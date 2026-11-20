@@ -76,6 +76,11 @@ pub fn modules() -> Vec<Module> {
     out.push(deep_canvas_test_modules::registries::mark_v2());
     #[cfg(feature = "test-mode-closed")]
     out.push(deep_canvas_test_modules::registries::mode_closed());
+    // Issue #2777's test canvas module: a kind whose field takes three words, unclosed or closed.
+    #[cfg(feature = "test-tone-unclosed")]
+    out.push(deep_canvas_test_modules::tone::unclosed());
+    #[cfg(feature = "test-tone-closed")]
+    out.push(deep_canvas_test_modules::tone::closed());
     #[cfg(feature = "test-mode-registry")]
     out.push(deep_canvas_test_modules::registries::mode_registry());
     #[cfg(feature = "test-mode-renumbered")]

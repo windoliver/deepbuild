@@ -1,0 +1,12 @@
+# At 8a2a8a745 (the #2690 known-failures entry dropped), Linux, 2026-11-18
+## node scripts/proof.mjs guard
+PASS guard: 20 commits checked: no guarded edit lacks its own approved proposal
+proof: wall time 283.2 s
+exit 0
+## node --test tests/acceptance/1115/failures.test.mjs (failed at 8f2e51904 on the entry; main-comparison-444c638cd.txt)
+✔ #1115.07ca71fc failures on main equal today's: affected.mjs with the merge base's scripts and with the change's, on one fixture set, list the same FAIL ids (5620.389408ms)
+✔ #1115.07ca71fc failures on main equal today's: the unit lane with the merge base's scripts and with the change's reads FAIL on one fixture set, and each names the failing tests (6746.719088ms)
+✔ #1115.07ca71fc failures on main equal today's: known-failures.json keeps the merge base's failures, lint and timing (79.370289ms)
+ℹ tests 3
+ℹ pass 3
+ℹ fail 0

@@ -121,6 +121,23 @@ fn blocked_rows(by_kind: BTreeMap<String, Vec<String>>) -> Vec<Value> {
 }
 
 impl<'a> Hub<'a> {
+    /// #2450's planted check, by the scenario's `planted`: `issues` less each refusal of a 3D
+    /// axis's title that names an item of `doc`, which the data module's check refuses for
+    /// every kind but a vector.
+    pub fn plant_axis_titles(&self, doc: &Value, issues: &mut Vec<Issue>) {
+        let name = deep_canvas_marks::axes3d::TAKES_ANY_KIND;
+        if self.scenario.module_planted.as_deref() != Some(name) {
+            return;
+        }
+        let names_item = |path: &str| {
+            let named = doc.pointer(&format!("/{path}")).and_then(Value::as_str);
+            named.is_some_and(|id| doc.get("items").is_some_and(|i| i.get(id).is_some()))
+        };
+        issues.retain(|i| {
+            !(i.code == "bad_axis" && i.path.contains("/params/titles/") && names_item(&i.path))
+        });
+    }
+
     /// What blocks a `deep show --check`'s claim on this revision: the items of a kind the
     /// build doesn't know, when the claim names the document among its deliverables. Outside a
     /// claim they stay notices (#389).
@@ -960,6 +977,7 @@ impl<'a> Hub<'a> {
                     // proof surface plants its wrong program.
                     if let Some(map) = input.as_object_mut() {
                         map.insert("assets".into(), self.assets_of(&checked.lowered));
+                        map.insert("catalogs".into(), self.catalogs_of(&checked.lowered));
                         map.remove("planted");
                         if let Some(p) = &self.scenario.module_planted {
                             map.insert("planted".into(), json!(p));
@@ -1222,9 +1240,37 @@ impl<'a> Hub<'a> {
                     }
                 }
             }
+            // #194: a logic item's data assets, a catalog among them.
+            for sha in data_assets(item) {
+                if let Some(b) = crate::evidence::read(&self.scenario.evidence, sha) {
+                    out.insert(sha.to_string(), json!(deep_canvas::base64::encode(&b)));
+                }
+            }
         }
         Value::Object(out)
     }
+
+    /// #194: the record of each catalog among the data assets a lowered document's logic items
+    /// name, by hash, as `catalog_import` kept it beside the bytes (`catalogs/<sha256>.json`).
+    fn catalogs_of(&self, lowered: &Value) -> Value {
+        let items = lowered
+            .get("items")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten();
+        let dir = self.scenario.evidence.join("catalogs");
+        let records = items.flat_map(|(_, i)| data_assets(i)).filter_map(|sha| {
+            let text = std::fs::read_to_string(dir.join(format!("{sha}.json"))).ok()?;
+            Some((sha.to_string(), serde_json::from_str::<Value>(&text).ok()?))
+        });
+        Value::Object(records.collect())
+    }
+}
+
+/// The data assets a logic item names in `assets`, by hash.
+fn data_assets(item: &Value) -> impl Iterator<Item = &str> {
+    let list = item.pointer("/params/assets").and_then(Value::as_array);
+    list.into_iter().flatten().filter_map(Value::as_str)
 }
 
 /// #457: camera.framing's `sweeps: from_brief` (its default) as the claim's brief's own

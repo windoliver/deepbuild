@@ -2189,6 +2189,7 @@ dependencies = [
  "block2 0.6.2",
  "chrono",
  "deep-app",
+ "deep-canvas",
  "deep-canvas-cells",
  "deep-canvas-effects",
  "deep-canvas-marks",
@@ -2414,11 +2415,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-catalog"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "deep-codecs"
 version = "0.0.0"
 dependencies = [
  "basisu_c_sys",
  "deep-canvas-cells",
+ "deep-catalog",
  "image",
  "libc",
  "libm",
@@ -2521,7 +2531,10 @@ name = "deep-images"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "gif 0.14.2",
  "image",
+ "image-webp",
+ "png 0.18.1",
  "sha2 0.10.9",
  "web-time",
 ]
@@ -2542,6 +2555,7 @@ dependencies = [
  "base64 0.22.1",
  "deep-canvas",
  "deep-canvas-sandbox",
+ "deep-catalog",
  "deep-sandbox-wasmtime",
  "gimli 0.33.0",
  "libc",
@@ -2671,6 +2685,7 @@ version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
  "bincode",
+ "deep-canvas",
  "deep-canvas-motion",
  "deep-canvas-physics",
  "deep-canvas-scene3d",
@@ -2740,6 +2755,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-pptx-reader"
+version = "0.0.0"
+dependencies = [
+ "roxmltree 0.21.1",
+ "zune-inflate",
+]
+
+[[package]]
 name = "deep-relay"
 version = "0.0.0"
 dependencies = [
@@ -2762,6 +2785,7 @@ dependencies = [
  "deep-canvas-cells",
  "deep-canvas-input",
  "deep-canvas-marks",
+ "deep-gpu",
  "deep-logic",
  "deep-marks-raster",
  "deep-text",
@@ -2842,6 +2866,7 @@ dependencies = [
  "deep-net",
  "deep-physics-rapier",
  "deep-play",
+ "deep-pptx-reader",
  "deep-relay",
  "deep-replica",
  "deep-sandbox-wasmtime",
@@ -2893,6 +2918,7 @@ dependencies = [
 name = "deep-text-gpui"
 version = "0.0.0"
 dependencies = [
+ "deep-canvas",
  "deep-canvas-marks",
  "deep-text",
  "gpui-kit",

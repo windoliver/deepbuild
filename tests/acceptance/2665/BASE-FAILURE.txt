@@ -1,0 +1,117 @@
+# #2665 acceptance tests: the run on the base, the throwaway window, and the planted wrong programs
+
+Run on a Mac17,10, 18 cores, at 1-minute loads of 13 to 311 from other sessions where recorded (uptime around the runs). The
+helpers stand in the machine (a Mac15,7, or a Mac14,2 in counts.test.mjs) and pin the load each process reads, so no
+verdict here reads this Mac's own. Every process had a temporary HOME, XDG_CACHE_HOME and TMPDIR. Each failure is an
+AssertionError; the line after each test's name is the first line of its message, trimmed, with the line of the
+assertion that threw.
+
+## The base (8df3e47e2)
+
+These files as committed, but for six `export` keywords helpers.mjs has since dropped (no test imports those names):
+
+$ node --test 'tests/acceptance/2665/*.test.mjs'                 (4 s; load 79 at the start, 85 at the end)
+
+✖ #2665.f5e661f9 a task with a ceiling on instructions retired reads FAIL on a fixture command that retires 5% more than the ceiling, at a load above the core count and off the reference Macs, where the same command's time limit reads INCONCLUSIVE
+✖ #2665.54342405 a fixture change that lowers an established task's peakBytes limit, whose five runs are within the new limit, passes, and its window record names the old limit, the new one and the five readings
+✖ #2665.9583c77c the commit that lowers a ceiling is judged against the old one, and the next commit against the new one
+✖ #2665.5222fad8 a count that can't be read is missing, never 0, and its ceiling reads INCONCLUSIVE
+✖ #2665.9afb008a a window's record lists each task with no ceiling by name with their count, and each task more than 20% under its ceiling with both numbers
+✖ #2665.d2a7b8af a fixture change that raises a limit, one that removes it, one that widens the task's margin and one that changes its command are each refused, naming the task and the field; with an approved proposal that names the task and holds both numbers, the raise passes
+ℹ tests 6
+ℹ pass 0
+ℹ fail 6
+
+The failures' messages:
+
+✖ #2665.54342405 (AC1)   lowering.test.mjs:60
+  the window refused f5bfcbfd759d0df2d976bd8384be1b42e6fe6cef, which lowers held's peakBytes limit from 10551296 to 2997527: benchmarks/budgets.json BLOCKED: Budget held changed or disappeared; restore its frozen definition
+✖ #2665.d2a7b8af (AC2)   refusals.test.mjs:56
+  the commit 88ff3065333c13e0bfb10ac57ec6642140059290 that raises alpha's peakBytes limit from 100000000 to 150000000 wasn't refused naming alpha and peakBytes: BLOCKED: benchmarks/budgets.json BLOCKED: Budget alpha changed or disappeared; restore its frozen definition
+✖ #2665.9583c77c (AC3)   lowering.test.mjs:77 (in verdict, :50)
+  the record of f5bfcbfd759d0df2d976bd8384be1b42e6fe6cef has no row for tight: [{"id":"benchmarks/budgets.json","state":"BLOCKED","note":"Budget held changed or disappeared; restore its frozen definition"}]
+✖ #2665.f5e661f9 (AC4)   counts.test.mjs:30
+  the record of 58bb33a015c274b2ec48b87827c716bdfd566087 has no verdict on counted's instructions ceiling: [{"id":"benchmarks/budgets.json","state":"BLOCKED","note":"counted: invalid limits"}]
+✖ #2665.5222fad8 (AC5)   lowering.test.mjs:88 (in verdict, :50)
+  the record of e15e121700342c99ce102f095647b66717b3c180 has no row for uncountable: [{"id":"benchmarks/budgets.json","state":"BLOCKED","note":"uncountable: invalid limits"}]
+✖ #2665.9afb008a (AC6)   lowering.test.mjs:100
+  the record of e15e121700342c99ce102f095647b66717b3c180 doesn't list open-a, a task with no ceiling: null
+
+Each window ran and wrote a record per commit; the base refused every measured commit before running a task. AC1 fails
+naming the message its criterion expects, a changed definition. AC2 stops at its first commit, whose note names alpha
+and no field; by the base's code (`validateBudgets`) each of the six refusals reads `Budget <id> changed or disappeared;
+restore its frozen definition`, the approved raise of epsilon too, though the test reads no further. The base takes no
+ceiling of instructions (`invalid limits`). The next commit after the lowering changes no budget, so the base refuses it
+for uncountable's ceiling alone, and its record holds no noCeiling or slack.
+
+## The throwaway window (the base's window plus 125 lines that meet the surface; not kept)
+
+$ node --test 'tests/acceptance/2665/*.test.mjs'                 (33 s; load 13 at the start, 17 at the end)
+
+✔ #2665.f5e661f9 a task with a ceiling on instructions retired reads FAIL on a fixture command … (10 s)
+✔ #2665.54342405 a fixture change that lowers an established task's peakBytes limit … (33 s, the lowering scene)
+✔ #2665.9583c77c the commit that lowers a ceiling is judged against the old one …
+✔ #2665.5222fad8 a count that can't be read is missing, never 0 …
+✔ #2665.9afb008a a window's record lists each task with no ceiling …
+✔ #2665.d2a7b8af a fixture change that raises a limit, one that removes it … (19 s)
+ℹ tests 6
+ℹ pass 6
+ℹ fail 0
+
+That run had these files as committed but for six `export` keywords helpers.mjs no longer has. With the committed files:
+
+$ node --test 'tests/acceptance/2665/*.test.mjs'                 (73 s; load 236 at the start, 311 at the end)
+✔ #2665.f5e661f9 (31 s), ✔ #2665.5222fad8, ✔ #2665.9afb008a, ✔ #2665.d2a7b8af (46 s)
+✖ #2665.54342405   the window refused 6682190dad2b…, which lowers held's peakBytes limit from 10682368 to 3034764: benchmarks/budgets.json BLOCKED: spawnSync tar EPIPE
+✖ #2665.9583c77c   the record of 6682190dad2b… has no row for tight: [{"id":"benchmarks/budgets.json","state":"BLOCKED","note":"spawnSync tar EPIPE"}]
+
+$ node --test tests/acceptance/2665/lowering.test.mjs           (53 s; load 253 at the start, 185 at the end)
+✔ #2665.54342405, ✔ #2665.9583c77c, ✔ #2665.5222fad8, ✔ #2665.9afb008a
+ℹ pass 4, fail 0
+
+The two failures are the window's copy step, which the throwaway keeps from the base: `git archive <commit>` fed to
+`tar -mxf -` through execFileSync's input ended in EPIPE on the lowering commit, so its record was BLOCKED before any
+task ran (1981's BASE-FAILURE.txt met the same at a load near 400). The rerun, at a load near 250, passed.
+
+Earlier runs of the same tests against it took 75 s (lowering), 33 s (refusals) and 7 s (counts); their loads weren't
+recorded (93 shortly after). Its records, as one run of the counts scene printed them: counted's instructions verdict FAIL against
+983998603, its 20 readings 4.96% to 5.54% over it; p50Ms INCONCLUSIVE, off the reference Macs at load 999.
+
+## The twins (the throwaway with one line changed; twins/README.md)
+
+Each ran once, on the file holding its criterion's test, laid over a copy of the base's scripts/ with the throwaway's
+test files.
+
+any-approval, refusals.test.mjs (74 s):
+✖ #2665.d2a7b8af (AC2)   refusals.test.mjs:66
+  the window took an approval naming eta for zeta's raise in a4b5328eeb0ec0149f2000b45312b24ba396c3f7: PASS: alpha PASS; beta PASS; gamma PASS; delta PASS; epsilon PASS; zeta PASS; eta PASS
+ℹ pass 0, fail 1
+
+own-number, lowering.test.mjs (82 s):
+✔ #2665.54342405, ✔ #2665.5222fad8, ✔ #2665.9afb008a
+✖ #2665.9583c77c (AC3)   lowering.test.mjs:78
+  the commit 89c7fcaa6ac93c29b41fa5347eb9773fa3dc0208, which lowers tight's peakBytes ceiling from 3197841 to 2010764, was judged against 2010764, not the old one its merge base holds: {"status":"FAIL","limit":2010764,"runs":[2637824,2670592,2654208,2654208,2637824],"margin":0.05,"reason":"all five runs are over 2010764 by more than the 5.0% margin"}
+ℹ pass 3, fail 1
+
+reads-time, counts.test.mjs (24 s):
+✖ #2665.f5e661f9 (AC4)   counts.test.mjs:33
+  counted's instructions ceiling read PASS on a command retiring 5% more than its 984863642 (1032758388, 1033560609, 1034106824, 1034338159, 1036811178 by /usr/bin/time -l), at load 999 on a Mac14,2: {"status":"PASS","limit":984863642,"runs":[213.226042,143.419042,142.781583,205.820625,112.43325]}
+ℹ pass 0, fail 1
+
+zero-count, lowering.test.mjs (86 s):
+✔ #2665.54342405, ✔ #2665.9583c77c
+✖ #2665.5222fad8 (AC5)   lowering.test.mjs:90
+  uncountable's command waits for a child no count covers, so each of its counts is missing (null), never 0 or a part: {"status":"PASS","limit":5000000000,"runs":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}
+✖ #2665.9afb008a (AC6)   lowering.test.mjs:109
+  the record of 35a89fbd0652397a54a32a8fdd51317f0dea41ce lists a task that isn't more than 20% under a ceiling (held is 12% under its 2997527, tight over its 1998352): [{"id":"roomy","metric":"peakBytes","limit":10551296,"reading":2670592},{"id":"uncountable","metric":"instructions","limit":5000000000,"reading":0}]
+ℹ pass 2, fail 2
+
+drops-uncapped, lowering.test.mjs (81 s):
+✔ #2665.54342405, ✔ #2665.9583c77c, ✔ #2665.5222fad8
+✖ #2665.9afb008a (AC6)   lowering.test.mjs:100
+  the record of f6f352c1f0a278e885d0604d3e83d1340637216f doesn't list open-b, a task with no ceiling: {"count":1,"tasks":["open-a"]}
+ℹ pass 3, fail 1
+
+Each twin fails its criterion's test at an assertion naming what the criterion says: both tasks (any-approval), the
+lowering commit (own-number), a PASS read off the time (reads-time), the task (zero-count) and the task left out
+(drops-uncapped).

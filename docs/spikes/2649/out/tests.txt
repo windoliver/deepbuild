@@ -1,0 +1,50 @@
+# Existing tests on main (b4a2049e808c), cut A and cut B copies, Node 24, macOS 27.2.1, run 2026-11-19/20.
+# Copies: cp -cR of the worktree at main, patch applied, npm run build -w packages/supervisor, target/debug/deep-hook built by cargo build -p deep-hook.
+# t-* runs, per copy: npx vitest run packages/supervisor/src/supervisor.test.ts tests/acceptance/236/ tests/acceptance/30/sandbox.test.ts
+
+== h-main: tests/acceptance/236/ with deep-hook built
+     × AC7 after kill -9 of the hub, a restart that finds only the record reaps every process of the run (setsid, bare and late-forked included) and leaves a look-alike with no token running 10719ms
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 11 passed (12)
+
+== h-A: tests/acceptance/236/ with deep-hook built
+     × AC7 after kill -9 of the hub, a restart that finds only the record reaps every process of the run (setsid, bare and late-forked included) and leaves a look-alike with no token running 10908ms
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 11 passed (12)
+
+== h-B: tests/acceptance/236/ with deep-hook built
+     × AC7 after kill -9 of the hub, a restart that finds only the record reaps every process of the run (setsid, bare and late-forked included) and leaves a look-alike with no token running 10677ms
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 11 passed (12)
+
+== s-main-1: supervisor.test.ts -t 'a cleaned run has no scan'
+      Tests  1 passed | 6 skipped (7)
+
+== s-main-2: supervisor.test.ts -t 'a cleaned run has no scan'
+      Tests  1 passed | 6 skipped (7)
+
+== s-main-3: supervisor.test.ts -t 'a cleaned run has no scan'
+      Tests  1 passed | 6 skipped (7)
+
+== s-B-1: supervisor.test.ts -t 'a cleaned run has no scan'
+AssertionError: cleanups that were recorded while a timed scan ran: without one the test shows nothing: expected 3 to be 5 // Object.is equality
+      Tests  1 failed | 6 skipped (7)
+
+== s-B-2: supervisor.test.ts -t 'a cleaned run has no scan'
+AssertionError: cleanups that were recorded while a timed scan ran: without one the test shows nothing: expected 3 to be 5 // Object.is equality
+      Tests  1 failed | 6 skipped (7)
+
+== s-B-3: supervisor.test.ts -t 'a cleaned run has no scan'
+AssertionError: cleanups that were recorded while a timed scan ran: without one the test shows nothing: expected 3 to be 5 // Object.is equality
+      Tests  1 failed | 6 skipped (7)
+
+== Before deep-hook was built (t-main, t-A, t-B): 7 tests of 236/ fail on all three alike (no deep-hook binary); supervisor.test.ts 7/7 and 30/sandbox 2/2 pass on all three.
+-- t-main
+ Test Files  3 failed | 8 passed (11)
+      Tests  7 failed | 33 passed | 1 skipped (41)
+-- t-A
+ Test Files  3 failed | 8 passed (11)
+      Tests  7 failed | 33 passed | 1 skipped (41)
+-- t-B
+ Test Files  3 failed | 8 passed (11)
+      Tests  7 failed | 33 passed | 1 skipped (41)

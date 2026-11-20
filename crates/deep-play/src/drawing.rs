@@ -159,6 +159,8 @@ fn cell_grids(
                     mask: false,
                     align: scene::Align::Start,
                     bound: false,
+                    flow: deep_text::Flow::Horizontal,
+                    line_height: None,
                 },
                 origin: [g.origin[0], y],
                 role: None,

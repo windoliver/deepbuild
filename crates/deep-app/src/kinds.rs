@@ -9,7 +9,7 @@
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use crate::states;
+use crate::{copy, states};
 
 /// The seven card kinds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -24,32 +24,35 @@ pub enum Kind {
 }
 
 impl Kind {
-    /// The kind's name as the card and its usage rows write it.
+    /// The kind's name as its usage rows write it: a code, drawn only by a planted card.
     pub fn name(self) -> &'static str {
         match self {
-            Kind::BatchedAuthority => "batched authority",
+            Kind::BatchedAuthority => "batched authority", // copy-exception: a kind's code
             Kind::Taste => "taste",
             Kind::Unblock => "unblock",
-            Kind::StalledClaim => "stalled claim",
+            Kind::StalledClaim => "stalled claim", // copy-exception: a kind's code
             Kind::Choice => "choice",
             Kind::Exception => "exception",
-            Kind::Definition => "early question about done",
+            Kind::Definition => "early question about done", // copy-exception: a kind's code
         }
     }
 
-    /// The card's first line (#1455): the kind's plain word from contracts/plain-words.json (#1348), or its name
-    /// where that is already plain, never the name the usage rows keep.
+    /// The card's first line (#1455) in the language shown (#2403): in English the kind's plain word from
+    /// contracts/plain-words.json (#1348), capitalised, never the name the usage rows keep.
     pub fn plain(self) -> String {
-        let name = self.name();
-        let word = crate::plain::words()
-            .iter()
-            .find(|(word, _)| word == name)
-            .map_or(name, |(_, plain)| plain.as_str());
-        let mut chars = word.chars();
-        chars
-            .next()
-            .map(|first| first.to_uppercase().chain(chars).collect())
-            .unwrap_or_default()
+        copy::text(self.plain_key()).to_owned()
+    }
+
+    fn plain_key(self) -> &'static str {
+        match self {
+            Kind::BatchedAuthority => "kinds.plain_batched_authority",
+            Kind::Taste => "kinds.plain_taste",
+            Kind::Unblock => "kinds.plain_unblock",
+            Kind::StalledClaim => "kinds.plain_stalled_claim",
+            Kind::Choice => "kinds.plain_choice",
+            Kind::Exception => "kinds.plain_exception",
+            Kind::Definition => "kinds.plain_definition",
+        }
     }
 
     /// The card kind of an ask: its `data.kind`, with a choice about a stalled claim (split, fund or accept) its
@@ -112,9 +115,10 @@ pub struct Scope {
     pub also: usize,
 }
 
-/// What Send back does to a call's change (#1345): reverts it when it landed, else starts another attempt.
-pub const REVERTS: &str = "reverts this change";
-pub const ATTEMPTS: &str = "starts another attempt";
+/// What Send back does to a call's change (#1345): reverts it when it landed, else starts another attempt. Each is
+/// its key in the app's table (#2403).
+pub const REVERTS: &str = "kinds.reverts";
+pub const ATTEMPTS: &str = "kinds.attempts";
 
 /// One row of the batched taste card (#1345, #2030): a taste ask shown in the batch, what its Send back does here,
 /// and when its recommended answer applies.
@@ -125,12 +129,12 @@ pub struct CallRow {
     /// The recommended option's label, and Send back's.
     pub yes: String,
     pub back: String,
-    /// [`REVERTS`] or [`ATTEMPTS`].
+    /// [`REVERTS`] or [`ATTEMPTS`]: the key of its words.
     pub sends: &'static str,
     pub applies: String,
 }
 /// What proves an agent's sign-in task (#1349), after the agent's id: its own sign-in probe, as the asks core names it.
-const SIGN_IN_PROBE: &str = " sign-in probe";
+const SIGN_IN_PROBE: &str = " sign-in probe"; // copy-exception: a check's name, matched
 
 /// The card's content for one ask.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -209,6 +213,17 @@ pub(crate) fn batch_of(events: &[Value], handle: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// Whether a card field is the moved pin's or the checks on its new commit, as the language shown names them (#2403):
+/// what the planted card that shows the diff only once answered leaves off.
+pub(crate) fn is_moved(name: &str) -> bool {
+    let checks_on = copy::text("kinds.field_checks_on");
+    let (before, after) = checks_on.split_once("{0}").unwrap_or((checks_on, ""));
+    name == copy::text("kinds.field_moved")
+        || (name.len() > before.len() + after.len()
+            && name.starts_with(before)
+            && name.ends_with(after))
+}
+
 /// The plan the ask shows, as the core binds it: the first one the core proposed for the ask. A later proposal, or
 /// one from another writer, is never what an approval runs, so the card never shows it.
 fn plan<'a>(events: &'a [Value], handle: &str) -> Option<&'a Value> {
@@ -273,16 +288,16 @@ impl Model {
         let mut plan_hash = None;
         let mut own_member = 0;
         let mut batch = Vec::new();
-        let field = |fields: &mut Vec<(String, String)>, name: &str, value: &Value| {
+        let field = |fields: &mut Vec<(String, String)>, name: &'static str, value: &Value| {
             if !value.is_null() {
-                fields.push((name.to_owned(), text(value)));
+                fields.push((copy::text(name).to_owned(), text(value)));
             }
         };
         match kind {
             Kind::BatchedAuthority => {
                 let subject = &data["subject"];
-                field(&mut fields, "effect", &subject["effect"]);
-                field(&mut fields, "target", &subject["target"]["ref"]);
+                field(&mut fields, "kinds.field_effect", &subject["effect"]);
+                field(&mut fields, "kinds.field_target", &subject["target"]["ref"]);
                 // A batch of several shows every member's plan, one step each, in batch order; the ask's own
                 // plan alone outside one. A batch of one is a batch.
                 let members = batch_of(events, handle);
@@ -325,34 +340,40 @@ impl Model {
                         .all(|step| step.undoable);
                 }
                 if !diffs.is_empty() {
-                    fields.push(("diff".into(), diffs.join(", ")));
+                    fields.push((copy::text("kinds.field_diff").to_owned(), diffs.join(", ")));
                 }
                 let public = steps.iter().any(|step| step.public)
                     || subject["target"]["public"].as_bool().unwrap_or(false);
-                fields.push(("public".into(), yes_no(public)));
+                fields.push((copy::text("kinds.field_public").to_owned(), yes_no(public)));
                 let undoable = !steps.is_empty() && steps.iter().all(|step| step.undoable);
-                fields.push(("undoable".into(), yes_no(undoable)));
+                fields.push((
+                    copy::text("kinds.field_undoable").to_owned(),
+                    yes_no(undoable),
+                ));
             }
             Kind::Taste => {
                 let subject = &data["subject"];
-                field(&mut fields, "screen", &subject["screen"]);
-                field(&mut fields, "element", &subject["element"]);
+                field(&mut fields, "kinds.field_screen", &subject["screen"]);
+                field(&mut fields, "kinds.field_element", &subject["element"]);
                 // The reference the call names, or the agent's own. The card draws no image, so its text claims none
                 // beside the live render (#1455).
                 let reference = data["reference"]
                     .as_str()
-                    .unwrap_or("the agent's")
+                    .unwrap_or_else(|| copy::text("kinds.reference_agents"))
                     .to_owned();
-                fields.push(("reference".into(), reference));
+                fields.push((copy::text("kinds.field_reference").to_owned(), reference));
                 // What DeepBuild saw beside what the agent shows: the checks on the commit the call is pinned to.
                 if let Some((passed, ran, look)) = checks_on(events, ask) {
-                    fields.push(("checks".into(), format!("{passed} of {ran} passed")));
+                    fields.push((
+                        copy::text("kinds.field_checks").to_owned(),
+                        copy::count("kinds.passed_of_ran", ran as u64, &[&passed]),
+                    ));
                     if let Some(look) = look {
-                        fields.push(("look at".into(), look));
+                        fields.push((copy::text("kinds.field_look_at").to_owned(), look));
                     }
                 }
-                field(&mut fields, "live", &data["live"]);
-                field(&mut fields, "sheet", &data["sheet"]);
+                field(&mut fields, "kinds.field_live", &data["live"]);
+                field(&mut fields, "kinds.field_sheet", &data["sheet"]);
             }
             Kind::Unblock => {
                 let steps_named = data["steps"]
@@ -362,35 +383,41 @@ impl Model {
                     .map(text)
                     .collect::<Vec<_>>()
                     .join("; ");
-                fields.push(("steps".into(), steps_named));
-                field(&mut fields, "where", &data["where"]);
-                field(&mut fields, "why", &data["why"]);
-                field(&mut fields, "proves", &data["proves"]);
+                fields.push((copy::text("kinds.field_steps").to_owned(), steps_named));
+                field(&mut fields, "kinds.field_where", &data["where"]);
+                field(&mut fields, "kinds.field_why", &data["why"]);
+                field(&mut fields, "kinds.field_proves", &data["proves"]);
                 if let Some(cost) = usd(&data["cost_usd"]) {
-                    fields.push(("cost".into(), cost));
+                    fields.push((copy::text("kinds.field_cost").to_owned(), cost));
                 }
             }
             Kind::StalledClaim => {
-                field(&mut fields, "claim", &data["claim"]);
-                field(&mut fields, "proven", &data["proven"]);
-                field(&mut fields, "open", &data["open"]);
+                field(&mut fields, "kinds.field_claim", &data["claim"]);
+                field(&mut fields, "kinds.field_proven", &data["proven"]);
+                field(&mut fields, "kinds.field_open", &data["open"]);
                 for option in &options {
                     if let Some(cost) = &option.cost {
-                        fields.push((format!("{} cost", option.id), cost.clone()));
+                        fields.push((
+                            copy::fill("kinds.field_option_cost", &[&option.id]),
+                            cost.clone(),
+                        ));
                     }
                 }
             }
             Kind::Choice | Kind::Definition => {
-                field(&mut fields, "point", &data["subject"]["point"]);
-                field(&mut fields, "requirement", &data["requirement"]);
+                field(&mut fields, "kinds.field_point", &data["subject"]["point"]);
+                field(&mut fields, "kinds.field_requirement", &data["requirement"]);
                 if let Some((from, to, checks)) = moved(events, ask) {
-                    fields.push(("moved".into(), format!("changed since {from}: now at {to}")));
-                    fields.push((format!("checks on {to}"), checks));
+                    fields.push((
+                        copy::text("kinds.field_moved").to_owned(),
+                        copy::fill("kinds.changed_since", &[&from, &to]),
+                    ));
+                    fields.push((copy::fill("kinds.field_checks_on", &[&to]), checks));
                 }
             }
             Kind::Exception => {
-                field(&mut fields, "waives", &data["waives"]);
-                field(&mut fields, "changes", &data["changes"]);
+                field(&mut fields, "kinds.field_waives", &data["waives"]);
+                field(&mut fields, "kinds.field_changes", &data["changes"]);
             }
         }
         let past = match kind {
@@ -472,9 +499,10 @@ impl Model {
     /// The approve button's words on a batched approval: how many steps it runs and how many can't be undone.
     pub fn approve_label(&self) -> Option<String> {
         let (runs, irreversible) = self.approve()?;
-        Some(format!(
-            "Approve: runs {runs} of {} steps · {irreversible} can't be undone",
-            self.steps.len()
+        Some(copy::count(
+            "kinds.approve_runs",
+            self.steps.len() as u64,
+            &[&runs, &irreversible],
         ))
     }
 
@@ -567,22 +595,22 @@ fn calls(events: &[Value], handle: &str, now: u64) -> Vec<CallRow> {
 }
 
 fn yes_no(value: bool) -> String {
-    if value { "yes" } else { "no" }.to_owned()
+    copy::text(if value { "kinds.yes" } else { "kinds.no" }).to_owned()
 }
 
 /// The default's words where it isn't one of the options, by kind (Decided: Ask deadlines and defaults).
 fn default_words(kind: Kind, id: &str) -> String {
-    let words: &str = match kind {
-        Kind::BatchedAuthority => "no",
-        Kind::Unblock => "stays blocked",
-        Kind::Exception => "no change",
-        Kind::Definition => "leave the requirement out",
-        Kind::Taste | Kind::Choice | Kind::StalledClaim => "the recommended option",
+    let words = match kind {
+        Kind::BatchedAuthority => "kinds.default_no",
+        Kind::Unblock => "kinds.default_stays_blocked",
+        Kind::Exception => "kinds.default_no_change",
+        Kind::Definition => "kinds.default_requirement_out",
+        Kind::Taste | Kind::Choice | Kind::StalledClaim => "kinds.default_recommended",
     };
     if id.is_empty() || id == "hold" {
-        words.to_owned()
+        copy::text(words).to_owned()
     } else {
-        format!("{words} ({id})")
+        copy::fill("kinds.default_with_id", &[&copy::text(words), &id])
     }
 }
 
@@ -655,15 +683,13 @@ fn moved(events: &[Value], ask: &Value) -> Option<(String, String, String)> {
     let short = |sha: &str| sha.chars().take(7).collect::<String>();
     let checks: Vec<String> = runs_on(events, &latest)
         .into_iter()
-        .map(|(check, finished)| {
-            let outcome = finished
-                .map(|finished| text(&finished["data"]["outcome"]))
-                .unwrap_or_else(|| "running".to_owned());
-            format!("{check} {outcome}")
+        .map(|(check, finished)| match finished {
+            Some(finished) => format!("{check} {}", text(&finished["data"]["outcome"])),
+            None => copy::fill("kinds.check_running", &[&check]),
         })
         .collect();
     let checks = if checks.is_empty() {
-        "none ran".to_owned()
+        copy::text("kinds.none_ran").to_owned()
     } else {
         checks.join(", ")
     };
@@ -713,7 +739,7 @@ fn checks_on(events: &[Value], ask: &Value) -> Option<(usize, usize, Option<Stri
             latest
                 .iter()
                 .find(|(_, finished)| finished.is_none())
-                .map(|(check, _)| format!("{check}, still running"))
+                .map(|(check, _)| copy::fill("kinds.check_still_running", &[check]))
         });
     Some((passed, latest.len(), look))
 }
@@ -783,8 +809,8 @@ fn same_scope<'a>(events: &'a [Value], ask: &Value) -> Option<(String, Vec<&'a V
     }
     let repo = project_of(events, &session);
     let words = match repo {
-        Some(repo) => format!("Answering saves it for this project ({repo})"),
-        None => "Answering saves it for this task".to_owned(),
+        Some(repo) => copy::fill("kinds.saves_for_project", &[&repo]),
+        None => copy::text("kinds.saves_for_task").to_owned(),
     };
     let also = states::open_asks(events, None)
         .into_iter()
@@ -1456,6 +1482,33 @@ mod tests {
             states::moment(7_200_000, 0),
             "its default applies at the undo's deadline"
         );
+    }
+
+    /// #2403: in English each kind's first line is still its plain word from contracts/plain-words.json (#1348),
+    /// capitalised, so the table never drifts from the one list.
+    #[test]
+    fn each_kinds_first_line_is_its_plain_word_from_the_one_list() {
+        for kind in [
+            Kind::BatchedAuthority,
+            Kind::Taste,
+            Kind::Unblock,
+            Kind::StalledClaim,
+            Kind::Choice,
+            Kind::Exception,
+            Kind::Definition,
+        ] {
+            let name = kind.name();
+            let word = crate::plain::words()
+                .iter()
+                .find(|(word, _)| word == name)
+                .map_or(name, |(_, plain)| plain.as_str());
+            let mut chars = word.chars();
+            let first: String = chars
+                .next()
+                .map(|first| first.to_uppercase().chain(chars).collect())
+                .unwrap_or_default();
+            assert_eq!(copy::english(kind.plain_key(), &[]), first, "{name}");
+        }
     }
 
     #[test]

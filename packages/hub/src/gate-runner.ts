@@ -632,7 +632,7 @@ export class GateRunner {
    * A claim made at a stop: its snapshot and checkout, its checks taken in turn for the fast lane, the rest left to
    * the slow lane. Resolves once the fast lane has ended or the hold has, with the claim's checks as they stand.
    */
-  async stop(r: { session: string; claim: string; task: string; cwd: string; base: string; requirements: ClaimRequirement[]; checks: ClaimCheck[]; stopAt: number; definition?: DefinitionState; joins?: boolean; same?: boolean; state?: StatePin }): Promise<{ fast: string[]; slow: string[]; snapshot: string; readyAt: number; budgetCost: string[]; changed: boolean }> {
+  async stop(r: { session: string; claim: string; task: string; cwd: string; base: string; requirements: ClaimRequirement[]; checks: ClaimCheck[]; stopAt: number; definition?: DefinitionState; joins?: boolean; state?: StatePin }): Promise<{ fast: string[]; slow: string[]; snapshot: string; readyAt: number; budgetCost: string[]; changed: boolean }> {
     // The snapshot and the checkout share one budget (#31): past it the claim is INCONCLUSIVE, naming the reason and
     // the count of untracked files, and none of its checks runs, in the live worktree or anywhere.
     const budget = this.o.checkouts().budget();
@@ -646,9 +646,15 @@ export class GateRunner {
     // Compared by tree: a snapshot of a dirty folder is a new commit even when its files are the last one's.
     let tree: string | undefined;
     let checkout: string | null = null;
+    // Read before deciding on a claim that may take no checkout, so no await stands between that decision and the carry (#2699).
+    let listed: Changes | undefined;
     // Hooks cannot see an outside edit (#2078). Read the tree and HEAD under the snapshot budget before deciding
-    // whether the last claim's results can carry without a checkout (#82).
+    // whether results already ended on this tree can carry without a checkout (#82).
     const ended = (e: Entry | undefined) => e !== undefined && !e.running && e.outcome !== null && e.runs.length > 0 && KEPT.has(e.outcome);
+    // The result a check carries (#82): the newest that ended on an older claim of the same tree, pinned to the same
+    // commit, and not a prerequisite's. Asked before the checkout and again by the carry itself.
+    const carriedFrom = (from: Claim[], t: string | undefined, c: ClaimCheck): Entry | undefined => t === undefined || this.o.plant === 'empty-commit-run-alone' ? undefined
+      : from.filter((o) => o.tree === t).reverse().map((o) => o.entries.get(c.check)).find((e) => ended(e) && e?.check.commit === c.commit && e?.check.prerequisite === undefined);
     // What a workspace's checks read is one of their inputs: another reading on the same tree is new work (#67).
     const stated = (t: string | undefined): string | undefined => (t !== undefined && r.state?.digests.length ? sha256Hex(new TextEncoder().encode(`${t}\n${r.state.digests.join('\n')}`)) : t);
     // A claim with no check to run yet, its definition still to come, takes no snapshot: nothing would run on it.
@@ -659,10 +665,17 @@ export class GateRunner {
         const [taken] = await Promise.all([this.o.checkouts().snapshot(r.cwd, budget), installs]);
         ({ commit: snapshot, tree } = taken);
         tree = stated(tree);
-        // A sibling claim may have landed while Git read the tree; compare against the last claim now.
-        const prior = (this.claims.get(r.session) ?? []).filter((c) => c.claim !== r.claim).at(-1);
         // The snapshot's deterministic commit pins both tree and HEAD; tree alone would reuse the wrong parent.
-        const reuse = r.same && !r.joins && tree !== undefined && prior?.tree === tree && prior.snapshot === snapshot && r.checks.every((c) => ended(prior.entries.get(c.check)));
+        const others = () => (this.claims.get(r.session) ?? []).filter((c) => c.claim !== r.claim);
+        // Whatever tool calls the turn made, no checkout is made when the carry below would run nothing (#2699): the last
+        // claim has this tree and HEAD, and every check carries a result that ended on a claim of this tree or is a
+        // prerequisite, which runs nothing in a checkout.
+        const runsNothing = (before: Claim[]) => !r.joins && tree !== undefined && before.at(-1)?.tree === tree && before.at(-1)?.snapshot === snapshot
+          && r.checks.every((c) => c.prerequisite !== undefined || carriedFrom(before, tree, c) !== undefined);
+        // Only such a claim waits for what it changed; any other's checkout starts beside that read. A sibling claim
+        // may land meanwhile, so the claims are read again after it.
+        if (runsNothing(others())) listed = await changes;
+        const reuse = listed !== undefined && runsNothing(others());
         if (!reuse) {
           checkout = (await this.o.checkouts().checkout({ worktree: r.cwd, commit: snapshot, dependencies: DEPENDENCIES, runs: [r.claim], budget })).dir;
           if (r.state) await hold(checkout, r.state.files);
@@ -681,7 +694,7 @@ export class GateRunner {
     const held = checkout === null ? null : Promise.resolve({ dir: checkout, commit: snapshot });
     const facts = installs && checkout !== null ? { installs, names: namesOf(checkout) } : null;
     const claim: Claim = joined ?? { claim: r.claim, session: r.session, task: r.task, cwd: r.cwd, base: r.base, snapshot, tree, checkout: held, requirements: r.requirements, entries: new Map(),
-      repo, installs: facts?.installs ?? Promise.resolve(''), names: facts?.names ?? Promise.resolve(''), state: r.state, changes: await changes };
+      repo, installs: facts?.installs ?? Promise.resolve(''), names: facts?.names ?? Promise.resolve(''), state: r.state, changes: listed ?? await changes };
     const last = older.at(-1)?.tree;
     const changed = r.checks.length > 0 && (tree === undefined || last === undefined || tree !== last);
     claim.ready = false;
@@ -727,9 +740,11 @@ export class GateRunner {
       for (const o of older.filter((x) => x.claim < r.claim)) { const e = o.entries.get(c.check); if (e) { e.stale = true; if (changed) e.newer ??= r.claim; } }
     }
     // A snapshot that changed no check's inputs reuses results and runs nothing (#82; design: Held time is counted):
-    // each check that ended on the last claim of the same tree carries its result to this one. Release checks have
-    // another input, the main line, so their pinned commit must match too; an ordinary run never substitutes.
-    const same = changed || tree === undefined || this.o.plant === 'empty-commit-run-alone' ? [] : older.filter((o) => o.tree === tree).reverse();
+    // each check that ended on an older claim of the same tree carries the newest such result to this one. Release
+    // checks have another input, the main line, so their pinned commit must match too; an ordinary run never substitutes.
+    // Read at once, as the decision read them on a claim that took no checkout: a prerequisite's append below awaits, and
+    // an older entry run again meanwhile (#67) would otherwise leave a check to run with no checkout (#2699).
+    const carries = new Map(r.checks.map((c) => { const e = changed ? undefined : carriedFrom(older, tree, c); return [c.check, e && { ...e, runs: [...e.runs] }] as const; }));
     const toRun: ClaimCheck[] = [];
     for (const c of r.checks) {
       if (c.prerequisite) {
@@ -747,7 +762,7 @@ export class GateRunner {
         claim.entries.set(c.check, { check: c, claim: r.claim, commit, lane: 'slow', runs: [run], base: null, outcome, running: false, stale: false });
         continue;
       }
-      const carried = same.map((o) => o.entries.get(c.check)).find((e) => ended(e) && e?.check.commit === c.commit && e?.check.prerequisite === undefined);
+      const carried = carries.get(c.check);
       if (!carried) { toRun.push(c); continue; }
       const { newer: _newer, ...kept } = carried;
       claim.entries.set(c.check, { ...kept, check: c, claim: r.claim, runs: [...carried.runs], stale: false });

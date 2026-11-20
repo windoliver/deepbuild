@@ -19,6 +19,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 
+use crate::copy;
 use crate::record::View;
 use crate::states::{self, Table};
 
@@ -111,13 +112,14 @@ pub struct Reach {
     pub delivered: Vec<String>,
 }
 
-const HUB_DOWN: &str = "The hub isn't answering";
+/// The key of what the count says while the hub isn't answering.
+const HUB_DOWN: &str = "notify.hub_down";
 
 impl Reach {
     /// The count: `count`, or with the hub down that it isn't answering, since a number may be old.
     pub fn count(&self, count: String) -> String {
         if self.hub_down {
-            return HUB_DOWN.to_owned();
+            return copy::text(HUB_DOWN).to_owned();
         }
         count
     }
@@ -126,25 +128,21 @@ impl Reach {
     pub fn notice(&self) -> Option<&'static str> {
         match self.setting {
             NotificationSetting::Allowed | NotificationSetting::NotAsked => None,
-            NotificationSetting::Denied => Some(
-                "Notifications are off: turn on Allow notifications for DeepBuild in System Settings",
-            ),
-            NotificationSetting::AlertsNone => Some(
-                "Alerts are set to None: pick an Alert style for DeepBuild in System Settings",
-            ),
+            NotificationSetting::Denied => Some(copy::text("notify.denied")),
+            NotificationSetting::AlertsNone => Some(copy::text("notify.alerts_none")),
         }
     }
 
     /// The menu bar's room for the same: `None` when there's nothing to say.
     pub fn short(&self) -> Option<&'static str> {
         if self.hub_down {
-            return Some(HUB_DOWN);
+            return Some(copy::text(HUB_DOWN));
         }
         matches!(
             self.setting,
             NotificationSetting::Denied | NotificationSetting::AlertsNone
         )
-        .then_some("Notifications off")
+        .then(|| copy::text("notify.notifications_off"))
     }
 
     /// Whether `ask`'s row says it wasn't notified.
@@ -356,7 +354,7 @@ impl Notifier {
             }
             out.push(Notification {
                 ask: None,
-                title: "DeepBuild".to_owned(),
+                title: "DeepBuild".to_owned(), // copy-exception: the product's name
                 text: end_notice(table, &sessions),
                 session: ask,
                 sound: None,
@@ -424,7 +422,7 @@ impl Notifier {
             });
         }
         for &(_, at, count) in batches.iter().filter(|(.., count)| *count > 1) {
-            out[at].title = "DeepBuild".to_owned();
+            out[at].title = "DeepBuild".to_owned(); // copy-exception: the product's name
             out[at].text = batch_text(&out[at].text, count);
         }
         // Each session keeps its newest; the one sound goes on what is left.
@@ -536,15 +534,17 @@ pub fn end_notice(table: &Table, sessions: &[String]) -> String {
             None => counts.push((word, 1)),
         }
     }
-    let tasks = match sessions.len() {
-        1 => "The run's 1 task has stopped".to_owned(),
-        n => format!("All {n} tasks have stopped"),
-    };
+    let tasks = copy::count("notify.tasks_stopped", sessions.len() as u64, &[]);
     let counts: Vec<String> = counts
         .iter()
-        .map(|(word, count)| format!("{count} {word}"))
+        .map(|(word, count)| {
+            copy::count("notify.state_count", *count as u64, &[&states::shown(word)])
+        })
         .collect();
-    format!("DeepBuild\n{tasks}: {}.", counts.join(", "))
+    copy::fill(
+        "notify.end_notice",
+        &[&tasks, &counts.join(copy::text("notify.count_comma"))],
+    )
 }
 
 /// A notification's title: it names DeepBuild and the session's task.
@@ -563,7 +563,7 @@ fn title(table: &Table, session: &str) -> String {
             None => named,
         };
     }
-    format!("DeepBuild · {}", table.title(session))
+    format!("DeepBuild · {}", table.title(session)) // copy-exception: the product's name and a session's title
 }
 
 /// A batch's notification (#1345), from its first ask's: how many questions the one card holds, then the first's
@@ -571,10 +571,14 @@ fn title(table: &Table, session: &str) -> String {
 fn batch_text(first: &str, count: usize) -> String {
     let line = first.split_once('\n').map_or(first, |(_, line)| line);
     let first = line.split_once(" — ").map_or(line, |(_, rest)| rest);
-    format!(
-        "DeepBuild\n{} {} — {count} questions on one card. The first: {first}",
-        states::glyph(states::State::NeedsYou.entry()),
-        states::State::NeedsYou.word()
+    copy::count(
+        "notify.batch",
+        count as u64,
+        &[
+            &states::glyph(states::State::NeedsYou.entry()),
+            &states::shown(states::State::NeedsYou.word()),
+            &first,
+        ],
     )
 }
 
@@ -594,13 +598,16 @@ fn ask_text(table: &Table, ask: &Value, now: u64) -> String {
     );
     // The undo of its default gives it a new deadline.
     let deadline = table.deadline(ask).unwrap_or(now);
-    format!(
-        "{}\n{} {} — {} If you don't answer: {label}, at {}.",
-        title(table, ask["session"].as_str().unwrap_or_default()),
-        states::glyph(states::State::NeedsYou.entry()),
-        states::State::NeedsYou.word(),
-        question,
-        states::moment(deadline, now),
+    copy::fill(
+        "notify.ask",
+        &[
+            &title(table, ask["session"].as_str().unwrap_or_default()),
+            &states::glyph(states::State::NeedsYou.entry()),
+            &states::shown(states::State::NeedsYou.word()),
+            &question,
+            &label,
+            &states::moment(deadline, now),
+        ],
     )
 }
 

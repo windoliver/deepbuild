@@ -14,6 +14,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::address::{Address, Place};
+use crate::copy;
 
 /// One row of the table.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
@@ -56,7 +57,7 @@ pub struct Show {
 /// Where each action's key binds: ⌘[ and ⌘] belong to a text field or a terminal while one has the keys (#1460).
 fn context(name: &str) -> Option<&'static str> {
     match name {
-        "Back" | "Forward" => Some("!Input && !Terminal"),
+        "Back" | "Forward" => Some("!Input && !Terminal"), // copy-exception: a key context, never drawn
         _ => None,
     }
 }
@@ -198,23 +199,59 @@ pub fn set_pages(pages: Vec<(String, String)>, cx: &mut App) {
 
 fn item(name: &str) -> MenuItem {
     MenuItem::action(
-        name.to_owned(),
+        label(name).to_owned(),
         Run {
             name: name.to_owned().into(),
         },
     )
 }
 
+/// What an action's or a menu's name draws as in the language shown (#2403): the English name stays the action's
+/// identity, which its key, ⌘K and a row's context menu send and `run` matches; only the label is the table's.
+pub fn label(name: &str) -> &str {
+    let key = match name {
+        "Preferences" => "actions.preferences",
+        "Hide DeepBuild" => "actions.hide_deepbuild",
+        "Quit DeepBuild" => "actions.quit_deepbuild",
+        "Write in the box" => "actions.write_in_the_box",
+        "Close Window" => "actions.close_window",
+        "Undo answer" => "actions.undo_answer",
+        "Commands" => "actions.commands",
+        "Back" => "actions.back",
+        "Forward" => "actions.forward",
+        "Next ask" => "actions.next_ask",
+        "Next area" => "actions.next_area",
+        "Open" => "actions.open",
+        "Pause" => "actions.pause",
+        "Write to it" => "actions.write_to_it",
+        "Rename" => "actions.rename",
+        "Later" => "actions.later",
+        "Copy title" => "actions.copy_title",
+        "Copy link" => "actions.copy_link",
+        "Minimize" => "actions.minimize",
+        "Keyboard shortcuts" => "actions.keyboard_shortcuts",
+        "File" => "actions.menu_file",
+        "Edit" => "actions.menu_edit",
+        "View" => "actions.menu_view",
+        "Go" => "actions.menu_go",
+        "Session" => "actions.menu_session",
+        "Window" => "actions.menu_window",
+        "Help" => "actions.menu_help",
+        _ => return name,
+    };
+    copy::text(key)
+}
+
 /// The Session menu's items for the selected row, in order: a row's context menu holds the same (#886).
 pub fn session_items() -> Vec<&'static str> {
     let mut items = vec![
-        "Open",
-        "Pause",
-        "Write to it",
-        "Rename",
-        "Later",
-        "Copy title",
-        "Copy link",
+        "Open",        // copy-exception: an action's identity; label() draws it
+        "Pause",       // copy-exception: an action's identity; label() draws it
+        "Write to it", // copy-exception: an action's identity; label() draws it
+        "Rename",      // copy-exception: an action's identity; label() draws it
+        "Later",       // copy-exception: an action's identity; label() draws it
+        "Copy title",  // copy-exception: an action's identity; label() draws it
+        "Copy link",   // copy-exception: an action's identity; label() draws it
     ];
     if cfg!(feature = "plant-no-later") {
         items.retain(|name| *name != "Later");
@@ -228,23 +265,23 @@ pub fn session_items() -> Vec<&'static str> {
 
 /// The names each menu holds, in order, the table's alone: View's pages and Edit's text items come after.
 fn layout() -> Vec<(&'static str, Vec<&'static str>)> {
-    let mut deepbuild = vec!["Preferences", "Hide DeepBuild", "Quit DeepBuild"];
+    let mut deepbuild = vec!["Preferences", "Hide DeepBuild", "Quit DeepBuild"]; // copy-exception: an action's identity; label() draws it
     if cfg!(feature = "plant-no-quit-item") {
         deepbuild.retain(|name| !name.starts_with("Quit"));
     }
     let mut session = session_items();
     if cfg!(feature = "plant-approve-menu-item") {
-        session.push("Approve");
+        session.push("Approve"); // copy-exception: planted wrong program
     }
     let mut menus = vec![
-        ("DeepBuild", deepbuild),
-        ("File", vec!["Write in the box", "Close Window"]),
-        ("Edit", vec!["Undo answer"]),
-        ("View", vec!["Commands"]),
-        ("Go", vec!["Back", "Forward", "Next ask", "Next area"]),
-        ("Session", session),
-        ("Window", vec!["Minimize"]),
-        ("Help", vec!["Keyboard shortcuts"]),
+        ("DeepBuild", deepbuild), // copy-exception: the product's name, the app menu's title
+        ("File", vec!["Write in the box", "Close Window"]), // copy-exception: an action's identity; label() draws it
+        ("Edit", vec!["Undo answer"]), // copy-exception: an action's identity; label() draws it
+        ("View", vec!["Commands"]),    // copy-exception: an action's identity; label() draws it
+        ("Go", vec!["Back", "Forward", "Next ask", "Next area"]), // copy-exception: an action's identity; label() draws it
+        ("Session", session), // copy-exception: an action's identity; label() draws it
+        ("Window", vec!["Minimize"]), // copy-exception: an action's identity; label() draws it
+        ("Help", vec!["Keyboard shortcuts"]), // copy-exception: an action's identity; label() draws it
     ];
     if cfg!(feature = "plant-action-missing-from-menu") {
         for (_, items) in &mut menus {
@@ -265,10 +302,14 @@ pub fn menus() -> Vec<Menu> {
                     use gpui_kit::base::input::{Copy, Cut, Paste, SelectAll};
                     items.extend([
                         MenuItem::separator(),
-                        MenuItem::os_action("Cut", Cut, OsAction::Cut),
-                        MenuItem::os_action("Copy", Copy, OsAction::Copy),
-                        MenuItem::os_action("Paste", Paste, OsAction::Paste),
-                        MenuItem::os_action("Select All", SelectAll, OsAction::SelectAll),
+                        MenuItem::os_action(copy::text("actions.cut"), Cut, OsAction::Cut),
+                        MenuItem::os_action(copy::text("actions.copy"), Copy, OsAction::Copy),
+                        MenuItem::os_action(copy::text("actions.paste"), Paste, OsAction::Paste),
+                        MenuItem::os_action(
+                            copy::text("actions.select_all"),
+                            SelectAll,
+                            OsAction::SelectAll,
+                        ),
                     ]);
                 }
                 "View" => {
@@ -291,7 +332,7 @@ pub fn menus() -> Vec<Menu> {
                 _ => {}
             }
             Menu {
-                name: name.into(),
+                name: label(name).to_owned().into(),
                 items,
                 disabled: false,
             }
@@ -299,8 +340,15 @@ pub fn menus() -> Vec<Menu> {
         .collect()
 }
 
+/// What the app does once its menus are set, with the Window menu's title as drawn: the app binary hands macOS that
+/// menu (#2403); a replica sets nothing.
+pub static MENUS_SET: std::sync::OnceLock<fn(&str)> = std::sync::OnceLock::new();
+
 pub fn set_menus(cx: &mut App) {
     cx.set_menus(menus());
+    if let Some(set) = MENUS_SET.get() {
+        set(label("Window")); // copy-exception: the Window menu's identity; label() draws it
+    }
 }
 
 /// The key a menu item shows for `action`, in the table's form, as the macOS menu bar picks it: the first binding
@@ -340,7 +388,7 @@ pub fn glyphs(key: &str) -> String {
         "enter" => "↩".to_owned(),
         "escape" => "⎋".to_owned(),
         "tab" => "⇥".to_owned(),
-        "space" => "Space".to_owned(),
+        "space" => copy::text("actions.space").to_owned(),
         "backspace" => "⌫".to_owned(),
         "delete" => "⌦".to_owned(),
         "up" => "↑".to_owned(),
@@ -423,7 +471,9 @@ pub fn hub_write(method: &'static str, params: Value, what: String, cx: &mut App
     cx.spawn(async move |cx| {
         if let Err(error) = call.await {
             let why = crate::hub::why(&error);
-            cx.update(|cx| crate::notice::show(format!("{what} didn't run: {why}"), cx));
+            cx.update(|cx| {
+                crate::notice::show(copy::fill("actions.didnt_run", &[&what, &why]), cx)
+            });
         }
     })
     .detach();
@@ -477,7 +527,7 @@ pub fn run(name: &str, window: &mut Window, cx: &mut App) {
                 hub_write(
                     "session.pause",
                     json!({ "session": session }),
-                    "Pause".into(),
+                    copy::text("actions.pause").to_owned(),
                     cx,
                 );
             }
@@ -491,7 +541,12 @@ pub fn run(name: &str, window: &mut Window, cx: &mut App) {
         }
         "Later" if !cfg!(feature = "plant-no-later") => {
             if let Selected::Ask { ask, .. } = &selected {
-                hub_write("ask.later", json!({ "ask": ask }), "Later".into(), cx);
+                hub_write(
+                    "ask.later",
+                    json!({ "ask": ask }),
+                    copy::text("actions.later").to_owned(),
+                    cx,
+                );
             }
         }
         "Copy title" => {

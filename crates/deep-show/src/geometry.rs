@@ -171,7 +171,8 @@ fn curve_row(
     row
 }
 
-/// A `mesh.asset@1`'s mesh, its glTF read from the evidence store by sha256; or the refusal.
+/// A `mesh.asset@1`'s mesh, its glTF read from the evidence store by sha256, its vertices where
+/// a soft volume's skin written on the item puts them (#2457); or the refusal.
 fn asset_mesh(evidence: &std::path::Path, id: &str, item: &Value) -> Result<Mesh, Value> {
     let at = format!("items/{id}/params/sha256");
     let sha = item
@@ -182,6 +183,7 @@ fn asset_mesh(evidence: &std::path::Path, id: &str, item: &Value) -> Result<Mesh
         .ok_or_else(|| json!({"code": "asset_missing", "path": at}))?;
     let node = item.pointer("/params/node").cloned().unwrap_or(json!(0));
     deep_canvas_scene3d::gltf::mesh(&bytes, &node)
+        .and_then(|m| deep_canvas_scene3d::skin::applied(m, item))
         .map_err(|why| json!({"code": "out_of_range", "path": format!("items/{id}/{}", why.split(':').next().unwrap_or(""))}))
 }
 

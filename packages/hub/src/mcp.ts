@@ -110,6 +110,22 @@ class Hub {
     }).finally(() => { if (this.inFlight.get(mine) === id) this.inFlight.delete(mine); });
     return 'error' in reply ? { ok: false, value: reply.error } : { ok: true, value: reply.result };
   }
+  /**
+   * The tools as the hub publishes them and holds calls to (#1415), over this connection, which then closes: the calls'
+   * own connection still says hello at the first call, once the agent's session has started. Undefined when the hub
+   * can't be reached in time.
+   */
+  async tools(): Promise<unknown[] | undefined> {
+    if (!(await this.connect()) || !this.sock) return undefined;
+    const id = `mcp#${++this.ids}`;
+    const reply = await new Promise<Obj>((resolve) => {
+      const timer = setTimeout(() => { this.waiting.delete(id); resolve({}); }, UNREACHABLE_MS);
+      this.waiting.set(id, (message) => { clearTimeout(timer); resolve(message); });
+      this.sock!.write(line({ id, method: 'mcp.tools', params: {} }));
+    }).finally(() => this.sock?.destroy());
+    const tools = (reply.result as Obj | undefined)?.tools;
+    return Array.isArray(tools) ? tools : undefined;
+  }
   /** The client cancelled a request (#1923): the hub is told that call's caller is gone, and its reply is never sent. */
   cancel(request: unknown): boolean {
     const id = this.inFlight.get(JSON.stringify(request ?? null));
@@ -160,7 +176,8 @@ export async function runMcp(server: 'deep' | 'deep-actions' = 'deep'): Promise<
         send({ id, result: {} });
         break;
       case 'tools/list':
-        send({ id, result: { tools } });
+        // The hub's list while it can be reached, so what is listed is what its check holds a call to; else this build's.
+        send({ id, result: { tools: (server === 'deep' ? await new Hub().tools() : undefined) ?? tools } });
         break;
       case 'resources/list':
         send({ id, result: { resources: CODES.map((page) => ({ uri: `deep://codes/${page.code}`, name: page.code, description: page.meaning, mimeType: 'application/json' })) } });

@@ -1,0 +1,14 @@
+// The test plug-in of #1415's AC8 (tests/acceptance/1415/README.md, The test plug-in): it registers forty check kinds,
+// ext.forty.k01 to ext.forty.k40, one every 50 ms, so registering them takes 2 s from the moment its code starts. Each kind
+// passes whatever it is given; no criterion runs one.
+
+const KINDS = Array.from({ length: 40 }, (_, i) => `ext.forty.k${String(i + 1).padStart(2, '0')}`);
+
+const passed = async () => ({ outcome: 'passed', testsRun: 1, evidence: [], read: [], mask: null, failures: [] });
+
+export default async function (deep: any): Promise<void> {
+  for (const kind of KINDS) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await deep.registerCheck(kind, passed);
+  }
+}

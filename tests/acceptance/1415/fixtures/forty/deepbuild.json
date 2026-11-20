@@ -1,0 +1,15 @@
+{
+  "id": "test/forty",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "checks": [
+    "ext.forty.k01", "ext.forty.k02", "ext.forty.k03", "ext.forty.k04", "ext.forty.k05",
+    "ext.forty.k06", "ext.forty.k07", "ext.forty.k08", "ext.forty.k09", "ext.forty.k10",
+    "ext.forty.k11", "ext.forty.k12", "ext.forty.k13", "ext.forty.k14", "ext.forty.k15",
+    "ext.forty.k16", "ext.forty.k17", "ext.forty.k18", "ext.forty.k19", "ext.forty.k20",
+    "ext.forty.k21", "ext.forty.k22", "ext.forty.k23", "ext.forty.k24", "ext.forty.k25",
+    "ext.forty.k26", "ext.forty.k27", "ext.forty.k28", "ext.forty.k29", "ext.forty.k30",
+    "ext.forty.k31", "ext.forty.k32", "ext.forty.k33", "ext.forty.k34", "ext.forty.k35",
+    "ext.forty.k36", "ext.forty.k37", "ext.forty.k38", "ext.forty.k39", "ext.forty.k40"
+  ]
+}

@@ -237,6 +237,12 @@ impl Canonical for TextSpec {
         if !self.spans.is_empty() {
             format!("{:?}", self.spans).encode(out);
         }
+        // #1215: a vertical text's columns; a horizontal one encodes as it did before them.
+        if let deep_text::Flow::Vertical(c) = self.flow {
+            (c.rl, c.upright, c.combine).encode(out);
+            c.height.map(f64::from).encode(out);
+            self.line_height.encode(out);
+        }
     }
 }
 
@@ -247,6 +253,10 @@ impl Canonical for Run {
         s.glyphs.len().encode(out);
         for g in &s.glyphs {
             (g.font.index, g.size, g.id, g.x, g.y, g.grapheme).encode(out);
+            // #1215: a glyph a vertical run turns; an upright one encodes as before.
+            if g.turn {
+                true.encode(out);
+            }
         }
         (s.width, s.height, s.lines, s.ellipsized).encode(out);
         s.shown.encode(out);
@@ -501,7 +511,7 @@ fn animate(v: &mut View<'_>) -> Result<(), OpError> {
     let reduced = v.reduced_motion()?;
     let t = 0;
     let id = v.id().unwrap_or_default().to_string();
-    let mut out: Vec<[f64; 2]> = vec![[0.0, 1.0]; run.shaped.glyphs.len()];
+    let mut out = vec![crate::animated::UNIT; run.shaped.glyphs.len()];
     let animators = fields
         .get("params")
         .and_then(|p| p.get("animators"))
@@ -532,15 +542,9 @@ fn animate(v: &mut View<'_>) -> Result<(), OpError> {
             }
         }
     }
-    // #466 (#2456): a reveal at the progress this frame evaluated, each glyph by its unit's share.
+    // #466 (#2456): a reveal at the progress this frame evaluated, as a fade or a write draws it.
     if let Some(Value::Object(params)) = fields.get("params") {
-        if let Some(shares) =
-            crate::animator::reveal_opacity(params, &run.shaped, &id).map_err(refused)?
-        {
-            for (unit, share) in out.iter_mut().zip(shares) {
-                unit[1] *= share;
-            }
-        }
+        crate::animated::reveal(&mut out, params, &run.shaped, &id).map_err(refused)?;
     }
     v.write("text.animated", Val::typed(out))
 }
@@ -1025,6 +1029,8 @@ fn register_data(r: &mut Registrar, decimate: fn(&mut View<'_>) -> Result<(), Op
     crate::axes3d::register(r);
     // #225: the vector field, its stream table and flow, and its `follow_stream` entry.
     crate::vector_field::register(r);
+    // #2776: what each path does with the two kinds drawn as marks in 3D.
+    r.paths(include_str!("paths.json"));
     // A scale it can't read raises marks2d's `scale_type` or `bad_scale`, which mark sets and
     // axes raise through the same scale.
     r.fixture("points", points_board(), None).sidecar(json!({
@@ -1242,13 +1248,13 @@ pub fn marks2d_planted(planted: relations::Planted) -> Module {
     }
 }
 
-/// What the frame draws: the draw list, each text's shaped run and each animated text's units as
-/// `[lift, opacity]`. The status marks are the text module's (`text.status`).
+/// What the frame draws: the draw list, each text's shaped run and each animated text's units
+/// ([`crate::animated::Unit`]). The status marks are the text module's (`text.status`).
 #[derive(Debug)]
 pub struct Drawing {
     pub frame: Frame,
     pub runs: BTreeMap<String, Arc<Run>>,
-    pub animated: BTreeMap<String, Vec<[f64; 2]>>,
+    pub animated: BTreeMap<String, Vec<crate::animated::Unit>>,
     /// The marks this frame put into its draw list: every mark when it built the list, the
     /// changed items' when it replaced them in the last one (#896).
     pub built: usize,
@@ -1401,6 +1407,10 @@ fn register_marks2d_with(r: &mut Registrar, planted: relations::Planted) {
         &["marks2d.frame"],
     )
     .document()
+    // A light is no mark (#1634): the frame builds nothing from one, and costs nothing on it.
+    .applies(|_, _, item| {
+        !(item.get("kind").and_then(Value::as_str)).is_some_and(|k| k.starts_with("light."))
+    })
     .run(frame);
     r.code(
         "bad_doc",
@@ -1941,7 +1951,7 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     }
     let mut animated = BTreeMap::new();
     for (id, a) in v.every("text.animated")? {
-        if let Some(units) = a.as_typed::<Vec<[f64; 2]>>() {
+        if let Some(units) = a.as_typed::<Vec<crate::animated::Unit>>() {
             animated.insert(id.to_string(), (*units).clone());
         }
     }

@@ -36,6 +36,7 @@ fn key(hash: [u8; 32], size: [u32; 2], level: u8) -> Key {
         crop: [0, 0, size[0], size[1]],
         flip: 0,
         level,
+        frame: 0,
     }
 }
 

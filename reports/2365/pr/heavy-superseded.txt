@@ -1,0 +1,1 @@
+INCONCLUSIVE: stopped initial 600 MB copy after source inspection identified accumulating complete lines. No test result for this version. Run is superseded by a meaningful bounded-buffer correction, not retried unchanged.

@@ -93,6 +93,8 @@ pub struct Body {
     /// deg/s, as written.
     pub angular: [f64; 3],
     pub mass: Option<f64>,
+    /// #2240: the local point its weight acts at, m; `None` leaves it where its shapes put it.
+    pub centre_of_mass: Option<[f64; 3]>,
     pub linear_damping: f64,
     pub angular_damping: f64,
     pub gravity_scale: f64,
@@ -236,6 +238,7 @@ pub struct World {
     pub solve: Option<Solve>,
 }
 
+mod centre;
 mod character;
 pub mod data;
 mod heightfield;
@@ -243,9 +246,10 @@ mod inputs;
 mod reads;
 mod soft;
 mod vehicle;
+pub use centre::bounds;
 pub use character::{Character, FIELDS as CHARACTER_FIELDS};
 pub use heightfield::HEIGHTFIELD_SAMPLES;
-pub use inputs::{resolved, Input, On, INPUTS_LATER};
+pub use inputs::{number_fields, resolved, Input, On, INPUTS_LATER};
 pub use reads::{probe_pose, probe_shape, Output, Read, Skin, Solve, READS};
 pub use soft::{sides, Pin, Soft, SoftShape, Stiffness, Tear, OPEN_MESH};
 pub use vehicle::{flat, Vehicle, Wheel, MOST_WHEELS};
@@ -1023,6 +1027,7 @@ impl Reader {
                 "velocity",
                 "mass",
                 "inertia",
+                "centre_of_mass",
                 "damping",
                 "gravity_scale",
                 "ccd",
@@ -1037,14 +1042,7 @@ impl Reader {
             ],
         );
         let (kind, vehicle) = (self.kind(b, p), self.vehicle(b, p));
-        if let Some(x) = b.get("inertia") {
-            self.refuse(
-                "physics.unsupported",
-                join(p, "inertia"),
-                x,
-                "inertia isn't run by this backend interface yet; #2098 brings it".into(),
-            );
-        }
+        self.inertia(b, p);
         let follow = self.follow(b, p, kind);
         let mut uses = Vec::new();
         for (i, u) in b
@@ -1145,6 +1143,7 @@ impl Reader {
             );
         }
         let character = self.character(b, p, kind, &uses, shapes);
+        let centre_of_mass = self.centre_of_mass(b, p, kind, &uses, shapes);
         Body {
             kind,
             follow,
@@ -1161,6 +1160,7 @@ impl Reader {
             linear: self.vec3(vel, "linear", &join(p, "velocity"), [0.0; 3]),
             angular: self.vec3(vel, "angular", &join(p, "velocity"), [0.0; 3]),
             mass: self.opt_num(b, "mass", p, f64::MIN_POSITIVE),
+            centre_of_mass,
             linear_damping: self.num(damp, "linear", &join(p, "damping"), damping, 0.0, f64::MAX),
             angular_damping: self.num(damp, "angular", &join(p, "damping"), damping, 0.0, f64::MAX),
             gravity_scale: self.num(b, "gravity_scale", p, 1.0, f64::MIN, f64::MAX),

@@ -13,7 +13,7 @@ use deep_text::{unicode::grapheme_starts, Shaped, Shaper};
 use crate::scene::{Frame, Mark};
 
 /// One grapheme of a text's source as drawn: its bytes in the source, the line it is on, its left and right edges in
-/// page units, and whether its run goes right to left.
+/// page units (#1215: in a vertical text, its top and bottom on its column), and whether its run goes right to left.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Place {
     pub bytes: Range<usize>,
@@ -23,7 +23,8 @@ pub struct Place {
 }
 
 /// A text item as drawn: its source text, its box and each line's top and height in page units, and the place of
-/// each grapheme of its source.
+/// each grapheme of its source. #1215: a vertical text's lines are its columns, each its left edge and width, in
+/// reading order, and its places run down them.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextBox {
     pub item: String,
@@ -31,6 +32,7 @@ pub struct TextBox {
     pub rect: [f64; 4],
     pub lines: Vec<[f64; 2]>,
     pub places: Vec<Place>,
+    pub vertical: bool,
 }
 
 /// The wrong programs #1498's suite proves its tests fail on.
@@ -75,32 +77,71 @@ impl TextBox {
         shaped: &Shaped,
         width: Option<f64>,
     ) -> TextBox {
+        let vertical = matches!(shaped.flow, deep_text::Flow::Vertical(_));
+        // Where a line's positions start: the text's left edge, or (#1215) a vertical text's top.
+        let start = if vertical { origin[1] } else { origin[0] };
         let shown = grapheme_starts(&shaped.shown).len();
-        // Each shown grapheme's left and right edges and baseline, from its glyphs.
+        // Each shown grapheme's left and right edges and baseline, from its glyphs; in a vertical text its top and
+        // bottom on its column, and its column's axis.
         let mut drawn: Vec<Option<([f64; 2], f64)>> = vec![None; shown];
+        // The origin and end of the last grapheme placed: a digit run set across shares one origin, and its graphemes
+        // take its cell in turn.
+        let mut stacked: Option<([f32; 2], f64)> = None;
         for g in &shaped.glyphs {
             let Some(d) = drawn.get_mut(g.grapheme) else {
                 continue;
             };
-            let (a, b) = (f64::from(g.x), f64::from(g.x + g.advance));
+            let (a, b, line) = if vertical {
+                let first = d.is_none();
+                let y = match stacked {
+                    Some((o, end)) if first && o == g.origin => end,
+                    _ => f64::from(g.origin[1]),
+                };
+                let end = y + f64::from(g.along);
+                if first {
+                    stacked = Some((g.origin, end));
+                }
+                (y, end, f64::from(g.origin[0]))
+            } else {
+                (f64::from(g.x), f64::from(g.x + g.advance), f64::from(g.y))
+            };
             let (a, b) = (a.min(b), a.max(b));
             *d = Some(match *d {
                 Some(([x0, x1], y)) => ([x0.min(a), x1.max(b)], y),
-                None => ([a, b], f64::from(g.y)),
+                None => ([a, b], line),
             });
         }
-        let mut baselines: Vec<f64> = drawn.iter().flatten().map(|(_, y)| *y).collect();
-        baselines.sort_by(f64::total_cmp);
-        baselines.dedup_by(|a, b| (*a - *b).abs() < 0.5);
-        // The first line's top is the run's: every line sits as far above its baseline.
-        let first = baselines.first().copied().unwrap_or(0.0);
         let height = f64::from(shaped.line_height);
-        let mut lines: Vec<[f64; 2]> = baselines
-            .iter()
-            .map(|y| [origin[1] + y - first, height])
-            .collect();
+        let mut baselines: Vec<f64> = drawn.iter().flatten().map(|(_, y)| *y).collect();
+        let mut lines: Vec<[f64; 2]> = if vertical {
+            // Columns in reading order, the order their graphemes come in, each a line height wide about its axis.
+            let mut axes: Vec<f64> = Vec::new();
+            for x in baselines {
+                if !axes.iter().any(|a| (a - x).abs() < 0.5) {
+                    axes.push(x);
+                }
+            }
+            baselines = axes;
+            baselines
+                .iter()
+                .map(|x| [origin[0] + x - height / 2.0, height])
+                .collect()
+        } else {
+            baselines.sort_by(f64::total_cmp);
+            baselines.dedup_by(|a, b| (*a - *b).abs() < 0.5);
+            // The first line's top is the run's: every line sits as far above its baseline.
+            let first = baselines.first().copied().unwrap_or(0.0);
+            baselines
+                .iter()
+                .map(|y| [origin[1] + y - first, height])
+                .collect()
+        };
         if lines.is_empty() {
-            lines.push([origin[1], height]);
+            lines.push(if vertical {
+                [origin[0], height]
+            } else {
+                [origin[1], height]
+            });
         }
         let line_of = |y: f64| {
             baselines
@@ -134,14 +175,14 @@ impl TextBox {
                     Place {
                         bytes,
                         line: line_of(y),
-                        x: [origin[0] + x0, origin[0] + x1],
+                        x: [start + x0, start + x1],
                         rtl: false,
                     }
                 }
                 // A grapheme with no glyph of its own, a line's break or a ligature's second part: where the one
                 // before it ends.
                 None => {
-                    let (line, at) = places.last().map_or((0, origin[0]), |p: &Place| {
+                    let (line, at) = places.last().map_or((0, start), |p: &Place| {
                         (p.line, if p.rtl { p.x[0] } else { p.x[1] })
                     });
                     Place {
@@ -173,15 +214,25 @@ impl TextBox {
         for (p, rtl) in places.iter_mut().zip(rtl) {
             p.rtl = rtl;
         }
-        let w = width.unwrap_or(f64::from(shaped.width));
-        let top = lines[0][0];
-        let bottom = lines.last().map_or(top, |l| l[0] + l[1]);
+        let rect = if vertical {
+            // Its columns across, and down to the longest column's end.
+            let left = lines.iter().map(|l| l[0]).fold(f64::MAX, f64::min);
+            let right = lines.iter().map(|l| l[0] + l[1]).fold(f64::MIN, f64::max);
+            let end = places.iter().map(|p| p.x[1]).fold(origin[1], f64::max);
+            [left, origin[1], right - left, end - origin[1]]
+        } else {
+            let w = width.unwrap_or(f64::from(shaped.width));
+            let top = lines[0][0];
+            let bottom = lines.last().map_or(top, |l| l[0] + l[1]);
+            [origin[0], top, w, bottom - top]
+        };
         TextBox {
             item: item.to_owned(),
             source: source.to_owned(),
-            rect: [origin[0], top, w, bottom - top],
+            rect,
             lines,
             places,
+            vertical,
         }
     }
 
@@ -195,7 +246,8 @@ impl TextBox {
     }
 
     /// The caret before grapheme `offset` of the source, `len()` the one after its last: `[x, top, height]` in page
-    /// units. Before a grapheme drawn right to left it is at its right edge.
+    /// units. Before a grapheme drawn right to left it is at its right edge. #1215: a vertical text's caret lies
+    /// across its column, `[y, left, width]`.
     pub fn caret(&self, offset: usize) -> [f64; 3] {
         let line = |l: usize| self.lines.get(l).copied().unwrap_or(self.lines[0]);
         match (self.places.get(offset), self.places.last()) {
@@ -207,13 +259,44 @@ impl TextBox {
                 let [top, h] = line(p.line);
                 [if p.rtl { p.x[0] } else { p.x[1] }, top, h]
             }
+            (None, None) if self.vertical => [self.rect[1], self.lines[0][0], self.lines[0][1]],
             (None, None) => [self.rect[0], self.rect[1], self.lines[0][1]],
         }
     }
 
+    /// #1215: the caret before grapheme `offset` as a segment `[x0, y0, x1, y1]` in page units: down its line's
+    /// height, or across a vertical text's column.
+    pub fn caret_segment(&self, offset: usize) -> [f64; 4] {
+        let [along, from, size] = self.caret(offset);
+        if self.vertical {
+            [from, along, from + size, along]
+        } else {
+            [along, from, along, from + size]
+        }
+    }
+
+    /// #1215: the grapheme whose box holds the page point `c`: on the line (a vertical text's column) that holds it,
+    /// the one whose extent along the line does; `None` when none does.
+    pub fn index_at(&self, c: [f64; 2]) -> Option<usize> {
+        let (along, across) = if self.vertical {
+            (c[1], c[0])
+        } else {
+            (c[0], c[1])
+        };
+        let line = self
+            .lines
+            .iter()
+            .position(|[from, size]| across >= *from && across < from + size)?;
+        self.places
+            .iter()
+            .position(|p| p.line == line && p.x[0] <= along && along < p.x[1])
+    }
+
     /// The caret nearest the page point `c`: on the line `c` is on, or the nearest line, before or after the
-    /// grapheme under it by which half `c` is in, in the grapheme's own direction.
+    /// grapheme under it by which half `c` is in, in the grapheme's own direction (#1215: in a vertical text, the
+    /// column `c` is in, and above or below the grapheme's middle).
     pub fn offset_at(&self, c: [f64; 2]) -> usize {
+        let c = if self.vertical { [c[1], c[0]] } else { c };
         let away = |[top, h]: [f64; 2]| (top - c[1]).max(c[1] - (top + h)).max(0.0);
         let line = (0..self.lines.len())
             .min_by(|a, b| away(self.lines[*a]).total_cmp(&away(self.lines[*b])))
@@ -266,7 +349,11 @@ impl TextBox {
                 .flat_map(|p| p.x);
             let (lo, hi) = xs.fold((f64::MAX, f64::MIN), |(lo, hi), x| (lo.min(x), hi.max(x)));
             if hi > lo {
-                out.push([lo, *top, hi - lo, *h]);
+                out.push(if self.vertical {
+                    [*top, lo, *h, hi - lo]
+                } else {
+                    [lo, *top, hi - lo, *h]
+                });
             }
         }
         out
@@ -288,6 +375,14 @@ pub fn at(texts: &[TextBox], c: [f64; 2], within: Option<f64>) -> Option<(String
         .min_by(|a, b| away(a).total_cmp(&away(b)))
         .filter(|t| within.is_none_or(|m| away(t) <= m))?;
     Some((t.item.clone(), t.offset_at(c)))
+}
+
+/// #1215: the text item and the grapheme whose box holds page point `c`, the topmost text first.
+pub fn index_at(texts: &[TextBox], c: [f64; 2]) -> Option<(String, usize)> {
+    texts
+        .iter()
+        .rev()
+        .find_map(|t| Some((t.item.clone(), t.index_at(c)?)))
 }
 
 /// The items' indices in reading order: by center y, then x.

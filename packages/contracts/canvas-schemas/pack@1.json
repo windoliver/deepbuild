@@ -96,6 +96,16 @@
       "type": "object",
       "additionalProperties": { "type": "array", "items": { "type": "string" } }
     },
+    "moved": {
+      "$comment": "#1962: each kind the version moved, <pack>.<kind>@<major>, to the kind it became, <pack>/<kind>@<major>, in this pack or one requires.packs lists.",
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "removed": {
+      "$comment": "#1962: each kind the version removed, <pack>.<kind>@<major>, with its reason.",
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
     "layouts": {
       "type": "object",
       "additionalProperties": {
