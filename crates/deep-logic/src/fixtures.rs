@@ -170,7 +170,16 @@ impl Logic {
     /// Runs `lib`'s fixtures, or refuses: with `true` when a fixture's own run failed, `false`
     /// when the piece didn't let it run.
     fn run_fixtures(&mut self, piece_v: &Value, lib: &Lib) -> Result<Value, (Vec<Value>, bool)> {
-        let assets = piece_v.get("assets").cloned().unwrap_or(json!({}));
+        // The piece's assets, and the first-party packs' it doesn't carry (#416, #953).
+        let mut assets = crate::first_party::assets().clone();
+        assets.extend(
+            piece_v
+                .get("assets")
+                .and_then(Value::as_object)
+                .cloned()
+                .unwrap_or_default(),
+        );
+        let assets = Value::Object(assets);
         let mut records = Vec::new();
         for id in &lib.fixtures {
             let missing = || {
