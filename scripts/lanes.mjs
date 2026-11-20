@@ -1151,6 +1151,12 @@ alone.push('tests/acceptance/1215/');
 // #2457's files build deep-physics and deep-show.
 alone.push('tests/acceptance/2457/');
 
+// #2645's files write a 100 MB transcript and measure the resident memory of the process that makes a claim on it, and
+// write and read every corpus transcript with lines of 2.3 MB placed in it: one file at a time, nothing beside them.
+// The memory rise is judged by judgeLimit, so that file is timed.
+alone.push('tests/acceptance/2645/');
+timed.push('tests/acceptance/2645/big.test.ts');
+
 // #2500's files (blind) each build deep-canvas-render and deep-motion; CPU only, no GPU and no timing.
 alone.push('tests/acceptance/2500/');
 
@@ -1163,6 +1169,11 @@ alone.push('tests/acceptance/2777/');
 
 // #2898's files (blind) each start real hubs, plug-ins and jobs and hold 40 s deep_wait calls; no timing.
 alone.push('tests/acceptance/2898/');
+
+// #2227's files type-check the hub and the CLI (AC1), run the whole workspace build in a copy of the checkout (AC2,
+// 485 s on the base) and a child Vitest of #1409's limit stop (AC3).
+alone.push('tests/acceptance/2227/');
+slow.push('tests/acceptance/2227/ac2-native-build.test.ts');
 
 // #2109's file (blind) runs #83's AC11 goldens, which start real hubs, in a child vitest; no timing.
 alone.push('tests/acceptance/2109/');
