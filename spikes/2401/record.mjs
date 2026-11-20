@@ -181,7 +181,7 @@ if (has('--probe')) {
     first_entry: firstEntry(r.rows), result_entry: resultEntry(r.rows),
     kinds: r.rows.map((v) => `${v.type}${v.subtype ? `:${v.subtype}` : ''}`),
     // Each window entry's reading, without the account's overage fields.
-    rate_limit_events: r.rows.filter((v) => v?.type === 'rate_limit_event').map(({ rate_limit_info: l = {} }) => ({ status: l.status, rateLimitType: l.rateLimitType, utilization: l.utilization, resetsAt: l.resetsAt, surpassedThreshold: l.surpassedThreshold, unifiedWindows: l.unifiedWindows })),
+    rate_limit_events: r.rows.filter((v) => v?.type === 'rate_limit_event').map((v) => (typeof v.rate_limit_info === 'object' && v.rate_limit_info ? v.rate_limit_info : {})).map((l) => ({ status: l.status, rateLimitType: l.rateLimitType, utilization: l.utilization, resetsAt: l.resetsAt, surpassedThreshold: l.surpassedThreshold, unifiedWindows: l.unifiedWindows })),
     rate_limits: r.rows.filter((v) => v?.rate_limits).map((v) => ({ type: v.type, rate_limits: v.rate_limits })),
   }, null, 2));
   process.exit(0);

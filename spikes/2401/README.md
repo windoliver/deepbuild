@@ -27,8 +27,10 @@ between the labels. It writes `record.json` in the shape `tests/acceptance/2401/
   prompt goes on stdin, the working folder is an empty temp folder, and a run still going after 5 minutes is stopped.
   A run with no init or result entry, or no tokens, leaves no record: the script names it and exits 1, since the rule
   can't leave out a run it can't read.
-- **The environment** is the runner's `ALLOWED_ENV` and `CLAUDE_CONFIG_DIR`, plus the `TMPDIR`, `CLAUDE_CODE_TMPDIR`
-  and `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` its `reach` sets. Under the default label `CLAUDE_CODE_ENTRYPOINT` is
+- **The environment** is what the runner's `launch()` gives a review job: `ALLOWED_ENV` and `CLAUDE_CONFIG_DIR`,
+  plus the `TMPDIR`, `CLAUDE_CODE_TMPDIR` and `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` its `reach` sets. That keeps
+  your home, so your user settings load into every run, as they do in a review job today. Their SessionStart hooks
+  run in each one: probe.json's `kinds` shows their entries. The runner's eval read path instead gives a job an empty home with `{}` settings. Under the default label `CLAUDE_CODE_ENTRYPOINT` is
   unset; under the other it is `deepbuild`. `CLAUDECODE` and the caller's own entrypoint are never passed on.
 
   It differs from the runner's job in five ways:
