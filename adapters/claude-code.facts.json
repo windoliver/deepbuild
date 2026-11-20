@@ -1002,7 +1002,7 @@
     ]
   },
   "toolLoading": {
-    "readBy": "what a session holds of DeepBuild's MCP servers at its start is counted the way its client loads them (#2897): by search, the tools' names, the servers' instructions and the tools marked to load up front; whole, every tool's schema. The session's start records both counts and the way",
+    "readBy": "what a session holds of DeepBuild's MCP servers at its start is counted the way its client loads them (#2897): by search, the tools' names, the servers' instructions, the tools marked to load up front and the skill's description; whole, every tool and the skill. The start of a session whose config loads deepbuild records both counts and the way",
     "conformance": "claude/toolLoading/by-search",
     "entries": [
       {

@@ -969,7 +969,7 @@
     ]
   },
   "toolLoading": {
-    "readBy": "what a session holds of DeepBuild's MCP servers at its start is counted the way its client loads them (#2897); a way not read charges neither, and the record still holds both counts",
+    "readBy": "what a session holds of DeepBuild's MCP servers at its start is counted the way its client loads them (#2897); a way not read charges neither, and a Codex session's start records no count, since the hub records one only for a Claude Code session whose config loads deepbuild",
     "conformance": "codex/toolLoading/unread",
     "entries": [
       {
