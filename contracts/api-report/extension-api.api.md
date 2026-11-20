@@ -62,6 +62,9 @@ export interface Deep {
         };
         deadline: number;
     }): Promise<unknown>;
+    "schedule.read"(params: {
+        source: string;
+    }): Promise<unknown>;
     "source.ask"(params: {
         name: string;
         request: {

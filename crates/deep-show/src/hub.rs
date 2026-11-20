@@ -245,6 +245,10 @@ pub enum Planted {
     MigrationRewritesChannelTargetsOnly,
     /// #1960: a writer's patch stores its items' migrated params under the major they were saved at.
     StoreMigratedParamsUnderSavedMajor,
+    /// #1962: the load drops every instance of a kind its pack's version moved.
+    LoaderDropsMovedInstances,
+    /// #1962: the load's move rewrites the kind and runs the target's steps, and carries no path.
+    MoveRewritesKindOnly,
     /// #306: a derived item's seed comes from a counter over expansion order.
     SeedsByExpansionOrder,
     /// #2015: a repeat over elements seeds each derived item with the part's element count too.
@@ -934,9 +938,13 @@ impl<'a> Hub<'a> {
             migration_first_fault: scenario.planted == Some(Planted::MigrationFirstFault),
             migrate_one_major: scenario.planted == Some(Planted::MigrationOneMajor),
             migrate_zero_as_absent: scenario.planted == Some(Planted::MigrationZeroAsLeftOut),
-            migrate_params_only: scenario.planted == Some(Planted::MigrationRenamesParamsOnly),
+            migrate_params_only: matches!(
+                scenario.planted,
+                Some(Planted::MigrationRenamesParamsOnly | Planted::MoveRewritesKindOnly)
+            ),
             migrate_channels_only: scenario.planted
                 == Some(Planted::MigrationRewritesChannelTargetsOnly),
+            drops_moved: scenario.planted == Some(Planted::LoaderDropsMovedInstances),
             walk_inputs: (scenario.planted == Some(Planted::ExpandsInHashOrder))
                 .then_some(walk_in_hash_order as deep_canvas::document::packs::WalkInputs),
             // #222: the planted cue-list expander.

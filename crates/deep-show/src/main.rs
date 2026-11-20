@@ -1516,6 +1516,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "store_migrated_params_under_saved_major" => {
                     Planted::StoreMigratedParamsUnderSavedMajor
                 }
+                "loader_drops_moved_instances" => Planted::LoaderDropsMovedInstances,
+                "move_rewrites_kind_only" => Planted::MoveRewritesKindOnly,
                 "checkpoint_nearest_in_distance" => Planted::CheckpointNearestInDistance,
                 "merges_in_finish_order" => Planted::MergesInFinishOrder,
                 "runs_every_node" => Planted::RunsEveryNode,
