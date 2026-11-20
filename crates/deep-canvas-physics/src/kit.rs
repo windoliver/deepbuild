@@ -17,6 +17,7 @@ use crate::occurrence::{self, Row, KINDS};
 use crate::roles::TABLE;
 use crate::track;
 
+mod centres;
 mod fixtures;
 pub mod scan;
 mod sensors;
@@ -142,6 +143,8 @@ pub enum Measure {
     },
     /// #2309: how far below where it started `body` is after step `step`, along y, m.
     Sink { body: &'static str, step: usize },
+    /// #2240: the most `body` has turned from the orientation it was built with, at any step, deg.
+    Turn { body: &'static str },
     /// #2241: how far `body` has moved along `along` by the end of step `step`, m, signed.
     Along {
         body: &'static str,
@@ -175,6 +178,8 @@ pub struct Fixture {
     pub tolerance: Tolerance,
     /// The answer is a bound the measure may reach but never pass.
     pub never_past: bool,
+    /// #2240: the answer is a bound the measure passes.
+    pub past: bool,
     /// What the backend must claim to run it.
     pub caps: Vec<&'static str>,
 }
@@ -734,6 +739,21 @@ fn read(m: &Measure, t: &Trace, b: &dyn Backend, w: &World, f: &Fixture) -> Read
             let sink = p.get(*step).zip(p.first()).map(|(a, z)| z[1] - a[1]);
             reading(sink, json!({"body": body}))
         }
+        Measure::Turn { body } => {
+            let rots: Vec<[f64; 4]> = t
+                .states
+                .iter()
+                .filter_map(|s| body_of(s, body).map(|b| b.rot))
+                .collect();
+            let turns = rots.iter().map(|q| centres::turn_between(rots[0], *q));
+            let most = turns
+                .enumerate()
+                .reduce(|a, b| if b.1 > a.1 { b } else { a });
+            reading(
+                most.map(|m| m.1),
+                json!({"body": body, "step": most.map(|m| m.0)}),
+            )
+        }
         Measure::Along { body, along, step } => {
             let p = path(t, body);
             let ends = p.get(*step).zip(p.first());
@@ -827,6 +847,7 @@ fn named_measure(m: &Measure) -> String {
         Measure::Sink { body, step } => {
             format!("how far {body} is below where it started after step {step}, m")
         }
+        Measure::Turn { body } => format!("most {body} turned from how it was built, deg"),
         Measure::Along { body, step, .. } => {
             format!("how far {body} has moved along its belt by step {step}, m")
         }
@@ -857,6 +878,8 @@ fn within(f: &Fixture, m: f64, rate: f64) -> bool {
     };
     if f.never_past {
         m <= f.answer + room
+    } else if f.past {
+        m > f.answer + room
     } else {
         (m - f.answer).abs() <= room
     }

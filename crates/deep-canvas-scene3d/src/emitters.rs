@@ -9,6 +9,9 @@ use serde_json::{json, Map, Value};
 
 use crate::scene::{placed_at, Refused};
 
+/// An emitter's distance models (Emitter), the field list `emitter.distance.model` (#2777).
+pub const DISTANCE_MODELS: [&str; 3] = ["inverse", "linear", "exponential"];
+
 /// One positional voice at t, its fields as authored (defaults where omitted).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Emitter {
@@ -82,11 +85,7 @@ pub fn emitters(doc: &Value, t: i64) -> Result<Vec<Emitter>, Refused> {
         let dpath = format!("{path}/distance");
         let model = match distance.and_then(|d| d.get("model")) {
             None => "inverse".to_string(),
-            Some(Value::String(s))
-                if ["inverse", "linear", "exponential"].contains(&s.as_str()) =>
-            {
-                s.clone()
-            }
+            Some(Value::String(s)) if DISTANCE_MODELS.contains(&s.as_str()) => s.clone(),
             Some(_) => return bad("out_of_range", format!("{dpath}/model")),
         };
         let cone = e.get("cone");

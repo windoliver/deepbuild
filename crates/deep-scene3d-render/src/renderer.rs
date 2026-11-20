@@ -170,6 +170,15 @@ pub struct Renderer {
     /// frame has.
     pub(super) doffer: Option<Box<dof::Dofer>>,
     pub(super) dofing: bool,
+    /// #971: the look's local tone map, made when a frame first has one; whether this frame
+    /// has; and the output pass's bind group over the image it resolves, with that image and
+    /// the covered mask it binds.
+    pub(super) toner: Option<Box<local_tone::Toner>>,
+    pub(super) toning: bool,
+    pub(super) toned_bind: Option<(wgpu::TextureView, wgpu::TextureView, wgpu::BindGroup)>,
+    /// #971: another view reads this one's linear picture (a mirror's view, a view inset's), so
+    /// it resolves no local tone map of its own.
+    pub(super) pictured: bool,
     /// #166: the water's pass, made when a frame first has water, and whether this frame has.
     pub(super) waterer: Option<Box<water::Waterer>>,
     pub(super) watering: bool,

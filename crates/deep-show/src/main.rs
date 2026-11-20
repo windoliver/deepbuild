@@ -2559,7 +2559,9 @@ fn declared(held: &[Module]) -> Vec<deep_canvas::registry::Interface> {
 /// The registry of a `set` build holding `held`: every interface it seals against, the seams'
 /// backends and its canvas modules.
 fn assemble(set: BuildSet, held: Vec<Module>) -> Registry {
-    let mut registry = Registry::new(set);
+    // #2777: the lists of words the fields the listing holds past kinds' params offer.
+    let lists = forms::lists(|m| held.iter().any(|h| h.manifest.name == m));
+    let mut registry = Registry::new(set).word_lists(lists);
     for interface in declared(&held) {
         registry = registry.declare(interface);
     }
@@ -2861,6 +2863,7 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         "census_accepts" => Ok(StartPlanted::Seal(Fault::CensusAccepted)),
         "census_skipped" => Ok(StartPlanted::Seal(Fault::CensusSkipped)),
         "census_pack_first" => Ok(StartPlanted::Seal(Fault::CensusPackFirst)),
+        "refusal_bad_value_only" => Ok(StartPlanted::Seal(Fault::RefusalBadValueOnly)),
         "pages_capped_at_64mib" => Ok(StartPlanted::Layouts(
             deep_canvas_sandbox::layouts::Planted {
                 pages_pack_cap: true,
