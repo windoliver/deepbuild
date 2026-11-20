@@ -1,0 +1,185 @@
+diff --git a/crates/deep-hook/Cargo.toml b/crates/deep-hook/Cargo.toml
+index 8b75d87b2..a56b09cf7 100644
+--- a/crates/deep-hook/Cargo.toml
++++ b/crates/deep-hook/Cargo.toml
+@@ -8,10 +8,14 @@ publish = false
+ [dependencies]
+ deep-contracts = { path = "../deep-contracts" }
+ # A joined project's hub over TLS 1.3 (#1338): already in the lockfile for deep-relay, ring as the one provider.
+-rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+-ring = "0.17"
++rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"], optional = true }
++ring = { version = "0.17", optional = true }
+ 
+ [features]
++# Spike #2175, cut B: the joined-hub route (TLS over TCP). A build without it is the hook every machine runs; it
++# hands a hook call to deep-hook-joined, a build with it, when this machine has joined a project.
++default = ["joined"]
++joined = ["dep:rustls", "dep:ring"]
+ # A planted feature for #16's AC23: this build lists f_test among its features, sends it only when the hub
+ # lists it too, and sends it anyway when DEEP_HOOK_FORCE_F_TEST=1.
+ plant-f-test = []
+diff --git a/crates/deep-hook/src/main.rs b/crates/deep-hook/src/main.rs
+index 89532b190..cafee2cfb 100644
+--- a/crates/deep-hook/src/main.rs
++++ b/crates/deep-hook/src/main.rs
+@@ -1939,8 +1939,36 @@ fn clone(from: &Path, to: &Path) -> ExitCode {
+     }
+ }
+ 
++/// Spike #2175, cut B: a machine that joined a project (any ~/.deepbuild/hubs/*.json) runs its hook calls and spool
++/// sends in deep-hook-joined, the build with the network route, before the call's stdin is read.
++#[cfg(not(feature = "joined"))]
++fn hand_to_joined(args: &[String]) {
++    use std::os::unix::ffi::OsStrExt;
++    extern "C" {
++        fn execv(path: *const std::ffi::c_char, argv: *const *const std::ffi::c_char) -> i32;
++    }
++    let hook_call = matches!(args, [agent, _] if !agent.starts_with('-')) || args.first().is_some_and(|a| a == "spool-send");
++    let joins = fs::read_dir(home().join("hubs"))
++        .map(|d| d.flatten().any(|e| e.path().extension().is_some_and(|x| x == "json")))
++        .unwrap_or(false);
++    if hook_call && joins {
++        let Ok(me) = env::current_exe() else { return };
++        let Ok(path) = std::ffi::CString::new(me.with_file_name("deep-hook-joined").as_os_str().as_bytes()) else {
++            return;
++        };
++        let words: Vec<std::ffi::CString> = args.iter().filter_map(|a| std::ffi::CString::new(a.as_str()).ok()).collect();
++        let mut argv = vec![path.as_ptr()];
++        argv.extend(words.iter().map(|w| w.as_ptr()));
++        argv.push(std::ptr::null());
++        // SAFETY: path and argv are NUL-terminated and live through the call; execv returns only on failure.
++        unsafe { execv(path.as_ptr(), argv.as_ptr()) };
++    }
++}
++
+ fn main() -> ExitCode {
+     let args: Vec<String> = env::args().skip(1).collect();
++    #[cfg(not(feature = "joined"))]
++    hand_to_joined(&args);
+     match args.as_slice() {
+         [arg] if arg == "--version" => println!("{}", env!("CARGO_PKG_VERSION")),
+         [arg] if arg == "--help" => println!(
+diff --git a/crates/deep-hook/src/remote.rs b/crates/deep-hook/src/remote.rs
+index 44d59746d..6b42df297 100644
+--- a/crates/deep-hook/src/remote.rs
++++ b/crates/deep-hook/src/remote.rs
+@@ -7,17 +7,23 @@
+ 
+ use std::fs;
+ use std::io::{self, Read, Write};
++#[cfg(feature = "joined")]
+ use std::net::{TcpStream, ToSocketAddrs};
+ use std::os::unix::net::UnixStream;
+ use std::path::{Path, PathBuf};
+ use std::process::{Command, ExitCode, Stdio};
++#[cfg(feature = "joined")]
+ use std::sync::Arc;
+ use std::time::{Duration, Instant};
+ 
+ use deep_contracts::{parse, Value};
++#[cfg(feature = "joined")]
+ use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
++#[cfg(feature = "joined")]
+ use rustls::pki_types::pem::PemObject;
++#[cfg(feature = "joined")]
+ use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime};
++#[cfg(feature = "joined")]
+ use rustls::{ClientConfig, ClientConnection, DigitallySignedStruct, SignatureScheme, StreamOwned};
+ 
+ /// The network route's fail-open time from the hook's start: `routes.network.failOpenMs` in the adapter facts.
+@@ -48,9 +54,11 @@ impl Timed for Stream {
+ /// The connection a hook speaks over: the hub's socket, or a joined hub's TLS connection.
+ pub enum Stream {
+     Unix(UnixStream),
++    #[cfg(feature = "joined")]
+     Tls(Box<StreamOwned<ClientConnection, TcpStream>>),
+ }
+ impl Stream {
++    #[cfg(feature = "joined")]
+     fn tcp(&self) -> Option<&TcpStream> {
+         match self {
+             Stream::Tls(s) => Some(s.get_ref()),
+@@ -60,12 +68,14 @@ impl Stream {
+     pub fn set_read_timeout(&self, t: Option<Duration>) -> io::Result<()> {
+         match self {
+             Stream::Unix(s) => s.set_read_timeout(t),
++            #[cfg(feature = "joined")]
+             _ => self.tcp().map_or(Ok(()), |s| s.set_read_timeout(t)),
+         }
+     }
+     pub fn set_write_timeout(&self, t: Option<Duration>) -> io::Result<()> {
+         match self {
+             Stream::Unix(s) => s.set_write_timeout(t),
++            #[cfg(feature = "joined")]
+             _ => self.tcp().map_or(Ok(()), |s| s.set_write_timeout(t)),
+         }
+     }
+@@ -74,6 +84,7 @@ impl Read for Stream {
+     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+         match self {
+             Stream::Unix(s) => s.read(buf),
++            #[cfg(feature = "joined")]
+             Stream::Tls(s) => s.read(buf),
+         }
+     }
+@@ -82,12 +93,14 @@ impl Write for Stream {
+     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+         match self {
+             Stream::Unix(s) => s.write(buf),
++            #[cfg(feature = "joined")]
+             Stream::Tls(s) => s.write(buf),
+         }
+     }
+     fn flush(&mut self) -> io::Result<()> {
+         match self {
+             Stream::Unix(s) => s.flush(),
++            #[cfg(feature = "joined")]
+             Stream::Tls(s) => s.flush(),
+         }
+     }
+@@ -180,6 +193,11 @@ fn by_id(home: &Path, hub: &str) -> Option<Remote> {
+ }
+ 
+ /// The joined hub whose project is the forge identity of the repo holding `cwd` (~/.deepbuild/hubs/<hub ID>.json).
++#[cfg(not(feature = "joined"))]
++pub fn joined(_: &Path, _: &Path) -> Option<Remote> {
++    None
++}
++#[cfg(feature = "joined")]
+ pub fn joined(home: &Path, cwd: &Path) -> Option<Remote> {
+     let dir = home.join("hubs");
+     let mut files: Vec<PathBuf> = fs::read_dir(&dir)
+@@ -204,11 +222,13 @@ pub fn joined(home: &Path, cwd: &Path) -> Option<Remote> {
+ }
+ 
+ /// Pins the hub's certificate by its ID; its handshake signature is checked against that certificate's key.
++#[cfg(feature = "joined")]
+ #[derive(Debug)]
+ struct Pinned {
+     hub: String,
+     provider: Arc<rustls::crypto::CryptoProvider>,
+ }
++#[cfg(feature = "joined")]
+ impl ServerCertVerifier for Pinned {
+     fn verify_server_cert(
+         &self,
+@@ -257,12 +277,18 @@ impl ServerCertVerifier for Pinned {
+     }
+ }
+ 
++#[cfg(feature = "joined")]
+ fn hex(bytes: &[u8]) -> String {
+     bytes.iter().map(|b| format!("{b:02x}")).collect()
+ }
+ 
+ /// A TLS connection to the joined hub by `deadline`, this machine's key proved, and the hook's hello with its credential
+ /// queued behind the handshake; none if the hub can't be reached, or proves another key, in time.
++#[cfg(not(feature = "joined"))]
++pub fn connect(_: &Path, _: &Remote, _: Instant) -> Option<Stream> {
++    None
++}
++#[cfg(feature = "joined")]
+ pub fn connect(home: &Path, remote: &Remote, deadline: Instant) -> Option<Stream> {
+     let left = deadline.checked_duration_since(Instant::now())?;
+     let key_file = home.join("keys").join(format!("{}.key", remote.hub));

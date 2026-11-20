@@ -1,0 +1,3767 @@
+{
+ "issue": 2175,
+ "imports": {
+  "date": "2026-11-20",
+  "command": "node docs/spikes/2175/imports.mjs",
+  "head": "daf97e759dfec711e200a2fd1bf5c7a1604a62ee",
+  "count": 148,
+  "processes": {
+   "version": 1,
+   "hubAnswers": 1,
+   "hubAway": 2
+  },
+  "symbols": {
+   "_CCRandomGenerateBytes": {
+    "group": "std's environment, time and errors",
+    "callers": [
+     "std::sys::random::hashmap_random_keys"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "__NSGetArgc": {
+    "group": "std's environment, time and errors",
+    "callers": [
+     "std::env::args_os"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "__NSGetArgv": {
+    "group": "std's environment, time and errors",
+    "callers": [
+     "std::env::args_os"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "__NSGetEnviron": {
+    "group": "across the program (std's environment, time and errors; std's process spawning (`Command`))",
+    "callers": [
+     "std::env::vars_os",
+     "std::sys::process::unix::unix::Command::do_exec",
+     "std::sys::process::unix::unix::Command::spawn"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": true
+    }
+   },
+   "__NSGetExecutablePath": {
+    "group": "std's environment, time and errors",
+    "callers": [
+     "std::env::current_exe"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": true
+    }
+   },
+   "__Unwind_Backtrace": {
+    "group": "panics and backtraces",
+    "callers": [
+     "std::sys::backtrace::print::core::fmt::Display::fmt"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "__Unwind_DeleteException": {
+    "group": "panics and backtraces",
+    "callers": [
+     "__rustc::__rust_panic_cleanup"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "__Unwind_GetDataRelBase": {
+    "group": "panics and backtraces",
+    "callers": [
+     "std::sys::personality::gcc::find_eh_action",
+     "std::sys::personality::gcc::find_eh_action::core::ops::function::FnOnce::call_once::vtable"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "__Unwind_GetIP": {
+    "group": "panics and backtraces",
+    "callers": [
+     "std::backtrace_rs::symbolize::gimli::resolve",
+     "std::sys::backtrace::_print_fmt"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "__Unwind_GetIPInfo": {
+    "group": "panics and backtraces",
+    "callers": [
+     "_rust_eh_personality"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "__Unwind_GetLanguageSpecificData": {
+    "group": "panics and backtraces",
+    "callers": [
+     "_rust_eh_personality"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "__Unwind_GetRegionStart": {
+    "group": "panics and backtraces",
+    "callers": [
+     "_rust_eh_personality"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "__Unwind_GetTextRelBase": {
+    "group": "panics and backtraces",
+    "callers": [
+     "std::sys::personality::gcc::find_eh_action",
+     "std::sys::personality::gcc::find_eh_action::core::ops::function::FnOnce::call_once::vtable"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "__Unwind_RaiseException": {
+    "group": "panics and backtraces",
+    "callers": [
+     "__rustc::__rust_start_panic"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "__Unwind_Resume": {
+    "group": "across the program (deep-hook's own code; files and folders; joined-hub route: TCP, DNS, TLS (`remote.rs`, rustls, ring); other; panics and backtraces; std's environment, time and errors; std's process spawning (`Command`); std's runtime start and exit; the hub's Unix socket; threads, locks and channels)",
+    "callers": [
+     "A::rustls::msgs::handshake::read",
+     "B::rustls::msgs::handshake::encode",
+     "B::rustls::msgs::handshake::read",
+     "C::rustls::msgs::handshake::NtNtB8_5codec::Codec::read",
+     "E::rustls::msgs::handshake::read",
+     "F::rustls::msgs::handshake::encode",
+     "F::rustls::msgs::handshake::read",
+     "H::rustls::msgs::handshake::NtNtB8_5codec::Codec::read",
+     "H_Nt::rustls::msgs::handshake::core::clone::Clone::clone",
+     "J_::core::slice::iter::deep_hook::shell::Run::iter::traits::iterator::Iterator::find::matcher::i_::Call::reads_whole",
+     "N::core::ops::function::impls::deep_hook::heavy::shipped::deep_contracts::Value::call_mut",
+     "N::core::ops::function::impls::deep_hook::matcher::deps::lockfiles::call_mut",
+     "N::core::ops::function::impls::deep_hook::matcher::named_paths::shell::Arg::call_mut",
+     "N::core::ops::function::impls::deep_hook::read_fields::Guard::deep_hook::matcher::Hit::call_mut",
+     "N::core::ops::function::impls::iter::traits::iterator::Iterator::any::check::shell::W::Reader::file::K::call_mut::Y",
+     "N::deep_hook::shell::text",
+     "N::hashbrown::map::alloc::string::String::deep_hook::shell::Val::std::hash::random::RandomState::insert::t",
+     "N::hashbrown::map::alloc::string::String::std::hash::random::RandomState::insert::deep_contracts",
+     "N::hashbrown::map::alloc::string::String::std::sync::mpsc::Sender::deep_hook::actions::Reply::w::hash::random::RandomState::insert",
+     "N::hashbrown::map::std::path::PathBuf::hash::random::RandomState::insert::deep_hook",
+     "N::object::read::symbol_map::new",
+     "N::ring::arithmetic::bigint::boxed_limbs::rsa::N::from_be_bytes_padded_less_than",
+     "N::ring::rsa::keypair",
+     "N::rustls::client::ech::state",
+     "N::rustls::client::hs::State::ClientConnectionData::handle",
+     "N::rustls::client::tls12::State::ClientConnectionData::handle",
+     "N::rustls::client::tls12::State::ClientConnectionData::into_owned",
+     "N::rustls::client::tls13::State::ClientConnectionData::handle",
+     "N::rustls::crypto::ring::tls12::encrypt",
+     "N::rustls::crypto::ring::tls13::decrypter",
+     "N::rustls::crypto::ring::tls13::encrypter",
+     "N::rustls::msgs::message::outbound::encode",
+     "N::rustls::tls13::key_schedule::derive_client_handshake_secrets",
+     "N::rustls::tls13::key_schedule::into_handshake",
+     "N::rustls::tls13::key_schedule::server_ech_confirmation_secret",
+     "N::std::sync::mpmc::list::alloc::string::String::recv::deep_hook",
+     "N::std::sync::mpmc::list::alloc::string::String::send::deep_hook",
+     "N::std::sync::mpmc::list::core::result::Result::os::unix::net::stream::UnixStream::recv::deep_hook",
+     "N::std::sync::mpmc::list::core::result::Result::os::unix::net::stream::UnixStream::send::deep_hook",
+     "N::std::sync::mpmc::list::deep_hook::Spooling::recv",
+     "N::std::sync::mpmc::list::deep_hook::Spooling::send",
+     "N::std::sync::mpmc::list::deep_hook::actions::Reply::recv",
+     "N::std::sync::mpmc::list::deep_hook::actions::Reply::send",
+     "N::std::sync::mpmc::zero::alloc::string::String::recv::deep_hook",
+     "N::std::sync::mpmc::zero::alloc::string::String::send::deep_hook",
+     "N::std::sync::mpmc::zero::core::result::Result::os::unix::net::stream::UnixStream::recv::deep_hook",
+     "N::std::sync::mpmc::zero::core::result::Result::os::unix::net::stream::UnixStream::send::deep_hook",
+     "N::std::sync::mpmc::zero::deep_hook::Spooling::recv",
+     "N::std::sync::mpmc::zero::deep_hook::Spooling::send",
+     "N::std::sync::mpmc::zero::deep_hook::actions::Reply::disconnect",
+     "N::std::sync::mpmc::zero::deep_hook::actions::Reply::recv",
+     "N::std::sync::mpmc::zero::deep_hook::actions::Reply::send",
+     "N::std::sys::sync::once_box::sync::mutex::Mutex::core::ops::drop::Drop::drop::deep_hook",
+     "N::std::sys::sync::once_box::sync::mutex::Mutex::core::ops::drop::Drop::drop::rustls",
+     "N_::rustls::msgs::handshake::core::clone::Clone::clone",
+     "Nt::addr2line::lookup::core::result::Result::gimli::read::endian_slice::EndianSlice::Function::X::NtB1C_8LocationEEB3s_EINtB5_12SimpleLookupIBY::X::K_7Res::X::dwarf_and_unit::J_25fi::INtB7_7::X::find_frames::new_lookup::std",
+     "Nt::deep_hook::shell",
+     "Nt::ring::io::writer::alloc::boxed::Box::core::convert::From::from",
+     "Nt::ring::rsa::keypair::sign",
+     "Nt::rustls::client::client_conn::connection::new",
+     "Nt::rustls::client::client_conn::for_client",
+     "Nt::rustls::client::ech::grease_ext",
+     "Nt::rustls::client::tls13::State::ClientConnectionData::handle",
+     "Nt::rustls::crypto::ring::quic::quic::Algorithm::header_protection_key",
+     "Nt::rustls::crypto::ring::quic::quic::Algorithm::packet_key",
+     "Nt::rustls::crypto::ring::sign::sign",
+     "Nt::rustls::crypto::ring::tls13::MessageEncryp::encrypt",
+     "Nt::rustls::crypto::signer::from_der",
+     "Nt::rustls::crypto::signer::keys_match",
+     "Nt::rustls::crypto::tls13::new",
+     "Nt::rustls::msgs::message::outbound::with_capacity",
+     "Nt::rustls::tls12::export_keying_material",
+     "Nt::rustls::tls12::extract_secrets",
+     "Nt::rustls::tls12::from_key_exchange",
+     "Nt::rustls::tls12::make_cipher_pair",
+     "Nt::rustls::tls12::make_key_block",
+     "Nt::rustls::tls12::make_verify_data",
+     "Nt::rustls::tls12::new_resume",
+     "Nt::rustls::tls13::key_schedule::into_pre_finished_client_traffic",
+     "Nt::std::fs::sync_all",
+     "Nt::std::fs::try_lock",
+     "Nt::std::sync::mpmc::alloc::string::String::send::deep_hook",
+     "Nt::std::sync::mpmc::core::result::Result::stream::UnixStream::io::error::Error::send::deep_hook",
+     "Nt::std::sync::mpmc::deep_hook::Spooling::send",
+     "Nt::std::sync::mpmc::deep_hook::actions::Reply::send",
+     "NtN::ring::arithmetic::bigint::P::RR::newRR",
+     "NtN::ring::arithmetic::bigint::Q::RR::newRR",
+     "NtN::ring::arithmetic::bigint::RR::newRR",
+     "NtN::rustls::client::ech::confirm_acceptance",
+     "NtN::rustls::client::ech::confirm_hrr_acceptance",
+     "NtN::rustls::client::ech::ech_hello",
+     "NtN::rustls::client::ech::encode_inner_hello",
+     "NtN::rustls::client::ech::new",
+     "NtN::rustls::client::ech::transcript_hrr_update",
+     "NtN::rustls::client::tls12::State::ClientConnectionData::handle",
+     "NtN::rustls::client::tls12::State::ClientConnectionData::into_owned",
+     "NtN::rustls::client::tls13::State::ClientConnectionData::handle",
+     "NtN::rustls::crypto::ring::tls12::Poly1305MessageEncry::encrypt",
+     "NtN::rustls::tls13::key_schedule::into_traffic",
+     "NtN::rustls::tls13::key_schedule::new",
+     "NtN::std::io::stdio::alloc::io::read::Read::read",
+     "NtN::std::io::stdio::alloc::io::read::Read::read_to_string",
+     "NtNt::alloc::collections::btree::map::entry::gimli::read::abbrev::Abbreviation::insert_entry::q",
+     "NtNt::alloc::collections::vec_deque::rustls::compress::CompressionCacheEntry::push_back_mut::q",
+     "NtNt::alloc::io::buffered::bufreader::std::fs::File::read_to_string::deep_hook",
+     "NtNt::alloc::vec::into_iter::core::iter::traits::iterator::Iterator::fold::string::String::F_::ToString::to_string::D_::INtB8_3V::D_::extend_trusted",
+     "NtNt::alloc::vec::into_iter::core::iter::traits::iterator::Iterator::try_fold::InPlaceDrop::string::String::g::adapters::map::map_try_fold::O_::e_::i::result::Result::e_::deep_hook::args_of::write_in_place_with_drop::O_::Z_E::w_",
+     "NtNt::alloc::vec::into_iter::deep_contracts::Value::core::iter::traits::iterator::Iterator::fold::K::adapters::map::map_fold::string::String::actions::object::E::for_each::call::h_N::INtB8_3V::h_E::extend_trusted::K_::Map::J_E::P_",
+     "NtNt::alloc::vec::into_iter::std::path::PathBuf::core::iter::traits::iterator::Iterator::try_fold::InPlaceDrop::D::adapters::filter::filter_try_fold::B_::F::result::Result::B_::deep_hook::matcher::E_4C::past_targets::write_in_place_with_drop::EB4G_",
+     "NtNt::gimli::read::abbrev::insert",
+     "NtNt::rustls::client::tls12::State::ClientConnectionData::handle",
+     "NtNt::rustls::client::tls13::State::ClientConnectionData::handle",
+     "NtNt::rustls::crypto::ring::sign::new",
+     "NtNt::rustls::tls13::key_schedule::into_traffic",
+     "NtNt::std::sync::mpmc::alloc::string::String::core::ops::drop::Drop::drop::deep_hook",
+     "NtNt::std::sync::mpmc::core::result::Result::stream::UnixStream::io::error::Error::ops::drop::Drop::drop::deep_hook",
+     "NtNt::std::sync::mpmc::deep_hook::Spooling::core::ops::drop::Drop::drop",
+     "NtNt::std::sync::mpmc::deep_hook::actions::Reply::core::ops::drop::Drop::drop",
+     "NtNtN::rustls::crypto::ring::sign::choose_scheme",
+     "NtNtN::rustls::crypto::ring::sign::public_key",
+     "O::rustls::msgs::handshake::encoding_for_binder_signing",
+     "O::rustls::msgs::handshake::payload_encode",
+     "O::rustls::msgs::handshake::read_version",
+     "Path::_join",
+     "Path::_with_extension",
+     "Path::join::deep_hook",
+     "R::rustls::msgs::handshake::read",
+     "T::rustls::msgs::handshake::read",
+     "V::rustls::msgs::handshake::encode",
+     "X::rustls::msgs::handshake::encode",
+     "_OUTLINED_FUNCTION_33",
+     "__rustc::__rust_start_panic",
+     "addr2line::line::path_push",
+     "addr2line::line::render_file::gimli::read::endian_slice::EndianSlice::endianity::LittleEndian::std",
+     "addr2line::unit::gimli::read::endian_slice::EndianSlice::endianity::LittleEndian::find_function_or_location::std",
+     "alloc::collections::btree::map::core::clone::Clone::clone::clone_subtree::set_val::SetValZST::alloc::Global::rustls",
+     "alloc::collections::btree::map::std::ffi::os_str::OsString::E6insertB1d_",
+     "alloc::collections::btree::map::std::ffi::os_str::OsString::core::option::Option::EE6insertB1d_",
+     "alloc::collections::btree::node::Mut::SetValZST::n::Leaf::n::Edge::insert_recursing::alloc::Global::NtNt::b_1::V::E::insert_entry::rustls",
+     "alloc::collections::btree::node::Mut::gimli::read::abbrev::Abbreviation",
+     "alloc::collections::btree::node::Mut::gimli::read::abbrev::Abbreviation::m::Leaf::m::KV::split_leaf_data::J",
+     "alloc::collections::btree::node::Mut::gimli::read::abbrev::Abbreviation::n::Internal::n::Edge::insert::alloc::Global::K",
+     "alloc::collections::btree::node::Mut::gimli::read::abbrev::Abbreviation::n::Internal::n::KV::split::alloc::Global::K",
+     "alloc::collections::btree::node::Mut::gimli::read::abbrev::Abbreviation::n::Leaf::n::Edge::insert::alloc::Global::K",
+     "alloc::collections::btree::node::Mut::gimli::read::abbrev::Abbreviation::n::Leaf::n::Edge::insert_recursing::alloc::Global::NtNt::C_1::V::E::insert_entry::K",
+     "alloc::collections::btree::node::Mut::gimli::read::abbrev::Abbreviation::n::Leaf::n::KV::split::alloc::Global::K",
+     "alloc::collections::btree::node::Mut::gimli::read::abbrev::Abbreviation::w",
+     "alloc::collections::btree::remove::NodeRef::marker::Mut::std::ffi::os_str::OsString::L::v::Leaf::v::KV::remove_leaf_kv::NtNtB::h_1::Occ::L::L::remove_kv::alloc::Global::R",
+     "alloc::collections::btree::remove::NodeRef::marker::Mut::std::sys::pal::unix::stack_overflow::thread_info::ThreadInfo::v::Leaf::v::KV::remove_leaf_kv::NtNtB::S_1::Occ::M::remove_kv::alloc::Global::Y",
+     "alloc::collections::vec_deque::rustls::compress::CompressionCacheEntry::core::ops::drop::Drop::drop::q",
+     "alloc::collections::vec_deque::rustls::msgs::persist::Tls13ClientSessionValue::core::ops::drop::Drop::drop::b",
+     "alloc::ffi::c_str::_from_vec_unchecked",
+     "alloc::ffi::c_str::spec_new_impl",
+     "alloc::fmt::format::format_inner",
+     "alloc::io::buf_read::default_read_until::bufreader::BufReader::deep_hook::remote::Stream::D",
+     "alloc::io::buf_read::default_read_until::bufreader::BufReader::std::fs::File::deep_hook",
+     "alloc::io::buf_read::default_read_until::bufreader::BufReader::std::io::stdio::StdinRaw::F",
+     "alloc::io::buf_read::default_read_until::bufreader::BufReader::std::os::unix::net::stream::UnixStream::deep_hook",
+     "alloc::io::buf_read::default_skip_until::bufreader::BufReader::std::fs::File::deep_hook",
+     "alloc::io::buffered::bufreader::BufReader::std::fs::File::BufRead::read_line::deep_hook",
+     "alloc::io::buffered::bufreader::deep_hook::remote::Stream::with_capacity",
+     "alloc::io::buffered::bufreader::std::os::unix::net::stream::UnixStream::with_capacity::deep_hook",
+     "alloc::io::buffered::bufwriter::std::io::stdio::StdoutRaw::flush_buf::c",
+     "alloc::io::error::core::io::error::Error::new::NulError::deep_hook",
+     "alloc::io::error::core::io::error::Error::new::String::rustls",
+     "alloc::io::error::core::io::error::Error::new::rustls::error::Error::deep_hook",
+     "alloc::io::error::core::io::error::Error::new::std",
+     "alloc::io::error::custom_owner_from_box",
+     "alloc::io::error::custom_owner_from_box::drop_box_raw::core::error::Error::h::marker::Send::O::Sync",
+     "alloc::io::error::custom_owner_from_box::drop_box_raw::core::io::error::Custom",
+     "alloc::io::read::append_to_string::bufreader::BufReader::deep_hook::remote::Stream::BufRead::read_line::C",
+     "alloc::io::read::default_read_buf_exact::bufreader::BufReader::std::fs::File::deep_hook",
+     "alloc::io::read::default_read_exact::bufreader::BufReader::std::fs::File::deep_hook",
+     "alloc::io::read::default_read_exact::std::fs::File::deep_hook",
+     "alloc::io::read::default_read_to_end::small_probe_read::std::fs::File::h",
+     "alloc::io::read::default_read_to_end::small_probe_read::std::fs::File::i",
+     "alloc::io::read::default_read_to_end::small_probe_read::std::net::tcp::TcpStream::deep_hook",
+     "alloc::io::read::default_read_to_end::small_probe_read::std::sys::fd::unix::FileDesc::m",
+     "alloc::io::read::default_read_to_end::small_probe_read::std::sys::stdio::unix::Stdin::l",
+     "alloc::io::read::default_read_to_end::std::fs::File",
+     "alloc::io::read::default_read_to_end::std::net::tcp::TcpStream::deep_hook",
+     "alloc::io::read::default_read_to_end::std::sys::stdio::unix::Stdin",
+     "alloc::slice::repeat::deep_contracts",
+     "alloc::slice::to_vec_in::deep_contracts::Value::to_vec::deep_hook",
+     "alloc::slice::to_vec_in::deep_hook::shell::Part::to_vec",
+     "alloc::slice::to_vec_in::deep_hook::shell::Val::to_vec",
+     "alloc::slice::to_vec_in::rustls::msgs::handshake::EchConfigPayload::to_vec",
+     "alloc::str::join_generic_copy::String::deep_hook",
+     "alloc::str::join_generic_copy::String::rustls",
+     "alloc::str::join_generic_copy::deep_hook",
+     "alloc::str::replace::deep_hook",
+     "alloc::str::to_lowercase",
+     "alloc::str::to_uppercase",
+     "alloc::string::core::ops::arith::Add::add",
+     "alloc::string::from_utf8",
+     "alloc::string::from_utf8_lossy",
+     "alloc::sync::gimli::read::abbrev::Abbreviations::drop_slow::std",
+     "alloc::sync::gimli::read::dwarf::Dwarf::endian_slice::EndianSlice::endianity::LittleEndian::drop_slow::std",
+     "alloc::sync::rustls::client::client_conn::ClientConfig::drop_slow",
+     "alloc::sync::rustls::compress::CompressionCache::drop_slow",
+     "alloc::sync::rustls::crypto::signer::CertifiedKey::drop_slow",
+     "alloc::sync::rustls::verify::ServerCertVerifier::drop_slow",
+     "alloc::sync::std::sync::mpmc::context::Inner::drop_slow::deep_hook",
+     "alloc::sync::std::sync::poison::mutex::Mutex::core::option::Option::collections::hash::map::HashMap::String::mpsc::Sender::deep_hook::actions::Reply::drop_slow::w_",
+     "alloc::sync::std::sys::fs::unix::InnerReadDir::drop_slow",
+     "alloc::sync::std::thread::lifecycle::Packet::drop_slow::deep_hook",
+     "alloc::sync::std::thread::scoped::ScopeData::drop_slow::deep_hook",
+     "alloc::sync::std::thread::spawnhook::SpawnHook::drop_slow",
+     "alloc::vec::String::core::clone::Clone::clone::deep_hook",
+     "alloc::vec::String::core::clone::Clone::clone::rustls",
+     "alloc::vec::String::core::clone::Clone::clone::webpki",
+     "alloc::vec::String::deep_contracts::Value::push_mut",
+     "alloc::vec::String::deep_contracts::Value::retain::deep_hook::leased_alone::Q",
+     "alloc::vec::Vec::core::io::write::Write::write_fmt::std",
+     "alloc::vec::core::clone::Clone::clone::rustls",
+     "alloc::vec::core::clone::Clone::clone::webpki",
+     "alloc::vec::core::ops::function::FnMut::Output::H_::Sync::deep_hook",
+     "alloc::vec::core::option::Option::String::clone::Clone::clone::deep_hook",
+     "alloc::vec::deep_contracts::Value::core::clone::Clone::clone::deep_hook",
+     "alloc::vec::deep_hook::shell::Part::push_mut",
+     "alloc::vec::deep_hook::shell::Tok::core::clone::Clone::clone",
+     "alloc::vec::deep_hook::shell::Tok::core::ops::drop::Drop::drop",
+     "alloc::vec::deep_hook::shell::Val::core::clone::Clone::clone",
+     "alloc::vec::drain::std::sync::mpmc::waker::Entry::core::ops::drop::Drop::drop::deep_hook",
+     "alloc::vec::extend_desugared::core::iter::adapters::filter_map::FilterMap::y::slice::iter::Iter::deep_hook::shell::Val::B2Y_::Y_::Reader::simple",
+     "alloc::vec::in_place_collect::from_iter_in_place::core::iter::adapters::filter::Filter::IntoIter::std::path::PathBuf::deep_hook::matcher",
+     "alloc::vec::in_place_collect::from_iter_in_place::core::iter::adapters::map::Map::IntoIter::deep_hook::args_of::String::C_",
+     "alloc::vec::in_place_collect::from_iter_in_place::core::iter::adapters::map::Map::IntoIter::f::option::Option::String::deep_hook::matcher::deps::tool_packages::o_::h_",
+     "alloc::vec::in_place_collect::from_iter_in_place::core::iter::adapters::map::Map::IntoIter::rustls::msgs::handshake::CertificateEntry::e::n_::l_::into_owned::l_::r_",
+     "alloc::vec::in_place_collect::from_iter_in_place::core::iter::adapters::map::Map::IntoIter::rustls::webpki::pki_error::E_::error::ExtendedKeyPurpose::E_",
+     "alloc::vec::in_place_collect::from_iter_in_place::core::iter::adapters::map::Map::IntoIter::rustls_pki_types::CertificateDer::handshake::i_1::Certif::into_owned::l_::m_",
+     "alloc::vec::into_iter::deep_contracts::Value::core::ops::drop::Drop::drop::deep_hook",
+     "alloc::vec::rustls::error::ExtendedKeyPurpose::core::clone::Clone::clone",
+     "alloc::vec::rustls::error::ExtendedKeyPurpose::core::clone::Clone::clone::deep_hook",
+     "alloc::vec::rustls::msgs::handshake::EchConfigExtension::core::clone::Clone::clone",
+     "alloc::vec::rustls::msgs::handshake::EchConfigPayload::core::clone::Clone::clone",
+     "alloc::vec::rustls::msgs::handshake::EchConfigPayload::core::clone::Clone::clone::deep_hook",
+     "alloc::vec::rustls::msgs::handshake::KeyShareEntry::core::clone::Clone::clone",
+     "alloc::vec::rustls::msgs::handshake::PresharedKeyIdentity::core::clone::Clone::clone",
+     "alloc::vec::rustls::msgs::handshake::ProtocolName::core::clone::Clone::clone",
+     "alloc::vec::rustls_pki_types::CertificateDer::core::clone::Clone::clone::rustls",
+     "alloc::vec::spec_extend::std::path::PathBuf::IntoIter::spec_extend::deep_hook",
+     "alloc::vec::spec_from_iter::IntoIter::from_iter::rustls",
+     "alloc::vec::spec_from_iter::String::core::iter::adapters::GenericShunt::G::map::Map::K::slice::iter::Iter::deep_hook::shell::Val::f_7::K::option::Option::K::convert::Infallible::from_iter::h_",
+     "alloc::vec::spec_from_iter::String::core::iter::adapters::GenericShunt::G::map::Map::K::slice::iter::Iter::std::path::PathBuf::deep_hook::read_fields::K::option::Option::K::convert::Infallible::from_iter::T_",
+     "alloc::vec::spec_from_iter::String::core::iter::adapters::GenericShunt::L::map::Map::P::slice::iter::Iter::deep_contracts::Value::deep_hook::classes::P::result::Result::P::convert::Infallible::from_iter",
+     "alloc::vec::spec_from_iter::String::core::iter::adapters::map::Map::M::slice::iter::Iter::rustls::enums::ContentType::W_::error::join::S_::from_iter::W_",
+     "alloc::vec::spec_from_iter::String::core::iter::adapters::map::Map::M::slice::iter::Iter::rustls::enums::HandshakeType::W_::error::join::S_::from_iter::W_",
+     "alloc::vec::spec_from_iter::core::iter::adapters::filter::Filter::p::copied::Copied::t::slice::iter::Iter::deep_hook::exchange::c_7::from_iter::c_",
+     "alloc::vec::spec_from_iter::core::iter::adapters::map::Map::r::enumerate::Enumerate::n::v::slice::iter::Iter::rustls::msgs::enums::ExtensionType::d_9::f_",
+     "alloc::vec::spec_from_iter::deep_hook::Guard::core::iter::adapters::GenericShunt::R::map::Map::V::slice::iter::Iter::String::deep_contracts::Value::rules::V::result::Result::V::convert::Infallible::p_E::from_iter",
+     "alloc::vec::spec_from_iter::rustls::msgs::handshake::CertificateEntry::core::iter::adapters::map::Map::k_::zip::Zip::o_::slice::iter::Iter::rustls_pki_types::CertificateDer::k_::chain::Chain::g_::o_::option::IntoIter::w_EEE::h::CertificatePayloadTls13::new::k_E::from_iter",
+     "alloc::vec::spec_from_iter::rustls::msgs::handshake::PresharedKeyBinder::core::iter::adapters::GenericShunt::k_::map::Map::o_::slice::iter::Iter::NtN::o_::convert::Infallible::from_iter",
+     "alloc::vec::spec_from_iter::std::path::PathBuf::core::iter::adapters::GenericShunt::U::map::Map::Y::slice::iter::Iter::String::deep_hook::shell::printed::Y::option::Option::Y::convert::Infallible::from_iter::T_",
+     "alloc::vec::spec_from_iter::webpki::verify_cert::OidDecoder::from_iter::rustls",
+     "alloc::vec::spec_from_iter_nested::IntoIter::deep_hook",
+     "alloc::vec::spec_from_iter_nested::String::EEINtB2_18Sp::iter::adapters::filter_map::FilterMap::deep_hook::matcher::deps::lockfiles::from_iter::B_",
+     "alloc::vec::spec_from_iter_nested::String::deep_contracts::Value::iter::adapters::filter::Filter::F_::slice::iter::Iter::actions::ordered::from_iter",
+     "alloc::vec::spec_from_iter_nested::String::iter::adapters::filter::Filter::W::map::Map::deep_hook::heavy::scalar::w_4::from_iter::y_",
+     "alloc::vec::spec_from_iter_nested::String::iter::adapters::filter_map::FilterMap::W::filter::Filter::deep::Value::deep_hook::standing::m_s_::from_iter::o_",
+     "alloc::vec::spec_from_iter_nested::String::iter::adapters::filter_map::FilterMap::deep::Value::deep_hook::heavy::strings::from_iter",
+     "alloc::vec::spec_from_iter_nested::String::iter::adapters::filter_map::FilterMap::deep_contracts::Value::deep_hook::remote::refused_generation::from_iter::c_",
+     "alloc::vec::spec_from_iter_nested::String::iter::adapters::filter_map::FilterMap::deep_hook::Guard::deep_hook::matcher::Hit::o_1::r::from_iter::o_",
+     "alloc::vec::spec_from_iter_nested::String::iter::adapters::filter_map::FilterMap::deep_hook::matcher::deps::locked::from_iter::q_",
+     "alloc::vec::spec_from_iter_nested::String::iter::adapters::filter_map::FilterMap::deep_hook::matcher::patched::from_iter::o_",
+     "alloc::vec::spec_from_iter_nested::String::iter::adapters::filter_map::FilterMap::deep_hook::matcher::written::from_iter::t_",
+     "alloc::vec::spec_from_iter_nested::String::iter::adapters::filter_map::FilterMap::matcher::deps::locked::from_iter::F_",
+     "alloc::vec::spec_from_iter_nested::String::iter::adapters::flatten::Flatten::IntoIter::from_iter::deep_hook",
+     "alloc::vec::spec_from_iter_nested::String::iter::adapters::map::Map::W::filter::Filter::deep_hook::Guard::deep_hook::matcher::Hit::x_7::J_s_::from_iter::x_",
+     "alloc::vec::spec_from_iter_nested::String::iter::adapters::map::Map::X::filter::Filter::matcher::graphql_value::H_s::from_iter::L_",
+     "alloc::vec::spec_from_iter_nested::String::iter::adapters::skip::Skip::std::env::Args::from_iter::deep_hook",
+     "alloc::vec::spec_from_iter_nested::String::iter::adapters::skip_while::SkipWhile::W::map::Map::deep_hook::heavy::matched_in::from_iter::m_",
+     "alloc::vec::spec_from_iter_nested::core::iter::adapters::filter::Filter::v::z::map::Map::D::str::iter::MatchIndices::deep_hook::matcher::words_at::n_s::p_1::gra::from_iter::r_",
+     "alloc::vec::spec_from_iter_nested::core::net::socket_addr::SocketAddr::std::sys::net::connection::socket::LookupHost::from_iter::y_",
+     "alloc::vec::spec_from_iter_nested::core::option::Option::INtNtNtNtB18_::iter::adapters::map::Map::B_::skip::Skip::deep_hook::matcher::deps::added::from_iter",
+     "alloc::vec::spec_from_iter_nested::core::option::Option::INtNtNtNtB18_::iter::adapters::map::Map::deep_hook::shell::Val::B3y_::y_6::resolve::from_iter::A_",
+     "alloc::vec::spec_from_iter_nested::core::str::iter::Chars::from_iter::deep_hook",
+     "alloc::vec::spec_from_iter_nested::deep_contracts::Value::iter::adapters::map::Map::IntoIter::p::deep_hook::actions::object::from_iter",
+     "alloc::vec::spec_from_iter_nested::deep_contracts::Value::iter::adapters::map::Map::j_::slice::iter::Iter::actions::serve::from_iter::C_",
+     "alloc::vec::spec_from_iter_nested::deep_hook::Guard::deep_hook::matcher::Hit::iter::adapters::filter_map::FilterMap::S_::slice::iter::Iter::ENCNvB15_3met::from_iter",
+     "alloc::vec::spec_from_iter_nested::deep_hook::heavy::Entry::iter::adapters::filter_map::FilterMap::j_::slice::iter::Iter::deep_contracts::Value",
+     "alloc::vec::spec_from_iter_nested::deep_hook::shell::Arg::iter::adapters::filter::Filter::i_::slice::iter::Iter::ENCNvNtB16_7::named_paths::from_iter",
+     "alloc::vec::spec_from_iter_nested::deep_hook::shell::Arg::iter::adapters::map::Map::j_::slice::iter::Iter::NtB15::Reader::resolve::from_iter",
+     "alloc::vec::spec_from_iter_nested::deep_hook::shell::Arg::iter::adapters::take_while::TakeWhile::i_::slice::iter::Iter::ENCNvNtB16_7::targets::from_iter",
+     "alloc::vec::spec_from_iter_nested::deep_hook::shell::Run::iter::adapters::filter::Filter::i_::slice::iter::Iter::ENCNvMNtB16_::matcher::E_4::kills_hub::from_iter",
+     "alloc::vec::spec_from_iter_nested::deep_hook::shell::Run::iter::adapters::flatten::FlatMap::l_::slice::iter::Iter::EINtNtB2h_3m::Map::IntoIter::kills_hub::s_s_::from_iter",
+     "alloc::vec::spec_from_iter_nested::deep_hook::shell::Val::iter::adapters::filter_map::FilterMap::h_::slice::iter::Iter::NtB13_6Reader::split::from_iter",
+     "alloc::vec::spec_from_iter_nested::deep_hook::shell::Val::iter::adapters::map::Map::j_::slice::iter::Iter::NtB15_6Reader6s::from_iter",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::copied::Copied::D::filter::Filter::D::flatten::Flatten::H::slice::iter::Iter::H::option::Option::EEENCNvMs4_::deep_hook::shell::h_6R::builtin::from_iter::j_",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::filter::Filter::D::copied::Copied::H::slice::iter::Iter::matcher::plain::from_iter::s_",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::filter_map::FilterMap::H::slice::iter::Iter::deep_hook::shell::Arg",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::filter_map::FilterMap::H::str::iter::Lines::deep_hook::remote::requests::from_iter",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::map::Map::D::filter::Filter::H::ops::range::Range::deep_hook::matcher::merge_read::i_",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::map::Map::Guard::deep_hook::matcher::Hit::c_8::from_iter::c_",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::map::Map::H::str::iter::Lines::deep_hook::matcher::merge_read::from_iter::R_",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::map::Map::H::take::Take::L::slice::iter::Split::deep_hook::args_of::to_vec::from_iter::g_",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::map::Map::Value::deep_hook::actions::ordered::from_iter::P_",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::map::Map::Value::deep_hook::actions::serve::from_iter::T_",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::map::Map::deep_contracts::Value::deep_hook::actions::ordered::from_iter::Y_",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::map::Map::deep_hook::matcher::deps::added::from_iter::j_",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::map::Map::deep_hook::matcher::dispatch::from_iter::h_",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::map::Map::deep_hook::matcher::git_rest::from_iter::h_",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::map::Map::deep_hook::matcher::i_4::other_checkout::from_iter::k_",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::map::Map::deep_hook::matcher::paths::k_4::glob_spellings::from_iter::m_",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::map::Map::deep_hook::matcher::paths::n_4::names_path::from_iter::p_",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::map::Map::deep_hook::matcher::paths::r_4::names_path::from_iter::t_",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::map::Map::deep_hook::matching::from_iter::h_",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::map::Map::deep_hook::remote::refused_generation::m_",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::map::Map::matcher::from_endpoint::from_iter::p_",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::map::Map::path::PathBuf::deep_hook::matcher::P_4::effect::from_iter::R_",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::map::Map::shell::Val::B3a_::a_6::resolve::from_iter::c_",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::skip::Skip::H::str::iter::SplitWhitespace::from_iter::deep_hook",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::skip_while::SkipWhile::D::map::Map::H::slice::iter::Iter::String::k_B::i_6::deep_hook::shell::printed::from_iter",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::take_while::TakeWhile::D::map::Map::D::skip::Skip::H::slice::iter::Iter::String::D_B::B_6::deep_hook::matcher::cleans::from_iter::n_",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::take_while::TakeWhile::D::map::Map::H::slice::iter::Iter::String::k_B::i_6::deep_hook::matcher::discards::from_iter",
+     "alloc::vec::spec_from_iter_nested::rustls::enums::CipherSuite::iter::adapters::cloned::Cloned::i_::filter::Filter::m_::slice::iter::Iter::ENCNvMs3_Nt::encode_inner_hello::from_iter",
+     "alloc::vec::spec_from_iter_nested::rustls::enums::CipherSuite::iter::adapters::filter_map::FilterMap::m_::slice::iter::Iter",
+     "alloc::vec::spec_from_iter_nested::rustls::enums::SignatureScheme::iter::adapters::filter::Filter::m_::cloned::Cloned::q_::slice::iter::Iter::EENvMB13_B1::supporte::EE9from_iterB",
+     "alloc::vec::spec_from_iter_nested::rustls::enums::SignatureScheme::iter::adapters::filter::Filter::m_::copied::Copied::q_::slice::iter::Iter::EENCNvXs4_N::d_24::f_11::ClientConnectionData::handle::from_iter",
+     "alloc::vec::spec_from_iter_nested::rustls::msgs::enums::NamedGroup::iter::adapters::map::Map::o_::filter::Filter::s_::slice::iter::Iter::A_s_::from_iter",
+     "alloc::vec::spec_from_iter_nested::std::path::PathBuf::iter::adapters::filter::Filter::a_::map::Map::a_::flatten::Flatten::deep_hook::remote::send_spool::s_0EE9from_iterB45_",
+     "alloc::vec::spec_from_iter_nested::std::path::PathBuf::iter::adapters::filter_map::FilterMap::IntoIter::deep_hook::matcher::G_4::deleted::from_iter::I_",
+     "alloc::vec::spec_from_iter_nested::std::path::PathBuf::iter::adapters::map::Map::a_::flatten::Flatten::deep_hook::remote::joined::from_iter::I_",
+     "alloc::vec::spec_from_iter_nested::str::iter::Split::EE::from_iter::deep_hook",
+     "alloc::vec::spec_from_iter_nested::str::iter::Split::from_iter::deep_hook",
+     "alloc::vec::spec_from_iter_nested::str::iter::SplitWhitespace::from_iter::deep_hook",
+     "alloc::vec::std::path::PathBuf::core::clone::Clone::clone::deep_hook",
+     "alloc::vec::std::path::PathBuf::core::option::Option::String::push_mut::deep_hook",
+     "alloc::vec::std::path::PathBuf::dedup_by::B5_Bv::dedup::deep_hook",
+     "alloc::vec::std::path::PathBuf::extend_desugared::core::iter::adapters::map::Map::D::filter_map::FilterMap::H::slice::iter::Iter::deep_hook::shell::Arg::n_7",
+     "alloc::vec::std::path::PathBuf::extend_trusted::core::iter::adapters::cloned::Cloned::F::slice::iter::Iter::deep_hook",
+     "alloc::vec::std::path::PathBuf::push_mut::deep_hook",
+     "alloc::vec::std::path::PathBuf::retain::deep_hook::matcher::outermost::s",
+     "c::rustls::msgs::handshake::encode",
+     "c::std::collections::hash::map::alloc::string::String::core::iter::traits::collect::FromIterator::jEE9from_iterIN::Q::adapters::map::Map::iter::Iter::Value::u_Nt::u_6P::object::u_",
+     "client::tls12::State::ClientConnectionData::handle",
+     "client::tls13::State::ClientConnectionData::handle",
+     "client::tls13::State::ClientConnectionData::into_owned",
+     "client::tls13::handle_new_ticket_impl",
+     "collections::btree::node::Owned::gimli::read::abbrev::Abbreviation::a::Internal::new_internal::alloc::Global::z",
+     "common_state::add",
+     "conn::client_conn::ClientConnectionData::handle_deframe_error::deep_hook",
+     "conn::connection::ClientConnectionData::write_vectored::deep_hook",
+     "core::array::NeverShortCircuit::std::path::PathBuf::wrap_mut_1::deep_hook::matcher::y_::Call::past_targets::A_",
+     "core::cell::once::Result::addr2line::function::Function::gimli::read::endian_slice::EndianSlice::e::e::LazyFunction::W::borrow::std",
+     "core::cell::once::Result::addr2line::function::Functions::gimli::read::endian_slice::EndianSlice::e::e::LazyFunctions::X::borrow::std",
+     "core::cell::once::Result::addr2line::line::Lines::gimli::read::Error::try_init::d::d::LazyLines::borrow::Q::endian_slice::EndianSlice::S::endianity::LittleEndian::std",
+     "core::io::cursor::Cursor::write_fmt::std",
+     "core::io::write::default_write_fmt::Adapter::fmt::Write::write_char::std",
+     "core::io::write::default_write_fmt::Adapter::std::io::stdio::StdoutLock::fmt::Write::write_char::a",
+     "core::io::write::default_write_fmt::Adapter::std::io::stdio::StdoutLock::fmt::Write::write_char::deep_hook",
+     "core::io::write::default_write_fmt::Adapter::std::net::tcp::TcpStream::fmt::Write::write_char::deep_hook",
+     "core::io::write::default_write_fmt::Adapter::std::sys::stdio::unix::Stderr::fmt::Write::write_char::c",
+     "core::io::write::default_write_fmt::Adapter::std::sys::stdio::unix::Stderr::fmt::Write::write_char::deep_hook",
+     "core::io::write::default_write_fmt::Cursor::write_str::std",
+     "core::io::write::default_write_fmt::std::io::stdio::StderrLock::write_str::d",
+     "core::io::write::default_write_fmt::std::io::stdio::StdoutLock::deep_hook",
+     "core::io::write::default_write_fmt::std::io::stdio::StdoutLock::write_str::d",
+     "core::io::write::default_write_fmt::std::io::stdio::StdoutLock::write_str::deep_hook",
+     "core::io::write::default_write_fmt::std::net::tcp::TcpStream::write_str::deep_hook",
+     "core::io::write::default_write_fmt::std::sys::stdio::unix::Stderr::write_str::deep_hook",
+     "core::io::write::default_write_fmt::std::sys::stdio::unix::Stderr::write_str::f",
+     "core::iter::adapters::map::Filter::slice::iter::Iter::deep_hook::Guard::deep_hook::matcher::Hit::M::denials::Y_::Iterator::next::M",
+     "core::iter::adapters::map::Flatten::std::fs::ReadDir::deep_hook::remote::joined::Iterator::next::Y",
+     "core::iter::adapters::map::Flatten::std::fs::ReadDir::deep_hook::remote::send_spool::traits::iterator::Iterator::try_fold::I_::find::check::p::path::PathBuf::V::ops::control_flow::ControlFlow::M_E::Z",
+     "core::iter::adapters::map::slice::iter::Iter::alloc::string::String::deep_contracts::Value::deep_hook::actions::ordered::traits::iterator::Iterator::fold::u_8::call::p::t::vec::K_3V::p::extend_trusted::L_",
+     "core::iter::adapters::map::slice::iter::Iter::alloc::string::String::deep_contracts::Value::deep_hook::classes::traits::iterator::Iterator::try_fold::INtB8_12::result::Result::convert::Infallible::o::g_8::g_1::tr::call::o::o::ops::control_flow::ControlFlow::ENcNtB6f_5Break0E0B6f_E0IB6g_B6f_EEB2I_",
+     "core::iter::adapters::map::slice::iter::Iter::alloc::string::String::deep_hook::heavy::form::traits::iterator::Iterator::fold::K_::for_each::call::n::p::n::O_::collect::Extend::n::extend",
+     "core::iter::adapters::map::slice::iter::Iter::alloc::string::String::deep_hook::matcher::paths::traits::iterator::Iterator::fold::e_8::call::n::r::vec::u_3V::n::extend_trusted",
+     "core::iter::adapters::map::slice::iter::Iter::alloc::string::String::deep_hook::remote::refused_generation::traits::iterator::Iterator::fold::vec::j_3V::o::extend_trusted",
+     "core::iter::adapters::map::slice::iter::Iter::alloc::string::String::o::deep_hook::matcher::from_endpoint::traits::iterator::Iterator::fold::vec::i_3V::o::extend_trusted::c_",
+     "core::iter::adapters::map::slice::iter::Iter::deep_contracts::Value::deep_hook::actions::serve::traits::iterator::Iterator::fold::Q_::for_each::call::n::alloc::vec",
+     "core::iter::adapters::map::slice::iter::Iter::deep_contracts::Value::deep_hook::actions::serve::traits::iterator::Iterator::fold::T_::for_each::call::alloc::string::String",
+     "core::iter::adapters::map::slice::iter::Iter::deep_hook::forward::traits::iterator::Iterator::fold::string::String::c_3::T_3::E14extend_trustedBN_E0E0EB1u_",
+     "core::iter::adapters::map::slice::iter::Iter::deep_hook::matcher::deps::added::traits::iterator::Iterator::fold::D_::for_each::call::option::Option::alloc::string::String",
+     "core::iter::adapters::map::slice::iter::Iter::deep_hook::remote::hex::traits::iterator::Iterator::fold::String::b_B::INtNtB2a_7collect6ExtendB39_E6extendBN_::v",
+     "core::iter::adapters::map::slice::iter::Iter::deep_hook::shell::Run::deep_hook::heavy::matched_in::o_::traits::iterator::Iterator::try_fold::n_4::check::alloc::vec::Vec::w_6s::String::o_::ops::control_flow::ControlFlow::r_EE::s_",
+     "core::iter::adapters::map::slice::iter::Iter::rustls::msgs::handshake::PresharedKeyBinder::NtN::t::client::ech::v_::EchState::grease_psk::traits::iterator::Iterator::try_fold::INtB8_12::result::Result::convert::Infallible::t::error::Error::h_8::h_1::tr::call::n::ops::control_flow::ControlFlow::n::q_5Bre::q_E0IB::r_B6q_::t",
+     "core::iter::adapters::map::slice::iter::Iter::rustls_pki_types::CertificateDer::option::IntoIter::S_::Option::d_E::Some::sources::repeat::Repeat::l_E::h::rustls::msgs::handshake::y_23::U_E14e::C_",
+     "core::iter::adapters::map::slice::iter::Iter::std::path::PathBuf::deep_hook::matcher::paths::traits::iterator::Iterator::fold::b_8::call::alloc::string::String::i_3v::Z_3V::e_E1::exte",
+     "core::iter::adapters::map::slice::iter::Iter::std::path::PathBuf::deep_hook::matcher::traits::iterator::Iterator::fold::String",
+     "core::iter::adapters::map::str::iter::SplitWhitespace::alloc::string::ToString::to_string::traits::iterator::Iterator::try_fold::p_::find::check::C::String::R_9::p_::next::check::t_N::deep_hook::heavy::matched_in::ops::control_flow::ControlFlow::t_E::T_",
+     "core::iter::adapters::try_process::Map::iter::Iter::alloc::string::String::deep_contracts::Value::deep_hook::classes::x::x::Result::Infallible::x::C_I::A_I::B::vec::Vec::p_E::x::collect::FromIterator::A_B::p_B::x::from_iter::J_EB::R_",
+     "core::iter::adapters::try_process::Map::iter::Iter::alloc::string::String::deep_contracts::Value::deep_hook::rules::R_::Guard::Result::Infallible::x::E_I::C_I::B::vec::Vec::p_E::x::collect::FromIterator::C_B::p_B::x::from_iter::L_EB::R_",
+     "core::iter::adapters::try_process::Map::iter::Iter::rustls::msgs::handshake::PresharedKeyBinder::NtN::C::client::ech::E_::EchState::grease_psk::w::Result::Infallible::C::error::Error::x_I::v_I::alloc::vec::Vec::w::h_EI::collect::FromIterator::v_B::w::h_EE::from_iter::U_EB::C",
+     "core::iter::traits::collect::default_extend::alloc::vec::Vec::b::string::String::EINtB4_10SpecExt::D::D::extend::deep_hook",
+     "core::option::Error::zip::deep_hook",
+     "core::ptr::drop_glue::IntoIter::std::fs::DirEntry::deep_hook",
+     "core::ptr::drop_glue::Option::Cell::std::thread::spawnhook::SpawnHooks::l",
+     "core::ptr::drop_glue::Option::IntoIter::std::fs::DirEntry::deep_hook",
+     "core::ptr::drop_glue::Option::N::std::sync::mpmc::zero::Spooling::send::Z",
+     "core::ptr::drop_glue::Option::N::std::sync::mpmc::zero::actions::Reply::send",
+     "core::ptr::drop_glue::Option::N::std::sync::mpmc::zero::result::Result::b::os::unix::net::stream::UnixStream::Error::send::deep_hook",
+     "core::ptr::drop_glue::Option::alloc::boxed::Box::rustls::crypto::ActiveKeyExchange::B",
+     "core::ptr::drop_glue::Option::alloc::vec::Vec::rustls::msgs::handshake::EchConfigPayload::A",
+     "core::ptr::drop_glue::Option::deep_hook::shell::Body",
+     "core::ptr::drop_glue::Option::rustls::client::common::ClientAuthDetails",
+     "core::ptr::drop_glue::Option::rustls::client::ech::EchState",
+     "core::ptr::drop_glue::Option::rustls::client::handy::cache::ServerData",
+     "core::ptr::drop_glue::Option::rustls::msgs::handshake::ServerEncryptedClientHello",
+     "core::ptr::drop_glue::Option::rustls::msgs::persist::Tls13ClientSessionValue",
+     "core::ptr::drop_glue::Option::rustls::quic::Secrets::deep_hook",
+     "core::ptr::drop_glue::Option::rustls::tls13::Tls13CipherSuite::KeyScheduleEarly",
+     "core::ptr::drop_glue::Option::rustls::tls13::key_schedule::KeyScheduleEarly",
+     "core::ptr::drop_glue::Option::std::backtrace_rs::symbolize::gimli::Mapping",
+     "core::ptr::drop_glue::Option::std::backtrace_rs::symbolize::gimli::Mapping::a",
+     "core::ptr::drop_glue::Pin::alloc::boxed::Box::std::sys::pal::unix::sync::mutex::Mutex::deep_hook",
+     "core::ptr::drop_glue::Pin::alloc::boxed::Box::std::sys::pal::unix::sync::mutex::Mutex::rustls",
+     "core::ptr::drop_glue::Result::Infallible::rustls::error::Error::s",
+     "core::ptr::drop_glue::Result::Option::alloc::boxed::Box::addr2line::unit::DwoUnit::gimli::read::endian_slice::EndianSlice::F_::endianity::LittleEndian::D_::Error::std",
+     "core::ptr::drop_glue::Result::alloc::boxed::Box::Any::Send::deep_hook",
+     "core::ptr::drop_glue::Result::alloc::boxed::Box::rustls::common_state::State::C::server::server_conn::ServerConnectionData::C::error::Error::C",
+     "core::ptr::drop_glue::Result::std::fs::DirEntry::Error",
+     "core::ptr::drop_glue::Result::std::fs::DirEntry::Error::deep_hook",
+     "core::ptr::drop_glue::UnsafeCell::Option::Result::alloc::boxed::Box::Any::Send::deep_hook",
+     "core::ptr::drop_glue::UnsafeCell::Option::std::sync::mpsc::Sender::alloc::string::String::mutex::Mutex::INtNtNtNtB1::collections::hash::map::HashMap::Reply::r_",
+     "core::ptr::drop_glue::UnsafeCell::alloc::collections::vec_deque::VecDeque::compress::CompressionCacheEntry::j_",
+     "core::ptr::drop_glue::UnsafeCell::rustls::limited_cache::LimitedCache::rustls_pki_types::server_name::ServerName::ServerData",
+     "core::ptr::drop_glue::UnsafeCell::std::sync::mpmc::zero::Inner::deep_hook",
+     "core::ptr::drop_glue::adapters::flatten::Flatten::IntoIter::std::collections::hash::map::HashMap::alloc::string::String::O::sync::mpsc::Sender::deep_hook::actions::Reply::I_",
+     "core::ptr::drop_glue::adapters::flatten::Flatten::std::fs::ReadDir::deep_hook",
+     "core::ptr::drop_glue::addr2line::Context::gimli::read::endian_slice::EndianSlice::h::endianity::LittleEndian::std",
+     "core::ptr::drop_glue::addr2line::unit::ResUnit::gimli::read::endian_slice::EndianSlice::o::endianity::LittleEndian::std",
+     "core::ptr::drop_glue::addr2line::unit::ResUnits::gimli::read::endian_slice::EndianSlice::p::endianity::LittleEndian::std",
+     "core::ptr::drop_glue::addr2line::unit::SupUnit::gimli::read::endian_slice::EndianSlice::o::endianity::LittleEndian::std",
+     "core::ptr::drop_glue::addr2line::unit::SupUnits::gimli::read::endian_slice::EndianSlice::p::endianity::LittleEndian::std",
+     "core::ptr::drop_glue::alloc::boxed::Box::Any::Send::deep_hook",
+     "core::ptr::drop_glue::alloc::boxed::Box::Option::c::std::backtrace_rs::symbolize::gimli::Mapping::K",
+     "core::ptr::drop_glue::alloc::boxed::Box::function::Fn::I::std::panic::PanicHookInfo::Output::Send::I_::Sync::O",
+     "core::ptr::drop_glue::alloc::boxed::Box::function::FnOnce::Output::Send::deep_hook",
+     "core::ptr::drop_glue::alloc::boxed::Box::function::FnOnce::Output::Send::std",
+     "core::ptr::drop_glue::alloc::boxed::Box::panic_unwind::imp::Exception::e",
+     "core::ptr::drop_glue::alloc::boxed::Box::rustls::client::tls12::ExpectCertificate::g",
+     "core::ptr::drop_glue::alloc::boxed::Box::rustls::client::tls13::ExpectTraffic::g",
+     "core::ptr::drop_glue::alloc::boxed::Box::rustls::common_state::State::g::client::client_conn::ClientConnectionData::deep_hook",
+     "core::ptr::drop_glue::alloc::boxed::Box::rustls::crypto::ActiveKeyExchange::f",
+     "core::ptr::drop_glue::alloc::boxed::Box::rustls::crypto::cipher::MessageDecrypter::deep_hook",
+     "core::ptr::drop_glue::alloc::boxed::Box::rustls::crypto::cipher::MessageDecrypter::h",
+     "core::ptr::drop_glue::alloc::boxed::Box::rustls::crypto::hpke::HpkeSealer::h",
+     "core::ptr::drop_glue::alloc::boxed::Box::rustls::crypto::signer::Signer::h",
+     "core::ptr::drop_glue::alloc::boxed::Box::rustls::crypto::tls13::HkdfExpander::h",
+     "core::ptr::drop_glue::alloc::boxed::Box::rustls::msgs::handshake::ServerExtensions::deep_hook",
+     "core::ptr::drop_glue::alloc::boxed::Box::rustls::msgs::handshake::ServerExtensions::g",
+     "core::ptr::drop_glue::alloc::boxed::Box::rustls::quic::PacketKey::f",
+     "core::ptr::drop_glue::alloc::boxed::Box::std::sync::mpmc::counter::Counter::f::array::Channel::deep_hook::Spooling::q_",
+     "core::ptr::drop_glue::alloc::boxed::Box::std::sync::mpmc::counter::Counter::f::array::Channel::deep_hook::actions::Reply::s_",
+     "core::ptr::drop_glue::alloc::boxed::Box::std::sync::mpmc::counter::Counter::f::array::Channel::string::String::deep_hook",
+     "core::ptr::drop_glue::alloc::boxed::Box::std::thread::lifecycle::ThreadInit::g",
+     "core::ptr::drop_glue::alloc::collections::vec_deque::Dropper::sync::Arc::rustls::compress::CompressionCacheEntry::S",
+     "core::ptr::drop_glue::alloc::collections::vec_deque::VecDeque::rustls::msgs::persist::Tls13ClientSessionValue::E",
+     "core::ptr::drop_glue::alloc::collections::vec_deque::VecDeque::rustls_pki_types::server_name::ServerName::rustls",
+     "core::ptr::drop_glue::alloc::io::buffered::bufreader::BufReader::deep_hook::remote::Stream::E",
+     "core::ptr::drop_glue::alloc::io::buffered::linewriter::LineWriter::std::io::stdio::StdoutRaw::K",
+     "core::ptr::drop_glue::alloc::string::String::addr2line",
+     "core::ptr::drop_glue::alloc::string::String::deep_contracts::Value::deep_hook",
+     "core::ptr::drop_glue::alloc::sync::ArcInner::gimli::read::dwarf::Dwarf::j::endian_slice::EndianSlice::l::endianity::LittleEndian::std",
+     "core::ptr::drop_glue::alloc::sync::ArcInner::rustls::client::handy::cache::ClientSessionMemoryCache::m",
+     "core::ptr::drop_glue::alloc::sync::ArcInner::rustls::compress::CompressionCache::i",
+     "core::ptr::drop_glue::alloc::sync::ArcInner::std::sync::poison::mutex::Mutex::Option::n::collections::hash::map::HashMap::string::String::l::mpsc::Sender::deep_hook::actions::Reply::Q_",
+     "core::ptr::drop_glue::alloc::sync::ArcInner::std::sys::fs::unix::InnerReadDir::m",
+     "core::ptr::drop_glue::alloc::sync::ArcInner::std::thread::lifecycle::Packet::deep_hook",
+     "core::ptr::drop_glue::alloc::vec::Vec::Option::symbolize::gimli::Mapping::H",
+     "core::ptr::drop_glue::alloc::vec::Vec::addr2line::unit::ResUnit::gimli::read::endian_slice::EndianSlice::V::endianity::LittleEndian::std",
+     "core::ptr::drop_glue::alloc::vec::Vec::addr2line::unit::SupUnit::gimli::read::endian_slice::EndianSlice::V::endianity::LittleEndian::std",
+     "core::ptr::drop_glue::alloc::vec::Vec::boxed::Box::function::FnMut::Output::Result::Error::Send::S_::Sync::deep_hook",
+     "core::ptr::drop_glue::alloc::vec::Vec::boxed::Box::function::FnOnce::Output::Send::deep_hook",
+     "core::ptr::drop_glue::alloc::vec::Vec::boxed::Box::function::FnOnce::Output::Send::std",
+     "core::ptr::drop_glue::alloc::vec::Vec::deep_contracts::Value::a",
+     "core::ptr::drop_glue::alloc::vec::Vec::deep_contracts::Value::deep_hook",
+     "core::ptr::drop_glue::alloc::vec::Vec::deep_hook::Guard::a",
+     "core::ptr::drop_glue::alloc::vec::Vec::deep_hook::heavy::Entry::c",
+     "core::ptr::drop_glue::alloc::vec::Vec::deep_hook::shell::Part::c",
+     "core::ptr::drop_glue::alloc::vec::Vec::deep_hook::shell::Run::c",
+     "core::ptr::drop_glue::alloc::vec::Vec::deep_hook::shell::Run::deep_hook",
+     "core::ptr::drop_glue::alloc::vec::Vec::deep_hook::shell::Tok::c",
+     "core::ptr::drop_glue::alloc::vec::Vec::deep_hook::shell::Tok::d",
+     "core::ptr::drop_glue::alloc::vec::Vec::deep_hook::shell::Tok::g",
+     "core::ptr::drop_glue::alloc::vec::Vec::rustls::msgs::handshake::EchConfigPayload::e",
+     "core::ptr::drop_glue::alloc::vec::Vec::std::sync::mpmc::waker::Entry::deep_hook",
+     "core::ptr::drop_glue::alloc::vec::Vec::string::String::deep_contracts::Value::deep_hook",
+     "core::ptr::drop_glue::alloc::vec::Vec::string::String::deep_contracts::Value::w",
+     "core::ptr::drop_glue::alloc::vec::into_iter::IntoIter::boxed::Box::function::FnOnce::Output::Send::std",
+     "core::ptr::drop_glue::deep_contracts::Value",
+     "core::ptr::drop_glue::deep_contracts::Value::deep_hook",
+     "core::ptr::drop_glue::deep_hook::Rules",
+     "core::ptr::drop_glue::deep_hook::actions::Hub",
+     "core::ptr::drop_glue::deep_hook::actions::Hub::connect",
+     "core::ptr::drop_glue::deep_hook::actions::serve",
+     "core::ptr::drop_glue::deep_hook::matcher::Call::deep_hook",
+     "core::ptr::drop_glue::deep_hook::remote::Stream",
+     "core::ptr::drop_glue::deep_hook::shell::Body",
+     "core::ptr::drop_glue::deep_hook::shell::Ctx",
+     "core::ptr::drop_glue::deep_hook::shell::Part",
+     "core::ptr::drop_glue::deep_hook::shell::Tok",
+     "core::ptr::drop_glue::deep_hook::spool_by",
+     "core::ptr::drop_glue::gimli::read::abbrev::AbbreviationsCache::std",
+     "core::ptr::drop_glue::gimli::read::dwarf::Dwarf::endian_slice::EndianSlice::endianity::LittleEndian::std",
+     "core::ptr::drop_glue::gimli::read::dwarf::Unit::endian_slice::EndianSlice::endianity::LittleEndian::std",
+     "core::ptr::drop_glue::panic_unwind::imp::Exception",
+     "core::ptr::drop_glue::rustls::builder::ConfigBuilder::client::client_conn::ClientConfig::WantsVerifier::deep_hook",
+     "core::ptr::drop_glue::rustls::builder::ConfigBuilder::client::client_conn::ClientConfig::r::builder::WantsClientCert",
+     "core::ptr::drop_glue::rustls::client::client_conn::ClientConfig::deep_hook",
+     "core::ptr::drop_glue::rustls::client::client_conn::connection::ClientConnection::deep_hook",
+     "core::ptr::drop_glue::rustls::client::common::ClientAuthDetails",
+     "core::ptr::drop_glue::rustls::client::ech::EchState",
+     "core::ptr::drop_glue::rustls::client::handy::cache::ClientSessionMemoryCache",
+     "core::ptr::drop_glue::rustls::client::handy::cache::ClientSessionMemoryCache::client_conn::ClientSessionStore::insert_tls13_ticket",
+     "core::ptr::drop_glue::rustls::client::hs::ClientHelloInput",
+     "core::ptr::drop_glue::rustls::client::hs::ClientSessionValue",
+     "core::ptr::drop_glue::rustls::client::hs::ExpectServerHello",
+     "core::ptr::drop_glue::rustls::client::hs::ExpectServerHelloOrHelloRetryRequest",
+     "core::ptr::drop_glue::rustls::client::tls12::ExpectCcs",
+     "core::ptr::drop_glue::rustls::client::tls12::ExpectCertificate",
+     "core::ptr::drop_glue::rustls::client::tls12::ExpectCertificateRequest",
+     "core::ptr::drop_glue::rustls::client::tls12::ExpectCertificateStatus",
+     "core::ptr::drop_glue::rustls::client::tls12::ExpectFinished",
+     "core::ptr::drop_glue::rustls::client::tls12::ExpectNewTicket",
+     "core::ptr::drop_glue::rustls::client::tls12::ExpectServerDone",
+     "core::ptr::drop_glue::rustls::client::tls12::ExpectServerKx",
+     "core::ptr::drop_glue::rustls::client::tls13::ExpectCertificateOrCertReq",
+     "core::ptr::drop_glue::rustls::client::tls13::ExpectCertificateRequest",
+     "core::ptr::drop_glue::rustls::client::tls13::ExpectCertificateVerify",
+     "core::ptr::drop_glue::rustls::client::tls13::ExpectCompressedCertificate",
+     "core::ptr::drop_glue::rustls::client::tls13::ExpectEncryptedExtensions",
+     "core::ptr::drop_glue::rustls::client::tls13::ExpectFinished",
+     "core::ptr::drop_glue::rustls::client::tls13::ExpectTraffic",
+     "core::ptr::drop_glue::rustls::client::tls13::KeyExchangeChoice",
+     "core::ptr::drop_glue::rustls::common_state::CommonState",
+     "core::ptr::drop_glue::rustls::common_state::CommonState::deep_hook",
+     "core::ptr::drop_glue::rustls::conn::ConnectionCommon::client::client_conn::ClientConnectionData::deep_hook",
+     "core::ptr::drop_glue::rustls::crypto::signer::CertifiedKey",
+     "core::ptr::drop_glue::rustls::error::Error",
+     "core::ptr::drop_glue::rustls::error::Error::deep_hook",
+     "core::ptr::drop_glue::rustls::error::PeerIncompatible",
+     "core::ptr::drop_glue::rustls::hash_hs::HandshakeHash",
+     "core::ptr::drop_glue::rustls::msgs::handshake::HandshakeMessagePayload",
+     "core::ptr::drop_glue::rustls::msgs::handshake::HandshakePayload",
+     "core::ptr::drop_glue::rustls::msgs::handshake::ServerExtensions",
+     "core::ptr::drop_glue::rustls::msgs::message::Message::deep_hook",
+     "core::ptr::drop_glue::rustls::msgs::message::MessagePayload",
+     "core::ptr::drop_glue::rustls::msgs::persist::ClientSessionCommon",
+     "core::ptr::drop_glue::rustls::msgs::persist::Tls12ClientSessionValue",
+     "core::ptr::drop_glue::rustls::msgs::persist::Tls13ClientSessionValue",
+     "core::ptr::drop_glue::rustls::quic::KeyBuilder",
+     "core::ptr::drop_glue::rustls::quic::Quic::deep_hook",
+     "core::ptr::drop_glue::rustls::record_layer::RecordLayer",
+     "core::ptr::drop_glue::rustls::stream::StreamOwned::client::client_conn::connection::ClientConnection::std::net::tcp::TcpStream::deep_hook",
+     "core::ptr::drop_glue::rustls::tls13::key_schedule::KeyScheduleBeforeFinished",
+     "core::ptr::drop_glue::rustls::tls13::key_schedule::KeyScheduleClientBeforeFinished",
+     "core::ptr::drop_glue::rustls::tls13::key_schedule::KeyScheduleHandshake",
+     "core::ptr::drop_glue::rustls_pki_types::server_name::ServerName::rustls::client::handy::cache::ServerData::I",
+     "core::ptr::drop_glue::std::backtrace_rs::symbolize::gimli::Context",
+     "core::ptr::drop_glue::std::backtrace_rs::symbolize::gimli::macho::Object",
+     "core::ptr::drop_glue::std::fs::DirEntry",
+     "core::ptr::drop_glue::std::fs::DirEntry::deep_hook",
+     "core::ptr::drop_glue::std::panicking::Hook",
+     "core::ptr::drop_glue::std::panicking::resume_unwind::RewrapBox",
+     "core::ptr::drop_glue::std::process::Command::deep_hook",
+     "core::ptr::drop_glue::std::sync::mpmc::counter::Counter::list::Channel::Result::os::unix::net::stream::UnixStream::Error::deep_hook",
+     "core::ptr::drop_glue::std::sync::mpmc::counter::Counter::list::Channel::alloc::string::String::deep_hook",
+     "core::ptr::drop_glue::std::sync::mpmc::counter::Counter::list::Channel::deep_hook::Spooling::P",
+     "core::ptr::drop_glue::std::sync::mpmc::counter::Counter::list::Channel::deep_hook::actions::Reply::R",
+     "core::ptr::drop_glue::std::sync::mpmc::waker::SyncWaker::deep_hook",
+     "core::ptr::drop_glue::std::sync::mpmc::waker::Waker::deep_hook",
+     "core::ptr::drop_glue::std::sync::poison::mutex::Mutex::Option::mpsc::Sender::alloc::string::String::b_::sync::Arc::r::collections::hash::map::HashMap::Reply",
+     "core::ptr::drop_glue::std::sync::poison::mutex::Mutex::io::stdio::Stdout::deep_hook",
+     "core::ptr::drop_glue::std::sync::poison::mutex::Mutex::mpmc::zero::Inner::deep_hook",
+     "core::ptr::drop_glue::std::sys::fs::unix::DirEntry",
+     "core::ptr::drop_glue::std::sys::process::unix::common::cstring_array::CStringArray",
+     "core::ptr::drop_glue::std::thread::join_handle::JoinHandle::deep_hook",
+     "core::ptr::drop_glue::std::thread::lifecycle::ThreadInit::deep_hook",
+     "core::ptr::drop_glue::std::thread::lifecycle::spawn_unchecked::deep_hook::actions::F::Hub::connect::H",
+     "core::ptr::drop_glue::std::thread::lifecycle::spawn_unchecked::deep_hook::actions::serve::I",
+     "core::ptr::drop_glue::std::thread::lifecycle::spawn_unchecked::deep_hook::spool_by::E",
+     "core::ptr::drop_glue::std::thread::lifecycle::spawn_unchecked::deep_hook::watchdog::E",
+     "core::ptr::drop_glue::std::thread::spawnhook::ChildSpawnHooks::deep_hook",
+     "core::ptr::drop_glue::std::thread::spawnhook::SpawnHook",
+     "core::ptr::drop_glue::std::thread::spawnhook::SpawnHooks",
+     "core::ptr::drop_glue::zeroize::Zeroizing::rustls_pki_types::PrivateKeyDer::rustls",
+     "core::result::alloc::string::String::FromUtf8Error::expect::deep_contracts",
+     "core::slice::sort::shared::smallsort::insert_tail::std::path::PathBuf::NtNtBa_3cmp10Parti::lt::deep_hook",
+     "core::slice::sort::shared::smallsort::insertion_sort_shift_left::alloc::string::String::deep_contracts::Value::s::slice::m::sort_by",
+     "core::slice::sort::shared::smallsort::insertion_sort_shift_left::alloc::string::String::deep_contracts::Value::s::slice::m::sort_by_key::option::Option::deep_hook::actions::ordered::H_",
+     "core::slice::sort::shared::smallsort::insertion_sort_shift_left::std::path::PathBuf::m::cmp::PartialOrd::lt::deep_hook",
+     "core::slice::sort::shared::smallsort::small_sort_general::SB1f_20s::g::std::backtrace_rs::symbolize::gimli::macho",
+     "core::slice::sort::shared::smallsort::small_sort_general::SB1f_20s::std::backtrace_rs::symbolize::gimli::macho",
+     "core::slice::sort::shared::smallsort::small_sort_general::addr2line::function::FunctionAddress::SB1f_20s::h::h::Functions::gimli::read::endian_slice::EndianSlice::i_9::LittleEndian::parse::std",
+     "core::slice::sort::shared::smallsort::small_sort_general::addr2line::function::InlinedFunctionAddress::SB1f_16s::B::h::h::Function::gimli::read::endian_slice::EndianSlice::j_9::LittleEndian::parse::std",
+     "core::slice::sort::shared::smallsort::small_sort_general::addr2line::line::LineSequence::SB1f_20s::h::h::Lines::parse::gimli::read::endian_slice::EndianSlice::c_9::LittleEndian::std",
+     "core::slice::sort::shared::smallsort::small_sort_general::addr2line::unit::UnitRange::SB1f_20s::h::h::ResUnits::gimli::read::endian_slice::EndianSlice::std",
+     "core::slice::sort::shared::smallsort::small_sort_general::f::cmp::PartialOrd::lt::rustls",
+     "core::slice::sort::shared::smallsort::small_sort_general_with_scratch::alloc::string::String::deep_contracts::Value::y::slice::s::sort_by",
+     "core::slice::sort::shared::smallsort::small_sort_general_with_scratch::alloc::string::String::deep_contracts::Value::y::slice::s::sort_by_key::option::Option::deep_hook::actions::ordered::N_",
+     "core::slice::sort::shared::smallsort::small_sort_general_with_scratch::std::path::PathBuf::s::cmp::PartialOrd::lt::deep_hook",
+     "core::slice::sort::stable::drift::sort::alloc::string::String::deep_contracts::Value::option::Option::deep_hook::actions::ordered::g_",
+     "core::slice::sort::stable::driftsort_main::alloc::string::String::deep_contracts::Value::F::write_value",
+     "core::slice::sort::stable::driftsort_main::alloc::string::String::deep_contracts::Value::deep_hook::actions::ordered",
+     "core::slice::sort::stable::driftsort_main::object::read::symbol_map::ObjectMapEntry::alloc::slice::sort_by_key::INtB11_9Sym::new",
+     "core::slice::sort::stable::driftsort_main::std::path::PathBuf::lt::alloc::vec::Vec::deep_hook",
+     "core::slice::sort::stable::merge::merge::alloc::string::String::deep_contracts::Value::D::write_value::D",
+     "core::slice::sort::stable::merge::merge::std::path::PathBuf::cmp::PartialOrd::lt::deep_hook",
+     "core::slice::sort::stable::quicksort::quicksort::object::read::symbol_map::ObjectMapEntry::alloc::slice::INtB17_9SymbolMap::E3new0E0EB1b_",
+     "core::slice::sort::unstable::quicksort::quicksort::gimli::common::DebugInfoOffset::a::DebugArangesOffset::SB17_20s::unit::EndianSlice::c::endianity::LittleEndian::parse::std",
+     "core::str::iter::SplitWhitespace::iterator::Iterator::partition::alloc::vec::Vec::deep_hook::matcher::paths::o_::Call::names_path::q_",
+     "crypto::cipher::with_length",
+     "deep_contracts::expect",
+     "deep_contracts::jcs",
+     "deep_contracts::number",
+     "deep_contracts::parse",
+     "deep_contracts::string",
+     "deep_contracts::value",
+     "deep_contracts::word",
+     "deep_contracts::write_value",
+     "deep_hook::actions::call",
+     "deep_hook::actions::forget",
+     "deep_hook::actions::ordered",
+     "deep_hook::actions::serve",
+     "deep_hook::actions::unreachable",
+     "deep_hook::address",
+     "deep_hook::call",
+     "deep_hook::clone::over",
+     "deep_hook::clone_one",
+     "deep_hook::config",
+     "deep_hook::covered",
+     "deep_hook::forward",
+     "deep_hook::guard",
+     "deep_hook::heavy::form",
+     "deep_hook::heavy::matched",
+     "deep_hook::heavy::matched_in",
+     "deep_hook::heavy_call",
+     "deep_hook::inline::holds",
+     "deep_hook::inline::path_of",
+     "deep_hook::inline::program",
+     "deep_hook::main",
+     "deep_hook::matcher::args_match",
+     "deep_hook::matcher::checkout",
+     "deep_hook::matcher::collect",
+     "deep_hook::matcher::command_of",
+     "deep_hook::matcher::common_of",
+     "deep_hook::matcher::deletes",
+     "deep_hook::matcher::deps::added",
+     "deep_hook::matcher::deps::manifest",
+     "deep_hook::matcher::deps::note",
+     "deep_hook::matcher::deps::path_in",
+     "deep_hook::matcher::deps::pypi_name",
+     "deep_hook::matcher::deps::unlocked",
+     "deep_hook::matcher::discards",
+     "deep_hook::matcher::dispatch",
+     "deep_hook::matcher::drops_stash",
+     "deep_hook::matcher::edits",
+     "deep_hook::matcher::effect",
+     "deep_hook::matcher::fields",
+     "deep_hook::matcher::first_two",
+     "deep_hook::matcher::from_endpoint",
+     "deep_hook::matcher::gh",
+     "deep_hook::matcher::git_cwd",
+     "deep_hook::matcher::git_rest",
+     "deep_hook::matcher::git_target",
+     "deep_hook::matcher::glab_merge_endpoint",
+     "deep_hook::matcher::graphql_merge",
+     "deep_hook::matcher::graphql_value",
+     "deep_hook::matcher::has_effect",
+     "deep_hook::matcher::holds_word",
+     "deep_hook::matcher::kills_hub",
+     "deep_hook::matcher::matches",
+     "deep_hook::matcher::merge_endpoint",
+     "deep_hook::matcher::named_paths",
+     "deep_hook::matcher::new",
+     "deep_hook::matcher::other_checkout",
+     "deep_hook::matcher::outermost",
+     "deep_hook::matcher::past",
+     "deep_hook::matcher::past_targets",
+     "deep_hook::matcher::path_in",
+     "deep_hook::matcher::paths::glob_spellings",
+     "deep_hook::matcher::pids",
+     "deep_hook::matcher::posts_comment",
+     "deep_hook::matcher::quote",
+     "deep_hook::matcher::reads_whole",
+     "deep_hook::matcher::runs_it",
+     "deep_hook::matcher::stage",
+     "deep_hook::matcher::stash",
+     "deep_hook::matcher::sub",
+     "deep_hook::matcher::targets",
+     "deep_hook::matcher::unrestorable",
+     "deep_hook::matcher::written",
+     "deep_hook::matching",
+     "deep_hook::quoted",
+     "deep_hook::read_fields",
+     "deep_hook::read_line::Stream",
+     "deep_hook::read_line::std::os::unix::net::stream::UnixStream",
+     "deep_hook::remote::Stream::core::io::write::Write::write_all",
+     "deep_hook::remote::connect",
+     "deep_hook::remote::hello",
+     "deep_hook::remote::joined",
+     "deep_hook::remote::refused_generation",
+     "deep_hook::remote::rustls::verify::ServerCertVerifier::verify_server_cert",
+     "deep_hook::remote::send_later",
+     "deep_hook::remote::send_spool",
+     "deep_hook::rules",
+     "deep_hook::setting",
+     "deep_hook::shell::backtick",
+     "deep_hook::shell::core::clone::Clone::clone",
+     "deep_hook::shell::dollar",
+     "deep_hook::shell::dquote",
+     "deep_hook::shell::fetched::read",
+     "deep_hook::shell::get",
+     "deep_hook::shell::lexical",
+     "deep_hook::shell::named_paths",
+     "deep_hook::shell::plain",
+     "deep_hook::shell::program",
+     "deep_hook::shell::runs",
+     "deep_hook::shell::same_name",
+     "deep_hook::shell::step",
+     "deep_hook::shell::tokens",
+     "deep_hook::shell::until",
+     "deep_hook::shell::walk",
+     "deep_hook::shell::word",
+     "deep_hook::spool",
+     "deep_hook::spool_by",
+     "deep_hook::spool_file::append",
+     "deep_hook::spool_file::sync",
+     "deep_hook::tool_paths::mcp",
+     "deep_hook::tool_paths::mcp::strings",
+     "deep_hook::tool_paths::pi_path",
+     "deep_hook::tool_paths::source",
+     "deep_hook::ulid",
+     "deep_hook::unanswered",
+     "deep_hook::waiter",
+     "deep_hook::worktree_hub",
+     "e::rustls::msgs::handshake::into_owned",
+     "e_N::rustls::msgs::handshake::clone_one",
+     "e_N::rustls::msgs::handshake::collect_used",
+     "error::core::clone::Clone::clone",
+     "error::core::fmt::Display::fmt",
+     "g::rustls::msgs::handshake::NtNtB8_5codec::Codec::read",
+     "gimli::read::abbrev::new",
+     "gimli::read::dwarf::EndianSlice::LittleEndian::new::std",
+     "gimli::read::line::parse::EndianSlice::endianity::LittleEndian::std",
+     "h::rustls::msgs::handshake::into_owned",
+     "handshake::payload_encode",
+     "handshake::read",
+     "hashbrown::raw::alloc::string::String::deep_hook::shell::Val::core::clone::Clone::clone::v",
+     "hashbrown::rustc_entry::HashMap::rustls_pki_types::server_name::ServerName::rustls::client::handy::cache::ServerData::std::hash::random::RandomState::rustc_entry",
+     "io::stdio::alloc::io::buf_read::BufRead::read_line",
+     "io::util::std::io::stdio::StdinLock::core::iter::traits::iterator::Iterator::next::deep_hook",
+     "l_N::rustls::msgs::handshake::collect_used",
+     "msgs::handshake::payload_encode",
+     "msgs::persist::new",
+     "q::rustls::msgs::handshake::read",
+     "raw::alloc::string::String::deep_hook::shell::Val::reserve_rehash::s::std::hash::random::RandomState::w",
+     "raw::rustls_pki_types::server_name::ServerName::rustls::client::handy::cache::ServerData::reserve_rehash::O::std::hash::random::RandomState::W",
+     "raw::std::path::PathBuf::reserve_rehash::hash::random::RandomState::deep_hook",
+     "read",
+     "read::abbrev::push",
+     "ring::arithmetic::bigint::elem_add::Unencoded",
+     "ring::arithmetic::bigint::elem_exp_consttime_inner::a::keypair::P::EB6_",
+     "ring::arithmetic::bigint::elem_exp_consttime_inner::a::keypair::Q::EB6_",
+     "ring::arithmetic::bigint::elem_exp_consttime_inner::power::Q",
+     "ring::arithmetic::bigint::elem_exp_vartime",
+     "ring::arithmetic::bigint::elem_mul::R",
+     "ring::arithmetic::bigint::elem_mul_into::RR::c::Unencoded",
+     "ring::arithmetic::bigint::elem_reduced::keypair::P",
+     "ring::arithmetic::bigint::elem_reduced_once::Q",
+     "ring::arithmetic::bigint::elem_widen::keypair::Q",
+     "ring::arithmetic::bigint::modulus::rsa::keypair::Q::to_elem::j::N",
+     "ring::arithmetic::bigint::modulusvalue::rsa::keypair::D::from_be_bytes",
+     "ring::arithmetic::bigint::private_exponent::from_be_bytes_padded::Q",
+     "ring::io::der_writer::write_all",
+     "ring::limb::fold_5_bit_windows::bigint::Elem::keypair::P::montgomery::R::elem_exp_consttime_inner::p::N::l::E0NCB2a_s_0EB4_",
+     "ring::limb::fold_5_bit_windows::bigint::Elem::keypair::Q::montgomery::R::elem_exp_consttime_inner::p::N::l::E0NCB2a_s_0EB4_",
+     "ring::rsa::keypair::from_components_",
+     "ring::rsa::public_key::exponentiate_elem",
+     "ring::rsa::public_key::from_modulus_and_exponent",
+     "ring::rsa::verification::verify_rsa_",
+     "rustls::builder::client_conn::ClientConfig::with_protocol_versions::deep_hook",
+     "rustls::client::builder::Con::ClientConfig::with_client_auth_cert",
+     "rustls::client::builder::Con::ClientConfig::with_client_cert_resolver",
+     "rustls::client::client_conn::builder_with_provider",
+     "rustls::client::client_conn::core::default::Default::default",
+     "rustls::client::common::resolve",
+     "rustls::client::common::server_sent_unsolicited_extensions",
+     "rustls::client::handy::cache::ClientSessionStore::insert_tls13_ticket",
+     "rustls::client::handy::cache::ClientSessionStore::kx_hint",
+     "rustls::client::handy::cache::ClientSessionStore::remove_tls12_session",
+     "rustls::client::handy::cache::ClientSessionStore::set_kx_hint",
+     "rustls::client::handy::cache::ClientSessionStore::set_tls12_session",
+     "rustls::client::handy::cache::ClientSessionStore::take_tls13_ticket",
+     "rustls::client::handy::cache::ClientSessionStore::tls12_session",
+     "rustls::client::handy::cache::client_conn::ClientSessionStore::insert_tls13_ticket",
+     "rustls::client::hs::ExpectServerHello::State::ClientConnectionData::into_external_state",
+     "rustls::client::hs::ExpectServerHelloOrHelloRetryRequest::State::ClientConnectionData::into_external_state",
+     "rustls::client::hs::State::ClientConnectionData::handle",
+     "rustls::client::hs::emit_client_hello_for_retry",
+     "rustls::client::hs::new",
+     "rustls::client::hs::process_alpn_protocol",
+     "rustls::client::hs::process_client_cert_type_extension",
+     "rustls::client::hs::process_server_cert_type_extension",
+     "rustls::client::hs::start_handshake",
+     "rustls::client::tls12::ExpectCcs::State::ClientConnectionData::into_external_state",
+     "rustls::client::tls12::ExpectCertificateRequest::State::ClientConnectionData::into_external_state",
+     "rustls::client::tls12::ExpectCertificateStatus::State::ClientConnectionData::into_external_state",
+     "rustls::client::tls12::ExpectFinished::State::ClientConnectionData::into_external_state",
+     "rustls::client::tls12::ExpectNewTicket::State::ClientConnectionData::into_external_state",
+     "rustls::client::tls12::ExpectServerDone::State::ClientConnectionData::into_external_state",
+     "rustls::client::tls12::ExpectServerKx::State::ClientConnectionData::into_external_state",
+     "rustls::client::tls12::State::ClientConnectionData::handle",
+     "rustls::client::tls12::State::ClientConnectionData::into_owned",
+     "rustls::client::tls12::emit_certificate",
+     "rustls::client::tls12::emit_certverify",
+     "rustls::client::tls12::emit_client_kx",
+     "rustls::client::tls12::emit_finished",
+     "rustls::client::tls12::server_hello::handle_server_hello",
+     "rustls::client::tls13::ExpectCertificateOrCertReq::State::ClientConnectionData::into_external_state",
+     "rustls::client::tls13::ExpectCertificateVerify::State::ClientConnectionData::into_external_state",
+     "rustls::client::tls13::ExpectEncryptedExtensions::State::ClientConnectionData::into_external_state",
+     "rustls::client::tls13::ExpectFinished::State::ClientConnectionData::into_external_state",
+     "rustls::client::tls13::State::ClientConnectionData::handle",
+     "rustls::client::tls13::derive_early_traffic_secret",
+     "rustls::client::tls13::emit_certificate_tls13",
+     "rustls::client::tls13::emit_compressed_certificate_tls13",
+     "rustls::client::tls13::fill_in_psk_binder",
+     "rustls::client::tls13::handle_server_hello",
+     "rustls::client::tls13::prepare_resumption",
+     "rustls::common_state::buffer_plaintext",
+     "rustls::common_state::enqueue_key_update_notification",
+     "rustls::common_state::process_alert",
+     "rustls::common_state::send_appdata_encrypt",
+     "rustls::common_state::send_cert_verify_error_alert",
+     "rustls::common_state::send_fatal_alert::Error",
+     "rustls::common_state::send_msg",
+     "rustls::common_state::send_msg_encrypt",
+     "rustls::common_state::start_encryption_tls12",
+     "rustls::common_state::start_outgoing_traffic",
+     "rustls::common_state::take_received_plaintext",
+     "rustls::compress::compression_for",
+     "rustls::compress::uncached_compression",
+     "rustls::conn::c::ClientConnectionData::complete_io::std::net::tcp::TcpStream::deep_hook",
+     "rustls::crypto::ring::default_provider",
+     "rustls::crypto::ring::hash::finish",
+     "rustls::crypto::ring::kx::KeyExchange::complete_for_tls_version",
+     "rustls::crypto::ring::kx::KeyExchange::complete_hybrid_component",
+     "rustls::crypto::ring::kx::KxGroup::start_and_complete",
+     "rustls::crypto::ring::kx::complete",
+     "rustls::crypto::ring::load_private_key",
+     "rustls::crypto::ring::sign::SigningKeyNtNtB9_6signer10SigningKey10public_key",
+     "rustls::crypto::ring::sign::SigningKeyNtNtB9_6signer10SigningKey13choose_scheme",
+     "rustls::crypto::ring::sign::any_ecdsa_type",
+     "rustls::crypto::ring::sign::any_eddsa_type",
+     "rustls::crypto::ring::sign::any_supported_type",
+     "rustls::crypto::ring::sign::choose_scheme",
+     "rustls::crypto::ring::sign::new",
+     "rustls::crypto::ring::sign::public_key",
+     "rustls::crypto::ring::tls12::Poly1305NtNtB8_6ciph::Tls12AeadAlgorithm::decrypter",
+     "rustls::crypto::ring::tls12::Poly1305NtNtB8_6ciph::Tls12AeadAlgorithm::encrypter",
+     "rustls::crypto::ring::tls12::Poly1305NtNtB8_6ciph::Tls12AeadAlgorithm::extract_keys",
+     "rustls::crypto::ring::tls12::Tls12AeadAlgorithm::decrypter",
+     "rustls::crypto::ring::tls12::Tls12AeadAlgorithm::encrypter",
+     "rustls::crypto::ring::tls12::Tls12AeadAlgorithm::extract_keys",
+     "rustls::crypto::ring::tls13::RingHkdf::extract_from_kx_shared_secret",
+     "rustls::crypto::tls12::for_key_exchange",
+     "rustls::crypto::tls12::for_secret",
+     "rustls::crypto::tls12::prf",
+     "rustls::error::core::clone::Clone::clone",
+     "rustls::error::core::fmt::Display::fmt",
+     "rustls::hash_hs::into_hrr_buffer",
+     "rustls::hash_hs::rollup_for_hrr",
+     "rustls::hash_hs::start_hash",
+     "rustls::limited_cache::rustls_pki_types::server_name::ServerName::handy::cache::ServerData::get_or_insert_default_and_edit::Y::Y::ClientSessionMemoryCache::insert_tls13_ticket",
+     "rustls::limited_cache::rustls_pki_types::server_name::ServerName::handy::cache::ServerData::get_or_insert_default_and_edit::Y::Y::ClientSessionMemoryCache::set_kx_hint",
+     "rustls::limited_cache::rustls_pki_types::server_name::ServerName::handy::cache::ServerData::get_or_insert_default_and_edit::Y::Y::ClientSessionMemoryCache::set_tls12_session",
+     "rustls::limited_cache::rustls_pki_types::server_name::ServerName::handy::cache::ServerData::new",
+     "rustls::msgs::codec::alloc::vec::Vec::C::encode",
+     "rustls::msgs::codec::alloc::vec::Vec::C::read",
+     "rustls::msgs::codec::alloc::vec::Vec::CertificateEntry::encode",
+     "rustls::msgs::codec::alloc::vec::Vec::CertificateEntry::read",
+     "rustls::msgs::codec::alloc::vec::Vec::DistinguishedName::encode",
+     "rustls::msgs::codec::alloc::vec::Vec::DistinguishedName::read",
+     "rustls::msgs::codec::alloc::vec::Vec::EchConfigExtension::encode",
+     "rustls::msgs::codec::alloc::vec::Vec::EchConfigExtension::read",
+     "rustls::msgs::codec::alloc::vec::Vec::EchConfigPayload::encode",
+     "rustls::msgs::codec::alloc::vec::Vec::EchConfigPayload::read",
+     "rustls::msgs::codec::alloc::vec::Vec::Ext::encode",
+     "rustls::msgs::codec::alloc::vec::Vec::Ext::read",
+     "rustls::msgs::codec::alloc::vec::Vec::HpkeSymmetricCipherSuite::encode",
+     "rustls::msgs::codec::alloc::vec::Vec::HpkeSymmetricCipherSuite::read",
+     "rustls::msgs::codec::alloc::vec::Vec::KeyShareEntry::encode",
+     "rustls::msgs::codec::alloc::vec::Vec::KeyShareEntry::read",
+     "rustls::msgs::codec::alloc::vec::Vec::PresharedKeyBinder::encode",
+     "rustls::msgs::codec::alloc::vec::Vec::PresharedKeyBinder::read",
+     "rustls::msgs::codec::alloc::vec::Vec::PresharedKeyIdentity::encode",
+     "rustls::msgs::codec::alloc::vec::Vec::PresharedKeyIdentity::read",
+     "rustls::msgs::codec::alloc::vec::Vec::ProtocolName::encode",
+     "rustls::msgs::codec::alloc::vec::Vec::ProtocolName::read",
+     "rustls::msgs::codec::alloc::vec::Vec::ResponderId::read",
+     "rustls::msgs::codec::alloc::vec::Vec::encode",
+     "rustls::msgs::codec::alloc::vec::Vec::read",
+     "rustls::msgs::codec::alloc::vec::Vec::rustls_pki_types::CertificateDer::encode",
+     "rustls::msgs::codec::alloc::vec::Vec::rustls_pki_types::CertificateDer::read",
+     "rustls::msgs::handshake::CertificatePayloadTls13::Codec::get_encoding",
+     "rustls::msgs::handshake::core::convert::From::rustls_pki_types::server_name::DnsName::from",
+     "rustls::msgs::handshake::encode",
+     "rustls::msgs::handshake::into_owned",
+     "rustls::msgs::handshake::new",
+     "rustls::msgs::handshake::payload_encode",
+     "rustls::msgs::handshake::read",
+     "rustls::msgs::handshake::used_extensions_in_encoding_order",
+     "rustls::msgs::message::core::convert::From::from",
+     "rustls::msgs::message::handshake",
+     "rustls::msgs::message::outbound::to_unencrypted_opaque",
+     "rustls::msgs::message::outbound::to_vec",
+     "rustls::tls12::decode_kx_params::handshake::ServerKeyExchangeParams",
+     "rustls::tls13::key_schedule::client_early_traffic_secret",
+     "rustls::tls13::key_schedule::derive_decrypter",
+     "rustls::tls13::key_schedule::expand_secret",
+     "rustls::tls13::key_schedule::into_handshake",
+     "rustls::tls13::key_schedule::resumption_psk_binder_key_and_sign_verify_data",
+     "rustls::tls13::key_schedule::server_ech_hrr_confirmation_secret",
+     "rustls::tls13::key_schedule::set_encrypter",
+     "rustls::tls13::key_schedule::sign_verify_data",
+     "rustls::vecbuf::append_limited_copy",
+     "rustls::webpki::pki_error",
+     "rustls::webpki::verify::verify_tls13_signature",
+     "rustls::x509::asn1_wrap",
+     "rustls_pki_types::CertificateDer::from_pem_file::alloc::string::String::deep_hook",
+     "rustls_pki_types::PrivateKeyDer::from_pem_file::std::path::PathBuf::deep_hook",
+     "rustls_pki_types::pem::alloc::io::buffered::bufreader::BufReader::std::fs::File::new::deep_hook",
+     "rustls_pki_types::pem::from_buf_inner",
+     "rustls_pki_types::pem::read",
+     "rustls_pki_types::server_name::to_str",
+     "shell::after",
+     "shell::builtin",
+     "shell::file",
+     "shell::one",
+     "shell::piped",
+     "shell::pipeline",
+     "shell::redirection",
+     "shell::resolve",
+     "shell::script_file",
+     "shell::shell",
+     "shell::split",
+     "shell::tokens",
+     "shell::too_deep",
+     "shell::value",
+     "shell::walk",
+     "std::backtrace_rs::symbolize::gimli::macho::parse",
+     "std::backtrace_rs::symbolize::gimli::mmap",
+     "std::backtrace_rs::symbolize::gimli::resolve",
+     "std::env::args_os",
+     "std::env::core::iter::traits::iterator::Iterator::next",
+     "std::env::current_dir",
+     "std::env::current_exe",
+     "std::env::temp_dir",
+     "std::env::var::inner",
+     "std::env::vars_os",
+     "std::fs::_create",
+     "std::fs::read_to_string::PathBuf::deep_hook",
+     "std::fs::read_to_string::inner",
+     "std::fs::write::inner",
+     "std::io::error::core::io::error::Error::from_raw_os_error::FUNCTIONS::ops::function::FnOnce::fmt::Formatter::call_once",
+     "std::io::error::core::io::error::Error::from_raw_os_error::FUNCTIONS::ops::function::FnOnce::fmt::Formatter::call_once::deep_hook",
+     "std::io::stdio::_eprint",
+     "std::io::stdio::_print",
+     "std::io::stdio::alloc::io::read::Read::read_to_string",
+     "std::io::stdio::core::io::write::Write::flush",
+     "std::io::stdio::core::io::write::Write::write_all",
+     "std::io::stdio::core::io::write::Write::write_fmt",
+     "std::io::stdio::print_to_buffer_if_capture_used",
+     "std::io::stdio::try_set_output_capture",
+     "std::net::tcp::TcpStream::alloc::io::read::Read::read_buf_exact::deep_hook",
+     "std::net::tcp::TcpStream::alloc::io::read::Read::read_exact::deep_hook",
+     "std::net::tcp::TcpStream::alloc::io::read::Read::read_to_string::deep_hook",
+     "std::net::tcp::TcpStream::core::io::write::Write::write_all::deep_hook",
+     "std::net::tcp::TcpStream::core::io::write::Write::write_all_vectored::deep_hook",
+     "std::net::tcp::TcpStream::core::io::write::Write::write_fmt::deep_hook",
+     "std::net::tcp::connect_timeout",
+     "std::os::unix::net::stream::UnixStream::core::io::write::Write::write_all::deep_hook",
+     "std::os::unix::net::stream::connect::path::Path::deep_hook",
+     "std::os::unix::net::stream::connect::path::PathBuf::deep_hook",
+     "std::panicking::default_hook",
+     "std::panicking::panic_handler",
+     "std::panicking::panic_handler::core::panic::PanicPayload::get",
+     "std::panicking::panic_handler::core::panic::PanicPayload::take_box",
+     "std::panicking::panic_with_hook",
+     "std::panicking::resume_unwind",
+     "std::panicking::set_hook",
+     "std::process::ChildStdin::core::io::write::Write::write_all::deep_hook",
+     "std::process::new::deep_hook",
+     "std::process::output",
+     "std::process::status",
+     "std::sync::mpmc::alloc::string::String::core::ops::drop::Drop::drop::deep_hook",
+     "std::sync::mpmc::array::alloc::string::String::recv::deep_hook",
+     "std::sync::mpmc::array::alloc::string::String::send::deep_hook",
+     "std::sync::mpmc::array::core::result::Result::os::unix::net::stream::UnixStream::recv::deep_hook",
+     "std::sync::mpmc::array::core::result::Result::os::unix::net::stream::UnixStream::send::deep_hook",
+     "std::sync::mpmc::array::deep_hook::Spooling::recv",
+     "std::sync::mpmc::array::deep_hook::Spooling::send",
+     "std::sync::mpmc::array::deep_hook::actions::Reply::recv",
+     "std::sync::mpmc::array::deep_hook::actions::Reply::send",
+     "std::sync::mpmc::channel::alloc::string::String::deep_hook",
+     "std::sync::mpmc::context::new",
+     "std::sync::mpmc::context::with::N::b::Channel::alloc::string::String::recv::core::result::Result::A::deep_hook",
+     "std::sync::mpmc::context::with::N::b::Channel::alloc::string::String::send::core::result::Result::SendTi::A::deep_hook",
+     "std::sync::mpmc::context::with::N::b::Channel::core::result::Result::os::unix::net::stream::UnixStream::F::io::error::Error::recv::B::A::deep_hook",
+     "std::sync::mpmc::context::with::N::b::Channel::core::result::Result::os::unix::net::stream::UnixStream::F::io::error::Error::recv::deep_hook",
+     "std::sync::mpmc::context::with::N::b::Channel::core::result::Result::os::unix::net::stream::UnixStream::F::io::error::Error::send::B::SendTi::A::deep_hook",
+     "std::sync::mpmc::context::with::N::b::Channel::deep_hook::Spooling::recv::core::result::Result::A::C",
+     "std::sync::mpmc::context::with::N::b::Channel::deep_hook::Spooling::send::core::result::Result::SendTi::A::C",
+     "std::sync::mpmc::context::with::N::b::Channel::deep_hook::actions::Reply::recv::core::result::Result::A::E",
+     "std::sync::mpmc::context::with::N::b::Channel::deep_hook::actions::Reply::send::core::result::Result::SendTi::A::E",
+     "std::sync::mpmc::context::with::a::Channel::core::result::Result::os::unix::net::stream::UnixStream::F::io::error::Error::recv::deep_hook",
+     "std::sync::mpmc::context::with::a::Channel::core::result::Result::os::unix::net::stream::UnixStream::F::io::error::Error::send::deep_hook",
+     "std::sync::mpmc::core::result::Result::stream::UnixStream::io::error::Error::ops::drop::Drop::drop::deep_hook",
+     "std::sync::mpmc::deep_hook::Spooling::core::ops::drop::Drop::drop",
+     "std::sync::mpmc::deep_hook::actions::Reply::core::ops::drop::Drop::drop",
+     "std::sync::mpmc::waker::disconnect",
+     "std::sync::mpmc::waker::notify",
+     "std::sync::mpmc::waker::register",
+     "std::sync::mpmc::waker::unregister",
+     "std::sync::once::once_lock::b::OnceLock::core::option::Option::deep_hook::remote::Remote::initialize::a::get_or_init::m_::forward::m_",
+     "std::sync::once::rt::cleanup",
+     "std::sys::backtrace::__rust_begin_short_backtrace::deep_hook::actions::c::Hub::connect::e",
+     "std::sys::backtrace::__rust_begin_short_backtrace::deep_hook::actions::serve::f",
+     "std::sys::backtrace::__rust_begin_short_backtrace::deep_hook::spool_by::b",
+     "std::sys::backtrace::_print_fmt",
+     "std::sys::backtrace::_print_fmt::core::ops::function::FnOnce::backtrace_rs::types::BytesOrWideString::call_once::vtable",
+     "std::sys::backtrace::print::core::fmt::Display::fmt",
+     "std::sys::env::unix::env_read_lock",
+     "std::sys::env::unix::getenv",
+     "std::sys::fd::unix::read_to_end",
+     "std::sys::fs::read_dir",
+     "std::sys::fs::unix::core::ops::drop::Drop::drop",
+     "std::sys::fs::unix::open_c",
+     "std::sys::fs::unix::readlink",
+     "std::sys::fs::unix::remove_dir_impl::remove_dir_all_recursive",
+     "std::sys::helpers::small_c_string::run_with_cstr_allocating",
+     "std::sys::helpers::small_c_string::run_with_cstr_allocating::File",
+     "std::sys::helpers::small_c_string::run_with_cstr_allocating::FileAttr",
+     "std::sys::helpers::small_c_string::run_with_cstr_allocating::core::option::Option::OsString",
+     "std::sys::helpers::small_c_string::run_with_cstr_allocating::socket::LookupHost",
+     "std::sys::net::connection::socket::lookup_host",
+     "std::sys::net::connection::socket::unix::new",
+     "std::sys::pal::unix::stack_overflow::core::ops::drop::Drop::drop",
+     "std::sys::pal::unix::stack_overflow::imp::make_handler",
+     "std::sys::pal::unix::stack_overflow::thread_info::set_current_info",
+     "std::sys::pal::unix::sync::mutex::init",
+     "std::sys::pal::unix::sync::mutex::lock::fail",
+     "std::sys::pal::unix::time::now",
+     "std::sys::pipe::unix::pipe",
+     "std::sys::process::env::capture",
+     "std::sys::process::env::set",
+     "std::sys::process::unix::common::arg",
+     "std::sys::process::unix::common::capture_env",
+     "std::sys::process::unix::common::new",
+     "std::sys::process::unix::common::read_output",
+     "std::sys::process::unix::common::setup_io",
+     "std::sys::process::unix::unix::Command::do_exec",
+     "std::sys::process::unix::unix::Command::spawn",
+     "std::sys::process::unix::unix::wait",
+     "std::sys::stdio::unix::Stderr::core::io::write::Write::write_all",
+     "std::sys::stdio::unix::Stderr::core::io::write::Write::write_all::deep_hook",
+     "std::sys::stdio::unix::Stderr::core::io::write::Write::write_all_vectored",
+     "std::sys::stdio::unix::Stderr::core::io::write::Write::write_fmt",
+     "std::sys::stdio::unix::Stderr::core::io::write::Write::write_fmt::deep_hook",
+     "std::sys::stdio::unix::Stdout::core::io::write::Write::write_all",
+     "std::sys::sync::once::queue::call",
+     "std::sys::sync::once_box::sync::mutex::Mutex::initialize::pthread::S::Mutex::get",
+     "std::sys::sync::once_box::sync::mutex::Mutex::initialize::pthread::S::Mutex::get::deep_hook",
+     "std::sys::sync::once_box::sync::mutex::Mutex::initialize::pthread::S::Mutex::get::rustls",
+     "std::sys::thread::unix::new",
+     "std::sys::thread_local::destructors::list::register",
+     "std::thread::lifecycle::core::ops::drop::Drop::drop::deep_hook",
+     "std::thread::lifecycle::spawn_unchecked::deep_hook::actions",
+     "std::thread::lifecycle::spawn_unchecked::deep_hook::actions::core::ops::function::FnOnce::call_once::vtable::a",
+     "std::thread::lifecycle::spawn_unchecked::deep_hook::actions::serve",
+     "std::thread::lifecycle::spawn_unchecked::deep_hook::actions::serve::core::ops::function::FnOnce::call_once::vtable::b",
+     "std::thread::lifecycle::spawn_unchecked::deep_hook::spool_by",
+     "std::thread::lifecycle::spawn_unchecked::deep_hook::spool_by::core::ops::function::FnOnce::call_once::vtable",
+     "std::thread::lifecycle::spawn_unchecked::deep_hook::watchdog",
+     "std::thread::lifecycle::spawn_unchecked::deep_hook::watchdog::core::ops::function::FnOnce::call_once::vtable",
+     "std::thread::scoped::scope::deep_hook::actions::serve",
+     "std::thread::spawnhook::core::ops::drop::Drop::drop",
+     "std::thread::spawnhook::inherit_and_run",
+     "std::thread::spawnhook::run_spawn_hooks",
+     "std::thread::thread::new",
+     "std::thread::thread::thread_name_string::core::convert::From::alloc::string::String::from",
+     "string::core::iter::traits::collect::FromIterator::from_iter::adapters::filter::Filter::str::iter::Chars::deep_contracts::scientific::W_",
+     "string::core::iter::traits::collect::FromIterator::from_iter::adapters::map::Map::range::Range::deep_hook::ulid::c_",
+     "string::core::iter::traits::collect::FromIterator::from_iter::adapters::take_while::TakeWhile::str::iter::Chars::deep_hook::matcher::graphql_value",
+     "sync::nonpoison::rwlock::panicking::Hook::replace",
+     "tls13::key_schedule::derive_logged_secret",
+     "tls13::key_schedule::derive_ticket_psk",
+     "tls13::key_schedule::export_keying_material",
+     "tls13::key_schedule::extract_secrets",
+     "tls13::key_schedule::next_application_traffic_secret",
+     "tls13::key_schedule::refresh_traffic_secret",
+     "tls13::key_schedule::request_key_update_and_update_encrypter",
+     "tls13::key_schedule::update_decrypter",
+     "tls13::key_schedule::update_encrypter_and_notify",
+     "untrusted::input::read_all::webpki::cert",
+     "untrusted::input::read_all::webpki::cert::SignedData",
+     "untrusted::input::read_all::webpki::cert::s",
+     "untrusted::input::read_all::webpki::cert::version3",
+     "untrusted::input::read_all::webpki::der::nested_of_mut::from_input",
+     "untrusted::input::read_all::webpki::signed_data::SubjectPublicKeyInfo::from_der",
+     "w::rustls::msgs::handshake::unwrap_given_kxa",
+     "webpki::der::asn1_wrap",
+     "webpki::der::nested_of_mut::Cert::from_input",
+     "webpki::error::core::clone::Clone::clone",
+     "webpki::signed_data::verify_signature"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "__Unwind_SetGR": {
+    "group": "panics and backtraces",
+    "callers": [
+     "_rust_eh_personality"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "__Unwind_SetIP": {
+    "group": "panics and backtraces",
+    "callers": [
+     "_rust_eh_personality"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "___error": {
+    "group": "across the program (deep-hook's own code; files and folders; joined-hub route: TCP, DNS, TLS (`remote.rs`, rustls, ring); other; panics and backtraces; std's environment, time and errors; std's process spawning (`Command`); std's runtime start and exit; the hub's Unix socket; threads, locks and channels)",
+    "callers": [
+     "Nt::std::fs::lock",
+     "Nt::std::fs::metadata",
+     "Nt::std::fs::sync_all",
+     "Nt::std::fs::try_lock",
+     "Nt::std::os::unix::net::stream::core::io::write::Write::write",
+     "Nt::std::process::core::io::write::Write::write",
+     "NtN::std::sys::stdio::unix::core::io::write::Write::write",
+     "NtN::std::sys::stdio::unix::core::io::write::Write::write_vectored",
+     "NtNt::alloc::io::buffered::bufreader::std::io::stdio::StdinRaw::read::d",
+     "alloc::io::buf_read::default_read_until::bufreader::BufReader::std::io::stdio::StdinRaw::F",
+     "alloc::io::buffered::bufwriter::std::io::stdio::StdoutRaw::flush_buf::c",
+     "alloc::io::read::default_read_to_end::small_probe_read::std::fs::File::h",
+     "alloc::io::read::default_read_to_end::small_probe_read::std::fs::File::i",
+     "alloc::io::read::default_read_to_end::small_probe_read::std::sys::fd::unix::FileDesc::m",
+     "alloc::io::read::default_read_to_end::small_probe_read::std::sys::stdio::unix::Stdin::l",
+     "alloc::io::read::default_read_to_end::std::fs::File",
+     "alloc::io::read::default_read_to_end::std::sys::stdio::unix::Stdin",
+     "deep_hook::clone_one",
+     "deep_hook::waiter",
+     "getrandom::imp::getrandom_inner",
+     "std::backtrace_rs::symbolize::gimli::mmap",
+     "std::env::current_dir",
+     "std::env::current_exe",
+     "std::env::temp_dir",
+     "std::fs::alloc::io::read::Read::read",
+     "std::fs::alloc::io::read::Read::read_buf",
+     "std::fs::alloc::io::read::Read::read_vectored",
+     "std::fs::buffer_capacity_required",
+     "std::fs::core::io::write::Write::write",
+     "std::fs::read_to_string::inner",
+     "std::fs::write::inner",
+     "std::net::tcp::alloc::io::read::Read::read_buf",
+     "std::net::tcp::alloc::io::read::Read::read_vectored",
+     "std::net::tcp::connect_timeout",
+     "std::net::tcp::core::io::write::Write::write",
+     "std::net::tcp::core::io::write::Write::write_vectored",
+     "std::net::tcp::set_nodelay",
+     "std::net::tcp::set_read_timeout",
+     "std::net::tcp::set_write_timeout",
+     "std::net::udp::recv",
+     "std::os::unix::net::listener::try_clone",
+     "std::os::unix::net::stream::alloc::io::read::Read::read",
+     "std::os::unix::net::stream::alloc::io::read::Read::read_buf",
+     "std::os::unix::net::stream::connect::path::Path::deep_hook",
+     "std::os::unix::net::stream::connect::path::PathBuf::deep_hook",
+     "std::os::unix::net::stream::shutdown",
+     "std::rt::lang_start_internal",
+     "std::sys::fd::unix::read_to_end",
+     "std::sys::fd::unix::set_nonblocking",
+     "std::sys::fd::unix::write",
+     "std::sys::fs::metadata",
+     "std::sys::fs::read_dir",
+     "std::sys::fs::remove_file",
+     "std::sys::fs::rename",
+     "std::sys::fs::symlink_metadata",
+     "std::sys::fs::unix::canonicalize",
+     "std::sys::fs::unix::core::iter::traits::iterator::Iterator::next",
+     "std::sys::fs::unix::core::ops::drop::Drop::drop",
+     "std::sys::fs::unix::lstat::core::ops::function::Fn::ffi::c_str::CStr::call",
+     "std::sys::fs::unix::mkdir",
+     "std::sys::fs::unix::open_c",
+     "std::sys::fs::unix::readlink",
+     "std::sys::fs::unix::remove_dir_impl::remove_dir_all_modern",
+     "std::sys::fs::unix::remove_dir_impl::remove_dir_all_recursive",
+     "std::sys::fs::unix::stat::core::ops::function::Fn::ffi::c_str::CStr::call",
+     "std::sys::fs::unix::unlink::core::ops::function::Fn::ffi::c_str::CStr::call",
+     "std::sys::net::connection::socket::lookup_host",
+     "std::sys::net::connection::socket::unix::new",
+     "std::sys::net::connection::socket::unix::take_error",
+     "std::sys::pal::unix::cvt",
+     "std::sys::pal::unix::stack_overflow::core::ops::drop::Drop::drop",
+     "std::sys::pal::unix::stack_overflow::imp::make_handler",
+     "std::sys::pal::unix::stack_overflow::imp::signal_handler",
+     "std::sys::pal::unix::stack_overflow::thread_info::set_current_info",
+     "std::sys::pal::unix::time::now",
+     "std::sys::pipe::unix::pipe",
+     "std::sys::process::unix::common::read_output",
+     "std::sys::process::unix::common::to_child_stdio",
+     "std::sys::process::unix::unix::Command::do_exec",
+     "std::sys::process::unix::unix::Command::spawn",
+     "std::sys::process::unix::unix::wait",
+     "std::sys::stdio::unix::Stderr::core::io::write::Write::write_all",
+     "std::sys::stdio::unix::Stderr::core::io::write::Write::write_all_vectored",
+     "std::sys::stdio::unix::Stdout::core::io::write::Write::write_all",
+     "std::thread::functions::sleep"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "___stack_chk_fail": {
+    "group": "across the program (joined-hub route: TCP, DNS, TLS (`remote.rs`, rustls, ring); other)",
+    "callers": [
+     "_nistz384_point_add",
+     "_nistz384_point_double",
+     "_ring_core_0_17_14__aes_nohw_ctr32_encrypt_blocks",
+     "_ring_core_0_17_14__p256_point_mul",
+     "_ring_core_0_17_14__p256_point_mul_base",
+     "_ring_core_0_17_14__p256_point_mul_base_vartime",
+     "_ring_core_0_17_14__p384_point_mul",
+     "_ring_core_0_17_14__x25519_fe_isnegative",
+     "_ring_core_0_17_14__x25519_ge_double_scalarmult_vartime",
+     "_ring_core_0_17_14__x25519_ge_frombytes_vartime",
+     "_ring_core_0_17_14__x25519_ge_scalarmult_base",
+     "_ring_core_0_17_14__x25519_public_from_private_generic_masked",
+     "_ring_core_0_17_14__x25519_scalar_mult_generic_masked",
+     "_table_select"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "___stack_chk_guard": {
+    "group": "no caller in the binary (dyld or the linker uses it)",
+    "callers": [],
+    "traced": false,
+    "untraced": "data",
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "__dyld_get_image_header": {
+    "group": "panics and backtraces",
+    "callers": [
+     "std::backtrace_rs::symbolize::gimli::resolve"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "__dyld_get_image_name": {
+    "group": "panics and backtraces",
+    "callers": [
+     "std::backtrace_rs::symbolize::gimli::resolve"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "__dyld_get_image_vmaddr_slide": {
+    "group": "panics and backtraces",
+    "callers": [
+     "std::backtrace_rs::symbolize::gimli::resolve"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "__dyld_image_count": {
+    "group": "panics and backtraces",
+    "callers": [
+     "std::backtrace_rs::symbolize::gimli::resolve"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "__exit": {
+    "group": "std's process spawning (`Command`)",
+    "callers": [
+     "std::sys::process::unix::unix::Command::spawn"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "__tlv_atexit": {
+    "group": "across the program (std's runtime start and exit; threads, locks and channels)",
+    "callers": [
+     "std::sys::thread::unix::new::thread_start",
+     "std::sys::thread_local::destructors::list::register",
+     "std::thread::current::init_current"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "__tlv_bootstrap": {
+    "group": "no caller in the binary (dyld or the linker uses it)",
+    "callers": [],
+    "traced": false,
+    "untraced": "called by dyld",
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_abort": {
+    "group": "across the program (other; std's runtime start and exit)",
+    "callers": [
+     "std::rt::lang_start_internal",
+     "std::sys::pal::unix::abort_internal"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_bzero": {
+    "group": "across the program (deep-hook's own code; joined-hub route: TCP, DNS, TLS (`remote.rs`, rustls, ring); other; the allocator)",
+    "callers": [
+     "N::ring::rsa::padding::pkcs1::N::verify",
+     "N::ring::rsa::padding::pss::verify",
+     "Nt::core::mem::maybe_uninit::MaybeUninit::write_default::write_default",
+     "Nt::core::num::imp::bignum::x4::mul_pow2",
+     "NtN::rustls::client::ech::encode_inner_hello",
+     "NtN::rustls::msgs::deframer::buffers::read",
+     "__rustc::__rdl_alloc_zeroed",
+     "_ring_core_0_17_14__LIMBS_select_512_32",
+     "_ring_core_0_17_14__little_endian_bytes_from_scalar",
+     "core::num::imp::dec2flt::decimal_seq::parse_decimal_seq",
+     "deep_hook::forward",
+     "hmac::sign",
+     "ring::aead::aes_gcm::open",
+     "ring::aead::aes_gcm::open_strided::fallback::Key::fallback::Key",
+     "ring::aead::aes_gcm::open_strided::vp::Key::neon::Key",
+     "ring::aead::aes_gcm::seal",
+     "ring::aead::aes_gcm::seal_strided::fallback::Key::fallback::Key",
+     "ring::aead::aes_gcm::seal_strided::vp::Key::neon::Key",
+     "ring::aead::algorithm::open_within",
+     "ring::arithmetic::bigint::elem_exp_consttime_inner::a::keypair::P::EB6_",
+     "ring::arithmetic::bigint::elem_exp_consttime_inner::a::keypair::Q::EB6_",
+     "ring::arithmetic::bigint::elem_reduced::keypair::P",
+     "ring::arithmetic::bigint::elem_widen::keypair::Q",
+     "ring::digest::try_finish",
+     "ring::ec::suite_b::ecdsa::verification::signature::VerificationAlgorithm::verify",
+     "ring::ec::suite_b::private_key::affine_from_jacobian",
+     "ring::ec::suite_b::verify_jacobian_point_is_on_the_curve",
+     "ring::hmac::sign",
+     "ring::rsa::padding::pss::encode",
+     "ring::rsa::verification::verify_rsa_"
+    ],
+    "traced": false,
+    "untraced": "crashes when interposed",
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_calloc": {
+    "group": "the allocator",
+    "callers": [
+     "__rustc::__rdl_alloc_zeroed"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": true
+    }
+   },
+   "_chdir": {
+    "group": "std's process spawning (`Command`)",
+    "callers": [
+     "std::sys::process::unix::unix::Command::do_exec"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_chroot": {
+    "group": "std's process spawning (`Command`)",
+    "callers": [
+     "std::sys::process::unix::unix::Command::do_exec"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_clock_gettime": {
+    "group": "std's environment, time and errors",
+    "callers": [
+     "std::sys::pal::unix::time::now"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_clonefile": {
+    "group": "deep-hook's own code",
+    "callers": [
+     "deep_hook::clone_one"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_close": {
+    "group": "across the program (deep-hook's own code; files and folders; joined-hub route: TCP, DNS, TLS (`remote.rs`, rustls, ring); other; panics and backtraces; std's process spawning (`Command`); the hub's Unix socket; threads, locks and channels)",
+    "callers": [
+     "N::std::sync::mpmc::list::core::result::Result::os::unix::net::stream::UnixStream::disconnect_receivers::deep_hook",
+     "N::std::sync::mpmc::zero::core::result::Result::os::unix::net::stream::UnixStream::recv::deep_hook",
+     "N::std::sync::mpmc::zero::core::result::Result::os::unix::net::stream::UnixStream::send::deep_hook",
+     "Nt::std::sync::mpmc::list::core::result::Result::os::unix::net::stream::UnixStream::drop::deep_hook",
+     "alloc::io::buffered::bufreader::std::os::unix::net::stream::UnixStream::with_capacity::deep_hook",
+     "core::ptr::drop_glue::Option::N::std::sync::mpmc::zero::result::Result::b::os::unix::net::stream::UnixStream::Error::send::deep_hook",
+     "core::ptr::drop_glue::Result::std::net::tcp::TcpStream::Error::deep_hook",
+     "core::ptr::drop_glue::Result::std::os::unix::net::stream::UnixStream::Error::b::sync::mpsc::RecvTimeoutError::deep_hook",
+     "core::ptr::drop_glue::Result::std::os::unix::net::stream::UnixStream::Error::deep_hook",
+     "core::ptr::drop_glue::Result::std::sync::mpmc::error::SendTimeoutError::UnixStream::Error::deep_hook",
+     "core::ptr::drop_glue::alloc::io::buffered::bufreader::BufReader::deep_hook::remote::Stream::E",
+     "core::ptr::drop_glue::alloc::io::buffered::bufreader::BufReader::std::fs::File::deep_hook",
+     "core::ptr::drop_glue::alloc::io::buffered::bufreader::BufReader::std::os::unix::net::stream::UnixStream::deep_hook",
+     "core::ptr::drop_glue::deep_hook::actions::Hub::connect",
+     "core::ptr::drop_glue::deep_hook::remote::Stream",
+     "core::ptr::drop_glue::rustls::stream::StreamOwned::client::client_conn::connection::ClientConnection::std::net::tcp::TcpStream::deep_hook",
+     "core::ptr::drop_glue::rustls_pki_types::pem::ReadIter::alloc::io::buffered::bufreader::BufReader::std::fs::File::PrivateKeyDer::deep_hook",
+     "core::ptr::drop_glue::std::net::tcp::TcpStream::deep_hook",
+     "core::ptr::drop_glue::std::process::Child",
+     "core::ptr::drop_glue::std::process::Child::deep_hook",
+     "core::ptr::drop_glue::std::process::Command::deep_hook",
+     "core::ptr::drop_glue::std::process::StdioPipes",
+     "core::ptr::drop_glue::std::sync::mpmc::error::SendTimeoutError::Result::os::unix::net::stream::UnixStream::Error::deep_hook",
+     "core::ptr::drop_glue::std::sync::mpmc::zero::Packet::Result::os::unix::net::stream::UnixStream::Error::deep_hook",
+     "core::ptr::drop_glue::std::sys::process::unix::common::ChildPipes",
+     "core::ptr::drop_glue::std::thread::lifecycle::spawn_unchecked::deep_hook::actions::F::Hub::connect::H",
+     "deep_hook::actions::call",
+     "deep_hook::forward",
+     "deep_hook::main",
+     "deep_hook::matcher::kills_hub",
+     "deep_hook::remote::connect",
+     "deep_hook::remote::send_later",
+     "deep_hook::spool_file::append",
+     "deep_hook::spool_file::sync",
+     "deep_hook::ulid",
+     "deep_hook::waiter",
+     "rustls_pki_types::CertificateDer::from_pem_file::alloc::string::String::deep_hook",
+     "rustls_pki_types::PrivateKeyDer::from_pem_file::std::path::PathBuf::deep_hook",
+     "std::backtrace_rs::symbolize::gimli::mmap",
+     "std::fs::read_to_string::inner",
+     "std::fs::write::inner",
+     "std::net::tcp::connect_timeout",
+     "std::os::unix::net::stream::connect::path::Path::deep_hook",
+     "std::os::unix::net::stream::connect::path::PathBuf::deep_hook",
+     "std::process::output",
+     "std::process::status",
+     "std::process::wait",
+     "std::sync::mpmc::array::core::result::Result::os::unix::net::stream::UnixStream::disconnect_receivers::deep_hook",
+     "std::sys::backtrace::__rust_begin_short_backtrace::deep_hook::actions::c::Hub::connect::e",
+     "std::sys::fs::unix::remove_dir_impl::remove_dir_all_recursive",
+     "std::sys::net::connection::socket::unix::new",
+     "std::sys::pipe::unix::pipe",
+     "std::sys::process::unix::common::read_output",
+     "std::sys::process::unix::common::setup_io",
+     "std::sys::process::unix::common::stderr",
+     "std::sys::process::unix::common::stdin",
+     "std::sys::process::unix::common::stdout",
+     "std::sys::process::unix::unix::Command::do_exec",
+     "std::sys::process::unix::unix::Command::spawn"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_closedir": {
+    "group": "files and folders",
+    "callers": [
+     "std::sys::fs::unix::core::ops::drop::Drop::drop"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_confstr": {
+    "group": "files and folders",
+    "callers": [
+     "std::env::temp_dir"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_connect": {
+    "group": "across the program (joined-hub route: TCP, DNS, TLS (`remote.rs`, rustls, ring); the hub's Unix socket)",
+    "callers": [
+     "std::net::tcp::connect_timeout",
+     "std::os::unix::net::stream::connect::path::Path::deep_hook",
+     "std::os::unix::net::stream::connect::path::PathBuf::deep_hook"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_dirfd": {
+    "group": "files and folders",
+    "callers": [
+     "std::sys::fs::unix::core::ops::drop::Drop::drop"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_dispatch_release": {
+    "group": "threads, locks and channels",
+    "callers": [
+     "alloc::sync::std::thread::thread::Inner::alloc::System::drop_slow"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": true
+    }
+   },
+   "_dispatch_semaphore_create": {
+    "group": "threads, locks and channels",
+    "callers": [
+     "std::thread::thread::new"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_dispatch_semaphore_signal": {
+    "group": "threads, locks and channels",
+    "callers": [
+     "N::std::sys::sync::rwlock::queue::unlock_queue",
+     "std::sys::sync::once::queue::call",
+     "std::sys::sync::once::queue::core::ops::drop::Drop::drop",
+     "std::sys::sync::thread_parking::darwin::unpark",
+     "std::thread::scoped::decrement_num_running_threads"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": true
+    }
+   },
+   "_dispatch_semaphore_wait": {
+    "group": "across the program (panics and backtraces; std's environment, time and errors; threads, locks and channels)",
+    "callers": [
+     "std::panicking::panic_with_hook",
+     "std::sys::env::unix::env_read_lock",
+     "std::sys::sync::once::queue::wait",
+     "std::thread::functions::park",
+     "std::thread::thread::park",
+     "std::thread::thread::park_timeout",
+     "sync::nonpoison::rwlock::panicking::Hook::replace"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": true
+    }
+   },
+   "_dispatch_time": {
+    "group": "threads, locks and channels",
+    "callers": [
+     "std::thread::thread::park_timeout"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": true
+    }
+   },
+   "_dlsym": {
+    "group": "std's process spawning (`Command`)",
+    "callers": [
+     "std::sys::process::unix::unix::Command::spawn"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_dup": {
+    "group": "std's runtime start and exit",
+    "callers": [
+     "std::rt::lang_start_internal"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_dup2": {
+    "group": "std's process spawning (`Command`)",
+    "callers": [
+     "std::sys::process::unix::unix::Command::do_exec"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_execvp": {
+    "group": "std's process spawning (`Command`)",
+    "callers": [
+     "std::sys::process::unix::unix::Command::do_exec"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_exit": {
+    "group": "std's runtime start and exit",
+    "callers": [
+     "std::sys::exit::exit"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_fcntl": {
+    "group": "across the program (files and folders; other; std's process spawning (`Command`); std's runtime start and exit; the hub's Unix socket)",
+    "callers": [
+     "Nt::std::fs::sync_all",
+     "std::os::unix::net::listener::try_clone",
+     "std::rt::lang_start_internal",
+     "std::sys::fd::unix::set_nonblocking",
+     "std::sys::process::unix::common::to_child_stdio"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_fdopendir": {
+    "group": "files and folders",
+    "callers": [
+     "std::sys::fs::unix::remove_dir_impl::remove_dir_all_recursive"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_flock": {
+    "group": "files and folders",
+    "callers": [
+     "Nt::std::fs::lock",
+     "Nt::std::fs::try_lock"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": true
+    }
+   },
+   "_fork": {
+    "group": "std's process spawning (`Command`)",
+    "callers": [
+     "std::sys::process::unix::unix::Command::spawn"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_free": {
+    "group": "across the program (files and folders; std's runtime start and exit; the allocator; threads, locks and channels)",
+    "callers": [
+     "__rustc::__rdl_dealloc",
+     "__rustc::__rdl_realloc",
+     "alloc::sync::core::mem::maybe_uninit::MaybeUninit::std::thread::thread::Inner::H::alloc::System::drop_slow::H",
+     "alloc::sync::std::thread::thread::Inner::alloc::System::drop_slow",
+     "std::sys::fs::unix::canonicalize",
+     "std::sys::thread_local::guard::apple::enable::run_dtors"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_freeaddrinfo": {
+    "group": "joined-hub route: TCP, DNS, TLS (`remote.rs`, rustls, ring)",
+    "callers": [
+     "alloc::vec::spec_from_iter_nested::core::net::socket_addr::SocketAddr::std::sys::net::connection::socket::LookupHost::from_iter::y_"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_fstat": {
+    "group": "across the program (files and folders; panics and backtraces)",
+    "callers": [
+     "Nt::std::fs::metadata",
+     "std::backtrace_rs::symbolize::gimli::mmap",
+     "std::fs::buffer_capacity_required",
+     "std::fs::read_to_string::inner"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": true
+    }
+   },
+   "_gai_strerror": {
+    "group": "joined-hub route: TCP, DNS, TLS (`remote.rs`, rustls, ring)",
+    "callers": [
+     "std::sys::net::connection::socket::lookup_host"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_getaddrinfo": {
+    "group": "joined-hub route: TCP, DNS, TLS (`remote.rs`, rustls, ring)",
+    "callers": [
+     "std::sys::net::connection::socket::lookup_host"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_getcwd": {
+    "group": "files and folders",
+    "callers": [
+     "std::env::current_dir"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_getentropy": {
+    "group": "joined-hub route: TCP, DNS, TLS (`remote.rs`, rustls, ring)",
+    "callers": [
+     "getrandom::imp::getrandom_inner"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_getenv": {
+    "group": "std's environment, time and errors",
+    "callers": [
+     "std::sys::env::unix::getenv"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_getpgid": {
+    "group": "deep-hook's own code",
+    "callers": [
+     "deep_hook::matcher::kills_hub"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_getpid": {
+    "group": "std's environment, time and errors",
+    "callers": [
+     "std::process::id"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_getppid": {
+    "group": "std's environment, time and errors",
+    "callers": [
+     "std::os::unix::process::parent_id"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_getsockopt": {
+    "group": "across the program (deep-hook's own code; the hub's Unix socket)",
+    "callers": [
+     "deep_hook::matcher::kills_hub",
+     "deep_hook::matcher::peer_of",
+     "std::sys::net::connection::socket::unix::take_error"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_ioctl": {
+    "group": "across the program (joined-hub route: TCP, DNS, TLS (`remote.rs`, rustls, ring); std's process spawning (`Command`); the hub's Unix socket)",
+    "callers": [
+     "std::net::tcp::connect_timeout",
+     "std::sys::net::connection::socket::unix::new",
+     "std::sys::pipe::unix::pipe"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_kill": {
+    "group": "deep-hook's own code",
+    "callers": [
+     "deep_hook::waiter"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_lseek": {
+    "group": "files and folders",
+    "callers": [
+     "std::fs::buffer_capacity_required"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_lstat": {
+    "group": "files and folders",
+    "callers": [
+     "std::sys::fs::symlink_metadata",
+     "std::sys::fs::unix::lstat::core::ops::function::Fn::ffi::c_str::CStr::call",
+     "std::sys::fs::unix::remove_dir_impl::remove_dir_all_modern"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": true
+    }
+   },
+   "_malloc": {
+    "group": "across the program (other; the allocator; threads, locks and channels)",
+    "callers": [
+     "__rustc::__rdl_alloc",
+     "raw_vec::std::alloc::System::finish_grow",
+     "std::thread::thread::new"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_memcmp": {
+    "group": "across the program (deep-hook's own code; joined-hub route: TCP, DNS, TLS (`remote.rs`, rustls, ring); other; panics and backtraces; std's environment, time and errors; threads, locks and channels)",
+    "callers": [
+     "J_::core::slice::iter::alloc::string::String::deep_contracts::Value::iter::traits::iterator::Iterator::all::deep_hook::tool_paths::path_args::W_",
+     "J_::core::slice::iter::alloc::string::String::deep_contracts::Value::iter::traits::iterator::Iterator::position::v::v::Parser::object::v",
+     "J_::core::slice::iter::iter::traits::iterator::Iterator::any::deep_hook::matcher::discards",
+     "J_::core::slice::iter::iter::traits::iterator::Iterator::any::deep_hook::matcher::discards::I",
+     "J_::core::slice::iter::iter::traits::iterator::Iterator::any::deep_hook::matcher::discards::K",
+     "J_::core::slice::iter::iter::traits::iterator::Iterator::find::shell::L::Reader::resolve::N",
+     "J_::core::slice::iter::rustls::crypto::SupportedKxGroup::iter::traits::iterator::Iterator::find::NtNtB::client::tls12::B_::ExpectServerDone::common_state::State::D_::client_conn::ClientConnectionData::handle",
+     "N::core::ops::function::impls::deep_hook::matcher::deps::locked::call_mut",
+     "N::core::ops::function::impls::iter::traits::iterator::Iterator::any::check::shell::W::Reader::file::K::call_mut::Y",
+     "N::core::ops::function::impls::iter::traits::iterator::Iterator::any::check::std::path::PathBuf::deep_hook::matcher::r_::Call::past_targets::K::call_mut::t_",
+     "N::hashbrown::map::alloc::string::String::deep_hook::shell::Val::std::hash::random::RandomState::insert::t",
+     "N::hashbrown::map::alloc::string::String::std::hash::random::RandomState::insert::deep_contracts",
+     "N::hashbrown::map::alloc::string::String::std::sync::mpsc::Sender::deep_hook::actions::Reply::w::hash::random::RandomState::insert",
+     "N::hashbrown::map::alloc::string::String::std::sync::mpsc::Sender::deep_hook::actions::Reply::x::hash::random::RandomState::remove::a_",
+     "N::ring::rsa::padding::pkcs1::N::verify",
+     "N::ring::rsa::padding::pss::verify",
+     "Nt::deep_hook::shell",
+     "Nt::rustls::crypto::signer::keys_match",
+     "NtNt::alloc::vec::into_iter::std::path::PathBuf::core::iter::traits::iterator::Iterator::try_fold::InPlaceDrop::D::adapters::filter::filter_try_fold::B_::F::result::Result::B_::deep_hook::matcher::E_4C::past_targets::write_in_place_with_drop::EB4G_",
+     "Y::std::path::core::cmp::PartialEq::eq",
+     "alloc::collections::btree::map::std::ffi::os_str::OsString::E6insertB1d_",
+     "alloc::collections::btree::map::std::ffi::os_str::OsString::core::option::Option::EE6insertB1d_",
+     "alloc::vec::String::retain::deep_hook::remote::refused_generation",
+     "alloc::vec::String::retain::deep_hook::tool_paths::mcp::j",
+     "alloc::vec::spec_from_iter::core::iter::adapters::filter::Filter::p::copied::Copied::t::slice::iter::Iter::deep_hook::exchange::c_7::from_iter::c_",
+     "alloc::vec::spec_from_iter_nested::String::iter::adapters::filter_map::FilterMap::deep_hook::matcher::deps::locked::from_iter::q_",
+     "alloc::vec::spec_from_iter_nested::String::iter::adapters::filter_map::FilterMap::deep_hook::matcher::patched::from_iter::o_",
+     "alloc::vec::spec_from_iter_nested::String::iter::adapters::map::Map::X::filter::Filter::matcher::graphql_value::H_s::from_iter::L_",
+     "alloc::vec::spec_from_iter_nested::str::iter::Split::from_iter::deep_hook",
+     "alloc::vec::std::path::PathBuf::retain::deep_hook::matcher::outermost::s",
+     "core::iter::adapters::chain::slice::iter::Iter::ENtNtNtB9_::traits::iterator::Iterator::try_fold::y::any::check::q::shell::O_::Reader::resolve::ops::control_flow::ControlFlow::Q_",
+     "core::iter::adapters::filter_map::str::iter::Lines::deep_hook::remote::requests::Iterator::next::E",
+     "core::iter::adapters::map::str::iter::Split::deep_hook::heavy::scalar::traits::iterator::Iterator::try_fold::String::q::flow::ops::control_flow::ControlFlow::EEB1s_",
+     "core::iter::adapters::rev::Rev::std::path::Components::traits::iterator::Iterator::eq_by::NCI::B1v::eq::E0E::deep_hook",
+     "core::slice::cmp::alloc::string::String::slice_contains::deep_hook",
+     "core::slice::cmp::slice_contains::deep_hook",
+     "core::slice::sort::shared::pivot::median3_rec::SB14_20s::NCNvMs_NtNtNtNt::std::backtrace_rs::symbolize::gimli::macho::V::Object::parse",
+     "core::slice::sort::shared::smallsort::insertion_sort_shift_left::SB1m_20s::n::std::backtrace_rs::symbolize::gimli::macho::d_::Object::parse::l_",
+     "core::slice::sort::shared::smallsort::small_sort_general::SB1f_20s::g::std::backtrace_rs::symbolize::gimli::macho",
+     "core::slice::sort::shared::smallsort::sort4_stable::SB19_20s::a::std::backtrace_rs::symbolize::gimli::macho",
+     "core::slice::sort::unstable::heapsort::heapsort::SB15_20s::std::backtrace_rs::symbolize::gimli::macho::W::Object::parse",
+     "core::slice::sort::unstable::ipnsort::SBT_20::std::backtrace_rs::symbolize::gimli::macho::I::Object::parse::Q",
+     "core::slice::sort::unstable::quicksort::quicksort::SB17_20s::backtrace_rs::symbolize::gimli::macho::Y::Object::parse",
+     "core::slice::starts_with::deep_hook",
+     "core::str::iter::iterator::Iterator::next",
+     "core::str::iter::next_back::deep_hook",
+     "core::str::pattern::is_contained_in",
+     "core::str::pattern::new",
+     "deep_contracts::core::cmp::PartialEq::eq",
+     "deep_contracts::number",
+     "deep_contracts::value",
+     "deep_contracts::word",
+     "deep_hook::actions::ordered",
+     "deep_hook::call",
+     "deep_hook::covered",
+     "deep_hook::forward",
+     "deep_hook::heavy::form",
+     "deep_hook::heavy::matched_in",
+     "deep_hook::inline::program",
+     "deep_hook::main",
+     "deep_hook::matcher::deps::added",
+     "deep_hook::matcher::deps::unlocked",
+     "deep_hook::matcher::deps::value_of",
+     "deep_hook::matcher::discards",
+     "deep_hook::matcher::gh",
+     "deep_hook::matcher::matches",
+     "deep_hook::matcher::merge_read",
+     "deep_hook::matcher::past",
+     "deep_hook::matcher::town",
+     "deep_hook::matcher::unrestorable",
+     "deep_hook::matcher::written",
+     "deep_hook::member",
+     "deep_hook::remote::joined",
+     "deep_hook::remote::refused_generation",
+     "deep_hook::remote::rustls::verify::ServerCertVerifier::verify_server_cert",
+     "deep_hook::setting",
+     "deep_hook::shaped",
+     "deep_hook::shell::eat",
+     "deep_hook::shell::is",
+     "deep_hook::shell::tokens",
+     "deep_hook::tool_paths::source",
+     "raw::alloc::string::String::deep_hook::shell::Val::remove_entry::s::w",
+     "ring::ec::suite_b::key_pair_from_bytes",
+     "ring::ec::suite_b::key_pair_from_pkcs8_",
+     "ring::pkcs8::unwrap_key__",
+     "rust::v0::print_type",
+     "rustls::client::hs::process_alpn_protocol",
+     "rustls::compress::compression_for",
+     "rustls_pki_types::pem::read",
+     "shell::file",
+     "shell::list",
+     "shell::redirection",
+     "shell::resolve",
+     "shell::value",
+     "std::backtrace_rs::symbolize::gimli::macho::section",
+     "std::backtrace_rs::symbolize::gimli::resolve",
+     "std::path::compare_components",
+     "std::path::core::cmp::PartialEq::eq",
+     "std::sys::process::env::capture",
+     "std::thread::scoped::scope::deep_hook::actions::serve",
+     "untrusted::input::read_all::webpki::cert::s",
+     "webpki::signed_data::verify_signature"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_memcpy": {
+    "group": "across the program (deep-hook's own code; files and folders; joined-hub route: TCP, DNS, TLS (`remote.rs`, rustls, ring); other; panics and backtraces; std's environment, time and errors; std's process spawning (`Command`); std's runtime start and exit; the allocator; the hub's Unix socket; threads, locks and channels)",
+    "callers": [
+     "H_Nt::rustls::msgs::handshake::core::clone::Clone::clone",
+     "J_::core::slice::iter::deep_hook::shell::Run::iter::traits::iterator::Iterator::find::matcher::i_::Call::reads_whole",
+     "N::core::ops::function::impls::deep_hook::matcher::deps::locked::call_mut",
+     "N::core::ops::function::impls::deep_hook::matcher::deps::lockfiles::call_mut",
+     "N::core::ops::function::impls::deep_hook::matcher::patched::call_mut",
+     "N::deep_hook::shell::text",
+     "N::ring::arithmetic::bigint::boxed_limbs::rsa::N::from_be_bytes_padded_less_than",
+     "N::ring::ec::suite_b::ecdsa::signing::sign",
+     "N::rustls::client::hs::State::ClientConnectionData::handle",
+     "N::rustls::client::tls12::State::ClientConnectionData::handle",
+     "N::rustls::client::tls12::State::ClientConnectionData::into_owned",
+     "N::rustls::client::tls13::State::ClientConnectionData::handle",
+     "N::rustls::crypto::ring::tls13::decrypter",
+     "N::rustls::crypto::ring::tls13::encrypter",
+     "N_::rustls::msgs::handshake::core::clone::Clone::clone",
+     "Nt::deep_hook::shell",
+     "Nt::rustls::client::client_conn::connection::new",
+     "Nt::rustls::client::client_conn::for_client",
+     "Nt::rustls::client::ech::grease_ext",
+     "Nt::rustls::client::tls13::State::ClientConnectionData::handle",
+     "Nt::rustls::crypto::ring::quic::quic::Algorithm::packet_key",
+     "Nt::rustls::crypto::tls13::new",
+     "Nt::rustls::msgs::persist::ClientSession::quic_params",
+     "Nt::rustls::tls12::export_keying_material",
+     "Nt::rustls::tls12::extract_secrets",
+     "Nt::rustls::tls12::make_cipher_pair",
+     "NtN::ring::io::writer::write_bytes",
+     "NtN::rustls::client::ech::confirm_acceptance",
+     "NtN::rustls::client::ech::confirm_hrr_acceptance",
+     "NtN::rustls::client::ech::ech_hello",
+     "NtN::rustls::client::ech::encode_inner_hello",
+     "NtN::rustls::client::ech::new",
+     "NtN::rustls::client::ech::transcript_hrr_update",
+     "NtN::rustls::client::tls12::State::ClientConnectionData::handle",
+     "NtN::rustls::client::tls12::State::ClientConnectionData::into_owned",
+     "NtN::rustls::client::tls13::State::ClientConnectionData::handle",
+     "NtNt::alloc::collections::vec_deque::grow::rustls",
+     "NtNt::alloc::collections::vec_deque::rustls::compress::CompressionCacheEntry::grow::q",
+     "NtNt::alloc::collections::vec_deque::rustls::msgs::persist::Tls13ClientSessionValue::grow::b",
+     "NtNt::alloc::collections::vec_deque::rustls_pki_types::server_name::ServerName::grow::rustls",
+     "NtNt::alloc::io::buffered::bufreader::std::fs::File::read::deep_hook",
+     "NtNt::alloc::io::buffered::bufreader::std::fs::File::read_buf::deep_hook",
+     "NtNt::alloc::io::buffered::bufreader::std::fs::File::read_buf_exact::deep_hook",
+     "NtNt::alloc::io::buffered::bufreader::std::fs::File::read_exact::deep_hook",
+     "NtNt::alloc::io::buffered::bufreader::std::fs::File::read_to_end::deep_hook",
+     "NtNt::alloc::io::buffered::bufreader::std::fs::File::read_to_string::deep_hook",
+     "NtNt::alloc::io::buffered::bufreader::std::fs::File::read_vectored::deep_hook",
+     "NtNt::alloc::io::buffered::bufreader::std::io::stdio::StdinRaw::read::d",
+     "NtNt::alloc::io::buffered::bufreader::std::io::stdio::StdinRaw::read_to_end::d",
+     "NtNt::alloc::vec::into_iter::core::iter::traits::iterator::Iterator::fold::string::String::F_::ToString::to_string::D_::INtB8_3V::D_::extend_trusted",
+     "NtNt::alloc::vec::into_iter::core::iter::traits::iterator::Iterator::try_fold::InPlaceDrop::string::String::g::adapters::map::map_try_fold::O_::e_::i::result::Result::e_::deep_hook::args_of::write_in_place_with_drop::O_::Z_E::w_",
+     "NtNt::alloc::vec::into_iter::deep_contracts::Value::core::iter::traits::iterator::Iterator::fold::K::adapters::map::map_fold::string::String::actions::object::E::for_each::call::h_N::INtB8_3V::h_E::extend_trusted::K_::Map::J_E::P_",
+     "NtNt::rustls::client::tls12::State::ClientConnectionData::handle",
+     "NtNt::rustls::client::tls13::State::ClientConnectionData::handle",
+     "NtNt::rustls::crypto::ring::tls13::hmac_sign",
+     "NtNt::rustls::msgs::base::NtB5_8NonEmptyENtNtB7_5c::Codec::encode",
+     "NtNtN::rustls::crypto::ring::sign::public_key",
+     "O::rustls::msgs::handshake::payload_encode",
+     "Path::_join",
+     "Path::_with_extension",
+     "Path::to_path_buf",
+     "T::rustls::msgs::handshake::encode",
+     "V::rustls::msgs::handshake::encode",
+     "V::rustls::msgs::handshake::read",
+     "X::rustls::msgs::handshake::encode",
+     "X::rustls::msgs::handshake::read",
+     "Z::rustls::msgs::handshake::encode",
+     "_OUTLINED_FUNCTION_19",
+     "_OUTLINED_FUNCTION_25",
+     "__rustc::__rdl_realloc",
+     "addr2line::line::path_push",
+     "addr2line::line::render_file::gimli::read::endian_slice::EndianSlice::endianity::LittleEndian::std",
+     "alloc::collections::btree::map::std::ffi::os_str::OsString::E6insertB1d_",
+     "alloc::collections::btree::map::std::ffi::os_str::OsString::core::option::Option::EE6insertB1d_",
+     "alloc::collections::btree::node::Mut::SetValZST::n::Leaf::n::Edge::insert_recursing::alloc::Global::NtNt::b_1::V::E::insert_entry::rustls",
+     "alloc::collections::btree::node::Mut::gimli::read::abbrev::Abbreviation::m::Leaf::m::KV::split_leaf_data::J",
+     "alloc::collections::btree::node::Mut::gimli::read::abbrev::Abbreviation::n::Internal::n::KV::split::alloc::Global::K",
+     "alloc::collections::btree::remove::NodeRef::marker::Mut::std::ffi::os_str::OsString::L::v::Leaf::v::KV::remove_leaf_kv::NtNtB::h_1::Occ::L::L::remove_kv::alloc::Global::R",
+     "alloc::collections::btree::remove::NodeRef::marker::Mut::std::sys::pal::unix::stack_overflow::thread_info::ThreadInfo::v::Leaf::v::KV::remove_leaf_kv::NtNtB::S_1::Occ::M::remove_kv::alloc::Global::Y",
+     "alloc::ffi::c_str::core::convert::From::ffi::c_str::CStr::from",
+     "alloc::ffi::c_str::spec_new_impl",
+     "alloc::io::buf_read::default_read_until::bufreader::BufReader::deep_hook::remote::Stream::D",
+     "alloc::io::buf_read::default_read_until::bufreader::BufReader::std::fs::File::deep_hook",
+     "alloc::io::buf_read::default_read_until::bufreader::BufReader::std::io::stdio::StdinRaw::F",
+     "alloc::io::buf_read::default_read_until::bufreader::BufReader::std::os::unix::net::stream::UnixStream::deep_hook",
+     "alloc::io::buffered::bufwriter::std::io::stdio::StdoutRaw::write_all_cold::c",
+     "alloc::io::error::core::io::error::Error::new::std",
+     "alloc::io::read::default_read_exact::bufreader::BufReader::std::fs::File::deep_hook",
+     "alloc::io::read::default_read_to_end::small_probe_read::std::fs::File::h",
+     "alloc::io::read::default_read_to_end::small_probe_read::std::fs::File::i",
+     "alloc::io::read::default_read_to_end::small_probe_read::std::net::tcp::TcpStream::deep_hook",
+     "alloc::io::read::default_read_to_end::small_probe_read::std::sys::fd::unix::FileDesc::m",
+     "alloc::io::read::default_read_to_end::small_probe_read::std::sys::stdio::unix::Stdin::l",
+     "alloc::slice::repeat::deep_contracts",
+     "alloc::slice::to_vec_in::rustls::msgs::handshake::EchConfigPayload::to_vec",
+     "alloc::str::join_generic_copy::String::deep_hook",
+     "alloc::str::join_generic_copy::String::rustls",
+     "alloc::str::join_generic_copy::deep_hook",
+     "alloc::str::replace::deep_hook",
+     "alloc::string::core::convert::From::Cow::from",
+     "alloc::string::core::fmt::Write::write_str",
+     "alloc::string::core::ops::arith::Add::add",
+     "alloc::string::from_utf8_lossy",
+     "alloc::vec::core::clone::Clone::clone::deep_hook",
+     "alloc::vec::core::clone::Clone::clone::rustls",
+     "alloc::vec::core::clone::Clone::clone::webpki",
+     "alloc::vec::rustls::error::ExtendedKeyPurpose::core::clone::Clone::clone",
+     "alloc::vec::rustls::error::ExtendedKeyPurpose::core::clone::Clone::clone::deep_hook",
+     "alloc::vec::rustls::msgs::handshake::EchConfigExtension::core::clone::Clone::clone",
+     "alloc::vec::rustls::msgs::handshake::EchConfigPayload::core::clone::Clone::clone",
+     "alloc::vec::rustls::msgs::handshake::EchConfigPayload::core::clone::Clone::clone::deep_hook",
+     "alloc::vec::rustls::msgs::handshake::KeyShareEntry::core::clone::Clone::clone",
+     "alloc::vec::rustls::msgs::handshake::PresharedKeyIdentity::core::clone::Clone::clone",
+     "alloc::vec::rustls::msgs::handshake::ProtocolName::core::clone::Clone::clone",
+     "alloc::vec::rustls_pki_types::CertificateDer::core::clone::Clone::clone::rustls",
+     "alloc::vec::rustls_pki_types::alg_id::AlgorithmIdentifier::core::clone::Clone::clone::deep_hook",
+     "alloc::vec::rustls_pki_types::alg_id::AlgorithmIdentifier::core::clone::Clone::clone::rustls",
+     "alloc::vec::spec_extend::std::path::PathBuf::IntoIter::spec_extend::deep_hook",
+     "alloc::vec::spec_from_iter::IntoIter::from_iter::rustls",
+     "alloc::vec::spec_from_iter::String::core::iter::adapters::GenericShunt::G::map::Map::K::slice::iter::Iter::std::path::PathBuf::deep_hook::read_fields::K::option::Option::K::convert::Infallible::from_iter::T_",
+     "alloc::vec::spec_from_iter_nested::String::iter::adapters::filter_map::FilterMap::deep_hook::matcher::written::from_iter::t_",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::map::Map::H::take::Take::L::slice::iter::Split::deep_hook::args_of::to_vec::from_iter::g_",
+     "alloc::vec::spec_from_iter_nested::iter::adapters::map::Map::deep_hook::matcher::git_rest::from_iter::h_",
+     "alloc::vec::std::path::PathBuf::core::clone::Clone::clone::deep_hook",
+     "alloc::vec::std::path::PathBuf::extend_trusted::core::iter::adapters::cloned::Cloned::F::slice::iter::Iter::deep_hook",
+     "c::rustls::msgs::handshake::encode",
+     "client::tls12::State::ClientConnectionData::handle",
+     "client::tls13::State::ClientConnectionData::handle",
+     "client::tls13::State::ClientConnectionData::into_owned",
+     "client::tls13::handle_new_ticket_impl",
+     "collections::btree::node::std::ffi::os_str::OsString::i::bulk_steal_left::o",
+     "collections::btree::node::std::ffi::os_str::OsString::i::bulk_steal_right::o",
+     "collections::btree::node::std::ffi::os_str::OsString::j::merge_tracking_child_edge::alloc::Global::p",
+     "collections::btree::node::std::sys::pal::unix::stack_overflow::thread_info::ThreadInfo::bulk_steal_left::v",
+     "collections::btree::node::std::sys::pal::unix::stack_overflow::thread_info::ThreadInfo::bulk_steal_right::v",
+     "collections::btree::node::std::sys::pal::unix::stack_overflow::thread_info::ThreadInfo::merge_tracking_child_edge::alloc::Global::w",
+     "common_state::add",
+     "core::cell::once::Result::addr2line::line::Lines::gimli::read::Error::try_init::d::d::LazyLines::borrow::Q::endian_slice::EndianSlice::S::endianity::LittleEndian::std",
+     "core::io::write::default_write_fmt::Adapter::alloc::vec::Vec::fmt::Write::write_char::std",
+     "core::io::write::default_write_fmt::Adapter::fmt::Write::write_char::std",
+     "core::io::write::default_write_fmt::Cursor::write_str::std",
+     "core::io::write::default_write_fmt::alloc::vec::Vec::write_str::std",
+     "core::iter::adapters::map::slice::iter::Iter::alloc::string::String::deep_hook::heavy::form::traits::iterator::Iterator::fold::K_::for_each::call::n::p::n::O_::collect::Extend::n::extend",
+     "core::iter::adapters::map::slice::iter::Iter::deep_contracts::Value::deep_hook::actions::serve::traits::iterator::Iterator::fold::Q_::for_each::call::n::alloc::vec",
+     "core::iter::adapters::map::slice::iter::Iter::deep_hook::matcher::deps::added::traits::iterator::Iterator::fold::D_::for_each::call::option::Option::alloc::string::String",
+     "core::iter::adapters::map::slice::iter::Iter::deep_hook::remote::hex::traits::iterator::Iterator::fold::String::b_B::INtNtB2a_7collect6ExtendB39_E6extendBN_::v",
+     "core::iter::adapters::map::slice::iter::Iter::rustls_pki_types::CertificateDer::option::IntoIter::S_::Option::d_E::Some::sources::repeat::Repeat::l_E::h::rustls::msgs::handshake::y_23::U_E14e::C_",
+     "core::iter::adapters::map::str::iter::SplitWhitespace::alloc::string::ToString::to_string::traits::iterator::Iterator::try_fold::p_::find::check::C::String::R_9::p_::next::check::t_N::deep_hook::heavy::matched_in::ops::control_flow::ControlFlow::t_E::T_",
+     "core::net::display_buffer::DisplayBuffer::write_char",
+     "core::net::display_buffer::write_str",
+     "core::net::parser::read_ipv6_addr",
+     "core::num::imp::dec2flt::decimal_seq::parse_decimal_seq",
+     "core::slice::sort::shared::smallsort::small_sort_general::SB1f_20s::g::std::backtrace_rs::symbolize::gimli::macho",
+     "core::slice::sort::shared::smallsort::small_sort_general::SB1f_20s::std::backtrace_rs::symbolize::gimli::macho",
+     "core::slice::sort::shared::smallsort::small_sort_general::addr2line::function::FunctionAddress::SB1f_20s::h::h::Functions::gimli::read::endian_slice::EndianSlice::i_9::LittleEndian::parse::std",
+     "core::slice::sort::shared::smallsort::small_sort_general::addr2line::function::InlinedFunctionAddress::SB1f_16s::B::h::h::Function::gimli::read::endian_slice::EndianSlice::j_9::LittleEndian::parse::std",
+     "core::slice::sort::shared::smallsort::small_sort_general::addr2line::line::LineSequence::SB1f_20s::h::h::Lines::parse::gimli::read::endian_slice::EndianSlice::c_9::LittleEndian::std",
+     "core::slice::sort::shared::smallsort::small_sort_general::addr2line::unit::UnitRange::SB1f_20s::h::h::ResUnits::gimli::read::endian_slice::EndianSlice::std",
+     "core::slice::sort::shared::smallsort::small_sort_general::f::cmp::PartialOrd::lt::rustls",
+     "core::slice::sort::shared::smallsort::small_sort_general_with_scratch::alloc::string::String::deep_contracts::Value::y::slice::s::sort_by",
+     "core::slice::sort::shared::smallsort::small_sort_general_with_scratch::alloc::string::String::deep_contracts::Value::y::slice::s::sort_by_key::option::Option::deep_hook::actions::ordered::N_",
+     "core::slice::sort::shared::smallsort::small_sort_general_with_scratch::std::path::PathBuf::s::cmp::PartialOrd::lt::deep_hook",
+     "core::slice::sort::shared::smallsort::small_sort_network::f::cmp::PartialOrd::lt::rustls",
+     "core::slice::sort::stable::drift::sort::alloc::string::String::deep_contracts::Value::option::Option::deep_hook::actions::ordered::g_",
+     "core::slice::sort::stable::drift::sort::object::read::symbol_map::ObjectMapEntry::alloc::slice::sort_by_key::SymbolMap::new",
+     "core::slice::sort::stable::merge::merge::alloc::string::String::deep_contracts::Value::D::write_value::D",
+     "core::slice::sort::stable::merge::merge::std::path::PathBuf::cmp::PartialOrd::lt::deep_hook",
+     "core::slice::sort::stable::quicksort::quicksort::alloc::string::String::deep_contracts::Value::b::slice::option::Option::deep_hook::actions::ordered::q_",
+     "core::slice::sort::stable::quicksort::quicksort::alloc::string::String::deep_contracts::Value::b::slice::write_value::L",
+     "core::slice::sort::stable::quicksort::quicksort::object::read::symbol_map::ObjectMapEntry::alloc::slice::INtB17_9SymbolMap::E3new0E0EB1b_",
+     "core::slice::sort::stable::quicksort::quicksort::std::path::PathBuf::NtNtBa_3cmp10Pa::lt::deep_hook",
+     "core::slice::sort::unstable::quicksort::quicksort::gimli::common::DebugInfoOffset::a::DebugArangesOffset::SB17_20s::unit::EndianSlice::c::endianity::LittleEndian::parse::std",
+     "d::rustls::msgs::handshake::read",
+     "deep_contracts::number",
+     "deep_contracts::string",
+     "deep_contracts::write_value",
+     "deep_hook::actions::call",
+     "deep_hook::actions::ordered",
+     "deep_hook::actions::serve",
+     "deep_hook::actions::text",
+     "deep_hook::actions::unreachable",
+     "deep_hook::address",
+     "deep_hook::call",
+     "deep_hook::covered",
+     "deep_hook::forward",
+     "deep_hook::guard",
+     "deep_hook::heavy::form",
+     "deep_hook::heavy::matched_in",
+     "deep_hook::heavy::scalar",
+     "deep_hook::inline::program",
+     "deep_hook::main",
+     "deep_hook::matcher::checkout",
+     "deep_hook::matcher::collect",
+     "deep_hook::matcher::deps::added",
+     "deep_hook::matcher::deps::note",
+     "deep_hook::matcher::deps::path_in",
+     "deep_hook::matcher::deps::unlocked",
+     "deep_hook::matcher::deps::value_of",
+     "deep_hook::matcher::effect",
+     "deep_hook::matcher::fields",
+     "deep_hook::matcher::from_endpoint",
+     "deep_hook::matcher::git_cwd",
+     "deep_hook::matcher::git_target",
+     "deep_hook::matcher::graphql_value",
+     "deep_hook::matcher::matches",
+     "deep_hook::matcher::merge_read",
+     "deep_hook::matcher::new",
+     "deep_hook::matcher::past",
+     "deep_hook::matcher::path_in",
+     "deep_hook::matcher::paths::glob_spellings",
+     "deep_hook::matcher::quote",
+     "deep_hook::matcher::stash",
+     "deep_hook::matcher::sub",
+     "deep_hook::matcher::written",
+     "deep_hook::matching",
+     "deep_hook::quoted",
+     "deep_hook::remote::connect",
+     "deep_hook::remote::refused_generation",
+     "deep_hook::shell::core::clone::Clone::clone",
+     "deep_hook::shell::dollar",
+     "deep_hook::shell::dquote",
+     "deep_hook::shell::fetched::read",
+     "deep_hook::shell::plain",
+     "deep_hook::shell::tokens",
+     "deep_hook::shell::word",
+     "deep_hook::spool_by",
+     "deep_hook::tool_paths::mcp",
+     "deep_hook::tool_paths::pi_path",
+     "deep_hook::tool_paths::source",
+     "deep_hook::worktree_hub",
+     "e::rustls::msgs::handshake::into_owned",
+     "e_N::rustls::msgs::handshake::clone_one",
+     "gimli::read::dwarf::EndianSlice::LittleEndian::new::std",
+     "h::rustls::msgs::handshake::end_entity_ocsp",
+     "handshake::payload_encode",
+     "handshake::read",
+     "hashbrown::raw::alloc::string::String::deep_hook::shell::Val::core::clone::Clone::clone::v",
+     "hmac::sign",
+     "io::impls::core::io::write::Write::write::std",
+     "io::impls::core::io::write::Write::write_all::std",
+     "io::impls::core::io::write::Write::write_all_vectored::std",
+     "io::impls::core::io::write::Write::write_vectored::std",
+     "j::rustls::msgs::handshake::encode",
+     "msgs::handshake::payload_encode",
+     "msgs::persist::new",
+     "net::socket_addr::to_socket_addrs",
+     "r::rustls::msgs::handshake::encode",
+     "ring::aead::aes_gcm::open",
+     "ring::aead::aes_gcm::open_strided::fallback::Key::fallback::Key",
+     "ring::aead::aes_gcm::open_strided::vp::Key::neon::Key",
+     "ring::aead::aes_gcm::seal",
+     "ring::aead::aes_gcm::seal_strided::fallback::Key::fallback::Key",
+     "ring::aead::aes_gcm::seal_strided::vp::Key::neon::Key",
+     "ring::aead::algorithm::aes_gcm_init_128",
+     "ring::aead::algorithm::aes_gcm_init_256",
+     "ring::aead::less_safe_key::new_",
+     "ring::arithmetic::bigint::elem_exp_consttime_inner::a::keypair::P::EB6_",
+     "ring::arithmetic::bigint::elem_exp_consttime_inner::a::keypair::Q::EB6_",
+     "ring::arithmetic::bigint::elem_exp_vartime",
+     "ring::arithmetic::bigint::elem_reduced::keypair::P",
+     "ring::arithmetic::bigint::elem_reduced_once::Q",
+     "ring::arithmetic::bigint::elem_widen::keypair::Q",
+     "ring::arithmetic::bigint::modulus::rsa::keypair::Q::to_elem::j::N",
+     "ring::arithmetic::bigint::modulusvalue::rsa::keypair::D::from_be_bytes",
+     "ring::arithmetic::bigint::private_exponent::from_be_bytes_padded::Q",
+     "ring::digest::update",
+     "ring::ec::suite_b::ecdsa::signing::format_rs_asn1::format_integer_tlv",
+     "ring::ec::suite_b::ecdsa::verification::signature::VerificationAlgorithm::verify",
+     "ring::ec::suite_b::key_pair_from_bytes",
+     "ring::ec::suite_b::private_key::affine_from_jacobian",
+     "ring::ec::suite_b::verify_jacobian_point_is_on_the_curve",
+     "ring::hkdf::fill_okm",
+     "ring::hmac::sign",
+     "ring::limb::parse_big_endian_and_pad_consttime",
+     "ring::limb::parse_big_endian_in_range_and_pad_consttime",
+     "ring::rsa::padding::pkcs1::pkcs1_encode",
+     "ring::rsa::padding::pss::encode",
+     "rustls::check::inappropriate_handshake_message",
+     "rustls::client::handy::cache::ClientSessionStore::tls12_session",
+     "rustls::client::hs::State::ClientConnectionData::handle",
+     "rustls::client::hs::emit_client_hello_for_retry",
+     "rustls::client::hs::process_alpn_protocol",
+     "rustls::client::hs::start_handshake",
+     "rustls::client::tls12::State::ClientConnectionData::handle",
+     "rustls::client::tls12::State::ClientConnectionData::into_owned",
+     "rustls::client::tls12::emit_client_kx",
+     "rustls::client::tls12::server_hello::handle_server_hello",
+     "rustls::client::tls13::State::ClientConnectionData::handle",
+     "rustls::client::tls13::emit_certverify_tls13",
+     "rustls::client::tls13::emit_compressed_certificate_tls13",
+     "rustls::client::tls13::fill_in_psk_binder",
+     "rustls::client::tls13::handle_server_hello",
+     "rustls::client::tls13::prepare_resumption",
+     "rustls::common_state::take_received_plaintext",
+     "rustls::compress::compression_for",
+     "rustls::crypto::ring::hash::finish",
+     "rustls::crypto::ring::hash::fork_finish",
+     "rustls::crypto::ring::hash::hash",
+     "rustls::crypto::ring::hmac::Key::sign",
+     "rustls::crypto::ring::hmac::sign_concat",
+     "rustls::crypto::ring::kx::KxGroup::start_and_complete",
+     "rustls::crypto::ring::ring_shim::agree_ephemeral",
+     "rustls::crypto::ring::sign::SignerNtNtB9_6signer6Signer4sign",
+     "rustls::crypto::ring::sign::SigningKeyNtNtB9_6signer10SigningKey10public_key",
+     "rustls::crypto::ring::sign::public_key",
+     "rustls::crypto::ring::sign::sign",
+     "rustls::crypto::ring::tls12::Poly1305NtNtB8_6ciph::Tls12AeadAlgorithm::decrypter",
+     "rustls::crypto::ring::tls12::Poly1305NtNtB8_6ciph::Tls12AeadAlgorithm::encrypter",
+     "rustls::crypto::ring::tls12::Tls12AeadAlgorithm::decrypter",
+     "rustls::crypto::ring::tls12::Tls12AeadAlgorithm::encrypter",
+     "rustls::crypto::tls12::prf",
+     "rustls::error::core::clone::Clone::clone",
+     "rustls::hash_hs::add_message",
+     "rustls::hash_hs::into_hrr_buffer",
+     "rustls::hash_hs::rollup_for_hrr",
+     "rustls::msgs::base::NtB5_8No::read",
+     "rustls::msgs::base::NtB5_8NonEmptyEN::encode",
+     "rustls::msgs::base::NtB5_8NonEmptyEN::read",
+     "rustls::msgs::base::NtNtB7_5::Codec::encode",
+     "rustls::msgs::base::NtNtB7_5::Codec::read",
+     "rustls::msgs::base::NtNtB7_5codec5Co::read",
+     "rustls::msgs::base::into_owned",
+     "rustls::msgs::base::into_vec",
+     "rustls::msgs::codec::alloc::vec::Vec::CertificateEntry::encode",
+     "rustls::msgs::codec::alloc::vec::Vec::DistinguishedName::encode",
+     "rustls::msgs::codec::alloc::vec::Vec::PresharedKeyBinder::encode",
+     "rustls::msgs::codec::alloc::vec::Vec::ProtocolName::encode",
+     "rustls::msgs::codec::alloc::vec::Vec::rustls_pki_types::CertificateDer::encode",
+     "rustls::msgs::handshake::CertificatePayloadTls13::Codec::get_encoding",
+     "rustls::msgs::handshake::encode",
+     "rustls::msgs::handshake::into_owned",
+     "rustls::msgs::handshake::payload_encode",
+     "rustls::msgs::handshake::read",
+     "rustls::msgs::handshake::used_extensions_in_encoding_order",
+     "rustls::msgs::message::core::convert::From::from",
+     "rustls::msgs::message::encode",
+     "rustls::msgs::message::outbound::copy_to_vec",
+     "rustls::vecbuf::read",
+     "rustls::x509::asn1_wrap",
+     "rustls_pki_types::into_owned",
+     "rustls_pki_types::pem::from_buf_inner",
+     "rustls_pki_types::pem::read",
+     "rustls_pki_types::server_name::core::convert::TryFrom::try_from",
+     "rustls_pki_types::server_name::to_owned",
+     "shell::after",
+     "shell::builtin",
+     "shell::file",
+     "shell::one",
+     "shell::redirection",
+     "shell::resolve",
+     "shell::shell",
+     "shell::too_deep",
+     "shell::value",
+     "shell::walk",
+     "std::backtrace_rs::symbolize::gimli::mmap",
+     "std::backtrace_rs::symbolize::gimli::new",
+     "std::backtrace_rs::symbolize::gimli::resolve",
+     "std::env::args_os",
+     "std::env::vars_os",
+     "std::fs::_open",
+     "std::fs::file_name",
+     "std::fs::read_to_string::inner",
+     "std::fs::write::inner",
+     "std::io::stdio::alloc::io::read::Read::read_to_string",
+     "std::io::stdio::core::io::write::Write::write_all",
+     "std::os::unix::net::addr::sockaddr_un",
+     "std::path::_push",
+     "std::path::_set_extension",
+     "std::sync::mpmc::channel::alloc::string::String::deep_hook",
+     "std::sys::backtrace::__rust_begin_short_backtrace::deep_hook::actions::c::Hub::connect::e",
+     "std::sys::env::unix::getenv",
+     "std::sys::fs::canonicalize",
+     "std::sys::fs::metadata",
+     "std::sys::fs::read_dir",
+     "std::sys::fs::read_link",
+     "std::sys::fs::remove_dir_all",
+     "std::sys::fs::remove_file",
+     "std::sys::fs::rename",
+     "std::sys::fs::symlink_metadata",
+     "std::sys::fs::unix::canonicalize",
+     "std::sys::fs::unix::mkdir",
+     "std::sys::pal::unix::stack_overflow::thread_info::set_current_info",
+     "std::sys::process::env::capture",
+     "std::sys::process::env::set",
+     "std::sys::process::unix::common::capture_env",
+     "std::sys::process::unix::common::new",
+     "std::sys::thread::unix::new::thread_start",
+     "string::core::clone::Clone::clone",
+     "v::rustls::msgs::handshake::encode",
+     "v::rustls::msgs::handshake::read",
+     "verify::Codec::encode",
+     "webpki::der::asn1_wrap",
+     "webpki::error::core::clone::Clone::clone",
+     "webpki::signed_data::verify_signature"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_memmove": {
+    "group": "across the program (deep-hook's own code; joined-hub route: TCP, DNS, TLS (`remote.rs`, rustls, ring); other; std's environment, time and errors; std's runtime start and exit; threads, locks and channels)",
+    "callers": [
+     "N::std::sync::mpmc::zero::alloc::string::String::recv::deep_hook",
+     "N::std::sync::mpmc::zero::alloc::string::String::send::deep_hook",
+     "N::std::sync::mpmc::zero::core::result::Result::os::unix::net::stream::UnixStream::recv::deep_hook",
+     "N::std::sync::mpmc::zero::core::result::Result::os::unix::net::stream::UnixStream::send::deep_hook",
+     "N::std::sync::mpmc::zero::deep_hook::Spooling::recv",
+     "N::std::sync::mpmc::zero::deep_hook::Spooling::send",
+     "N::std::sync::mpmc::zero::deep_hook::actions::Reply::recv",
+     "N::std::sync::mpmc::zero::deep_hook::actions::Reply::send",
+     "Nt::rustls::msgs::deframer::buffers::discard",
+     "NtN::rustls::msgs::deframer::handshake::core::ops::drop::Drop::drop",
+     "NtNt::alloc::collections::vec_deque::grow::rustls",
+     "NtNt::alloc::collections::vec_deque::rustls::compress::CompressionCacheEntry::grow::q",
+     "NtNt::alloc::collections::vec_deque::rustls::compress::CompressionCacheEntry::remove::q",
+     "NtNt::alloc::collections::vec_deque::rustls::msgs::persist::Tls13ClientSessionValue::grow::b",
+     "NtNt::alloc::collections::vec_deque::rustls_pki_types::server_name::ServerName::grow::rustls",
+     "alloc::collections::btree::map::std::ffi::os_str::OsString::E6insertB1d_",
+     "alloc::collections::btree::map::std::ffi::os_str::OsString::core::option::Option::EE6insertB1d_",
+     "alloc::collections::btree::node::Mut::SetValZST::n::Leaf::n::Edge::insert_recursing::alloc::Global::NtNt::b_1::V::E::insert_entry::rustls",
+     "alloc::collections::btree::node::Mut::gimli::read::abbrev::Abbreviation::m::Internal::m::Edge::insert_fit::J",
+     "alloc::collections::btree::node::Mut::gimli::read::abbrev::Abbreviation::m::Leaf::m::Edge::insert_fit::J",
+     "alloc::collections::btree::remove::NodeRef::marker::Mut::std::ffi::os_str::OsString::L::v::Leaf::v::KV::remove_leaf_kv::NtNtB::h_1::Occ::L::L::remove_kv::alloc::Global::R",
+     "alloc::collections::btree::remove::NodeRef::marker::Mut::std::sys::pal::unix::stack_overflow::thread_info::ThreadInfo::v::Leaf::v::KV::remove_leaf_kv::NtNtB::S_1::Occ::M::remove_kv::alloc::Global::Y",
+     "alloc::io::buffered::bufwriter::flush_buf::core::ops::drop::Drop::drop",
+     "alloc::vec::String::deep_contracts::Value::retain::deep_hook::leased_alone::Q",
+     "alloc::vec::drain::std::sync::mpmc::waker::Entry::core::ops::drop::Drop::drop::deep_hook",
+     "alloc::vec::spec_from_iter::IntoIter::from_iter::rustls",
+     "alloc::vec::std::path::PathBuf::dedup_by::B5_Bv::dedup::deep_hook",
+     "alloc::vec::std::path::PathBuf::retain::deep_hook::matcher::outermost::s",
+     "collections::btree::node::std::ffi::os_str::OsString::i::bulk_steal_left::o",
+     "collections::btree::node::std::ffi::os_str::OsString::i::bulk_steal_right::o",
+     "collections::btree::node::std::ffi::os_str::OsString::j::merge_tracking_child_edge::alloc::Global::p",
+     "collections::btree::node::std::sys::pal::unix::stack_overflow::thread_info::ThreadInfo::bulk_steal_left::v",
+     "collections::btree::node::std::sys::pal::unix::stack_overflow::thread_info::ThreadInfo::bulk_steal_right::v",
+     "collections::btree::node::std::sys::pal::unix::stack_overflow::thread_info::ThreadInfo::merge_tracking_child_edge::alloc::Global::w",
+     "core::ops::drop::Drop::drop",
+     "core::ptr::drop_glue::alloc::vec::drain::Drain::drop::Drop::drop::DropGuard::std::sync::mpmc::waker::Entry::alloc::Global::deep_hook",
+     "deep_hook::heavy::matched_in",
+     "raw::alloc::string::String::deep_hook::shell::Val::reserve_rehash::s::std::hash::random::RandomState::w",
+     "raw::alloc::string::String::reserve_rehash::std::hash::random::RandomState::deep_contracts",
+     "raw::alloc::string::String::std::sync::mpsc::Sender::deep_hook::actions::Reply::reserve_rehash::s::z::hash::random::RandomState::c_",
+     "raw::rustls_pki_types::server_name::ServerName::rustls::client::handy::cache::ServerData::reserve_rehash::O::std::hash::random::RandomState::W",
+     "raw::std::path::PathBuf::reserve_rehash::hash::random::RandomState::deep_hook",
+     "rustls::common_state::start_outgoing_traffic",
+     "rustls::msgs::deframer::handshake::coalesce",
+     "std::sync::mpmc::waker::notify",
+     "std::sync::mpmc::waker::unregister",
+     "std::sys::pal::unix::stack_overflow::thread_info::set_current_info"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_memset": {
+    "group": "across the program (joined-hub route: TCP, DNS, TLS (`remote.rs`, rustls, ring); other; std's environment, time and errors; threads, locks and channels)",
+    "callers": [
+     "core::num::imp::flt2dec::strategy::dragon::format_exact",
+     "core::num::imp::flt2dec::strategy::dragon::format_shortest",
+     "core::num::imp::flt2dec::strategy::grisu::format_exact_opt::possibly_round",
+     "hashbrown::raw::fallible_with_capacity::alloc::alloc::Global::rustls",
+     "raw::alloc::string::String::deep_hook::shell::Val::reserve_rehash::s::std::hash::random::RandomState::w",
+     "raw::alloc::string::String::reserve_rehash::std::hash::random::RandomState::deep_contracts",
+     "raw::alloc::string::String::std::sync::mpsc::Sender::deep_hook::actions::Reply::reserve_rehash::s::z::hash::random::RandomState::c_",
+     "raw::std::path::PathBuf::reserve_rehash::hash::random::RandomState::deep_hook"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_mkdir": {
+    "group": "files and folders",
+    "callers": [
+     "std::sys::fs::unix::mkdir"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": true
+    }
+   },
+   "_mmap": {
+    "group": "across the program (panics and backtraces; std's runtime start and exit)",
+    "callers": [
+     "std::backtrace_rs::symbolize::gimli::mmap",
+     "std::rt::lang_start_internal",
+     "std::sys::pal::unix::stack_overflow::imp::make_handler"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_mprotect": {
+    "group": "std's runtime start and exit",
+    "callers": [
+     "std::rt::lang_start_internal",
+     "std::sys::pal::unix::stack_overflow::imp::make_handler"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_munmap": {
+    "group": "across the program (panics and backtraces; std's runtime start and exit)",
+    "callers": [
+     "core::ptr::drop_glue::Option::std::backtrace_rs::symbolize::gimli::Mapping",
+     "core::ptr::drop_glue::Option::std::backtrace_rs::symbolize::gimli::Mapping::a",
+     "core::ptr::drop_glue::std::backtrace_rs::symbolize::gimli::stash::Stash",
+     "std::backtrace_rs::symbolize::gimli::resolve",
+     "std::sys::pal::unix::stack_overflow::core::ops::drop::Drop::drop"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": true
+    }
+   },
+   "_nanosleep": {
+    "group": "threads, locks and channels",
+    "callers": [
+     "std::thread::functions::sleep"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_open": {
+    "group": "across the program (files and folders; std's runtime start and exit)",
+    "callers": [
+     "std::rt::lang_start_internal",
+     "std::sys::fs::unix::open_c"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_openat": {
+    "group": "files and folders",
+    "callers": [
+     "std::sys::fs::unix::remove_dir_impl::remove_dir_all_recursive"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_opendir": {
+    "group": "across the program (files and folders; other)",
+    "callers": [
+     "std::sys::fs::read_dir",
+     "std::sys::helpers::small_c_string::run_with_cstr_allocating::libc::unix::DIR"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_pause": {
+    "group": "std's runtime start and exit",
+    "callers": [
+     "std::sys::pal::unix::stack_overflow::core::ops::drop::Drop::drop",
+     "std::sys::pal::unix::stack_overflow::thread_info::set_current_info"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_pipe": {
+    "group": "std's process spawning (`Command`)",
+    "callers": [
+     "std::sys::pipe::unix::pipe"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_poll": {
+    "group": "across the program (joined-hub route: TCP, DNS, TLS (`remote.rs`, rustls, ring); std's process spawning (`Command`))",
+    "callers": [
+     "std::net::tcp::connect_timeout",
+     "std::sys::process::unix::common::read_output"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_posix_memalign": {
+    "group": "across the program (the allocator; threads, locks and channels)",
+    "callers": [
+     "__rustc::__rdl_alloc",
+     "__rustc::__rdl_alloc_zeroed",
+     "__rustc::__rdl_realloc",
+     "std::thread::thread::new"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": true
+    }
+   },
+   "_posix_spawn_file_actions_adddup2": {
+    "group": "std's process spawning (`Command`)",
+    "callers": [
+     "std::sys::process::unix::unix::Command::spawn"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": true
+    }
+   },
+   "_posix_spawn_file_actions_destroy": {
+    "group": "std's process spawning (`Command`)",
+    "callers": [
+     "std::sys::process::unix::unix::Command::spawn"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": true
+    }
+   },
+   "_posix_spawn_file_actions_init": {
+    "group": "std's process spawning (`Command`)",
+    "callers": [
+     "std::sys::process::unix::unix::Command::spawn"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": true
+    }
+   },
+   "_posix_spawnattr_destroy": {
+    "group": "std's process spawning (`Command`)",
+    "callers": [
+     "std::sys::process::unix::unix::Command::spawn"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": true
+    }
+   },
+   "_posix_spawnattr_init": {
+    "group": "std's process spawning (`Command`)",
+    "callers": [
+     "std::sys::process::unix::unix::Command::spawn"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": true
+    }
+   },
+   "_posix_spawnattr_setflags": {
+    "group": "std's process spawning (`Command`)",
+    "callers": [
+     "std::sys::process::unix::unix::Command::spawn"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": true
+    }
+   },
+   "_posix_spawnattr_setpgroup": {
+    "group": "std's process spawning (`Command`)",
+    "callers": [
+     "std::sys::process::unix::unix::Command::spawn"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_posix_spawnattr_setsigdefault": {
+    "group": "std's process spawning (`Command`)",
+    "callers": [
+     "std::sys::process::unix::unix::Command::spawn"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": true
+    }
+   },
+   "_posix_spawnp": {
+    "group": "std's process spawning (`Command`)",
+    "callers": [
+     "std::sys::process::unix::unix::Command::spawn"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": true
+    }
+   },
+   "_pthread_attr_destroy": {
+    "group": "threads, locks and channels",
+    "callers": [
+     "core::ptr::drop_glue::drop_guard::DropGuard::maybe_uninit::MaybeUninit::libc::new::apple::libpthread::sys::_pthread::_pthread_types::pthread_attr_t::std::sys::thread::unix::y_6::new::E_",
+     "std::sys::thread::unix::new"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_pthread_attr_init": {
+    "group": "threads, locks and channels",
+    "callers": [
+     "std::sys::thread::unix::new"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_pthread_attr_setstacksize": {
+    "group": "threads, locks and channels",
+    "callers": [
+     "std::sys::thread::unix::new"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_pthread_create": {
+    "group": "threads, locks and channels",
+    "callers": [
+     "std::sys::thread::unix::new"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_pthread_detach": {
+    "group": "threads, locks and channels",
+    "callers": [
+     "N::std::sys::thread::unix::core::ops::drop::Drop::drop"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_pthread_get_stackaddr_np": {
+    "group": "std's runtime start and exit",
+    "callers": [
+     "std::rt::lang_start_internal",
+     "std::sys::pal::unix::stack_overflow::imp::make_handler"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_pthread_get_stacksize_np": {
+    "group": "std's runtime start and exit",
+    "callers": [
+     "std::rt::lang_start_internal",
+     "std::sys::pal::unix::stack_overflow::imp::make_handler"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_pthread_mutex_destroy": {
+    "group": "threads, locks and channels",
+    "callers": [
+     "Nt::std::sys::pal::unix::sync::mutex::core::ops::drop::Drop::drop",
+     "alloc::sync::std::sync::poison::mutex::Mutex::drop_slow",
+     "core::ptr::drop_glue::Pin::alloc::boxed::Box::std::sys::pal::unix::sync::mutex::Mutex::C",
+     "std::sys::sync::mutex::pthread::core::ops::drop::Drop::drop",
+     "std::sys::sync::once_box::sync::mutex::Mutex::initialize::pthread::S::Mutex::get"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": true
+    }
+   },
+   "_pthread_mutex_init": {
+    "group": "threads, locks and channels",
+    "callers": [
+     "std::sys::pal::unix::sync::mutex::init"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_pthread_mutex_lock": {
+    "group": "across the program (other; panics and backtraces; std's runtime start and exit; threads, locks and channels)",
+    "callers": [
+     "N::std::io::stdio::lock",
+     "NtN::std::io::stdio::alloc::io::read::Read::read",
+     "NtN::std::io::stdio::alloc::io::read::Read::read_to_string",
+     "NtNtN::std::sync::poison::mutex::alloc::vec::Vec::lock",
+     "io::stdio::lock",
+     "std::io::stdio::print_to_buffer_if_capture_used",
+     "std::sys::backtrace::lock",
+     "std::sys::pal::unix::stack_overflow::core::ops::drop::Drop::drop",
+     "std::sys::pal::unix::stack_overflow::thread_info::set_current_info",
+     "std::sys::pal::unix::sync::mutex::lock"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_pthread_mutex_trylock": {
+    "group": "across the program (std's runtime start and exit; threads, locks and channels)",
+    "callers": [
+     "alloc::sync::std::sync::poison::mutex::Mutex::drop_slow",
+     "std::sync::once::rt::cleanup",
+     "std::sys::sync::mutex::pthread::core::ops::drop::Drop::drop"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_pthread_mutex_unlock": {
+    "group": "across the program (other; std's runtime start and exit; threads, locks and channels)",
+    "callers": [
+     "NtN::std::io::stdio::alloc::io::read::Read::read",
+     "NtN::std::io::stdio::alloc::io::read::Read::read_to_string",
+     "alloc::sync::std::sync::poison::mutex::Mutex::drop_slow",
+     "core::ptr::drop_glue::Result::std::sync::poison::mutex::MutexGuard",
+     "core::ptr::drop_glue::std::sync::poison::mutex::MutexGuard::alloc::vec::Vec",
+     "std::io::stdio::core::io::write::Write::flush",
+     "std::io::stdio::core::io::write::Write::write_fmt",
+     "std::io::stdio::print_to_buffer_if_capture_used",
+     "std::sync::once::rt::cleanup",
+     "std::sys::pal::unix::stack_overflow::core::ops::drop::Drop::drop",
+     "std::sys::pal::unix::stack_overflow::thread_info::set_current_info",
+     "std::sys::pal::unix::sync::mutex::unlock",
+     "std::sys::sync::mutex::pthread::core::ops::drop::Drop::drop"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_pthread_mutexattr_destroy": {
+    "group": "threads, locks and channels",
+    "callers": [
+     "core::ptr::drop_glue::std::sys::pal::unix::sync::mutex::AttrGuard",
+     "std::sys::pal::unix::sync::mutex::init"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_pthread_mutexattr_init": {
+    "group": "threads, locks and channels",
+    "callers": [
+     "std::sys::pal::unix::sync::mutex::init"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_pthread_mutexattr_settype": {
+    "group": "threads, locks and channels",
+    "callers": [
+     "std::sys::pal::unix::sync::mutex::init"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_pthread_self": {
+    "group": "std's runtime start and exit",
+    "callers": [
+     "std::rt::lang_start_internal",
+     "std::sys::pal::unix::stack_overflow::imp::make_handler"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_pthread_setname_np": {
+    "group": "across the program (std's runtime start and exit; threads, locks and channels)",
+    "callers": [
+     "std::rt::lang_start_internal",
+     "std::sys::thread::unix::new::thread_start"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_pthread_threadid_np": {
+    "group": "across the program (std's runtime start and exit; threads, locks and channels)",
+    "callers": [
+     "std::sys::pal::unix::stack_overflow::thread_info::set_current_info",
+     "std::thread::current::with_current_name::default_hook"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_read": {
+    "group": "across the program (files and folders; other; std's process spawning (`Command`))",
+    "callers": [
+     "NtNt::alloc::io::buffered::bufreader::std::io::stdio::StdinRaw::read::d",
+     "alloc::io::buf_read::default_read_until::bufreader::BufReader::std::io::stdio::StdinRaw::F",
+     "alloc::io::read::default_read_to_end::small_probe_read::std::fs::File::h",
+     "alloc::io::read::default_read_to_end::small_probe_read::std::fs::File::i",
+     "alloc::io::read::default_read_to_end::small_probe_read::std::sys::fd::unix::FileDesc::m",
+     "alloc::io::read::default_read_to_end::small_probe_read::std::sys::stdio::unix::Stdin::l",
+     "alloc::io::read::default_read_to_end::std::fs::File",
+     "alloc::io::read::default_read_to_end::std::sys::stdio::unix::Stdin",
+     "std::fs::alloc::io::read::Read::read",
+     "std::fs::alloc::io::read::Read::read_buf",
+     "std::sys::fd::unix::read_to_end",
+     "std::sys::process::unix::unix::Command::spawn"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_readdir": {
+    "group": "files and folders",
+    "callers": [
+     "std::sys::fs::unix::core::iter::traits::iterator::Iterator::next"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_readlink": {
+    "group": "files and folders",
+    "callers": [
+     "std::sys::fs::unix::readlink"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_readv": {
+    "group": "across the program (files and folders; joined-hub route: TCP, DNS, TLS (`remote.rs`, rustls, ring))",
+    "callers": [
+     "std::fs::alloc::io::read::Read::read_vectored",
+     "std::net::tcp::alloc::io::read::Read::read_vectored"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_realloc": {
+    "group": "across the program (other; the allocator)",
+    "callers": [
+     "__rustc::__rdl_realloc",
+     "raw_vec::std::alloc::System::finish_grow"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_realpath$DARWIN_EXTSN": {
+    "group": "files and folders",
+    "callers": [
+     "std::sys::fs::unix::canonicalize"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_recv": {
+    "group": "across the program (joined-hub route: TCP, DNS, TLS (`remote.rs`, rustls, ring); the hub's Unix socket)",
+    "callers": [
+     "std::net::tcp::alloc::io::read::Read::read_buf",
+     "std::net::udp::recv",
+     "std::os::unix::net::stream::alloc::io::read::Read::read",
+     "std::os::unix::net::stream::alloc::io::read::Read::read_buf"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": false
+    }
+   },
+   "_rename": {
+    "group": "files and folders",
+    "callers": [
+     "std::sys::fs::rename"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": false
+    }
+   },
+   "_sched_yield": {
+    "group": "threads, locks and channels",
+    "callers": [
+     "std::thread::functions::yield_now"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_send": {
+    "group": "across the program (joined-hub route: TCP, DNS, TLS (`remote.rs`, rustls, ring); the hub's Unix socket)",
+    "callers": [
+     "Nt::std::os::unix::net::stream::core::io::write::Write::write",
+     "std::net::tcp::core::io::write::Write::write"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": false
+    }
+   },
+   "_setgid": {
+    "group": "std's process spawning (`Command`)",
+    "callers": [
+     "std::sys::process::unix::unix::Command::do_exec"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_setgroups": {
+    "group": "std's process spawning (`Command`)",
+    "callers": [
+     "std::sys::process::unix::unix::Command::do_exec"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_setpgid": {
+    "group": "std's process spawning (`Command`)",
+    "callers": [
+     "std::sys::process::unix::unix::Command::do_exec"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_setsid": {
+    "group": "std's process spawning (`Command`)",
+    "callers": [
+     "std::sys::process::unix::unix::Command::do_exec"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_setsockopt": {
+    "group": "across the program (joined-hub route: TCP, DNS, TLS (`remote.rs`, rustls, ring); the hub's Unix socket)",
+    "callers": [
+     "std::net::tcp::set_nodelay",
+     "std::net::tcp::set_read_timeout",
+     "std::net::tcp::set_write_timeout",
+     "std::sys::net::connection::socket::unix::new"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_setuid": {
+    "group": "std's process spawning (`Command`)",
+    "callers": [
+     "std::sys::process::unix::unix::Command::do_exec"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_shutdown": {
+    "group": "the hub's Unix socket",
+    "callers": [
+     "std::os::unix::net::stream::shutdown"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_sigaction": {
+    "group": "std's runtime start and exit",
+    "callers": [
+     "std::rt::lang_start_internal",
+     "std::sys::pal::unix::stack_overflow::imp::signal_handler"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_sigaddset": {
+    "group": "std's process spawning (`Command`)",
+    "callers": [
+     "std::sys::process::unix::unix::Command::spawn"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": true
+    }
+   },
+   "_sigaltstack": {
+    "group": "std's runtime start and exit",
+    "callers": [
+     "std::sys::pal::unix::stack_overflow::core::ops::drop::Drop::drop",
+     "std::sys::pal::unix::stack_overflow::imp::make_handler"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_sigemptyset": {
+    "group": "std's process spawning (`Command`)",
+    "callers": [
+     "std::sys::process::unix::unix::Command::spawn"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": true
+    }
+   },
+   "_signal": {
+    "group": "across the program (std's process spawning (`Command`); std's runtime start and exit)",
+    "callers": [
+     "std::rt::lang_start_internal",
+     "std::sys::process::unix::unix::Command::do_exec"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_socket": {
+    "group": "the hub's Unix socket",
+    "callers": [
+     "std::sys::net::connection::socket::unix::new"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_stat": {
+    "group": "files and folders",
+    "callers": [
+     "std::sys::fs::metadata",
+     "std::sys::fs::unix::stat::core::ops::function::Fn::ffi::c_str::CStr::call"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_strerror_r": {
+    "group": "across the program (std's environment, time and errors; threads, locks and channels)",
+    "callers": [
+     "std::io::error::core::io::error::Error::from_raw_os_error::FUNCTIONS::ops::function::FnOnce::fmt::Formatter::call_once",
+     "std::sys::io::error::unix::error_string"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_strlen": {
+    "group": "across the program (files and folders; joined-hub route: TCP, DNS, TLS (`remote.rs`, rustls, ring); other; panics and backtraces; std's environment, time and errors; threads, locks and channels)",
+    "callers": [
+     "alloc::ffi::c_str::from_raw",
+     "std::backtrace_rs::symbolize::gimli::resolve",
+     "std::env::args_os",
+     "std::env::current_dir",
+     "std::env::vars_os",
+     "std::io::error::core::io::error::Error::from_raw_os_error::FUNCTIONS::ops::function::FnOnce::fmt::Formatter::call_once",
+     "std::sys::env::unix::getenv",
+     "std::sys::fs::unix::canonicalize",
+     "std::sys::fs::unix::core::iter::traits::iterator::Iterator::next",
+     "std::sys::io::error::unix::error_string",
+     "std::sys::net::connection::socket::lookup_host"
+    ],
+    "traced": false,
+    "untraced": "crashes when interposed",
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_sysconf": {
+    "group": "across the program (std's runtime start and exit; threads, locks and channels)",
+    "callers": [
+     "std::rt::lang_start_internal",
+     "std::sys::thread::unix::new"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_sysctl": {
+    "group": "deep-hook's own code",
+    "callers": [
+     "deep_hook::waiter"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_sysctlbyname": {
+    "group": "joined-hub route: TCP, DNS, TLS (`remote.rs`, rustls, ring)",
+    "callers": [
+     "ring::polyfill::once_cell::race::init::fe::get_or_init::init"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_unlink": {
+    "group": "files and folders",
+    "callers": [
+     "std::sys::fs::remove_file",
+     "std::sys::fs::unix::remove_dir_impl::remove_dir_all_modern",
+     "std::sys::fs::unix::unlink::core::ops::function::Fn::ffi::c_str::CStr::call"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_unlinkat": {
+    "group": "files and folders",
+    "callers": [
+     "std::sys::fs::unix::remove_dir_impl::remove_dir_all_recursive"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "_waitpid": {
+    "group": "std's process spawning (`Command`)",
+    "callers": [
+     "std::sys::process::unix::unix::wait"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": true
+    }
+   },
+   "_write": {
+    "group": "across the program (files and folders; other)",
+    "callers": [
+     "Nt::std::process::core::io::write::Write::write",
+     "NtN::std::sys::stdio::unix::core::io::write::Write::write",
+     "alloc::io::buffered::bufwriter::std::io::stdio::StdoutRaw::flush_buf::c",
+     "std::fs::core::io::write::Write::write",
+     "std::fs::write::inner",
+     "std::sys::fd::unix::write",
+     "std::sys::stdio::unix::Stderr::core::io::write::Write::write_all",
+     "std::sys::stdio::unix::Stdout::core::io::write::Write::write_all"
+    ],
+    "traced": true,
+    "paths": {
+     "version": true,
+     "hubAnswers": true,
+     "hubAway": true
+    }
+   },
+   "_writev": {
+    "group": "across the program (joined-hub route: TCP, DNS, TLS (`remote.rs`, rustls, ring); other)",
+    "callers": [
+     "NtN::std::sys::stdio::unix::core::io::write::Write::write_vectored",
+     "std::net::tcp::core::io::write::Write::write_vectored",
+     "std::sys::stdio::unix::Stderr::core::io::write::Write::write_all_vectored"
+    ],
+    "traced": true,
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   },
+   "dyld_stub_binder": {
+    "group": "no caller in the binary (dyld or the linker uses it)",
+    "callers": [],
+    "traced": false,
+    "untraced": "called by dyld",
+    "paths": {
+     "version": false,
+     "hubAnswers": false,
+     "hubAway": false
+    }
+   }
+  }
+ },
+ "cuts": null
+}
