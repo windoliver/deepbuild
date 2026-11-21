@@ -584,6 +584,7 @@ impl Hub<'_> {
             samples: None,
             writer: Writer::You,
             serial: Some(serial as u32),
+            player: None,
         };
         let track = self.tracks.entry(doc.clone()).or_default();
         track.append(entry);
@@ -612,6 +613,7 @@ impl Hub<'_> {
             samples: None,
             writer: Writer::You,
             serial: Some(serial as u32),
+            player: None,
         });
         let written = track
             .entries()
@@ -823,7 +825,7 @@ impl Hub<'_> {
     }
 
     /// `items` laid out by the canvas on a board `points` wide and tall, drawn at `size` pixels.
-    fn board_rgba(
+    pub(crate) fn board_rgba(
         &mut self,
         id: &str,
         items: Vec<Value>,

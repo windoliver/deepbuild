@@ -230,6 +230,14 @@ pub enum Call {
     Scope(String),
     /// The frames a panel presented up to now (#383).
     Presented(String),
+    /// #1250: those frames, each from `from` on with its index target as the live play drew it.
+    PresentedIndices(String, i64),
+    /// #1250: a player control run in a panel (Save clip, Save still), and a panel's cards.
+    Clip {
+        panel: String,
+        action: crate::clip::Action,
+    },
+    Clips(String),
     /// Your pop-out of a panel's view onto a display, with your input's serial (#400).
     PopOut {
         panel: String,
@@ -413,6 +421,8 @@ pub struct Eval {
     pub data_hash: bool,
     /// #507: each text item's drawn string beside the frame.
     pub texts: bool,
+    /// #297: each entry text's shown string beside the frame.
+    pub shown: bool,
     /// #169: the core's carried-state list as the frame leaves it.
     pub carried: bool,
     /// #903: the tour pointer as the frame draws it.

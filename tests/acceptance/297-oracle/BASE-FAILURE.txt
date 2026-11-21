@@ -1,0 +1,74 @@
+#297 Oracle lane at the base, 4bf2fc7ad (Merge pull request #2899), before any implementation. Run once on 2026-11-20,
+on the same Mac and build as the #297 suite's base run, with DEEP_ORACLES set to a folder holding the two pinned files
+under vendor/, fetched with `gh api` from branch doneright of DeepBuildAI/deepbuild (doneright/oracles/vendor/...), their
+SHA-256s the pins in helpers.ts:
+
+  DEEP_ORACLES=<folder> PATH=$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 \
+    CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/297-oracle --no-file-parallelism --testTimeout=600000
+
+2 tests, 2 failed; none passed. Each reads its pinned file (the hash checked), passes its own judge's checks on the model
+answers (README: The judge), and fails in `presented` (../297/helpers.ts:274): the base refuses the lane's entry text
+(`cut`, `form`) with `bad_doc` at items/<item>/params/text. `npx tsc --noEmit -p tests/acceptance/297-oracle` exits 0.
+The run was not repeated.
+
+The run's output follows, the checkout's path written <checkout>.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/297-oracle
+
+stdout | graphemes.test.ts > AC3 #297.d2e288d8 Oracle: the entry text's ellipsis cuts at a boundary GraphemeBreakTest.txt gives > AC3 #297.d2e288d8 every row the clean look's faces draw, cut by the box at each of 21 prefixes, cuts at the file's boundaries, run on our entry text
+AC3 #297.d2e288d8 Oracle: 27 of the file's 766 rows (567 entries), the rest drawn by no face of the clean look or refused by the #297 rules
+
+ ❯ graphemes.test.ts (1 test | 1 failed) 10362ms
+   ❯ AC3 #297.d2e288d8 Oracle: the entry text's ellipsis cuts at a boundary GraphemeBreakTest.txt gives (1)
+     × AC3 #297.d2e288d8 every row the clean look's faces draw, cut by the box at each of 21 prefixes, cuts at the file's boundaries, run on our entry text 5617ms
+stdout | normalization.test.ts > AC6 #297.cd44d20a Oracle: the entry text shows the NFC form NormalizationTest.txt gives > AC6 #297.cd44d20a every input the body face draws shows as the file's NFC form, run on our entry text
+AC6 #297.cd44d20a Oracle: 2709 inputs from 20034 lines of NormalizationTest.txt, the rest drawn by no bundled body face or refused by the #297 rules
+
+ ❯ normalization.test.ts (1 test | 1 failed) 10879ms
+   ❯ AC6 #297.cd44d20a Oracle: the entry text shows the NFC form NormalizationTest.txt gives (1)
+     × AC6 #297.cd44d20a every input the body face draws shows as the file's NFC form, run on our entry text 5194ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  graphemes.test.ts > AC3 #297.d2e288d8 Oracle: the entry text's ellipsis cuts at a boundary GraphemeBreakTest.txt gives > AC3 #297.d2e288d8 every row the clean look's faces draw, cut by the box at each of 21 prefixes, cuts at the file's boundaries, run on our entry text
+AssertionError: the Oracle lane's piece is presented: [{"check":"document.validate","code":"bad_doc","severity":"error","ids":["cut"],"path":"items/cut/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented ../297/helpers.ts:274:93
+    272| /** A `deep_show` reply that presented its document with no error. */
+    273| export function presented(reply: JsonObject, what: string): void {
+    274|   expect(reply['outcome'], `${what} is presented: ${show(reply['issues…
+       |                                                                                             ^
+    275|   expect(errorsOf(reply).map(namedIn), `${what} is presented with no e…
+    276| }
+ ❯ graphemes.test.ts:94:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  normalization.test.ts > AC6 #297.cd44d20a Oracle: the entry text shows the NFC form NormalizationTest.txt gives > AC6 #297.cd44d20a every input the body face draws shows as the file's NFC form, run on our entry text
+AssertionError: the Oracle lane's piece is presented: [{"check":"document.validate","code":"bad_doc","severity":"error","ids":["form"],"path":"items/form/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented ../297/helpers.ts:274:93
+    272| /** A `deep_show` reply that presented its document with no error. */
+    273| export function presented(reply: JsonObject, what: string): void {
+    274|   expect(reply['outcome'], `${what} is presented: ${show(reply['issues…
+       |                                                                                             ^
+    275|   expect(errorsOf(reply).map(namedIn), `${what} is presented with no e…
+    276| }
+ ❯ normalization.test.ts:68:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed (2)
+   Start at  00:03:43
+   Duration  23.06s (tests 97%, transform 2%)
+
+exit 1

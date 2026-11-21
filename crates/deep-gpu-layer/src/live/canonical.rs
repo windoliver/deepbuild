@@ -14,7 +14,7 @@ pub fn canonical(app: &mut App, out: &str, call: &Value) -> Value {
         return bad("canonical is {look, writer, doc, size, frame, purpose}");
     };
     let look = match Look3::read(&call["look"]) {
-        Ok(l) => l,
+        Ok(l) => crate::flat::CallLook::of(l, call),
         Err(e) => return bad(&format!("look: {e}")),
     };
     let looks = match crate::regions::looks_of(call, None) {

@@ -30,7 +30,7 @@ test("a refusal the core recorded for a move its table allows fails: the record 
     { v: 1, id: ID(3), kind: 'move.refused', writer: 'core', data: { object: `ask:${ID(1)}`, table: 'ask.machine@1', state: 'open', event: 'ask.answered', event_id: ID(2) } },
   ]);
   assert.equal(r.status, 1, r.out);
-  assert.match(r.out, /FAIL lifecycle replay: .*was refused moving ask:\S+ from open, which ask\.machine@1 allows/);
+  assert.match(r.out, /FAIL lifecycle replay: .*was refused moving ask:\S+ from open, which ask\.machine@2 allows/);
 });
 
 test("an agent's release of a session's lease with no proof fails", (t) => {

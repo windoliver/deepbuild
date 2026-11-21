@@ -1,5 +1,41 @@
 use super::*;
 
+/// The fields each item declares, before its program is checked.
+pub(super) struct Declared {
+    program: String,
+    debug: Option<String>,
+    step: i64,
+    turn: bool,
+    due: Option<String>,
+    reads: Vec<String>,
+    writes: Vec<Write>,
+    fuel: i64,
+    memory: u64,
+    stack: i32,
+    every: i64,
+    ring: u64,
+    assets: Vec<String>,
+    links: Vec<(String, String)>,
+    saves: Option<Value>,
+    pages: Option<Value>,
+    carry: Option<Value>,
+    carry_in: Option<crate::carry::CarryIn>,
+    profile: Option<Value>,
+    /// #276: the seats a profile's read entry has a block for: the piece's `players`, else 1.
+    seats: u32,
+    emits: Vec<Emit>,
+    fires: Vec<fires::Fire>,
+    services: Vec<(String, u32)>,
+    mirrors: Vec<(String, String)>,
+    preview: Option<(Vec<String>, Vec<Write>)>,
+    /// `lanes`: its lane graph and vehicle kind, built at check (#981).
+    lanes: Option<Value>,
+    /// `process`: process@1's kind names (#980).
+    process: Option<Vec<String>>,
+    /// The item's fields as given, for its bake key.
+    given: String,
+}
+
 pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> {
     let bad = |field: &str, what: String| {
         logic_refused(id, vec![refusal("field", what, json!({"field": field}))])
@@ -21,11 +57,17 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             "assets",
             "links",
             "saves",
+            "carry",
+            "carry_in",
+            "profile",
             "emits",
             "fires",
             "services",
             "mirrors",
             "preview",
+            "pages",
+            "lanes",
+            "process",
         ]
         .contains(&k.as_str())
         {
@@ -220,6 +262,23 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
     let services =
         crate::services::declared(params.get("services")).map_err(|e| bad("services", e))?;
     let mirrors = crate::mirrors::declared(params.get("mirrors")).map_err(|e| bad("mirrors", e))?;
+    // #980: process@1's kinds, by name; a kind is its index here.
+    let process = match params.get("process") {
+        None => None,
+        Some(p) => {
+            let what = || bad("process", "process is {kinds: [name]}, 1 to 16 unique kind names".into());
+            let kinds: Vec<String> = p
+                .get("kinds")
+                .and_then(Value::as_array)
+                .and_then(|a| a.iter().map(|k| k.as_str().map(str::to_string)).collect())
+                .ok_or_else(what)?;
+            let unique = kinds.iter().collect::<std::collections::BTreeSet<_>>().len() == kinds.len();
+            if kinds.is_empty() || kinds.len() > 16 || !unique || p.as_object().is_some_and(|o| o.len() != 1) {
+                return Err(what());
+            }
+            Some(kinds)
+        }
+    };
     Ok(Declared {
         links,
         program,
@@ -236,11 +295,27 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
         ring,
         assets,
         saves: params.get("saves").cloned(),
+        pages: params.get("pages").cloned(),
+        carry: params.get("carry").cloned(),
+        carry_in: match params.get("carry_in") {
+            None => None,
+            Some(v) => Some(crate::carry::carry_in_of(v).map_err(|r| logic_refused(id, vec![r]))?),
+        },
+        // #276: a profile past its cap is refused here, naming its size.
+        profile: match params.get("profile") {
+            None => None,
+            Some(v) => crate::profile::shape_of(v)
+                .map(|_| Some(v.clone()))
+                .map_err(|r| logic_refused(id, vec![r]))?,
+        },
+        seats: 1,
         emits,
         fires,
         services,
         mirrors,
         preview,
+        lanes: params.get("lanes").cloned(),
+        process,
         given: Value::Object(params.clone()).to_string(),
     })
 }
@@ -326,7 +401,9 @@ pub(super) fn region_map(
         reads.sort();
     }
     for r in &reads {
-        let (size, ty, read) = if let Some((size, ty)) = controls.get(r) {
+        let (size, ty, read) = if r == crate::world::seats::READ {
+            (crate::world::seats::SIZE, "seats".to_string(), Read::Seats)
+        } else if let Some((size, ty)) = controls.get(r) {
             (*size, ty.to_string(), Read::Control)
         } else if let Some(read) = series_read(r, sources) {
             // One series of a series source, read as a scalar (Logic: readings).
@@ -455,6 +532,34 @@ pub(super) fn region_map(
         ty: "i64".into(),
         read: Read::Seed,
     });
+    // #189: the carry record's entry, after the item's other reads.
+    if let Some(ci) = &d.carry_in {
+        entries.push(Region {
+            region: "reads",
+            name: "carry_in".into(),
+            offset: at + 8,
+            size: ci.size(),
+            ty: "carry".into(),
+            read: Read::Carry,
+        });
+    }
+    // #276: the profile record's entry, after those, a block for each seat.
+    if let Some(shape) = d
+        .profile
+        .as_ref()
+        .and_then(|v| crate::profile::shape_of(v).ok())
+    {
+        let at = entries.last().map_or(at, |e| align8(e.offset + e.size));
+        let size = d.seats * crate::profile::block(&shape);
+        entries.push(Region {
+            region: "reads",
+            name: "profile".into(),
+            offset: at,
+            size,
+            ty: "profile".into(),
+            read: Read::Profile,
+        });
+    }
     let mut at = 0u32;
     for w in &d.writes {
         entries.push(Region {
@@ -532,6 +637,10 @@ pub(super) fn declarations(piece: &Value) -> Result<Declarations, Refused> {
             machine.push(id.clone());
             continue;
         }
+        // A floor path steps nothing: a lane graph is built from it (#981).
+        if item.get("kind").and_then(Value::as_str) == Some("path@1") {
+            continue;
+        }
         if item.get("kind").and_then(Value::as_str) != Some("logic@1") {
             return Err(logic_refused(
                 id,
@@ -547,7 +656,13 @@ pub(super) fn declarations(piece: &Value) -> Result<Declarations, Refused> {
             .and_then(Value::as_object)
             .cloned()
             .unwrap_or_default();
-        decls.push((id.clone(), declared(id, &params)?));
+        let mut d = declared(id, &params)?;
+        // #276: a match's seats, which the logic piece of a document with a net item names.
+        d.seats = piece
+            .get("players")
+            .and_then(Value::as_u64)
+            .map_or(1, |n| n.clamp(1, 8) as u32);
+        decls.push((id.clone(), d));
     }
     Ok((controls, decls, machine))
 }
@@ -852,6 +967,19 @@ pub fn check_in(
         }
         let assets_at = global_at(&given, "assets_at");
         let mut assets = Vec::new();
+        // #981: the lane graph `lanes` names, built from the piece's floor paths, is asset 0.
+        let lanes = match &d.lanes {
+            None => None,
+            Some(l) => {
+                let items = piece
+                    .get("items")
+                    .and_then(Value::as_object)
+                    .ok_or_else(bad)?;
+                let g = crate::lanes::build(l, items).map_err(|r| logic_refused(id, r))?;
+                assets.push((rewrite::hash(&g.bytes), g.bytes.clone()));
+                Some(std::sync::Arc::new(g))
+            }
+        };
         for sha in &d.assets {
             assets.push((sha.clone(), asset(sha).ok_or_else(|| missing("data", sha))?));
         }
@@ -896,6 +1024,41 @@ pub fn check_in(
         {
             None => None,
             Some(Ok(s)) => Some(s),
+            Some(Err(r)) => {
+                refused.push(r);
+                None
+            }
+        };
+        // #211: the page region, after every other region, and init's pages.
+        let pages = match &d.pages {
+            None => None,
+            Some(v) => match crate::pages::of(v, &given, memory, &regions, &segments, &asset) {
+                Ok(p) => Some(p),
+                Err(r) => {
+                    refused.push(r);
+                    None
+                }
+            },
+        };
+        let carry = match d
+            .carry
+            .as_ref()
+            .map(|v| crate::carry::carry_of(v, &layout, &d.writes))
+        {
+            None => None,
+            Some(Ok(c)) => Some(c),
+            Some(Err(r)) => {
+                refused.push(r);
+                None
+            }
+        };
+        let profile = match d
+            .profile
+            .as_ref()
+            .map(|v| crate::profile::profile_of(v, &layout, &d.writes, d.seats))
+        {
+            None => None,
+            Some(Ok(p)) => Some(p),
             Some(Err(r)) => {
                 refused.push(r);
                 None
@@ -950,6 +1113,9 @@ pub fn check_in(
             fixtures: BTreeMap::new(),
             interfaces: BTreeMap::new(),
             saves,
+            carry,
+            carry_in: d.carry_in.clone(),
+            profile,
             emits: d.emits.clone(),
             emits_at: emits_at.unwrap_or(0),
             fires: d.fires.clone(),
@@ -958,6 +1124,9 @@ pub fn check_in(
             services_at: services_at.unwrap_or(0),
             mirrors,
             preview,
+            pages,
+            lanes,
+            process: d.process.clone(),
         });
     }
     // A save holds every item at one instant, so a piece with saves steps at one rate.

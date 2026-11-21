@@ -1,0 +1,74 @@
+#2975 acceptance suite: runs by the blind job on 2026-11-20, macOS (darwin), Node v24.22.0.
+Built with npm ci && npm run build --workspaces && cargo build --locked -p deep-hook. Each file run alone with
+node --test tests/acceptance/2975/<file>.test.mjs, the four files side by side. Sandbox paths show as <sandbox>; no
+token appears in any output. 1-minute load averages are given beside each run (this Mac ran 90-190 throughout).
+
+== On the base, 4b6ce2f41 (load 134 at start, 92-124 at end)
+
+signal.test.mjs
+  ✖ #2975.0cab1d79 (AC1, kill -TERM)                 1.8 s
+      AssertionError: after kill -TERM the installed hub must exit 75 (RESTART_EXIT), a restart the login service
+      undoes; it exited 0
+      -> the criterion's own reason: the base's SIGTERM handler is a clean stop, exit 0, which the login service's
+         restart rule (restart unless the exit is 0) leaves down.
+  ✖ #2975.8459f39f (AC2, kill -INT)                  1.7 s
+      AssertionError: after kill -INT the installed hub must exit 75 (RESTART_EXIT), a restart the login service
+      undoes; it exited 0
+      -> the same, for SIGINT.
+  ✔ #2975.20c7734e (AC3, exits within 5 s)           1.8 s   SIGTERM to exit: 43 ms (listening 1002 ms when signalled)
+      -> holds on the base, which exits at once (with 0); proven by twin signal-waits-restart-after.
+      (Earlier base runs: 343 ms at load 186, 627 ms at load 123.)
+
+dev.test.mjs
+  ✔ #2975.c596419b (AC4, dev hub exits 0 and stays down)   49 s
+      -> holds on the base; proven by twin dev-signal-exits-75.
+
+confirmed.test.mjs
+  ✔ #2975.03961608 (AC5, confirmed stop exits 0 with a SIGTERM during it)   37 s
+      SIGTERMs delivered after the confirmation and before the exit: 4
+      -> holds on the base (stop() returns early once stopping); proven by twins signal-75-during-confirmed-stop and
+         confirmed-stop-exits-75.
+
+definition.test.mjs
+  ﹣ #2975.4668c24b the systemd unit ...   SKIPPED: platform darwin: the base writes the systemd unit only on Linux
+      (service.ts picks the definition by process.platform), so this half runs on Linux.
+      Expected on Linux at the base: fails at the deepEqual, RestartSec undefined, SuccessExitStatus75 false,
+      RestartForceExitStatus75 false (the base's unit has only Restart=on-failure). NOT RUN here.
+  ✔ #2975.4668c24b the plist still has KeepAlive with SuccessfulExit false   1.6 s
+      -> holds on the base; proven by twin keepalive-always.
+
+== On the throwaway implementation (load 140-170)
+
+The throwaway (twins/README.md has what it changed; reverted after with git checkout -- packages/):
+  server.ts: SIGTERM/SIGINT call hub.stop(`signal:<name>`, undefined, hub.installed ? RESTART_EXIT : 0)
+  service.ts: the unit adds RestartSec=3, SuccessExitStatus=75, RestartForceExitStatus=75
+
+  ✔ #2975.0cab1d79 (AC1)   12.1 s  (the stand-in's 10 s throttle, then the new hub with a new PID and start ID;
+                                     the record: ['signal:SIGTERM'])
+  ✔ #2975.8459f39f (AC2)   12.3 s  (record: ['signal:SIGINT'])
+  ✔ #2975.20c7734e (AC3)    2.4 s  SIGTERM to exit: 449 ms (132 ms in another run)
+  ✔ #2975.c596419b (AC4)   51 s
+  ✔ #2975.03961608 (AC5)   38 s    SIGTERMs delivered after the confirmation and before the exit: 5
+  ✔ #2975.4668c24b plist    2.4 s
+  ﹣ #2975.4668c24b unit     skipped on darwin (not run on Linux by this job)
+
+  Note: the first throwaway run of signal.test.mjs failed AC1/AC2 at the record assertion because the test then
+  expected 'signal:TERM'; that was the test's own error against the issue's 'signal:SIGTERM' and was fixed before
+  these runs. The base's failure is earlier (the exit code) and unchanged by it.
+
+== Twins, each laid over the throwaway, packages/hub rebuilt, its test file run alone (load 140-172)
+
+  signal-waits-restart-after       signal.test.mjs     ✖ #2975.20c7734e: "a SIGTERM to an installed hub listening for
+                                                         1 s must end it within 5 s, so a logout isn't held up; it
+                                                         took 14040 ms" (AC1, AC2 pass on it)
+  dev-signal-exits-75              dev.test.mjs        ✖ #2975.c596419b: "a dev hub (--root) must exit 0 on SIGTERM
+                                                         and on SIGINT"
+  signal-75-during-confirmed-stop  confirmed.test.mjs  ✖ #2975.03961608: "a confirmed stop must still exit 0 though 5
+                                                         SIGTERM(s) reached the hub while it stopped; it exited 75"
+  confirmed-stop-exits-75          confirmed.test.mjs  ✖ #2975.03961608: "... though 4 SIGTERM(s) reached the hub
+                                                         while it stopped; it exited 75"
+  keepalive-always                 definition.test.mjs ✖ #2975.4668c24b (plist): "the plist's KeepAlive must still be
+                                                         { SuccessfulExit: false }: true"
+
+Every twin failed at an assertion in the test file. After the twins the throwaway's files went back, then
+git checkout -- packages/ reverted the sources and packages/hub was rebuilt at the base for the final base run above.

@@ -364,6 +364,13 @@ export class Projector {
         if (e.kind === 'ask.answered' && typeof d.plan_hash === 'string') this.up('plans', { ask, answered_hash: d.plan_hash });
         break;
       }
+      case 'approval.withdrawn':
+        // Your Undo inside the hold, or the hub starting again during it (#1101): an answered ask whose held steps never
+        // started is open again, unanswered, its deadline as it was.
+        if (e.writer !== 'core') break;
+        this.stmt("UPDATE asks SET status = 'open', outcome = 'unanswered', answered = NULL, answer = NULL, decision = NULL WHERE id = ? AND status = 'answered'").run(bare(e.subject));
+        this.stmt('UPDATE plans SET answered_hash = NULL WHERE ask = ?').run(bare(e.subject));
+        break;
       case 'default.undone':
         // Your undo, on the trusted path: a defaulted ask is open again, unanswered, until its new deadline.
         if (e.writer !== 'core') break;

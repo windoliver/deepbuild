@@ -64,6 +64,12 @@ macro_rules! set {
 /// the one before it.
 static SETS: [Set; 3] = [set!("figure"), set!("game2d"), set!("full")];
 
+/// #280: the full set's player and its page glue, which net.budget's web part plays a piece in.
+pub(crate) fn full_player() -> (&'static [u8], &'static [u8]) {
+    let full = &SETS[SETS.len() - 1];
+    (full.wasm, full.glue)
+}
+
 impl Set {
     /// The set as its build recorded it.
     fn about(&self) -> Value {
@@ -467,6 +473,11 @@ fn element(guard: Option<Guard>) -> String {
             "      if (!this.#asked) await this.#persist();\n",
             "",
         ),
+        // Planted (#189 AC9): Import record takes a record without holding it to the SHA-256 its name gives.
+        Some(Guard::WebCarryImportSkipsHash) => ELEMENT.replace(
+            r"const hash = /^([0-9a-f]{64})\.carry$/.exec(file.name)?.[1] ?? await sha256(bytes);",
+            "const hash = await sha256(bytes);",
+        ),
         // Planted (#1045 AC1): no accessibility tree beside the canvas, and no live region.
         Some(Guard::WebNoTree) => ELEMENT.replace("    this.#keepTree();\n", ""),
         // Planted (#1045 AC1): each readout announced on every frame drawn, changed or not.
@@ -613,6 +624,7 @@ impl Hub<'_> {
             Guard::WebFragmentWritesEntry,
             Guard::WebSavesKeyedByOrigin,
             Guard::WebSavesNeverAskPersistence,
+            Guard::WebCarryImportSkipsHash,
             Guard::WebLeavesOutFont,
             Guard::WebIndexChecksWebgpuOnly,
             Guard::WebIndexRequiresEveryAnyOf,
@@ -678,6 +690,25 @@ impl Hub<'_> {
                 refused.push(r);
             }
         }
+        // #211: a logic item whose world could outgrow the web player's store, which keeps it in
+        // memory up to web_max, is refused, naming the field.
+        let init_only = self.planted(Planted::WebExportChecksInitOnly);
+        let root = &self.scenario.evidence;
+        for (id, item) in doc["items"].as_object().into_iter().flatten() {
+            let Some(pages) = item.pointer("/params/pages") else {
+                continue;
+            };
+            let init = pages["init"]
+                .as_str()
+                .or_else(|| pages.pointer("/init/asset").and_then(Value::as_str))
+                .and_then(|sha| crate::evidence::read(root, sha))
+                .map(|b| b.len() as u64);
+            if let Some(mut r) = deep_logic::pages::web_refused(pages, init, init_only) {
+                r["item"] = json!(id);
+                r["code"] = json!("web.pages");
+                refused.push(r);
+            }
+        }
         if !refused.is_empty() {
             let names: Vec<&str> = refused.iter().filter_map(|r| r["item"].as_str()).collect();
             return Err(
@@ -705,20 +736,23 @@ impl Hub<'_> {
         // The player and its page glue.
         let (_, wasm_sha) = files.put(player(set, guard), Some("wasm"), Map::new());
         let (glue_path, _) = files.put(set.glue.to_vec(), Some("js"), Map::new());
-        let element = element(guard);
+        // #277's planted web copy: back in view, it jumps to the confirmed step.
+        let element = match self.scenario.module_planted.as_deref() {
+            Some("web_catch_up_jumps") => ELEMENT.replace(
+                "    const opened = JSON.parse(this.#player.join(",
+                "    this.#player.net_plant('web_catch_up_jumps');\n    const opened = JSON.parse(this.#player.join(",
+            ),
+            _ => element(guard),
+        };
         let (element_path, _) = files.put(element.clone().into_bytes(), Some("js"), Map::new());
         // The document as the app's frames draw it, and the recorded input track as the hub holds
         // it (#1164's `track` call), its bytes the ones its hash is of, so it is the app's by hash.
         let doc_bytes = serde_json::to_vec(doc).map_err(|_| json!({"code": "bad_input"}))?;
         let (doc_path, doc_sha) = files.put(doc_bytes, Some("json"), Map::new());
-        let mut held = deep_canvas_input::track::Track::default();
-        for e in &job.track {
-            let e = crate::track_call::entry_of(e).ok_or_else(
-                || json!({"code": "bad_input", "what": "track: each entry is {t, control, value, writer}"}),
-            )?;
-            held.append(e);
-        }
-        let (_, track_sha) = files.put(held.bytes(), Some("json"), Map::new());
+        let held = crate::track_call::held_bytes(&job.track).ok_or_else(
+            || json!({"code": "bad_input", "what": "track: each entry is {t, control, value, writer}"}),
+        )?;
+        let (_, track_sha) = files.put(held, Some("json"), Map::new());
         // Everything the document names by hash.
         for (_, path, sha) in crate::extended::hashes(doc, true) {
             let bytes = crate::evidence::read(&root, &sha).ok_or_else(|| {

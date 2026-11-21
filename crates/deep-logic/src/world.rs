@@ -120,6 +120,9 @@ pub struct Record {
     pub(crate) restarts: BTreeMap<String, BTreeMap<i64, Vec<u8>>>,
     /// #860: the steps that ran on a branch a rewind closed, whose rows hold the arrays they left.
     pub(crate) frozen: BTreeSet<i64>,
+    /// #551: checkpoints record no deep hash, which costs a pass over the whole memory in the
+    /// step; a reader restores the checkpoint for one (a match's copy, whose frames are timed).
+    pub deferred: bool,
 }
 
 impl Record {
@@ -221,6 +224,8 @@ pub(crate) struct Stored {
     pending: BTreeMap<String, VecDeque<Entry>>,
     mirrors: Vec<Pending>,
     pub(crate) memory: Memory,
+    /// #211: its world pages' map (whole or changes), slots and move queue.
+    pub(crate) paged: Option<crate::pages::Kept>,
     /// The CPU time taking and storing it took, in ns, as the ring reports it (#548).
     ns: u64,
 }
@@ -255,9 +260,13 @@ pub(crate) struct Live {
     mirror_ns: u64,
     /// #210: the ns the step took to take its reads and lay them out.
     read_ns: u64,
+    /// #211: the CPU time the moves before the last step took, in ns; 0 with none.
+    pages_ns: u64,
     dirty: BTreeSet<u32>,
     /// The pages written since the last keyframe stored (crate::keyframes).
     pub(crate) kdirty: BTreeSet<u32>,
+    /// #551: the pages written since the rollback ring's last match step.
+    pub(crate) rdirty: BTreeSet<u32>,
     stored: Vec<Stored>,
     /// The last step a checkpoint was taken at.
     pub(crate) checked: Option<i64>,
@@ -272,6 +281,8 @@ pub(crate) struct Live {
     previewed: Option<(i64, Vec<u8>)>,
     /// The preview's write region as the last preview left it: zero before one and after a trap.
     preview: Vec<u8>,
+    /// #211: its world pages as it steps.
+    pub(crate) paged: Option<crate::pages::State>,
 }
 
 /// The rows a step emitted, in list order: each its kind's index and its bytes.
@@ -283,7 +294,8 @@ impl Stored {
             Memory::Whole(m) => m.len(),
             Memory::Pages(p) => p.len() * PAGE as usize,
         };
-        (memory + self.arrays.len() + self.prev.len() + 8 * self.globals.len()) as u64
+        let paged = self.paged.as_ref().map_or(0, crate::pages::Kept::bytes);
+        (memory + self.arrays.len() + self.prev.len() + 8 * self.globals.len()) as u64 + paged
     }
 }
 
@@ -293,25 +305,31 @@ impl Live {
     /// there, since nothing wrote them again before it), or, past the last one kept, into the
     /// pages the next checkpoint takes. The planted ring drops its oldest instead.
     fn thin(&mut self, budget: u64, drops_oldest: bool) {
+        let mut dropped = false;
         while self.stored.len() > 1 && self.stored.iter().map(Stored::bytes).sum::<u64>() > budget {
+            dropped = true;
             if drops_oldest {
                 let oldest = self.stored.remove(0);
                 let next = &mut self.stored[0];
                 let later = std::mem::replace(&mut next.memory, Memory::Pages(BTreeMap::new()));
                 next.memory = merge(Some(oldest.memory), later);
+                next.paged = merged(oldest.paged, next.paged.take());
                 continue;
             }
             self.spacing *= 2;
             let mut kept: Vec<Stored> = Vec::new();
             let mut carry: Option<Memory> = None;
+            let mut carry_map: Option<crate::pages::Kept> = None;
             for mut s in std::mem::take(&mut self.stored) {
                 if s.ran % self.spacing != 0 {
                     carry = Some(merge(carry, s.memory));
+                    carry_map = merged(carry_map, s.paged);
                     continue;
                 }
                 if let Some(c) = carry.take() {
                     s.memory = merge(Some(c), s.memory);
                 }
+                s.paged = merged(carry_map.take(), s.paged.take());
                 kept.push(s);
             }
             self.stored = kept;
@@ -322,6 +340,42 @@ impl Live {
                 Some(Memory::Pages(p)) => self.dirty.extend(p.into_keys()),
                 None => {}
             }
+            // A dropped checkpoint's map changes go to the next one the ring stores; later
+            // changes win.
+            if let (Some(c), Some(st)) = (carry_map, self.paged.as_mut()) {
+                let (crate::pages::MapPart::Whole(mut all) | crate::pages::MapPart::Changes(mut all)) = c.map;
+                all.extend(std::mem::take(&mut st.changed));
+                st.changed = all;
+            }
+        }
+        if dropped {
+            self.free_pages();
+        }
+    }
+
+    /// #211: frees each page version that neither the map nor a checkpoint the ring keeps names.
+    fn free_pages(&mut self) {
+        let Some(st) = &self.paged else { return };
+        let mut keep: std::collections::HashSet<crate::pages::Hash> =
+            st.map.values().map(|e| e.hash).collect();
+        for s in &self.stored {
+            keep.extend(s.paged.iter().flat_map(crate::pages::Kept::hashes));
+        }
+        st.store.borrow_mut().free(&keep);
+    }
+}
+
+/// An earlier checkpoint's page map under a later one's (#211), with the later one's slots and queue.
+fn merged(
+    earlier: Option<crate::pages::Kept>,
+    later: Option<crate::pages::Kept>,
+) -> Option<crate::pages::Kept> {
+    match (earlier, later) {
+        (e, None) => e,
+        (None, l) => l,
+        (Some(e), Some(mut l)) => {
+            l.map = crate::pages::merge(Some(e.map), l.map);
+            Some(l)
         }
     }
 }
@@ -356,6 +410,7 @@ impl Live {
             pending: self.pending.clone(),
             mirrors: self.mirrors.clone(),
             memory,
+            paged: None,
             ns: 0,
         }
     }
@@ -409,6 +464,26 @@ impl Live {
         let (a, b) = (cut(m), cut(n));
         m[..a.start] == n[..b.start] && m[a.end..] == n[b.end..]
     }
+    /// #550: the globals as the step and full-state hashes take them.
+    pub(crate) fn encoded_globals(&mut self) -> Vec<u8> {
+        self.encoded()
+    }
+    /// #550: the step hash of the state its last step left, without that step's rows.
+    pub(crate) fn last_step_hash(&mut self) -> u64 {
+        self.step_hash(&Vec::new())
+    }
+    /// #550: writes `bytes` into the program's memory at `at`, marking the page written.
+    pub(crate) fn poke(&mut self, at: usize, bytes: &[u8]) -> Option<()> {
+        self.runner.write("memory", at, bytes).ok()?;
+        self.mark([(at / PAGE as usize) as u32]);
+        Some(())
+    }
+    /// Marks `pages` written, for the checkpoint ring, the keyframes and the rollback ring.
+    pub(crate) fn mark(&mut self, pages: impl IntoIterator<Item = u32> + Clone) {
+        self.dirty.extend(pages.clone());
+        self.kdirty.extend(pages.clone());
+        self.rdirty.extend(pages);
+    }
     /// The step hash: the program's globals, the arrays it wrote and the rows it emitted, each
     /// after its kind's index (none for a step that emitted none, so an item's hash is as before).
     fn step_hash(&mut self, rows: &Rows) -> u64 {
@@ -430,12 +505,104 @@ impl Live {
         h.update(self.encoded());
         h.update(&self.arrays);
         h.update(self.memory());
+        // #211: an item with pages adds its map's root, its move queue and its slots.
+        if let Some(p) = &self.paged {
+            h.update(p.hashed());
+        }
         u64::from_be_bytes(h.finalize()[..8].try_into().expect("8 bytes"))
     }
 }
 
+/// Lower-case hex, two digits a byte, written into one buffer (#3056: a string a byte made a
+/// large memory's state cost a step's time many times over).
 fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(2 * bytes.len());
+    for b in bytes {
+        out.push(char::from(DIGITS[usize::from(b >> 4)]));
+        out.push(char::from(DIGITS[usize::from(b & 15)]));
+    }
+    out
+}
+
+/// One item's state as [`World::saved`] writes it, its memory and arrays still raw bytes, so a
+/// step can carry it and the hex is written only when something reads it (#3056).
+pub struct Snapshot {
+    next: i64,
+    failed: bool,
+    memory: Vec<u8>,
+    globals: Vec<Value>,
+    arrays: Vec<u8>,
+    pending: Map<String, Value>,
+    /// #211: its world pages, their written versions' bytes with them.
+    pages: Option<Value>,
+}
+
+impl std::fmt::Debug for Snapshot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Snapshot {{ next: {}, failed: {}, memory: {} bytes, arrays: {} bytes }}",
+            self.next,
+            self.failed,
+            self.memory.len(),
+            self.arrays.len()
+        )
+    }
+}
+
+impl World {
+    /// Every item's whole state as raw data: what [`World::saved`] writes, before its bytes are hex.
+    pub fn snapshot(&mut self) -> Vec<Snapshot> {
+        let piece = self.piece.clone();
+        self.lives
+            .iter_mut()
+            .zip(&piece.items)
+            .map(|(l, item)| Snapshot {
+                next: l.next,
+                failed: l.failed,
+                memory: l.memory().to_vec(),
+                globals: l
+                    .globals()
+                    .iter()
+                    .map(|v| match v {
+                        Val::I32(x) => json!(["i32", x]),
+                        Val::I64(x) => json!(["i64", x]),
+                        Val::F32(x) => json!(["f32", x]),
+                        Val::F64(x) => json!(["f64", x]),
+                        _ => Value::Null,
+                    })
+                    .collect(),
+                arrays: l.arrays.clone(),
+                pending: l
+                    .pending
+                    .iter()
+                    .map(|(k, q)| (k.clone(), q.iter().map(Entry::to_json).collect()))
+                    .collect(),
+                pages: match (&item.pages, &l.paged) {
+                    (Some(p), Some(st)) => Some(st.json(p)),
+                    _ => None,
+                },
+            })
+            .collect()
+    }
+
+    /// `items` as the plain data [`World::saved`] gives.
+    pub fn saved_of(items: &[Snapshot]) -> Value {
+        Value::Array(
+            items
+                .iter()
+                .map(|s| {
+                    let mut v = json!({"next": s.next, "failed": s.failed, "memory": hex(&s.memory), "globals": s.globals,
+                           "arrays": hex(&s.arrays), "pending": s.pending});
+                    if let Some(p) = &s.pages {
+                        v["pages"] = p.clone();
+                    }
+                    v
+                })
+                .collect(),
+        )
+    }
 }
 
 /// The logic items of a piece, stepping on one input track.
@@ -451,6 +618,8 @@ pub struct World {
     pub saves_dir: Option<std::path::PathBuf>,
     /// With no folder, the saves its steps asked for, held for the host's store (Export: web player).
     pub held: Option<Vec<crate::saves::Held>>,
+    /// #189: the time the saves machinery took since it was last read (a live frame's `saves_ns`).
+    pub saves_ns: u64,
     pub saved: Vec<Value>,
     /// The steps the piece's same-machine counters have seen, and the adapter this run is on.
     pub(crate) seen: u64,
@@ -463,8 +632,28 @@ pub struct World {
 
 pub type Failed = Value;
 
+mod net;
 mod rewind;
+pub mod rollback;
+pub mod seats;
 mod world_impl;
+
+impl World {
+    /// The planted logic module this world runs as.
+    pub fn planted(&self) -> Planted {
+        self.planted
+    }
+
+    /// #277's planted catch-up: every item's clock moves on to the first step at or after `t`,
+    /// running none of the steps before it.
+    pub fn skip(&mut self, t: i64) {
+        for (i, item) in self.piece.items.iter().enumerate() {
+            let k = t.div_euclid(item.step) + i64::from(t.rem_euclid(item.step) != 0);
+            let l = &mut self.lives[i];
+            l.next = l.next.max(k);
+        }
+    }
+}
 
 /// The planted replay's change: the first value of the item's first array, an i32 plus one, an
 /// f64 (or a vector's first component) to the next f64 above it, a bool flipped.
@@ -480,6 +669,29 @@ fn changed(item: &Item, arrays: &mut [u8]) {
         _ => {
             let v = f64::from_le_bytes(arrays[at..at + 8].try_into().expect("8 bytes"));
             arrays[at..at + 8].copy_from_slice(&v.next_up().to_le_bytes());
+        }
+    }
+}
+
+/// #1250's planted piece that reads the wall clock: the first value of the item's first array
+/// with the wall clock's nanoseconds modulo 2^30 added, an i32 wrapping and a bool flipped by the
+/// count's parity, so a replica of the same track never ends where the play did.
+fn walled(item: &Item, arrays: &mut [u8]) {
+    let Some(w) = item.writes.first() else { return };
+    let at = item.write(&w.name).expect("a write entry").offset as usize;
+    let ns = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
+        .map_or(0, |d| d.subsec_nanos() as u64 + d.as_secs() * 1_000_000_000)
+        % (1 << 30);
+    match w.ty {
+        Ty::Bool => arrays[at] ^= (ns & 1) as u8,
+        Ty::I32 => {
+            let v = i32::from_le_bytes(arrays[at..at + 4].try_into().expect("4 bytes"));
+            arrays[at..at + 4].copy_from_slice(&v.wrapping_add(ns as i32).to_le_bytes());
+        }
+        _ => {
+            let v = f64::from_le_bytes(arrays[at..at + 8].try_into().expect("8 bytes"));
+            arrays[at..at + 8].copy_from_slice(&(v + ns as f64).to_le_bytes());
         }
     }
 }
@@ -548,7 +760,7 @@ fn report(
     }
     let (items, arrays) = rec.steps.entry(k).or_default();
     let mut row = json!({"hash": hash.map(|h| format!("{h:016x}")), "fuel": fuel, "failed": l.failed, "pages": pages,
-                         "mirror_ns": l.mirror_ns, "service_ns": 0, "read_ns": l.read_ns});
+                         "mirror_ns": l.mirror_ns, "service_ns": 0, "read_ns": l.read_ns, "pages_ns": l.pages_ns});
     if let Some(f) = &l.filled {
         row["filled"] = f.clone();
     }

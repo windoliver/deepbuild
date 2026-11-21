@@ -19,7 +19,7 @@ use tungstenite::{Message, WebSocket};
 
 #[cfg(test)]
 use crate::wire;
-pub use crate::wire::{check_hello, host, Limits};
+pub use crate::wire::{check_hello, check_hello_as, host, Limits};
 
 pub const BACKEND: Backend = Backend {
     name: "network.macos",
@@ -46,17 +46,26 @@ pub struct Connection {
 impl Connection {
     /// Connects to the relay `relay` names, trusting the PEM authorities `ca`, and reads its hello.
     pub fn open(relay: &str, ca: &[u8]) -> Result<(Connection, Value), String> {
-        Connection::open_with(relay, ca, RootCertStore::empty())
+        Connection::open_with(relay, ca, RootCertStore::empty(), None)
+    }
+
+    /// #277: a connection that asks for `protocol` by the WebSocket subprotocol (relay@2).
+    pub fn open_as(relay: &str, ca: &[u8], protocol: &str) -> Result<(Connection, Value), String> {
+        Connection::open_with(relay, ca, RootCertStore::empty(), Some(protocol))
     }
 
     /// #549: a Join's connection, which trusts the platform's own authorities beside `ca`.
-    pub fn open_for_join(relay: &str, ca: &[u8]) -> Result<(Connection, Value), String> {
+    pub fn open_for_join(
+        relay: &str,
+        ca: &[u8],
+        protocol: Option<&str>,
+    ) -> Result<(Connection, Value), String> {
         let mut roots = RootCertStore::empty();
         for cert in rustls_native_certs::load_native_certs().certs {
             // A platform certificate rustls can't read is left out; the handshake names the rest.
             let _ = roots.add(cert);
         }
-        Connection::open_with(relay, ca, roots)
+        Connection::open_with(relay, ca, roots, protocol)
     }
 
     /// The address this copy reaches the relay from, which a direct path listens on.
@@ -68,6 +77,7 @@ impl Connection {
         relay: &str,
         ca: &[u8],
         mut roots: RootCertStore,
+        protocol: Option<&str>,
     ) -> Result<(Connection, Value), String> {
         let host = host(relay);
         let fail = |what: String| format!("the relay {host} {what}");
@@ -103,7 +113,19 @@ impl Connection {
             .map_err(|e| e.to_string())?;
         tcp.set_nodelay(true).map_err(|e| e.to_string())?;
         let tls = ClientConnection::new(Arc::new(config), server).map_err(|e| e.to_string())?;
-        let (ws, _) = tungstenite::client(format!("wss://{host}/"), StreamOwned::new(tls, tcp))
+        let mut request =
+            tungstenite::client::IntoClientRequest::into_client_request(format!("wss://{host}/"))
+                .map_err(|e| fail(format!("can't be asked: {e}")))?;
+        // #277: relay@2 is asked for by its subprotocol, an HTTP token.
+        if protocol == Some(crate::wire::PROTOCOL2) {
+            let value = crate::wire::SUBPROTOCOL2
+                .parse()
+                .map_err(|_| fail("can't be asked for relay@2".into()))?;
+            request
+                .headers_mut()
+                .insert("Sec-WebSocket-Protocol", value);
+        }
+        let (ws, _) = tungstenite::client(request, StreamOwned::new(tls, tcp))
             .map_err(|e| fail(format!("refused the https connection: {e}")))?;
         let mut conn = Connection { ws, host };
         match conn.next(OPEN)? {
