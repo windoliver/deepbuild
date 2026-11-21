@@ -21,7 +21,7 @@ impl Logic {
             .and_then(Value::as_i64)
             .filter(|n| *n >= 0)
             .ok_or_else(|| bad("steps"))?;
-        let entries = track(&piece, line, steps).ok_or_else(|| bad("track"))?;
+        let entries = track(&piece, line, steps, &self.planted).ok_or_else(|| bad("track"))?;
         let mut rec = Record::default();
         World::new(
             piece.clone(),

@@ -22,6 +22,7 @@ use crate::locate::{self, entries_hash, track_after, Found, FNV_START};
 pub use crate::message::Hashed;
 use crate::message::{hex, Message};
 
+mod profile;
 mod rollback;
 mod seats;
 pub use seats::{Seat, NET_SEATS, SEAT};
@@ -59,6 +60,10 @@ pub trait Stepper {
     fn back(&mut self, step: i64, t: i64) -> Result<(), Value> {
         Err(json!({"code": "no_ring", "step": step, "t": t}))
     }
+    /// #276: the entries its player brings to step 0, `(control, value)`: its profile record.
+    fn brings(&self) -> Vec<(String, Value)> {
+        Vec::new()
+    }
     /// #551: the CPU time each canvas module took since the last call, `(module, ns)`.
     fn timed(&mut self) -> Vec<(String, u64)> {
         Vec::new()
@@ -90,6 +95,11 @@ pub trait Stepper {
     /// full-state hash there.
     fn seek(&mut self, step: i64, _len: i64) -> Result<(i64, u64), Value> {
         Err(json!({"code": "no_ring", "step": step}))
+    }
+    /// #265: each logic array as the copy holds it now, laid out as a bake (steps past
+    /// `confirmed` included, a replaced step's gone): what its frame draws; none by default.
+    fn drawn(&self) -> Option<Value> {
+        None
     }
 }
 
@@ -139,6 +149,8 @@ pub enum Planted {
     RewindsToLastRead,
     /// #551: it never holds its clock, whatever its lead.
     IgnoresLeadRule,
+    /// #276: it reads each peer's profile record at step 0 as its own store holds its own viewer's.
+    ProfileFromOwnStore,
     /// #277: it stamps a leave at the step it noticed the close, with no exchange.
     StampsLeaveWhenNoticed,
     /// #277: it stamps a leave after the last message it holds itself, skipping the exchange.
@@ -163,6 +175,7 @@ impl Planted {
             "net_records_predicted" => Planted::RecordsPredicted,
             "net_rewinds_to_last_read" => Planted::RewindsToLastRead,
             "net_ignores_lead_rule" => Planted::IgnoresLeadRule,
+            "net_profile_from_own_store" => Planted::ProfileFromOwnStore,
             "net_leave_at_notice" => Planted::StampsLeaveWhenNoticed,
             "net_skips_last_exchange" => Planted::SkipsLeaveExchange,
             "net_catch_up_in_arrival_order" => Planted::CatchesUpInArrivalOrder,
@@ -293,6 +306,8 @@ pub struct Copy<S> {
     /// it ran, by step and player: what the locator steps again with and hashes.
     track: Vec<Value>,
     log: BTreeMap<i64, Vec<(u8, Vec<(String, Value)>)>>,
+    /// #276: the profile record entry its player brought to step 0.
+    brought: Option<Value>,
     /// The merged track's hash over the steps it ran (#550: entries first).
     track_hash: u64,
     hashes: Vec<Hashed>,
@@ -360,6 +375,7 @@ impl<S: Stepper> Copy<S> {
             confirmed_by: vec![0; n],
             track: Vec::new(),
             log: BTreeMap::new(),
+            brought: None,
             track_hash: FNV_START,
             hashes: Vec::new(),
             theirs: BTreeMap::new(),
@@ -376,13 +392,13 @@ impl<S: Stepper> Copy<S> {
             seats: seats::Seats::new(players),
             cfg,
         };
-        // No entry can be stamped before step `delay`: those steps' messages are empty.
-        for _ in 0..copy.cfg.delay {
-            copy.send(Message::default());
-        }
+        // No entry can be stamped before step `delay`: those steps' messages are empty, but for
+        // step 0's, which carries what its player brings (#276: its profile record).
+        copy.bring();
         // #551: with a window, a copy counts its peers' first `delay` messages held too, since
-        // every copy knows they are empty, so it doesn't wait at its window for them.
-        if copy.cfg.window > 0 {
+        // every copy knows they are empty, so it doesn't wait at its window for them; a piece
+        // that keeps a profile has each player's record in its first.
+        if copy.cfg.window > 0 && copy.cfg.controls.get(kind::PROFILE).is_none() {
             copy.through = vec![copy.cfg.delay; n];
         }
         copy
@@ -688,6 +704,9 @@ impl<S: Stepper> Copy<S> {
             (false, Planted::StampsOwnPlayer) => ("peer", self.me),
             (false, _) => ("peer", p),
         };
+        if control == kind::PROFILE {
+            return self.profile_entry(k, seq, value, (writer, player));
+        }
         json!({"t": k * self.cfg.step(), "seq": seq, "control": control, "value": value,
                "writer": writer, "player": player})
     }
@@ -712,8 +731,9 @@ impl<S: Stepper> Copy<S> {
             self.track_hash = track_after(self.track_hash, entries_hash(k, player, &entries));
             for (seq, (control, value)) in entries.iter().enumerate() {
                 let entry = self.stamped(k, player, seq, control, value);
+                let fed = self.fed(&entry);
                 let entered = kind::admit(&self.cfg.controls, control, value)
-                    .and_then(|()| self.sim.enter(&entry));
+                    .and_then(|()| self.sim.enter(&fed));
                 match entered {
                     Ok(()) => self.track.push(entry),
                     Err(why) => self.refused.push(json!({"step": k, "player": player,
@@ -851,7 +871,7 @@ impl<S: Stepper> Copy<S> {
                 for (seq, (control, value)) in entries.iter().enumerate() {
                     let entry = self.stamped(k, *p, seq, control, value);
                     if kind::admit(&self.cfg.controls, control, value).is_ok() {
-                        let _ = sim.enter(&entry);
+                        let _ = sim.enter(&self.fed(&entry));
                     }
                 }
             }

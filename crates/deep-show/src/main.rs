@@ -666,7 +666,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "geometry" => return geometry::parse(c).map(|g| Call::Geometry(Box::new(g))),
         "kinds" => return Some(Call::KindSchemas),
         "spatial" => return spatial::parse(c).map(|s| Call::Spatial(Box::new(s))),
-        "logic" => return picks::parse(c).map(|l| Call::Logic(Box::new(l))),
+        "logic" | "open_save" => return picks::parse(c).map(|l| Call::Logic(Box::new(l))),
         "terrain_rays" => return terrain::parse(c).map(|r| Call::TerrainRays(Box::new(r))),
         "physics_bake" => return physics::parse(c).map(|b| Call::PhysicsBake(Box::new(b))),
         "world" => return points::parse_world(c).map(|(doc, world)| Call::World { doc, world }),
@@ -1375,6 +1375,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || *p == deep_canvas_marks::entries::FIT_SKIPS_ENTRIES
                 || entries::PLANTED.contains(p)
                 || deep_net::PLANTED.contains(p)
+                // #265's trail that keeps the points a copy read from predicted steps.
+                || *p == net::TRAIL_KEEPS_PREDICTED
                 // #225's in the data module's integrator; #2450's in its reading of axis titles.
                 || *p == deep_canvas_marks::vector_field::PLANTED_EULER
                 || *p == deep_canvas_marks::axes3d::TAKES_ANY_KIND

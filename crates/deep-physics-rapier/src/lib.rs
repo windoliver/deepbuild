@@ -44,6 +44,7 @@ pub mod fp;
 mod inputs;
 mod joints;
 mod kinematic;
+mod laws;
 mod occurrences;
 pub mod planted;
 pub mod runner;
@@ -201,6 +202,16 @@ pub enum Twin {
     LinksAtZero,
     TreeCountsOnly,
     Small(runner::contact::Small),
+    /// #1931's wrong laws: an inverse square that falls off as 1 ÷ r; a magnetic law that holds
+    /// q (v × B) over the step; one that takes B × v; a pair law without the factor 2; and one
+    /// without the cutoff. And its wrong check, which admits a held central force at any
+    /// substeps.
+    LawFallsAsR,
+    LawHoldsQvb,
+    LawTakesBv,
+    LawWithoutTwo,
+    LawWithoutCutoff,
+    SubstepsAdmitted,
 }
 
 /// A Rapier world behind the backend interface.
@@ -209,7 +220,10 @@ pub struct Rapier {
     world: PhysicsWorld,
     /// Each body's handle, in canonical (ID) order.
     bodies: Vec<(String, RigidBodyHandle)>,
-    forces: Vec<Force>,
+    /// Each force by ID, its strength what the last `set` gave it (#2371).
+    forces: Vec<(String, Force)>,
+    /// #2371: each body's anchors by address, `<body>#<anchor>`: the body and its local point.
+    anchors: BTreeMap<String, (RigidBodyHandle, [f64; 3])>,
     /// The fixed body a joint end of `world` holds to.
     world_body: Option<RigidBodyHandle>,
     /// Each collider's shape use.
@@ -272,6 +286,16 @@ pub struct Rapier {
     /// #2098: the triangles a wind pushes, by body, in the body's frame.
     aero: BTreeMap<String, Vec<deep_canvas_physics::wind::Triangle>>,
 }
+
+/// #189's test builds of the physics implementation: a document's every world built as if it
+/// declared its gravity this many times over; none in every shipped build.
+pub const GRAVITY_TIMES: Option<f64> = if cfg!(feature = "test-gravity-heavy") {
+    Some(2.0)
+} else if cfg!(feature = "test-gravity-drift") {
+    Some(1.000_001)
+} else {
+    None
+};
 
 fn v3(a: [f64; 3]) -> Vector {
     Vector::new(a[0] as f32, a[1] as f32, a[2] as f32)
@@ -1073,7 +1097,13 @@ impl Backend for Rapier {
         self.soft.build(w, &mut self.world, &handles);
         self.particle_capacity = w.capacity.get("particles").copied().unwrap_or(u64::MAX);
         self.checkpoint_every = w.checkpoint_every;
-        self.forces = w.forces.values().cloned().collect();
+        self.forces = w.forces.clone().into_iter().collect();
+        let anchors = w.bodies.iter().flat_map(|(id, b)| {
+            let h = handles[id];
+            let named = b.anchors.iter();
+            named.map(move |(name, p)| (format!("{id}#{name}"), (h, *p)))
+        });
+        self.anchors = anchors.collect();
         if out.is_empty() {
             Ok(())
         } else {
@@ -1095,7 +1125,7 @@ impl Backend for Rapier {
         let start = self.start();
         let watched = self.readings();
         self.aim(targets);
-        self.push();
+        self.push(targets);
         let vehicles = self.vehicles.ids();
         let belts = belt::Belts {
             twin: self.twin,
@@ -1273,6 +1303,7 @@ impl Backend for Rapier {
                 self.vehicles.bytes(),
                 self.soft.bytes(),
                 self.character_bytes(),
+                self.strength_bytes(),
                 self.grab_bytes(),
             ]
             .concat(),
@@ -1315,6 +1346,7 @@ impl Backend for Rapier {
         let rest = self.vehicles.restore(rest);
         let rest = self.soft.restore(rest);
         let rest = self.characters_of(rest);
+        let rest = self.strengths_of(rest);
         self.grabs = Rapier::grabs_of(rest);
         self.step = cp.step;
         self.last.clear();
