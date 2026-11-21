@@ -563,9 +563,9 @@ impl Hub<'_> {
             plays: m.plays.clone(),
             faults: m.faults.clone(),
             planted,
-            // #550: the planted copy that stamps a peer's entries with its own player is copy 1, as is
-            // #276's that brings a profile from its own store; #552's guesser, and its copy whose
-            // bits are wrong or never come, copy 2.
+            // #550: the planted copy that stamps a peer's entries with its own player is copy 1, as
+            // is #276's that reads its profile from its own store; #552's guesser, and its copy
+            // whose bits are wrong or never come, copy 2.
             planted_on: match planted {
                 Planted::StampsOwnPlayer | Planted::ProfileFromOwnStore => Some(1),
                 Planted::GuessesFromSeed | Planted::RevealsOtherBits | Planted::WithholdsBits => {
@@ -667,7 +667,7 @@ impl Hub<'_> {
             .collect();
         let reads = (s.piece.items.iter()).any(|i| !i.emits.is_empty());
         let mut copies = Vec::new();
-        for c in &played.copies {
+        for (i, c) in played.copies.iter().enumerate() {
             let mut report = c.report();
             // #276: the profile records its confirmed steps wrote, into its own folder.
             if let Some(dir) = m.saves_dirs.get(&c.me) {
