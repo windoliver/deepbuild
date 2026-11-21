@@ -18,6 +18,7 @@ mod data_hash;
 mod defaults;
 mod determinism;
 mod efficiency;
+mod entries;
 mod evidence;
 mod export;
 mod extended;
@@ -669,7 +670,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "terrain_rays" => return terrain::parse(c).map(|r| Call::TerrainRays(Box::new(r))),
         "physics_bake" => return physics::parse(c).map(|b| Call::PhysicsBake(Box::new(b))),
         "world" => return points::parse_world(c).map(|(doc, world)| Call::World { doc, world }),
-        "match" | "play_match" | "sockets" => return net::parse(name, c),
+        "match" | "play_match" | "sockets" | "replay" => return net::parse(name, c),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
             return Some(Call::InstallPack {
@@ -798,6 +799,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 track: optional(c.get("track"), |t| t.as_array().cloned())?,
                 data_hash: flag("data_hash")?,
                 texts: flag("texts")?,
+                shown: flag("shown")?,
                 carried: flag("carried")?,
                 tour_pointer: flag("tour_pointer")?,
             })));
@@ -1368,6 +1370,11 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 // #223's in the marks2d module's warp.
                 || deep_canvas_marks::warp::PLANTED.contains(p)
                 || deep_net::Planted::named(p).is_some()
+                // #297's in the text module's entry texts and the text control's range.
+                || deep_canvas_marks::entries::planted(Some(p)) != Default::default()
+                || *p == deep_canvas_marks::entries::FIT_SKIPS_ENTRIES
+                || entries::PLANTED.contains(p)
+                || deep_net::PLANTED.contains(p)
                 // #225's in the data module's integrator; #2450's in its reading of axis titles.
                 || *p == deep_canvas_marks::vector_field::PLANTED_EULER
                 || *p == deep_canvas_marks::axes3d::TAKES_ANY_KIND
@@ -1385,6 +1392,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         .filter(|p| familiar::PLANTED.contains(p) || math_twins::PLANTED.contains(p))
         .map(str::to_string);
     let logic_planted = crate::logic::planted(input.get("planted"))?;
+    // #551: the planted rate rule is the net kind's own, read at every check this run makes.
+    deep_net::kind::plant_rate_rule(module_planted.as_deref() == Some("net_rate_faster_only"));
     let planted = match input.get("planted").map(Value::as_str) {
         None => None,
         Some(_) if logic_planted.is_some() => None,

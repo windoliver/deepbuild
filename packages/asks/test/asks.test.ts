@@ -187,6 +187,18 @@ describe('a taste call that dropped near copies (#394)', () => {
   });
 });
 
+describe('an option ID no command line carries (#2563)', () => {
+  it('is refused when the ask is raised, naming the ID and why; a control character, a space or a leading - is not', async () => {
+    await start('S1', 'T1');
+    const holding = (subject: string, id: string): Obj => choice(subject, { options: [{ id, label: 'Odd', decision: 'none' }, { id: 'files', label: 'Plain files', decision: 'none' }], recommended: 'files', default: 'files' });
+    for (const id of ['a\0b', '\0']) {
+      await expect(asks.raise(agent('S1'), 'deep_ask.choice', holding(`refused ${id.length}`, id))).rejects.toThrow(`option ${JSON.stringify(id)} holds a NUL, which no command line carries`);
+    }
+    for (const id of ['esc\u001bkey', '-fast', 'two words', 'a, b', '😀']) await asks.raise(agent('S1'), 'deep_ask.choice', holding(`kept ${id.charCodeAt(0)}`, id));
+    expect((await events('ask.created')).length).toBe(5);
+  });
+});
+
 describe('a block someone else owns (#320)', () => {
   const block = (subject: string, over: Obj = {}): Obj => ({
     kind: 'unblock', question: `Renew ${subject}?`,

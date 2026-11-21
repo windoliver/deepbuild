@@ -10,7 +10,7 @@ use deep_relay::wire::Frame;
 use serde_json::{json, Value};
 
 use crate::card::Card;
-use crate::copy::{Copy, Planted, Stepper};
+use crate::copy::{Copy, Defect, Planted, Stepper};
 use crate::kind::{Config, FLICKS};
 
 /// What a player does: an entry on `control` made when match step `step` is the first its copy
@@ -20,6 +20,26 @@ pub struct Play {
     pub step: i64,
     pub control: String,
     pub value: Value,
+    /// #550: the players whose copies it goes to, over a direct path; every copy where none.
+    pub to: Option<Vec<u8>>,
+}
+
+/// #551: how the relay holds every frame back, in match steps.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Held {
+    /// A seeded whole number of steps from 0 to n, so frames may arrive in another order.
+    UpTo(i64),
+    Exactly(i64),
+}
+
+/// #551: player `player`'s message for match step `step` reaches copy `to` only once that copy
+/// has run step `at`: every frame of that player's to that copy carrying it waits till then.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Deliver {
+    pub player: u8,
+    pub step: i64,
+    pub to: u8,
+    pub at: i64,
 }
 
 /// Every frame `player` sends from `at` for `len` waits at the relay until `at + len`.
@@ -38,6 +58,15 @@ pub struct Faults {
     pub holds: Vec<Hold>,
     /// Each frame is held back by up to this long, by the seed.
     pub back: i64,
+    /// #551: each frame held back a seeded whole number of match steps up to n, or exactly n.
+    pub held: Option<Held>,
+    /// #551: a player's message for a step that reaches one copy only once it has run a step.
+    pub deliver: Vec<Deliver>,
+    /// #551: each player's one-way latency to the relay, in flicks: a frame from player i to
+    /// player j takes both players', and a copy starts when the relay's start reaches it.
+    pub latency: Vec<i64>,
+    /// #550: frames go straight between copies, as on a direct path, each copy's to each other.
+    pub direct: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -46,8 +75,14 @@ pub struct Ask {
     pub plays: BTreeMap<u8, Vec<Play>>,
     pub faults: Faults,
     pub planted: Planted,
+    /// #550: the one copy `planted` applies to, or every copy.
+    pub planted_on: Option<u8>,
     /// What each named copy shows at a time: `(player, t)`.
     pub shows: Vec<(u8, i64)>,
+    /// Whether the relay's log keeps each frame's messages.
+    pub log: bool,
+    /// #550: a planted defect one copy makes.
+    pub defect: Option<(u8, Defect)>,
 }
 
 /// One frame the relay carried to one copy.
@@ -60,6 +95,9 @@ pub struct Carried {
     pub at: i64,
     /// None when the relay dropped it.
     pub delivered: Option<i64>,
+    /// The copy it went to, and the frame's bytes, as hex, when the log keeps them.
+    pub to: u8,
+    pub bytes: Option<String>,
 }
 
 /// What a copy showed at a time: its last step, and the app's notice then.
@@ -90,8 +128,8 @@ impl<S> Played<S> {
             .iter()
             .filter(|_| log)
             .map(|c| {
-                json!({"player": c.player, "first": c.first, "count": c.count, "confirmed": c.confirmed,
-                       "at": s(c.at), "delivered": c.delivered.map(s)})
+                json!({"player": c.player, "to": c.to, "first": c.first, "count": c.count, "confirmed": c.confirmed,
+                       "at": s(c.at), "delivered": c.delivered.map(s), "bytes": c.bytes})
             })
             .collect();
         json!({"frames": self.log.len(), "dropped": self.dropped(), "log": rows})
@@ -126,8 +164,13 @@ pub fn play<S: Stepper>(
     make: &mut dyn FnMut(u8) -> Result<S, Value>,
 ) -> Result<Played<S>, Value> {
     let step = cfg.step();
+    let lat = |p: usize| ask.faults.latency.get(p).copied().unwrap_or(0);
     let mut copies = Vec::new();
     for me in 1..=cfg.players {
+        let planted = match ask.planted_on {
+            Some(on) if on != me => Planted::None,
+            _ => ask.planted,
+        };
         let mut copy = Copy::new(
             cfg.clone(),
             card.clone(),
@@ -135,12 +178,15 @@ pub fn play<S: Stepper>(
             cfg.players,
             [0x54; 16],
             make(me)?,
-            ask.planted,
-            0,
+            planted,
+            lat(me as usize - 1),
         );
         copy.limit(ask.steps);
+        if let Some((_, d)) = ask.defect.as_ref().filter(|(on, _)| *on == me) {
+            copy.plant(d.clone());
+        }
         let plays = ask.plays.get(&me).into_iter().flatten();
-        copy.script(plays.map(|p| (p.step, p.control.clone(), p.value.clone())));
+        copy.script(plays.map(|p| (p.step, p.control.clone(), p.value.clone(), p.to.clone())));
         copies.push(copy);
     }
     let mut rng = Rng(ask.faults.seed ^ 0x006e_6574_4035_3439);
@@ -151,7 +197,7 @@ pub fn play<S: Stepper>(
         queue.insert((at, seq), e);
     };
     for i in 0..copies.len() {
-        push(&mut queue, 0, Event::Tick(i));
+        push(&mut queue, lat(i), Event::Tick(i));
     }
     for (i, (_, t)) in ask.shows.iter().enumerate() {
         push(&mut queue, *t, Event::Show(i));
@@ -182,6 +228,8 @@ pub fn play<S: Stepper>(
         .max()
         .unwrap_or(0);
     let stop = longest + 2 * cfg.timeout + ask.steps * step * 10 + 60 * FLICKS;
+    // #551: frames `deliver` holds, each with its copy and the step it waits for that copy to run.
+    let mut pending: Vec<(usize, i64, Vec<u8>)> = Vec::new();
     while let Some(((now, _), event)) = queue.pop_first() {
         if now > stop {
             break;
@@ -190,6 +238,18 @@ pub fn play<S: Stepper>(
             Event::Show(i) => played.shown.push(show(&played.copies, i, now)),
             Event::Deliver(to, frame) => played.copies[to].receive(&frame, now),
             Event::Tick(i) => {
+                // Held frames reach their copy, in the order sent, right after it ran their step.
+                let ready: Vec<Vec<u8>> = {
+                    let ran = played.copies[i].ran();
+                    let (go, wait): (Vec<_>, Vec<_>) = std::mem::take(&mut pending)
+                        .into_iter()
+                        .partition(|(to, at, _)| *to == i && ran > *at);
+                    pending = wait;
+                    go.into_iter().map(|(_, _, f)| f).collect()
+                };
+                for f in ready {
+                    played.copies[i].receive(&f, now);
+                }
                 push(&mut queue, now + step, Event::Tick(i));
                 let Some(frame) = played.copies[i].tick(now) else {
                     continue;
@@ -206,17 +266,45 @@ pub fn play<S: Stepper>(
                 if ask.faults.back > 0 {
                     at += (rng.next() % (ask.faults.back as u64 + 1)) as i64;
                 }
+                match ask.faults.held {
+                    Some(Held::UpTo(n)) => at += (rng.next() % (n.max(0) as u64 + 1)) as i64 * step,
+                    Some(Held::Exactly(n)) => at += n * step,
+                    None => {}
+                }
+                let from = at;
                 for to in (0..played.copies.len()).filter(|to| *to != i) {
+                    let at = from + lat(i) + lat(to);
+                    // Through the relay every copy gets the one frame; on a direct path each
+                    // gets its own.
+                    let sent = match ask.faults.direct {
+                        true => played.copies[i].frame_for(&frame, to as u8 + 1),
+                        false => frame.clone(),
+                    };
+                    // #551: a frame carrying a message `deliver` names waits for its copy's step.
+                    let carries = |d: &&Deliver| {
+                        d.player == player
+                            && d.to as usize == to + 1
+                            && read.as_ref().is_some_and(|f| {
+                                (f.first as i64..f.first as i64 + f.steps.len() as i64)
+                                    .contains(&d.step)
+                            })
+                    };
+                    let waits = ask.faults.deliver.iter().find(carries).copied();
+                    let waits = waits.filter(|d| played.copies[to].ran() <= d.at);
                     played.log.push(Carried {
                         player,
                         first: read.as_ref().map_or(0, |f| f.first as i64),
                         count: read.as_ref().map_or(0, |f| f.steps.len() as i64),
                         confirmed: read.as_ref().map_or(0, |f| f.confirmed as i64),
                         at: now,
-                        delivered: (!dropped).then_some(at),
+                        delivered: (!dropped && waits.is_none()).then_some(at),
+                        to: to as u8 + 1,
+                        bytes: ask.log.then(|| deep_relay::wire::hex(&sent)),
                     });
-                    if !dropped {
-                        push(&mut queue, at, Event::Deliver(to, frame.clone()));
+                    match waits {
+                        _ if dropped => {}
+                        Some(d) => pending.push((to, d.at, sent)),
+                        None => push(&mut queue, at, Event::Deliver(to, sent)),
                     }
                 }
             }
@@ -248,6 +336,7 @@ mod tests {
                         step: g,
                         control: "push".into(),
                         value: json!((g * 7 + p as i64 * 3) % 17 - 8),
+                        to: None,
                     })
                     .collect();
                 (p, list)
@@ -262,6 +351,7 @@ mod tests {
             faults,
             planted,
             shows: vec![(1, 10 * FLICKS + FLICKS * 4 / 5)],
+            ..Ask::default()
         };
         play(&cfg(delay, 1), &Card::default(), &ask, &mut |_| {
             Ok(Word::default())
@@ -338,6 +428,47 @@ mod tests {
         assert_eq!(six.copies[0].ran(), 204);
         for c in &six.copies {
             assert_eq!(c.end(), Some(End::Timeout));
+        }
+    }
+
+    #[test]
+    fn a_copy_that_sends_its_peers_other_entries_is_named_by_its_entries_not_a_field() {
+        let three = Config {
+            players: 3,
+            ..cfg(2, 8)
+        };
+        let to = |value: f64, player: u8| Play {
+            step: 10,
+            control: "push".into(),
+            value: json!(value),
+            to: Some(vec![player]),
+        };
+        for (planted, cause) in [
+            (Planted::None, "entries"),
+            (Planted::LocatesStateOnly, "state"),
+        ] {
+            let ask = Ask {
+                steps: 60,
+                plays: [(3u8, vec![to(3.0, 1), to(-8.0, 2)])].into_iter().collect(),
+                faults: Faults {
+                    direct: true,
+                    ..Faults::default()
+                },
+                planted,
+                ..Ask::default()
+            };
+            let played =
+                play(&three, &Card::default(), &ask, &mut |_| Ok(Word::default())).unwrap();
+            for (c, held) in played.copies[..2].iter().zip([3.0, -8.0]) {
+                let d = c.desync().unwrap();
+                assert_eq!(d["cause"], json!(cause));
+                if planted == Planted::None {
+                    assert_eq!((&d["player"], &d["step"]), (&json!(3), &json!(12)));
+                    assert!(d.get("module").is_none() && d.get("field").is_none());
+                }
+                // Each record keeps the entry it held for player 3 at step 12.
+                assert_eq!(c.record()["track"][0]["value"], json!(held));
+            }
         }
     }
 

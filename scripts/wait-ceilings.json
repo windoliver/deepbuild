@@ -655,6 +655,8 @@
   "tests/acceptance/2403/asks.test.ts": 1,
   "tests/acceptance/2403/helpers.ts": 2,
   "tests/acceptance/2403/shown.test.ts": 1,
+  "tests/acceptance/2492/twins/active-handle-left-running/packages/extension-host/src/host.ts": 4,
+  "tests/acceptance/2492/twins/late-handle-left-running/packages/extension-host/src/host.ts": 4,
   "tests/acceptance/2495/closure/report-handle.test.ts": 4,
   "tests/acceptance/2495/helpers.ts": 1,
   "tests/acceptance/25/fallbacks/cap.test.ts": 1,

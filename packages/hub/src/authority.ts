@@ -6,8 +6,9 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { writeJson } from './claude-settings.js';
-import { call, failure, notAnswered, withPrompt, type Reply } from './client.js';
+import { call, failure, notAnswered, Unanswered, withPrompt, type Reply } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { stopAsPeer } from './service.js';
 import { startOf } from './wire.js';
 
 type Obj = Record<string, unknown>;
@@ -25,6 +26,21 @@ export async function confirmed(command: string, detail?: string): Promise<strin
     return 'error' in reply ? reply.error.remediation : undefined;
   } catch (error) {
     return failure(error, hubAddress(null).path);
+  }
+}
+
+/**
+ * The installed hub stopped once the OS confirms you inside the hub (#1865), the stop itself asking, so the prompt
+ * names `command` once. Why it didn't stop, or undefined once its socket goes quiet.
+ */
+export async function stopAsYou(command: 'deep hub stop' | 'deep setup --undo'): Promise<string | undefined> {
+  const path = rootOf(installedRoot()).socket;
+  try {
+    const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
+    const peer = { pid: process.pid, start: (await startOf(process.pid)) ?? '' };
+    return await withPrompt(() => stopAsPeer(path, token, { command }, peer, () => confirmed(command)));
+  } catch (error) {
+    return error instanceof Unanswered || (error as NodeJS.ErrnoException).code === 'ENOENT' ? failure(error, path) : `${command}: the hub at unix:${path} didn't stop: ${error instanceof Error ? error.message : String(error)}`;
   }
 }
 
