@@ -1,0 +1,11 @@
+{
+  "#1576.bd04ffbe": [
+    "reads-every-row"
+  ],
+  "#1576.054c1375": [
+    "page-hook-frame-per-event"
+  ],
+  "#1576.61b3806a": [
+    "query-per-row"
+  ]
+}

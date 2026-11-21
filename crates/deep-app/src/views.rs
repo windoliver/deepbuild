@@ -237,7 +237,9 @@ struct TerminalTab {
     /// #1498: the cells the core's selection holds, each row's `[from, row, to]`, and whether your press is down.
     outline: Vec<[u16; 3]>,
     pressing: bool,
-    _poll: Task<()>,
+    /// Whether its grid is polled now: only while it is shown (#2661).
+    polled: bool,
+    _poll: Option<Task<()>>,
 }
 
 /// One shipped view, drawn as a dock panel.
@@ -257,6 +259,8 @@ pub struct Shipped {
     /// The Agents page's model, as the hub last gave it (`agents.read`), and the sync whose diff it shows.
     agents: Option<serde_json::Value>,
     reviewing: Option<String>,
+    /// Whether the Agents page's model is polled now: only while the page is shown (#2661).
+    agents_polled: bool,
     _agents_poll: Option<Task<()>>,
     /// When the soonest age the view shows next reads differently, and the timer that draws it then (#1546).
     age_tick: Option<(u64, Task<()>)>,
@@ -479,15 +483,6 @@ impl Shipped {
     }
 
     pub fn new(kind: Kind, cx: &mut Context<Self>) -> Self {
-        // The Agents page reads the hub's model while it is open.
-        let poll = (kind == Kind::Agents).then(|| {
-            cx.spawn(async move |this, cx| loop {
-                if this.update(cx, |this, cx| this.read_agents(cx)).is_err() {
-                    return;
-                }
-                cx.background_executor().timer(AGENTS_TICK).await;
-            })
-        });
         // The record and the bound values reach the view through the entity it observes (#1546).
         crate::record::on_move(cx, |this: &mut Shipped, cx| this.record_moved(cx));
         if kind == Kind::Session {
@@ -510,7 +505,8 @@ impl Shipped {
             popped: false,
             agents: None,
             reviewing: None,
-            _agents_poll: poll,
+            agents_polled: false,
+            _agents_poll: None,
             age_tick: None,
             kept: crate::list::Kept::default(),
             hovered: false,
@@ -1034,12 +1030,6 @@ impl Shipped {
             .and_then(|tab| tab["drawn"][0]["text"].as_str())
             .filter(|_| page.is_some())
             .map_or(copy::text("views.no_terminal").to_owned(), str::to_owned);
-        let poll = cx.spawn(async move |this, cx| loop {
-            cx.background_executor().timer(TERMINAL_TICK).await;
-            if this.update(cx, |this, cx| this.read_terminal(cx)).is_err() {
-                return;
-            }
-        });
         let focus = cx.focus_handle();
         TERMINAL_KEYS.with(|keys| *keys.borrow_mut() = Some(focus.clone()));
         self.terminal = Some(TerminalTab {
@@ -1049,9 +1039,81 @@ impl Shipped {
             words,
             outline: Vec::new(),
             pressing: false,
-            _poll: poll,
+            polled: false,
+            _poll: None,
         });
         self.read_terminal(cx);
+        self.poll_terminal(false, cx);
+    }
+
+    /// Whether the view's page is drawn: in a window of its own, or as the shell's page region (#2661).
+    fn page_shown(&self, cx: &App) -> bool {
+        self.popped
+            || (crate::open::shown_region(cx) == Some(crate::open::Region::Shipped(self.kind))
+                && crate::open::popped(cx) != Some(self.kind))
+    }
+
+    /// Polls the Agents page's model while the page is shown (#2661): right after the frame that shows it, then each
+    /// [`AGENTS_TICK`], until the first tick it isn't shown. The next draw that shows it starts it again.
+    fn poll_agents(&mut self, cx: &mut Context<Self>) {
+        if self.kind != Kind::Agents || self.agents_polled || !self.page_shown(cx) {
+            return;
+        }
+        self.agents_polled = true;
+        self._agents_poll = Some(cx.spawn(async move |this, cx| loop {
+            let shown = this.update(cx, |this, cx| {
+                this.agents_polled = this.page_shown(cx);
+                if this.agents_polled {
+                    this.read_agents(cx);
+                }
+                this.agents_polled
+            });
+            if !matches!(shown, Ok(true)) {
+                return;
+            }
+            cx.background_executor().timer(AGENTS_TICK).await;
+        }));
+    }
+
+    /// Whether the open Terminal tab is drawn: its session's page is shown (#2661).
+    fn terminal_shown(&self, cx: &App) -> bool {
+        let session = crate::open::opened_session(cx);
+        self.page_shown(cx)
+            && self
+                .terminal
+                .as_ref()
+                .is_some_and(|tab| session.as_deref() == Some(tab.session.as_str()))
+    }
+
+    /// Polls the open Terminal tab's grid while it is shown (#2661), as [`Shipped::poll_agents`] polls: each
+    /// [`TERMINAL_TICK`], at once when `now`, after the frame that shows it.
+    fn poll_terminal(&mut self, now: bool, cx: &mut Context<Self>) {
+        let shown = self.terminal_shown(cx);
+        let Some(tab) = self.terminal.as_mut().filter(|tab| shown && !tab.polled) else {
+            return;
+        };
+        tab.polled = true;
+        tab._poll = Some(cx.spawn(async move |this, cx| {
+            if !now {
+                cx.background_executor().timer(TERMINAL_TICK).await;
+            }
+            loop {
+                let shown = this.update(cx, |this, cx| {
+                    let shown = this.terminal_shown(cx);
+                    if let Some(tab) = this.terminal.as_mut() {
+                        tab.polled = shown;
+                    }
+                    if shown {
+                        this.read_terminal(cx);
+                    }
+                    shown
+                });
+                if !matches!(shown, Ok(true)) {
+                    return;
+                }
+                cx.background_executor().timer(TERMINAL_TICK).await;
+            }
+        }));
     }
 
     /// #1498: your pointer on the terminal tab's grid, to the core ([`crate::select::grid`]).
@@ -1272,6 +1334,7 @@ fn drew(name: &'static str, bounds: Bounds<Pixels>) {
 }
 
 /// Forgets the views laid out in earlier frames; [`crate::canvas::clear_items`] calls it.
+#[cfg(feature = "fixtures")]
 pub(crate) fn forget_drawn() {
     DRAWN.with(|drawn| {
         LEFT.with(|left| *left.borrow_mut() = std::mem::take(&mut *drawn.borrow_mut()))
@@ -2979,6 +3042,9 @@ impl Render for Shipped {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // The ages this frame writes, from here on, set the view's next tick (#1546).
         states::ages_written();
+        // A page shown again reads the hub once now, and polls it while it stays shown (#2661).
+        self.poll_agents(cx);
+        self.poll_terminal(true, cx);
         let chrome = chrome::of(window);
         // While setup hasn't finished, the count says so, never a number of asks (#1002).
         let unfinished = crate::setup::count();
@@ -4375,7 +4441,7 @@ fn terminal_view(tab: &TerminalTab, chrome: &chrome::Chrome) -> AnyElement {
             .children(screen.rows.into_iter().map(|row| div().child(row.text)))
             .into_any_element();
     }
-    cells::cells("terminal", screen)
+    cells::cells(cells::TERMINAL, screen)
         .flex_none()
         .into_any_element()
 }

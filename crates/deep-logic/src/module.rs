@@ -19,6 +19,7 @@ pub mod tuning;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
@@ -33,7 +34,7 @@ use serde_json::{json, Map, Value};
 use crate::bake::handed;
 use crate::piece::{self, History, Piece};
 use crate::services::Service;
-use crate::world::{carry_of, track_of, Entry, Record, World};
+use crate::world::{carry_of, track_of, Entry, Record, Snapshot, World};
 use crate::Planted;
 
 /// The interface this module implements, apart from the logic item kind of that name.
@@ -93,6 +94,8 @@ const PARAMS: [(&str, &str); 22] = [
         "fog",
         "{grid: <logic>.<name> (i32, two bits a player), size: [cols, rows], origin?: [x, z], cell?: m}",
     ),
+    // process@1's kind names, which its kind rules read (#980).
+    ("process", "{kinds: [name]}"),
     ("wasm", "text (the program's bytes, which the hub inlines)"),
 ];
 
@@ -362,13 +365,24 @@ fn rate(doc: &Value) -> Option<i64> {
         .filter(|g| *g > 0)
 }
 
-/// Every logic item's state after a step, as plain data, and its arrays by `<logic ID>.<name>`.
+/// Every logic item's state after a step, and its arrays by `<logic ID>.<name>`. The state is kept
+/// as raw bytes, its plain data written only when something reads it (#3056).
 #[derive(Debug)]
 pub struct State {
-    pub saved: Value,
+    items: Vec<Snapshot>,
+    saved: OnceLock<Value>,
+    /// Which step wrote it: the thread's world that is still at this state, if any, continues it.
+    token: u64,
     pub arrays: BTreeMap<String, Vec<Value>>,
     /// Each item's read region, its offset and size in bytes: what the host writes every step.
     pub reads: Vec<(usize, usize)>,
+}
+
+impl State {
+    /// The items' state as plain data, as [`World::saved`] gives it.
+    pub fn saved(&self) -> &Value {
+        self.saved.get_or_init(|| World::saved_of(&self.items))
+    }
 }
 
 impl Canonical for State {
@@ -377,7 +391,7 @@ impl Canonical for State {
     /// plays that carry the same state hash equal whatever clock brought them there (Carried
     /// state; #1040's pages).
     fn encode(&self, out: &mut Vec<u8>) {
-        for (i, item) in self.saved.as_array().into_iter().flatten().enumerate() {
+        for (i, item) in self.saved().as_array().into_iter().flatten().enumerate() {
             let fields = item.as_object().into_iter().flatten();
             for (k, v) in fields.filter(|(k, _)| *k != "next") {
                 out.extend(canonical(&Value::String(k.clone())));
@@ -397,6 +411,16 @@ impl Canonical for State {
 
 /// How many checked pieces a thread keeps.
 const PIECES_KEPT: usize = 8;
+
+/// The token the next state a step writes takes.
+static TOKENS: AtomicU64 = AtomicU64::new(1);
+
+thread_local! {
+    /// The world the last step on this thread left, with the token of the state it wrote and the
+    /// track entries it steps on: a step from that state continues it rather than loading the
+    /// state again (#3056), which seeking equals playing makes the same.
+    static LAST: RefCell<Option<(u64, Vec<Value>, World)>> = const { RefCell::new(None) };
+}
 
 /// The between-step services `logic.step` hands a document's logic items (Logic: between-step
 /// services): the build that links the modules answering them binds them once; with none bound,
@@ -522,6 +546,7 @@ fn step(v: &mut View<'_>) -> Result<(), OpError> {
     let takes = piece.items.iter().any(|i| i.carry_in.is_some());
     let keeps = piece.items.iter().any(|i| i.profile.is_some());
     let mut entries = Vec::new();
+    let mut given = Vec::new();
     for e in doc
         .get("track")
         .and_then(Value::as_array)
@@ -531,12 +556,20 @@ fn step(v: &mut View<'_>) -> Result<(), OpError> {
         let carried = takes && e.get("carry").is_some() || keeps && e.get("profile").is_some();
         if carried || e.get("control").and_then(Value::as_str).is_some_and(read) {
             entries.push(Entry::parse(e).ok_or_else(|| OpError::new("bad_input", e.to_string()))?);
+            given.push(e.clone());
         }
     }
     let track = track_of(&entries);
     let mut rec = Record::default();
-    let mut world = match v.carried(STATE).and_then(|s| s.as_typed::<State>()) {
-        None => World::new(
+    let carried = v.carried(STATE).and_then(|s| s.as_typed::<State>());
+    let last = LAST.with(|l| l.borrow_mut().take());
+    let mut world = match (&carried, last) {
+        (Some(s), Some((token, on, w)))
+            if s.token == token && on == given && Rc::ptr_eq(&w.piece, &piece) =>
+        {
+            Ok(w)
+        }
+        (None, _) => World::new(
             piece.clone(),
             track,
             false,
@@ -544,7 +577,7 @@ fn step(v: &mut View<'_>) -> Result<(), OpError> {
             &mut rec,
             None,
         ),
-        Some(s) => World::from_saved(piece.clone(), track, &s.saved, Planted::default()),
+        (Some(s), _) => World::from_saved(piece.clone(), track, s.saved(), Planted::default()),
     }
     .map_err(failed)?;
     // #860: the track is the current branch; the seen values it carries in are the host's run's,
@@ -567,16 +600,21 @@ fn step(v: &mut View<'_>) -> Result<(), OpError> {
         }
     }
     v.note_step(t / rate(doc).unwrap_or(STEP), 0);
-    v.write(
+    let token = TOKENS.fetch_add(1, Ordering::Relaxed);
+    let written = v.write(
         STATE,
         Val::typed(State {
-            saved: world.saved(),
+            items: world.snapshot(),
+            saved: OnceLock::new(),
+            token,
             arrays,
             reads: (piece.items.iter())
                 .map(|i| (i.reads_at as usize, i.layout.size("reads") as usize))
                 .collect(),
         }),
-    )
+    );
+    LAST.with(|l| *l.borrow_mut() = Some((token, given, world)));
+    written
 }
 
 /// The kit fixture's program, assembled from its text, with its hash.
@@ -923,4 +961,43 @@ fn budget(doc: &Value, input: &Value) -> Report {
     out.results
         .push(json!({"kind": "logic.budget", "report": reply["report"]}));
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #3056: a world that runs on from a step leaves the same state and arrays as one restored
+    /// from that step's state, which is what lets `step` keep the live world between steps.
+    #[test]
+    fn a_world_run_on_leaves_what_one_restored_from_its_state_does() {
+        let piece = FIXTURE.with(Rc::clone);
+        let step = piece.items[0].step;
+        let press = |k: i64, seq: u32| Entry {
+            t: k * step,
+            seq,
+            control: "press".into(),
+            value: 1.0.into(),
+            writer: "you".into(),
+            player: 1,
+            as_of: None,
+            arrived: 0,
+        };
+        let presses = [press(2, 0), press(5, 1), press(7, 2)];
+        let mut rec = Record::default();
+        let mut on = World::new(piece.clone(), track_of(&presses), false, Planted::default(), &mut rec, None)
+            .expect("the fixture starts");
+        on.run_through(3 * step, &mut rec);
+        let saved = World::saved_of(&on.snapshot());
+        assert_eq!(saved, on.saved(), "the snapshot's plain data is saved's");
+        let mut restored = World::from_saved(piece.clone(), track_of(&presses), &saved, Planted::default())
+            .expect("the state loads");
+        on.run_through(9 * step, &mut rec);
+        restored.run_through(9 * step, &mut Record::default());
+        assert_eq!(on.saved(), restored.saved());
+        for w in &piece.items[0].writes {
+            let (a, b) = (on.array(0, &w.name), restored.array(0, &w.name));
+            assert!(a.is_some() && a == b, "{}: {a:?} against {b:?}", w.name);
+        }
+    }
 }

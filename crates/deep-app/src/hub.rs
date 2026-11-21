@@ -198,11 +198,21 @@ impl HubClient {
             .ok_or_else(|| HubError::Io(io::ErrorKind::TimedOut.into()))
     }
 
-    /// The next line within `timeout`, or None when none came; a line cut by the timeout is kept for the next read.
+    /// The next line within `timeout`, or None when none came; a line cut by the timeout is kept for the next read. A
+    /// zero `timeout` takes only what has come, waiting for nothing (#2661): the window's idle tick never blocks.
     fn read_within(&mut self, timeout: Duration) -> Result<Option<Value>, HubError> {
-        self.writer
-            .set_read_timeout(Some(timeout.max(Duration::from_millis(1))))?;
-        match self.reader.read_line(&mut self.partial) {
+        let waits = !timeout.is_zero();
+        if waits {
+            self.writer
+                .set_read_timeout(Some(timeout.max(Duration::from_millis(1))))?;
+        } else {
+            self.writer.set_nonblocking(true)?;
+        }
+        let read = self.reader.read_line(&mut self.partial);
+        if !waits {
+            self.writer.set_nonblocking(false)?;
+        }
+        match read {
             Ok(0) => return Err(HubError::Protocol("the hub closed the connection".into())),
             Ok(_) => {}
             Err(e)
@@ -273,18 +283,19 @@ impl HubClient {
         let id = format!("app#{}", self.ids);
         self.send(json!({ "v": 1, "id": id, "method": method, "params": params }))?;
         loop {
-            let line = self.read()?;
+            let mut line = self.read()?;
             if line.get("id").and_then(Value::as_str) != Some(id.as_str()) {
                 self.pending.push_back(line);
                 continue;
             }
-            if let Some(error) = line.get("error") {
-                return Err(HubError::Refused(error.clone()));
+            // The line is the call's own: its result is taken out of it, never copied (#2661).
+            let mut reply = std::mem::take(line.as_object_mut().expect("a line with an id"));
+            if let Some(error) = reply.remove("error") {
+                return Err(HubError::Refused(error));
             }
-            return line
-                .get("result")
-                .cloned()
-                .ok_or_else(|| HubError::Protocol(line.to_string()));
+            return reply
+                .remove("result")
+                .ok_or_else(|| HubError::Protocol(Value::Object(reply).to_string()));
         }
     }
 }

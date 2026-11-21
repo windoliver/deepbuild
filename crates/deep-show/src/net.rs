@@ -44,6 +44,8 @@ pub struct Join {
 pub struct Given {
     links: BTreeMap<String, String>,
     relay_ca: Option<PathBuf>,
+    /// #280: Google Chrome, where net.budget's web part plays the piece in the web player.
+    pub chrome: Option<PathBuf>,
 }
 
 pub fn given(input: &Map<String, Value>) -> Option<Given> {
@@ -58,7 +60,15 @@ pub fn given(input: &Map<String, Value>) -> Option<Given> {
         None => None,
         Some(c) => Some(PathBuf::from(c.as_str()?)),
     };
-    Some(Given { links, relay_ca })
+    let chrome = match input.get("chrome") {
+        None => None,
+        Some(c) => Some(PathBuf::from(c.as_str()?)),
+    };
+    Some(Given {
+        links,
+        relay_ca,
+        chrome,
+    })
 }
 
 /// The net module, on logic: a build that leaves logic out leaves it out too.
@@ -128,6 +138,8 @@ pub struct MatchCall {
     on: Vec<String>,
     seeks: Vec<(u8, i64)>,
     full: bool,
+    /// #280: net.feel's check input but `steps`, which is the match's own.
+    feel: Option<Box<deep_net::feel::Feel>>,
     /// #276: each copy's own saves folder, its viewer's store (`saves_dirs: {"<player>": path}`).
     saves_dirs: BTreeMap<u8, PathBuf>,
     /// #552: the seed of each copy's test source in place of its secure one, the copies' views
@@ -293,6 +305,22 @@ fn parse_match(c: &Map<String, Value>) -> Option<MatchCall> {
                     .collect::<Option<_>>()?,
             },
             direct: relay.and_then(|r| r.get("direct")).and_then(Value::as_bool) == Some(true),
+            profile: None,
+            // #280: `[{player, to, steps}]`.
+            late: match relay.and_then(|r| r.get("late")) {
+                None => Vec::new(),
+                Some(l) => l
+                    .as_array()?
+                    .iter()
+                    .map(|l| {
+                        Some(deep_net::play::Late {
+                            player: player(l.get("player")?)?,
+                            to: player(l.get("to")?)?,
+                            steps: l.get("steps")?.as_i64().filter(|n| *n >= 0)?,
+                        })
+                    })
+                    .collect::<Option<_>>()?,
+            },
             fates,
             withhold,
         },
@@ -380,6 +408,14 @@ fn parse_match(c: &Map<String, Value>) -> Option<MatchCall> {
             None => None,
             Some(p) => Some(player(p)?),
         },
+        feel: match c.get("feel") {
+            None => None,
+            Some(f) => {
+                let mut f = f.clone();
+                f["steps"] = c.get("steps")?.clone();
+                Some(Box::new(deep_net::feel::Feel::of(&f).ok()?))
+            }
+        },
     })
 }
 
@@ -423,6 +459,36 @@ struct Setup {
 const DIRECT: Duration = Duration::from_secs(15);
 /// How long a copy waits for its seat, and for the match's other copies.
 const SEATING: Duration = Duration::from_secs(3600);
+
+/// #280: net.feel's profile, items and bounds are the brief's or the definition's, never the
+/// working agent's: the refusal of a writer's change to one among `stored`'s own checks, naming
+/// the field.
+fn feel_refusal(path: String, value: Value) -> deep_canvas::document::Issue {
+    let what = format!("{path} is net.feel's: its profile, items and bounds come from the brief or the definition, never from the working agent");
+    deep_canvas::document::Issue::envelope("not_your_layer", path, value, &what)
+}
+
+/// #280: a writer's patch whose op reaches a net.feel's profile, items or bounds, refused.
+pub(crate) fn feel_patched(stored: &Value, patch: &Value) -> Option<deep_canvas::document::Issue> {
+    patch.get("ops")?.as_array()?.iter().find_map(|op| {
+        let value = op.get("value").cloned().unwrap_or(Value::Null);
+        let path = deep_net::feel::locked(stored, op.get("path")?.as_str()?, &value)?;
+        Some(feel_refusal(path, value))
+    })
+}
+
+/// #280: a writer's whole document that changes a net.feel's profile, items or bounds, refused.
+pub(crate) fn feel_shown(stored: &Value, shown: &Value) -> Option<deep_canvas::document::Issue> {
+    let path = deep_net::feel::changed(stored, shown)?;
+    let value = shown.pointer(&format!("/{path}")).cloned();
+    Some(feel_refusal(path, value.unwrap_or(Value::Null)))
+}
+
+/// #280: the host's wall clock in ns, which only net.feel's planted wall-clock meter reads.
+fn wall_ns() -> i64 {
+    static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+    START.get_or_init(Instant::now).elapsed().as_nanos() as i64
+}
 
 /// The host's time since `start`, in flicks.
 fn since(start: Instant) -> i64 {
@@ -559,6 +625,8 @@ impl Hub<'_> {
             log: m.log,
             defect: m.plant.clone(),
             draw_seed: m.secure.unwrap_or(m.faults.seed),
+            // #280: only net.feel's planted wall-clock meter reads the host's clock.
+            clock: Some(wall_ns),
         };
         let (piece, track, doc) = (s.piece.clone(), s.track.clone(), s.doc.clone());
         let rounds = planted == Planted::HashRoundsFloats;
@@ -571,6 +639,8 @@ impl Hub<'_> {
         // #297: every copy checks each entry to a text control an entry text shows alike.
         let form = self.forms.get(&m.doc).cloned().unwrap_or_default();
         let (ty, lax) = (self.entry_type(&form), self.entry_lax());
+        // #280: the items net.feel names, whose positions its correction distance reads.
+        let items = m.feel.as_ref().map(|f| f.items.clone()).unwrap_or_default();
         // #277: the catch-up that applies missed messages in arrival order: its logic module takes
         // a step's entries in the order the copy entered them.
         let arrival = name == Some("net_catch_up_in_arrival_order");
@@ -593,6 +663,7 @@ impl Hub<'_> {
             }
             l.plant_ring(ring);
             l.worlds(&doc)?;
+            l.name_items(&doc, &items);
             l.range = deep_play::net::Range::of(&form, ty.clone(), lax);
             Ok(l)
         };
@@ -606,9 +677,27 @@ impl Hub<'_> {
                 let frame_ms = deep_canvas::budget::of(&rev)
                     .and_then(|(_, limits)| limits.cpu_ms)
                     .unwrap_or(deep_logic::budget::FRAME_NS / 1e6);
-                checks::budget(&s.cfg, &s.card, &ask, make, frame_ms, &m.on)
+                // #280: the web part plays in the web player in headless Chrome, where the
+                // scenario names Chrome; else it stays BLOCKED.
+                let chrome = self.scenario.net.chrome.clone();
+                let files = match chrome.is_some() && m.on.iter().any(|h| h == "web") {
+                    true => self.web_files(&m.doc, &s.track),
+                    false => Err(json!("net.budget measures no web part here")),
+                };
+                let mut web = |ask: &Value| match (&chrome, &files) {
+                    (Some(c), Ok(files)) => crate::net_web::measure(c, files, ask),
+                    (_, Err(e)) => Err(e.clone()),
+                    (None, _) => Err(json!("the scenario names no Chrome")),
+                };
+                let web: Option<deep_net::window::Web<'_>> = chrome.is_some().then_some(&mut web);
+                checks::budget(&s.cfg, &s.card, &ask, make, frame_ms, &m.on, web)
                     .map(|(p, c)| (p, Some(c)))
             }
+            Some("net.feel") => match m.feel.as_deref() {
+                Some(feel) => deep_net::feel::feel(&s.cfg, &s.card, &ask, make, feel)
+                    .map(|(p, c)| (p, Some(c))),
+                None => return json!({"code": "bad_input", "path": "feel"}),
+            },
             Some("net.desync") => {
                 checks::desync(&s.cfg, &s.card, &ask, make, m.seed).map(|(p, c)| (p, Some(c)))
             }
@@ -711,6 +800,8 @@ impl Hub<'_> {
         }
         if !m.renders.is_empty() {
             let mut renders = Vec::new();
+            let keeps = self.scenario.module_planted.as_deref() == Some(TRAIL_KEEPS_PREDICTED);
+            let mut kept = BTreeMap::new();
             for shown in &played.shown {
                 // The piece's own layer at the step the copy shows, drawn by render-back: the
                 // app's notice is the app's own and never in it.
@@ -730,7 +821,16 @@ impl Hub<'_> {
                                 sha
                             })
                     }
-                    None => self.piece_layer(&m.doc, at),
+                    // #265: a copy's frame drawn from its own logic arrays as it held them then,
+                    // a prediction before a rollback and the steps run again after one.
+                    None => match &shown.arrays {
+                        Some(arrays) if keeps => {
+                            let arrays = kept_points(&mut kept, shown, arrays);
+                            self.copy_layer(&m.doc, arrays, at)
+                        }
+                        Some(arrays) => self.copy_layer(&m.doc, arrays.clone(), at),
+                        None => self.piece_layer(&m.doc, at),
+                    },
                 };
                 let sha = match drawn {
                     Ok(sha) => sha,
@@ -804,6 +904,31 @@ impl Hub<'_> {
         match drawn.pointer("/snapshots/0/sha256").and_then(Value::as_str) {
             Some(sha) => Ok(sha.to_string()),
             None => Err(unavailable(drawn)),
+        }
+    }
+
+    /// #265: the SHA-256 of `doc`'s own layer drawn at `t` from a copy's logic `arrays`, as
+    /// render-back draws its current revision; a piece with no 3D layer draws as render-back
+    /// draws it.
+    fn copy_layer(&mut self, doc: &str, arrays: Value, t: i64) -> Result<String, Value> {
+        let (Some(session), Some(rev)) = (
+            self.scenario.sessions.keys().next().cloned(),
+            self.rev_at(doc, i64::MAX),
+        ) else {
+            return self.piece_layer(doc, t);
+        };
+        let Some(mut document) = self.revision(doc, rev).filter(crate::probe::draws_3d) else {
+            return self.piece_layer(doc, t);
+        };
+        let Value::Object(arrays) = arrays else {
+            return self.piece_layer(doc, t);
+        };
+        let held = document["arrays"].as_object().cloned().unwrap_or_default();
+        document["arrays"] = Value::Object(held.into_iter().chain(arrays).collect());
+        let drawn = self.render_back_3d(&session, rev, &document, t, None, &Default::default());
+        match drawn.pointer("/snapshots/0/sha256").and_then(Value::as_str) {
+            Some(sha) => Ok(sha.to_string()),
+            None => Err(json!({"code": "render_unavailable", "why": drawn})),
         }
     }
 
@@ -1193,4 +1318,35 @@ impl Hub<'_> {
         report.insert("direct".into(), json!(all_direct));
         Value::Object(report)
     }
+}
+
+/// #265's planted `trail_keeps_predicted_points`: a copy's frame draws each array's steps
+/// through its last frame's step as that frame held them, kept, so a trail draws the places it
+/// read from predicted steps after a rollback replaced them.
+pub(crate) const TRAIL_KEEPS_PREDICTED: &str = "trail_keeps_predicted_points";
+
+/// `arrays` with each array's steps through the copy's last drawn frame's step taken from
+/// that frame (the planted program); this frame's kept in turn.
+fn kept_points(
+    kept: &mut BTreeMap<u8, (i64, Value)>,
+    shown: &deep_net::play::Shown,
+    arrays: &Value,
+) -> Value {
+    let mut out = arrays.clone();
+    if let Some((last, before)) = kept.get(&shown.player) {
+        let through = |s: &Value| s["step"].as_i64().is_some_and(|k| k <= *last);
+        for (name, column) in out.as_object_mut().into_iter().flatten() {
+            let old = before[name]["steps"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            if let Some(steps) = column["steps"].as_array_mut() {
+                let mut merged: Vec<Value> = old.into_iter().filter(through).collect();
+                merged.extend(steps.drain(..).filter(|s| !through(s)));
+                *steps = merged;
+            }
+        }
+    }
+    kept.insert(shown.player, (shown.step, out.clone()));
+    out
 }

@@ -36,6 +36,12 @@
 // with the canvas's last frame, and one notice names the step it held and the failure's first line. The index page's
 // line that the player hasn't started, with its link to the fallback page, is for a page whose script never ran:
 // removing it is the element's first act.
+//
+// A piece that offers it has the viewer's measure tool (issue #1217; canvas primitives: Selection, viewer_tools.measure):
+// `measure` turns it on, a click on the canvas places a point where its ray meets the surface under it (A, then B, a
+// third A again), Esc clears both, and Tab and Enter place points at the parts' anchors. The core holds the points and
+// reads them, as the app does; the page draws the line, the points and the readout over the canvas, where nothing can
+// be clicked. All of it is the viewer's session state: no entry, value or patch reaches the piece.
 
 const bundle = JSON.parse(document.getElementById('deep-bundle').textContent);
 const hex = (buf) => Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
@@ -155,6 +161,9 @@ class DeepPlayer extends HTMLElement {
   #waiting = null;
   // #2856: where a failure the player can't recover from stopped the play, `{step, message}`, or null.
   #stopped = null;
+  // #1217: the measure's drawing over the canvas, and where a press that may be its click went down.
+  #measured = null;
+  #down = null;
 
   connectedCallback() {
     // #2856: the index page's line saying the player hasn't started goes first, so only a page whose script never ran
@@ -166,7 +175,85 @@ class DeepPlayer extends HTMLElement {
     this.#canvas.width = bundle.size[0];
     this.#canvas.height = bundle.size[1];
     this.appendChild(this.#canvas);
+    this.#canvas.addEventListener('pointerdown', (e) => { this.#down = e.button === 0 && this.measure ? [e.clientX, e.clientY] : null; });
+    this.#canvas.addEventListener('pointerup', (e) => {
+      const down = this.#down;
+      this.#down = null;
+      if (down && e.button === 0 && Math.hypot(e.clientX - down[0], e.clientY - down[1]) < 3) this.#place(down);
+    });
+    this.#canvas.addEventListener('keydown', (e) => {
+      if (!this.measure || e.metaKey || e.ctrlKey || e.altKey) return;
+      const took = e.key === 'Escape' ? this.#player.measure_clear() : !e.shiftKey && this.#player.measure_key(e.key);
+      if (!took) return;
+      e.preventDefault();
+      this.#draw();
+    });
     this.#load().catch((e) => this.#notice(String((e && e.message) || e)));
+  }
+
+  /** The viewer's measure tool: whether it is on. Setting it turns it on in a piece that offers it, or off. */
+  get measure() { return !!this.#player?.measure_on?.(); }
+  set measure(on) {
+    if (!this.#ready || !this.#player.measure_set) return;
+    this.#player.measure_set(!!on);
+    // The canvas takes the tool's keys only while it is on.
+    if (this.measure) this.#canvas.tabIndex = 0; else this.#canvas.removeAttribute('tabindex');
+    this.#draw();
+  }
+
+  /** The frame's part of the canvas's box, in client px: the box, less the bars its fit leaves. */
+  #frameBox() {
+    const r = this.#canvas.getBoundingClientRect();
+    const k = Math.min(r.width / this.#canvas.width, r.height / this.#canvas.height);
+    const [w, h] = [this.#canvas.width * k, this.#canvas.height * k];
+    return { left: r.left + (r.width - w) / 2, top: r.top + (r.height - h) / 2, k };
+  }
+
+  /** A click at client point `at` with the tool on: a point where its ray meets what the frame shows there. */
+  async #place(at) {
+    const box = this.#frameBox();
+    if (!this.#player.measure_press()) return;
+    // The frame's object-ID target reads back once this thread yields.
+    for (;;) {
+      const placed = this.#player.measure_click((at[0] - box.left) / box.k, (at[1] - box.top) / box.k);
+      if (placed === 1) this.#draw();
+      if (placed !== 0) return;
+      await new Promise((next) => setTimeout(next, 4));
+    }
+  }
+
+  /** The measure over the canvas, as the core gives it for the frame drawn: its line, its points and its readout,
+   * in the frame's px, where no pointer reaches them. */
+  #overlay() {
+    const shown = this.#player.measure_shown ? JSON.parse(this.#player.measure_shown()) : null;
+    this.#measured?.remove();
+    this.#measured = null;
+    if (!shown) return;
+    const el = (tag, attrs, text) => {
+      const e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+      for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
+      if (text !== undefined) e.textContent = text;
+      return e;
+    };
+    const [w, h] = [this.#canvas.width, this.#canvas.height];
+    const svg = el('svg', { 'data-deep-measure': '', 'aria-hidden': 'true', viewBox: `0 0 ${w} ${h}`,
+      style: `position:absolute;left:${this.#canvas.offsetLeft}px;top:${this.#canvas.offsetTop}px;width:${this.#canvas.offsetWidth}px;height:${this.#canvas.offsetHeight}px;pointer-events:none` });
+    const { a, b, text, color, ground } = shown;
+    if (a && b) svg.append(el('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: color, 'stroke-width': 2, 'stroke-linecap': 'round' }));
+    for (const p of [a, b]) if (p) svg.append(el('circle', { cx: p[0], cy: p[1], r: 4, fill: color }));
+    if (a && b && text) {
+      // A plate beside the line's middle, kept inside the frame.
+      const [pw, ph] = [text.length * 7.3 + 16, 24];
+      const x = Math.min(Math.max((a[0] + b[0]) / 2 + 12, 0), Math.max(w - pw, 0));
+      const y = Math.min(Math.max((a[1] + b[1]) / 2 - ph / 2, 0), Math.max(h - ph, 0));
+      svg.append(el('rect', { x: x + 0.5, y: y + 0.5, width: pw - 1, height: ph - 1, fill: ground, stroke: color }));
+      svg.append(el('text', { x: x + 8, y: y + 16, fill: color, style: 'font:12px ui-monospace,SFMono-Regular,Menlo,monospace' }, text));
+    }
+    this.appendChild(svg);
+    this.#measured = svg;
+    // The readout is said once when it changes, as a readout of the piece is.
+    if (this.#live && text && this.#said.get('\0measure') !== text) this.#live.textContent = text;
+    this.#said.set('\0measure', text ?? '');
   }
 
   get ready() { return this.#ready; }
@@ -801,6 +888,7 @@ class DeepPlayer extends HTMLElement {
       if (this.#firstFrameMs === null) this.#firstFrameMs = performance.now();
     }
     this.#announce();
+    this.#overlay();
     const now = this.#stages.filter((s) => s.t <= this.#t).pop()?.id ?? null;
     if (now !== this.#stage) {
       this.#stage = now;

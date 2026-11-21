@@ -1261,8 +1261,10 @@ pub fn marks2d_planted(planted: relations::Planted) -> Module {
 #[derive(Debug)]
 pub struct Drawing {
     pub frame: Frame,
-    pub runs: BTreeMap<String, Arc<Run>>,
-    pub animated: BTreeMap<String, Vec<crate::animated::Unit>>,
+    /// Each text's run and each animated text's units, shared with the next frame that replaces
+    /// marks in this one's list (#2660), never copied.
+    pub runs: Arc<BTreeMap<String, Arc<Run>>>,
+    pub animated: Arc<BTreeMap<String, Vec<crate::animated::Unit>>>,
     /// The marks this frame put into its draw list: every mark when it built the list, the
     /// changed items' when it replaced them in the last one (#896).
     pub built: usize,
@@ -1303,7 +1305,7 @@ impl Canonical for Frame {
 
 impl deep_canvas::schedule::Canonical for Drawing {
     fn encode(&self, out: &mut Vec<u8>) {
-        deep_canvas::schedule::Canonical::encode(&(&self.frame, &self.runs, &self.animated), out);
+        deep_canvas::schedule::Canonical::encode(&(&self.frame, &*self.runs, &*self.animated), out);
     }
 }
 
@@ -1747,15 +1749,21 @@ fn item(v: &mut View<'_>) -> Result<(), OpError> {
     v.write("marks2d.item", Val::typed(placed))
 }
 
-/// What a frame reads of the document beside its items: every other member, as written.
-fn envelope_of(doc: &Value) -> Key {
+/// What a frame reads of the document beside its items: every other member, as written. The
+/// revision's own key of them stands in for hashing them again, with the ID, which it leaves out
+/// (#2660).
+fn envelope_of(v: &mut View<'_>, doc: &Value) -> Result<Key, OpError> {
     let mut h = Hasher::new("marks2d.envelope");
+    if let Some(kept) = v.envelope()? {
+        let id = doc.get("id").and_then(Value::as_str).unwrap_or_default();
+        return Ok(h.key(&kept).text(id).finish());
+    }
     for (k, v) in doc.as_object().into_iter().flatten() {
         if k != "items" {
             h.text(k).bytes(&canonical(v));
         }
     }
-    h.finish()
+    Ok(h.finish())
 }
 
 /// The last frame's draw list with the marks of the items whose own marks changed replaced in
@@ -1835,8 +1843,8 @@ fn replaced(v: &mut View<'_>, envelope: Key) -> Result<Option<Drawing>, OpError>
     }
     Ok(Some(Drawing {
         frame,
-        runs: last.runs.clone(),
-        animated: last.animated.clone(),
+        runs: Arc::clone(&last.runs),
+        animated: Arc::clone(&last.animated),
         built,
         damage,
         basis: Some(Basis {
@@ -1886,7 +1894,7 @@ fn warp_time(v: &mut View<'_>) -> Result<(), OpError> {
 /// The frame's draw list from every item's evaluated fields and transform.
 fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     let doc = v.document()?;
-    let envelope = envelope_of(doc);
+    let envelope = envelope_of(v, doc)?;
     if let Some(drawing) = replaced(v, envelope)? {
         return v.write("marks2d.frame", Val::typed(drawing));
     }
@@ -2027,8 +2035,8 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
         "marks2d.frame",
         Val::typed(Drawing {
             frame,
-            runs,
-            animated,
+            runs: Arc::new(runs),
+            animated: Arc::new(animated),
             built,
             damage: Vec::new(),
             basis,

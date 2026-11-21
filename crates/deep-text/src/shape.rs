@@ -881,7 +881,11 @@ impl Shaper {
     /// `text` laid out in the spec's style, whole (no line limit applied): from the run cache, or
     /// laid out now and kept there: from its paragraphs, or (#1215) set in columns.
     fn run(&mut self, spec: &Spec<'_>, text: &str) -> Arc<Shaped> {
-        let key = Key::of(spec, text, false);
+        self.run_keyed(spec, text, Key::of(spec, text, false))
+    }
+
+    /// [`Self::run`] under `key`, the run's key already built.
+    fn run_keyed(&mut self, spec: &Spec<'_>, text: &str, key: Key) -> Arc<Shaped> {
         if let Some(run) = cache::get(&key) {
             return run;
         }
@@ -922,14 +926,16 @@ impl Shaper {
     /// again. Text that overflows its box or line limit is cut to fit with an ellipsis; a bound
     /// value or masked text never is, and is drawn whole.
     pub fn shape(&mut self, spec: &Spec<'_>) -> Arc<Shaped> {
-        let fitted = Key::of(spec, spec.text, true);
-        if let Some(run) = cache::get(&fitted) {
+        let key = Key::of(spec, spec.text, true);
+        if let Some(run) = cache::get(&key) {
             return run;
         }
-        let whole = self.run(spec, spec.text);
+        // The whole run's key is the fitted one's, so a text that fits builds one (#2660).
+        let whole = self.run_keyed(spec, spec.text, key.whole());
         if fits(spec, &whole) || spec.bound || spec.mask {
             return whole;
         }
+        let fitted = Key::of(spec, spec.text, true);
         let reshaping = cache::planted() == Some(Planted::ReshapingFit);
         // The longest prefix, by grapheme (#297: a cut never splits one), whose run with an
         // ellipsis fits. Each candidate's run comes through the cache, so no prefix is shaped
