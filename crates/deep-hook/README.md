@@ -2,14 +2,15 @@
 
 ## What it is for
 
-The binary every agent hook runs as `deep-hook <agent> <event>`: it stamps the call with its seq and ID, matches it against the guard entries in `~/.deepbuild/rules.json`, forwards it to the hub and prints the reply; with the hub away it applies the fail-closed entries, allows the rest and spools the request for replay. It is also Claude Code's status line command, its background Stop waiter and, as `deep-hook mcp actions`, its deep-actions MCP server (#824), so a session runs one Node server rather than two. It only appends events and reads `rules.json`; it never holds the control token (technical design: deep-hook).
+The binary every agent hook runs as `deep-hook <agent> <event>`: it stamps the call with its seq and ID, matches it against the guard entries in `~/.deepbuild/rules.json`, forwards it to the hub and prints the reply; with the hub away it applies the fail-closed entries, allows the rest and spools the request for replay. It is also Claude Code's status line command, its background Stop waiter and, as `deep-hook mcp actions`, its deep-actions MCP server (#824), so a session runs one Node server rather than two. It only appends events and reads `rules.json`; it never holds the control token, and its waiter says hello as its session's waiter, which the hub binds by the agent process it runs under (#1851; technical design: deep-hook, Socket roles).
 
 ## Where new code goes
 
-- `src/main.rs`: the hook, spool, status line and waiter paths.
+- `src/main.rs`: the hook, spool and status line paths, and what the waiter reads of its agent.
+- `src/waiter.rs`: the waiter's wait for its session's answers, bound to the session by its agent (#1851).
 - `src/matcher.rs`: each `match` predicate of a guard@1 entry. `src/shell.rs`: the shell reader those predicates read a command through.
 - `default-rules.json`: the shipped guard entries, which packages/hub/src/setup.ts installs into `rules.json`.
-- Tests: unit tests in each file's `#[cfg(test)]` module; the binary's behavior in `tests/cli.rs`; acceptance suites under tests/acceptance drive the built binary.
+- Tests: unit tests in each file's `#[cfg(test)]` module; the binary's behavior in `tests/cli.rs`, and the waiter's against a stand-in hub in `tests/waiter.rs`; acceptance suites under tests/acceptance drive the built binary.
 - A public item in `src/matcher.rs` or `src/shell.rs` is an interface: the interfaces lane (scripts/api-surface.mjs) diffs it.
 
 ## What it may import

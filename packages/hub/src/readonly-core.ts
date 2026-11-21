@@ -69,6 +69,7 @@ export class ReadOnlyCore {
     return Promise.reject(Error(this.why.reason));
   }
   mcpHello(): Promise<{ session: null }> { return Promise.resolve({ session: null }); }
+  waiterHello(): Promise<{ refused: string }> { return Promise.resolve({ refused: `The hub can't read its record, so it binds no waiter: ${this.why.reason}` }); }
   extensionHook(): Promise<null> { return Promise.resolve(null); }
   hookReply(): Promise<Obj> { return Promise.resolve({}); }
   /** No record to keep the rest in: the parts joined as they came (#1296). */
