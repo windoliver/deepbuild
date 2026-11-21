@@ -27,6 +27,7 @@ impl Groups {
         layer: &Layer<'_>,
     ) -> Result<(wgpu::Texture, Vec<BlendInputs>, Vec<Value>), Value> {
         self.free.append(&mut self.taken);
+        self.ran.clear();
         // A frame isolates at most 32 groups (Frame and group).
         let drawn = layer
             .layers

@@ -39,6 +39,14 @@ pub enum Planted {
     ShadowInsideOutline,
     ShadowRemovesAmbient,
     ShadowEdgeAliased,
+    /// #161's wrong programs (tests/acceptance/161/README.md: Planted programs), each on one
+    /// operator a group's pass names.
+    InvertOnPremultiplied,
+    InvertWithoutAlphaGuard,
+    KeyKeepsColorAtAlpha0,
+    TwirlCenterFromFrameOrigin,
+    BlurRadiusInDevicePx,
+    SliceShiftSeededByFrame,
 }
 
 /// A refusal as a call answers it.

@@ -638,6 +638,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
 
     let mut listed = Vec::with_capacity(count as usize);
     let mut lumas: Vec<Vec<f32>> = Vec::new();
+    // #161: each frame's marks and time, and the packs' operators, for the reseed rule.
+    let mut seen: Vec<crate::reseed::Seen> = Vec::new();
+    let mut named = Arc::new(Vec::new());
     let mut switches = Vec::new();
     let mut movie = Movie::new(out, export, size);
     let played = (|| -> Result<(), Value> {
@@ -673,6 +676,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             // #1619: what the look's finish pass is given for this frame, on any backend.
             let finish_hash = frame.print.as_ref().map(|p| p.finish_hash(size));
+            if checks_flicker {
+                seen.push((frame.layers.clone(), at(n)));
+                named = frame.packs.clone();
+            }
             *marks.lock().unwrap_or_else(|e| e.into_inner()) = Arc::new(frame);
             {
                 let win = app.window.as_ref().expect("opened");
@@ -790,6 +797,11 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     }
     if checks_flicker {
         reply["flicker"] = crate::print2d::flicker(&lumas, fps as f64);
+        let reseed = crate::reseed::reseeded(&seen, &lumas, &named);
+        if !reseed.is_empty() {
+            reply["flicker"]["verdict"] = json!("FAIL");
+            reply["flicker"]["reseed"] = json!(reseed);
+        }
     }
     if export {
         reply["export"] = movie.finish()?;
