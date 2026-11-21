@@ -376,6 +376,34 @@ impl Bvh {
         blocked
     }
 
+    /// Each triangle in a leaf whose box `reaches` lets in, with its index among the triangles
+    /// the tree was built from: a query over a region that isn't a ray (#1782: the fan of rays
+    /// from a camera to an edge).
+    pub(crate) fn each_in(
+        &self,
+        reaches: impl Fn(V3, V3) -> bool,
+        mut each: impl FnMut(usize, &[V3; 3]),
+    ) {
+        let mut stack = [0u32; 64];
+        let mut top = usize::from(!self.nodes.is_empty());
+        while top > 0 {
+            top -= 1;
+            let node = &self.nodes[stack[top] as usize];
+            if !reaches(node.min, node.max) {
+                continue;
+            }
+            if !node.leaf {
+                stack[top] = node.start;
+                stack[top + 1] = node.end;
+                top += 2;
+                continue;
+            }
+            for &t in &self.order[node.start as usize..node.end as usize] {
+                each(t, &self.tris[t]);
+            }
+        }
+    }
+
     /// The nearest triangle to `p`: its squared distance and its index, the lower on a tie.
     fn nearest(&self, p: V3) -> (f64, Option<usize>) {
         let mut best = (f64::INFINITY, None);

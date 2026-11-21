@@ -1,0 +1,120 @@
+The #2738 suite run at base commit 86b99ac36 ("Merge pull request #2932 …", main; no implementation of #2738), on
+macOS 27.2 arm64 (a Mac17,10, Apple M5 Max; rustup 1.99.1, Node 24.22.2, vitest 5.0.5; Docker 29.5.2, whose VM has 4
+CPUs and 5.77 GiB, shared with other sessions' containers), the checkout's path redacted to <checkout>. The Mac was
+shared and loaded (load average 200 to 285). Each file ran on its own, through the throttle's test class but for
+criterion 2 (two `cargo tree` commands, run directly):
+
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node scripts/throttle.mjs test --wait 480 -- \
+    npx vitest run --root tests/acceptance/2738 <file> --testTimeout=600000
+
+deep-gpu was built first through the throttle's build class (`cargo build --locked --bin deep-gpu`: 3 min 25 s once
+granted, after about 4 h 23 min in the build queue), so criterion 3's own build found it fresh.
+
+Result: 3 of 3 tests fail, none passes; each fails at its own assertion, for the reason the README names.
+
+==== AC2 #2738.4e863912 (ac2-no-meshopt.test.ts): FAIL, 2.1 s ====
+
+Both commands show the path deep-physics-rapier → deep-canvas-scene3d → meshopt:
+
+AssertionError: neither graph has a path from deep-physics-rapier to meshopt:
+  cargo tree --locked -e normal,build -i meshopt shows a path from deep-physics-rapier to meshopt:
+meshopt v0.7.0
+├── deep-canvas-scene3d v0.0.0
+│   ├── deep-canvas-effects v0.0.0
+│   │   … (deep-app, deep-replica, deep-effects-render, deep-gpu-layer, deep-player, deep-scene3d-render, deep-show)
+│   ├── deep-canvas-loop v0.0.0
+│   │   …
+│   ├── deep-canvas-media v0.0.0
+│   │   …
+│   ├── deep-gpu-layer v0.0.0
+│   ├── deep-physics-rapier v0.0.0
+│   │   ├── deep-gpu-layer v0.0.0
+│   │   ├── deep-play v0.0.0 (*)
+│   │   ├── deep-player v0.0.0
+│   │   └── deep-show v0.0.0
+│   ├── deep-play v0.0.0 (*)
+│   ├── deep-player v0.0.0
+│   ├── deep-scene3d-render v0.0.0 (*)
+│   └── deep-show v0.0.0
+└── deep-gpu-layer v0.0.0
+  cargo tree --locked -e normal,build -i meshopt -p deep-physics-rapier shows a path from deep-physics-rapier to meshopt:
+meshopt v0.7.0
+└── deep-canvas-scene3d v0.0.0
+    └── deep-physics-rapier v0.0.0: expected [ …(2) ] to deeply equal []
+
+Checked apart from the suite, the judge's "no path" branch: for a package that doesn't reach meshopt,
+`cargo tree --locked -e normal,build -i meshopt -p deep-canvas-physics` prints no tree and exits 101 with
+"error: package ID specification `meshopt` did not match any packages", which the test reads as no path.
+
+==== AC1 #2738.a13e05b2 (ac1-linux-build.test.ts): FAIL, 37.9 min (third run) ====
+
+The image check passes (no c++, g++ or clang++ in rust:1.99.1-slim-bookworm for linux/amd64; it has /usr/bin/cc and
+/usr/bin/gcc). Both builds then fail at meshopt's build script, the issue's reason:
+
+AssertionError: each build succeeds in rust:1.99.1-slim-bookworm (linux/amd64):
+  cargo build --locked --bin deep-physics in rust:1.99.1-slim-bookworm (linux/amd64) failed (exit 101):
+warning: meshopt@0.7.0: Compiler family detection failed due to error: ToolNotFound: failed to find tool "c++": No such file or directory (os error 2)
+error: failed to run custom build command for `meshopt v0.7.0`
+
+Caused by:
+  process didn't exit successfully: `/target/debug/build/meshopt-c94f09e551012528/build-script-build` (exit status: 1)
+  --- stdout
+  … (cc-rs's environment reads: CXX_x86_64-unknown-linux-gnu, HOST_CXX, CXX = None, …)
+  cargo:warning=Compiler family detection failed due to error: ToolNotFound: failed to find tool "c++": No such file or directory (os error 2)
+  …
+  --- stderr
+  error occurred in cc-rs: failed to find tool "c++": No such file or directory (os error 2)
+
+  cargo build --locked -p deep-physics-rapier --bin deep-physics in rust:1.99.1-slim-bookworm (linux/amd64) failed (exit 101):
+warning: meshopt@0.7.0: Compiler family detection failed due to error: ToolNotFound: failed to find tool "c++": No such file or directory (os error 2)
+error: failed to run custom build command for `meshopt v0.7.0`
+
+Caused by:
+  process didn't exit successfully: `/target/debug/build/meshopt-cb184116bfe82e83/build-script-build` (exit status: 1)
+  … (the same)
+  --- stderr
+  error occurred in cc-rs: failed to find tool "c++": No such file or directory (os error 2)
+: expected [ …(2) ] to deeply equal []
+
+The two runs before it didn't reach meshopt, for reasons outside the program, and failed (never passed):
+- Run 1 (34.1 min, `CARGO_BUILD_JOBS=2` then): the root build was OOM-killed in the shared VM (docker run exit 137),
+  and the `-p` build's linker crashed under QEMU ("cc: internal compiler error: Segmentation fault signal terminated
+  program collect2" linking slotmap's build script).
+- Run 2 (25.3 min, one job): both builds OOM-killed (exit 137). `docker events` showed `oom` for both containers, and
+  for four other sessions' containers in the same half hour; at times two other `rust:1.99.1-bookworm` builds held
+  4.4 of the VM's 5.77 GiB.
+After run 1 the suite builds with one job, and labels a killed or crashed toolchain `INCONCLUSIVE:` in its message;
+run 3 started once the VM's containers held under 1 GiB. Its caches (crates, git sources, built dependencies) are under
+target/acceptance-2738-linux/, so a later run starts warm.
+
+==== AC3 #2738.99312f73 (ac3-proxy-band.test.ts): FAIL, 5.3 s ====
+
+The scenes draw (view3d answers both calls), the ball's rows name the bands the test expects, and the two frames'
+pixel hashes differ; the base has no triangle count for an item without mesh levels (README: Assumed surfaces 1):
+
+AssertionError: the renderer draws the proxy band at more than 0 and at most 30% of the full mesh's triangles:
+  the ball in its proxy band: the ball's row reports no triangles drawn (triangles: null)
+  the ball in its full band: the ball's row reports no triangles drawn (triangles: null): expected [ …(2) ] to deeply equal []
+
+The same two calls run apart from the suite on the same binary, each frame's `lod` row and pixel hash:
+  proxy band: {"item":"ball","bands":["proxy"],"blend":null,"level":null,"errors_px":null,"triangles":null,"shadow_level":null}
+              pixel_hash be9ffbeb039ec38449441802502db25418d3b9595a90e1d145dad8abe7f0e577
+  full band:  {"item":"ball","bands":["full"],"blend":null,"level":null,"errors_px":null,"triangles":null,"shadow_level":null}
+              pixel_hash 55445e75fe0f827f349499271dcc906d5edcd133beb3a5dd4579574c640d5f0f
+(again after the plant was reverted and deep-gpu rebuilt: the same two hashes).
+
+The planted renderer (README: Planted wrong programs): `crates/deep-canvas-scene3d/src/scene/scattered.rs`, after
+`lod_of`'s `proxy_mesh` match, `let proxy_mesh = proxy_mesh.filter(|_| false);`, so the ball keeps its full mesh in its
+proxy band; deep-gpu rebuilt through the throttle (1 min 23 s), the test run (3.7 s), the edit reverted with
+`git checkout -- <file>` and deep-gpu rebuilt. The test fails on it, and the pixel line names the full mesh:
+
+AssertionError: the renderer draws the proxy band at more than 0 and at most 30% of the full mesh's triangles:
+  the ball in its proxy band: the ball's row reports no triangles drawn (triangles: null)
+  the ball in its full band: the ball's row reports no triangles drawn (triangles: null)
+  the proxy band draws the same pixels as the full band (55445e75fe0f827f349499271dcc906d5edcd133beb3a5dd4579574c640d5f0f): the renderer drew the full mesh: expected [ …(3) ] to deeply equal []
+
+On the base, the pixel line passes: the base draws its proxy (made by meshoptimizer while scene3d evaluates the scene),
+which differs from the full mesh's pixels. So once a row reports its triangles, a program that keeps the base's
+drawing passes this test, and one that draws the full mesh in the proxy band fails it whatever it reports.
+
+The type-check, `node node_modules/typescript/bin/tsc -p tests/acceptance/2738/tsconfig.json`, exits 0.

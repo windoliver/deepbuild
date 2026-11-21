@@ -1,0 +1,140 @@
+# #2616's acceptance suite on its base, e575a47af2bf04e21970f058ecb271612527f8cc (origin/main, 2026-11-20), in a
+# checkout with nothing of #2616 applied, run once on 2026-11-20 at 16:20 -0800 from the repository root:
+#   NO_COLOR=1 npx vitest run tests/acceptance/2616 --testTimeout=600000
+# vitest 5.0.5, Node 24.22.2, macOS, 18 cores, one-minute load about 205 to 221 throughout (heavily loaded).
+# Wall time 22.9 s (npx, the root config's load, both files); vitest's Duration 14.12 s.
+# <checkout> stands for this checkout's path.
+#
+# AC1 #2616.eb2caca2 (two-pages.test.ts): FAILS at its assertion (AssertionError, innermost frame
+#      two-pages.test.ts:11). The pull request reads `open`; the message's first line names the run:
+#      "e2e (shard 11 of 16)" (check run 41261600038, in_progress), run 38 of 45, on page 2 of 2. The base asked for
+#      the check runs once, read page 1 (30 runs, all completed), never asked for the page the forge's Link header
+#      named, and read the commit status. 913 ms.
+# AC2 #2616.f16645e8 (two-pages.test.ts): PASSES. The base meets it: it reads page 1 alone, all completed, and the
+#      head has no status. Its wrong program is the twin next-page-reads-running (below).
+# AC3 #2616.58c0bef1 (one-page.test.ts): PASSES. The base meets it: one request for check runs, `checks running`.
+#      Its wrong program is the twin asks-past-last-page, the issue's planted reader (below).
+#
+# How long each test took: the default reporter printed AC1's time (913 ms) and no time for the two tests that
+# passed. vitest's results cache for this run gives each file's time, its tests and the root setup file's hooks
+# included: two-pages.test.ts 9,845 ms (AC1 and AC2), one-page.test.ts 9,410 ms (AC3). The base wasn't run again
+# for the passing tests' own times (one run per file). On the other programs below, run with the verbose reporter,
+# each test took 62 to 328 ms.
+
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ tests/acceptance/2616/two-pages.test.ts (2 tests | 1 failed) 9845ms
+   × AC1 #2616.eb2caca2 against a recorded forge whose head has 45 check runs over two pages, its one unfinished run on the second, the pull request reads checks running 913ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2616/two-pages.test.ts > AC1 #2616.eb2caca2 against a recorded forge whose head has 45 check runs over two pages, its one unfinished run on the second, the pull request reads checks running
+AssertionError: "e2e (shard 11 of 16)" (check run 41261600038, in_progress), run 38 of 45, on page 2 of 2 is the head's one unfinished run, and the pull request reads open
+the recorded forge was asked:
+  GET /repos/acme/widgets/pulls/7
+  GET /repos/acme/widgets/commits/7da9c472b9b70b3a49b260b30d933930167546aa/check-runs
+  GET /repos/acme/widgets/commits/7da9c472b9b70b3a49b260b30d933930167546aa/status: expected 'open' to be 'checks running' // Object.is equality
+
+Expected: "checks running"
+Received: "open"
+
+ ❯ tests/acceptance/2616/two-pages.test.ts:11:190
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 2 passed (3)
+   Start at  16:20:16
+   Duration  14.12s (tests 81%, transform 12%, import 5%, setup 1%)
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# The twins, each laid over this checkout's packages/hub/src/forge.ts at the base (the file restored after each), and
+# the file that tests its criterion run once with --reporter=verbose. Both twins first type-checked under
+# packages/hub/tsconfig.json's options (tsc exit 0).
+#
+# Twin next-page-reads-running (AC2), 2026-11-20 16:22 -0800, wall time 16 s:
+#   NO_COLOR=1 npx vitest run tests/acceptance/2616/two-pages.test.ts --testTimeout=600000 --reporter=verbose
+# AC1 passes on it (the shortcut answers running whenever the forge names a next page); AC2 fails at its assertion:
+# the head whose 45 runs all completed reads `checks running`.
+
+ RUN  v5.0.5 <checkout>
+
+ ✓ tests/acceptance/2616/two-pages.test.ts > AC1 #2616.eb2caca2 against a recorded forge whose head has 45 check runs over two pages, its one unfinished run on the second, the pull request reads checks running 110ms
+ × tests/acceptance/2616/two-pages.test.ts > AC2 #2616.f16645e8 with every run on both pages completed and no pending status, the same head of 45 check runs reads open 98ms
+   → all 45 of the head's check runs, 30 on page 1 and 15 on page 2, completed, the head has no commit status, and the pull request reads checks running
+the recorded forge was asked:
+  GET /repos/acme/widgets/pulls/7
+  GET /repos/acme/widgets/commits/7da9c472b9b70b3a49b260b30d933930167546aa/check-runs: expected 'checks running' to be 'open' // Object.is equality
+
+ FAIL  tests/acceptance/2616/two-pages.test.ts > AC2 #2616.f16645e8 with every run on both pages completed and no pending status, the same head of 45 check runs reads open
+AssertionError: all 45 of the head's check runs, 30 on page 1 and 15 on page 2, completed, the head has no commit status, and the pull request reads checks running
+the recorded forge was asked:
+  GET /repos/acme/widgets/pulls/7
+  GET /repos/acme/widgets/commits/7da9c472b9b70b3a49b260b30d933930167546aa/check-runs: expected 'checks running' to be 'open' // Object.is equality
+
+Expected: "open"
+Received: "checks running"
+
+ ❯ tests/acceptance/2616/two-pages.test.ts:22:229
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  16:22:39
+   Duration  6.93s (tests 97%, transform 1%, import 1%, setup 1%)
+
+# Twin asks-past-last-page (AC3, the issue's planted reader), 2026-11-20 16:23 -0800, wall time 15 s:
+#   NO_COLOR=1 npx vitest run tests/acceptance/2616/one-page.test.ts --testTimeout=600000 --reporter=verbose
+# AC3 fails at its first assertion, naming the request for a page the forge didn't name.
+
+ RUN  v5.0.5 <checkout>
+
+ × tests/acceptance/2616/one-page.test.ts > AC3 #2616.58c0bef1 a head with 12 check runs, one of them unfinished, reads checks running from one request for check runs, and asks for no page the forge didn't name 200ms
+   → the reader asked for a page of check runs the recorded forge didn't name: GET /repos/acme/widgets/commits/585469ebd4a7e211097e37fed1ff7632524cd043/check-runs?per_page=100&page=2
+the recorded forge was asked:
+  GET /repos/acme/widgets/pulls/7
+  GET /repos/acme/widgets/commits/585469ebd4a7e211097e37fed1ff7632524cd043/check-runs?per_page=100&page=1
+  GET /repos/acme/widgets/commits/585469ebd4a7e211097e37fed1ff7632524cd043/check-runs?per_page=100&page=2  (not in the recording: answered 404): expected [ Array(1) ] to deeply equal []
+
+ FAIL  tests/acceptance/2616/one-page.test.ts > AC3 #2616.58c0bef1 a head with 12 check runs, one of them unfinished, reads checks running from one request for check runs, and asks for no page the forge didn't name
+AssertionError: the reader asked for a page of check runs the recorded forge didn't name: GET /repos/acme/widgets/commits/585469ebd4a7e211097e37fed1ff7632524cd043/check-runs?per_page=100&page=2
+the recorded forge was asked:
+  GET /repos/acme/widgets/pulls/7
+  GET /repos/acme/widgets/commits/585469ebd4a7e211097e37fed1ff7632524cd043/check-runs?per_page=100&page=1
+  GET /repos/acme/widgets/commits/585469ebd4a7e211097e37fed1ff7632524cd043/check-runs?per_page=100&page=2  (not in the recording: answered 404): expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "GET /repos/acme/widgets/commits/585469ebd4a7e211097e37fed1ff7632524cd043/check-runs?per_page=100&page=2",
++ ]
+
+ ❯ tests/acceptance/2616/one-page.test.ts:13:177
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  16:23:13
+   Duration  6.50s (tests 87%, transform 7%, import 4%, setup 2%)
+
+# ---------------------------------------------------------------------------------------------------------------------
+# The harness check: a throwaway right reader, never committed (the base's forge.ts with checksRunning reading
+# `.../check-runs?per_page=100` and then each page the forge's rel="next" names, until none), laid over
+# packages/hub/src/forge.ts for this one run and the base's file restored after, 2026-11-20 16:21 -0800, wall time 22 s:
+#   NO_COLOR=1 npx vitest run tests/acceptance/2616 --testTimeout=600000 --reporter=verbose
+# All three pass: the recording serves page 2 at the URL its Link header names.
+
+ RUN  v5.0.5 <checkout>
+
+ ✓ tests/acceptance/2616/one-page.test.ts > AC3 #2616.58c0bef1 a head with 12 check runs, one of them unfinished, reads checks running from one request for check runs, and asks for no page the forge didn't name 254ms
+ ✓ tests/acceptance/2616/two-pages.test.ts > AC1 #2616.eb2caca2 against a recorded forge whose head has 45 check runs over two pages, its one unfinished run on the second, the pull request reads checks running 328ms
+ ✓ tests/acceptance/2616/two-pages.test.ts > AC2 #2616.f16645e8 with every run on both pages completed and no pending status, the same head of 45 check runs reads open 62ms
+
+ Test Files  2 passed (2)
+      Tests  3 passed (3)
+   Start at  16:21:46
+   Duration  7.57s (tests 82%, transform 10%, import 4%, setup 3%)

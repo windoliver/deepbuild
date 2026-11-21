@@ -2372,7 +2372,6 @@ dependencies = [
  "deep-canvas-marks",
  "deep-canvas-motion",
  "deep-text",
- "meshopt",
  "serde_json",
  "sha2 0.10.9",
  "vello_cpu 0.3.0",
@@ -2498,6 +2497,7 @@ dependencies = [
  "deep-codecs",
  "deep-effects-render",
  "deep-gpu",
+ "deep-groups-render",
  "deep-logic",
  "deep-marks-render",
  "deep-physics-rapier",
@@ -2515,6 +2515,25 @@ dependencies = [
  "sha2 0.11.1",
  "wgpu 30.0.1",
  "wgpu-profiler",
+]
+
+[[package]]
+name = "deep-groups-render"
+version = "0.0.0"
+dependencies = [
+ "bytemuck",
+ "deep-canvas",
+ "deep-canvas-drawn",
+ "deep-canvas-effects",
+ "deep-canvas-marks",
+ "deep-canvas-scene3d",
+ "deep-effects-render",
+ "deep-gpu",
+ "deep-marks-render",
+ "deep-scene3d-render",
+ "image",
+ "serde_json",
+ "wgpu 30.0.1",
 ]
 
 [[package]]
@@ -2826,6 +2845,7 @@ dependencies = [
  "deep-canvas-marks",
  "deep-canvas-scene3d",
  "deep-gpu",
+ "meshopt",
  "naga 30.0.1",
  "serde_json",
  "web-time",
@@ -2859,6 +2879,7 @@ dependencies = [
  "deep-codecs",
  "deep-effects-render",
  "deep-gpu",
+ "deep-groups-render",
  "deep-images",
  "deep-logic",
  "deep-lottie-reader",
