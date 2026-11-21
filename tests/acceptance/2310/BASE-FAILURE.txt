@@ -1,0 +1,245 @@
+The #2310 suite run at base commit 85203f458b85c999ac03a884c837398e56aeac8d ("Merge pull request #2852 …"; no
+implementation of #2310), on November 19, 2026, on macOS 27.2 arm64 (Apple M5 Max, shared, 1-minute load between 50
+and 180 while it ran), Node 24.22.2, vitest 5.0.5, TypeScript 5.9.3, cargo and rustc 1.99.1. The type-check first:
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/2310/tsconfig.json          (exit 0, no error)
+
+then each test file, one at a time, with
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/2310 --no-file-parallelism --testTimeout=600000 \
+    --reporter=verbose <file>
+
+The two builds the suite reads were in the target folder before the run (this checkout's release deep-physics and its
+debug build with --features test-backends); the suite's own cargo calls found them made and copied them, each file
+in 0.5 to 4 s. No container, wasm32 or merge-base build was started by the suite: each test that has one fails before
+it. At the base the merge base is 85203f458 itself.
+
+Each file was run once, then again after each correction to helpers.ts, which every file imports (a mass and two
+written-pose tolerances loosened, two unused exports removed, a message's number rounded) and after ac7's seek test
+gathered its two vacuity checks into its one list: three runs of each file, four of ac6, every run with the result
+below. The lines are the last run's, of the files as delivered.
+
+Result, over the seven files: Test Files 7 failed (7); Tests 22 failed (22). Every test fails at an assertion in its
+own test file because the base lacks what its criterion asks: the base's reader refuses `articulated` as an unknown
+field, its kit holds none of the five fixtures, and it knows none of the five planted names or the test backend. None
+fails in a helper, at an import or at a timeout, and none is BLOCKED or INCONCLUSIVE. No test passes at the base.
+
+The base's refusal, the same in every world below (one issue for each joint that writes the field):
+  unknown_field at joints/<ID>/articulated: "joints/<ID>/articulated is not a field here; the fields are kind, a, b,
+  frame_a, frame_b, limits, spring, motor, breaks_at, ratio, of, pulley, path, active, collide_connected, swing, twist"
+An unknown planted or backend name: exits 2, stdout {"ok":false,"code":"bad_input"}.
+
+ac1-hung-chain.test.ts (#2310.e54abd92)
+ × hung from the world with a 10 kg bob, over 4 s no joint's two anchors are more than 0.1 mm apart at any step and the
+   bob's centre stays 1.05 m from the fixed point within 0.1 mm
+   ac1-hung-chain.test.ts:35  AssertionError: the chain hung with a 10 kg bob, on articulated ball joints, baked 4 s:
+     the chain hung with a 10 kg bob isn't baked: unknown_field at joints/joint_01/articulated: … (eleven issues,
+     one for each joint)
+   : expected [ Array(1) ] to deeply equal []
+ × the behavior kit holds the new fixture articulated/loaded_chain once, …
+   ac1-hung-chain.test.ts:42  AssertionError: the kit's data holds the new fixture articulated/loaded_chain: expected
+   '…' to be ''
+     articulated/loaded_chain: the kit's data holds it 0 times, not once; of its 64 fixtures, those on joints:
+     pendulum_period, hinge_limit, hinge_motor
+ × (twin: articulated_built_separate) a planted wrapper that builds the joints as separate ones opens a joint 17.5 mm
+   and fails, naming the joint and the step
+   ac1-hung-chain.test.ts:58  AssertionError: deep-physics --planted articulated_built_separate runs and answers the
+   bake: expected '…' to be ''
+     deep-physics --planted articulated_built_separate exits 2, not 0; stdout: {"ok":false,"code":"bad_input"}
+
+ac2-swung-chain.test.ts (#2310.4ec9a54e)
+ × with a 100 kg bob and gravity turned square to it, the bob passes its lowest point at √(2 × 9.81 × 1.05) =
+   4.539 m/s within 1%, and no joint opens 0.1 mm over 4 s
+   ac2-swung-chain.test.ts:38  AssertionError: the chain with a 100 kg bob, let go level, on articulated ball joints,
+   baked 4 s: the chain with a 100 kg bob, let go level isn't baked: unknown_field at joints/joint_01/articulated: …
+ × swung into a static wall, the bob of the 10 kg chain writes hit naming the wall, its centre is never more than 1 mm
+   past the place where it touches, and no joint opens
+   ac2-swung-chain.test.ts:46  AssertionError: the chain with a 10 kg bob, swung into the wall, on articulated ball
+   joints, baked 4 s: the chain with a 10 kg bob, swung into the wall isn't baked: unknown_field at … 
+ × the behavior kit holds the swing as articulated/swing once, …
+   ac2-swung-chain.test.ts:53  AssertionError: the kit's data holds the swing, articulated/swing: expected '…' to be ''
+     articulated/swing: the kit's data holds it 0 times, not once; …
+ × (twin: articulated_built_separate) the planted wrapper's chain falls apart and fails, naming the first joint to
+   open and the step
+   ac2-swung-chain.test.ts:69  AssertionError: deep-physics --planted articulated_built_separate runs and answers the
+   bakes: … exits 2, not 0; stdout: {"ok":false,"code":"bad_input"}
+
+ac3-kit-fixtures.test.ts (#2310.7b0715e2)
+ × on an articulated joint a 1 kg ball on a 1 m ball joint released from 10° swings with a period of 2.010 s within
+   1%, a hinge limited to ±30° under gravity is never past 30.5°, and a hinge motor set to 90°/s turns within 1% of it
+   after 0.5 s
+   ac3-kit-fixtures.test.ts:45  AssertionError: the kit's three worlds on articulated joints, baked:
+     the pendulum on an articulated ball joint isn't baked: unknown_field at joints/rod/articulated: …
+     the hinge limited to ±30° on an articulated joint isn't baked: unknown_field at joints/pin/articulated: …
+     the hinge motor on an articulated joint isn't baked: unknown_field at joints/pin/articulated: …
+   : expected [ …(3) ] to deeply equal []
+ × the behavior kit runs its pendulum, hinge limit and hinge motor a second time on articulated joints, …
+   ac3-kit-fixtures.test.ts:53  AssertionError: the kit's data holds each fixture a second time, on an articulated
+   joint:
+     articulated/pendulum_period: the kit's data holds it 0 times, not once; …
+     articulated/hinge_limit: the kit's data holds it 0 times, not once; …
+     articulated/hinge_motor: the kit's data holds it 0 times, not once; …
+ × (twin: articulated_drops_limits) a planted wrapper that drops an articulated joint's limits passes 30.5° and
+   fails, naming the joint and its largest angle
+   ac3-kit-fixtures.test.ts:81  AssertionError: deep-physics --planted articulated_drops_limits runs and answers the
+   bake: … exits 2, not 0; stdout: {"ok":false,"code":"bad_input"}
+
+ac4-trees.test.ts (#2310.96ed9c5c)
+ × a square of four bodies joined by four articulated hinges is refused at check, naming the hinge that closes the
+   loop, and with that one hinge left separate the world is accepted and steps
+   ac4-trees.test.ts:41  AssertionError: the square of four bodies joined by four articulated hinges, and the square
+   with corner_4 left separate:
+     corner_4: the square … isn't refused naming it: no error physics.articulation_tree at joints/corner_4 (its
+     errors: unknown_field (error) at joints/corner_1/articulated, …; and the same at corner_2, corner_3, corner_4)
+     the square with corner_4 left separate isn't accepted at check: unknown_field (error) at
+     joints/corner_1/articulated, … (corner_1, corner_2, corner_3)
+     the square with corner_4 left separate isn't baked: unknown_field at joints/corner_1/articulated: …
+   (The base's refusal names all four hinges, each for its field; that is why the refusal is read by its code.)
+ × a body that is the b of two articulated joints is refused, naming the second, and breaks_at on an articulated joint
+   is refused, naming the field
+   ac4-trees.test.ts:53  AssertionError: the checks:
+     hold_2: the body that is the b of both hold_1 and hold_2 isn't refused naming it: no error
+     physics.articulation_tree at joints/hold_2 (its errors: unknown_field at joints/hold_1/articulated and at
+     joints/hold_2/articulated)
+     joints/rod/breaks_at: breaks_at on the articulated joint rod isn't refused naming the field: no error has that
+     path (its errors: unknown_field (error) at joints/rod/articulated, …)
+     the articulated joint rod with breaks_at left out isn't accepted at check: unknown_field … joints/rod/articulated
+ × (twin: articulated_tree_counts_only) a planted check that only counts joints against bodies accepts the square and
+   fails, naming the joint
+   ac4-trees.test.ts:58  AssertionError: deep-physics --planted articulated_tree_counts_only runs and answers the
+   check: … exits 2, not 0; stdout: {"ok":false,"code":"bad_input"}
+
+ac5-written-pose.test.ts (#2310.df957af4)
+ × an articulated hinge whose second body is written 45° from straight down, its anchors together, starts there: …
+   ac5-written-pose.test.ts:35  AssertionError: the articulated hinge whose body is written 45° from straight down,
+   baked 1 s: … isn't baked: unknown_field at joints/hinge/articulated: …
+ × the same body written 2 mm off its anchor is refused, naming the joint and the 2 mm
+   ac5-written-pose.test.ts:46  AssertionError: the checks (physics.articulation_gap):
+     hinge: the body written 2 mm off its anchor isn't refused naming it: no error physics.articulation_gap at
+     joints/hinge (its errors: unknown_field (error) at joints/hinge/articulated, actual true: …)
+     the articulated hinge whose body is written 45° from straight down, its anchors together, isn't accepted at
+     check: unknown_field (error) at joints/hinge/articulated, …
+ × (twin: articulated_starts_at_zero) a planted wrapper that leaves every articulated joint at coordinate 0 starts the
+   body straight down and fails, naming the body
+   ac5-written-pose.test.ts:52  AssertionError: deep-physics --planted articulated_starts_at_zero runs and answers the
+   bake: … exits 2, not 0; stdout: {"ok":false,"code":"bad_input"}
+
+ac6-hand-and-torso.test.ts (#2310.d9ba72ca)
+ × with both joints articulated the hand and the torso raise no physics.mass_ratio and no joint opens 0.1 mm in 4 s;
+   with both joints separate they raise the lint as #523 says
+   ac6-hand-and-torso.test.ts:44  AssertionError: the hand of 0.2 kg and the torso of 40 kg that hangs from it:
+     the hand and the torso, both joints articulated isn't accepted at check: unknown_field (error) at
+     joints/grip/articulated, …; unknown_field (error) at joints/wrist/articulated, …
+     the hand and the torso, both joints articulated isn't baked: unknown_field at joints/grip/articulated: …
+   : expected [ …(2) ] to deeply equal []
+   (Nothing else is wrong there: the refused world raises no physics.mass_ratio, which is why the test also holds it
+   to being accepted, and the same world on separate joints raises the lint as #523 says.)
+ × a test backend whose caps() list no articulations (--backend no_articulations) refuses the world with
+   physics.backend_cap, naming the joint and the backend, and accepts it with both joints separate
+   ac6-hand-and-torso.test.ts:49  AssertionError: deep-physics --backend no_articulations answers: the test-backends
+   build holds the test backend no_articulations: … exits 2, not 0; stdout: {"ok":false,"code":"bad_input"}
+
+ac7-seek-golden-merge-base.test.ts (#2310.648e6d3e)
+ × the 10 kg chain's bake, seeked from each checkpoint, gives the same step hashes as a straight run
+   ac7-seek-golden-merge-base.test.ts:59  AssertionError: the 10 kg chain let go level bakes 4 s into a store, on
+   articulated joints: expected '…' to be ''
+     the 10 kg chain let go level, on articulated joints isn't baked: unknown_field at joints/joint_01/articulated: …
+ × (twin: checkpoint_drops_joint_coordinates) a planted checkpoint that leaves the joints' coordinates out fails,
+   naming the first step and the body
+   ac7-seek-golden-merge-base.test.ts:72  AssertionError: deep-physics --planted checkpoint_drops_joint_coordinates
+   runs and answers the bake and the seeks: … exits 2, not 0; stdout: {"ok":false,"code":"bad_input"}
+ × the 10 kg chain's golden recorded on macOS arm64 matches on Linux x86_64 and in wasm32, step for step
+   ac7-seek-golden-merge-base.test.ts:86  AssertionError: the golden is recorded on this Mac: expected '…' to be ''
+     the golden of the 10 kg chain let go level, on articulated joints, isn't recorded: unknown_field at
+     joints/joint_01/articulated: …
+   (Before any replay: neither the wasm32 library nor the lane's container was built or started.)
+ × a world with no articulated joint gives step hashes byte-identical to the merge base's, and the chain on
+   articulated joints has other step hashes than the same chain on separate ones
+   ac7-seek-golden-merge-base.test.ts:139  AssertionError: the comparison with the merge base is of hashes that see an
+   articulation:
+     nothing shows these step hashes see an articulation: the 10 kg chain let go level, on articulated joints, isn't
+     baked: unknown_field at joints/joint_01/articulated: …
+   (The four worlds with no articulated joint bake here; the test fails before the merge base is built. The
+   comparison itself holds at the base: below.)
+
+Probed apart from the suite on the base's binaries, through the suite's own worlds, calls and judges, with
+`articulated` left out of every joint, which is what the base runs (README: What the base already does). The probe
+files are not delivered.
+
+  The chain on separate joints, each baked 4 s; the widest opening of any joint, and where:
+    hung, 1 kg bob            2.73 mm   joint_02, step 9       (the issue: 2.73 mm)
+    let go level, 1 kg        11.81 mm  joint_02, step 224     (the issue: 11.81 mm)
+    hung, 10 kg               17.52 mm  joint_02, step 25      (the issue: 17.52 mm; criterion 1's 17.5 mm)
+    let go level, 10 kg       28.81 mm  joint_02, step 214     (the issue: 28.81 mm); lowest point at step 77, 4.462 m/s
+    let go level, 100 kg      3234.58 mm joint_07, step 318    (the issue: falls apart); first to open joint_02 at
+                              step 4; lowest point at step 112, 3.509 m/s
+  The judges' failures on the hung 10 kg chain, as criterion 1's twin test reads them (its own assertions pass on it):
+    joint_02: step 1: its two anchors are 0.24 mm apart, more than 0.1 mm; 17.52 mm at the most, at step 25
+    joint_04: step 1: … 17.32 mm at the most, at step 25      (and joint_06, joint_08, joint_10)
+    bob: step 1: its centre is 1.05043 m from the fixed point, not 1.05 m within 0.1 mm (480 of 481 states are off;
+    1.13527 m at step 25 is the farthest off)
+  and on the 100 kg chain let go level, as criterion 2's twin test reads them (its own assertions pass on it):
+    bob: step 112: it passes its lowest point at 3.509 m/s, not √(2 × 9.81 × 1.05) = 4.539 m/s within 1%
+    joint_02: step 4: its two anchors are 0.11 mm apart, more than 0.1 mm; 2887.48 mm at the most, at step 449  (…)
+  The 10 kg chain on separate joints swung into the wall: `hit` between bob and wall at step 78, speed 4.46 m/s; the
+    bob's centre at most 0.37 mm past where it touches (step 81), so the wall's own two clauses find nothing wrong;
+    its joints open (six failures), which is what fails the wall's judge. On that stretched chain link_10 also meets
+    the wall, at step 79.
+  The kit's three worlds on separate joints: period 2.0109 s (answer 2.0099 s); largest angle 30.000° at step 33;
+    89.995°/s after step 60: no failure. The limited hinge with its limits taken out: "pin: its largest angle is
+    179.167°, at step 116, past 30.5° on a hinge limited to ±30°", as criterion 3's twin test reads it.
+  The base kit's own pendulum_period, hinge_limit and hinge_motor, each baked through the suite's fixture bake and
+    read by the judges from its world document: 2.01089 s, 29.999998° at step 33, and the motor within 1%: no
+    failure. The kit's data judges on them say what is off: no `articulated: true`, no `articulations` in `caps`, and
+    the pendulum's ball 0.5236 kg, not 1 kg. On fixtures made from this suite's own worlds they find nothing, and
+    each planted change (gravity turned, a bob of another mass, 240 steps, a joint moved 1 mm, a link of 0.2 kg, a
+    bob of radius 0.06 m, an answer of 4.54, a tolerance of 2%) is named.
+  The body written 45° from straight down, on a separate hinge: at (0.70710677, −0.70710677) m after step 1 and
+    within 0.2 µm of it after step 120: no failure. Written straight down: "arm: step 1: it is at (0, -1) m from the
+    hinge, not (0.7071, -0.7071) m within 0.1 mm (120 of the 120 steps of its first second are off)". Written 2 mm
+    off: accepted, its hinge 2.00003 mm open in the world as built, which this suite's measure of an opening reads.
+  The square with every hinge separate: accepted; it falls 4.9152 m in 1 s, and no step hash repeats the one before.
+    A body held by two separate joints, and `breaks_at` on a separate joint: accepted.
+  The hand and the torso on separate joints: `physics.mass_ratio`, ids [wrist, hand, torso], ratio 199.999997; grip
+    opens 0.00 mm, wrist 15.42 mm at step 11 and 7.65 mm from step 120 on. The issue's opening paragraph prints
+    14.14 mm for its probe's hand. Tried and still 15.42 mm: the hinge's `a` and `b` swapped, its axis, the grip a
+    fixed joint or a hinge or at the hand's centre, the torso over the hand, the hand's mass declared, sleep off, the
+    joints' and bodies' order. Other readings: 13.76 mm with the torso at its density's 36 kg, 13.89 mm with a hand
+    of 0.22 kg. No test depends on the number.
+  The 10 kg chain let go level on separate joints, baked into a store: checkpoints at 60, 120, …, 480 (149,120 bytes
+    of a 16 MiB ring); a seek from each gives the straight run's states and step hashes; no step hash repeats. The
+    base's own `checkpoint_poses_only` finds nothing on this chain, which has no contact, so the seek judge's
+    failing path was shown on a seek changed here: one number of link_04 moved 1e-7 at its fourth state reads "the
+    seek from the checkpoint at step 180: step 183: link_04 linear is […] after the seek and […] in the straight
+    run"; one hash swapped reads "… step 185: its step hash is … after the seek and … in the straight run, though no
+    body's state differs".
+  Its golden, recorded by the release build (macos, aarch64, verify_on the two targets): `golden_verify` answers
+    PASS, machines same, 481 step hashes, on the release build and on the debug test-backends build, under one bake
+    key and runtime digest; shifted one ulp at step 240 (bob, linear.x) it answers FAIL with first_step 240 and its
+    hashes first differ there. #2012's judges, as ac7 calls them, find nothing wrong with the first and catch a leg
+    that echoes the golden and a replay on another machine.
+  The merge-base leg, with the merge base's release build made first through the build slot in
+    target/acceptance-191-base/85203f458b85 (7 min 42 s), run through helpers' `askBase` as ac7's test runs it:
+      the 10 kg chain let go level, separate   481 step hashes here and on the merge base; the last e23b8b4b7891e0ee
+      the hand and the torso, separate         481 and 481; the last c6536332092daed8 (it comes to rest: its hash
+                                               repeats at 367 steps; the other three never repeat)
+      the hinge limited to ±30°, separate      241 and 241; the last 751173a6d1e621ab
+      the hinge motor, separate                121 and 121; the last c2722909ff262d35
+    no difference; a hash swapped at step 300 reads "the step hash at step 300 is … here and … with its hash at step
+    300 swapped". That export and build were removed afterwards.
+  The check's judges on made-up issues: a `physics.articulation_tree` at joints/hold_2 or under it passes and one
+    also at joints/hold_1 fails; a `physics.articulation_gap` at joints/hinge with actual 0.002000029 passes, and 2,
+    another code or another joint fail; an error at joints/rod/breaks_at passes, and one at joints/rod or at
+    joints/rod/breaks_at/force fails; a `physics.backend_cap` at joints/wrist/articulated naming no_articulations
+    passes, and one naming rapier3d, at another joint or under another code fails.
+  The base's test backend no_belts, for the calls ac6 makes: `backend` answers {"backend": "no_belts", "caps":
+    ["ccd"]}; it and the reference backend in the same build accept the hand and the torso on separate joints, which
+    write no `backend` field.
+  The behavior kit on the release build: 64 fixtures, verdict pass, 0.4 s.
+
+What couldn't be run at the base: every test's passing path on articulated joints, the five planted programs, the
+test backend and the five fixtures, none of which the base has. Of ac7's golden test, the wasm32 leg and the Linux
+x86_64 leg were not run and their builds not started: the test fails before them, and a linux/amd64 build of the
+workspace under emulation was not to be started in this job. Those two legs are #2012's `onWasm32` and `onLane`,
+called as #2012's own first test calls them.

@@ -120,6 +120,9 @@ pub struct Record {
     pub(crate) restarts: BTreeMap<String, BTreeMap<i64, Vec<u8>>>,
     /// #860: the steps that ran on a branch a rewind closed, whose rows hold the arrays they left.
     pub(crate) frozen: BTreeSet<i64>,
+    /// #551: checkpoints record no deep hash, which costs a pass over the whole memory in the
+    /// step; a reader restores the checkpoint for one (a match's copy, whose frames are timed).
+    pub deferred: bool,
 }
 
 impl Record {
@@ -258,6 +261,8 @@ pub(crate) struct Live {
     dirty: BTreeSet<u32>,
     /// The pages written since the last keyframe stored (crate::keyframes).
     pub(crate) kdirty: BTreeSet<u32>,
+    /// #551: the pages written since the rollback ring's last match step.
+    pub(crate) rdirty: BTreeSet<u32>,
     stored: Vec<Stored>,
     /// The last step a checkpoint was taken at.
     pub(crate) checked: Option<i64>,
@@ -395,6 +400,40 @@ impl Live {
     pub(crate) fn memory(&mut self) -> &[u8] {
         self.runner.memory("memory").unwrap_or(&[])
     }
+    /// #194: whether this state equals `other`'s, the bytes `skip` holds in memory left out
+    /// (logic.tuning: the copies of an item's data assets).
+    pub(crate) fn same_but(&mut self, other: &mut Live, skip: std::ops::Range<usize>) -> bool {
+        if self.last != other.last
+            || self.arrays != other.arrays
+            || self.encoded() != other.encoded()
+        {
+            return false;
+        }
+        let (m, n) = (self.memory(), other.memory());
+        let cut = |x: &[u8]| skip.start.min(x.len())..skip.end.min(x.len());
+        let (a, b) = (cut(m), cut(n));
+        m[..a.start] == n[..b.start] && m[a.end..] == n[b.end..]
+    }
+    /// #550: the globals as the step and full-state hashes take them.
+    pub(crate) fn encoded_globals(&mut self) -> Vec<u8> {
+        self.encoded()
+    }
+    /// #550: the step hash of the state its last step left, without that step's rows.
+    pub(crate) fn last_step_hash(&mut self) -> u64 {
+        self.step_hash(&Vec::new())
+    }
+    /// #550: writes `bytes` into the program's memory at `at`, marking the page written.
+    pub(crate) fn poke(&mut self, at: usize, bytes: &[u8]) -> Option<()> {
+        self.runner.write("memory", at, bytes).ok()?;
+        self.mark([(at / PAGE as usize) as u32]);
+        Some(())
+    }
+    /// Marks `pages` written, for the checkpoint ring, the keyframes and the rollback ring.
+    pub(crate) fn mark(&mut self, pages: impl IntoIterator<Item = u32> + Clone) {
+        self.dirty.extend(pages.clone());
+        self.kdirty.extend(pages.clone());
+        self.rdirty.extend(pages);
+    }
     /// The step hash: the program's globals, the arrays it wrote and the rows it emitted, each
     /// after its kind's index (none for a step that emitted none, so an item's hash is as before).
     fn step_hash(&mut self, rows: &Rows) -> u64 {
@@ -437,6 +476,8 @@ pub struct World {
     pub saves_dir: Option<std::path::PathBuf>,
     /// With no folder, the saves its steps asked for, held for the host's store (Export: web player).
     pub held: Option<Vec<crate::saves::Held>>,
+    /// #189: the time the saves machinery took since it was last read (a live frame's `saves_ns`).
+    pub saves_ns: u64,
     pub saved: Vec<Value>,
     /// The steps the piece's same-machine counters have seen, and the adapter this run is on.
     pub(crate) seen: u64,
@@ -449,8 +490,28 @@ pub struct World {
 
 pub type Failed = Value;
 
+mod net;
 mod rewind;
+pub mod rollback;
+pub mod seats;
 mod world_impl;
+
+impl World {
+    /// The planted logic module this world runs as.
+    pub fn planted(&self) -> Planted {
+        self.planted
+    }
+
+    /// #277's planted catch-up: every item's clock moves on to the first step at or after `t`,
+    /// running none of the steps before it.
+    pub fn skip(&mut self, t: i64) {
+        for (i, item) in self.piece.items.iter().enumerate() {
+            let k = t.div_euclid(item.step) + i64::from(t.rem_euclid(item.step) != 0);
+            let l = &mut self.lives[i];
+            l.next = l.next.max(k);
+        }
+    }
+}
 
 /// The planted replay's change: the first value of the item's first array, an i32 plus one, an
 /// f64 (or a vector's first component) to the next f64 above it, a bool flipped.

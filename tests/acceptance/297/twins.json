@@ -1,0 +1,29 @@
+{
+  "#297.688a1e6a": [
+    "entry_any_player"
+  ],
+  "#297.3618602e": [
+    "entry_own_viewer_only"
+  ],
+  "#297.d2e288d8": [
+    "fit_skips_entries"
+  ],
+  "#297.ee30ab4e": [
+    "entry_takes_missing_glyph"
+  ],
+  "#297.50f2c738": [
+    "entry_falls_back_to_player_1"
+  ],
+  "#297.cd44d20a": [
+    "entry_normalizes_track"
+  ],
+  "#297.8d736efc": [
+    "control_takes_hidden"
+  ],
+  "#297.a18ed59e": [
+    "control_no_mark_limit"
+  ],
+  "#297.597888a6": [
+    "entry_compare_code_points"
+  ]
+}

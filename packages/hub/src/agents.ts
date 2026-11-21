@@ -433,6 +433,11 @@ export class Agents {
     return this.loginPath().split(':').map((d) => join(d, binary)).find((f) => f.startsWith('/') && existsSync(f));
   }
   installed(): AgentFacts[] { return agentFacts().filter((a) => this.which(a.binary) !== undefined); }
+  /** Every path `installed` looks at: each agent's program in each folder of the login PATH (#2648). */
+  lookedFor(): string[] {
+    const dirs = this.loginPath().split(':');
+    return agentFacts().flatMap((a) => dirs.map((d) => join(d, a.binary))).filter((f) => f.startsWith('/'));
+  }
 
   // ---- agents.propose: the plan, shown before you approve.
 

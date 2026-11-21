@@ -1,0 +1,112 @@
+Run of tests/acceptance/1334-redraft-1865 on the candidate #1865 implementation in this worktree (packages/*/dist and
+target/debug/deep-hook built by another job; base dcb63a0a0 plus uncommitted changes this job didn't read), 2026-11-20, macOS, Node 24.22.0.
+Command: node --test tests/acceptance/1334-redraft-1865/contract.test.mjs
+Uptime before and after (1/5/15-minute loads) are the first and last lines.
+
+13:10  up 17:36, 4 users, load averages: 42.39 44.88 64.53
+✔ #1334.33ca60cb a session whose deep-hook is older than the hub's contract gets a clear refusal, and nothing is recorded as a PASS (redraft 1865) (28281.822125ms)
+✔ a contract mismatch fails closed with its reason: a call a fail_closed guard entry matches is denied, as with the hub away (redraft 1865) (0.272917ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 198061.849208
+exit=0
+13:13  up 17:40, 4 users, load averages: 46.50 54.28 65.10
+
+================================================================================
+Added at the coordinator's request: crash.test.mjs and misjudge.test.mjs, same build, 2026-11-20, run side by side, each file alone:
+  node --test tests/acceptance/1334-redraft-1865/crash.test.mjs
+  node --test tests/acceptance/1334-redraft-1865/misjudge.test.mjs
+Both fail before any promotion code runs, at the scene's first promotion: main watch never recorded a clean run of c1 in
+the fixture on this Mac ('its last clean run here is none yet'). The coordinator reports the originals fail the same way here.
+Nothing #1865 changes (the restart's stop) was reached. Read as BLOCKED by the environment, not as a result of the redraft.
+
+---- rcrash
+13:16  up 17:43, 4 users, load averages: 26.50 49.14 61.63
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one notice naming the commit (redraft 1865) (1490.310542ms)
+✖ the hub runs from a promoted build in a versioned folder: its login service names ~/.deepbuild/versions/current, never a checkout or a temporary path (redraft 1865) (0.665125ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3965.47275
+
+✖ failing tests:
+
+test at tests/acceptance/1334-redraft-1865/crash.test.mjs:17:1
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one notice naming the commit (redraft 1865) (1490.310542ms)
+  AssertionError [ERR_ASSERTION]: #1334.775c65d4 the first promotion, of a build of b7004c7 that main watch passed, must leave ~/.deepbuild/versions/current on its folder under versions/ and the hub answering: current undefined, the hub does not answer
+  exit 1
+  stdout:
+  
+  stderr:
+  deep hub promote: b7004c77a87bccc92a228628250ac00d17127c89 isn't a commit main watch passed, so it isn't promoted: its last clean run here is none yet
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1334-redraft-1865/crash.test.mjs:21:1
+✖ the hub runs from a promoted build in a versioned folder: its login service names ~/.deepbuild/versions/current, never a checkout or a temporary path (redraft 1865) (0.665125ms)
+  AssertionError [ERR_ASSERTION]: the first promotion, of a build of b7004c7 that main watch passed, failed: exit 1
+  stdout:
+  
+  stderr:
+  deep hub promote: b7004c77a87bccc92a228628250ac00d17127c89 isn't a commit main watch passed, so it isn't promoted: its last clean run here is none yet
+  
+  
+  1 !== 0
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+exit=1
+13:16  up 17:43, 4 users, load averages: 43.99 52.39 62.71
+
+---- rmis
+13:16  up 17:43, 4 users, load averages: 26.50 49.14 61.63
+✖ #1334.14e4b3e9 a planted build that starts but judges the fixture claim wrongly is rolled back the same way; a health check that only pings the hub passes this plant and fails, naming the claim (redraft 1865) (1487.264959ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3874.9125
+
+✖ failing tests:
+
+test at tests/acceptance/1334-redraft-1865/misjudge.test.mjs:15:1
+✖ #1334.14e4b3e9 a planted build that starts but judges the fixture claim wrongly is rolled back the same way; a health check that only pings the hub passes this plant and fails, naming the claim (redraft 1865) (1487.264959ms)
+  AssertionError [ERR_ASSERTION]: #1334.14e4b3e9 the first promotion, of a build of b7004c7 that main watch passed, must leave ~/.deepbuild/versions/current on its folder under versions/ and the hub answering: current undefined, the hub does not answer
+  exit 1
+  stdout:
+  
+  stderr:
+  deep hub promote: b7004c77a87bccc92a228628250ac00d17127c89 isn't a commit main watch passed, so it isn't promoted: its last clean run here is none yet
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+exit=1
+13:16  up 17:43, 4 users, load averages: 43.99 52.39 62.71

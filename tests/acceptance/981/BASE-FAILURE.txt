@@ -1,0 +1,38 @@
+# #981 suite at the base: NOT RUN against deep-logic
+
+Base: 4bf2fc7ad (this worktree's HEAD; first parent 531da1ef0), before any implementation.
+Host: the reference Mac, macOS arm64, one-minute load about 250 on 18 cores.
+
+The vitest run at the base was not done. It needs `deep-logic` built (a fresh worktree has no target/), and heavy
+builds on this shared Mac go through the build grant, `node scripts/throttle.mjs build --wait 120 -- sh scripts/lease
+cargo build --locked --bin deep-logic`, which holds one build at a time. The request waited from 07:36 to 08:12 UTC
+behind one build held since 07:05 and 16 more queued (builds here took 20 to 80 minutes each), last of 17; it was
+withdrawn (stopped by its own task) rather than held for hours. So no line below is a run of the suite.
+
+What each test calls first, and what the base answers there (read from the base, not run through the tests):
+
+- Every test of every file calls `lanes()` (helpers.ts) before anything of the implementation's but the layout probe,
+  after only its own node-side checks. `lanes()` sends `{"call": "first_party"}` and expects a first-party pack that
+  declares lanes@1. At the base, crates/deep-logic/src/first_party.rs embeds packs/interfaces-1.0.0 only
+  (`include_str!("../../../packs/interfaces-1.0.0/pack.json")`), and that manifest declares (node, at the base):
+
+    interfaces: physics2d.lib@1, fsm@1, nn.mlp@1 | libs: []
+
+  so each test is expected to fail first on:
+    AssertionError: a first-party pack declares lanes@1 (packs: interfaces@1.0.0): expected undefined to be defined
+
+  ac1-straight (1 test), ac2-junction (1), ac3-loop (2), ac4-lift (1), ac5-fleet (2), ac6-refusals (3), ac7-hosts (2),
+  ac8-budget (2): 14 tests, all expected to fail there.
+- Past that, the base also lacks the rest of the surface: a piece's path@1 items are refused
+  (piece/checks.rs:524, "only logic@1 items are stepped here"), a logic item's `lanes` is refused
+  (piece/checks.rs:31, "logic@1 has no field lanes"), and `judge` is an unknown call (lib.rs:646, bad_input).
+
+What was run here, without deep-logic (README: Checked before the base run): every node-side first-principles check
+the tests make before lanes() (the profiles, zone layouts, timelines, the 500 tasks, the grid's 400 paths and route
+times) and every program assembled as a relocatable object and run as a whole module in node's WebAssembly against a
+stand-in for lanes@1's exports.
+
+To run it once a build grant is free (paths redacted as <checkout>):
+
+  cd <checkout> && NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node scripts/throttle.mjs build --wait 600 -- \
+    sh scripts/lease npx vitest run --root tests/acceptance/981 --testTimeout=600000 --no-file-parallelism

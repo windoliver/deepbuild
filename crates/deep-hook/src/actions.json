@@ -18,6 +18,13 @@
      "query"
     ],
     "additionalProperties": false
+   },
+   "annotations": {
+    "title": "Find plug-in actions",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
    }
   },
   {
@@ -45,6 +52,13 @@
      "input"
     ],
     "additionalProperties": false
+   },
+   "annotations": {
+    "title": "Call a plug-in action",
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": true,
+    "openWorldHint": true
    }
   }
  ],

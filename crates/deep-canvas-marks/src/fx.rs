@@ -4,7 +4,7 @@
 //! radius, as `blur.x@1` and `blur.y@1` sample) and a dilation by a disc.
 //!
 //! This file is the CPU reference: every layer is a function of a coverage grid in device px.
-//! The GPU layer runs the same arithmetic in f32 (`deep-gpu-layer/src/paintfx.wgsl`), and the two
+//! The GPU layer runs the same arithmetic in f32 (`deep-groups-render/src/paintfx.wgsl`), and the two
 //! agree within one 8-bit code value.
 
 use serde_json::{Map, Value};

@@ -243,15 +243,29 @@ const ACTION_DESCRIPTIONS: Readonly<Record<string, string>> = {
   find_actions: 'Finds the actions the installed plug-ins offer agents, each with its plug-in, whether it reads, changes your data or sends, and its input schema. A listed action proves nothing about what calling it will do.',
   call_action: 'Calls a plug-in action by name with a request ID. A read runs; a change needs your standing rule or an ask, and a send always asks: until you answer, it returns held with the ask, and you call again with the same request ID. A change or send returns the plug-in\'s report and what the hub recorded it changed; the report is the plug-in\'s statement, never a check result.',
 };
+/** A tool as an MCP server lists it: its name, description and input schema, then its title and four hints (#2898). */
+type Listed = { name: string; description: string; inputSchema: Schema; annotations: Obj };
+
 /** The tools as deep mcp actions lists them. */
-export function actionToolList(): { name: string; description: string; inputSchema: Schema }[] {
-  return Object.entries(ACTION_SCHEMAS).map(([name, inputSchema]) => ({ name, description: ACTION_DESCRIPTIONS[name]!, inputSchema }));
+export function actionToolList(): Listed[] {
+  return Object.entries(ACTION_SCHEMAS).map(([name, inputSchema]) => ({ name, description: ACTION_DESCRIPTIONS[name]!, inputSchema, annotations: annotations(name) }));
 }
 
 let described: Record<string, string> | undefined;
 /** Each tool's description, as scripts/skill.mjs generated it from the Building blocks table. */
 function descriptions(): Record<string, string> {
   return (described ??= JSON.parse(readFileSync(new URL('../tools.json', import.meta.url), 'utf8')) as Record<string, string>);
+}
+let annotated: Record<string, Obj> | undefined;
+/**
+ * A tool's title and hints, as scripts/skill.mjs generated them: the server's word to a client, never read by the hub.
+ * A tool the table misses is an error, never a listing left to the protocol's cautious defaults.
+ */
+function annotations(name: string): Obj {
+  annotated ??= JSON.parse(readFileSync(new URL('../annotations.json', import.meta.url), 'utf8')) as Record<string, Obj>;
+  const hints = annotated[name];
+  if (!hints) throw Error(`packages/hub/annotations.json gives ${name} no title or hints; add it to HINTS in scripts/skill.mjs and run it`);
+  return hints;
 }
 
 /** The schemas this hub publishes and holds calls to: #1415's planted hub marks deep_kinds's op optional though its handler needs one. */
@@ -275,11 +289,11 @@ export const instructionsFor = (server: 'deep' | 'deep-actions'): string => gene
  * reaches an agent. The tool a task starts with carries Claude Code's mark to load up front (#2897); every other stays
  * behind a client's search.
  */
-export function toolList(): { name: string; description: string; inputSchema: Schema; _meta?: Obj }[] {
+export function toolList(): (Listed & { _meta?: Obj })[] {
   const text = descriptions();
   const upFront = new Set(generated().upFront);
   return Object.entries(published()).filter(([name]) => text[name])
-    .map(([name, inputSchema]) => ({ name, description: text[name]!, inputSchema, ...(upFront.has(name) ? { _meta: { 'anthropic/alwaysLoad': true } } : {}) }));
+    .map(([name, inputSchema]) => ({ name, description: text[name]!, inputSchema, annotations: annotations(name), ...(upFront.has(name) ? { _meta: { 'anthropic/alwaysLoad': true } } : {}) }));
 }
 
 /**

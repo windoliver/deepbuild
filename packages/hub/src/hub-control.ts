@@ -331,7 +331,11 @@ export class HubControl {
       case 'work.show': return this.options.services.work.show(params);
       case 'work.pause': return this.options.services.work.pause(params);
       case 'work.once': return this.work.workspaceCall(() => this.options.services.landing.workOnce(String(params.repo ?? ''), Array.isArray(params.issues) ? params.issues.map(Number).filter((n) => Number.isSafeInteger(n) && n > 0) : []));
-      case 'job.submit': return this.options.services.runner.submit(params.spec as JobSpec);
+      case 'job.submit': {
+        // A work job writes a job's workspace, so it runs only under that job's approval (#1527), never over RPC.
+        if ((params.spec as { kind?: unknown } | undefined)?.kind === 'work') throw Error('a work job runs only under an approved job that repeats, never on request');
+        return this.options.services.runner.submit(params.spec as JobSpec);
+      }
       case 'job.status': return this.options.services.runner.status(String(params.job));
       case 'job.list': return { jobs: await this.options.services.runner.list() };
       case 'checks.kinds': return { kinds: (await this.options.services.checkKinds()).list() };

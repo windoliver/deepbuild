@@ -1,0 +1,33 @@
+# Hand reproduction, 2026-11-20T07:39:00Z, main b4a2049e808c05a4ad0f727bb09c422b545cbb36, load { 138.19 59.47 32.99 }
+$ cc -O2 -dynamiclib -o $H/count.dylib scripts/count-children.c && cc -O2 -DRUNNER -o $H/run scripts/count-children.c
+built
+
+## 1. benchmarks/sandbox.mjs (sandbox-setup): 20 sandboxed runs of /usr/bin/true, one supervisor
+$ : > $H/s.log; DEEP_COUNT_LOG=$H/s.log $H/run $H/count.dylib node benchmarks/sandbox.mjs
+{"supervisedMs":55.227333000000726,"bareMs":9.847499999999854,"overheadMs":45.37983300000087}
+$ awk '$1=="start"{n=split($4,p,"/"); print p[n]}' $H/s.log | sort | uniq -c
+   2 (forked)
+  86 helper
+  21 ps
+  53 sandbox-exec
+  20 true
+
+## 2. One sandboxed /bin/sleep 60 that forks nothing ($H/idle.mjs: open, start, wait, cleanup, close; no sites hook)
+$ : > $H/i.log; DEEP_COUNT_LOG=$H/i.log $H/run $H/count.dylib node $H/idle.mjs $PWD
+{"status":"started","startedAt":1795160379004,"endedAt":1795160439031,"seconds":60.027}
+$ awk '$1=="start"{n=split($4,p,"/"); print p[n]}' $H/i.log | sort | uniq -c
+   2 (forked)
+ 588 helper
+ 583 ps
+  33 sandbox-exec
+$ grep -c "^start .*/bin/ps$" $H/i.log; grep -c "^start .*/helper$" $H/i.log   # ps and helper, over the 60 s run
+583
+588
+
+## 3. The denial stream: does each filter show a refused write in a canary sandbox? (sw_vers: 27.2.1 26B131)
+$ /usr/bin/log stream --style ndjson --predicate 'subsystem == "com.apple.sandbox.reporting" AND sender == "Sandbox" AND eventMessage CONTAINS "dev.deepbuild.hand"' & ; 10 refused writes 300 ms apart
+reports shown: 1   (the stream's own first line, "Filtering the log data using ...", which echoes the predicate: 0 reports)
+$ /usr/bin/log stream --style ndjson --predicate 'process == "kernel" AND sender == "Sandbox" AND eventMessage CONTAINS "dev.deepbuild.hand"' & ; 10 refused writes 300 ms apart
+reports shown: 11  (that first line and the 10 refused writes' reports)
+$ grep -o '"subsystem":"[^"]*","category":"[^"]*"' $H/stream.txt | sort | uniq -c   # what the 10 reports carry
+  10 "subsystem":"","category":""

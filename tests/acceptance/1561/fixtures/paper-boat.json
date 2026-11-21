@@ -1,0 +1,187 @@
+{
+ "format": 1,
+ "id": "paper-boat-1561",
+ "profile": "figure",
+ "title": "A paper boat crossing a pond",
+ "description": "The #1561 drawn-look fixture: a paper boat on a washed pond, lit from the upper left, through a camera that follows it.",
+ "size": [
+  480,
+  270
+ ],
+ "seed": 1561,
+ "camera": "cam",
+ "transport": {
+  "span": "2s"
+ },
+ "requires": {
+  "modules": {
+   "effects": "^1"
+  }
+ },
+ "budget": {
+  "class": "figure"
+ },
+ "layers": {
+  "main": {
+   "writer": "agent-a",
+   "title": "Main",
+   "order": "a1"
+  }
+ },
+ "channels": {
+  "dolly": {
+   "target": "items/cam/params/target/0",
+   "type": "f32",
+   "keys": {
+    "k0": {
+     "t": "0s",
+     "value": 240,
+     "interp": "linear"
+    },
+    "k1": {
+     "t": "2s",
+     "value": 320,
+     "interp": "linear"
+    }
+   }
+  },
+  "push": {
+   "target": "items/cam/params/view_width",
+   "type": "f32",
+   "keys": {
+    "k0": {
+     "t": "0s",
+     "value": 480,
+     "interp": "linear"
+    },
+    "k1": {
+     "t": "2s",
+     "value": 400,
+     "interp": "linear"
+    }
+   }
+  }
+ },
+ "items": {
+  "cam": {
+   "id": "cam",
+   "kind": "camera@1",
+   "layer": "main",
+   "name": "cam",
+   "order": "a0",
+   "params": {
+    "projection": "orthographic",
+    "target": [
+     240,
+     135,
+     0
+    ],
+    "view_width": 480
+   }
+  },
+  "pond": {
+   "id": "pond",
+   "kind": "rect@1",
+   "layer": "main",
+   "name": "pond",
+   "order": "b0",
+   "params": {
+    "box": [
+     30,
+     150,
+     520,
+     100
+    ],
+    "paint": {
+     "fill": {
+      "fill": "pool",
+      "role": "accent"
+     }
+    }
+   }
+  },
+  "hull": {
+   "id": "hull",
+   "kind": "path@1",
+   "layer": "main",
+   "name": "hull",
+   "order": "b1",
+   "params": {
+    "d": "M 176 150 L 304 150 L 278 180 L 202 180 Z",
+    "paint": {
+     "fill": {
+      "fill": "pool",
+      "role": "wine"
+     },
+     "stroke": {
+      "line": "nib",
+      "role": "ink"
+     }
+    }
+   }
+  },
+  "sail": {
+   "id": "sail",
+   "kind": "path@1",
+   "layer": "main",
+   "name": "sail",
+   "order": "b2",
+   "params": {
+    "d": "M 240 144 L 240 62 L 298 144 Z",
+    "paint": {
+     "fill": {
+      "role": "ochre"
+     },
+     "stroke": {
+      "line": "nib",
+      "role": "ink"
+     }
+    }
+   }
+  },
+  "reed": {
+   "id": "reed",
+   "kind": "path@1",
+   "layer": "main",
+   "name": "reed",
+   "order": "b3",
+   "params": {
+    "d": "M 96 200 C 90 150 108 110 98 60",
+    "paint": {
+     "stroke": {
+      "line": "nib",
+      "role": "moss"
+     }
+    }
+   }
+  },
+  "sun": {
+   "id": "sun",
+   "kind": "circle@1",
+   "layer": "main",
+   "name": "sun",
+   "order": "b4",
+   "params": {
+    "center": [
+     400,
+     56
+    ],
+    "r": 18,
+    "paint": {
+     "fill": {
+      "role": "vermilion"
+     }
+    }
+   }
+  }
+ },
+ "collections": {
+  "lit": {
+   "members": [
+    "hull",
+    "sail",
+    "sun"
+   ]
+  }
+ }
+}

@@ -18,6 +18,7 @@ mod data_hash;
 mod defaults;
 mod determinism;
 mod efficiency;
+mod entries;
 mod evidence;
 mod export;
 mod extended;
@@ -665,11 +666,11 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "geometry" => return geometry::parse(c).map(|g| Call::Geometry(Box::new(g))),
         "kinds" => return Some(Call::KindSchemas),
         "spatial" => return spatial::parse(c).map(|s| Call::Spatial(Box::new(s))),
-        "logic" => return picks::parse(c).map(|l| Call::Logic(Box::new(l))),
+        "logic" | "open_save" => return picks::parse(c).map(|l| Call::Logic(Box::new(l))),
         "terrain_rays" => return terrain::parse(c).map(|r| Call::TerrainRays(Box::new(r))),
         "physics_bake" => return physics::parse(c).map(|b| Call::PhysicsBake(Box::new(b))),
         "world" => return points::parse_world(c).map(|(doc, world)| Call::World { doc, world }),
-        "match" | "play_match" | "sockets" => return net::parse(name, c),
+        "match" | "play_match" | "sockets" | "replay" => return net::parse(name, c),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
             return Some(Call::InstallPack {
@@ -798,6 +799,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 track: optional(c.get("track"), |t| t.as_array().cloned())?,
                 data_hash: flag("data_hash")?,
                 texts: flag("texts")?,
+                shown: flag("shown")?,
                 carried: flag("carried")?,
                 tour_pointer: flag("tour_pointer")?,
             })));
@@ -1351,8 +1353,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_motion::cues::planted(p)
                 || *p == deep_canvas_motion::lengths::ONE_VALUE
                 || deep_canvas_marks::arrays::PLANTED.contains(p)
-                // #1967's wrong programs live in the cells module's playback and conversion.
-                || deep_canvas_cells::recording::PLANTED.contains(p)
+                // #1967's wrong programs live in the cells module's playback and conversion, #194's in the catalog job.
+                || deep_canvas_cells::recording::PLANTED.contains(p) || deep_codecs::catalog::PLANTED.contains(p)
                 || deep_canvas_export::lottie::PLANTED.contains(p)
                 || deep_canvas_input::rows::PLANTED.contains(p)
                 // #540's in the input module's point control and scene3d's pointer math.
@@ -1368,13 +1370,18 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 // #223's in the marks2d module's warp.
                 || deep_canvas_marks::warp::PLANTED.contains(p)
                 || deep_net::Planted::named(p).is_some()
+                // #297's in the text module's entry texts and the text control's range.
+                || deep_canvas_marks::entries::planted(Some(p)) != Default::default()
+                || *p == deep_canvas_marks::entries::FIT_SKIPS_ENTRIES
+                || entries::PLANTED.contains(p)
+                || deep_net::PLANTED.contains(p)
                 // #225's in the data module's integrator; #2450's in its reading of axis titles.
                 || *p == deep_canvas_marks::vector_field::PLANTED_EULER
                 || *p == deep_canvas_marks::axes3d::TAKES_ANY_KIND
                 // #548's deep_query region map that lays the reads out by name.
                 || *p == logic::MAP_READS_BY_NAME
                 // #466's boil and blur in deep-show's frames.
-                || films::PLANTED.contains(p) || sandbox::PLANTED.contains(p)
+                || films::PLANTED.contains(p) || sandbox::PLANTED.contains(p) || *p == frames::VALIDATED_PER_FRAME
                 || caption_design::PLANTED.contains(p)
         })
         .map(str::to_string);
@@ -1385,6 +1392,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         .filter(|p| familiar::PLANTED.contains(p) || math_twins::PLANTED.contains(p))
         .map(str::to_string);
     let logic_planted = crate::logic::planted(input.get("planted"))?;
+    // #551: the planted rate rule is the net kind's own, read at every check this run makes.
+    deep_net::kind::plant_rate_rule(module_planted.as_deref() == Some("net_rate_faster_only"));
     let planted = match input.get("planted").map(Value::as_str) {
         None => None,
         Some(_) if logic_planted.is_some() => None,
@@ -1516,6 +1525,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "store_migrated_params_under_saved_major" => {
                     Planted::StoreMigratedParamsUnderSavedMajor
                 }
+                "loader_drops_moved_instances" => Planted::LoaderDropsMovedInstances,
+                "move_rewrites_kind_only" => Planted::MoveRewritesKindOnly,
                 "checkpoint_nearest_in_distance" => Planted::CheckpointNearestInDistance,
                 "merges_in_finish_order" => Planted::MergesInFinishOrder,
                 "runs_every_node" => Planted::RunsEveryNode,

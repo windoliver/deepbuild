@@ -20,9 +20,11 @@ use serde_json::{json, Value};
 use crate::hub::Hub;
 
 pub(crate) mod cast;
+pub(crate) mod defaults;
 mod derive;
 pub(crate) mod kit;
 mod lap;
+pub(crate) mod saves;
 pub(crate) use derive::{parse, Bake};
 
 /// The physics module the full set seals, on the Rapier backend this build links, its pins as
@@ -90,6 +92,12 @@ pub enum Planted {
     CastAnswersLate,
     /// #213: the logic module writes services' results after the checkpoint that follows a step.
     ResultsAfterCheckpoint,
+    /// #189: a save whose runtime digest alone differs opens straight, its world's backend bytes
+    /// loaded into this build's world, with no re-derivation.
+    RestoreLoadsOldWorld,
+    /// #189: the content a save binds, and the piece's it is matched against, hold the piece's
+    /// data assets only, never a world.
+    ContentLeavesOutWorlds,
 }
 
 pub(crate) fn planted(name: &str) -> Option<crate::hub::Planted> {
@@ -100,6 +108,33 @@ pub(crate) fn planted(name: &str) -> Option<crate::hub::Planted> {
         "results_after_checkpoint" => Planted::ResultsAfterCheckpoint,
         _ => return None,
     }))
+}
+
+/// Each character reading of `reads` (`(name, body, read)`) as logic track entries from a bake's or
+/// a restore's body states, the first at step `from`: its value at the first state and after every
+/// step that changes it, at that step's time.
+fn character_reads(
+    reply: &Value,
+    reads: &[(&str, &str, &str)],
+    step: i64,
+    from: i64,
+    out: &mut Vec<Value>,
+) {
+    for (name, body, read) in reads {
+        let mut last = None;
+        for (k, s) in reply["bodies"][body]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .enumerate()
+        {
+            let on = s["character"][read] == json!(true);
+            if last != Some(on) {
+                out.push(json!({"t": (from + k as i64) * step, "seq": 0, "control": name, "value": u8::from(on), "writer": "physics", "player": 0}));
+                last = Some(on);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -166,7 +201,21 @@ impl Hub<'_> {
     /// its worlds' soft volumes are built from, read from the evidence store.
     fn sourced<'a>(&self, form: &'a Value) -> std::borrow::Cow<'a, Value> {
         let root = &self.scenario.evidence;
-        deep_physics_rapier::source::sourced(form, &|sha| crate::evidence::read(root, sha))
+        let mut out =
+            deep_physics_rapier::source::sourced(form, &|sha| crate::evidence::read(root, sha));
+        // #189's test builds: each world as if its document declared its gravity times this.
+        if let Some(times) = deep_physics_rapier::GRAVITY_TIMES {
+            for w in out.to_mut()["worlds"]
+                .as_object_mut()
+                .into_iter()
+                .flat_map(|m| m.values_mut())
+            {
+                for g in w["gravity"].as_array_mut().into_iter().flatten() {
+                    *g = json!(g.as_f64().unwrap_or(0.0) * times);
+                }
+            }
+        }
+        out
     }
 
     /// #182: the values a logic item's reads of a world's character readings take,
@@ -180,6 +229,18 @@ impl Hub<'_> {
         core: &[Value],
         names: &[String],
     ) -> Result<Vec<Value>, Box<Issue>> {
+        Ok(self.world_runs(form, core, names)?.0)
+    }
+
+    /// [`Hub::logic_readings`], with each world's bake as a save keeps it (#189): its checkpoints,
+    /// their states included, and its step's length.
+    pub(crate) fn world_runs(
+        &self,
+        form: &Value,
+        core: &[Value],
+        names: &[String],
+    ) -> Result<(Vec<Value>, Vec<saves::Baked>), Box<Issue>> {
+        let mut baked = Vec::new();
         let sourced = self.sourced(form);
         let form = &*sourced;
         let mut out = Vec::new();
@@ -210,7 +271,7 @@ impl Hub<'_> {
                             .collect::<Vec<_>>()),
                     )
                 })?;
-            let kept = derive::kept(form, &w, core).map_err(|r| {
+            let kept = derive::kept(form, id, &w, core).map_err(|r| {
                 refused(
                     id,
                     json!([{"code": r.code, "path": r.path, "what": r.what}]),
@@ -220,28 +281,19 @@ impl Hub<'_> {
             let steps = crate::stepped::steps_of(form, doc, span, step);
             let bodies: Vec<&str> = reads.iter().map(|r| r.1).collect();
             let call = json!({"call": "bake", "scene": form, "world": id, "steps": steps, "read": bodies,
-                              "track": derive::track_of(&kept)});
+                              "track": derive::track_of(&kept), "checkpoints": true});
             let reply = run.answer(&call).unwrap_or(Value::Null);
             if reply["ok"] != json!(true) {
                 return Err(Box::new(refused(id, reply)));
             }
-            for (name, body, read) in reads {
-                let mut last = None;
-                for (k, s) in reply["bodies"][body]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .enumerate()
-                {
-                    let on = s["character"][read] == json!(true);
-                    if last != Some(on) {
-                        out.push(json!({"t": k as i64 * step, "seq": 0, "control": name, "value": u8::from(on), "writer": "physics", "player": 0}));
-                        last = Some(on);
-                    }
-                }
-            }
+            character_reads(&reply, &reads, step, 0, &mut out);
+            baked.push(saves::Baked {
+                id: id.to_string(),
+                step,
+                checkpoints: reply["checkpoints"].as_array().cloned().unwrap_or_default(),
+            });
         }
-        Ok(out)
+        Ok((out, baked))
     }
 
     /// `physics_bake` (#522): the bake of world `b.world` of the document `b.doc` presents, over
@@ -290,7 +342,7 @@ impl Hub<'_> {
         } else {
             &b.track[..]
         };
-        let kept = match derive::kept(&doc, &w, core) {
+        let kept = match derive::kept(&doc, &b.world, &w, core) {
             Ok(k) => k,
             Err(r) => return json!({"ok": false, "code": r.code, "path": r.path, "what": r.what}),
         };
@@ -387,7 +439,7 @@ impl Hub<'_> {
                 .and_then(|d| check(&d, &RAPIER3D, &deep_canvas_physics::roles::TABLE));
             let Some(kept) = w
                 .ok()
-                .and_then(|w| Some((derive::kept(form, &w, &track).ok()?, w)))
+                .and_then(|w| Some((derive::kept(form, id, &w, &track).ok()?, w)))
             else {
                 continue;
             };

@@ -1,0 +1,48 @@
+
+[1m== 1. Start the installed hub (temp HOME, stand-in login service)[0m
+The hub is up.
+hub up: start 01M7Y25WG4RT3063A5PE5DD41Y, restarts left 6
+
+[1m== 2. Six restarts on the token alone: each spends one of the budget's 6 in any 60 minutes[0m
+restart 1:
+reply: {"v":1,"id":1,"result":{"restarting":true}}
+  hub up: start 01M7Y26BV2Y5Z9P6C43ZVWDN6Q, restarts left 5, next frees 2026-11-21T04:25:13.149Z (a new start after 13 s)
+restart 2:
+reply: {"v":1,"id":1,"result":{"restarting":true}}
+  hub up: start 01M7Y26V6A1SQ85KRPV0NGZ6A9, restarts left 4, next frees 2026-11-21T04:25:13.149Z (a new start after 13 s)
+restart 3:
+reply: {"v":1,"id":1,"result":{"restarting":true}}
+  hub up: start 01M7Y27AEV6FPAFHA8P93JBS2C, restarts left 3, next frees 2026-11-21T04:25:13.149Z (a new start after 13 s)
+restart 4:
+reply: {"v":1,"id":1,"result":{"restarting":true}}
+  hub up: start 01M7Y27SQCDT820ZWAZ9VW4ZYQ, restarts left 2, next frees 2026-11-21T04:25:13.149Z (a new start after 14 s)
+restart 5:
+reply: {"v":1,"id":1,"result":{"restarting":true}}
+  hub up: start 01M7Y288ZTR444WAEHFG80NDQY, restarts left 1, next frees 2026-11-21T04:25:13.149Z (a new start after 13 s)
+restart 6:
+reply: {"v":1,"id":1,"result":{"restarting":true}}
+  hub up: start 01M7Y28R7ZXP54F8V0BTXVJEQ6, restarts left 0, next frees 2026-11-21T04:25:13.149Z (a new start after 14 s)
+
+[1m== 3. The 7th restart is refused, naming the budget, when the next frees up, and deep hub stop / deep hub start[0m
+reply: {"v":1,"id":1,"error":{"code":"unavailable","retryable":false,"remediation":"The hub's restart budget is spent: 6 restarts in any 60 minutes, 0 left; the next frees up at 2026-11-21T04:25:13.149Z. Stop and start the hub yourself with deep hub stop and deep hub start.","path":"/method","actual":"hub.restart","evidence":[]}}
+waiting 20 s: the hub must stay up with the same start
+hub up: start 01M7Y28R7ZXP54F8V0BTXVJEQ6, restarts left 0, next frees 2026-11-21T04:25:13.149Z
+same start as before the 7th restart: the hub stayed up
+exits the login service saw: 6
+
+[1m== 4. With the budget spent, a confirmed deep hub stop still stops the hub, and deep hub start starts it[0m
+The hub stopped. It starts again at your next login, or with deep hub start.
+deep hub stop exit 0
+hub: not answering
+The hub is up.
+deep hub start exit 0
+hub up: start 01M7Y29GSB727AYXTFP8F8SHMT, restarts left 0, next frees 2026-11-21T04:25:13.149Z
+
+[1m== 5. The budget file under the hub root (times on the hub's clock)[0m
+-rw------- <tmp>/home/.deepbuild/restarts.json
+v 1, 6 restarts: 03:25:13 03:25:28 03:25:43 03:25:59 03:26:15 03:26:30
+
+[1m== 6. Cleanup: stop the hub and the stand-in supervisor this run started, by PID; remove the temp folder[0m
+deep hub stop exit 0
+stopped stand-in supervisor pid 56731
+removed <tmp>

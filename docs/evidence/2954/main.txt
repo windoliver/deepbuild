@@ -1,0 +1,321 @@
+main processes-fail | load 202.1 209.2 204.5 | exit 1 after 28.8 s, 17.6 s after the first ✖ | tests 2 pass 0 fail 2 cancelled 0 | forced holds running at the failure: 2 | marked or recorded processes left: 6 at +3 s, 6 at +10 s | any new ds56m. at +3 s: 6
+
+$ node --test --test-concurrency=1 --test-reporter=spec --test-name-pattern=a check that passes or fails <scratch>/out/copies/main/zz-forced-processes-fail.test.mjs
+
+FORCED run marker ds56m.ddab5651.
+FORCED pids 76252,76300,76302 of run marker ds56m.ddab5651.
+✖ #56.d29f38cc [plain] a check that passes or fails leaves none of its grandchildren behind, and a failing one is retried three times (10267.984833ms)
+FORCED run marker ds56m.48e974d4.
+FORCED pids 77003,77036,77037 of run marker ds56m.48e974d4.
+✖ #56.d29f38cc [effect] a check that passes or fails leaves none of its grandchildren behind, and a failing one is retried three times (17395.07725ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 28463.917333
+
+✖ failing tests:
+
+test at <scratch>/out/copies/main/zz-forced-processes-fail.test.mjs:56:3
+✖ #56.d29f38cc [plain] a check that passes or fails leaves none of its grandchildren behind, and a failing one is retried three times (10267.984833ms)
+  AssertionError [ERR_ASSERTION]: FORCED failure with holds in flight, run marker ds56m.ddab5651.
+      at TestContext.<anonymous> (file://<scratch>/out/copies/main/zz-forced-processes-fail.test.mjs:71:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+
+test at <scratch>/out/copies/main/zz-forced-processes-fail.test.mjs:56:3
+✖ #56.d29f38cc [effect] a check that passes or fails leaves none of its grandchildren behind, and a failing one is retried three times (17395.07725ms)
+  AssertionError [ERR_ASSERTION]: FORCED failure with holds in flight, run marker ds56m.48e974d4.
+      at TestContext.<anonymous> (file://<scratch>/out/copies/main/zz-forced-processes-fail.test.mjs:71:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+
+markers: ds56m.ddab5651. ds56m.48e974d4.
+forced pids: 76252 76300 76302 77003 77036 77037
+left at +3 s:
+76252 node <checkout>/tests/acceptance/56/fixtures/check.mjs ds56m.ddab5651.h3-forced. {"log":"/private/v
+76300 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.ddab5651.h3-forced.
+76302 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.ddab5651.h3-forced.
+77003 node <checkout>/tests/acceptance/56/fixtures/check.mjs ds56m.48e974d4.h3-forced. {"log":"/private/v
+77036 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.48e974d4.h3-forced.
+77037 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.48e974d4.h3-forced.
+left at +10 s:
+76252 node <checkout>/tests/acceptance/56/fixtures/check.mjs ds56m.ddab5651.h3-forced. {"log":"/private/v
+76300 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.ddab5651.h3-forced.
+76302 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.ddab5651.h3-forced.
+77003 node <checkout>/tests/acceptance/56/fixtures/check.mjs ds56m.48e974d4.h3-forced. {"log":"/private/v
+77036 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.48e974d4.h3-forced.
+77037 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.48e974d4.h3-forced.
+any new ds56m. at +3 s:
+76252 node <checkout>/tests/acceptance/56/fixtures/check.mjs ds56m.ddab5651.h3-forced. {"log":"/private/v
+76300 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.ddab5651.h3-forced.
+76302 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.ddab5651.h3-forced.
+77003 node <checkout>/tests/acceptance/56/fixtures/check.mjs ds56m.48e974d4.h3-forced. {"log":"/private/v
+77036 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.48e974d4.h3-forced.
+77037 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.48e974d4.h3-forced.
+
+----------------------------------------------------------------------------------------------------
+
+main timeouts-fail | load 219.7 213.9 206.8 | exit 1 after 57.2 s, 25.2 s after the first ✖ | tests 2 pass 0 fail 2 cancelled 0 | forced holds running at the failure: 2 | marked or recorded processes left: 6 at +3 s, 6 at +10 s | any new ds56m. at +3 s: 6
+
+$ node --test --test-concurrency=1 --test-reporter=spec --test-name-pattern=on the real clock <scratch>/out/copies/main/zz-forced-timeouts-fail.test.mjs
+
+FORCED run marker ds56m.2f7b0130.
+FORCED pids 80683,80746,80751 of run marker ds56m.2f7b0130.
+✖ #56.57268f7d [plain] on the real clock a hold times out 2 s after it arrives, whatever its check is still doing (30220.656458ms)
+FORCED run marker ds56m.20d961b0.
+FORCED pids 81943,81962,81964 of run marker ds56m.20d961b0.
+✖ #56.57268f7d [effect] on the real clock a hold times out 2 s after it arrives, whatever its check is still doing (24959.449292ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 56035.468375
+
+✖ failing tests:
+
+test at <scratch>/out/copies/main/zz-forced-timeouts-fail.test.mjs:98:3
+✖ #56.57268f7d [plain] on the real clock a hold times out 2 s after it arrives, whatever its check is still doing (30220.656458ms)
+  AssertionError [ERR_ASSERTION]: FORCED failure with holds in flight, run marker ds56m.2f7b0130.
+      at TestContext.<anonymous> (file://<scratch>/out/copies/main/zz-forced-timeouts-fail.test.mjs:113:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+
+test at <scratch>/out/copies/main/zz-forced-timeouts-fail.test.mjs:98:3
+✖ #56.57268f7d [effect] on the real clock a hold times out 2 s after it arrives, whatever its check is still doing (24959.449292ms)
+  AssertionError [ERR_ASSERTION]: FORCED failure with holds in flight, run marker ds56m.20d961b0.
+      at TestContext.<anonymous> (file://<scratch>/out/copies/main/zz-forced-timeouts-fail.test.mjs:113:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+
+markers: ds56m.2f7b0130. ds56m.20d961b0.
+forced pids: 80683 80746 80751 81943 81962 81964
+left at +3 s:
+80683 node <checkout>/tests/acceptance/56/fixtures/check.mjs ds56m.2f7b0130.h3-forced. {"log":"/private/v
+80746 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.2f7b0130.h3-forced.
+80751 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.2f7b0130.h3-forced.
+81943 node <checkout>/tests/acceptance/56/fixtures/check.mjs ds56m.20d961b0.h3-forced. {"log":"/private/v
+81962 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.20d961b0.h3-forced.
+81964 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.20d961b0.h3-forced.
+left at +10 s:
+80683 node <checkout>/tests/acceptance/56/fixtures/check.mjs ds56m.2f7b0130.h3-forced. {"log":"/private/v
+80746 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.2f7b0130.h3-forced.
+80751 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.2f7b0130.h3-forced.
+81943 node <checkout>/tests/acceptance/56/fixtures/check.mjs ds56m.20d961b0.h3-forced. {"log":"/private/v
+81962 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.20d961b0.h3-forced.
+81964 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.20d961b0.h3-forced.
+any new ds56m. at +3 s:
+80683 node <checkout>/tests/acceptance/56/fixtures/check.mjs ds56m.2f7b0130.h3-forced. {"log":"/private/v
+80746 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.2f7b0130.h3-forced.
+80751 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.2f7b0130.h3-forced.
+81943 node <checkout>/tests/acceptance/56/fixtures/check.mjs ds56m.20d961b0.h3-forced. {"log":"/private/v
+81962 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.20d961b0.h3-forced.
+81964 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.20d961b0.h3-forced.
+
+----------------------------------------------------------------------------------------------------
+
+main typecheck-fail | load 202.4 208.6 205.4 | exit 1 after 59.0 s, 32.3 s after the first ✖ | tests 2 pass 0 fail 2 cancelled 0 | forced holds running at the failure: 2 | marked or recorded processes left: 6 at +3 s, 6 at +10 s | any new ds56m. at +3 s: 6
+
+$ node --test --test-concurrency=1 --test-reporter=spec --test-name-pattern=a failure inside the slice <scratch>/out/copies/main/zz-forced-typecheck-fail.test.mjs
+
+FORCED run marker ds56m.47eae741.
+FORCED pids 83898,83913,83914 of run marker ds56m.47eae741.
+✖ #56.6526364c [plain] a failure inside the slice comes back naming the slice's own source file and line (24738.239333ms)
+FORCED run marker ds56m.7c4e59cc.
+FORCED pids 84577,84605,84612 of run marker ds56m.7c4e59cc.
+✖ #56.6526364c [effect] a failure inside the slice comes back naming the slice's own source file and line (31914.779917ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 58064.314417
+
+✖ failing tests:
+
+test at <scratch>/out/copies/main/zz-forced-typecheck-fail.test.mjs:57:3
+✖ #56.6526364c [plain] a failure inside the slice comes back naming the slice's own source file and line (24738.239333ms)
+  AssertionError [ERR_ASSERTION]: FORCED failure with holds in flight, run marker ds56m.47eae741.
+      at TestContext.<anonymous> (file://<scratch>/out/copies/main/zz-forced-typecheck-fail.test.mjs:72:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+
+test at <scratch>/out/copies/main/zz-forced-typecheck-fail.test.mjs:57:3
+✖ #56.6526364c [effect] a failure inside the slice comes back naming the slice's own source file and line (31914.779917ms)
+  AssertionError [ERR_ASSERTION]: FORCED failure with holds in flight, run marker ds56m.7c4e59cc.
+      at TestContext.<anonymous> (file://<scratch>/out/copies/main/zz-forced-typecheck-fail.test.mjs:72:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+
+markers: ds56m.47eae741. ds56m.7c4e59cc.
+forced pids: 83898 83913 83914 84577 84605 84612
+left at +3 s:
+83898 node <checkout>/tests/acceptance/56/fixtures/check.mjs ds56m.47eae741.h1-forced. {"log":"/private/v
+83913 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.47eae741.h1-forced.
+83914 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.47eae741.h1-forced.
+84577 node <checkout>/tests/acceptance/56/fixtures/check.mjs ds56m.7c4e59cc.h1-forced. {"log":"/private/v
+84605 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.7c4e59cc.h1-forced.
+84612 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.7c4e59cc.h1-forced.
+left at +10 s:
+83898 node <checkout>/tests/acceptance/56/fixtures/check.mjs ds56m.47eae741.h1-forced. {"log":"/private/v
+83913 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.47eae741.h1-forced.
+83914 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.47eae741.h1-forced.
+84577 node <checkout>/tests/acceptance/56/fixtures/check.mjs ds56m.7c4e59cc.h1-forced. {"log":"/private/v
+84605 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.7c4e59cc.h1-forced.
+84612 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.7c4e59cc.h1-forced.
+any new ds56m. at +3 s:
+83898 node <checkout>/tests/acceptance/56/fixtures/check.mjs ds56m.47eae741.h1-forced. {"log":"/private/v
+83913 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.47eae741.h1-forced.
+83914 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.47eae741.h1-forced.
+84577 node <checkout>/tests/acceptance/56/fixtures/check.mjs ds56m.7c4e59cc.h1-forced. {"log":"/private/v
+84605 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.7c4e59cc.h1-forced.
+84612 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.7c4e59cc.h1-forced.
+
+----------------------------------------------------------------------------------------------------
+
+main leases-fail | load 202.9 209.4 206.4 | exit 1 after 28.0 s, 14.1 s after the first ✖ | tests 2 pass 0 fail 2 cancelled 0 | forced holds running at the failure: 0 | marked or recorded processes left: 0 at +3 s, 0 at +10 s | any new ds56m. at +3 s: 0
+
+$ node --test --test-concurrency=1 --test-reporter=spec --test-name-pattern=50 sessions holding hooks <scratch>/out/copies/main/zz-forced-leases-fail.test.mjs
+
+FORCED run marker ds56m.d3c75d22.
+✖ #56.80ab2a58 [plain] 50 sessions holding hooks share a pool of 10 ports, never more than 10 leased at once, and every lease comes back (12122.772ms)
+FORCED run marker ds56m.c16cae55.
+✖ #56.80ab2a58 [effect] 50 sessions holding hooks share a pool of 10 ports, never more than 10 leased at once, and every lease comes back (13900.087583ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 27004.986625
+
+✖ failing tests:
+
+test at <scratch>/out/copies/main/zz-forced-leases-fail.test.mjs:75:3
+✖ #56.80ab2a58 [plain] 50 sessions holding hooks share a pool of 10 ports, never more than 10 leased at once, and every lease comes back (12122.772ms)
+  AssertionError [ERR_ASSERTION]: a hold is due 2 s after it arrives: hold_until_ms is 2044 ms after the request
+      at TestContext.<anonymous> (file://<scratch>/out/copies/main/zz-forced-leases-fail.test.mjs:82:58)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at <scratch>/out/copies/main/zz-forced-leases-fail.test.mjs:75:3
+✖ #56.80ab2a58 [effect] 50 sessions holding hooks share a pool of 10 ports, never more than 10 leased at once, and every lease comes back (13900.087583ms)
+  AssertionError [ERR_ASSERTION]: a hold is due 2 s after it arrives: hold_until_ms is 2082 ms after the request
+      at TestContext.<anonymous> (file://<scratch>/out/copies/main/zz-forced-leases-fail.test.mjs:82:58)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+markers: ds56m.d3c75d22. ds56m.c16cae55.
+forced pids: 
+left at +3 s:
+
+left at +10 s:
+
+any new ds56m. at +3 s:
+
+----------------------------------------------------------------------------------------------------
+
+main processes-timeout | load 209.0 209.9 206.8 | exit 1 after 153.0 s, 0.4 s after the first ✖ | tests 1 pass 0 fail 0 cancelled 1 | forced holds running at the failure: 1 | marked or recorded processes left: 3 at +3 s, 3 at +10 s | any new ds56m. at +3 s: 3
+
+$ node --test --test-concurrency=1 --test-reporter=spec --test-name-pattern=\[plain\] a check that passes or fails <scratch>/out/copies/main/zz-forced-processes-timeout.test.mjs
+
+FORCED run marker ds56m.9a681d1f.
+FORCED pids 90389,90420,90421 of run marker ds56m.9a681d1f.
+FORCED hang until the test times out, run marker ds56m.9a681d1f.
+✖ #56.d29f38cc [plain] a check that passes or fails leaves none of its grandchildren behind, and a failing one is retried three times (150110.71175ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 0
+ℹ cancelled 1
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 152107.489375
+
+✖ failing tests:
+
+test at <scratch>/out/copies/main/zz-forced-processes-timeout.test.mjs:56:3
+✖ #56.d29f38cc [plain] a check that passes or fails leaves none of its grandchildren behind, and a failing one is retried three times (150110.71175ms)
+  'test timed out after 150000ms'
+
+markers: ds56m.9a681d1f.
+forced pids: 90389 90420 90421
+left at +3 s:
+90389 node <checkout>/tests/acceptance/56/fixtures/check.mjs ds56m.9a681d1f.h3-forced. {"log":"/private/v
+90420 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.9a681d1f.h3-forced.
+90421 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.9a681d1f.h3-forced.
+left at +10 s:
+90389 node <checkout>/tests/acceptance/56/fixtures/check.mjs ds56m.9a681d1f.h3-forced. {"log":"/private/v
+90420 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.9a681d1f.h3-forced.
+90421 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.9a681d1f.h3-forced.
+any new ds56m. at +3 s:
+90389 node <checkout>/tests/acceptance/56/fixtures/check.mjs ds56m.9a681d1f.h3-forced. {"log":"/private/v
+90420 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.9a681d1f.h3-forced.
+90421 /bin/sh -c trap "" TERM HUP INT; while :; do sleep 1; done ds56m.9a681d1f.h3-forced.

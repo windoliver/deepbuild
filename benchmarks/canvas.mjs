@@ -276,7 +276,8 @@ workloads.costs = () => {
       rmSync(dir, { recursive: true, force: true });
     }
   }
-  const report = { fingerprint: machine, build: measured.build, terms, declared: declared.terms, declaredFingerprint: declared.fingerprint };
+  // #1430: the hits and misses of the text's run and shape caches over the bench.
+  const report = { fingerprint: machine, build: measured.build, terms, caches: measured.caches, declared: declared.terms, declaredFingerprint: declared.fingerprint };
   if (write) {
     if (!references.some((reference) => reference.model === machine.model)) throw Error(`coefficients come from a reference Mac; this is ${machine.model}`);
     const { model, chip, memoryBytes, macosBuild } = machine;
@@ -1377,11 +1378,14 @@ const EFFICIENCY = {
   'canvas-logic-budgets': Object.fromEntries(['occurrences_64_ms', 'linear_1000_vec3_ms', 'preview_4mib_ms', 'checkpoint_3_pages_ms'].map((k) => [k, (r) => r[k]])),
   // #1968: each reading by its own name (benchmarks/code-film.mjs).
   'canvas-code-film': Object.fromEntries(['tokens_2000_lines_ms', 'diff_400_lines_ms', 'seek_10_min_ms', 'still_code_steps'].map((k) => [k, (r) => r[k]])),
+  // #1430: each reading by its own name (benchmarks/text-reflow.mjs).
+  'canvas-text-reflow': Object.fromEntries(['width_change_50kb_ms', 'typed_char_50kb_ms'].map((k) => [k, (r) => r[k]])),
   // #184: each reading by its own name (benchmarks/playtest.mjs).
   'playtest-maze': { maze_40_runs_s: (r) => r.maze_40_runs_s, idle_work: (r) => r.idle_work },
   'playtest-throughput': { fixture_realtime_x: (r) => r.fixture_realtime_x },
   // #556: each reading by its own name (benchmarks/playtest.mjs).
   'playtest-crawler': Object.fromEntries(['crawler_80_runs_s', 'legal_added_s', 'reach_200_floors_s', 'idle_work'].map((k) => [k, (r) => r[k]])),
+  'catalog-budgets': Object.fromEntries(['pack_10000_rows_ms', 'reach_5000_recipes_ms', 'economy_5000_recipes_ms', 'idle_work'].map((k) => [k, (r) => r[k]])), // #194 (benchmarks/catalog.mjs)
 };
 const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps', 'still_code_steps', 'idle_work', 'frame_expansions', 'forest_draws_per_variant_material', 'light_lists_bytes']);
 /** Targets that are floors, each reading at or above its limit (#184's multiple of real time). */
@@ -2056,6 +2060,8 @@ workloads.surface = async () => (await import('./surface.mjs')).surface({ releas
 // #1968's budgets: a long file's tokens mapped to runs, two versions aligned, a seek into a long terminal recording and a
 // still code item's steps per frame (benchmarks/code-film.mjs).
 workloads['code-film'] = async () => (await import('./code-film.mjs')).codeFilm({ release, once, runs });
+// #1430's budgets: a width change and a typed character on a 50 KB text (benchmarks/text-reflow.mjs).
+workloads['text-reflow'] = async () => (await import('./text-reflow.mjs')).textReflow({ release, run, runs });
 // #233's budgets: a math@1 document against its expansion written by hand, and a frame's own expansions (benchmarks/math.mjs).
 workloads.math = async () => (await import('./math.mjs')).math({ root, release, once, runs });
 workloads['between-steps'] = async () => (await import('./between-steps.mjs')).betweenSteps({ root, release, once, runs });
@@ -2063,6 +2069,7 @@ workloads['water-rings'] = async () => (await import('./water-rings.mjs')).water
 // #184's budgets: the maze's 40 runs and replays on two replicas with no work added to a piece played without the
 // plug-in, and 20 runs of the 2-minute maze on four replicas as a multiple of real time (benchmarks/playtest.mjs).
 for (const task of ['playtest-maze', 'playtest-throughput', 'playtest-crawler']) workloads[task] = async () => (await import('./playtest.mjs')).playtest({ root, release, task, planted: planted() });
+workloads.catalog = async () => (await import('./catalog.mjs')).catalogBudgets({ root, release, once }); // #194's budgets
 
 const task = process.argv[2];
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);

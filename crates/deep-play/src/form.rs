@@ -25,6 +25,13 @@ pub fn played(
     read: &dyn Fn(&str) -> Option<Vec<u8>>,
 ) -> Result<Value, Box<Issue>> {
     let mut form = with_track(doc, track);
+    // #194: what the logic items fire, baked before the worlds that take it, as the app does.
+    #[cfg(feature = "logic")]
+    if crate::fires::any(&form) {
+        if let Some(p) = crate::logic::logic_piece(sealed, &form, track, read, false)? {
+            crate::fires::inline(&mut form, p, track)?;
+        }
+    }
     #[cfg(feature = "physics")]
     crate::worlds::inline(sealed, &mut form, track, &crate::worlds::Host::default())?;
     #[cfg(feature = "logic")]

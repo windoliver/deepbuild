@@ -32,29 +32,6 @@ pub enum Rule {
     Multiply,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Sleep {
-    pub on: bool,
-    pub speed: f64,
-    pub time: f64,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Solver {
-    pub contact_hz: f64,
-    pub contact_damping: f64,
-    pub max_speed: f64,
-    pub restitution_threshold: f64,
-    pub hit_threshold: f64,
-    pub sleep: Sleep,
-    pub ccd: bool,
-}
-
-/// #2309: the stiffest contact a step settles, Hz: (step rate × substeps) ÷ 6.
-pub fn most_contact_hz(step_rate: f64, substeps: f64) -> f64 {
-    step_rate * substeps / 6.0
-}
-
 mod shape;
 pub use shape::*;
 
@@ -93,6 +70,8 @@ pub struct Body {
     /// deg/s, as written.
     pub angular: [f64; 3],
     pub mass: Option<f64>,
+    /// #2098: kg·m², its moments about its own axes through its centre of mass, when written.
+    pub inertia: Option<[f64; 3]>,
     /// #2240: the local point its weight acts at, m; `None` leaves it where its shapes put it.
     pub centre_of_mass: Option<[f64; 3]>,
     pub linear_damping: f64,
@@ -162,6 +141,7 @@ pub struct Joint {
     pub breaks_at: Option<Breaks>,
     pub collide_connected: bool,
     pub active: bool,
+    pub articulated: bool,
     pub coupling: reads::Coupling,
 }
 
@@ -188,6 +168,8 @@ pub enum ForceKind {
         damping_ratio: f64,
         max_force: Option<f64>,
     },
+    /// #2098: a wind (`doc::wind`).
+    Wind(Wind),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -203,6 +185,10 @@ pub struct Force {
     /// Body IDs, with each named collision group's members expanded.
     pub applies_to: Vec<String>,
     pub strength: f64,
+    /// #2371: the channel path a drag's `medium` or a spring's `point` reads in its place.
+    pub channel: Option<String>,
+    /// #2371: the `set` input its `strength` names, whose `value` it starts at.
+    pub set_by: Option<String>,
 }
 
 /// A world as the backend builds it, in canonical (ID) order.
@@ -226,6 +212,8 @@ pub struct World {
     pub step_p95: f64,
     pub groups: Vec<String>,
     pub shapes: BTreeMap<String, Shape>,
+    /// #2098: a 2D world's shapes, which hold its bodies' in `shapes`' place.
+    pub flat: BTreeMap<String, Flat>,
     pub bodies: BTreeMap<String, Body>,
     pub joints: BTreeMap<String, Joint>,
     pub forces: BTreeMap<String, Force>,
@@ -241,18 +229,25 @@ pub struct World {
 mod centre;
 mod character;
 pub mod data;
+mod dims;
 mod heightfield;
 mod inputs;
 mod reads;
 mod soft;
+mod solver;
 mod vehicle;
+mod wind;
 pub use centre::bounds;
 pub use character::{Character, FIELDS as CHARACTER_FIELDS};
+pub use dims::Flat;
 pub use heightfield::HEIGHTFIELD_SAMPLES;
-pub use inputs::{resolved, Input, On, INPUTS_LATER};
+pub use inputs::{addressed, number_fields, resolved, Input, On};
 pub use reads::{probe_pose, probe_shape, Output, Read, Skin, Solve, READS};
+pub use reads::{Formula, Reduce, Sampled};
 pub use soft::{sides, Pin, Soft, SoftShape, Stiffness, Tear, OPEN_MESH};
-pub use vehicle::{flat, Vehicle, Wheel, MOST_WHEELS};
+pub use solver::{most_contact_hz, Sleep, Solver};
+pub use vehicle::{flat, Taken, Vehicle, Wheel, FIELDS as VEHICLE_FIELDS, MOST_WHEELS};
+pub use wind::{Gust, Velocity, Wind};
 
 /// The world document's own fields; `kind` names it.
 const WORLD_KEYS: &[&str] = &[
@@ -304,6 +299,10 @@ pub fn read(doc: &Value) -> Result<World, Vec<Refusal>> {
 #[derive(Default)]
 struct Reader {
     out: Vec<Refusal>,
+    /// #2098: whether the world is 2D, so a point is `[x, y]` (`dims`); and the world's `seed`.
+    flat: bool,
+    seed: u64,
+    flats: BTreeMap<String, Flat>,
 }
 
 fn join(path: &str, key: &str) -> String {
@@ -414,36 +413,17 @@ impl Reader {
             .as_array()
             .map(|a| a.iter().map(Value::as_f64).collect::<Option<Vec<_>>>())
         {
-            Some(Some(a)) if a.len() == 3 => [a[0], a[1], a[2]],
+            Some(Some(a)) if a.len() == 3 && !self.flat => [a[0], a[1], a[2]],
+            Some(Some(a)) if a.len() == 2 && self.flat => [a[0], a[1], 0.0],
             _ => {
+                let n = if self.flat { "two" } else { "three" };
                 self.refuse(
                     "out_of_range",
                     join(path, key),
                     v,
-                    format!("{} must be three numbers", show(&join(path, key))),
+                    format!("{} must be {n} numbers", show(&join(path, key))),
                 );
                 default
-            }
-        }
-    }
-
-    fn bools3(&mut self, m: &Map<String, Value>, key: &str, path: &str) -> [bool; 3] {
-        let Some(v) = m.get(key) else {
-            return [false; 3];
-        };
-        match v
-            .as_array()
-            .map(|a| a.iter().map(Value::as_bool).collect::<Option<Vec<_>>>())
-        {
-            Some(Some(a)) if a.len() == 3 => [a[0], a[1], a[2]],
-            _ => {
-                self.refuse(
-                    "out_of_range",
-                    join(path, key),
-                    v,
-                    format!("{} must be three booleans", show(&join(path, key))),
-                );
-                [false; 3]
             }
         }
     }
@@ -511,6 +491,10 @@ impl Reader {
                 "dimensions must be 2 or 3".into(),
             );
         }
+        self.flat = dimensions == 2;
+        self.seed = m.get("seed").and_then(Value::as_u64).unwrap_or(0);
+        let run = self.flat.then(|| self.unrun(m));
+        let m = run.as_ref().unwrap_or(m);
         let step_rate = self.num(m, "step_rate", "", 120.0, f64::MIN_POSITIVE, 1e6);
         if let Err(e) = deep_canvas::time::step_length(step_rate) {
             self.refuse(
@@ -609,8 +593,10 @@ impl Reader {
         let groups = self.groups(m);
         let mut shapes = BTreeMap::new();
         for (id, v) in self.map(m, "shapes") {
-            if let Some(s) = self.shape(v, &format!("shapes/{id}")) {
-                shapes.insert(id.clone(), s);
+            let p = format!("shapes/{id}");
+            match self.shape2(v, &p) {
+                Some(f) => self.flats.extend(f.map(|f| (id.clone(), f))),
+                None => shapes.extend(self.shape(v, &p).map(|s| (id.clone(), s))),
             }
         }
         self.children(&shapes);
@@ -640,7 +626,7 @@ impl Reader {
             }
         }
         let solve = self.solve(m, mode == Mode::Kinematic, &joints);
-        let inputs = self.inputs(m, &bodies);
+        let inputs = self.inputs(m, &bodies, &mut forces);
         let soft = self.softs(m, &bodies, &materials, &groups);
         let mut outputs = BTreeMap::new();
         for (id, v) in self.map(m, "outputs") {
@@ -665,6 +651,7 @@ impl Reader {
             step_p95,
             groups,
             shapes,
+            flat: std::mem::take(&mut self.flats),
             bodies,
             joints,
             forces,
@@ -691,43 +678,6 @@ impl Reader {
                 );
                 Vec::new()
             }
-        }
-    }
-
-    /// The solver; unwritten, `contact_hz` is the lower of 30 Hz and `most` (#2309).
-    fn solver(&mut self, v: &Value, most: f64) -> Solver {
-        let p = "solver";
-        let s = &self.obj(
-            v,
-            p,
-            &[
-                "contact_hz",
-                "contact_damping",
-                "max_speed",
-                "restitution_threshold",
-                "hit_threshold",
-                "sleep",
-                "ccd",
-            ],
-        );
-        let sl = &self.obj(
-            s.get("sleep").unwrap_or(&Value::Null),
-            "solver/sleep",
-            &["on", "speed", "time"],
-        );
-        let hz = most.min(30.0);
-        Solver {
-            contact_hz: self.num(s, "contact_hz", p, hz, f64::MIN_POSITIVE, f64::MAX),
-            contact_damping: self.num(s, "contact_damping", p, 10.0, 0.0, f64::MAX),
-            max_speed: self.num(s, "max_speed", p, 400.0, f64::MIN_POSITIVE, f64::MAX),
-            restitution_threshold: self.num(s, "restitution_threshold", p, 0.0, 0.0, f64::MAX),
-            hit_threshold: self.num(s, "hit_threshold", p, 1.0, 0.0, f64::MAX),
-            sleep: Sleep {
-                on: self.flag(sl, "on", "solver/sleep", true),
-                speed: self.num(sl, "speed", "solver/sleep", 0.05, 0.0, f64::MAX),
-                time: self.num(sl, "time", "solver/sleep", 0.5, 0.0, f64::MAX),
-            },
-            ccd: self.flag(s, "ccd", p, true),
         }
     }
 
@@ -987,6 +937,9 @@ impl Reader {
     fn pose(&mut self, v: Option<&Value>, p: &str) -> Pose {
         let m = &self.obj(v.unwrap_or(&Value::Null), p, &["pos", "rot"]);
         let pos = self.vec3(m, "pos", p, [0.0; 3]);
+        if let Some(rot) = self.turn(m, p) {
+            return Pose { pos, rot };
+        }
         let rot = match m
             .get("rot")
             .and_then(Value::as_array)
@@ -1042,7 +995,6 @@ impl Reader {
             ],
         );
         let (kind, vehicle) = (self.kind(b, p), self.vehicle(b, p));
-        self.inertia(b, p);
         let follow = self.follow(b, p, kind);
         let mut uses = Vec::new();
         for (i, u) in b
@@ -1081,7 +1033,7 @@ impl Reader {
                 .and_then(Value::as_str)
                 .unwrap_or("")
                 .to_string();
-            if !shapes.contains_key(&shape) {
+            if !shapes.contains_key(&shape) && !self.flats.contains_key(&shape) {
                 self.refuse(
                     "ref_unresolved",
                     join(&up, "shape"),
@@ -1158,16 +1110,17 @@ impl Reader {
             shapes: uses,
             pose: self.pose(b.get("pose"), &join(p, "pose")),
             linear: self.vec3(vel, "linear", &join(p, "velocity"), [0.0; 3]),
-            angular: self.vec3(vel, "angular", &join(p, "velocity"), [0.0; 3]),
+            angular: self.spin(vel, &join(p, "velocity")),
             mass: self.opt_num(b, "mass", p, f64::MIN_POSITIVE),
+            inertia: self.inertia(b, p),
             centre_of_mass,
             linear_damping: self.num(damp, "linear", &join(p, "damping"), damping, 0.0, f64::MAX),
             angular_damping: self.num(damp, "angular", &join(p, "damping"), damping, 0.0, f64::MAX),
             gravity_scale: self.num(b, "gravity_scale", p, 1.0, f64::MIN, f64::MAX),
             ccd: self.flag(b, "ccd", p, false),
             sleep: self.flag(b, "sleep", p, true),
-            lock_linear: self.bools3(locks, "linear", &join(p, "locks")),
-            lock_angular: self.bools3(locks, "angular", &join(p, "locks")),
+            lock_linear: self.locks(locks, "linear", &join(p, "locks")),
+            lock_angular: self.locks(locks, "angular", &join(p, "locks")),
             active: self.flag(b, "active", p, true),
             anchors,
             character,
@@ -1256,6 +1209,7 @@ impl Reader {
                 "path",
                 "active",
                 "collide_connected",
+                "articulated",
                 "swing",
                 "twist",
             ],
@@ -1346,6 +1300,7 @@ impl Reader {
             breaks_at: self.breaks(j, p),
             collide_connected: self.flag(j, "collide_connected", p, false),
             active: self.flag(j, "active", p, true),
+            articulated: self.flag(j, "articulated", p, false),
             coupling: self.coupling(j, p, kind),
         })
     }
@@ -1369,6 +1324,8 @@ impl Reader {
             _ => ("", &Value::Null),
         };
         let kp = join(p, "kind");
+        // #2371: a medium or a point written as a string is the channel path it reads.
+        let mut channel = None;
         let kind = match name {
             "uniform" => {
                 let m = &self.obj(fields, &kp, &["accel"]);
@@ -1378,9 +1335,7 @@ impl Reader {
             }
             "drag" => {
                 let m = &self.obj(fields, &kp, &["linear", "quadratic", "medium"]);
-                if let Some(x) = m.get("medium").filter(|x| x.is_string()) {
-                    self.refuse("physics.unsupported", join(&kp, "medium"), x, "a drag medium read from a channel isn't run by this backend interface yet; #2371 brings it".into());
-                }
+                channel = m.get("medium").and_then(Value::as_str).map(String::from);
                 ForceKind::Drag {
                     linear: self.num(m, "linear", &kp, 0.0, 0.0, f64::MAX),
                     quadratic: self.num(m, "quadratic", &kp, 0.0, 0.0, f64::MAX),
@@ -1393,9 +1348,7 @@ impl Reader {
             }
             "spring_to_point" => {
                 let m = &self.obj(fields, &kp, &["point", "hz", "damping_ratio", "max_force"]);
-                if let Some(x) = m.get("point").filter(|x| x.is_string()) {
-                    self.refuse("physics.unsupported", join(&kp, "point"), x, "a spring point read from a channel isn't run by this backend interface yet; #2371 brings it".into());
-                }
+                channel = m.get("point").and_then(Value::as_str).map(String::from);
                 ForceKind::SpringToPoint {
                     point: if m.get("point").is_some_and(Value::is_array) {
                         self.vec3(m, "point", &kp, [0.0; 3])
@@ -1407,12 +1360,9 @@ impl Reader {
                     max_force: self.opt_num(m, "max_force", &kp, 0.0),
                 }
             }
-            "wind" | "buoyancy" | "inverse_square" | "magnetic" | "lennard_jones" => {
-                let issue = match name {
-                    "wind" => "#2098",
-                    "buoyancy" => "#1786",
-                    _ => "#1931",
-                };
+            "wind" => ForceKind::Wind(self.wind(fields, &kp)?),
+            "buoyancy" | "inverse_square" | "magnetic" | "lennard_jones" => {
+                let issue = if name == "buoyancy" { "#1786" } else { "#1931" };
                 self.refuse(
                     "physics.unsupported",
                     kp,
@@ -1447,9 +1397,7 @@ impl Reader {
                 None
             }
         });
-        if f.get("strength").is_some_and(|s| !s.is_number()) {
-            self.refuse("physics.unsupported", join(p, "strength"), &f["strength"], "a strength set by an input isn't run by this backend interface yet; #2371 brings it".into());
-        }
+        let (strength, set_by) = self.strength(f, p);
         let mut applies_to = Vec::new();
         for (i, t) in f
             .get("applies_to")
@@ -1483,7 +1431,9 @@ impl Reader {
             kind,
             region,
             applies_to,
-            strength: self.num(f, "strength", p, 1.0, f64::MIN, f64::MAX),
+            strength,
+            channel,
+            set_by,
         })
     }
 }
