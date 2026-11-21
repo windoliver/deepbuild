@@ -505,4 +505,40 @@ describe('an answer that saves a decision (#319.43d13eb3, #22)', () => {
     letGo();
     await expect(answering).rejects.toThrow('refused');
   });
+
+  it('an overrule settles only once the decision it overrules is written, even when the record refuses its new decision', async () => {
+    const session = 'claude0003abcd';
+    await start(session, 'T1');
+    const decisionId = id(now);
+    await record.append({ writer: 'core', ...who, session }, { v: 1, id: decisionId, kind: 'decision.created', ts: now, data: { key: sha('taste:header'), scope: `session:${session}`, answer: 'green', ask: `ask:${id(now)}` } });
+    const off = asks.registerResolver('test/resolver', () => ({ answer: 'green', because: `decision:${decisionId}` }));
+    let handle: string;
+    try {
+      handle = await asks.raise(agent(session), 'deep_ask.taste', taste('header'));
+      expect(await outcome(handle)).toBe('decided_for_you');
+    } finally {
+      off();
+    }
+    let letGo!: () => void;
+    const held = new Promise<void>((done) => { letGo = done; });
+    const real = record;
+    // The record refuses the new decision at once and takes the overruling only when let go.
+    const refusing = new Proxy(real, {
+      get(target, key) {
+        if (key === 'append') {
+          return (c: Parameters<typeof real.append>[0], e: Parameters<typeof real.append>[1]) => e.kind === 'decision.created' ? Promise.reject(Error('refused')) : e.kind === 'decision.overruled' ? held.then(() => real.append(c, e)) : real.append(c, e);
+        }
+        const value = Reflect.get(target, key) as unknown;
+        return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+      },
+    });
+    asks = await openAsks({ record: refusing, now: () => now, deliver: () => undefined });
+    let settled = false;
+    const overruling = asks.overrule(card, handle, { option: 'blue' }).finally(() => { settled = true; });
+    overruling.catch(() => undefined);
+    await new Promise((done) => setTimeout(done, 50));
+    expect(settled, 'the overrule holds the asks until the overruling it writes is through').toBe(false);
+    letGo();
+    await expect(overruling).rejects.toThrow('refused');
+  });
 });

@@ -1218,7 +1218,7 @@ class AsksCore implements Asks {
     const now = this.options.now();
     const id = ulid(now);
     const as = asCore(connection);
-    await Promise.all([{ v: 1, id, kind: 'decision.created', subject: ask.handle, ts: now, data: { key: String(ask.data.key), scope, answer, ask: ask.handle } }, ...contradicted.map((d) => ({ v: 2, id: ulid(now), kind: 'decision.overruled', subject: d.handle, ts: now, data: { decision: d.handle, at: scope } }))].map((event) => this.options.record.append(as, event))); // one turn, in this order: durable in one commit (#22)
+    await allThrough([{ v: 1, id, kind: 'decision.created', subject: ask.handle, ts: now, data: { key: String(ask.data.key), scope, answer, ask: ask.handle } }, ...contradicted.map((d) => ({ v: 2, id: ulid(now), kind: 'decision.overruled', subject: d.handle, ts: now, data: { decision: d.handle, at: scope } }))].map((event) => this.options.record.append(as, event))); // one turn, in this order: durable in one commit (#22)
     await this.sync();
     return `decision:${id}`;
   }
