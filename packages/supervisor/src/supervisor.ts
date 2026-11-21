@@ -136,7 +136,7 @@ class LocalSupervisor implements Supervisor {
   private streams: Stream[] = [];
   /** The canary run whose report shows the denial stream is live, and when it last came through the kept stream. */
   private canary = '';
-  private warmAt = 0;
+  private warmAt = -Infinity;
   /** The first warm-up of the denial stream; a sandboxed launch waits for it, opening doesn't. */
   private warming: Promise<unknown> = Promise.resolve();
   private ticking: Promise<void> | undefined;
@@ -398,7 +398,7 @@ class LocalSupervisor implements Supervisor {
   /** A denial stream on one filter. */
   private stream(filter: string): Stream {
     const log = spawn(HELPER, ['leash', '/usr/bin/log', 'stream', '--style', 'ndjson', '--predicate', filter], { stdio: ['ignore', 'pipe', 'ignore'] });
-    const s: Stream = { log, shownAt: 0 };
+    const s: Stream = { log, shownAt: -Infinity };
     log.unref();
     (log.stdout as unknown as { unref?: () => void }).unref?.();
     let buffer = '';
@@ -411,7 +411,7 @@ class LocalSupervisor implements Supervisor {
         let message = '';
         try { message = String((JSON.parse(line) as { eventMessage?: unknown }).eventMessage ?? ''); } catch { continue; }
         const m = /deny\(\d+\) (\S+) (.*?)\s*\ndev\.deepbuild\.(run:[0-9A-Za-z]+)/.exec(message);
-        if (m) s.shownAt = Date.now();
+        if (m) s.shownAt = performance.now();
         if (m && log === this.log) this.warmAt = s.shownAt;
         // Any stream still running records, each refusal once: a run kept from before a restart may be refused mid-warm.
         if (!m || !this.runs.has(m[3]!)) continue;
@@ -487,7 +487,7 @@ class LocalSupervisor implements Supervisor {
    * a dearer one's showing it never will.
    */
   private async warm(ms: number): Promise<Stream | undefined> {
-    const since = Date.now();
+    const since = performance.now();
     const streams = this.streams;
     const shown = (): Stream | undefined => streams.find((s) => s.shownAt >= since);
     // When a stream first showed one: each later report moves a stream's shownAt on.
@@ -495,13 +495,13 @@ class LocalSupervisor implements Supervisor {
     const settled = (): boolean => {
       const best = shown();
       if (!best) return false;
-      first ||= Date.now();
-      return Date.now() >= first + SHOWN_MS || !streams.slice(0, streams.indexOf(best)).some((s) => s.log.exitCode === null);
+      first ||= performance.now();
+      return performance.now() >= first + SHOWN_MS || !streams.slice(0, streams.indexOf(best)).some((s) => s.log.exitCode === null);
     };
     this.canary = `run:canary${randomBytes(8).toString('hex')}`;
     const profile = `(version 1)\n(deny default (with message "dev.deepbuild.${this.canary}"))\n(import "system.sb")\n(allow file-read* process-exec)`;
     // Each try refused on a path of its own: the kernel folds identical reports into one, later.
-    for (let n = 0; !settled() && !this.closed && streams.some((s) => s.log.exitCode === null) && Date.now() < since + ms; n++) {
+    for (let n = 0; !settled() && !this.closed && streams.some((s) => s.log.exitCode === null) && performance.now() < since + ms; n++) {
       const target = `/tmp/deep-canary-${this.canary.slice(4)}-${n}`;
       await new Promise((done) => spawn('/usr/bin/sandbox-exec', ['-p', profile, HELPER, 'probe', '/dev/null', 'write', target], { stdio: 'ignore' }).on('close', done).on('error', done));
       for (let i = 0; i < 10 && !settled(); i++) await sleep(25);
@@ -696,7 +696,7 @@ class LocalSupervisor implements Supervisor {
       : { argv: spec.argv, cwd, env };
     // After a minute with no report, the stream is shown live again before a process can be refused anything.
     if (sandboxed) await this.warming;
-    if (sandboxed && this.log && Date.now() - this.warmAt > WARM_MS) await this.warm(2000);
+    if (sandboxed && this.log && performance.now() - this.warmAt > WARM_MS) await this.warm(2000);
     const r: Run = { ...blank(spec.run, cwd, 'running'), sandboxed, token: sha256(token), leases, ...(spec.holder ? { holder: spec.holder } : {}), ...(egress ? { egress } : {}), ...(spec.limits ? { limits: spec.limits } : {}) };
     this.runs.set(spec.run, r);
     this.scanSoon();
