@@ -148,6 +148,8 @@ export interface InboxRow {
   missing: Missing | null;
   /** What you typed beside an ask that typed text can't close, as its card shows it. */
   words: string[];
+  /** The exception "this session keeps asking" that holds it, while it shows only there (#667); null otherwise. */
+  folded: string | null;
 }
 export interface Asks {
   raise(connection: Connection, source: string, ask: unknown, plan?: PlanInput): Promise<string>;
@@ -570,6 +572,10 @@ class AsksCore implements Asks {
         const allow = options.find((o) => o.decision === 'allow');
         if (allow) throw new AskRefused(`option ${allow.id} declares allow, which only DeepBuild writes`, { option: allow.id });
       }
+      // #2563: `deep inbox answer` takes an option by its ID on a command line, which carries no NUL (the schema
+      // already refuses a lone surrogate).
+      const untypable = options.find((o) => o.id.includes('\0'));
+      if (untypable) throw new AskRefused(`option ${JSON.stringify(untypable.id)} holds a NUL, which no command line carries, so deep inbox answer could never choose it`, { option: untypable.id });
       const ids = new Set(options.map((o) => o.id));
       if (data.recommended !== null && !ids.has(data.recommended as string)) throw new AskRefused('the recommendation names no option', { field: 'recommended' });
       if (!ids.has(data.default as string)) throw new AskRefused('the default names no option', { field: 'default' });
@@ -889,6 +895,7 @@ class AsksCore implements Asks {
         ask: a.handle, kind: a.data.kind as AskKind, session: a.session, status: this.status(a),
         outcome: a.closed?.outcome ?? 'unanswered', owner: String(a.data.owner), age: now - a.created,
         request: a.request ? { ...a.request } : null, decision: a.closed?.decision ?? null, missing: a.closed ? null : a.missing ?? null, words: [...a.words],
+        folded: !a.closed && this.inFold(a) ? a.folded! : null,
       }));
     });
   }

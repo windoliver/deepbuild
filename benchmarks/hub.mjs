@@ -278,7 +278,9 @@ const modes = {
     const read = reading.stop();
     await stop(hub);
     const aSecond = (count) => (count === null ? null : count / (read.spanMs / 1000));
-    return { idleCpuPercent, rssBytes, ...report(read, hub.pid, ({ pid, instructions, cpuMs, wakeups, footprintBytes }) => ({ pid, wakeups, instructionsPerSecond: aSecond(instructions), cpuMsPerSecond: aSecond(cpuMs), footprintBytes })) };
+    const readings = report(read, hub.pid, ({ pid, instructions, cpuMs, wakeups, footprintBytes }) => ({ pid, wakeups, instructionsPerSecond: aSecond(instructions), cpuMsPerSecond: aSecond(cpuMs), footprintBytes }));
+    // The hub's own wakeups and instructions a second beside its CPU (#2648), the numbers its count limits read.
+    return { idleCpuPercent, wakeupsPerSecond: aSecond(readings.hub?.wakeups ?? null), instructionsPerSecond: readings.hub?.instructionsPerSecond ?? null, rssBytes, ...readings };
   },
 };
 

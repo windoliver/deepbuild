@@ -103,6 +103,7 @@ impl Hub<'_> {
                 track: None,
                 data_hash: false,
                 texts: false,
+                shown: false,
                 carried: false,
                 tour_pointer: false,
             };

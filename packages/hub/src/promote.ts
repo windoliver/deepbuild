@@ -2,9 +2,10 @@
 // folder, ~/.deepbuild/versions/<commit>/, through the `current` link the login service names, never from a worktree,
 // a checkout or a temporary path. Run in the checkout main watch (#1333) watches: only the commit of its last clean
 // run is promoted, and never while it reads main red. The promotion waits for a drain (the run's starts pause and its
-// turns finish), then the hub stops, `current` switches, the login service starts the new build, which reconciles, and
-// a health check has that hub judge one fixture claim. A build that doesn't answer, doesn't stay up or reads the claim
-// wrong is rolled back: the last good build comes back by itself and records one notice naming the promoted commit.
+// turns finish), then `current` switches, the hub restarts (#1865), the login service starts the new build, which
+// reconciles, and a health check has that hub judge one fixture claim. A build that doesn't answer, doesn't stay up or
+// reads the claim wrong is rolled back: the last good build comes back by itself and records one notice naming the
+// promoted commit.
 import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, readlinkSync, renameSync, rmSync, statSync, symlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -62,12 +63,20 @@ export async function promoteCommand(args: readonly string[]): Promise<number> {
         told = true;
         await sleep(1000);
       }
-      await stop(root);
     }
   } catch (error) {
     return refused(`the hub couldn't be drained, so ${commit} isn't promoted: ${message(error)}`, 3);
   }
+  // `current` first, then a restart on the token alone (#1865), which the login service brings back on the build it names.
   switchTo(versions, commit);
+  const stuck = await restart(root);
+  if (stuck) {
+    if (previous) switchTo(versions, previous);
+    else rmSync(join(versions, 'current'), { force: true });
+    // The hub that stays in serves session starts again.
+    try { await control(root.socket, rootToken(root), 'hub.drain', { on: false }, 10_000); } catch { /* it says why below */ }
+    return refused(`${commit} isn't promoted: ${stuck}`, 3);
+  }
   const why = await up(root, previous ? UP_MS : SLOW_UP_MS, true);
   if (!why) {
     prune(versions, [commit, previous]);
@@ -75,12 +84,15 @@ export async function promoteCommand(args: readonly string[]): Promise<number> {
     return 0;
   }
   // The rollback: the build that was in comes back, and records the one notice.
-  await stop(root);
   if (!previous) {
     rmSync(join(versions, 'current'), { force: true });
+    const left = await restart(root);
+    if (left) return refused(`${commit} wasn't promoted (${why}), and its hub is still up: ${left}`, 3);
     return refused(`${commit} wasn't promoted: ${why}; there is no last good build to come back to`);
   }
   switchTo(versions, previous);
+  const kept = await restart(root);
+  if (kept) return refused(`${commit} was rolled back (${why}), but its hub is still up: ${kept}`, 3);
   const back = await up(root, SLOW_UP_MS, false);
   if (back) return refused(`${commit} was rolled back (${why}), but ${previous} didn't come back: ${back}`, 3);
   try {
@@ -103,17 +115,35 @@ function switchTo(versions: string, name: string): void {
   renameSync(link, join(versions, 'current'));
 }
 /**
- * Stops the installed hub if one answers, and waits for its process to exit: the service manager starts a job only
- * once it isn't running, so a start asked for while the old hub still exits would start nothing.
+ * Restarts the installed hub if one answers, on the token alone (#1865), and waits for its process to exit: the login
+ * service starts it again on the build `current` names, and a start asked for while the old hub still exits would
+ * start nothing. A hub from before #1865 knows no restart, and still stops on the token. Why the old hub still runs, or
+ * undefined once it's gone.
  */
-async function stop(root: Root): Promise<void> {
-  if (!(await helloAt(root.socket))) return;
+async function restart(root: Root): Promise<string | undefined> {
+  const before = await helloAt(root.socket);
+  if (!before) return undefined;
   let pid: unknown;
-  try { pid = (await control(root.socket, rootToken(root), 'hub.health', {}, 10_000)).pid; } catch { /* read below by its socket */ }
-  try { await control(root.socket, rootToken(root), 'hub.stop'); } catch { /* gone already */ }
-  // Signal 0 only asks whether the hub's process still runs.
-  const runs = () => { try { process.kill(Number(pid), 0); return true; } catch { return false; } };
-  for (const deadline = Date.now() + 30_000; Date.now() < deadline && (typeof pid === 'number' ? runs() : await helloAt(root.socket));) await sleep(250);
+  try { pid = (await control(root.socket, rootToken(root), 'hub.health', {}, 10_000)).pid; } catch { /* read below by its start */ }
+  try {
+    await control(root.socket, rootToken(root), 'hub.restart', {}, 10_000);
+  } catch (error) {
+    if (message(error).includes('"unknown_method"')) {
+      try { await control(root.socket, rootToken(root), 'hub.stop', {}, 10_000); } catch { /* gone already */ }
+    } else if ((await helloAt(root.socket))?.start === before.start) return message(error);
+    // Otherwise the hub went meanwhile, and the login service starts it again all the same.
+  }
+  // Signal 0 only asks whether the hub's process still runs; without its PID, whether the same start still answers.
+  const runs = async () => {
+    if (typeof pid !== 'number') return (await helloAt(root.socket))?.start === before.start;
+    try { process.kill(pid, 0); return true; } catch { return false; }
+  };
+  // A hub just up waits out its restart's minimum (server.ts, RESTART_AFTER_MS) before it goes.
+  for (const deadline = Date.now() + 45_000; await runs();) {
+    if (Date.now() >= deadline) return `the hub that was in (start ${String(before.start)}) didn't restart within 45 s`;
+    await sleep(250);
+  }
+  return undefined;
 }
 /**
  * The login service starts the build `current` names; why it isn't up, or undefined once its hub answers, judges the
