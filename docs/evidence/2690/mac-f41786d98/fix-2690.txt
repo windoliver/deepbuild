@@ -1,0 +1,17 @@
+
+ RUN  v5.0.5 ~/mac-runs/d2690f/tests/acceptance/2690
+
+stdout | row-word.test.ts > #2690.50174a03 `deep`, the hub's list row and the app's drawn row agree on an open ask's word > #2690.50174a03: each open ask's word in the hub's row.set is the word deep status --json, deep and the app's drawn row give it
+the hub's ask rows: ask:01M7YDE9C2V3VZTN0AM8N8QGPY "Push release-1.4 to origin?" word "needs you"; ask:01M7YDG3Z2SBJGSWNJF8AGHJ2P "Which header colour on the login page?" word "needs you"; ask:01M7YDHYJ288VHG9YWQAEM840J "Keep the cart on SQLite or plain files?" word "needs you"
+
+ ✓ row-word.test.ts (3 tests) 315086ms
+   ✓ #2690.50174a03 `deep`, the hub's list row and the app's drawn row agree on an open ask's word (1)
+     ✓ #2690.50174a03: each open ask's word in the hub's row.set is the word deep status --json, deep and the app's drawn row give it 285472ms
+   ✓ #2690.9af6aab5 An open ask's row in the app still draws its kind in its state-word slot (#1461 AC27) (2)
+     ✓ #2690.9af6aab5 wrong program: ask-words-alike, every ask row drawing "needs you" in its slot, fails naming each row 29546ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  22:46:57
+   Duration  315.70s (tests 100%)
+

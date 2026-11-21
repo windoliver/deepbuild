@@ -1,0 +1,6 @@
+start; cc --version exit 0; screen-lock flag 0; Now drawing from 'AC Power' 15:27:22 load { 9.47 34.08 44.75 } thermal 1 free KB 55439488
+BASE clone at de86786960c9f74652e24c28b5a2a78c6d30406c; origin/claude/fix-2690-ask-row-word a6a183c459a917057eb982054d168f849b0e8083 15:27:59 load { 8.24 31.04 43.21 } thermal 1 free KB 54203688
+setup base (npm ci, workspace build, deep-hook, deep-drive) exit=2 15:29:18 load { 9.40 26.01 40.19 } thermal 1 free KB 53886432
+BLOCKED: setup base failed; see setup-base.log 15:29:18 load { 9.40 26.01 40.19 } thermal 1 free KB 53886424
+clone ~/private/d2690 removed 15:29:21 load { 9.45 25.74 40.02 } thermal 1 free KB 55429504
+secret scan hits=0 15:29:21 load { 9.45 25.74 40.02 } thermal 1 free KB 55429592

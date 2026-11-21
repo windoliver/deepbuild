@@ -1,0 +1,3 @@
+PASS guard: 6 commits checked: no guarded edit lacks its own approved proposal
+proof: wall time 1903.4 s
+exit=0

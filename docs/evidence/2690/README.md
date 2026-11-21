@@ -1,0 +1,21 @@
+# Evidence for #2690
+
+- `guard-a6a183c45.txt`: the proof guard at a6a183c45, the first fix: PASS (2 commits).
+- `mac-a6a183c45-blocked/` (Mac): BLOCKED at base setup, because the base b4c099e2e didn't build (main's `footprint_unknown`, #2858, fixed by #2868). Nothing was tested. Main was merged in (53ef834e8).
+- `mac-53ef834e8/` (Mac, 2026-11-19): the base (main a0d3713a7 + the blind tests) and the first fix, merged.
+  - `#2690.50174a03` failed at both. At the fix, each ask row's name read `<question> · Approval` (or `· How it looks`, `· Pick one`), because the first fix named `row.word`, and in the app's list an ask row's `row.word` is its kind, not the hub's word. Fixed in the next commit, which names `needs you` in the language shown.
+  - #1461 AC27 and #1172 AC3 (`rows.test.ts`) passed at the fix, so #1172's earlier failure (at e4dea91f3) didn't recur.
+  - #1810's redraft failed only on the same word line.
+  - #1459 AC6 failed before and after the retake, on the same structural difference: the "Needs you" heading has 1 child in the replica and 2 in the live tree (its count and the `needs-you-pop-out` button, on main since #1592). The stored captures already hold both, so this doesn't come from #2690; a run at main checks it.
+  - `git-status-after-fix.txt` lists 15 staged `tests/acceptance/1810` files the Mac script's restore left behind. They didn't affect steps e–g.
+- Linux affected runs at 53ef834e8: INCONCLUSIVE. The first was stopped for the main merge, the second by the Spark reboot (2026-11-19 20:24), the third was OOM-killed at its 24G cap, and the fourth was stopped when the fix changed. None was read.
+- Review of 26e4f2a4f (2026-11-20): naming the word in the row's own name breaks every locator that finds an ask row by its exact name, its bare question: #1546's blind journeys (`tests/acceptance/1546/helpers.ts`, a strict hover) and the shipped `needs-you` motion journey (`crates/deep-replica/src/drive/motion.rs`). Neither ran in the rounds above. The owner chose the mark slot instead: the row's name is its question again, and an ask's `<id>:mark` slot is named `needs you` in the language shown, where it was named by its glyph. The captures in `mac-53ef834e8/live/` are of the superseded first fix and are not the ones to commit.
+- Nothing above proves the fix now at the head. The Mac round for it is pending.
+- `guard-f41786d98.txt`: the proof guard at f41786d98: PASS (6 commits).
+- `mac-f41786d98/` (MacBook Pro Mac18,1, 2026-11-20): the base (main 703ea8e49 + the blind tests) and the head f41786d98, the mark-slot fix.
+  - `#2690.50174a03` fails at the base (`lacks its word "needs you"`) and passes at the head; both `#2690.9af6aab5` tests pass at both. 3 of 3 at the head.
+  - #1461 AC27 passes (2 passed, 6 skipped by `-t`). #1810's `redraft-replica` passes 6 of 6.
+  - #1459 AC6 fails at the base and at the head the same way, before and after the retake: the "Needs you" heading has 1 child in the replica and 2 in the live tree (the replica's snapshot has no `needs-you-pop-out` button). Its parity file also lists 22 rows with no id, as the 53ef834e8 round did. The retake changes each ask's mark name from `!` to `needs you` and six bounds lines per view; the retaken captures aren't committed.
+  - #1172 AC3 (`rows.test.ts`) fails 2 of 2: `no reply to canvas.user within 10000 ms`. #1546 AC1 fails 5 of 6 and #1427 AC7 4 of 4, on panics in `vendor/gpui-pre/src/app/entity_map.rs` (`cannot update deep_app::views::Shell while it is already being updated`, `used a entity with the wrong context`). None of the three ran at the base in this round, so whether main fails them is not known from it.
+  - The run's live captures and the replica's snapshots aren't committed (about 700 KB); the captures of the first fix under `mac-53ef834e8/live/` are removed.
+- `mac-base-703ea8e49/` (MacBook Pro, 2026-11-20): the base alone, main 703ea8e49. #1172 AC3 (`rows.test.ts`) fails 2 of 2, #1546 AC1 5 of 6 and #1427 AC7 4 of 4, each with the head's own errors (`no reply to canvas.user within 10000 ms`; the two `entity_map.rs` panics). So main fails all three and this change doesn't cause them. The screen locked during this run (unlocked at its start, locked by #1172's result); the head's round ran unlocked and failed the same way.

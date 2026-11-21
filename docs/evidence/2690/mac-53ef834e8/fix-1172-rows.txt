@@ -1,0 +1,14 @@
+== commit 53ef834e811a81574b17fafa079dadf4e4889d30
+== command: node node_modules/vitest/vitest.mjs run tests/acceptance/1172/rows.test.ts
+== start 2026-11-19 22:16:49 load { 41.76 66.22 84.99 } thermal 1
+
+ RUN  v5.0.5 ~/private/d2690b
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  22:16:49
+   Duration  466.20s (tests 100%)
+
+== end 2026-11-19 22:24:35 load { 12.39 31.79 59.73 } thermal 1
+exit=0

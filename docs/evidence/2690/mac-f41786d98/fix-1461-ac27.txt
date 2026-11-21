@@ -1,0 +1,14 @@
+
+ RUN  v5.0.5 ~/mac-runs/d2690f
+
+ ↓ tests/acceptance/1461/rows.test.ts (2 tests | 2 skipped)
+ ✓ tests/acceptance/1461/redraft/rows.test.ts (6 tests | 4 skipped) 8563ms
+   ✓ AC27 #1461.a024b727 Two asks of different kinds differ in their rows' state words. A planted list that draws both alike fails, naming the pair (2)
+     ✓ AC27 a push approval's row and a choice's row read different state words 5788ms
+     ✓ AC27 wrong program: ask-words-alike, every ask row reading the same word, fails naming the pair 2657ms
+
+ Test Files  1 passed | 1 skipped (2)
+      Tests  2 passed | 6 skipped (8)
+   Start at  22:52:14
+   Duration  9.31s (tests 87%, transform 11%, import 1%)
+

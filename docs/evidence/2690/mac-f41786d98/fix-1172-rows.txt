@@ -1,0 +1,46 @@
+
+ RUN  v5.0.5 ~/mac-runs/d2690f
+
+ ❯ tests/acceptance/1172/rows.test.ts (2 tests | 2 failed) 283600ms
+   ❯ #1172 Needs you shows questions and presents their cards (2)
+     × AC3 each row shows its ask's question, and a click on it presents that ask's question card in the window 272777ms
+     × AC3 wrong program: a planted row that shows the ask's handle fails, naming the ask 10535ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1172/rows.test.ts > #1172 Needs you shows questions and presents their cards > AC3 each row shows its ask's question, and a click on it presents that ask's question card in the window
+Error: no reply to canvas.user within 10000 ms
+ ❯ Conn.call tests/acceptance/16/helpers.ts:353:23
+    351|     this.send({ v: 1, id, method, params });
+    352|     const reply = await this.seek((line) => line.id === id && ('result…
+    353|     if (!reply) throw Error(`no reply to ${method} within ${timeoutMs}…
+       |                       ^
+    354|     return reply.json!;
+    355|   }
+ ❯ canvasUser tests/acceptance/1172/helpers.ts:437:123
+ ❯ makeWorld tests/acceptance/1172/helpers.ts:415:18
+ ❯ tests/acceptance/1172/rows.test.ts:48:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/1172/rows.test.ts > #1172 Needs you shows questions and presents their cards > AC3 wrong program: a planted row that shows the ask's handle fails, naming the ask
+Error: no reply to canvas.user within 10000 ms
+ ❯ Conn.call tests/acceptance/16/helpers.ts:353:23
+    351|     this.send({ v: 1, id, method, params });
+    352|     const reply = await this.seek((line) => line.id === id && ('result…
+    353|     if (!reply) throw Error(`no reply to ${method} within ${timeoutMs}…
+       |                       ^
+    354|     return reply.json!;
+    355|   }
+ ❯ canvasUser tests/acceptance/1172/helpers.ts:437:123
+ ❯ makeWorld tests/acceptance/1172/helpers.ts:415:18
+ ❯ tests/acceptance/1172/rows.test.ts:55:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  22:52:23
+   Duration  283.93s (tests 100%)
+
