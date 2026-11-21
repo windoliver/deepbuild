@@ -1,0 +1,52 @@
+# #3025 acceptance suite at the base, b6b99ad8c (Merge pull request #3003), before any implementation.
+#
+# Run once, on this Mac's Metal device, from the blind worktree at the base (cargo built deep-gpu; load about 200):
+#
+#   PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease nice -n 10 \
+#     node node_modules/vitest/vitest.mjs run --root tests/acceptance/3025 --no-file-parallelism --testTimeout=600000 holes.test.ts
+#   node node_modules/typescript/bin/tsc -p tests/acceptance/3025/tsconfig.json   -> exit 0, no errors
+#
+# Result: 2 tests, 2 failed, each for the reason the issue names. Both operators cut (one has a discard_if@1 step, one
+# writes alpha), so op::compile builds their shadow pipeline, whose op_shadow_fs calls run_op, which reads group 1
+# through planted(P_BUMP_HAND); the device rejects it, the operator is refused, and view3d refuses the frame with
+# operator_compile instead of drawing the solid without its operator (view3d.rs). In each test the fixture's own checks
+# ran first, in the same process, and held at the base: the plate alone reads at least 0.5 on every pixel of the ring
+# (56,536 px) and the disc with no operator darkens it (mean under 5% of the plate alone), so the whole shadow the
+# fallback would cast is there to see and the regions are where the shadow falls.
+#
+# Not run at the base: a frame of either disc under its operator, which the base never draws through view3d.
+#
+# Also checked at the base, by a probe (not part of the suite): a disc of the same shape under a non-cutting operator,
+# which compiles there, painted red where uv0.u < 0.5; seen from above and from below, with a marker at world +X,
+# both caps are red on the world x < 0 half, so the discarded half is the same on both faces a shadow pass draws.
+# Region sizes, from the view's own math: ring 56,536 px; kept 24,642; cut 24,642; hole 6,886.
+
+ ❯ holes.test.ts (2 tests | 2 failed) 2235688ms
+     × AC1 #3025.f34de22c a solid whose operator discards where uv0.u < 0.5 compiles and throws a shadow from its kept half only 37043ms
+     × AC1 #3025.f34de22c a solid whose operator writes alpha 0 everywhere compiles and throws no shadow 33743ms
+
+ FAIL  holes.test.ts > AC1 #3025.f34de22c a material operator that cuts its coverage compiles and lets the spot's light through its holes > AC1 #3025.f34de22c a solid whose operator discards where uv0.u < 0.5 compiles and throws a shadow from its kept half only
+AssertionError: the disc under an operator that discards where uv0.u < 0.5:
+  cut: the frame is refused, operator_compile: cut: the device rejects its pipeline: Validation Error
+
+Caused by:
+  In Device::create_render_pipeline, label = 'scene3d material operator shadow'
+    Error matching ShaderStages(FRAGMENT) shader requirements against the pipeline
+      Shader global ResourceBinding { group: 1, binding: 0 } is not available in the pipeline layout
+        Binding is missing from the pipeline layout
+ ❯ holes.test.ts:140:5
+
+ FAIL  holes.test.ts > AC1 #3025.f34de22c a material operator that cuts its coverage compiles and lets the spot's light through its holes > AC1 #3025.f34de22c a solid whose operator writes alpha 0 everywhere compiles and throws no shadow
+AssertionError: the disc under an operator that writes alpha 0 everywhere:
+  clear: the frame is refused, operator_compile: clear: the device rejects its pipeline: Validation Error
+
+Caused by:
+  In Device::create_render_pipeline, label = 'scene3d material operator shadow'
+    Error matching ShaderStages(FRAGMENT) shader requirements against the pipeline
+      Shader global ResourceBinding { group: 1, binding: 0 } is not available in the pipeline layout
+        Binding is missing from the pipeline layout
+ ❯ holes.test.ts:148:5
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Duration  2237.93s (tests 100%; almost all of it the cargo build)

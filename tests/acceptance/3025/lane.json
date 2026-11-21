@@ -1,0 +1,1 @@
+{ "alone": true, "why": "builds deep-gpu with cargo and draws on the Metal device, as tests/acceptance/446/ does" }
