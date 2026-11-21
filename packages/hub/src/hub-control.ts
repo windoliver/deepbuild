@@ -57,6 +57,8 @@ import type { CheckKinds } from './checks-port.js';
 
 import { Stacks } from './stacks.js';
 import { Starts } from './starts.js';
+import { Drain, drainFor, drainHealth, drainWords } from './drain.js';
+import { argsOf } from './children.js';
 
 import { HeavyQueue } from './heavy.js';
 
@@ -150,8 +152,8 @@ export class HubControl {
     this.work = new WorkspaceActions({ settings: options.settings, services: options.services, events: options.events,   state: options.state });
   }
 
-  /** A promotion's drain (#1334): no session starts until the hub restarts on the new build. */
-  private draining = false;
+  /** A promotion's drain (#1334), held only while renewed (#2974): no session starts while it holds. */
+  private readonly drain = new Drain(() => this.options.services.now(), argsOf);
 
   /** Every app or CLI write with an effect runs once per request ID, and its reply names its log position (#1577). */
   private readonly writes = new Writes({ record: () => this.options.services.record, plant: () => this.options.settings.plant });
@@ -265,7 +267,11 @@ export class HubControl {
       // The list's rows (#1463), as status.read waits for them: behind every hook received and the state pass under way.
       case 'rows.read':
         this.options.schedule.replayLate();
-        return (this.options.schedule.replaying ?? Promise.resolve()).then(() => this.options.schedule.queue(async () => undefined)).then(() => this.options.state().statesSettled()).then(() => this.options.services.log.reflecting(() => this.options.state().rowsSeen(context.role, params.detail === true)));
+        return (this.options.schedule.replaying ?? Promise.resolve()).then(() => this.options.schedule.queue(async () => undefined)).then(() => this.options.state().statesSettled()).then(() => this.options.services.log.reflecting(async () => {
+          const read = await this.options.state().rowsSeen(context.role, params.detail === true);
+          const held = this.drain.read();
+          return held ? { ...read, paused: drainWords(drainFor(held, context.role)) } : read;
+        }));
       // A row's page was open a second while you were present (#1461): the row reads as read in every reader.
       case 'row.read':
         if (context.role !== 'app') throw refuse('role', '/method', 'Only the app says a row was seen.', method);
@@ -284,12 +290,12 @@ export class HubControl {
       case 'host.remove': return this.options.services.hosts.remove(params.host);
       case 'start.approve': return this.options.services.sessionStarts.approve(params, context);
       case 'start.session':
-        if (this.draining) throw refuse('unavailable', '/method', 'A promotion is draining the hub: no session starts until it restarts on the new build. Start it again then.', method, true);
+        { const held = this.drain.read(); if (held) throw refuse('unavailable', '/method', `${drainWords(drainFor(held, context.role))} Start it again then.`, method, true); }
         return this.options.services.sessionStarts.startSession(params, context);
       // A promotion (#1334): the run pauses and its running turns are counted until none is left; the fixture claim
       // judged by this build's own verdict engine; and, on the build that came back, the rollback's one notice.
       case 'hub.drain':
-        this.draining = params.on !== false;
+        if (params.on === false) this.drain.lift(); else await this.drain.take(context.peer);
         // A turn runs while its session reads working, or waits on a permission prompt, as session.state records it.
         await this.options.state().statesSettled();
         return { turns: [...this.options.state().states.values()].filter((s) => s.startsWith('working/') || s === 'needs you/waiting').length };
@@ -423,7 +429,11 @@ export class HubControl {
 
   async notifierGone(): Promise<void> { return this.readings.notifierGone(); }
 
-  async health(role: string): Promise<Obj> { return this.readings.health(role.startsWith('person:') ? this.options.state().seenBy(role) : undefined); }
+  async health(role: string): Promise<Obj> {
+    const health = await this.readings.health(role.startsWith('person:') ? this.options.state().seenBy(role) : undefined);
+    const held = this.drain.read();
+    return held ? { ...health, drain: drainHealth(drainFor(held, role)) } : health;
+  }
 
   async forgeRepos(): Promise<string[]> { return this.readings.forgeRepos(); }
 
