@@ -475,7 +475,7 @@ class LocalSupervisor implements Supervisor {
     for (let n = 0; this.warmAt < since && this.log?.exitCode === null && Date.now() < since + ms; n++) {
       const target = `/tmp/deep-canary-${this.canary.slice(4)}-${n}`;
       // Planted: each probe runs a second first, so one is still running when a stopped hub exits.
-      const child = spawn('/usr/bin/sandbox-exec', ['-p', profile, '/bin/sh', '-c', 'sleep 1; exec "$0" "$@"', HELPER, 'probe', '/dev/null', 'write', target], { stdio: 'ignore' });
+      const child = spawn('/usr/bin/sandbox-exec', ['-p', profile, '/usr/bin/perl', '-e', 'select(undef, undef, undef, 1); exec @ARGV', HELPER, 'probe', '/dev/null', 'write', target], { stdio: 'ignore' });
       const ended = new Promise((done) => child.on('close', done).on('error', done));
       this.probe = { child, ended };
       await ended;
