@@ -1,0 +1,73 @@
+
+ RUN  v5.0.5 ~/mac-runs/mb-base
+
+ ❯ tests/acceptance/1546/ac1-journey.test.ts (6 tests | 5 failed) 37735ms
+   ❯ #1546 AC1 a record event reaches the window by itself, and the replica reads the frame it drew (2)
+     ✓ an ask raised on the record is drawn with no input: the frame drawn after it lists the row and the new count, and equals a forced one 35011ms
+     × planted record-in-thread-local: the drawn frame keeps the old count and rows, and the check fails naming Needs you, the ask's row and the step 180ms
+   ❯ #1546 AC1 seeded journeys of record events, clock steps, hovers and resizes (4)
+     × seed 1546: the window draws only when dirty, every step's forced frame equals the last drawn one, and the claim is PASS 822ms
+     × seed 7: the window draws only when dirty, every step's forced frame equals the last drawn one, and the claim is PASS 695ms
+     × seed 2026: the window draws only when dirty, every step's forced frame equals the last drawn one, and the claim is PASS 416ms
+     × seed 1546 with the planted view: FAIL, its first finding at a record event, naming Needs you and a raised ask's row at that ask's step 569ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1546/ac1-journey.test.ts > #1546 AC1 a record event reaches the window by itself, and the replica reads the frame it drew > planted record-in-thread-local: the drawn frame keeps the old count and rows, and the check fails naming Needs you, the ask's row and the step
+AssertionError: a finding at step 1 names the Needs you view: step 1 (feed): deepbuild/sidebar drew "Needs you" where a forced frame has "Needs you",step 2 (see): deepbuild/sidebar drew "Needs you" where a forced frame has "Needs you",step 3 (wait_for): deepbuild/sidebar drew "Needs you" where a forced frame has "Needs you": expected undefined to be truthy
+
+- Expected:
+true
+
++ Received:
+undefined
+
+ ❯ tests/acceptance/1546/ac1-journey.test.ts:52:100
+     50|     expect(atFeed.every((f) => f.call === 'feed'), `findings at step 1…
+     51|     const needsYou = atFeed.find((f) => /(^|\/)needs-you$/.test(f.view…
+     52|     expect(needsYou, `a finding at step 1 names the Needs you view: ${…
+       |                                                                                                    ^
+     53|     expect(needsYou!.node.name, `it names the node a forced frame has …
+     54|     expect(String(needsYou!.drawn?.name ?? ''), 'and the drawn frame h…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/acceptance/1546/ac1-journey.test.ts > #1546 AC1 seeded journeys of record events, clock steps, hovers and resizes > seed 1546: the window draws only when dirty, every step's forced frame equals the last drawn one, and the claim is PASS
+ FAIL  tests/acceptance/1546/ac1-journey.test.ts > #1546 AC1 seeded journeys of record events, clock steps, hovers and resizes > seed 7: the window draws only when dirty, every step's forced frame equals the last drawn one, and the claim is PASS
+ FAIL  tests/acceptance/1546/ac1-journey.test.ts > #1546 AC1 seeded journeys of record events, clock steps, hovers and resizes > seed 2026: the window draws only when dirty, every step's forced frame equals the last drawn one, and the claim is PASS
+AssertionError: BLOCKED: deep-drive gave no JSON reply to resize: {"exited":true,"stderr":"text>::update_window::<(), <gpui::window::Window>::new::{closure#13}::{closure#0}>\n             at ./vendor/gpui-pre/src/app.rs:3303:14\n  42: <gpui::app::async_context::AsyncApp as gpui::AppContext>::update_window::<(), <gpui::window::Window>::new::{closure#13}::{closure#0}>\n             at ./vendor/gpui-pre/src/app/async_context.rs:97:14\n  43: <gpui::window::AnyWindowHandle>::update::<gpui::app::async_context::AsyncApp, (), <gpui::window::Window>::new::{closure#13}::{closure#0}>\n             at ./vendor/gpui-pre/src/window.rs:7576:12\n  44: <gpui::window::Window>
+ ❯ Drive.call tests/acceptance/124/helpers.ts:162:80
+    160|     const reply = await answer;
+    161|     const ms = performance.now() - at;
+    162|     if (reply.exited || reply.timedOut || reply.unparsed !== undefined…
+       |                                                                                ^
+    163|     return { reply, ms };
+    164|   }
+ ❯ Replica.call tests/acceptance/1546/helpers.ts:79:23
+ ❯ Replica.must tests/acceptance/1546/helpers.ts:87:19
+ ❯ run tests/acceptance/1546/helpers.ts:222:28
+ ❯ tests/acceptance/1546/ac1-journey.test.ts:76:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/1546/ac1-journey.test.ts > #1546 AC1 seeded journeys of record events, clock steps, hovers and resizes > seed 1546 with the planted view: FAIL, its first finding at a record event, naming Needs you and a raised ask's row at that ask's step
+AssertionError: BLOCKED: deep-drive gave no JSON reply to resize: {"exited":true,"stderr":"text>::update_window::<(), <gpui::window::Window>::new::{closure#13}::{closure#0}>\n             at ./vendor/gpui-pre/src/app.rs:3303:14\n  42: <gpui::app::async_context::AsyncApp as gpui::AppContext>::update_window::<(), <gpui::window::Window>::new::{closure#13}::{closure#0}>\n             at ./vendor/gpui-pre/src/app/async_context.rs:97:14\n  43: <gpui::window::AnyWindowHandle>::update::<gpui::app::async_context::AsyncApp, (), <gpui::window::Window>::new::{closure#13}::{closure#0}>\n             at ./vendor/gpui-pre/src/window.rs:7576:12\n  44: <gpui::window::Window>
+ ❯ Drive.call tests/acceptance/124/helpers.ts:162:80
+    160|     const reply = await answer;
+    161|     const ms = performance.now() - at;
+    162|     if (reply.exited || reply.timedOut || reply.unparsed !== undefined…
+       |                                                                                ^
+    163|     return { reply, ms };
+    164|   }
+ ❯ Replica.call tests/acceptance/1546/helpers.ts:79:23
+ ❯ run tests/acceptance/1546/helpers.ts:222:109
+ ❯ tests/acceptance/1546/ac1-journey.test.ts:96:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 1 passed (6)
+   Start at  00:18:01
+   Duration  38.08s (tests 99%)
+
