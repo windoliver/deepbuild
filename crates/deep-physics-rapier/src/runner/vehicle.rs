@@ -62,7 +62,7 @@ pub fn planted(name: &str, run: &mut Run) -> bool {
 /// The world check; under the planted `check_counts_wheels_only`, a vehicle body's only refusal
 /// is a wheel too many: not a 2D world, not a follow channel.
 pub(super) fn check(v: &Value, run: &Run) -> Result<World, Vec<Refusal>> {
-    let checked = deep_canvas_physics::check::check(v, &run.caps, run.table);
+    let checked = deep_canvas_physics::check::check(v, &run.caps_of(v), run.table);
     if run.vehicle != VehiclePlant::WheelsOnly {
         return checked;
     }
@@ -149,6 +149,8 @@ pub(super) fn take(b: &Rapier, w: &World, t: &mut Trace, (k, start, every): (u64
 pub(super) fn outputs(outputs: &mut Value, t: &Trace, frame: i64, w: &World) {
     let step = deep_canvas_physics::occurrence::step_flicks(w);
     bake::wheel_series(outputs, &t.wheels, frame, step);
+    // #2248: and each valued output's series, rows for one a series samples (reading.rs).
+    deep_canvas_physics::reading::series(outputs, w, &t.values, frame);
 }
 
 /// A bake reply's `wheels`: each wheel a pose output reads, by its address, as its states after

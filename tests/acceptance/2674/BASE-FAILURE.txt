@@ -1,0 +1,236 @@
+# #2674 acceptance tests: the run on the base, the throwaway, each planted window, and the synthetic evidence
+
+Run on a Mac17,10 (18 cores), a reference Mac, at a one-minute load of 165 to 250 from other sessions (`sysctl -n
+vm.loadavg` before and after the base run below). The scene stands in a Mac15,7 and pins the load every process but the
+throttle reads at 18, this Mac's cores. HOME, XDG_CACHE_HOME, TMPDIR and the throttle table were in a scratch folder.
+Lines are cut at about 300 characters; every failure is an AssertionError.
+
+## The base (86b99ac36), both files, from this worktree
+
+$ node --test tests/acceptance/2674/window.test.mjs tests/acceptance/2674/evidence.test.mjs      (3 min 40 s)
+
+{ 165.77 193.25 203.73 }
+✖ #2674.5e151201 the table beside the windows' records has one line for each of the thirteen rows, reads a verdict only from a committed record, says when a line is a reading, and a planted table giving a row PASS with no record behind it fails, naming the row (0.935292ms)
+✖ #2674.77d9eb79 each suite #1830 lists reads PASS or FAIL in a window, and none reads INCONCLUSIVE for a missing load (67.494834ms)
+✖ #2674.9d468621 #1009's criterion is settled PASS or FAIL by a window's record, and #1009 says which (13.273333ms)
+✖ #2674.5cde9b0e every window ends with one record per commit merged since the one before and a window-open and window-close in the throttle log, every task reads a verdict or not reached, and no task measured at a load at the cores reads PASS; the repo holds three such windows in a row on one reference Mac (216050.195583ms)
+✖ #2674.39a35288 a commit's record holds the load at each run's start and end, and a window in which every limit read INCONCLUSIVE by load is left open naming the load; in the repo's windows at least 90% of the tasks that carry a limit or a target read PASS or FAIL (3.87875ms)
+✖ #2674.04047d99 each commit's record holds, for each task and each side, its p50, its p95, its peak bytes and its instructions retired per round, in the sandbox and in the repo's windows (3.89825ms)
+✖ #2674.d1a3f7be each window's record gives its start, its end, the commits it measured, and the tasks it ran and did not reach; a window in the repo ends within two hours or names the task that took longest (1.254417ms)
+ℹ tests 7
+ℹ pass 0
+ℹ fail 7
+ℹ duration_ms 220164.287333
+  AssertionError [ERR_ASSERTION]: the repo holds no table at benchmarks/windows/numbers.md, beside the windows' records
+  AssertionError [ERR_ASSERTION]: the windows' records don't read every suite #1830 lists PASS or FAIL:
+    103: no task of benchmarks/budgets.json runs it (tests/acceptance/103 or tests/acceptance/103-redraft-1830)
+    124: no task of benchmarks/budgets.json runs it (tests/acceptance/124 or tests/acceptance/124-redraft-1830)
+    148: no task of benchmarks/budgets.json runs it (tests/acceptance/148 or tests/acceptance/148-redraft-1830)
+    149: no task of benchmarks/budgets.json runs it (tests/acceptance/149 or tests/acceptance/149-redraft-1830)
+    166: no task of benchmarks/budgets.json runs it (tests/acceptance/166 or tests/acceptance/166-redraft-1830)
+    262: no task of benchmarks/budgets.json runs it (tests/acceptance/262 or tests/acceptance/262-redraft-1830)
+    311/redraft-ac12: no task of benchmarks/budgets.json runs it (tests/acceptance/311/redraft-ac12 or tests/acceptance/311-redraft-1830)
+    365: no task of benchmarks/budgets.json runs it (tests/acceptance/365 or tests/acceptance/365-redraft-1830)
+    417: no task of benchmarks/budgets.json runs it (tests/acceptance/417 or tests/acceptance/417-redraft-1830)
+    465: no task of benchmarks/budgets.json runs it (tests/acceptance/465 or tests/acceptance/465-redraft-1830)
+    568/judge.test.mjs: no task of benchmarks/budgets.json runs it (tests/acceptance/568/judge.test.mjs or tests/acceptance/568-redraft-1830)
+    761: no task of benchmarks/budgets.json runs it (tests/acceptance/761 or tests/acceptance/761-redraft-1830)
+    1018/redraft-ac6: no task of benchmarks/budgets.json runs it (tests/acceptance/1018/redraft-ac6 or tests/acceptance/1018-redraft-1830)
+    1098: no task of benchmarks/budgets.json runs it (tests/acceptance/1098 or tests/acceptance/1098-redraft-1830)
+    1425: no task of benchmarks/budgets.json runs it (tests/acceptance/1425 or tests/acceptance/1425-redraft-1830)
+    1427: no task of benchmarks/budgets.json runs it (tests/acceptance/1427 or tests/acceptance/1427-redraft-1830)
+  AssertionError [ERR_ASSERTION]: #1009's criterion isn't settled by a window's record:
+    no task of benchmarks/budgets.json names #1009.542330be, #1009's criterion
+  AssertionError [ERR_ASSERTION]: the repo doesn't hold three scheduled windows in a row on one reference Mac:
+    the repo holds no benchmarks/windows/: no window's records are committed
+    benchmarks/windows/ holds 0 windows with a record, not three in a row
+  AssertionError [ERR_ASSERTION]: the record of 0f2ab2034aae82b56c25dee0501f54f32e26f2b7 doesn't hold the load at each run's start and end of limited, which carries a limit:
+    limited on 0f2ab2034aae holds no load at its runs' start and end: {"id":"limited","state":"INCONCLUSIVE","note":"the load was 18.0 on 18 cores","limits":{"p50Ms":{"status":"PASS","limit":60000,"runs":[1134.3195840000117,1739.5407910000067,589.1932080000115,1700.484249999994,500.80320799999754],"margin":0.05}}}
+  AssertionError [ERR_ASSERTION]: the record of 0f2ab2034aae82b56c25dee0501f54f32e26f2b7 doesn't hold limited's numbers for each side:
+    the record of 0f2ab2034aae holds no change side for limited: {"id":"limited","state":"INCONCLUSIVE","note":"the load was 18.0 on 18 cores","limits":{"p50Ms":{"status":"PASS","limit":60000,"runs":[1134.3195840000117,1739.5407910000067,589.1932080000115,1700.484249999994,500.80320799999754],"margin":0.05}}}
+    the record of 0f2ab2034aae holds no base side for limited: {"id":"limited","state":"INCONCLUSIVE","note":"the load was 18.0 on 18 cores","limits":{"p50Ms":{"status":"PASS","limit":60000,"runs":[1134.3195840000117,1739.5407910000067,589.1932080000115,1700.484249999994,500.80320799999754],"margin":0.05}}}
+  AssertionError [ERR_ASSERTION]: the window over 0f2ab2034aae82b56c25dee0501f54f32e26f2b7, 4ce1db5a17f432d14c219cfb213affb1bfbb7ed1 left 0 records of its own (start, end, commits), not one
+{ 212.37 204.91 206.63 }
+
+The base's window measured both commits (one record each), logged a window-open and a window-close for both windows,
+and read `limited` and `plain` INCONCLUSIVE ("the load was 18.0 on 18 cores"), so AC1's scene checks pass on the base:
+its own guard holds the load at the cores, though `judgeLimit` read the p50 limit PASS there (the record above). AC1
+fails at the repo, and `twins/passes-at-load` covers its scene line. AC2, AC4 and AC7 fail at the scene: no loads, no
+sides, no window record. AC3, AC5 and AC6 fail at the repo.
+
+## The throwaway, in a scratch tree (a copy of the base's scripts/ and this folder, budget-window.mjs replaced)
+
+The throwaway is the base's window plus a window record in ~/.deepbuild/lanes/ (start, end, commits, ran,
+notReached, longest, host, machine), and on each row `loads` (the load before and after its task) and `sides` (from
+judgeTask's now and then). Not kept. The scratch tree holds no benchmarks/windows/, so each test passes its scene
+checks and fails at the repo, with "the repo holds no benchmarks/windows/: no window's records are committed":
+
+✖ #2674.5cde9b0e every window ends with one record per commit merged since the one before and a window-open and window-close in the throttle log, every task reads a verdict or not reached, and no task measured at a load at the cores reads PASS; the repo holds three such windows in a row on one reference Mac (115837.087375ms)
+✖ #2674.39a35288 a commit's record holds the load at each run's start and end, and a window in which every limit read INCONCLUSIVE by load is left open naming the load; in the repo's windows at least 90% of the tasks that carry a limit or a target read PASS or FAIL (7.039709ms)
+✖ #2674.04047d99 each commit's record holds, for each task and each side, its p50, its p95, its peak bytes and its instructions retired per round, in the sandbox and in the repo's windows (1.156833ms)
+✖ #2674.d1a3f7be each window's record gives its start, its end, the commits it measured, and the tasks it ran and did not reach; a window in the repo ends within two hours or names the task that took longest (9.722083ms)
+ℹ tests 4
+ℹ pass 0
+ℹ fail 4
+ℹ duration_ms 116316.902958
+  AssertionError [ERR_ASSERTION]: the repo doesn't hold three scheduled windows in a row on one reference Mac:
+    the repo holds no benchmarks/windows/: no window's records are committed
+    benchmarks/windows/ holds 0 windows with a record, not three in a row
+  AssertionError [ERR_ASSERTION]: the repo's windows don't read 90% of the tasks that carry a limit or a target PASS or FAIL:
+    no task that carries a limit or a target ran in the windows
+  AssertionError [ERR_ASSERTION]: a committed record doesn't hold each side's numbers:
+    the repo holds no benchmarks/windows/: no window's records are committed
+    benchmarks/windows/ holds no commit's record
+  AssertionError [ERR_ASSERTION]: a committed window's record isn't whole:
+    the repo holds no benchmarks/windows/: no window's records are committed
+    benchmarks/windows/ holds no window's record
+
+## The throwaway with a synthetic set of three windows, in this worktree (both removed afterwards)
+
+The throwaway in scripts/budget-window.mjs, and benchmarks/windows/ written by a private generator from the base's last
+seven first-parent commits (the first as the mark, then two per window), every row PASS with five loads of 6.5 to 7.25,
+both sides and 20 counts; a table of thirteen lines (one PASS citing a record, three readings, nine unmeasured); and,
+in benchmarks/budgets.json, sixteen `suite-<n>` tasks running each redraft folder and `#1009.542330be` on
+`command-check-count`. (This run predates dropping the `host` check from AC1's judge; nothing else changed.)
+
+✔ #2674.5e151201 the table beside the windows' records has one line for each of the thirteen rows, reads a verdict only from a committed record, says when a line is a reading, and a planted table giving a row PASS with no record behind it fails, naming the row (510.262875ms)
+✔ #2674.77d9eb79 each suite #1830 lists reads PASS or FAIL in a window, and none reads INCONCLUSIVE for a missing load (101.952083ms)
+✖ #2674.9d468621 #1009's criterion is settled PASS or FAIL by a window's record, and #1009 says which (2588.855625ms)
+✔ #2674.5cde9b0e every window ends with one record per commit merged since the one before and a window-open and window-close in the throttle log, every task reads a verdict or not reached, and no task measured at a load at the cores reads PASS; the repo holds three such windows in a row on one reference Mac (174584.612917ms)
+✔ #2674.39a35288 a commit's record holds the load at each run's start and end, and a window in which every limit read INCONCLUSIVE by load is left open naming the load; in the repo's windows at least 90% of the tasks that carry a limit or a target read PASS or FAIL (11.011916ms)
+✔ #2674.04047d99 each commit's record holds, for each task and each side, its p50, its p95, its peak bytes and its instructions retired per round, in the sandbox and in the repo's windows (849.075041ms)
+✔ #2674.d1a3f7be each window's record gives its start, its end, the commits it measured, and the tasks it ran and did not reach; a window in the repo ends within two hours or names the task that took longest (21.773041ms)
+ℹ tests 7
+ℹ pass 6
+ℹ fail 1
+ℹ duration_ms 179136.049208
+  AssertionError [ERR_ASSERTION]: #1009's criterion isn't settled by a window's record:
+    #1009 doesn't say which: no comment or body names 54f9bdb9475e (PASS), ff2a40cce2cb (PASS), f0cfb5d44734 (PASS), 197e759a9dc5 (PASS), 6650eb2a06d0 (PASS), 86b99ac36cfb (PASS) with its verdict
+
+Six pass. AC6 fails as it should: the real #1009 names no synthetic record. Its passing branch was read with the issue
+stubbed (below).
+
+## Each planted window, in a scratch tree
+
+$ node --test <tree>/tests/acceptance/2674/window.test.mjs      (twins/passes-at-load as scripts/budget-window.mjs)
+
+✖ #2674.5cde9b0e every window ends with one record per commit merged since the one before and a window-open and window-close in the throttle log, every task reads a verdict or not reached, and no task measured at a load at the cores reads PASS; the repo holds three such windows in a row on one reference Mac (169793.279834ms)
+✖ #2674.39a35288 a commit's record holds the load at each run's start and end, and a window in which every limit read INCONCLUSIVE by load is left open naming the load; in the repo's windows at least 90% of the tasks that carry a limit or a target read PASS or FAIL (16.878667ms)
+✖ #2674.04047d99 each commit's record holds, for each task and each side, its p50, its p95, its peak bytes and its instructions retired per round, in the sandbox and in the repo's windows (2.724708ms)
+✖ #2674.d1a3f7be each window's record gives its start, its end, the commits it measured, and the tasks it ran and did not reach; a window in the repo ends within two hours or names the task that took longest (6.921708ms)
+ℹ tests 4
+ℹ pass 0
+ℹ fail 4
+ℹ duration_ms 171429.266708
+  AssertionError [ERR_ASSERTION]: the window recorded PASS for a task measured at a load of 18, every process's, on 18 cores:
+    limited reads PASS on 48a427188060, measured at a load of 18 on 18 cores
+    plain reads PASS on 48a427188060, measured at a load of 18 on 18 cores
+  AssertionError [ERR_ASSERTION]: a window in which every limit read INCONCLUSIVE at a load of 18 on 18 cores isn't left open naming the load: {"problems":[],"open":[],"read":2,"counted":2}
+  AssertionError [ERR_ASSERTION]: a committed record doesn't hold each side's numbers:
+    the repo holds no benchmarks/windows/: no window's records are committed
+    benchmarks/windows/ holds no commit's record
+  AssertionError [ERR_ASSERTION]: a committed window's record isn't whole:
+    the repo holds no benchmarks/windows/: no window's records are committed
+    benchmarks/windows/ holds no window's record
+
+$ node --test <tree>/tests/acceptance/2674/window.test.mjs      (twins/states-only as scripts/budget-window.mjs)
+
+✖ #2674.5cde9b0e every window ends with one record per commit merged since the one before and a window-open and window-close in the throttle log, every task reads a verdict or not reached, and no task measured at a load at the cores reads PASS; the repo holds three such windows in a row on one reference Mac (163664.622333ms)
+✖ #2674.39a35288 a commit's record holds the load at each run's start and end, and a window in which every limit read INCONCLUSIVE by load is left open naming the load; in the repo's windows at least 90% of the tasks that carry a limit or a target read PASS or FAIL (19.429ms)
+✖ #2674.04047d99 each commit's record holds, for each task and each side, its p50, its p95, its peak bytes and its instructions retired per round, in the sandbox and in the repo's windows (5.061084ms)
+✖ #2674.d1a3f7be each window's record gives its start, its end, the commits it measured, and the tasks it ran and did not reach; a window in the repo ends within two hours or names the task that took longest (12.123542ms)
+ℹ tests 4
+ℹ pass 0
+ℹ fail 4
+ℹ duration_ms 165968.334458
+  AssertionError [ERR_ASSERTION]: the repo doesn't hold three scheduled windows in a row on one reference Mac:
+    the repo holds no benchmarks/windows/: no window's records are committed
+    benchmarks/windows/ holds 0 windows with a record, not three in a row
+  AssertionError [ERR_ASSERTION]: the record of 6d1ac702f1396718b4867d430ba16c1d9dc55ec3 doesn't hold the load at each run's start and end of limited, which carries a limit:
+    limited on 6d1ac702f139 holds no load at its runs' start and end: {"id":"limited","state":"INCONCLUSIVE"}
+  AssertionError [ERR_ASSERTION]: the record of 6d1ac702f1396718b4867d430ba16c1d9dc55ec3 doesn't hold limited's numbers for each side:
+    the record of 6d1ac702f139 holds no change side for limited: {"id":"limited","state":"INCONCLUSIVE"}
+    the record of 6d1ac702f139 holds no base side for limited: {"id":"limited","state":"INCONCLUSIVE"}
+  AssertionError [ERR_ASSERTION]: a committed window's record isn't whole:
+    the repo holds no benchmarks/windows/: no window's records are committed
+    benchmarks/windows/ holds no window's record
+
+passes-at-load fails AC1 at the scene, naming both tasks (and AC2, whose window is no longer all INCONCLUSIVE);
+states-only fails AC4 at the scene, naming the task (and AC2: its rows hold no loads). Both pass AC7's scene checks.
+
+## The repo judges on the synthetic set, and twenty mutations of it
+
+Every judge on the synthetic set as written (AC6 with #1009 stubbed: first with no comment, then with a comment naming
+the first record's commit and PASS), and the in-test planted table for each of the thirteen rows:
+
+holdings: none
+AC1 inARow: none
+AC2 share: none
+AC4 sidesHeld: none
+AC7 windowsWhole: none
+AC3 table: none
+  plant Hook overhead: caught
+  plant Fail-open time: caught
+  plant Event intake: caught
+  plant The app: caught
+  plant Chrome frames: caught
+  plant Concurrent runs: caught
+  plant Stop holds: caught
+  plant Record size: caught
+  plant Release gates: caught
+  plant Hot path: caught
+  plant Memory: caught
+  plant The app's footprint: caught
+  plant The canvas: caught
+AC5 suites: none
+AC6 1009 (gh stub: no comment): 
+  #1009 doesn't say which: no comment or body names 54f9bdb9475e (PASS), ff2a40cce2cb (PASS), f0cfb5d44734 (PASS), 197e759a9dc5 (PASS), 6650eb2a06d0 (PASS), 86b99ac36cfb (PASS) with its verdict
+AC6 1009 (gh stub: comment names commit, PASS): none
+
+Then each mutation, in a scratch copy of the set (git still reading this checkout's history), with its criterion's
+judge:
+
+AC1 PASS at load 18 on a Mac17,10: 
+    2026-11-22T0300Z/2a9abb2e3008aa97be3e3e09df48504a1b3977c4-budget-window-f0cfb5d44734c169c15b53c3ad22f566bc64d3cc.json: hook-startup reads PASS on f0cfb5d44734, measured at a load of 18 on 18 cores
+AC1 PASS with no loads: 
+    2026-11-22T0300Z/2a9abb2e3008aa97be3e3e09df48504a1b3977c4-budget-window-f0cfb5d44734c169c15b53c3ad22f566bc64d3cc.json: repo-rules reads PASS on f0cfb5d44734 with no load at its runs' start and end in the record
+AC1 a record missing: 
+    2026-11-21T0300Z: 0 records of 54f9bdb9475e, a commit it measured, not one
+AC1 no window-close: 
+    2026-11-23T0300Z: its throttle.log holds no window-open and window-close of one grant around its start and end: [{"at":"2026-11-23T03:00:03.000Z","event":"window-open","id":"grant2","pid":102}]
+AC1 two windows: 
+    benchmarks/windows/ holds 2 windows with a record, not three in a row
+AC1 a state SKIPPED: 
+    2026-11-21T0300Z/71763881d58bd5a46101ce5d6efe7777f409ebb7-budget-window-54f9bdb9475ef9c5a0713690c18c99640a92bd39.json: hook-startup on 54f9bdb9475e reads "SKIPPED", not PASS, FAIL, INCONCLUSIVE or BLOCKED
+AC1 a task neither run nor not reached: 
+    2026-11-21T0300Z/71763881d58bd5a46101ce5d6efe7777f409ebb7-budget-window-54f9bdb9475ef9c5a0713690c18c99640a92bd39.json: deep-status-run-events on 54f9bdb9475e is neither a row of the record nor not reached
+AC1 a gap between windows: 
+    2026-11-22T0300Z: 197e759a9dc5 doesn't follow 54f9bdb9475e on main's first-parent line, so the windows aren't each over the commits merged since the one before
+AC1 two Macs: 
+    the windows ran on ["Mac17,10","Mac15,12"], not on one reference Mac (Mac15,7, Mac15,12, Mac17,10)
+AC2 every limit INCONCLUSIVE by load in one window: 
+    32 of 48 tasks that carry a limit or a target read PASS or FAIL (66.7%), under 90%
+    2026-11-23T0300Z: every task that carries a limit or a target read INCONCLUSIVE by load, at loads up to 31.5 on 18 cores
+AC2 a row with no loads: 
+    2026-11-21T0300Z: hook-startup on 54f9bdb9475e reads FAIL with no load at its runs' start and end in the record
+AC4 states only: 
+    2026-11-21T0300Z/71763881d58bd5a46101ce5d6efe7777f409ebb7-budget-window-54f9bdb9475ef9c5a0713690c18c99640a92bd39.json: the record of 54f9bdb9475e holds no change side for hook-startup: {"id":"hook-startup","state":"PASS"
+    2026-11-21T0300Z/71763881d58bd5a46101ce5d6efe7777f409ebb7-budget-window-54f9bdb9475ef9c5a0713690c18c99640a92bd39.json: the record of 54f9bdb9475e holds no base side for hook-startup: {"id":"hook-startup","state":"PASS"}
+    2026-11-21T0300Z/71763881d58bd5a46101ce5d6efe7777f409ebb7-budget-window-54f9bdb9475ef9c5a0713690c18c99640a92bd39.json: the record of 54f9bdb9475e holds no change side for repo-rules: {"id":"repo-rules","state":"PASS"}
+    2026-11-21T0300Z/71763881d58bd5a46101ce5d6efe7777f409ebb7-budget-window-54f9bdb9475ef9c5a0713690c18c99640a92bd39.json: the record of 54f9bdb9475e holds no base side for repo-rules: {"id":"repo-rules","state":"PASS"}
+    … one line per row and side, 50 in all
+AC4 instructions as one total: 
+    2026-11-21T0300Z/71763881d58bd5a46101ce5d6efe7777f409ebb7-budget-window-54f9bdb9475ef9c5a0713690c18c99640a92bd39.json: hook-startup's change side on 54f9bdb9475e holds no instructions retired per round (a count or null f
+AC4 a count of 0: 
+    2026-11-21T0300Z/71763881d58bd5a46101ce5d6efe7777f409ebb7-budget-window-54f9bdb9475ef9c5a0713690c18c99640a92bd39.json: hook-startup's change side on 54f9bdb9475e holds no instructions retired per round (a count or null f
+AC7 three hours, no longest: 
+    2026-11-23T0300Z: it ran 3.00 h, over two hours, and its record names no task it ran as the one that took longest: null
+AC7 three hours, longest named (passes): none
+AC7 ran misses a task: 
+    2026-11-21T0300Z: its ran is ["hook-startup","repo-rules","hub-core-plain","hub-core-effect","corpus-replay","replica-launch","replica-memory","seam-suites","command-check-count","suite-103","suite-124","suite-148","suit
+AC7 no start: 
+    2026-11-21T0300Z: its record's start isn't a time: "yesterday"
+AC5 a suite INCONCLUSIVE for a missing load: 
+    417: suite-417 reads INCONCLUSIVE for a missing load in 2026-11-22T0300Z/2a9abb2e3008aa97be3e3e09df48504a1b3977c4-budget-window-f0cfb5d44734c169c15b53c3ad22f566bc64d3cc.json: a reading, not a budget result: the load at e
+AC6 the 1009 rows INCONCLUSIVE: 
+    no window's record settles #1009.542330be: its tasks ["command-check-count"] read ["INCONCLUSIVE","INCONCLUSIVE","INCONCLUSIVE","INCONCLUSIVE","INCONCLUSIVE","INCONCLUSIVE"]
