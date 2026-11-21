@@ -34,7 +34,7 @@ pub struct Input {
 }
 
 /// One body as a step left it.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct BodyState {
     pub id: String,
     pub pos: [f64; 3],
@@ -47,6 +47,12 @@ pub struct BodyState {
     /// here, every substep's.
     pub contact_impulse: f64,
     pub sleeping: bool,
+    /// #2248: kg, as the backend steps it.
+    pub mass: f64,
+    /// #2248: J: its kinetic energy plus its potential where it stands, −m g·p.
+    pub energy: f64,
+    /// #2248: the pairs of shape uses it is one of that touch after the step.
+    pub contacts: u32,
 }
 
 /// The world as the last step left it, bodies in canonical (ID) order.
@@ -111,6 +117,13 @@ pub const FIELDS: [&str; 13] = [
     "angular.x",
     "angular.y",
     "angular.z",
+];
+
+/// #2098: the fields of a 2D world's body in the canonical state: its position, its rotation as
+/// the backend holds it, the cosine and sine of its turn about +Z, then its velocity, `angular`
+/// rad/s about +Z.
+pub const FLAT_FIELDS: [&str; 7] = [
+    "pos.x", "pos.y", "rot.cos", "rot.sin", "linear.x", "linear.y", "angular",
 ];
 
 /// The fields of a soft body's particle in the canonical state, after every body's (#524):
@@ -191,6 +204,21 @@ pub fn hinge_angle(q: [f64; 4]) -> f64 {
 pub fn about_x(deg: f64) -> [f64; 4] {
     let h = ops::rad(deg) / 2.0;
     [ops::sin(h), 0.0, 0.0, ops::cos(h)]
+}
+
+/// `v` turned by the quaternion `q` (`[x, y, z, w]`).
+pub fn rotate(q: [f64; 4], v: [f64; 3]) -> [f64; 3] {
+    let (u, w) = ([q[0], q[1], q[2]], q[3]);
+    let cross = |a: [f64; 3], b: [f64; 3]| {
+        [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ]
+    };
+    let t = cross(u, v).map(|x| 2.0 * x);
+    let c = cross(u, t);
+    [0, 1, 2].map(|i| v[i] + w * t[i] + c[i])
 }
 
 /// #523: the whole turns a hinge gains over a step from angle `a0` to `a1` (deg, each in

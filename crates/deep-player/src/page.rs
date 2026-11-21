@@ -396,9 +396,39 @@ impl Player {
         }
     }
 
+    /// #551: a person's key while the match plays; whether it made an entry.
+    pub fn net_key(&mut self, key: &str) -> bool {
+        self.net.as_mut().is_some_and(|n| n.key(key))
+    }
+
     /// The page's tick: the frame to send, empty when there is none.
     pub fn net_tick(&mut self, now_ms: f64) -> Vec<u8> {
         self.net.as_mut().map_or(Vec::new(), |n| n.tick(now_ms))
+    }
+
+    /// #277: what the copy has to send beside its frames: `{controls: [text], frames: [hex]}`.
+    pub fn net_sends(&mut self) -> String {
+        self.net
+            .as_mut()
+            .map_or(
+                json!({"controls": [], "frames": []}),
+                crate::net::Match::sends,
+            )
+            .to_string()
+    }
+
+    /// #277: the page is about to be hidden, or shows again: the frame to send now, if any.
+    pub fn net_visible(&mut self, hidden: bool, now_ms: f64) -> Vec<u8> {
+        self.net
+            .as_mut()
+            .map_or(Vec::new(), |n| n.visible(hidden, now_ms))
+    }
+
+    /// #277: a planted web copy the page names, before its match starts.
+    pub fn net_plant(&mut self, name: &str) {
+        if let Some(n) = self.net.as_mut() {
+            n.plant(name);
+        }
     }
 
     /// The connection ended.

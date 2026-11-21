@@ -29,6 +29,7 @@ use gpui_kit::*;
 use serde_json::{json, Value};
 
 use crate::hub::{HubClient, HubError};
+use deep_canvas::gauge::{Gauge, Place};
 use deep_text_gpui::{measure, paint_label, Label};
 
 /// One layer as the panel composes it: its panel's bounds, its picture and the name its outline shows.
@@ -173,12 +174,30 @@ struct Picture {
     painted: bool,
 }
 
+/// #1431: the panel's pictures (`CanvasPanel.pictures`), decoded in the heap: only those a shown or waiting revision
+/// uses, one a panel's layer, so the bounds hold while the panels and their layers do.
+// copy-exception: a gauge's key, read in the footprint record, never drawn
+pub static PICTURES: Gauge = Gauge::new("CanvasPanel::pictures", Place::Heap, 256, 1_024_000_000);
+
+/// The bytes a decoded picture holds.
+fn picture_bytes(image: &RenderImage) -> u64 {
+    image.as_bytes(0).map_or(0, |b| b.len() as u64)
+}
+
+impl Drop for CanvasPanel {
+    fn drop(&mut self) {
+        let bytes = self.pictures.iter().map(|p| picture_bytes(&p.image)).sum();
+        PICTURES.sub(self.pictures.len() as u64, bytes);
+    }
+}
+
 /// The panel's view: the newest presented revision of each document, composed in its bands.
 pub struct CanvasPanel {
     evidence: PathBuf,
     shown: Vec<Presented>,
     /// The session whose page shows the panel; with none, every revision draws.
     session: Option<String>,
+    // cache: entries 256, bytes 1_024_000_000
     pictures: Vec<Picture>,
     /// Painted pictures no shown revision uses any more, freed from the GPU the next time the panel draws.
     unused: Vec<Arc<RenderImage>>,
@@ -346,11 +365,23 @@ impl CanvasPanel {
         !self.decoding.is_empty()
     }
 
+    /// #1431: how many pictures the panel holds.
+    pub fn held(&self) -> usize {
+        self.pictures.len()
+    }
+
     /// A picture's decoding ended: every waiting revision none of whose pictures is still in decoding is shown, a
-    /// picture that didn't decode drawn as none.
+    /// picture that didn't decode drawn as none. One no revision uses any more, as a later one took its revision's
+    /// place while it decoded, is let go at once (#1431: the panel holds what it shows).
     fn decoded(&mut self, sha: String, image: Option<Arc<RenderImage>>) {
         self.decoding.remove(&sha);
-        if let Some(image) = image {
+        let used = (self.shown.iter().chain(&self.waiting)).any(|p| {
+            p.layers
+                .iter()
+                .any(|l| l.picture.as_deref() == Some(sha.as_str()))
+        });
+        if let Some(image) = image.filter(|_| used) {
+            PICTURES.add(1, picture_bytes(&image));
             self.pictures.push(Picture {
                 sha,
                 image,
@@ -381,8 +412,11 @@ impl CanvasPanel {
         let unused = &mut self.unused;
         self.pictures.retain(|h| {
             let keep = used(&h.sha);
-            if !keep && h.painted {
-                unused.push(h.image.clone());
+            if !keep {
+                PICTURES.sub(1, picture_bytes(&h.image));
+                if h.painted {
+                    unused.push(h.image.clone());
+                }
             }
             keep
         });

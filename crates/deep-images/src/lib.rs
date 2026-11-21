@@ -9,6 +9,7 @@
 //! in bytes and entries, evicts least recently used first at frame start and never what the last
 //! two drawn frames drew.
 
+pub mod animated;
 mod level;
 mod source;
 
@@ -57,13 +58,15 @@ impl Drop for Inside {
 }
 
 /// One request: a picture by its sha256, the whole pixels of it drawn, the flips an atlas cell
-/// draws it with (bit 1 across, 2 down, 4 turned a quarter: #1653), and the level.
+/// draws it with (bit 1 across, 2 down, 4 turned a quarter: #1653), the level, and (#1489) the
+/// frame of an animation, 0 for a still picture.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Key {
     pub hash: [u8; 32],
     pub crop: [u32; 4],
     pub flip: u8,
     pub level: u8,
+    pub frame: u32,
 }
 
 impl Key {
@@ -84,11 +87,13 @@ pub enum Queue {
     Prefetch,
 }
 
-/// What a live frame draws for a request: its level, the nearest level held (and which), or
+/// What a live frame draws for a request: its level, the nearest level held (and which), (#1489)
+/// the frame of the animation it last drew while the frame asked for is made (and which), or
 /// nothing yet.
 pub enum Shown {
     Exact(Arc<Level>),
     Nearest(Arc<Level>, u8),
+    Frame(Arc<Level>, u32),
     Nothing,
 }
 
@@ -109,6 +114,8 @@ pub enum Plant {
     QueueWithoutCancel,
     /// #1486 AC4: an evictor that ignores the two-frame rule.
     EvictorIgnoresTwoFrames,
+    /// #1489 AC1: an animation's decoder that decodes every frame up front and keeps them all.
+    DecoderHoldsAllFrames,
 }
 
 impl Plant {
@@ -121,6 +128,7 @@ impl Plant {
             "uploads_per_frame" => Plant::UploadsPerFrame,
             "queue_without_cancel" => Plant::QueueWithoutCancel,
             "evictor_ignores_two_frames" => Plant::EvictorIgnoresTwoFrames,
+            "decoder_holds_all_frames" => Plant::DecoderHoldsAllFrames,
             _ => return None,
         })
     }
@@ -172,6 +180,27 @@ struct Held {
     used: u64,
 }
 
+/// #1489: an animation's frame source, and the bytes of pixels it held when it last made a frame,
+/// read without waiting for a frame it is making.
+type Source = (
+    Arc<Mutex<animated::Player>>,
+    Arc<std::sync::atomic::AtomicU64>,
+);
+
+/// #1489: one animation drawn at one crop, flip and level.
+#[derive(Default)]
+struct Stream {
+    /// The frame last drawn exactly, which a frame not made yet shows instead.
+    shown: Option<u32>,
+    /// The frames of it the cache may hold.
+    held: Vec<u32>,
+}
+
+/// The stream a key is one frame of.
+fn stream(key: &Key) -> Key {
+    Key { frame: 0, ..*key }
+}
+
 struct Queued {
     store: Arc<Store>,
     queue: Queue,
@@ -195,6 +224,14 @@ struct State {
     in_flight: u64,
     failed: HashMap<Key, Refused>,
     sizes: HashMap<[u8; 32], [u32; 2]>,
+    /// #1489: each source probed as an animation, `None` for a still picture.
+    animations: HashMap<[u8; 32], Option<Arc<animated::Animation>>>,
+    /// #1489: each animation's stream (its key at frame 0): the frame it last drew exactly and the
+    /// frames it may hold.
+    streams: HashMap<Key, Stream>,
+    /// #1489: the frame each animation was last asked for in, so a frame source no frame asks
+    /// for is let go.
+    asked: HashMap<[u8; 32], u64>,
     scratch: Vec<(u64, Key)>,
     /// Visible requests this pass that drew short of their level, and whether the last pass had any.
     short: u64,
@@ -220,6 +257,9 @@ struct Shared {
     rows: Mutex<()>,
     /// The last source a cut came from, kept for the next cell of the same atlas.
     source: Mutex<Option<([u8; 32], Arc<image::RgbaImage>)>>,
+    /// #1489: one frame source for each animation a request reached, with the bytes it held when
+    /// it last made a frame.
+    players: Mutex<HashMap<[u8; 32], Source>>,
 }
 
 /// The image service. One serves a process; every path asks it.
@@ -273,6 +313,9 @@ impl Images {
             in_flight: 0,
             failed: HashMap::new(),
             sizes: HashMap::new(),
+            animations: HashMap::new(),
+            streams: HashMap::new(),
+            asked: HashMap::new(),
             scratch: Vec::new(),
             short: 0,
             settling: false,
@@ -293,6 +336,7 @@ impl Images {
                 done: Condvar::new(),
                 rows: Mutex::new(()),
                 source: Mutex::new(None),
+                players: Mutex::new(HashMap::new()),
             }),
         }
     }
@@ -331,6 +375,66 @@ impl Images {
         Ok(size)
     }
 
+    /// #1489: the source as an animation, probed once per hash from its blocks, or `None` for a
+    /// still picture; `over_budget` when its canvas couldn't be decoded within the caps.
+    pub fn animation(
+        &self,
+        store: &Store,
+        hash: &[u8; 32],
+    ) -> Result<Option<Arc<animated::Animation>>, Refused> {
+        let _in = Inside::enter();
+        if let Some(known) = self.lock().animations.get(hash) {
+            return Ok(known.clone());
+        }
+        // Only a file that starts as a GIF, a WebP or a PNG is read whole: a video never is.
+        let head = store.head(hash, 12).unwrap_or_default();
+        let read = animated::may_animate(&head);
+        let probed = match read {
+            true => animated::probe(&store.read(hash)?).map(Arc::new),
+            false => None,
+        };
+        if probed.as_ref().is_some_and(|a| !source::fits(a.size)) {
+            return Err(source::refused("over_budget"));
+        }
+        let mut s = self.lock();
+        s.stats.source_reads += u64::from(read);
+        if let Some(a) = &probed {
+            s.sizes.insert(*hash, a.size);
+        }
+        s.animations.insert(*hash, probed.clone());
+        Ok(probed)
+    }
+
+    /// #1489: the bytes of pixels each animation holds, by its hash, into `held`: its frame
+    /// source's canvas and what its decoder keeps, and the levels of its frames the cache holds.
+    pub fn animations_held(&self, held: &mut HashMap<[u8; 32], u64>) {
+        let _in = Inside::enter();
+        held.clear();
+        {
+            let s = self.lock();
+            for (stream, kept) in &s.streams {
+                let levels: u64 = (kept.held.iter())
+                    .filter_map(|f| {
+                        s.held.get(&Key {
+                            frame: *f,
+                            ..*stream
+                        })
+                    })
+                    .map(|h| h.level.bytes())
+                    .sum();
+                *held.entry(stream.hash).or_default() += levels;
+            }
+        }
+        let players = self
+            .shared
+            .players
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        for (hash, (_, bytes)) in players.iter() {
+            *held.entry(*hash).or_default() += bytes.load(std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
     /// The frames started so far, by the service's count.
     pub fn frame(&self) -> u64 {
         self.lock().frame
@@ -350,10 +454,26 @@ impl Images {
             .filter(|h| h.drawn >= keep_from)
             .map(|h| h.level.bytes())
             .sum();
-        Started {
+        // #1489: a frame source no frame asked for in the last two is let go.
+        let gone: Vec<[u8; 32]> = (s.asked.iter())
+            .filter(|(_, at)| **at < keep_from)
+            .map(|(h, _)| *h)
+            .collect();
+        let started = Started {
             stats: s.snapshot(),
             drawn_bytes,
+        };
+        if !gone.is_empty() {
+            s.asked.retain(|_, at| *at >= keep_from);
+            drop(s);
+            let mut players = self
+                .shared
+                .players
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            players.retain(|h, _| !gone.contains(h));
         }
+        started
     }
 
     /// A live frame's request: the level if held, else the nearest level held or nothing, with the
@@ -363,6 +483,11 @@ impl Images {
         let _in = Inside::enter();
         let mut s = self.lock();
         let (frame, tick) = (s.frame, s.tick + 1);
+        // #1489: an animation's frame source stays while frames ask for it.
+        let animated = s.animations.get(&key.hash).is_some_and(Option::is_some);
+        if animated {
+            *s.asked.entry(key.hash).or_default() = frame;
+        }
         if let Some(h) = s.held.get_mut(&key) {
             let visible = queue == Queue::Visible;
             if visible {
@@ -371,6 +496,9 @@ impl Images {
             let level = h.level.clone();
             if visible {
                 s.tick = tick;
+                if animated {
+                    s.drew_frame(key);
+                }
             }
             return Shown::Exact(level);
         }
@@ -416,6 +544,13 @@ impl Images {
             return Shown::Nothing;
         }
         s.short += 1;
+        // #1489: a frame not made yet shows the frame its animation last drew.
+        if let Some(f) = (s.streams.get(&stream(&key))).and_then(|t| t.shown) {
+            if let Some(h) = s.held.get_mut(&Key { frame: f, ..key }) {
+                h.drawn = frame;
+                return Shown::Frame(h.level.clone(), f);
+            }
+        }
         for d in 1..=level::DEEPEST {
             for k in [key.level.checked_sub(d), key.level.checked_add(d)] {
                 let Some(k) = k.filter(|k| *k <= level::DEEPEST) else {
@@ -469,12 +604,19 @@ impl Images {
                 s.bytes -= h.level.bytes();
             }
         }
+        if s.animations.get(&key.hash).is_some_and(Option::is_some) {
+            let frame = s.frame;
+            *s.asked.entry(key.hash).or_default() = frame;
+        }
         loop {
             let (frame, tick) = (s.frame, s.tick + 1);
             if let Some(h) = s.held.get_mut(&key) {
                 (h.drawn, h.used) = (frame, tick);
                 let level = h.level.clone();
                 s.tick = tick;
+                if s.animations.get(&key.hash).is_some_and(Option::is_some) {
+                    s.drew_frame(key);
+                }
                 return Ok(level);
             }
             if let Some(r) = s.failed.get(&key) {
@@ -487,13 +629,17 @@ impl Images {
             s.queued.remove(&key);
             s.running.insert(key);
             let plant = s.plant;
+            let animated = s.animations.get(&key.hash).is_some_and(Option::is_some);
             drop(s);
-            let made = make(&self.shared, store, key, plant);
+            let made = make(&self.shared, store, (key, animated), plant);
             s = self.lock();
             s.running.remove(&key);
             let level = s.finish(key, made);
             if let Some(h) = s.held.get_mut(&key) {
                 h.drawn = frame;
+            }
+            if level.is_ok() && s.animations.get(&key.hash).is_some_and(Option::is_some) {
+                s.drew_frame(key);
             }
             self.shared.done.notify_all();
             self.shared.work.notify_all();
@@ -577,6 +723,46 @@ impl State {
         self.scratch = order;
     }
 
+    /// #1489: the frames of `key`'s animation stream the cache holds, but `key`'s own and the frame
+    /// the stream last drew, are let go: an animation holds the frame shown and the one made next,
+    /// never every frame's level. A frame drawn needs no level once drawn: its sprite is its own.
+    fn stale_frames(&mut self, key: Key) {
+        let kept = self.streams.entry(stream(&key)).or_default();
+        let shown = kept.shown;
+        let mut frames = std::mem::take(&mut kept.held);
+        frames.retain(|f| {
+            let k = Key { frame: *f, ..key };
+            if *f == key.frame || Some(*f) == shown {
+                return *f != key.frame && self.held.contains_key(&k);
+            }
+            if let Some(h) = self.held.remove(&k) {
+                self.bytes -= h.level.bytes();
+                self.stats.evicted += 1;
+            }
+            false
+        });
+        frames.push(key.frame);
+        if let Some(stream) = self.streams.get_mut(&stream(&key)) {
+            stream.held = frames;
+        }
+    }
+
+    /// #1489: `key`'s frame is drawn exactly: it is the frame its stream shows, and the frame it
+    /// showed before goes.
+    fn drew_frame(&mut self, key: Key) {
+        let Some(stream) = self.streams.get_mut(&stream(&key)) else {
+            return;
+        };
+        let before = stream.shown.replace(key.frame);
+        if let Some(f) = before.filter(|f| *f != key.frame) {
+            stream.held.retain(|h| *h != f);
+            if let Some(h) = self.held.remove(&Key { frame: f, ..key }) {
+                self.bytes -= h.level.bytes();
+                self.stats.evicted += 1;
+            }
+        }
+    }
+
     fn finish(
         &mut self,
         key: Key,
@@ -600,6 +786,9 @@ impl State {
                 };
                 if let Some(old) = self.held.insert(key, held) {
                     self.bytes -= old.level.bytes();
+                }
+                if self.animations.get(&key.hash).is_some_and(Option::is_some) {
+                    self.stale_frames(key);
                 }
                 Ok(level)
             }
@@ -651,8 +840,9 @@ fn work(shared: &Arc<Shared>) {
         s.running.insert(key);
         s.in_flight += cost;
         let plant = s.plant;
+        let animated = s.animations.get(&key.hash).is_some_and(Option::is_some);
         drop(s);
-        let made = make(shared, &q.store, key, plant);
+        let made = make(shared, &q.store, (key, animated), plant);
         s = lock(shared);
         s.running.remove(&key);
         s.in_flight -= cost;
@@ -713,15 +903,65 @@ fn source_of(shared: &Shared, store: &Store, key: &Key) -> Result<Arc<image::Rgb
     Ok(rgba)
 }
 
+/// #1489: `key`'s level of one frame of an animation, made from the animation's frame source (one
+/// per source, opened on first need), whose canvas then moves on to the next frame. A frame's
+/// level is never stored: the frames are made again in order.
+fn frame_level(shared: &Shared, store: &Store, key: Key, plant: Plant) -> Result<Level, Refused> {
+    let players = || shared.players.lock().unwrap_or_else(|p| p.into_inner());
+    let found = players().get(&key.hash).cloned();
+    let (player, held) = match found {
+        Some(source) => source,
+        None => {
+            let bytes: Arc<[u8]> = Arc::from(store.read(&key.hash)?);
+            lock(shared).stats.source_reads += 1;
+            let opened = animated::Player::open(bytes, plant == Plant::DecoderHoldsAllFrames)?;
+            let player = opened.ok_or(source::refused("asset_undecodable"))?;
+            let made = (Arc::new(Mutex::new(player)), Arc::default());
+            players().entry(key.hash).or_insert(made).clone()
+        }
+    };
+    let mut player = player.lock().unwrap_or_else(|p| p.into_inner());
+    let [w, h] = player.animation.size;
+    let [x, y, cw, ch] = key.crop;
+    if u64::from(x) + u64::from(cw) > u64::from(w) || u64::from(y) + u64::from(ch) > u64::from(h) {
+        return Err(Refused {
+            code: "out_of_range",
+            on_crop: true,
+        });
+    }
+    let picture = player.frame(key.frame as usize)?;
+    let level = if key.crop == [0, 0, w, h] && key.flip == 0 {
+        reduce(picture, key.shown(), key.level)
+    } else {
+        let whole = image::RgbaImage::from_raw(w, h, picture.to_vec())
+            .ok_or(source::refused("asset_undecodable"))?;
+        let cut = image::imageops::crop_imm(&whole, x, y, cw, ch).to_image();
+        reduce(
+            source::flipped(cut, key.flip).as_raw(),
+            key.shown(),
+            key.level,
+        )
+    };
+    // The next frame is made while this one shows; a failure there is the next request's.
+    let _ = player.ahead(true);
+    held.store(player.held(), std::sync::atomic::Ordering::Relaxed);
+    Ok(level)
+}
+
 /// Makes `key`'s level: read back from the store when a proxy row names it, else decoded from the
 /// source, reduced, and stored with its row. Whether it decoded, and how long it took, ms.
 fn make(
     shared: &Shared,
     store: &Store,
-    key: Key,
+    (key, animated): (Key, bool),
     plant: Plant,
 ) -> Result<(Level, bool, f64), Refused> {
     let start = Instant::now();
+    if animated {
+        log(shared, "decode", key);
+        let level = frame_level(shared, store, key, plant)?;
+        return Ok((level, true, start.elapsed().as_secs_f64() * 1000.0));
+    }
     if plant != Plant::DecodesPerDraw {
         if let Some(level) = stored(store, &key) {
             log(shared, "read", key);

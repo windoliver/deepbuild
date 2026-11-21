@@ -453,7 +453,7 @@ impl<'a> Prog<'a> {
             let v = match &input.from {
                 From::Time => V::N(Sc::F32, L::one(env.t)),
                 From::Seed => V::N(Sc::U32, L::one(f64::from(env.seed))),
-                From::Target { .. } | From::Asset(_) => {
+                From::Target { .. } | From::Previous { .. } | From::Asset(_) => {
                     let img = env
                         .textures
                         .get(name)

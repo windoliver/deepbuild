@@ -1,0 +1,31 @@
+# At 444c638cd (main 0f34aacbe merged), Linux (Spark, arm64), in a fresh worktree after npm ci, the workspace build and deep-hook
+# commands: node scripts/proof.mjs guard; NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1810
+# the two replica tests are BLOCKED here: the replica draws on macOS only
+npm-ci exit=0 2026-11-18T00:39:27Z free=527G load=92.07
+build exit=0 2026-11-18T00:42:26Z free=581G load=77.03
+deep-hook exit=0 2026-11-18T00:43:44Z free=577G load=98.35
+guard exit=0 2026-11-18T01:01:45Z free=529G load=102.48
+acceptance exit=1 2026-11-18T01:02:40Z free=528G load=118.23
+## guard
+PASS guard: 16 commits checked: no guarded edit lacks its own approved proposal
+proof: wall time 1078.8 s
+## tests/acceptance/1810
+ ✓ tests/acceptance/1810/redraft-replica/judges.test.ts (5 tests) 1094ms
+     × #1810.eebcb4a2: with two asks answered and one open, deep and the app's list say 1 at the same log position 35ms
+ ✓ tests/acceptance/1810/judges.test.ts (2 tests) 1430ms
+ ✓ tests/acceptance/1810/width.test.ts (1 test) 21135ms
+   ✓ #1810.1a3e8cda (1)
+     ✓ #1810.1a3e8cda: a session with a 90-character title and 3 open asks: the status answer's line is at most 80 columns and ends in "needs you: 3" 17450ms
+     ✓ #1810.eebcb4a2: two asks answered and one open: "anything for me?" answers "needs you: 1", and deep and the app's folded list say 1 at one log position 31063ms
+     × #1810.eebcb4a2: the replica's list (the app itself, on macOS) says 1 at deep status --json's log position 2003ms
+ ✓ tests/acceptance/1810/defaulted.test.ts (2 tests) 45382ms
+   ✓ #1810.a646c123 (2)
+     ✓ #1810.a646c123: an ask that took its default and can still be undone isn't counted by the status answer, deep or the app's list 24224ms
+     ✓ #1810.a646c123: (wrong program) a status answer that counts the undoable default (DEEP_HUB_PLANT=needs-you-counts-defaulted) fails, naming the ask 16111ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+Error: BLOCKED: the replica draws on macOS only; this is linux
+     43| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+Error: BLOCKED: the replica draws on macOS only; this is linux
+     54| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+ Test Files  2 failed | 4 passed (6)
+      Tests  2 failed | 11 passed (13)

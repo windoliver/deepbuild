@@ -53,6 +53,8 @@ pub const MIRROR_PASS: &str = "scene3d.mirror";
 pub const FLARE_PASS: &str = "scene3d.flare";
 /// #468: depth of field over the linear image, after the geometry and before bloom.
 pub const DOF_PASS: &str = "scene3d.dof";
+/// #971: the look's local tone map over the linear image, just before the output pass reads it.
+pub const LOCAL_TONE_PASS: &str = "scene3d.local_tone";
 /// #166: the water's parts, drawn after the geometry and the mirror's view.
 pub const WATER_PASS: &str = "scene3d.water";
 /// #506: each view inset's own view, drawn whole before the frame's geometry reads its picture: in
@@ -76,6 +78,9 @@ pub const CULL_PASS: &str = "scene3d.cull";
 /// test of the camera's lists against it (#1637; Instance `instance@1`), each frame, from that
 /// frame's depth alone, after the cull and before anything draws.
 pub const PYRAMID_PASS: &str = "scene3d.depth_pyramid";
+/// The fill lights listed cell by cell in the light policy's grid (#1634; Light and the light
+/// policy), when a light or the view changes, before the geometry reads the lists.
+pub const FILL_PASS: &str = "scene3d.light_clusters";
 /// Ambient occlusion (#418; Look `look@1`: ao): the opaque solids' depth and normal prepass, the
 /// occlusion and its blur, before the geometry pass reads it; drawn only while the look has ao on.
 pub const AO_PASS: &str = "scene3d.ao";
@@ -264,6 +269,21 @@ fn lit_by_order(v: &mut View<'_>) -> Result<(), OpError> {
 /// scene3d's registration with its light policy breaking ties by `tie`: by ID in the shipped
 /// module, by registration order in #421's planted implementation of scene3d@1.
 pub fn register_with(r: &mut Registrar, tie: Tie) {
+    // #2777: the lists of words a document sets outside the kinds' params that this module reads,
+    // each with the words its reader takes.
+    let gpu: Vec<&str> = crate::stack::KINDS
+        .iter()
+        .filter(|k| k.2)
+        .map(|k| k.0)
+        .collect();
+    r.word_list(
+        "emitter.distance.model",
+        "emitter",
+        "distance",
+        &crate::emitters::DISTANCE_MODELS,
+    )
+    .word_list("light.kind", "light", "kind", &crate::light::KINDS)
+    .word_list("modifier.gpu", "modifier", "kind", &gpu);
     for solid in ["box", "cylinder", "sphere"] {
         r.kind(
             kind(solid, common(vec![json_param("size", crate::spec::SIZE)])),
@@ -509,6 +529,7 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
     });
     r.pass(CULL_PASS, "compute");
     r.pass(PYRAMID_PASS, "compute");
+    r.pass(FILL_PASS, "compute");
     r.pass(AO_PASS, "geometry");
     r.pass(GEOMETRY_PASS, "geometry");
     // #200: the shadow and object-ID passes compile from the core's base steps, which the seal
@@ -526,6 +547,7 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
     r.pass(INSET_VIEW_PASS, "shadows");
     r.pass(INSET_UNLIT_PASS, "upscale");
     r.pass(FLARE_PASS, "bloom");
+    r.pass(LOCAL_TONE_PASS, "tone_mapping");
     r.pass(OUTPUT_PASS, "tone_mapping");
     // Headless, the kit proves what reaches the check: the figure's kinds and fields pass it
     // with no issue. Its pixels need the GPU, and the acceptance suite draws them there.
@@ -581,6 +603,8 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         }));
     // #486: the lobe outputs, occlusion and normal in gpu.output@1, core.bump@1 in gpu.function@1.
     crate::gpu::register(r);
+    // #2776: every kind above draws in 3D, and says what each path does with it.
+    r.in_3d(include_str!("paths.json"));
 }
 
 /// A 10 × 10 m plate with bushes and flowers scattered over it at least 0.5 m apart, none in

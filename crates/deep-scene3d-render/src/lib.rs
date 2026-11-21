@@ -16,6 +16,7 @@ mod diag;
 pub mod dof;
 pub mod env;
 pub mod exposure;
+pub mod fill;
 pub mod flare;
 mod glass;
 pub mod hdr;
@@ -23,6 +24,7 @@ pub mod held;
 pub mod history;
 pub mod inset;
 pub mod local;
+pub mod local_tone;
 pub mod maps;
 mod mesh;
 pub mod mirror;
@@ -64,8 +66,10 @@ use deep_gpu::encode::Job;
 use deep_gpu::render::Pass;
 use deep_gpu::surface::FORMAT;
 
+use deep_canvas::gauge::Kept;
+
 pub use crate::diag::{draw_offscreen_diag, white, Diag, DiagCounts};
-use crate::mesh::Mesh;
+use crate::mesh::{Mesh, MESHES};
 pub use crate::module::{
     draw_offscreen, timed, AfterFrame, Counts, HdrFrame, Module3, PostFrame, Profiler, Shared,
     LIGHT, PYRAMID_NS_PER_PX,
@@ -420,6 +424,8 @@ struct LightsUniform {
     /// Each shaded light's weight near the cut and a hash of its ID (u32 bits), which a light
     /// response takes (#485).
     answers: [[f32; 4]; SHADED],
+    /// The fill lights' clusters and what their depth is measured from (#1634; fill.rs).
+    fill: [[f32; 4]; 2],
 }
 
 /// scene3d.wgsl's `Local` (#446).
@@ -2387,6 +2393,7 @@ impl Renderer {
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let fill = fill::Fill::new(d, planted.fill);
         let tints = tint::Store::new(d);
         let insets = inset::Store::new(d);
         let lights_bind = lights_bind(
@@ -2691,6 +2698,7 @@ impl Renderer {
             to_world: None,
             clusters: None,
             cluster_buffer,
+            fill,
             env,
             sky: false,
             sky_pipeline: None,
@@ -2764,6 +2772,10 @@ impl Renderer {
             flaring: false,
             doffer: None,
             dofing: false,
+            toner: None,
+            toning: false,
+            toned_bind: None,
+            pictured: false,
             waterer: None,
             watering: false,
             reflection: None,
@@ -2787,7 +2799,7 @@ impl Renderer {
                 LABEL_PASS,
                 RESOLVE_PASS,
             ],
-            meshes: BTreeMap::new(),
+            meshes: Kept::new(&MESHES),
             sways: sway::Sways::default(),
             motion: motion::MotionPass::default(),
             motion_frame: None,
@@ -3526,12 +3538,71 @@ impl Renderer {
         });
     }
 
+    /// A light as scene3d.wgsl's `Light` holds one: `weight` the policy's near the cut, `local`
+    /// 1 + its local shadow's slot, 0 for none.
+    fn light_rows(
+        &self,
+        scene: &Scene,
+        l: &light::Light,
+        weight: f64,
+        local: u32,
+    ) -> [[f32; 4]; 6] {
+        let kind = match l.kind {
+            LightKind::Sun => 0.0,
+            LightKind::Point => 1.0,
+            LightKind::Spot => 2.0,
+            LightKind::Area => 3.0,
+        };
+        let mut intensity = l.intensity * weight;
+        let table = l.distribution.as_ref();
+        intensity *= table.map_or(1.0, |t| t.scale);
+        if let (Some(t), true) = (table, self.planted.local.ies_peak) {
+            // The planted wrong program: a table scaled to its peak, not to its integral.
+            let d = &scene.distributions[t.layer as usize];
+            intensity /= d.table.iter().copied().fold(0.0, f32::max) as f64;
+        }
+        if l.kind == LightKind::Spot && self.planted.spot_counts_cone {
+            // The planted wrong program: lm ÷ 2π(1 − cos outer) in place of lm ÷ 4π.
+            intensity *= 2.0 / (1.0 - l.cone[0]).max(1e-6);
+        }
+        let range = if l.range.is_finite() { l.range } else { 0.0 };
+        [
+            [l.pos[0] as f32, l.pos[1] as f32, l.pos[2] as f32, kind],
+            [
+                l.dir[0] as f32,
+                l.dir[1] as f32,
+                l.dir[2] as f32,
+                range as f32,
+            ],
+            [
+                (l.color[0] * intensity) as f32,
+                (l.color[1] * intensity) as f32,
+                (l.color[2] * intensity) as f32,
+                l.radius as f32,
+            ],
+            [
+                l.cone[0] as f32,
+                l.cone[1] as f32,
+                local as f32,
+                f32::from_bits(l.receiver_bit),
+            ],
+            l.area.map_or(v4(l.axes[0], 0.0), |a| {
+                v4(a.right, if a.disk { 1.0 } else { 0.0 })
+            }),
+            {
+                let up = l.area.map_or(l.axes[1], |a| a.up);
+                v4(up, table.map_or(0.0, |t| f64::from(t.layer) + 1.0))
+            },
+        ]
+    }
+
     /// The lights the light policy shades at this frame's view, each with its weight (#421).
     fn prepare_lights(
         &mut self,
         device: &Device,
         scene: &Scene,
         policy: light::Policy,
+        scores: &[f64],
         dropped: Vec<String>,
     ) {
         let cam = &scene.camera;
@@ -3594,6 +3665,7 @@ impl Renderer {
             locals: [LocalUniform::zeroed(); local::SLOTS],
             items: [[[0.0; 4]; 6]; SHADED],
             answers: [[0.0; 4]; SHADED],
+            fill: [[0.0; 4]; 2],
         };
         // Each light's local map (#446).
         let mut local_of = BTreeMap::new();
@@ -3661,54 +3733,47 @@ impl Renderer {
             u.answers[0][2] = policy.left_out.len() as f32;
         }
         for (slot, &(i, weight)) in u.items.iter_mut().zip(&policy.shaded) {
-            let l = &scene.lights[i];
-            let kind = match l.kind {
-                LightKind::Sun => 0.0,
-                LightKind::Point => 1.0,
-                LightKind::Spot => 2.0,
-                LightKind::Area => 3.0,
-            };
-            let mut intensity = l.intensity * weight;
-            let table = l.distribution.as_ref();
-            intensity *= table.map_or(1.0, |t| t.scale);
-            if let (Some(t), true) = (table, self.planted.local.ies_peak) {
-                // The planted wrong program: a table scaled to its peak, not to its integral.
-                let d = &scene.distributions[t.layer as usize];
-                intensity /= d.table.iter().copied().fold(0.0, f32::max) as f64;
-            }
-            if l.kind == LightKind::Spot && self.planted.spot_counts_cone {
-                // The planted wrong program: lm ÷ 2π(1 − cos outer) in place of lm ÷ 4π.
-                intensity *= 2.0 / (1.0 - l.cone[0]).max(1e-6);
-            }
-            let range = if l.range.is_finite() { l.range } else { 0.0 };
-            *slot = [
-                [l.pos[0] as f32, l.pos[1] as f32, l.pos[2] as f32, kind],
-                [
-                    l.dir[0] as f32,
-                    l.dir[1] as f32,
-                    l.dir[2] as f32,
-                    range as f32,
-                ],
-                [
-                    (l.color[0] * intensity) as f32,
-                    (l.color[1] * intensity) as f32,
-                    (l.color[2] * intensity) as f32,
-                    l.radius as f32,
-                ],
-                [
-                    l.cone[0] as f32,
-                    l.cone[1] as f32,
-                    local_of.get(&i).copied().unwrap_or(0) as f32,
-                    f32::from_bits(l.receiver_bit),
-                ],
-                l.area.map_or(v4(l.axes[0], 0.0), |a| {
-                    v4(a.right, if a.disk { 1.0 } else { 0.0 })
-                }),
-                {
-                    let up = l.area.map_or(l.axes[1], |a| a.up);
-                    v4(up, table.map_or(0.0, |t| f64::from(t.layer) + 1.0))
-                },
-            ];
+            let local = local_of.get(&i).copied().unwrap_or(0);
+            *slot = self.light_rows(scene, &scene.lights[i], weight, local);
+        }
+        // The fill lights at this view (#1634), by the policy's order, for their clusters' pass.
+        let ordering = web_time::Instant::now();
+        let mut order = light::fill_order(&scene.lights, scores);
+        // The planted wrong programs: the lights in the document's order, and the key lights' cut
+        // at 32 with its margin.
+        if self.planted.fill.cap_by_list_order {
+            order.sort_by_key(|&(i, _)| i);
+        }
+        let cut = (order.get(SHADED))
+            .map(|&(_, score)| score)
+            .filter(|_| self.planted.fill.top_32);
+        if self.planted.fill.top_32 {
+            order.truncate(SHADED);
+        }
+        let records: Vec<fill::Record> = order
+            .iter()
+            .map(|&(i, score)| {
+                let l = &scene.lights[i];
+                let weight =
+                    cut.map_or(1.0, |c| ((score - c) / (c * light::MARGIN)).clamp(0.0, 1.0));
+                fill::Record {
+                    light: self.light_rows(scene, l, weight, 0),
+                    more: [f32::from_bits(op::light_hash(&l.id)), 0.0, 0.0, 0.0],
+                }
+            })
+            .collect();
+        let (lit, remade) =
+            (self.fill).prepare(device, scene, &order, &records, &mut self.cluster_buffer);
+        u.fill = lit;
+        self.counts.scoring_ms += ordering.elapsed().as_secs_f64() * 1e3;
+        self.counts.lists_bytes = self.fill.bytes(&self.cluster_buffer);
+        let [w, h] = self.internal();
+        let px = f64::from(w) * f64::from(h);
+        self.counts.light_estimate =
+            fill::estimate(scene, px, self.fill.walked, self.fill.listed);
+        if remade {
+            self.clusters = None;
+            self.rebind_lights(device);
         }
         self.counts.shadows_dropped = dropped;
         // Above eight lights, each tile and slice lists the lights that reach it, by the policy's
@@ -3780,8 +3845,10 @@ impl Renderer {
 
     /// Builds `shape`'s unit mesh the first time a batch draws one.
     fn mesh(&mut self, device: &Device, shape: Shape) {
-        if let std::collections::btree_map::Entry::Vacant(e) = self.meshes.entry(shape) {
-            e.insert(Mesh::build(device, shape));
+        if !self.meshes.touch(&shape) {
+            let mesh = Mesh::build(device, shape);
+            let bytes = mesh.bytes();
+            self.meshes.insert(shape, mesh, bytes);
             self.counts.meshes_built += 1;
         }
     }
@@ -3789,7 +3856,7 @@ impl Renderer {
     /// Uploads a builder's mesh the first time a batch draws one of its hash (#420); a swaying
     /// one's vertices the sway pass writes at every frame (#2016).
     fn built_mesh(&mut self, device: &Device, shape: Shape, m: &deep_canvas_scene3d::geom::Mesh) {
-        if let std::collections::btree_map::Entry::Vacant(e) = self.meshes.entry(shape) {
+        if !self.meshes.touch(&shape) {
             let mesh = match &m.sway {
                 Some(_) => {
                     let v = mesh::vertices(m);
@@ -3799,8 +3866,28 @@ impl Renderer {
                 }
                 None => Mesh::of(device, m),
             };
-            e.insert(mesh);
+            let bytes = mesh.bytes();
+            self.meshes.insert(shape, mesh, bytes);
             self.counts.meshes_built += 1;
+        }
+    }
+
+    /// #1431: starts a turn for the meshes and the maps: what earlier turns drew may be freed.
+    fn turn(&mut self) {
+        self.meshes.turn();
+        self.maps.turn();
+    }
+
+    /// #1431: frees the meshes this turn didn't draw while the cache is past a bound, the
+    /// longest unused first, and the sway each one had; and the maps' textures and groups the
+    /// same way, with each material operator's group that bound a freed one.
+    fn free_unused(&mut self) {
+        for (shape, _) in self.meshes.evict() {
+            self.sways.remove(shape);
+        }
+        let gone = self.maps.free();
+        if !gone.is_empty() {
+            self.op_binds.retain(|(_, n), _| !gone.contains(n));
         }
     }
 
@@ -3933,8 +4020,10 @@ impl Renderer {
     /// Takes the frame's scene: the uniforms, each batch's changed records, and the batches
     /// whose draw key changed encoded again. What it did is in [`Renderer::counts`].
     pub fn prepare(&mut self, device: &Device, scene: &Scene, look: &Look3) {
+        self.turn();
         let placed = self.placed(scene);
         self.prepare_placed(device, placed.as_ref().unwrap_or(scene), look);
+        self.free_unused();
     }
 
     /// #458: `scene` moved by its view's origin, which this keeps, so its positions reach the GPU
@@ -4359,6 +4448,7 @@ impl Renderer {
                 .views
                 .entry(v.id.clone())
                 .or_insert_with(|| Box::new(Renderer::new(device, planted)));
+            r.pictured = true;
             r.prepare(device, &deep_canvas_scene3d::views::seen(scene, v), look);
             if let Some((_, view)) = r.linear() {
                 pictures.insert(deep_canvas_scene3d::inset::view_key(&v.id), view.clone());
@@ -4388,7 +4478,7 @@ impl Renderer {
             .flat_map(|b| &b.solids)
             .filter(|(_, set)| set.cull.is_none())
             .filter_map(|((shape, maps, ..), set)| {
-                let (buffer, mesh) = (set.buffer.as_ref()?, self.meshes.get(shape)?);
+                let (buffer, mesh) = (set.buffer.as_ref()?, self.meshes.peek(shape)?);
                 Some((
                     mesh.vertices.clone(),
                     mesh.indices.clone(),
@@ -4411,7 +4501,7 @@ impl Renderer {
             let winding = !self.planted.winding_ignores_determinant;
             let (mut records, mut draws) = (Vec::new(), Vec::new());
             for s in scene.layers.iter().flat_map(|l| &l.solids) {
-                let Some(mesh) = self.meshes.get(&s.shape) else {
+                let Some(mesh) = self.meshes.peek(&s.shape) else {
                     continue;
                 };
                 if s.cast_only || s.alpha < 1.0 || skip && s.id.contains('#') {
@@ -4676,7 +4766,9 @@ impl Renderer {
         let placed = self.placed(scene);
         let scene = placed.as_ref().unwrap_or(scene);
         if self.origin != was {
-            return self.prepare_placed(device, scene, look);
+            self.turn();
+            self.prepare_placed(device, scene, look);
+            return self.free_unused();
         }
         self.prepare_moved_placed(device, scene, look, moved);
     }
@@ -5045,7 +5137,7 @@ impl Renderer {
                     }
                 }
                 // The camera's occluders: low sets drawn from the camera's frustum list.
-                let mesh = self.meshes.get(&key.0);
+                let mesh = self.meshes.peek(&key.0);
                 if let (Some(view), Some(mesh)) = (&c.frustum[cull::CAMERA], mesh) {
                     if occluded(cull::CAMERA) && mesh.count <= OCCLUDER_INDICES {
                         let faces = ((key.1 >> CULL_SHIFT) as usize).min(2);
@@ -5361,11 +5453,13 @@ impl Renderer {
             .filter(|s| s.shadow && !cascaded)
             .and_then(|s| shadow::light_clip(scene, s.toward, 0.0));
         self.prepare_cascades(device, scene, &frame);
+        let scoring = web_time::Instant::now();
         let policy = scene
             .light_cut
             .clone()
             .unwrap_or_else(|| light::policy(&scene.lights, &scene.camera));
         let scores = light::scores(&scene.lights, &scene.camera);
+        self.counts.scoring_ms = scoring.elapsed().as_secs_f64() * 1e3;
         let shadowed = light::shadowed(&scene.lights, &policy, &scene.shadowing, &scores);
         self.prepare_locals(device, scene, &frame, &shadowed.kept);
         // A warm-up's prepare (#432) records no pass, so its maps stay undrawn: keyed as drawn,
@@ -5399,7 +5493,7 @@ impl Renderer {
             self.compiled += 1;
             self.names.push(backdrop::PASS);
         }
-        self.prepare_lights(device, scene, policy, dropped);
+        self.prepare_lights(device, scene, policy, &scores, dropped);
         if let Some(m) = self.shadow.clip {
             let mut light_frame = frame;
             for c in 0..4 {
@@ -5460,6 +5554,25 @@ impl Renderer {
                 bytemuck::bytes_of(&tone),
             )
         });
+        // #971: the look's local tone map at the internal size the targets draw; at its
+        // identity it draws nothing.
+        self.toning = match look.local.filter(|l| !l.is_identity() && !self.pictured) {
+            Some(l) => {
+                let exposure = scene.exposure.unwrap_or(look.exposure);
+                let (internal, planted) = (self.internal(), self.planted.local_tone);
+                self.toner
+                    .get_or_insert_with(|| Box::new(local_tone::Toner::new(device)))
+                    .prepare(device, &l, exposure, internal, planted);
+                true
+            }
+            None => {
+                if let Some(t) = self.toner.as_mut() {
+                    t.rest();
+                }
+                self.toned_bind = None;
+                false
+            }
+        };
         self.ground = [
             decode(scene.ground[0]),
             decode(scene.ground[1]),
@@ -5982,7 +6095,7 @@ impl Renderer {
             if key.3 == 0 && !items {
                 set.cull = None;
             }
-            match (&self.rows, self.meshes.get(&key.0), &set.buffer) {
+            match (&self.rows, self.meshes.peek(&key.0), &set.buffer) {
                 (Some(rows), Some(mesh), Some(records))
                     if (key.3 != 0 || items)
                         && set.cull.as_ref().is_none_or(|c| {
@@ -6238,6 +6351,18 @@ impl Renderer {
         }
     }
 
+    /// After a frame (#1634): the clusters past their cap at its view, each with the fill lights
+    /// it dropped, into this frame's counts.
+    pub fn check_clusters(&mut self, device: &Device) {
+        self.counts.clusters_over = self.fill.check(device).to_vec();
+    }
+
+    /// Each cluster's fill lights as the frame just drawn walked them, by ID with their weights
+    /// (#1634), read back from the pass's lists.
+    pub fn read_clusters(&self, device: &Device) -> Vec<([u32; 3], Vec<(String, f32)>)> {
+        self.fill.read(device, &self.cluster_buffer)
+    }
+
     /// The opaque sets holding a part whose subsurface spreads, for the share pass (#481).
     fn share_draws(&self) -> Vec<sss::ShareDraw> {
         let mut draws = Vec::new();
@@ -6247,7 +6372,7 @@ impl Renderer {
                     set.subsurface,
                     &set.cull,
                     &set.buffer,
-                    self.meshes.get(shape),
+                    self.meshes.peek(shape),
                 ) else {
                     continue;
                 };
@@ -6290,7 +6415,7 @@ impl Renderer {
                 if *kind != BLEND && *kind != ADD {
                     continue;
                 }
-                let Some(mesh) = self.meshes.get(shape) else {
+                let Some(mesh) = self.meshes.peek(shape) else {
                     continue;
                 };
                 let op = batch.clear_ops.get(k).copied().unwrap_or(0);
@@ -6346,7 +6471,7 @@ impl Renderer {
                 continue;
             };
             for (k, ((shape, maps), kind)) in batch.clear_draws.iter().enumerate() {
-                if let (true, Some(mesh)) = (*kind == of, self.meshes.get(shape)) {
+                if let (true, Some(mesh)) = (*kind == of, self.meshes.peek(shape)) {
                     let op = batch.clear_ops.get(k).copied().unwrap_or(0);
                     let (group, own) = match self.see_through_op(op, *maps) {
                         Some((m, g)) if of == GLASS && m.glass.is_some() => {
@@ -6397,7 +6522,7 @@ impl Renderer {
             batch.solids.iter().partition(|(_, set)| !set.lower);
         for (key, set) in detailed.into_iter().chain(lower) {
             let (shape, maps, op, _) = key;
-            let (Some(buffer), Some(mesh)) = (&set.buffer, self.meshes.get(shape)) else {
+            let (Some(buffer), Some(mesh)) = (&set.buffer, self.meshes.peek(shape)) else {
                 continue;
             };
             calls.push((Call::Set(*key), set.len()));
@@ -6449,7 +6574,7 @@ impl Renderer {
         }
         if let Some(buffer) = &batch.clear.buffer {
             for (k, ((shape, maps), kind)) in batch.clear_draws.iter().enumerate() {
-                let Some(mesh) = self.meshes.get(shape) else {
+                let Some(mesh) = self.meshes.peek(shape) else {
                     continue;
                 };
                 // Transmissive parts draw after the opaque scene's copy, and with them in the
@@ -6551,7 +6676,7 @@ impl Renderer {
         device: &Device,
         solid: &Solid,
     ) -> Option<(Option<f32>, Vec<[f64; 3]>)> {
-        let mesh = self.meshes.get(&solid.shape)?;
+        let mesh = self.meshes.peek(&solid.shape)?;
         let size = mesh.vertices.size();
         let bytes = read_back(device, "scene3d drawn vertices", size, |e, staging| {
             e.copy_buffer_to_buffer(&mesh.vertices, 0, staging, 0, size)
@@ -6718,13 +6843,18 @@ impl Renderer {
     /// What the depth pyramid's pass prices this frame at, in ms, when the frame built one
     /// (#1637): its declared cost per pixel at the frame's internal size.
     pub fn declared_ms(&self) -> Vec<(&'static str, f64)> {
-        match (&self.pyramid, self.counts.pyramid) {
+        let mut declared = match (&self.pyramid, self.counts.pyramid) {
             (Some(p), true) => vec![(
                 cull::PYRAMID_PASS,
                 f64::from(PYRAMID_NS_PER_PX) * f64::from(p.size[0]) * f64::from(p.size[1]) / 1e6,
             )],
             _ => Vec::new(),
+        };
+        // #1634: the fill lights' pass, in a frame that ran it, by the lights its cells walked.
+        if self.counts.fill_walked > 0 {
+            declared.push((fill::PASS, fill::pass_ms(self.counts.fill_walked)));
         }
+        declared
     }
 
     /// Turns the camera's occlusion cull on or off: off, its lists are the frustum's (a view's
@@ -6775,7 +6905,7 @@ impl Renderer {
         for id in &self.order {
             let batch = &self.batches[id];
             for ((shape, maps, op, _), set) in batch.solids.iter().chain(&batch.casters) {
-                let (Some(buffer), Some(mesh)) = (&set.buffer, self.meshes.get(shape)) else {
+                let (Some(buffer), Some(mesh)) = (&set.buffer, self.meshes.peek(shape)) else {
                     continue;
                 };
                 // A material operator that cuts its coverage casts through its own pipeline.
@@ -6805,7 +6935,7 @@ impl Renderer {
             // See-through parts cast as their `shadow` says (the record's no-cast flag).
             if let Some(buffer) = &batch.clear.buffer {
                 for (k, ((shape, _), _)) in batch.clear_draws.iter().enumerate() {
-                    if let Some(mesh) = self.meshes.get(shape) {
+                    if let Some(mesh) = self.meshes.peek(shape) {
                         let k = k as u32;
                         let owner = batch.clear.owners.get(k as usize);
                         if only.is_some_and(|o| owner.is_none_or(|i| !o.contains(i))) {
@@ -6849,7 +6979,7 @@ impl Renderer {
                 if self.shadow_cut(*op, *maps).is_some() {
                     continue;
                 }
-                if let (Some(view), Some(mesh)) = (&c.views[k], self.meshes.get(shape)) {
+                if let (Some(view), Some(mesh)) = (&c.views[k], self.meshes.peek(shape)) {
                     draws.push((
                         mesh.vertices.clone(),
                         mesh.indices.clone(),
@@ -7265,6 +7395,11 @@ impl Renderer {
                     .map(|(_, job)| (inset::VIEW_PASS.to_string(), job)),
             );
         }
+        // #1634: the fill lights' clusters, before the geometry walks their lists.
+        if let Some(job) = self.fill.job(&self.profiler) {
+            self.counts.fill_walked = self.fill.walked;
+            jobs.push((fill::PASS.into(), job));
+        }
         jobs.push((GEOMETRY_PASS.into(), geometry));
         // #465: the mirror's view and its picture over the mirror's parts, before the effects.
         if let (true, Some(m), Some(t)) = (
@@ -7376,6 +7511,22 @@ impl Renderer {
             if let Some(job) = f.job(device, &t.depth_view, &into, &self.profiler) {
                 jobs.push((FLARE_PASS.into(), job));
             }
+        }
+        // #971: the local tone map over the linear image the output would read; the output
+        // reads the image it resolves instead.
+        if let (true, Some(l)) = (self.toning, self.toner.as_mut()) {
+            let source = self
+                .pre_tone
+                .clone()
+                .unwrap_or_else(|| t.linear_view.clone());
+            let (job, resolved) = l.job(device, t.size, &source, &self.profiler);
+            jobs.push((local_tone::LOCAL_TONE_PASS.into(), job));
+            let kept = match &self.toned_bind {
+                Some((r, c, b)) if *r == resolved && *c == self.covered.1 => Some(b.clone()),
+                _ => None,
+            };
+            bind = kept.unwrap_or_else(|| self.output_bind(&device.device, &resolved));
+            self.toned_bind = Some((resolved, self.covered.1.clone(), bind.clone()));
         }
         // With passes after the finish, the output writes the finished frame, and they write
         // the slot from it (#382). Below scale 1 the output and the guard write the internal
@@ -8141,6 +8292,20 @@ impl Renderer {
         let t = self.targets.as_ref()?;
         let texture = self.pre_tone.as_ref().map_or(&t.linear, |v| v.texture());
         let half = read_texture(device, texture, t.size, 8)?;
+        Some(
+            half.as_chunks::<2>()
+                .0
+                .iter()
+                .flat_map(|h| f16_to_f32(u16::from_le_bytes(*h)).to_le_bytes())
+                .collect(),
+        )
+    }
+
+    /// #971: the image the look's local tone map resolved from that one, which the output pass
+    /// read in its place, laid out the same; `None` in a frame with no local tone map.
+    pub fn read_toned(&self, device: &Device) -> Option<Vec<u8>> {
+        let (texture, size) = self.toner.as_ref().filter(|_| self.toning)?.resolved()?;
+        let half = read_texture(device, texture, size, 8)?;
         Some(
             half.as_chunks::<2>()
                 .0

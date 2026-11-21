@@ -44,6 +44,27 @@ const NO_VEHICLE_CAPS: Caps = Caps {
     backend: "no_vehicle_controller",
     ..TEST_CAPS
 };
+/// #2241: a test backend that leaves belts out of its caps, under its own name, so a refusal by
+/// its caps names it.
+const NO_BELTS_CAPS: Caps = Caps {
+    backend: "no_belts",
+    ..TEST_CAPS
+};
+
+/// #2308: a test backend whose caps say it scales no lengths, under its own name, so a refusal
+/// by its caps names it.
+const NO_LENGTH_CAPS: Caps = Caps {
+    backend: "no_length_unit",
+    scales_lengths: false,
+    ..TEST_CAPS
+};
+
+/// #2310: a test backend that leaves articulations out of its caps, under its own name, so a
+/// refusal by its caps names it.
+const NO_ARTICULATIONS_CAPS: Caps = Caps {
+    backend: "no_articulations",
+    ..TEST_CAPS
+};
 
 /// A test backend: Rapier running `twin`, under `caps`, declaring `tolerances` of its own.
 pub struct TestBackend {
@@ -62,8 +83,8 @@ const fn test(name: &'static str, twin: Twin, caps: &'static Caps) -> TestBacken
     }
 }
 
-/// #191's test backends by name, and #251's and #182's.
-pub const TEST_BACKENDS: [TestBackend; 14] = [
+/// #191's test backends by name, and #251's, #182's, #2241's, #2243's, #2308's and #2310's.
+pub const TEST_BACKENDS: [TestBackend; 18] = [
     test("friction_average", Twin::FrictionAverage, &TEST_CAPS),
     test("no_joint_limits", Twin::NoJointLimits, &TEST_CAPS),
     test("restitution_min", Twin::RestitutionMin, &TEST_CAPS),
@@ -78,6 +99,8 @@ pub const TEST_BACKENDS: [TestBackend; 14] = [
         tolerances: Some(r#"{"free_fall": {"relative": 0.05}}"#),
     },
     test("no_vehicle_controller", Twin::None, &NO_VEHICLE_CAPS),
+    test("no_belts", Twin::None, &NO_BELTS_CAPS),
+    test("no_articulations", Twin::None, &NO_ARTICULATIONS_CAPS),
     // #182: no character controller in its caps; one climbing steps a quarter higher than its
     // step height; one ignoring snap; one whose ground distance is 0.001 m; and one ignoring a
     // launch off the ground.
@@ -90,6 +113,9 @@ pub const TEST_BACKENDS: [TestBackend; 14] = [
         Twin::LaunchGroundedOnly,
         &CHARACTER_CAPS,
     ),
+    // #2243: one that leaves each moved character body's pose stale until the backend's step.
+    test("stale_character_poses", Twin::StalePoses, &CHARACTER_CAPS),
+    test("no_length_unit", Twin::None, &NO_LENGTH_CAPS),
 ];
 
 /// The test backend named `name`, in a `test-backends` build only.
@@ -140,6 +166,8 @@ impl Run {
             self.twin = t.twin;
         }
         (self.test, self.caps) = (Some(t), *t.caps);
+        // #2308's planted check reads the range of solver.length_unit alone.
+        self.caps.scales_lengths |= self.twin == Twin::Small(super::contact::Small::RangeOnly);
         Some(self)
     }
 
@@ -180,17 +208,25 @@ impl Run {
 
     /// #191's default for fast bodies: `world` baked over `steps` (1 s at its rate by default), each
     /// body physics.fast_body flags that leaves `ccd` unset turned to `ccd: true` with an
-    /// assumption row; refused, naming the body, when the expansion leaves one off.
+    /// assumption row; refused, naming the body, when the expansion leaves one off. #2239: `world`
+    /// is a document, or with `scene` the ID of a world the scene lists; only a fast dynamic body
+    /// gets a row, a kinematic body and a pair keeping their issues for the playtest run that
+    /// bakes the world; and the world the kit writes is checked as any other.
     fn expand(&self, call: &Value) -> Value {
-        let source = call.get("world").cloned().unwrap_or(Value::Null);
+        let listed = call.get("scene").and_then(|_| call["world"].as_str());
+        let source = match listed {
+            Some(id) => call["scene"]["worlds"][id].clone(),
+            None => call.get("world").cloned().unwrap_or(Value::Null),
+        };
         let steps = call
             .get("steps")
             .and_then(Value::as_u64)
             .or_else(|| source["step_rate"].as_u64())
             .unwrap_or(120);
-        let baked = self
-            .answer(&json!({"call": "bake", "world": source, "steps": steps, "read": []}))
-            .unwrap_or_else(|| json!({"ok": false, "code": "bad_input"}));
+        let mut ask = call.clone();
+        (ask["call"], ask["steps"], ask["read"]) = (json!("bake"), json!(steps), json!([]));
+        let bad = || json!({"ok": false, "code": "bad_input"});
+        let baked = self.answer(&ask).unwrap_or_else(bad);
         if baked["ok"] != true {
             return baked;
         }
@@ -199,6 +235,7 @@ impl Run {
             .into_iter()
             .flatten()
             .filter(|i| i["code"] == fast::FAST_BODY)
+            .filter(|i| i.get("kind").is_none() || self.ccd_on_kinematic)
             .filter_map(|i| {
                 let f = Flag {
                     step: i["step"].as_u64()?,
@@ -209,7 +246,15 @@ impl Run {
             })
             .collect();
         let (world, assumptions) = fast::expand(&source, &flagged, self.leave_ccd_off);
-        let refused = fast::refused(&source, &world, &flagged);
+        let mut refused = fast::refused(&source, &world, &flagged);
+        ask["call"] = json!("check");
+        match listed {
+            Some(id) => ask["scene"]["worlds"][id] = world.clone(),
+            None => ask["world"] = world.clone(),
+        }
+        let checked = self.answer(&ask).unwrap_or_else(bad);
+        let errors = checked["issues"].as_array().into_iter().flatten();
+        refused.extend(errors.filter(|i| i["severity"] == "error").cloned());
         if refused.is_empty() {
             json!({"ok": true, "world": world, "assumptions": assumptions})
         } else {

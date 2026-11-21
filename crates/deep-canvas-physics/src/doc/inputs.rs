@@ -150,6 +150,19 @@ fn bad(path: String, actual: &Value, what: String) -> Box<Refusal> {
 }
 
 /// `v` as field `key` of `kind`, or its refusal.
+/// #194: the number fields of an input kind, in the kind's order: what a logic item that fires an
+/// input of this kind writes in its slot, after the count.
+pub fn number_fields(kind: &str) -> Vec<&'static str> {
+    KINDS
+        .iter()
+        .find(|(n, _)| *n == kind)
+        .map_or(&[][..], |k| k.1)
+        .iter()
+        .filter(|(_, f)| matches!(f, Field::Num(..)))
+        .map(|(n, _)| *n)
+        .collect()
+}
+
 fn field(kind: &str, key: &str, v: &Value, path: &str) -> Result<Value, Box<Refusal>> {
     let later = format!("{kind}.{key}");
     if let Some((_, issue)) = LATER.iter().find(|(n, _)| *n == later) {

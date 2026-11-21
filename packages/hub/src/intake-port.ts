@@ -16,7 +16,7 @@ export interface IntakeDeps {
   forge: string;
   token(): Promise<string | undefined>;
   raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
-  appendCore(kind: string, data: Obj, extra?: { subject?: string }): Promise<void>;
+  appendCore(kind: string, data: Obj, extra?: { subject?: string; v?: number }): Promise<void>;
   /** Kept as evidence: its SHA-256. */
   keep(bytes: Uint8Array, source: string): Promise<string>;
   /** Where the research job runs. */

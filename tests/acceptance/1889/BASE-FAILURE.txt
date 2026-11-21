@@ -1,0 +1,79 @@
+# tests/acceptance/1889 at base ee05e7257 (origin/main), macOS arm64, Node v24.22.0, load ~153.75 at the time of writing
+# node node_modules/vitest/vitest.mjs run tests/acceptance/1889  (exit 1)
+
+ RUN  v5.0.5 <repo>
+
+ ❯ tests/acceptance/1889/held.test.ts (4 tests | 4 failed) 54307ms
+   ❯ AC1 #1889.3ff068ee With a stand-in Gmail that accepts the send and then answers 503 to the message read, the delivery ends with one message sent and the retry held. On the merge base two are sent (3)
+     × AC1 #1889.3ff068ee the send is kept and its answer lost; find's message read answers 503: one message sent, the retry held 12717ms
+     × AC1 #1889.3ff068ee the same with a rate limit, 429, on the message read: one message sent, the retry held 11978ms
+     × AC1 #1889.3ff068ee the same with a 500 on the message read: one message sent, the retry held 12764ms
+   ❯ AC3 #1889.5e4d1e1c A planted `find` that reads every failure as `false` fails the first criterion (1)
+     × AC3 #1889.5e4d1e1c the first criterion's check on the 503 (fails on twins/failure-reads-false, two sent) 15386ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1889/held.test.ts > AC1 #1889.3ff068ee With a stand-in Gmail that accepts the send and then answers 503 to the message read, the delivery ends with one message sent and the retry held. On the merge base two are sent > AC1 #1889.3ff068ee the send is kept and its answer lost; find's message read answers 503: one message sent, the retry held
+ FAIL  tests/acceptance/1889/held.test.ts > AC3 #1889.5e4d1e1c A planted `find` that reads every failure as `false` fails the first criterion > AC3 #1889.5e4d1e1c the first criterion's check on the 503 (fails on twins/failure-reads-false, two sent)
+AssertionError: one message sent: Gmail kept the first send, and its 503 to the message read at tick 1 is no "not sent": expected 2 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ heldThrough tests/acceptance/1889/held.test.ts:24:138
+     22|     await tickAt(g, T0 + (3 + i) * MINUTE);
+     23|     expect(g.failed.length, `find read the message at tick ${i} after …
+     24|     expect(g.sent(), `one message sent: Gmail kept the first send, and…
+       |                                                                                                                                          ^
+     25|     expect(g.posts(), `no second send request after the ${status} at t…
+     26|     expect(HELD, `the retry is held after the ${status} at tick ${i}, …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/acceptance/1889/held.test.ts > AC1 #1889.3ff068ee With a stand-in Gmail that accepts the send and then answers 503 to the message read, the delivery ends with one message sent and the retry held. On the merge base two are sent > AC1 #1889.3ff068ee the same with a rate limit, 429, on the message read: one message sent, the retry held
+AssertionError: one message sent: Gmail kept the first send, and its 429 to the message read at tick 1 is no "not sent": expected 2 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ heldThrough tests/acceptance/1889/held.test.ts:24:138
+     22|     await tickAt(g, T0 + (3 + i) * MINUTE);
+     23|     expect(g.failed.length, `find read the message at tick ${i} after …
+     24|     expect(g.sent(), `one message sent: Gmail kept the first send, and…
+       |                                                                                                                                          ^
+     25|     expect(g.posts(), `no second send request after the ${status} at t…
+     26|     expect(HELD, `the retry is held after the ${status} at tick ${i}, …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/acceptance/1889/held.test.ts > AC1 #1889.3ff068ee With a stand-in Gmail that accepts the send and then answers 503 to the message read, the delivery ends with one message sent and the retry held. On the merge base two are sent > AC1 #1889.3ff068ee the same with a 500 on the message read: one message sent, the retry held
+AssertionError: one message sent: Gmail kept the first send, and its 500 to the message read at tick 1 is no "not sent": expected 2 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ heldThrough tests/acceptance/1889/held.test.ts:24:138
+     22|     await tickAt(g, T0 + (3 + i) * MINUTE);
+     23|     expect(g.failed.length, `find read the message at tick ${i} after …
+     24|     expect(g.sent(), `one message sent: Gmail kept the first send, and…
+       |                                                                                                                                          ^
+     25|     expect(g.posts(), `no second send request after the ${status} at t…
+     26|     expect(HELD, `the retry is held after the ${status} at tick ${i}, …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  4 failed | 1 passed (5)
+   Start at  17:44:32
+   Duration  55.40s (tests 97%, transform 2%, import 1%)
+

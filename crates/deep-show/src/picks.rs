@@ -142,18 +142,25 @@ impl Viewer {
 pub struct LogicCall {
     pub doc: String,
     pub steps: i64,
-    pub check: bool,
+    /// The check the call runs: logic.determinism, or #194's logic.tuning.
+    pub check: Option<&'static str>,
     pub seeks: Vec<i64>,
     pub regions: bool,
     pub at_times: Option<Vec<f64>>,
     /// #548: the input track the replay reads in place of the hub's.
     pub track: Option<Vec<Value>>,
+    /// #277: logic.determinism's `compare: "web"`, with the web player's run's golden (`web`).
+    pub web: Option<Option<Value>>,
 }
 
 pub fn parse(c: &Map<String, Value>) -> Option<LogicCall> {
     let check = match c.get("check") {
-        None => false,
-        Some(v) => v.as_str()? == "logic.determinism",
+        None => None,
+        Some(v) => Some(
+            ["logic.determinism", "logic.tuning"]
+                .into_iter()
+                .find(|k| v.as_str() == Some(*k))?,
+        ),
     };
     let steps = c
         .get("steps")?
@@ -180,6 +187,11 @@ pub fn parse(c: &Map<String, Value>) -> Option<LogicCall> {
         None => None,
         Some(t) => Some(t.as_array()?.clone()),
     };
+    let web = match c.get("compare") {
+        None => None,
+        Some(v) if v.as_str() == Some("web") => Some(c.get("web").cloned()),
+        Some(_) => return None,
+    };
     Some(LogicCall {
         doc: c.get("doc")?.as_str()?.to_string(),
         steps,
@@ -188,7 +200,50 @@ pub fn parse(c: &Map<String, Value>) -> Option<LogicCall> {
         regions: c.get("regions").and_then(Value::as_bool).unwrap_or(false),
         at_times,
         track,
+        web,
     })
+}
+
+/// #277: logic.determinism's `compare: "web"`: the web player's run's step hashes (its golden,
+/// `{step_hashes: {<item>: [hash | null]}}`) against the app's bake, step by step: PASS only when
+/// every step of the bake has the web run's same hash; a failure names each item's first step that
+/// differs or that the web run lacks. With no web run it stays BLOCKED.
+fn against_web(steps: &[Value], web: Option<&Value>, piece: &Piece) -> Value {
+    let Some(golden) = web.and_then(|w| w.get("step_hashes")) else {
+        let why = json!({"kind": "logic.determinism", "compare": "web",
+                         "what": "no web run: the web player's golden of the piece's steps is needed"});
+        return json!({"kind": "logic.determinism", "verdict": "BLOCKED", "failures": [why]});
+    };
+    let failures: Vec<Value> = piece
+        .items
+        .iter()
+        .filter_map(|i| {
+            let theirs = golden.get(&i.id).and_then(Value::as_array);
+            let k = steps.iter().position(|s| {
+                let mine = &s["hash"][&i.id];
+                let k = s["step"].as_u64().unwrap_or(0) as usize;
+                theirs.and_then(|t| t.get(k)).filter(|h| !h.is_null()) != Some(mine)
+            })?;
+            let step = steps[k]["step"].clone();
+            let theirs = theirs
+                .and_then(|t| t.get(k))
+                .cloned()
+                .unwrap_or(Value::Null);
+            let what = match theirs.is_null() {
+                true => format!("the web run lacks step {step} of {}", i.id),
+                false => format!(
+                    "the web run's step hash at step {step} of {} differs from the app's",
+                    i.id
+                ),
+            };
+            Some(
+                json!({"kind": "logic.determinism", "compare": "web", "item": i.id, "step": step,
+                        "app": steps[k]["hash"][&i.id], "web": theirs, "what": what}),
+            )
+        })
+        .collect();
+    let verdict = if failures.is_empty() { "PASS" } else { "FAIL" };
+    json!({"kind": "logic.determinism", "verdict": verdict, "failures": failures})
 }
 
 /// #213: a seek to step `to` of `world`'s run: the nearest checkpoint at or before it restored
@@ -799,7 +854,14 @@ impl Hub<'_> {
             }
             out["seeks"] = json!(seeks);
         }
-        if l.check {
+        if l.check == Some("logic.tuning") {
+            out["check"] = self.tuning_check(&form, &read, &piece, &entries, l.steps);
+        }
+        if let (Some("logic.determinism"), Some(web)) = (l.check, &l.web) {
+            out["check"] = against_web(&steps, web.as_ref(), &piece);
+            return out;
+        }
+        if l.check == Some("logic.determinism") {
             let at: Vec<i64> = match &l.at_times {
                 Some(ts) => ts
                     .iter()
