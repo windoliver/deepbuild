@@ -20,12 +20,13 @@ feed() {
   local err code words
   err=$(env -i HOME="$H" PATH=/usr/bin:/bin LC_ALL=C "$HOOK" claude-code PreToolUse < "$H/payloads/$f" 2>&1 >/dev/null)
   code=$?
-  words=$(printf '%s\n' "$err" | grep -e 'DeepBuild' | head -1 | cut -c1-118)
+  words=$(printf '%s\n' "$err" | grep -e 'DeepBuild' | head -1)
   [ -z "$words" ] && words="(allowed, nothing printed)"
   printf '%-24s exit %s  %s\n' "$f" "$code" "$words"
 }
 
-echo "== #2042 hand e2e: deep-hook $(cd "$W" && /usr/bin/git rev-parse --short HEAD) (the fix), shipped rules.json, load $(sysctl -n vm.loadavg)"
+{
+echo "== #2042 hand e2e: HEAD $(cd "$W" && /usr/bin/git rev-parse --short HEAD), built from code of $(cd "$W" && /usr/bin/git log -1 --format=%h -- . ":!docs"), load $(sysctl -n vm.loadavg)"
 echo "-- hub STOPPED (nothing listens at $H/.deepbuild/hub.sock)"
 for f in $(ls "$H/payloads"); do feed "$f"; done
 
@@ -43,3 +44,4 @@ kill "$HUB"
 wait "$HUB" 2>/dev/null
 kill -0 "$HUB" 2>/dev/null && echo "hub $HUB still running" || echo "hub $HUB stopped"
 echo "== done"
+} 2>&1 | tee "$E/e2e-full.txt" | cut -c1-151
