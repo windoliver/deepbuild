@@ -52,6 +52,7 @@ import { SLASH_COMMAND, adapterOf, loopFact, registry, toolClasses, versionOf } 
 import { continueLine, fit, type Part } from './context-fit.js';
 
 import { briefing, headOf, loadsOf } from './session-facts.js';
+import { toolLoad } from './tool-load.js';
 
 import { GateRunner, type KeptRow } from './gate-runner.js';
 import { Siblings } from './siblings.js';
@@ -1827,6 +1828,8 @@ export class Core {
       if (draft.kind === 'tool.after') await this.delivery.prAfter(meta, data.command);
       if (draft.kind === 'session.start') {
         data.loads = await loadsOf(meta.cwd, live.agent ?? meta.agent).catch(() => []);
+        const load = toolLoad(live.agent ?? meta.agent, data.loads as { kind: string; name: string }[], meta.version);
+        if (load) data.toolLoad = load;
         if (!foreign) void this.control.enteredProject(meta.session, meta.cwd);
         // Each server's tool list, read off this hook's path: recorded after the start, its changes held for you.
         if (!foreign && session) void this.holds.listed(meta.session, live.agent, meta.cwd).catch((error: unknown) => process.stderr.write(`deep hub: tool lists for ${meta.session} not recorded: ${error instanceof Error ? error.message : String(error)}\n`));

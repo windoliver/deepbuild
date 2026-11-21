@@ -1170,6 +1170,11 @@ timed.push('tests/acceptance/2760/budgets.test.ts');
 alone.push('tests/acceptance/2760-redraft-ac8/');
 timed.push('tests/acceptance/2760-redraft-ac8/budget-timing.test.ts');
 byHand.push('tests/acceptance/2760/budgets.test.ts');
+// #2897's files (blind) start a hub and DeepBuild's MCP servers as Claude Code, as #26's do. Its AC6 runs as its blind
+// redraft: the first draft reads deep_status's argument-free schema, which AC7 keeps, as empty on any program, so it is
+// kept by hand (tests/acceptance/2897-redraft-ac6/DISPUTE.md).
+alone.push('tests/acceptance/2897/', 'tests/acceptance/2897-redraft-ac6/');
+byHand.push('tests/acceptance/2897/ac6-full-schema.test.ts');
 // #1826's files each build deep-graph, and its taste call deep-canvas-render; CPU only, no GPU and no timing.
 alone.push('tests/acceptance/1826/');
 // #732's files each build deep-show (ac9-atomic.test.ts also with test-export-guards), export decks through the GPU and
