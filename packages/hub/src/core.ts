@@ -98,11 +98,11 @@ import { Jobs } from './jobs.js';
 import { Libraries } from './libraries.js';
 
 import { excerpt, historyKey, type Restored } from './waits.js';
-import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, loginPlan, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
+import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
 import { disk, testVfs, writeAtomic, type Durable } from './vfs.js';
 import { EXTENSION_HOOK_MS, derivedId, refuse, signature, ulid, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Scope, SCREEN_TOOLS } from './wire.js';
 import type { CallContext, Session, Live, Cursor, Counter, Routes } from './session-types.js';
-import { CODEX_BINARY, CLAUDE_BINARY, HOUR, ARCHIVED_THREADS_MS, DRIFT_MS, DAY, sql, letters, ghToken, GITHUB_PASS_MS, HOOK_CHECK_MS, CALL_GRACE, SLEPT, said, TURN_ENTRIES, PROMPT_PLACE_MS, CORES, machineLoad, FOREIGN, HOLDS_NO_PROMPT, signInCommands, type Obj, isObj, watching, waitingOn, READS, AUTOMATIC_QUEUED, effectEntries, callOf, MODS_MS, sendKey, OWN_TURN, holdsTurns, childPrompt, readsLogged, streamed, crashing, receipting, TYPED_RULE, wakeable } from "./hub-shared.js";
+import { CODEX_BINARY, CLAUDE_BINARY, HOUR, ARCHIVED_THREADS_MS, DRIFT_MS, DAY, sql, letters, ghToken, GITHUB_PASS_MS, HOOK_CHECK_MS, CALL_GRACE, SLEPT, said, TURN_ENTRIES, PROMPT_PLACE_MS, CORES, machineLoad, FOREIGN, HOLDS_NO_PROMPT, signInCommands, type Obj, isObj, watching, waitingOn, READS, AUTOMATIC_QUEUED, effectEntries, callOf, MODS_MS, sendKey, OWN_TURN, holdsTurns, childPrompt, readsLogged, streamed, crashing, receipting, TYPED_RULE, wakeable, planOf } from "./hub-shared.js";
 import { leasesScreen, offScreen } from './screen-gate.js';
 
 import { HubCanvas } from './hub-canvas.js';
@@ -1735,21 +1735,6 @@ export class Core {
     return read;
   }
   /**
-   * The login plan of a Claude Code home (#1033), read again only after MODS_MS or once a file a sign-in rewrites
-   * changes: each read starts claude, about 175 ms of CPU, on every Claude Code session's start.
-   */
-  private planOf(home: string): Promise<unknown> {
-    const claude = claudeOnPath(process.env);
-    if (!claude) return Promise.resolve(undefined);
-    const files = [join(home, '.credentials.json'), join(home, '..', '.claude.json'), join(home, '.claude.json')];
-    const key = JSON.stringify([claude, ...files.map(statKey)]);
-    const seen = this.plansSeen.get(home);
-    if (seen && seen.key === key && this.now() - seen.at < MODS_MS) return seen.plan;
-    const plan = loginPlan(claude, { ...process.env, ...(home ? { CLAUDE_CONFIG_DIR: home } : {}) });
-    this.plansSeen.set(home, { key, at: this.now(), plan });
-    return plan;
-  }
-  /**
    * A denied call that ran anyway (#1033): guard.overridden with what denied it and the home's mods that could have
    * approved it, one line on the session's row, its claims judged again, and for a send, which may already have left,
    * one ask naming it.
@@ -1781,7 +1766,7 @@ export class Core {
   private async modsReading(meta: HookMeta): Promise<void> {
     const read = await this.sessionMods(meta);
     if (!read.home) return;
-    const held = await denyHolds({ ...process.env, ...(read.home ? { CLAUDE_CONFIG_DIR: read.home } : {}) }, claudeOnPath(process.env), () => this.planOf(read.home));
+    const held = await denyHolds({ ...process.env, ...(read.home ? { CLAUDE_CONFIG_DIR: read.home } : {}) }, claudeOnPath(process.env), () => planOf(this.plansSeen, this.now, read.home));
     const risky = held || !('mods' in read) ? [] : read.mods.filter((m) => m.overrides);
     let reading: string | undefined;
     if ('unread' in read && !held) reading = `${MODS_WATCH} (${read.home}) loads mods DeepBuild couldn't read (${read.unread}), so whether one can approve a call past the guard is not checked: its holds and blocks may be watch-only.`;
