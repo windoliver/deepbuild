@@ -513,8 +513,96 @@ impl Live {
     }
 }
 
+/// Lower-case hex, two digits a byte, written into one buffer (#3056: a string a byte made a
+/// large memory's state cost a step's time many times over).
 fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(2 * bytes.len());
+    for b in bytes {
+        out.push(char::from(DIGITS[usize::from(b >> 4)]));
+        out.push(char::from(DIGITS[usize::from(b & 15)]));
+    }
+    out
+}
+
+/// One item's state as [`World::saved`] writes it, its memory and arrays still raw bytes, so a
+/// step can carry it and the hex is written only when something reads it (#3056).
+pub struct Snapshot {
+    next: i64,
+    failed: bool,
+    memory: Vec<u8>,
+    globals: Vec<Value>,
+    arrays: Vec<u8>,
+    pending: Map<String, Value>,
+    /// #211: its world pages, their written versions' bytes with them.
+    pages: Option<Value>,
+}
+
+impl std::fmt::Debug for Snapshot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Snapshot {{ next: {}, failed: {}, memory: {} bytes, arrays: {} bytes }}",
+            self.next,
+            self.failed,
+            self.memory.len(),
+            self.arrays.len()
+        )
+    }
+}
+
+impl World {
+    /// Every item's whole state as raw data: what [`World::saved`] writes, before its bytes are hex.
+    pub fn snapshot(&mut self) -> Vec<Snapshot> {
+        let piece = self.piece.clone();
+        self.lives
+            .iter_mut()
+            .zip(&piece.items)
+            .map(|(l, item)| Snapshot {
+                next: l.next,
+                failed: l.failed,
+                memory: l.memory().to_vec(),
+                globals: l
+                    .globals()
+                    .iter()
+                    .map(|v| match v {
+                        Val::I32(x) => json!(["i32", x]),
+                        Val::I64(x) => json!(["i64", x]),
+                        Val::F32(x) => json!(["f32", x]),
+                        Val::F64(x) => json!(["f64", x]),
+                        _ => Value::Null,
+                    })
+                    .collect(),
+                arrays: l.arrays.clone(),
+                pending: l
+                    .pending
+                    .iter()
+                    .map(|(k, q)| (k.clone(), q.iter().map(Entry::to_json).collect()))
+                    .collect(),
+                pages: match (&item.pages, &l.paged) {
+                    (Some(p), Some(st)) => Some(st.json(p)),
+                    _ => None,
+                },
+            })
+            .collect()
+    }
+
+    /// `items` as the plain data [`World::saved`] gives.
+    pub fn saved_of(items: &[Snapshot]) -> Value {
+        Value::Array(
+            items
+                .iter()
+                .map(|s| {
+                    let mut v = json!({"next": s.next, "failed": s.failed, "memory": hex(&s.memory), "globals": s.globals,
+                           "arrays": hex(&s.arrays), "pending": s.pending});
+                    if let Some(p) = &s.pages {
+                        v["pages"] = p.clone();
+                    }
+                    v
+                })
+                .collect(),
+        )
+    }
 }
 
 /// The logic items of a piece, stepping on one input track.

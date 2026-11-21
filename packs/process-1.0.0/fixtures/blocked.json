@@ -1,0 +1,436 @@
+{
+  "name": "blocked",
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "243b24c996d30abe3cd68570ce71ae20c5caeba16b3bd53588c9856b0c111168",
+      "step_rate": 60,
+      "writes": {
+        "kind": {
+          "type": "i32",
+          "count": 20
+        },
+        "gen": {
+          "type": "i32",
+          "count": 20
+        },
+        "at": {
+          "type": "i32",
+          "count": 20
+        },
+        "batch": {
+          "type": "i32",
+          "count": 20
+        },
+        "holds": {
+          "type": "i32",
+          "count": 20
+        },
+        "rank": {
+          "type": "i32",
+          "count": 20
+        },
+        "made": {
+          "type": "f64",
+          "count": 20
+        },
+        "d": {
+          "type": "f64",
+          "count": 20
+        },
+        "made_n": {
+          "type": "i32",
+          "count": 1
+        },
+        "out_n": {
+          "type": "i32",
+          "count": 1
+        },
+        "count": {
+          "type": "i32",
+          "count": 4
+        },
+        "left": {
+          "type": "i32",
+          "count": 4
+        },
+        "area": {
+          "type": "f64",
+          "count": 4
+        },
+        "dwell": {
+          "type": "f64",
+          "count": 4
+        },
+        "busy": {
+          "type": "i32",
+          "count": 1
+        },
+        "cap": {
+          "type": "i32",
+          "count": 1
+        },
+        "busy_area": {
+          "type": "f64",
+          "count": 1
+        },
+        "thru": {
+          "type": "f64",
+          "count": 4
+        },
+        "mean": {
+          "type": "f64",
+          "count": 4
+        },
+        "p90": {
+          "type": "f64",
+          "count": 4
+        },
+        "wip": {
+          "type": "f64",
+          "count": 4
+        },
+        "clock": {
+          "type": "f64",
+          "count": 3
+        },
+        "rec_n": {
+          "type": "i32",
+          "count": 1
+        },
+        "rec_t": {
+          "type": "f64",
+          "count": 8
+        },
+        "rec_w": {
+          "type": "f64",
+          "count": 8
+        }
+      },
+      "process": {
+        "kinds": [
+          "case"
+        ]
+      },
+      "budget": {
+        "fuel": 10000000
+      }
+    }
+  },
+  "track": [],
+  "steps": 1300,
+  "expect": {
+    "arrays": {
+      "1199": {
+        "kind": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          -1,
+          -1
+        ],
+        "at": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          -1,
+          -1
+        ],
+        "rank": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          0,
+          0,
+          0
+        ],
+        "d": [
+          10,
+          9.4,
+          8.8,
+          8.2,
+          7.6,
+          7,
+          6.4,
+          5.8,
+          5.2,
+          4.6,
+          4,
+          3.4,
+          2.8,
+          2.2,
+          1.6,
+          1,
+          0.4,
+          0,
+          0,
+          0
+        ],
+        "count": [
+          17,
+          1,
+          0,
+          18
+        ],
+        "made_n": [
+          18
+        ],
+        "out_n": [
+          0
+        ]
+      },
+      "1250": {
+        "kind": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          -1,
+          -1
+        ],
+        "at": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          -1,
+          -1
+        ],
+        "rank": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          0,
+          0,
+          0
+        ],
+        "d": [
+          10,
+          9.4,
+          8.8,
+          8.2,
+          7.6,
+          7,
+          6.4,
+          5.8,
+          5.2,
+          4.6,
+          4,
+          3.4,
+          2.8,
+          2.2,
+          1.6,
+          1,
+          0.4,
+          0,
+          0,
+          0
+        ],
+        "count": [
+          17,
+          1,
+          0,
+          18
+        ],
+        "made_n": [
+          18
+        ],
+        "out_n": [
+          0
+        ]
+      },
+      "1299": {
+        "kind": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          -1,
+          -1
+        ],
+        "at": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          -1,
+          -1
+        ],
+        "rank": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          0,
+          0,
+          0
+        ],
+        "d": [
+          10,
+          9.4,
+          8.8,
+          8.2,
+          7.6,
+          7,
+          6.4,
+          5.8,
+          5.2,
+          4.6,
+          4,
+          3.4,
+          2.8,
+          2.2,
+          1.6,
+          1,
+          0.4,
+          0,
+          0,
+          0
+        ],
+        "count": [
+          17,
+          1,
+          0,
+          18
+        ],
+        "made_n": [
+          18
+        ],
+        "out_n": [
+          0
+        ]
+      }
+    },
+    "tolerance": {
+      "abs": 1e-9
+    }
+  },
+  "answer": "A 10 m belt at 0.5 m/s with 0.6 m spacing at a 1/60 s tick: 10 ÷ (0.5 ÷ 60) = 1,200 ticks end to end and 0.6 ÷ (0.5 ÷ 60) = 72 ticks of spacing; its end leads nowhere. 18 cases made at t = 0 wait in its infeed queue; case i enters at tick 72i, when the one before is 72 ticks along, and all ride a tick a tick until the lead reaches the end in tick 1,199 and stops there; then every case stops where it is, case i at 1,200 − 72i ticks (10 − 0.6i m), case 16 at 0.4 m, short of the 0.6 m the next needs, so ⌊1,200 ÷ 72⌋ + 1 = 17 ride and case 17 waits at the head of the queue from then on: 18 made, 18 held, none out."
+}

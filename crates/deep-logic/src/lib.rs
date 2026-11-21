@@ -35,6 +35,7 @@ mod planted;
 pub mod play;
 pub mod point;
 pub mod probe;
+pub mod process;
 pub mod profile;
 pub mod saves;
 pub mod services;
