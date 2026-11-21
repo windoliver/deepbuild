@@ -79,6 +79,16 @@ const alive = (procs, { pid, start }) => (procs.has(pid) ? procs.get(pid).start 
 const ended = (entry) => !alive(processes(), entry) && !alive(processes({ fresh: true }), entry);
 /** This process and its ancestors, nearest first: what a DEEP_THROTTLE or DEEP_PERF_LOCK holder is verified against. */
 export const ancestors = () => chain(processes({ fresh: true }), process.pid);
+/** Every process under `pid` now, by PID and start, so a stop later reaches only these and not a number since taken. */
+export function descendants(pid) {
+  const procs = processes({ fresh: true });
+  return [...procs].filter(([at]) => at !== pid && chain(procs, at).includes(pid)).map(([at, { start }]) => ({ pid: at, start }));
+}
+/** SIGKILL to each of `tree` still listed with the start it had. */
+export function killTree(tree) {
+  const procs = processes({ fresh: true });
+  for (const holder of tree) if (procs.get(holder.pid)?.start === holder.start) try { process.kill(holder.pid, 'SIGKILL'); } catch {}
+}
 /** The command lines of `pids`, by pid. */
 function commands(pids) {
   const env = { ...process.env, LC_ALL: 'C' };
@@ -432,15 +442,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   // A grant held past its bound while a request from outside this tree waits ends (#2744): SIGTERM to the command,
   // and 10 s later SIGKILL to every process of the tree as it stood then, by PID and start.
   let tree = null;
-  const mine = () => {
-    const procs = processes({ fresh: true });
-    return [...procs].filter(([pid]) => pid !== process.pid && chain(procs, pid).includes(process.pid)).map(([pid, { start }]) => ({ pid, start }));
-  };
+  const mine = () => descendants(process.pid);
   // Only a process listed now with the start it had then: a number since taken is someone else's.
-  const stop = () => {
-    const procs = processes({ fresh: true });
-    for (const holder of tree) if (procs.get(holder.pid)?.start === holder.start) try { process.kill(holder.pid, 'SIGKILL'); } catch {}
-  };
+  const stop = () => killTree(tree);
   if (!grant.pass && !window) {
     // A monotonic clock, so a machine that slept doesn't count the sleep. A request waits once it was pending at the
     // last look too, so one about to be granted at once doesn't count; and a grant given back early has nothing to end.
