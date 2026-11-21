@@ -2466,7 +2466,7 @@ impl RowDrawn {
         let rtl = unicode_bidi::get_base_direction(title.as_str()) == unicode_bidi::Direction::Rtl;
         // Once the list's width is known, the title's room is what the row's other slots leave it (#1808). Beside a long
         // state word at the list's narrowest the time leaves what's drawn, its slot kept in the tree with no width, so
-        // the title keeps at least 12 characters.
+        // the title keeps at least 12 characters. An ask row keeps its time, and its title takes what's left (#1345).
         let wide = |text: &str, weight| drawn_width(window, text, weight);
         let roomy = shape.width.map(|width| {
             let flag = row.flag.as_ref().map_or(px(0.), |flag| {
