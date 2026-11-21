@@ -10,6 +10,7 @@
 import { readFile } from 'node:fs/promises';
 import type { Plant } from './plant.js';
 import { isRecord as isObj } from '@deepbuild/contracts';
+import { forgeFetch } from '@deepbuild/github';
 
 type Obj = Record<string, unknown>;
 
@@ -49,10 +50,8 @@ export function recordedFetch(file: string): Fetch {
 /** The live API at `api`, the token as a bearer when set; a request that fails to reach it reads as a 599. */
 export function liveFetch(api: string, token: string | undefined, signal?: AbortSignal): Fetch {
   return async (path, page) => {
-    const headers: Record<string, string> = { accept: 'application/vnd.github+json' };
-    if (token) headers.authorization = `Bearer ${token}`;
     try {
-      const res = await fetch(`${api}${path}?per_page=100&page=${page}`, { headers, signal: signal ?? AbortSignal.timeout(20_000) });
+      const res = await forgeFetch(api, `${path}?per_page=100&page=${page}`, { token, signal: signal ?? AbortSignal.timeout(20_000) });
       const out: Record<string, string> = {};
       res.headers.forEach((v, k) => { out[k.toLowerCase()] = v; });
       return { status: res.status, headers: out, body: await res.json().catch(() => undefined) };
@@ -74,10 +73,8 @@ export function recordedGraphql(file: string): Graphql {
 /** The live GraphQL API at `api`, the token as a bearer when set; a request that fails to reach it reads as a 599. */
 export function liveGraphql(api: string, token: string | undefined): Graphql {
   return async (query, variables) => {
-    const headers: Record<string, string> = { accept: 'application/vnd.github+json', 'content-type': 'application/json' };
-    if (token) headers.authorization = `Bearer ${token}`;
     try {
-      const res = await fetch(`${api}/graphql`, { method: 'POST', headers, body: JSON.stringify({ query, variables }), signal: AbortSignal.timeout(20_000) });
+      const res = await forgeFetch(api, '/graphql', { method: 'POST', token, body: { query, variables }, signal: AbortSignal.timeout(20_000) });
       return { status: res.status, headers: {}, body: await res.json().catch(() => undefined) };
     } catch {
       return { status: 599, headers: {}, body: undefined };
