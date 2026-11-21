@@ -4,7 +4,7 @@
 //! pixel is decoded to linear light, multiplied by `ambient` plus the sum of energy × reach ×
 //! color over the lights, clamped to 1 and encoded once. An item with `unlit`, or one a status
 //! binding paints, keeps full brightness. This is the CPU reference the GPU layer's light pass
-//! (`deep-gpu-layer`'s `lightfx`) follows in f32.
+//! (`deep-groups-render`'s `lightfx`) follows in f32.
 
 use std::collections::BTreeSet;
 use std::sync::Arc;

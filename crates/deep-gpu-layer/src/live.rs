@@ -242,7 +242,7 @@ struct Args {
     /// listed them, which alone reports the app's meter row.
     windows: Vec<String>,
     named: bool,
-    look: Look3,
+    look: crate::flat::CallLook,
     /// #462: the looks the documents' shots and regions name.
     looks: BTreeMap<String, crate::regions::Named>,
     /// The look's frame-history window, 0 without history.
@@ -488,7 +488,7 @@ fn parse(call: &Value, out: &str) -> Result<Args, Value> {
         calibration: call["calibration"] == true,
         named: call.get("windows").is_some(),
         windows,
-        look,
+        look: crate::flat::CallLook::of(look, call),
         looks,
         history,
         frames,
@@ -771,7 +771,7 @@ pub(crate) fn admit(
     writer: &str,
     doc_id: &str,
     size: Option<[u32; 2]>,
-    look: &Look3,
+    look: &crate::flat::CallLook,
     history: u32,
     path: Path,
     labels: &mut Labels,
@@ -826,7 +826,12 @@ pub(crate) fn admit(
     if let Some(d) = doc.as_object_mut() {
         d.insert("size".into(), json!(size));
     }
-    let frames = content_with(&doc, program, look, labels, assets.clone())?;
+    let unevaluated = |(code, path): (&str, String)| {
+        let what = "the document can't be evaluated";
+        vec![issue(code, &path, Value::Null, what)]
+    };
+    let frames =
+        Content::of(&doc, program, look, labels, assets.clone(), planted).map_err(unevaluated)?;
     let moving = camera_moves(&doc);
     // Frame history's upscale renders at the look's scale (#173).
     let base_scale = match look.history.mode {
@@ -886,46 +891,6 @@ pub(crate) fn admit(
     })
 }
 
-/// A checked document's frames, from its compiled motion program: a document with no camera is
-/// 2D, as a chart is, and draws by marks2d (#397).
-fn content_with(
-    doc: &Value,
-    program: Result<deep_canvas_motion::program::Program, deep_canvas_scene3d::scene::Refused>,
-    look: &Look3,
-    labels: &mut Labels,
-    assets: Option<frames::Reader>,
-) -> Result<Content, Vec<Value>> {
-    let unevaluated = |(code, path): (&str, String)| {
-        vec![issue(
-            code,
-            &path,
-            Value::Null,
-            "the document can't be evaluated",
-        )]
-    };
-    Ok(if crate::flat::is_flat(doc) {
-        Content::Flat(Box::new(
-            crate::flat::Flat::new(doc, &look.roles).map_err(unevaluated)?,
-        ))
-    } else {
-        Content::Scene(Box::new(
-            program
-                .and_then(|p| Frames::with_program(doc, p, look, labels, assets))
-                .map_err(|r| unevaluated((r.code, r.path)))?,
-        ))
-    })
-}
-
-/// A stamped document's frames, compiled again: a view rebuilt on a reopened device (#1413).
-fn content_of(
-    doc: &Value,
-    look: &Look3,
-    labels: &mut Labels,
-    assets: frames::Reader,
-) -> Result<Content, Vec<Value>> {
-    content_with(doc, Frames::compile(doc), look, labels, Some(assets))
-}
-
 /// #1729: the call's assets, files by hash, as a document's frames read them.
 fn reader(files: &BTreeMap<String, PathBuf>) -> frames::Reader {
     let files = files.clone();
@@ -972,6 +937,8 @@ struct ViewRow {
     /// Each pipeline made while drawing it, and the operator pipelines its session holds (#432).
     created: Vec<deep_scene3d_render::created::Created>,
     operator_pipelines: usize,
+    /// #1561: a 2D document's drawn frame: whether it reused the last frame's marks.
+    reused: Option<bool>,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -1707,8 +1674,12 @@ impl Live {
             if let Some(mut rev) = ses.current.take().filter(|_| !newer) {
                 if rev.frames.is_none() {
                     let assets = reader(&self.args.assets);
+                    // A stamped document's frames, compiled again (#1413).
+                    let program = Frames::compile(&rev.doc);
+                    let (look, plant) = (&self.args.look, self.plants.planted);
+                    let labels = &mut self.labels;
                     rev.frames =
-                        content_of(&rev.doc, &self.args.look, &mut self.labels, assets).ok();
+                        Content::of(&rev.doc, program, look, labels, Some(assets), plant).ok();
                 }
                 if rev.frames.is_some() {
                     ses.pending = Some(rev);
@@ -2199,6 +2170,11 @@ impl Live {
                     .view
                     .as_ref()
                     .map_or((Vec::new(), 0), |v| (v.created(), v.operator_pipelines()));
+                let reused = self.sessions[s]
+                    .view
+                    .as_ref()
+                    .filter(|_| drawn)
+                    .and_then(|v| v.reused());
                 self.views.push(ViewRow {
                     session: s,
                     binds,
@@ -2214,6 +2190,7 @@ impl Live {
                     ops,
                     created,
                     operator_pipelines,
+                    reused,
                 });
             }
             let cpu_ms = began.elapsed().as_secs_f64() * 1e3;
@@ -2736,6 +2713,9 @@ impl Live {
                         if self.args.reports.binds {
                             o["binds"] = json!(v.binds);
                         }
+                        if let Some(reused) = v.reused {
+                            o["reused"] = json!(reused);
+                        }
                         o
                     })
                     .collect();
@@ -3103,7 +3083,7 @@ mod tests {
             "../../../tests/acceptance/1903/fixtures/look.json"
         ))
         .expect("the #1903 look");
-        let look = Look3::read(&look).expect("a look");
+        let look = crate::flat::CallLook::of(Look3::read(&look).expect("a look"), &Value::Null);
         let issues = admit(
             evidence["scene"].clone(),
             "agent:alpha",

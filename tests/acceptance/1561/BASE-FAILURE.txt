@@ -1,0 +1,206 @@
+Base commit: 9550dc0f0 ("Merge pull request #2831 from windoliver/feat/1929-box-mesh-deform"); no implementation of
+             #1561 in it.
+Date: 2026-11-19; the run started at 22:34 UTC and was made once.
+Machine: macOS 27.2 on arm64, shared with other sessions; node v24.22.0, vitest 5.0.5. Every comparison is between
+         frames of this one run on this one machine. Paths below are written relative to the repo root.
+Build: target/debug/deep-gpu and target/debug/deep-show were built at the base before this run. Each file's own
+       `cargo build --locked --bin …` left them as they were (their modification times are unchanged by the run).
+Command: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node scripts/throttle.mjs test --wait 30 -- npx vitest run
+         --root tests/acceptance/1561 --no-file-parallelism --testTimeout=600000
+Lease: the run went through the machine's test lease (scripts/throttle.mjs), which granted; it printed no
+       INCONCLUSIVE line.
+Type-check: node node_modules/typescript/bin/tsc --noEmit -p tests/acceptance/1561/tsconfig.json passes (exit 0, no
+            output), run once after the suite through the same lease.
+
+The suite's files at this run, by SHA-256 (README.md and this file were written after it):
+  c4f6cee68c659e77acd80a82e60f476b3499ecdc4dbd1e02740a628b150663f0  tests/acceptance/1561/drawn-look.test.ts
+  930839a88cbeb9030e8bfbf65106d3622870d8ae91a3093499313490be15b746  tests/acceptance/1561/helpers.ts
+  3cb1407dfc0dd6451bfae82ad65e729f6b2212ff9e72878db96aabfce4e2a549  tests/acceptance/1561/moved-frame.test.ts
+  7ffa3d96f012035ed32c697449e86f62cf388d986acb36db5f49b4daa1e03309  tests/acceptance/1561/taste.test.ts
+  c5b0031dc2191959d86202363d79087b03e941d881587792b08e308dc9e69c0a  tests/acceptance/1561/tsconfig.json
+  037141985538c9f1f775e45746e408636afe94cbe5f326fa848f7ac38de2b4ba  tests/acceptance/1561/fixtures/blown-leaf.json
+  26ffa7ea17390d644fada75fc711e54a5b4e95cec747962296a42d290aea44de  tests/acceptance/1561/fixtures/look.json
+  ad8cdc04831f776177eab681a6feec756e7f47f1c7a2b1926d11c15bd8b2232a  tests/acceptance/1561/fixtures/paper-boat.json
+
+Result: Test Files 3 failed (3), Tests 6 failed (6), exit 1, 59.91 s. Every failure is an AssertionError raised in
+helpers.ts; none is a load, compile or type error, and none is a timeout.
+
+  1. drawn-look.test.ts, "AC1 #1561.785c8c1d the live window draws the fixture at t = 0, 0.5 s and 1 s, the camera
+     moved at the last two, equal by pixel hash to film2d's frames at the same t".
+     Failed at its own judge's assertion: `none`, helpers.ts:54:60, from drawn-look.test.ts:106:5. film2d's guards
+     passed first. The live window's frames 1, 3 and 5 are one blank picture, not film2d's frames 0, 2 and 4, and
+     "the first field the live window dropped is the named fill: it draws the same three frames with and without it".
+  2. drawn-look.test.ts, "AC1 #1561.785c8c1d deep-show's frame path draws the fixture at t = 0, 0.5 s and 1 s, the
+     camera moved at the last two, equal by pixel hash to film2d's frames at the same t".
+     Failed at its own judge's assertion: `none`, helpers.ts:54:60, from drawn-look.test.ts:112:5. deep-show's frames
+     0, 2 and 4 are one picture, not blank, not film2d's, and "the first field deep-show's frame path dropped is the
+     named fill: it draws the same three frames with and without it".
+  3. drawn-look.test.ts, "AC1 #1561.785c8c1d planted live_passes_no_page, a live window that passes no page, draws
+     plain role colors and fails, naming the named fill as the first field it dropped".
+     Failed before its judge, at an assertion of the suite's on the binary's answer: `lines`, helpers.ts:136:97, from
+     drawn-look.test.ts:118:66. The base refuses the unknown planted name: "deep-gpu run --planted live_passes_no_page
+     accepted scenario 1: {"ok":false,"code":"bad_input"}". The planted program was not drawn or judged.
+  4. moved-frame.test.ts, "AC2 #1561.4606f756 frames 5 and 9 at 4 frames a second reuse the last frame's marks and
+     equal by pixel hash the full redraws at t = 1 s and t = 2 s".
+     Failed at its own judge's assertion: `none`, helpers.ts:54:60, from moved-frame.test.ts:63:5. The view rows have
+     no `reused` ("is undefined, not true" on frames 5 and 9, "is undefined, not false" on frames 2 and 3), and "the
+     full redraw at t = 1 s has no fills and paper to keep: it's the frame the look draws with its drawn fields
+     removed" (the same at t = 2 s). The judge lists no pixel-hash difference between frames 5 and 2 or 9 and 3.
+  5. moved-frame.test.ts, "AC2 #1561.4606f756 planted reuse_drops_page, a reuse that drops the page, fails, naming
+     frame 5".
+     Failed before its judge, at an assertion of the suite's on the binary's answer: `lines`, helpers.ts:136:97, from
+     moved-frame.test.ts:68:17. The base refuses the unknown planted name: "deep-gpu run --planted reuse_drops_page
+     accepted scenario 1: {"ok":false,"code":"bad_input"}". The planted program was not drawn or judged.
+  6. taste.test.ts, "AC3 #1561.ca22b9de the run writes the fixture's screenshot from the live window and from
+     deep-show, and the recorded call on exactly those says they look right".
+     Reads INCONCLUSIVE, which is a failure and not a pass: `inconclusive`, helpers.ts:63:10, from
+     taste.test.ts:44:29. The two screenshots were written; no tests/acceptance/1561/TASTE.json exists. The live
+     window's screenshot is blank at the base.
+
+The run, trimmed. The list of tests and each failure's message and trace are whole. Cut, and marked where: the
+"Expected / Received" diff under a failure, which repeats the message above it line for line. The checkout's path on
+the RUN line is written relative to the repo root.
+
+ RUN  v5.0.5 tests/acceptance/1561
+
+ ❯ drawn-look.test.ts (3 tests | 3 failed) 35101ms
+   ❯ AC1 #1561.785c8c1d a 2D document under a drawn look draws in the live window and through deep-show's frame path as film2d draws it (3)
+     × AC1 #1561.785c8c1d the live window draws the fixture at t = 0, 0.5 s and 1 s, the camera moved at the last two, equal by pixel hash to film2d's frames at the same t 23523ms
+     × AC1 #1561.785c8c1d deep-show's frame path draws the fixture at t = 0, 0.5 s and 1 s, the camera moved at the last two, equal by pixel hash to film2d's frames at the same t 5654ms
+     × AC1 #1561.785c8c1d planted live_passes_no_page, a live window that passes no page, draws plain role colors and fails, naming the named fill as the first field it dropped 32ms
+ ❯ moved-frame.test.ts (2 tests | 2 failed) 12123ms
+   ❯ AC2 #1561.4606f756 a frame that only moved keeps its fills and paper (2)
+     × AC2 #1561.4606f756 frames 5 and 9 at 4 frames a second reuse the last frame's marks and equal by pixel hash the full redraws at t = 1 s and t = 2 s 9622ms
+     × AC2 #1561.4606f756 planted reuse_drops_page, a reuse that drops the page, fails, naming frame 5 37ms
+stdout | taste.test.ts > AC3 #1561.ca22b9de the screenshots and the one taste call on them > AC3 #1561.ca22b9de the run writes the fixture's screenshot from the live window and from deep-show, and the recorded call on exactly those says they look right
+AC3 #1561.ca22b9de: screenshots written from this run's frames:
+  target/acceptance/1561/live-window.png  01451b329f2b1038fe06d9e04d750c607f2c9edd04c4dcd950b1e34fc57bdb52  (blank: one color in every pixel)
+  target/acceptance/1561/deep-show.png  1458bcc26c16fcd525f621fe18294fc8e797e2b9fa3c191294190f61ecfd4429
+
+ ❯ taste.test.ts (1 test | 1 failed) 11809ms
+   ❯ AC3 #1561.ca22b9de the screenshots and the one taste call on them (1)
+     × AC3 #1561.ca22b9de the run writes the fixture's screenshot from the live window and from deep-show, and the recorded call on exactly those says they look right 7829ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  drawn-look.test.ts > AC1 #1561.785c8c1d a 2D document under a drawn look draws in the live window and through deep-show's frame path as film2d draws it > AC1 #1561.785c8c1d the live window draws the fixture at t = 0, 0.5 s and 1 s, the camera moved at the last two, equal by pixel hash to film2d's frames at the same t
+AssertionError: the live window draws the fixture under its drawn look as film2d does:
+  the live window's frame 1 (t = 0 s) isn't film2d's frame 0 at the same t: pixel hash d015983d12b84bdec9127812df800368bb7914ddc7dafc0d044d759dea19ed59 against b7d76d2d77df48c31b2279a3aae1203aa4133f28059a02862bdbc7ed526a4496; it is blank
+  the live window's frame 3 (t = 0.5 s) isn't film2d's frame 2 at the same t: pixel hash d015983d12b84bdec9127812df800368bb7914ddc7dafc0d044d759dea19ed59 against 2d25cb655d68dcd87586e721c9f13dd49df92fa087984dd555ee9ff5786d5113; it is blank
+  the live window's frame 5 (t = 1 s) isn't film2d's frame 4 at the same t: pixel hash d015983d12b84bdec9127812df800368bb7914ddc7dafc0d044d759dea19ed59 against 8eaafdaadc5ff8f8c612e5f1f92991827c74e2a680df06fcadef3a1509cbec2f; it is blank
+  the first field the live window dropped is the named fill: it draws the same three frames with and without it: expected [ …(4) ] to deeply equal []
+
+[Expected / Received diff cut: the four lines above, against an empty list]
+
+ ❯ none helpers.ts:54:60
+     52| /** No failures; the message lists them. */
+     53| export function none(failures: readonly string[], what: string): void {
+     54|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     55| }
+     56| /** At least one failure, and one that says `words`: what a planted pr…
+ ❯ drawn-look.test.ts:106:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  drawn-look.test.ts > AC1 #1561.785c8c1d a 2D document under a drawn look draws in the live window and through deep-show's frame path as film2d draws it > AC1 #1561.785c8c1d deep-show's frame path draws the fixture at t = 0, 0.5 s and 1 s, the camera moved at the last two, equal by pixel hash to film2d's frames at the same t
+AssertionError: deep-show's frame path draws the fixture under its drawn look as film2d does:
+  deep-show's frame path's frame 0 (t = 0 s) isn't film2d's frame 0 at the same t: pixel hash 025d2d13247197f02bfc02c85d74805a9067a13633380696f5ef4d73c3435fd2 against b7d76d2d77df48c31b2279a3aae1203aa4133f28059a02862bdbc7ed526a4496
+  deep-show's frame path's frame 2 (t = 0.5 s) isn't film2d's frame 2 at the same t: pixel hash 025d2d13247197f02bfc02c85d74805a9067a13633380696f5ef4d73c3435fd2 against 2d25cb655d68dcd87586e721c9f13dd49df92fa087984dd555ee9ff5786d5113
+  deep-show's frame path's frame 4 (t = 1 s) isn't film2d's frame 4 at the same t: pixel hash 025d2d13247197f02bfc02c85d74805a9067a13633380696f5ef4d73c3435fd2 against 8eaafdaadc5ff8f8c612e5f1f92991827c74e2a680df06fcadef3a1509cbec2f
+  the first field deep-show's frame path dropped is the named fill: it draws the same three frames with and without it: expected [ …(4) ] to deeply equal []
+
+[Expected / Received diff cut: the four lines above, against an empty list]
+
+ ❯ none helpers.ts:54:60
+     52| /** No failures; the message lists them. */
+     53| export function none(failures: readonly string[], what: string): void {
+     54|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     55| }
+     56| /** At least one failure, and one that says `words`: what a planted pr…
+ ❯ drawn-look.test.ts:112:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  drawn-look.test.ts > AC1 #1561.785c8c1d a 2D document under a drawn look draws in the live window and through deep-show's frame path as film2d draws it > AC1 #1561.785c8c1d planted live_passes_no_page, a live window that passes no page, draws plain role colors and fails, naming the named fill as the first field it dropped
+AssertionError: deep-gpu run --planted live_passes_no_page accepted scenario 1: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+[Expected / Received diff cut: true against false]
+
+ ❯ helpers.ts:136:97
+    134|   });
+    135|   // A refusal first: a binary that doesn't know a planted name answer…
+    136|   answers.forEach((a, i) => expect(a['ok'], `${label} accepted scenari…
+       |                                                                                                 ^
+    137|   expect(r.status, `${label} exits 0 (${r.signal ?? 'no signal'}); ${s…
+    138|   expect(answers.length, `${label}: one output line per input line; ${…
+ ❯ lines helpers.ts:136:11
+ ❯ runGpu helpers.ts:148:20
+ ❯ liveWindow drawn-look.test.ts:68:19
+ ❯ drawn-look.test.ts:118:66
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  moved-frame.test.ts > AC2 #1561.4606f756 a frame that only moved keeps its fills and paper > AC2 #1561.4606f756 frames 5 and 9 at 4 frames a second reuse the last frame's marks and equal by pixel hash the full redraws at t = 1 s and t = 2 s
+AssertionError: the frames that only moved are reused frames, each equal to a full redraw at the same t:
+  frame 5 (t = 1 s) at 4 frames a second only moved, but its view row's reused is undefined, not true: it didn't reuse the last frame's marks
+  frame 2 (t = 1 s) at 1 frame a second follows a change that isn't a move, but its view row's reused is undefined, not false: it isn't a full redraw
+  the full redraw at t = 1 s has no fills and paper to keep: it's the frame the look draws with its drawn fields removed
+  frame 9 (t = 2 s) at 4 frames a second only moved, but its view row's reused is undefined, not true: it didn't reuse the last frame's marks
+  frame 3 (t = 2 s) at 1 frame a second follows a change that isn't a move, but its view row's reused is undefined, not false: it isn't a full redraw
+  the full redraw at t = 2 s has no fills and paper to keep: it's the frame the look draws with its drawn fields removed: expected [ …(6) ] to deeply equal []
+
+[Expected / Received diff cut: the six lines above, against an empty list]
+
+ ❯ none helpers.ts:54:60
+     52| /** No failures; the message lists them. */
+     53| export function none(failures: readonly string[], what: string): void {
+     54|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     55| }
+     56| /** At least one failure, and one that says `words`: what a planted pr…
+ ❯ moved-frame.test.ts:63:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  moved-frame.test.ts > AC2 #1561.4606f756 a frame that only moved keeps its fills and paper > AC2 #1561.4606f756 planted reuse_drops_page, a reuse that drops the page, fails, naming frame 5
+AssertionError: deep-gpu run --planted reuse_drops_page accepted scenario 1: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+[Expected / Received diff cut: true against false]
+
+ ❯ helpers.ts:136:97
+    134|   });
+    135|   // A refusal first: a binary that doesn't know a planted name answer…
+    136|   answers.forEach((a, i) => expect(a['ok'], `${label} accepted scenari…
+       |                                                                                                 ^
+    137|   expect(r.status, `${label} exits 0 (${r.signal ?? 'no signal'}); ${s…
+    138|   expect(answers.length, `${label}: one output line per input line; ${…
+ ❯ lines helpers.ts:136:11
+ ❯ runGpu helpers.ts:148:20
+ ❯ judge moved-frame.test.ts:38:19
+ ❯ moved-frame.test.ts:68:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  taste.test.ts > AC3 #1561.ca22b9de the screenshots and the one taste call on them > AC3 #1561.ca22b9de the run writes the fixture's screenshot from the live window and from deep-show, and the recorded call on exactly those says they look right
+AssertionError: INCONCLUSIVE: no taste call is recorded: show the owner
+  target/acceptance/1561/live-window.png  01451b329f2b1038fe06d9e04d750c607f2c9edd04c4dcd950b1e34fc57bdb52  (blank: one color in every pixel)
+  target/acceptance/1561/deep-show.png  1458bcc26c16fcd525f621fe18294fc8e797e2b9fa3c191294190f61ecfd4429
+and record the answer in tests/acceptance/1561/TASTE.json (README: The taste call); this is not a pass
+ ❯ inconclusive helpers.ts:63:10
+     61| /** A test that can't be judged here fails with this, never passes. */
+     62| export function inconclusive(reason: string): never {
+     63|   expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |          ^
+     64| }
+     65| /** A test whose input is missing or blank fails with this, never pass…
+ ❯ taste.test.ts:44:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  6 failed (6)
+   Start at  14:34:19
+   Duration  59.91s (tests 99%)

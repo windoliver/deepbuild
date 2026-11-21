@@ -1,0 +1,12 @@
+{
+  "issue": 1561,
+  "criterion": "#1561.ca22b9de",
+  "verdict": "looks_right",
+  "who": "the owner, in the implementing session: asked whether the two screenshots look right, answered \"Looks right\"",
+  "when": "2026-11-19T22:38:23Z",
+  "screenshots": {
+    "live-window.png": "9383ce3a891faab76b98c418ffd72ff1023a7057f37a818375759a82193d215a",
+    "deep-show.png": "41e292dc9aa711642f28a61259b890aa95f26714f07595a0667bfe694425dddd"
+  },
+  "note": "Shown to the owner on the pull request and in the session's preview, with a clip and stills of film2d, the live window and deep-show's frames beside them. Said to the owner beside the question, and the same in film2d's frame, so not this change's: the boat's pond is dark teal, a dark band runs along the bottom edge, and the vermilion rim is hard to pick out."
+}
