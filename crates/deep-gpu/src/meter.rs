@@ -580,10 +580,11 @@ pub struct Shape {
     /// The copy path: each slot is read back through a buffer of its own.
     pub read_back: bool,
     /// The renderer's bytes for each pixel at the internal size: its targets, their stored
-    /// samples and the cull's prepass depth and pyramid.
+    /// samples and the cull's prepass depth and pyramid, and a mirror's own renderer's at half
+    /// that size.
     pub per_px: f64,
-    /// The renderer's bytes whatever the internal size: its glyph atlas, shadow maps, env cubes
-    /// and a mirror's own renderer.
+    /// The renderer's bytes whatever the internal size: its glyph atlas, shadow maps and env
+    /// cubes, and a mirror's own renderer's.
     pub fixed: u64,
 }
 

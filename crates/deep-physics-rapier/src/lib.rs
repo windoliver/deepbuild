@@ -209,7 +209,10 @@ pub struct Rapier {
     world: PhysicsWorld,
     /// Each body's handle, in canonical (ID) order.
     bodies: Vec<(String, RigidBodyHandle)>,
-    forces: Vec<Force>,
+    /// Each force by ID, its strength what the last `set` gave it (#2371).
+    forces: Vec<(String, Force)>,
+    /// #2371: each body's anchors by address, `<body>#<anchor>`: the body and its local point.
+    anchors: BTreeMap<String, (RigidBodyHandle, [f64; 3])>,
     /// The fixed body a joint end of `world` holds to.
     world_body: Option<RigidBodyHandle>,
     /// Each collider's shape use.
@@ -1083,7 +1086,13 @@ impl Backend for Rapier {
         self.soft.build(w, &mut self.world, &handles);
         self.particle_capacity = w.capacity.get("particles").copied().unwrap_or(u64::MAX);
         self.checkpoint_every = w.checkpoint_every;
-        self.forces = w.forces.values().cloned().collect();
+        self.forces = w.forces.clone().into_iter().collect();
+        let anchors = w.bodies.iter().flat_map(|(id, b)| {
+            let h = handles[id];
+            let named = b.anchors.iter();
+            named.map(move |(name, p)| (format!("{id}#{name}"), (h, *p)))
+        });
+        self.anchors = anchors.collect();
         if out.is_empty() {
             Ok(())
         } else {
@@ -1105,7 +1114,7 @@ impl Backend for Rapier {
         let start = self.start();
         let watched = self.readings();
         self.aim(targets);
-        self.push();
+        self.push(targets);
         let vehicles = self.vehicles.ids();
         let belts = belt::Belts {
             twin: self.twin,
@@ -1283,6 +1292,7 @@ impl Backend for Rapier {
                 self.vehicles.bytes(),
                 self.soft.bytes(),
                 self.character_bytes(),
+                self.strength_bytes(),
                 self.grab_bytes(),
             ]
             .concat(),
@@ -1325,6 +1335,7 @@ impl Backend for Rapier {
         let rest = self.vehicles.restore(rest);
         let rest = self.soft.restore(rest);
         let rest = self.characters_of(rest);
+        let rest = self.strengths_of(rest);
         self.grabs = Rapier::grabs_of(rest);
         self.step = cp.step;
         self.last.clear();

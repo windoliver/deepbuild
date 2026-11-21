@@ -1,0 +1,131 @@
+{
+ "frames": "61 a film at 30 fps, each the bake's state at step 4 × its number",
+ "runs": {
+  "yard-front": {
+   "sleeper": {
+    "frames read": 59,
+    "most off its bake, px": 0.114,
+    "first frame the bake moves it": 18,
+    "moved by the last frame read, m": 8.9532,
+    "the frames show it move, px": 306.96
+   },
+   "faller": {
+    "frames read": 61,
+    "most off its bake, px": 0.882,
+    "first frame the bake moves it": 1,
+    "moved by the last frame read, m": 2.7667,
+    "the frames show it move, px": 95.11
+   },
+   "puck": {
+    "frames read": 61,
+    "most off its bake, px": 0.53,
+    "first frame the bake moves it": 21,
+    "moved by the last frame read, m": 5.3417,
+    "the frames show it move, px": 183.23
+   }
+  },
+  "yard-above": {
+   "puck": {
+    "frames read": 61,
+    "most off its bake, px": 0.099,
+    "first frame the bake moves it": 21,
+    "moved by the last frame read, m": 5.3417,
+    "the frames show it move, px": 320.5
+   },
+   "chip": {
+    "frames read": 61,
+    "most off its bake, px": 0.129,
+    "first frame the bake moves it": 26,
+    "moved by the last frame read, m": 0.1167,
+    "the frames show it move, px": 7
+   }
+  },
+  "beads-1": {
+   "near": {
+    "frames read": 61,
+    "most off its bake, px": 0.226,
+    "first frame the bake moves it": 3,
+    "moved by the last frame read, m": 0.1917,
+    "the frames show it move, px": 28.66
+   },
+   "far": {
+    "frames read": 61,
+    "most off its bake, px": 0,
+    "first frame the bake moves it": -1,
+    "moved by the last frame read, m": 0,
+    "the frames show it move, px": 0
+   }
+  },
+  "beads-1.2": {
+   "near": {
+    "frames read": 61,
+    "most off its bake, px": 0.097,
+    "first frame the bake moves it": 3,
+    "moved by the last frame read, m": 0.1917,
+    "the frames show it move, px": 28.66
+   },
+   "far": {
+    "frames read": 61,
+    "most off its bake, px": 0.101,
+    "first frame the bake moves it": 3,
+    "moved by the last frame read, m": 0.1917,
+    "the frames show it move, px": 28.66
+   }
+  },
+  "crates": {
+   "address": {
+    "frames read": 59,
+    "most off its bake, px": 0.266,
+    "first frame the bake moves it": 3,
+    "moved by the last frame read, m": 1.85,
+    "the frames show it move, px": 185
+   },
+   "point": {
+    "frames read": 59,
+    "most off its bake, px": 0.266,
+    "first frame the bake moves it": 3,
+    "moved by the last frame read, m": 1.85,
+    "the frames show it move, px": 185
+   },
+   "centre": {
+    "frames read": 59,
+    "most off its bake, px": 0.167,
+    "first frame the bake moves it": 3,
+    "moved by the last frame read, m": 1.85,
+    "the frames show it move, px": 185
+   }
+  },
+  "field-above": {
+   "leaf": {
+    "frames read": 61,
+    "most off its bake, px": 0.116,
+    "first frame the bake moves it": 9,
+    "moved by the last frame read, m": 2.7965,
+    "the frames show it move, px": 127.96
+   },
+   "puck": {
+    "frames read": 61,
+    "most off its bake, px": 0.214,
+    "first frame the bake moves it": 11,
+    "moved by the last frame read, m": 7.9948,
+    "the frames show it move, px": 365.52
+   },
+   "bob": {
+    "frames read": 61,
+    "most off its bake, px": 0.097,
+    "first frame the bake moves it": 12,
+    "moved by the last frame read, m": 0.4998,
+    "the frames show it move, px": 22.86
+   }
+  }
+ },
+ "claims": {
+  "radius 1 m: the bead 1.1 m away is the same pixels in every frame": true,
+  "radius 1 m: the bead 0.9 m away moves, px": 28.66,
+  "radius 1.2 m: the bead 1.1 m away moves, px": 28.66,
+  "the crate poked by address against the crate poked at the point: their middles differ by at most, px": 0,
+  "the crate poked at its centre covers other pixels (it doesn't turn)": true,
+  "the deactivated body is the same pixels from frame 23 (step 92) on": true
+ },
+ "failures": []
+}

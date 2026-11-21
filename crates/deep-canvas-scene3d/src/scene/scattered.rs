@@ -578,31 +578,25 @@ pub(super) fn by_material(
     let Some(named) = named.as_object() else {
         return refused("out_of_range", format!("items/{id}/materials"));
     };
-    // Each triangle's material: the first part naming it, else the item's own.
     let own = item.get("material").and_then(Value::as_str);
-    let mut of: Vec<Option<Option<&str>>> = vec![None; mesh.triangles()];
     for (part, m) in named {
         let unresolved = || Refused {
             code: "ref_unresolved",
             path: format!("items/{id}/materials/{part}"),
         };
-        let tris = (mesh.parts.get(part))
-            .or_else(|| mesh.closed.get(part).map(|c| &c.0))
-            .ok_or_else(unresolved)?;
+        if !mesh.parts.contains_key(part) && !mesh.closed.contains_key(part) {
+            return Err(unresolved());
+        }
         let material = |m: &&str| {
             let kind = items.get(m).and_then(|i| i.get("kind"));
             kind.and_then(Value::as_str) == Some("material@1")
         };
-        let m = m.as_str().filter(material).ok_or_else(unresolved)?;
-        for &t in tris {
-            if let Some(slot) = of.get_mut(t as usize).filter(|s| s.is_none()) {
-                *slot = Some(Some(m));
-            }
-        }
+        m.as_str().filter(material).ok_or_else(unresolved)?;
     }
+    // Each triangle's material: the first part naming it, else the item's own.
     let mut groups: BTreeMap<Option<&str>, Vec<u32>> = BTreeMap::new();
-    for (t, m) in of.iter().enumerate() {
-        groups.entry(m.unwrap_or(own)).or_default().push(t as u32);
+    for (t, m) in mesh.materials(named, own).into_iter().enumerate() {
+        groups.entry(m).or_default().push(t as u32);
     }
     let holder = |m: Option<&str>| {
         let mut h = item.clone();
