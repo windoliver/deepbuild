@@ -56,6 +56,19 @@ impl World {
                     break;
                 }
             }
+            // #211: the world's page map from init, and the requests init wrote, for step lead - 1.
+            let mut paged = item.pages.as_ref().map(|p| {
+                crate::pages::State::new(p, crate::pages::new_store(p, planted.page_store))
+            });
+            if let (Some(p), Some(st), false) = (&item.pages, paged.as_mut(), failed) {
+                let memory = runner.memory("memory").expect("a memory");
+                if let Err((kind, fields)) = st.requests(p, -1, memory) {
+                    let mut trap = json!({"item": item.id, "step": null, "t": null, "kind": kind, "function": null, "offset": null, "inputs": []});
+                    extend(&mut trap, fields);
+                    rec.traps.push(trap);
+                    failed = true;
+                }
+            }
             let size = item.layout.size("writes") as usize;
             let linear = item.writes.iter().any(|w| w.linear);
             lives.push(Live {
@@ -74,6 +87,7 @@ impl World {
                 filled: None,
                 mirror_ns: 0,
                 read_ns: 0,
+                pages_ns: 0,
                 asked: None,
                 dirty: BTreeSet::new(),
                 kdirty: BTreeSet::new(),
@@ -85,6 +99,7 @@ impl World {
                 spare: None,
                 previewed: None,
                 preview: preview_region(item),
+                paged,
             });
         }
         let published = lives.iter().map(|l| l.arrays.clone()).collect();
@@ -181,6 +196,26 @@ impl World {
             .collect()
     }
 
+    /// #211: each item with pages' meters: `pages.late`, the moves whose page was still on the
+    /// store's disk when their step came, which held the step.
+    pub fn meters(&self) -> Map<String, Value> {
+        let mut out = Map::new();
+        for (item, l) in self.piece.items.iter().zip(&self.lives) {
+            if let Some(st) = &l.paged {
+                out.insert(item.id.clone(), json!({"pages.late": st.late}));
+            }
+        }
+        out
+    }
+
+    /// #211: item `i`'s pages that arrived fresh, each with its bytes' hash now.
+    pub fn generated(&mut self, i: usize) -> Option<BTreeMap<u32, crate::pages::Hash>> {
+        let p = self.piece.items[i].pages.clone()?;
+        let l = &mut self.lives[i];
+        let memory = l.runner.memory("memory").unwrap_or(&[]).to_vec();
+        Some(l.paged.as_ref()?.generated(&p, &memory))
+    }
+
     /// The step every item is about to run, when they agree.
     pub fn at(&self) -> Option<i64> {
         let k = self.lives.first()?.next;
@@ -211,7 +246,28 @@ impl World {
                 rec.checkpoint(m, at, seen, &[]);
             }
         }
+        // #211: the page map this checkpoint names, and its changes since the one before: whole
+        // in the ring's first checkpoint, else only the changes.
+        let pages = self.piece.items[i].pages.clone();
         let l = &mut self.lives[i];
+        let mut kept = None;
+        if let (Some(p), Some(st)) = (&pages, l.paged.as_mut()) {
+            let started = cpu_ns();
+            let k = st.kept(l.stored.is_empty());
+            let map_ns = cpu_ns() - started;
+            let changed = std::mem::take(&mut st.recorded).len();
+            let named = st.named(p, l.runner.memory("memory").unwrap_or(&[]));
+            let fields = json!({"map": named, "map_changed": changed, "map_bytes": k.map_bytes(), "map_ns": map_ns});
+            if let Some(c) = rec
+                .checkpoints
+                .get_mut(&id)
+                .and_then(Value::as_array_mut)
+                .and_then(|a| a.last_mut())
+            {
+                extend(c, fields);
+            }
+            kept = Some(k);
+        }
         // A seek back replays steps the ring has passed: it keeps only checkpoints past its last.
         if !store || l.stored.last().is_some_and(|s| s.step >= at) {
             rec.took(&id, cpu_ns() - t);
@@ -230,6 +286,7 @@ impl World {
             )
         };
         let mut stored = l.stored(memory);
+        stored.paged = kept;
         if planted.checkpoint_drops_globals {
             stored.globals = Vec::new();
         }
@@ -241,6 +298,9 @@ impl World {
         stored.ns = cpu_ns() - t;
         l.stored.push(stored);
         l.dirty.clear();
+        if let Some(st) = l.paged.as_mut() {
+            st.changed.clear();
+        }
         l.thin(ring, planted.ring_drops_oldest);
         rec.took(&id, cpu_ns() - t);
     }
@@ -557,6 +617,7 @@ impl World {
         l.filled = None;
         l.mirror_ns = 0;
         l.read_ns = 0;
+        l.pages_ns = 0;
         // What a linear write blends from: the arrays as they stood before this step ran.
         if !l.prev.is_empty() {
             l.prev.clone_from(&l.arrays);
@@ -564,6 +625,17 @@ impl World {
         if l.failed {
             report(rec, item, k, l, None, 0, Vec::new(), &Vec::new());
             return;
+        }
+        // #211: the moves queued for this step, ahead of the read region fill; the pages they
+        // load are the module's own writes, so no slot counts them as written.
+        if let (Some(p), Some(st)) = (&item.pages, l.paged.as_mut()) {
+            let started = cpu_ns();
+            let memory = l.runner.memory_mut("memory").expect("a memory");
+            let wrote = st.moves_before(p, k, memory, self.planted.pagers);
+            if st.moved > 0 {
+                l.pages_ns = (cpu_ns() - started).max(1);
+            }
+            l.mark(wrote);
         }
         // The read region, in declaration order.
         let size = item.layout.size("reads") as usize;
@@ -739,6 +811,10 @@ impl World {
                     .insert(item.id.clone(), json!({"services": hex(bytes)}));
             }
         }
+        if let (Some(p), Some(st)) = (&item.pages, l.paged.as_ref()) {
+            let h = st.table_hash(p, memory);
+            filled.insert("slot_table".into(), json!(format!("{h:016x}")));
+        }
         l.filled = (!filled.is_empty()).then_some(Value::Object(filled));
         memory[from..from + size].copy_from_slice(&region);
         if size > 0 {
@@ -756,11 +832,15 @@ impl World {
             let _ = l.runner.set(n, Val::I64(*w as i64));
         }
         // The answers after the last step charge this one: each request its fuel_per_request.
-        let debt = services::debt(item, l.runner.memory("memory").expect("a memory"));
+        let mut debt = services::debt(item, l.runner.memory("memory").expect("a memory"));
+        // #211: each move charges its step 65,536 fuel.
+        if let Some(st) = &l.paged {
+            debt += i64::from(st.moved) * crate::pages::MOVE_FUEL;
+        }
         let call = Call {
             export: "step".into(),
             args: vec![Val::I64(k)],
-            fuel: item.fuel - debt,
+            fuel: (item.fuel - debt).max(0),
             stack: item.stack,
             deadline: None,
         };
@@ -794,6 +874,22 @@ impl World {
             rec.traps.push(json!({"item": item.id, "step": k, "t": t, "kind": kind, "function": function, "offset": offset, "inputs": inputs, "source": src}));
             report(rec, item, k, l, None, fuel, pages, &Vec::new());
             return;
+        }
+        // #211: the slots it wrote and the written cap, then the requests it left, for step
+        // k + lead; either traps as any trap does.
+        if let (Some(p), Some(st)) = (&item.pages, l.paged.as_mut()) {
+            let memory = l.runner.memory("memory").expect("a memory");
+            let done = st
+                .after_step(p, &pages)
+                .and_then(|()| st.requests(p, k, memory));
+            if let Err((kind, fields)) = done {
+                l.failed = true;
+                let mut trap = json!({"item": item.id, "step": k, "t": t, "kind": kind, "function": null, "offset": null, "inputs": inputs});
+                extend(&mut trap, fields);
+                rec.traps.push(trap);
+                report(rec, item, k, l, None, fuel, pages, &Vec::new());
+                return;
+            }
         }
         let memory = l.runner.memory("memory").expect("a memory");
         let fires = crate::piece::fires::fired(item, memory);
@@ -1024,7 +1120,15 @@ impl World {
         let mut lives = Vec::new();
         for i in 0..self.lives.len() {
             let (memory, s) = cache.load(i, c)?;
-            lives.push(self.revive(i, &self.piece.items[i].bytes, memory, s)?);
+            let mut live = self.revive(i, &self.piece.items[i].bytes, memory, s)?;
+            if let (Some(st), Some(k)) = (&self.lives[i].paged, &s.paged) {
+                live.paged = Some(crate::pages::State::restored(
+                    st.store.clone(),
+                    &[k],
+                    self.planted.pagers,
+                ));
+            }
+            lives.push(live);
         }
         let back = self.restored(lives, c);
         self.adopt(back, c);
@@ -1174,6 +1278,11 @@ impl World {
             }
             live.failed = s["failed"].as_bool().ok_or_else(bad)?;
             live.arrays = unhex(&s["arrays"]).ok_or_else(bad)?;
+            if let Some(p) = &item.pages {
+                let store = crate::pages::new_store(p, planted.page_store);
+                live.paged =
+                    Some(crate::pages::State::from_json(p, store, &s["pages"]).ok_or_else(bad)?);
+            }
             for (k, q) in s["pending"].as_object().into_iter().flatten() {
                 let q: VecDeque<Entry> = q
                     .as_array()
@@ -1271,7 +1380,29 @@ impl World {
             let bytes = counted
                 .filter(|(x, _)| *x == i)
                 .map_or(item.bytes.as_slice(), |(_, b)| b);
-            lives.push(self.revive(i, bytes, memory, &stored[j])?);
+            let mut live = self.revive(i, bytes, memory, &stored[j])?;
+            // #211: the map from the last whole one at or before it and the changes after it.
+            if let Some(st) = &self.lives[i].paged {
+                let from = (0..=j)
+                    .rev()
+                    .find(|&w| {
+                        matches!(
+                            stored[w].paged.as_ref().map(|k| &k.map),
+                            Some(crate::pages::MapPart::Whole(_))
+                        )
+                    })
+                    .unwrap_or(0);
+                let parts: Vec<&crate::pages::Kept> = stored[from..=j]
+                    .iter()
+                    .filter_map(|s| s.paged.as_ref())
+                    .collect();
+                live.paged = Some(crate::pages::State::restored(
+                    st.store.clone(),
+                    &parts,
+                    self.planted.pagers,
+                ));
+            }
+            lives.push(live);
         }
         Ok(self.restored(lives, c))
     }
@@ -1405,6 +1536,7 @@ impl World {
             filled: None,
             mirror_ns: 0,
             read_ns: 0,
+            pages_ns: 0,
             asked: None,
             // The restore wrote every page.
             dirty: (0..pages).collect(),
@@ -1417,6 +1549,7 @@ impl World {
             spare: None,
             previewed: None,
             preview: preview_region(item),
+            paged: None,
         })
     }
 
@@ -1443,6 +1576,7 @@ impl World {
             live.cursor = l.cursor.clone();
             live.pending = l.pending.clone();
             live.mirrors = l.mirrors.clone();
+            live.paged = l.paged.clone();
             lives.push(live);
         }
         let len = self.piece.items.first().map_or(0, |i| i.step);
@@ -1498,5 +1632,12 @@ impl World {
                 },
             )
             .collect()
+    }
+}
+
+/// `fields`' entries added to the object `v`.
+pub(super) fn extend(v: &mut Value, fields: Value) {
+    if let (Some(o), Value::Object(f)) = (v.as_object_mut(), fields) {
+        o.extend(f);
     }
 }

@@ -102,7 +102,7 @@ pub fn listing() -> Value {
 }
 
 /// One field of a logic item this task doesn't build yet: refused by name, never ignored.
-const LATER: [&str; 2] = ["pages", "parallel"];
+const LATER: [&str; 1] = ["parallel"];
 /// A row's own columns: no declared field can take one of these names, so a reader can name each
 /// field beside them.
 const ROW_COLUMNS: [&str; 5] = ["step", "t", "kind", "a", "b"];
@@ -585,6 +585,8 @@ pub struct Item {
     /// its assets' hashes (Logic: checkpoints and bake).
     pub content: String,
     pub saves: Option<Saves>,
+    /// Its world pages (Logic: world pages; #211).
+    pub pages: Option<crate::pages::Pages>,
     /// #189: the record it gives and the record it takes (Logic: carry records); #276: its profile.
     pub carry: Option<crate::carry::Carry>,
     pub carry_in: Option<crate::carry::CarryIn>,

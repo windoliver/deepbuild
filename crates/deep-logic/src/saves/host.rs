@@ -35,7 +35,8 @@ pub fn held_at(w: &mut World, k: i64, slot: i32, ended: bool) -> Held {
 pub fn differs(piece: &Piece, old: &[u8], new: &[u8]) -> Option<Option<String>> {
     let state = |b: &[u8]| {
         let n = b.iter().position(|x| *x == b'\n')?;
-        decode(&b[n + 1..], piece.items.len())
+        let paged = |i: usize| piece.items.get(i).is_some_and(|it| it.pages.is_some());
+        decode(&b[n + 1..], piece.items.len(), &paged)
     };
     let (Some((a, am)), Some((b, bm))) = (state(old), state(new)) else {
         return Some(None);

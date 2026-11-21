@@ -124,6 +124,7 @@
 {"list":"light.spot@1.receivers","closed":"record","reopens_if":"never: all names every collection","instead":"a collection, or a list of collections"},
 {"list":"light.sun@1.shadow_far","closed":"determinism","reopens_if":"a sun's shadow reach needs deriving by another rule than auto's","instead":"a distance in m"},
 {"list":"logic@1.clock","closed":"determinism","reopens_if":"never: a logic item steps on a fixed clock or on input, so a replay steps it the same","instead":"nothing"},
+{"list":"logic@1.pages.init","closed":"determinism","reopens_if":"never: a world's pages start as zeros, an asset's or a provider's, each by hash, so a replay starts them the same","instead":"an asset in pages@1, or a provider's out: pages"},
 {"list":"look.finish@1.ao","closed":"determinism","reopens_if":"never: none turns ambient occlusion off","instead":"its fields: radius, strength, samples, resolution, multi_bounce, specular"},
 {"list":"look.finish@1.bloom","closed":"determinism","reopens_if":"never: none turns bloom off","instead":"its fields: intensity, radius, threshold, tint, dirt"},
 {"list":"look.finish@1.tone_map","closed":"ring","reopens_if":"a look needs a tone curve none of the four draws, reviewed with the app","instead":"agx's `white` and `contrast` shape its curve, and `local` compresses a frame's range before the curve"},

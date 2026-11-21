@@ -1614,6 +1614,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "mute_leaves_port_sending" => Planted::MuteLeavesPortSending,
                 "gate_trusts_document_sound" => Planted::GateTrustsDocumentSound,
                 "web_export_keeps_port" => Planted::WebExportKeepsPort,
+                "web_export_checks_init_only" => Planted::WebExportChecksInitOnly,
                 "shipped_panels_ungated" => Planted::ShippedPanelsUngated,
                 "comparer_matches_hash" => Planted::ComparerMatchesHash,
                 "keeps_voices_on_switch" => Planted::KeepsVoicesOnSwitch,

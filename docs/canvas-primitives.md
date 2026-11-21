@@ -1489,6 +1489,7 @@ Every field list of the sealed listing, generated from it: each place where a se
 | `light.spot@1.receivers` | `all` | closed: record | never: all names every collection | a collection, or a list of collections |
 | `light.sun@1.shadow_far` | `auto` | closed: determinism | a sun's shadow reach needs deriving by another rule than auto's | a distance in m |
 | `logic@1.clock` | `fixed`, `on_input` | closed: determinism | never: a logic item steps on a fixed clock or on input, so a replay steps it the same | nothing |
+| `logic@1.pages.init` | `zero` | closed: determinism | never: a world's pages start as zeros, an asset's or a provider's, each by hash, so a replay starts them the same | an asset in pages@1, or a provider's out: pages |
 | `look.finish@1.ao` | `none` | closed: determinism | never: none turns ambient occlusion off | its fields: radius, strength, samples, resolution, multi_bounce, specular |
 | `look.finish@1.bloom` | `none` | closed: determinism | never: none turns bloom off | its fields: intensity, radius, threshold, tint, dirt |
 | `look.finish@1.tone_map` | `none`, `filmic`, `agx`, `neutral` | closed: ring | a look needs a tone curve none of the four draws, reviewed with the app | agx's `white` and `contrast` shape its curve, and `local` compresses a frame's range before the curve |

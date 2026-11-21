@@ -29,6 +29,7 @@ pub mod links;
 pub mod live;
 pub mod mirrors;
 pub mod module;
+pub mod pages;
 pub mod piece;
 mod planted;
 pub mod play;
@@ -493,6 +494,8 @@ impl Logic {
     }
 
     pub fn handle(&mut self, line: &Value) -> Value {
+        // #211: the page store this call's items with pages start with.
+        pages::configure(line.get("store"));
         match line.get("call").and_then(Value::as_str) {
             Some("about") => json!({
                 "interface": "logic@1", "sandbox": deep_canvas_sandbox::module::INTERFACE,
@@ -644,6 +647,7 @@ impl Logic {
             "ok": true, "items": items(&piece), "keys": keys, "steps": rec.steps_json(&piece, only), "occurrences": rec.occurrences(&piece), "checkpoints": rec.checkpoints, "ranges": rec.ranges_json(&piece, only), "ring": world.ring(),
             "traps": libraries_in(&piece, rec.traps), "issues": rec.issues, "budgets": budgets, "saves": saves, "carries": carries, "profiles": profiles, "frames": frames, "restores": restores_out, "probes": probes_out, "seeks": seeks_out, "peeks": peeks,
             "track": entries.iter().map(Entry::to_json).collect::<Vec<_>>(), "closed": world.branches.closed_json(),
+            "meters": world.meters(),
         }))
     }
 
@@ -731,7 +735,24 @@ impl Logic {
             .map(|t| t.as_f64().map(|t| flicks(t) / len))
             .collect::<Option<_>>()
             .ok_or_else(|| bad("at_times"))?;
-        checks::determinism(&piece, &entries, steps, &at, self.planted)
+        let mut out = checks::determinism(&piece, &entries, steps, &at, self.planted)?;
+        // #211: with `orders`, two or more tracks that move through a world with pages.
+        if let Some(o) = line.get("orders") {
+            let list = o.as_array().filter(|l| l.len() >= 2).ok_or_else(|| bad("orders: two or more input tracks"))?;
+            let tracks = list
+                .iter()
+                .map(|t| track(&piece, &json!({"track": t}), steps, &self.planted))
+                .collect::<Option<Vec<_>>>()
+                .ok_or_else(|| bad("orders"))?;
+            let failures = checks::orders(&piece, &tracks, steps, self.planted)?;
+            if let Some(f) = out["failures"].as_array_mut() {
+                f.extend(failures);
+                if !f.is_empty() {
+                    out["verdict"] = json!("FAIL");
+                }
+            }
+        }
+        Ok(out)
     }
 
     /// A golden of the piece's bake recorded on this host (Golden): the bake keys, the runtime
@@ -1023,7 +1044,7 @@ impl Logic {
                     "reads_at": i.reads_at, "writes_at": i.writes_at, "reads_size": i.layout.size("reads"), "writes_size": i.layout.size("writes"),
                     "regions": regions, "writes": writes, "globals": n.globals, "pages": n.pages,
                     "assets": (!i.assets.is_empty()).then(|| B64.encode(i.asset_bytes())), "assets_at": i.assets_at,
-                    "emits_at": i.emits_at,
+                    "emits_at": i.emits_at, "world_pages": i.pages.as_ref().map(pages::Pages::web),
                     "emits": i.emits.iter().map(|e| json!({"kind": e.kind, "max": e.max, "row": e.row(), "size": e.size(),
                         "fields": e.fields.iter().map(|(n, t)| json!([n, t.name()])).collect::<Vec<_>>()})).collect::<Vec<_>>(),
                 })

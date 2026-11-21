@@ -81,6 +81,10 @@ pub struct Planted {
     pub profile_bound_to_content: bool,
     /// #276: a check's replica that names no fixture record starts from the viewer's stored one.
     pub check_reads_viewer_profile: bool,
+    /// #211: the planted pagers and stores (the #211 acceptance README: Planted twins).
+    pub pagers: crate::pages::Pagers,
+    pub page_store: crate::pages::Plants,
+    pub save_drops_page_map: bool,
     /// #1250: a piece that reads the wall clock: after every step of the first item, the wall
     /// clock's nanoseconds join the first value of its first array, in a play and its replica alike.
     pub reads_wall_clock: bool,
@@ -148,6 +152,11 @@ impl Planted {
             "profile_replay_reads_store" => p.profile_replay_reads_store = true,
             "profile_bound_to_content" => p.profile_bound_to_content = true,
             "check_reads_viewer_profile" => p.check_reads_viewer_profile = true,
+            "pager_restores_without_queue" => p.pagers.restores_without_queue = true,
+            "pager_skips_dirty_write_back" => p.pagers.skips_dirty_writeback = true,
+            "pager_applies_moves_as_reads_finish" => p.pagers.applies_in_read_order = true,
+            "store_keeps_one_copy_per_page" => p.page_store.overwrites_by_page = true,
+            "save_drops_page_map" => p.save_drops_page_map = true,
             _ => return None,
         }
         Some(self)
