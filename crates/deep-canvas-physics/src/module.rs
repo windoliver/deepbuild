@@ -18,6 +18,7 @@ use deep_canvas::registry::{
 use serde_json::{json, Value};
 
 use crate::bake::Build;
+use crate::doc::Taken;
 
 /// The interface this module implements.
 pub const INTERFACE: &str = "physics@1";
@@ -133,17 +134,75 @@ fn entries(r: &mut Registrar, hand: fn(&[Value], &[Value]) -> Vec<[u64; 2]>) {
         "time",
         "simulate",
     );
-    r.tool_entry("deep_kinds", &character_entry());
+    for entry in body_kinds() {
+        r.tool_entry("deep_kinds", &entry.to_string());
+    }
 }
 
-/// #182: the character body as `deep_kinds` lists it, through this module's tool entry: its kind,
-/// its one capsule, and each field of `character` with its unit and default.
-fn character_entry() -> String {
-    let fields: serde_json::Map<String, Value> = crate::doc::CHARACTER_FIELDS
+/// #2717: `physics.world@1`'s body kinds as `deep_kinds` lists them, through this module's tool
+/// entries, in the order `body@1` names them: the three plain kinds, each with what moves it;
+/// #182's character body, its one capsule and each field of `character` with its unit and
+/// default; and #251's vehicle body with each field of `vehicle`, its default the one the world
+/// reader takes when the field is left out.
+fn body_kinds() -> Vec<Value> {
+    let plain = |kind: &str, moves: &str| json!({"name": format!("body@1.{kind}"), "kind": kind, "moves": moves});
+    let character: serde_json::Map<String, Value> = crate::doc::CHARACTER_FIELDS
         .iter()
         .map(|(k, v)| (format!("character.{k}"), json!(v)))
         .collect();
-    json!({"name": "body@1.character", "kind": "character",
-           "shapes": "one capsule, and no follow channel", "fields": fields})
-    .to_string()
+    let vehicle: serde_json::Map<String, Value> = crate::doc::VEHICLE_FIELDS
+        .iter()
+        .map(|(k, unit, default)| {
+            let line = match default {
+                None => unit.to_string(),
+                Some(Taken::Num(x)) => format!("{unit} = {x}"),
+                Some(Taken::Flag(x)) => format!("{unit} = {x}"),
+            };
+            (format!("vehicle.{k}"), json!(line))
+        })
+        .collect();
+    vec![
+        plain("static", "never"),
+        plain(
+            "kinematic",
+            "only to its follow channel's pose, at each step's time",
+        ),
+        plain(
+            "dynamic",
+            "as the backend integrates it: gravity, forces, contacts and joints",
+        ),
+        json!({"name": "body@1.character", "kind": "character",
+               "shapes": "one capsule, and no follow channel", "fields": character}),
+        json!({"name": "body@1.vehicle", "kind": "vehicle",
+               "shapes": "its chassis, and no follow channel; 3D worlds only", "fields": vehicle}),
+    ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #2717: the kinds listed are the five `body@1` names, each one the world reader takes.
+    #[test]
+    fn lists_each_body_kind_the_reader_takes() {
+        let listed = body_kinds();
+        let kinds: Vec<&str> = listed.iter().filter_map(|e| e["kind"].as_str()).collect();
+        assert_eq!(
+            kinds,
+            ["static", "kinematic", "dynamic", "character", "vehicle"]
+        );
+        let refused = |kind: &str| {
+            let doc = json!({"kind": "physics.world@1", "bodies": {"b": {"kind": kind}}});
+            let refusals = crate::doc::read(&doc).err().unwrap_or_default();
+            refusals.iter().any(|r| r.path == "bodies/b/kind")
+        };
+        assert!(
+            refused("wheeled"),
+            "the reader refuses a kind it doesn't take"
+        );
+        for (entry, kind) in listed.iter().zip(kinds) {
+            assert_eq!(entry["name"], format!("body@1.{kind}"));
+            assert!(!refused(kind), "the reader takes {kind}");
+        }
+    }
 }

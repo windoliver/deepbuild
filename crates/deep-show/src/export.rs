@@ -270,7 +270,7 @@ impl Hub<'_> {
         session.frame(sched, t, &default_view(doc));
         let (block, pictures) = self.videos_at(doc, t, true);
         // #157: a video the decode worker couldn't decode at this frame stops the frame.
-        if let Some(id) = undecoded(doc, &block) {
+        if let Some(id) = undecoded(doc, &block, t) {
             return Err(Unfit {
                 code: "decode_error",
                 path: format!("items/{id}"),
@@ -1002,8 +1002,8 @@ fn round_start(k: i64, frame: i64, hz: u32) -> i64 {
     ((x + f / 2) / f) as i64
 }
 
-/// The first video item at a frame whose picture the decode worker couldn't give.
-fn undecoded(doc: &Value, block: &Map<String, Value>) -> Option<String> {
+/// The first video item shown at a frame whose picture the decode worker couldn't give.
+fn undecoded(doc: &Value, block: &Map<String, Value>, t: i64) -> Option<String> {
     doc["items"]
         .as_object()?
         .iter()
@@ -1013,6 +1013,6 @@ fn undecoded(doc: &Value, block: &Map<String, Value>) -> Option<String> {
                 && i["params"]["asset"].is_string()
         })
         .map(|(id, _)| id)
-        .find(|id| !block.contains_key(*id))
+        .find(|id| !block.contains_key(*id) && !crate::video::hidden_at(doc, id, t))
         .cloned()
 }

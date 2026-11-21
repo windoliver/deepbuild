@@ -17,7 +17,63 @@ use deep_net::{Change, Defect, Stepper};
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
 
+/// #297 (Text `text@1`: entries): what each entry to a text control an entry text shows may
+/// hold, checked alike on every copy: a value out of its range is refused before it joins the
+/// track, naming the player, and the copy lists it in its `refused`.
+pub struct Range {
+    form: Map<String, Value>,
+    ty: deep_canvas_marks::scene::Type,
+    lax: deep_canvas_marks::entries::Lax,
+    shaper: Option<deep_text::Shaper>,
+}
+
+impl Range {
+    /// The range of `form`'s text controls entry texts show, in the type `ty` draws them in, with
+    /// a planted laxness; `None` where no entry text shows one.
+    pub fn of(
+        form: &Value,
+        ty: deep_canvas_marks::scene::Type,
+        lax: deep_canvas_marks::entries::Lax,
+    ) -> Option<Range> {
+        let form = form.as_object()?;
+        let items = form.get("items").and_then(Value::as_object)?;
+        let shows = items.values().any(|i| {
+            deep_canvas_marks::entries::is_entry_text(i)
+                || deep_canvas_marks::entries::has_entry_column(i)
+        });
+        shows.then(|| Range {
+            form: form.clone(),
+            ty,
+            lax,
+            shaper: None,
+        })
+    }
+
+    /// The refusal of `entry`, a value out of its control's range, naming the control, the
+    /// player, the step and why; `None` where it is in range.
+    pub fn check(&mut self, entry: &Value) -> Option<Value> {
+        use deep_canvas_marks::entries;
+        let control = entry["control"].as_str()?;
+        let value = entry["value"].as_str()?;
+        if !entries::shown_control(&self.form, control) {
+            return None;
+        }
+        let shaper = self.shaper.get_or_insert_with(deep_text::Shaper::new);
+        let r = entries::refused(&self.form, control, value, &self.ty, shaper, self.lax)?;
+        let t = entry["t"].as_i64().unwrap_or(0);
+        let mut out = json!({"code": "out_of_range", "control": control, "reason": r.reason(),
+                             "player": entry.get("player").cloned().unwrap_or(json!(1)),
+                             "t": t, "step": t.div_euclid(entries::step_len(&self.form))});
+        for (k, v) in r.named().as_object().into_iter().flatten() {
+            out[k] = v.clone();
+        }
+        Some(out)
+    }
+}
+
 pub struct Logic {
+    /// #297: the range entry texts give their controls, checked before an entry joins the track.
+    pub range: Option<Range>,
     piece: Rc<Piece>,
     /// The input track recorded before the match, which a run again starts from.
     start: Vec<Value>,
@@ -57,6 +113,7 @@ impl Logic {
             None,
         )?;
         Ok(Logic {
+            range: None,
             piece,
             start: track.to_vec(),
             world,
@@ -106,6 +163,9 @@ impl Logic {
 
 impl Stepper for Logic {
     fn enter(&mut self, entry: &Value) -> Result<(), Value> {
+        if let Some(refused) = self.range.as_mut().and_then(|r| r.check(entry)) {
+            return Err(refused);
+        }
         let entry_json = entry;
         let entry = Entry::parse(entry).ok_or_else(
             || json!({"code": "bad_input", "what": "an entry is {t, control, value}"}),
@@ -176,6 +236,12 @@ impl Stepper for Logic {
     fn again(&self) -> Result<Self, Value> {
         let mut again = Logic::new(self.piece.clone(), &self.start, false)?;
         again.rounds = self.rounds;
+        again.range = self.range.as_ref().map(|r| Range {
+            form: r.form.clone(),
+            ty: r.ty.clone(),
+            lax: r.lax,
+            shaper: None,
+        });
         again.plant = self.plant;
         if let Some(w) = self.worlds.as_ref() {
             again.worlds = w.again(&self.start)?;

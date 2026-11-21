@@ -1,8 +1,9 @@
-//! The build's first-party packs (#416, #981; canvas primitives: Logic: library interfaces):
-//! `packs/interfaces-1.0.0`, which declares physics2d.lib@1, fsm@1 and nn.mlp@1, and
-//! `packs/lanes-1.0.0`, which declares lanes@1 with its reference library, held in the binary so
-//! every piece's links resolve against them, as the release's packs are installed for every
-//! document.
+//! The build's first-party packs (#416, #981, #953; canvas primitives: Logic: library interfaces):
+//! `packs/interfaces-1.0.0`, which declares physics2d.lib@1, fsm@1 and nn.mlp@1,
+//! `packs/lanes-1.0.0`, which declares lanes@1 with its reference library, and
+//! `packs/modslib-1.0.0`, which declares mods.lib@1 with its reference library mods.tree, held in
+//! the binary so every piece's links resolve against them, as the release's packs are installed for
+//! every document.
 
 use std::sync::OnceLock;
 
@@ -56,6 +57,23 @@ const PACKS: &[(&str, Files)] = &[
             pack_file!("lanes-1.0.0", "fixtures/lift.json"),
             pack_file!("lanes-1.0.0", "objects/straight_own.wasm"),
             pack_file!("lanes-1.0.0", "fixtures/straight_own.json"),
+        ],
+    ),
+    (
+        include_str!("../../../packs/modslib-1.0.0/pack.json"),
+        &[
+            pack_file!("modslib-1.0.0", "objects/mods_tree.wasm"),
+            pack_file!("modslib-1.0.0", "objects/mods_stale.wasm"),
+            pack_file!("modslib-1.0.0", "data/units.bin"),
+            pack_file!("modslib-1.0.0", "objects/stack.wasm"),
+            pack_file!("modslib-1.0.0", "data/stack.bin"),
+            pack_file!("modslib-1.0.0", "fixtures/stack.json"),
+            pack_file!("modslib-1.0.0", "objects/edits.wasm"),
+            pack_file!("modslib-1.0.0", "data/edits.bin"),
+            pack_file!("modslib-1.0.0", "fixtures/edits.json"),
+            pack_file!("modslib-1.0.0", "objects/archer_own.wasm"),
+            pack_file!("modslib-1.0.0", "data/archer_own.bin"),
+            pack_file!("modslib-1.0.0", "fixtures/archer_own.json"),
         ],
     ),
 ];

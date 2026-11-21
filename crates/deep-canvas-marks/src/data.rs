@@ -69,7 +69,9 @@ pub(crate) fn column_of(c: &Value, n: usize, path: &str) -> Result<Column, Refus
         return Ok(Column::Const(v.clone()));
     }
     // #538: a copy column no frame has looked up yet shows nothing; a frame rewrites it.
-    if crate::copy::is_copy_column(&Value::Object(c.clone())) {
+    if crate::copy::is_copy_column(&Value::Object(c.clone()))
+        || crate::entries::is_entry(&Value::Object(c.clone()))
+    {
         return Ok(Column::Texts(vec![String::new(); n]));
     }
     // A table column reaches the module inlined by whoever holds the evidence store, and a

@@ -18,6 +18,9 @@ deep-canvas-motion = { path = "../deep-canvas-motion" }
 # deep-physics reads the assets its scene's soft volumes are built from.
 deep-canvas = { path = "../deep-canvas" }
 rapier3d = { version = "=0.36.1", default-features = false, features = ["dim3", "f32", "std", "enhanced-determinism", "serde-serialize"] }
+# Issue #2098: a `dimensions: 2` world's backend, at the same pin and features as rapier3d, beside
+# it behind the one backend interface (src/dim2.rs).
+rapier2d = { version = "=0.36.1", default-features = false, features = ["dim2", "f32", "std", "enhanced-determinism", "serde-serialize"] }
 base64 = "0.22"
 bincode = "1"
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }

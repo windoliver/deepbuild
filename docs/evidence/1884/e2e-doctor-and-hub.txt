@@ -1,0 +1,43 @@
+$ bash /tmp/e2e1884.command
+== facts: 2.1.299, 2.1.304, 2.1.308   (branch 0f575acb4 + fix)
+== dev hub: pid 32084, {"v":1,"ready":true,"pid":32084,"socket":"/tmp/e2e1884.hDpulV/h/.deepbuild/hub.sock","star
+
+################ stand-in claude 2.1.304 on PATH ################
+$ which claude; claude --version
+/tmp/e2e1884.hDpulV/bin-2.1.304/claude
+2.1.304 (Claude Code)
+$ deep doctor --json | grep claude.binary
+claude.binary  ok  healthy
+  /tmp/e2e1884.hDpulV/bin-2.1.304/claude is Claude Code 2.1.304, which its facts cover
+$ deep-hook claude-code PreToolUse  (session 03a7d579, Bash 'rm -rf build', guarded in block mode)
+  exit 2  (blocked: the session is gated)  stderr: DeepBuild blocked this: Guarded in this e2e. Leave it. (guard e2e-rm-build)
+$ deep status   (the hub's own report)
+    Working:
+    no repo
+      agent  agent  working · at work, 2s
+    1 session
+    0 asks need you
+  => hub: session 03a7d579 not watch-only
+
+################ stand-in claude 2.1.300 on PATH ################
+$ which claude; claude --version
+/tmp/e2e1884.hDpulV/bin-2.1.300/claude
+2.1.300 (Claude Code)
+$ deep doctor --json | grep claude.binary
+claude.binary  fail  version_uncovered
+  /tmp/e2e1884.hDpulV/bin-2.1.300/claude is Claude Code 2.1.300, not a version its facts cover (2.1.299, 2.1.304, 2.1.308): its hooks are recorded unverified, and its holds and every block but the floor are watch-only; its fail_closed guard entries still deny
+$ deep-hook claude-code PreToolUse  (session 26d35614, Bash 'rm -rf build', guarded in block mode)
+  exit 0  (let through: the session is watch-only)  stderr:
+$ deep status   (the hub's own report)
+    Working:
+    no repo
+      agent · 03a7d579  agent  working · at work, 4s
+      agent · 26d35614  agent  working · watch-only: it runs its agent 2.1.300, past the versions its facts cover. Install a version the facts cover, or update DeepBuild. · at work, 2s
+          This session runs claude-code 2.1.300, past the versions its facts cover: it is recorded unverified, and its holds and every block but the floor are watch-only until the live smoke test widens the range to 2.1.300. The floor still holds: its fail_closed guard entries deny as they do with the hub stopped.
+    2 sessions
+    0 asks need you
+  => hub: session 26d35614 watch-only
+
+== stopped the hub I started (pid 32084)
+== removed /tmp/e2e1884.hDpulV
+$
