@@ -75,6 +75,12 @@ pub struct Planted {
     pub rewind_restores_arrays_only: bool,
     /// #860: a rewind that zeroes the carried seen array instead of keeping it.
     pub rewind_clears_seen: bool,
+    /// #276: a replay whose track holds a profile entry reads the store's newest record instead.
+    pub profile_replay_reads_store: bool,
+    /// #276: a profile record bound to its item's data assets as well as its arrays' shape.
+    pub profile_bound_to_content: bool,
+    /// #276: a check's replica that names no fixture record starts from the viewer's stored one.
+    pub check_reads_viewer_profile: bool,
 }
 
 impl Planted {
@@ -135,6 +141,9 @@ impl Planted {
             "read_region_keeps_last" => p.read_region_keeps_last = true,
             "rewind_restores_arrays_only" => p.rewind_restores_arrays_only = true,
             "rewind_clears_seen" => p.rewind_clears_seen = true,
+            "profile_replay_reads_store" => p.profile_replay_reads_store = true,
+            "profile_bound_to_content" => p.profile_bound_to_content = true,
+            "check_reads_viewer_profile" => p.check_reads_viewer_profile = true,
             _ => return None,
         }
         Some(self)

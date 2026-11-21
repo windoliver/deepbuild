@@ -309,7 +309,7 @@ impl World {
                 }
             }
             if let Some(k) = self.at() {
-                if self.saves_dir.is_some() || self.held.is_some() {
+                if self.keeps() {
                     crate::saves::due(self, k, ended_at);
                 }
                 // #860: a rewind stamped by now comes before any step at this time, and the seen
@@ -689,12 +689,9 @@ impl World {
                         .is_some_and(|i| matches!(list[i].value, Given::Number(n) if n != 0.0));
                     region[at..at + 4].copy_from_slice(&i32::from(on).to_le_bytes());
                 }
-                Read::Carry => crate::carry::fill(
-                    item,
-                    self.track.get(crate::carry::CARRY),
-                    k,
-                    &mut region[at..at + e.size as usize],
-                ),
+                Read::Carry | Read::Profile => {
+                    crate::profile::fill_read(item, &self.track, e, k, &mut region)
+                }
                 Read::Seats => seats::fill(&self.track, (before, t), item.step, &mut region[at..]),
                 Read::Mirror(_) | Read::None => {}
             }

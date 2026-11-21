@@ -137,7 +137,7 @@ fn checked(line: &Value, planted: Planted) -> Result<Piece, Value> {
 /// The piece's world and the check's reply.
 fn build(line: &Value, planted: Planted) -> Result<(World, Value), Value> {
     let piece = Rc::new(checked(line, planted)?);
-    let entries = track(&piece, line, 0)
+    let entries = track(&piece, line, 0, &planted)
         .ok_or_else(|| json!({"ok": false, "code": "bad_input", "what": "track"}))?;
     let items: Map<String, Value> = piece
         .items

@@ -471,7 +471,20 @@ pub(crate) fn due(w: &mut World, k: i64, ended_at: Instant) {
     w.saves_ns += started.elapsed().as_nanos() as u64;
 }
 
+impl World {
+    /// Whether its steps' saves and records are written or held: with a saves folder, a host's
+    /// store, or a profile (#276), whose records a match holds until they're confirmed.
+    pub(crate) fn keeps(&self) -> bool {
+        let profile = self.piece.items.iter().any(|i| i.profile.is_some());
+        self.saves_dir.is_some() || self.held.is_some() || profile
+    }
+}
+
 fn asked(w: &mut World, k: i64, ended_at: Instant) {
+    crate::profile::due(w, k);
+    if w.saves_dir.is_none() && w.held.is_none() {
+        return;
+    }
     crate::carry::due(w, k);
     let asked: Vec<(usize, i32, bool)> = w
         .lives
