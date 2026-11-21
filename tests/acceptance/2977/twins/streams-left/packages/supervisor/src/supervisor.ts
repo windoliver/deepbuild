@@ -1,0 +1,1210 @@
+// The supervisor (#236): the hub's trusted-ring part that starts every process, in the platform sandbox and
+// with a run token, tracks what each run owns, stops only what it can prove is the run's, and holds a run's
+// leases until every process recorded for it is proven gone. Its ownership records live in the event log, so a
+// supervisor opened after a crash reaps what the last one left behind.
+//
+// A run owns: the process it started; every process its sandbox holds (the native helper finds them by the
+// run's marker, which no fork, exec, setsid or empty environment sheds), recorded by ID and start time when
+// they appear; and every member of its process group. Before a stop each is proven again: its start time, and
+// for one recorded with the run token, the token read back from its environment.
+import { spawn, type ChildProcess } from 'node:child_process';
+import { createHash, randomBytes } from 'node:crypto';
+import { appendFileSync, closeSync, createReadStream, mkdirSync, openSync, readFileSync } from 'node:fs';
+import { availableParallelism, constants, homedir, totalmem } from 'node:os';
+import { dirname, join } from 'node:path';
+import { readSince, ulid, type Connection, type Event, type EventInput } from '@deepbuild/record';
+import type { JsonValue } from '@deepbuild/contracts';
+import { alive, HELPER, scan, sha256, startNow, table, tokenOf, type Proc } from './procs.js';
+import { bubblewrapWith } from './bubblewrap.js';
+import type { Egress } from './egress.js';
+import { markerOf, quote, real, seatbeltWith } from './seatbelt.js';
+import type { Cleanup, Exit, Grant, HostFacts, LimitStop, ResourceKind, ResourceStep, RunStatus, SandboxBackend, Started, StartSpec, Supervisor, SupervisorOptions } from './types.js';
+
+const CORE: Connection = { writer: 'core', actor: 'you', scope: 'you' };
+const DAY = 86_400_000;
+const SCAN_MS = 100;
+const GRACE_MS = 2000;
+const WARM_MS = 60_000;
+/** The system log's sandbox reports that carry a run's tag, by their sender: `log` tests every message the machine writes. */
+const REPORTS = 'sender == "Sandbox" AND eventMessage CONTAINS "dev.deepbuild.run:"';
+/** The same reports by the subsystem they carry too, which the log filters by before it sends the stream a message. */
+const REPORTS_BY_SUBSYSTEM = `subsystem == "com.apple.sandbox.reporting" AND ${REPORTS}`;
+/** The same reports by the process that writes them, the kernel, whose sandbox extension is their sender: the log sends the stream the kernel's messages alone. */
+const REPORTS_BY_KERNEL = `process == "kernel" AND ${REPORTS}`;
+/** The stream's filters, the cheapest for `log` first: each is warmed at once, and the cheapest that shows a canary's report is kept. */
+const FILTERS: readonly string[] = [REPORTS_BY_SUBSYSTEM, REPORTS_BY_KERNEL, REPORTS];
+/** How long after a dearer filter's stream shows a canary's report a cheaper one still running may show it too, before the dearer one is kept. */
+const SHOWN_MS = 1000;
+/** The planted world of the fallback's test: a macOS whose reports carry another subsystem than the filter names. */
+const REPORTS_ELSEWHERE = `subsystem == "com.apple.sandbox.elsewhere" AND ${REPORTS}`;
+/** And the planted world of the last fallback's: one whose reports another process than the filter names writes. */
+const REPORTS_BY_ANOTHER = `process == "deepbuild-elsewhere" AND ${REPORTS}`;
+/** How long a run's output may stay open after its process exits: a background process holding it is a leftover, reaped by cleanup. */
+const DRAIN_MS = 1000;
+/** How often a key out of its pool has its cleanup check run again. */
+const RECHECK_MS = 60_000;
+/** The ask.sources@1 row the supervisor raises its unblock asks from. */
+const UNBLOCK_SOURCE = 'supervisor.cleanup';
+const RUN = /^run:[0-9A-Za-z]+$/;
+const MIB = 1024 * 1024;
+/** The event a stop at a limit records (#1409). */
+const LIMIT_KIND = 'run.stopped_at_limit';
+/** How long a run's end waits for the watcher to write the ends before it: it never holds an exit longer. */
+const SYNC_MS = 1000;
+/** Whether a lease event is one of the supervisor's runs' (the core's, or a writer a run named as its holder), not a session's or a package's own. */
+const ours = (holder: unknown): boolean => holder === 'core' || (typeof holder === 'string' && holder.startsWith('mcp:'));
+/** The kinds `open` and a tick read: both read them as this type, so a kind either names that the list leaves out fails to compile. */
+const FOLDED = ['process.starting', 'run.kept', 'process.tracked', 'process.ended', 'lease.acquired', 'lease.stale', 'lease.released', 'run.cleaned', 'ask.created', 'ask.answered', 'ask.defaulted', 'ask.superseded', 'ask.moot', 'ask.cancelled'] as const;
+type Folded = (typeof FOLDED)[number];
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** How many cleaned runs stay answerable by `status`, `wait` and `cleanup`, newest first. */
+const CLEANED_KEPT = 64;
+
+interface Tracked { start: string; token: string | null }
+interface Run {
+  run: string;
+  cwd: string;
+  sandboxed: boolean;
+  pid?: number;
+  pgid?: number;
+  /** The run token's digest; the token itself never leaves this process. */
+  token: string | null;
+  tracked: Map<number, Tracked>;
+  ended: Set<number>;
+  /** The process.ended events that prove its processes gone: what its leases' release cites. */
+  gone: string[];
+  leases: { kind: string; key: string }[];
+  /** Who holds its leases (StartSpec.holder); the core when unset. */
+  holder?: string;
+  /** What its cleanup recorded, once it has run. */
+  cleaned?: Cleanup;
+  /** Its cleanup while it runs: a second call shares it. */
+  cleaning?: Promise<Cleanup>;
+  /** It keeps running when the hub stops: an open adopts it rather than reaping it (StartSpec.keep). */
+  kept?: boolean;
+  /** Its egress filter, while it holds a credential by stand-in; closed by its cleanup. */
+  egress?: Egress;
+  /** What it may take (StartSpec.limits). */
+  limits?: StartSpec['limits'];
+  /** The limit it was stopped at, once it was: what its exit carries. */
+  limited?: LimitStop;
+  /** Its stop at a limit while it is recorded and its processes are killed. */
+  stopping?: Promise<void>;
+  /** Its first process, as the watcher names its ends: a run with a file limit on macOS. */
+  watched?: number;
+  child?: ChildProcess;
+  exit?: Promise<Exit>;
+  state: RunStatus['state'];
+}
+/** A run with nothing of it recorded yet: sandboxed, no token, no process, no lease. */
+const blank = (run: string, cwd: string, state: Run['state']): Run => ({ run, cwd, sandboxed: true, token: null, tracked: new Map(), ended: new Set(), gone: [], leases: [], state });
+/** A pool key's name, `kind:key`, as its kind and key. */
+const parts = (name: string): { kind: string; key: string } => {
+  const at = name.indexOf(':');
+  return { kind: name.slice(0, at), key: name.slice(at + 1) };
+};
+/** One key of a pool: free, held by a run (until `expires`, then stale), left dirty by a run's cleanup, or out of the pool. */
+interface Key { holder?: string; expires?: number; stale?: boolean; dirty?: { run: string; ask?: string }; retired?: boolean }
+interface Waiter { spec: StartSpec; on: string[]; resolve(started: Started | Promise<Started>): void }
+
+class LocalSupervisor implements Supervisor {
+  readonly name = 'local';
+  private readonly runs = new Map<string, Run>();
+  private readonly kinds = new Map<string, ResourceKind>();
+  private readonly keys = new Map<string, Key>();
+  private readonly waiters: Waiter[] = [];
+  /** Each unblock ask the supervisor raised, by handle: the key it is about. */
+  private readonly asked = new Map<string, string>();
+  private readonly denied = new Set<string>();
+  /** With a lease table: each key's lease there, by `kind:key`. */
+  private readonly leaseIds = new Map<string, string>();
+  /** A run's table leases the record holds before its process.starting: the table grants them first. */
+  private readonly early = new Map<string, { kind: string; key: string }[]>();
+  private cursor = 0;
+  private scanning: Promise<void> = Promise.resolve();
+  private pumping: Promise<void> = Promise.resolve();
+  private timer: NodeJS.Timeout | undefined;
+  /** When the timed scan's beat began: the supervisor's opening. */
+  private beatFrom = 0;
+  /** The timer's scan while it is queued or runs. */
+  private timed: Promise<void> | undefined;
+  /** The denial stream kept, once one showed a canary's report. */
+  private log: ChildProcess | undefined;
+  /** The streams being warmed, one per filter, until one is kept: then that one alone. */
+  private streams: Stream[] = [];
+  /** The canary run whose report shows the denial stream is live, and when it last came through the kept stream. */
+  private canary = '';
+  private warmAt = 0;
+  /** The first warm-up of the denial stream; a sandboxed launch waits for it, opening doesn't. */
+  private warming: Promise<unknown> = Promise.resolve();
+  private ticking: Promise<void> | undefined;
+  private readonly cleaning = new Set<Promise<unknown>>();
+  /** Each run between leaving the queue and its launch settling. */
+  private readonly launching = new Map<string, Promise<unknown>>();
+  private recheckedAt = 0;
+  /** Each run whose cleanup left a process running: checked again each tick until every one is proven gone. */
+  private readonly lingering = new Set<Run>();
+  private closed = false;
+  private readonly sandbox: SandboxBackend;
+  /**
+   * The helper's `watch` (macOS), started with the first run that has a file limit: it follows each such run's
+   * processes, its forks included, and writes each one's end, so a child killed at the limit is seen.
+   */
+  private watcher: ChildProcess | undefined;
+  /** Each watched run by the first process the watcher names its ends with. */
+  private readonly watchedRuns = new Map<number, Run>();
+  /** Each "sync" sent to the watcher whose echo hasn't come. */
+  private readonly syncs = new Map<number, () => void>();
+  private synced = 0;
+
+  constructor(private readonly options: SupervisorOptions) {
+    // The supervisor's own package, whose helper it runs outside any sandbox, is guarded like the caller's paths.
+    const guarded = [dirname(dirname(HELPER)), ...(options.guarded ?? [])];
+    // Each folder above one is kept from moving, or a run could move it aside and put its own in its place.
+    const above = (p: string): string[] => (dirname(p) === p ? [] : [...above(dirname(p)), p]);
+    this.sandbox = process.platform === 'linux'
+      ? bubblewrapWith('bubblewrap', guarded.map((g) => (typeof g === 'string' ? { path: g, except: [] } : g)))
+      : seatbeltWith('seatbelt', [...guarded.flatMap((g) => [
+        typeof g === 'string'
+          ? `(deny file-write* (subpath ${quote(real(g))}))`
+          : `(deny file-write* (require-all (subpath ${quote(real(g.path))}) ${g.except.map((e) => `(require-not (subpath ${quote(real(e))}))`).join(' ')}))`,
+        ...above(dirname(real(typeof g === 'string' ? g : g.path))).map((a) => `(deny file-write-unlink (literal ${quote(a)}))`),
+      ]), ...(options.plant === 'sandbox-any-loopback' ? ['(allow network-outbound (remote ip "localhost:*"))'] : [])]);
+    for (const kind of options.resources ?? []) {
+      this.kinds.set(kind.kind, kind);
+      for (const key of kind.keys) this.keys.set(`${kind.kind}:${key}`, {});
+    }
+  }
+
+  // ---- Records.
+
+  /** Appends as the core; resolves with the event's ID. */
+  private async append(kind: string, data: Record<string, unknown>, subject?: string, v = 1): Promise<string> {
+    const ts = this.options.now();
+    const event: EventInput = { v, id: ulid(ts), kind, ts, data: data as JsonValue, ...(subject ? { subject } : {}) };
+    await this.options.record.append(CORE, event);
+    return event.id;
+  }
+  /**
+   * What the log gained of the kinds the supervisor reads, the rest never decoded. The cursor moves to the head read
+   * first, so a busy log's other events are scanned once, not again at every tick.
+   */
+  private async events(): Promise<Event[]> {
+    const all: Event[] = [];
+    this.cursor = await readSince(this.options.record, this.cursor, FOLDED, (e) => all.push(e));
+    return all;
+  }
+  private async head(): Promise<number> {
+    const [row] = (await this.options.record.raw('SELECT max(log_pos) AS head FROM events')) as { head: number | bigint | null }[];
+    return Number(row?.head ?? 0);
+  }
+  private async lease(kind: 'lease.acquired' | 'lease.stale', run: string, lease: { kind: string; key: string }, expires = this.options.now() + (this.options.lease_ms ?? DAY)): Promise<void> {
+    await this.append(kind, { resource: { host: 'local', kind: lease.kind, key: lease.key }, holder: this.holderOf(run), mode: 'exclusive', expires }, run);
+  }
+  /** The holder a run's leases name: its spec's, or the core. */
+  private holderOf(run: string): string {
+    return this.runs.get(run)?.holder ?? 'core';
+  }
+  /** A run's lease ends: through the lease table when there is one, citing what proves it over. */
+  private async release(run: string, lease: { kind: string; key: string }, proof: string[]): Promise<void> {
+    const name = `${lease.kind}:${lease.key}`;
+    const id = this.leaseIds.get(name);
+    this.leaseIds.delete(name);
+    if (this.options.leases) {
+      if (id) await this.options.leases.release(id, proof);
+      return;
+    }
+    await this.append('lease.released', { resource: { host: 'local', kind: lease.kind, key: lease.key }, holder: this.holderOf(run), mode: 'exclusive', expires: this.options.now() + (this.options.lease_ms ?? DAY) }, run);
+  }
+  private async track(r: Run, pid: number, start: string, token: string | null): Promise<void> {
+    // A known ID with another start time is a new process of the run's: the one it named is gone.
+    if (r.tracked.get(pid)?.start === start) return;
+    r.tracked.set(pid, { start, token });
+    r.ended.delete(pid);
+    await this.append('process.tracked', { run: r.run, pid, start, pgid: r.pgid ?? pid, cwd: r.cwd, token }, r.run);
+  }
+
+  // ---- Opening: the record's runs, and what a crash left behind.
+
+  async open(): Promise<void> {
+    // Answers are acted on once the whole record is folded, and only those still open then: a replay repeats no step.
+    const settled: Event[] = [];
+    for (const e of await this.events()) {
+      const d = e.data as Record<string, unknown>;
+      const run = typeof d.run === 'string' ? d.run : e.subject ?? '';
+      const r = this.runs.get(run);
+      switch (e.kind as Folded) {
+        case 'process.starting':
+          this.runs.set(run, { ...blank(run, String(d.cwd), 'running'), leases: this.early.get(run) ?? [] });
+          this.early.delete(run);
+          break;
+        case 'run.kept':
+          if (r) r.kept = true;
+          break;
+        case 'process.tracked':
+          if (!r) break;
+          if (r.pid === undefined) Object.assign(r, { pid: d.pid, pgid: d.pgid, token: d.token });
+          r.tracked.set(d.pid as number, { start: String(d.start), token: (d.token as string | null) ?? null });
+          r.ended.delete(d.pid as number);
+          break;
+        case 'process.ended':
+          r?.ended.add(d.pid as number);
+          r?.gone.push(e.id);
+          break;
+        case 'lease.acquired':
+        case 'lease.stale':
+        case 'lease.released': {
+          // Only a run's leases, the core's or its named holder's, are the supervisor's: a session's in the same table never joins a pool.
+          if (!ours(d.holder)) break;
+          // The holder is kept here only without a table, where the run's start precedes its leases; the table folds its own.
+          if (r && d.holder !== 'core') r.holder = d.holder as string;
+          const res = d.resource as { kind: string; key: string };
+          const name = `${res.kind}:${res.key}`;
+          let key = this.keys.get(name);
+          if (e.kind === 'lease.acquired') {
+            if (!RUN.test(run)) break;
+            key ??= this.keys.set(name, {}).get(name)!;
+            key.holder = run;
+            key.expires = d.expires as number;
+            if (e.subject?.startsWith('lease:')) this.leaseIds.set(name, e.subject);
+            if (r) r.leases.push({ kind: res.kind, key: res.key });
+            else this.early.set(run, [...(this.early.get(run) ?? []), { kind: res.kind, key: res.key }]);
+          } else if (!key) {
+            break;
+          } else if (e.kind === 'lease.stale') {
+            key.stale = true;
+          } else {
+            delete key.holder;
+            delete key.expires;
+            delete key.stale;
+            delete key.dirty;
+            delete key.retired;
+            this.leaseIds.delete(name);
+            // An answer about an earlier spell of this key settles nothing now.
+            for (const [handle, of] of this.asked) if (of === name) this.asked.delete(handle);
+          }
+          break;
+        }
+        case 'run.cleaned':
+          if (!r) break;
+          r.state = 'cleaned';
+          r.cleaned = { run, outcome: d.outcome as Cleanup['outcome'], left: d.left as string[], stopped: d.stopped as number[] };
+          for (const name of d.left as string[]) {
+            const key = this.keys.get(name);
+            if (key?.holder === run) key.dirty = { run };
+          }
+          break;
+        case 'ask.created':
+          if (d.kind === 'unblock' && typeof (d as { proves?: unknown }).proves === 'string') {
+            const name = /^cleanup check of (.+)$/.exec(String(d.proves))?.[1];
+            const key = name ? this.keys.get(name) : undefined;
+            if (key?.dirty) { key.dirty.ask = `ask:${e.id}`; this.asked.set(`ask:${e.id}`, name!); }
+          }
+          break;
+        case 'ask.answered':
+        case 'ask.defaulted':
+          if (e.subject && this.asked.has(e.subject)) settled.push(e);
+          break;
+        case 'ask.superseded':
+        case 'ask.moot':
+        case 'ask.cancelled':
+          if (e.subject && this.asked.has(e.subject)) this.dropAsk(e.subject);
+          break;
+      }
+    }
+    // A run whose cleanup left a process the record never saw end is checked again, as before the restart.
+    for (const r of this.runs.values()) if (r.state === 'cleaned' && [...r.tracked.keys()].some((pid) => !r.ended.has(pid))) this.lingering.add(r);
+    for (const e of settled) if (this.asked.has(e.subject!)) await this.settleAsk(e);
+    // Leases the table granted a run a crash cut before its start was recorded: nothing ran on them.
+    for (const [run, leases] of this.early) {
+      for (const lease of leases) {
+        await this.release(run, lease, []);
+        this.keys.set(`${lease.kind}:${lease.key}`, {});
+      }
+    }
+    this.early.clear();
+    // A run left in flight by a crash: its leftovers are reaped, from the record and its sandbox's marker. A kept run
+    // was meant to outlive the hub: it stays the run's, scanned and stoppable as before.
+    for (const r of [...this.runs.values()].filter((r) => r.state !== 'cleaned' && !r.kept)) {
+      r.state = 'exited';
+      await this.cleanup(r.run);
+    }
+    if (process.platform === 'darwin' && this.options.plant !== 'sandbox-left-to-caller') {
+      this.watchDenials(this.options.plant === 'reports-other-subsystem' ? [REPORTS_ELSEWHERE, REPORTS_BY_KERNEL, REPORTS]
+        : this.options.plant === 'reports-other-process' ? [REPORTS_ELSEWHERE, REPORTS_BY_ANOTHER, REPORTS] : FILTERS);
+    }
+    this.beatFrom = Date.now();
+    this.scanSoon();
+  }
+
+  /** The runs a scan reads: each in the supervisor's sandbox that is live, or that its cleanup left running. */
+  private scanned(): Run[] {
+    return [...this.runs.values()].filter((r) => r.sandboxed && (this.lingering.has(r) || (r.state !== 'cleaned' && r.state !== 'BLOCKED' && r.state !== 'held')));
+  }
+  /**
+   * The timed scan, running while a run has a sandbox to scan: with none, the timer stops, so a hub with no run
+   * wakes for nothing; a run's start and a cleanup that leaves a process running start it again, on the beat it
+   * has kept since the supervisor opened, so a run's first scan comes as soon as it did while the timer never stopped.
+   */
+  private scanSoon(): void {
+    if (this.timer || this.closed) return;
+    // One timed scan at a time: on a loaded machine a scan outlasts the interval, and queued ones would pile up
+    // without end in front of a cleanup's own scan.
+    const beat = (): void => {
+      if (!this.scanned().length) {
+        clearInterval(this.timer);
+        this.timer = undefined;
+        return;
+      }
+      this.timed ??= this.scanOnce().catch(() => undefined).finally(() => { this.timed = undefined; });
+    };
+    this.timer = setTimeout(() => {
+      this.timer = setInterval(beat, SCAN_MS);
+      this.timer.unref();
+      beat();
+    }, SCAN_MS - ((Date.now() - this.beatFrom) % SCAN_MS));
+    this.timer.unref();
+  }
+
+  /**
+   * The system log's sandbox reports that carry a run's tag: each a sandbox.denied for that run. The filter names
+   * the reports' subsystem, so the log sends the stream those alone: filtered by sender only, `log` reads every
+   * message the machine writes for the hub's whole life. The stream announces its filter before it is attached,
+   * and after a while idle macOS drops the first reports of a program that isn't Apple's, so it counts as ready
+   * only once it has seen a denial of its own: the helper, refused a write in a canary's sandbox, until its report
+   * comes through. A macOS whose reports carry another subsystem, or none, shows the canary's through that filter
+   * never, so a stream starts on each filter at once, the wider ones too: the kernel's messages, then the sender
+   * alone. The cheapest that shows a canary's report is kept and the others end, so such a macOS waits for the first
+   * report, not out a whole warm-up per filter (#2977). The stream writes nothing while no report matches, so no
+   * closed pipe tells it that this process has gone: it runs on the helper's leash, which ends it when this process
+   * ends, however it ends.
+   */
+  private watchDenials(filters: readonly string[]): void {
+    const streams = filters.map((filter) => this.stream(filter));
+    this.streams = streams;
+    this.warming = this.warm(10_000).then((shown) => {
+      // With none shown the widest stays, unwarmed: a later sandboxed start warms it again.
+      const kept = shown ?? streams.at(-1)!;
+      if (!shown && !this.closed) process.stderr.write('deep supervisor: the system log never showed a sandbox report, so denials go unrecorded\n');
+      this.streams = [kept];
+      this.log = kept.log;
+      this.warmAt = kept.shownAt;
+    });
+  }
+
+  /** A denial stream on one filter. */
+  private stream(filter: string): Stream {
+    const log = spawn(HELPER, ['leash', '/usr/bin/log', 'stream', '--style', 'ndjson', '--predicate', filter], { stdio: ['ignore', 'pipe', 'ignore'] });
+    const s: Stream = { log, shownAt: 0 };
+    log.unref();
+    (log.stdout as unknown as { unref?: () => void }).unref?.();
+    let buffer = '';
+    log.stdout!.setEncoding('utf8').on('data', (chunk: string) => {
+      buffer += chunk;
+      let i: number;
+      while ((i = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, i);
+        buffer = buffer.slice(i + 1);
+        let message = '';
+        try { message = String((JSON.parse(line) as { eventMessage?: unknown }).eventMessage ?? ''); } catch { continue; }
+        const m = /deny\(\d+\) (\S+) (.*?)\s*\ndev\.deepbuild\.(run:[0-9A-Za-z]+)/.exec(message);
+        if (m) s.shownAt = Date.now();
+        if (m && log === this.log) this.warmAt = s.shownAt;
+        // Any stream still running records, each refusal once: a run kept from before a restart may be refused mid-warm.
+        if (!m || !this.runs.has(m[3]!)) continue;
+        const [, operation, target, run] = m as unknown as [string, string, string, string];
+        const seen = `${run} ${operation} ${target}`;
+        if (this.denied.has(seen)) continue;
+        this.denied.add(seen);
+        void this.recordDenial(run, operation, target || '(none)').catch(() => undefined);
+      }
+    });
+    return s;
+  }
+
+  /** A refusal on the run's record, naming who holds the port it tried, when another run holds it (#580). */
+  private async recordDenial(run: string, operation: string, target: string): Promise<void> {
+    const port = operation.startsWith('network') ? /:(\d+)$/.exec(target)?.[1] : undefined;
+    const held = port ? (await this.options.leases?.leases().catch(() => []))?.find((v) => v.lease.resource.kind === 'port' && v.lease.resource.key === port) : undefined;
+    await this.append('sandbox.denied', { run, operation, target, ...(held ? { holder: held.lease.holder } : {}) }, run, 2);
+  }
+
+  /**
+   * What a run's egress filter refused, recorded as the sandbox's refusals are: once for the run, operation and target,
+   * in the one set, so a request refused in a loop adds one event (#2399).
+   */
+  private filterRefused(run: string, { operation, target }: { operation: string; target: string }): void {
+    // The planted wrong programs: no refusal of the filter's recorded, one kept per operation, and a set without the run.
+    if (this.options.plant === 'egress-refusals-unrecorded') return;
+    const seen = this.options.plant === 'egress-refusal-once-per-operation' ? `${run} ${operation}`
+      : this.options.plant === 'egress-refusals-seen-without-run' ? `${operation} ${target}` : `${run} ${operation} ${target}`;
+    if (this.denied.has(seen)) return;
+    this.denied.add(seen);
+    // One the record didn't take isn't recorded: the next try is.
+    void this.append('sandbox.denied', { run, operation, target }, run).catch(() => void this.denied.delete(seen));
+  }
+
+  /**
+   * What a Linux run's sandbox parent writes, one JSON line each: a refusal, recorded as a sandbox.denied for the run
+   * once, or the program's own end, given to `exited` once every refusal before it is on the record. Resolves once
+   * the parent is gone, the pipe with it, and what it refused is recorded.
+   */
+  private readDenials(run: string, stream: NodeJS.ReadableStream, exited: (code: number | null, signal: NodeJS.Signals | null) => void): Promise<void> {
+    let buffer = '';
+    let recorded = Promise.resolve();
+    return new Promise((resolve) => {
+      stream.setEncoding('utf8').on('data', (chunk: string) => {
+        buffer += chunk;
+        let i: number;
+        while ((i = buffer.indexOf('\n')) >= 0) {
+          const line = buffer.slice(0, i);
+          buffer = buffer.slice(i + 1);
+          let said: { operation?: unknown; target?: unknown; exit?: unknown; signal?: unknown };
+          try { said = JSON.parse(line) as typeof said; } catch { continue; }
+          if ('exit' in said) {
+            const name = Object.entries(constants.signals).find(([, n]) => n === said.signal)?.[0] as NodeJS.Signals | undefined;
+            const code = typeof said.exit === 'number' ? said.exit : null;
+            recorded = recorded.then(() => exited(code, code === null ? name ?? null : null));
+            continue;
+          }
+          if (typeof said.operation !== 'string' || typeof said.target !== 'string') continue;
+          const seen = `${run} ${said.operation} ${said.target}`;
+          if (this.denied.has(seen)) continue;
+          this.denied.add(seen);
+          const { operation, target } = said;
+          recorded = recorded.then(() => this.recordDenial(run, operation, target || '(none)')).catch(() => undefined);
+        }
+      }).on('error', () => undefined).on('close', () => void recorded.then(resolve));
+    });
+  }
+
+  /**
+   * Until a stream shows a canary's report and no cheaper one still running can, or `ms` pass: the cheapest stream
+   * that showed it. A report reaches every stream at once, so a cheaper one that hasn't shown it within SHOWN_MS of
+   * a dearer one's showing it never will.
+   */
+  private async warm(ms: number): Promise<Stream | undefined> {
+    const since = Date.now();
+    const streams = this.streams;
+    const shown = (): Stream | undefined => streams.find((s) => s.shownAt >= since);
+    // When a stream first showed one: each later report moves a stream's shownAt on.
+    let first = 0;
+    const settled = (): boolean => {
+      const best = shown();
+      if (!best) return false;
+      first ||= Date.now();
+      return Date.now() >= first + SHOWN_MS || !streams.slice(0, streams.indexOf(best)).some((s) => s.log.exitCode === null);
+    };
+    this.canary = `run:canary${randomBytes(8).toString('hex')}`;
+    const profile = `(version 1)\n(deny default (with message "dev.deepbuild.${this.canary}"))\n(import "system.sb")\n(allow file-read* process-exec)`;
+    // Each try refused on a path of its own: the kernel folds identical reports into one, later.
+    for (let n = 0; !settled() && !this.closed && streams.some((s) => s.log.exitCode === null) && Date.now() < since + ms; n++) {
+      const target = `/tmp/deep-canary-${this.canary.slice(4)}-${n}`;
+      await new Promise((done) => spawn('/usr/bin/sandbox-exec', ['-p', profile, HELPER, 'probe', '/dev/null', 'write', target], { stdio: 'ignore' }).on('close', done).on('error', done));
+      for (let i = 0; i < 10 && !settled(); i++) await sleep(25);
+    }
+    return shown();
+  }
+
+  // ---- host@1.
+
+  async facts(): Promise<HostFacts> {
+    return { host: 'local', platform: process.platform, arch: process.arch, cores: availableParallelism(), memory: totalmem() };
+  }
+
+  start(spec: StartSpec): Promise<Started> {
+    if (!RUN.test(spec.run)) return Promise.reject(Error(`a run is named run:<id>, not ${spec.run}`));
+    if (this.runs.has(spec.run) || this.waiters.some((w) => w.spec.run === spec.run)) return Promise.reject(Error(`${spec.run} has already started`));
+    for (const name of spec.limits ? ['memory_mb', 'file_mb'] as const : []) {
+      const value: unknown = spec.limits![name];
+      if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > 0xffff_ffff) return Promise.reject(Error(`a run's ${name} is a whole number of MiB, not ${String(value)}`));
+    }
+    // The scan finds a run's processes by its sandbox: one in a sandbox of its own can't be measured, so it can't be held to memory.
+    if (spec.limits && spec.own_sandbox) return Promise.reject(Error(`${spec.run} runs in its own sandbox, where the supervisor's scan can't find its processes to hold them to memory_mb`));
+    return new Promise((resolve) => {
+      this.waiters.push({ spec, on: [], resolve });
+      // A failed pass leaves the waiter for the next one.
+      this.pump().catch(() => undefined);
+    });
+  }
+
+  /** Starts every held run whose leases are free now, and blocks each one a kind it needs has run out of; one pass at a time. */
+  private pump(): Promise<void> {
+    const next = this.pumping.then(() => this.pumpOnce());
+    this.pumping = next.catch(() => undefined);
+    return next;
+  }
+  private async pumpOnce(): Promise<void> {
+    if (this.closed) return;
+    for (const waiter of [...this.waiters]) {
+      // Given up on while this pass waited on a raise.
+      if (!this.waiters.includes(waiter)) continue;
+      let wants: Awaited<ReturnType<LocalSupervisor['choose']>>;
+      try {
+        wants = await this.choose(waiter.spec);
+      } catch (error) {
+        // The lease table refused the request itself, such as a kind no one declared: the start is refused.
+        if (!this.options.leases) throw error;
+        this.waiters.splice(this.waiters.indexOf(waiter), 1);
+        waiter.resolve(Promise.reject(error as Error));
+        continue;
+      }
+      // Given up on, or the supervisor closed, while its kinds checked their keys.
+      if (this.closed || !this.waiters.includes(waiter)) continue;
+      if (wants.kind === 'wait') {
+        const first = !this.runs.has(waiter.spec.run);
+        waiter.on = wants.on;
+        if (first) this.runs.set(waiter.spec.run, blank(waiter.spec.run, waiter.spec.cwd, 'held'));
+        // A failed raise is retried on the next pass; the other waiters go on.
+        for (const name of wants.on) await this.ask(name, waiter.spec.run).catch(() => undefined);
+        continue;
+      }
+      this.waiters.splice(this.waiters.indexOf(waiter), 1);
+      if (wants.kind === 'blocked') {
+        this.runs.set(waiter.spec.run, blank(waiter.spec.run, waiter.spec.cwd, 'BLOCKED'));
+        waiter.resolve({ run: waiter.spec.run, status: 'BLOCKED', cause: 'resource', kind: wants.on });
+        continue;
+      }
+      const expires = this.options.now() + (this.options.lease_ms ?? DAY);
+      for (const lease of wants.leases) this.keys.set(`${lease.kind}:${lease.key}`, { holder: waiter.spec.run, expires });
+      const launched = this.launch(waiter.spec, wants.leases);
+      this.launching.set(waiter.spec.run, launched);
+      void launched.catch(() => undefined).finally(() => this.launching.delete(waiter.spec.run));
+      waiter.resolve(launched.catch(async (error: unknown) => {
+        const r = this.runs.get(waiter.spec.run);
+        if (r?.child || r?.state === 'running') {
+          // Refused after its start was recorded: its cleanup closes the records and gives its keys back.
+          await this.cleanup(r.run).catch(() => undefined);
+        } else {
+          // Refused before anything was recorded or held: the table's grants go back, with nothing run on them.
+          for (const lease of wants.leases) {
+            if (this.options.leases) await this.release(waiter.spec.run, lease, []).catch(() => undefined);
+            this.keys.set(`${lease.kind}:${lease.key}`, {});
+          }
+          this.runs.delete(waiter.spec.run);
+          this.pump().catch(() => undefined);
+        }
+        throw error;
+      }));
+    }
+  }
+
+  private async choose(spec: StartSpec): Promise<{ kind: 'ok'; leases: { kind: string; key: string }[] } | { kind: 'wait'; on: string[] } | { kind: 'blocked'; on: string }> {
+    const leases: { kind: string; key: string }[] = [];
+    const on: string[] = [];
+    // With the lease table, each key is the table's grant, held by the core for the run; one a session or another
+    // writer holds there waits. What the run was granted goes back when it waits or is blocked: nothing ran on it.
+    const table = this.options.leases;
+    const elsewhere = new Set(table ? (await table.leases()).filter((v) => v.lease.resource.host === 'local').map((v) => `${v.lease.resource.kind}:${v.lease.resource.key}`) : []);
+    const giveBack = async () => { for (const lease of table ? leases : []) await this.release(spec.run, lease, []); };
+    for (const want of spec.leases ?? []) {
+      const pool = [...this.keys.entries()].filter(([name]) => name.startsWith(`${want.kind}:`)).map(([name, key]) => ({ key: name.slice(want.kind.length + 1), state: key }));
+      const candidates = want.key === undefined ? pool : pool.filter((p) => p.key === want.key);
+      if (want.key !== undefined && !candidates.length && !this.kinds.has(want.kind)) candidates.push({ key: want.key, state: {} });
+      const usable = candidates.filter((c) => !c.state.retired && !leases.some((l) => l.kind === want.kind && l.key === c.key));
+      if (!usable.length) { await giveBack(); return { kind: 'blocked', on: want.kind }; }
+      // A key nobody here holds is asked of its kind too (or granted by the table, which asks it): one something
+      // outside DeepBuild holds is skipped.
+      const check = this.kinds.get(want.kind)?.free;
+      let free: (typeof usable)[number] | undefined;
+      let outside = 0;
+      for (const c of usable) {
+        const name = `${want.kind}:${c.key}`;
+        if (c.state.holder || c.state.dirty || elsewhere.has(name)) continue;
+        if (table) {
+          // Another want waits: the run takes nothing until every want can be had.
+          if (on.length) break;
+          const got = await table.lease({ holder: spec.holder ?? 'core', run: spec.run }, { host: 'local', kind: want.kind, key: c.key }, 'exclusive');
+          if (got.status === 'granted') { this.leaseIds.set(name, got.lease.id); free = c; break; }
+          if (got.status === 'BLOCKED') { await giveBack(); return { kind: 'blocked', on: want.kind }; }
+          if (got.reason === 'taken') outside++;
+          continue;
+        }
+        if (!check || (await check(c.key).catch(() => false))) { free = c; break; }
+        outside++;
+      }
+      if (free) leases.push({ kind: want.kind, key: free.key });
+      else if (outside === usable.length) { await giveBack(); return { kind: 'blocked', on: want.kind }; }
+      else on.push(...usable.map((c) => `${want.kind}:${c.key}`));
+    }
+    if (on.length) await giveBack();
+    return on.length ? { kind: 'wait', on } : { kind: 'ok', leases };
+  }
+
+  /** One unblock ask per key a cleanup left dirty, raised when a run first waits on it. */
+  private async ask(name: string, waiting: string): Promise<void> {
+    const key = this.keys.get(name);
+    if (!key?.dirty || key.dirty.ask || this.options.plant === 'hold-without-ask') return;
+    const kind = this.kinds.get(parts(name).kind);
+    const now = this.options.now();
+    key.dirty.ask = 'raising';
+    // The first open ask reads the record from here on: what came before can't answer it.
+    if (!this.asked.size) this.cursor = await this.head();
+    const handle = await this.options.asks.raise(CORE, UNBLOCK_SOURCE, {
+      kind: 'unblock',
+      question: `${key.dirty.run}'s cleanup couldn't release ${name}. Release it yourself?`,
+      options: [{ id: 'done', label: 'I did it', decision: 'none' }, { id: 'retire', label: `Take ${name} out of its pool`, decision: 'none' }],
+      recommended: 'done', deadline: now + this.options.settings.asks.unblock.deadline_ms, fallback: 'you', default: 'retire', provisional: false,
+      owner: 'you', key: sha256(`${UNBLOCK_SOURCE} ${name} ${key.dirty.run}`), pinned_to: { kind: 'evidence', ref: sha256(`${key.dirty.run} left ${name}`) },
+      steps: [`Release ${name} where it is held${kind?.release ? `, as ${kind.release.argv.join(' ')} tried to` : ''}`, 'Answer "I did it": the cleanup check runs again'],
+      where: 'outside DeepBuild', why: `${waiting} needs ${parts(name).kind}, and ${name} is still bound`, unblocks: [waiting], proves: `cleanup check of ${name}`,
+    }).catch((error: unknown) => {
+      // Raised again the next time a run waits on it.
+      delete key.dirty?.ask;
+      throw error;
+    });
+    key.dirty.ask = handle;
+    this.asked.set(handle, name);
+  }
+
+  private async launch(spec: StartSpec, leases: { kind: string; key: string }[]): Promise<Started> {
+    if (process.platform !== 'darwin' && process.platform !== 'linux') throw Error(`no platform sandbox backend for ${process.platform} yet; nothing runs outside one`);
+    const cwd = real(spec.cwd);
+    const sandboxed = this.options.plant !== 'sandbox-left-to-caller' && spec.own_sandbox !== true;
+    const token = spec.env?.DEEP_RUN_TOKEN ?? randomBytes(24).toString('base64url');
+    // Each lease's key in the variable it names; the leases come in the order they were asked for.
+    const keys = Object.fromEntries((spec.leases ?? []).flatMap((want, i) => (want.env ? [[want.env, leases[i]!.key]] : [])));
+    // A credential with hosts goes in as a stand-in, its value only into requests through the run's egress filter.
+    const creds = spec.credentials ?? [];
+    // The egress filter, and node:http, https and tls with it, load only for a run that holds such a credential.
+    const egress = creds.some((c) => c.hosts?.length)
+      ? await (await import('./egress.js')).openEgress(creds, (r) => this.filterRefused(spec.run, r), this.options.plant === 'standin-every-host' ? 'standin-every-host' : undefined)
+      : undefined;
+    const given = Object.fromEntries(creds.flatMap((c) => [
+      [c.env, egress?.standIns[c.env] ?? c.value],
+      // The planted wrong program: the filter puts the value in the run's environment too, beside the stand-in.
+      ...(this.options.plant === 'standin-value-in-env' && egress?.standIns[c.env] ? [[`${c.env}_VALUE`, c.value]] : []),
+    ]));
+    // The planted wrong program: the run's CA added to the login keychain, where every process of yours trusts it.
+    if (egress && this.options.plant === 'run-ca-in-login-keychain') {
+      mkdirSync(join(homedir(), 'Library', 'Keychains'), { recursive: true });
+      appendFileSync(join(homedir(), 'Library', 'Keychains', 'login.keychain-db'), readFileSync(join(egress.dir, 'run-ca.pem')));
+    }
+    const env = { ...(spec.inherit === false ? {} : process.env), ...spec.env, ...keys, ...given, ...egress?.env, DEEP_RUN_TOKEN: token } as Record<string, string>;
+    // A leased port is one it may listen on, and connect to; the egress filter's port, one it may connect to.
+    const ports = leases.filter((l) => this.kinds.get(l.kind)?.port).map((l) => `127.0.0.1:${l.key}`);
+    const out = egress ? [`127.0.0.1:${egress.port}`] : [];
+    const grant: Grant = ports.length || egress
+      ? { ...spec.grant, listen: [...(spec.grant?.listen ?? []), ...ports], hosts: [...(spec.grant?.hosts ?? []), ...ports, ...out], ...(egress ? { read: [...(spec.grant?.read ?? []), egress.dir] } : {}) }
+      : spec.grant ?? {};
+    // The profile first: a grant the sandbox can't enforce refuses the start before anything is held or recorded.
+    const launch = sandboxed
+      ? await this.sandbox.confine({ argv: spec.argv, cwd, env }, grant, spec.run).catch(async (error: unknown) => { await egress?.close(); throw error; })
+      : { argv: spec.argv, cwd, env };
+    // After a minute with no report, the stream is shown live again before a process can be refused anything.
+    if (sandboxed) await this.warming;
+    if (sandboxed && this.log && Date.now() - this.warmAt > WARM_MS) await this.warm(2000);
+    const r: Run = { ...blank(spec.run, cwd, 'running'), sandboxed, token: sha256(token), leases, ...(spec.holder ? { holder: spec.holder } : {}), ...(egress ? { egress } : {}), ...(spec.limits ? { limits: spec.limits } : {}) };
+    this.runs.set(spec.run, r);
+    this.scanSoon();
+    // The run first, so a replay finds its leases on it.
+    await this.append('process.starting', { run: spec.run, cwd }, spec.run);
+    // How each credential reached it, by name: the value itself, or a stand-in for its hosts.
+    for (const c of creds) await this.append('credential.loaded', { run: spec.run, env: c.env, ...(egress?.standIns[c.env] ? { by: 'stand-in', hosts: c.hosts! } : { by: 'value' }) }, spec.run);
+    if (spec.keep) {
+      r.kept = true;
+      await this.append('run.kept', { run: spec.run }, spec.run);
+    }
+    if (!this.options.leases) for (const lease of leases) await this.lease('lease.acquired', spec.run, lease, this.keys.get(`${lease.kind}:${lease.key}`)?.expires);
+    if (this.options.crash === 'start-recorded') process.kill(process.pid, 'SIGKILL');
+    // On Linux the sandbox's parent process writes each refusal it makes to its fourth descriptor (bubblewrap.ts).
+    const denials = sandboxed && process.platform === 'linux';
+    // A run kept past the hub under a systemd service stops the service's restart from reaching it: its processes sit
+    // in a user scope of their own, systemd-run execing the sandbox in place so the PID stays the one tracked, and its
+    // output goes to files, which outlive the hub as a pipe to it wouldn't. Refusals still come by pipe, so one made
+    // while no hub reads it is enforced but not recorded.
+    const service = spec.keep === true && process.platform === 'linux' && process.env.INVOCATION_ID !== undefined ? this.options.kept : undefined;
+    const name = spec.run.replace(':', '-');
+    const scope = service !== undefined && this.options.plant !== 'kept-in-service-cgroup' ? ['/usr/bin/systemd-run', '--user', '--scope', '--quiet', '--collect', `--unit=deep-${name}`] : [];
+    // The file limit is the kernel's, set by the helper as it execs the sandbox, so every process inside inherits it.
+    const fsize = spec.limits ? [HELPER, 'limit', String(spec.limits.file_mb * MIB)] : [];
+    const argv = [...scope, ...fsize, ...launch.argv];
+    if (service !== undefined) mkdirSync(service, { recursive: true, mode: 0o700 });
+    const outputs = service === undefined ? undefined : ['stdout', 'stderr'].map((stream) => join(service, `${name}.${stream}`)) as [string, string];
+    const files = outputs?.map((file) => openSync(file, 'a', 0o600));
+    const child = spawn(argv[0]!, argv.slice(1), { cwd: launch.cwd, env: launch.env, detached: true, stdio: [spec.input ? 'pipe' : 'ignore', files?.[0] ?? 'pipe', files?.[1] ?? 'pipe', ...(denials ? ['pipe' as const] : [])] });
+    files?.forEach((fd) => closeSync(fd));
+    r.child = child;
+    // Watched from its first process on: the watcher follows its forks as they come.
+    if (child.pid !== undefined && spec.limits && process.platform === 'darwin') this.watch(r, child.pid);
+    // A process that exits before reading all of its input is no error of the supervisor's.
+    child.stdin?.on('error', () => undefined);
+    const hashes = { stdout: sha256Stream(), stderr: sha256Stream() };
+    child.stdout?.on('data', (chunk: Buffer) => { hashes.stdout.update(chunk); spec.output?.stdout(chunk); });
+    child.stderr?.on('data', (chunk: Buffer) => { hashes.stderr.update(chunk); spec.output?.stderr(chunk); });
+    const drain = () => setTimeout(() => setImmediate(() => { child.stdout?.destroy(); child.stderr?.destroy(); }), DRAIN_MS).unref();
+    child.on('exit', () => {
+      if (r.state === 'running') r.state = 'exited';
+      // A background process still holding its output doesn't keep the run open: what came by now is its output.
+      // Closed after the loop's next read of the pipes, so a stalled loop doesn't cut what was already written.
+      drain();
+    });
+    let settle: (exit: Exit) => void = () => undefined;
+    r.exit = new Promise((resolve) => { settle = resolve; });
+    const ended = (code: number | null, signal: NodeJS.Signals | null) => {
+      const digests = outputs ? Promise.all(outputs.map(sha256File)) : Promise.resolve([hashes.stdout.digest(), hashes.stderr.digest()]);
+      void Promise.all([digests, this.limitsSettled(r, signal)]).then(([[stdout, stderr]]) => settle({ run: spec.run, code, signal, evidence: { stdout: stdout!, stderr: stderr! }, ...(r.limited ? { limit: r.limited } : {}) }));
+    };
+    child.on('error', () => ended(null, null));
+    if (denials) {
+      // The run ends when the program does, as its sandbox's parent reports it: bwrap's own process may go earlier,
+      // on the signal that stops the run, or later, after the leftovers the parent reaps. Without that report, when
+      // the parent went with the program, bwrap's end is the run's.
+      // The report can be read before the program's last output is, so the digests wait for both pipes, which `drain`
+      // closes in time if a background process still holds them.
+      const output = Promise.all([child.stdout, child.stderr].flatMap((pipe) => (pipe ? [new Promise((done) => { pipe.once('close', done); })] : [])));
+      const parentGone = this.readDenials(spec.run, child.stdio[3] as NodeJS.ReadableStream, (code, signal) => { if (r.state === 'running') r.state = 'exited'; drain(); void output.then(() => ended(code, signal)); });
+      child.on('close', (code, signal) => void parentGone.then(() => output).then(() => ended(code, signal)));
+    } else child.on('close', ended);
+    const pid = child.pid;
+    if (pid === undefined) {
+      r.state = 'exited';
+      return { run: spec.run, status: 'started', pid: 0, pgid: 0, start: '', leases };
+    }
+    if (this.options.crash === 'spawned') process.kill(process.pid, 'SIGKILL');
+    r.pid = pid;
+    r.pgid = pid;
+    // A process that is already gone and reaped leaves nothing to track; its group's members are still found. On
+    // Linux the table is read before the loop turns, so a run over in milliseconds is still tracked and its end recorded.
+    const start = process.platform === 'linux' ? startNow(pid) : (await table([pid])).get(pid)?.start ?? '';
+    if (start) await this.track(r, pid, start, r.token);
+    // Its input only once its process is recorded, so a crash before this point leaves a process that read nothing.
+    if (spec.input) child.stdin!.end(typeof spec.input === 'function' ? spec.input() : spec.input);
+    return { run: spec.run, status: 'started', pid, pgid: pid, start, leases };
+  }
+
+  /**
+   * Records each process a live run's sandbox holds that it hasn't recorded yet, by ID and start time; and a run its
+   * cleanup left running, so what its leftovers fork counts among them.
+   */
+  private scanOnce(): Promise<void> {
+    if (this.options.plant === 'records-only-started' || this.closed) return this.scanning;
+    const next = this.scanning.then(async () => {
+      const live = this.scanned();
+      if (!live.length) return;
+      const bytes = new Map<number, number>();
+      const found = await scan(live.map((r) => markerOf(r.run)), bytes);
+      // A run past its memory is stopped: the sum over every process its sandbox holds, the scan's own reading.
+      for (const r of live) {
+        const cap = r.limits?.memory_mb;
+        if (cap === undefined || r.limited || r.state === 'cleaned') continue;
+        const reading = (found.get(markerOf(r.run)) ?? []).reduce((sum, pid) => sum + (bytes.get(pid) ?? 0), 0);
+        if (reading > cap * MIB) this.stopAtLimit(r, 'memory_mb', reading / MIB);
+      }
+      const held = live.flatMap((r) => (found.get(markerOf(r.run)) ?? []).map((pid) => ({ r, pid })));
+      if (!held.length) return;
+      // By ID and start time: an ID the run used before may name a new process of its own.
+      const procs = await table(held.map((f) => f.pid));
+      for (const { r, pid } of held) {
+        const p = procs.get(pid);
+        if (p && r.tracked.get(pid)?.start !== p.start) await this.track(r, pid, p.start, (await tokenOf(pid)) ?? null);
+      }
+    });
+    this.scanning = next.catch(() => undefined);
+    return next;
+  }
+
+  /** What the run owns that it can prove now: each tracked process by its start time (and token), and its group's members. */
+  private async provable(r: Run): Promise<Proc[]> {
+    // Every candidate is a tracked process or a member of a group whose tracked leader is alive: with none of
+    // them alive, nothing is, and the full process table isn't read.
+    if (![...r.tracked.keys()].some(alive)) return [];
+    const procs = await table();
+    const candidates = new Map<number, Proc>();
+    for (const [pid] of r.tracked) { const p = procs.get(pid); if (p) candidates.set(pid, p); }
+    // Its group counts only while the leader it started is alive: a leaderless group's ID may since name another's.
+    const leader = r.pgid === undefined ? undefined : procs.get(r.pgid);
+    const groupOurs = leader !== undefined && r.tracked.get(leader.pid)?.start === leader.start;
+    if (groupOurs) for (const p of procs.values()) if (p.pgid === r.pgid) candidates.set(p.pid, p);
+    // macOS hides a platform binary's environment (perl, sh) from `ps -E`: its own sandbox then proves it in place of its token.
+    const boxed = r.sandboxed ? new Set((await scan([markerOf(r.run)]).catch(() => new Map<string, number[]>())).get(markerOf(r.run)) ?? []) : new Set<number>();
+    const proven: Proc[] = [];
+    for (const p of candidates.values()) {
+      const tracked = r.tracked.get(p.pid);
+      if (tracked && tracked.start !== p.start) continue; // the ID now names another process: the tracked one is gone
+      const token = await tokenOf(p.pid);
+      let ok: boolean;
+      switch (this.options.plant) {
+        case 'stops-token-bearing-group-members': ok = p.pgid === r.pgid && token === r.token; break;
+        case 'requires-token-in-group': ok = token === r.token; break;
+        default: ok = !tracked?.token || token === tracked.token || (token === null && boxed.has(p.pid));
+      }
+      if (ok) proven.push(p);
+    }
+    return proven;
+  }
+
+  /**
+   * Stops a run at one of its limits, once: its own event names the limit, its value and the reading, and every
+   * process it owns is killed. Its exit carries the stop, so a check reads it as stopped, never as the product's failure.
+   */
+  private stopAtLimit(r: Run, limit: LimitStop['limit'], reading?: number): void {
+    if (r.limited) return;
+    r.limited = { limit, max: r.limits![limit], ...(reading === undefined ? {} : { reading }) };
+    r.stopping = Promise.all([
+      this.append(LIMIT_KIND, { run: r.run, ...r.limited }, r.run),
+      this.signal(r.run, 'SIGKILL'),
+    ]).then(() => undefined, () => undefined);
+  }
+
+  /**
+   * Once each stop at a limit that came before the run's end is recorded: the ends the watcher saw before it, and the
+   * program's own end by SIGXFSZ, which is the file limit's.
+   */
+  private async limitsSettled(r: Run, signal: NodeJS.Signals | null): Promise<void> {
+    if (!r.limits) return;
+    if (r.watched !== undefined) await this.sync();
+    if (signal === 'SIGXFSZ') this.stopAtLimit(r, 'file_mb');
+    await r.stopping;
+  }
+
+  /** Has the watcher follow a run's processes from its first, `pid`. */
+  private watch(r: Run, pid: number): void {
+    if (!this.watcher) {
+      const watcher = spawn(HELPER, ['watch'], { stdio: ['pipe', 'pipe', 'ignore'] });
+      this.watcher = watcher;
+      watcher.unref();
+      for (const pipe of [watcher.stdin, watcher.stdout] as unknown as { unref?: () => void }[]) pipe.unref?.();
+      watcher.stdin!.on('error', () => undefined);
+      let buffer = '';
+      watcher.stdout!.setEncoding('utf8').on('data', (chunk: string) => {
+        buffer += chunk;
+        let i: number;
+        while ((i = buffer.indexOf('\n')) >= 0) {
+          const [what, a, , status] = buffer.slice(0, i).split(' ');
+          buffer = buffer.slice(i + 1);
+          if (what === 'sync') { this.syncs.get(Number(a))?.(); this.syncs.delete(Number(a)); continue; }
+          // A process killed by SIGXFSZ wrote past the file limit: its status's low bits are the signal.
+          const watched = this.watchedRuns.get(Number(a));
+          if (what === 'exit' && watched && (Number(status) & 0x7f) === constants.signals.SIGXFSZ) this.stopAtLimit(watched, 'file_mb');
+        }
+      });
+      // Gone, it answers no sync: none waits on it.
+      watcher.on('close', () => {
+        if (this.watcher === watcher) this.watcher = undefined;
+        for (const done of this.syncs.values()) done();
+        this.syncs.clear();
+      });
+    }
+    r.watched = pid;
+    this.watchedRuns.set(pid, r);
+    this.watcher.stdin!.write(`${pid}\n`);
+  }
+  /** Once the watcher has written every end that came before this call, or SYNC_MS pass. */
+  private sync(): Promise<void> {
+    const watcher = this.watcher;
+    if (!watcher) return Promise.resolve();
+    const n = ++this.synced;
+    return new Promise<void>((resolve) => {
+      const timer = setTimeout(() => { this.syncs.delete(n); resolve(); }, SYNC_MS);
+      this.syncs.set(n, () => { clearTimeout(timer); resolve(); });
+      watcher.stdin!.write(`sync ${n}\n`);
+    });
+  }
+
+  async signal(run: string, signal: NodeJS.Signals): Promise<void> {
+    const r = this.runs.get(run);
+    if (!r) throw Error(`${run} is no run of this supervisor`);
+    // A scan first, as cleanup does: a process the run started since the last scan is tracked, so the signal reaches it after its leader is gone.
+    await this.scanOnce().catch(() => undefined);
+    const proven = await this.provable(r);
+    // Its process group at once, as the group's own members see a group signal; then each proven process outside it.
+    if (r.pgid !== undefined && proven.some((p) => p.pgid === r.pgid)) try { process.kill(-r.pgid, signal); } catch { /* gone */ }
+    for (const p of proven) if (p.pgid !== r.pgid) try { process.kill(p.pid, signal); } catch { /* gone */ }
+  }
+
+  async lives(run: string): Promise<boolean> {
+    const r = this.runs.get(run);
+    if (!r) return false;
+    await this.scanOnce().catch(() => undefined);
+    return (await this.provable(r)).length > 0;
+  }
+
+  wait(run: string): Promise<Exit> {
+    const r = this.runs.get(run);
+    if (!r?.exit) return Promise.reject(Error(`${run} has no process of this supervisor's to wait for`));
+    return r.exit;
+  }
+
+  async status(run: string): Promise<RunStatus> {
+    const r = this.runs.get(run);
+    if (!r) {
+      if (await this.recorded(run)) return { run, state: 'cleaned' };
+      throw Error(`${run} is no run of this supervisor`);
+    }
+    const waiter = this.waiters.find((w) => w.spec.run === run);
+    return { run, state: r.state, ...(waiter ? { on: waiter.on } : {}) };
+  }
+
+  /** A clean run that left memory (#824), as the record has its cleanup; undefined for one this supervisor never cleaned. */
+  private async recorded(run: string): Promise<Cleanup | undefined> {
+    const [row] = (await this.options.record.raw("SELECT data FROM events WHERE kind = 'run.cleaned' AND writer = 'core' AND subject = ? ORDER BY log_pos DESC LIMIT 1", [run])) as { data: string }[];
+    if (!row) return undefined;
+    const d = JSON.parse(row.data) as { outcome: Cleanup['outcome']; left: string[]; stopped: number[] };
+    return { run, outcome: d.outcome, left: d.left, stopped: d.stopped };
+  }
+
+  cleanup(run: string): Promise<Cleanup> {
+    // A run on its way out of the queue is cleaned once its launch settles.
+    const launching = this.launching.get(run);
+    if (launching) return launching.catch(() => undefined).then(() => this.cleanup(run));
+    const r = this.runs.get(run);
+    if (!r) {
+      // A start still in its first pass, given up on before it was held: it never starts.
+      const waiter = this.waiters.find((w) => w.spec.run === run);
+      // One cleaned and since forgotten answers as it did then.
+      if (!waiter) return this.recorded(run).then((cleaned) => cleaned ?? Promise.reject(Error(`${run} is no run of this supervisor`)));
+      this.waiters.splice(this.waiters.indexOf(waiter), 1);
+      this.runs.set(run, blank(run, waiter.spec.cwd, 'BLOCKED'));
+      waiter.resolve({ run, status: 'BLOCKED', cause: 'resource', kind: waiter.spec.leases?.[0]?.kind ?? '' });
+      return Promise.resolve({ run, outcome: 'clean', left: [], stopped: [] });
+    }
+    // A run that never started has nothing to stop or release, and nothing to record.
+    if (r.state === 'held' || r.state === 'BLOCKED') {
+      // A held run given up on never starts: its start resolves BLOCKED on what it waited for.
+      const waiter = this.waiters.find((w) => w.spec.run === run);
+      if (waiter) {
+        this.waiters.splice(this.waiters.indexOf(waiter), 1);
+        const on = waiter.on[0] ?? '';
+        waiter.resolve({ run, status: 'BLOCKED', cause: 'resource', kind: on.slice(0, on.indexOf(':')) });
+        r.state = 'BLOCKED';
+      }
+      return Promise.resolve({ run, outcome: 'clean', left: [], stopped: [] });
+    }
+    if (r.cleaning) return r.cleaning;
+    // A cleanup that threw is forgotten, so the next ask runs it again.
+    const cleaning: Promise<Cleanup> = (r.cleaning = this.cleanupOnce(r).catch((error: unknown) => { delete r.cleaning; throw error; }));
+    this.cleaning.add(cleaning);
+    void cleaning.finally(() => this.cleaning.delete(cleaning)).catch(() => undefined);
+    return cleaning;
+  }
+  private async cleanupOnce(r: Run): Promise<Cleanup> {
+    const run = r.run;
+    if (r.cleaned) return r.cleaned;
+    const stopped = new Set<number>();
+    // Until a scan finds nothing of the run's left to stop: a process forked while the others stop is found too.
+    for (const signal of ['SIGTERM', 'SIGKILL', 'SIGKILL', 'SIGKILL'] as const) {
+      await this.scanOnce().catch(() => undefined);
+      const proven = await this.provable(r);
+      if (!proven.length) break;
+      for (const p of proven) {
+        if (r.tracked.get(p.pid)?.start !== p.start) await this.track(r, p.pid, p.start, (await tokenOf(p.pid)) ?? null);
+        try { process.kill(p.pid, signal); stopped.add(p.pid); } catch { /* gone */ }
+      }
+      const until = Date.now() + GRACE_MS;
+      while (proven.some((p) => alive(p.pid)) && Date.now() < until) await sleep(20);
+    }
+    await this.scanOnce().catch(() => undefined);
+    const left = (await this.leftovers(r, this.rescan)).map((pid) => `pid:${pid}`);
+    if (left.length) {
+      this.lingering.add(r);
+      this.scanSoon();
+    }
+    // The leases end only once every process recorded for the run is gone; a key its check finds bound is left,
+    // and so is every key while a process is, each one held for the unblock ask.
+    if (left.length) {
+      for (const lease of r.leases) {
+        const name = `${lease.kind}:${lease.key}`;
+        this.keys.set(name, { holder: run, dirty: { run } });
+        left.push(name);
+      }
+    } else {
+      // Every key is given back and checked first: one its check finds unclean holds all of the run's, since what
+      // holds one (a container on its port, say) may hold the others.
+      const unclean: string[] = [];
+      for (const lease of r.leases) {
+        const name = `${lease.kind}:${lease.key}`;
+        const kind = this.kinds.get(lease.kind);
+        if (kind?.release) await this.step(kind.release, lease.key);
+        // The planted wrong program holds the lease while anything at all still takes the key, recorded or not.
+        const taken = this.options.plant === 'holds-lease-while-taken' && kind?.free && !(await kind.free(lease.key).catch(() => false));
+        if (taken || (kind?.check && !(await this.step(kind.check, lease.key)))) unclean.push(name);
+      }
+      for (const lease of r.leases) {
+        const name = `${lease.kind}:${lease.key}`;
+        if (unclean.length) {
+          this.keys.set(name, { holder: run, dirty: { run } });
+          left.push(name);
+          continue;
+        }
+        await this.release(run, lease, r.gone);
+        this.keys.set(name, {});
+        // Given back: a cleanup that runs again after a throw gives it back no second time.
+        r.leases = r.leases.filter((l) => l !== lease);
+      }
+    }
+    const outcome = left.length ? 'unfinished' : 'clean';
+    await r.egress?.close();
+    delete r.egress;
+    if (r.watched !== undefined && this.watchedRuns.get(r.watched) === r) this.watchedRuns.delete(r.watched);
+    await this.append('run.cleaned', { run, outcome, left, stopped: [...stopped] }, run);
+    r.state = 'cleaned';
+    r.cleaned = { run, outcome, left, stopped: [...stopped] };
+    // A timed scan that began while the run was still being cleaned is waited out: no helper of it outlives the cleanup.
+    await this.scanning;
+    // Last in the table: the window keeps the newest cleaned, however long ago each started.
+    this.runs.delete(r.run);
+    this.runs.set(r.run, r);
+    this.forgetCleaned();
+    await this.pump();
+    return r.cleaned;
+  }
+
+  /**
+   * Past the newest CLEANED_KEPT, a run that left nothing goes, its process and pipes with it: the record holds it, and a
+   * hub that runs for weeks can't keep every one (#824). A run that left something stays, since its keys cite it.
+   */
+  private forgetCleaned(): void {
+    const done = [...this.runs.values()].filter((r) => r.cleaned?.outcome === 'clean' && !this.lingering.has(r));
+    for (const r of done.slice(0, Math.max(0, done.length - CLEANED_KEPT))) {
+      this.runs.delete(r.run);
+      for (const seen of this.denied) if (seen.startsWith(`${r.run} `)) this.denied.delete(seen);
+    }
+  }
+
+  /** A resource's cleanup step or check, in the platform sandbox with its folder writable; true when it exits 0. */
+  private async step(step: ResourceStep, key: string): Promise<boolean> {
+    const env = { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', ...step.env, DEEP_RESOURCE_KEY: key };
+    const launch = await this.sandbox.confine({ argv: step.argv, cwd: step.cwd, env }, { ...step.grant, write: [step.cwd, ...(step.grant?.write ?? [])] });
+    return new Promise((resolve) => {
+      const child = spawn(launch.argv[0]!, launch.argv.slice(1), { cwd: launch.cwd, env: launch.env, stdio: 'ignore', detached: true });
+      const timer = setTimeout(() => { try { process.kill(-child.pid!, 'SIGKILL'); } catch { /* gone */ } }, 60_000);
+      child.on('error', () => { clearTimeout(timer); resolve(false); });
+      child.on('exit', (code) => { clearTimeout(timer); resolve(code === 0); });
+    });
+  }
+
+  /** One tick at a time: a tick asked for while one runs is that one. */
+  tick(): Promise<void> {
+    this.ticking ??= this.tickOnce().finally(() => { this.ticking = undefined; });
+    return this.ticking;
+  }
+  /** A scan whose failure leaves things as they are: `leftovers` runs it between finding processes gone and recording it. */
+  private readonly rescan = async (): Promise<boolean> => {
+    await this.scanOnce().catch(() => undefined);
+    return true;
+  };
+  /**
+   * The same for a lingering run's recheck, false once closed, when a scan no longer runs: nothing is then recorded
+   * gone, and a supervisor opened again checks those processes once more. A cleanup under way at close still
+   * records what it stopped.
+   */
+  private readonly recheck = async (): Promise<boolean> => (await this.rescan()) && !this.closed;
+  /**
+   * Each tracked process proven gone gets its end recorded; the ones still running are returned. `before` runs once
+   * they are found gone and before their ends are recorded: a scan there records what they forked first, since a
+   * gone process forks nothing more.
+   */
+  private async leftovers(r: Run, before: () => Promise<boolean>): Promise<number[]> {
+    // Only the live ones are looked up: a gone ID has no start time to compare. Only those tracked before the lookup
+    // are judged: one a scan tracks meanwhile isn't in it, and still runs.
+    const open = [...r.tracked].filter(([pid]) => !r.ended.has(pid));
+    const procs = await table(open.map(([pid]) => pid).filter(alive));
+    const gone = open.filter(([pid, t]) => procs.get(pid)?.start !== t.start).map(([pid, t]) => ({ pid, start: t.start }));
+    for (const { pid, start } of (await before()) ? gone : []) {
+      // Its ID, recorded again by the scan, names a new process of the run: that one still runs.
+      if (r.ended.has(pid) || r.tracked.get(pid)?.start !== start) continue;
+      r.ended.add(pid);
+      r.gone.push(await this.append('process.ended', { run: r.run, pid }, r.run));
+    }
+    return [...r.tracked.keys()].filter((pid) => !r.ended.has(pid));
+  }
+
+  private async tickOnce(): Promise<void> {
+    // A lease past its term whose holder still runs is only stale: marked once, still its holder's. The lease table
+    // marks its own leases.
+    for (const [name, key] of this.options.leases ? [] : this.keys) {
+      if (!key.holder || key.stale || key.dirty || key.expires === undefined || this.options.now() <= key.expires) continue;
+      key.stale = true;
+      await this.lease('lease.stale', key.holder, parts(name), key.expires);
+    }
+    // A run its cleanup left running is checked again: each of its processes found gone gets its end recorded, which
+    // is what ends a lease the lease table holds for the run. Its sandbox is scanned once they are found gone and
+    // before their ends are recorded, so what they forked is recorded first: a gone process forks nothing more.
+    for (const r of this.closed ? [] : [...this.lingering]) if (!(await this.leftovers(r, this.recheck)).length) this.lingering.delete(r);
+    // Nothing to read for until an unblock ask is open, a key is out of its pool or a run waits: a tick then costs nothing.
+    if (!this.asked.size && !this.waiters.length && ![...this.keys.values()].some((k) => k.retired)) return;
+    if (this.asked.size) await this.options.asks.tick();
+    for (const e of this.asked.size ? await this.events() : []) {
+      if (!e.subject || !this.asked.has(e.subject)) continue;
+      const kind = e.kind as Folded;
+      if (kind === 'ask.answered' || kind === 'ask.defaulted') await this.settleAsk(e);
+      else if (kind === 'ask.superseded' || kind === 'ask.moot' || kind === 'ask.cancelled') this.dropAsk(e.subject);
+    }
+    // A key out of its pool comes back once a later cleanup check finds it clean, checked once a minute.
+    const recheck = Date.now() - this.recheckedAt >= RECHECK_MS;
+    if (recheck) this.recheckedAt = Date.now();
+    for (const [name, key] of recheck ? this.keys : []) if (key.retired && (await this.clean(name))) await this.free(name, []);
+    await this.pump();
+  }
+
+  /** An unblock ask closed: "I did it" runs the cleanup check again; the default, or a check still failing, takes the key out of its pool. */
+  private async settleAsk(e: Event): Promise<void> {
+    const name = this.asked.get(e.subject!)!;
+    this.asked.delete(e.subject!);
+    const key = this.keys.get(name);
+    if (!key?.dirty) return;
+    const { answer, verified } = e.data as { answer?: unknown; verified?: unknown };
+    const done = e.kind === 'ask.answered' && answer === 'done' && verified !== false;
+    if (done && (await this.clean(name))) await this.free(name, [e.id]);
+    else key.retired = true;
+  }
+  /** Whether every process the run that left `name` dirty is recorded with is gone, and its kind's cleanup check passes. */
+  private async clean(name: string): Promise<boolean> {
+    const r = this.runs.get(this.keys.get(name)?.dirty?.run ?? '');
+    if (r && (await this.leftovers(r, this.rescan)).length) return false;
+    const { kind, key } = parts(name);
+    const check = this.kinds.get(kind)?.check;
+    return !check || this.step(check, key);
+  }
+  /** An unblock ask closed with no answer to act on: the next run that waits on its key raises it again. */
+  private dropAsk(handle: string): void {
+    const key = this.keys.get(this.asked.get(handle)!);
+    this.asked.delete(handle);
+    if (key?.dirty?.ask === handle) delete key.dirty.ask;
+  }
+  /** A key back in its pool; its lease's release cites `proof` (your answer) and the processes proven gone. */
+  private async free(name: string, proof: string[]): Promise<void> {
+    const key = this.keys.get(name)!;
+    const holder = key.dirty?.run ?? key.holder;
+    if (holder) await this.release(holder, parts(name), [...proof, ...(this.runs.get(holder)?.gone ?? [])]);
+    this.keys.set(name, {});
+  }
+
+  async close(): Promise<void> {
+    this.closed = true;
+    if (this.timer) clearInterval(this.timer);
+    await Promise.allSettled([this.scanning, this.pumping, this.ticking, ...this.cleaning]);
+    await Promise.allSettled([...this.runs.values()].map((r) => r.egress?.close()));
+    for (const { log } of this.streams) if (log.pid) try { process.kill(log.pid, 'SIGTERM'); } catch { /* gone */ }
+    // The watcher ends at the end of its input.
+    this.watcher?.stdin?.end();
+  }
+}
+
+/** A `log stream` on one filter, and when it last showed a canary's report. */
+interface Stream { log: ChildProcess; shownAt: number }
+
+/** The SHA-256 of a kept run's output file. */
+function sha256File(file: string): Promise<string> {
+  return new Promise((done, fail) => {
+    const hash = createHash('sha256');
+    createReadStream(file).on('data', (chunk) => hash.update(chunk)).on('error', fail).on('end', () => done(hash.digest('hex')));
+  });
+}
+
+/** An incremental SHA-256 whose digest can be read, once, when its stream ends. */
+function sha256Stream(): { update(chunk: Buffer): void; digest(): string } {
+  const hash = createHash('sha256');
+  let digest: string | undefined;
+  return { update: (chunk) => { hash.update(chunk); }, digest: () => (digest ??= hash.digest('hex')) };
+}
+
+/** Opens the supervisor on the record; before it resolves it reaps what the record says a crashed hub left behind. */
+export async function openSupervisor(options: SupervisorOptions): Promise<Supervisor> {
+  const supervisor = new LocalSupervisor(options);
+  await supervisor.open();
+  return supervisor;
+}
