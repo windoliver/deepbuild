@@ -67,3 +67,18 @@ SKIP tests/acceptance/323/review.test.ts (by hand)
    item 47f665b04cc4 open: false
    verdict: "FAIL"; stop's reply: "https://github.com/acme/shop/pull/31 · Part of · review: run: the review stopped before its asserti… · next: agent\nDeepBuild: https://github.com/acme/shop/pull/31 is open as Part of its issue, with review still unmet. Keep working on it in the same pull request: push to its branch, open no new one.\nhttps://github.com/acme/shop/pull/31 · Part of · review: run: the review sto
 hub stderr: ""
+
+## 9. Corrections and notes on reading the runs above (added after review; nothing above was changed)
+- Section 8's last clause, "AC12's test judges that", is wrong and is withdrawn. Once the session's PR is recorded, the claim also gets
+  the review check, which can't run in this world and fails ("the review stopped before its assertion"), at both stops, the second
+  after the item closed. So the verdict is not PASS with or without an open thread item, and AC12's "doesn't pass" assertion is met by
+  the failing review check too. No run in this file isolates the item's hold on the verdict. What the runs show is each thread's item
+  opening, staying open for the session's own resolution, and closing for the reviewer's. The frozen judge is copied exactly; making
+  that assertion tell the two apart is a further dispute, not this redraft's.
+- Section 8 also answers REDRAFT.md's open question, whether a prompt naming the pull request changes anything else the hub does: the
+  stop's reply gains the PR line "… is open as Part of its issue, with review still unmet. Keep working on it in the same pull
+  request …". It touches no judged assertion: the reply doesn't start with PASS, and the items and asks are as before.
+- Section 3, d6aacc01b: the four failures have two causes. AC12's right-program test fails at its judged assertion. The other three are
+  one setup BLOCKED each for AC12's wrong-program run and AC13's scenario; AC14 (0 ms) reads AC13's cached scenario, so it repeats that
+  BLOCKED. The one pass there is AC13's wrong-program test.
+- Section 8's lines are cut at 420 characters by the redaction filter; the cut-off first-stop line ends "[open: true]".
