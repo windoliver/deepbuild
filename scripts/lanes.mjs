@@ -845,6 +845,11 @@ alone.push('tests/acceptance/551/', 'tests/acceptance/551-oracle/');
 // in process; ac1 and ac2 run net.budget's web part in headless Chrome, and ac8 times net.feel and net.budget itself.
 alone.push('tests/acceptance/280/');
 timed.push('tests/acceptance/280/ac8-budgets.test.ts');
+// #280's first draft of AC4 holds each copy's last two rollbacks, which come after it ran its last step and so can only
+// re-run to that step, to a depth of 3; its blind redraft, 280-redraft-ac4/, runs in its place, and the first draft's
+// file runs by hand (tests/acceptance/280-redraft-ac4/DISPUTE.md).
+alone.push('tests/acceptance/280-redraft-ac4/');
+byHand.push('tests/acceptance/280/ac4-depth.test.ts');
 // #277's files each build deep-show (ac1 and ac5 also the shipped relay) and play matches in process; ac1 and ac5 also
 // play live matches between app copies and headless Chrome's web player through the shipped relay.
 alone.push('tests/acceptance/277/');
