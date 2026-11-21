@@ -1198,6 +1198,12 @@ alone.push('tests/write-reveal-frames.test.ts');
 // the file's AC1, AC2, AC4 and AC5 run by hand with it (tests/acceptance/2204-redraft-ac3/DISPUTE.md).
 byHand.push('tests/acceptance/2204/rules-unreadable.test.ts');
 
+// #1097's first draft of computed.test.ts and depth.test.ts is kept as written, by hand only: each file's wrong-program
+// test seeds the checkout's default-rules.json into the pinned merge base's deep-hook, which can't read the entries added
+// since the pin (from #1294 on), so it fails closed on every call; the blind redraft, 1097-redraft-defaults/, seeds the
+// defaults that commit shipped and runs both tests of each file in its place (its REDRAFT.md).
+byHand.push('tests/acceptance/1097/computed.test.ts', 'tests/acceptance/1097/depth.test.ts');
+
 // #2776's files build deep-show (full with the test module test.paths) and export 3D scenes to the web.
 alone.push('tests/acceptance/2776/seal.test.ts', 'tests/acceptance/2776/export.test.ts', 'tests/acceptance/2776/listing.test.ts');
 

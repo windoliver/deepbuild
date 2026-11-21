@@ -2,7 +2,8 @@
 // test, golden or fixture carrying a criterion tag, or of your decisions, passes only as its own
 // proposal you approved, and a tolerance in a tagged fixture only tightens.
 import { spawnSync } from 'node:child_process';
-import { basename, dirname, posix } from 'node:path';
+import { lstatSync } from 'node:fs';
+import { basename, dirname, join, posix } from 'node:path';
 import { LANE_FILE } from './lanes.mjs';
 import { APPROVERS, blobId, git, isTestFile, keyedStrings, listFiles, literals, named, outsideTests, relativeImports, removedLines, resolveModule, RUNNER_CONFIG, show, signersIn, sourceOf, spans, tagsIn, tagsWithImports, testImports, underTestPaths } from './proof-change.mjs';
 
@@ -17,9 +18,10 @@ const DECISIONS = {
 // a proof's build reuses: once main holds the lanes, the change runs its own copy of them, so an edit of them is an
 // edit of the checks. So is an edit of a test runner's config (RUNNER_CONFIG), which can stub the code under test
 // only where it finds the change. The x86_64 lane and its image pin decide which replay counts as another machine.
-const LANES_CODE = /^scripts\/(?:(?:proof[^/]*|lanes|throttle|perf|budget-window|benchmark|affected|bays|shards|lane-x86)\.mjs|lane-x86\.json)$/;
-// The skips the lanes let stand are a decision of the same weight, so that key is guarded. Only that key: affected.mjs
-// --record rewrites the rest of the file on main.
+// main-watch.mjs decides whether landings pause and which landing broke main, and known-failures-check.mjs whether a
+// listed failure may stand.
+const LANES_CODE = /^scripts\/(?:(?:proof[^/]*|lanes|throttle|perf|budget-window|benchmark|affected|bays|shards|lane-x86|main-watch|known-failures-check)\.mjs|lane-x86\.json)$/;
+// The skips the lanes let stand are a decision of the same weight, so that key is guarded: any change to it.
 const SKIPS_FILE = 'scripts/known-failures.json';
 const skipsIn = (text) => {
   try {
@@ -27,6 +29,59 @@ const skipsIn = (text) => {
   } catch {
     return text;
   }
+};
+// Every other key lists what reads as failing on main already (#1872), so an entry added, or changed in any way but a
+// lint count that falls, is guarded, and the approval names it as `<file> › <entry>`; a removed entry or a lowered
+// count isn't. A key's entries are an object's by name and a list's by value, each told by its kind, since a reader of
+// one breaks on the other; a file that doesn't parse is one entry.
+const entriesOf = (text) => {
+  try {
+    const json = JSON.parse(text ?? '{}') ?? {};
+    return Object.entries(json).filter(([key]) => key !== 'skips').flatMap(([key, value]) => (Array.isArray(value) ? value.map((item) => [key, typeof item === 'string' ? item : JSON.stringify(item), true, 'list'])
+      : value && typeof value === 'object' ? Object.entries(value).map(([id, item]) => [key, id, item, 'object']) : [[key, key, value, 'value']]));
+  } catch {
+    return [[null, 'the whole file, which does not parse as JSON', text, 'text']];
+  }
+};
+const valuesOf = (text) => new Map(entriesOf(text).map(([key, id, value, kind]) => [`${key}\0${kind}\0${id}`, { key, id, value: JSON.stringify(value) }]));
+// How an entry stands against an older copy of it: null when the same or tighter.
+const looser = (old, now) => {
+  if (!old) return 'added';
+  const [was, is] = [old.value, now.value].map((value) => JSON.parse(value));
+  return old.value === now.value || (now.key === 'lint' && typeof was === 'number' && typeof is === 'number' && is < was) ? null : 'changed';
+};
+const loosened = (before, after) => {
+  const was = valuesOf(before);
+  return [...valuesOf(after)].flatMap(([at, now]) => (looser(was.get(at), now) ? [{ ...now, how: looser(was.get(at), now) }] : []));
+};
+// A merge's result, judged three ways: each entry stands as no looser than every side that changed it from the merge
+// base, removal included, or than the base when neither did, so a stale copy of an entry main took out or tightened
+// stays out, even where the other side tightened it less, which needed no approval. A lint count is bounded by the
+// base, both sides' raises and the larger fall, a missing one counting 0 as the lanes read it: one side's fix and the
+// other's new findings both stand. The same change on both sides counts once, as git merges it.
+const resolvedLooser = (base, ours, theirs, result) => {
+  const [was, one, other] = [base, ours, theirs].map(valuesOf);
+  return [...valuesOf(result)].flatMap(([at, now]) => {
+    const counts = [was, one, other, new Map([[at, now]])].map((side) => (side.get(at) ? JSON.parse(side.get(at).value) : 0));
+    if (now.key === 'lint' && counts.every((count) => typeof count === 'number')) {
+      const [start, ...deltas] = [counts[0], ...new Set([counts[1] - counts[0], counts[2] - counts[0]])];
+      return counts[3] <= start + Math.min(0, ...deltas) + deltas.reduce((sum, delta) => sum + Math.max(0, delta), 0) ? [] : [{ ...now, how: 'changed' }];
+    }
+    const changed = [one, other].filter((side) => side.get(at)?.value !== was.get(at)?.value);
+    const how = (changed.length ? changed : [was]).map((side) => looser(side.get(at), now)).find(Boolean);
+    return how ? [{ ...now, how }] : [];
+  });
+};
+// A path no file is at, as one under a folder made a file, is no link.
+const isLink = (path) => {
+  try {
+    return lstatSync(path).isSymbolicLink();
+  } catch {
+    return false;
+  }
+};
+const judgeKnown = (judge, entries, extra = '') => {
+  for (const { key, id, how } of entries) judge({ detail: `${SKIPS_FILE}: ${key === null ? id : `the ${key} key's entry ${id}`} ${how}${extra}` }, key === null ? SKIPS_FILE : `${SKIPS_FILE} › ${id}`);
 };
 // A row of the carried-patch table may hold hunks over budget (#1426). The numbers it allows, in the table's order, are
 // guarded, so the count over budget falls or rises only by a signature; a README with no table yet guards none.
@@ -173,11 +228,21 @@ export function guard({ root, change, issue }, approvals, say) {
     if (commit.merge?.conflicts.includes(APPROVERS)) judge({ detail: `${APPROVERS}: changed in resolving a merge conflict` }, APPROVERS);
     // A conflict's resolution keeps either side's list, or it is an edit of its own.
     if (lanesOnMain && commit.merge?.conflicts.includes(SKIPS_FILE) && !commit.merge.parents.some((parent) => skipsIn(show(root, parent, SKIPS_FILE)) === skipsIn(show(root, commit.sha, SKIPS_FILE)))) judge({ detail: `${SKIPS_FILE}: the skips key changed in resolving a merge conflict` }, SKIPS_FILE);
+    // Every merge, clean or not: a clean one may keep a stale entry too, in a second copy of its key that parses last.
+    // Against each merge base, as a criss-cross history has more than one.
+    if (lanesOnMain && commit.merge) {
+      const [ours, theirs, result] = [...commit.merge.parents, commit.sha].map((rev) => show(root, rev, SKIPS_FILE));
+      const found = git(root, ['merge-base', '--all', ...commit.merge.parents]).split('\n').filter(Boolean).flatMap((base) => resolvedLooser(show(root, base, SKIPS_FILE), ours, theirs, result));
+      judgeKnown(judge, found.filter((edit, at) => found.findIndex(({ key, id }) => key === edit.key && id === edit.id) === at), ' in merging');
+    }
     if (lanesOnMain && commit.merge?.conflicts.includes(CARRIED_TABLE) && !commit.merge.parents.some((parent) => budgetsIn(show(root, parent, CARRIED_TABLE)) === budgetsIn(show(root, commit.sha, CARRIED_TABLE)))) judge({ detail: `${CARRIED_TABLE}: a budget number changed in resolving a merge conflict` }, CARRIED_TABLE);
     for (const file of commit.files) {
+      // The lanes read the file through a link, where the guard reads the link's own text, a conflict's resolution too.
+      if (lanesOnMain && file.path === SKIPS_FILE && (commit.sha ? /^1[26]0000 /.test(git(root, ['ls-tree', commit.sha, '--', file.path])) : isLink(join(root, file.path)))) judge({ hard: true, detail: `${file.path}: no longer a plain file, so the lanes read other text than the guard does` }, file.path);
       if (commit.merge?.conflicts.includes(file.path)) continue;
       if (lanesOnMain && isCheck(file.path) && file.hunks.length) judge(checkEdit(file.path, ''), file.path);
       if (lanesOnMain && file.path === SKIPS_FILE && skipsIn(show(root, commit.parent, file.path)) !== skipsIn(show(root, commit.sha, file.path))) judge({ detail: `${file.path}: the skips key changed` }, file.path);
+      if (lanesOnMain && file.path === SKIPS_FILE && !commit.merge) judgeKnown(judge, loosened(show(root, commit.parent, file.path), show(root, commit.sha, file.path)));
       // Node resolves a bare import through each node_modules folder above the importing file, so a
       // package committed in one may stand in for the one installed.
       if (lanesOnMain && file.hunks.length && underTests(file.path)) judge({ detail: `${file.path}: a package committed under node_modules, which a test's import may resolve to in place of the one installed` }, file.path);
