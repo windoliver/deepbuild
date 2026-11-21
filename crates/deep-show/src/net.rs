@@ -41,6 +41,8 @@ pub struct Join {
 pub struct Given {
     links: BTreeMap<String, String>,
     relay_ca: Option<PathBuf>,
+    /// #280: Google Chrome, where net.budget's web part plays the piece in the web player.
+    pub chrome: Option<PathBuf>,
 }
 
 pub fn given(input: &Map<String, Value>) -> Option<Given> {
@@ -55,7 +57,15 @@ pub fn given(input: &Map<String, Value>) -> Option<Given> {
         None => None,
         Some(c) => Some(PathBuf::from(c.as_str()?)),
     };
-    Some(Given { links, relay_ca })
+    let chrome = match input.get("chrome") {
+        None => None,
+        Some(c) => Some(PathBuf::from(c.as_str()?)),
+    };
+    Some(Given {
+        links,
+        relay_ca,
+        chrome,
+    })
 }
 
 /// The net module, on logic: a build that leaves logic out leaves it out too.
@@ -125,6 +135,8 @@ pub struct MatchCall {
     on: Vec<String>,
     seeks: Vec<(u8, i64)>,
     full: bool,
+    /// #280: net.feel's check input but `steps`, which is the match's own.
+    feel: Option<Box<deep_net::feel::Feel>>,
     /// #276: each copy's own saves folder, its viewer's store (`saves_dirs: {"<player>": path}`).
     saves_dirs: BTreeMap<u8, PathBuf>,
 }
@@ -285,6 +297,22 @@ fn parse_match(c: &Map<String, Value>) -> Option<MatchCall> {
                     .collect::<Option<_>>()?,
             },
             direct: relay.and_then(|r| r.get("direct")).and_then(Value::as_bool) == Some(true),
+            profile: None,
+            // #280: `[{player, to, steps}]`.
+            late: match relay.and_then(|r| r.get("late")) {
+                None => Vec::new(),
+                Some(l) => l
+                    .as_array()?
+                    .iter()
+                    .map(|l| {
+                        Some(deep_net::play::Late {
+                            player: player(l.get("player")?)?,
+                            to: player(l.get("to")?)?,
+                            steps: l.get("steps")?.as_i64().filter(|n| *n >= 0)?,
+                        })
+                    })
+                    .collect::<Option<_>>()?,
+            },
             fates,
             withhold,
         },
@@ -360,6 +388,14 @@ fn parse_match(c: &Map<String, Value>) -> Option<MatchCall> {
                 .is_some()
                 .then_some(true)?,
         },
+        feel: match c.get("feel") {
+            None => None,
+            Some(f) => {
+                let mut f = f.clone();
+                f["steps"] = c.get("steps")?.clone();
+                Some(Box::new(deep_net::feel::Feel::of(&f).ok()?))
+            }
+        },
     })
 }
 
@@ -403,6 +439,36 @@ struct Setup {
 const DIRECT: Duration = Duration::from_secs(15);
 /// How long a copy waits for its seat, and for the match's other copies.
 const SEATING: Duration = Duration::from_secs(3600);
+
+/// #280: net.feel's profile, items and bounds are the brief's or the definition's, never the
+/// working agent's: the refusal of a writer's change to one among `stored`'s own checks, naming
+/// the field.
+fn feel_refusal(path: String, value: Value) -> deep_canvas::document::Issue {
+    let what = format!("{path} is net.feel's: its profile, items and bounds come from the brief or the definition, never from the working agent");
+    deep_canvas::document::Issue::envelope("not_your_layer", path, value, &what)
+}
+
+/// #280: a writer's patch whose op reaches a net.feel's profile, items or bounds, refused.
+pub(crate) fn feel_patched(stored: &Value, patch: &Value) -> Option<deep_canvas::document::Issue> {
+    patch.get("ops")?.as_array()?.iter().find_map(|op| {
+        let value = op.get("value").cloned().unwrap_or(Value::Null);
+        let path = deep_net::feel::locked(stored, op.get("path")?.as_str()?, &value)?;
+        Some(feel_refusal(path, value))
+    })
+}
+
+/// #280: a writer's whole document that changes a net.feel's profile, items or bounds, refused.
+pub(crate) fn feel_shown(stored: &Value, shown: &Value) -> Option<deep_canvas::document::Issue> {
+    let path = deep_net::feel::changed(stored, shown)?;
+    let value = shown.pointer(&format!("/{path}")).cloned();
+    Some(feel_refusal(path, value.unwrap_or(Value::Null)))
+}
+
+/// #280: the host's wall clock in ns, which only net.feel's planted wall-clock meter reads.
+fn wall_ns() -> i64 {
+    static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+    START.get_or_init(Instant::now).elapsed().as_nanos() as i64
+}
 
 /// The host's time since `start`, in flicks.
 fn since(start: Instant) -> i64 {
@@ -534,6 +600,8 @@ impl Hub<'_> {
             shows: m.renders.iter().map(|(p, t)| (*p, flicks(*t))).collect(),
             log: m.log,
             defect: m.plant.clone(),
+            // #280: only net.feel's planted wall-clock meter reads the host's clock.
+            clock: Some(wall_ns),
         };
         let (piece, track, doc) = (s.piece.clone(), s.track.clone(), s.doc.clone());
         let rounds = planted == Planted::HashRoundsFloats;
@@ -545,6 +613,8 @@ impl Hub<'_> {
         // #297: every copy checks each entry to a text control an entry text shows alike.
         let form = self.forms.get(&m.doc).cloned().unwrap_or_default();
         let (ty, lax) = (self.entry_type(&form), self.entry_lax());
+        // #280: the items net.feel names, whose positions its correction distance reads.
+        let items = m.feel.as_ref().map(|f| f.items.clone()).unwrap_or_default();
         // #277: the catch-up that applies missed messages in arrival order: its logic module takes
         // a step's entries in the order the copy entered them.
         let arrival = name == Some("net_catch_up_in_arrival_order");
@@ -564,6 +634,7 @@ impl Hub<'_> {
             l.rounds = rounds;
             l.plant_ring(ring);
             l.worlds(&doc)?;
+            l.name_items(&doc, &items);
             l.range = deep_play::net::Range::of(&form, ty.clone(), lax);
             Ok(l)
         };
@@ -577,9 +648,27 @@ impl Hub<'_> {
                 let frame_ms = deep_canvas::budget::of(&rev)
                     .and_then(|(_, limits)| limits.cpu_ms)
                     .unwrap_or(deep_logic::budget::FRAME_NS / 1e6);
-                checks::budget(&s.cfg, &s.card, &ask, make, frame_ms, &m.on)
+                // #280: the web part plays in the web player in headless Chrome, where the
+                // scenario names Chrome; else it stays BLOCKED.
+                let chrome = self.scenario.net.chrome.clone();
+                let files = match chrome.is_some() && m.on.iter().any(|h| h == "web") {
+                    true => self.web_files(&m.doc, &s.track),
+                    false => Err(json!("net.budget measures no web part here")),
+                };
+                let mut web = |ask: &Value| match (&chrome, &files) {
+                    (Some(c), Ok(files)) => crate::net_web::measure(c, files, ask),
+                    (_, Err(e)) => Err(e.clone()),
+                    (None, _) => Err(json!("the scenario names no Chrome")),
+                };
+                let web: Option<deep_net::window::Web<'_>> = chrome.is_some().then_some(&mut web);
+                checks::budget(&s.cfg, &s.card, &ask, make, frame_ms, &m.on, web)
                     .map(|(p, c)| (p, Some(c)))
             }
+            Some("net.feel") => match m.feel.as_deref() {
+                Some(feel) => deep_net::feel::feel(&s.cfg, &s.card, &ask, make, feel)
+                    .map(|(p, c)| (p, Some(c))),
+                None => return json!({"code": "bad_input", "path": "feel"}),
+            },
             Some("net.desync") => {
                 checks::desync(&s.cfg, &s.card, &ask, make, m.seed).map(|(p, c)| (p, Some(c)))
             }

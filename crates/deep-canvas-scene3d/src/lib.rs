@@ -48,6 +48,7 @@ pub mod pointer;
 pub mod points;
 pub mod poly;
 pub mod probe;
+mod refresh;
 pub mod rest;
 pub mod samples;
 pub mod scene;

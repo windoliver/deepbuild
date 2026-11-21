@@ -607,6 +607,29 @@ fn changed(item: &Item, arrays: &mut [u8]) {
     }
 }
 
+/// #1250's planted piece that reads the wall clock: the first value of the item's first array
+/// with the wall clock's nanoseconds modulo 2^30 added, an i32 wrapping and a bool flipped by the
+/// count's parity, so a replica of the same track never ends where the play did.
+fn walled(item: &Item, arrays: &mut [u8]) {
+    let Some(w) = item.writes.first() else { return };
+    let at = item.write(&w.name).expect("a write entry").offset as usize;
+    let ns = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
+        .map_or(0, |d| d.subsec_nanos() as u64 + d.as_secs() * 1_000_000_000)
+        % (1 << 30);
+    match w.ty {
+        Ty::Bool => arrays[at] ^= (ns & 1) as u8,
+        Ty::I32 => {
+            let v = i32::from_le_bytes(arrays[at..at + 4].try_into().expect("4 bytes"));
+            arrays[at..at + 4].copy_from_slice(&v.wrapping_add(ns as i32).to_le_bytes());
+        }
+        _ => {
+            let v = f64::from_le_bytes(arrays[at..at + 8].try_into().expect("8 bytes"));
+            arrays[at..at + 8].copy_from_slice(&(v + ns as f64).to_le_bytes());
+        }
+    }
+}
+
 /// The rows a step wrote to the item's emit region, each kind's in declaration order and sorted by
 /// (a, b) with ties in the order the program wrote them; or the first kind whose count passes its
 /// `max_per_step`, and the count.

@@ -823,6 +823,9 @@ impl World {
         if self.planted.replay_changes_step_37 && k == 37 && i == 0 {
             changed(item, &mut fresh);
         }
+        if self.planted.reads_wall_clock && i == 0 {
+            walled(item, &mut fresh);
+        }
         let started = web_time::Instant::now();
         let mut changed = bake::ranges(item, k, &l.arrays, &fresh);
         let ms = started.elapsed().as_secs_f64() * 1000.0;

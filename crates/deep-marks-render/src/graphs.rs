@@ -135,9 +135,9 @@ fn sizes(
     items: &Map<String, Value>,
     vectors: &crate::Vectors,
 ) -> BTreeMap<String, [f64; 2]> {
-    let input = json!({"items": items, "bound_values": doc.get("bound_values")});
+    let bound = doc.get("bound_values");
     let solved = SHAPER
-        .with(|s| deep_canvas_marks::layout::solve(&input, &mut s.borrow_mut()))
+        .with(|s| deep_canvas_marks::layout::solve_items(items, bound, &mut s.borrow_mut()))
         .unwrap_or_default();
     let mut out = BTreeMap::new();
     for g in items.values().filter(|i| kind(i) == "graph@1") {
