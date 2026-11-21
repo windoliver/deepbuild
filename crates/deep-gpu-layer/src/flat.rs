@@ -87,10 +87,18 @@ impl std::ops::Deref for CallLook {
 }
 
 /// Whether a document draws as 2D in the live window: it names no camera, or (#1561) its camera
-/// is a 2D film's.
+/// is a 2D film's and it holds nothing of scene3d's, which only the 3D path reads: none of its
+/// kinds, and no item it draws for another module.
 pub fn is_flat(doc: &Value) -> bool {
+    let of_scene3d = |items: &Map<String, Value>| {
+        deep_canvas_scene3d::scene::has_3d(doc)
+            || (items.values().filter_map(|i| i["kind"].as_str()))
+                .any(|k| deep_canvas_scene3d::spec::SCENE3D.contains(&k))
+    };
     match (doc.as_object(), doc["items"].as_object()) {
-        (Some(d), Some(items)) if d.contains_key("camera") => drawn::camera_of(d, items).is_some(),
+        (Some(d), Some(items)) if d.contains_key("camera") => {
+            !of_scene3d(items) && drawn::camera_of(d, items).is_some()
+        }
         _ => doc.get("camera").is_none(),
     }
 }
