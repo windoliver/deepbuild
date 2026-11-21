@@ -35,7 +35,7 @@ const setBack = (change: StateChange): StateUndo => (change.was === null
 
 /** A reading's identity: the digest of its items, whatever read them, and the bytes the evidence store keeps it as. */
 export function reading(items: readonly StateItem[]): { digest: string; bytes: Uint8Array } {
-  const bytes = canonicalize([...items].sort((a, b) => (a.id < b.id ? -1 : 1)) as unknown as JsonValue);
+  const bytes = canonicalize([...items].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)) as unknown as JsonValue);
   return { digest: sha256Hex(bytes), bytes };
 }
 /** Each item that differs from what was read then, through the source's own compare. */
@@ -198,11 +198,14 @@ function gitFill(): StateSourceFill {
   });
 }
 function hostFill(): StateSourceFill {
+  let dir = '';
   let log = '';
   const append = (item: string, value: JsonValue): void => writeFileSync(log, `${JSON.stringify({ id: `c-${item}`, item, value })}\n`, { flag: 'a' });
   return fill('host', hostSource(() => log), {
     start() {
-      log = join(scratch('state-host'), 'changes.jsonl');
+      if (dir) rmSync(dir, { recursive: true, force: true });
+      dir = scratch('state-host');
+      log = join(dir, 'changes.jsonl');
       writeFileSync(log, '');
       append('port', 80);
       return [{ id: 'set-port', item: 'port', was: 80, to: 8080 }, { id: 'add-flag', item: 'flag', was: null, to: true }];
@@ -228,6 +231,7 @@ function documentFill(): StateSourceFill {
   const versions = (): string => join(dir, 'versions');
   return fill('document', documentSource(path, versions), {
     start() {
+      if (dir) rmSync(dir, { recursive: true, force: true });
       dir = scratch('state-document');
       writeFileSync(path(), 'one\n');
       return [

@@ -140,9 +140,7 @@ fn opaque(s: &Solid, add_occludes: bool) -> bool {
     if add_occludes && m.is_some_and(|m| m.alpha_mode == AlphaMode::Add) {
         return true;
     }
-    !(s.alpha < 1.0
-        || s.per_pixel
-        || m.is_some_and(|m| m.alpha_mode.see_through() || m.lobes.transmission > 0.0))
+    s.opaque()
 }
 
 impl<'a> Occluders<'a> {

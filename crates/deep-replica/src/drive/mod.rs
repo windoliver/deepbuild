@@ -18,6 +18,7 @@ mod clocks;
 mod core;
 mod counts;
 mod frames;
+mod game_shell;
 pub mod glyphs;
 mod hubcopy;
 mod locate;

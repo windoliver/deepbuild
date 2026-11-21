@@ -1,5 +1,38 @@
 use super::*;
 
+/// The fields each item declares, before its program is checked.
+pub(super) struct Declared {
+    program: String,
+    debug: Option<String>,
+    step: i64,
+    turn: bool,
+    due: Option<String>,
+    reads: Vec<String>,
+    writes: Vec<Write>,
+    fuel: i64,
+    memory: u64,
+    stack: i32,
+    every: i64,
+    ring: u64,
+    assets: Vec<String>,
+    links: Vec<(String, String)>,
+    saves: Option<Value>,
+    carry: Option<Value>,
+    carry_in: Option<crate::carry::CarryIn>,
+    profile: Option<Value>,
+    /// #276: the seats a profile's read entry has a block for: the piece's `players`, else 1.
+    seats: u32,
+    emits: Vec<Emit>,
+    fires: Vec<fires::Fire>,
+    services: Vec<(String, u32)>,
+    mirrors: Vec<(String, String)>,
+    preview: Option<(Vec<String>, Vec<Write>)>,
+    /// `lanes`: its lane graph and vehicle kind, built at check (#981).
+    lanes: Option<Value>,
+    /// The item's fields as given, for its bake key.
+    given: String,
+}
+
 pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> {
     let bad = |field: &str, what: String| {
         logic_refused(id, vec![refusal("field", what, json!({"field": field}))])
@@ -21,6 +54,9 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             "assets",
             "links",
             "saves",
+            "carry",
+            "carry_in",
+            "profile",
             "emits",
             "fires",
             "services",
@@ -237,6 +273,19 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
         ring,
         assets,
         saves: params.get("saves").cloned(),
+        carry: params.get("carry").cloned(),
+        carry_in: match params.get("carry_in") {
+            None => None,
+            Some(v) => Some(crate::carry::carry_in_of(v).map_err(|r| logic_refused(id, vec![r]))?),
+        },
+        // #276: a profile past its cap is refused here, naming its size.
+        profile: match params.get("profile") {
+            None => None,
+            Some(v) => crate::profile::shape_of(v)
+                .map(|_| Some(v.clone()))
+                .map_err(|r| logic_refused(id, vec![r]))?,
+        },
+        seats: 1,
         emits,
         fires,
         services,
@@ -459,6 +508,34 @@ pub(super) fn region_map(
         ty: "i64".into(),
         read: Read::Seed,
     });
+    // #189: the carry record's entry, after the item's other reads.
+    if let Some(ci) = &d.carry_in {
+        entries.push(Region {
+            region: "reads",
+            name: "carry_in".into(),
+            offset: at + 8,
+            size: ci.size(),
+            ty: "carry".into(),
+            read: Read::Carry,
+        });
+    }
+    // #276: the profile record's entry, after those, a block for each seat.
+    if let Some(shape) = d
+        .profile
+        .as_ref()
+        .and_then(|v| crate::profile::shape_of(v).ok())
+    {
+        let at = entries.last().map_or(at, |e| align8(e.offset + e.size));
+        let size = d.seats * crate::profile::block(&shape);
+        entries.push(Region {
+            region: "reads",
+            name: "profile".into(),
+            offset: at,
+            size,
+            ty: "profile".into(),
+            read: Read::Profile,
+        });
+    }
     let mut at = 0u32;
     for w in &d.writes {
         entries.push(Region {
@@ -555,7 +632,13 @@ pub(super) fn declarations(piece: &Value) -> Result<Declarations, Refused> {
             .and_then(Value::as_object)
             .cloned()
             .unwrap_or_default();
-        decls.push((id.clone(), declared(id, &params)?));
+        let mut d = declared(id, &params)?;
+        // #276: a match's seats, which the logic piece of a document with a net item names.
+        d.seats = piece
+            .get("players")
+            .and_then(Value::as_u64)
+            .map_or(1, |n| n.clamp(1, 8) as u32);
+        decls.push((id.clone(), d));
     }
     Ok((controls, decls, machine))
 }
@@ -922,6 +1005,30 @@ pub fn check_in(
                 None
             }
         };
+        let carry = match d
+            .carry
+            .as_ref()
+            .map(|v| crate::carry::carry_of(v, &layout, &d.writes))
+        {
+            None => None,
+            Some(Ok(c)) => Some(c),
+            Some(Err(r)) => {
+                refused.push(r);
+                None
+            }
+        };
+        let profile = match d
+            .profile
+            .as_ref()
+            .map(|v| crate::profile::profile_of(v, &layout, &d.writes, d.seats))
+        {
+            None => None,
+            Some(Ok(p)) => Some(p),
+            Some(Err(r)) => {
+                refused.push(r);
+                None
+            }
+        };
         if !refused.is_empty() {
             return Err(logic_refused(id, refused));
         }
@@ -971,6 +1078,9 @@ pub fn check_in(
             fixtures: BTreeMap::new(),
             interfaces: BTreeMap::new(),
             saves,
+            carry,
+            carry_in: d.carry_in.clone(),
+            profile,
             emits: d.emits.clone(),
             emits_at: emits_at.unwrap_or(0),
             fires: d.fires.clone(),

@@ -1,9 +1,10 @@
 //! #1918: a world inside the scene that lists it (World and backend: "its outputs' item paths and
 //! its bodies' follow channels resolve in that scene"). Each path physics reads (a kinematic
-//! body's `follow`, a motor's `target`, a kinematic solve's driver) is an item path the scene's
-//! channels and drivers write, evaluated by the motion module at each step's own time, inside the
-//! step (Phase). A read that depends on a physics pose, through a driver reading what the world's
-//! outputs write or its lists and readings, is a cycle, refused at check.
+//! body's `follow`, a motor's `target`, a kinematic solve's driver, and with #2371 a drag's
+//! `medium` and a spring's `point`) is an item path the scene's channels and drivers write,
+//! evaluated by the motion module at each step's own time, inside the step (Phase). A read that
+//! depends on a physics pose, through a driver reading what the world's outputs write or its
+//! lists and readings, is a cycle, refused at check.
 
 use std::collections::BTreeSet;
 
@@ -11,7 +12,7 @@ use deep_canvas_motion::doc::DriverInput;
 use deep_canvas_motion::eval::Validity;
 use deep_canvas_motion::program::Program;
 use deep_canvas_physics::backend::Targets;
-use deep_canvas_physics::doc::{Refusal, World};
+use deep_canvas_physics::doc::{ForceKind, Refusal, World};
 use serde_json::{json, Value};
 
 /// What a read sets.
@@ -19,6 +20,7 @@ enum Sets {
     Follow(String),
     Motor(String),
     Coord(String),
+    Force(String),
 }
 
 struct Read {
@@ -91,6 +93,16 @@ impl Scene {
             let field = format!("solve/drivers/{i}/channel");
             wanted.push((Sets::Coord(j.clone()), p.clone(), field, 1));
         }
+        for (f, force) in &w.forces {
+            if let Some(p) = &force.channel {
+                let key = match force.kind {
+                    ForceKind::Drag { .. } => "medium",
+                    _ => "point",
+                };
+                let field = format!("forces/{f}/kind/{key}");
+                wanted.push((Sets::Force(f.clone()), p.clone(), field, 3));
+            }
+        }
         let outputs: Vec<&str> = w.outputs.values().filter_map(|o| o.to.as_deref()).collect();
         let mut out = Vec::new();
         let mut reads = Vec::new();
@@ -148,6 +160,9 @@ impl Scene {
                     t.motors.insert(j.clone(), v[0]);
                 }
                 Sets::Coord(j) => t.coords.push((j.clone(), v[0])),
+                Sets::Force(f) => {
+                    t.forces.insert(f.clone(), [v[0], v[1], v[2]]);
+                }
             }
         }
         t

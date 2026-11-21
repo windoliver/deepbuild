@@ -314,6 +314,9 @@ pub enum Planted {
     CreaseBelowAngle,
     EdgesDeriveEveryFrame,
     EdgesDashOtherSpace,
+    /// #1782's, by name (tests/acceptance/1782/README.md: Planted programs): a crease line's
+    /// wrong picker, and a hidden style's wrong span classifiers, cache, edge IDs and dash.
+    HiddenLines(&'static str),
     ReleasesAtRevision,
     /// #417's: the look switch's clock stops at the request, before the new look is on screen.
     StopsAtRequest,
@@ -915,7 +918,10 @@ impl Planted {
             "part_pose_in_world_space" => Planted::PartPoseInWorldSpace,
             "terrain_no_horizon_bake" => Planted::TerrainNoHorizonBake,
             "terrain_occlusion_from_slope" => Planted::TerrainOcclusionFromSlope,
-            _ => return None,
+            _ => {
+                let planted = deep_canvas_scene3d::spans::PLANTED;
+                Planted::HiddenLines(planted.iter().find(|p| p.0 == name)?.0)
+            }
         })
     }
 }
