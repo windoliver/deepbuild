@@ -136,7 +136,7 @@ impl Run {
             Ok(x) => x,
             Err(e) => return Some(e),
         };
-        let track = match Track::read(&w, call) {
+        let track = match self.track(&w, call) {
             Ok(t) => t,
             Err(e) => return Some(e),
         };

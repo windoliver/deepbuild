@@ -66,6 +66,17 @@ fn first_difference(
 }
 
 impl Run {
+    /// The call's `track` (absent: none), resolved against `w`, or the reply refusing an entry;
+    /// #2371's planted runner keeps both of two `set`s of one target and path on one step.
+    pub(super) fn track(&self, w: &World, call: &Value) -> Result<Track, Value> {
+        let t = call.get("track").unwrap_or(&Value::Null);
+        if t.is_null() {
+            return Ok(Track::default());
+        }
+        let read = track::read(w, t, self.set_applies_both);
+        read.map(Track::of).map_err(|r| refused(&[*r]))
+    }
+
     /// `world` built, then restored from `cp` as this runner restores (a planted restore leaves
     /// part of it out); as built when there's no checkpoint.
     pub(super) fn restored(
@@ -135,7 +146,7 @@ impl Run {
         let reply = (|| {
             let (rate, _) = rate(call)?;
             let (w, _) = self.build(world)?;
-            let track = Track::read(&w, call)?;
+            let track = self.track(&w, call)?;
             let reads = scene.as_ref().filter(|s| !s.reads_nothing());
             let key = self.key(
                 world,
@@ -195,7 +206,7 @@ impl Run {
         }
         let ran = (|| {
             let (w, mut b) = self.build(world)?;
-            let track = Track::read(&w, call)?;
+            let track = self.track(&w, call)?;
             let straight = self.ran(&mut b, &w, steps, (&track, on), None)?;
             let (_, mut b2) = self.build(world)?;
             let twice = self.ran(&mut b2, &w, steps, (&track, on), None)?;
