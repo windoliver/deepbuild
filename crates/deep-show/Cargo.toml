@@ -371,6 +371,10 @@ deep-text = { path = "../deep-text" }
 # started, by PID; already in the lockfile.
 libc = "0.2"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# Issue #1250: a clip of a play on an indexed look, a GIF of its index frames, and a still, an
+# indexed PNG; both already in the lockfile.
+gif = "0.14"
+png = "0.18"
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 # Issue #542: the planted text control that normalizes its commit to NFC; already in the lockfile.
 unicode-normalization = "0.1"

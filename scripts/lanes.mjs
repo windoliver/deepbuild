@@ -1313,6 +1313,10 @@ slow.push('tests/acceptance/2738/ac1-linux-build.test.ts');
 // #265's files (blind) build deep-gpu (ac4 deep-show), draw on the GPU and play a match; ac6 times eight movers' frame CPU.
 alone.push('tests/acceptance/265/');
 timed.push('tests/acceptance/265/ac6-budgets.test.ts');
+// #1250's files (blind) each build deep-show (full) and play the fixture games live in it, the clips read back with
+// FFmpeg; ac7-budgets.test.ts times the clip and the play's frames on the reference Mac and judges the kept track.
+alone.push('tests/acceptance/1250/');
+timed.push('tests/acceptance/1250/ac7-budgets.test.ts');
 
 // #1576's files each start hubs on records of up to 100,000 sessions, and AC5 runs a busy process per core, at the
 // lowest priority, beside two runs: one file at a time. Every number they judge is a count, so none is timed.

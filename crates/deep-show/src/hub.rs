@@ -223,6 +223,8 @@ pub enum Planted {
     Physics(crate::physics::Planted),
     /// #525's live worlds' wrong programs.
     Ahead(crate::stepped::Planted),
+    /// #1250's planted clips.
+    Clip(crate::clip::write::Plant),
     /// #202: a kind_rules requirement counts the working agent's own pack rule as its cover.
     OwnRuleCountsAsCover,
     /// #202: the kind_rules check evaluates a pack kind's recipe rules a second time.
@@ -762,6 +764,8 @@ pub struct Hub<'a> {
     pub forms: BTreeMap<String, Value>,
     /// Each document's session.
     pub sessions: BTreeMap<String, DocSession>,
+    /// #1250: each piece's live play as the app keeps it for clips, and each panel's cards.
+    pub(crate) clips: crate::clip::Clips,
     /// Panels a `panel` call showed or hid.
     pub panels_shown: BTreeMap<String, bool>,
     /// The GPU 3D revisions draw on (#378): unopened until the first, `None` inside where there
@@ -974,6 +978,7 @@ impl<'a> Hub<'a> {
             ),
             sched,
             sessions: BTreeMap::new(),
+            clips: Default::default(),
             background: Vec::new(),
             panels_shown: BTreeMap::new(),
             gpu3: None,
@@ -1670,6 +1675,9 @@ impl<'a> Hub<'a> {
             Call::Net(c) => self.net_call(c),
             Call::Scope(panel) => self.scope_reply(panel),
             Call::Presented(panel) => self.presented(panel),
+            Call::PresentedIndices(panel, from) => self.presented_indices(panel, *from),
+            Call::Clip { panel, action } => self.player_action(panel, action),
+            Call::Clips(panel) => self.clips_reply(panel),
             Call::PopOut {
                 panel,
                 display,
