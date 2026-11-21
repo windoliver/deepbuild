@@ -397,6 +397,7 @@ impl Flat {
 
 impl Flat {
     /// The last frame through the group compositor, each writer layer alone.
+    #[allow(clippy::too_many_arguments)]
     fn composed(
         &mut self,
         device: &Device,
