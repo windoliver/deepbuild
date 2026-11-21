@@ -1,0 +1,581 @@
+# #1873 acceptance suite, run on the base 58d3e19ee3e956709c1570b87c098350e285a19a (this checkout, unchanged).
+# Date 2026-11-20T09:54Z; node v24.22.0; 8 cores (availableParallelism 8);
+# load (vm.loadavg) at start { 10.32 9.15 8.54 }, at end { 10.48 9.23 8.58 }.
+# Command: node --test 'tests/acceptance/1873/*.test.mjs'   exit 1
+# Home paths read ~, the system temp folder <tmp>.
+
+✖ #1873.b9b52cba a lint or timing entry with no open issue, or added more than 14 days ago, fails the lint lane, naming it; on main every lint and timing entry passes the check (1479.411458ms)
+✖ #1873.125cf93b a lint key naming a file that no longer exists fails the lint lane, naming the key; on main the lint keys pass (2367.912333ms)
+✖ #1873.48498355 in a fixture repository, a skips entry whose id names a deleted test fails the lint lane, naming the entry (1853.911042ms)
+✖ #1873.e084d5c1 a fixture entry whose reason names DEEP_FIXTURE_OPT_IN, on a test file that never reads it, fails the lint lane, naming the entry and the variable; on a file that reads it, it passes (1349.865542ms)
+✖ #1873.f9faca98 on main, every skips entry passes the rules: it names a test in the tree, and a variable its reason names is read by the test's file (2184.973709ms)
+✖ #1873.36e78550 a planted landing that slows a listed timing test, ticked at a load below the core count, pauses landings naming the test; at a load above it, it pauses nothing and names the load (10271.083208ms)
+✖ #1873.d1984163 a known-failures.json entry whose test passes on main fails the lane, naming the entry; a lane that keeps reading it as known fails this test (12941.4ms)
+✖ #1873.a54dd0d9 a listed skip whose test ran in the main watch's run fails the tick, naming the entry and the state it ran to (0.616958ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 0
+ℹ fail 8
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 13101.1945
+
+✖ failing tests:
+
+test at tests/acceptance/1873/lint.test.mjs:46:1
+✖ #1873.b9b52cba a lint or timing entry with no open issue, or added more than 14 days ago, fails the lint lane, naming it; on main every lint and timing entry passes the check (1479.411458ms)
+  AssertionError [ERR_ASSERTION]: the lint lane didn't fail on lint and timing entries with no open issue or added 20 days ago
+  exit 0
+  stdout:
+  RUN lint
+  all 0 known failures name an open issue, added within the last 14 days
+  PASS lint (0.81 s)
+  
+  stderr:
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-1873-listed-failures-end-e755e5/tests/acceptance/1873/lint.test.mjs:71:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1873/lint.test.mjs:93:1
+✖ #1873.125cf93b a lint key naming a file that no longer exists fails the lint lane, naming the key; on main the lint keys pass (2367.912333ms)
+  AssertionError [ERR_ASSERTION]: the lint lane didn't fail a lint key naming crates/deep-text/src/worker.rs, which the repository doesn't hold
+  exit 0
+  stdout:
+  RUN lint
+  all 0 known failures name an open issue, added within the last 14 days
+  PASS lint (0.97 s)
+  
+  stderr:
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-1873-listed-failures-end-e755e5/tests/acceptance/1873/lint.test.mjs:101:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1873/lint.test.mjs:114:1
+✖ #1873.48498355 in a fixture repository, a skips entry whose id names a deleted test fails the lint lane, naming the entry (1853.911042ms)
+  AssertionError [ERR_ASSERTION]: the lint lane didn't fail a skips entry naming tests/gone.test.mjs › was here once, a test deleted on main: the check reads no skips
+  exit 0
+  stdout:
+  RUN lint
+  all 0 known failures name an open issue, added within the last 14 days
+  PASS lint (0.78 s)
+  
+  stderr:
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-1873-listed-failures-end-e755e5/tests/acceptance/1873/lint.test.mjs:120:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1873/lint.test.mjs:129:1
+✖ #1873.e084d5c1 a fixture entry whose reason names DEEP_FIXTURE_OPT_IN, on a test file that never reads it, fails the lint lane, naming the entry and the variable; on a file that reads it, it passes (1349.865542ms)
+  AssertionError [ERR_ASSERTION]: the lint lane accepted a reason naming DEEP_FIXTURE_OPT_IN on a test file that never reads it
+  exit 0
+  stdout:
+  RUN lint
+  all 0 known failures name an open issue, added within the last 14 days
+  PASS lint (0.66 s)
+  
+  stderr:
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-1873-listed-failures-end-e755e5/tests/acceptance/1873/lint.test.mjs:135:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1873/lint.test.mjs:142:1
+✖ #1873.f9faca98 on main, every skips entry passes the rules: it names a test in the tree, and a variable its reason names is read by the test's file (2184.973709ms)
+  AssertionError [ERR_ASSERTION]: the check doesn't read skips (a fixture entry naming a deleted test passes it), so its pass on main proves nothing
+  exit 0
+  stdout:
+  RUN lint
+  all 0 known failures name an open issue, added within the last 14 days
+  PASS lint (0.87 s)
+  
+  stderr:
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-1873-listed-failures-end-e755e5/tests/acceptance/1873/lint.test.mjs:147:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1873/load.test.mjs:25:1
+✖ #1873.36e78550 a planted landing that slows a listed timing test, ticked at a load below the core count, pauses landings naming the test; at a load above it, it pauses nothing and names the load (10271.083208ms)
+  AssertionError [ERR_ASSERTION]: at load 0 on 8 cores the slowed timing test read as listed: landings didn't pause
+  exit 0
+  stdout:
+  RUN main-watch: the unit and lint lanes on main at c127b819ef
+  RUN unit
+  ✖ stays within its budget (2502.995917ms)
+  ℹ tests 1
+  ℹ suites 0
+  ℹ pass 0
+  ℹ fail 1
+  ℹ cancelled 0
+  ℹ skipped 0
+  ℹ todo 0
+  ℹ duration_ms 2611.668333
+  
+  ✖ failing tests:
+  
+  test at tests/timed.test.mjs:4:1
+  ✖ stays within its budget (2502.995917ms)
+    AssertionError [ERR_ASSERTION]: work took 2502 ms against a budget of 1000 ms
+        at TestContext.<anonymous> (file://<tmp>/deep-1873-vIOneh/home/.deepbuild/main-watch/c8695285dab83a72/tree/tests/timed.test.mjs:8:10)
+        at async Test.run (node:internal/test_runner/test:1409:7)
+        at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+  RUN lint
+  all 0 known failures name an open issue, added within the last 14 days
+  PASS lint (0.94 s)
+  FAIL unit: tests/timed.test.mjs › stays within its budget: work took 2502 ms against a budget of 1000 ms
+    Fix: Repair the behavior named by the failing test.
+    Elapsed: 3.44 s
+  KNOWN tests/timed.test.mjs › stays within its budget
+  landings open
+  
+  stderr:
+  
+  polls: ["open: landings open","open: landings open","open: landings open","open: landings open","open: landings open","open: landings open","open: landings open","open: landings open"]
+  status after: landings open
+  
+  'open' !== 'paused'
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-1873-listed-failures-end-e755e5/tests/acceptance/1873/load.test.mjs:27:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'open',
+    expected: 'paused',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1873/watch.test.mjs:39:1
+✖ #1873.d1984163 a known-failures.json entry whose test passes on main fails the lane, naming the entry; a lane that keeps reading it as known fails this test (12941.4ms)
+  AssertionError [ERR_ASSERTION]: the tick read the failures entry tests/fixed.test.mjs › passes again as known, though its test passed in the run: no FAIL line names it
+  exit 0
+  stdout:
+  RUN main-watch: the unit and lint lanes on main at d480d5b81e
+  RUN unit
+  ✔ stays within its budget (1.009208ms)
+  ✔ passes again (0.960458ms)
+  ✔ runs to a pass when opted in (0.69225ms)
+  ✖ runs to a fail when opted in (0.591417ms)
+  ℹ tests 4
+  ℹ suites 0
+  ℹ pass 3
+  ℹ fail 1
+  ℹ cancelled 0
+  ℹ skipped 0
+  ℹ todo 0
+  ℹ duration_ms 417.966583
+  
+  ✖ failing tests:
+  
+  test at tests/gated.test.mjs:5:1
+  ✖ runs to a fail when opted in (0.591417ms)
+    AssertionError [ERR_ASSERTION]: the gated fixture test fails when it runs
+        at TestContext.<anonymous> (file://<tmp>/deep-1873-WYWfCU/home/.deepbuild/main-watch/dddfff0728628cd7/tree/tests/gated.test.mjs:5:61)
+        at Test.runInAsyncScope (node:async_hooks:227:14)
+        at Test.run (node:internal/test_runner/test:1402:25)
+        at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+        at Test.postRun (node:internal/test_runner/test:1542:19)
+        at Test.run (node:internal/test_runner/test:1467:12)
+        at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: undefined,
+      expected: undefined,
+      operator: 'fail',
+      diff: 'simple'
+    }
+  RUN lint
+  all 1 known failures name an open issue, added within the last 14 days
+  PASS lint (0.96 s)
+  FAIL unit: tests/gated.test.mjs › runs to a fail when opted in: the gated fixture test fails when it runs
+    Fix: Repair the behavior named by the failing test.
+    Elapsed: 1.29 s
+  RUN main-watch
+  ✖ runs to a fail when opted in (4.848625ms)
+  ℹ tests 1
+  ℹ suites 0
+  ℹ pass 0
+  ℹ fail 1
+  ℹ cancelled 0
+  ℹ skipped 0
+  ℹ todo 0
+  ℹ duration_ms 394.5115
+  
+  ✖ failing tests:
+  
+  test at tests/gated.test.mjs:5:1
+  ✖ runs to a fail when opted in (4.848625ms)
+    AssertionError [ERR_ASSERTION]: the gated fixture test fails when it runs
+        at TestContext.<anonymous> (file://<tmp>/deep-1873-WYWfCU/home/.deepbuild/main-watch/dddfff0728628cd7/tree/tests/gated.test.mjs:5:61)
+        at Test.runInAsyncScope (node:async_hooks:227:14)
+        at Test.run (node:internal/test_runner/test:1402:25)
+        at Test.start (node:internal/test_runner/test:1262:17)
+        at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: undefined,
+      expected: undefined,
+      operator: 'fail',
+      diff: 'simple'
+    }
+  FAIL main-watch: tests/gated.test.mjs › runs to a fail when opted in: the gated fixture test fails when it runs
+    Fix: Repair the behavior named by the failing test.
+    Elapsed: 1.17 s
+  RUN main-watch
+  ✖ runs to a fail when opted in (1.115667ms)
+  ℹ tests 1
+  ℹ suites 0
+  ℹ pass 0
+  ℹ fail 1
+  ℹ cancelled 0
+  ℹ skipped 0
+  ℹ todo 0
+  ℹ duration_ms 209.761041
+  
+  ✖ failing tests:
+  
+  test at tests/gated.test.mjs:5:1
+  ✖ runs to a fail when opted in (1.115667ms)
+    AssertionError [ERR_ASSERTION]: the gated fixture test fails when it runs
+        at TestContext.<anonymous> (file://<tmp>/deep-1873-WYWfCU/home/.deepbuild/main-watch/dddfff0728628cd7/tree/tests/gated.test.mjs:5:61)
+        at Test.runInAsyncScope (node:async_hooks:227:14)
+        at Test.run (node:internal/test_runner/test:1402:25)
+        at Test.start (node:internal/test_runner/test:1262:17)
+        at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: undefined,
+      expected: undefined,
+      operator: 'fail',
+      diff: 'simple'
+    }
+  FAIL main-watch: tests/gated.test.mjs › runs to a fail when opted in: the gated fixture test fails when it runs
+    Fix: Repair the behavior named by the failing test.
+    Elapsed: 1.21 s
+  RUN main-watch
+  ✖ runs to a fail when opted in (1.741167ms)
+  ℹ tests 1
+  ℹ suites 0
+  ℹ pass 0
+  ℹ fail 1
+  ℹ cancelled 0
+  ℹ skipped 0
+  ℹ todo 0
+  ℹ duration_ms 142.557375
+  
+  ✖ failing tests:
+  
+  test at tests/gated.test.mjs:5:1
+  ✖ runs to a fail when opted in (1.741167ms)
+    AssertionError [ERR_ASSERTION]: the gated fixture test fails when it runs
+        at TestContext.<anonymous> (file://<tmp>/deep-1873-WYWfCU/home/.deepbuild/main-watch/dddfff0728628cd7/tree/tests/gated.test.mjs:5:61)
+        at Test.runInAsyncScope (node:async_hooks:227:14)
+        at Test.run (node:internal/test_runner/test:1402:25)
+        at Test.start (node:internal/test_runner/test:1262:17)
+        at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: undefined,
+      expected: undefined,
+      operator: 'fail',
+      diff: 'simple'
+    }
+  FAIL main-watch: tests/gated.test.mjs › runs to a fail when opted in: the gated fixture test fails when it runs
+    Fix: Repair the behavior named by the failing test.
+    Elapsed: 0.76 s
+  FAIL main-watch: tests/gated.test.mjs › runs to a fail when opted in fails on main at d480d5b81e on every repeat; landings paused
+  FAIL main-watch: tests/gated.test.mjs › runs to a fail when opted in fails on main, and no landing since the last clean run (none yet) caused it
+  RUN main-watch: an attempt on #9900 with claude
+  {"type":"result","subtype":"success","is_error":false,"result":"stand-in agent: I changed nothing"}
+  RUN main-watch
+  ✖ runs to a fail when opted in (1.125708ms)
+  ℹ tests 1
+  ℹ suites 0
+  ℹ pass 0
+  ℹ fail 1
+  ℹ cancelled 0
+  ℹ skipped 0
+  ℹ todo 0
+  ℹ duration_ms 184.454416
+  
+  ✖ failing tests:
+  
+  test at tests/gated.test.mjs:5:1
+  ✖ runs to a fail when opted in (1.125708ms)
+    AssertionError [ERR_ASSERTION]: the gated fixture test fails when it runs
+        at TestContext.<anonymous> (file://<tmp>/deep-1873-WYWfCU/home/.deepbuild/main-watch/dddfff0728628cd7/tree/tests/gated.test.mjs:5:61)
+        at Test.runInAsyncScope (node:async_hooks:227:14)
+        at Test.run (node:internal/test_runner/test:1402:25)
+        at Test.start (node:internal/test_runner/test:1262:17)
+        at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: undefined,
+      expected: undefined,
+      operator: 'fail',
+      diff: 'simple'
+    }
+  FAIL main-watch: tests/gated.test.mjs › runs to a fail when opted in: the gated fixture test fails when it runs
+    Fix: Repair the behavior named by the failing test.
+    Elapsed: 0.73 s
+  ASK main-watch: #9901 for tests/gated.test.mjs › runs to a fail when opted in; landings stay paused
+  landings paused: main is red: tests/gated.test.mjs › runs to a fail when opted in
+  
+  stderr:
+  
+  status after: landings paused: main is red: tests/gated.test.mjs › runs to a fail when opted in (#9900)
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-1873-listed-failures-end-e755e5/tests/acceptance/1873/watch.test.mjs:41:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1873/watch.test.mjs:45:1
+✖ #1873.a54dd0d9 a listed skip whose test ran in the main watch's run fails the tick, naming the entry and the state it ran to (0.616958ms)
+  AssertionError [ERR_ASSERTION]: no FAIL line names the skips entry tests/gated.test.mjs › runs to a pass when opted in and the PASS its test ran to
+  exit 0
+  stdout:
+  RUN main-watch: the unit and lint lanes on main at d480d5b81e
+  RUN unit
+  ✔ stays within its budget (1.009208ms)
+  ✔ passes again (0.960458ms)
+  ✔ runs to a pass when opted in (0.69225ms)
+  ✖ runs to a fail when opted in (0.591417ms)
+  ℹ tests 4
+  ℹ suites 0
+  ℹ pass 3
+  ℹ fail 1
+  ℹ cancelled 0
+  ℹ skipped 0
+  ℹ todo 0
+  ℹ duration_ms 417.966583
+  
+  ✖ failing tests:
+  
+  test at tests/gated.test.mjs:5:1
+  ✖ runs to a fail when opted in (0.591417ms)
+    AssertionError [ERR_ASSERTION]: the gated fixture test fails when it runs
+        at TestContext.<anonymous> (file://<tmp>/deep-1873-WYWfCU/home/.deepbuild/main-watch/dddfff0728628cd7/tree/tests/gated.test.mjs:5:61)
+        at Test.runInAsyncScope (node:async_hooks:227:14)
+        at Test.run (node:internal/test_runner/test:1402:25)
+        at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+        at Test.postRun (node:internal/test_runner/test:1542:19)
+        at Test.run (node:internal/test_runner/test:1467:12)
+        at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: undefined,
+      expected: undefined,
+      operator: 'fail',
+      diff: 'simple'
+    }
+  RUN lint
+  all 1 known failures name an open issue, added within the last 14 days
+  PASS lint (0.96 s)
+  FAIL unit: tests/gated.test.mjs › runs to a fail when opted in: the gated fixture test fails when it runs
+    Fix: Repair the behavior named by the failing test.
+    Elapsed: 1.29 s
+  RUN main-watch
+  ✖ runs to a fail when opted in (4.848625ms)
+  ℹ tests 1
+  ℹ suites 0
+  ℹ pass 0
+  ℹ fail 1
+  ℹ cancelled 0
+  ℹ skipped 0
+  ℹ todo 0
+  ℹ duration_ms 394.5115
+  
+  ✖ failing tests:
+  
+  test at tests/gated.test.mjs:5:1
+  ✖ runs to a fail when opted in (4.848625ms)
+    AssertionError [ERR_ASSERTION]: the gated fixture test fails when it runs
+        at TestContext.<anonymous> (file://<tmp>/deep-1873-WYWfCU/home/.deepbuild/main-watch/dddfff0728628cd7/tree/tests/gated.test.mjs:5:61)
+        at Test.runInAsyncScope (node:async_hooks:227:14)
+        at Test.run (node:internal/test_runner/test:1402:25)
+        at Test.start (node:internal/test_runner/test:1262:17)
+        at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: undefined,
+      expected: undefined,
+      operator: 'fail',
+      diff: 'simple'
+    }
+  FAIL main-watch: tests/gated.test.mjs › runs to a fail when opted in: the gated fixture test fails when it runs
+    Fix: Repair the behavior named by the failing test.
+    Elapsed: 1.17 s
+  RUN main-watch
+  ✖ runs to a fail when opted in (1.115667ms)
+  ℹ tests 1
+  ℹ suites 0
+  ℹ pass 0
+  ℹ fail 1
+  ℹ cancelled 0
+  ℹ skipped 0
+  ℹ todo 0
+  ℹ duration_ms 209.761041
+  
+  ✖ failing tests:
+  
+  test at tests/gated.test.mjs:5:1
+  ✖ runs to a fail when opted in (1.115667ms)
+    AssertionError [ERR_ASSERTION]: the gated fixture test fails when it runs
+        at TestContext.<anonymous> (file://<tmp>/deep-1873-WYWfCU/home/.deepbuild/main-watch/dddfff0728628cd7/tree/tests/gated.test.mjs:5:61)
+        at Test.runInAsyncScope (node:async_hooks:227:14)
+        at Test.run (node:internal/test_runner/test:1402:25)
+        at Test.start (node:internal/test_runner/test:1262:17)
+        at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: undefined,
+      expected: undefined,
+      operator: 'fail',
+      diff: 'simple'
+    }
+  FAIL main-watch: tests/gated.test.mjs › runs to a fail when opted in: the gated fixture test fails when it runs
+    Fix: Repair the behavior named by the failing test.
+    Elapsed: 1.21 s
+  RUN main-watch
+  ✖ runs to a fail when opted in (1.741167ms)
+  ℹ tests 1
+  ℹ suites 0
+  ℹ pass 0
+  ℹ fail 1
+  ℹ cancelled 0
+  ℹ skipped 0
+  ℹ todo 0
+  ℹ duration_ms 142.557375
+  
+  ✖ failing tests:
+  
+  test at tests/gated.test.mjs:5:1
+  ✖ runs to a fail when opted in (1.741167ms)
+    AssertionError [ERR_ASSERTION]: the gated fixture test fails when it runs
+        at TestContext.<anonymous> (file://<tmp>/deep-1873-WYWfCU/home/.deepbuild/main-watch/dddfff0728628cd7/tree/tests/gated.test.mjs:5:61)
+        at Test.runInAsyncScope (node:async_hooks:227:14)
+        at Test.run (node:internal/test_runner/test:1402:25)
+        at Test.start (node:internal/test_runner/test:1262:17)
+        at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: undefined,
+      expected: undefined,
+      operator: 'fail',
+      diff: 'simple'
+    }
+  FAIL main-watch: tests/gated.test.mjs › runs to a fail when opted in: the gated fixture test fails when it runs
+    Fix: Repair the behavior named by the failing test.
+    Elapsed: 0.76 s
+  FAIL main-watch: tests/gated.test.mjs › runs to a fail when opted in fails on main at d480d5b81e on every repeat; landings paused
+  FAIL main-watch: tests/gated.test.mjs › runs to a fail when opted in fails on main, and no landing since the last clean run (none yet) caused it
+  RUN main-watch: an attempt on #9900 with claude
+  {"type":"result","subtype":"success","is_error":false,"result":"stand-in agent: I changed nothing"}
+  RUN main-watch
+  ✖ runs to a fail when opted in (1.125708ms)
+  ℹ tests 1
+  ℹ suites 0
+  ℹ pass 0
+  ℹ fail 1
+  ℹ cancelled 0
+  ℹ skipped 0
+  ℹ todo 0
+  ℹ duration_ms 184.454416
+  
+  ✖ failing tests:
+  
+  test at tests/gated.test.mjs:5:1
+  ✖ runs to a fail when opted in (1.125708ms)
+    AssertionError [ERR_ASSERTION]: the gated fixture test fails when it runs
+        at TestContext.<anonymous> (file://<tmp>/deep-1873-WYWfCU/home/.deepbuild/main-watch/dddfff0728628cd7/tree/tests/gated.test.mjs:5:61)
+        at Test.runInAsyncScope (node:async_hooks:227:14)
+        at Test.run (node:internal/test_runner/test:1402:25)
+        at Test.start (node:internal/test_runner/test:1262:17)
+        at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: undefined,
+      expected: undefined,
+      operator: 'fail',
+      diff: 'simple'
+    }
+  FAIL main-watch: tests/gated.test.mjs › runs to a fail when opted in: the gated fixture test fails when it runs
+    Fix: Repair the behavior named by the failing test.
+    Elapsed: 0.73 s
+  ASK main-watch: #9901 for tests/gated.test.mjs › runs to a fail when opted in; landings stay paused
+  landings paused: main is red: tests/gated.test.mjs › runs to a fail when opted in
+  
+  stderr:
+  
+  status after: landings paused: main is red: tests/gated.test.mjs › runs to a fail when opted in (#9900)
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-1873-listed-failures-end-e755e5/tests/acceptance/1873/watch.test.mjs:47:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
