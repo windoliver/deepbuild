@@ -487,6 +487,10 @@ timed.push('tests/acceptance/1939/ac2-budget.test.ts');
 // deep-show for release there).
 alone.push('tests/acceptance/2513/');
 timed.push('tests/acceptance/2513/ac2-budget.test.ts');
+// #3017's files each build deep-show and draw on the GPU; budget.test.ts times the table on a reference Mac (building
+// deep-show for release there); suites.test.ts runs other suites' files that build and draw.
+alone.push('tests/acceptance/3017/');
+timed.push('tests/acceptance/3017/budget.test.ts');
 // #456's files each build deep-show and draw on the GPU; shots.test.ts writes docs/evidence/456/ and waits on your
 // taste call in tests/acceptance/456/TASTE.json.
 alone.push('tests/acceptance/456/');
