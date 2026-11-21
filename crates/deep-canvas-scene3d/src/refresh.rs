@@ -210,7 +210,11 @@ pub(crate) fn layers(dst: &mut Vec<Layer3>, src: &[Layer3], keeps: &Keeps<'_>) {
         } = s;
         d.id.clone_from(id);
         let item = |id: &String| (keeps.item)(id);
-        fill(&mut d.solids, solids.iter().filter(|x| (keeps.solid)(&x.id)), solid);
+        fill(
+            &mut d.solids,
+            solids.iter().filter(|x| (keeps.solid)(&x.id)),
+            solid,
+        );
         fill(&mut d.lines, lines.iter().filter(|x| item(&x.id)), line);
         fill(&mut d.points, points.iter().filter(|x| item(&x.id)), point);
         let labels = labels.iter().filter(|x| keeps.labels && item(&x.id));
@@ -279,8 +283,7 @@ pub(crate) fn shared(dst: &mut Scene, src: &Scene) {
     same(&mut dst.pages, pages);
     // The decoded maps by reference: their texels are never compared.
     let held = dst.texels.len() == texels.len()
-        && (dst.texels.iter().zip(texels))
-            .all(|((a, x), (b, y))| a == b && Arc::ptr_eq(x, y));
+        && (dst.texels.iter().zip(texels)).all(|((a, x), (b, y))| a == b && Arc::ptr_eq(x, y));
     if !held {
         dst.texels.clone_from(texels);
     }

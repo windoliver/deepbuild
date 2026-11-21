@@ -289,8 +289,7 @@ pub fn seen(scene: &Scene, v: &View) -> Scene {
 pub fn seen_into(s: &mut Scene, scene: &Scene, v: &View) {
     crate::refresh::shared(s, scene);
     let window = |id: &str| scene.views.iter().any(|w| w.id == owner(id));
-    let keeps =
-        |id: &str| !window(id) && v.keep.as_ref().is_none_or(|k| k.contains(owner(id)));
+    let keeps = |id: &str| !window(id) && v.keep.as_ref().is_none_or(|k| k.contains(owner(id)));
     let keeps = crate::refresh::Keeps {
         solid: &keeps,
         item: &keeps,
