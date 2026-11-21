@@ -40,6 +40,13 @@ function smallest(list: Figures[]): Figures {
 }
 /** A fifth under each figure. */
 const fifthUnder = (f: Figures): Figures => Object.fromEntries(UNITS.filter((u) => f[u] !== undefined).map((u) => [u, Math.floor(f[u]! * 0.8)])) as Figures;
+/**
+ * An error's cap: a fifth under its characters (the 9,000 drafted from the 11,000 an error keeps) and its tokens, whose count
+ * a cut can miss by a token or two, but its bytes whole: they are counted exactly as deep mcp sends them, and an error is
+ * never paged, so a spare would only cut a refusal every client keeps whole (#806's replay of #393 AC9: 8,471 bytes under
+ * Codex 0.144.0's 10,000).
+ */
+const errorCapOf = (f: Figures): Figures => ({ ...fifthUnder(f), ...(f.bytes === undefined ? {} : { bytes: f.bytes }) });
 
 /** Every toolResult entry of every shipped facts file. */
 const allEntries = (): Entry[] => factsFiles().flatMap(entriesOf);
@@ -75,7 +82,7 @@ export function limitOf(client: unknown): Limit {
   }
   // With no figure at all a reply would go uncapped: refused, never sent as if every client kept everything.
   if (!UNITS.some((u) => result[u] !== undefined) || !UNITS.some((u) => error[u] !== undefined)) throw Error('no facts file holds a toolResult limit');
-  return { client: name, client_version: version, from, result, error, cap: fifthUnder(result), error_cap: fifthUnder(error) };
+  return { client: name, client_version: version, from, result, error, cap: fifthUnder(result), error_cap: errorCapOf(error) };
 }
 
 let counter: ((text: string) => number) | undefined;
