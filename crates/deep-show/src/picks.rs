@@ -854,6 +854,13 @@ impl Hub<'_> {
             }
             out["seeks"] = json!(seeks);
         }
+        // #552: the full-state hashes a copy of the document's match takes, so a replay of a
+        // record compares with the match.
+        if let Some(cfg) = deep_net::Config::of(&form) {
+            let doc = self.presented_doc(&l.doc).unwrap_or_default();
+            let h = crate::matched::replay_hashes(piece.clone(), (&doc, &read), &cfg, l.steps);
+            out["hashes"] = h.map_or_else(|e| e, |h| json!(h));
+        }
         if l.check == Some("logic.tuning") {
             out["check"] = self.tuning_check(&form, &read, &piece, &entries, l.steps);
         }

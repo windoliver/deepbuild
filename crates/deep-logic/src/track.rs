@@ -27,6 +27,9 @@ pub enum Given {
     /// A layout-shaped reading's record: its bytes, at most 256.
     Record(Vec<u8>),
     Rewind(To),
+    /// #552: a draw's commitment `{step, hash}` or bits `{step, bits}`, the net module's own
+    /// entries (Net: random draws after commit), which no control's read region holds.
+    Draw(Value),
 }
 
 /// #860: the key a track keeps its rewinds under, which no control's ID can be (each of an ID's
@@ -108,6 +111,7 @@ impl Given {
             }
             Given::Rewind(To::Stop(n)) => json!({"to": {"stop": n}}),
             Given::Rewind(To::Step(k)) => json!({"to": {"step": k}}),
+            Given::Draw(v) => v.clone(),
         }
     }
     /// The value as its control's read region lays it out: an f64 (8 B), a pick's `u32 set,
@@ -131,8 +135,8 @@ impl Given {
             }
             Given::Vector(v) => v.iter().flat_map(|x| x.to_le_bytes()).collect(),
             Given::Record(b) => b.clone(),
-            // No read region holds a rewind.
-            Given::Rewind(_) => Vec::new(),
+            // No read region holds a rewind or a draw's entry.
+            Given::Rewind(_) | Given::Draw(_) => Vec::new(),
         }
     }
 }
@@ -199,6 +203,12 @@ impl Entry {
             value: match (rewind, reading) {
                 (Some(to), _) => Given::Rewind(to),
                 (None, Some(_)) => Given::reading(v.get("value")?)?,
+                _ if v["control"]
+                    .as_str()
+                    .is_some_and(|c| c == crate::draws::COMMIT || c == crate::draws::REVEAL) =>
+                {
+                    Given::Draw(v.get("value")?.clone())
+                }
                 (None, None) => Given::parse(v.get("value")?)?,
             },
             writer: v

@@ -14,8 +14,10 @@ pub mod bake;
 pub mod bindings;
 pub mod budget;
 pub mod checks;
+pub mod draws;
 pub mod first_party;
 mod fixtures;
+pub mod fog;
 pub mod grid_bot;
 pub mod interfaces;
 pub mod judder;
@@ -1093,8 +1095,9 @@ impl Logic {
             .ok_or_else(|| bad("steps"))?;
         let entries = track(&piece, line, steps).ok_or_else(|| bad("track"))?;
         // The web runner fills no reading's slot yet: a plan it would run short is refused.
-        if !piece.sources.is_empty() {
-            return Err(bad("the web player doesn't read readings yet"));
+        let draws = piece.items.iter().flat_map(|i| &i.layout.entries);
+        if !piece.sources.is_empty() || draws.clone().any(|e| e.read == piece::Read::Draws) {
+            return Err(bad("the web player doesn't read readings or net.draws yet"));
         }
         let items: Vec<Value> = piece
             .items
@@ -1108,7 +1111,7 @@ impl Logic {
                     .map(|e| {
                         let (kind, from, offset) = match &e.read {
                             piece::Read::Control => ("control", Value::Null, 0),
-                            piece::Read::Reading { .. } | piece::Read::World => unreachable!("refused above"),
+                            piece::Read::Reading { .. } | piece::Read::World | piece::Read::Draws => unreachable!("refused above"),
                             piece::Read::Array { item, offset } => ("array", json!(item), *offset),
                             piece::Read::Seed => ("seed", Value::Null, 0),
                             piece::Read::Seats => ("seats", Value::Null, 0),

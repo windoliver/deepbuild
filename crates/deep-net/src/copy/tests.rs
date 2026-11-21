@@ -99,6 +99,8 @@ pub(crate) fn cfg(delay: i64, hash_every: i64) -> Config {
         timeout: 5 * FLICKS,
         controls: json!({"push": {"kind": "slider", "range": [-8, 8]}}),
         seats: false,
+        draw_after: Vec::new(),
+        courtesy: false,
     }
 }
 

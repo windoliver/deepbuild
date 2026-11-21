@@ -23,6 +23,24 @@ pub(crate) struct Message {
     /// One part of what its locator found (`Found::parts`).
     pub(crate) found: Option<Value>,
     pub(crate) fields: Vec<(i64, Vec<(String, String, u64)>)>,
+    /// #552's planted net module puts its copy's `match.me` here; a message never holds it.
+    pub(crate) me: Option<u8>,
+}
+
+/// #552: every message a relay@1 frame carries, as the relay's log reads them back.
+pub(crate) fn read_frame(bytes: &[u8]) -> Vec<Value> {
+    let Ok(f) = deep_relay::wire::Frame::decode(bytes) else {
+        return Vec::new();
+    };
+    let game = deep_relay::wire::hex(&f.game);
+    f.steps
+        .iter()
+        .enumerate()
+        .filter_map(|(i, b)| {
+            let m = Message::decode(b)?;
+            Some(m.to_json(&game, f.player + 1, f.first as i64 + i as i64))
+        })
+        .collect()
 }
 
 pub(crate) fn hex(h: u64) -> String {
@@ -52,6 +70,9 @@ impl Message {
         }
         if let Some(f) = &self.found {
             m.insert("l".into(), f.clone());
+        }
+        if let Some(me) = self.me {
+            m.insert("m".into(), json!(me));
         }
         if !self.fields.is_empty() {
             let at: Vec<Value> = self
@@ -116,6 +137,7 @@ impl Message {
         if let Some(l) = v.get("l") {
             m.found = Some(l.clone());
         }
+        m.me = v.get("m").and_then(Value::as_u64).map(|p| p as u8);
         if let Some(f) = v.get("f") {
             m.fields = f
                 .as_array()?
@@ -138,6 +160,30 @@ impl Message {
                 .collect::<Option<_>>()?;
         }
         Some(m)
+    }
+
+    /// #552: the message as the relay's log reads it back, its members by name: the match, the
+    /// player and the step it's for, its entries, the hash it confirmed, how its copy ended, and
+    /// what its locator found; and anything else it holds, by its own name.
+    pub(crate) fn to_json(&self, game: &str, player: u8, step: i64) -> Value {
+        let mut out =
+            json!({"match": game, "player": player, "step": step, "entries": self.entries});
+        if let Some(h) = self.hash {
+            out["hash"] = json!({"step": h.step, "state": hex(h.state), "track": hex(h.track)});
+        }
+        if let Some((end, detail)) = &self.end {
+            out["end"] = json!({"end": end, "detail": detail});
+        }
+        if let Some(f) = &self.found {
+            out["locate"] = f.clone();
+        }
+        if !self.fields.is_empty() {
+            out["locate_fields"] = json!(self.fields.len());
+        }
+        if let Some(me) = self.me {
+            out["me"] = json!(me);
+        }
+        out
     }
 }
 
