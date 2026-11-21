@@ -2,11 +2,11 @@
 // never as a child of the terminal or hook that first needed it: launchd on macOS, a systemd user service on
 // Linux. A dev hub (--root) is started in a session of its own, so it outlives its terminal too.
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdirSync, openSync, readFileSync, realpathSync, rmSync, watch, writeFileSync } from 'node:fs';
+import { mkdirSync, openSync, realpathSync, rmSync, watch, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
-import { hubAddress, installedPrograms, installedRoot, lastingNode, onPath, rootOf, underTemp, type Root } from './paths.js';
+import { controlToken, hubAddress, installedPrograms, installedRoot, lastingNode, onPath, type Root, rootOf, rootToken, underTemp } from './paths.js';
 import { notAnswered, Unanswered } from './client.js';
 import { line } from './wire.js';
 
@@ -175,13 +175,13 @@ export async function stopAsPeer(path: string, token: string, params: Obj, peer:
 }
 
 /**
- * One control call on the hub at `path`, as the CLI, with the token `tokenFile` holds: the hub's hello within
- * `timeoutMs`, and the call's reply within `replyMs`.
+ * One control call on the hub at `path`, as the CLI, presenting `token`: the hub's hello within `timeoutMs`, and the
+ * call's reply within `replyMs`.
  */
-export async function control(path: string, tokenFile: string, method: string, params: Obj = {}, timeoutMs = 2000, replyMs = timeoutMs): Promise<Obj> {
+export async function control(path: string, token: string, method: string, params: Obj = {}, timeoutMs = 2000, replyMs = timeoutMs): Promise<Obj> {
   const c = await connect(path, timeoutMs);
   try {
-    c.send({ hello: 'cli', token: readFileSync(tokenFile, 'utf8').trim() });
+    c.send({ hello: 'cli', token });
     const hello = await c.next();
     if (hello.error) throw Error(`the hub refused the CLI's credential: ${JSON.stringify(hello.error)}`);
     c.send({ id: method, method, params });
@@ -327,7 +327,7 @@ export const serviceFile = (): string => definition([], '').file;
 async function coreAnswers(root: Root): Promise<number> {
   let token: string;
   try {
-    token = readFileSync(root.token, 'utf8').trim();
+    token = rootToken(root);
   } catch {
     return 0;
   }
@@ -392,9 +392,9 @@ export async function hubStatus(options: { root?: string }): Promise<number> {
     process.stderr.write(`deep hub status: ${error instanceof Error ? error.message : String(error)}\n`);
     return 3;
   }
-  const tokenFile = rootOf(options.root ?? installedRoot()).token;
   try {
-    process.stdout.write(`${JSON.stringify(await control(path, tokenFile, 'hub.health', {}, 2000, STATUS_REPLY_MS))}\n`);
+    const token = options.root ? rootToken(rootOf(options.root)) : controlToken(path);
+    process.stdout.write(`${JSON.stringify(await control(path, token, 'hub.health', {}, 2000, STATUS_REPLY_MS))}\n`);
     return 0;
   } catch (error) {
     // No socket, nothing listening, or a home whose hub never wrote its token: the one sentence (#1812).
@@ -412,7 +412,7 @@ function stopFailed(path: string, error: unknown): number {
 export async function stopHub(options: { root: string }): Promise<number> {
   const root = rootOf(options.root);
   try {
-    await control(root.socket, root.token, 'hub.stop');
+    await control(root.socket, rootToken(root), 'hub.stop');
   } catch (error) {
     return stopFailed(root.socket, error);
   }
