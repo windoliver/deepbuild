@@ -1,0 +1,13 @@
+start; 'AC Power'; caffeinate 8 assertions 01:15:15 load { 19.84 25.57 36.29 } thermal 1 lock 0 front [Claude] free KB 69096948
+disk guard ok before clone 01:15:15 load { 19.84 25.57 36.29 } thermal 1 lock 0 front [Claude] free KB 69088024
+clone at ca8c6312f89e584154100af50e7730e57de288e1 exit=0; origin/claude/fix-drive-panics-1546-1427 ca8c6312f89e584154100af50e7730e57de288e1; origin/main e9d73de9688ae6d24c31d195dc4e626982d34716; merge-base 7a256fd4b9651f5ed1f5255d3520603320803eb4 01:15:58 load { 24.47 26.13 36.01 } thermal 1 lock 0 front [Claude] free KB 65719020
+setup (npm ci, workspace build, deep-hook) exit=0 01:17:44 load { 23.45 25.58 34.66 } thermal 0 lock 0 front [Claude] free KB 60322912
+disk guard ok before step 1 01:17:44 load { 23.45 25.58 34.66 } thermal 0 lock 0 front [Claude] free KB 60322896
+fix2-1427-ac7.txt: Tests 4 failed (4) exit=1 01:25:19 load { 39.38 46.97 43.37 } thermal 0 lock 0 front [Claude] free KB 29658544
+no panic in fix2-1427-ac7.txt; direct run skipped 01:25:19 load { 39.38 46.97 43.37 } thermal 0 lock 0 front [Claude] free KB 29657508
+disk guard ok before step 2 01:25:19 load { 39.38 46.97 43.37 } thermal 0 lock 0 front [Claude] free KB 29652904
+fix2-1546-ac1.txt: Tests 2 failed | 4 passed (6) exit=1 01:25:35 load { 37.23 46.00 43.11 } thermal 0 lock 0 front [Claude] free KB 28359612
+porcelain after: 0 01:25:36 load { 37.23 46.00 43.11 } thermal 0 lock 0 front [Claude] free KB 28457676
+clone mb-ca8c removed 01:25:41 load { 48.42 48.17 43.89 } thermal 0 lock 0 front [Claude] free KB 44136832
+ALL DONE 01:25:42 load { 48.42 48.17 43.89 } thermal 0 lock 0 front [Claude] free KB 44135716
+secret scan hits=0 01:25:49

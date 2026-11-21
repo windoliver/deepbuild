@@ -753,7 +753,11 @@ impl Replica {
                                 pressed_button: None,
                                 modifiers: Modifiers::default(),
                             };
-                            window.dispatch_event(event.to_platform_input(), cx);
+                            // Once this observer returns: it runs inside the shell's own update, and the shell
+                            // listens for the pointer's moves (#1808), which update it again (#1546).
+                            window.defer(cx, move |window, cx| {
+                                window.dispatch_event(event.to_platform_input(), cx);
+                            });
                         }
                     })
                     .detach();
