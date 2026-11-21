@@ -32,6 +32,12 @@ draws at scale 1 whatever its surface says, a pack operator named `blur@1` is ad
 | 12 `#161.6c7f6fc1` | `ac12-linear-color-key` | 2 passed |
 | 13 `#161.2dcc0047` | `ac13-taste` | INCONCLUSIVE: no taste call is recorded |
 
+## The head, after two more merges of main
+
+`acceptance-head.txt`: the thirteen untimed files once more at bbe9ee3a8 (main 89df55943 merged in), on binaries built
+from it. The same 12 files and 23 tests pass; `ac13-taste` is INCONCLUSIVE, and the fifteen files it kept have the
+SHA-256s of those in `shown/`.
+
 ## The timed files
 
 `timed.txt`: the two timed files once more inside a timed grant of the throttle, started at a one-minute load of 13.05.
@@ -44,6 +50,11 @@ estimates: most operators measure 0.04 to 0.08 ns a pixel whatever they declare 
 `calibrate` showed the same picture. The check refuses a declaration under its estimate ÷ 1.25, so an operator whose
 estimate is more than 1.67 times its measured cost can't declare a cost that the check accepts and the criterion holds.
 Criterion 4's measured half is open.
+
+`calibrate-readings.txt`: two readings of `calibrate` on a quiet machine (load 5.9 and 7.1, thermal state nominal) that
+was on battery, so they count for no test. As declared, 1 of the 70 is within 25%. Most operators read about 0.065 ns
+a pixel whatever they estimate, and 11 of main's own shipped and fixture graphs read outside #429's bound in the same
+readings (`pixel_hash@1` 0.047 against an estimate of 0.0046, `fixture.fbm8@1` 3.09 against 0.29).
 
 `ac6-timed` stopped before timing anything.
 
