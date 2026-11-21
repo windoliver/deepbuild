@@ -1368,6 +1368,10 @@
         "objc2-foundation": {
           "spec": "^0.3",
           "why": "Issue #1551: the point (NSPoint) a `wake` posts its pointer move at; already in the lockfile."
+        },
+        "deep-groups-render": {
+          "spec": "* path=../deep-groups-render",
+          "why": "Issue #1561: `frames` draws a 2D document under a drawn look through the compositor and the passes the live window and film2d run, on the GPU this binary has on macOS."
         }
       }
     },
@@ -1622,6 +1626,10 @@
         "libc": {
           "spec": "^0.2",
           "why": "Issue #1903: the envelope's peak resident memory, read with getrusage on every platform (#2477); on macOS also issue #854: a replica's cold start timed from the process's spawn, as proc_pidinfo reports its start; already in the lockfile."
+        },
+        "deep-groups-render": {
+          "spec": "* path=../deep-groups-render",
+          "why": "Issue #1561: the group compositor and the drawn passes, moved to a render crate so deep-show draws a drawn look's 2D frame through them too."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -1660,10 +1668,6 @@
         "deep-canvas-drawn": {
           "spec": "* path=../deep-canvas-drawn",
           "why": "Issue #149: a drawn look's spec and line profiles, read for the 3D module's marks."
-        },
-        "meshopt": {
-          "spec": "^0.7",
-          "why": "Issue #425: a proxy band's mesh, simplified once per content key (Level of detail: proxies)."
         },
         "sha2": {
           "spec": "^0.10",
@@ -1728,6 +1732,10 @@
         "web-time": {
           "spec": "=1.1.0",
           "why": "Issue #172: a time read on the page's clock in the web player, the system's elsewhere."
+        },
+        "meshopt": {
+          "spec": "^0.7",
+          "why": "Issue #2738 (from #425): a proxy band's mesh, simplified once per content key where a scene is drawn, so scene3d links no C++; already in the tree."
         }
       },
       "dev-dependencies": {
@@ -1790,6 +1798,62 @@
         "deep-canvas-motion": {
           "spec": "* path=../deep-canvas-motion",
           "why": "Issue #483: the motion program a document's composed operators are evaluated through at a time, with how long each value holds."
+        }
+      }
+    },
+    "crates/deep-groups-render/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #1561: the blend modes' WGSL and a document's frame rate, which the group compositor reads (moved with it from deep-gpu-layer)."
+        },
+        "deep-canvas-drawn": {
+          "spec": "* path=../deep-canvas-drawn",
+          "why": "Issue #1561: a drawn look's light, paper, lines and media as read and checked, which the drawn passes draw (moved with them from deep-gpu-layer)."
+        },
+        "deep-canvas-effects": {
+          "spec": "* path=../deep-canvas-effects",
+          "why": "Issue #1561: a group's pass graphs and the collection targets they read, which the compositor compiles and runs (moved with it from deep-gpu-layer)."
+        },
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #1561: the marks, scopes and paints a frame draws, the look's dressing of them and the 2D camera, which a 2D frame is made from."
+        },
+        "deep-canvas-scene3d": {
+          "spec": "* path=../deep-canvas-scene3d",
+          "why": "Issue #1561: the scene and look a drawing look's 3D post pass reads (moved with drawn.rs from deep-gpu-layer)."
+        },
+        "deep-effects-render": {
+          "spec": "* path=../deep-effects-render",
+          "why": "Issue #1561: the operator runtime a group's passes run on, and its mip chains (moved with the compositor from deep-gpu-layer)."
+        },
+        "deep-gpu": {
+          "spec": "* path=../deep-gpu",
+          "why": "Issue #1561: the GPU layer's device, its slot format and its timing spans, which the compositor and the drawn passes draw on."
+        },
+        "deep-marks-render": {
+          "spec": "* path=../deep-marks-render",
+          "why": "Issue #1561: Vello GPU, which draws each run of a writer layer's marks into the compositor's targets."
+        },
+        "deep-scene3d-render": {
+          "spec": "* path=../deep-scene3d-render",
+          "why": "Issue #1561: the status guard an operator's pixels pass, and scene3d's post hook a drawing look's 3D passes run in (moved with the compositor from deep-gpu-layer)."
+        },
+        "bytemuck": {
+          "spec": "^1",
+          "why": "Issue #1561: #2032's occluder segments and bins cast to bytes for the light pass's buffers (moved with lightfx.rs from deep-gpu-layer)."
+        },
+        "image": {
+          "spec": "^0.25",
+          "why": "Issue #1561: a layer read back as straight RGBA, and a paper tooth read from a gray PNG (moved with the compositor from deep-gpu-layer)."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #1561: documents, evaluated items and refusals as JSON."
+        },
+        "wgpu": {
+          "spec": "^30",
+          "why": "Issue #1561: the compositor's and the drawn passes' pipelines, targets and read-backs."
         }
       }
     },
