@@ -814,6 +814,10 @@ alone.push('tests/acceptance/550/', 'tests/acceptance/550-oracle/');
 // #551's files each build deep-show (ac1 and the Oracle lane also the shipped relay) and play matches in process; ac1 and
 // the Oracle lane also play a live match between the app and headless Chrome's web player through the shipped relay.
 alone.push('tests/acceptance/551/', 'tests/acceptance/551-oracle/');
+// #280's files each build deep-show (ac7 in two feature sets; ac8 also the merge base) and play matches of eight copies
+// in process; ac1 and ac2 run net.budget's web part in headless Chrome, and ac8 times net.feel and net.budget itself.
+alone.push('tests/acceptance/280/');
+timed.push('tests/acceptance/280/ac8-budgets.test.ts');
 byHand.push('tests/acceptance/549/ac2-join-only.test.ts');
 // #297's files each build deep-show and run its scenarios; the Oracle lane runs thousands of frames through it.
 alone.push('tests/acceptance/297/', 'tests/acceptance/297-oracle/');
