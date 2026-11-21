@@ -53,6 +53,24 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   'tests/acceptance/140/gpu/', 'tests/acceptance/140/view/', 'tests/acceptance/140/platform/', 'tests/acceptance/309/', 'tests/acceptance/385/', 'tests/acceptance/874/redraft/',
   ...['cycles', 'planted', 'leftovers', 'sessions/readings', 'sessions/planted'].map((f) => `tests/acceptance/824/${f}.test.ts`), 'tests/acceptance/1285/', 'tests/acceptance/1294/', 'tests/acceptance/1507/', 'tests/acceptance/1998/', 'tests/acceptance/1999/', 'tests/acceptance/1848/', 'tests/acceptance/2653/', 'tests/acceptance/1868/', 'tests/acceptance/1868-redraft-ac2/',
   'tests/acceptance/1334-redraft-2565/'];
+
+/**
+ * A suite's own lane file (#1327): `tests/acceptance/<issue>/lane.json` says its folder runs alone, and why, as
+ * `{ "alone": true, "why": "<reason>" }` and nothing else. Running alone only makes a run stricter, so a new one lands
+ * with its suite with no approval; anything else a lane decides (a skip, by hand, a timed grant, leaving a lane) stays
+ * in this file. The folder runs alone while the disk holds the file, whatever it holds, so nothing in it can loosen a
+ * run; the guard refuses any other shape or place, and the edit or removal of a landed one
+ * (docs/parallel-proof.md, section 7).
+ */
+export const LANE_FILE = /^tests\/acceptance\/(\d+)\/lane\.json$/;
+// A copy of scripts/ with no suites beside it reads none.
+const suites = join(root, 'tests/acceptance');
+for (const folder of existsSync(suites) ? readdirSync(suites, { withFileTypes: true }) : []) {
+  if (!folder.isDirectory() || !LANE_FILE.test(`tests/acceptance/${folder.name}/lane.json`)) continue;
+  // As the disk finds it, so a name it folds to lane.json counts too and can't stand in for one.
+  if (statSync(join(suites, folder.name, 'lane.json'), { throwIfNoEntry: false })?.isFile()) alone.push(`tests/acceptance/${folder.name}/`);
+}
+
 /**
  * Files whose recorded run takes over two minutes on this machine, by the fastest run each that vitest's results caches
  * in the worktrees and affected.mjs's node --test reports held on 2026-11-07. affected.mjs runs them with --slow and for
