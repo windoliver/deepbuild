@@ -18,13 +18,17 @@ use crate::roles::TABLE;
 use crate::track;
 
 mod centres;
+mod chains;
 mod fixtures;
+mod laws;
 pub mod scan;
 mod sensors;
+mod small;
 mod vehicles;
 pub mod walks;
 
 pub use fixtures::{all, test_capped};
+pub use vehicles::car_world;
 
 /// The physics interface's reference implementation, which the claim rule doesn't hold.
 pub const REFERENCE: &str = "rapier3d";
@@ -160,11 +164,54 @@ pub enum Measure {
     /// #2243: how far apart the axes of two character bodies that meet stand after the last
     /// step, m; it fails wherever one breaks the rule of their meeting.
     Meet(walks::Meet),
+    /// #2308: how far past x = `edge` `body`'s centre is, m, after the first step that ends with
+    /// it `drop` below where it started.
+    Past {
+        body: &'static str,
+        edge: f64,
+        drop: f64,
+    },
+    /// #2308: how deep the deepest two neighbours of the row of dominoes are inside each other
+    /// after the last step, m; it fails wherever they don't pass `tilt` degrees in order, or the
+    /// last passes it outside `last` seconds.
+    Topple { last: [f64; 2], tilt: f64 },
     /// #2307: how far `body` moves from the end of step `from` to the end of step `to`, m.
     Parked {
         body: &'static str,
         from: usize,
         to: usize,
+    },
+    /// #2310: `body`'s distance from the point `from` after each step, m: the one farthest from
+    /// the answer; it fails wherever a joint of the world opens.
+    Reach { body: &'static str, from: [f64; 3] },
+    /// #2310: `body`'s speed where it passes its lowest point, m/s: let go along `along` from
+    /// `from`, square to gravity; it fails wherever a joint of the world opens.
+    Lowest {
+        body: &'static str,
+        from: [f64; 3],
+        along: [f64; 3],
+    },
+    /// #1931: `body`'s distance from `point` after each step, m: the one farthest from the
+    /// answer; it fails too unless the body first comes back to its start line after `period`
+    /// s, within the answer's tolerance.
+    Orbit {
+        body: &'static str,
+        point: [f64; 3],
+        period: f64,
+    },
+    /// #1931: the radius of the circle `body` turns in, m; it fails wherever its speed leaves
+    /// `speed`, m/s, by more than `band`, a share, or its path leaves y `between`, m.
+    Gyration {
+        body: &'static str,
+        speed: f64,
+        band: f64,
+        between: [f64; 2],
+    },
+    /// #1931: how far apart `a` and `b` are after step `step`, m.
+    Apart {
+        a: &'static str,
+        b: &'static str,
+        step: usize,
     },
 }
 
@@ -209,6 +256,9 @@ pub enum Planted {
     AdmitsUnfixtured,
     /// #251's, and #182's `kit_passes_excluded`.
     CountsExcludedPassed,
+    /// #1931's: the kit with the force laws' fixtures taken out, so a candidate that claims a
+    /// law is refused; its runner leaves them out of the fixtures it hands over.
+    WithoutLaws,
 }
 
 /// The kit's report on one backend.
@@ -274,7 +324,7 @@ fn dist(a: [f64; 3], b: [f64; 3]) -> f64 {
 
 /// Steps `b` through `f` from its built world `w`.
 fn trace(b: &mut dyn Backend, w: &World, f: &Fixture) -> Result<Trace, String> {
-    let entries = track::read(w, &f.track).map_err(|r| r.what)?;
+    let entries = track::read(w, &f.track, false).map_err(|r| r.what)?;
     let by_step = track::by_step(&entries);
     let rank = occurrence::ranks(w);
     let rate = w.step_rate;
@@ -779,11 +829,27 @@ fn read(m: &Measure, t: &Trace, b: &dyn Backend, w: &World, f: &Fixture) -> Read
             )
         }
         Measure::Meet(m) => met(t, m),
+        Measure::Past { body, edge, drop } => small::past(&path(t, body), body, *edge, *drop),
+        Measure::Topple { last, tilt } => small::toppled(t, *last, *tilt),
         Measure::Parked { body, from, to } => {
             let p = path(t, body);
             let moved = p.get(*from).zip(p.get(*to)).map(|(a, z)| dist(*a, *z));
             reading(moved, json!({"body": body}))
         }
+        Measure::Reach { body, from } => chains::reach(w, t, body, *from, f.answer),
+        Measure::Lowest { body, from, along } => chains::lowest(w, t, body, (*from, *along)),
+        Measure::Orbit {
+            body,
+            point,
+            period,
+        } => laws::orbit_of(t, (body, *point), *period, (f.answer, room(f, t.rate))),
+        Measure::Gyration {
+            body,
+            speed,
+            band,
+            between,
+        } => laws::gyration_of(t, body, (*speed, *band), *between, room(f, t.rate)),
+        Measure::Apart { a, b, step } => laws::apart_of(t, a, b, *step),
     }
 }
 
@@ -868,8 +934,25 @@ fn named_measure(m: &Measure) -> String {
             "distance between the axes of {} and {} after the last step, m",
             m.walker, m.other
         ),
+        Measure::Past { body, drop, .. } => {
+            format!("how far past the edge {body}'s centre is once it has dropped {drop} m, m")
+        }
+        Measure::Topple { .. } => {
+            "how deep the deepest two neighbouring dominoes are inside each other after the last step, m".into()
+        }
         Measure::Parked { body, from, to } => {
             format!("distance {body} moves from step {from} to step {to}, m")
+        }
+        Measure::Reach { body, .. } => {
+            format!("distance of {body}'s centre from the fixed point at every step, m")
+        }
+        Measure::Lowest { body, .. } => format!("speed of {body} at its lowest point, m/s"),
+        Measure::Orbit { body, .. } => {
+            format!("distance of {body} from the point farthest from the answer, m")
+        }
+        Measure::Gyration { body, .. } => format!("radius of the circle {body} turns in, m"),
+        Measure::Apart { a, b, step } => {
+            format!("distance between {a} and {b} after step {step}, m")
         }
     }
 }
@@ -882,13 +965,18 @@ fn in_seconds(m: &Measure) -> bool {
     )
 }
 
-fn within(f: &Fixture, m: f64, rate: f64) -> bool {
-    let room = match f.tolerance {
+/// How far `f`'s measure may land from its answer, in the measure's unit.
+fn room(f: &Fixture, rate: f64) -> f64 {
+    match f.tolerance {
         Tolerance::Relative(r) => r * f.answer.abs(),
         Tolerance::M(x) | Tolerance::Deg(x) => x,
         Tolerance::Steps(n) if in_seconds(&f.measure) => n / rate,
         Tolerance::Steps(n) => n,
-    };
+    }
+}
+
+fn within(f: &Fixture, m: f64, rate: f64) -> bool {
+    let room = room(f, rate);
     if f.never_past {
         m <= f.answer + room
     } else if f.past {

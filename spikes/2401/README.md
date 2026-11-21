@@ -1,0 +1,163 @@
+# Spike #2401: a headless job's cost to a plan window, under Claude Code's default label and under DeepBuild's name
+
+Design: [Plan usage, per account and per task](../../docs/technical-design.md#plan-usage-per-account-and-per-task),
+[What each agent gives us, and the limits we design around](../../docs/technical-design.md#what-each-agent-gives-us-and-the-limits-we-design-around),
+[Decided](../../docs/technical-design.md#decided).
+
+**Status: BLOCKED.** The 40 runs haven't run, so there is no `record.json`, no reading and no row under Decided.
+Nothing is set meanwhile, as the issue decided. This account has no 5-hour window to read: no probe's stream carried one,
+and `/usage` lists only weekly windows ([below](#the-account-has-no-5-hour-window)). The issue's rule reads the 5-hour
+window, so waiting for the weekly reset doesn't unblock it. The runs are held until you decide how to take them.
+
+## The job and the script
+
+```sh
+node spikes/2401/record.mjs --claude <path> --dry      # $0: a throwaway home and an invalid token; tool lists only
+node spikes/2401/record.mjs --claude <path> --probe    # one real run: what its stream carries
+node spikes/2401/record.mjs --claude <path> --own-use <pct/Mtok> --basis "<words>" [--streams <dir>]
+```
+
+The last form spends plan usage. It makes one opening run (`lead`, under neither label), then 40 runs alternating
+between the labels. It writes `record.json` in the shape the issue's acceptance tests read (`tests/acceptance/2401/README.md`, on [PR 2907](https://github.com/windoliver/deepbuild/pull/2907)). Raw streams go to
+`--streams`, which must be outside the checkout, and the record pins each one by SHA-256.
+
+- **The job** is the review check's. Its prompt is the one `packages/hub/src/kinds.ts` builds, over that file's
+  default rubric and the fixed diff in [`job/diff.patch`](job/diff.patch).
+- **The launch** is the runner's. It uses the facts' `launch.readOnlyJob` args, then the `--mcp-config` and
+  `--tools Read,Grep,Glob` that `AGENTS['claude-code'].confine` adds for a job with no MCP server and no sub-agent. The
+  prompt goes on stdin, the working folder is an empty temp folder, and a run still going after 5 minutes is stopped.
+  A run with no init or result entry, or no tokens, leaves no record: the script names it and exits 1, since the rule
+  can't leave out a run it can't read.
+- **The environment** is what the runner's `launch()` gives a review job: `ALLOWED_ENV` and `CLAUDE_CONFIG_DIR`,
+  plus the `TMPDIR`, `CLAUDE_CODE_TMPDIR` and `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` its `reach` sets. That keeps
+  your home, so your user settings load into every run, as they do in a review job today. Their SessionStart hooks
+  run in each one: probe.json's `kinds` shows their entries. The runner's eval read path instead gives a job an empty home with `{}` settings. Under the default label `CLAUDE_CODE_ENTRYPOINT` is
+  unset; under the other it is `deepbuild`. `CLAUDECODE` and the caller's own entrypoint are never passed on.
+
+  It differs from the runner's job in five ways:
+  - Claude Code reads its own keychain login, for which it needs `USER`. The runner hands it the access token in
+    `CLAUDE_CODE_OAUTH_TOKEN` instead.
+  - `PATH` is the system's, not your login `PATH`.
+  - There is no HTTPS forwarder.
+  - There is no supervisor sandbox.
+  - No billing key variable is passed on. The runner passes on the ones in its own environment.
+- **The window** is read the way the runner reads an eval job's stream (`evaluationProcess` in
+  `packages/runner/src/runner.ts`), in both its shapes: an entry's `rate_limit_info` whose `rateLimitType` is `five_hour`
+  or `seven_day`, at `utilization × 100`, and an entry's `rate_limits.five_hour` or `.seven_day`, at `used_percentage`. The runner's path for a review job reads no window from its stream at all; Claude Code's
+  windows reach the hub from the status line.
+
+  A run's `after` is its own last reading of a window, and its `before` is the previous run's last reading of it.
+  Whether a reading already counts the request it came with is assumed, not shown.
+- **The first entry** is the stream's `system` `init` entry. Your user settings' SessionStart hooks, which
+  `--setting-sources user` keeps, write `hook_started` and `hook_response` entries before it.
+- **A key** counts as set when the init entry's `apiKeySource` isn't `none`, such as a key an `apiKeyHelper` in your
+  settings gives.
+- **Agents** are kept from `--dry`'s throwaway home only. Under your home they name your plugins.
+
+## What the probe found
+
+[`probe.json`](probe.json) records one run under the default label:
+
+- Claude Code 2.1.308, the newest version the facts cover.
+- Nov 20 2026 at 05:32 UTC, on Mac15,12 at load 14.9.
+- The diff's hunk header was corrected afterwards, so later runs' prompt differs from the probe's by that one line.
+- The run predates the script's current `--probe` output, and `probe.json` was trimmed by hand to that shape:
+  - `ran_at` and `load_1m` come from the shell that ran it (`date -u` and `uptime` just before).
+  - `host_model` was read afterwards on the same Mac.
+  - `permissionMode` (`dontAsk`), the model list, the init entry's agents and the event's overage fields were
+    dropped.
+  - Top-level `rate_limits` on any entry were not looked for, so the probe shows nothing about that shape.
+
+What the run carried:
+
+- **Tokens:** 9,831 in all: 2 input, 1,407 output, 5,421 cache creation and 3,001 cache read. At API prices that is
+  $0.0018. The run took 5.8 s and one turn on `claude-haiku-5-5`.
+- **The window:** one `rate_limit_event`, for `seven_day` only.
+  - It read status `allowed_warning`, utilization 0.95 and `surpassedThreshold` 0.75.
+  - It resets Tue Nov 24 08:00 UTC.
+  - Its `unifiedWindows` also held only `seven_day`.
+  - The run carried no `rate_limit_event` for `five_hour`.
+- **The tools:** Glob, Grep and Read, the three names `--tools` gives.
+
+### Three probes back to back
+
+[`probe-step.json`](probe-step.json) holds three `--probe` runs from Nov 20 2026, 06:17:45 to 06:18:08 UTC, at load
+136 to 147, with other sessions working on the account. Their output is as the script printed it.
+
+- **Tokens:** 10,025, 9,724 and 9,743, so 29,492 in all and $0.0055 at API prices. All three succeeded.
+- **The window:** each run carried one `rate_limit_event`, for `seven_day` (`allowed_warning`), and every one read
+  0.97. Weekly use rose from the first probe's 0.95 to 0.97 in the 45 minutes between them, while other sessions were
+  working. Across these three runs it didn't move at all.
+- **No 5-hour reading:** none of the three carried a `rate_limit_event` for `five_hour`. No entry carried a top-level
+  `rate_limits`.
+
+So far every reading has had two decimals, whole percents, and about 30,000 tokens of this job moved the weekly window less than one of those steps. A
+single ~10,000-token run reads a change of 0 on the weekly window, and the 5-hour window isn't reported at all
+([why](#the-account-has-no-5-hour-window)).
+
+### What this means for the 40 runs
+
+The rule takes each run's change in window percent per million tokens, and it needs 15 kept runs per label. A run
+missing a 5-hour reading on either side is left out. This is what one run shows, and what it leaves open:
+
+1. **No 5-hour `rate_limit_event` in the one run.** If every run carried only the weekly reading, every run would be
+   left out, and the reading would be INCONCLUSIVE. All four probes match that, and so does `/usage`: the account has
+   no 5-hour window (below).
+2. **A run moves less than one step.** All four readings had two decimals (whole percents), and three runs of about
+   10,000 tokens each left the weekly reading at 0.97 (above). The 5-hour window's step, once reported, is unknown;
+   suppose it is also whole percents and a run moves it less than one point. Then each run reads a change of 0 or 1. Runs of 1 above the own-use ceiling are left out, leaving rates of 0 and an INCONCLUSIVE reading.
+   Otherwise the per-run ranges overlap under both labels. Either way the rule gives "not set" without measuring a
+   rate.
+3. **The account is at 97% of its weekly window.** Forty runs and a lead come to about 400,000 tokens, spent from the
+   last 3% of the weekly window, which your own work needs until Nov 24.
+
+## The account has no 5-hour window
+
+[`usage.json`](usage.json) holds Claude Code 2.1.308's `/usage`, run through `-p` on Nov 20 2026 at 09:56 UTC. It made
+no model call: 0 tokens, $0. It lists two windows, both weekly: all models at 100% and Fable at 99%, resetting Nov 23 at
+11:59 pm Pacific (Nov 24 07:59 UTC). It lists no current-session (5-hour) window.
+
+The binary says why the streams carried none. Its schema for `rate_limit_event`'s `unifiedWindows` reads the windows
+from the `anthropic-ratelimit-unified-*` response headers and says "Windows absent from the account state are absent
+here". The probes' events held `seven_day` only, so the server sent no 5-hour header. The 5-hour window is missing from
+the account's state, not hidden by the warning band.
+
+So the rule can't be applied on this account:
+
+- AC1 leaves out a run missing a 5-hour reading. Every run here misses one, so every run would be left out and the
+  reading would be INCONCLUSIVE, whatever the spend.
+- Nothing here shows that the weekly reset brings a 5-hour window. Whether it does can be checked at $0 with the
+  same `/usage` after Nov 24 07:59 UTC; no paid probe is needed for that.
+- Weekly use is at 100% now, so no paid run should start before the reset anyway.
+
+### What you can choose
+
+- **Another account that has a 5-hour window.** `/usage` shows a current-session line on such an account. Then run the
+  probes and the 40 runs there, as the issue gives them.
+- **Measure on the weekly window instead.** This changes the issue's rule (it reads the 5-hour window) and AC1's
+  left-out test, so it needs an amendment and the blind job's redraft. At whole-percent steps a run of ~10,000 tokens
+  reads 0, so it also needs blocks of runs per label large enough to move the weekly window several points each: a
+  large share of a week's plan.
+- **Check at $0 after the reset.** Run `/usage` after Nov 24 07:59 UTC. If a current-session line appears, probe and
+  run as planned; if not, take one of the other choices.
+- **Leave it to #1796.** #1796 reads routes from history as history builds up, at no extra spend.
+
+## What the label changes besides the rate
+
+[`dry.json`](dry.json) holds this, measured at $0 on 2.1.308 with `--dry`. That run used a throwaway home with no user
+settings or plugins, and an invalid token that fails every turn before a model call, after the init entry.
+
+| | Default (`CLAUDE_CODE_ENTRYPOINT` unset) | `CLAUDE_CODE_ENTRYPOINT=deepbuild` |
+|---|---|---|
+| Tools | Glob, Grep, Read | Glob, Grep, Read |
+| Agents | claude, Explore, general-purpose, Plan, statusline-setup | the same and `claude-code-guide` |
+
+The tool lists are the same. The `deepbuild` label adds the built-in `claude-code-guide` agent. A job can't reach it,
+because `--tools` doesn't offer Task. Under your own home, the agents list also names your plugins' agents. The real
+runs read the tool lists again from every run's init entry.
+
+## Checks
+
+The issue's acceptance tests are on [PR 2907](https://github.com/windoliver/deepbuild/pull/2907), not here. They stay
+BLOCKED until the record exists, and that PR carries them with the record. This PR adds no test and changes no code
+outside `spikes/2401/`.

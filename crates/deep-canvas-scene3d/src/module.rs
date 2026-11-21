@@ -7,6 +7,7 @@
 
 use deep_canvas::kinds::{Entry, Param, ParamType, Version};
 use deep_canvas::refs::{kind as names, Decl, Holds};
+use deep_canvas::registry::fields::{Closure, NOTHING};
 use deep_canvas::registry::{Dependency, Manifest, Module, Range, Registrar, Semver};
 use deep_canvas::schedule::{Canonical, OpError, Val, View};
 use serde_json::{json, Value};
@@ -304,12 +305,33 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
                 json_param("join", "miter | round | bevel"),
                 // A line of a mesh's edges in place of points (Marks in 3D: mesh edges; #420).
                 json_param("edges", crate::spec::EDGES),
+                // Marks in 3D: trail (#450), which a piece's check takes too (#265).
+                json_param("trail", crate::spec::TRAIL),
+                // The style a mesh-edge line's spans behind opaque geometry draw in (#1782).
+                json_param("hidden", crate::spec::HIDDEN),
                 // Marks in 3D: whether the sky's fog applies to it (#537's live lines set false).
                 fog(true),
             ]),
         ),
         &[],
         "",
+    )
+    // #2777: a trail's space and window are closed lists (Marks in 3D: trail).
+    .closes(
+        "trail.space",
+        Closure::closed(
+            "determinism",
+            "a trail needs its places held in a frame other than the world's or its source's parent's",
+            NOTHING,
+        ),
+    )
+    .closes(
+        "trail.window",
+        Closure::closed(
+            "determinism",
+            "a trail needs a stretch of its source's path that none of span, since and whole draws",
+            "several trails on one source, each with its own window",
+        ),
     )
     // #1801: a line's points may be items it runs between.
     .refs(&[Decl::new("params/points", Holds::Item, names::TARGET)]);

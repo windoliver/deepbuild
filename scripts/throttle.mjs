@@ -5,18 +5,40 @@
 // opens a budget window (section 12a): a timed grant that waits for every slot to empty, around budget-window.mjs.
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { appendFileSync, linkSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { constants, cpus, homedir, loadavg, userInfo } from 'node:os';
+import { appendFileSync, existsSync, linkSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { constants, cpus, freemem, homedir, loadavg, totalmem, userInfo } from 'node:os';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// The Mac has one bay pair and one build at a time; the Spark, Linux, has the cores for more.
+// The Mac has one bay pair and one build at a time; the Spark, Linux, has the cores for more. test's number is its
+// ceiling: a test grant past the first starts only while the machine's readings leave room (roomForTest).
 const LIMITS = process.platform === 'darwin' ? { build: 1, 'bay-pair': 1, test: 2, timed: 1 } : { build: 2, 'bay-pair': 3, test: 6, timed: 1 };
 const CLASSES = Object.keys(LIMITS);
 const POLL_MS = 200;
 // A CLI grant's default bound, in minutes: the longest full run seen on the Spark was about 9 hours.
 const HOLD = 720;
 const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+// A run on the Spark is a unit capped at 24 GiB (MemoryMax), so one more run needs that much memory available; a run
+// on the Mac, whose whole process tree measured 2.6 GiB, is budgeted 8 GiB (#2980). A test grant younger than 5
+// minutes doesn't show in the readings yet, so it is counted as a run's memory still to come.
+const RUN_MEMORY = (process.platform === 'darwin' ? 8 : 24) * 2 ** 30;
+const SETTLING_MS = 5 * 60_000;
+
+/**
+ * Whether another test grant may start beside `held` (the table's test grants), by `readings` of the machine: the
+ * first always may; past it, while fewer than the ceiling hold, the load is under the cores and the memory available,
+ * less a run's for each held grant still settling (or of no known time), leaves room for one more run. Without
+ * readings, as for a test's own table given none, only the ceiling decides.
+ */
+export function roomForTest(held, readings, now = Date.now()) {
+  if (!held.length) return true;
+  if (held.length >= LIMITS.test) return false;
+  if (!readings) return true;
+  const { memory, load, cores } = readings;
+  const settling = held.filter((grant) => !(now - grant.at >= SETTLING_MS)).length;
+  return load < cores && memory - settling * RUN_MEMORY >= RUN_MEMORY;
+}
 
 /**
  * Every process, by pid: its parent and its start time, which tells a holder from a later process given its number.
@@ -57,6 +79,16 @@ const alive = (procs, { pid, start }) => (procs.has(pid) ? procs.get(pid).start 
 const ended = (entry) => !alive(processes(), entry) && !alive(processes({ fresh: true }), entry);
 /** This process and its ancestors, nearest first: what a DEEP_THROTTLE or DEEP_PERF_LOCK holder is verified against. */
 export const ancestors = () => chain(processes({ fresh: true }), process.pid);
+/** Every process under `pid` now, by PID and start, so a stop later reaches only these and not a number since taken. */
+export function descendants(pid) {
+  const procs = processes({ fresh: true });
+  return [...procs].filter(([at]) => at !== pid && chain(procs, at).includes(pid)).map(([at, { start }]) => ({ pid: at, start }));
+}
+/** SIGKILL to each of `tree` still listed with the start it had. */
+export function killTree(tree) {
+  const procs = processes({ fresh: true });
+  for (const holder of tree) if (procs.get(holder.pid)?.start === holder.start) try { process.kill(holder.pid, 'SIGKILL'); } catch {}
+}
 /** The command lines of `pids`, by pid. */
 function commands(pids) {
   const env = { ...process.env, LC_ALL: 'C' };
@@ -88,6 +120,49 @@ function folder() {
   return (chosen = inTest ? process.env.DEEP_THROTTLE_TABLE || join(homedir(), '.deepbuild', 'throttle') : join(userInfo().homedir, '.deepbuild', 'throttle'));
 }
 
+/**
+ * The machine's readings: the memory available, the 1-minute load and the cores. On Linux the memory is os.freemem(),
+ * MemAvailable. On darwin os.freemem() counts only free pages, a fraction of a GiB on a busy Mac, so it is the kernel's
+ * own measure, kern.memorystatus_level, the percentage of memory free (#2980).
+ */
+export function machineReadings() {
+  let memory = freemem();
+  if (process.platform === 'darwin') {
+    const read = spawnSync('/usr/sbin/sysctl', ['-n', 'kern.memorystatus_level'], { encoding: 'utf8' });
+    const level = Number(read.stdout?.trim());
+    if (read.status !== 0 || !read.stdout?.trim() || !(level >= 0 && level <= 100)) throw Error(`sysctl kern.memorystatus_level read ${JSON.stringify(read.stdout ?? '')} (${read.error?.message ?? read.stderr?.trim() ?? ''})`);
+    memory = Math.floor((level * totalmem()) / 100);
+  }
+  return { memory, load: loadavg()[0], cores: cpus().length };
+}
+
+/**
+ * The readings a test grant is decided on. The machine's table reads the machine (machineReadings). A test's own table, whose holders are a test's stubs, reads the file
+ * DEEP_THROTTLE_READINGS names, again at each look, or none without it; the machine's table refuses the variable.
+ */
+function readings() {
+  const file = process.env.DEEP_THROTTLE_READINGS;
+  // By real path, so a trailing slash or a HOME linked to the real one is still the machine's table.
+  const machine = join(userInfo().homedir, '.deepbuild', 'throttle');
+  mkdirSync(folder(), { recursive: true, mode: 0o700 });
+  if (realpathSync(folder()) === (existsSync(machine) ? realpathSync(machine) : machine)) {
+    if (file !== undefined) throw Error('DEEP_THROTTLE_READINGS is read only for a test\'s own table, inside a test run (node --test or vitest); unset it to use the machine\'s readings');
+    return machineReadings();
+  }
+  if (file === undefined) return null;
+  let given;
+  try {
+    given = JSON.parse(readFileSync(file, 'utf8'));
+  } catch (error) {
+    throw Error(`DEEP_THROTTLE_READINGS: ${file} can't be read as JSON (${error.message})`);
+  }
+  const { memory, load, cores } = given ?? {};
+  if (![memory, load, cores].every((value) => typeof value === 'number' && Number.isFinite(value) && value >= 0) || !Number.isInteger(cores) || cores < 1) {
+    throw Error(`DEEP_THROTTLE_READINGS: ${file} isn't {"memory": <bytes>, "load": <number>, "cores": <integer ≥ 1>}: ${JSON.stringify(given)}`);
+  }
+  return { memory, load, cores };
+}
+
 // The table is one file, rewritten whole under a lock file only one process can create, held for a read and a write;
 // a request's ps runs before it is taken; a timed-out drain's and a past-bound holder's, inside it. The lock names
 // its holder by number and start, and only a lock whose holder is gone is taken over: aside, by a rename only one process can make, and removed only if it is the lock judged gone. Two runs
@@ -99,7 +174,18 @@ function locked(act) {
   // lock, which a run given its number must not rewrite.
   const mine = `${mark}.${process.pid}`;
   rmSync(mine, { force: true });
-  writeFileSync(mine, JSON.stringify({ pid: process.pid, start: processes().get(process.pid).start }));
+  // A write that fails, as on a full disk, takes its own file with it (#2869).
+  const write = (path, data) => {
+    try {
+      writeFileSync(path, data);
+    } catch (error) {
+      try {
+        rmSync(path, { force: true });
+      } catch {}
+      throw error;
+    }
+  };
+  write(mine, JSON.stringify({ pid: process.pid, start: processes().get(process.pid).start }));
   const { ino } = statSync(mine);
   for (;;) {
     try {
@@ -152,7 +238,7 @@ function locked(act) {
     table.grants = table.grants.filter((grant) => !gave.includes(grant));
     table.requests = table.requests.filter((request) => !ended(request));
     const result = act(table, processes());
-    writeFileSync(`${file}.${process.pid}`, JSON.stringify(table));
+    write(`${file}.${process.pid}`, JSON.stringify(table));
     renameSync(`${file}.${process.pid}`, file);
     return result;
   } finally {
@@ -194,7 +280,7 @@ function blockers(table, procs, request) {
 
 // Requests in the order they are served: those nested in a current holder's chain first, then by arrival.
 const order = (a, b) => Number(b.nested) - Number(a.nested) || a.seq - b.seq;
-function grantable(table, procs, request) {
+function grantable(table, procs, request, seen) {
   const mine = chain(procs, request.pid);
   const outside = table.grants.filter((grant) => !mine.includes(grant.pid));
   // timed is exclusive of every class outside its own chain.
@@ -213,7 +299,7 @@ function grantable(table, procs, request) {
     // on. A window drains whatever is held (section 12a).
     const marked = table.grants.some((grant) => grant.blocked);
     if (!request.nested && table.requests.some((other) => other.class === 'timed' && (other.window || !marked))) return false;
-    return held < LIMITS[request.class];
+    return request.class === 'test' ? roomForTest(table.grants.filter((grant) => grant.class === 'test'), seen) : held < LIMITS[request.class];
   }
   if (blockers(table, procs, request).length) return false;
   // A top-level request waits for load below the cores, as the log shows. A nested one, in a chain that holds a grant
@@ -225,7 +311,8 @@ function grantable(table, procs, request) {
 let blocked = [];
 
 /**
- * Takes a grant of `cls`, waiting at most `wait` minutes; null when none came. A build or test request from a chain
+ * Takes a grant of `cls`, waiting at most `wait` minutes; null when none came, or an ENOSPC marked `waited` thrown when
+ * the wait ran out on a full disk (#2869). A build or test request from a chain
  * that holds a grant, and a timed request from one that holds timed, passes through: it holds its ancestor's grant
  * and is released with it. The grant's `token` is what DEEP_THROTTLE carries to the holder's descendants. A wait doesn't
  * run down while a window is open: a window outlasts a wait, and only its end decides when the next build starts.
@@ -233,6 +320,8 @@ let blocked = [];
 export function acquire(cls, { wait = 30, window = false } = {}) {
   if (!LIMITS[cls]) throw Error(`no throttle class ${cls}; the classes are ${CLASSES.join(', ')}`);
   const pid = process.pid;
+  // A readings variable the table can't take is refused before anything is asked.
+  readings();
   let deadline = Date.now() + wait * 60_000, polled = Date.now();
   const request = locked((table, procs) => {
     const held = inherited(table, procs, chain(procs, pid));
@@ -245,14 +334,28 @@ export function acquire(cls, { wait = 30, window = false } = {}) {
     return entry;
   });
   if (request.pass) return { class: cls, token: process.env.DEEP_THROTTLE, pass: true };
+  // A full disk leaves the table as it was (#2869): a waiting request's look whose write fails with ENOSPC is one more
+  // look with no grant, and the request keeps its place. Once the wait has run out the ENOSPC is thrown, marked
+  // `waited`, rather than no grant returned: the request it couldn't take out of the table stays there until this
+  // process ends, as after any error. The CLI reads it as the timeout it is.
+  const look = (act) => {
+    try {
+      return locked(act);
+    } catch (error) {
+      if (error.code !== 'ENOSPC') throw error;
+      if (Date.now() > deadline) throw Object.assign(error, { waited: true });
+      return null;
+    }
+  };
   for (;;) {
-    const grant = locked((table, procs) => {
+    const grant = look((table, procs) => {
       const pending = table.requests.find((other) => other.id === request.id);
       if (!pending) return 'timeout';
       const now = Date.now();
       if ([...table.grants, ...table.requests].some((other) => other.window && other.id !== request.id)) deadline += now - polled;
       polled = now;
-      if (!grantable(table, procs, pending)) {
+      const seen = cls === 'test' ? readings() : undefined;
+      if (!grantable(table, procs, pending, seen)) {
         if (now <= deadline) return null;
         table.requests.splice(table.requests.indexOf(pending), 1);
         // A drain that timed out names what it waited on. A top-level one marks it too, so the next drain doesn't stop
@@ -270,11 +373,16 @@ export function acquire(cls, { wait = 30, window = false } = {}) {
       const entry = { id: request.id, class: cls, pid, start: request.start, nested: request.nested, window, index, at: now };
       table.grants.push(entry);
       const load = loadavg()[0], cores = cpus().length;
-      log({ event: 'granted', class: cls, grant: entry.nested ? 'nested' : 'top-level', id: entry.id, pid, index, load, cores, wait });
+      log({ event: 'granted', class: cls, grant: entry.nested ? 'nested' : 'top-level', id: entry.id, pid, index, load, cores, wait, ...cls === 'test' ? { readings: seen } : {} });
       return entry;
     });
     if (grant === 'timeout') {
-      log({ event: 'timeout', class: cls, id: request.id, pid, wait, ...blocked.length ? { blockers: blocked } : {} });
+      // The request is out of the table, so a log line a full disk refuses changes nothing.
+      try {
+        log({ event: 'timeout', class: cls, id: request.id, pid, wait, ...blocked.length ? { blockers: blocked } : {} });
+      } catch (error) {
+        if (error.code !== 'ENOSPC') throw error;
+      }
       return null;
     }
     if (grant) return { class: cls, id: grant.id, index: grant.index, token: `${cls}:${grant.id}`, pass: false };
@@ -331,9 +439,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     grant = acquire(cls, { wait, window });
   } catch (error) {
-    // The table couldn't be read or written, so nothing ran: BLOCKED, never a failure of the command.
-    console.log(`BLOCKED throttle: ${error.message}\n  Fix: Repair what the line names: ~/.deepbuild/throttle/ this user's to write, its table readable, ps runnable.`);
-    process.exit(2);
+    // A wait that ran out on a full disk is no grant (#2869).
+    if (error.waited) grant = null;
+    // The table couldn't be read or written otherwise, so nothing ran: BLOCKED, never a failure of the command.
+    else {
+      console.log(`BLOCKED throttle: ${error.message}\n  Fix: Repair what the line names: ~/.deepbuild/throttle/ this user's to write, its table readable, ps runnable.`);
+      process.exit(2);
+    }
   }
   if (!grant) {
     // The marker a job's report reads by: its output is the test run's too, so a line there proves nothing.
@@ -343,7 +455,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.exit(3);
   }
   if (window) log({ event: 'window-open', id: grant.id, pid: process.pid });
-  const child = spawn(command[0], command.slice(1), { stdio: 'inherit', env: { ...process.env, DEEP_THROTTLE: grant.token } });
+  // A window's record names its grant, as the log's window-open and window-close lines do (#2674).
+  const child = spawn(command[0], command.slice(1), { stdio: 'inherit', env: { ...process.env, DEEP_THROTTLE: grant.token, ...window && { DEEP_WINDOW: grant.id } } });
   // A terminal's SIGINT reaches the whole group, the command too, so it isn't sent again; a SIGTERM or SIGHUP sent to
   // this process alone is passed on.
   process.on('SIGINT', () => {});
@@ -363,15 +476,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   // A grant held past its bound while a request from outside this tree waits ends (#2744): SIGTERM to the command,
   // and 10 s later SIGKILL to every process of the tree as it stood then, by PID and start.
   let tree = null;
-  const mine = () => {
-    const procs = processes({ fresh: true });
-    return [...procs].filter(([pid]) => pid !== process.pid && chain(procs, pid).includes(process.pid)).map(([pid, { start }]) => ({ pid, start }));
-  };
+  const mine = () => descendants(process.pid);
   // Only a process listed now with the start it had then: a number since taken is someone else's.
-  const stop = () => {
-    const procs = processes({ fresh: true });
-    for (const holder of tree) if (procs.get(holder.pid)?.start === holder.start) try { process.kill(holder.pid, 'SIGKILL'); } catch {}
-  };
+  const stop = () => killTree(tree);
   if (!grant.pass && !window) {
     // A monotonic clock, so a machine that slept doesn't count the sleep. A request waits once it was pending at the
     // last look too, so one about to be granted at once doesn't count; and a grant given back early has nothing to end.

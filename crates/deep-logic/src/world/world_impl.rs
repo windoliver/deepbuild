@@ -77,6 +77,7 @@ impl World {
                 asked: None,
                 dirty: BTreeSet::new(),
                 kdirty: BTreeSet::new(),
+                rdirty: BTreeSet::new(),
                 stored: Vec::new(),
                 checked: None,
                 spacing: item.every,
@@ -97,6 +98,7 @@ impl World {
             planted,
             saves_dir: None,
             held: None,
+            saves_ns: 0,
             saved: Vec::new(),
             seen: 0,
             adapter: String::new(),
@@ -198,7 +200,7 @@ impl World {
             return;
         }
         l.checked = Some(at);
-        let deep = l.deep_hash();
+        let deep = if rec.deferred { 0 } else { l.deep_hash() };
         // The CPU time storing it; the full-state hash beside it is the record's evidence.
         let t = cpu_ns();
         rec.checkpoint(&id, at, deep, &l.arrays);
@@ -307,7 +309,7 @@ impl World {
                 }
             }
             if let Some(k) = self.at() {
-                if self.saves_dir.is_some() || self.held.is_some() {
+                if self.keeps() {
                     crate::saves::due(self, k, ended_at);
                 }
                 // #860: a rewind stamped by now comes before any step at this time, and the seen
@@ -378,9 +380,7 @@ impl World {
         let memory = l.runner.memory_mut("memory").expect("a memory");
         match services::serve(item, k, memory) {
             Ok((pages, n)) => {
-                let pages = pages.into_iter().map(|p| p as u32);
-                l.dirty.extend(pages.clone());
-                l.kdirty.extend(pages);
+                l.mark(pages.into_iter().map(|p| p as u32));
                 // The time answering what step k asked: 0 when it asked nothing.
                 let ns = if n == 0 {
                     0
@@ -489,6 +489,7 @@ impl World {
         let item = &piece.items[i];
         let k = self.lives[i].next;
         let t = k * item.step;
+        let before = self.lives[i].last * item.step; // #277: `net.seats` since the step before
         let read_started = web_time::Instant::now();
         // Each read control's entries stamped by now, at most PER_STEP a step, the step's own by
         // time, player and seq, never by arrival (Input track); each reading's values as recorded.
@@ -506,7 +507,8 @@ impl World {
                 let q = l.pending.entry(r.name.clone()).or_default();
                 let mut fresh: Vec<Entry> = Vec::new();
                 while *c < list.len() && list[*c].t <= t {
-                    fresh.push(list[*c].clone());
+                    // Entries stamped since the last step that ran, never before it (#551).
+                    fresh.extend((list[*c].t > l.last * item.step).then(|| list[*c].clone()));
                     *c += 1;
                 }
                 if r.read == Read::Control {
@@ -687,6 +689,10 @@ impl World {
                         .is_some_and(|i| matches!(list[i].value, Given::Number(n) if n != 0.0));
                     region[at..at + 4].copy_from_slice(&i32::from(on).to_le_bytes());
                 }
+                Read::Carry | Read::Profile => {
+                    crate::profile::fill_read(item, &self.track, e, k, &mut region)
+                }
+                Read::Seats => seats::fill(&self.track, (before, t), item.step, &mut region[at..]),
                 Read::Mirror(_) | Read::None => {}
             }
         }
@@ -774,8 +780,7 @@ impl World {
                 }
             }
         }
-        l.dirty.extend(&pages);
-        l.kdirty.extend(&pages);
+        l.mark(pages.iter().copied());
         rec.fuel.entry(i).or_default().push((k, fuel));
         let trap = match out {
             Ok(o) => o.trap.map(|t| (t.kind, Some(t.function), Some(t.offset))),
@@ -817,6 +822,9 @@ impl World {
         let mut fresh = memory[w..w + n].to_vec();
         if self.planted.replay_changes_step_37 && k == 37 && i == 0 {
             changed(item, &mut fresh);
+        }
+        if self.planted.reads_wall_clock && i == 0 {
+            walled(item, &mut fresh);
         }
         let started = web_time::Instant::now();
         let mut changed = bake::ranges(item, k, &l.arrays, &fresh);
@@ -1112,31 +1120,7 @@ impl World {
     /// (`module`). Entries still waiting stay with it; its place on the track doesn't, since the
     /// world that loads it reads a track of its own.
     pub fn saved(&mut self) -> Value {
-        let items: Vec<Value> = self
-            .lives
-            .iter_mut()
-            .map(|l| {
-                let globals: Vec<Value> = l
-                    .globals()
-                    .iter()
-                    .map(|v| match v {
-                        Val::I32(x) => json!(["i32", x]),
-                        Val::I64(x) => json!(["i64", x]),
-                        Val::F32(x) => json!(["f32", x]),
-                        Val::F64(x) => json!(["f64", x]),
-                        _ => Value::Null,
-                    })
-                    .collect();
-                let pending: Map<String, Value> = l
-                    .pending
-                    .iter()
-                    .map(|(k, q)| (k.clone(), q.iter().map(Entry::to_json).collect()))
-                    .collect();
-                json!({"next": l.next, "failed": l.failed, "memory": hex(l.memory()), "globals": globals,
-                       "arrays": hex(&l.arrays), "pending": pending})
-            })
-            .collect();
-        Value::Array(items)
+        World::saved_of(&self.snapshot())
     }
 
     /// A world on `track` holding the state `saved` gave, each item in a fresh instance; the start
@@ -1150,10 +1134,11 @@ impl World {
         let bad =
             || json!({"ok": false, "code": "bad_input", "what": "a saved state of another piece"});
         let unhex = |v: &Value| -> Option<Vec<u8>> {
-            let s = v.as_str()?;
-            (0..s.len())
-                .step_by(2)
-                .map(|i| u8::from_str_radix(s.get(i..i + 2)?, 16).ok())
+            let s = v.as_str()?.as_bytes();
+            let digit = |c: u8| char::from(c).to_digit(16);
+            (s.len() % 2 == 0).then_some(())?;
+            (s.chunks_exact(2))
+                .map(|p| Some((digit(p[0])? * 16 + digit(p[1])?) as u8))
                 .collect()
         };
         let mut lives = Vec::new();
@@ -1214,6 +1199,7 @@ impl World {
             planted,
             saves_dir: None,
             held: None,
+            saves_ns: 0,
             saved: Vec::new(),
             seen: 0,
             adapter: String::new(),
@@ -1376,6 +1362,7 @@ impl World {
             planted,
             saves_dir: None,
             held: None,
+            saves_ns: 0,
             saved: Vec::new(),
             seen,
             adapter: String::new(),
@@ -1422,6 +1409,7 @@ impl World {
             // The restore wrote every page.
             dirty: (0..pages).collect(),
             kdirty: (0..pages).collect(),
+            rdirty: (0..pages).collect(),
             stored: Vec::new(),
             checked: None,
             spacing: item.every,
@@ -1484,6 +1472,7 @@ impl World {
             planted: self.planted,
             saves_dir: None,
             held: None,
+            saves_ns: 0,
             saved: Vec::new(),
             seen: self.seen,
             adapter: self.adapter.clone(),

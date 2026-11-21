@@ -19,6 +19,7 @@ pub mod tuning;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
@@ -33,7 +34,7 @@ use serde_json::{json, Map, Value};
 use crate::bake::handed;
 use crate::piece::{self, History, Piece};
 use crate::services::Service;
-use crate::world::{carry_of, track_of, Entry, Record, World};
+use crate::world::{carry_of, track_of, Entry, Record, Snapshot, World};
 use crate::Planted;
 
 /// The interface this module implements, apart from the logic item kind of that name.
@@ -46,7 +47,7 @@ const STEP: i64 = 11_760_000;
 /// `fires`, each with the form its reader takes (#1973); `wasm` is the program's bytes, which
 /// whoever holds the evidence store inlines by the program's hash before a frame, as a vector's
 /// outline is.
-const PARAMS: [(&str, &str); 18] = [
+const PARAMS: [(&str, &str); 22] = [
     ("program", "asset ID"),
     ("debug", "asset ID"),
     ("step_rate", "Hz"),
@@ -71,12 +72,25 @@ const PARAMS: [(&str, &str); 18] = [
         "saves",
         "{slots?: integer, request?: name, ends?: name, migrate?}",
     ),
+    // #189: the record a giving item writes and the one a taking item reads (Logic: carry records).
+    ("carry", "{request: name, out: [name]}"),
+    (
+        "carry_in",
+        "{arrays: {name → {type, count?: u32}}, accepts: [sha256]}",
+    ),
+    // #276: the profile record the app or the player reopens when the piece starts (Logic: saves).
+    (
+        "profile",
+        "{arrays: {name → {type, count?: u32}}, request: name}",
+    ),
     (
         "preview",
         "{reads?: [control ID | path], writes?: {name → {type, count?: u32}}}",
     ),
     ("services", "{service@major → {max_per_step: u16}}"),
     ("mirrors", "[{array: path, at: name}]"),
+    // process@1's kind names, which its kind rules read (#980).
+    ("process", "{kinds: [name]}"),
     ("wasm", "text (the program's bytes, which the hub inlines)"),
 ];
 
@@ -254,9 +268,21 @@ fn register(r: &mut Registrar) {
         false,
     );
     // Each code's planted fixture (#138's kit): a program that traps at step 0, which fails the
-    // determinism check that ran it, and one whose every step spends most of its fuel.
-    planted(r, "logic.determinism", "(unreachable)");
-    planted(r, "logic.budget", "(local $i i32) (loop $l (local.set $i (i32.add (local.get $i) (i32.const 1))) (br_if $l (i32.lt_u (local.get $i) (i32.const 200000))))");
+    // determinism check that ran it, one whose every step spends most of its fuel, and one that
+    // names a tuning catalog and never reads it, so moving its row changes no step.
+    planted(r, "logic.determinism", "(unreachable)", None);
+    planted(r, "logic.budget", "(local $i i32) (loop $l (local.set $i (i32.add (local.get $i) (i32.const 1))) (br_if $l (i32.lt_u (local.get $i) (i32.const 200000))))", None);
+    let tuning = deep_catalog::pack(
+        &[deep_catalog::Source {
+            name: "tuning".into(),
+            format: deep_catalog::Format::Csv,
+            bytes: b"id,value,min,max\njump_height,1.0,0.5,2.0\n".to_vec(),
+        }],
+        &json!({"tuning": {"id": "id", "columns": {"value": {"type": "f64"}, "min": {"type": "f64"}, "max": {"type": "f64"}}}}),
+        deep_catalog::Planted::None,
+    )
+    .expect("the planted tuning table packs");
+    planted(r, "logic.tuning", "", Some(tuning));
     // #535: each logic item's arrays, by `<logic>.<name>`. Its fixture's changed ranges are the
     // ones the module hands over, so the kit's clean-rebuild rule runs [`handed`] itself.
     let frames = json!([[0, 0, 0], [0, 5, 0], [0, 5, 7]]);
@@ -334,13 +360,24 @@ fn rate(doc: &Value) -> Option<i64> {
         .filter(|g| *g > 0)
 }
 
-/// Every logic item's state after a step, as plain data, and its arrays by `<logic ID>.<name>`.
+/// Every logic item's state after a step, and its arrays by `<logic ID>.<name>`. The state is kept
+/// as raw bytes, its plain data written only when something reads it (#3056).
 #[derive(Debug)]
 pub struct State {
-    pub saved: Value,
+    items: Vec<Snapshot>,
+    saved: OnceLock<Value>,
+    /// Which step wrote it: the thread's world that is still at this state, if any, continues it.
+    token: u64,
     pub arrays: BTreeMap<String, Vec<Value>>,
     /// Each item's read region, its offset and size in bytes: what the host writes every step.
     pub reads: Vec<(usize, usize)>,
+}
+
+impl State {
+    /// The items' state as plain data, as [`World::saved`] gives it.
+    pub fn saved(&self) -> &Value {
+        self.saved.get_or_init(|| World::saved_of(&self.items))
+    }
 }
 
 impl Canonical for State {
@@ -349,7 +386,7 @@ impl Canonical for State {
     /// plays that carry the same state hash equal whatever clock brought them there (Carried
     /// state; #1040's pages).
     fn encode(&self, out: &mut Vec<u8>) {
-        for (i, item) in self.saved.as_array().into_iter().flatten().enumerate() {
+        for (i, item) in self.saved().as_array().into_iter().flatten().enumerate() {
             let fields = item.as_object().into_iter().flatten();
             for (k, v) in fields.filter(|(k, _)| *k != "next") {
                 out.extend(canonical(&Value::String(k.clone())));
@@ -369,6 +406,16 @@ impl Canonical for State {
 
 /// How many checked pieces a thread keeps.
 const PIECES_KEPT: usize = 8;
+
+/// The token the next state a step writes takes.
+static TOKENS: AtomicU64 = AtomicU64::new(1);
+
+thread_local! {
+    /// The world the last step on this thread left, with the token of the state it wrote and the
+    /// track entries it steps on: a step from that state continues it rather than loading the
+    /// state again (#3056), which seeking equals playing makes the same.
+    static LAST: RefCell<Option<(u64, Vec<Value>, World)>> = const { RefCell::new(None) };
+}
 
 /// The between-step services `logic.step` hands a document's logic items (Logic: between-step
 /// services): the build that links the modules answering them binds them once; with none bound,
@@ -488,23 +535,36 @@ fn step(v: &mut View<'_>) -> Result<(), OpError> {
     let doc = v.document()?;
     let t = v.t()?;
     let piece = piece_of(doc)?;
-    // The played form's input track (Input track): the entries of the controls its items read.
+    // The played form's input track (Input track): the entries of the controls its items read,
+    // and a carry record's entry where an item takes one (#189).
     let read = |c: &str| piece.items.iter().any(|i| i.reads.iter().any(|r| r == c));
+    let takes = piece.items.iter().any(|i| i.carry_in.is_some());
+    let keeps = piece.items.iter().any(|i| i.profile.is_some());
     let mut entries = Vec::new();
+    let mut given = Vec::new();
     for e in doc
         .get("track")
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
     {
-        if e.get("control").and_then(Value::as_str).is_some_and(read) {
+        let carried = takes && e.get("carry").is_some() || keeps && e.get("profile").is_some();
+        if carried || e.get("control").and_then(Value::as_str).is_some_and(read) {
             entries.push(Entry::parse(e).ok_or_else(|| OpError::new("bad_input", e.to_string()))?);
+            given.push(e.clone());
         }
     }
     let track = track_of(&entries);
     let mut rec = Record::default();
-    let mut world = match v.carried(STATE).and_then(|s| s.as_typed::<State>()) {
-        None => World::new(
+    let carried = v.carried(STATE).and_then(|s| s.as_typed::<State>());
+    let last = LAST.with(|l| l.borrow_mut().take());
+    let mut world = match (&carried, last) {
+        (Some(s), Some((token, on, w)))
+            if s.token == token && on == given && Rc::ptr_eq(&w.piece, &piece) =>
+        {
+            Ok(w)
+        }
+        (None, _) => World::new(
             piece.clone(),
             track,
             false,
@@ -512,7 +572,7 @@ fn step(v: &mut View<'_>) -> Result<(), OpError> {
             &mut rec,
             None,
         ),
-        Some(s) => World::from_saved(piece.clone(), track, &s.saved, Planted::default()),
+        (Some(s), _) => World::from_saved(piece.clone(), track, s.saved(), Planted::default()),
     }
     .map_err(failed)?;
     // #860: the track is the current branch; the seen values it carries in are the host's run's,
@@ -535,16 +595,21 @@ fn step(v: &mut View<'_>) -> Result<(), OpError> {
         }
     }
     v.note_step(t / rate(doc).unwrap_or(STEP), 0);
-    v.write(
+    let token = TOKENS.fetch_add(1, Ordering::Relaxed);
+    let written = v.write(
         STATE,
         Val::typed(State {
-            saved: world.saved(),
+            items: world.snapshot(),
+            saved: OnceLock::new(),
+            token,
             arrays,
             reads: (piece.items.iter())
                 .map(|i| (i.reads_at as usize, i.layout.size("reads") as usize))
                 .collect(),
         }),
-    )
+    );
+    LAST.with(|l| *l.borrow_mut() = Some((token, given, world)));
+    written
 }
 
 /// The kit fixture's program, assembled from its text, with its hash.
@@ -607,19 +672,32 @@ fn fixture_step(state: &mut Value, input: &StepInput<'_>) {
 
 /// The fixture that raises exactly `code`: a figure of one logic item whose step is `body`, its
 /// program a fixture asset, since a kit fixture has no evidence store. It names no other module's
-/// kind, which the kit's seal of this module alone would refuse as unknown.
-fn planted(r: &mut Registrar, code: &str, body: &str) {
+/// kind, which the kit's seal of this module alone would refuse as unknown. A `catalog` is the
+/// item's one data asset, copied at `assets_at`, its record in the check input's `catalogs`.
+fn planted(r: &mut Registrar, code: &str, body: &str, catalog: Option<deep_catalog::Packed>) {
+    let at = match catalog {
+        Some(_) => r#"(global (export "assets_at") i32 (i32.const 4096))"#,
+        None => "",
+    };
     let text = format!(
         r#"(module (memory (export "memory") 1 1) (global (export "reads_at") i32 (i32.const 0))
-        (global (export "writes_at") i32 (i32.const 1024)) (func (export "init") (param i64)) (func (export "step") (param i64) {body}))"#
+        (global (export "writes_at") i32 (i32.const 1024)) {at} (func (export "init") (param i64)) (func (export "step") (param i64) {body}))"#
     );
     let program = wat::parse_str(text).expect("a planted program");
     let sha = deep_canvas::canon::sha256_hex(&program);
+    let mut params = json!({"program": sha, "writes": {"n": {"type": "i32"}}});
+    let mut check = json!({"kind": code});
+    let mut assets = vec![program];
+    if let Some(c) = catalog {
+        params["assets"] = json!([c.sha256]);
+        check["catalogs"] = json!({ c.sha256: c.record });
+        assets.push(c.bytes);
+    }
     let doc = json!({
         "format": 1, "profile": "figure", "title": code, "description": format!("The logic module's planted {code}."), "size": [320, 180],
         "seed": 1, "transport": {"span": "1s", "frame_rate": [60, 1]}, "requires": {"modules": {"logic": "^1"}},
         "items": {
-            "rules": {"id": "rules", "kind": "logic@1", "name": "Rules", "order": "a1", "params": {"program": sha, "writes": {"n": {"type": "i32"}}}},
+            "rules": {"id": "rules", "kind": "logic@1", "name": "Rules", "order": "a1", "params": params},
         },
     });
     r.fixture(&format!("logic-{}", &code[6..]), doc, None)
@@ -627,8 +705,8 @@ fn planted(r: &mut Registrar, code: &str, body: &str) {
         .planted()
         // The module registers its own kind (#533), so the kit's seal of this module alone knows
         // logic@1 and the fixture raises its code and no other.
-        .sidecar(json!({"codes": [code], "checks": [{"kind": code}]}))
-        .fixture_assets(vec![program]);
+        .sidecar(json!({"codes": [code], "checks": [check]}))
+        .fixture_assets(assets);
 }
 
 /// What a report raises, as a check over items gives it.
@@ -641,8 +719,18 @@ fn issues(report: Report) -> Vec<(String, Raised)> {
 }
 
 /// The lowered document's logic items as one checked piece, its input track, and the steps its
-/// transport's span covers; or why it can't be read, as a blocked row.
-fn baked(doc: &Value, input: &Value) -> Result<(Rc<Piece>, Vec<Entry>, i64), Value> {
+/// transport's span covers; or why it can't be read, as a blocked row. #550's net check kinds
+/// read a document's match from it too.
+pub fn baked(doc: &Value, input: &Value) -> Result<(Rc<Piece>, Vec<Entry>, i64), Value> {
+    baked_with(doc, input, &Default::default())
+}
+
+/// As `baked`, its piece checked with `planted`'s twins (#551: a planted page tracker).
+pub fn baked_with(
+    doc: &Value,
+    input: &Value,
+    planted: &crate::Planted,
+) -> Result<(Rc<Piece>, Vec<Entry>, i64), Value> {
     let items: serde_json::Map<String, Value> = doc
         .get("items")
         .and_then(Value::as_object)
@@ -659,7 +747,7 @@ fn baked(doc: &Value, input: &Value) -> Result<(Rc<Piece>, Vec<Entry>, i64), Val
     let line = json!({"seed": doc.get("seed").and_then(Value::as_i64).unwrap_or(0),
         "controls": doc.get("controls").cloned().unwrap_or(json!({})), "items": items,
         "assets": input.get("assets").cloned().unwrap_or(json!({}))});
-    let piece = piece::check(&line, &Default::default(), &mut History::new()).map_err(|r| r.0)?;
+    let piece = piece::check(&line, planted, &mut History::new()).map_err(|r| r.0)?;
     let entries: Vec<Entry> = doc
         .get("track")
         .and_then(Value::as_array)
@@ -868,4 +956,43 @@ fn budget(doc: &Value, input: &Value) -> Report {
     out.results
         .push(json!({"kind": "logic.budget", "report": reply["report"]}));
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #3056: a world that runs on from a step leaves the same state and arrays as one restored
+    /// from that step's state, which is what lets `step` keep the live world between steps.
+    #[test]
+    fn a_world_run_on_leaves_what_one_restored_from_its_state_does() {
+        let piece = FIXTURE.with(Rc::clone);
+        let step = piece.items[0].step;
+        let press = |k: i64, seq: u32| Entry {
+            t: k * step,
+            seq,
+            control: "press".into(),
+            value: 1.0.into(),
+            writer: "you".into(),
+            player: 1,
+            as_of: None,
+            arrived: 0,
+        };
+        let presses = [press(2, 0), press(5, 1), press(7, 2)];
+        let mut rec = Record::default();
+        let mut on = World::new(piece.clone(), track_of(&presses), false, Planted::default(), &mut rec, None)
+            .expect("the fixture starts");
+        on.run_through(3 * step, &mut rec);
+        let saved = World::saved_of(&on.snapshot());
+        assert_eq!(saved, on.saved(), "the snapshot's plain data is saved's");
+        let mut restored = World::from_saved(piece.clone(), track_of(&presses), &saved, Planted::default())
+            .expect("the state loads");
+        on.run_through(9 * step, &mut rec);
+        restored.run_through(9 * step, &mut Record::default());
+        assert_eq!(on.saved(), restored.saved());
+        for w in &piece.items[0].writes {
+            let (a, b) = (on.array(0, &w.name), restored.array(0, &w.name));
+            assert!(a.is_some() && a == b, "{}: {a:?} against {b:?}", w.name);
+        }
+    }
 }

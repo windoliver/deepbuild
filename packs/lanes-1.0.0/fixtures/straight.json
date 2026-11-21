@@ -1,0 +1,180 @@
+{
+  "name": "straight",
+  "items": {
+    "e": {
+      "kind": "path@1",
+      "params": {
+        "verbs": [
+          "M",
+          "L"
+        ],
+        "pts": [
+          0,
+          0,
+          20,
+          0
+        ]
+      }
+    }
+  },
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "9e7a28b07a4e251a575dc6425746c1b072c20a16372275487b33c6e427e8d5ee",
+      "step_rate": 10,
+      "writes": {
+        "pos": {
+          "type": "vec2",
+          "count": 1
+        },
+        "heading": {
+          "type": "f64",
+          "count": 1
+        },
+        "speed": {
+          "type": "f64",
+          "count": 1
+        },
+        "state": {
+          "type": "i32",
+          "count": 1
+        },
+        "fork": {
+          "type": "f64",
+          "count": 1
+        },
+        "load": {
+          "type": "vec3",
+          "count": 1
+        }
+      },
+      "lanes": {
+        "graph": {
+          "paths": [
+            "e"
+          ],
+          "two_way": [
+            "e"
+          ],
+          "speed": {
+            "e": 2
+          },
+          "bays": {
+            "park.a": [
+              0,
+              0
+            ],
+            "rack.b": [
+              20,
+              0
+            ]
+          }
+        },
+        "vehicle": {
+          "length": 2,
+          "width": 1,
+          "gap": 0.5,
+          "speed": 3,
+          "accel": 1,
+          "decel": 1
+        }
+      }
+    }
+  },
+  "track": [],
+  "steps": 140,
+  "expect": {
+    "arrays": {
+      "0": {
+        "pos": [
+          [
+            0.005,
+            0
+          ]
+        ],
+        "state": [
+          1
+        ]
+      },
+      "9": {
+        "pos": [
+          [
+            0.5,
+            0
+          ]
+        ]
+      },
+      "19": {
+        "pos": [
+          [
+            2,
+            0
+          ]
+        ]
+      },
+      "49": {
+        "pos": [
+          [
+            8,
+            0
+          ]
+        ]
+      },
+      "99": {
+        "pos": [
+          [
+            18,
+            0
+          ]
+        ]
+      },
+      "109": {
+        "pos": [
+          [
+            19.5,
+            0
+          ]
+        ]
+      },
+      "115": {
+        "pos": [
+          [
+            19.92,
+            0
+          ]
+        ]
+      },
+      "118": {
+        "pos": [
+          [
+            19.995,
+            0
+          ]
+        ]
+      },
+      "119": {
+        "pos": [
+          [
+            20,
+            0
+          ]
+        ],
+        "state": [
+          0
+        ]
+      },
+      "139": {
+        "pos": [
+          [
+            20,
+            0
+          ]
+        ]
+      }
+    },
+    "tolerance": {
+      "abs": 0.000001
+    }
+  },
+  "answer": "One vehicle, top speed 3 m/s, on the 20 m edge e with a 2 m/s limit, 1 m/s² each way, at 10 Hz, sent from park.a to rack.b at step 0. The limit holds it to 2 m/s: up 2 s over 2 m (s = t²/2), 16 m at 2 m/s in 8 s, down 2 s over 2 m (s = 20 − (12 − t)²/2): rest to rest in 12 s. Step k ends at t = (k + 1)/10 s, so pos at step k is (s(t), 0): driving at step 0, parked at rack.b at step 119."
+}

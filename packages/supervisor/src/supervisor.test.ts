@@ -61,12 +61,12 @@ test('a clean run forgotten past the newest 64 still answers status and cleanup 
 
 // The denial stream filters by the subsystem macOS's sandbox reports carry, so `log` isn't sent every message the
 // machine writes. On a macOS whose reports carry another one (planted here: the filter names a subsystem no report
-// has) the canary never shows through it, and the stream starts again on a wider filter. Without that second
-// start no denial is recorded, and this fails waiting for it. The second start names the kernel as the reports'
-// process, where the sandbox extension writes them, before the sender alone: sent every process's messages, `log`
-// costs several times what it does sent the kernel's. A second start on the sender alone fails the last line. Where
-// the kernel's messages show no report either (planted: the filter names a process that writes none), the stream
-// starts a third time, on the sender alone, and a supervisor that stops at the second records no denial.
+// has) the canary never shows through it, so a stream on each wider filter warms beside it (#2977). Without a wider
+// one no denial is recorded, and this fails waiting for it. The one kept names the kernel as the reports' process,
+// where the sandbox extension writes them, before the sender alone: sent every process's messages, `log` costs
+// several times what it does sent the kernel's. Keeping the sender alone fails the last line. Where the kernel's
+// messages show no report either (planted: the filter names a process that writes none), the sender alone is kept,
+// and a supervisor without that filter records no denial.
 test.skipIf(process.platform !== 'darwin').each([
   ['carry another subsystem', 'reports-other-subsystem', '--predicate process == "kernel" AND sender =='],
   ['carry another subsystem and come from another process', 'reports-other-process', '--predicate sender =='],

@@ -273,3 +273,9 @@ harness = false
 name = "acceptance_1606"
 path = "../../tests/acceptance/1606-redraft-ac5-ac9/app/card.rs"
 harness = false
+
+# Issue #2661: the fold's bytes, the Agents and Terminal polls on a stand-in hub, and the Sidebar's lists of asks, written
+# blind in tests/acceptance/2661. One binary with a counting allocator, which counts only the test's own thread.
+[[test]]
+name = "acceptance_2661"
+path = "../../tests/acceptance/2661/app/main.rs"

@@ -193,6 +193,7 @@ struct View3 {
 
 /// #1431: the panel's pictures (`CanvasPanel.pictures`), decoded in the heap: only those a shown or waiting revision
 /// uses, one a panel's layer, so the bounds hold while the panels and their layers do.
+// copy-exception: a gauge's key, read in the footprint record, never drawn
 pub static PICTURES: Gauge = Gauge::new("CanvasPanel::pictures", Place::Heap, 256, 1_024_000_000);
 
 /// The bytes a decoded picture holds.
@@ -251,6 +252,7 @@ pub fn placed() -> Option<Placed> {
 }
 
 /// Forgets the earlier frames' placement, as [`crate::canvas::clear_items`] forgets their items.
+#[cfg(feature = "fixtures")]
 pub(crate) fn forget_placed() {
     PLACED.with(|p| *p.borrow_mut() = None);
 }
@@ -745,7 +747,11 @@ impl Render for CanvasPanel {
                                 size: size(px(r[2] * k), px(r[3] * k)),
                             };
                             for item in items {
-                                crate::canvas::record(&item.id, item.value.clone(), at(item.rect));
+                                crate::canvas::record(
+                                    &item.id,
+                                    || item.value.clone(),
+                                    at(item.rect),
+                                );
                             }
                             PLACED.with(|p| {
                                 *p.borrow_mut() = Some(Placed {

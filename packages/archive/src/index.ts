@@ -14,6 +14,7 @@ import type { Asks } from '@deepbuild/asks';
 import { scrubText, type EvidenceStore, type Writer } from '@deepbuild/evidence';
 import type { Connection, Event, EventInput, RecordStore } from '@deepbuild/record';
 import { ulid } from '@deepbuild/record/ids';
+import { forgeFetch } from '@deepbuild/github';
 import { copyTranscript, sourceStamp, type Part, type Prefix } from './copy.js';
 
 export interface ArchiveOptions {
@@ -278,9 +279,14 @@ export async function openArchive(options: ArchiveOptions): Promise<Archive> {
 
   /** An agent whose hooks kept landing for a day after its last capture: capture went quiet. */
   async function quiet(): Promise<void> {
-    const rows = (await record.raw("SELECT agent, max(ts) AS ts FROM events WHERE log_pos > ? AND writer = 'hook' AND agent IS NOT NULL GROUP BY agent", [cursor])) as { agent: string; ts: number }[];
-    for (const { agent, ts } of rows) hooked.set(agent, Math.max(hooked.get(agent) ?? 0, ts));
-    cursor = Number(((await record.raw('SELECT coalesce(max(log_pos), 0) AS pos FROM events')) as { pos: number }[])[0]!.pos);
+    const head = Number(((await record.raw('SELECT coalesce(max(log_pos), 0) AS pos FROM events')) as { pos: number }[])[0]!.pos);
+    const rows = (await record.raw("SELECT agent, max(ts) AS ts, max(log_pos) AS pos FROM events WHERE log_pos > ? AND writer = 'hook' AND agent IS NOT NULL GROUP BY agent", [cursor])) as { agent: string; ts: number; pos: number }[];
+    let seenPos = head;
+    for (const { agent, ts, pos } of rows) {
+      hooked.set(agent, Math.max(hooked.get(agent) ?? 0, ts));
+      seenPos = Math.max(seenPos, Number(pos));
+    }
+    cursor = Math.max(cursor, seenPos);
     for (const [agent, last] of captured) {
       if ((hooked.get(agent) ?? 0) - last < DAY || alerted.has(`${agent}@${last}`)) continue;
       await append(agent, 'archive.quiet', 1, { agent, last }, []);
@@ -289,24 +295,11 @@ export async function openArchive(options: ArchiveOptions): Promise<Archive> {
 
   async function forgeRuns(forge: NonNullable<ArchiveOptions['forge']>): Promise<void> {
     const token = options.env.GH_TOKEN ?? options.env.GITHUB_TOKEN;
-    const headers = { accept: 'application/vnd.github+json', ...(token && { authorization: `Bearer ${token}` }) };
-    const origin = new URL(forge.api).origin;
     const get = async (path: string): Promise<Response> => {
-      // One deadline covers redirects and the final body's consumption. Never carry credentials to another origin.
-      const signal = AbortSignal.timeout(10_000);
-      let url = new URL(`${forge.api}${path}`);
-      for (let hop = 0; ; hop++) {
-        if (url.origin !== origin || url.username || url.password) throw Error('the forge redirected outside its declared origin');
-        const res = await fetch(url, { headers, redirect: 'manual', signal });
-        if (res.status >= 300 && res.status < 400 && res.headers.has('location')) {
-          await res.body?.cancel();
-          if (hop >= 5) throw Error('the forge exceeded five redirects');
-          url = new URL(res.headers.get('location')!, url);
-          continue;
-        }
-        if (!res.ok) { await res.body?.cancel(); throw Error(`the forge answered ${res.status} for ${path}`); }
-        return res;
-      }
+      // One deadline covers redirects and the final body's consumption.
+      const res = await forgeFetch(forge.api, path, { token, signal: AbortSignal.timeout(10_000) });
+      if (!res.ok) { await res.body?.cancel(); throw Error(`the forge answered ${res.status} for ${path}`); }
+      return res;
     };
     for (const repo of forge.repos) {
       // Newest first: a page whose runs were all copied already ends the walk.

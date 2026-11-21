@@ -10,7 +10,7 @@
 // (known-failures.json) read apart from new ones, and a timing budget missed at a load above the core count reads INCONCLUSIVE. So does a
 // skip, or BLOCKED by its note, unless the same file's `skips` list covers it, which is printed.
 //
-//   node scripts/affected.mjs [--list] [--wide] [--record] [--timed] [--slow] [path ...]
+//   node scripts/affected.mjs [--list] [--wide] [--timed] [--slow] [path ...]
 //
 // The alone block's folders run side by side, each in a shard of its own (scripts/shards.mjs), so no sibling's cargo
 // build rewrites a binary under it; those lanes.mjs names exclusive run after, one at a time, with nothing beside them.
@@ -20,20 +20,21 @@
 //
 // Paths stand for the change, which is otherwise the worktree against its merge base with origin/main. --list prints
 // the selection without running it. A test that starts a package's build is selected when the change is in that
-// package or the test is in the changed file's own package; otherwise it is WIDE, and --wide also runs it (select, below). --record, run on main, writes what failed into known-failures.json.
+// package or the test is in the changed file's own package; otherwise it is WIDE, and --wide also runs it (select, below).
 import { spawn, spawnSync } from 'node:child_process';
-import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync, writeSync } from 'node:fs';
+import { closeSync, constants as modes, existsSync, mkdtempSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { availableParallelism, constants, loadavg, tmpdir } from 'node:os';
 import { dirname, join, posix, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { alone, byHand, cargoResults, changedPaths, checks, crates, exclusive, listed, ownLane, readSkips, reportResults, slow, timed, worst } from './lanes.mjs';
+import { alone, byHand, cargoResults, changedPaths, checks, crates, exactTree, exclusive, listed, ownLane, readSkips, reportResults, slow, timed, worst } from './lanes.mjs';
 import { isTestFile, listFiles, named, underTestPaths } from './proof-change.mjs';
 import { namedByConfig } from './proof-guard.mjs';
 import { childEnv } from './proof-runs.mjs';
-import { binaryNames, buildBinaries, watchBinaries } from './proof-binaries.mjs';
-import { claimShards, roomy } from './shards.mjs';
-import { release } from './throttle.mjs';
+import { binaryNames, binaryPlan, buildBinaries, buildInPlace, watchBinaries } from './proof-binaries.mjs';
+import { claimShards, cloneBuilds, roomy } from './shards.mjs';
+import { acquire, descendants, killTree, release } from './throttle.mjs';
 
 export { cargoResults, crates, reportResults };
 
@@ -347,17 +348,57 @@ const LIGHT = /^lint scripts\/(?:repo-rules|conformance-lint|slots-check|canvas-
 // no job: each reads as run by none.
 const live = new Set();
 let stopped = null;
+// A test job whose log and report have both stood still for IDLE minutes is stopped (#2627): a test that starves its
+// worker's event loop defeats vitest's own limit (#2783), and a handle a test leaks keeps its file from exiting (#2804),
+// either for ever. The bound is above the longest stretch a test may write nothing: #1781's 120 min build hook runs
+// before its 120 min tests with no result between, and the timed lane's limits reach 240 min (#416, #140). SIGTERM to the job, and
+// 10 s later SIGKILL to every process of its tree, by PID and start, as the throttle does for a grant past its bound
+// (#2744); the job's throttle, then, ends by itself and gives its grant back. The job ends once they have, and reads
+// by what it reported before the stop. DEEP_JOB_IDLE_MIN sets the bound in minutes, for tests.
+const IDLE_MIN = Number(process.env.DEEP_JOB_IDLE_MIN ?? 360);
+const size = (path) => { try { return statSync(path).size; } catch { return 0; } };
+// The run's jobserver while its builds share it (jobserver, below); each job's end may fill it again.
+let pool = null;
 function run(logs, label, command, args, env = {}, cwd = root) {
   if (stopped) return Promise.resolve({ label, log: null, status: null, output: `stopped by ${stopped}` });
   const log = join(logs, `${label.replace(/\W+/g, '-')}.log`);
+  const report = /^(?:vitest|node)/.test(label) ? join(logs, `${label}.jsonl`) : null;
   const descriptor = openSync(log, 'w');
   const cls = label.endsWith('timed') ? 'timed' : /^(?:vitest|node)/.test(label) ? 'test' : 'build';
   const leased = [join(root, 'scripts/lease'), command, ...args];
   return new Promise((done) => {
     const child = spawn(LIGHT.test(label) ? leased[0] : process.execPath, LIGHT.test(label) ? leased.slice(1) : [join(root, 'scripts/throttle.mjs'), cls, '--wait', '30', '--', ...leased], { cwd, stdio: ['ignore', descriptor, descriptor], env: childEnv(env) });
     live.add(child);
-    child.on('error', (error) => { live.delete(child); closeSync(descriptor); done({ label, log, status: null, output: String(error) }); });
-    child.on('close', (status) => { live.delete(child); closeSync(descriptor); done({ label, log, status, output: readFileSync(log, 'utf8') }); });
+    let idle = null, watch = null;
+    if (report) {
+      let seen = '', since = performance.now();
+      watch = setInterval(() => {
+        const now = `${size(log)} ${size(report)}`;
+        if (now !== seen) [seen, since] = [now, performance.now()];
+        else if (!idle && performance.now() - since >= IDLE_MIN * 60_000) {
+          // Without a listing, nothing is stopped: the next look tries again.
+          let tree;
+          try { tree = descendants(child.pid); } catch { return; }
+          // What the report holds now stands; what a job writes as it is stopped, a cancelled file's error, is no result.
+          idle = { cut: size(report), minutes: IDLE_MIN };
+          child.kill('SIGTERM');
+          idle.killed = new Promise((killed) => setTimeout(() => {
+            try { killTree([...tree, ...child.exitCode === null && child.signalCode === null ? descendants(child.pid) : []]); } catch {}
+            // The throttle ends once its command has; one that doesn't is ended too.
+            setTimeout(() => { child.kill('SIGKILL'); killed(); }, 5_000);
+          }, 10_000));
+        }
+      }, Math.min(10_000, IDLE_MIN * 10_000));
+    }
+    child.on('error', (error) => { clearInterval(watch); live.delete(child); closeSync(descriptor); done({ label, log, status: null, output: String(error) }); });
+    child.on('close', async (status) => {
+      clearInterval(watch);
+      await idle?.killed;
+      live.delete(child);
+      closeSync(descriptor);
+      pool?.refill();
+      done({ label, log, status, output: readFileSync(log, 'utf8'), idle });
+    });
   });
 }
 
@@ -374,28 +415,60 @@ const SHARDS = Math.min(Number(process.env.DEEP_SHARDS) || Math.max(1, Math.floo
  * the run's, GNU make's named pipe through CARGO_MAKEFLAGS, and starts each compile past its first on a token read from
  * the pipe. Cargo builds one at a time in a folder's target/ and runs that first compile on no token, so the pipe holds
  * a token per core less one for the worktree and one for each of the `shards` running; `give` hands theirs back once
- * they have ended. `close` ends it, before the timed blocks, which compile as before.
+ * they have ended. `close` ends it, before the timed blocks, which compile as before. A cargo killed while it holds
+ * tokens never writes them back (#2848), so as each job ends the run fills the pipe to its count again, as the hub's
+ * pool does, but only while no process but the run has the pipe open: a live build may hold tokens, and none is added
+ * beside them. `close` comes after every untimed job has ended, so the pipe should hold its count then; what it lacks
+ * was lost while builds ran, so a build may have had less than its share, and it returns how many.
  */
 function jobserver(shards) {
   const dir = mkdtempSync(join(tmpdir(), 'deep-jobserver-')), fifo = join(dir, 'tokens');
   const made = spawnSync('mkfifo', ['-m', '600', fifo], { encoding: 'utf8' });
   if (made.status !== 0) throw Error(`BLOCKED jobserver: mkfifo failed: ${made.error?.message ?? made.stderr.trim()}`);
-  // Held open by the run, so the pipe keeps its tokens while no build has it open.
-  const fd = openSync(fifo, 'r+');
-  const give = (count) => { if (count > 0) writeSync(fd, '+'.repeat(count)); };
+  // Held open by the run, so the pipe keeps its tokens while no build has it open, and never blocking the run.
+  const fd = openSync(fifo, modes.O_RDWR | modes.O_NONBLOCK);
+  let tokens = 0;
+  const give = (count) => { if (count > 0) { tokens += count; writeSync(fd, '+'.repeat(count)); } };
   give(CORES - 1 - shards);
+  // Whether the run alone has the pipe open: fuser names every process that has, the run among them, so a fuser that
+  // can't see it, is missing or hangs on another mount says nothing.
+  const alone = () => {
+    const seen = spawnSync('fuser', [fifo], { encoding: 'utf8', timeout: 10_000 });
+    const pids = seen.status === null ? [] : seen.stdout.split(/\s+/).flatMap((word) => word.match(/^(\d+)\D*$/)?.[1] ?? []);
+    return pids.includes(String(process.pid)) && pids.every((pid) => pid === String(process.pid));
+  };
+  // No build has started yet, so a run that isn't alone here never can be: it never refills, and lost tokens stay lost.
+  const sees = alone();
+  if (!sees) console.log(`JOBSERVER fuser can't see the run's pipe, so tokens a killed build held are not given back (#2848)`);
   const before = process.env.CARGO_MAKEFLAGS;
   process.env.CARGO_MAKEFLAGS = `-j --jobserver-auth=fifo:${fifo}`;
   let open = true;
+  // The free tokens, read out of the pipe.
+  const take = () => {
+    const buffer = Buffer.alloc(4096);
+    let free = 0;
+    for (;;) {
+      try { const read = readSync(fd, buffer, 0, buffer.length, null); if (read <= 0) break; free += read; } catch { break; }
+    }
+    return free;
+  };
   return {
     give,
+    refill: () => {
+      if (!open || !sees || !alone()) return;
+      // The free tokens are read out first, so a build that opens the pipe meanwhile takes none and is seen.
+      const free = take();
+      writeSync(fd, '+'.repeat(alone() ? tokens : free));
+    },
     close: () => {
-      if (!open) return;
+      if (!open) return 0;
       open = false;
+      const lost = Math.max(0, tokens - take());
       if (before === undefined) delete process.env.CARGO_MAKEFLAGS;
       else process.env.CARGO_MAKEFLAGS = before;
       closeSync(fd);
       rmSync(dir, { recursive: true, force: true });
+      return lost;
     },
   };
 }
@@ -426,10 +499,10 @@ async function runGroups(groups, places, files, vitest, node, label, env = {}, m
 // its own gives it back before the timed files, which then ask as the caller would. With no grant in the wait, no job started, and every file reads INCONCLUSIVE.
 // DEEP_TEST_GRANT_WAIT sets the wait in minutes, for tests.
 const HELD = 'DEEP_AFFECTED_HELD';
-async function queued(args, files, started) {
+async function queued(args, files, started, prep) {
   const marker = join(mkdtempSync(join(tmpdir(), 'deep-affected-grant-')), 'started');
   const wait = process.env.DEEP_TEST_GRANT_WAIT ?? '30';
-  const child = spawn(process.execPath, [join(root, 'scripts/throttle.mjs'), 'test', '--wait', wait, '--', process.execPath, fileURLToPath(import.meta.url), ...args], { stdio: 'inherit', env: { ...process.env, [HELD]: JSON.stringify({ marker, before: process.env.DEEP_THROTTLE ?? '' }) } });
+  const child = spawn(process.execPath, [join(root, 'scripts/throttle.mjs'), 'test', '--wait', wait, '--', process.execPath, fileURLToPath(import.meta.url), ...args], { stdio: 'inherit', env: { ...process.env, [HELD]: JSON.stringify({ marker, before: process.env.DEEP_THROTTLE ?? '', prep }) } });
   // A terminal's SIGINT reaches the whole group; a SIGTERM or SIGHUP sent to this process alone is passed on.
   process.on('SIGINT', () => {});
   for (const signal of ['SIGTERM', 'SIGHUP']) process.on(signal, () => child.kill(signal));
@@ -438,10 +511,92 @@ async function queued(args, files, started) {
   rmSync(dirname(marker), { recursive: true, force: true });
   if (ran) return status;
   // throttle.mjs said why: no grant in the wait (3), or a table it couldn't use (2).
-  const state = status === 3 ? 'INCONCLUSIVE' : 'BLOCKED';
-  for (const file of files) console.log(`${state} ${file}: not run, for want of a test grant`);
+  return unrun(status === 3 ? 'INCONCLUSIVE' : 'BLOCKED', files, started);
+}
+
+// A run's unrun files when it takes no grant: the first line, then each file, then the summary, as with no test grant.
+function unrun(state, files, started, first, why = 'for want of a test grant') {
+  if (first) console.log(first);
+  for (const file of files) console.log(`${state} ${file}: not run, ${why}`);
   console.log(`${state} affected: 0 new, 0 already failing on main, ${files.length} inconclusive or blocked, 0 listed skips, 0 passed, in ${((performance.now() - started) / 1000).toFixed(0)} s at load ${loadavg()[0].toFixed(0)}; no job started`);
   return state === 'INCONCLUSIVE' ? 2 : 3;
+}
+
+// A shard lock the run took before its test grant names the run's first process, until its test-grant child names
+// itself (main), so the shard stays the run's while the child runs, whatever becomes of the first. Once given back
+// another run may take it at the same path, so a process gives back only a lock that names it.
+const ours = ({ lock, holder }) => {
+  try {
+    return JSON.parse(readFileSync(join(lock, 'holder.json'), 'utf8')).pid === holder;
+  } catch {
+    return false;
+  }
+};
+// What the run's binaries and shards were made for: the worktree's tree and the files selected.
+const madeFor = (files) => createHash('sha256').update(JSON.stringify([exactTree(root), files])).digest('hex');
+const giveBack = (shard) => { if (ours(shard)) rmSync(shard.lock, { recursive: true, force: true }); };
+const tick = () => new Promise((done) => setImmediate(done));
+
+/**
+ * What the run makes before it asks for its test grant (#2820), so no test slot waits on cargo: its shards, and in the
+ * worktree and each shard the Rust binaries its selected tests need, those read through DEEP_BIN_DIR and the builds an
+ * untimed test starts itself (binaryPlan), all on one build grant of the run's own, waited for as long as its test grant,
+ * each with its test's profile. A run that builds no binary takes none. The shards stay the run's through its
+ * wait, so what was built in them is still theirs when its tests start. A stop is seen before each checkout's builds, not between one checkout's. Returns what the
+ * run's test-grant child reads, or the exit status, having printed why.
+ */
+async function prepare(untimed, timedFiles, alone, listedFiles, started) {
+  const logs = mkdtempSync(join(tmpdir(), 'deep-affected-')), binRoot = join(logs, 'binaries');
+  watchBinaries(binRoot);
+  const stop = (signal) => { stopped ??= signal; };
+  let grant = null, shards = [];
+  const before = process.env.DEEP_THROTTLE;
+  try {
+    const plan = binaryPlan(root, untimed);
+    if (timedFiles.length) plan.names = [...new Set([...plan.names, ...binaryNames(root, timedFiles)])];
+    if (plan.names.length || plan.builds.length) {
+      const wait = Number(process.env.DEEP_TEST_GRANT_WAIT ?? '30');
+      try {
+        grant = acquire('build', { wait });
+      } catch (error) {
+        throw Error(`BLOCKED throttle: ${error.message}`);
+      }
+      if (!grant) return unrun('INCONCLUSIVE', listedFiles, started, `INCONCLUSIVE no grant: no build grant came within ${wait} min for the run's binaries; no test grant was asked for`, 'for want of a build grant');
+      process.env.DEEP_THROTTLE = grant.token;
+    }
+    // A stop while the run waited ended it; from here one is seen between the builds, which run synchronously.
+    for (const signal of ['SIGTERM', 'SIGHUP', 'SIGINT']) process.on(signal, stop);
+    const groups = shardGroups(alone);
+    shards = groups.shared.length > 1 && SHARDS > 1 ? await claimShards(root, Math.min(SHARDS, groups.shared.length), (line) => console.log(line)) : [];
+    // All final executables are captured before any consumer or sibling cargo test starts. Each shard builds from its
+    // own checkout; its first use covers every group it could take from the shared queue.
+    const binaries = [];
+    for (const cwd of [root, ...shards.map(({ dir }) => dir)]) {
+      await tick();
+      if (stopped) break;
+      const at = performance.now(), { names, builds } = cwd === root ? plan : binaryPlan(cwd, groups.shared.flat().filter((file) => untimed.includes(file)));
+      buildInPlace(cwd, builds);
+      // No time limit before the test grant: a cold build holds no test slot, and at 2 jobs one ran past 20 minutes.
+      binaries.push([cwd, buildBinaries(cwd, join(binRoot, String(binaries.length), 'bin'), names, undefined, { timeout: 0 })]);
+      if (names.length || builds.length) console.log(`BINARIES ${cwd}: ${[...names.map((name) => `${name} (DEEP_BIN_DIR)`), ...builds.map(({ args }) => `cargo build ${args.join(' ')}`)].join(', ')}; built in ${((performance.now() - at) / 1000).toFixed(0)} s, before the test grant`);
+    }
+    await tick();
+    if (stopped) {
+      for (const shard of shards) shard.release();
+      console.log(`BLOCKED affected: stopped by ${stopped} before its test grant; logs in ${logs}`);
+      return 128 + constants.signals[stopped];
+    }
+    return { logs, binRoot, binaries, madeFor: madeFor(listedFiles), shards: shards.map(({ dir, lock }) => ({ dir, lock, holder: process.pid })) };
+  } catch (error) {
+    for (const shard of shards) shard.release();
+    const state = error.message.startsWith('INCONCLUSIVE') ? 'INCONCLUSIVE' : 'BLOCKED';
+    return unrun(state, listedFiles, started, `${/^(?:BLOCKED|INCONCLUSIVE)\b/.test(error.message) ? '' : 'BLOCKED test binaries: '}${error.message}`, 'for want of its binaries');
+  } finally {
+    for (const signal of ['SIGTERM', 'SIGHUP', 'SIGINT']) process.off(signal, stop);
+    if (before === undefined) delete process.env.DEEP_THROTTLE;
+    else process.env.DEEP_THROTTLE = before;
+    release(grant);
+  }
 }
 
 async function main(args) {
@@ -475,35 +630,63 @@ async function main(args) {
   if (!held && selection.wide.length) console.log(`WIDE ${selection.wide.length} more see the change only through a process that starts another package (--wide runs them): ${selection.wide.join(' ')}`);
   if (args.includes('--list')) return 0;
   const files = [...Object.values(blocks).flatMap((block) => [...block.vitest, ...block.node]), ...runTimed ? [...timedFiles.vitest, ...timedFiles.node] : []];
-  if (!held) return queued(args, [...files, ...selection.crates.map((name) => `cargo test -p ${name}`)], started);
+  if (!held) {
+    const listedFiles = [...files, ...selection.crates.map((name) => `cargo test -p ${name}`)];
+    const timedRun = runTimed ? [...timedFiles.vitest, ...timedFiles.node] : [];
+    const prep = await prepare(files.filter((file) => !timedRun.includes(file)), timedRun, [...blocks.alone.vitest, ...blocks.alone.node], listedFiles, started);
+    if (typeof prep === 'number') return prep;
+    try {
+      return await queued(args, listedFiles, started, prep);
+    } finally {
+      for (const shard of prep.shards) giveBack(shard);
+      rmSync(prep.binRoot, { recursive: true, force: true });
+    }
+  }
   // Stopped, the run passes the stop to its jobs, starts none, and ends once they have, through its own clean-up (its
   // shards' locks too, which a shard still being made keeps till it is), so none runs on once its grant is given back.
-  // A stop that comes during a binary build is seen when that build ends.
+  // A stop that comes before the test grant, during the binary builds, is seen when they end (prepare).
   for (const signal of ['SIGTERM', 'SIGHUP', 'SIGINT']) process.on(signal, () => {
     stopped ??= signal;
     for (const child of live) child.kill(signal === 'SIGINT' ? 'SIGTERM' : signal);
   });
 
-  const logs = mkdtempSync(join(tmpdir(), 'deep-affected-'));
-  const binaries = new Map(), binRoot = join(logs, 'binaries');
-  watchBinaries(binRoot);
+  // What the run made before its test grant (prepare): its logs, binaries, shards and package build.
+  const { logs, binRoot } = held.prep;
+  const binaries = new Map(held.prep.binaries);
   const binEnv = (cwd = root) => ({ DEEP_BIN_DIR: binaries.get(cwd) });
-  const prepareBinaries = (cwd, selected) => binaries.set(cwd, buildBinaries(cwd, join(binRoot, String(binaries.size), 'bin'), binaryNames(cwd, selected)));
-  let shards = [], pool = null;
+  // What was made while the run waited is for the tree and the files it was made for; a change since leaves it unproven.
+  const listedFiles = [...files, ...selection.crates.map((name) => `cargo test -p ${name}`)];
+  if (madeFor(listedFiles) !== held.prep.madeFor) return unrun('BLOCKED', listedFiles, started, 'BLOCKED affected: the worktree or the files it selects changed while the run waited for its test grant; run it again', 'for its binaries were built for another tree');
+  // The shards' locks name this process from here (ours), so they stay the run's whatever becomes of the one that took them.
+  const own = spawnSync('ps', ['-o', 'lstart=', '-p', String(process.pid)], { encoding: 'utf8', env: { ...process.env, TZ: 'UTC', LC_ALL: 'C' } }).stdout.trim();
+  let shards = held.prep.shards.filter(ours).map((shard) => {
+    writeFileSync(join(shard.lock, 'holder.next.json'), JSON.stringify({ pid: process.pid, start: own }));
+    renameSync(join(shard.lock, 'holder.next.json'), join(shard.lock, 'holder.json'));
+    const mine = { ...shard, holder: process.pid };
+    return { dir: shard.dir, release: () => giveBack(mine) };
+  });
   try {
     const vitest = (files, extra, label, cwd, env = {}) => run(logs, label, process.execPath, ['node_modules/vitest/vitest.mjs', 'run', ...extra, '--reporter=dot', '--reporter=./scripts/proof-vitest-reporter.mjs', ...files], { ...env, ...binEnv(cwd), DEEP_PROOF_VITEST_REPORT: join(logs, `${label}.jsonl`) }, cwd);
     const node = (files, extra, label, cwd, env = {}) => run(logs, label, process.execPath, ['--test', ...extra, '--test-reporter=./scripts/proof-reporter.mjs', `--test-reporter-destination=${join(logs, `${label}.jsonl`)}`, '--test-reporter=dot', '--test-reporter-destination=stdout', ...files], { ...env, ...binEnv(cwd) }, cwd);
     const jobs = [];
-    // Tests that run a package's build read dist, so a change to a package builds them first, as the typecheck lane does.
-    if (changed.some((path) => /^packages\/[^/]+\/src\//.test(path))) jobs.push(await run(logs, 'build', 'npm', ['run', 'build', '--workspaces']));
-    // Shards copy the worktree's package builds, so they are claimed once those are built.
+    // Tests that run a package's build read dist, so a change to a package builds them first, as the typecheck lane does,
+    // and the shards, claimed before it (prepare), take the new builds.
+    if (changed.some((path) => /^packages\/[^/]+\/src\//.test(path))) {
+      jobs.push(await run(logs, 'build', 'npm', ['run', 'build', '--workspaces']));
+      // A shard whose copy fails is left unused, as one that can't be made is.
+      shards = shards.filter((shard) => {
+        try {
+          cloneBuilds(root, shard.dir);
+          return true;
+        } catch (error) {
+          console.log(`SHARD ${shard.dir} not used: ${error.message}`);
+          shard.release();
+          return false;
+        }
+      });
+    }
     const groups = shardGroups([...blocks.alone.vitest, ...blocks.alone.node]);
-    shards = groups.shared.length > 1 && SHARDS > 1 ? await claimShards(root, Math.min(SHARDS, groups.shared.length), (line) => console.log(line)) : [];
-    // All final executables are captured before any consumer or sibling cargo test starts. Each shard builds
-    // from its own checkout; its first use covers every group it could take from the shared queue.
-    prepareBinaries(root, files);
-    for (const { dir } of shards) prepareBinaries(dir, groups.shared.flat());
-    // Those builds ran one at a time; from here the run's builds run at once, so they share its jobserver.
+    // The binary builds ran before the grant, one at a time; from here the run's builds run at once, so they share its jobserver.
     pool = jobserver(shards.length);
     const lints = checks.find(({ name }) => name === 'lint').commands.filter(([, script]) => script?.startsWith('scripts/'));
     if (selection.owners.length) lints.push(['cargo', 'fmt', '--all', '--', '--check'], ['cargo', 'clippy', '--locked', '--keep-going', '--all-targets', ...selection.owners.flatMap((name) => ['-p', name]), '--', '-D', 'warnings']);
@@ -536,7 +719,7 @@ async function main(args) {
     jobs.push(...(await runGroups([...left, ...groups.exclusive], [root], blocks.alone, vitest, node, 'alone-worktree')).jobs);
     // The untimed jobs have ended, so the run's own grant and its jobserver go back, and each timed block asks for its
     // timed grant as the run's caller would: nested in the caller's grant, or top-level.
-    pool.close();
+    const lost = pool.close();
     const [cls, id] = (process.env.DEEP_THROTTLE ?? '').split(':');
     if (id && process.env.DEEP_THROTTLE !== held.before) release({ class: cls, id });
     const own = { DEEP_THROTTLE: held.before };
@@ -546,10 +729,14 @@ async function main(args) {
 
     if (stopped) return console.log(`BLOCKED affected: stopped by ${stopped}; its jobs were stopped and none of their results is read; logs in ${logs}`), 128 + constants.signals[stopped];
     const failures = [], passed = [], findings = [], skips = [];
+    // A build that ran short of its compile share may have timed out or run slow, so the run can't say it passed (#2848).
+    if (lost) failures.push({ id: 'jobserver', state: 'INCONCLUSIVE', message: `${lost} of the run's compile tokens were missing when its builds had ended, so a build may have had less than its share` });
     for (const job of jobs) {
       const tests = /^(?:vitest|node)/.test(job.label);
       let report = '';
-      try { if (tests) report = readFileSync(join(logs, `${job.label}.jsonl`), 'utf8'); } catch {}
+      try { if (tests) report = readFileSync(join(logs, `${job.label}.jsonl`)).subarray(0, job.idle?.cut).toString('utf8'); } catch {}
+      // A stopped job's report may end part way through a row.
+      if (job.idle) report = report.slice(0, report.lastIndexOf('\n') + 1);
       const results = reportResults(job.cwd ?? root, report, job.label);
       // A job the throttle didn't run, for want of a grant or of its table, ran nothing, so none of its results is read:
       // it is unrun, never a failure on main. A vitest job's marker names each of its files; any other's output says so.
@@ -566,21 +753,16 @@ async function main(args) {
         failures.push(...results.failures);
         passed.push(...results.passed);
         skips.push(...results.skips ?? []);
-        // A file that reported no test didn't run, and nothing unrun passes.
-        for (const file of files.filter((file) => !report.includes(file))) failures.push({ id: named(file, '(file)'), state: results.noGrant ? 'INCONCLUSIVE' : 'FAIL', message: results.noGrant ?? 'reported no test' });
+        // A file that reported no test didn't run, and nothing unrun passes. A job stopped for standing still may have
+        // stopped part way through a file that reported, so it reads INCONCLUSIVE itself, and the run with it.
+        const stuck = job.idle && `its job reported nothing for ${job.idle.minutes} min and was stopped`;
+        if (stuck) failures.push({ id: `${job.label} job`, state: 'INCONCLUSIVE', message: `${stuck}; a file it reported may be part run (${job.log})` });
+        for (const file of files.filter((file) => !report.includes(file))) failures.push({ id: named(file, '(file)'), state: results.noGrant || stuck ? 'INCONCLUSIVE' : 'FAIL', message: results.noGrant ?? stuck ?? 'reported no test' });
       }
     }
     const baseline = JSON.parse(readFileSync(join(root, BASELINE), 'utf8'));
     const { covered, open } = readSkips(skips, baseline.skips, timed);
     const { known, fresh, unsure } = classify([...failures, ...open], findings, baseline);
-    if (args.includes('--record')) {
-      for (const id of passed) delete baseline.failures[id];
-      for (const { id, message } of fresh.filter(({ message }) => message !== 'lint')) baseline.failures[id] = message || 'fails on main';
-      const counts = new Map();
-      for (const { state, key } of findings) if (state === 'FAIL') counts.set(key, (counts.get(key) ?? 0) + 1);
-      for (const [key, count] of counts) baseline.lint[key] = Math.max(count, baseline.lint[key] ?? 0);
-      writeFileSync(join(root, BASELINE), `${JSON.stringify(baseline, null, 2)}\n`);
-    }
     for (const { id, message } of known) console.log(`KNOWN ${id}${message === 'lint' ? '' : `: ${message}`}`);
     for (const { id, state, message } of unsure) console.log(`${state} ${id}${message ? `: ${message}` : ''}`);
     for (const { id, note, reason } of covered) console.log(`LISTED ${id}${note ? `: ${note}` : ''} (${reason})`);

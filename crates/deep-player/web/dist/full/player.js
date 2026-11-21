@@ -309,6 +309,124 @@ export class Player {
         }
     }
     /**
+     * Esc: both points go; whether there was one.
+     * @returns {boolean}
+     */
+    measure_clear() {
+        const ret = wasm.player_measure_clear(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * That click at frame px (`x`, `y`), once its target is read: a point where the click's
+     * ray meets the item named there. 0 while the device still maps the target, 1 for a point
+     * placed, 2 for none.
+     * @param {number} x
+     * @param {number} y
+     * @returns {number}
+     */
+    measure_click(x, y) {
+        const ret = wasm.player_measure_click(this.__wbg_ptr, x, y);
+        return ret;
+    }
+    /**
+     * Tab or Enter with the tool on: Tab moves among the parts' anchors and Enter places a
+     * point at the one focused; whether the tool took the key (Tab past the last anchor is the
+     * page's again).
+     * @param {string} key
+     * @returns {boolean}
+     */
+    measure_key(key) {
+        const ptr0 = passStringToWasm0(key, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.player_measure_key(this.__wbg_ptr, ptr0, len0);
+        return ret !== 0;
+    }
+    /**
+     * Whether the tool is on.
+     * @returns {boolean}
+     */
+    measure_on() {
+        const ret = wasm.player_measure_on(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * A click lands on the frame last drawn: that frame's object-ID target starts to read
+     * back; false before a 3D frame is drawn with the tool on.
+     * @returns {boolean}
+     */
+    measure_press() {
+        const ret = wasm.player_measure_press(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * The viewer's setting: on in a piece that offers the tool; off drops its points.
+     * @param {boolean} on
+     */
+    measure_set(on) {
+        wasm.player_measure_set(this.__wbg_ptr, on);
+    }
+    /**
+     * The measure as the page draws it over the canvas, JSON `{a, b, text, color, ground}`:
+     * each point where the frame last drawn shows it, in frame px, or null; the readout's
+     * line; and the look's accent and ground. `null` while the tool is off.
+     * @returns {string}
+     */
+    measure_shown() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.player_measure_shown(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            deferred1_0 = r0;
+            deferred1_1 = r1;
+            return getStringFromWasm0(r0, r1);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+            wasm.__wbindgen_export5(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
+     * #280: net.budget's web part: the document and the track recorded before the match by
+     * their files' SHA-256, and `request` (`{track, steps, len, window, frame_ms, from_step}`);
+     * the match's stepping measured here, five runs after a warm-up, as the app measures its own.
+     * @param {string} doc
+     * @param {string} track
+     * @param {string} request
+     * @returns {string}
+     */
+    net_budget(doc, track, request) {
+        let deferred5_0;
+        let deferred5_1;
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            const ptr0 = passStringToWasm0(doc, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len0 = WASM_VECTOR_LEN;
+            const ptr1 = passStringToWasm0(track, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len1 = WASM_VECTOR_LEN;
+            const ptr2 = passStringToWasm0(request, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len2 = WASM_VECTOR_LEN;
+            wasm.player_net_budget(retptr, this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+            var ptr4 = r0;
+            var len4 = r1;
+            if (r3) {
+                ptr4 = 0; len4 = 0;
+                throw takeObject(r2);
+            }
+            deferred5_0 = ptr4;
+            deferred5_1 = len4;
+            return getStringFromWasm0(ptr4, len4);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+            wasm.__wbindgen_export5(deferred5_0, deferred5_1, 1);
+        }
+    }
+    /**
      * A control message from the relay: `{send}`, `{close}` or `{}`.
      * @param {string} text
      * @param {number} now_ms
@@ -347,6 +465,26 @@ export class Player {
         return ret !== 0;
     }
     /**
+     * #551: a person's key while the match plays; whether it made an entry.
+     * @param {string} key
+     * @returns {boolean}
+     */
+    net_key(key) {
+        const ptr0 = passStringToWasm0(key, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.player_net_key(this.__wbg_ptr, ptr0, len0);
+        return ret !== 0;
+    }
+    /**
+     * #277: a planted web copy the page names, before its match starts.
+     * @param {string} name
+     */
+    net_plant(name) {
+        const ptr0 = passStringToWasm0(name, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.player_net_plant(this.__wbg_ptr, ptr0, len0);
+    }
+    /**
      * A frame another copy of the match sent.
      * @param {Uint8Array} frame
      * @param {number} now_ms
@@ -357,6 +495,26 @@ export class Player {
         wasm.player_net_receive(this.__wbg_ptr, ptr0, len0, now_ms);
     }
     /**
+     * #277: what the copy has to send beside its frames: `{controls: [text], frames: [hex]}`.
+     * @returns {string}
+     */
+    net_sends() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.player_net_sends(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            deferred1_0 = r0;
+            deferred1_1 = r1;
+            return getStringFromWasm0(r0, r1);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+            wasm.__wbindgen_export5(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
      * The page's tick: the frame to send, empty when there is none.
      * @param {number} now_ms
      * @returns {Uint8Array}
@@ -365,6 +523,25 @@ export class Player {
         try {
             const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
             wasm.player_net_tick(retptr, this.__wbg_ptr, now_ms);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var v1 = getArrayU8FromWasm0(r0, r1).slice();
+            wasm.__wbindgen_export5(r0, r1 * 1, 1);
+            return v1;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * #277: the page is about to be hidden, or shows again: the frame to send now, if any.
+     * @param {boolean} hidden
+     * @param {number} now_ms
+     * @returns {Uint8Array}
+     */
+    net_visible(hidden, now_ms) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.player_net_visible(retptr, this.__wbg_ptr, hidden, now_ms);
             var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
             var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
             var v1 = getArrayU8FromWasm0(r0, r1).slice();
@@ -402,6 +579,78 @@ export class Player {
             return this;
         } finally {
             wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * The page reopens the profile record `name`, its bytes' SHA-256, when the piece starts:
+     * `{profile}` as JSON once the piece is made again with its entry at step 0, or its refusal
+     * as JSON, naming the first array that differs.
+     * @param {string} name
+     * @param {Uint8Array} bytes
+     * @returns {string}
+     */
+    open_profile(name, bytes) {
+        let deferred4_0;
+        let deferred4_1;
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            const ptr0 = passStringToWasm0(name, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len0 = WASM_VECTOR_LEN;
+            const ptr1 = passArray8ToWasm0(bytes, wasm.__wbindgen_export);
+            const len1 = WASM_VECTOR_LEN;
+            wasm.player_open_profile(retptr, this.__wbg_ptr, ptr0, len0, ptr1, len1);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+            var ptr3 = r0;
+            var len3 = r1;
+            if (r3) {
+                ptr3 = 0; len3 = 0;
+                throw takeObject(r2);
+            }
+            deferred4_0 = ptr3;
+            deferred4_1 = len3;
+            return getStringFromWasm0(ptr3, len3);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+            wasm.__wbindgen_export5(deferred4_0, deferred4_1, 1);
+        }
+    }
+    /**
+     * The viewer opens the carry record `name`, its bytes' SHA-256, into the piece: `{record}` as
+     * JSON once the piece is made again with its entry at step 0, or its refusal as JSON, naming
+     * what differs.
+     * @param {string} name
+     * @param {Uint8Array} bytes
+     * @returns {string}
+     */
+    open_record(name, bytes) {
+        let deferred4_0;
+        let deferred4_1;
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            const ptr0 = passStringToWasm0(name, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len0 = WASM_VECTOR_LEN;
+            const ptr1 = passArray8ToWasm0(bytes, wasm.__wbindgen_export);
+            const len1 = WASM_VECTOR_LEN;
+            wasm.player_open_record(retptr, this.__wbg_ptr, ptr0, len0, ptr1, len1);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+            var ptr3 = r0;
+            var len3 = r1;
+            if (r3) {
+                ptr3 = 0; len3 = 0;
+                throw takeObject(r2);
+            }
+            deferred4_0 = ptr3;
+            deferred4_1 = len3;
+            return getStringFromWasm0(ptr3, len3);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+            wasm.__wbindgen_export5(deferred4_0, deferred4_1, 1);
         }
     }
     /**
@@ -460,6 +709,51 @@ export class Player {
         }
     }
     /**
+     * The profile record at `at` of [`Self::profiles_due`]: the bytes the page stores whole under
+     * their SHA-256.
+     * @param {number} at
+     * @returns {Uint8Array}
+     */
+    profile_bytes(at) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.player_profile_bytes(retptr, this.__wbg_ptr, at);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+            if (r3) {
+                throw takeObject(r2);
+            }
+            var v1 = getArrayU8FromWasm0(r0, r1).slice();
+            wasm.__wbindgen_export5(r0, r1 * 1, 1);
+            return v1;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * #276: the profile records the steps the shown time has reached since the last call wrote,
+     * as JSON in step order: each `{at, item, step, hash}`.
+     * @returns {string}
+     */
+    profiles_due() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.player_profiles_due(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            deferred1_0 = r0;
+            deferred1_1 = r1;
+            return getStringFromWasm0(r0, r1);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+            wasm.__wbindgen_export5(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
      * Each readout heard and what it says in the frame shown (#1045), as JSON `{id: text}`.
      * @returns {string}
      */
@@ -469,6 +763,51 @@ export class Player {
         try {
             const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
             wasm.player_readouts(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            deferred1_0 = r0;
+            deferred1_1 = r1;
+            return getStringFromWasm0(r0, r1);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+            wasm.__wbindgen_export5(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
+     * The record at `at` of [`Self::records_due`]: the bytes the page stores whole under their
+     * SHA-256, as the app's record file holds them.
+     * @param {number} at
+     * @returns {Uint8Array}
+     */
+    record_bytes(at) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.player_record_bytes(retptr, this.__wbg_ptr, at);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+            if (r3) {
+                throw takeObject(r2);
+            }
+            var v1 = getArrayU8FromWasm0(r0, r1).slice();
+            wasm.__wbindgen_export5(r0, r1 * 1, 1);
+            return v1;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * #189: the carry records the steps the shown time has reached since the last call wrote, as
+     * JSON in step order: each `{at, item, step, hash, layout}`.
+     * @returns {string}
+     */
+    records_due() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.player_records_due(retptr, this.__wbg_ptr);
             var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
             var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
             deferred1_0 = r0;
@@ -505,8 +844,10 @@ export class Player {
         }
     }
     /**
-     * The piece's saves as the page keeps them (Logic: saves): `{piece, slots}` as JSON, the
-     * document's stable ID and the most slots its logic declares, 0 for a piece with no saves.
+     * The piece's saves as the page keeps them (Logic: saves): `{piece, slots, gives, takes,
+     * profile}` as JSON, the document's stable ID, the most slots its logic declares (0 for a
+     * piece with no saves), whether its logic gives a carry record (`carry`) or takes one
+     * (`carry_in`), and whether it keeps a profile record (#276).
      * @returns {string}
      */
     saves() {
@@ -564,6 +905,23 @@ export class Player {
         } finally {
             wasm.__wbindgen_add_to_stack_pointer(16);
             wasm.__wbindgen_export5(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
+     * The viewer's start fresh, this run only: the piece made again from its start reading
+     * zeros, the stored profile record kept.
+     */
+    start_fresh() {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.player_start_fresh(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            if (r1) {
+                throw takeObject(r0);
+            }
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
         }
     }
     /**
@@ -756,6 +1114,9 @@ function __wbg_get_imports() {
         }, arguments); },
         __wbg_copyBufferToBuffer_9c174b96fb08d551: function() { return handleError(function (arg0, arg1, arg2, arg3, arg4, arg5) {
             getObject(arg0).copyBufferToBuffer(getObject(arg1), arg2, getObject(arg3), arg4, arg5);
+        }, arguments); },
+        __wbg_copyTextureToBuffer_1234b3210431ad05: function() { return handleError(function (arg0, arg1, arg2, arg3) {
+            getObject(arg0).copyTextureToBuffer(getObject(arg1), getObject(arg2), getObject(arg3));
         }, arguments); },
         __wbg_copyTextureToTexture_d2e6a1eb3254b828: function() { return handleError(function (arg0, arg1, arg2, arg3) {
             getObject(arg0).copyTextureToTexture(getObject(arg1), getObject(arg2), getObject(arg3));
@@ -1223,7 +1584,7 @@ function __wbg_get_imports() {
                     const a = state0.a;
                     state0.a = 0;
                     try {
-                        return __wasm_bindgen_func_elem_33277(a, state0.b, arg0, arg1);
+                        return __wasm_bindgen_func_elem_38488(a, state0.b, arg0, arg1);
                     } finally {
                         state0.a = a;
                     }
@@ -1437,8 +1798,14 @@ function __wbg_get_imports() {
         __wbg_set_buffer_8d0ac64ad20dfc84: function(arg0, arg1) {
             getObject(arg0).buffer = getObject(arg1);
         },
+        __wbg_set_buffer_910a40a90f97cfca: function(arg0, arg1) {
+            getObject(arg0).buffer = getObject(arg1);
+        },
         __wbg_set_buffers_5d0e0c50791f710e: function(arg0, arg1, arg2) {
             getObject(arg0).buffers = getArrayJsValueViewFromWasm0(arg1, arg2);
+        },
+        __wbg_set_bytes_per_row_1e824a5502b54b3d: function(arg0, arg1) {
+            getObject(arg0).bytesPerRow = arg1 >>> 0;
         },
         __wbg_set_bytes_per_row_c28583f0063160f1: function(arg0, arg1) {
             getObject(arg0).bytesPerRow = arg1 >>> 0;
@@ -1737,6 +2104,9 @@ function __wbg_get_imports() {
         __wbg_set_offset_f64_a903425d5a8e5815: function(arg0, arg1) {
             getObject(arg0).offset = arg1;
         },
+        __wbg_set_offset_f64_d1d115dd438165b5: function(arg0, arg1) {
+            getObject(arg0).offset = arg1;
+        },
         __wbg_set_onuncapturederror_bb813f1102da2296: function(arg0, arg1) {
             getObject(arg0).onuncapturederror = getObject(arg1);
         },
@@ -1783,6 +2153,9 @@ function __wbg_get_imports() {
             getObject(arg0).resource = getObject(arg1);
         },
         __wbg_set_rows_per_image_c6d50d227e634379: function(arg0, arg1) {
+            getObject(arg0).rowsPerImage = arg1 >>> 0;
+        },
+        __wbg_set_rows_per_image_deb456502f23c260: function(arg0, arg1) {
             getObject(arg0).rowsPerImage = arg1 >>> 0;
         },
         __wbg_set_sample_count_481c255a12054e1d: function(arg0, arg1) {
@@ -2005,33 +2378,33 @@ function __wbg_get_imports() {
             getObject(arg0).writeTexture(getObject(arg1), getArrayU8FromWasm0(arg2, arg3), getObject(arg4), getObject(arg5));
         }, arguments); },
         __wbindgen_generic_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 8191, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_33275);
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 9796, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_38486);
             return addHeapObject(ret);
         },
         __wbindgen_generic_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("GPUDevice")], shim_idx: 527, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_2491);
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("GPUDevice")], shim_idx: 588, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_2992);
             return addHeapObject(ret);
         },
         __wbindgen_generic_0000000000000003: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("GPUDeviceLostInfo")], shim_idx: 530, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_2493);
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("GPUDeviceLostInfo")], shim_idx: 591, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_2994);
             return addHeapObject(ret);
         },
         __wbindgen_generic_0000000000000004: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("GPUUncapturedErrorEvent")], shim_idx: 530, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_2493_38);
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("GPUUncapturedErrorEvent")], shim_idx: 591, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_2994_57);
             return addHeapObject(ret);
         },
         __wbindgen_generic_0000000000000005: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("any")], shim_idx: 527, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_2491_39);
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("any")], shim_idx: 588, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_2992_58);
             return addHeapObject(ret);
         },
         __wbindgen_generic_0000000000000006: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("undefined")], shim_idx: 527, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_2491_40);
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("undefined")], shim_idx: 588, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_2992_59);
             return addHeapObject(ret);
         },
         __wbindgen_generic_0000000000000007: function(arg0) {
@@ -2068,22 +2441,22 @@ function __wbg_get_imports() {
     };
 }
 
-function __wasm_bindgen_func_elem_2493(arg0, arg1, arg2) {
-    wasm.__wasm_bindgen_func_elem_2493(arg0, arg1, addHeapObject(arg2));
+function __wasm_bindgen_func_elem_2994(arg0, arg1, arg2) {
+    wasm.__wasm_bindgen_func_elem_2994(arg0, arg1, addHeapObject(arg2));
 }
 
-function __wasm_bindgen_func_elem_2493_38(arg0, arg1, arg2) {
-    wasm.__wasm_bindgen_func_elem_2493_38(arg0, arg1, addHeapObject(arg2));
+function __wasm_bindgen_func_elem_2994_57(arg0, arg1, arg2) {
+    wasm.__wasm_bindgen_func_elem_2994_57(arg0, arg1, addHeapObject(arg2));
 }
 
-function __wasm_bindgen_func_elem_33277(arg0, arg1, arg2, arg3) {
-    wasm.__wasm_bindgen_func_elem_33277(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
+function __wasm_bindgen_func_elem_38488(arg0, arg1, arg2, arg3) {
+    wasm.__wasm_bindgen_func_elem_38488(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
 }
 
-function __wasm_bindgen_func_elem_33275(arg0, arg1, arg2) {
+function __wasm_bindgen_func_elem_38486(arg0, arg1, arg2) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        wasm.__wasm_bindgen_func_elem_33275(retptr, arg0, arg1, addHeapObject(arg2));
+        wasm.__wasm_bindgen_func_elem_38486(retptr, arg0, arg1, addHeapObject(arg2));
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         if (r1) {
@@ -2094,10 +2467,10 @@ function __wasm_bindgen_func_elem_33275(arg0, arg1, arg2) {
     }
 }
 
-function __wasm_bindgen_func_elem_2491(arg0, arg1, arg2) {
+function __wasm_bindgen_func_elem_2992(arg0, arg1, arg2) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        wasm.__wasm_bindgen_func_elem_2491(retptr, arg0, arg1, addHeapObject(arg2));
+        wasm.__wasm_bindgen_func_elem_2992(retptr, arg0, arg1, addHeapObject(arg2));
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         if (r1) {
@@ -2108,10 +2481,10 @@ function __wasm_bindgen_func_elem_2491(arg0, arg1, arg2) {
     }
 }
 
-function __wasm_bindgen_func_elem_2491_39(arg0, arg1, arg2) {
+function __wasm_bindgen_func_elem_2992_58(arg0, arg1, arg2) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        wasm.__wasm_bindgen_func_elem_2491_39(retptr, arg0, arg1, addHeapObject(arg2));
+        wasm.__wasm_bindgen_func_elem_2992_58(retptr, arg0, arg1, addHeapObject(arg2));
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         if (r1) {
@@ -2122,10 +2495,10 @@ function __wasm_bindgen_func_elem_2491_39(arg0, arg1, arg2) {
     }
 }
 
-function __wasm_bindgen_func_elem_2491_40(arg0, arg1, arg2) {
+function __wasm_bindgen_func_elem_2992_59(arg0, arg1, arg2) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        wasm.__wasm_bindgen_func_elem_2491_40(retptr, arg0, arg1, addHeapObject(arg2));
+        wasm.__wasm_bindgen_func_elem_2992_59(retptr, arg0, arg1, addHeapObject(arg2));
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         if (r1) {

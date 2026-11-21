@@ -363,6 +363,7 @@ impl Session {
                 samples: None,
                 writer: Writer::You,
                 serial: Some(self.serial),
+                player: None,
             });
         }
         Ok(())
@@ -397,7 +398,9 @@ impl Session {
         } else {
             self.track.last_at(&c.id, t)
         };
-        let mut v = e.map_or_else(|| c.default.clone(), |e| e.value_at(t));
+        let mut v = e
+            .as_ref()
+            .map_or_else(|| c.default.clone(), |e| e.value_at(t));
         if self.planted.recompute {
             let px = e.and_then(|e| e.samples.as_ref()?.last()?.px);
             if let Some(px) = px {
@@ -604,6 +607,7 @@ impl Session {
             samples,
             writer: Writer::You,
             serial: Some(serial),
+            player: None,
         })
     }
 
@@ -1211,6 +1215,7 @@ impl Session {
             samples: None,
             writer,
             serial,
+            player: None,
         });
         Ok(json!({"appended": 1, "dropped": dropped}))
     }
@@ -1234,6 +1239,7 @@ impl Session {
             samples: None,
             writer: Writer::Agent,
             serial: None,
+            player: None,
         });
         Ok(1)
     }

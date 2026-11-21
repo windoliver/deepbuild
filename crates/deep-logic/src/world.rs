@@ -120,6 +120,9 @@ pub struct Record {
     pub(crate) restarts: BTreeMap<String, BTreeMap<i64, Vec<u8>>>,
     /// #860: the steps that ran on a branch a rewind closed, whose rows hold the arrays they left.
     pub(crate) frozen: BTreeSet<i64>,
+    /// #551: checkpoints record no deep hash, which costs a pass over the whole memory in the
+    /// step; a reader restores the checkpoint for one (a match's copy, whose frames are timed).
+    pub deferred: bool,
 }
 
 impl Record {
@@ -258,6 +261,8 @@ pub(crate) struct Live {
     dirty: BTreeSet<u32>,
     /// The pages written since the last keyframe stored (crate::keyframes).
     pub(crate) kdirty: BTreeSet<u32>,
+    /// #551: the pages written since the rollback ring's last match step.
+    pub(crate) rdirty: BTreeSet<u32>,
     stored: Vec<Stored>,
     /// The last step a checkpoint was taken at.
     pub(crate) checked: Option<i64>,
@@ -409,6 +414,26 @@ impl Live {
         let (a, b) = (cut(m), cut(n));
         m[..a.start] == n[..b.start] && m[a.end..] == n[b.end..]
     }
+    /// #550: the globals as the step and full-state hashes take them.
+    pub(crate) fn encoded_globals(&mut self) -> Vec<u8> {
+        self.encoded()
+    }
+    /// #550: the step hash of the state its last step left, without that step's rows.
+    pub(crate) fn last_step_hash(&mut self) -> u64 {
+        self.step_hash(&Vec::new())
+    }
+    /// #550: writes `bytes` into the program's memory at `at`, marking the page written.
+    pub(crate) fn poke(&mut self, at: usize, bytes: &[u8]) -> Option<()> {
+        self.runner.write("memory", at, bytes).ok()?;
+        self.mark([(at / PAGE as usize) as u32]);
+        Some(())
+    }
+    /// Marks `pages` written, for the checkpoint ring, the keyframes and the rollback ring.
+    pub(crate) fn mark(&mut self, pages: impl IntoIterator<Item = u32> + Clone) {
+        self.dirty.extend(pages.clone());
+        self.kdirty.extend(pages.clone());
+        self.rdirty.extend(pages);
+    }
     /// The step hash: the program's globals, the arrays it wrote and the rows it emitted, each
     /// after its kind's index (none for a step that emitted none, so an item's hash is as before).
     fn step_hash(&mut self, rows: &Rows) -> u64 {
@@ -434,8 +459,84 @@ impl Live {
     }
 }
 
+/// Lower-case hex, two digits a byte, written into one buffer (#3056: a string a byte made a
+/// large memory's state cost a step's time many times over).
 fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(2 * bytes.len());
+    for b in bytes {
+        out.push(char::from(DIGITS[usize::from(b >> 4)]));
+        out.push(char::from(DIGITS[usize::from(b & 15)]));
+    }
+    out
+}
+
+/// One item's state as [`World::saved`] writes it, its memory and arrays still raw bytes, so a
+/// step can carry it and the hex is written only when something reads it (#3056).
+pub struct Snapshot {
+    next: i64,
+    failed: bool,
+    memory: Vec<u8>,
+    globals: Vec<Value>,
+    arrays: Vec<u8>,
+    pending: Map<String, Value>,
+}
+
+impl std::fmt::Debug for Snapshot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Snapshot {{ next: {}, failed: {}, memory: {} bytes, arrays: {} bytes }}",
+            self.next,
+            self.failed,
+            self.memory.len(),
+            self.arrays.len()
+        )
+    }
+}
+
+impl World {
+    /// Every item's whole state as raw data: what [`World::saved`] writes, before its bytes are hex.
+    pub fn snapshot(&mut self) -> Vec<Snapshot> {
+        self.lives
+            .iter_mut()
+            .map(|l| Snapshot {
+                next: l.next,
+                failed: l.failed,
+                memory: l.memory().to_vec(),
+                globals: l
+                    .globals()
+                    .iter()
+                    .map(|v| match v {
+                        Val::I32(x) => json!(["i32", x]),
+                        Val::I64(x) => json!(["i64", x]),
+                        Val::F32(x) => json!(["f32", x]),
+                        Val::F64(x) => json!(["f64", x]),
+                        _ => Value::Null,
+                    })
+                    .collect(),
+                arrays: l.arrays.clone(),
+                pending: l
+                    .pending
+                    .iter()
+                    .map(|(k, q)| (k.clone(), q.iter().map(Entry::to_json).collect()))
+                    .collect(),
+            })
+            .collect()
+    }
+
+    /// `items` as the plain data [`World::saved`] gives.
+    pub fn saved_of(items: &[Snapshot]) -> Value {
+        Value::Array(
+            items
+                .iter()
+                .map(|s| {
+                    json!({"next": s.next, "failed": s.failed, "memory": hex(&s.memory), "globals": s.globals,
+                           "arrays": hex(&s.arrays), "pending": s.pending})
+                })
+                .collect(),
+        )
+    }
 }
 
 /// The logic items of a piece, stepping on one input track.
@@ -451,6 +552,8 @@ pub struct World {
     pub saves_dir: Option<std::path::PathBuf>,
     /// With no folder, the saves its steps asked for, held for the host's store (Export: web player).
     pub held: Option<Vec<crate::saves::Held>>,
+    /// #189: the time the saves machinery took since it was last read (a live frame's `saves_ns`).
+    pub saves_ns: u64,
     pub saved: Vec<Value>,
     /// The steps the piece's same-machine counters have seen, and the adapter this run is on.
     pub(crate) seen: u64,
@@ -463,8 +566,28 @@ pub struct World {
 
 pub type Failed = Value;
 
+mod net;
 mod rewind;
+pub mod rollback;
+pub mod seats;
 mod world_impl;
+
+impl World {
+    /// The planted logic module this world runs as.
+    pub fn planted(&self) -> Planted {
+        self.planted
+    }
+
+    /// #277's planted catch-up: every item's clock moves on to the first step at or after `t`,
+    /// running none of the steps before it.
+    pub fn skip(&mut self, t: i64) {
+        for (i, item) in self.piece.items.iter().enumerate() {
+            let k = t.div_euclid(item.step) + i64::from(t.rem_euclid(item.step) != 0);
+            let l = &mut self.lives[i];
+            l.next = l.next.max(k);
+        }
+    }
+}
 
 /// The planted replay's change: the first value of the item's first array, an i32 plus one, an
 /// f64 (or a vector's first component) to the next f64 above it, a bool flipped.
@@ -480,6 +603,29 @@ fn changed(item: &Item, arrays: &mut [u8]) {
         _ => {
             let v = f64::from_le_bytes(arrays[at..at + 8].try_into().expect("8 bytes"));
             arrays[at..at + 8].copy_from_slice(&v.next_up().to_le_bytes());
+        }
+    }
+}
+
+/// #1250's planted piece that reads the wall clock: the first value of the item's first array
+/// with the wall clock's nanoseconds modulo 2^30 added, an i32 wrapping and a bool flipped by the
+/// count's parity, so a replica of the same track never ends where the play did.
+fn walled(item: &Item, arrays: &mut [u8]) {
+    let Some(w) = item.writes.first() else { return };
+    let at = item.write(&w.name).expect("a write entry").offset as usize;
+    let ns = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
+        .map_or(0, |d| d.subsec_nanos() as u64 + d.as_secs() * 1_000_000_000)
+        % (1 << 30);
+    match w.ty {
+        Ty::Bool => arrays[at] ^= (ns & 1) as u8,
+        Ty::I32 => {
+            let v = i32::from_le_bytes(arrays[at..at + 4].try_into().expect("4 bytes"));
+            arrays[at..at + 4].copy_from_slice(&v.wrapping_add(ns as i32).to_le_bytes());
+        }
+        _ => {
+            let v = f64::from_le_bytes(arrays[at..at + 8].try_into().expect("8 bytes"));
+            arrays[at..at + 8].copy_from_slice(&(v + ns as f64).to_le_bytes());
         }
     }
 }

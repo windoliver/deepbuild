@@ -1,0 +1,19 @@
+no repo
+  agent · taskever  agent  INVALID · waits for you: no check was selected for the claim, so nothing checks req:taskeveryhourchecktheteamfeedfornews3025611b1#R1, req:taskeveryhourchecktheteamfeedfornews3025611b1#R2, 3m
+      not verified: R1, R2 · INVALID 0/2 · next: agent
+  agent · taskever  agent  INVALID · waits for you: no check was selected for the claim, so nothing checks req:taskeveryhourchecktheteamfeedfornews3025611b2#R1, req:taskeveryhourchecktheteamfeedfornews3025611b2#R2, 0s
+      not verified: R1, R2 · INVALID 0/2 · next: agent
+Working:
+everyhourchecktheteamfeedfornews-9e764c06
+  Work task #1: Note the new stories. When your change is read  claude-code  says done · unpushed: 1 commit on deep/issue-1-464cw5 on no remote branch. Push the branch, or say why it stays here. · it says done, and its checks have given no verdict yet, 3m
+      says done · next: DeepBuild · session/afcb4961/01M7W4FN2AGB41TPH2ASWXCDEN; 2 calls, 0 failed, commit 299e8e5b8eb8: write src/i1.txt  ok; shell git add src/i1.txt && git -c user.name=agent -c user.email=agent@exampl…  ok; the rest: deep read session:afcb49618f994fe9882bae364d61cb22
+  Work task #2: Note the new stories (round 2). When your chan  claude-code  says done · unpushed: 1 commit on deep/issue-2-td2gmj on no remote branch. Push the branch, or say why it stays here. · it says done, and its checks have given no verdict yet, 0s
+      says done · next: DeepBuild · session/090a9c62/01M7WEVZXJZWA4V4D9AEZ0Z4AZ; 2 calls, 0 failed, commit 4f225bf7aeb8: write src/i2.txt  ok; shell git add src/i2.txt && git -c user.name=agent -c user.email=agent@exampl…  ok; the rest: deep read session:090a9c6287274c9395d7f5dc17625856
+every hour, check the release feed for new stories
+  New project  INVALID · "every hour, check the release feed for new stories" fires more than once a day, so it needs a wake test that says when a model is needed, and it has none., 6m
+every hour, check the design feed for new stories
+  New project  INVALID · The wake test of "every hour, check the design feed for new stories" stays quiet on its planted change, a third story in the feed (it answered nothing new), so it could never wake the job., 3m
+every hour, check the team feed for new stories
+  New project  BLOCKED · The wake test .deepbuild/wake.sh in /private/tmp/dh1342-QEa4gz/h/.deepbuild/workspaces/everyhourchecktheteamfeedfornews-9e764c06 isn't the one you approved: its digest is 87cd91c69511a9d701207a0677c29b9f2a530b71554738fec526ea6bdfbdceec, and your approval fixed 8e32c50060946
+4 sessions
+0 asks need you

@@ -171,6 +171,8 @@ export type Plant =
   | 'churn-keeps-every-answer' | 'churn-keeps-every-result' | 'churn-keeps-every-output' | 'churn-keeps-every-name-set'
   // #2402's: a host that counts a hook handler's failures and never clears them.
   | 'failures-never-cleared'
+  // #2648's: a hub that reads gates.json, notices.json and the agents' settings once, at its start.
+  | 'reads-files-at-start-only'
   // #824's per-session reading: deep mcp loading the whole hub package, a waiter keeping its session's transcript, and
   // a platform that reads no process's memory.
   | 'mcp-loads-hub' | 'waiter-keeps-transcript' | 'sessions-no-memory-read'
@@ -306,6 +308,10 @@ export type Plant =
   | 'status-lists-every-ask'
   // #1577's: a request ID marked in progress where the mark outlives the hub, and an undo applied past a newer change.
   | 'pending-across-restart' | 'applies-stale-undo'
+  // #1101's, which the asks core plays: a yes that starts its step at the click, an Undo that lets the step run anyway or
+  // closes the ask as declined, a hub that runs held steps when it starts again, a batch that holds every step, and an
+  // Undo that withdraws a step that already ran.
+  | 'hold-starts-at-click' | 'undo-runs-anyway' | 'undo-closes-declined' | 'restart-runs-held' | 'batch-holds-all' | 'undo-withdraws-ran'
   // #2646's: a state pass that leaves out each session whose promise fell due, and an asks core whose reads of the log
   // leave tool.before out of their kinds.
   | 'pass-skips-due-promise' | 'state-pass-skips-due-promise' | 'asks-without-tool-before'
@@ -317,7 +323,10 @@ export type Plant =
   // #1509's: a gate that asks for every package run straight from a registry, whatever its age.
   | 'asks-every-registry-run'
   // #1868's: a hub that builds the asks and readings of the canvas core's world once and reads them so ever after.
-  | 'canvas-world-built-once';
+  | 'canvas-world-built-once'
+  // #1576's: a sessions.read that returns every row, a page sent a frame more for each event, and an inbox.read that
+  // reads each ask with a query of its own.
+  | 'reads-every-row' | 'page-hook-frame-per-event' | 'query-per-row';
 const PLANTS: readonly string[] = [
   'asks-every-registry-run',
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
@@ -371,6 +380,7 @@ const PLANTS: readonly string[] = [
   'churn-no-full-collection', 'churn-no-resident-read',
   'churn-keeps-every-answer', 'churn-keeps-every-result', 'churn-keeps-every-output', 'churn-keeps-every-name-set',
   'failures-never-cleared',
+  'reads-files-at-start-only',
   'mcp-loads-hub', 'waiter-keeps-transcript', 'sessions-no-memory-read',
   'repeat-reaches-you',
   'deep-wait-polls', 'stop-answers-waiting',
@@ -435,10 +445,12 @@ const PLANTS: readonly string[] = [
   'parser-pool-messages-only', 'parser-pool-leaves-line-waiting',
   'status-lists-every-ask',
   'pending-across-restart', 'applies-stale-undo',
+  'hold-starts-at-click', 'undo-runs-anyway', 'undo-closes-declined', 'restart-runs-held', 'batch-holds-all', 'undo-withdraws-ran',
   'pass-skips-due-promise', 'state-pass-skips-due-promise', 'asks-without-tool-before',
   'hands-over-socket-chunk',
   'rubric-holds-every-rule', 'review-without-caller',
   'canvas-world-built-once',
+  'reads-every-row', 'page-hook-frame-per-event', 'query-per-row',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

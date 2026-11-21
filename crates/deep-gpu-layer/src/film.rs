@@ -211,14 +211,15 @@ fn marks_at(
         pinned: t,
         ..Record::default()
     };
-    crate::lightfx::stale(planted, &mut items);
+    crate::lightfx::stale(planted.and_then(Planted::composed), &mut items);
     let frame = scene::frame_planted(
         doc,
         &items,
         (palette, ty),
         &record,
         1.0,
-        crate::lightfx::scene_plant(planted).unwrap_or(scene::Planted::None),
+        crate::lightfx::scene_plant(planted.and_then(Planted::composed))
+            .unwrap_or(scene::Planted::None),
     )
     .map_err(|r| refused(r.code, r.path))?;
     let layers = frame
@@ -462,7 +463,19 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                        items: &Map<String, Value>| {
         ix.as_ref().map(|ix| {
             let marks: Vec<Arc<Drawn>> = layers.iter().flatten().cloned().collect();
-            Arc::new(crate::indexed::frame(ix, &marks, items, "ground", planted))
+            let plant = match planted {
+                Some(crate::Planted::PartialCoverage) => {
+                    Some(crate::indexed::Plant::PartialCoverage)
+                }
+                Some(crate::Planted::PuffFullOpacity) => {
+                    Some(crate::indexed::Plant::PuffFullOpacity)
+                }
+                Some(crate::Planted::LightAfterUpscale) => {
+                    Some(crate::indexed::Plant::LightAfterUpscale)
+                }
+                _ => None,
+            };
+            Arc::new(crate::indexed::frame(ix, &marks, items, "ground", plant))
         })
     };
     let snap =

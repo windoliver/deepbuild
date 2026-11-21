@@ -13,11 +13,13 @@ mod audio;
 mod bake;
 mod caption_design;
 mod capture;
+mod clip;
 mod costs;
 mod data_hash;
 mod defaults;
 mod determinism;
 mod efficiency;
+mod entries;
 mod evidence;
 mod export;
 mod extended;
@@ -57,6 +59,7 @@ mod modes;
 mod momentum;
 mod narration;
 mod net;
+mod net_web;
 mod over3d;
 mod packs;
 mod physics;
@@ -527,6 +530,20 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 a[1].as_str()?.to_string(),
             ]));
         }
+        // #1250: ⌘⇧C, Save clip's default key, and the player controls as actions.
+        "input" if clip::action_of(c.get("event")?).is_some() => {
+            return Some(Call::Clip {
+                panel: c.get("panel")?.as_str()?.to_string(),
+                action: clip::action_of(c.get("event")?)??,
+            })
+        }
+        "clips" => return Some(Call::Clips(c.get("panel")?.as_str()?.to_string())),
+        "presented" if c.contains_key("indices") => {
+            return Some(Call::PresentedIndices(
+                c.get("panel")?.as_str()?.to_string(),
+                c.get("indices")?.get("from")?.as_i64()?,
+            ))
+        }
         "input" => {
             return Some(Call::Input {
                 panel: c.get("panel")?.as_str()?.to_string(),
@@ -665,11 +682,11 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "geometry" => return geometry::parse(c).map(|g| Call::Geometry(Box::new(g))),
         "kinds" => return Some(Call::KindSchemas),
         "spatial" => return spatial::parse(c).map(|s| Call::Spatial(Box::new(s))),
-        "logic" => return picks::parse(c).map(|l| Call::Logic(Box::new(l))),
+        "logic" | "open_save" => return picks::parse(c).map(|l| Call::Logic(Box::new(l))),
         "terrain_rays" => return terrain::parse(c).map(|r| Call::TerrainRays(Box::new(r))),
         "physics_bake" => return physics::parse(c).map(|b| Call::PhysicsBake(Box::new(b))),
         "world" => return points::parse_world(c).map(|(doc, world)| Call::World { doc, world }),
-        "match" | "play_match" | "sockets" => return net::parse(name, c),
+        "match" | "play_match" | "sockets" | "replay" => return net::parse(name, c),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
             return Some(Call::InstallPack {
@@ -798,6 +815,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 track: optional(c.get("track"), |t| t.as_array().cloned())?,
                 data_hash: flag("data_hash")?,
                 texts: flag("texts")?,
+                shown: flag("shown")?,
                 carried: flag("carried")?,
                 tour_pointer: flag("tour_pointer")?,
             })));
@@ -1368,6 +1386,13 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 // #223's in the marks2d module's warp.
                 || deep_canvas_marks::warp::PLANTED.contains(p)
                 || deep_net::Planted::named(p).is_some()
+                // #297's in the text module's entry texts and the text control's range.
+                || deep_canvas_marks::entries::planted(Some(p)) != Default::default()
+                || *p == deep_canvas_marks::entries::FIT_SKIPS_ENTRIES
+                || entries::PLANTED.contains(p)
+                || deep_net::PLANTED.contains(p)
+                // #265's trail that keeps the points a copy read from predicted steps.
+                || *p == net::TRAIL_KEEPS_PREDICTED
                 // #225's in the data module's integrator; #2450's in its reading of axis titles.
                 || *p == deep_canvas_marks::vector_field::PLANTED_EULER
                 || *p == deep_canvas_marks::axes3d::TAKES_ANY_KIND
@@ -1375,7 +1400,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || *p == logic::MAP_READS_BY_NAME
                 // #466's boil and blur in deep-show's frames.
                 || films::PLANTED.contains(p) || sandbox::PLANTED.contains(p) || *p == frames::VALIDATED_PER_FRAME
-                || caption_design::PLANTED.contains(p)
+                || caption_design::PLANTED.contains(p) || scene3d::PLANTED.contains(p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1385,6 +1410,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         .filter(|p| familiar::PLANTED.contains(p) || math_twins::PLANTED.contains(p))
         .map(str::to_string);
     let logic_planted = crate::logic::planted(input.get("planted"))?;
+    // #551: the planted rate rule is the net kind's own, read at every check this run makes.
+    deep_net::kind::plant_rate_rule(module_planted.as_deref() == Some("net_rate_faster_only"));
     let planted = match input.get("planted").map(Value::as_str) {
         None => None,
         Some(_) if logic_planted.is_some() => None,
@@ -1400,6 +1427,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             None if geometry_audit::planted(p).is_some() => geometry_audit::planted(p),
             None if physics::planted(p).is_some() => physics::planted(p),
             None if stepped::planted(p).is_some() => stepped::planted(p),
+            None if clip::planted(p).is_some() => clip::planted(p),
             None => Some(match p {
                 "presents_unnamed_removal" => Planted::PresentsUnnamedRemoval,
                 "diffs_items_only" => Planted::DiffsItemsOnly,
@@ -1854,143 +1882,7 @@ fn read_line(line: &str) -> Option<(Map<String, Value>, Scenario)> {
 
 mod answer;
 use answer::*;
-
-/// The virtual display clock `canvas` plays its calls on (#806): 120 Hz, the latch 2 ms before vsync,
-/// half a millisecond a check, and each call ten frames after the one before, so a patch is current
-/// at a latch before the next call arrives, as on the stand-in's clock (#384, #96).
-const CANVAS_CLOCK: (i64, i64, i64) = (120, 1_411_200, 352_800);
-const CANVAS_SPACING: i64 = 10 * (shared::FLICKS / 120);
-
-/// `deep-show canvas` (#806): the hub's canvas side, long-lived. Its world (a scenario's fields but
-/// `calls`, `clock` and `at`) is the hub's: the sessions it bound, the documents it minted, the
-/// record's objects, the claims, the window and card. Each call is played after every call before
-/// it, on the clock `canvas` keeps, and answered with its reply, so the replies are the stand-in's for
-/// the same calls in the same order. A fault holds only the call that sends it, not the earlier ones
-/// played again before it.
-struct CanvasSide {
-    /// The world but its record's objects, which `record` holds.
-    world: Map<String, Value>,
-    /// The world's record objects (#1868): read once when the hub sends its world, then shared by
-    /// every call's scenario, so a call that draws nothing from the record pays nothing for it.
-    record: std::sync::Arc<BTreeMap<String, RecordObject>>,
-    calls: Vec<Value>,
-}
-
-impl CanvasSide {
-    fn scenario(&self, fault: bool) -> Option<Scenario> {
-        let mut scenario = self.scenario_of_world(fault)?;
-        scenario.record = self.record.clone();
-        Some(scenario)
-    }
-
-    fn scenario_of_world(&self, fault: bool) -> Option<Scenario> {
-        let mut input = self.world.clone();
-        if !fault {
-            input.remove("fault");
-        }
-        let (refresh_hz, lead, check) = CANVAS_CLOCK;
-        input.insert(
-            "clock".into(),
-            json!({"refresh_hz": refresh_hz, "lead": lead, "check": check}),
-        );
-        let calls: Vec<Value> = self
-            .calls
-            .iter()
-            .enumerate()
-            .map(|(i, c)| {
-                let mut c = c.clone();
-                let arrives = if ["deep_query", "geometry", "fn", "deep_kinds"]
-                    .iter()
-                    .any(|k| c["call"] == *k)
-                {
-                    "arrives"
-                } else {
-                    "at"
-                };
-                c[arrives] = json!((i as i64 + 1) * CANVAS_SPACING);
-                c
-            })
-            .collect();
-        input.insert("calls".into(), Value::Array(calls));
-        scenario(&input)
-    }
-
-    fn line(&mut self, startup: &Startup, line: &str) -> Value {
-        let Ok(Value::Object(input)) = serde_json::from_str::<Value>(line) else {
-            return bad_input();
-        };
-        if let Some(Value::Object(world)) = input.get("world") {
-            // The record's objects are read here, once; a replay's run entries (a list) stay in the world.
-            let mut world = world.clone();
-            let record = match world.get("record") {
-                Some(Value::Object(_)) => {
-                    let Some(record) = record_objects(&world) else {
-                        return bad_input();
-                    };
-                    world.remove("record");
-                    record
-                }
-                _ => BTreeMap::new(),
-            };
-            let before = std::mem::replace(&mut self.world, world);
-            if self.scenario(false).is_none() {
-                self.world = before;
-                return bad_input();
-            }
-            self.record = std::sync::Arc::new(record);
-            return json!({"ok": true});
-        }
-        let Some(Value::Object(call)) = input.get("call") else {
-            return bad_input();
-        };
-        let mut call = call.clone();
-        let out = call.remove("out");
-        let doc = call.get("doc").and_then(Value::as_str).map(str::to_string);
-        self.calls.push(Value::Object(call));
-        let Some(scenario) = self.scenario(true) else {
-            self.calls.pop();
-            return bad_input();
-        };
-        match out.as_ref().and_then(Value::as_str) {
-            // The window as the calls leave it, drawn and written to `out`; the reply is the
-            // `screen` call's own, with the picture's size and each item's box beside it.
-            Some(out) if scenario.window.is_some() => {
-                let mut drawn = screen(&scenario, startup, out, 0, 1.0);
-                let Some(Value::Array(mut replies)) = drawn.get_mut("replies").map(Value::take)
-                else {
-                    return drawn;
-                };
-                let mut reply = replies.pop().unwrap_or(Value::Null);
-                for k in ["width", "height", "items"] {
-                    reply[k] = drawn[k].take();
-                }
-                json!({"ok": true, "reply": reply})
-            }
-            _ => {
-                let mut hub = hub::Hub::new(&scenario, startup);
-                let mut replies = hub.run_calls();
-                let reply = replies.pop().unwrap_or(Value::Null);
-                // #412: deep_kinds reads and changes nothing, so it leaves no call to replay.
-                if self.calls.last().and_then(|c| c.get("call")) == Some(&json!("deep_kinds")) {
-                    self.calls.pop();
-                }
-                let presented = match doc.as_deref() {
-                    // #1415: a patch that changed nothing made no revision to present.
-                    Some(doc)
-                        if reply.get("rev").is_some()
-                            && reply["outcome"] != "refused"
-                            && reply["outcome"] != "applied"
-                            && reply["outcome"] != "no_change" =>
-                    {
-                        hub.presented_revision(doc)
-                    }
-                    _ => None,
-                };
-                json!({"ok": true, "reply": reply, "presented": presented})
-            }
-        }
-    }
-}
+mod canvas_side;
 
 #[cfg(target_os = "macos")]
 fn screen(scenario: &Scenario, startup: &Startup, out: &str, t: i64, scale: f64) -> Value {
@@ -3039,16 +2931,23 @@ fn main() {
         }
     };
     let stdin = io::stdin();
-    let mut canvas = CanvasSide {
-        world: Map::new(),
-        record: Default::default(),
-        calls: Vec::new(),
-    };
-    canvas.world.insert("evidence".into(), json!(""));
-    for line in stdin.lock().lines() {
+    let mut lines = stdin.lock().lines();
+    if command == "canvas" {
+        // A line that is not UTF-8 was read to its end: it is one that can't be read.
+        let next = || match lines.next()? {
+            Ok(line) => Some(Some(line)),
+            Err(e) if e.kind() == io::ErrorKind::InvalidData => Some(None),
+            Err(_) => None,
+        };
+        canvas_side::serve(startup, next, |reply| {
+            let _ = writeln!(out, "{reply}");
+            let _ = out.flush();
+        });
+        return;
+    }
+    for line in lines {
         let reply = match line {
             Ok(line) => match command.as_str() {
-                "canvas" => canvas.line(startup, &line),
                 "live" => live(startup, &line),
                 _ => answer(&command, startup, &line),
             },

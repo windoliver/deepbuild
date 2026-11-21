@@ -72,6 +72,7 @@ pub enum Planted {
     DefaultsSkipJson,
     /// #548: the bindings generator orders each region's fields by name before laying them out.
     BindingsByName,
+    VehicleReaderOtherDefaults, // #2717: the world reader takes other defaults for a vehicle body.
 }
 
 impl Planted {
@@ -97,7 +98,7 @@ impl Planted {
             "defaults_compared_with_dump_only" => Planted::DefaultsComparedWithDumpOnly,
             "defaults_skip_json" => Planted::DefaultsSkipJson,
             "bindings_fields_by_name" => Planted::BindingsByName,
-            _ => return None,
+            _ => return crate::physics::defaults::planted(name),
         })
     }
 }
@@ -165,6 +166,9 @@ const INSTALLED: &[(&str, &str)] = &[
         "logic-counter.wat",
         include_str!("../gallery/logic-counter.wat"),
     ),
+    // #550: net@1's example, a two-player piece, and its program's source.
+    ("net-rally.json", include_str!("../gallery/net-rally.json")),
+    ("net-rally.wat", include_str!("../gallery/net-rally.wat")),
     // #508: the figure the canvas skill embeds, its example of a 3D figure.
     ("figure.json", include_str!("../gallery/figure.json")),
 ];
@@ -816,6 +820,26 @@ pub(crate) fn kind_rows(sealed: &Sealed, planted: Option<Planted>) -> Vec<KindRo
             }
             row.entry["example"] = json!(text.as_deref().map(|t| sha256_hex(t.as_bytes())));
             row.example = text;
+        }
+    }
+    // #550: net@1 with its check kinds and its gallery example, a two-player piece; listed
+    // unavailable, naming why, in a build without the net module.
+    let net_text = INSTALLED.iter().find(|(f, _)| *f == "net-rally.json");
+    let net_text = net_text.map(|(_, t)| t.to_string());
+    let checks = deep_net::feel::check_kinds();
+    if let Some(row) = out.iter_mut().find(|r| r.entry["name"] == json!("net@1")) {
+        row.entry["check_kinds"] = checks;
+        row.entry["example"] = json!(net_text.as_deref().map(|t| sha256_hex(t.as_bytes())));
+        row.example = net_text;
+    } else if !named.iter().any(|n| n == "net@1") {
+        named.push("net@1".into());
+        push("net@1".into(), "net".into(), None, &mut out);
+        if let Some(e) = out.last_mut().map(|r| &mut r.entry) {
+            e["available"] = json!(false);
+            e["code"] = json!("module_missing");
+            e["check_kinds"] = checks;
+            e["kit"] =
+                json!({"verdict": "BLOCKED", "rules": [{"rule": "sealed", "verdict": "BLOCKED"}]});
         }
     }
     if drawn_by("scene3d") {

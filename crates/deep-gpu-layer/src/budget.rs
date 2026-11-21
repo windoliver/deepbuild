@@ -99,7 +99,7 @@ struct StubTimer {
 }
 
 pub(crate) struct Args {
-    pub(crate) look: Look3,
+    pub(crate) look: crate::flat::CallLook,
     pub(crate) writer: String,
     doc: PathBuf,
     pub(crate) size: [u32; 2],
@@ -129,6 +129,7 @@ pub(crate) fn parse(call: &Value) -> Result<Args, Value> {
         ));
     };
     let look = Look3::read(&call["look"]).map_err(|e| bad(&format!("look: {e}")))?;
+    let look = crate::flat::CallLook::of(look, call);
     let fps = call["fps"].as_u64().unwrap_or(60).max(1);
     let warmup = call["warmup"].as_u64().unwrap_or(60);
     let per_run = (seconds * fps as f64).round().max(1.0) as u64;

@@ -1,0 +1,108 @@
+The #2248 suite at base commit 85203f458b85c999ac03a884c837398e56aeac8d ("Merge pull request #2852 …"; no
+implementation of #2248), on macOS 27.2 arm64 (Mac17,10, shared; 1-minute load between 54 and 170 while it ran),
+rustc 1.99.1, Node 24.22.2, vitest 5.0.5, each file run alone with
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/2248 --no-file-parallelism --testTimeout=600000 \
+    <file>
+
+on the base's release deep-physics (cargo build --locked -j 6 --release -p deep-physics-rapier --bin deep-physics)
+and its debug deep-show (cargo build --locked -j 6 -p deep-show --bin deep-show), both built from this commit
+through the build slot before any file ran; each file's own cargo call found its build made and copied it. The
+checkout's path is left out.
+
+Result: Test Files 3 failed (3); Tests 6 failed (6). ac1 and ac2 under a second each, ac3 5.4 s.
+
+Every test fails at an assertion in its own test file (expect(problems).toEqual([]), expect(tolds(...)).toEqual([]),
+expect(unpresented(...)).toBe(''), expect(failures).toEqual([])), on what its criterion states and the base lacks.
+None fails in a helper, at an import or at a timeout; none is BLOCKED or INCONCLUSIVE; none passes at the base.
+
+Each file was run once as first written and once more as delivered, after changes to helpers.ts that touch no
+judgement: the runner goes through #191's own `physics` instead of a copy of it, exports no test uses were dropped,
+the scene's builder takes the list of outputs it writes, and a readout's text with a slot left unfilled reads as no
+number. Each run gave the same result for every test, at the same assertion; the lines below are the last run's.
+The type-check, node node_modules/typescript/bin/tsc -p tests/acceptance/2248/tsconfig.json, exits 0 on the files as
+delivered. tests/acceptance/2248/node_modules (vitest's cache) was removed after the runs.
+
+Clauses that hold at the base inside tests that fail there (printed by the tests, asserted with the rest)
+-------------------------------------------------------------------------------------------------------
+- Criterion 3, "a hinge motor at 90°/s turns its wheel: 45° at 0.5 s within 1%": the scene's world baked by
+  deep-physics, which doesn't read an output's `to`, turns its wheel as the issue says. It is the fact the dial is
+  held to; the base writes nothing of it to the dial.
+    the hinge's coordinate in the bake: 44.880632088711316° at 0.5 s, 89.88061045219862° at 1 s
+- Criterion 3, the readout's scene (the scene without the output `turn`) is presented at the base: a `to` that is no
+  path draws nothing there, and `eval` reads the readout's template as it was written, "{value/1}".
+
+Failing at the base
+-------------------
+ac1-sampled-series.test.ts (#2248.a0a41ad7)
+ × the output {from: ball, read: velocity, sample: 12, average: 12} bakes one value every 0.1 s, each the mean of the
+   ball's vertical velocity over the 12 steps that end at it: −9.360 m/s at 1 s within 0.1%
+   AssertionError: the dropped ball baked 1 s: the output's series is read:
+     the dropped ball baked 1 s is refused, not baked: physics.unsupported at outputs/fall/average: an output's
+     average isn't run by this backend interface yet; #2248 brings it; physics.unsupported at outputs/fall/sample: an
+     output's sample isn't run by this backend interface yet; #2248 brings it: expected [ Array(1) ] to deeply equal []
+   ❯ ac1-sampled-series.test.ts:30:80
+   (the base's world reader refuses `sample` and `average`, so the world is never baked)
+ × with keep: 0.5 s a series reading it holds only the samples of the last 0.5 s
+   AssertionError: each series is read:
+     the series without keep, read at 1 s is refused, not baked: physics.unsupported at outputs/fall/average: …;
+     physics.unsupported at outputs/fall/sample: …
+     the series with keep: 0.5 s, read at 1 s is refused, not baked: physics.unsupported at outputs/fall/average: …;
+     physics.unsupported at outputs/fall/sample: …; physics.unsupported at outputs/fall/keep: an output's keep isn't
+     run by this backend interface yet; #2248 brings it
+     the series with keep: 0.5 s, read at 0.8 s is refused, not baked: (the same three)
+     : expected [ …(3) ] to deeply equal []
+   ❯ ac1-sampled-series.test.ts:50:63
+   (the same, and `keep`)
+
+ac2-expr.test.ts (#2248.7a7a91ac)
+ × an output with expr "0.5 * m * v * v" over the reads v (the ball's speed) and m (its mass), unit J, reads the
+   ball's kinetic energy at 1 s, ½ × 1 × 9.81², within 0.5%
+   AssertionError: the dropped ball's energy by expr: the output's series is read:
+     the dropped ball's energy by expr is refused, not baked: unknown_field at outputs/ke/reads: outputs/ke/reads is
+     not a field here; the fields are from, read, to, interpolate, reduce, average, sample, keep, expr, unit,
+     crossings; physics.unsupported at outputs/ke/expr: an output's expr isn't run by this backend interface yet;
+     #2248 brings it; physics.unsupported at outputs/ke/unit: an output's unit isn't run by this backend interface
+     yet; #2248 brings it; physics.missing_field at outputs/ke/read: outputs/ke needs a read: one of pose, position,
+     angle, velocity, joint_coordinate, joint_force, contact_count, energy, particle_positions, grounded, sliding,
+     crouched: expected [ Array(1) ] to deeply equal []
+   ❯ ac2-expr.test.ts:27:80
+   (the base runs no `expr`, takes no `unit`, has no named reads, and wants a `read` on every output)
+ × an expr that names no read is refused at check, naming the output, where the same expr over the reads it names is
+   taken
+   AssertionError: "0.5 * m * v * v" over the reads it names, v and m, is taken at check: expected [ …(4) ] to deeply
+   equal []
+     + "unknown_field at outputs/ke/reads: …"
+     + "physics.unsupported at outputs/ke/expr: an output's expr isn't run by this backend interface yet; #2248 brings it"
+     + "physics.unsupported at outputs/ke/unit: an output's unit isn't run by this backend interface yet; #2248 brings it"
+     + "physics.missing_field at outputs/ke/read: …"
+   ❯ ac2-expr.test.ts:49:98
+   (the base refuses every `expr`. The output with no reads is refused there too, by the last three of these, each
+   naming `ke`: a refusal for another reason than the criterion's, which is why the test first requires the `expr`
+   over its reads to be taken. The test printed, for the output with no reads: physics.unsupported at
+   outputs/ke/expr; physics.unsupported at outputs/ke/unit; physics.missing_field at outputs/ke/read)
+
+ac3-scene-dial-readout.test.ts (#2248.ac6cea78)
+ × an output {from: hinge, read: joint_coordinate, to: items/dial/at/rot/2} turns the scene's dial as a hinge motor
+   at 90°/s turns its wheel: 45° at 0.5 s within 1%
+   AssertionError: the scene is presented, each output of its world written where its `to` names: expected
+   'physics_refused at worlds/rig: {"code…' to be ''
+     + physics_refused at worlds/rig: {"code":"physics.unsupported","path":"outputs/turn/to","what":"an output's to
+       with read joint_coordinate isn't drawn by this host yet; #2248 brings it"}
+   ❯ ac3-scene-dial-readout.test.ts:43:118
+   (the three assertions before it pass: the bake is read, it holds the hinge's coordinate at the scene's 61 frames,
+   and that is 44.8806° at 0.5 s. In its scene the base refuses the world for the hinge's output to an item path)
+ × an output reading a body's velocity writes its vertical part to a readout at every frame
+   AssertionError: the readout shows the vertical part of the ball's velocity at every frame:
+     frame 0 (0.000 s): the readout shows null; the ball's vertical velocity is 0.0000 m/s
+     frame 1 (0.017 s): the readout shows null; the ball's vertical velocity is -0.1635 m/s
+     frame 2 (0.033 s): the readout shows null; the ball's vertical velocity is -0.3270 m/s
+     …
+     frame 30 (0.500 s): the readout shows null; the ball's vertical velocity is -4.9050 m/s
+     …
+     frame 60 (1.000 s): the readout shows null; the ball's vertical velocity is -9.8100 m/s
+     : expected [ …(61) ] to deeply equal []
+   ❯ ac3-scene-dial-readout.test.ts:68:117
+   (the assertion before it passes: the scene is presented. At the base nothing reaches the readout, and `eval`'s
+   `paths` read no text of it: items/vy/params/text is null at each of the 61 frames)

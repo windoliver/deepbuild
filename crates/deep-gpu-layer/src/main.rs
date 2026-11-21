@@ -23,7 +23,6 @@ mod columns;
 mod compare;
 mod compile;
 mod conformance;
-mod drawn;
 mod effects;
 mod envelope;
 #[cfg(feature = "test-faults")]
@@ -37,23 +36,20 @@ mod flows2d;
 mod frames;
 mod full_lane;
 mod golden;
-mod groups;
 mod guard;
 mod hdr;
 mod host;
-mod indexed;
+use deep_groups_render::indexed;
 mod insets;
 mod interp_suite;
 mod levels;
 mod live;
-mod lightfx;
 mod liveview;
 mod lod;
 mod look_ops;
 mod marks2d;
 mod op_transition;
 mod opframe;
-mod paintfx;
 mod parity;
 mod particles;
 mod physics;
@@ -94,6 +90,10 @@ use deep_gpu::seam::Startup;
 use deep_gpu::surface::Path;
 use gpui_kit::HeadlessAppContext;
 use serde_json::{json, Value};
+
+// #1561: the 2D compositor and the drawn passes are a render crate's, which deep-show draws
+// through too.
+pub(crate) use deep_groups_render::{drawn, groups, lightfx};
 
 use crate::scene::Scene;
 use crate::window::Win;
@@ -229,6 +229,11 @@ pub enum Planted {
     FlareFixedGhosts,
     /// #465: the flare built as if nothing covered its light.
     FlareIgnoresOcclusion,
+    /// #2691's wrong programs (tests/acceptance/2691/README.md: Planted programs): the mirror's
+    /// pass at half of half the internal size; a plain mirror's lookup by the pixel's place over
+    /// the frame's full size.
+    MirrorHalvesTwice,
+    MirrorSamplesFullFrame,
     /// #468: a circle of confusion linear in |d − s|, matched to the physical one at 10 m.
     CocLinearInDistance,
     /// #166: the water's foam carried from frame to frame as simulation state.
@@ -309,6 +314,9 @@ pub enum Planted {
     CreaseBelowAngle,
     EdgesDeriveEveryFrame,
     EdgesDashOtherSpace,
+    /// #1782's, by name (tests/acceptance/1782/README.md: Planted programs): a crease line's
+    /// wrong picker, and a hidden style's wrong span classifiers, cache, edge IDs and dash.
+    HiddenLines(&'static str),
     ReleasesAtRevision,
     /// #417's: the look switch's clock stops at the request, before the new look is on screen.
     StopsAtRequest,
@@ -356,6 +364,11 @@ pub enum Planted {
     HalftonePopTakesDotPasses,
     InkFillFlat,
     RimKeepsFirst,
+    /// #1561's wrong programs (tests/acceptance/1561/README.md: Planted programs): a live window
+    /// that hands a 2D document's frames no page and none of its look's drawn fields; and a
+    /// frame that reuses the last frame's marks drawn with no page.
+    LivePassesNoPage,
+    ReuseDropsPage,
     DropsClouds,
     /// #424's wrong programs.
     AddWritesDepth,
@@ -526,6 +539,12 @@ pub enum Planted {
     BoundsBindPose,
     /// #450's: a whole trail drawn from the frames drawn so far (tests/acceptance/450/README.md).
     TrailAppendsPerFrame,
+    /// #265's (tests/acceptance/265/README.md: Planted programs): a world-space emitter's anchor
+    /// kept from the frames drawn, a trail through a linear array's stored steps, and a wake
+    /// that keeps the last frame's samples.
+    AnchorKeptFromFrame,
+    TrailReadsStoredSteps,
+    WakeKeepsLastFrame,
     /// #451's: particles on a vector field's stream move instead in a straight line along the
     /// field's arrow at their birth point (tests/acceptance/451/README.md: The planted program).
     ParticlesFollowArrows,
@@ -548,6 +567,35 @@ pub enum Planted {
 }
 
 impl Planted {
+    /// The compositor's wrong program this one is, if it is one of the render crate's (#1561).
+    pub(crate) fn composed(self) -> Option<deep_groups_render::Planted> {
+        use deep_groups_render::Planted as P;
+        Some(match self {
+            Planted::GroupPassAtLayerEnd => P::GroupPassAtLayerEnd,
+            Planted::GroupPassReadsEarlier => P::GroupPassReadsEarlier,
+            Planted::GroupPassPastGrow => P::GroupPassPastGrow,
+            Planted::BackdropReadsLaterItems => P::BackdropReadsLaterItems,
+            Planted::BackdropPastCoverage => P::BackdropPastCoverage,
+            Planted::BevelLitOpposite => P::BevelLitOpposite,
+            Planted::LightLinearFalloff => P::LightLinearFalloff,
+            Planted::LightEncodedSum => P::LightEncodedSum,
+            Planted::LightDefaultAmbientZero => P::LightDefaultAmbientZero,
+            Planted::LightEveryChild => P::LightEveryChild,
+            Planted::LightStaleList => P::LightStaleList,
+            Planted::VividLightAsLinearLight => P::VividLightAsLinearLight,
+            Planted::PassLinearIn2d => P::PassLinearIn2d,
+            Planted::PassEncodedIn3d => P::PassEncodedIn3d,
+            Planted::InkFillFlat => P::InkFillFlat,
+            Planted::RimKeepsFirst => P::RimKeepsFirst,
+            Planted::ShadowBoundingBoxes => P::ShadowBoundingBoxes,
+            Planted::SunFarPointLight => P::SunFarPointLight,
+            Planted::ShadowInsideOutline => P::ShadowInsideOutline,
+            Planted::ShadowRemovesAmbient => P::ShadowRemovesAmbient,
+            Planted::ShadowEdgeAliased => P::ShadowEdgeAliased,
+            _ => return None,
+        })
+    }
+
     fn parse(name: &str) -> Option<Planted> {
         Some(match name {
             "warms_in_use_at_t0" => Planted::WarmsInUseAtT0,
@@ -649,6 +697,8 @@ impl Planted {
             "loads_everything" => Planted::LoadsEverything,
             "slow_gpu_frame" => Planted::SlowGpuFrame,
             "flare_fixed_ghosts" => Planted::FlareFixedGhosts,
+            "mirror_halves_twice" => Planted::MirrorHalvesTwice,
+            "mirror_samples_full_frame" => Planted::MirrorSamplesFullFrame,
             "coc_linear_in_distance" => Planted::CocLinearInDistance,
             "flare_ignores_occlusion" => Planted::FlareIgnoresOcclusion,
             "water_foam_keeps_state" => Planted::WaterFoamKeepsState,
@@ -701,6 +751,9 @@ impl Planted {
             "inherit_previous_frame" => Planted::InheritPreviousFrame,
             "bounds_bind_pose" => Planted::BoundsBindPose,
             "trail_appends_per_frame" => Planted::TrailAppendsPerFrame,
+            "anchor_kept_from_frame" => Planted::AnchorKeptFromFrame,
+            "trail_reads_stored_steps" => Planted::TrailReadsStoredSteps,
+            "wake_keeps_last_frame" => Planted::WakeKeepsLastFrame,
             "particles_follow_arrows" => Planted::ParticlesFollowArrows,
             "axes_mod_applies_transform" => Planted::AxesModAppliesTransform,
             "axes3d_own_tick_rule" => Planted::Axes3dOwnTickRule,
@@ -749,6 +802,8 @@ impl Planted {
             "halftone_pop_takes_dot_passes" => Planted::HalftonePopTakesDotPasses,
             "ink_fill_flat" => Planted::InkFillFlat,
             "rim_keeps_first" => Planted::RimKeepsFirst,
+            "live_passes_no_page" => Planted::LivePassesNoPage,
+            "reuse_drops_page" => Planted::ReuseDropsPage,
             "drops_clouds" => Planted::DropsClouds,
             "add_writes_depth" => Planted::AddWritesDepth,
             "add_skips_depth_test" => Planted::AddWithoutDepthTest,
@@ -872,7 +927,10 @@ impl Planted {
             "part_pose_in_world_space" => Planted::PartPoseInWorldSpace,
             "terrain_no_horizon_bake" => Planted::TerrainNoHorizonBake,
             "terrain_occlusion_from_slope" => Planted::TerrainOcclusionFromSlope,
-            _ => return None,
+            _ => {
+                let planted = deep_canvas_scene3d::spans::PLANTED;
+                Planted::HiddenLines(planted.iter().find(|p| p.0 == name)?.0)
+            }
         })
     }
 }
@@ -922,6 +980,11 @@ pub fn refused(code: &str, reason: impl Into<String>) -> Value {
 }
 
 impl App {
+    /// The app's planted program as the compositor's render crate names it (#1561).
+    pub(crate) fn composed(&self) -> Option<deep_groups_render::Planted> {
+        self.planted.and_then(Planted::composed)
+    }
+
     pub fn scene(&mut self, path: &str) -> Result<Arc<Scene>, Value> {
         if let Some(s) = self.scenes.get(path) {
             return Ok(s.clone());
