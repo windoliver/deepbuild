@@ -55,9 +55,26 @@ struct Pipes {
 #[derive(Clone)]
 struct Draw {
     at: wgpu::Buffer,
-    sides: Option<(Mesh, Mesh)>,
+    sides: Option<(wgpu::Buffer, wgpu::Buffer)>,
     indices: wgpu::Buffer,
     count: u32,
+}
+
+/// A pre-skin's vertices as the velocity passes read them (#2657): its positions alone, each at a
+/// whole vertex's stride so its draw shares the mesh at t's pipelines and indices. Those passes
+/// read nothing else, so it derives no tangent and makes no index buffer.
+fn side(device: &Device, m: &deep_canvas_scene3d::geom::Mesh) -> wgpu::Buffer {
+    let mut v = vec![0f32; m.positions.len() * FLOATS];
+    for (out, p) in v.as_chunks_mut::<FLOATS>().0.iter_mut().zip(&m.positions) {
+        out[..3].copy_from_slice(&p.map(|x| x as f32));
+    }
+    device
+        .device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("scene3d.motion side"),
+            contents: bytemuck::cast_slice(&v),
+            usage: wgpu::BufferUsages::VERTEX,
+        })
 }
 
 /// A frame's velocity pass and resolve, ready to record.
@@ -288,7 +305,7 @@ fn draw_list(
         let sides = at
             .meshes
             .as_ref()
-            .map(|(o, c)| (Mesh::of(device, o), Mesh::of(device, c)));
+            .map(|(o, c)| (side(device, o), side(device, c)));
         let (t, o, c) = (rows(&s.model), rows(&at.open), rows(&at.close));
         instances.push(Instance {
             rows: [t[0], t[1], t[2], o[0], o[1], o[2], c[0], c[1], c[2]],
@@ -727,7 +744,7 @@ impl TargetFrame {
         pass.set_vertex_buffer(3, self.instances.slice(..));
         for (k, dr) in self.draws.iter().enumerate() {
             let (o, c) = match &dr.sides {
-                Some((o, c)) => (&o.vertices, &c.vertices),
+                Some((o, c)) => (o, c),
                 None => (&dr.at, &dr.at),
             };
             pass.set_vertex_buffer(0, dr.at.slice(..));
@@ -788,7 +805,7 @@ impl Frame {
             pass.set_vertex_buffer(3, self.instances.slice(..));
             for (k, dr) in self.draws.iter().enumerate() {
                 let (o, c) = match &dr.sides {
-                    Some((o, c)) => (&o.vertices, &c.vertices),
+                    Some((o, c)) => (o, c),
                     None => (&dr.at, &dr.at),
                 };
                 pass.set_vertex_buffer(0, dr.at.slice(..));

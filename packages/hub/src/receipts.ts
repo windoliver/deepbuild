@@ -15,7 +15,7 @@ type Obj = Record<string, unknown>;
 
 /** The writes with an effect, each with the event kinds that carry it out: the first of them carries its receipt. */
 const WRITES: ReadonlyMap<string, readonly string[]> = new Map([
-  ['ask.answer', ['ask.answered']], ['ask.undo', ['default.undone']], ['decision.overrule', ['decision.overruled']],
+  ['ask.answer', ['ask.answered']], ['ask.undo', ['default.undone', 'approval.withdrawn']], ['decision.overrule', ['decision.overruled']],
   ['offer.save', ['ask.answered']], ['run.start', ['run.started']], ['staged.undo', ['staged.undone']], ['session.note', ['session.note']],
 ]);
 

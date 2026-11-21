@@ -279,9 +279,14 @@ export async function openArchive(options: ArchiveOptions): Promise<Archive> {
 
   /** An agent whose hooks kept landing for a day after its last capture: capture went quiet. */
   async function quiet(): Promise<void> {
-    const rows = (await record.raw("SELECT agent, max(ts) AS ts FROM events WHERE log_pos > ? AND writer = 'hook' AND agent IS NOT NULL GROUP BY agent", [cursor])) as { agent: string; ts: number }[];
-    for (const { agent, ts } of rows) hooked.set(agent, Math.max(hooked.get(agent) ?? 0, ts));
-    cursor = Number(((await record.raw('SELECT coalesce(max(log_pos), 0) AS pos FROM events')) as { pos: number }[])[0]!.pos);
+    const head = Number(((await record.raw('SELECT coalesce(max(log_pos), 0) AS pos FROM events')) as { pos: number }[])[0]!.pos);
+    const rows = (await record.raw("SELECT agent, max(ts) AS ts, max(log_pos) AS pos FROM events WHERE log_pos > ? AND writer = 'hook' AND agent IS NOT NULL GROUP BY agent", [cursor])) as { agent: string; ts: number; pos: number }[];
+    let seenPos = head;
+    for (const { agent, ts, pos } of rows) {
+      hooked.set(agent, Math.max(hooked.get(agent) ?? 0, ts));
+      seenPos = Math.max(seenPos, Number(pos));
+    }
+    cursor = Math.max(cursor, seenPos);
     for (const [agent, last] of captured) {
       if ((hooked.get(agent) ?? 0) - last < DAY || alerted.has(`${agent}@${last}`)) continue;
       await append(agent, 'archive.quiet', 1, { agent, last }, []);

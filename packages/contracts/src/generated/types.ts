@@ -3569,6 +3569,62 @@ export interface AnswerRefused {
   evidence?: Array<string>;
 }
 
+/** approval.held@1 */
+export interface ApprovalHeld {
+  v: 1;
+  id: string;
+  kind: "approval.held";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    until: number;
+    steps: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
+/** approval.started@1 */
+export interface ApprovalStarted {
+  v: 1;
+  id: string;
+  kind: "approval.started";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    steps: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
+/** approval.withdrawn@1 */
+export interface ApprovalWithdrawn {
+  v: 1;
+  id: string;
+  kind: "approval.withdrawn";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    steps: Array<string>;
+    restarted: boolean;
+  };
+  evidence?: Array<string>;
+}
+
 /** archive.quiet@1 */
 export interface ArchiveQuiet {
   v: 1;
@@ -4817,6 +4873,153 @@ export interface BriefDrafted {
       }>;
       fits: string | null;
       every: string | null;
+    };
+  };
+  evidence?: Array<string>;
+}
+
+/** brief.drafted@2 */
+export interface BriefDraftedV2 {
+  v: 2;
+  id: string;
+  kind: "brief.drafted";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    key: string;
+    ask: string;
+    heading: string;
+    brief: {
+      makes: "document" | "deck" | "film" | "plan" | "budget" | "report" | "site" | "game" | "app";
+      software: boolean;
+      lines: Array<{
+        id: string;
+        field: "makes" | "for" | "holds" | "leaves_out" | "proves" | "goes" | "fact";
+        text: string;
+        cites: Array<{
+          at: string;
+          quote: string;
+        }>;
+        default?: boolean;
+      }>;
+      promises: Array<{
+        line: string;
+        kind: "document" | "data" | "message" | "money" | "code" | "taste";
+        recommended?: string;
+      }>;
+      tasks: Array<{
+        title: string;
+        serves: Array<string>;
+        criteria: Array<string>;
+        blocked_by: Array<string>;
+      }>;
+      left_out: Array<{
+        title: string;
+        why: string;
+      }>;
+      held: Array<{
+        does: string;
+        usd: number;
+        due: string | null;
+        at: string;
+      }>;
+      fits: string | null;
+      every: string | null;
+      watch?: string;
+      wake?: {
+        test: string;
+        planted: {
+          name: string;
+          before: string;
+          after: string;
+        };
+        twin: {
+          name: string;
+          before: string;
+          after: string;
+        };
+      };
+    };
+  };
+  evidence?: Array<string>;
+}
+
+/** brief.drafted@3 */
+export interface BriefDraftedV3 {
+  v: 3;
+  id: string;
+  kind: "brief.drafted";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    key: string;
+    ask: string;
+    heading: string;
+    brief: {
+      makes: "document" | "deck" | "film" | "plan" | "budget" | "report" | "site" | "game" | "app";
+      software: boolean;
+      lines: Array<{
+        id: string;
+        field: "makes" | "for" | "holds" | "leaves_out" | "proves" | "goes" | "fact";
+        text: string;
+        cites: Array<{
+          at: string;
+          quote: string;
+        }>;
+        default?: boolean;
+      }>;
+      promises: Array<{
+        line: string;
+        kind: "document" | "data" | "message" | "money" | "code" | "taste";
+        recommended?: string;
+      }>;
+      tasks: Array<{
+        title: string;
+        serves: Array<string>;
+        criteria: Array<string>;
+        blocked_by: Array<string>;
+      }>;
+      left_out: Array<{
+        title: string;
+        why: string;
+      }>;
+      held: Array<{
+        does: string;
+        usd: number;
+        due: string | null;
+        at: string;
+      }>;
+      fits: string | null;
+      every: string | null;
+      watch?: string;
+      wake?: {
+        test: string;
+        planted: {
+          name: string;
+          before: string;
+          after: string;
+        };
+        twin: {
+          name: string;
+          before: string;
+          after: string;
+        };
+      };
+      cost?: {
+        dry_usd: number;
+        run_usd: number;
+        month_usd: number;
+      };
     };
   };
   evidence?: Array<string>;

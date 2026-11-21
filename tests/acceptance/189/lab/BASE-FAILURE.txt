@@ -1,0 +1,52 @@
+# #189 lab acceptance suite at the base: this worktree's HEAD 4bf2fc7ad, #2899's merge (moved pack kinds, no save,
+# world, logic or seal code) on top of the named base 531da1ef0, clean but for tests/acceptance/189/lab added; on
+# macOS arm64 (Mac17,10, Apple M5 Max, 64 GB: one of the reference Macs), cargo 1.99.1, Node 24, vitest 5, 2026-11-20
+# UTC. The checkout's path is redacted to <checkout>.
+#
+# The suite was NOT run end to end at the base. Every test drives deep-show's full build, and this worktree's target
+# folder was empty: a full deep-show build was queued through the machine's throttle
+# (node scripts/throttle.mjs build --wait 180 -- cargo build --locked -p deep-show --bin deep-show) and stood eleventh
+# of eighteen build requests behind a grant already 40 minutes in, with the 1-minute load at 247 on 18 cores, so it
+# could not be granted within the session; it was stopped by its PID and its request left the queue. A build outside
+# the throttle would break the machine's one-build-at-a-time rule, so none was made. Each test's first failure at the
+# base below is therefore READ from the base's code, not observed, except where a line says "observed".
+
+Observed:
+- npx tsc -p tests/acceptance/189/lab/tsconfig.json exits 0.
+- npx vitest list --root tests/acceptance/189/lab collects 6 tests in 3 files (ac08 3, ac10 2, ac11 1).
+- cargo refuses both test features at the base, before compiling anything:
+    $ cargo build --locked -p deep-show --bin deep-show --features test-physics-rapier-patch-drift
+    error: the package 'deep-show' does not contain this feature: test-physics-rapier-patch-drift
+    $ cargo build --locked -p deep-show --bin deep-show --features test-physics-rapier-patch-heavy
+    error: the package 'deep-show' does not contain this feature: test-physics-rapier-patch-heavy
+  So in a run, ac08's and ac11's beforeAll record those builds as failed, and any test that asks for one fails at
+  "the binary builds: deep-show full,test-physics-rapier-patch-drift" (or -heavy) with cargo's error.
+- The lab's logic program, as helpers.ts writes it, validates (WebAssembly.validate in Node: the program 247 bytes, the
+  layout probe 100) and, stepped there with a stood-in grounded reading (off the ground 50, 70, 71 and 99 steps in a
+  row from step 88), keeps alive 1 through 70 such steps, marks the hero dead at 71 or more (from step 158), and writes
+  request 1 at step 1,799 alone. A scratch check, not committed.
+
+Read from the base's code (expected first failure of each test, in a run whose full build succeeds):
+- All six tests first need the lab's save at step 1,800 (helpers: writeSave), written by the full build's `logic` call
+  with `saves_dir`. At the base, `deep-show`'s `logic` call (crates/deep-show/src/picks.rs: parse, logic_call) reads no
+  `saves_dir` and its reply holds `steps`, `track`, `trap`, `traps`, `checkpoints` (logic items only) and `handles`, no
+  `saves`; so each test fails at "the lab saved …: the logic call's saves (README: logic, saves_dir) is an array, got
+  undefined", before its open:
+  - ac08 1, 2, 3 (#189.4e3f31a0): there; past it they would meet, in order, the missing world checkpoints
+    (checkpoints.lab), the drift and heavy builds (cargo's refusal above), and `open_save`, which the base's call
+    parser doesn't know (a scenario holding it is {"ok":false,"code":"bad_input"}), as it doesn't know the planted name
+    restore_loads_old_world (deep-show run --planted answers bad_input and exits 2; main.rs planted_named).
+  - ac10 1, 2 (#189.dfd0da6e): there; past it, `open_save` (bad_input) and the planted name content_leaves_out_worlds
+    (bad_input, exit 2).
+  - ac11 1 (#189.9badbff7): on this reference Mac, there; past it, the drift build. Off a Mac it fails BLOCKED
+    ("criterion 11's re-derivation budget is pinned to the reference Mac") before it builds or measures.
+- Before that point every call each test makes exists at the base and is expected to answer: `schedule` publishes
+  runtime_digest, set_digest and physics@1's implementation (#1920); `deep_show` presents a scene with a world and a
+  logic item reading `lab.hero.grounded` (#182's suite runs that shape at the base) and declaring `saves` (#1041's suite
+  runs the `logic` call over such an item at the base); `deep_query`'s logic read gives the region map. Not observed.
+
+Not checked at the base: the lab run through deep-show (the hero's walk, launch, landing on `far`, the wall, the fall
+into the pit; the heavy gravity's short launch; the drift gravity leaving the grounded reading, and so the logic state,
+alone while the world's bytes change), the region map's offsets, and whether the full build presents the lab without
+an issue. These are this job's reading of the base's code and of #182's and #1041's suites (README: Checked at the
+base, and not).

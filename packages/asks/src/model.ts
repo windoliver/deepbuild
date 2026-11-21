@@ -1,5 +1,6 @@
 // Shared ask data and public types; leaf module so the core and its seams have no type-only back-edges.
 import type { JsonValue } from '@deepbuild/contracts';
+import type { Connection } from '@deepbuild/record';
 import type { CardTarget, Target } from './targets.js';
 
 export type AskKind = 'authority' | 'unblock' | 'taste' | 'exception' | 'choice' | 'definition';
@@ -13,6 +14,16 @@ export interface PlanStep {
 }
 /** What the core marks a step with no undo, in the plan it records and shows (#69). */
 export const CANT_UNDO = "can't undo";
+/** How long an approved step that can't be undone waits before it starts, in the hub, with Undo on its receipt (#1101). */
+export const HOLD_MS = 10_000;
+/**
+ * A step that can't be undone, by its plan's own words, as its card reads them: no undo, or one that says there is none
+ * ("can't…", "cannot…", "not…", "none", "no", "irreversible…").
+ */
+export function cantUndo(step: Pick<PlanStep, 'undo'>): boolean {
+  const undo = (step.undo ?? '').trim().toLowerCase();
+  return !undo || undo === 'none' || undo === 'no' || /^(can't|cannot|not |irreversible)/.test(undo);
+}
 /** A batch as its card shows it: every step of every plan in it, each with its switch as it starts. */
 export interface BatchCard { batch: string; steps: { ask: string; step: number; does: string; undo: string; on: boolean }[] }
 /** A budget you approved, and what's left in it, counting runs reserved and not yet charged. */
@@ -54,7 +65,14 @@ export interface Refusal { ask: string; resolver: string; decision: string | nul
  */
 export type AsksPlant = 'decision-exists-only'
   | 'origin-from-agent-message' | 'first-recipient-origin' | 'rule-by-recipient-kind' | 'push-target-as-repo' | 'wider-scope-offered'
-  | 'asks-without-tool-before';
+  | 'asks-without-tool-before' | HoldPlant;
+/**
+ * #1101's planted wrong programs of the hold, which the hub passes on: a yes that starts its step at the click, an Undo
+ * that lets the step run anyway or closes the ask as declined, a hub that runs held steps when it starts again, a batch
+ * that holds every step, and an Undo that withdraws a step that already ran.
+ */
+export const HOLD_PLANTS = ['hold-starts-at-click', 'undo-runs-anyway', 'undo-closes-declined', 'restart-runs-held', 'batch-holds-all', 'undo-withdraws-ran'] as const;
+export type HoldPlant = typeof HOLD_PLANTS[number];
 
 /** What the question card shows for one ask. */
 export interface Card {
@@ -149,6 +167,12 @@ export interface Ask {
   budget?: BudgetLeft;
   /** Your answer: the plan it bound, its click, its decision, and the steps of the plan it approved (null: all of them). */
   approval?: { hash: string | null; token: string | null; decision: string; steps: number[] | null };
+  /**
+   * Your yes to steps that can't be undone, answered, whose steps the hub holds until `until` before they start (#1101):
+   * the steps, and, for a hold this process started, how they start (the answer handed on, the decision it saves). One
+   * read back from the log after the hub started again has no `run`, and is withdrawn.
+   */
+  held?: { until: number; steps: string[]; run?: { give: () => void; connection: Connection; save: string | null } };
   words: string[];
   /** What its card said it saves, fixed when the card was first presented (#327). */
   saves?: Card['saves'];

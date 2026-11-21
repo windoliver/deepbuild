@@ -34,10 +34,10 @@ interface Held { fill: CheckRunnerFill; routes: Route[] }
  */
 const PLUGIN_KINDS: Record<string, string> = {
   playtest: 'deepbuild/playtest',
-  ...Object.fromEntries(['catalog.refs', 'catalog.reach', 'catalog.economy', 'catalog.bounds', 'catalog.copy', 'scenario.reach'].map((k) => [k, 'deepbuild/catalog'])),
+  ...Object.fromEntries(['catalog.refs', 'catalog.reach', 'catalog.economy', 'catalog.bounds', 'catalog.copy', 'scenario.reach', 'catalog.dominance'].map((k) => [k, 'deepbuild/catalog'])),
 };
-/** #194: the spec field each catalog kind's input sits in, which names its catalog by asset ID. */
-const CATALOG_FIELDS = ['refs', 'reach', 'economy', 'bounds', 'copy', 'scenario'] as const;
+/** #194: the spec field each catalog kind's input sits in, which names its catalog by asset ID (#832: dominance too). */
+const CATALOG_FIELDS = ['refs', 'reach', 'economy', 'bounds', 'copy', 'scenario', 'dominance'] as const;
 /**
  * #194: `spec` with every catalog its kind's input names carried in `catalogs`, the bytes in base64 and the probe's
  * record kept beside them (`catalogs/<sha256>.json`), from the evidence root `evidence`; one it doesn't hold is left

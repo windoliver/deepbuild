@@ -44,6 +44,12 @@ pub const CALLS: [&str; 3] = ["inbox.read", "stream.subscribe", "events.read"];
 
 /// The events one refetch asks for at a time.
 const PAGE: usize = 1000;
+
+/// Whether the log goes on past an `events.read` page of `read` events: a full page may, and one the hub's byte cap
+/// ended says so with `more` (#1576), however few events it holds.
+fn more(page: &Value, read: usize) -> bool {
+    read == PAGE || page["more"] == true
+}
 /// The newest events a view keeps.
 const TAIL: usize = 256;
 /// While the hub doesn't answer the app tries it this often, and after [`SLOW_AFTER`] [`SLOWLY`].
@@ -192,15 +198,16 @@ impl View {
         let mut after = 0;
         while after < self.log_pos {
             let page = client.call("events.read", json!({ "after": after, "limit": PAGE }))?;
-            let events = page["events"].as_array().cloned().unwrap_or_default();
-            for event in &events {
+            // The page's events are read where they are (#2661).
+            let events = page["events"].as_array().map_or(&[][..], Vec::as_slice);
+            for event in events {
                 after = event["log_pos"].as_u64().unwrap_or(after);
                 if after > self.log_pos {
                     return Ok(());
                 }
                 self.before(event);
             }
-            if events.len() < PAGE {
+            if !more(&page, events.len()) {
                 break;
             }
         }
@@ -657,7 +664,7 @@ impl RecordReader {
     fn refetch(&mut self) -> Result<(), HubError> {
         loop {
             let client = self.client.as_mut().expect("connected");
-            let page = client.call(
+            let mut page = client.call(
                 "events.read",
                 json!({ "after": self.view.log_pos, "limit": PAGE }),
             )?;
@@ -667,8 +674,8 @@ impl RecordReader {
                 self.client = None;
                 return self.connect();
             }
-            let events = page["events"].as_array().cloned().unwrap_or_default();
-            let full = events.len() == PAGE;
+            let events = taken(&mut page);
+            let full = more(&page, events.len());
             for event in events {
                 if event["log_pos"].as_u64().unwrap_or(0) > self.view.log_pos {
                     self.view.apply(event);
@@ -689,9 +696,9 @@ impl RecordReader {
         let client = self.client.as_mut().expect("connected");
         let (mut events, mut after) = (Vec::new(), 0);
         loop {
-            let page = client.call("events.read", json!({ "after": after, "limit": PAGE }))?;
-            let read = page["events"].as_array().cloned().unwrap_or_default();
-            let full = read.len() == PAGE;
+            let mut page = client.call("events.read", json!({ "after": after, "limit": PAGE }))?;
+            let read = taken(&mut page);
+            let full = more(&page, read.len());
             for event in read {
                 after = event["log_pos"].as_u64().unwrap_or(after);
                 if after > self.view.log_pos {
@@ -703,6 +710,14 @@ impl RecordReader {
                 return Ok(events);
             }
         }
+    }
+}
+
+/// A page's events, taken out of it rather than copied (#2661).
+fn taken(page: &mut Value) -> Vec<Value> {
+    match page.get_mut("events").map(Value::take) {
+        Some(Value::Array(events)) => events,
+        _ => Vec::new(),
     }
 }
 

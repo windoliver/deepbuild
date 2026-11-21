@@ -646,7 +646,8 @@ mod notifications {
                 if deep_app::setup::refresh() {
                     cx.update(|cx| cx.refresh_windows());
                 }
-                watch.tick(now, || record::read(Duration::from_millis(5)));
+                // The idle read takes what came and waits for nothing: the UI thread never blocks on a quiet hub (#2661).
+                watch.tick(now, || record::read(Duration::ZERO));
                 if !notifies {
                     // Only the notifier reads these; a window that doesn't notify lets them go.
                     record::take_unseen();

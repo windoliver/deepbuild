@@ -1,0 +1,155 @@
+{
+  "name": "steady_own",
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "7f4a6fe034b1d62bfd0bfb4280ecd23a585424cd79ebb6789459da109d20747f",
+      "step_rate": 1,
+      "writes": {
+        "kind": {
+          "type": "i32",
+          "count": 8
+        },
+        "gen": {
+          "type": "i32",
+          "count": 8
+        },
+        "at": {
+          "type": "i32",
+          "count": 8
+        },
+        "batch": {
+          "type": "i32",
+          "count": 8
+        },
+        "holds": {
+          "type": "i32",
+          "count": 8
+        },
+        "rank": {
+          "type": "i32",
+          "count": 8
+        },
+        "made": {
+          "type": "f64",
+          "count": 8
+        },
+        "d": {
+          "type": "f64",
+          "count": 8
+        },
+        "made_n": {
+          "type": "i32",
+          "count": 1
+        },
+        "out_n": {
+          "type": "i32",
+          "count": 1
+        },
+        "count": {
+          "type": "i32",
+          "count": 5
+        },
+        "left": {
+          "type": "i32",
+          "count": 5
+        },
+        "area": {
+          "type": "f64",
+          "count": 5
+        },
+        "dwell": {
+          "type": "f64",
+          "count": 5
+        },
+        "busy": {
+          "type": "i32",
+          "count": 1
+        },
+        "cap": {
+          "type": "i32",
+          "count": 1
+        },
+        "busy_area": {
+          "type": "f64",
+          "count": 1
+        },
+        "thru": {
+          "type": "f64",
+          "count": 5
+        },
+        "mean": {
+          "type": "f64",
+          "count": 5
+        },
+        "p90": {
+          "type": "f64",
+          "count": 5
+        },
+        "wip": {
+          "type": "f64",
+          "count": 5
+        },
+        "clock": {
+          "type": "f64",
+          "count": 3
+        },
+        "rec_n": {
+          "type": "i32",
+          "count": 1
+        },
+        "rec_t": {
+          "type": "f64",
+          "count": 64
+        },
+        "rec_w": {
+          "type": "f64",
+          "count": 64
+        }
+      },
+      "process": {
+        "kinds": [
+          "order"
+        ]
+      },
+      "budget": {
+        "fuel": 10000000
+      },
+      "links": [
+        {
+          "name": "process_ref@1.0.0",
+          "asset": "0a866ab715f621edc0ff3b9fe3e9386777eb6adf774bc8e05fc2f9f003955e92"
+        }
+      ]
+    }
+  },
+  "track": [],
+  "steps": 3,
+  "expect": {
+    "arrays": {
+      "0": {
+        "rec_n": [
+          1
+        ],
+        "busy_area": [
+          45
+        ]
+      },
+      "2": {
+        "rec_n": [
+          3
+        ],
+        "out_n": [
+          3
+        ],
+        "busy_area": [
+          135
+        ]
+      }
+    },
+    "tolerance": {
+      "abs": 1e-9
+    }
+  },
+  "answer": "The steady model of process@1's fixture steady for three minutes, importing process_ref by its own name: one order a minute, each held 45 s, one record a minute."
+}

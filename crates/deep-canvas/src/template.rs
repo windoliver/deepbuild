@@ -3,7 +3,7 @@
 //! its path's source. This build's slots read data constants (`{data/<name>}`); the check and the
 //! text module read templates through this one parser.
 
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 /// A piece of a template: words as written, or a slot's path.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -57,12 +57,12 @@ fn number(n: f64) -> String {
 
 /// Each slot of `template` that shows a story's own number (a number whose constant's source is
 /// `story`, Honest numbers): its path and what it shows. Empty for a template that doesn't parse.
-pub fn story_numbers<'t>(doc: &Value, template: &'t str) -> Vec<(&'t str, String)> {
+pub fn story_numbers<'t>(doc: &Map<String, Value>, template: &'t str) -> Vec<(&'t str, String)> {
     parts(template)
         .unwrap_or_default()
         .into_iter()
         .filter_map(|part| match part {
-            Part::Slot(slot) => value(doc, slot)
+            Part::Slot(slot) => value_of(doc, slot)
                 .filter(|s| s.number && s.source.as_deref() == Some("story"))
                 .map(|s| (slot, s.text)),
             Part::Words(_) => None,
@@ -73,6 +73,12 @@ pub fn story_numbers<'t>(doc: &Value, template: &'t str) -> Vec<(&'t str, String
 /// The value at `path` in `doc`: a data constant `data/<name>`, a number or a string, bare or as
 /// `{value, source}` (Document envelope). `None` when the path names nothing this build shows.
 pub fn value(doc: &Value, path: &str) -> Option<Shown> {
+    value_of(doc.as_object()?, path)
+}
+
+/// [`value`] in a document's members as they are (#2660: a caller holding them builds no
+/// document to read one).
+fn value_of(doc: &Map<String, Value>, path: &str) -> Option<Shown> {
     // #504: a figure's readout also reads what moves its parts: an assembly's value (0 when
     // unwritten) and a control's (its value at t where the caller wrote one, else its default),
     // so every number on the card comes from the model that moves the parts.

@@ -43,7 +43,7 @@ import { Starts } from './starts.js';
 
 import { Replicas } from './drive.js';
 
-import { Refused, refusal, refuse, ulid, type CoreOptions, type Draft, type HookMeta } from './wire.js';
+import { cursorAt, cursorOf, Refused, refusal, refuse, SETTLED_PAGE, ulid, type CoreOptions, type Draft, type HookMeta } from './wire.js';
 import type { CallContext, Session, Live } from './session-types.js';
 
 import { TranscriptReader } from './transcript-reader.js';
@@ -903,18 +903,42 @@ export class SessionState {
     });
   }
 
-  /** The sessions' rows; one paseo runs whose answer no route could carry reads "answer waiting" (#55). */
-  async sessionRows(seen = ''): Promise<Record<string, unknown>[]> {
-    let rows = (await this.options.services.record.table('sessions')).rows as Record<string, unknown>[];
-    // A reader sees a session whose events it may see (#1337).
-    if (seen) {
-      const visible = new Set(((await this.options.services.record.raw(`SELECT DISTINCT session_id AS id FROM events WHERE session_id IS NOT NULL${seen}`)) as { id: string }[]).map((r) => r.id));
-      rows = rows.filter((row) => visible.has(String(row.id)));
+  /**
+   * The sessions' rows as a phone can afford them (#1576): every live one, then the 25 newest settled, by where each
+   * settled (its last turn stopped, or it ended since its state last moved), with `rest` and `next` as the inbox's. One
+   * paseo runs whose answer no route could carry reads "answer waiting" (#55).
+   */
+  async sessionRows(seen = '', params: Obj = {}): Promise<Obj> {
+    const raw: RecordStore['raw'] = (q, values) => this.options.services.record.raw(q, values);
+    // A reader sees a session whose events it may see (#1337); a session that ended without a turn ending settles there.
+    const visible = seen ? ` AND id IN (SELECT session_id FROM events WHERE session_id IS NOT NULL${seen})` : '';
+    const table = `(SELECT sessions.*, coalesce(ended_log_pos, (SELECT max(log_pos) FROM events WHERE session_id = sessions.id AND kind = 'session.end' AND log_pos > coalesce(sessions.status_at, 0))) AS settled_at FROM sessions WHERE 1${visible})`;
+    const older = (at: { at: number; id: string }) => ['settled_at IS NOT NULL AND (settled_at < ? OR (settled_at = ? AND id < ?))', [at.at, at.at, at.id]] as const;
+    const from = params.page === undefined ? undefined : cursorAt(params.page);
+    let found: Record<string, unknown>[];
+    let next: string | null = null;
+    let rest = 0;
+    // The planted wrong program reads every session's row, whatever the params.
+    if (this.options.settings.plant === 'reads-every-row') found = (await raw(`SELECT * FROM ${table} ORDER BY id`)) as Record<string, unknown>[];
+    else {
+      const live = from ? [] : (await raw(`SELECT * FROM ${table} WHERE settled_at IS NULL ORDER BY id`)) as Record<string, unknown>[];
+      const [where, at] = from ? older(from) : ['settled_at IS NOT NULL', []];
+      const settled = (await raw(`SELECT * FROM ${table} WHERE ${where} ORDER BY settled_at DESC, id DESC LIMIT ?`, [...at, SETTLED_PAGE])) as Record<string, unknown>[];
+      const last = settled.at(-1);
+      if (last) {
+        const after = { at: Number(last.settled_at), id: String(last.id) };
+        const [w, a] = older(after);
+        rest = Number(((await raw(`SELECT count(*) AS n FROM ${table} WHERE ${w}`, [...a])) as { n: number }[])[0]!.n);
+        if (rest) next = cursorOf(after.at, after.id);
+      }
+      found = [...live, ...settled];
     }
+    // Its integers as the sessions table gives them, which the wire writes as decimal text.
+    const rows = found.map(({ settled_at: _, ...row }) => Object.fromEntries(Object.entries(row).map(([k, v]) => [k, typeof v === 'number' ? BigInt(v) : v])));
     for (const id of [...this.options.delivery().answerWaiting]) if (!(await this.options.delivery().answers.waitingFor(id)).length) this.options.delivery().answerWaiting.delete(id);
     // The session map (#352): each session's repo, branch, issue and changed files, the commands it runs now, its leases and its state.
     const leases = (await this.options.services.record.raw(`SELECT kind, key, holder FROM leases WHERE state = 'held'`)) as { kind: string; key: string; holder: string }[];
-    return rows.map((row) => {
+    const sessions = rows.map((row) => {
       const id = String(row.id);
       const placed = this.options.services.siblings.row(id);
       const map = placed && {
@@ -925,6 +949,7 @@ export class SessionState {
       const started = this.options.services.sessionStarts.rowOf(id);
       return { ...row, ...(started ? { run: started.run, sandbox: started.sandbox } : {}), ...(map ? { map } : {}), ...(this.options.delivery().answerWaiting.has(id) ? { delivery: 'answer waiting: neither deep-hook\'s waiter nor paseo\'s plugin can carry it, so it goes with the session\'s next prompt' } : {}) };
     });
+    return { sessions, rest, next };
   }
 
   /**

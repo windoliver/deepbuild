@@ -55,7 +55,7 @@ export async function runPlaytest(input: PlaytestInput, play: Play, ask?: Ask): 
   const iface = input.play;
   // The interface, its goals and its bots, each refused before any run.
   const locked = iface && lockRefusal(iface);
-  if (locked) return ended([failure('play', `refused before any run: ${locked}`, false)]);
+  if (locked) return { ...ended([failure('play', `refused before any run: ${locked}`, false)]), runs: [] };
   let goals: Judged[];
   let reads: string[];
   try {
@@ -63,11 +63,11 @@ export async function runPlaytest(input: PlaytestInput, play: Play, ask?: Ask): 
     goals = tests;
     reads = tests.flatMap((t) => t.reads);
   } catch (e) {
-    return ended([failure('goals', `refused before any run: ${said(e)}`, false)]);
+    return { ...ended([failure('goals', `refused before any run: ${said(e)}`, false)]), runs: [] };
   }
   for (const [b, bot] of input.bots.entries()) {
     const why = refusal(bot, iface);
-    if (why) return ended([failure(`bot ${b}`, `refused before any run: ${why}`, false)]);
+    if (why) return { ...ended([failure(`bot ${b}`, `refused before any run: ${why}`, false)]), runs: [] };
   }
   const bounds = iface ? ranged(iface) : [];
   const links = iface && linksOf(iface);
@@ -114,7 +114,7 @@ export async function runPlaytest(input: PlaytestInput, play: Play, ask?: Ask): 
       const replay = await play(input.piece, { ...common, seed, track: first.entries, frames: keep });
       const reached = new Map([...goalSteps(first, goals)].flatMap(([g, k]) => (k === undefined ? [] : [[g, k] as const])));
       const model = rows ? { replayed: outcomeOf(replay, goals, stuck, acting) } : undefined;
-      ran.push({ test, bot: job.b, seed, outcome, first, replay, reached, model });
+      ran.push({ test, bot: job.b, seed, outcome, first, replay, reached, ...(model ? { model } : {}) });
     }
   };
   // The interface taken by the piece before any run, then each bot: a play of no step at the check's own seed, which the
@@ -125,7 +125,7 @@ export async function runPlaytest(input: PlaytestInput, play: Play, ask?: Ask): 
       await play(input.piece, { seed: input.seed, span: { steps: 0 }, play: iface, values: [], frames: [] });
     } catch (e) {
       const why = said(e);
-      return ended([failure('play', why.startsWith('play.missing') ? why : `refused before any run: ${why}`, false)]);
+      return { ...ended([failure('play', why.startsWith('play.missing') ? why : `refused before any run: ${why}`, false)]), runs: [] };
     }
   }
   for (const [b, bot] of input.bots.entries()) {

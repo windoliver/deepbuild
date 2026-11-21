@@ -1,0 +1,128 @@
+# #2627 AC2 acceptance tests: the run on the base
+
+## The base (f17fa347c, no #2627 implementation), in its own worktree, on the Spark (Linux arm64, 20 cores, load about 38)
+
+$ systemd-run --user -p AppArmorProfile=claude-desktop -p MemoryMax=24G -p MemorySwapMax=2G \
+    -p WorkingDirectory=<repo> bash -c "node --test 'tests/acceptance/2627/*.test.mjs' > <log> 2>&1"
+(stack-trace lines dropped; the checkout reads <repo>, each test's temporary folder <sandbox>, home paths ~)
+
+Both tests fail at their first assertion, for the expected reason: affected.mjs was still running at the test's 270 s
+limit, held by the stuck job, so the test SIGKILLed its process group. The noted processes are the stuck file's own
+(the node --test file's process, vitest's forked worker) and the child each started; afterwards none of them ran and
+no sandbox folder was left (checked with ps -p and ls).
+
+✖ #2627.0e4b51fe a node --test file that never exits is stopped within the bound: it reads INCONCLUSIVE, never FAIL or PASS, the file beside it keeps its pass, none of its processes is left, the run reads INCONCLUSIVE and its grant is released (270421.8819ms)
+✖ #2627.0e4b51fe a vitest file whose worker spins without yielding is stopped within the bound: it reads INCONCLUSIVE, never FAIL or PASS, the file beside it keeps its pass, none of its processes is left, the run reads INCONCLUSIVE and its grant is released (270401.66414ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 271341.603439
+
+✖ failing tests:
+
+test at tests/acceptance/2627/node-job.test.mjs:9:1
+✖ #2627.0e4b51fe a node --test file that never exits is stopped within the bound: it reads INCONCLUSIVE, never FAIL or PASS, the file beside it keeps its pass, none of its processes is left, the run reads INCONCLUSIVE and its grant is released (270421.8819ms)
+  AssertionError [ERR_ASSERTION]: affected.mjs did not end within 270 s with DEEP_JOB_IDLE_MIN=1: nothing bounded the job holding tests/fixture-2627-stuck.test.mjs
+  affected.mjs: still running at its 270 s limit, so its process group was SIGKILLed after 270 s
+  stdout:
+  parallel node: tests/fixture-2627-pass.test.mjs tests/fixture-2627-stuck.test.mjs
+  
+  stderr:
+  
+  noted processes:
+  {"role":"file","pid":41971,"start":"Wed Nov 18 12:56:58 2026"}
+  {"role":"child","pid":42154,"start":"Wed Nov 18 12:56:58 2026"}
+  throttle log:
+  {"at":"2026-11-18T20:56:57.851Z","event":"granted","class":"test","grant":"top-level","id":"2ff7283866b9e637","pid":41331,"index":1,"load":37.66,"cores":20,"wait":30}
+  {"at":"2026-11-18T20:56:58.891Z","event":"passed","class":"test","pid":41725,"through":"test:2ff7283866b9e637"}
+  {"at":"2026-11-18T20:56:58.937Z","event":"passed","class":"build","pid":41752,"through":"test:2ff7283866b9e637"}
+  {"at":"2026-11-18T20:56:58.961Z","event":"passed","class":"build","pid":41737,"through":"test:2ff7283866b9e637"}
+  {"at":"2026-11-18T20:56:58.984Z","event":"passed","class":"build","pid":41755,"through":"test:2ff7283866b9e637"}
+  {"at":"2026-11-18T20:56:59.181Z","event":"passed","class":"build","pid":41836,"through":"test:2ff7283866b9e637"}
+  {"at":"2026-11-18T20:56:59.220Z","event":"passed","class":"build","pid":41930,"through":"test:2ff7283866b9e637"}
+  {"at":"2026-11-18T20:56:59.321Z","event":"passed","class":"build","pid":41916,"through":"test:2ff7283866b9e637"}
+  {"at":"2026-11-18T20:56:59.397Z","event":"passed","class":"build","pid":42089,"through":"test:2ff7283866b9e637"}
+  {"at":"2026-11-18T20:56:59.401Z","event":"passed","class":"build","pid":41940,"through":"test:2ff7283866b9e637"}
+  {"at":"2026-11-18T20:56:59.437Z","event":"passed","class":"build","pid":41857,"through":"test:2ff7283866b9e637"}
+  {"at":"2026-11-18T20:56:59.438Z","event":"passed","class":"build","pid":42030,"through":"test:2ff7283866b9e637"}
+  {"at":"2026-11-18T20:56:59.474Z","event":"passed","class":"build","pid":42041,"through":"test:2ff7283866b9e637"}
+  {"at":"2026-11-18T20:56:59.533Z","event":"passed","class":"build","pid":41898,"through":"test:2ff7283866b9e637"}
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2627/vitest-job.test.mjs:10:1
+✖ #2627.0e4b51fe a vitest file whose worker spins without yielding is stopped within the bound: it reads INCONCLUSIVE, never FAIL or PASS, the file beside it keeps its pass, none of its processes is left, the run reads INCONCLUSIVE and its grant is released (270401.66414ms)
+  AssertionError [ERR_ASSERTION]: affected.mjs did not end within 270 s with DEEP_JOB_IDLE_MIN=1: nothing bounded the job holding tests/fixture-2627/stuck.test.ts
+  affected.mjs: still running at its 270 s limit, so its process group was SIGKILLed after 270 s
+  stdout:
+  parallel vitest: tests/fixture-2627/pass.test.ts tests/fixture-2627/stuck.test.ts
+  
+  stderr:
+  
+  noted processes:
+  {"role":"file","pid":43154,"start":"Wed Nov 18 12:56:59 2026"}
+  {"role":"child","pid":43299,"start":"Wed Nov 18 12:56:59 2026"}
+  throttle log:
+  {"at":"2026-11-18T20:56:57.949Z","event":"granted","class":"test","grant":"top-level","id":"20795f6b42f90790","pid":41358,"index":1,"load":37.66,"cores":20,"wait":30}
+  {"at":"2026-11-18T20:56:59.213Z","event":"passed","class":"build","pid":41852,"through":"test:20795f6b42f90790"}
+  {"at":"2026-11-18T20:56:59.306Z","event":"passed","class":"build","pid":41907,"through":"test:20795f6b42f90790"}
+  {"at":"2026-11-18T20:56:59.308Z","event":"passed","class":"test","pid":41834,"through":"test:20795f6b42f90790"}
+  {"at":"2026-11-18T20:56:59.350Z","event":"passed","class":"build","pid":42206,"through":"test:20795f6b42f90790"}
+  {"at":"2026-11-18T20:56:59.391Z","event":"passed","class":"build","pid":41885,"through":"test:20795f6b42f90790"}
+  {"at":"2026-11-18T20:56:59.398Z","event":"passed","class":"build","pid":42099,"through":"test:20795f6b42f90790"}
+  {"at":"2026-11-18T20:56:59.440Z","event":"passed","class":"build","pid":42183,"through":"test:20795f6b42f90790"}
+  {"at":"2026-11-18T20:56:59.474Z","event":"passed","class":"build","pid":42157,"through":"test:20795f6b42f90790"}
+  {"at":"2026-11-18T20:56:59.532Z","event":"passed","class":"build","pid":42122,"through":"test:20795f6b42f90790"}
+  {"at":"2026-11-18T20:56:59.534Z","event":"passed","class":"build","pid":42280,"through":"test:20795f6b42f90790"}
+  {"at":"2026-11-18T20:56:59.579Z","event":"passed","class":"build","pid":42218,"through":"test:20795f6b42f90790"}
+  {"at":"2026-11-18T20:56:59.640Z","event":"passed","class":"build","pid":42272,"through":"test:20795f6b42f90790"}
+  {"at":"2026-11-18T20:56:59.642Z","event":"passed","class":"build","pid":42316,"through":"test:20795f6b42f90790"}
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+EXIT 1
+
+## Can the tests pass, and do they catch wrong programs? (throwaway, not kept, proves nothing about the real change)
+
+To tell a test bug from a real failure, a throwaway watchdog was patched into a scratch copy of the base's scripts/
+(never into the repo): a vitest or node job whose log and report stayed unchanged for DEEP_JOB_IDLE_MIN minutes is
+sent SIGTERM, and 10 s later every process of its tree as listed at the SIGTERM is SIGKILLed; each of its files with no
+result reads INCONCLUSIVE "no result: its job was stopped after 1 min with no output". Against it:
+
+✔ #2627.0e4b51fe a node --test file that never exits is stopped within the bound: it reads INCONCLUSIVE, never FAIL or PASS, the file beside it keeps its pass, none of its processes is left, the run reads INCONCLUSIVE and its grant is released (72910.547344ms)
+✔ #2627.0e4b51fe a vitest file whose worker spins without yielding is stopped within the bound: it reads INCONCLUSIVE, never FAIL or PASS, the file beside it keeps its pass, none of its processes is left, the run reads INCONCLUSIVE and its grant is released (72806.584659ms)
+ℹ tests 2
+ℹ pass 2
+ℹ fail 0
+ℹ duration_ms 73834.84942
+
+Planted wrong programs, each one change to that watchdog:
+
+- term-only (SIGKILLs only the job's own process, not its tree):
+    AssertionError [ERR_ASSERTION]: processes of the stuck file still run after the run ended
+    AssertionError [ERR_ASSERTION]: processes of the stuck file still run after the run ended
+  ℹ pass 0
+  ℹ fail 2
+- reads-fail (the stuck file's missing result reads FAIL, as on the base):
+    AssertionError [ERR_ASSERTION]: no INCONCLUSIVE line names tests/fixture-2627-stuck.test.mjs
+    AssertionError [ERR_ASSERTION]: no INCONCLUSIVE line names tests/fixture-2627/stuck.test.ts
+  ℹ pass 0
+  ℹ fail 2
+- all-files (every file of the stopped job reads INCONCLUSIVE, the passing one too):
+    AssertionError [ERR_ASSERTION]: the passing file beside it, tests/fixture-2627-pass.test.mjs, lost its pass
+    AssertionError [ERR_ASSERTION]: the passing file beside it, tests/fixture-2627/pass.test.ts, lost its pass
+  ℹ pass 0
+  ℹ fail 2

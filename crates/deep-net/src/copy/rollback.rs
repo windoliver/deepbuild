@@ -30,7 +30,7 @@ pub(super) struct Roll {
     /// A trap in a step past confirmed, and its fault: the copy waits there.
     pub(super) trapped: Option<(i64, Value)>,
     /// Each peer's last message step its frames carried.
-    heard: Vec<Option<i64>>,
+    pub(super) heard: Vec<Option<i64>>,
     /// Its lead over the last second, a sample a step, and the steps it ran while leading.
     leads: VecDeque<f64>,
     beats: i64,
@@ -89,6 +89,7 @@ impl<S: Stepper> Copy<S> {
         };
         self.logged(step, player, entries);
         self.roll.late = Some(at);
+        self.late_came();
     }
 
     /// The planted copy records each player's predicted input at step `k` as an entry.
@@ -138,11 +139,12 @@ impl<S: Stepper> Copy<S> {
     /// The lead rule: half its depth less the smallest of its peers', averaged over a second; a
     /// copy whose lead passes one match step holds its clock one step in every 10.
     pub(super) fn leads(&mut self) -> bool {
-        if self.cfg.window == 0 || self.planted == Planted::IgnoresLeadRule {
+        if self.cfg.window == 0 || self.planted == Planted::IgnoresLeadRule || self.is_away() {
             return false;
         }
         let me = self.me as usize - 1;
-        let peers = (0..self.players as usize).filter(|p| *p != me);
+        // #277: a left or absent seat leads nobody.
+        let peers = (0..self.players as usize).filter(|p| *p != me && self.seated(*p));
         let (Some(own), Some(least)) = (
             self.depth_of(me),
             peers.filter_map(|p| self.depth_of(p)).min(),
@@ -175,6 +177,8 @@ impl<S: Stepper> Copy<S> {
         if s >= self.next || self.end.is_some() {
             return;
         }
+        // #280: what the copy drew before it rolls back, for net.feel's correction distance.
+        let before = self.shown_now();
         if let Err(why) = self.sim.back(s, s * self.cfg.step()) {
             let fault = json!({"step": s, "item": null, "kind": "rollback", "why": why});
             self.finish(End::Faulted, fault);
@@ -182,8 +186,11 @@ impl<S: Stepper> Copy<S> {
         }
         let (to, len) = (self.next, self.cfg.step());
         self.roll.rollbacks.push((to, s));
-        self.track
-            .retain(|e| e["t"].as_i64().is_some_and(|t| t < s * len));
+        // The track is in step order: what the replaced steps put on it is its tail.
+        let kept = self
+            .track
+            .partition_point(|e| e["t"].as_i64().is_some_and(|t| t < s * len));
+        self.track.truncate(kept);
         self.refused
             .retain(|r| r["step"].as_i64().is_some_and(|k| k < s));
         if let Some(h) = self.roll.trail.get(&s) {
@@ -198,6 +205,7 @@ impl<S: Stepper> Copy<S> {
         while self.next < to && self.roll.trapped.is_none() && self.end.is_none() {
             self.run(self.now);
         }
+        self.corrected(&before, to);
     }
 
     /// Steps confirmed and run with every player's entries become final: each one's full-state

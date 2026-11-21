@@ -64,3 +64,20 @@ fn a_star_matches_any_run_and_the_rest_matches_whole() {
     assert!(glob(b"a*b*c", b"a xx b yy c"));
     assert!(!glob(b"a*b*c", b"a xx b yy"));
 }
+
+#[test]
+fn set_cwd_updates_worktree_hub_across_calls() {
+    let uses =
+        super::parse(r#"{"/tmp/wt-a":"unix:/tmp/hub-a.sock","/tmp/wt-b":"unix:/tmp/hub-b.sock"}"#)
+            .unwrap();
+    super::set_cwd(std::path::PathBuf::from("/tmp/wt-a/sub"));
+    assert_eq!(
+        super::worktree_hub(Some(&uses)),
+        Some(std::path::PathBuf::from("/tmp/hub-a.sock"))
+    );
+    super::set_cwd(std::path::PathBuf::from("/tmp/wt-b/sub"));
+    assert_eq!(
+        super::worktree_hub(Some(&uses)),
+        Some(std::path::PathBuf::from("/tmp/hub-b.sock"))
+    );
+}

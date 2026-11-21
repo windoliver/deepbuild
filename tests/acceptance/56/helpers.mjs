@@ -1,5 +1,6 @@
 // Shared by the #56 acceptance tests: the spike's hub, its socket protocol, the check fixture's
-// record, the process table, free ports, a seeded random source and the spike's results record.
+// record, the process table, free ports, a seeded random source, the spike's results record and
+// each test's end step (HELPERS-REDRAFT.md).
 // The slice is reached only through `node spikes/hub-core/hub.mjs --variant <plain|effect>` and
 // its socket, so one test drives both builds. See README.md for the surface.
 import assert from 'node:assert/strict';
@@ -36,10 +37,11 @@ export const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 export const hex = (bytes = 4) => randomBytes(bytes).toString('hex');
 
 // A short scratch folder: the hub's socket lives inside it, and a Unix socket path must stay
-// under 104 bytes on macOS.
+// under 104 bytes on macOS. The test's end step deletes it last.
 export function scratch(t, prefix = 'ds56-') {
+  const end = ending(t);
   const directory = realpathSync(mkdtempSync(join(tmpdir(), prefix)));
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  end.directories.push(directory);
   return directory;
 }
 
@@ -57,6 +59,48 @@ export async function within(promise, ms, what) {
   let timer;
   const late = new Promise((_, fail) => { timer = setTimeout(() => fail(Error(`timed out after ${ms} ms waiting for ${what}`)), ms); });
   try { return await Promise.race([promise, late]); } finally { clearTimeout(timer); }
+}
+
+// ------------------------------------------------------------------ each test's end
+
+// What a test started through these helpers: its hubs, its fixtures' markers and its scratch
+// folders. node runs a test's end steps in the order they were registered, skips the rest once one
+// throws, and on a timeout runs them while the test's function goes on. So each test gets one end
+// step that stops everything in order (#2954): it kills each hub and waits for it to exit, then
+// stops every process carrying one of the test's markers, and only then deletes the folders the hub
+// and its checks write to. Once that step has begun, or the test has timed out, the helpers start
+// nothing more for the test.
+const ends = new WeakMap();
+
+function ending(t) {
+  let end = ends.get(t);
+  if (end?.began || t.signal.aborted) throw Error('the test has ended, so the helpers start nothing more for it');
+  if (!end) {
+    end = { began: false, hubs: [], markers: [], directories: [] };
+    ends.set(t, end);
+    t.after(() => finish(end));
+  }
+  return end;
+}
+
+async function finish(end) {
+  end.began = true;
+  for (const { child } of end.hubs) if (child.exitCode === null && child.signalCode === null) try { process.kill(child.pid, 'SIGKILL'); } catch {}
+  await Promise.all(end.hubs.map(({ exited }) => within(exited, 5000, 'a killed hub to exit').catch(() => {})));
+  // A check the hub left can show in `ps` without its arguments, so without the marker, and start a
+  // marked grandchild after a pass (LEASES-REDRAFT.md). So keep stopping marked processes for a
+  // second after the hubs exit and until a pass finds none, 5 s at most. A `ps` that fails counts
+  // as finding none, and running out of time ends the sweep without throwing.
+  if (end.markers.length) {
+    const since = Date.now();
+    await waitFor(() => {
+      let left;
+      try { left = living(...end.markers); } catch { left = []; }
+      for (const pid of left) try { process.kill(pid, 'SIGKILL'); } catch {}
+      return !left.length && Date.now() - since >= 1000;
+    }, 5000, 'no marked process left').catch(() => {});
+  }
+  for (const directory of end.directories) rmSync(directory, { recursive: true, force: true });
 }
 
 // ------------------------------------------------------------------ ports
@@ -88,13 +132,13 @@ export async function busyPorts(ports) {
 
 // ------------------------------------------------------------------ processes
 
-// Every live process whose command line carries `marker`. A zombie doesn't count. Only processes
-// this test started carry its random marker, so a match is never someone else's process.
-export function living(marker) {
+// Every live process whose command line carries one of `markers`. A zombie doesn't count. Only
+// processes this test started carry its random marker, so a match is never someone else's process.
+export function living(...markers) {
   const result = spawnSync('ps', ['-axww', '-o', 'pid=,stat=,command='], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   assert.equal(result.status, 0, `ps failed: ${result.stderr}`);
   return result.stdout.split('\n').map((line) => line.trim().match(/^(\d+)\s+(\S+)\s+(.*)$/)).filter(Boolean)
-    .filter(([, , stat, command]) => !stat.startsWith('Z') && command.includes(marker)).map(([, pid]) => Number(pid));
+    .filter(([, , stat, command]) => !stat.startsWith('Z') && markers.some((marker) => command.includes(marker))).map(([, pid]) => Number(pid));
 }
 
 export async function waitGone(marker, withinMs) {
@@ -105,11 +149,6 @@ export async function waitGone(marker, withinMs) {
     left = living(marker);
   }
   return left;
-}
-
-function stop(pid, marker) {
-  const line = spawnSync('ps', ['-ww', '-o', 'stat=,command=', '-p', String(pid)], { encoding: 'utf8' }).stdout.trim();
-  if (line && !line.startsWith('Z') && line.includes(marker)) try { process.kill(pid, 'SIGKILL'); } catch {}
 }
 
 // ------------------------------------------------------------------ the check fixture
@@ -148,11 +187,9 @@ export function fixture(t) {
     const config = { log, key, counter: join(directory, `${key}.attempts`), script, grandchildren };
     return { key, marker, session, script, argv: [process.execPath, CHECK, marker, JSON.stringify(config)] };
   };
-  // Whatever happened, nothing this test's checks started outlives it: stop each recorded PID
-  // that still carries the test's marker.
-  t.after(() => {
-    for (const { pid, event } of events()) if (['start', 'grandchild'].includes(event)) stop(pid, run);
-  });
+  // Whatever happened, nothing this test's checks started outlives it: the test's end step stops
+  // every process that still carries the test's marker.
+  ending(t).markers.push(run);
   return {
     directory, log, extensionLog, run, check, events,
     of: (key, event) => events().filter((line) => line.key === key && (!event || line.event === event)),
@@ -183,8 +220,10 @@ function lineReader(socket, onObject) {
   });
 }
 
-// Starts the variant's hub and waits for its ready line. Stops it by PID when the test ends.
+// Starts the variant's hub and waits for its ready line. The test's end step kills it by PID and
+// waits for it to exit.
 export async function startHub(t, { variant, state, ports, extensionLog, extension = true, virtual = false }) {
+  const end = ending(t);
   const args = [`${SPIKE}/hub.mjs`, '--variant', variant, '--state', state, '--ports', `${ports[0]}-${ports.at(-1)}`];
   if (extension) args.push('--extension', EXTENSION);
   if (virtual) args.push('--clock', 'virtual');
@@ -194,6 +233,7 @@ export async function startHub(t, { variant, state, ports, extensionLog, extensi
   let stdout = '', stderr = '';
   child.stderr.setEncoding('utf8').on('data', (chunk) => { stderr += chunk; });
   const exited = new Promise((done) => child.once('exit', (code, signal) => done({ code, signal })));
+  end.hubs.push({ child, exited });
   const ready = new Promise((done, fail) => {
     child.stdout.setEncoding('utf8').on('data', (chunk) => {
       stdout += chunk;
@@ -203,7 +243,6 @@ export async function startHub(t, { variant, state, ports, extensionLog, extensi
     });
     exited.then(({ code, signal }) => fail(Error(`exited ${code ?? signal} before its ready line`)));
   });
-  t.after(() => { if (child.exitCode === null && child.signalCode === null) try { process.kill(child.pid, 'SIGKILL'); } catch {} });
   let line;
   try {
     line = await within(ready, 20_000, 'the ready line');

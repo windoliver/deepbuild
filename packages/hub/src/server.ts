@@ -35,6 +35,7 @@ import { gatesOff } from './watch.js';
 import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refuse, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type Scope, type Scoped, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
 import { isRecord as isObj } from '@deepbuild/contracts/json';
 import { writeSynced } from './vfs.js';
+import { budgetFile, readBudget, spend, spentWhy } from './restart-budget.js';
 
 /** How often the hub checks that its lock file is still the one it holds (#909): the design says at least once a minute. */
 const LOCK_CHECK_MS = 5000;
@@ -48,7 +49,7 @@ const MAX_LINE = 64 << 20;
  */
 const BEHIND = 10_000;
 const BEHIND_BYTES = 8 << 20;
-/** A restart's exit (#1865): not 0, so the login service (KeepAlive's SuccessfulExit false, Restart=on-failure) starts the hub again. */
+/** A restart's exit (#1865): not 0 to launchd (KeepAlive's SuccessfulExit false) and forced to restart by systemd (RestartForceExitStatus), so the login service starts the hub again. */
 const RESTART_EXIT = 75;
 /** How long a hub stays up before a restart (#1865): past launchd's 10 s throttle and systemd's 10 s start-limit window. */
 const RESTART_AFTER_MS = 15_000;
@@ -60,7 +61,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['hub.drain', ['cli']], ['hub.check', ['cli']], ['build.rolled_back', ['cli']],
   ['hub.health', ['app', 'cli', 'person']], ['health', ['app', 'cli', 'person']], ['events.read', ['app', 'cli', 'person']], ['stream.subscribe', ['app', 'cli']], ['ask.answer', ['app', 'cli']], ['ask.confirm', ['app']], ['views.installed', ['app']], ['command.run', ['app']],
   // The App API (#34): its reads, each with the log_pos it reflects and the hub's start ID, an overrule and pairing a device.
-  ['inbox.read', ['app', 'cli']], ['ask.card', ['app', 'cli']], ['sessions.read', ['app', 'cli', 'person']], ['changes.read', ['app', 'cli']], ['evidence.read', ['app', 'cli']],
+  ['inbox.read', ['app', 'cli']], ['ask.card', ['app', 'cli']], ['sessions.read', ['app', 'cli', 'person']], ['session.page', ['app', 'cli', 'person']], ['changes.read', ['app', 'cli']], ['evidence.read', ['app', 'cli']],
   ['numbers.read', ['app', 'cli']], ['numbers.baseline', ['cli']], ['race.start', ['cli']], ['numbers.refresh', ['cli']], ['numbers.sample', ['cli']], ['decision.overrule', ['app', 'cli']], ['ask.undo', ['app', 'cli']], ['ask.take_over', ['app', 'cli']], ['device.pair', ['app', 'cli']], ['device.unpair', ['app', 'cli']], ['channel.link', ['app', 'cli']], ['confirm.enroll', ['app']],
   // A permission you said yes to in the terminal, offered back, saved as a decision with one click (#23).
   ['offer.save', ['app', 'cli']],
@@ -145,7 +146,7 @@ const STAGED_MATCHES: unknown[] = [STAGED_MATCH, PAST_MATCH, DISCARD_MATCH, STAS
 /** The permission modes in which Claude Code denies what isn't allowed already: a standing rule never allows past them. */
 const DENYING_MODES = new Set(['dontAsk', 'plan']);
 /** The App API's reads beside events.read: each result carries the hub's start ID beside the log_pos it reflects. */
-const READS = new Set(['inbox.read', 'sessions.read', 'changes.read', 'evidence.read', 'numbers.read']);
+const READS = new Set(['inbox.read', 'sessions.read', 'session.page', 'changes.read', 'evidence.read', 'numbers.read']);
 
 type Obj = Record<string, unknown>;
 /**
@@ -353,6 +354,8 @@ class Hub {
   private listening = 0;
   /** The installed hub's stops waiting on the OS to confirm you (#1865): a restart then would throw your answer away. */
   private confirming = 0;
+  /** A restart on the token alone is waiting out RESTART_AFTER_MS (#2973): one more asked for is that one. */
+  private restarting = false;
   private stopping = false;
   /** The lock file was removed or replaced under this hub (#909): another start can take it, so no hook is acknowledged. */
   private lost = false;
@@ -1299,7 +1302,7 @@ class Hub {
         const stopping = () => { conn.write({ id, result: { stopping: true } }); void this.stop('requested', conn.sock); };
         // A dev hub stops on its token; the installed hub only once the OS confirms you inside the hub, as gates.off
         // does (#1865), since a command's child holds the token too, and a stop exits 0, which no login service undoes.
-        if (real(this.root.dir) !== real(rootOf(installedRoot()).dir)) return stopping();
+        if (!this.installed()) return stopping();
         const command = params.command ?? 'deep hub stop';
         if (command !== 'deep hub stop' && command !== 'deep setup --undo') return conn.write({ id, error: refusal('enum', '/params/command', 'Name deep hub stop or deep setup --undo.', command) });
         this.confirming++;
@@ -1309,10 +1312,24 @@ class Hub {
         );
       }
       case 'hub.restart': {
-        // The token alone only restarts (#1865): a failed exit, which the login service starts again at once. A hub up
+        // The token alone only restarts (#1865): an exit the login service restarts. A hub up
         // under RESTART_AFTER_MS waits that out first, so restarts asked back to back can't keep it down between the
         // login service's throttled starts, nor spend systemd's start limit.
         if (this.confirming) return conn.write({ id, error: refusal('unavailable', '/method', 'A deep hub stop is waiting for you to answer the OS; restart once it is answered.', method, true) });
+        // One restart asked for while one waits is the same restart, and spends nothing more; a hub already stopping
+        // spends none.
+        if (this.restarting) return conn.write({ id, result: { restarting: true } });
+        if (this.stopping) return conn.write({ id, error: refusal('unavailable', '/method', 'The hub is stopping; once it is back, restart it again if you still need to.', method, true) });
+        // The restart budget (#2973), kept under the root so a loop of restarts can't reset it: past it, a person stops
+        // and starts the hub, and the hub stays up. Spent, synced, before the reply, so the count holds at the exit.
+        const now = this.now();
+        const budget = readBudget(this.root.dir, now);
+        const spent = spentWhy(budget);
+        if (spent) return conn.write({ id, error: refusal('unavailable', '/method', spent, method) });
+        try { spend(this.root.dir, budget, now); } catch (error) {
+          return conn.write({ id, error: refusal('unavailable', '/method', `The hub's restart budget, ${budgetFile(this.root.dir)}, couldn't be written, so the hub doesn't restart: ${error instanceof Error ? error.message : String(error)}. Stop and start the hub yourself with deep hub stop and deep hub start.`, method) });
+        }
+        this.restarting = true;
         const wait = Math.max(0, this.listening + RESTART_AFTER_MS - Date.now());
         conn.write({ id, result: { restarting: true } });
         return void setTimeout(() => void this.stop('requested', conn.sock, RESTART_EXIT), wait);
@@ -1337,7 +1354,7 @@ class Hub {
         // Health waits for the core's start, as calls through the core's queue do (#2801): its readings aren't open before.
         // The process readings after the core's: its own checks start short-lived children (the secret store's) that
         // would count as the hub's.
-        return void reply(this.core.started.then(() => this.core.request({ op: 'health', role: conn.name })).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, parsers: this.parsers.count(), ...(health as Obj), process: await processHealth() })));
+        return void reply(this.core.started.then(() => this.core.request({ op: 'health', role: conn.name })).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, parsers: this.parsers.count(), ...(health as Obj), restarts: this.restarts(), process: await processHealth() })));
       case 'stream.subscribe': {
         const sub = `${conn.id}:${JSON.stringify(id)}`;
         const after = Number.isSafeInteger(params.after) && (params.after as number) >= 0 ? (params.after as number) : 0;
@@ -1379,8 +1396,9 @@ class Hub {
         if (method === 'events.read') {
           // The page's events come as one JSON array's text, written as it is, with the start ID beside its log_pos.
           return void this.core.request({ op: 'call', method, params, context: { role: conn.name } }).then((result) => {
-            const { log_pos, events } = result as { log_pos: number; events: string };
-            if (!conn.done && conn.sock.writable) conn.sock.write(`{"v":${VERSION},"id":${JSON.stringify(id)},"result":{"start":${JSON.stringify(this.start)},"log_pos":${log_pos},"events":${events}}}\n`);
+            const { log_pos, events, more } = result as { log_pos: number; events: string; more: boolean };
+            // A page the byte cap ended says so (#1576): more follows it however few events it holds.
+            if (!conn.done && conn.sock.writable) conn.sock.write(`{"v":${VERSION},"id":${JSON.stringify(id)},"result":{"start":${JSON.stringify(this.start)},"log_pos":${log_pos},"events":${events}${more ? ',"more":true' : ''}}}\n`);
           }, (error: unknown) => reply(Promise.reject(error)));
         }
         if (READS.has(method)) {
@@ -1395,6 +1413,16 @@ class Hub {
     }
   }
 
+  /** Whether this is the installed hub, of `~/.deepbuild`, rather than a dev hub started with `--root`. */
+  installed(): boolean {
+    return real(this.root.dir) === real(rootOf(installedRoot()).dir);
+  }
+
+  /** The restart budget as hub.health reports it (#2973), for deep hub promote: restarts left, when the next frees up. */
+  private restarts(): Obj {
+    const budget = readBudget(this.root.dir, this.now());
+    return { left: budget.left, ...(budget.frees !== undefined ? { frees: new Date(budget.frees).toISOString() } : {}), ...(budget.bad ? { unreadable: budget.bad } : {}) };
+  }
   /** A stop with its reason recorded: no new connections, the core's clean stop, then only our own socket removed. */
   async stop(reason: string, requester?: net.Socket, code = 0): Promise<void> {
     if (this.stopping) return;
@@ -1510,7 +1538,10 @@ export async function runHub(options: { root?: string; safe?: boolean }): Promis
   process.stdout.on('error', () => undefined);
   process.stderr.on('error', () => undefined);
   const hub = new Hub(root, writeToken(root), lock, plant, vfs, options.safe === true);
-  for (const signal of ['SIGTERM', 'SIGINT'] as const) process.on(signal, () => void hub.stop(`signal:${signal}`));
+  // On the installed hub a signal is a restart, not a stop (#2975): a command's child can send one with no confirmation,
+  // and an exit 0 would keep the hub down till your next login. Logout and shutdown send it too, so it doesn't wait.
+  const onSignal = hub.installed() ? RESTART_EXIT : 0;
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) process.on(signal, () => void hub.stop(`signal:${signal}`, undefined, onSignal));
   await hub.open(clock);
   process.stdout.write(`${JSON.stringify({ v: 1, ready: true, pid: process.pid, socket: root.socket, start: hub.start, ...(options.safe ? { safe: true } : {}) })}\n`);
   shedStartup();
