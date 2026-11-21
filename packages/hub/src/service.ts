@@ -176,12 +176,12 @@ export async function stopAsPeer(path: string, token: string, params: Obj, peer:
 
 /**
  * One control call on the hub at `path`, as the CLI, with the token `tokenFile` holds: the hub's hello within
- * `timeoutMs`, and the call's reply within `replyMs`.
+ * `timeoutMs`, and the call's reply within `replyMs`; with `peer`, the call names that process as its caller.
  */
-export async function control(path: string, tokenFile: string, method: string, params: Obj = {}, timeoutMs = 2000, replyMs = timeoutMs): Promise<Obj> {
+export async function control(path: string, tokenFile: string, method: string, params: Obj = {}, timeoutMs = 2000, replyMs = timeoutMs, peer?: { pid: number; start: string }): Promise<Obj> {
   const c = await connect(path, timeoutMs);
   try {
-    c.send({ hello: 'cli', token: readFileSync(tokenFile, 'utf8').trim() });
+    c.send({ hello: 'cli', token: readFileSync(tokenFile, 'utf8').trim(), ...(peer ? { peer } : {}) });
     const hello = await c.next();
     if (hello.error) throw Error(`the hub refused the CLI's credential: ${JSON.stringify(hello.error)}`);
     c.send({ id: method, method, params });
