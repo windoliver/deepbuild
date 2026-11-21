@@ -5,7 +5,7 @@
 //
 //   docs/evidence/1898/e2e.command (runs this file with vitest.e2e.mjs and prints what it saw; E2E_LOG is the log).
 import { spawn, spawnSync } from 'node:child_process';
-import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { it } from 'vitest';
@@ -62,7 +62,6 @@ let w = makeWorld({ drafts: [DRAFT], files: EXPIRED.files, answers: prAnswers([{
 const bin = join(w.tmp, 'bin');
 mkdirSync(bin, { recursive: true });
 writeFileSync(join(bin, 'claude'), FIXTURE('fake-reviewer.pl').replace('__CONFIG__', Buffer.from(JSON.stringify({ version: COVERED, model: 'claude-sonnet-5-5', findings: [] }), 'utf8').toString('base64')), { mode: 0o755 });
-chmodSync(join(bin, 'claude'), 0o755);
 writeFileSync(join(w.root, 'config.json'), `${JSON.stringify({ asks: SETTINGS, runner: { login_path: `${bin}:/usr/bin:/bin` }, plan: { reserve_pct: 10 } }, null, 2)}\n`);
 writeFileSync(join(w.home, '.claude', '.credentials.json'), `${JSON.stringify({ claudeAiOauth: { accessToken: `sk-ant-oat01-e2e1898FAKE${'x'.repeat(40)}`, refreshToken: `sk-ant-ort01-e2e1898FAKE${'y'.repeat(40)}`, expiresAt: 4102444800000, scopes: ['user:inference'], subscriptionType: 'max' } })}\n`, { mode: 0o600 });
 writeFileSync(join(w.home, '.claude', 'settings.json'), '{}\n');
