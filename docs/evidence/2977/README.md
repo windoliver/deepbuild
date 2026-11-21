@@ -16,6 +16,6 @@ For "before", `packages/supervisor/src/supervisor.ts` was put back to the base `
 
 - **The difference.** On the base, the first install waits out the subsystem filter's whole 10 s warm, because no report shows through that filter. Only then does the kernel's filter start. On this branch, all three streams warm at once and the kernel's is kept.
 - **No error from this change.** On both builds the hub keeps one stream, and its stderr shows only Node's `stripTypeScriptTypes` experimental warning.
-- **A refusal on both builds.** `deep install packages/jobs/import` is refused on both base and branch: "lottie-import@1.0.0 wrote no {outputs}". The refusal comes from that job tool's qualification and is unrelated to the report stream.
+- **A refusal on both builds.** `deep install packages/jobs/import` is refused on both base and branch: "lottie-import@1.0.0 wrote no {outputs}". The cause is this run's TMPDIR, which goes through the `/tmp` symlink. With the real `/private/tmp` path, the same build installs `import` (#3005). The refusal is unrelated to the report stream.
 
 Temp paths in the transcripts are shown as `<tmp>/` and the checkout as `<checkout>`. To rerun: `npm run build --workspaces` and `cargo build -p deep-hook`, then `TMPDIR=<short dir> bash docs/evidence/2977/e2e.sh <label>`, with Node 24 as `node` on PATH. The hub's socket path must fit macOS's 104-byte limit.
