@@ -331,9 +331,18 @@ function build(directory) {
 }
 
 /** The paths of a stack's frames outside the runtime and the installed packages, innermost first; a
- * path may hold spaces. */
-function frames(stack, directory) {
-  return [...String(stack).matchAll(/^\s*at (?:.*? \()?((?:file:\/\/)?\/.*?):\d+:\d+\)?\s*$/gm)]
+ * path may hold spaces. Given the failure's message, the frames are the stack's last lines, each `at …`, after that
+ * message, so a line of the message shaped like a frame is none (#1838); without it, every such line counts. */
+function frames(stack, directory, message = null) {
+  let text = String(stack);
+  if (message !== null) {
+    const after = message ? text.indexOf(message) : -1;
+    const lines = (after < 0 ? text : text.slice(after + message.length)).trimEnd().split('\n');
+    let first = lines.length;
+    while (first > 0 && /^\s*at /.test(lines[first - 1])) first -= 1;
+    text = lines.slice(first).join('\n');
+  }
+  return [...text.matchAll(/^\s*at (?:.*? \()?((?:file:\/\/)?\/.*?):\d+:\d+\)?\s*$/gm)]
     .map(([, location]) => relative(directory, location.startsWith('file:') ? fileURLToPath(location) : location))
     .filter((path) => !path.split('/').includes('node_modules'));
 }
@@ -353,13 +362,13 @@ const asserted = (name = '', code = '', message = '', stack = '') => code === 'E
 function atAssertion(directory, { name = 'Error', code, message = '', stack = '', thrown }) {
   const caught = thrown ?? (/ but got '.*'$| but '.*' was thrown$/.test(firstLine(message)) ? { stack: '' } : null);
   if (caught && !frames(caught.stack, directory).some((path) => !path.startsWith('..') && !underTestPaths(path))) return false;
-  return asserted(name, code, message, stack) && underTestPaths(frames(stack, directory)[0] ?? '..');
+  return asserted(name, code, message, stack) && underTestPaths(frames(stack, directory, message)[0] ?? '..');
 }
 
 function failure(directory, error) {
   const { name = 'Error', code, message = '' } = error;
   const cause = `${name}${code && !name.includes(code) ? ` [${code}]` : ''}: ${firstLine(message)}`.split(`${directory}/`).join('');
-  return { atAssertion: atAssertion(directory, error), cause };
+  return { atAssertion: atAssertion(directory, error), bySubtests: error.failureType === 'subtestsFailed', cause };
 }
 
 // A run that outlasts this is stopped, and its files count as not run, never as passed or failed.
@@ -657,7 +666,13 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
 function wrongProgram(runs, test) {
   if (failedAtAssertion(runs.base.results.get(test.key))) return 'failed on the merge base at its assertion';
   const twin = (test.twins ?? []).find(({ key }) => failedAtAssertion(runs.twins.get(key)?.results.get(test.key)));
-  return twin ? `failed on ${twin.twin} at its assertion` : null;
+  if (twin) return `failed on ${twin.twin} at its assertion`;
+  // A parent test fails where its subtests do, as their failure, never at an assertion of its own. It is proven when it
+  // failed only by its subtests on the merge base or a twin, and each of its subtests is proven (#1838).
+  const subtests = runs.tests.filter(({ path, key }) => path === test.path && key.startsWith(`${test.key} › `) && !key.slice(test.key.length + 3).includes(' › '));
+  const bySubtests = (result) => result?.status === 'fail' && result.failure.bySubtests;
+  const failed = bySubtests(runs.base.results.get(test.key)) || (test.twins ?? []).some(({ key }) => bySubtests(runs.twins.get(key)?.results.get(test.key)));
+  return failed && subtests.length && subtests.every((subtest) => subtest.status === 'pass' && wrongProgram(runs, subtest)) ? `each of its ${subtests.length} subtests is proven` : null;
 }
 
 /** The before lane's lines; returns the tests that failed on a wrong program. */

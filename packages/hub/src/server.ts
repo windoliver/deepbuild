@@ -35,6 +35,7 @@ import { gatesOff } from './watch.js';
 import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refuse, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type Scope, type Scoped, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
 import { isRecord as isObj } from '@deepbuild/contracts/json';
 import { writeSynced } from './vfs.js';
+import { budgetFile, readBudget, spend, spentWhy } from './restart-budget.js';
 
 /** How often the hub checks that its lock file is still the one it holds (#909): the design says at least once a minute. */
 const LOCK_CHECK_MS = 5000;
@@ -353,6 +354,8 @@ class Hub {
   private listening = 0;
   /** The installed hub's stops waiting on the OS to confirm you (#1865): a restart then would throw your answer away. */
   private confirming = 0;
+  /** A restart on the token alone is waiting out RESTART_AFTER_MS (#2973): one more asked for is that one. */
+  private restarting = false;
   private stopping = false;
   /** The lock file was removed or replaced under this hub (#909): another start can take it, so no hook is acknowledged. */
   private lost = false;
@@ -1313,6 +1316,20 @@ class Hub {
         // under RESTART_AFTER_MS waits that out first, so restarts asked back to back can't keep it down between the
         // login service's throttled starts, nor spend systemd's start limit.
         if (this.confirming) return conn.write({ id, error: refusal('unavailable', '/method', 'A deep hub stop is waiting for you to answer the OS; restart once it is answered.', method, true) });
+        // One restart asked for while one waits is the same restart, and spends nothing more; a hub already stopping
+        // spends none.
+        if (this.restarting) return conn.write({ id, result: { restarting: true } });
+        if (this.stopping) return conn.write({ id, error: refusal('unavailable', '/method', 'The hub is stopping; once it is back, restart it again if you still need to.', method, true) });
+        // The restart budget (#2973), kept under the root so a loop of restarts can't reset it: past it, a person stops
+        // and starts the hub, and the hub stays up. Spent, synced, before the reply, so the count holds at the exit.
+        const now = this.now();
+        const budget = readBudget(this.root.dir, now);
+        const spent = spentWhy(budget);
+        if (spent) return conn.write({ id, error: refusal('unavailable', '/method', spent, method) });
+        try { spend(this.root.dir, budget, now); } catch (error) {
+          return conn.write({ id, error: refusal('unavailable', '/method', `The hub's restart budget, ${budgetFile(this.root.dir)}, couldn't be written, so the hub doesn't restart: ${error instanceof Error ? error.message : String(error)}. Stop and start the hub yourself with deep hub stop and deep hub start.`, method) });
+        }
+        this.restarting = true;
         const wait = Math.max(0, this.listening + RESTART_AFTER_MS - Date.now());
         conn.write({ id, result: { restarting: true } });
         return void setTimeout(() => void this.stop('requested', conn.sock, RESTART_EXIT), wait);
@@ -1337,7 +1354,7 @@ class Hub {
         // Health waits for the core's start, as calls through the core's queue do (#2801): its readings aren't open before.
         // The process readings after the core's: its own checks start short-lived children (the secret store's) that
         // would count as the hub's.
-        return void reply(this.core.started.then(() => this.core.request({ op: 'health', role: conn.name })).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, parsers: this.parsers.count(), ...(health as Obj), process: await processHealth() })));
+        return void reply(this.core.started.then(() => this.core.request({ op: 'health', role: conn.name })).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, parsers: this.parsers.count(), ...(health as Obj), restarts: this.restarts(), process: await processHealth() })));
       case 'stream.subscribe': {
         const sub = `${conn.id}:${JSON.stringify(id)}`;
         const after = Number.isSafeInteger(params.after) && (params.after as number) >= 0 ? (params.after as number) : 0;
@@ -1400,6 +1417,11 @@ class Hub {
     return real(this.root.dir) === real(rootOf(installedRoot()).dir);
   }
 
+  /** The restart budget as hub.health reports it (#2973), for deep hub promote: restarts left, when the next frees up. */
+  private restarts(): Obj {
+    const budget = readBudget(this.root.dir, this.now());
+    return { left: budget.left, ...(budget.frees !== undefined ? { frees: new Date(budget.frees).toISOString() } : {}), ...(budget.bad ? { unreadable: budget.bad } : {}) };
+  }
   /** A stop with its reason recorded: no new connections, the core's clean stop, then only our own socket removed. */
   async stop(reason: string, requester?: net.Socket, code = 0): Promise<void> {
     if (this.stopping) return;

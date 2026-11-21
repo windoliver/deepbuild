@@ -30,7 +30,7 @@ export default async function* reporter(source) {
     const cause = innermost(error);
     yield `${JSON.stringify({
       type: type.slice(5), file: data.file, name: data.name, nesting: data.nesting, suite: data.details?.type === 'suite', skip: Boolean(data.skip), todo: Boolean(data.todo), note: [data.skip, data.todo].find((note) => typeof note === 'string'), message: data.message,
-      error: error && { name: cause?.name, code: cause?.code, message: String(cause?.message ?? ''), stack: String(cause?.stack ?? ''), thrown: thrown(cause) },
+      error: error && { name: cause?.name, code: cause?.code, message: String(cause?.message ?? ''), stack: String(cause?.stack ?? ''), thrown: thrown(cause), failureType: error.failureType },
     })}\n`;
   }
 }
