@@ -157,6 +157,17 @@ fn refused_by(doc: &Value, caps: &Caps) -> Vec<Refusal> {
             ));
         }
     }
+    if !caps.scales_lengths {
+        let unit = doc.pointer("/solver/length_unit");
+        if let Some(v) = unit.filter(|v| v.as_f64() != Some(1.0)) {
+            out.push(cap(
+                "solver/length_unit".into(),
+                v,
+                caps,
+                "scales none of its lengths by a world's; solver.length_unit must be 1",
+            ));
+        }
+    }
     for (id, m) in doc
         .get("contact_materials")
         .and_then(Value::as_object)

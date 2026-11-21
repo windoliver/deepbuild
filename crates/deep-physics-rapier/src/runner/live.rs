@@ -81,6 +81,7 @@ impl Run {
             leave_ccd_off: self.leave_ccd_off,
             lint: self.lint,
             ccd_on_kinematic: self.ccd_on_kinematic,
+            small: self.small,
             views: std::cell::RefCell::default(),
         }
     }

@@ -169,6 +169,16 @@ pub enum Twin {
     /// then moves out of the way.
     StalePoses,
     StandingGivesWay,
+    /// #2308's wrong wrappers: one that never sets the backend's length; one that keeps the
+    /// backend's own contact frequency whatever `solver.contact_hz` says; one that lets the
+    /// length scale the backend's speed cap; and one that lets it scale each body's sleep speed.
+    /// And its wrong check: one that reads only the range of `solver.length_unit`, whatever the
+    /// backend's caps say of scaling by it.
+    LengthIgnored,
+    ContactOwn,
+    SpeedCapScaled,
+    SleepSpeedScaled,
+    LengthRangeOnly,
 }
 
 /// A Rapier world behind the backend interface.
@@ -897,15 +907,28 @@ impl Backend for Rapier {
         p.dt = (1.0 / w.step_rate) as f32;
         // The world's substeps are the solver's iterations, not repeated steps (World and backend).
         p.num_solver_iterations = w.substeps as usize;
-        p.contact_softness =
-            SpringCoefficients::new(w.solver.contact_hz as f32, w.solver.contact_damping as f32);
+        let hz = match self.twin {
+            Twin::ContactOwn => SpringCoefficients::<f32>::contact_defaults().natural_frequency,
+            _ => w.solver.contact_hz as f32,
+        };
+        p.contact_softness = SpringCoefficients::new(hz, w.solver.contact_damping as f32);
         // Rapier holds a contact with a fixed body at twice the frequency; the world keeps that.
         let fixed = if self.twin == Twin::StaticContactSame { 1.0 } else { 2.0 };
-        p.static_contact_softness = SpringCoefficients::new(
-            fixed * w.solver.contact_hz as f32,
-            w.solver.contact_damping as f32,
-        );
-        p.normalized_max_linear_velocity = w.solver.max_speed as f32;
+        p.static_contact_softness =
+            SpringCoefficients::new(fixed * hz, w.solver.contact_damping as f32);
+        // #2308: Rapier scales its own lengths by the world's, and with them its speed cap and
+        // each body's sleep speed, which the world keeps in m/s.
+        let unit = match self.twin {
+            Twin::LengthIgnored => 1.0,
+            _ => w.solver.length_unit,
+        };
+        p.length_unit = unit as f32;
+        let (cap, sleep) = match self.twin {
+            Twin::SpeedCapScaled => (1.0, unit),
+            Twin::SleepSpeedScaled => (unit, 1.0),
+            _ => (unit, unit),
+        };
+        p.normalized_max_linear_velocity = (w.solver.max_speed / cap) as f32;
         p.max_ccd_substeps = usize::from(w.solver.ccd && self.twin != Twin::NoSweep);
         let mut handles = BTreeMap::new();
         for id in deep_canvas_physics::occurrence::built_order(w) {
@@ -956,7 +979,7 @@ impl Backend for Rapier {
                 .locked_axes(locks)
                 .build();
             let a = rb.activation_mut();
-            a.normalized_linear_threshold = w.solver.sleep.speed as f32;
+            a.normalized_linear_threshold = (w.solver.sleep.speed / sleep) as f32;
             a.time_until_sleep = w.solver.sleep.time as f32;
             let colliders: Vec<(usize, ColliderBuilder)> = (0..b.shapes.len())
                 .filter_map(|i| Some((i, self.collider(w, id, b, i, &mut out)?)))

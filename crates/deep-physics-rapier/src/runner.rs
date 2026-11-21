@@ -38,6 +38,7 @@ pub mod kit;
 #[cfg(not(target_arch = "wasm32"))]
 mod live;
 mod replay;
+pub mod small;
 mod timeline;
 pub mod vehicle;
 pub mod walk;
@@ -87,6 +88,8 @@ pub struct Run {
     /// #2239's planted lint, and its planted kit: it turns ccd on for a flagged kinematic body too.
     lint: deep_canvas_physics::fast::Planted,
     ccd_on_kinematic: bool,
+    /// #2308's planted lint.
+    small: deep_canvas_physics::small::Planted,
     /// #251's planted vehicle controller or check.
     vehicle: crate::VehiclePlant,
     /// The views this runner holds open, by session (#522).
@@ -462,6 +465,7 @@ impl Run {
             leave_ccd_off: false,
             lint: deep_canvas_physics::fast::Planted::None,
             ccd_on_kinematic: false,
+            small: deep_canvas_physics::small::Planted::None,
             vehicle: crate::VehiclePlant::None,
             #[cfg(not(target_arch = "wasm32"))]
             views: std::cell::RefCell::default(),
@@ -497,7 +501,8 @@ impl Run {
                     && !vehicle::planted(name, &mut run)
                     && !walk::planted(name, &mut run)
                     && !contact::planted(name, &mut run)
-                    && !fast::planted(name, &mut run) =>
+                    && !fast::planted(name, &mut run)
+                    && !small::planted(name, &mut run) =>
             {
                 return None
             }
@@ -803,7 +808,9 @@ impl Run {
                 {
                     Ok((w, b)) => {
                         let (soft, backend) = held::held(&w, &b.held());
-                        json!({"ok": true, "issues": self.mass_ratios(&w, &b), "built": b.built(),
+                        let mut issues = self.mass_ratios(&w, &b);
+                        issues.extend(deep_canvas_physics::small::issues(&w, self.small));
+                        json!({"ok": true, "issues": issues, "built": b.built(),
                                "soft": soft, "backend": backend})
                     }
                     Err(e) => json!({"ok": true, "issues": e["issues"]}),

@@ -48,6 +48,7 @@ pub struct Solver {
     pub hit_threshold: f64,
     pub sleep: Sleep,
     pub ccd: bool,
+    pub length_unit: f64,
 }
 
 /// #2309: the stiffest contact a step settles, Hz: (step rate × substeps) ÷ 6.
@@ -704,6 +705,7 @@ impl Reader {
                 "hit_threshold",
                 "sleep",
                 "ccd",
+                "length_unit",
             ],
         );
         let sl = &self.obj(
@@ -724,6 +726,7 @@ impl Reader {
                 time: self.num(sl, "time", "solver/sleep", 0.5, 0.0, f64::MAX),
             },
             ccd: self.flag(s, "ccd", p, true),
+            length_unit: self.num(s, "length_unit", p, 1.0, f64::MIN_POSITIVE, 1.0),
         }
     }
 
