@@ -13,7 +13,7 @@ use deep_canvas_physics::backend::{
 use deep_canvas_physics::bake::{Build, Pin};
 use deep_canvas_physics::caps::{Caps, RAPIER3D};
 use deep_canvas_physics::doc::{
-    BodyKind, Breaks, End, Force, ForceKind, Joint, JointKind, Material, Mode, Motor,
+    BodyKind, Breaks, End, Force, ForceKind, Joint, JointKind, Law, Material, Mode, Motor,
     Pose as DocPose, Read, Refusal, Region, Rot, Rule, Shape, World,
 };
 use deep_canvas_physics::occurrence::Raw;
@@ -41,6 +41,7 @@ pub mod fp;
 mod inputs;
 mod joints;
 mod kinematic;
+mod laws;
 mod occurrences;
 pub mod planted;
 pub mod runner;
@@ -169,6 +170,16 @@ pub enum Twin {
     /// then moves out of the way.
     StalePoses,
     StandingGivesWay,
+    /// #1931's wrong laws: an inverse square that falls off as 1 ÷ r; a magnetic law that holds
+    /// q (v × B) over the step; one that takes B × v; a pair law without the factor 2; and one
+    /// without the cutoff. And its wrong check, which admits a held central force at any
+    /// substeps.
+    LawFallsAsR,
+    LawHoldsQvb,
+    LawTakesBv,
+    LawWithoutTwo,
+    LawWithoutCutoff,
+    SubstepsAdmitted,
 }
 
 /// A Rapier world behind the backend interface.
@@ -689,22 +700,31 @@ impl Rapier {
             .iter()
             .map(|(id, h)| (id.as_str(), *h))
             .collect();
+        let (twin, dt) = (self.twin, self.world.integration_parameters.dt);
         for f in &self.forces {
+            let inside = |p: Vector| match &f.region {
+                None => true,
+                Some(Region::Box { center, half }) => {
+                    let d = (p - v3(*center)).abs();
+                    let h = v3(*half);
+                    d.x <= h.x && d.y <= h.y && d.z <= h.z
+                }
+                Some(Region::Sphere { center, radius }) => {
+                    (p - v3(*center)).length() <= *radius as f32
+                }
+            };
+            // #1931: where the bodies a pair law applies to stand, in canonical order.
+            let pairs = matches!(f.kind, ForceKind::Law(Law::LennardJones { .. }));
+            let all = f.applies_to.iter().filter(|_| pairs);
+            let live = all.map(|id| &self.world.bodies[ids[id.as_str()]]);
+            let stands: Vec<Vector> = live
+                .filter(|rb| rb.is_enabled() && inside(rb.translation()))
+                .map(|rb| rb.translation())
+                .collect();
             for id in &f.applies_to {
                 let rb = &mut self.world.bodies[ids[id.as_str()]];
                 let p = rb.translation();
-                let inside = match &f.region {
-                    None => true,
-                    Some(Region::Box { center, half }) => {
-                        let d = (p - v3(*center)).abs();
-                        let h = v3(*half);
-                        d.x <= h.x && d.y <= h.y && d.z <= h.z
-                    }
-                    Some(Region::Sphere { center, radius }) => {
-                        (p - v3(*center)).length() <= *radius as f32
-                    }
-                };
-                if !rb.is_dynamic() || !inside {
+                if !rb.is_dynamic() || !inside(p) {
                     continue;
                 }
                 let (m, v) = (rb.mass(), rb.linvel());
@@ -730,6 +750,14 @@ impl Rapier {
                             Some(max) if f.length() > *max as f32 => f * (*max as f32 / f.length()),
                             _ => f,
                         }
+                    }
+                    // #1931: a law takes the strength itself, since a magnetic turn scales its
+                    // field, never its push.
+                    ForceKind::Law(law) => {
+                        let at = (p, v, m);
+                        let push = laws::push(law, twin, f.strength as f32, at, &stands, dt);
+                        rb.add_force(push, true);
+                        continue;
                     }
                 };
                 rb.add_force(force * f.strength as f32, true);

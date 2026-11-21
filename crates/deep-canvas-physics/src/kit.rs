@@ -18,6 +18,7 @@ use crate::roles::TABLE;
 use crate::track;
 
 mod fixtures;
+mod laws;
 pub mod scan;
 mod sensors;
 mod vehicles;
@@ -157,6 +158,28 @@ pub enum Measure {
     /// #2243: how far apart the axes of two character bodies that meet stand after the last
     /// step, m; it fails wherever one breaks the rule of their meeting.
     Meet(walks::Meet),
+    /// #1931: `body`'s distance from `point` after each step, m: the one farthest from the
+    /// answer; it fails too unless the body first comes back to its start line after `period`
+    /// s, within the answer's tolerance.
+    Orbit {
+        body: &'static str,
+        point: [f64; 3],
+        period: f64,
+    },
+    /// #1931: the radius of the circle `body` turns in, m; it fails wherever its speed leaves
+    /// `speed`, m/s, by more than `band`, a share, or its path leaves y `between`, m.
+    Gyration {
+        body: &'static str,
+        speed: f64,
+        band: f64,
+        between: [f64; 2],
+    },
+    /// #1931: how far apart `a` and `b` are after step `step`, m.
+    Apart {
+        a: &'static str,
+        b: &'static str,
+        step: usize,
+    },
 }
 
 /// One fixture of the behavior part.
@@ -198,6 +221,9 @@ pub enum Planted {
     AdmitsUnfixtured,
     /// #251's, and #182's `kit_passes_excluded`.
     CountsExcludedPassed,
+    /// #1931's: the kit with the force laws' fixtures taken out, so a candidate that claims a
+    /// law is refused; its runner leaves them out of the fixtures it hands over.
+    WithoutLaws,
 }
 
 /// The kit's report on one backend.
@@ -753,6 +779,18 @@ fn read(m: &Measure, t: &Trace, b: &dyn Backend, w: &World, f: &Fixture) -> Read
             )
         }
         Measure::Meet(m) => met(t, m),
+        Measure::Orbit {
+            body,
+            point,
+            period,
+        } => laws::orbit_of(t, (body, *point), *period, (f.answer, room(f, t.rate))),
+        Measure::Gyration {
+            body,
+            speed,
+            band,
+            between,
+        } => laws::gyration_of(t, body, (*speed, *band), *between, room(f, t.rate)),
+        Measure::Apart { a, b, step } => laws::apart_of(t, a, b, *step),
     }
 }
 
@@ -836,6 +874,13 @@ fn named_measure(m: &Measure) -> String {
             "distance between the axes of {} and {} after the last step, m",
             m.walker, m.other
         ),
+        Measure::Orbit { body, .. } => {
+            format!("distance of {body} from the point farthest from the answer, m")
+        }
+        Measure::Gyration { body, .. } => format!("radius of the circle {body} turns in, m"),
+        Measure::Apart { a, b, step } => {
+            format!("distance between {a} and {b} after step {step}, m")
+        }
     }
 }
 
@@ -847,13 +892,18 @@ fn in_seconds(m: &Measure) -> bool {
     )
 }
 
-fn within(f: &Fixture, m: f64, rate: f64) -> bool {
-    let room = match f.tolerance {
+/// How far `f`'s measure may land from its answer, in the measure's unit.
+fn room(f: &Fixture, rate: f64) -> f64 {
+    match f.tolerance {
         Tolerance::Relative(r) => r * f.answer.abs(),
         Tolerance::M(x) | Tolerance::Deg(x) => x,
         Tolerance::Steps(n) if in_seconds(&f.measure) => n / rate,
         Tolerance::Steps(n) => n,
-    };
+    }
+}
+
+fn within(f: &Fixture, m: f64, rate: f64) -> bool {
+    let room = room(f, rate);
     if f.never_past {
         m <= f.answer + room
     } else {

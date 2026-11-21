@@ -579,5 +579,6 @@ pub fn all() -> Vec<Fixture> {
     out.extend(super::sensors::all());
     out.extend(super::walks::all());
     out.extend(super::vehicles::all());
+    out.extend(super::laws::all());
     out
 }

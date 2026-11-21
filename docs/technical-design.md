@@ -1647,7 +1647,7 @@ A canvas module (see [Canvas modules](#canvas-modules)).
 **What it is, and its shape:**
 
 - **Joints:** fixed, ball, hinge, slider, distance with a spring (in hertz, with a damping ratio), rope, gear, rack and pinion, pulley, and path. Gear, rack and pinion, pulley and path work in kinematic mode only. Each joint can have limits, a motor and a break threshold.
-- **Forces:** wind, drag, a spring to a point, buoyancy.
+- **Forces:** wind, drag, a spring to a point, buoyancy, and three closed laws: an inverse square about a point, a magnetic turn that never changes a speed, and a Lennard-Jones pair. Each is computed once per step and held over the substeps, so a world holding the inverse square or the pair runs at one substep.
 
 **It can never:** Hide a broken joint: a break is an event
 
@@ -1683,7 +1683,7 @@ A canvas module (see [Canvas modules](#canvas-modules)).
 
 #### Behavior kit
 
-**What it is, and its shape:** Fixtures with analytic answers and tolerances that every physics backend passes, for what its caps allow, before a build can choose it: free fall, projectile range, a pendulum's period, bounces and slides under each combine rule, a slide on a slope, a box a belt carries, joint limits and motors, occurrences, sleep, the character body's slope, step, snap and jump and two character bodies that meet, and the vehicle body's sag, braking, drive, turn and wheel contacts. Goldens prove one backend repeats itself; these prove backends agree with the documented world. The answers and tolerances are the physics interface's, never a backend's, and the character and vehicle bodies' controllers are defined by them, so a second backend's controllers must behave as the first's do. The rope's sag, the balloon's and the soft volume's volume ratios, the tear, buoyancy, linear drag and the spring to a point also run on the reference implementation, each measured by the kit from particle positions and body states, never reported by a backend.
+**What it is, and its shape:** Fixtures with analytic answers and tolerances that every physics backend passes, for what its caps allow, before a build can choose it: free fall, projectile range, a pendulum's period, bounces and slides under each combine rule, a slide on a slope, a box a belt carries, joint limits and motors, occurrences, sleep, the character body's slope, step, snap and jump and two character bodies that meet, the vehicle body's sag, braking, drive, turn and wheel contacts, and the force laws' orbit, gyration and pair at rest. Goldens prove one backend repeats itself; these prove backends agree with the documented world. The answers and tolerances are the physics interface's, never a backend's, and the character and vehicle bodies' controllers are defined by them, so a second backend's controllers must behave as the first's do. The rope's sag, the balloon's and the soft volume's volume ratios, the tear, buoyancy, linear drag and the spring to a point also run on the reference implementation, each measured by the kit from particle positions and body states, never reported by a backend.
 
 **It can never:** Take a tolerance from a backend, or pass a fixture its caps exclude
 
