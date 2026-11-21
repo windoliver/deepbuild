@@ -38,6 +38,7 @@ pub mod lens;
 pub mod light;
 pub mod lod;
 pub mod look;
+pub mod measure;
 pub mod measures;
 pub mod mirror;
 pub mod modifiers;
@@ -148,4 +149,7 @@ pub const PLANTED: [&str; 56] = [
     bind::PLANTS[5],
     bind::PLANTS[6],
     bind::PLANTS[7],
+    // #1217: the measure tool that ignores `shown_at`, and the one that writes an input entry.
+    measure::PLANTED[0],
+    measure::PLANTED[1],
 ];

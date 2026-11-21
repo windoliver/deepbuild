@@ -114,6 +114,11 @@ pub trait Stepper {
     /// #553: the steps before `upto` are confirmed: a save, an ended slot or a carry record one of
     /// them asked for takes effect now, from that step's state.
     fn confirmed(&mut self, _upto: i64) {}
+    /// #265: each logic array as the copy holds it now, laid out as a bake (steps past
+    /// `confirmed` included, a replaced step's gone): what its frame draws; none by default.
+    fn drawn(&self) -> Option<Value> {
+        None
+    }
 }
 
 /// How a planted defect changes its field's value: `n` added to it, or bit `b` of its bits

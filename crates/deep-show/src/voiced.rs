@@ -446,6 +446,10 @@ impl<S: Stepper> Stepper for Voiced<S> {
     fn confirmed(&mut self, upto: i64) {
         self.inner.confirmed(upto);
     }
+
+    fn drawn(&self) -> Option<Value> {
+        self.inner.drawn()
+    }
 }
 
 #[cfg(test)]

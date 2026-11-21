@@ -1031,6 +1031,9 @@ alone.push('tests/acceptance/2310/');
 alone.push('tests/acceptance/2308/', 'tests/acceptance/191-redraft-2308/');
 // #2371's files build deep-physics.
 alone.push('tests/acceptance/2371/');
+// #1931's files build deep-physics (release and test-backends) and the wasm32 library; the blind redraft of #191's
+// first criterion's test under it builds deep-physics (shipped) and the wasm32 library, as #191's file does.
+alone.push('tests/acceptance/1931/', 'tests/acceptance/191-redraft-1931/');
 
 // #2742's files build deep-gpu; ac1 compares two films' GPU time on any Mac, and ac2 runs #417's suite.
 alone.push('tests/acceptance/2742/');
@@ -1300,6 +1303,10 @@ alone.push('tests/acceptance/953/', 'tests/acceptance/953-oracle/');
 // tree, and build deep-gpu to draw two frames on the GPU; no timing.
 alone.push('tests/acceptance/2738/');
 slow.push('tests/acceptance/2738/ac1-linux-build.test.ts');
+
+// #265's files (blind) build deep-gpu (ac4 deep-show), draw on the GPU and play a match; ac6 times eight movers' frame CPU.
+alone.push('tests/acceptance/265/');
+timed.push('tests/acceptance/265/ac6-budgets.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
