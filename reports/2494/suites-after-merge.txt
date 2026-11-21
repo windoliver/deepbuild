@@ -1,0 +1,18 @@
+After the merge of main (86b99ac36), with presented_revision moved to hub/presented.rs. Load averages 130 to 300.
+
+tests/acceptance/2494   change: 3 passed of 3 (after one run BLOCKED on a missing deep-hook build, and one run of AC2 alone, passed)
+tests/acceptance/377    change: 30 passed, 7 skipped of 37
+tests/acceptance/379    main:   29 failed, 18 passed of 47
+                        change: 29 failed, 18 passed of 47, the same 29
+                        13 of them: `deep-gpu run` exited 0 with no output; 5: INCONCLUSIVE, not a reference Mac
+tests/acceptance/806    main:   9 failed, 18 passed of 27
+                        change: 8 failed, 19 passed (first run); 11 failed, 16 passed (second run)
+                        the second run's two extra failures are replies from a hub that did not answer in time
+tests/acceptance/246 `no dependency is added` fails on the base 9550dc0f0 too, naming crates/deep-app/Cargo.toml
+
+Third pass, load averages 20 to 70:
+tests/acceptance/806    change: 7 failed, 20 passed of 27. All seven fail on main too; main fails two more (#384 AC2, #393 AC8)
+                        (one run before it was BLOCKED whole: target/debug/deep-hook was gone again and had to be built)
+scripts/repo-rules.mjs  the same lines on main and on the change but for the size note
+cargo clippy -D warnings, --no-deps: deep-gpu clean; deep-app stops at views.rs; deep-show at export/tools.rs and sandbox.rs,
+                        and deep-replica at drive/memory.rs: none is a file this change touches
