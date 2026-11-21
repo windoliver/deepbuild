@@ -1,7 +1,8 @@
-//! The build's first-party packs (#416, #981, #953; canvas primitives: Logic: library interfaces):
-//! `packs/interfaces-1.0.0`, which declares physics2d.lib@1, fsm@1 and nn.mlp@1,
-//! `packs/lanes-1.0.0`, which declares lanes@1 with its reference library, and
-//! `packs/modslib-1.0.0`, which declares mods.lib@1 with its reference library mods.tree, held in
+//! The build's first-party packs (#416, #981, #953, #959; canvas primitives: Logic: library
+//! interfaces): `packs/interfaces-1.0.0`, which declares physics2d.lib@1, fsm@1 and nn.mlp@1,
+//! `packs/lanes-1.0.0`, which declares lanes@1 with its reference library,
+//! `packs/modslib-1.0.0`, which declares mods.lib@1 with its reference library mods.tree, and
+//! `packs/sense-1.0.0`, which declares sense.lib@1 with its reference library sense.sight, held in
 //! the binary so every piece's links resolve against them, as the release's packs are installed for
 //! every document.
 
@@ -74,6 +75,28 @@ const PACKS: &[(&str, Files)] = &[
             pack_file!("modslib-1.0.0", "objects/archer_own.wasm"),
             pack_file!("modslib-1.0.0", "data/archer_own.bin"),
             pack_file!("modslib-1.0.0", "fixtures/archer_own.json"),
+        ],
+    ),
+    (
+        include_str!("../../../packs/sense-1.0.0/pack.json"),
+        &[
+            pack_file!("sense-1.0.0", "objects/sense_sight.wasm"),
+            pack_file!("sense-1.0.0", "objects/sense_flat.wasm"),
+            pack_file!("sense-1.0.0", "objects/driver.wasm"),
+            pack_file!("sense-1.0.0", "data/ridge.bin"),
+            pack_file!("sense-1.0.0", "data/ridged.f32"),
+            pack_file!("sense-1.0.0", "fixtures/ridge.json"),
+            pack_file!("sense-1.0.0", "data/radar.bin"),
+            pack_file!("sense-1.0.0", "data/flat.f32"),
+            pack_file!("sense-1.0.0", "fixtures/radar.json"),
+            pack_file!("sense-1.0.0", "data/ghost.bin"),
+            pack_file!("sense-1.0.0", "fixtures/ghost.json"),
+            pack_file!("sense-1.0.0", "data/spread.bin"),
+            pack_file!("sense-1.0.0", "fixtures/spread.json"),
+            pack_file!("sense-1.0.0", "objects/driver_own.wasm"),
+            pack_file!("sense-1.0.0", "data/sight_own.bin"),
+            pack_file!("sense-1.0.0", "data/small.f32"),
+            pack_file!("sense-1.0.0", "fixtures/sight_own.json"),
         ],
     ),
 ];
