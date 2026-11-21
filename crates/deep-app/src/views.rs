@@ -2799,20 +2799,25 @@ fn needs_you_heading(
                     .children(drawn),
             )
             .children((!popped).then(|| {
-                // An icon of the set at a row's size (#1592), drawn on hover and named in the tree at rest.
+                // An icon of the set at a row's size (#1592), drawn on hover and named in the tree at rest: what fades
+                // is a box around the control, so the control itself is there at rest for the replica's tree, as it is
+                // in the tree macOS reads (#1459 AC6).
                 let (icon, place) = crate::icons::POP_OUT;
-                control(
-                    "needs-you-pop-out",
-                    Control::Icon(icon, place),
-                    copy::text("views.pop_out"),
-                    chrome,
-                )
-                .aria_label(copy::text("views.pop_out_needs_you"))
-                .opacity(0.)
-                .group_hover("needs-you-heading", |style| style.opacity(1.))
-                .on_click(|_, _, cx| {
-                    crate::open::pop_out(Address::page("needs-you"), Kind::NeedsYou, cx)
-                })
+                div()
+                    .opacity(0.)
+                    .group_hover("needs-you-heading", |style| style.opacity(1.))
+                    .child(
+                        control(
+                            "needs-you-pop-out",
+                            Control::Icon(icon, place),
+                            copy::text("views.pop_out"),
+                            chrome,
+                        )
+                        .aria_label(copy::text("views.pop_out_needs_you"))
+                        .on_click(|_, _, cx| {
+                            crate::open::pop_out(Address::page("needs-you"), Kind::NeedsYou, cx)
+                        }),
+                    )
             })),
     )
 }
