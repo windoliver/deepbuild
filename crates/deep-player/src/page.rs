@@ -43,6 +43,15 @@ pub struct Player {
     /// holds the net module.
     #[cfg(feature = "full")]
     net: Option<crate::net::Match>,
+    /// #1217: the viewer's measure tool, and the 3D frame last drawn while it is on, which a
+    /// click's ray is met on.
+    #[cfg(feature = "full")]
+    measure: deep_canvas_scene3d::measure::Tool,
+    #[cfg(feature = "full")]
+    measured: Option<Box<deep_canvas_scene3d::scene::Scene>>,
+    /// #1217: the frame a click landed on, kept while its object-ID target is read back.
+    #[cfg(feature = "full")]
+    clicked: Option<(Box<deep_canvas_scene3d::scene::Scene>, crate::gpu::IdsRead)>,
 }
 
 #[wasm_bindgen]
@@ -69,6 +78,12 @@ impl Player {
             maps: Default::default(),
             #[cfg(feature = "full")]
             net: None,
+            #[cfg(feature = "full")]
+            measure: Default::default(),
+            #[cfg(feature = "full")]
+            measured: None,
+            #[cfg(feature = "full")]
+            clicked: None,
         })
     }
 
@@ -269,7 +284,11 @@ impl Player {
         match draw.frame(p, size, &self.maps) {
             crate::draw::Frame::Pixels(rgba) => gpu.show(&rgba, size),
             #[cfg(feature = "full")]
-            crate::draw::Frame::Scene(scene, look, over) => gpu.show3d(&scene, &look, &over, size),
+            crate::draw::Frame::Scene(scene, look, over) => {
+                let drew = gpu.show3d(&scene, &look, &over, size);
+                self.measured = self.measure.on.then_some(scene);
+                drew
+            }
         }
     }
 
@@ -353,7 +372,130 @@ impl Player {
         if let Some(net) = &self.net {
             out.insert("match".into(), net.probe());
         }
+        // #1217: the measure tool's state, in a piece that offers it.
+        #[cfg(feature = "full")]
+        if let Some(doc) = self.offers_measure() {
+            out.insert("measure".into(), self.measure.to_json(doc, None));
+        }
         Value::Object(out).to_string()
+    }
+}
+
+/// #1217: the viewer's measure tool (Selection: `viewer_tools.measure`), the app's own
+/// (`deep_canvas_scene3d::measure`), as session state of the page: nothing it does writes an
+/// input entry or reaches the piece.
+#[cfg(feature = "full")]
+#[wasm_bindgen]
+impl Player {
+    /// Whether the tool is on.
+    pub fn measure_on(&self) -> bool {
+        self.measure.on
+    }
+
+    /// The viewer's setting: on in a piece that offers the tool; off drops its points.
+    pub fn measure_set(&mut self, on: bool) {
+        if let Some(p) = self.played.as_ref() {
+            self.measure.set(p.document(), on);
+        }
+        if !self.measure.on {
+            self.measured = None;
+        }
+    }
+
+    /// Esc: both points go; whether there was one.
+    pub fn measure_clear(&mut self) -> bool {
+        self.measure.clear()
+    }
+
+    /// A click lands on the frame last drawn: that frame's object-ID target starts to read
+    /// back; false before a 3D frame is drawn with the tool on.
+    pub fn measure_press(&mut self) -> bool {
+        let read = self.gpu.as_ref().and_then(crate::gpu::Gpu::read_ids);
+        self.clicked = self.measured.clone().zip(read);
+        self.clicked.is_some()
+    }
+
+    /// That click at frame px (`x`, `y`), once its target is read: a point where the click's
+    /// ray meets the item named there. 0 while the device still maps the target, 1 for a point
+    /// placed, 2 for none.
+    pub fn measure_click(&mut self, x: f64, y: f64) -> u8 {
+        use deep_canvas_scene3d::{measure, pointer};
+        let Some(ids) = self.clicked.as_ref().map(|(_, read)| read.take()) else {
+            return 2;
+        };
+        let Some(ids) = ids else {
+            return 0;
+        };
+        let Some(gpu) = self.gpu.as_ref() else {
+            return 2;
+        };
+        let (Some((scene, _)), Some((size, picks))) = (self.clicked.take(), gpu.picks()) else {
+            return 2;
+        };
+        let target = pointer::Ids {
+            size,
+            ids: &ids,
+            picks: &picks,
+        };
+        let named = pointer::topmost(
+            &scene,
+            &target,
+            [x, y],
+            measure::MARGIN,
+            &|_: &str| true,
+            None,
+        );
+        let placed = named.and_then(|t| measure::place(&scene, [x, y], &t, self.measure.snap));
+        placed.map_or(2, |p| {
+            self.measure.put(p);
+            1
+        })
+    }
+
+    /// Tab or Enter with the tool on: Tab moves among the parts' anchors and Enter places a
+    /// point at the one focused; whether the tool took the key (Tab past the last anchor is the
+    /// page's again).
+    pub fn measure_key(&mut self, key: &str) -> bool {
+        use deep_canvas_scene3d::measure;
+        let (Some(p), Some(scene)) = (self.played.as_ref(), self.measured.as_ref()) else {
+            return false;
+        };
+        let anchors = measure::anchors(scene, p.document());
+        match key {
+            "Tab" => {
+                self.measure.tab(&anchors);
+                self.measure.focus.is_some()
+            }
+            "Enter" => self.measure.enter(&anchors),
+            _ => false,
+        }
+    }
+
+    /// The measure as the page draws it over the canvas, JSON `{a, b, text, color, ground}`:
+    /// each point where the frame last drawn shows it, in frame px, or null; the readout's
+    /// line; and the look's accent and ground. `null` while the tool is off.
+    pub fn measure_shown(&self) -> String {
+        use deep_canvas_scene3d::measure;
+        let (Some(p), Some(scene)) = (self.played.as_ref(), self.measured.as_ref()) else {
+            return "null".into();
+        };
+        let [a, b] = measure::shown(&self.measure, scene);
+        let readout = self.measure.readout(p.document(), None);
+        let role = |name: &str| p.look.light.get(name).copied();
+        let hex = |[r, g, b]: [u8; 3]| format!("#{r:02x}{g:02x}{b:02x}");
+        let color = role("accent").or(role("ink")).unwrap_or([0; 3]);
+        json!({"a": a, "b": b, "text": readout.as_ref().map(measure::label),
+               "color": hex(color), "ground": hex(role("ground").unwrap_or([255; 3]))})
+        .to_string()
+    }
+}
+
+#[cfg(feature = "full")]
+impl Player {
+    /// The piece's document, when it offers the measure tool.
+    fn offers_measure(&self) -> Option<&Value> {
+        let doc = self.played.as_ref()?.document();
+        deep_canvas_scene3d::measure::Tool::offered(doc).then_some(doc)
     }
 }
 

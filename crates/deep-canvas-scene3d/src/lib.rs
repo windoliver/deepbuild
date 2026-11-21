@@ -38,6 +38,7 @@ pub mod lens;
 pub mod light;
 pub mod lod;
 pub mod look;
+pub mod measure;
 pub mod measures;
 pub mod mirror;
 pub mod modifiers;
@@ -73,7 +74,7 @@ pub mod water;
 
 /// The wrong programs #420's, #441's and #440's criteria plant in scene3d's and the building
 /// module's operators, each reachable only through a proof surface's `planted`.
-pub const PLANTED: [&str; 54] = [
+pub const PLANTED: [&str; 56] = [
     "torus_genus_0",
     "vertex_count_off_by_one",
     "cap_left_open",
@@ -144,4 +145,7 @@ pub const PLANTED: [&str; 54] = [
     bind::PLANTS[5],
     bind::PLANTS[6],
     bind::PLANTS[7],
+    // #1217: the measure tool that ignores `shown_at`, and the one that writes an input entry.
+    measure::PLANTED[0],
+    measure::PLANTED[1],
 ];
