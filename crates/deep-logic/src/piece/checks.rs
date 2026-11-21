@@ -349,6 +349,8 @@ pub(super) fn region_map(
         }
         let (size, ty, read) = if r == crate::draws::READ {
             (crate::draws::SIZE, "draws".to_string(), Read::Draws)
+        } else if r == crate::world::seats::READ {
+            (crate::world::seats::SIZE, "seats".to_string(), Read::Seats)
         } else if let Some((size, ty)) = controls.get(r) {
             (*size, ty.to_string(), Read::Control)
         } else if let Some(read) = series_read(r, sources) {

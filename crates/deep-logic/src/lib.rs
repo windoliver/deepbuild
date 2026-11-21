@@ -1005,6 +1005,7 @@ impl Logic {
                             piece::Read::Array { item, offset } => ("array", json!(item), *offset),
                             piece::Read::Seed => ("seed", Value::Null, 0),
                             piece::Read::Carry => ("carry", Value::Null, 0),
+                            piece::Read::Seats => ("seats", Value::Null, 0),
                             piece::Read::Mirror(_) | piece::Read::None => ("write", Value::Null, 0),
                         };
                         json!({"region": e.region, "name": e.name, "offset": e.offset, "size": e.size, "type": e.ty, "read": kind, "from": from, "from_offset": offset})

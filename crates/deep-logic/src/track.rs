@@ -41,6 +41,11 @@ pub enum Given {
 /// #860: the key a track keeps its rewinds under, which no control's ID can be (each of an ID's
 /// segments starts with a letter or a digit).
 pub const REWIND: &str = ":rewind";
+/// #277: the key a track keeps the net module's seat entries under, `seat {player, state}`, each
+/// entry's value the state's number in `SEATS`.
+pub const SEAT: &str = ":seat";
+/// #277: a seat's states as `net.seats` numbers them, from 1.
+pub const SEATS: [&str; 3] = ["left", "absent", "back"];
 
 /// #860: where a rewind returns on the current branch: back n stops (n ≥ 1) from the current
 /// one, or to the stop at step k.
@@ -195,6 +200,22 @@ impl Entry {
                 })
             }
         };
+        // #277: a seat entry the net module writes: `{seat: {player, state}, writer: "net"}`.
+        if let Some(seat) = v.get("seat") {
+            let state = SEATS
+                .iter()
+                .position(|s| seat.get("state") == Some(&json!(s)))?;
+            return Some(Entry {
+                t: v.get("t")?.as_i64()?,
+                seq: v.get("seq").map_or(Some(0), Value::as_u64)? as u32,
+                control: SEAT.to_string(),
+                value: Given::Number(state as f64 + 1.0),
+                writer: "net".to_string(),
+                player: seat.get("player")?.as_u64()? as u32,
+                as_of: None,
+                arrived: 0,
+            });
+        }
         let reading = v
             .get("reading")
             .and_then(Value::as_str)
@@ -233,6 +254,14 @@ impl Entry {
     }
     pub fn to_json(&self) -> Value {
         let value = self.value.to_json();
+        if self.control == SEAT {
+            let state = match self.value {
+                Given::Number(n) => SEATS.get((n as usize).wrapping_sub(1)).copied(),
+                _ => None,
+            };
+            return json!({"t": self.t, "seq": self.seq, "seat": {"player": self.player, "state": state},
+                          "writer": self.writer, "player": self.player});
+        }
         if let Given::Rewind(_) = self.value {
             return json!({"t": self.t, "seq": self.seq, "rewind": value, "writer": self.writer, "player": self.player});
         }

@@ -30,7 +30,7 @@ pub(super) struct Roll {
     /// A trap in a step past confirmed, and its fault: the copy waits there.
     pub(super) trapped: Option<(i64, Value)>,
     /// Each peer's last message step its frames carried.
-    heard: Vec<Option<i64>>,
+    pub(super) heard: Vec<Option<i64>>,
     /// Its lead over the last second, a sample a step, and the steps it ran while leading.
     leads: VecDeque<f64>,
     beats: i64,
@@ -138,11 +138,12 @@ impl<S: Stepper> Copy<S> {
     /// The lead rule: half its depth less the smallest of its peers', averaged over a second; a
     /// copy whose lead passes one match step holds its clock one step in every 10.
     pub(super) fn leads(&mut self) -> bool {
-        if self.cfg.window == 0 || self.planted == Planted::IgnoresLeadRule {
+        if self.cfg.window == 0 || self.planted == Planted::IgnoresLeadRule || self.is_away() {
             return false;
         }
         let me = self.me as usize - 1;
-        let peers = (0..self.players as usize).filter(|p| *p != me);
+        // #277: a left or absent seat leads nobody.
+        let peers = (0..self.players as usize).filter(|p| *p != me && self.seated(*p));
         let (Some(own), Some(least)) = (
             self.depth_of(me),
             peers.filter_map(|p| self.depth_of(p)).min(),

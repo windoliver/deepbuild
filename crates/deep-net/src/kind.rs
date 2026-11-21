@@ -365,6 +365,9 @@ pub struct Config {
     pub draw_after: Vec<String>,
     /// #552: the piece reads `match.me`, so its Join prompt says its fog is a courtesy.
     pub courtesy: bool,
+    /// #277: a logic item reads `net.seats`, so a leave, a drop or an absence hands the seat to
+    /// the piece's bot at one agreed step; else the match ends as before, nothing playing it.
+    pub seats: bool,
 }
 
 impl Config {
@@ -396,6 +399,7 @@ impl Config {
                 .filter_map(|c| Some(c.as_str()?.to_string()))
                 .collect(),
             courtesy: crate::prompt::reads_me(form),
+            seats: reads_seats(form),
         })
     }
 
@@ -409,10 +413,31 @@ impl Config {
 /// names a control the piece declares, and its value is one that control can take (a number
 /// within a slider's range, one of a choice's options, a text within its cap). The refusal names
 /// the code and the control; the copy adds the player.
+/// #277: whether a logic item of `form` reads `net.seats`.
+pub fn reads_seats(form: &Value) -> bool {
+    let items = form.get("items").and_then(Value::as_object);
+    items.into_iter().flatten().any(|(_, i)| {
+        i["kind"].as_str().is_some_and(|k| k.starts_with("logic@"))
+            && i["params"]["reads"]
+                .as_array()
+                .is_some_and(|r| r.iter().any(|r| r == crate::copy::NET_SEATS))
+    })
+}
+
 pub fn admit(controls: &Value, control: &str, value: &Value) -> Result<(), Value> {
     // #552: a draw's commitment and bits are the net module's own entries.
     if control == crate::draw::COMMIT || control == crate::draw::REVEAL {
         return crate::draw::admit(control, value);
+    }
+    // #277: a seat entry the net module writes, never a player's control.
+    if control == crate::copy::SEAT {
+        return match crate::copy::Seat::named(value.as_str().unwrap_or_default()) {
+            Some(_) => Ok(()),
+            None => Err(
+                json!({"code": "out_of_range", "control": control, "value": value,
+                               "what": "a seat is left, absent or back"}),
+            ),
+        };
     }
     let Some(c) = controls.get(control) else {
         return Err(json!({"code": "unknown_control", "control": control,

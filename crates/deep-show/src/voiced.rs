@@ -396,6 +396,14 @@ impl<S: Stepper> Stepper for Voiced<S> {
         self.inner.timed()
     }
 
+    fn spent(&self) -> u64 {
+        self.inner.spent()
+    }
+
+    fn jump(&mut self, step: i64, t: i64) {
+        self.inner.jump(step, t);
+    }
+
     fn written(&self) -> Vec<(String, u64)> {
         self.inner.written()
     }

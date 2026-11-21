@@ -1,8 +1,9 @@
 // #2741: an affected.mjs run whose alone block puts a cargo-building file in each of at least three shards, each on a
 // target/ that must recompile, never has more rustc processes under its grant than the machine has cores, sampled once
-// a second. Written blind from issue #2741, AGENTS.md, the design's Dogfooding section and docs/parallel-proof.md
-// sections 6, 7a and 13, at base 80561d40c. This checkout's real scripts/ run in a scratch tree made by #1115's
-// helpers, with a HOME of its own, so the throttle table and ~/deepbuild-shards/ are the sandbox's (README).
+// a second. A blind redraft of tests/acceptance/2741/ for the design as #2820 leaves it (the run builds its tests'
+// written-out cargo builds before its test grant), from issues #2741 and #2820, AGENTS.md and docs/parallel-proof.md
+// sections 5, 6 and 7a, at base f17fa347c. This checkout's real scripts/ run in a scratch tree, with a HOME and a
+// throttle table of their own, so the table and ~/deepbuild-shards/ are the sandbox's (README).
 import assert from 'node:assert/strict';
 import { execFile, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
@@ -10,8 +11,7 @@ import { availableParallelism, homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
-import { CHECKOUT, dump, sandbox, tree } from '../1115/helpers.mjs';
-import { start } from '../2574/helpers.mjs';
+import { CHECKOUT, dump, sandbox, start, tree } from './helpers.mjs';
 
 const CORES = availableParallelism();
 // The criterion's "at least three shards": one alone group each, and DEEP_SHARDS asks the run for that many.
@@ -60,14 +60,16 @@ pub fn v() -> u64 {
 }
 
 /**
- * A planted test file for vitest or node --test: it builds the planted binary with cargo in its own tree's target/,
- * noting its process, its tree and how many planted crates cargo compiled.
+ * A planted test file for vitest or node --test: it gives every planted leaf a seed no earlier build saw, so its tree's
+ * target/ must recompile whoever built there before (the run itself, under #2820), then builds the planted binary with
+ * cargo there, noting its process, its tree and how many planted crates cargo compiled.
  */
 function planted(file) {
   const vitest = file.endsWith('.ts');
-  return `// Planted by tests/acceptance/2741: builds the planted crates with cargo in this tree's own target/.
+  return `// Planted by tests/acceptance/2741-redraft-2820: builds the planted crates with cargo in this tree's own target/,
+// after giving each leaf a seed no earlier build saw.
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync } from 'node:fs';
+import { appendFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 ${vitest ? "import { expect, test } from 'vitest';" : "import assert from 'node:assert/strict';\nimport test from 'node:test';"}
@@ -77,6 +79,13 @@ while (!existsSync(join(root, 'Cargo.toml')) && dirname(root) !== root) root = d
 const note = (fields) => appendFileSync(process.env.T2741_RECORD, JSON.stringify({ file: ${JSON.stringify(file)}, root, pid: process.pid, at: Date.now(), ...fields }) + '\\n');
 
 test('the planted crates build with cargo in this tree', () => {
+  // A seed no earlier build saw, in every leaf: cargo's fingerprints, rustc's incremental cache and any compiler cache
+  // all miss, so each leaf's constant is evaluated again, whatever this target/ already holds.
+  const salt = Date.now() * 1000 + process.pid % 1000;
+  for (const crate of readdirSync(join(root, 'crates')).filter((name) => name.startsWith('planted-leaf-'))) {
+    const lib = join(root, 'crates', crate, 'src', 'lib.rs');
+    writeFileSync(lib, readFileSync(lib, 'utf8').replace(/let mut acc: u64 = \\d+;/, \`let mut acc: u64 = \${salt + Number(crate.slice(-2))};\`));
+  }
   note({ event: 'start' });
   const result = spawnSync('cargo', ['build', '--offline', '-p', 'planted-bin'], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 26 });
   const compiled = (result.stderr ?? '').match(/^\\s*Compiling planted-/gm)?.length ?? 0;
@@ -116,10 +125,10 @@ const shardOf = (root) => {
 
 /**
  * The process table, read once a second until the returned stop() (each reading starts on its second, however long
- * the last takes on a loaded machine): each counts the rustc processes under the run's grant, those whose parent
- * chain reaches the process holding it (docs/parallel-proof.md, section 6), by the planted file they descend from.
+ * the last takes on a loaded machine): each counts the rustc processes under the run's grants, those whose parent
+ * chain reaches a process holding one (docs/parallel-proof.md, section 6), by the planted file they descend from.
  */
-function sampler(holderOf, plantedOf) {
+function sampler(holdersOf, plantedOf) {
   const samples = [], pending = new Set(), started = Date.now();
   const read = () => {
     const at = Date.now() - started;
@@ -130,13 +139,13 @@ function sampler(holderOf, plantedOf) {
         const [, pid, ppid, name] = line.match(/^\s*(\d+)\s+(\d+)\s+(.*?)\s*$/) ?? [];
         if (pid) procs.set(Number(pid), { ppid: Number(ppid), name });
       }
-      const holder = holderOf(), files = plantedOf(), by = {};
+      const holders = holdersOf(), files = plantedOf(), by = {};
       let count = 0;
       for (const [pid, { name }] of procs) {
-        if (!holder || name !== 'rustc') continue;
+        if (name !== 'rustc') continue;
         const chain = [];
         for (let p = pid; procs.has(p) && !chain.includes(p); p = procs.get(p).ppid) chain.push(p);
-        if (!chain.includes(holder)) continue;
+        if (!chain.some((p) => holders.has(p))) continue;
         count += 1;
         const shard = files.get(chain.find((p) => files.has(p))) ?? 'other';
         by[shard] = (by[shard] ?? 0) + 1;
@@ -167,19 +176,24 @@ test('#2741 AC: an affected.mjs run whose alone block builds with cargo in three
   const tmp = join(box.dir, 'tmp');
   mkdirSync(tmp);
   const record = join(box.dir, 'builds.jsonl');
+  const table = join(box.home, '.deepbuild', 'throttle');
   const env = {
     PATH: [box.env.PATH, ...RUST_BINS.filter((dir) => existsSync(join(dir, 'cargo')))].join(delimiter),
     RUSTUP_HOME, CARGO_HOME: join(box.dir, 'cargo'), TMPDIR: tmp,
     DEEP_TEST_SHARD_FLOOR: '0', DEEP_SHARDS: String(SHARDS), T2741_RECORD: record,
+    // The sandbox's own table, named outright: inside a test run throttle.mjs reads it, and outside one it refuses it
+    // rather than falling back to the machine's table (docs/parallel-proof.md, section 6, tables of a test's own).
+    DEEP_THROTTLE_TABLE: table,
   };
   const cargo = spawnSync('cargo', ['--version'], { cwd: fixture.cwd, env: { ...box.env, ...env }, encoding: 'utf8' });
   assert.equal(cargo.status, 0, `cargo can't run in the sandbox, so nothing can build: ${cargo.error?.message ?? cargo.stderr}`);
 
-  const log = join(box.home, '.deepbuild', 'throttle', 'log');
-  const grantOf = () => lines(log).find((event) => event.event === 'granted' && event.grant === 'top-level');
+  // The run's grants: every top-level grant of the sandbox's table, which nothing but the run uses. Under #2820 a run
+  // holds a build grant for its binaries before its test grant, so a compile under either counts.
+  const log = join(table, 'log');
+  const grantsOf = () => lines(log).filter((event) => event.event === 'granted' && event.grant === 'top-level');
   const child = start(box, { cwd: fixture.cwd, env }, files);
-  let holder;
-  const stop = sampler(() => (holder ??= grantOf()?.pid), () => new Map(lines(record).filter((e) => e.event === 'start').map((e) => [e.pid, shardOf(e.root)])));
+  const stop = sampler(() => new Set(grantsOf().map((grant) => grant.pid)), () => new Map(lines(record).filter((e) => e.event === 'start').map((e) => [e.pid, shardOf(e.root)])));
   let run, timer;
   try {
     run = await Promise.race([child.done, new Promise((done) => { timer = setTimeout(() => done(null), RUN_MS); })]);
@@ -193,10 +207,10 @@ test('#2741 AC: an affected.mjs run whose alone block builds with cargo in three
   const all = `${series}\nthe machine's cores: ${CORES}\nbuilds:\n${builds.map((e) => JSON.stringify(e)).join('\n')}\n${run ? dump(run) : `stdout so far:\n${child.out().slice(-2_500)}`}`;
   assert.ok(run, `affected.mjs did not end within ${RUN_MS / 60_000} min\n${all}`);
 
-  // The run held a grant, the planted files each built in a shard of their own on a target/ that had to recompile, and
-  // their rustc ran under the grant: otherwise the count below proves nothing.
-  const grant = grantOf();
-  assert.ok(grant, `the run took no top-level grant in its throttle table, so nothing ran under one\n${all}`);
+  // The run held its test grant, the planted files each built in a shard of their own on a target/ that had to
+  // recompile, and their rustc ran under the run's grants: otherwise the count below proves nothing.
+  const grants = grantsOf();
+  assert.ok(grants.some((grant) => grant.class === 'test'), `the run took no top-level test grant in its throttle table (grants: ${JSON.stringify(grants)}), so its tests ran under none\n${all}`);
   const ends = new Map(builds.filter((e) => e.event === 'end').map((e) => [e.file, e]));
   for (const file of files) {
     const end = ends.get(file);
@@ -207,7 +221,7 @@ test('#2741 AC: an affected.mjs run whose alone block builds with cargo in three
   const shards = join(box.home, 'deepbuild-shards');
   const roots = [...new Set([...ends.values()].map((end) => end.root))];
   assert.ok(roots.length >= SHARDS && roots.every((root) => root.startsWith(`${shards}/`)), `the planted files built in ${roots.join(', ')}, not each in a shard of its own under ${shards}\n${all}`);
-  for (const root of roots) assert.ok(samples.some((sample) => sample.by[shardOf(root)] > 0), `no rustc of the build in ${root} was seen under the run's grant (pid ${grant.pid}), so the count can't speak for it\n${all}`);
+  for (const root of roots) assert.ok(samples.some((sample) => sample.by[shardOf(root)] > 0), `no rustc of the build in ${root} was seen under the run's grants (pids ${grants.map((grant) => grant.pid).join(', ')}), so the count can't speak for it\n${all}`);
 
   const peak = samples.reduce((top, sample) => (sample.count > top.count ? sample : top));
   t.diagnostic(`peak: ${peak.count} rustc processes under the run's grant at ${seconds(peak)} (${breakdown(peak)}), on ${CORES} cores`);

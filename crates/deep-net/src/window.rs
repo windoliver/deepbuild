@@ -120,10 +120,12 @@ pub fn rollback<S: Stepper>(
         ..cfg.clone()
     };
     let quiet = Ask {
-        faults: Faults::default(),
+        faults: crate::checks::on_time(ask),
         shows: Vec::new(),
         ..ask.clone()
     };
+    // #277: a copy a seeded leave killed stops where it was killed, in either run.
+    let gone = crate::checks::killed(ask);
     let mut on_time = play(&every, card, &quiet, make)?;
     let base = left(&mut on_time);
     // The schedule the ask gives, or the design's own: 8 seeded ones that hold each frame back by
@@ -187,6 +189,9 @@ pub fn rollback<S: Stepper>(
         };
         for ((c, a), b) in held.copies.iter().zip(&got).zip(&base) {
             let me = c.me;
+            if gone.contains(&me) {
+                continue;
+            }
             if let Some(f) = c.report().get("fault").filter(|f| !f.is_null()) {
                 fail(
                     me,
