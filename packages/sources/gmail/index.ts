@@ -113,7 +113,10 @@ export default async function (deep: any): Promise<void> {
     },
     async find(ctx: Ctx, d: { scope: string; id: string; key: string }) {
       const m = await get(ctx, `/messages/${d.id}`);
-      if (m.status !== 200) return false;
+      // Only Gmail saying the message isn't there reads as no marker. Any other failed answer, a 5xx or a rate limit,
+      // leaves whether the reply went out unknown, so it throws and the retry waits (#1889).
+      if (m.status === 404) return false;
+      if (m.status !== 200) throw Error(`Gmail answered ${m.status} to the message read`);
       const t = await get(ctx, `/threads/${m.json.threadId}`);
       if (t.status !== 200) throw Error(`Gmail answered ${t.status}`);
       return (t.json.messages ?? []).some((x: any) => header(x, MARK) === d.key);
