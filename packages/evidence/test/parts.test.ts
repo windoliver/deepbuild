@@ -38,3 +38,17 @@ test('parts read as their concatenation, survive reopen and retention, and a reo
     expect(await store.verify(sha)).toBe(false);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test('a single-part manifest keeps the caller redaction when stricter than the leaf', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'deep-evidence-single-part-'));
+  try {
+    const store = await openEvidenceStore({ root, now: () => 0 });
+    const writer = store.connect({ role: 'deepbuild', via: 'capture' });
+    const leaf = await writer.put({ ...labels, bytes: Buffer.from('only\n') });
+    expect(leaf.status).toBe('stored');
+    if (leaf.status !== 'stored') return;
+    const joined = await writer.put({ ...labels, redaction: 'incomplete', parts: [leaf.evidence.sha256] });
+    expect(joined.status).toBe('stored');
+    if (joined.status === 'stored') expect(joined.evidence.redaction).toBe('incomplete');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

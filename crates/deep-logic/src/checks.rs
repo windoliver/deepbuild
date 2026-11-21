@@ -19,6 +19,8 @@ use crate::point::Point;
 use crate::world::{track_of, Entry, Given, Record, StepRow, World, REWIND};
 use crate::Planted;
 
+pub mod layout;
+
 /// Steps a continuation probe runs on for.
 pub const PROBE_STEPS: i64 = 60;
 

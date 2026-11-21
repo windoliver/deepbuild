@@ -76,16 +76,22 @@ pub enum EdgeKind {
     All,
     Quads,
     Cage,
-    /// The edges sharper than `angle` degrees, and with `border` those of one face (#1640).
+    /// The edges sharper than `angle` degrees, and with `border` those of one face (#1640); with
+    /// `material` those whose two faces draw with different materials on the item (#1782).
     Crease {
         angle: f64,
         border: bool,
+        material: bool,
     },
 }
 
+/// #1782's planted picker: a crease line with `material` keeps every edge two triangles share,
+/// whatever their materials.
+pub const PLANTED_SHARED: &str = "edges_material_every_shared";
+
 impl EdgeKind {
-    /// A mesh-edge line's `edges`: its kind, and a crease's `angle` (default 30, 0 to 180) and
-    /// `border` (default true); `Err` names the field it refuses.
+    /// A mesh-edge line's `edges`: its kind, and a crease's `angle` (default 30, 0 to 180),
+    /// `border` (default true) and `material` (default false); `Err` names the field it refuses.
     pub fn read(edges: &Value) -> Result<EdgeKind, &'static str> {
         // A crease is `"crease"` or `{"crease": {"angle": deg}}`, as other variants with fields.
         let (name, fields) = match edges.get("kind") {
@@ -112,6 +118,10 @@ impl EdgeKind {
                 border: match edges.get("border") {
                     None | Some(Value::Null) => true,
                     Some(v) => v.as_bool().ok_or("border")?,
+                },
+                material: match edges.get("material") {
+                    None | Some(Value::Null) => false,
+                    Some(v) => v.as_bool().ok_or("material")?,
                 },
             },
             _ => return Err("kind"),
@@ -185,6 +195,45 @@ pub fn unit(a: V3) -> V3 {
 impl Mesh {
     pub fn triangles(&self) -> usize {
         self.indices.len() / 3
+    }
+
+    /// Each triangle's material under an item's `materials` map (Object: `materials`; #1636):
+    /// the first part naming it, else the item's `own`.
+    pub fn materials<'a>(
+        &self,
+        named: &'a serde_json::Map<String, Value>,
+        own: Option<&'a str>,
+    ) -> Vec<Option<&'a str>> {
+        let mut of: Vec<Option<Option<&str>>> = vec![None; self.triangles()];
+        for (part, m) in named {
+            let tris = (self.parts.get(part)).or_else(|| self.closed.get(part).map(|c| &c.0));
+            let (Some(tris), Some(m)) = (tris, m.as_str()) else {
+                continue;
+            };
+            for &t in tris {
+                if let Some(slot) = of.get_mut(t as usize).filter(|s| s.is_none()) {
+                    *slot = Some(Some(m));
+                }
+            }
+        }
+        of.into_iter().map(|m| m.unwrap_or(own)).collect()
+    }
+
+    /// Each triangle's material on `item` as a number, equal for equal materials (#1782: what a
+    /// crease line with `material` picks by); `None` for an item with no `materials` map.
+    pub fn material_ids(&self, item: &Value) -> Option<Vec<u32>> {
+        let named = item.get("materials")?.as_object()?;
+        let of = self.materials(named, item.get("material").and_then(Value::as_str));
+        let mut seen: Vec<Option<&str>> = Vec::new();
+        let mut ids = Vec::with_capacity(of.len());
+        for m in of {
+            let at = seen.iter().position(|s| *s == m).unwrap_or_else(|| {
+                seen.push(m);
+                seen.len() - 1
+            });
+            ids.push(at as u32);
+        }
+        Some(ids)
     }
 
     /// A vertex at `p` with normal `n`; each attribute gets a 0 for it.
@@ -494,11 +543,20 @@ impl Mesh {
     /// by its two ends, on positions welded to 1e-6 m: an edge whose two triangles' normals part
     /// by more than `angle` degrees, one more than two triangles meet at, and with `border` one
     /// that bounds a single triangle. A triangle welding collapses or of no area bounds no edge.
-    /// `below` is #1640's planted reader, which keeps the edges at or under the angle instead.
-    pub fn creases(&self, angle: f64, border: bool, below: bool) -> Vec<[V3; 2]> {
+    /// With `materials`, each triangle's material on the item, also an edge whose two triangles
+    /// draw with different ones (#1782). `below` is #1640's planted reader, which keeps the edges
+    /// at or under the angle instead; `shared` #1782's, which keeps every edge of two triangles.
+    pub fn creases(
+        &self,
+        angle: f64,
+        border: bool,
+        materials: Option<&[u32]>,
+        (below, shared): (bool, bool),
+    ) -> Vec<[V3; 2]> {
         let at = self.welded_ids(true);
         let cos = deep_canvas::ops::cos(deep_canvas::ops::rad(angle));
-        let mut edges: BTreeMap<(u32, u32), (Vec<V3>, [V3; 2])> = BTreeMap::new();
+        let material = |t: usize| materials.and_then(|m| m.get(t)).copied().unwrap_or(0);
+        let mut edges: BTreeMap<(u32, u32), (Vec<(V3, u32)>, [V3; 2])> = BTreeMap::new();
         for t in 0..self.triangles() {
             let v = [0, 1, 2].map(|j| self.indices[3 * t + j]);
             let w = v.map(|i| at[i as usize]);
@@ -515,14 +573,14 @@ impl Mesh {
                     .entry((a.min(b), a.max(b)))
                     .or_insert_with(|| (Vec::new(), ends.map(|e| self.positions[e as usize])))
                     .0
-                    .push(unit(n));
+                    .push((unit(n), material(t)));
             }
         }
         edges
             .into_values()
             .filter(|(n, _)| match n.as_slice() {
                 [_] => border,
-                [a, b] => (dot(*a, *b) < cos) != below,
+                [a, b] => shared || a.1 != b.1 || (dot(a.0, b.0) < cos) != below,
                 _ => true,
             })
             .map(|(_, ends)| ends)
@@ -533,7 +591,12 @@ impl Mesh {
     /// the stack left before its first subdivide (the mesh's own quads when it has none), with
     /// #440's planted readers: `quads_keep_diagonals` (quads drawn as all) and
     /// `cage_reads_subdivided` (the cage read from the subdivided mesh).
-    pub fn edge_list(&self, kind: EdgeKind, planted: Option<&str>) -> Vec<[V3; 2]> {
+    pub fn edge_list(
+        &self,
+        kind: EdgeKind,
+        materials: Option<&[u32]>,
+        planted: Option<&str>,
+    ) -> Vec<[V3; 2]> {
         match kind {
             EdgeKind::All => self.edges(true, true),
             EdgeKind::Quads => self.edges(planted == Some("quads_keep_diagonals"), true),
@@ -541,20 +604,23 @@ impl Mesh {
                 Some(cage) if planted != Some("cage_reads_subdivided") => cage.clone(),
                 _ => self.edges(false, true),
             },
-            EdgeKind::Crease { angle, border } => {
-                self.crease_set(angle, border, planted).0.as_ref().clone()
+            EdgeKind::Crease { angle, border, .. } => {
+                let set = self.crease_set(angle, border, materials, planted);
+                set.0.as_ref().clone()
             }
         }
     }
 
     /// The crease set and whether this call derived it: derived once per content key (its
-    /// positions and triangles, the angle and `border`) and kept while the process runs, at most
-    /// 64 sets. #1640's planted readers: `crease_below_angle` keeps the edges under the angle,
-    /// `edges_derive_every_frame` skips the cache.
+    /// positions and triangles, the angle and `border`, and with `materials` each triangle's
+    /// material, #1782) and kept while the process runs, at most 64 sets. #1640's planted
+    /// readers: `crease_below_angle` keeps the edges under the angle, `edges_derive_every_frame`
+    /// skips the cache; #1782's [`PLANTED_SHARED`] keeps every edge two triangles share.
     pub fn crease_set(
         &self,
         angle: f64,
         border: bool,
+        materials: Option<&[u32]>,
         planted: Option<&str>,
     ) -> (std::sync::Arc<Vec<[V3; 2]>>, bool) {
         use std::collections::HashMap;
@@ -562,10 +628,15 @@ impl Mesh {
         type Made = HashMap<[u8; 16], Arc<Vec<[V3; 2]>>>;
         static MADE: OnceLock<Mutex<Made>> = OnceLock::new();
         let below = planted == Some("crease_below_angle");
+        let shared = planted == Some(PLANTED_SHARED) && materials.is_some();
         let mut h = deep_canvas::schedule::Hasher::new("scene3d.creases");
         h.bytes(&(&self.positions, &self.indices).canonical_bytes())
             .bytes(&angle.to_le_bytes())
-            .int(i64::from(border) | (i64::from(below) << 1));
+            .int(i64::from(border) | (i64::from(below) << 1) | (i64::from(shared) << 2));
+        if let Some(m) = materials {
+            let bytes: Vec<u8> = m.iter().flat_map(|x| x.to_le_bytes()).collect();
+            h.bytes(&bytes);
+        }
         let key = h.finish().0;
         let made = MADE.get_or_init(Default::default);
         let cached = planted != Some("edges_derive_every_frame");
@@ -575,7 +646,7 @@ impl Mesh {
         {
             return (set, false);
         }
-        let set = Arc::new(self.creases(angle, border, below));
+        let set = Arc::new(self.creases(angle, border, materials, (below, shared)));
         if let (true, Ok(mut m)) = (cached, made.lock()) {
             if m.len() >= 64 {
                 m.clear();
