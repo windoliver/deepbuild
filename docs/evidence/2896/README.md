@@ -47,6 +47,12 @@ Paths are redacted (`~`, `<scratch>`).
 ## Not proven here
 
 - **AC7** (budgets on the reference Mac in the local preflight): open. The walk's whole cost is in `suite-run.txt` (115 and 46
-  calls, and each page's tokens), but no preflight on the reference Mac has run. The A/B above is this Mac's only.
+  calls, and each page's tokens), but no preflight has reached perf. The A/B above is this Mac's only.
+  - `ac7-preflight-mac18.txt`: `scripts/preflight` on this Mac, in a fresh GitHub clone of #2940 with #2957 (the Mac18,1
+    as a fourth reference Mac) merged in locally. The lint lane failed with 356 FAIL lines across secrets, canvas-lint,
+    deps, waits, size, the vendor patch table and copy literals. None names a file #2940 changes. So perf could only be
+    BLOCKED, and the run was stopped during the unit lane, since it held the machine's exclusive timed grant.
+  - Main's own preflight wasn't run here to confirm the same failures. AC7 needs a preflight whose checks pass, on main
+    with #2957 merged.
 - **`node scripts/affected.mjs` on the final tree**: not completed. A run on c08aa56d4 was stopped after 2.5 h, when the disk
   fell under its floor and it began building in this worktree. The checks above were chosen by hand instead.
