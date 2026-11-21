@@ -13,6 +13,7 @@ mod audio;
 mod bake;
 mod caption_design;
 mod capture;
+mod clip;
 mod costs;
 mod data_hash;
 mod defaults;
@@ -531,6 +532,20 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 a[0].as_str()?.to_string(),
                 a[1].as_str()?.to_string(),
             ]));
+        }
+        // #1250: ⌘⇧C, Save clip's default key, and the player controls as actions.
+        "input" if clip::action_of(c.get("event")?).is_some() => {
+            return Some(Call::Clip {
+                panel: c.get("panel")?.as_str()?.to_string(),
+                action: clip::action_of(c.get("event")?)??,
+            })
+        }
+        "clips" => return Some(Call::Clips(c.get("panel")?.as_str()?.to_string())),
+        "presented" if c.contains_key("indices") => {
+            return Some(Call::PresentedIndices(
+                c.get("panel")?.as_str()?.to_string(),
+                c.get("indices")?.get("from")?.as_i64()?,
+            ))
         }
         "input" => {
             return Some(Call::Input {
@@ -1389,7 +1404,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || *p == logic::MAP_READS_BY_NAME
                 // #466's boil and blur in deep-show's frames.
                 || films::PLANTED.contains(p) || sandbox::PLANTED.contains(p) || *p == frames::VALIDATED_PER_FRAME
-                || caption_design::PLANTED.contains(p)
+                || caption_design::PLANTED.contains(p) || scene3d::PLANTED.contains(p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1416,6 +1431,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             None if geometry_audit::planted(p).is_some() => geometry_audit::planted(p),
             None if physics::planted(p).is_some() => physics::planted(p),
             None if stepped::planted(p).is_some() => stepped::planted(p),
+            None if clip::planted(p).is_some() => clip::planted(p),
             None => Some(match p {
                 "presents_unnamed_removal" => Planted::PresentsUnnamedRemoval,
                 "diffs_items_only" => Planted::DiffsItemsOnly,

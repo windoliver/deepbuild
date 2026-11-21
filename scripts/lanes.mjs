@@ -487,6 +487,10 @@ timed.push('tests/acceptance/1939/ac2-budget.test.ts');
 // deep-show for release there).
 alone.push('tests/acceptance/2513/');
 timed.push('tests/acceptance/2513/ac2-budget.test.ts');
+// #3017's files each build deep-show and draw on the GPU; budget.test.ts times the table on a reference Mac (building
+// deep-show for release there); suites.test.ts runs other suites' files that build and draw.
+alone.push('tests/acceptance/3017/');
+timed.push('tests/acceptance/3017/budget.test.ts');
 // #456's files each build deep-show and draw on the GPU; shots.test.ts writes docs/evidence/456/ and waits on your
 // taste call in tests/acceptance/456/TASTE.json.
 alone.push('tests/acceptance/456/');
@@ -560,6 +564,9 @@ alone.push('tests/acceptance/2028/');
 alone.push('tests/acceptance/2021/');
 // #2029's files build the replica and deep-drive plain and planted, start real hubs and draw the answered asks' pages.
 alone.push('tests/acceptance/2029/');
+// #1101's files build deep-drive with test-confirm, plain and planted, start real hubs on a stepped clock, run real git
+// pushes and draw the held and answered asks' pages.
+alone.push('tests/acceptance/1101/');
 // #1056's files build deep-gpu and draw #464's pixel fixtures; records.test.ts runs #464's two-GPU tests.
 alone.push('tests/acceptance/1056/');
 // #404's parts: #1897's files each build deep-show in their own feature set and hold the GPU for the pixel hash;
@@ -1316,10 +1323,30 @@ slow.push('tests/acceptance/2738/ac1-linux-build.test.ts');
 // #265's files (blind) build deep-gpu (ac4 deep-show), draw on the GPU and play a match; ac6 times eight movers' frame CPU.
 alone.push('tests/acceptance/265/');
 timed.push('tests/acceptance/265/ac6-budgets.test.ts');
+// #1250's files (blind) each build deep-show (full) and play the fixture games live in it, the clips read back with
+// FFmpeg; ac7-budgets.test.ts times the clip and the play's frames on the reference Mac and judges the kept track.
+alone.push('tests/acceptance/1250/');
+timed.push('tests/acceptance/1250/ac7-budgets.test.ts');
 
 // #1576's files each start hubs on records of up to 100,000 sessions, and AC5 runs a busy process per core, at the
 // lowest priority, beside two runs: one file at a time. Every number they judge is a count, so none is timed.
 alone.push('tests/acceptance/1576/');
+
+// #3016's files (blind) read process-wide gauges and the Metal device's allocated size, and frames.test.ts runs four
+// Metal suites (465, 506, 462, 166) one after another for hours; query.test.ts builds deep-show. No timing.
+alone.push('tests/acceptance/3016/');
+
+// #2661's files (blind) build the app's test binary, the shipping app and deep-live, start windows and run benchmarks;
+// AC4 samples a real window's UI thread on this Mac's display, and AC7 reads two budgets over hours.
+alone.push('tests/acceptance/2661/');
+byHand.push('tests/acceptance/2661/ac4-tick.live.test.mjs', 'tests/acceptance/2661/ac7-budgets.test.mjs');
+timed.push('tests/acceptance/2661/ac4-tick.live.test.mjs', 'tests/acceptance/2661/ac7-budgets.test.mjs');
+
+// #980's files (blind) each build deep-logic and #416's assembler, ac07 and ac10 deep-show too; ac08 starts headless
+// Chrome, ac02 runs 100,000 arrivals three times, ac10 writes docs/evidence/980/, and ac09 judges a step's time on the
+// reference Mac.
+alone.push('tests/acceptance/980/');
+timed.push('tests/acceptance/980/ac09-budget.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

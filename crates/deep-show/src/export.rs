@@ -451,6 +451,8 @@ pub struct Job {
     /// one for the codec, and `brief: {tools}`, the tools the brief pins.
     pub tool: Option<String>,
     pub pins: Vec<String>,
+    /// #1250: `gif: {scale}` (or `video.gif`), an indexed look's GIF's options.
+    pub gif: Value,
 }
 
 impl Default for Job {
@@ -486,6 +488,7 @@ impl Default for Job {
             srgb: false,
             tool: None,
             pins: Vec::new(),
+            gif: Value::Null,
         }
     }
 }
@@ -667,6 +670,11 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
             .flatten()
             .filter_map(|t| t.as_str().map(str::to_string))
             .collect(),
+        gif: c
+            .get("gif")
+            .or_else(|| video.and_then(|v| v.get("gif")))
+            .cloned()
+            .unwrap_or(Value::Null),
     })
 }
 

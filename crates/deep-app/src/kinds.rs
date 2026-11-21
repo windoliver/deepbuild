@@ -187,6 +187,39 @@ pub fn undoable(step: &Value) -> bool {
         || undo.starts_with("irreversible"))
 }
 
+/// How long an approved step that can't be undone waits before it starts (#1101): the hub keeps the hold, and the
+/// card's receipt counts it down with Undo.
+pub const HOLD_MS: u64 = 10_000;
+
+/// Where the hub's hold of your answered yes to a step that can't be undone stands for `handle`, as the core recorded
+/// it (#1101).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Hold {
+    /// Held: its steps start at this time, in ms since the epoch.
+    Waiting(u64),
+    /// The hold ran out and its steps started: they can't be taken back.
+    Ran,
+    /// Withdrawn before its steps started, by Undo or the hub starting again during it: the ask is open again.
+    Withdrawn,
+}
+
+/// The newest hold the core recorded on `handle`, and how it ended; `None` for an ask no yes of yours held.
+pub fn hold(events: &[Value], handle: &str) -> Option<Hold> {
+    let mut hold = None;
+    for event in events {
+        if event["subject"] != handle || event["writer"] != "core" {
+            continue;
+        }
+        hold = match (event["kind"].as_str(), hold) {
+            (Some("approval.held"), _) => event["data"]["until"].as_u64().map(Hold::Waiting),
+            (Some("approval.started"), Some(Hold::Waiting(_))) => Some(Hold::Ran),
+            (Some("approval.withdrawn"), Some(Hold::Waiting(_))) => Some(Hold::Withdrawn),
+            (_, hold) => hold,
+        };
+    }
+    hold
+}
+
 /// The ask.created event of `handle`.
 pub fn find<'a>(events: &'a [Value], handle: &str) -> Option<&'a Value> {
     events
@@ -338,6 +371,12 @@ impl Model {
                         .iter()
                         .filter(|step| step.member == member)
                         .all(|step| step.undoable);
+                }
+                // A card with one step has no switch (#1101): Allow is the switch, and the hub's hold with Undo is
+                // the guard. Switches stay on a card of two steps or more.
+                // #1101's planted card keeps the switch, so a yes takes two presses.
+                if let [one] = steps.as_mut_slice() {
+                    one.on = one.on || !crate::plain::planted("single-step-switch");
                 }
                 if !diffs.is_empty() {
                     fields.push((copy::text("kinds.field_diff").to_owned(), diffs.join(", ")));

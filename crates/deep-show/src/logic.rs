@@ -428,7 +428,12 @@ impl Hub<'_> {
 }
 
 /// #1164: the logic twins a scenario's `planted` may name, alone or as a list applied together.
-const PLANTED: [&str; 2] = ["restore_zeroes_move_count", "check_compares_step_hashes"];
+const PLANTED: [&str; 3] = [
+    "restore_zeroes_move_count",
+    "check_compares_step_hashes",
+    // #1250: the planted piece that reads the wall clock, in the live play and its clip's replica.
+    "logic_reads_wall_clock",
+];
 
 /// A scenario's `planted` as logic twins: `Some(None)` when it names none, `None` (bad input)
 /// for a list holding any other name.
