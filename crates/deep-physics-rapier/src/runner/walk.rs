@@ -4,9 +4,9 @@
 //! character's vertical speed; a kit that passes a fixture its caps exclude; a character stepped
 //! as a plain kinematic body; a place that keeps the vertical speed; a ceiling that keeps the
 //! upward speed; a crouch that stands on release; and a corner whose walls are resolved one at a
-//! time.
-
-use std::collections::BTreeMap;
+//! time. #2243's (tests/acceptance/2243/README.md): a wrapper that moves every character body
+//! against the last step's poses; and one that lets a walker's approach move a character body
+//! that wants no move.
 
 use super::{shape_use, Run};
 use crate::{Rapier, Twin};
@@ -16,7 +16,7 @@ use deep_canvas_physics::kit::Planted;
 use serde_json::{json, Value};
 
 /// The planted programs this file runs.
-pub const PLANTED: [&str; 8] = [
+pub const PLANTED: [&str; 10] = [
     "slope_limit_ignored",
     "checkpoint_drops_vertical",
     "kit_passes_excluded",
@@ -25,6 +25,8 @@ pub const PLANTED: [&str; 8] = [
     "ceiling_keeps_upward",
     "crouch_stands_on_release",
     "corner_one_wall_at_a_time",
+    "characters_against_last_step",
+    "approach_moves_standing",
 ];
 
 /// Plants `name`, one of [`PLANTED`], in `run`; false for another name.
@@ -41,30 +43,36 @@ pub fn planted(name: &str, run: &mut Run) -> bool {
         "ceiling_keeps_upward" => Twin::KeepsUpward,
         "crouch_stands_on_release" => Twin::StandsOnRelease,
         "corner_one_wall_at_a_time" => Twin::EachWallAlone,
+        "characters_against_last_step" => Twin::StalePoses,
+        "approach_moves_standing" => Twin::StandingGivesWay,
         _ => return false,
     };
     true
 }
 
-/// Each character output's reading after a step into `readings`: grounded, sliding or crouched,
-/// 0 or 1; and the character bodies' states.
+/// Each character output's reading after a step into `t`'s readings: grounded, sliding or
+/// crouched, 0 or 1; (#2248) each valued output's value after it into `t`'s values (reading.rs);
+/// and the character bodies' states.
 pub(super) fn readings(
     b: &Rapier,
     w: &World,
-    readings: &mut BTreeMap<String, (bool, Vec<[f64; 2]>)>,
+    joints: &[deep_canvas_physics::backend::JointState],
+    t: &mut super::Trace,
 ) -> Vec<CharacterState> {
     let walkers = b.characters();
-    for (id, o) in w.outputs.iter().filter(|(_, o)| o.read.of_character()) {
+    let own = |o: &deep_canvas_physics::doc::Output| o.read.of_character() && !o.valued();
+    for (id, o) in w.outputs.iter().filter(|(_, o)| own(o)) {
         if let Some(c) = walkers.iter().find(|x| x.id == o.from) {
             let on = match o.read {
                 Read::Grounded => c.grounded,
                 Read::Sliding => c.sliding,
                 _ => c.crouched,
             };
-            let e = readings.entry(id.clone()).or_insert((false, Vec::new()));
+            let e = t.readings.entry(id.clone()).or_insert((false, Vec::new()));
             e.1.push([f64::from(u8::from(on)), 0.0]);
         }
     }
+    deep_canvas_physics::reading::take(b, w, joints, &walkers, &mut t.values);
     walkers
 }
 

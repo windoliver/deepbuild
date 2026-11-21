@@ -31,11 +31,16 @@ use deep_canvas_physics::track::{self, Entry};
 use serde_json::{json, Map, Value};
 
 mod audit;
+pub mod centre;
 pub mod contact;
+mod dims;
+pub mod fast;
 mod held;
 pub mod kit;
+pub mod links;
 #[cfg(not(target_arch = "wasm32"))]
 mod live;
+pub mod net;
 mod replay;
 mod timeline;
 pub mod vehicle;
@@ -83,8 +88,13 @@ pub struct Run {
     kit_planted: deep_canvas_physics::kit::Planted,
     /// #191 criterion 12's planted recipe: it leaves a flagged body's ccd off.
     leave_ccd_off: bool,
+    /// #2239's planted lint, and its planted kit: it turns ccd on for a flagged kinematic body too.
+    lint: deep_canvas_physics::fast::Planted,
+    ccd_on_kinematic: bool,
     /// #251's planted vehicle controller or check.
     vehicle: crate::VehiclePlant,
+    /// #2240's planted check or output.
+    centre: centre::Plant,
     /// The views this runner holds open, by session (#522).
     #[cfg(not(target_arch = "wasm32"))]
     views: std::cell::RefCell<BTreeMap<String, live::View>>,
@@ -349,6 +359,8 @@ struct Trace {
     /// #523: each joint output's reading after each step: whether it is joint_force's
     /// `{force, torque}`, and the values.
     readings: BTreeMap<String, (bool, Vec<[f64; 2]>)>,
+    /// #2248: each valued output's value after each step (reading.rs).
+    values: BTreeMap<String, Vec<Vec<f64>>>,
     /// The occurrence list, each step's rows sorted (#1918).
     occurrences: Vec<occurrence::Row>,
     /// The list as #2011's shape uses, for `bake` with `occurrences: true`.
@@ -456,7 +468,10 @@ impl Run {
             test: None,
             kit_planted: deep_canvas_physics::kit::Planted::None,
             leave_ccd_off: false,
+            lint: deep_canvas_physics::fast::Planted::None,
+            ccd_on_kinematic: false,
             vehicle: crate::VehiclePlant::None,
+            centre: centre::Plant::None,
             #[cfg(not(target_arch = "wasm32"))]
             views: std::cell::RefCell::default(),
         };
@@ -464,7 +479,6 @@ impl Run {
             None => {}
             Some("caps_allow_restitution_threshold") => run.caps.restitution_threshold = true,
             Some("caps_allow_rolling_resistance") => run.caps.rolling_resistance = true,
-            Some("caps_allow_tangent_speed") => run.caps.tangent_speed = true,
             Some("caps_allow_dynamic_gear") => run.caps.dynamic_couplings = true,
             Some("hash_rounds_1e6") => run.round_hashes = true,
             Some("key_omits_frame_rate") => run.key_without_rate = true,
@@ -491,7 +505,11 @@ impl Run {
                 if !kit::planted(name, &mut run)
                     && !vehicle::planted(name, &mut run)
                     && !walk::planted(name, &mut run)
-                    && !contact::planted(name, &mut run) =>
+                    && !contact::planted(name, &mut run)
+                    && !centre::planted(name, &mut run)
+                    && !fast::planted(name, &mut run)
+                    && !dims::planted(name, &mut run)
+                    && !links::planted(name, &mut run) =>
             {
                 return None
             }
@@ -568,13 +586,13 @@ impl Run {
             frame_rate: if self.key_without_rate { "" } else { rate },
             steps,
         };
-        bake::key(&parts, &self.build, target)
+        bake::key(&parts, &self.build_of(world), target)
     }
 
     /// The world `v` holds, built, or the issues that refuse it.
     fn build(&self, v: &Value) -> Result<(World, Rapier), Value> {
         let refused = |e: Vec<Refusal>| refused(&e);
-        let w = contact::check(v, self).map_err(refused)?;
+        let w = links::check(v, self).map_err(refused)?;
         let mut b = Rapier {
             restore_any_version: self.restore_any_version,
             reverse_pairs: cfg!(feature = "test-reverse-pairs"),
@@ -597,9 +615,14 @@ impl Run {
             return Some(doc.map(|d| (d, None)).map_err(|e| refused(&e)));
         };
         let id = world.as_str()?;
+        // #2457: with `evidence`, the store its scene's mesh assets are read from (source.rs).
+        let root = call.get("evidence").and_then(Value::as_str).map(Path::new);
+        let kept =
+            root.map(|r| crate::source::sourced(scene, &|sha| crate::source::stored(r, sha)));
+        let scene = kept.as_deref().unwrap_or(scene);
         let doc = scene.get("worlds")?.get(id)?;
         let read = crate::bound::expand(Some(scene), doc).and_then(|doc| {
-            let w = check(&doc, &self.caps, self.table)?;
+            let w = check(&doc, &self.caps_of(&doc), self.table)?;
             let skins = deep_canvas_physics::skin::check(&w, scene);
             if !skins.is_empty() {
                 return Err(skins);
@@ -614,20 +637,19 @@ impl Run {
         let c = b.canonical();
         let joints = b.joints();
         t.step_hashes.push(self.hash(&c, &joints));
-        for x in c.iter().filter(|x| x.values.len() == FIELDS.len()) {
-            t.fast
-                .at(k, &x.id, [0, 1, 2].map(|i| f64::from(x.values[i])));
-        }
-        for (id, o) in &w.outputs {
+        let bodies = c.iter().filter(|x| x.values.len() == FIELDS.len());
+        t.fast
+            .step(k, bodies.map(|x| (x.id.as_str(), x.values.as_slice())));
+        for (id, o) in w.outputs.iter().filter(|(_, o)| !o.valued()) {
             let (Some(at), Some(x)) = (o.read.vec3_at(), c.iter().find(|x| x.id == o.from)) else {
                 continue;
             };
             let p = [x.values[at], x.values[at + 1], x.values[at + 2]];
             t.positions.entry(id.clone()).or_default().push(p);
         }
-        let walkers = walk::readings(b, w, &mut t.readings);
+        let walkers = walk::readings(b, w, &joints, t);
         for (id, o) in w.outputs.iter().filter(|(_, o)| o.read.of_joint()) {
-            if let Some(j) = joints.iter().find(|j| j.id == o.from) {
+            if let Some(j) = joints.iter().find(|j| j.id == o.from && !o.valued()) {
                 let (pair, v) = match o.read {
                     Read::JointCoordinate => (false, [j.coordinate.unwrap_or(0.0), 0.0]),
                     _ => (true, [j.force, j.torque]),
@@ -637,6 +659,7 @@ impl Run {
             }
         }
         vehicle::take(b, w, t, (k, start, plan.every));
+        centre::take(self, b, w, &c, t);
         if (k - start).is_multiple_of(plan.every) {
             let read = b.read();
             for s in read.bodies {
@@ -732,7 +755,7 @@ impl Run {
         let mut t = Trace {
             bodies,
             particles,
-            fast: deep_canvas_physics::fast::FastBodies::new(&w),
+            fast: deep_canvas_physics::fast::FastBodies::new(&w, self.caps.sweep, self.lint),
             vehicles: vehicle::named(call, &b),
             ..Trace::default()
         };
@@ -779,7 +802,7 @@ impl Run {
         t.shaped = shape_uses(&t.occurrences, w);
         let record = json!({"key": key, "step_hashes": t.step_hashes, "ring": ring(t),
                             "checkpoints": t.ring.kept.iter().map(|k| checkpoint(&k.checkpoint)).collect::<Vec<_>>(),
-                            "outputs": outputs, "positions": t.positions, "track": track,
+                            "outputs": outputs, "positions": t.positions, "values": t.values, "track": track,
                             "occurrences": occurrence::listed(&t.occurrences),
                             "occurrences_hash": occurrence::hash(&t.occurrences, &rank)});
         (key, record)
@@ -798,7 +821,7 @@ impl Run {
                 {
                     Ok((w, b)) => {
                         let (soft, backend) = held::held(&w, &b.held());
-                        json!({"ok": true, "issues": self.mass_ratios(&w, &b), "built": b.built(),
+                        json!({"ok": true, "issues": contact::warned(self, &w, self.mass_ratios(&w, &b)), "built": b.built(),
                                "soft": soft, "backend": backend})
                     }
                     Err(e) => json!({"ok": true, "issues": e["issues"]}),
@@ -1005,7 +1028,7 @@ impl Run {
                         .collect();
                     json!({"ok": true, "golden": {
                         "bake_key": self.key(world, &reads, &track.json(), &rate, plan.steps, None),
-                        "runtime_digest": self.build.runtime_digest(), "machine": replay::machine(&self.build.target),
+                        "runtime_digest": self.build_of(world).runtime_digest(), "machine": replay::machine(&self.build.target),
                         "step_hashes": t.step_hashes, "checkpoint_hashes": hashes,
                         "occurrences_hash": record["occurrences_hash"],
                         "record_on": self.build.target, "verify_on": verify_on}})
@@ -1133,7 +1156,7 @@ impl Run {
             Ok(r) => r,
             Err(e) => return Some(e),
         };
-        let (w, mut b) = match self.build(world) {
+        let (w, mut b) = match self.build(world).and_then(dims::solid("physics.query")) {
             Ok(x) => x,
             Err(e) => return Some(e),
         };

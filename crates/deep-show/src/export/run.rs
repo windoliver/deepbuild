@@ -121,6 +121,10 @@ impl Hub<'_> {
         let entry = sealed(&target).ok_or_else(
             || json!({"code": "unknown_target", "target": target, "codec": job.codec}),
         )?;
+        // #732: the pptx deck, a slide per stage, read back apart from its writer.
+        if target == "pptx" {
+            return self.export_pptx(job, &doc);
+        }
         // #162: a Lottie can't keep the status rule: refused before anything is written.
         if let Some(r) = lottie::refused(&doc).filter(|_| target == "lottie") {
             return Err(r);

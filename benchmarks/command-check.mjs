@@ -5,7 +5,8 @@
 // reading back its report, read trace and output) and once as a plain run, back to back, which goes first
 // alternating from pair to pair. The plain run has the kind's hermetic environment and the same loaders but asks for
 // no report and reads nothing back, so a pair's difference is the counting alone. It prints every pair as one JSON
-// line, `{"checkMs": [...], "plainMs": [...]}`; the issue's 1% stays in tests/acceptance/30/budgets.test.ts.
+// line, `{"checkMs": [...], "plainMs": [...], "overheadPercent": n}`; the budget window judges `overheadPercent` against
+// the issue's 1% (#1009), and tests/acceptance/30/budgets.test.ts judges it on five readings of 300 pairs.
 // By default it times 10 pairs, the perf lane's short run; `--pairs <n>` times n, as AC12's number asks for 300.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -89,7 +90,11 @@ try {
       plain.push(await run(i, false));
     }
   }
-  console.log(JSON.stringify({ checkMs: checked, plainMs: plain }));
+  // The reading the budget window judges against #1009's 1% (#2674): the median paired difference over the median plain
+  // run, as tests/acceptance/30's judge reads each of its five.
+  const median = (values) => [...values].sort((a, b) => a - b)[Math.floor((values.length - 1) / 2)];
+  const overheadPercent = (median(checked.map((ms, i) => ms - plain[i])) / median(plain)) * 100;
+  console.log(JSON.stringify({ checkMs: checked, plainMs: plain, overheadPercent }));
 } finally {
   await sup.close();
   await record.close();

@@ -831,5 +831,6 @@ pub(super) fn expand_one(
         channels,
         sections,
         placed,
+        report: Map::new(),
     })
 }

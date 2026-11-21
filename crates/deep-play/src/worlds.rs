@@ -14,18 +14,20 @@ use deep_canvas_physics::doc::World;
 use deep_canvas_physics::module::changed;
 use deep_canvas_physics::occurrence::{step_flicks, timed};
 use deep_canvas_physics::written;
-use deep_physics_rapier::channels::{output_channels, states};
+use deep_physics_rapier::channels::output_channels;
 use deep_physics_rapier::runner::Run;
 use serde_json::{json, Map, Value};
 
 use crate::derive::Fired;
 
 /// What the host bakes with beyond the document: the entries its canvas modules fire, their
-/// order, and a planted output that writes a body's whole transform.
+/// order, a planted output that writes a body's whole transform, and the store it reads the
+/// mesh assets its worlds' soft volumes are built from (#2457).
 pub struct Host<'a> {
     pub fired: &'a dyn Fn(&Value) -> Vec<Fired>,
     pub modules_first: bool,
     pub whole_transform: bool,
+    pub assets: Option<deep_physics_rapier::source::Assets<'a>>,
 }
 
 impl Default for Host<'_> {
@@ -34,6 +36,7 @@ impl Default for Host<'_> {
             fired: &|_| Vec::new(),
             modules_first: false,
             whole_transform: false,
+            assets: None,
         }
     }
 }
@@ -163,8 +166,13 @@ pub fn inline(
     let core = if track.is_empty() { &own[..] } else { track };
     let (mut lists, mut channels, mut arrays) = (Map::new(), Map::new(), Map::new());
     let whole = host.whole_transform;
+    // The scene its worlds are read in: the form, with the assets the host's store holds.
+    let scene = match host.assets {
+        Some(read) => deep_physics_rapier::source::sourced(form, read),
+        None => std::borrow::Cow::Borrowed(&*form),
+    };
     for (id, doc) in &worlds {
-        let w = deep_physics_rapier::bound::expand(Some(form), doc);
+        let w = deep_physics_rapier::bound::expand(Some(&scene), doc);
         let w = w.and_then(|d| check(&d, &RAPIER3D, &deep_canvas_physics::roles::TABLE));
         // #524: a skin off its soft body's lattice is the world's refusal too.
         let w = w.and_then(|w| match deep_canvas_physics::skin::check(&w, form) {
@@ -186,7 +194,7 @@ pub fn inline(
         }
         let fired = (host.fired)(form);
         let kept =
-            crate::derive::kept(form, &w, core, &fired, host.modules_first).map_err(|r| {
+            crate::derive::kept(form, id, &w, core, &fired, host.modules_first).map_err(|r| {
                 refused(
                     id,
                     json!([{"code": r.code, "path": r.path, "what": r.what}]),
@@ -195,7 +203,7 @@ pub fn inline(
         let step = step_flicks(&w);
         // #525: over its own span; its inputs the ones the core input track derives (#522).
         let steps = steps_of(form, doc, span, step);
-        let call = json!({"call": "bake", "scene": form, "world": id, "steps": steps, "frame_rate": rate,
+        let call = json!({"call": "bake", "scene": &*scene, "world": id, "steps": steps, "frame_rate": rate,
                           "track": crate::derive::track_of(&kept)});
         let reply = run.answer(&call).unwrap_or(Value::Null);
         if reply["ok"] != json!(true) {
@@ -203,10 +211,10 @@ pub fn inline(
         }
         let rows = reply["occurrences"].as_array().cloned().unwrap_or_default();
         lists.insert(format!("{id}.occurrences"), json!(timed(&rows, &w)));
-        output_channels(id, &w, &states(&reply), &frames, whole, &mut channels)
+        output_channels(id, &w, &reply, &frames, whole, &mut channels)
             .map_err(|e| refused(id, e))?;
         arrays.extend(readings(form, id, &w, &reply["bodies"]).map_err(|e| refused(id, e))?);
-        arrays.extend(written::arrays(id, &w, form, &reply["bodies"]));
+        arrays.extend(written::arrays(id, &w, form, &reply));
         arrays.extend(deep_canvas_physics::skin::arrays(
             id,
             &w,

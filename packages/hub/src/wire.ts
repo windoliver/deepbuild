@@ -10,14 +10,22 @@ export const VERSION = 1;
 export const FEATURES: readonly string[] = [
   // Every method the app calls (#41): crates/deep-app/src/hub.rs NEEDS checks this hello against them.
   'inbox.read', 'stream.subscribe', 'events.read', 'notifications.report', 'views.shown', 'views.hidden', 'row.read', 'canvas.drawn', 'canvas.user',
+  // A hub that restarts on the token alone and asks the OS inside itself before a stop (#1865): the CLI's stop reads it.
+  'hub.restart',
 ];
 /** The hub's contract version, "major.minor": a client needing a newer one shows the hub as older (compat.ts). */
 export const CONTRACT = '1.0';
 /** What a stream subscribe asks for (#1575): one session's events, or the list's rows; with none, every event, as the app subscribes. */
 export type Scope = { kind: 'session'; session: string } | { kind: 'list' };
 
-/** error@3: one refusal. */
-export interface Refusal { code: string; retryable: boolean; remediation: string; path: string; actual: string; evidence: string[] }
+/**
+ * error@5: one refusal. `missing_field` carries the tool's input schema; `not_ready` what loaded of the total and when to
+ * call again (#1415).
+ */
+export interface Refusal {
+  code: string; retryable: boolean; remediation: string; path: string; actual: string; evidence: string[];
+  schema?: Record<string, unknown>; loaded?: number; total?: number; retry_after_ms?: number;
+}
 const actualText = (actual: unknown): string => (typeof actual === 'string' ? actual : actual === undefined ? '' : JSON.stringify(actual) ?? String(actual));
 export function refusal(code: string, path: string, remediation: string, actual: unknown = '', retryable = false): Refusal {
   return { code, retryable, remediation, path, actual: actualText(actual).slice(0, 8192), evidence: [] };
@@ -274,4 +282,6 @@ export interface CoreOptions {
   github?: string;
   /** A file of runs for the background job `test` (#909), from DEEP_HUB_TEST_FAIL_JOB: a line `fail` throws, `ok` passes; only tests set it. */
   failJob?: string;
+  /** A JSON file of release entries `[{ id, version, digest }]` the extension host loads in the hub, from DEEP_HUB_TEST_RELEASE; only tests set it (#2402). */
+  release?: string;
 }

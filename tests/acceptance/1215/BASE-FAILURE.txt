@@ -1,0 +1,94 @@
+#1215 acceptance suite at the base, 7312c66d2 (Merge pull request #2850), before any implementation.
+
+Each file was run once there, on this Mac (Apple silicon, macOS, load average about 200 on 18 cores), with the binaries
+each file's beforeAll builds (deep-text, deep-canvas-render, and deep-show with --no-default-features --features full;
+toolchain 1.99.1, built beforehand with the same commands so the files' own builds were no-ops), unleased (no `deep` CLI
+on PATH, so scripts/lease ran the command directly):
+
+  PATH=$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    NO_COLOR=1 scripts/lease npx vitest run --root tests/acceptance/1215 --no-file-parallelism --testTimeout=600000
+
+`npx tsc --noEmit -p tests/acceptance/1215` exits 0. All 8 tests fail, each on an AssertionError raised by an expect in this
+suite's files; none fails on loading, a build or a type error. At the base, `flow`, `combine_upright` and `line_height`
+are ignored and every text is set across, glyph rows carry no `orientation`, `raster` answers no `hit` or `carets`, the
+three planted names answer bad_input (probed once beside the run: `planted: "vertical_laid_horizontal"` → {"ok":false,
+"code":"bad_input"}), and `deep-text fit` reads no `flow`.
+
+Two files were corrected after the first run and run once more at the base, alone: ac7-film-audit.test.ts, whose first
+title card (in a 160 u box from y = 480) PASSed at the base, since set across it still read inside the safe area; it now
+stands at (1700, 300) with no box, where set across it runs past the safe area's right edge. And ac2-orientation.test.ts,
+whose message now names a glyph with no orientation and lists only the first 40 failures. Their lines below are from that
+second run; the other six are from the first. AC8 drew its three documents set across and wrote them to
+docs/evidence/1215/; those base pictures were deleted afterwards.
+
+ac1-origins.test.ts (1 failed of 1, 1.5 s)
+  AssertionError: "第4窟散花楼" in vertical_rl at 64 px:
+    glyph 0 (第) sits at (0.00, 69.40), not (0.00, 0.00), the first glyph's x and 0.00 down
+    glyph 1 (4) sits at (64.00, 69.40), not (0.00, 64.00), the first glyph's x and 64.00 down
+    glyph 2 (窟) sits at (99.52, 69.40), not (0.00, 128.00), the first glyph's x and 128.00 down
+    … glyph 5 (楼) sits at (291.52, 69.40), not (0.00, 320.00): expected [ …(6) ] to deeply equal []
+
+ac2-orientation.test.ts (1 failed of 1, 43 s in the first run, 147 s in the second)
+  AssertionError: 30773 code points in vertical_rl, 30773 set against their class; the first:
+    U+0020 " " (R in VerticalOrientation.txt): the shaped run sets it with no orientation, not "turned"
+    U+0021 "!" (R in VerticalOrientation.txt): the shaped run sets it with no orientation, not "turned"
+    … (40 listed): expected 30773 to be +0
+
+ac3-vert.test.ts (1 failed of 1, 1.6 s)
+  AssertionError: "（敦煌，莫高窟。）" in vertical_rl:
+    "（" (U+FF08), grapheme 0, draws glyph 29759 from crates/deep-text/fonts/NotoSansSC-Regular.otf, not glyph 29699 of
+      crates/deep-text/fonts/NotoSansSC-Regular.otf (the vert form)
+    "，" (U+FF0C), grapheme 3, draws glyph 29763 …, not glyph 29684 … (the vert form)
+    "。" (U+3002), grapheme 7, draws glyph 1142 …, not glyph 29686 … (the vert form)
+    "）" (U+FF09), grapheme 8, draws glyph 29760 …, not glyph 29700 … (the vert form): expected [ …(4) ] to deeply equal []
+  (The horizontal half and the planted half aren't reached; the font guard passed.)
+
+ac4-digits.test.ts (1 failed of 1, 1.6 s)
+  AssertionError: the digits in vertical_rl:
+    "第4窟": "第" and "窟" centre at 232.00 and 331.52, so the column has no one axis
+    "隋1400年" at combine_upright 2: "1" (grapheme 1) isn't turned 90° clockwise: x axis at 0.000°, y axis at 90.000°,
+      transform [1,0,0,1,264,109.40400695800781]
+    … "4", "0", "0" the same
+    "隋1400年" at combine_upright 4: "1400" set across is 142.08 u wide, more than the column's 80: expected [ …(6) ] to
+      deeply equal []
+
+ac5-columns.test.ts (1 failed of 1, 2.3 s)
+  AssertionError: the columns, their breaks and the fit check:
+    the 240 × 512 box's columns: graphemes by column [[2,5,8,11,14,17,20,23],[1,4,7,10,13,16,19,22],[0,3,6,9,12,15,18,21]],
+      not 3 of 8 in order [[0,1,2,3,4,5,6,7],[8,9,10,11,12,13,14,15],[16,17,18,19,20,21,22,23]]
+    the 240 × 400 box's columns: … not 4 of 6 in order …
+    the 240 × 512 box: the second column's x is 64.00, not the first's 128.00 minus 72
+    the columns 512 high start at graphemes [1,0], horizontal flow 512 wide at [8,16]
+    … the columns 400 high start at graphemes [1,0], horizontal flow 400 wide at [6,12,18]
+    the fit check at 240 × 512: fits true in 5 columns, not true in 3: {"ok":true,"fits":true,"width":210,"height":415,
+      "lines":5, …}
+    the fit check at 240 × 400: fits false in 5 columns needing 210 px across, not false in 4 needing 288: …: expected
+      [ …(9) ] to deeply equal []
+
+ac6-hit-caret.test.ts (1 failed of 1, 1.7 s)
+  AssertionError: the hit test and the caret:
+    the click at (400.00, 69.08) answers hit undefined, not {item: "title", index: 2}
+    texts.title.carets[3] is undefined, not [x0, y0, x1, y1]; carets: undefined: expected [ …(2) ] to deeply equal []
+
+ac7-film-audit.test.ts (1 failed of 1, 8.2 s, second run)
+  AssertionError: the vertical title card:
+    the vertical title card is FAIL, not PASS: FAIL [{"check":"film.audit","code":"film.hold_short","severity":"error",
+      "ids":["title"],"t":705600000,"what":"`title` reads for 0.000 s from 1.000 s as made, short of the 4.000 s its
+      graphemes need", … "need":4,"held":0,"rendition":"as_made", …}, … reduced motion …]
+    the vertical title card raises film.hold_short, film.hold_short: …: expected [ …(2) ] to deeply equal []
+  (The 9 px title's check isn't reached at the base. In the first run, which passed, it held: the 9 px title failed
+  film.hold_short naming `title` with held 0.)
+
+ac8-taste.test.ts (1 failed of 1, 5.0 s)
+  AssertionError: INCONCLUSIVE: no taste call is recorded: attach these to the PR, show them to the owner
+    docs/evidence/1215/title-card.png  ac3211c8028b40baa5c3c311c01fec54305aa5551c889d25a0e71a1669c62609
+    docs/evidence/1215/mixed-column.png  3e30aa00e2ccc4b82b910ae922d8c1c4d5d959a3e4a1613e22be188e4235b077
+    docs/evidence/1215/punctuation.png  185b3b9737a6a957988b740e0e147c6317441b1f0d6f9418a15f42860dc3265e
+  and record the answer in tests/acceptance/1215/TASTE.json (README: The taste call); this is not a pass
+  (These are the base's pictures, every text set across; they were deleted. It fails INCONCLUSIVE, its one honest
+  reading, and never passes without a recorded call.)
+
+Not shown at the base, since no vertical run exists there: that each planted program, once it exists, fails its check
+naming what its criterion says (glyph 1 and both positions; U+0020; each of ，。（）). The failures come from the same
+check functions that judge the honest run (originFailures, orientationFailures, idFailures), whose messages at the base
+already take those forms.

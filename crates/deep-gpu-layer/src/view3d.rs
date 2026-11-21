@@ -160,12 +160,12 @@ fn run_view(
         return Err(json!({"code": "refused", "issues": broken}));
     }
     deep_canvas_effects::effect::lower(&mut args.doc);
-    crate::physics::bake(&mut args.doc, &call["tracks"])?;
+    crate::physics::bake(&mut args.doc, &call["tracks"], &args.assets)?;
     crate::particles::refuse(&args.doc, app.planted)?;
     // The frames the call draws and how each is reached (#173), the ones logic runs at first.
     let reached = history::order(args.from, args.frames, &args.seeks, &args.history, args.fps);
     let order: Vec<u64> = reached.iter().map(|(n, _)| *n).collect();
-    let mut baked = crate::fed::bake(&args.doc, &args.assets, (&order, args.fps), app.planted)?;
+    let mut baked = crate::fed::bake(&mut args.doc, &args.assets, (&order, args.fps), app.planted)?;
     let packed = args.doc["packs"].as_array().is_some_and(|p| !p.is_empty());
     let mut lowered_doc = if packed {
         Some(lowered(&args.doc, &packs)?)
@@ -269,6 +269,7 @@ fn run_view(
         "linear",
         "ids",
         "pre_tone",
+        "pre_curve",
         "backdrop",
         "depth",
         "reflection",
@@ -375,10 +376,15 @@ fn run_view(
     let (doc_look, doc_look_json) = (args.look.clone(), args.look_json.clone());
     // #462's planted strokes: the camera the frame before drew through.
     let mut last_camera: Option<deep_canvas_scene3d::scene::Camera> = None;
+    // #1993: how many times `lose_device_at` forced the device lost.
+    let mut device_losses = 0u64;
     let result = (|| -> Result<(), Value> {
         // The lights the policy last left out: a change is reported once, by ID (#421).
         let mut left_out: Vec<String> = Vec::new();
         let mut dropped: Vec<String> = Vec::new();
+        let mut touched = crate::touches::Started::default();
+        // The clusters last reported past their cap (#1634).
+        let mut clusters_over: Vec<deep_scene3d_render::fill::Over> = Vec::new();
         // #1640's wrong programs for mesh-edge lines, by their planted names.
         let edge_plant = match app.planted {
             Some(Planted::CreaseBelowAngle) => Some("crease_below_angle"),
@@ -388,6 +394,10 @@ fn run_view(
         };
         for &(n, reach) in &reached {
             let frame_started = std::time::Instant::now();
+            if args.lose_at == Some(n) && device_losses == 0 {
+                session3::lose_device(app);
+                device_losses += 1;
+            }
             // A seek applies every patch up to the frame it opens at.
             let mut patched = false;
             for (k, (frame, writer, ops)) in args.patches.iter().enumerate() {
@@ -643,14 +653,9 @@ fn run_view(
                     Some((w.material.clone(), f))
                 })
                 .flatten();
-            let rings = (args.rings).then(|| {
-                scene.water.as_ref().map_or(Vec::new(), |w| {
-                    w.rings()
-                        .into_iter()
-                        .map(|r| json!({"part": r.part, "drop": r.drop, "at": r.at, "born": r.born, "radius": r.radius}))
-                        .collect::<Vec<_>>()
-                })
-            });
+            // #2760: the planted rings, then the rings the frame draws, as it lists them.
+            crate::touches::plant(&mut scene, app.planted, t, &mut touched);
+            let rings = (args.rings).then(|| crate::touches::rows(&scene));
             strokes |= scene
                 .layers
                 .iter()
@@ -1606,11 +1611,19 @@ fn run_view(
             frame.insert("settled".into(), json!(settled));
             // What each stepped operator's carried output holds as this frame drew (#252).
             let fx2 = fx.clone();
-            let carried = app
-                .worker
-                .call(move |_| lock(&fx2).docops.as_ref().map(|o| o.carried()));
-            if let Some(c) = carried.filter(|c| c.as_object().is_some_and(|m| !m.is_empty())) {
+            let carried = app.worker.call(move |_| {
+                let fx = lock(&fx2);
+                fx.docops.as_ref().map(|o| (o.carried(), o.settling()))
+            });
+            let (carried, behind) = carried.unzip();
+            if let Some(c) =
+                carried.filter(|c: &Value| c.as_object().is_some_and(|m| !m.is_empty()))
+            {
                 frame.insert("carried".into(), c);
+            }
+            // A frame drawn before the carried state is rebuilt after a lost device (#1993).
+            if behind == Some(true) {
+                frame.insert("settling".into(), json!(true));
             }
             if args.timings {
                 frame.insert("wall_ms".into(), json!(wall_ms));
@@ -1758,6 +1771,29 @@ fn run_view(
                 }
                 if let (Some(pre), true) = (&drawn.pre_tone, args.targets.contains("pre_tone")) {
                     frame.insert("pre_tone".into(), json!(write_named(out, pre, "f32")?));
+                }
+                // #971: the linear values the tone curve reads: that image after the look's
+                // local tone map, the exposure and the grade's white balance.
+                if let (Some(pre), true) = (
+                    drawn.toned.as_ref().or(drawn.pre_tone.as_ref()),
+                    args.targets.contains("pre_curve"),
+                ) {
+                    let scale = scene.exposure.unwrap_or(args.look.exposure);
+                    let balance = args.look.grade.white_balance();
+                    let read: Vec<u8> = pre
+                        .as_chunks::<16>()
+                        .0
+                        .iter()
+                        .flat_map(|p| {
+                            let c =
+                                |k: usize| f32::from_le_bytes([p[k], p[k + 1], p[k + 2], p[k + 3]]);
+                            let lit = [0, 4, 8].map(|k| f64::from(c(k)) * scale);
+                            let rgb = deep_canvas_marks::finish::mul(&balance, lit);
+                            let e = |x: f64| (x as f32).to_le_bytes();
+                            [e(rgb[0]), e(rgb[1]), e(rgb[2]), c(12).to_le_bytes()].concat()
+                        })
+                        .collect();
+                    frame.insert("pre_curve".into(), json!(write_named(out, &read, "f32")?));
                 }
                 if let Some(name) = &dirt_file {
                     frame.insert("dirt".into(), json!(name));
@@ -1942,6 +1978,22 @@ fn run_view(
                     .expect("a list")
                     .push(notice);
             }
+            // #1634: the clusters past `per_cluster` and the fill lights dropped from any of them,
+            // reported once per change.
+            if c.clusters_over != clusters_over {
+                clusters_over.clone_from(&c.clusters_over);
+                let dropped: std::collections::BTreeSet<&String> =
+                    clusters_over.iter().flat_map(|o| &o.dropped).collect();
+                if !clusters_over.is_empty() {
+                    let clusters: Vec<[u32; 3]> = clusters_over.iter().map(|o| o.cluster).collect();
+                    frame
+                        .entry("notices")
+                        .or_insert_with(|| json!([]))
+                        .as_array_mut()
+                        .expect("a list")
+                        .push(json!({"code": "cluster_over_budget", "clusters": clusters, "dropped": dropped}));
+                }
+            }
             if args.counts {
                 let c = &drawn.counts;
                 let encoded: Vec<Value> = c
@@ -2022,6 +2074,19 @@ fn run_view(
             if args.light_cut {
                 frame.insert("light_cut".into(), crate::lod::cut_json(&evaluated, &cut));
             }
+            if args.clusters && capture {
+                let rows: Vec<Value> = session3::clusters(app)
+                    .into_iter()
+                    .map(|(cluster, lights)| {
+                        let lights: Vec<Value> = lights
+                            .into_iter()
+                            .map(|(light, weight)| json!({"light": light, "weight": weight}))
+                            .collect();
+                        json!({"cluster": cluster, "lights": lights})
+                    })
+                    .collect();
+                frame.insert("clusters".into(), json!(rows));
+            }
             if args.masks && capture && !noop {
                 let mut rows = Vec::new();
                 for c in choices.iter().filter(|c| c.bands.len() == 2) {
@@ -2097,6 +2162,16 @@ fn run_view(
                     .chain(op_declared.map(|(k, v)| (k, json!(v))))
                     .collect();
                 frame.insert("declared_ms".into(), Value::Object(declared));
+                // #1634: what the light policy's scoring took and what the fill lights hold, with
+                // the cost model's estimate of the frame, in a scene that holds a fill light.
+                let c = &drawn.counts;
+                if c.lists_bytes > 0 {
+                    let lights = json!({"scoring_ms": c.scoring_ms, "lists_bytes": c.lists_bytes});
+                    frame.insert("lights".into(), lights);
+                    let [gpu_ms, scoring_ms, lists_bytes] = c.light_estimate;
+                    let estimate = json!({"gpu_ms": gpu_ms, "scoring_ms": scoring_ms, "lists_bytes": lists_bytes});
+                    frame.insert("estimate".into(), estimate);
+                }
             }
             if !clicks.is_empty() {
                 let ids = drawn.targets.as_ref().map(|(_, ids)| ids.as_slice());
@@ -2223,6 +2298,9 @@ fn run_view(
         "render_targets": render_targets,
         "layers": layers_report(&args.doc, &args.hidden),
     });
+    if args.lose_at.is_some() {
+        reply["device_losses"] = json!(device_losses);
+    }
     if !worlds.is_empty() {
         reply["worlds"] = Value::Object(
             worlds

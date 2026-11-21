@@ -22,9 +22,11 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             "links",
             "saves",
             "emits",
+            "fires",
             "services",
             "mirrors",
             "preview",
+            "lanes",
         ]
         .contains(&k.as_str())
         {
@@ -215,6 +217,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
     };
     let links = links::declared(params.get("links"))
         .ok_or_else(|| bad("links", "links is a list of {name, asset}".into()))?;
+    let fires = super::fires::declared(params.get("fires")).map_err(|e| bad("fires", e))?;
     let services =
         crate::services::declared(params.get("services")).map_err(|e| bad("services", e))?;
     let mirrors = crate::mirrors::declared(params.get("mirrors")).map_err(|e| bad("mirrors", e))?;
@@ -235,9 +238,11 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
         assets,
         saves: params.get("saves").cloned(),
         emits,
+        fires,
         services,
         mirrors,
         preview,
+        lanes: params.get("lanes").cloned(),
         given: Value::Object(params.clone()).to_string(),
     })
 }
@@ -323,7 +328,9 @@ pub(super) fn region_map(
         reads.sort();
     }
     for r in &reads {
-        let (size, ty, read) = if let Some((size, ty)) = controls.get(r) {
+        let (size, ty, read) = if r == crate::world::seats::READ {
+            (crate::world::seats::SIZE, "seats".to_string(), Read::Seats)
+        } else if let Some((size, ty)) = controls.get(r) {
             (*size, ty.to_string(), Read::Control)
         } else if let Some(read) = series_read(r, sources) {
             // One series of a series source, read as a scalar (Logic: readings).
@@ -477,6 +484,19 @@ pub(super) fn region_map(
         });
         at += e.size();
     }
+    // Then each input it fires: its i32 count and its number fields, end to end from fires_at.
+    let mut at = 0u32;
+    for f in &d.fires {
+        entries.push(Region {
+            region: "fires",
+            name: format!("{}.{}", f.world, f.input),
+            offset: at,
+            size: f.size(),
+            ty: "fire".into(),
+            read: Read::None,
+        });
+        at += f.size();
+    }
     let text: String = entries
         .iter()
         .map(|e| format!("{}|{}|{}|{}|{}\n", e.region, e.name, e.offset, e.size, e.ty))
@@ -514,6 +534,10 @@ pub(super) fn declarations(piece: &Value) -> Result<Declarations, Refused> {
                 .is_none_or(|p| p.as_object().is_some_and(Map::is_empty))
         {
             machine.push(id.clone());
+            continue;
+        }
+        // A floor path steps nothing: a lane graph is built from it (#981).
+        if item.get("kind").and_then(Value::as_str) == Some("path@1") {
             continue;
         }
         if item.get("kind").and_then(Value::as_str) != Some("logic@1") {
@@ -793,6 +817,28 @@ pub fn check_in(
                 }
             }
         }
+        // #194: the fire region, each input's count and fields, in declaration order.
+        let fires_at = global_at(&given, "fires_at");
+        if !d.fires.is_empty() {
+            let size = u64::from(super::fires::size(&d.fires));
+            match fires_at {
+                None => refused.push(refusal(
+                    "region",
+                    "an item that fires exports fires_at, an immutable i32 global holding an address".into(),
+                    json!({"field": "fires"}),
+                )),
+                Some(at) => {
+                    if let Some(why) = clash(u64::from(at), u64::from(at) + size, memory, &regions, &[]) {
+                        refused.push(refusal(
+                            "region",
+                            format!("the fire region, {size} bytes at {at}, {why}"),
+                            json!({"region": "fires"}),
+                        ));
+                    }
+                    regions.push(("the fire region", at, size as u32));
+                }
+            }
+        }
         let services_at = global_at(&given, "services_at");
         let asked =
             crate::services::asked(&d.services, services, services_at, memory, &mut regions)
@@ -814,6 +860,19 @@ pub fn check_in(
         }
         let assets_at = global_at(&given, "assets_at");
         let mut assets = Vec::new();
+        // #981: the lane graph `lanes` names, built from the piece's floor paths, is asset 0.
+        let lanes = match &d.lanes {
+            None => None,
+            Some(l) => {
+                let items = piece
+                    .get("items")
+                    .and_then(Value::as_object)
+                    .ok_or_else(bad)?;
+                let g = crate::lanes::build(l, items).map_err(|r| logic_refused(id, r))?;
+                assets.push((rewrite::hash(&g.bytes), g.bytes.clone()));
+                Some(std::sync::Arc::new(g))
+            }
+        };
         for sha in &d.assets {
             assets.push((sha.clone(), asset(sha).ok_or_else(|| missing("data", sha))?));
         }
@@ -914,10 +973,13 @@ pub fn check_in(
             saves,
             emits: d.emits.clone(),
             emits_at: emits_at.unwrap_or(0),
+            fires: d.fires.clone(),
+            fires_at: fires_at.unwrap_or(0),
             services: asked,
             services_at: services_at.unwrap_or(0),
             mirrors,
             preview,
+            lanes,
         });
     }
     // A save holds every item at one instant, so a piece with saves steps at one rate.

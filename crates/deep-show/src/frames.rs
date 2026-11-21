@@ -328,7 +328,11 @@ impl<'a> Hub<'a> {
         if !self.doc_visible(&e.doc) {
             return json!({"outcome": "not_presented", "reason": "hidden", "nodes": []});
         }
-        let rev = self.current(&e.doc).map(|r| r.rev);
+        // #1415: a shared document's frame evaluates its current revision in its own session.
+        let rev = match self.load_shared(&e.doc) {
+            Some(rev) => Some(rev),
+            None => self.current(&e.doc).map(|r| r.rev),
+        };
         let t = match self.resolve_time(&e.doc, &e.t) {
             Ok(t) => t,
             Err(code) => return json!({"outcome": "refused", "code": code, "issues": []}),
@@ -347,6 +351,7 @@ impl<'a> Hub<'a> {
         {
             self.sandbox.runs += 1;
         }
+        self.catalogs_validated_again(&e.doc);
         // #169: every row of the core's carried-state list as a play on this track leaves it at
         // `t`, so steps the live session ran under another track never answer for it.
         let carried: Option<Value> = self.played_form(&e.doc).filter(|_| e.carried).map(|form| {
@@ -488,7 +493,7 @@ impl<'a> Hub<'a> {
         reply["position"] = json!(program.as_ref().map_or(t, |p| p.position(t).0));
         // #1968: each text diff's tokens at t, for the film block.
         let diffs = e.film.then(|| diff_report(&self.sched, evaluated));
-        let drawing = if e.pixels || e.film || e.texts {
+        let drawing = if e.pixels || e.film || e.texts || e.shown {
             drawing_of(&self.sched, evaluated).map(|p| match &document {
                 // #466: the look's boil on the frame's lines.
                 Some(d) => self.boiled(d, t, reduced, p),
@@ -535,6 +540,13 @@ impl<'a> Hub<'a> {
                     .map(crate::film_audit::drawn_texts)
                     .unwrap_or_default(),
             );
+        }
+        // #297: what each entry text draws at t.
+        if e.shown {
+            let d = drawing.as_ref().and_then(|d| d.drawing.as_deref());
+            let doc = document.as_ref().unwrap_or(&Value::Null);
+            let shown = crate::entries::shown_of(doc, d.map(|d| &d.frame), d.map(|d| &d.runs));
+            reply["shown"] = Value::Object(shown);
         }
         let drawing = drawing.filter(|_| e.pixels);
         reply["hashes"] = json!(self
@@ -811,6 +823,7 @@ impl<'a> Hub<'a> {
             }
             let t = f.from + f.step * k as i64;
             self.load_frame(&f.doc, t);
+            self.catalogs_validated_again(&f.doc);
             let Some(session) = self.sessions.get_mut(&f.doc) else {
                 break;
             };
@@ -954,7 +967,7 @@ impl<'a> Hub<'a> {
                     .filter(|(_, r)| Arc::ptr_eq(r, &run))
                     .map(|(doc, _)| doc)
                     .collect();
-                json!({"shaped": self.shapings.get(&key).copied().unwrap_or(0), "docs": docs})
+                json!({"shaped": self.shapings.get(key.shape()).copied().unwrap_or(0), "docs": docs})
             })
             .collect();
         json!({ "runs": runs })
@@ -1319,6 +1332,54 @@ mod story_tests {
             assert_eq!(shown("q"), head, "a counter on #head at {t}");
             assert_eq!(shown("r"), count, "a counter on a driver at {t}");
             assert_eq!(at_dot, Some(dot), "an item on #head at {t}");
+        }
+    }
+}
+
+/// #194's wrong program: a piece that does work per frame because it names a catalog.
+pub const VALIDATED_PER_FRAME: &str = "catalog_validated_per_frame";
+
+impl Hub<'_> {
+    /// Planted (#194): at each frame of `doc`, each catalog asset a logic item names validated
+    /// again under its layout, as if no verdict were kept, so the sandbox runs once more a frame.
+    fn catalogs_validated_again(&mut self, doc: &str) {
+        if self.scenario.module_planted.as_deref() != Some(VALIDATED_PER_FRAME) {
+            return;
+        }
+        let Some(form) = self.forms.get(doc) else {
+            return;
+        };
+        let items = form["items"].as_object().into_iter().flatten();
+        let named: Vec<&str> = items
+            .filter(|(_, i)| i["kind"] == "logic@1")
+            .flat_map(|(_, i)| {
+                i.pointer("/params/assets")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+            })
+            .filter_map(Value::as_str)
+            .collect();
+        let catalogs: Vec<(String, String)> = form["assets"]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .filter(|(_, a)| a["kind"] == "catalog")
+            .filter_map(|(_, a)| {
+                Some((
+                    a["sha256"].as_str()?.to_string(),
+                    a["layout"].as_str()?.to_string(),
+                ))
+            })
+            .filter(|(sha, _)| named.contains(&sha.as_str()))
+            .collect();
+        for (sha, layout) in catalogs {
+            if let Some(bytes) = crate::evidence::read(&self.scenario.evidence, &sha) {
+                self.sandbox.forget(&sha);
+                let _ = self
+                    .sandbox
+                    .validate_bytes(&self.startup.sealed, &layout, &bytes);
+            }
         }
     }
 }

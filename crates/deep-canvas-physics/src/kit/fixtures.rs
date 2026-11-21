@@ -56,6 +56,7 @@ pub fn fixture(
         answer,
         tolerance,
         never_past: false,
+        past: false,
         caps: Vec::new(),
     }
 }
@@ -410,6 +411,67 @@ fn resting_stack() -> Fixture {
     )
 }
 
+/// #2241: a 0.5 m box of friction 0.5 set at rest on a static belt of friction 0.5 whose top face
+/// passes through the origin, its `tangent_speed` `speed` and its body turned `rot`, degrees: about
+/// +Y, or about +Z to tilt it up along its +X, the box with it.
+fn belt(speed: f64, rot: [f64; 3]) -> Value {
+    let (s, c) = (ops::sin(ops::rad(rot[2])), ops::cos(ops::rad(rot[2])));
+    let mut surface = material(0.5, 0.0);
+    surface["tangent_speed"] = json!(speed);
+    let at = [-0.25 * s, 0.25 * c, 0.0];
+    let tilted = json!({"pose": {"pos": at, "rot": [0.0, 0.0, rot[2]]}});
+    world(
+        json!({"contact_materials": {"belt": surface, "box": material(0.5, 0.0)},
+                 "shapes": {"belt": {"kind": "box", "half": [10, 0.1, 10]}, "box": {"kind": "box", "half": [0.25, 0.25, 0.25]}},
+                 "bodies": {"belt": {"kind": "static", "shapes": [{"shape": "belt", "contact_material": "belt"}],
+                                     "pose": {"pos": [0.1 * s, -0.1 * c, 0], "rot": rot}},
+                            "box": dynamic("box", "box", at, tilted)}}),
+    )
+}
+
+/// #2241: a belt at `sign` m/s has carried its box `sign` × (v·t − v² ÷ (2μg)) along `along` at
+/// 2 s: it slips for v ÷ (μg), then rides at the belt's speed.
+fn belt_carries(name: &str, sign: f64, rot: [f64; 3], along: [f64; 3]) -> Fixture {
+    let m = Measure::Along {
+        body: "box",
+        along,
+        step: 240,
+    };
+    let answer = sign * (2.0 - 1.0 / (2.0 * 0.5 * G));
+    let mut f = fixture(
+        name,
+        belt(sign, rot),
+        240,
+        m,
+        answer,
+        Tolerance::Relative(0.01),
+    );
+    f.caps = vec!["belts"];
+    f
+}
+
+/// #2241: on the belt tilted 10° the box reaches the belt's speed up the slope at
+/// 1 ÷ (g × (0.5 cos 10° − sin 10°)) = 0.320 s, step 38.4, within 2 steps, so by step 41, and
+/// holds it from then on.
+fn belt_tilted() -> Fixture {
+    let th = ops::rad(10.0);
+    let m = Measure::Held {
+        body: "box",
+        along: [ops::cos(th), ops::sin(th), 0.0],
+        from: 41,
+    };
+    let mut f = fixture(
+        "belt_tilted",
+        belt(1.0, [0.0, 0.0, 10.0]),
+        240,
+        m,
+        1.0,
+        Tolerance::Relative(0.01),
+    );
+    f.caps = vec!["belts"];
+    f
+}
+
 /// The fast body: a 0.05 m sphere at 200 m/s with `ccd` on, its centre 10 m before a static wall
 /// 0.02 m thick and 2 m tall.
 pub fn fast_world(ccd: Option<bool>) -> Value {
@@ -508,8 +570,38 @@ pub fn all() -> Vec<Fixture> {
     out.push(super::scan::queries());
     out.push(ccd_wall());
     out.push(resting_stack());
+    // #2241: a belt runs along its own +X: level, turned 90° about +Y (world −Z) and backwards.
+    out.extend([
+        belt_carries("belt_level", 1.0, [0.0; 3], [1.0, 0.0, 0.0]),
+        belt_carries("belt_turned", 1.0, [0.0, 90.0, 0.0], [0.0, 0.0, -1.0]),
+        belt_carries("belt_reversed", -1.0, [0.0; 3], [1.0, 0.0, 0.0]),
+        belt_tilted(),
+    ]);
+    out.extend(super::small::all());
     out.extend(super::sensors::all());
     out.extend(super::walks::all());
     out.extend(super::vehicles::all());
+    out.extend(super::centres::all());
+    // #2310: the loaded chain and the swing, and the pendulum, here its ball of 1 kg, the hinge
+    // limit and the hinge motor a second time, each on articulated joints.
+    out.extend(super::chains::all());
+    let mut swings = articulated(pendulum());
+    swings.world["bodies"]["bob"]["mass"] = json!(1);
+    out.extend([
+        swings,
+        articulated(hinge_limit()),
+        articulated(hinge_motor()),
+    ]);
     out
+}
+
+/// #2310: `f` a second time, every joint of its world articulated, for a backend that claims
+/// articulations.
+fn articulated(mut f: Fixture) -> Fixture {
+    f.name = format!("articulated/{}", f.name);
+    for (_, j) in f.world["joints"].as_object_mut().into_iter().flatten() {
+        j["articulated"] = json!(true);
+    }
+    f.caps.push("articulations");
+    f
 }

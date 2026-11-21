@@ -18,6 +18,8 @@ pub enum Writer {
     You,
     Tour,
     Agent,
+    /// #297: another player's entry in a match's merged track.
+    Peer,
 }
 
 impl Writer {
@@ -26,6 +28,7 @@ impl Writer {
             Writer::You => "you",
             Writer::Tour => "tour",
             Writer::Agent => "agent",
+            Writer::Peer => "peer",
         }
     }
 }
@@ -50,6 +53,8 @@ pub struct Entry {
     pub samples: Option<Vec<Sample>>,
     pub writer: Writer,
     pub serial: Option<u32>,
+    /// #297: the player who made it, in a match's merged track; none for a piece played alone.
+    pub player: Option<u8>,
 }
 
 impl Entry {
@@ -102,6 +107,9 @@ impl Entry {
         o.insert("writer".into(), json!(self.writer.name()));
         if let Some(serial) = self.serial {
             o.insert("serial".into(), json!(serial));
+        }
+        if let Some(player) = self.player {
+            o.insert("player".into(), json!(player));
         }
         Value::Object(o)
     }
@@ -243,6 +251,7 @@ mod tests {
             samples: None,
             writer: Writer::You,
             serial: Some(1),
+            player: None,
         }
     }
 

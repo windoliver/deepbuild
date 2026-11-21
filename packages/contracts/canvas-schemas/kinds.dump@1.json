@@ -73,6 +73,13 @@
       "items": {
         "$ref": "#/$defs/registry"
       }
+    },
+    "field_lists": {
+      "$comment": "#2777: every list of words a document sets that the build seals, by name: a sealed kind's field's, or one a canvas module reads outside its kinds' params, each with its closure: {registry}, {closed, reopens_if, instead} or {open}.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/field_list"
+      }
     }
   },
   "required": [
@@ -85,6 +92,37 @@
   ],
   "additionalProperties": false,
   "$defs": {
+    "field_list": {
+      "type": "object",
+      "properties": {
+        "list": {
+          "type": "string"
+        },
+        "entry": {
+          "type": "string"
+        },
+        "field": {
+          "type": "string"
+        },
+        "words": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "closure": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "list",
+        "entry",
+        "field",
+        "words",
+        "closure"
+      ],
+      "additionalProperties": false
+    },
     "registry": {
       "type": "object",
       "properties": {
@@ -148,6 +186,9 @@
           "items": {
             "$ref": "#/$defs/migration"
           }
+        },
+        "paths": {
+          "$ref": "#/$defs/paths"
         }
       },
       "required": [
@@ -193,6 +234,9 @@
         },
         "default": {
           "x-opaque": "a field's default, of the field's own type"
+        },
+        "paths": {
+          "$ref": "#/$defs/paths"
         }
       },
       "required": [
@@ -244,6 +288,67 @@
         "to",
         "renames",
         "retires"
+      ],
+      "additionalProperties": false
+    },
+    "paths": {
+      "$comment": "What each path does with a sealed 3D entry or a field that carries its own answers (#2776; canvas primitives: Paths: rays, finals and the web player).",
+      "type": "object",
+      "properties": {
+        "rays": {
+          "$ref": "#/$defs/answer"
+        },
+        "final": {
+          "$ref": "#/$defs/answer"
+        },
+        "web": {
+          "$ref": "#/$defs/answer"
+        }
+      },
+      "required": [
+        "rays",
+        "final",
+        "web"
+      ],
+      "additionalProperties": false
+    },
+    "answer": {
+      "type": "object",
+      "properties": {
+        "answer": {
+          "enum": [
+            "same",
+            "stand_in",
+            "refused",
+            "not_applicable"
+          ],
+          "x-closure": {
+            "closed": "ring",
+            "reopens_if": "a release adds a renderer, or a path needs an answer the four words cannot say",
+            "mark": "exhaustive"
+          }
+        },
+        "held_by": {
+          "type": "string"
+        },
+        "draws": {
+          "type": "string"
+        },
+        "receipt": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "task": {
+          "type": "string"
+        },
+        "why": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "answer"
       ],
       "additionalProperties": false
     }

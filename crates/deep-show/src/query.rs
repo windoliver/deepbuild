@@ -818,37 +818,9 @@ impl Hub<'_> {
         }
     }
 
-    /// Every 2D item's evaluated box in an evaluated session (#1162): its fields at its world
-    /// transform, a relation's place applied, frames laid out; `[x, y, w, h]` by ID.
+    /// Every 2D item's evaluated box in an evaluated session: [`item_boxes`].
     fn boxes(&self, s: &DocSession) -> BTreeMap<String, [f64; 4]> {
-        let l = &self.sched;
-        let Some(doc) = s.document().and_then(Value::as_object) else {
-            return BTreeMap::new();
-        };
-        let mut items = Map::new();
-        for id in doc
-            .get("items")
-            .and_then(Value::as_object)
-            .into_iter()
-            .flatten()
-            .map(|(id, _)| id)
-        {
-            let Some((fields, _)) = s.read(l, "core.fields", Some(id)) else {
-                continue;
-            };
-            let Some(fields) = fields.as_typed::<Fields>() else {
-                continue;
-            };
-            let world = s
-                .read(l, "marks2d.at", Some(id))
-                .or_else(|| s.read(l, "core.world", Some(id)))
-                .and_then(|(w, _)| w.as_typed::<Transform>().map(|t| *t));
-            items.insert(
-                id.clone(),
-                deep_canvas_marks::modules::item_json(&fields, world.as_ref()),
-            );
-        }
-        deep_canvas_marks::scene::item_boxes(doc, &items).unwrap_or_default()
+        item_boxes(&self.sched, s)
     }
 
     /// `items/<id>/bounds`: the item's evaluated box as `[[x, y, 0], [x + w, y + h, 0]]`, in
@@ -1092,4 +1064,40 @@ fn outside_grant(q: &Query, rev: u64) -> Value {
     json!({"rev": rev, "rows": [], "values": values, "keys": values.clone(),
            "unresolved": unresolved,
            "coverage": {"complete": false, "rows_total": 0, "rows_shown": 0, "cut": []}})
+}
+
+/// Every 2D item's evaluated box in an evaluated session (#1162): its fields at its world
+/// transform, a relation's place applied, frames laid out; `[x, y, w, h]` by ID. #732's deck
+/// places each text box at its item's.
+pub(crate) fn item_boxes(
+    l: &deep_canvas::schedule::Scheduler<'_>,
+    s: &DocSession,
+) -> BTreeMap<String, [f64; 4]> {
+    let Some(doc) = s.document().and_then(Value::as_object) else {
+        return BTreeMap::new();
+    };
+    let mut items = Map::new();
+    for id in doc
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .map(|(id, _)| id)
+    {
+        let Some((fields, _)) = s.read(l, "core.fields", Some(id)) else {
+            continue;
+        };
+        let Some(fields) = fields.as_typed::<Fields>() else {
+            continue;
+        };
+        let world = s
+            .read(l, "marks2d.at", Some(id))
+            .or_else(|| s.read(l, "core.world", Some(id)))
+            .and_then(|(w, _)| w.as_typed::<Transform>().map(|t| *t));
+        items.insert(
+            id.clone(),
+            deep_canvas_marks::modules::item_json(&fields, world.as_ref()),
+        );
+    }
+    deep_canvas_marks::scene::item_boxes(doc, &items).unwrap_or_default()
 }

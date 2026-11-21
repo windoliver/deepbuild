@@ -268,7 +268,10 @@
         "idle"
       ],
       "margin": 0.5,
-      "limits": {},
+      "limits": {
+        "report.wakeupsPerSecond": 50,
+        "report.instructionsPerSecond": 4500000
+      },
       "initialReason": "Issue #16 first measurement: the merge base has no hub. One process starts the hub on a temp home and leaves it idle for seven seconds, reading its CPU and resident memory; the issue's 0.5% idle CPU and 150 MB with 30 days of history stay in tests/acceptance/16/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.",
       "criteria": [
         "#2646.0e7e5ac3"
@@ -447,7 +450,12 @@
         "benchmarks/command-check.mjs"
       ],
       "margin": 0.5,
-      "limits": {},
+      "limits": {
+        "report.overheadPercent": 1
+      },
+      "criteria": [
+        "#1009.542330be"
+      ],
       "initialReason": "Issue #30 first measurement: the merge base has no command check kind. One process opens a record, the asks core and the supervisor in a temp folder and runs a 200-test Vitest project through the platform sandbox 10 times as the command check kind (runCommandCheck, counting from its reporter) and 10 times as a plain run under the same hermetic environment and loaders, interleaved, so p50 includes Node's start and both arms; the issue's 1% for counting tests stays in tests/acceptance/30/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
@@ -1134,6 +1142,41 @@
       ]
     },
     {
+      "id": "canvas-water-rings",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "water-rings"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "rings_pond_gpu_ms": 0.3
+      },
+      "initialReason": "Issue #2760 first measurement: the merge base has no rings on water where something touches it and no such task. A release deep-gpu draws a 12 m x 8 m pond of 128 x 128 cells, seen straight down from 16 m so it fills half a 1080p frame, whose water's rings read a logic item's occurrence list (64 touches in one step every 122 steps, so 64 rings are alive at the default span and never more), against the same pond and logic item with plain water, 300 frames a side, five runs after a warm-up one, each a fresh process; the difference of the sides' median GPU time is what the rings add. canvas.mjs judge holds the time on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#2760.6dfadd78"
+      ]
+    },
+    {
+      "id": "canvas-local-tone-map",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "local-tone-map"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "local_1080p_gpu_ms": 0.6,
+        "local_2160p_gpu_ms": 2
+      },
+      "initialReason": "Issue #971 first measurement: the merge base has no local tone map and no such task. A release deep-gpu draws #465's stage under a filmic look at 1920 x 1080 and at 3840 x 2160, with local {strength: 0.5} on the look and without, 300 frames a side, five runs after a warm-up one, each a fresh process; the difference of the sides' median GPU time at each size is what the local tone map adds. canvas.mjs judge holds the times on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#971.ae60e422"
+      ]
+    },
+    {
       "id": "canvas-ground",
       "command": [
         "node",
@@ -1554,6 +1597,20 @@
       ]
     },
     {
+      "id": "pptx-export",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "pptx-export"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #732 first measurement (#732.bbcc6582): the merge base has no pptx target. One `deep-show run` exports a 20-stage piece to a deck at 1920 x 1080, two of its stages showing a 3D display whose screen carries an inset, its fidelity check reading the file back and drawing each slide with the pinned LibreOffice; it prints the receipt's timing.wall (under 5 s), which tests/acceptance/732/ac10-budgets.test.ts judges on a reference Mac. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#732.bbcc6582"
+      ]
+    },
+    {
       "id": "narration-transcript",
       "command": [
         "node",
@@ -1745,6 +1802,24 @@
       "initialReason": "Issue #1968 first measurement (#1968.161c44a9): the merge base has no text_diff and reports no code timings. A release deep-show presents five documents by the agent's session and reads frames: a 2,000-line code item's tokens mapped to runs in the look as a change maps them (frames timings, tokens ms, the median of five frames); two 400-line versions under a text_diff read and aligned as the check aligns them, edits spread from the first line to the last (aligns ms, the median of five frames); a board whose cell grid plays a ten-minute terminal recording, sought to five times out of order after a frame at 0 s (the slowest frame's scheduler time); and a film with a dot moving every frame with a still code item and without it, the nodes frames 2 to 6 run with it beyond those without it. One warm-up and five runs, each a fresh process; canvas.mjs judge holds the three times to their targets on a reference Mac and the count on any machine. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
       "criteria": [
         "#1968.161c44a9"
+      ]
+    },
+    {
+      "id": "canvas-text-reflow",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "text-reflow"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "width_change_50kb_ms": 5,
+        "typed_char_50kb_ms": 2
+      },
+      "initialReason": "Issue #1430 first measurement (#1430.8a0fdfd2): the merge base keys its one shaped-run cache on the width and shapes a text whole, so a new width or one typed character shapes all of it again. A release deep-text shape lays a 50 KB text of 100 paragraphs out at 640 px, then at five other widths (width_change_50kb_ms) and five times with one more character typed into a paragraph (typed_char_50kb_ms), each the shaper's time for its line and a run's reading the median of its five; one warm-up and five runs, each a fresh process. canvas.mjs judge holds both times to their targets on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#1430.8a0fdfd2"
       ]
     },
     {
@@ -1987,6 +2062,91 @@
       "initialReason": "Issue #210 first measurement (#210.91594eec): the merge base has no ports and no each reading. The drum pad with its port open is played for 10 s of virtual time, a note every 50 ms, and each Out carries its delay_ns, from the end of its step's run to its handoff to the plug-in; the sensor piece is baked over 600 steps with 16 values a step and with none, and each step reports its read_ns. The issue's numbers on the reference Mac (a step's entries delivered within 2 ms at p99, 16 values adding under 0.05 ms a step, and no port work in any frame of a piece with no port) are judged in tests/acceptance/210/ac8-budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.",
       "criteria": [
         "#210.91594eec"
+      ]
+    },
+    {
+      "id": "canvas-many-lamps",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "many-lamps"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "frame_gpu_p95_ms": 10,
+        "cluster_pass_gpu_p95_ms": 0.5,
+        "scoring_cpu_p95_ms": 1,
+        "light_lists_bytes": 4000000,
+        "estimate_off": 0.25
+      },
+      "initialReason": "Issue #1634 first measurement (#1634.5a35384c): the merge base has no fill lights and no such task. A release deep-gpu plays the night city of tests/acceptance/1634 (1,024 fill point and 1,024 fill spot lamps, ranges 6 to 12 m) at 1920 x 1080 for 300 frames with timings, five runs after a warm-up one, each a fresh process; canvas.mjs judge holds the frame's GPU p95, the cluster pass's, the CPU scoring's and each estimate's distance from its measurement on a reference Mac, and the light lists' bytes anywhere. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#1634.5a35384c"
+      ]
+    },
+    {
+      "id": "canvas-cells-long-record",
+      "command": [
+        "node",
+        "benchmarks/canvas-world.mjs",
+        "tests/acceptance/1868/canvas-cells.test.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "ratio": 1.2
+      },
+      "initialReason": "Issue #1868 first measurement (#1868.f34f3f9c): the merge base has no such task. A canvas.user cells call, the call the app's open Terminal tab sends every 250 ms, on a record of 200,000 reading.recorded events and 5,000 asks, against the same call on an empty record; the issue's limit is 1.20 times the empty record's time. node --test runs the blind acceptance test itself, which seeds both records, starts a hub of this checkout on each, times five runs of each side after a warm-up, sides alternating, and judges them by scripts/benchmark.mjs's judgeLimit (PASS only on a reference Mac on mains power, Low Power Mode off, thermal state nominal, load within the cores); the benchmark prints that verdict and exits 0, and its judge gives it as the target. Once main has this task, p50 and peak memory get a 50% merge-base margin, and instructions retired are judged as for every task: over a whole acceptance run (seeding, two hubs) that count may read INCONCLUSIVE, or FAIL on an unrelated change to hub start-up. The blind job read the merge base at 3.06 times, all five runs over (tests/acceptance/1868/BASE-FAILURE.txt).",
+      "criteria": [
+        "#1868.f34f3f9c"
+      ]
+    },
+    {
+      "id": "deep-status-run-events",
+      "command": [
+        "node",
+        "benchmarks/canvas-world.mjs",
+        "tests/acceptance/1868/status-runs.test.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "ratio": 1.2
+      },
+      "initialReason": "Issue #1868 first measurement (#1868.bf84aa8b): the merge base has no such task (deep-status-30 seeds no runs). One deep_status call for a session with 10 claims on a record of 200,000 run events, against the same call on 1,000; the issue's limit is 1.20 times the shorter record's time. node --test runs the blind acceptance test itself, which seeds both records, starts a hub of this checkout on each, times five runs of each side after a warm-up, sides alternating, and judges them by scripts/benchmark.mjs's judgeLimit (PASS only on a reference Mac on mains power, Low Power Mode off, thermal state nominal, load within the cores); the benchmark prints that verdict and exits 0, and its judge gives it as the target. Once main has this task, p50 and peak memory get a 50% merge-base margin, and instructions retired are judged as for every task: over a whole acceptance run (seeding, two hubs) that count may read INCONCLUSIVE, or FAIL on an unrelated change to hub start-up. The blind job read the merge base at 282.67 times, all five runs over (tests/acceptance/1868/BASE-FAILURE.txt).",
+      "criteria": [
+        "#1868.bf84aa8b"
+      ]
+    },
+    {
+      "id": "catalog-budgets",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "catalog"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "pack_10000_rows_ms": 1000,
+        "reach_5000_recipes_ms": 200,
+        "economy_5000_recipes_ms": 200,
+        "idle_work": 0
+      },
+      "initialReason": "Issue #194 first measurement: the merge base has no catalog probe, no catalog checks and no such task. On a release build of deep-catalog and the catalog plug-in's own runners: pack_10000_rows_ms, deep-catalog's own time packing one table of 10,000 rows and 20 columns, held to 1,000 ms; reach_5000_recipes_ms, catalog.reach's own time over a chain of 5,000 recipes, held to 200 ms; economy_5000_recipes_ms, catalog.economy's own time over 2,500 recipe-and-uncraft pairs, held to 200 ms; five runs after a warm-up, judged on a reference Mac. idle_work counts the steps of a 600-step release bake at which a logic item naming the plug-in's clean kit catalog spends other fuel than the same item naming none, judged anywhere: a piece that names a catalog gains no work per frame.",
+      "criteria": [
+        "#194.60b4ab87"
+      ]
+    },
+    {
+      "id": "net-seats",
+      "command": ["node", "benchmarks/net-seats.mjs"],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #277 first measurement (#277.2c9337c4): the merge base has no seats that change. node benchmarks/net-seats.mjs runs the criterion's blind acceptance test (tests/acceptance/277/ac4-budgets.test.ts), which plays the eight-seat piece's four copies over the test relay twice: once with seats that never change, counting the frames, bytes, messages, rollbacks and steps run against the merge base's counts for the same match, and once with copy 4 hidden for 20 s, recording its catch-up in steps a second (a reading, counted only on a reference Mac). The window times the run against its merge base; once main has this task, p50 and peak memory get a 50% merge-base margin.",
+      "criteria": [
+        "#277.2c9337c4"
       ]
     }
   ]

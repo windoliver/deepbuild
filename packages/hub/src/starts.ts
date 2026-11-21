@@ -15,7 +15,9 @@ import type { Asks } from '@deepbuild/asks';
 import type { AppKey, SessionCredentials } from './forge-port.js';
 import { TERMINAL_PROTOCOL } from '@deepbuild/extension-host';
 import { alive, HELPER, type Supervisor } from '@deepbuild/supervisor';
+import { writeThrough } from './agent-files.js';
 import { parents } from './children.js';
+import { coverage, coveredBy } from './adapter-facts.js';
 import { registry } from './hookmap.js';
 import { refusal, Refused, ulid, type Plant } from './wire.js';
 import { ROLES, type Rule } from './work-rule.js';
@@ -398,9 +400,8 @@ export class Starts {
     if (used !== undefined && used >= approval.plan_share) return refuse('plan_share', `${agent}'s plan window in ${home} is ${used}% used, at the ${approval.plan_share}% plan share ${approval.ask} allows.`);
     const found = await this.versionOf(agent).catch((error: Error) => error);
     if (found instanceof Error) return refuse('version', `${agent} can't start: ${found.message}`);
-    const facts = this.factsOf(agent)!;
-    if (!(facts.versions as string[]).includes(found.version)) {
-      return refuse('version', `${agent} ${found.version} is past the versions its facts cover (${(facts.versions as string[]).join(', ')}), so its hooks would be watch-only; it doesn't start.`);
+    if (!coveredBy(agent, found.version)) {
+      return refuse('version', `${agent} ${found.version} is not a version its facts cover (${coverage(agent).join(', ')}), so its hooks would be watch-only; it doesn't start.`);
     }
     const tree = r.worktree ?? await this.worktree(repo, issue, run);
     const { sandbox, entry } = this.o.plant === 'starts-without-sandbox' ? { sandbox: NONE, entry: undefined } : this.sandboxOf(agent, found.version);
@@ -691,7 +692,8 @@ export class Starts {
   }
   /**
    * The worktree a start made is one you approved, so it starts trusted where the agent keeps folder trust as JSON
-   * (its facts' `trust`): nothing types into its trust dialog. Written whole through a rename, the rest kept.
+   * (its facts' `trust`): nothing types into its trust dialog. Written whole through the file a link points to, the
+   * rest kept, as setup writes it, so a link into your dotfiles stays a link. The planted wrong program renames over the path.
    */
   private trust(started: Obj, home: string, worktree: string): void {
     const t = isObj(started.trust) ? started.trust : undefined;
@@ -703,8 +705,10 @@ export class Starts {
     let at = config;
     for (const k of path.slice(0, -1)) at = (isObj(at[k]) ? at[k] : (at[k] = {})) as Obj;
     at[path.at(-1)!] = true;
+    const text = `${JSON.stringify(config, null, 2)}\n`;
+    if (this.o.plant !== 'trust-renames-over-link') return writeThrough(file, text);
     const tmp = `${file}.deep-${process.pid}`;
-    writeFileSync(tmp, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+    writeFileSync(tmp, text, { mode: 0o600 });
     renameSync(tmp, file);
   }
   /** Your login shell's environment minus what marks a nested session and your forge login, with the account's home only when it isn't the default. */

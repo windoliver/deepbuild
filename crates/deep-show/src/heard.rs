@@ -102,13 +102,13 @@ impl Scope {
     }
 }
 
-/// What one line's transcripts say.
+/// What one line's transcripts say; #1518's `cut.heard` judges its rows the same way.
 #[derive(Default)]
-struct Judged {
-    issues: Vec<Value>,
-    blocked: Vec<Value>,
-    asks: Vec<Value>,
-    measure: Vec<Value>,
+pub(crate) struct Judged {
+    pub(crate) issues: Vec<Value>,
+    pub(crate) blocked: Vec<Value>,
+    pub(crate) asks: Vec<Value>,
+    pub(crate) measure: Vec<Value>,
 }
 
 impl Hub<'_> {
@@ -658,7 +658,7 @@ pub(crate) fn fit_issues(doc: &Value, s: &Script) -> Vec<Value> {
 }
 
 /// A default row: FAIL on an error issue, else BLOCKED on anything it couldn't read, else PASS.
-fn row(claim: &str, name: &str, check: &str, j: Judged) -> Value {
+pub(crate) fn row(claim: &str, name: &str, check: &str, j: Judged) -> Value {
     let result = if j.issues.iter().any(|i| i["severity"] == "error") {
         "FAIL"
     } else if !j.blocked.is_empty() {

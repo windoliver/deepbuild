@@ -10,7 +10,9 @@ import { homedir } from 'node:os';
 import { delimiter, dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFacts } from '@deepbuild/adapters';
+import { coverage, coveredBy } from './adapter-facts.js';
 import { canvasItems } from './canvas-doctor.js';
+import { appFootprintItem } from './footprint-doctor.js';
 import { claudeSettings, commands, FORWARDER, installed, readJson, shadowedBy, topLevel } from './claude-settings.js';
 import { call } from './client.js';
 import { deprecatedCalls, rpcTable } from './contracts.js';
@@ -53,22 +55,7 @@ async function which(name: string, path: string): Promise<string | undefined> {
   }
   return undefined;
 }
-const facts = (agent: string): { versions: string[]; billing?: { apiKeyVariables?: string[] } } => readFacts(`${agent}.facts.json`);
-const parts = (v: string) => v.split(/[.-]/).map((p) => (/^\d+$/.test(p) ? Number(p) : p));
-function compare(a: string, b: string): number {
-  const x = parts(a), y = parts(b);
-  for (let i = 0; i < Math.max(x.length, y.length); i++) {
-    const p = x[i] ?? 0, q = y[i] ?? 0;
-    if (p === q) continue;
-    if (typeof p === 'number' && typeof q === 'number') return p - q;
-    return String(p) < String(q) ? -1 : 1;
-  }
-  return 0;
-}
-const covered = (agent: string, version: string) => {
-  const range = facts(agent).versions;
-  return range.length > 0 && compare(version, range[0]!) >= 0 && compare(version, range[range.length - 1]!) <= 0;
-};
+const facts = (agent: string): { billing?: { apiKeyVariables?: string[] } } => readFacts(`${agent}.facts.json`);
 /** A job is reported only at this many failures in a row (#909), so one blip stays quiet. */
 const JOB_FAILURES = 3;
 
@@ -127,6 +114,10 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
       });
       for (const f of failing) add('hub.jobs', 'deepbuild', 'job_failing', 'warn', `the hub's job ${f.name} failed ${f.failures} times in a row since ${new Date(f.since).toISOString()}: ${f.error}`, 'Read the error; the job runs again on its own, and its next clean run clears this.');
       if (!failing.length) add('hub.jobs', 'deepbuild', 'healthy', 'ok', `none of the hub's ${Object.keys(jobs).length} jobs has failed ${JOB_FAILURES} times in a row`, 'Nothing to do.');
+      // A hook handler set aside (#2402): one item each, naming its extension, its hook kind and its last failure.
+      for (const a of isObj(reply.result.hooks) && Array.isArray(reply.result.hooks.aside) ? reply.result.hooks.aside.filter(isObj) : []) {
+        add('extensions.hooks', 'deepbuild', 'handler_set_aside', 'warn', `${String(a.extension)}'s ${String(a.hook)} handler is set aside after ${String(a.failures)} failures in a row, so DeepBuild no longer asks it; the last: ${String(a.last)}`, `Install ${String(a.extension)} again, or a fixed version, with \`deep install <its folder>\`, or restart the hub (\`deep hub stop\`, then \`deep hub start\`): either gives its handler a fresh try.`);
+      }
       // The release's packs (#1720): one that failed the canvas core's pack check isn't installed, and is named here.
       const packs = Array.isArray(reply.result.packs) ? reply.result.packs.filter(isObj) : [];
       const named = (p: Obj) => `${typeof p.pack === 'string' ? `${p.pack}@${String(p.version)}` : 'a pack'} (packs/${String(p.folder)})`;
@@ -191,6 +182,8 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
   await Promise.all([claudeItems(claude, loginPath, env, options.prompt, add), codexItems(codex, env, add)]);
   // The canvas: its GPU adapter and tier, a fixture rendered headless against its golden, and its verdict (#140).
   items.push(...(await canvasItems(env)));
+  // The app's footprint beside the gauges for what it owns (#1431).
+  items.push(await appFootprintItem(env));
   return items;
 }
 
@@ -286,7 +279,6 @@ export function hookItems(env: NodeJS.ProcessEnv, cwd: string): Item[] {
 
 async function claudeItems(claude: string | undefined, loginPath: string | undefined, env: NodeJS.ProcessEnv, prompt: boolean, add: (...a: [string, string, Item['code'], Item['level'], string, string]) => void): Promise<void> {
   const agent = 'claude-code';
-  const range = facts(agent).versions;
   if (!claude) {
     add('claude.binary', agent, 'binary_missing', 'fail', 'no claude on your PATH', 'Install Claude Code, or put it on your PATH.');
     return;
@@ -296,7 +288,7 @@ async function claudeItems(claude: string | undefined, loginPath: string | undef
   ]);
   const v = /(\d+\.\d+\.\d+[\w.-]*)/.exec(version?.out ?? '')?.[1];
   if (!v) add('claude.binary', agent, 'binary_missing', 'fail', `${claude} --version printed no version`, 'Reinstall Claude Code.');
-  else if (!covered(agent, v)) add('claude.binary', agent, 'version_uncovered', 'fail', `${claude} is Claude Code ${v}, outside what its facts cover (${range[0]} to ${range[range.length - 1]}): its hooks are recorded unverified, and its holds and every block but the floor are watch-only; its fail_closed guard entries still deny`, 'Install a version the facts cover, or update DeepBuild.');
+  else if (!coveredBy(agent, v)) add('claude.binary', agent, 'version_uncovered', 'fail', `${claude} is Claude Code ${v}, not a version its facts cover (${coverage(agent).join(', ')}): its hooks are recorded unverified, and its holds and every block but the floor are watch-only; its fail_closed guard entries still deny`, 'Install a version the facts cover, or update DeepBuild.');
   else add('claude.binary', agent, 'healthy', 'ok', `${claude} is Claude Code ${v}, which its facts cover`, 'Nothing to do.');
   if (jobs !== undefined) {
     const same = (() => { try { return realpathSync(jobs) === realpathSync(claude); } catch { return jobs === claude; } })();
@@ -358,9 +350,8 @@ async function codexItems(codex: string | undefined, env: NodeJS.ProcessEnv, add
   if (!codex) return;
   const [version, signedIn] = await Promise.all([ran(codex, ['--version']), probeSignIn(agent, codex)]);
   const v = /(\d+\.\d+\.\d+[\w.-]*)/.exec(version?.out ?? '')?.[1];
-  const range = facts(agent).versions;
   if (!v) add('codex.binary', agent, 'binary_missing', 'fail', `${codex} --version printed no version`, 'Reinstall Codex.');
-  else if (!covered(agent, v)) add('codex.binary', agent, 'version_uncovered', 'fail', `${codex} is Codex ${v}, outside what its facts cover (${range[0]} to ${range[range.length - 1]})`, 'Install a version the facts cover, or update DeepBuild.');
+  else if (!coveredBy(agent, v)) add('codex.binary', agent, 'version_uncovered', 'fail', `${codex} is Codex ${v}, not a version its facts cover (${coverage(agent).join(', ')})`, 'Install a version the facts cover, or update DeepBuild.');
   else add('codex.binary', agent, 'healthy', 'ok', `${codex} is Codex ${v}, which its facts cover`, 'Nothing to do.');
   if (signedIn === 'signed_in') add('codex.sign_in', agent, 'healthy', 'ok', 'codex login status exits 0: signed in', 'Nothing to do.');
   else add('codex.sign_in', agent, 'signed_out', 'fail', signedIn === 'signed_out' ? 'codex login status exits non-zero: not signed in' : "codex login status couldn't be read: not signed in", 'Run codex login.');

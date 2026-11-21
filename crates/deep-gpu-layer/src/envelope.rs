@@ -1309,6 +1309,10 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
         h["potential_headroom"] = json!(potential);
         h["headroom"] = json!(current);
     }
+    // #1431: the process's footprint as the runs left it, beside the gauges.
+    if reply.get("verdict").is_some() {
+        reply["footprint"] = deep_gpu::footprint::read(deep_gpu::footprint::SYSTEM).json();
+    }
     reply
 }
 

@@ -1265,7 +1265,7 @@ fn marks3d(
                 })
             })?;
             Some(
-                crate::axes3d::read(a, item, req.item, req.channels).map_err(|r| {
+                crate::axes3d::read(a, item, req.item, req.channels, req.planted).map_err(|r| {
                     deep_canvas::outline::Refusal {
                         code: r.code,
                         what: r.path.clone(),

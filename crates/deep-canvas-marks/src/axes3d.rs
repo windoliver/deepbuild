@@ -14,6 +14,8 @@ use crate::data::{Scale, ScaleKind};
 
 pub const KIND: &str = "axes3d@1";
 pub const DEFORM: &str = "mod.axes@1";
+/// The kind a title may name (Marks in 3D: axes `axes3d@1`: `titles: {x, y, z: text | vector ID}`).
+const VECTOR: &str = "vector@1";
 const NAMES: [&str; 3] = ["x", "y", "z"];
 /// The look roles the axes draw in, never a status color: their lines, ticks and labels in ink,
 /// their grid planes muted.
@@ -26,6 +28,10 @@ const LABEL: f64 = 5.0;
 /// place as well as mapping through their scales, so a point moves twice as far as its axes;
 /// and axes with a tick rule of their own, every tick at full opacity.
 pub const PLANTED: [&str; 2] = ["axes_mod_applies_transform", "axes3d_own_tick_rule"];
+
+/// #2450's wrong program, which a proof surface plants by this name: a check that takes a title
+/// naming an item of any kind, as its text.
+pub const TAKES_ANY_KIND: &str = "axes_title_takes_any_kind";
 
 /// Registers the axes' marks and their deform with the data module.
 pub fn register(r: &mut Registrar) {
@@ -46,8 +52,16 @@ pub struct Axes {
     tick: f64,
     facing: &'static str,
     tips: bool,
-    titles: [Option<String>; 3],
+    pub titles: [Option<Title>; 3],
     planes: Vec<[usize; 2]>,
+}
+
+/// An axis's title (#2450): its text, or the `vector@1` item it names, with that item's width
+/// over its height.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Title {
+    Text(String),
+    Vector(String, f64),
 }
 
 fn refusal(code: &'static str, path: String) -> Refusal {
@@ -59,12 +73,13 @@ fn refusal(code: &'static str, path: String) -> Refusal {
 }
 
 /// Axes item `id` (`item` as at t), its scales read through `item_of` and followed through the
-/// document's `channels`.
+/// document's `channels`; `planted` is the wrong program a test build plants by name, or none.
 pub fn read<'d>(
     id: &str,
     item: &Value,
     item_of: &dyn Fn(&str) -> Option<&'d Value>,
     channels: Option<&Value>,
+    planted: Option<&str>,
 ) -> Result<Axes, Refusal> {
     let path = format!("items/{id}/params");
     let p = item.get("params").cloned().unwrap_or(Value::Null);
@@ -132,11 +147,22 @@ pub fn read<'d>(
             continue;
         };
         let t = t.as_str().ok_or_else(|| bad(&format!("titles/{name}")))?;
-        // A title naming a vector item would draw it facing the camera: not drawn yet.
-        if item_of(t).is_some() {
-            return Err(bad(&format!("titles/{name}")));
-        }
-        titles[a] = Some(t.to_string());
+        // A title naming a vector item draws it; one naming an item of any other kind is refused.
+        titles[a] = Some(match item_of(t) {
+            Some(v) if v.get("kind").and_then(Value::as_str) == Some(VECTOR) => {
+                let side = |k: usize| {
+                    v.pointer(&format!("/params/size/{k}"))
+                        .and_then(Value::as_f64)
+                        .filter(|s| s.is_finite() && *s > 0.0)
+                };
+                let aspect = side(0).zip(side(1)).map_or(1.0, |(w, h)| w / h);
+                Title::Vector(t.to_string(), aspect)
+            }
+            Some(_) if planted != Some(TAKES_ANY_KIND) => {
+                return Err(bad(&format!("titles/{name}")))
+            }
+            _ => Title::Text(t.to_string()),
+        });
     }
     let mut planes = Vec::new();
     for (k, v) in p
@@ -303,7 +329,20 @@ impl Axes {
             }
             if let Some(t) = &self.titles[a] {
                 let place = add(ends[1], along, tip + LABEL * self.tick);
-                out.push(text(format!("{name}.title"), place, t, 1.0));
+                let sub = format!("{name}.title");
+                out.push(match t {
+                    Title::Text(t) => text(sub, place, t, 1.0),
+                    // A vector title: the item pictured at the title's size, facing as a label.
+                    Title::Vector(item, aspect) => Mark {
+                        sub,
+                        kind: "mark.image@1",
+                        at: place,
+                        params: json!({"item": item, "size_space": "world", "facing": self.facing,
+                                       "size": [LABEL * self.tick * aspect, LABEL * self.tick],
+                                       "fog": false}),
+                        opacity: 1.0,
+                    },
+                });
             }
             for t in shown {
                 let points = vec![t.at, t.end];
@@ -369,7 +408,7 @@ fn add(a: [f64; 3], b: [f64; 3], k: f64) -> [f64; 3] {
 
 /// The marks fill: the axes' marks at the frame's time.
 fn marks(req: &Request<'_, '_>) -> Result<Vec<Mark>, Refusal> {
-    Ok(read(req.id, req.value, req.item, req.channels)?.marks(req.planted))
+    Ok(read(req.id, req.value, req.item, req.channels, req.planted)?.marks(req.planted))
 }
 
 /// The deform fill: each point, in the axes' numbers, to its place in metres in the axes' own
@@ -383,7 +422,7 @@ fn deform(req: &Request<'_, '_>, points: &mut [[f64; 3]]) -> Result<(), Refusal>
     let (Some(axes_id), Some(item)) = (axes_id, item) else {
         return Err(refusal("ref_unresolved", "params/axes".into()));
     };
-    let axes = read(axes_id, item, req.item, req.channels)?;
+    let axes = read(axes_id, item, req.item, req.channels, req.planted)?;
     // The planted wrong program also adds the axes' own place, which their parents apply.
     let moved = (req.planted == Some(PLANTED[0]))
         .then(|| item.pointer("/at/pos").and_then(Value::as_array).cloned())
@@ -410,7 +449,7 @@ pub fn ticks_report(
     items: &Map<String, Value>,
     channels: Option<&Value>,
 ) -> Result<Value, Refusal> {
-    let axes = read(id, item, &|k| items.get(k), channels)?;
+    let axes = read(id, item, &|k| items.get(k), channels, None)?;
     let [x, y, z] = axes.ticks(None).map(|t| {
         t.into_iter()
             .map(|(value, _, opacity)| json!({"value": value, "opacity": opacity}))
@@ -442,7 +481,7 @@ fn rule(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
     };
     let items = doc.get("items").and_then(Value::as_object);
     let item_of = |k: &str| items.and_then(|m| m.get(k));
-    let axes = match read(id, item, &item_of, doc.get("channels")) {
+    let axes = match read(id, item, &item_of, doc.get("channels"), None) {
         Ok(a) => a,
         Err(r) => return vec![raised(r.code, r.path, r.what)],
     };

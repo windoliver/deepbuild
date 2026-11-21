@@ -1,0 +1,119 @@
+The #2098 suite run once at base commit 85203f458b85c999ac03a884c837398e56aeac8d ("Merge pull request #2852 …"; no
+implementation of #2098), on November 19, 2026, on macOS 27.2 arm64 (shared, 1-minute load between 55 and 290 while
+this job worked), Node 24.22.2, vitest 5.0.5, TypeScript 5.9.3, cargo and rustc 1.99.1. The type-check first:
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/2098/tsconfig.json          (exit 0, no error)
+
+then each test file once, one at a time, with
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/2098 --no-file-parallelism --testTimeout=3600000 \
+    --reporter=verbose <file>
+
+The one build the suite reads, this checkout's release deep-physics, was in the target folder before the run (made by
+`cargo build --locked -j 6 --release -p deep-physics-rapier --bin deep-physics` through the build slot). This job
+started no build of its own; the suite's own cargo call found it made and copied it out. Each file took under a
+second.
+
+Result, over the three runs: Test Files 3 failed (3); Tests 8 failed (8). Every test fails at an assertion in its own
+test file, for the reason the README gives: the base refuses a 2D world, a `wind` force and a body's `inertia`, links
+no rapier2d, and knows none of this suite's three planted names. None fails in a helper, at an import or at a timeout,
+and none is BLOCKED or INCONCLUSIVE. No test passes at the base, and none should. No file was run twice.
+
+What the base already does inside those failing tests, which they don't credit:
+- ac1, second test: the base refuses the 2D drop named for rapier3d at `dimensions`, naming the backend, as it
+  refuses `dimensions: 2` in any world:
+    physics.backend_cap at dimensions, actual 2: "rapier3d 0.36.1 runs only 3D worlds (2D on rapier2d is #2098), so
+    dimensions is refused"
+  This suite's refusal judge finds nothing wrong with that reply (probed by hand, below). The test fails on the base
+  because the same world named for rapier2d is not accepted, which it asserts first.
+
+ac1-2d-world.test.ts (#2098.07d55616)
+ × the 2D world, both of restitution 0.5, runs on rapier2d 0.36.1 and the ball rebounds to within 0.05 of a quarter of
+   the 2 m drop
+   ac1-2d-world.test.ts:24  AssertionError: the 2D drop with backend.name rapier2d bakes: the ball's height and
+   vertical velocity after each of 240 steps: expected '…' to be ''
+     the 2D drop with backend.name rapier2d isn't baked: physics.backend_cap at dimensions: rapier3d 0.36.1 runs only
+     3D worlds (2D on rapier2d is #2098), so dimensions is refused; physics.backend_cap at backend/name: rapier3d
+     0.36.1 is the backend this build runs, not "rapier2d", so backend/name is refused; out_of_range at
+     shapes/ball/kind: a shape's kind must be sphere, box, capsule, cylinder, plane, convex, mesh, heightfield or
+     compound; unknown_field at shapes/floor/a: …; unknown_field at shapes/floor/b: …; out_of_range at
+     shapes/floor/kind: …; ref_unresolved at bodies/floor/shapes/0/shape: "floor" is not a shape of this world;
+     ref_unresolved at bodies/ball/shapes/0/shape: "ball" is not a shape of this world; out_of_range at
+     bodies/ball/pose/pos: bodies/ball/pose/pos must be three numbers
+ × the same world with backend.name rapier3d and dimensions 2 is refused at check naming dimensions and rapier3d,
+   beside the same world accepted and stepped on rapier2d
+   ac1-2d-world.test.ts:44  AssertionError: the 2D drop with backend.name rapier2d is accepted at check and steps:
+   expected [ …(10) ] to deeply equal []
+     the 2D drop with backend.name rapier2d isn't accepted at check: physics.backend_cap at dimensions: rapier3d
+     0.36.1 runs only 3D worlds (2D on rapier2d is #2098), so dimensions is refused
+     the 2D drop with backend.name rapier2d isn't accepted at check: physics.backend_cap at backend/name: rapier3d
+     0.36.1 is the backend this build runs, not "rapier2d", so backend/name is refused
+     … (the seven reader refusals above, one line each)
+     the 2D drop with backend.name rapier2d isn't baked: … (the same nine)
+ × a planted program that builds a 2D world on rapier3d (world_2d_built_on_rapier3d) is caught: its check refuses
+   nothing at dimensions, and the failure names dimensions and rapier3d
+   ac1-2d-world.test.ts:51  AssertionError: deep-physics --planted world_2d_built_on_rapier3d answers: the planted
+   program runs: expected '…' to be ''
+     deep-physics --planted world_2d_built_on_rapier3d exits 2, not 0; stdout: {"ok":false,"code":"bad_input"};
+     stderr:
+
+ac2-wind.test.ts (#2098.7c1127fe)
+ × a body under wind {velocity: (2, 0, 0)} with coupling {kind: aero_triangles, coefficient: 1} is taken at check,
+   runs, and the wind moves it from rest along +x
+   ac2-wind.test.ts:26  AssertionError: a body under wind {velocity: (2, 0, 0), coupling: {kind: aero_triangles,
+   coefficient: 1}} is accepted at check: expected [ …(1) ] to deeply equal []
+     a body under wind {velocity: (2, 0, 0), coupling: {kind: aero_triangles, coefficient: 1}} isn't accepted at
+     check: physics.unsupported at forces/wind/kind: a wind force isn't run by this backend interface yet; #2098
+     brings it
+ × the same seed gives the same gusts on every run, step hash by step hash; the gusts move the body, and another seed
+   gives others
+   ac2-wind.test.ts:45  AssertionError: each wind bakes 240 steps, a hash for each: expected [ …(5) ] to deeply
+   equal []
+     the wind with gust {amplitude: 1, scale: 0.5, speed: 2} and seed 7 isn't baked: physics.unsupported at
+     forces/wind/kind: a wind force isn't run by this backend interface yet; #2098 brings it
+     … (the same for its second process, its second time in that process, the same wind and seed 7 with no gust, and
+     the same gusty wind with seed 8)
+ × a planted program whose wind noise comes from platform sin (wind_noise_from_platform_sin) is caught: it still
+   gusts, and its gusts aren't the ones the hash gives the seed, the failure naming the step
+   ac2-wind.test.ts:56  AssertionError: deep-physics --planted wind_noise_from_platform_sin answers: the planted
+   program runs: expected '…' to be ''
+     deep-physics --planted wind_noise_from_platform_sin exits 2, not 0; stdout: {"ok":false,"code":"bad_input"};
+     stderr:
+
+ac3-inertia.test.ts (#2098.f0ef7a3d)
+ × the box given inertia twice its shape's spins up at half the angular acceleration of the same box without it,
+   under the same torque, within 1%
+   ac3-inertia.test.ts:22  AssertionError: the two cubes under the same torque bake: each box's state after each of
+   120 steps: expected '…' to be ''
+     the two cubes under the same torque isn't baked: physics.unsupported at bodies/doubled/inertia: inertia isn't
+     run by this backend interface yet; #2098 brings it
+ × a planted program that ignores a body's inertia (inertia_ignored) is caught: the box spins up as fast as the one
+   without it, and the failure names the box
+   ac3-inertia.test.ts:30  AssertionError: deep-physics --planted inertia_ignored answers: the planted program runs:
+   expected '…' to be ''
+     deep-physics --planted inertia_ignored exits 2, not 0; stdout: {"ok":false,"code":"bad_input"}; stderr:
+
+Probed by hand at the base, outside the suite, to see that the worlds and the judges are well formed wherever the base
+already runs them. Each probe fed the suite's own documents and judges (helpers.ts) to the same release deep-physics;
+none is a test, none gave an expected value, and none is kept:
+
+- The same ball and floor as a 3D world (a `sphere` of radius 0.1 m built at (0, 2.1, 0) over a static `box` whose
+  top is y = 0, the same contact material on both, `gravity` left out, baked 240 steps with `checkpoints: true`): the
+  ball first moves upward after step 78 and its first rebound is 0.4966 m, 0.2483 of the drop, which the rebound
+  judge passes; the bake lists four checkpoints, at steps 60, 120, 180 and 240, each naming
+  {"name": "rapier3d", "version": "0.36.1"}, which the backend judge passes for rapier3d and fails for rapier2d.
+  `Cargo.lock` resolves rapier3d to 0.36.1 alone and rapier2d to no version.
+- The check of the 2D drop named for rapier3d: the refusal judge finds nothing wrong (the issue quoted above).
+- The steady wind's world with its force's kind written `{"drag": {"linear": 1, "medium": [2, 0, 0]}}` in place of
+  the wind: accepted at check; the body moves 0.0167 m/s along +x after its first step and 1.2673 m/s after 120, so
+  the "moved from rest" judge passes; its 241 step hashes are the same strings in a second bake and in a second
+  process, and differ from step 1 on with `linear: 2`.
+- The two cubes with `inertia` left out of `doubled`: accepted at check; each spins up at 57.2976 deg/s² over the
+  first second (0.4775 deg/s after step 1, 28.648 after 60, 57.298 after 120), against 1 N·m ÷ 1 kg·m² = 57.2958
+  deg/s², so the plain box's line of the judge passes; the judge fails on the pair, as it must on an inertia ignored:
+    doubled: given inertia twice its shape's it spins up at 57.2976 deg/s², 1.0000 of plain's 57.2976 deg/s² under the
+    same torque, not half of it within 1%
+
+Not run at the base, because nothing there can run it: the 2D drop itself (no rapier2d), any wind, and a body with an
+`inertia`. That each test passes on a right program is therefore unproven here.

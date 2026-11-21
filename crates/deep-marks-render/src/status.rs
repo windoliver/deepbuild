@@ -55,6 +55,8 @@ pub fn label_of(spec: &scene::TextSpec) -> Option<Label> {
         spans: spec.spans.clone(),
         gap: spec.gap as f32,
         indent: spec.indent as f32,
+        flow: spec.flow,
+        line_height: spec.columns_line_height(),
         align: match spec.align {
             Align::Start => deep_text::Align::Start,
             Align::Center => deep_text::Align::Center,

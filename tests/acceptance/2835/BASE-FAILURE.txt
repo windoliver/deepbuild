@@ -1,0 +1,143 @@
+Base: 18f89124c (head of PR #2821, fix/lane-copy-binaries), worktree HEAD; no implementation changes.
+Platform: darwin arm64; Node v24.22.0; cargo 1.99.1; StrykerJS from npm ci (node_modules/.bin/stryker).
+Command: node --test --test-concurrency=1 tests/acceptance/2835/*.test.mjs
+Temporary paths redacted to <tmp>, the home folder to ~, the worktree to <repo>, StrykerJS log stamps to <time> (<pid>).
+Result: 3 tests, 3 failures, each an AssertionError [ERR_ASSERTION] thrown in this folder's test files (see the "at TestContext" frames), for the expected reason: the mutation lane puts no deep-hook or deep-show under its copy's target/debug/ (none in a fresh copy; the twin's deep-hook left in the change bay).
+load: { 55.33 68.74 82.44 }
+v24.22.0
+✖ #2835.addc1d10 a passing tagged test starting the checkout hub gets through StrykerJS initial run, and the lane reports mutants instead of BLOCKED (15171.71775ms)
+ℹ BLOCKED mutation: StrykerJS could not run the tagged tests: StrykerJS exited 1 and left no report: <time> (<pid>) ERROR DryRunExecutor One or more tests failed in the initial test run:
+  Fix: Assert what the criterion names so a mutant of the added lines fails its tests, or name a planted wrong program in tests/acceptance/<issue>/twins.json; install the tool a BLOCKED line names.
+proof: wall time 12.9 s
+
+✖ #2835.fe9d8d8e a tagged test naming neither the hub nor the CLI package finds no deep-hook or deep-show in the mutation copy (44132.276291ms)
+ℹ BAY claim {"index":1,"role":"base","use":"before","bay":"<tmp>/home/deepbuild-bays/1/base","base":"e2fc1ca522b96afb3fa2e774cff1801f60ae03ba","tree":"2887d3b0ed204cce7968a360fa71ce38dad1633b","bundle":null,"untracked":null,"overlay":{"files":1,"hash":"12b8ce6fcb165a410e95664ecdfe9fd9d61374d88dd2dd2c5b6cf8f74609ae4c"},"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":false,"written":131,"deleted":0,"crates":["deep-hook","deep-show"]}
+BAY claim {"index":1,"role":"change","use":"before","bay":"<tmp>/home/deepbuild-bays/1/change","tree":"662529289c98e5751a9db5591c72c60dbb3a4236","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":null,"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":false,"written":132,"deleted":0,"crates":["deep-hook","deep-show"]}
+PASS before: tests/acceptance/2835/hub.test.mjs › #2835.addc1d10 hub run answers with the change programs: failed on the merge base at its assertion
+BAY release {"index":1,"role":"base","bay":"<tmp>/home/deepbuild-bays/1/base","status":null,"targetBytes":2118573,"touched":0}
+BAY release {"index":1,"role":"change","bay":"<tmp>/home/deepbuild-bays/1/change","status":null,"targetBytes":2118745,"touched":0}
+proof: wall time 12.1 s
+
+ℹ BAY claim {"index":1,"role":"base","use":"before","bay":"<tmp>/home/deepbuild-bays/1/base","base":"e2fc1ca522b96afb3fa2e774cff1801f60ae03ba","tree":"2887d3b0ed204cce7968a360fa71ce38dad1633b","bundle":null,"untracked":null,"overlay":{"files":1,"hash":"896dafca1004869dc956916f7286d338eadf237435aee6f4062ceea91ff17917"},"sealedTree":{"base":"e2fc1ca522b96afb3fa2e774cff1801f60ae03ba","tree":"2887d3b0ed204cce7968a360fa71ce38dad1633b","bundle":null,"untracked":null},"seal":"intact","cold":false,"stopped":false,"installed":false,"written":0,"deleted":1,"crates":[]}
+BAY claim {"index":1,"role":"change","use":"before","bay":"<tmp>/home/deepbuild-bays/1/change","tree":"9fc87bf9df461d9b5f0ab3388389d78844fd244e","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":null,"sealedTree":{"tree":"662529289c98e5751a9db5591c72c60dbb3a4236","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[]},"seal":"intact","cold":false,"stopped":false,"installed":false,"written":1,"deleted":1,"crates":[]}
+BAY claim {"index":1,"role":"change","use":"mutation","bay":"<tmp>/home/deepbuild-bays/1/change","tree":"9fc87bf9df461d9b5f0ab3388389d78844fd244e","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":null,"sealedTree":{"tree":"662529289c98e5751a9db5591c72c60dbb3a4236","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[]},"seal":"intact","cold":false,"stopped":false,"installed":false,"written":0,"deleted":0,"crates":[]}
+PASS mutation: 2 mutants of the added lines, 0 surviving on a line a tagged test executes
+BAY release {"index":1,"role":"base","bay":"<tmp>/home/deepbuild-bays/1/base","status":null,"targetBytes":1169901,"touched":0}
+BAY release {"index":1,"role":"change","bay":"<tmp>/home/deepbuild-bays/1/change","status":null,"targetBytes":1170025,"touched":109}
+proof: wall time 13.7 s
+
+ℹ BLOCKED mutation: StrykerJS could not run the tagged tests: StrykerJS exited 1 and left no report: <time> (<pid>) ERROR DryRunExecutor One or more tests failed in the initial test run:
+  Fix: Assert what the criterion names so a mutant of the added lines fails its tests, or name a planted wrong program in tests/acceptance/<issue>/twins.json; install the tool a BLOCKED line names.
+proof: wall time 12.6 s
+
+✖ #2835.1b0cb5cf the mutation copy target/debug holds programs built from the change own sources even after a twin used the bay (22778.058167ms)
+ℹ BAY claim {"index":1,"role":"base","use":"before","bay":"<tmp>/home/deepbuild-bays/1/base","base":"2b02da1fa0f64c8da24f6f3f3ece6772d529aed8","tree":"2887d3b0ed204cce7968a360fa71ce38dad1633b","bundle":null,"untracked":null,"overlay":{"files":3,"hash":"e874a62b0b919ea8f93986e16479bed8da3130a2fe4f3fd88e9e6cae2eb7bd24"},"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":false,"written":131,"deleted":0,"crates":["deep-hook","deep-show"]}
+BAY claim {"index":1,"role":"change","use":"before","bay":"<tmp>/home/deepbuild-bays/1/change","tree":"975201d2bad586afe1b17cce6b14248233ca938b","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":null,"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":false,"written":134,"deleted":0,"crates":["deep-hook","deep-show"]}
+BAY claim {"index":1,"role":"change","use":"twin tests/acceptance/2835/twins/hook-twin","bay":"<tmp>/home/deepbuild-bays/1/change","tree":"975201d2bad586afe1b17cce6b14248233ca938b","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":{"files":1,"hash":"ae4c70065589793807f5a0f5b10e0aae3e3c9d1723e8c78b3b2537e940544266"},"sealedTree":null,"seal":"none","cold":false,"stopped":false,"installed":false,"written":0,"deleted":0,"crates":["deep-hook"]}
+BAY claim {"index":1,"role":"change","use":"mutation","bay":"<tmp>/home/deepbuild-bays/1/change","tree":"975201d2bad586afe1b17cce6b14248233ca938b","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":null,"sealedTree":null,"seal":"none","cold":false,"stopped":false,"installed":false,"written":1,"deleted":0,"crates":["deep-hook"]}
+BLOCKED mutation: StrykerJS could not run the tagged tests: StrykerJS exited 1 and left no report: <time> (<pid>) ERROR DryRunExecutor One or more tests failed in the initial test run:
+  Fix: Assert what the criterion names so a mutant of the added lines fails its tests, or name a planted wrong program in tests/acceptance/<issue>/twins.json; install the tool a BLOCKED line names.
+BAY release {"index":1,"role":"base","bay":"<tmp>/home/deepbuild-bays/1/base","status":null,"targetBytes":2118573,"touched":0}
+BAY release {"index":1,"role":"change","bay":"<tmp>/home/deepbuild-bays/1/change","status":null,"targetBytes":2219854,"touched":109}
+proof: wall time 20.4 s
+
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 82431.153167
+
+✖ failing tests:
+
+test at tests/acceptance/2835/hub.test.mjs:9:1
+✖ #2835.addc1d10 a passing tagged test starting the checkout hub gets through StrykerJS initial run, and the lane reports mutants instead of BLOCKED (15171.71775ms)
+  AssertionError [ERR_ASSERTION]: StrykerJS's initial run: the hub found no binary under the mutation copy's target/ (BLOCKED: no deep-hook is built under target/)
+  exit 1
+  BLOCKED mutation: StrykerJS could not run the tagged tests: StrykerJS exited 1 and left no report: <time> (<pid>) ERROR DryRunExecutor One or more tests failed in the initial test run:
+    Fix: Assert what the criterion names so a mutant of the added lines fails its tests, or name a planted wrong program in tests/acceptance/<issue>/twins.json; install the tool a BLOCKED line names.
+  proof: wall time 12.9 s
+  
+  
+  
+  3 !== 0
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/2835/hub.test.mjs:21:37)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 3,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2835/neither.test.mjs:11:1
+✖ #2835.fe9d8d8e a tagged test naming neither the hub nor the CLI package finds no deep-hook or deep-show in the mutation copy (44132.276291ms)
+  AssertionError [ERR_ASSERTION]: control: StrykerJS's initial run of a test naming packages/cli/ found no deep-hook and deep-show under the mutation copy's target/debug/
+  exit 1
+  BLOCKED mutation: StrykerJS could not run the tagged tests: StrykerJS exited 1 and left no report: <time> (<pid>) ERROR DryRunExecutor One or more tests failed in the initial test run:
+    Fix: Assert what the criterion names so a mutant of the added lines fails its tests, or name a planted wrong program in tests/acceptance/<issue>/twins.json; install the tool a BLOCKED line names.
+  proof: wall time 12.6 s
+  
+  
+  + actual - expected
+  
+  + []
+  - [
+  -   'deep-hook',
+  -   'deep-show'
+  - ]
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/2835/neither.test.mjs:34:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [ 'deep-hook', 'deep-show' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2835/sources.test.mjs:10:1
+✖ #2835.1b0cb5cf the mutation copy target/debug holds programs built from the change own sources even after a twin used the bay (22778.058167ms)
+  AssertionError [ERR_ASSERTION]: StrykerJS's initial run: the mutation copy's target/debug/deep-hook is the change's program, not the twin's
+  exit 1
+  BAY claim {"index":1,"role":"base","use":"before","bay":"<tmp>/home/deepbuild-bays/1/base","base":"2b02da1fa0f64c8da24f6f3f3ece6772d529aed8","tree":"2887d3b0ed204cce7968a360fa71ce38dad1633b","bundle":null,"untracked":null,"overlay":{"files":3,"hash":"e874a62b0b919ea8f93986e16479bed8da3130a2fe4f3fd88e9e6cae2eb7bd24"},"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":false,"written":131,"deleted":0,"crates":["deep-hook","deep-show"]}
+  BAY claim {"index":1,"role":"change","use":"before","bay":"<tmp>/home/deepbuild-bays/1/change","tree":"975201d2bad586afe1b17cce6b14248233ca938b","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":null,"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":false,"written":134,"deleted":0,"crates":["deep-hook","deep-show"]}
+  BAY claim {"index":1,"role":"change","use":"twin tests/acceptance/2835/twins/hook-twin","bay":"<tmp>/home/deepbuild-bays/1/change","tree":"975201d2bad586afe1b17cce6b14248233ca938b","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":{"files":1,"hash":"ae4c70065589793807f5a0f5b10e0aae3e3c9d1723e8c78b3b2537e940544266"},"sealedTree":null,"seal":"none","cold":false,"stopped":false,"installed":false,"written":0,"deleted":0,"crates":["deep-hook"]}
+  BAY claim {"index":1,"role":"change","use":"mutation","bay":"<tmp>/home/deepbuild-bays/1/change","tree":"975201d2bad586afe1b17cce6b14248233ca938b","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":null,"sealedTree":null,"seal":"none","cold":false,"stopped":false,"installed":false,"written":1,"deleted":0,"crates":["deep-hook"]}
+  BLOCKED mutation: StrykerJS could not run the tagged tests: StrykerJS exited 1 and left no report: <time> (<pid>) ERROR DryRunExecutor One or more tests failed in the initial test run:
+    Fix: Assert what the criterion names so a mutant of the added lines fails its tests, or name a planted wrong program in tests/acceptance/<issue>/twins.json; install the tool a BLOCKED line names.
+  BAY release {"index":1,"role":"base","bay":"<tmp>/home/deepbuild-bays/1/base","status":null,"targetBytes":2118573,"touched":0}
+  BAY release {"index":1,"role":"change","bay":"<tmp>/home/deepbuild-bays/1/change","status":null,"targetBytes":2219854,"touched":109}
+  proof: wall time 20.4 s
+  
+  
+  + actual - expected
+  
+  + 'hook-twin'
+  - 'hook-change'
+          ^
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/2835/sources.test.mjs:31:37)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'hook-twin',
+    expected: 'hook-change',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+exit 1

@@ -620,32 +620,6 @@ fn framing_of(
     })
 }
 
-/// An item's extent about its position: a box's, a cylinder's or a sphere's size (#504, read as
-/// the geometry audit reads it), a rect's box, else a point.
-fn extent(item: &Value) -> [Vec3; 2] {
-    let params = item.get("params");
-    match item.get("kind").and_then(Value::as_str) {
-        Some("mark.box@1" | "mark.cylinder@1" | "mark.sphere@1") => {
-            let half = match params.and_then(|p| p.get("size")) {
-                Some(Value::Array(s)) if s.len() == 3 => {
-                    [0, 1, 2].map(|k| s[k].as_f64().unwrap_or(0.0) / 2.0)
-                }
-                Some(v) => [v.as_f64().unwrap_or(0.0) / 2.0; 3],
-                None => [0.5; 3],
-            };
-            [[-half[0], -half[1], -half[2]], half]
-        }
-        Some("rect@1") => match params.and_then(|p| p.get("box")).and_then(Value::as_array) {
-            Some(b) if b.len() == 4 => {
-                let v = |k: usize| b[k].as_f64().unwrap_or(0.0);
-                [[v(0), v(1), 0.0], [v(0) + v(2), v(1) + v(3), 0.0]]
-            }
-            _ => [[0.0; 3]; 2],
-        },
-        _ => [[0.0; 3]; 2],
-    }
-}
-
 /// The eight (or, flat, four) corners of `[lo, hi]`.
 fn corners(b: &[Vec3; 2]) -> [Vec3; 8] {
     std::array::from_fn(|i| {
@@ -980,16 +954,19 @@ fn union_over(
     let mut state = program.state();
     let mut out = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
     for id in keep {
-        let Some(i) = program.items.iter().position(|x| x == id) else {
+        // #2500: a text's `#line:n` or `#tok:k` is kept by its box, as an item by its extent.
+        let (item, part) = crate::anchored::split(id);
+        let own = items.and_then(|m| m.get(item)).unwrap_or(&Value::Null);
+        let found = program.items.iter().position(|x| x == item);
+        let Some((i, e)) = found.zip(crate::anchored::extent(item, own, part)) else {
             return refused(
                 "ref_unresolved",
                 format!("shots/{shot}/frame/keep"),
                 json!({"item": id, "shot": shot}),
             );
         };
-        let e = extent(items.and_then(|m| m.get(id)).unwrap_or(&Value::Null));
         // #504: an assembly's part is bounded in the assembly's space, then widened by its reach.
-        let member = program.member(id);
+        let member = program.member(item);
         let mut own = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
         for axis in 0..3 {
             let slot = i * TRANSFORM + axis;
@@ -1133,16 +1110,17 @@ fn at_start(
     Ok(out)
 }
 
-/// An item's bounds at the state's time.
+/// An item's bounds at the state's time; #2500: a text's `<id>#line:n` or `<id>#tok:k`, its box's.
 pub fn bounds_at(
     program: &Program,
     doc: &Map<String, Value>,
     state: &State,
     id: &str,
 ) -> Option<[Vec3; 2]> {
+    let (id, part) = crate::anchored::split(id);
     let i = program.items.iter().position(|x| x == id)?;
     let pos = [0, 1, 2].map(|k| state.slots[i * TRANSFORM + k]);
-    let e = extent(doc.get("items")?.get(id)?);
+    let e = crate::anchored::extent(id, doc.get("items")?.get(id)?, part)?;
     // #504: an assembly's part's extent turns with the assembly.
     if let Some(a) = program.member(id) {
         let m = program.assembly_world(&state.slots, a);

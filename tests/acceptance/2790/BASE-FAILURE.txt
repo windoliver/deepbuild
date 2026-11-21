@@ -1,0 +1,146 @@
+# #2790 acceptance suite at the base commit 8bfb6a633 (origin/main), 2026-11-20, macOS, Node 24.22.0
+# Command: npm run build --workspaces && NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/2790 --reporter=verbose
+# Local paths redacted as <repo> and <home>.
+
+
+ RUN  v5.0.5 <repo>
+
+ ✓ tests/acceptance/2790/regenerated.test.ts > #2790.92d7996b docs/extension-guide.md is regenerated, with an entry for deep.registerPort, and its drift test names it nowhere > #2790.92d7996b the guide has an entry for deep.registerPort under the digest the contract publishes 2ms
+ ✓ tests/acceptance/2790/regenerated.test.ts > #2790.92d7996b docs/extension-guide.md is regenerated, with an entry for deep.registerPort, and its drift test names it nowhere > #2790.92d7996b docs/extension-guide.md is what node scripts/guide.mjs writes 91ms
+ ✓ tests/acceptance/2790/regenerated.test.ts > #2790.92d7996b docs/extension-guide.md is regenerated, with an entry for deep.registerPort, and its drift test names it nowhere > #2790.92d7996b node scripts/guide.mjs --check prints no line that names deep.registerPort 44ms
+ × tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it is a plug-in's side of a piece's port 103ms
+   → the entry says deep.registerPort is a plug-in's side of a piece's port: expected 'A port a piece can declare to the plu…' to match /plug-in's side of (?:a|the) piece's …/i
+ ✓ tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it lists the entries and the occurrence rows the port takes, by the contract's field names 102ms
+ ✓ tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it lists the sources the port gives for readings in 89ms
+ ✓ tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it says whether its gear makes sound 104ms
+ × tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 gear that makes sound makes the plug-in a device gate owner whatever the document says 125ms
+   → the entry says sound makes the plug-in a device gate owner: expected 'A port a piece can declare to the plu…' to match /device gate owner/i
+ ✓ tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 registering opens nothing 108ms
+ ✓ tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 a port opens only after a person clicks Connect 136ms
+ × tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 a port sends only while the piece plays live 135ms
+   → the entry says a port sends only while the piece plays live: expected 'A port a piece can declare to the plu…' to match /only (?:while|when|as) (?:the piece|…/i
+ ✓ tests/acceptance/2790/drift.test.ts > #2790.d87e08da the drift case of tests/acceptance/351/guide.test.ts fails on no line that names deep.registerPort > #2790.d87e08da the #351 drift case passes, or fails only on deep.source.ask, never on deep.registerPort 1160ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it is a plug-in's side of a piece's port
+AssertionError: the entry says deep.registerPort is a plug-in's side of a piece's port: expected 'A port a piece can declare to the plu…' to match /plug-in's side of (?:a|the) piece's …/i
+
+- Expected:
+/plug-in's side of (?:a|the) piece's port/i
+
++ Received:
+"A port a piece can declare to the plug-in: `entries` and `rows`, the entries and occurrences it asks for, each of which the piece must list, and what the piece lists is sent as it plays live; `sources`, the readings it gives back, each a source the plug-in has registered; and `sound`, whether its gear makes sound, which puts it under the device gate. Registering opens nothing: nothing flows until you click Connect on the app's prompt, and a seek, a replay or an export sends nothing."
+
+ ❯ tests/acceptance/2790/purpose.test.ts:13:94
+     11|     const text = said();
+     12|     expect(text, `the entry says what the method is for: ${text}`).not…
+     13|     expect(text, 'the entry says deep.registerPort is a plug-in\'s sid…
+       |                                                                                              ^
+     14|   }, 120_000);
+     15|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 gear that makes sound makes the plug-in a device gate owner whatever the document says
+AssertionError: the entry says sound makes the plug-in a device gate owner: expected 'A port a piece can declare to the plu…' to match /device gate owner/i
+
+- Expected:
+/device gate owner/i
+
++ Received:
+"A port a piece can declare to the plug-in: `entries` and `rows`, the entries and occurrences it asks for, each of which the piece must list, and what the piece lists is sent as it plays live; `sources`, the readings it gives back, each a source the plug-in has registered; and `sound`, whether its gear makes sound, which puts it under the device gate. Registering opens nothing: nothing flows until you click Connect on the app's prompt, and a seek, a replay or an export sends nothing."
+
+ ❯ tests/acceptance/2790/purpose.test.ts:40:80
+     38|   it('#2790.56435eb8 gear that makes sound makes the plug-in a device …
+     39|     const text = said();
+     40|     expect(text, 'the entry says sound makes the plug-in a device gate…
+       |                                                                                ^
+     41|     expect(text, 'the entry says that holds whatever the document says…
+     42|   }, 120_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 a port sends only while the piece plays live
+AssertionError: the entry says a port sends only while the piece plays live: expected 'A port a piece can declare to the plu…' to match /only (?:while|when|as) (?:the piece|…/i
+
+- Expected:
+/only (?:while|when|as) (?:the piece|it) plays live/i
+
++ Received:
+"A port a piece can declare to the plug-in: `entries` and `rows`, the entries and occurrences it asks for, each of which the piece must list, and what the piece lists is sent as it plays live; `sources`, the readings it gives back, each a source the plug-in has registered; and `sound`, whether its gear makes sound, which puts it under the device gate. Registering opens nothing: nothing flows until you click Connect on the app's prompt, and a seek, a replay or an export sends nothing."
+
+ ❯ tests/acceptance/2790/purpose.test.ts:53:83
+     51|
+     52|   it('#2790.56435eb8 a port sends only while the piece plays live', ()…
+     53|     expect(said(), 'the entry says a port sends only while the piece p…
+       |                                                                                   ^
+     54|   }, 120_000);
+     55| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  3 failed | 9 passed (12)
+   Start at  02:15:30
+   Duration  1.49s (tests 83%, transform 11%, import 5%, setup 1%)
+
+
+# ---- Each twin laid over a copy of the base checkout (rsync of the worktree without node_modules/target/.git, node_modules linked), then the test file its criterion maps to:
+
+## twin guide-stale-port-regenerated
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/2790/regenerated.test.ts > #2790.92d7996b docs/extension-guide.md is regenerated, with an entry for deep.registerPort, and its drift test names it nowhere > #2790.92d7996b the guide has an entry for deep.registerPort under the digest the contract publishes
+AssertionError: the entry's release line carries the contract's digest d1:c1a0515e41f2a3869341f5cb779d2ce7e1098964f8aa4a1f1645968f95b4538c: expected 'In R1 · preview · `d1:000000000000000…' to contain '`d1:c1a0515e41f2a3869341f5cb779d2ce7e…'
+ FAIL  tests/acceptance/2790/regenerated.test.ts > #2790.92d7996b docs/extension-guide.md is regenerated, with an entry for deep.registerPort, and its drift test names it nowhere > #2790.92d7996b docs/extension-guide.md is what node scripts/guide.mjs writes
+AssertionError: docs/extension-guide.md is byte for byte what node scripts/guide.mjs writes: expected false to be true // Object.is equality
+ FAIL  tests/acceptance/2790/regenerated.test.ts > #2790.92d7996b docs/extension-guide.md is regenerated, with an entry for deep.registerPort, and its drift test names it nowhere > #2790.92d7996b node scripts/guide.mjs --check prints no line that names deep.registerPort
+AssertionError: node scripts/guide.mjs --check printed:
+      Tests  3 failed (3)
+
+## twin guide-without-port-drift
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/2790/drift.test.ts > #2790.d87e08da the drift case of tests/acceptance/351/guide.test.ts fails on no line that names deep.registerPort > #2790.d87e08da the #351 drift case passes, or fails only on deep.source.ask, never on deep.registerPort
+AssertionError: the drift case fails on no line that names deep.registerPort: expected [ Array(1) ] to deeply equal []
+      Tests  1 failed (1)
+
+## twin guide-without-port-regenerated
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/2790/regenerated.test.ts > #2790.92d7996b docs/extension-guide.md is regenerated, with an entry for deep.registerPort, and its drift test names it nowhere > #2790.92d7996b the guide has an entry for deep.registerPort under the digest the contract publishes
+AssertionError: docs/extension-guide.md has a ### `deep.registerPort` entry: expected null not to be null
+ FAIL  tests/acceptance/2790/regenerated.test.ts > #2790.92d7996b docs/extension-guide.md is regenerated, with an entry for deep.registerPort, and its drift test names it nowhere > #2790.92d7996b docs/extension-guide.md is what node scripts/guide.mjs writes
+AssertionError: docs/extension-guide.md is byte for byte what node scripts/guide.mjs writes: expected false to be true // Object.is equality
+ FAIL  tests/acceptance/2790/regenerated.test.ts > #2790.92d7996b docs/extension-guide.md is regenerated, with an entry for deep.registerPort, and its drift test names it nowhere > #2790.92d7996b node scripts/guide.mjs --check prints no line that names deep.registerPort
+AssertionError: node scripts/guide.mjs --check printed:
+      Tests  3 failed (3)
+
+## twin port-opens-on-register-purpose
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 registering opens nothing
+AssertionError: the entry says registering opens nothing: expected 'A plug-in\'s side of a piece\'s port:…' to match /registering (?:it |a port )?opens no…/i
+ FAIL  tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 a port opens only after a person clicks Connect
+AssertionError: the entry says a port opens only after a person clicks Connect: expected 'A plug-in\'s side of a piece\'s port:…' to match /(?:only after|until) (?:a person|you…/i
+ FAIL  tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 a port sends only while the piece plays live
+AssertionError: the entry says a port sends only while the piece plays live: expected 'A plug-in\'s side of a piece\'s port:…' to match /only (?:while|when|as) (?:the piece|…/i
+      Tests  3 failed | 5 passed (8)
+
+## twin port-undescribed-purpose
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it is a plug-in's side of a piece's port
+AssertionError: node scripts/guide.mjs writes the guide:
+ FAIL  tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it lists the entries and the occurrence rows the port takes, by the contract's field names
+AssertionError: node scripts/guide.mjs writes the guide:
+ FAIL  tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it lists the sources the port gives for readings in
+AssertionError: node scripts/guide.mjs writes the guide:
+ FAIL  tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 it says whether its gear makes sound
+AssertionError: node scripts/guide.mjs writes the guide:
+ FAIL  tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 gear that makes sound makes the plug-in a device gate owner whatever the document says
+AssertionError: node scripts/guide.mjs writes the guide:
+ FAIL  tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 registering opens nothing
+AssertionError: node scripts/guide.mjs writes the guide:
+ FAIL  tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 a port opens only after a person clicks Connect
+AssertionError: node scripts/guide.mjs writes the guide:
+ FAIL  tests/acceptance/2790/purpose.test.ts > #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design and the host give it > #2790.56435eb8 a port sends only while the piece plays live
+AssertionError: node scripts/guide.mjs writes the guide:
+      Tests  8 failed (8)
