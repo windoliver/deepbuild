@@ -27,7 +27,11 @@ for (const mac of references) {
   });
 }
 
-it("doesn't count it on another Mac, or on a reference Mac's model with other memory", async () => {
+// One machine per test: onReferenceMac() keeps its first answer until the module is loaded again.
+it("doesn't count it on another Mac", async () => {
   expect(await onMac('Mac14,2', 16 * 2 ** 30, 8)).toBe(false);
+});
+
+it("doesn't count it on a reference Mac's model with other memory", async () => {
   expect(await onMac('Mac18,1', 16 * 2 ** 30, 12)).toBe(false);
 });
