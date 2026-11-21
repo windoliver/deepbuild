@@ -35,7 +35,7 @@ export interface AgentParts {
   reach(o: { temp: string; proxy: string; token?: string; home: string; env: Record<string, string | undefined> }): Record<string, string>;
   /** Whether what it left in its job's temp folder shows its read-only mode refusing, where its output doesn't say. */
   refusedIn?(temp: string): boolean;
-  /** Its facts cover exactly the versions they list, not the range between them. */
+  /** Its version reads with its pre-release suffix, since its facts list builds by it (0.163.0-alpha.10.2). */
   exactVersions?: true;
   /** Whether an account has no plan window for a job to wait on: with no plan account signed in, a budget is its only gate. */
   planless?(account: string | null): boolean;
