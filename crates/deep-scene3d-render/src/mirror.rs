@@ -36,6 +36,8 @@ pub struct Planted {
 pub struct Mirrorer {
     planted: Planted,
     view: Box<Renderer>,
+    /// The mirrored view of the scene and the size it was made at, kept while the scene holds.
+    pub(crate) mirrored: Option<(Scene, [u32; 2])>,
     layout: wgpu::BindGroupLayout,
     /// The overlay without and with #166's `reflection` target.
     pipeline: [wgpu::RenderPipeline; 2],
@@ -159,6 +161,7 @@ impl Mirrorer {
         Mirrorer {
             planted: planted.mirror,
             view: Box::new(Renderer::new(device, planted)),
+            mirrored: None,
             layout,
             pipeline,
             sampler,
@@ -170,7 +173,8 @@ impl Mirrorer {
     }
 
     /// Prepares the mirrored view of `scene`, whose frame draws at `internal`, and this frame's
-    /// parameters.
+    /// parameters. `held`: `scene` is the one the frame before prepared, unchanged, so the view
+    /// made then is drawn again if it is the size this frame wants (#3024).
     #[allow(clippy::too_many_arguments)]
     pub fn prepare(
         &mut self,
@@ -181,15 +185,20 @@ impl Mirrorer {
         look: &Look3,
         picks: &BTreeMap<String, u32>,
         overlay: bool,
+        held: bool,
     ) {
         let size = if self.planted.halves_twice {
             half(half(internal))
         } else {
             half(internal)
         };
-        let view = deep_canvas_scene3d::mirror::view(scene, mirror, size);
+        let view = match self.mirrored.take() {
+            Some((view, s)) if held && s == size => view,
+            _ => deep_canvas_scene3d::mirror::view(scene, mirror, size),
+        };
         self.view.pictured = true;
         self.view.prepare(device, &view, look);
+        self.mirrored = Some((view, size));
         let mut ids: Vec<u32> = mirror
             .parts
             .iter()

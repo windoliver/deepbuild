@@ -642,6 +642,8 @@ impl Hub<'_> {
         }
         if !m.renders.is_empty() {
             let mut renders = Vec::new();
+            let keeps = self.scenario.module_planted.as_deref() == Some(TRAIL_KEEPS_PREDICTED);
+            let mut kept = BTreeMap::new();
             for shown in &played.shown {
                 // The piece's own layer at the step the copy shows, drawn by render-back: the
                 // app's notice is the app's own and never in it.
@@ -661,7 +663,16 @@ impl Hub<'_> {
                                 sha
                             })
                     }
-                    None => self.piece_layer(&m.doc, at),
+                    // #265: a copy's frame drawn from its own logic arrays as it held them then,
+                    // a prediction before a rollback and the steps run again after one.
+                    None => match &shown.arrays {
+                        Some(arrays) if keeps => {
+                            let arrays = kept_points(&mut kept, shown, arrays);
+                            self.copy_layer(&m.doc, arrays, at)
+                        }
+                        Some(arrays) => self.copy_layer(&m.doc, arrays.clone(), at),
+                        None => self.piece_layer(&m.doc, at),
+                    },
                 };
                 let sha = match drawn {
                     Ok(sha) => sha,
@@ -735,6 +746,31 @@ impl Hub<'_> {
         match drawn.pointer("/snapshots/0/sha256").and_then(Value::as_str) {
             Some(sha) => Ok(sha.to_string()),
             None => Err(unavailable(drawn)),
+        }
+    }
+
+    /// #265: the SHA-256 of `doc`'s own layer drawn at `t` from a copy's logic `arrays`, as
+    /// render-back draws its current revision; a piece with no 3D layer draws as render-back
+    /// draws it.
+    fn copy_layer(&mut self, doc: &str, arrays: Value, t: i64) -> Result<String, Value> {
+        let (Some(session), Some(rev)) = (
+            self.scenario.sessions.keys().next().cloned(),
+            self.rev_at(doc, i64::MAX),
+        ) else {
+            return self.piece_layer(doc, t);
+        };
+        let Some(mut document) = self.revision(doc, rev).filter(crate::probe::draws_3d) else {
+            return self.piece_layer(doc, t);
+        };
+        let Value::Object(arrays) = arrays else {
+            return self.piece_layer(doc, t);
+        };
+        let held = document["arrays"].as_object().cloned().unwrap_or_default();
+        document["arrays"] = Value::Object(held.into_iter().chain(arrays).collect());
+        let drawn = self.render_back_3d(&session, rev, &document, t, None, &Default::default());
+        match drawn.pointer("/snapshots/0/sha256").and_then(Value::as_str) {
+            Some(sha) => Ok(sha.to_string()),
+            None => Err(json!({"code": "render_unavailable", "why": drawn})),
         }
     }
 
@@ -1114,4 +1150,35 @@ impl Hub<'_> {
         report.insert("direct".into(), json!(all_direct));
         Value::Object(report)
     }
+}
+
+/// #265's planted `trail_keeps_predicted_points`: a copy's frame draws each array's steps
+/// through its last frame's step as that frame held them, kept, so a trail draws the places it
+/// read from predicted steps after a rollback replaced them.
+pub(crate) const TRAIL_KEEPS_PREDICTED: &str = "trail_keeps_predicted_points";
+
+/// `arrays` with each array's steps through the copy's last drawn frame's step taken from
+/// that frame (the planted program); this frame's kept in turn.
+fn kept_points(
+    kept: &mut BTreeMap<u8, (i64, Value)>,
+    shown: &deep_net::play::Shown,
+    arrays: &Value,
+) -> Value {
+    let mut out = arrays.clone();
+    if let Some((last, before)) = kept.get(&shown.player) {
+        let through = |s: &Value| s["step"].as_i64().is_some_and(|k| k <= *last);
+        for (name, column) in out.as_object_mut().into_iter().flatten() {
+            let old = before[name]["steps"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            if let Some(steps) = column["steps"].as_array_mut() {
+                let mut merged: Vec<Value> = old.into_iter().filter(through).collect();
+                merged.extend(steps.drain(..).filter(|s| !through(s)));
+                *steps = merged;
+            }
+        }
+    }
+    kept.insert(shown.player, (shown.step, out.clone()));
+    out
 }

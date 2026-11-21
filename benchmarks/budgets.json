@@ -523,6 +523,27 @@
       "initialReason": "Issue #24 first measurement: the merge base has no deep inbox. One process seeds a heavy month of asks (20 sessions a day, five asks each; the first 29 days' asks closed at their defaults, the last day's 100 open), starts the hub on it and times five deep inbox runs after a warm-up, failing unless each lists every open ask; p50 includes the seeding and the hub's start. The issue's 300 ms stays in tests/acceptance/24/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "phone-reads",
+      "command": [
+        "node",
+        "benchmarks/phone-reads.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {
+        "report.coldOpenBytes": 25000,
+        "report.coldOpenGrowthPercent": 10,
+        "report.reconnectQueries": 12,
+        "report.turnFrames": 9,
+        "report.turnBytes": 4700
+      },
+      "initialReason": "Issue #1576 first measurement: the merge base pages none of its list reads and counts no queries. One process seeds records of 200 and 1,000 sessions (5 at work with an open ask each, 50 of the rest with an ask you answered), counts the bytes the hub sends a cold open (the app's hello, inbox.read, sessions.read) on each and the queries a reconnect's two reads report on the larger, then plays the first turn of adapters/corpus/claude-code/2.1.308/tools on an empty record and counts the frames and bytes its session's page gets once caught up. Every number is a count, held on any machine, so load can't void it; each ceiling sits just above this branch's reading (24,840 bytes, 0.33%, 12 queries, 8 frames, 4,019 bytes here; tests/acceptance/1576 reads the turn as 4,147 bytes under its longer temp paths). The turn reads one frame more, 9 frames and 4,440 bytes here, when the state pass, 200 ms after the stop, runs before the stop's claim is made, as it does with every core busy: a second session.state. The turn's ceilings hold both, and two runs under the same load read the same. coldOpenBytes and coldOpenGrowthPercent catch a list read that returns every row, as the merge base's sessions.read does (367,499 bytes on 1,000 sessions, growing with each one) and the planted reads-every-row does; reconnectQueries catches a query per row, as the planted query-per-row's inbox.read runs one for each ask on its page; turnFrames and turnBytes catch a frame per event, as the planted page-hook-frame-per-event sends a session's page (16 to 18 frames, 4,753 bytes or more). p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#1576.bd04ffbe",
+        "#1576.054c1375",
+        "#1576.61b3806a"
+      ]
+    },
+    {
       "id": "lease-grant",
       "command": [
         "node",
@@ -2147,6 +2168,23 @@
       "initialReason": "Issue #277 first measurement (#277.2c9337c4): the merge base has no seats that change. node benchmarks/net-seats.mjs runs the criterion's blind acceptance test (tests/acceptance/277/ac4-budgets.test.ts), which plays the eight-seat piece's four copies over the test relay twice: once with seats that never change, counting the frames, bytes, messages, rollbacks and steps run against the merge base's counts for the same match, and once with copy 4 hidden for 20 s, recording its catch-up in steps a second (a reading, counted only on a reference Mac). The window times the run against its merge base; once main has this task, p50 and peak memory get a 50% merge-base margin.",
       "criteria": [
         "#277.2c9337c4"
+      ]
+    },
+    {
+      "id": "canvas-logic-trails",
+      "command": [
+        "node",
+        "benchmarks/canvas-world.mjs",
+        "tests/acceptance/265/ac6-budgets.test.ts"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "frame_cpu_p95_ms": 4
+      },
+      "initialReason": "Issue #265 first measurement (#265.e3eb2a00): the merge base refuses a trail, a wake and a world-space emitter behind an item a logic array moves, and has no such task. Eight boxes one logic item moves, each on its own lake whose material wakes behind it over 8 s, each with a world-space emitter anchored on it and a 16-segment mark.line trail, a showpiece; the vitest file runs the blind acceptance test itself, which builds a release deep-gpu, plays the movers' 600 frames at 1280 x 720 with timings, five runs after a warm-up one, each a fresh process, and judges each run's p95 of cpu_ms against 4 ms by scripts/benchmark.mjs's judgeLimit (PASS only on a reference Mac at rest); the benchmark prints that verdict and exits 0, and its judge gives it as the target. Once main has this task, p50 and peak memory of the whole command get a 50% merge-base margin.",
+      "criteria": [
+        "#265.e3eb2a00"
       ]
     }
   ]

@@ -30,8 +30,9 @@ pub fn evaluate_any(
     // the core's draw reads it), such as a card its close button closed.
     let unbound = bound_hidden(map);
     let map = unbound.as_ref().unwrap_or(map);
-    // #166: a wake behind an item a logic array moves, refused at check before anything else.
-    crate::water::logic_moved(map)?;
+    // #265: a wake or a trail behind an item a live drag moves, refused at check before anything
+    // else.
+    crate::water::dragged(map)?;
     // #268: a shore item that anything moves or reshapes, refused at check.
     crate::shore::static_items(map)?;
     let program = Program::compile(map).map_err(|r| Refused {

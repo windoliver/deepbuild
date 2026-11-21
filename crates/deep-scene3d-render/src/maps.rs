@@ -5,7 +5,7 @@
 //! filters, its wrap, and anisotropy up to its `filter_taps`. Samplers are bindings, so changing
 //! one never recompiles a pipeline.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
@@ -145,10 +145,10 @@ pub static TEXTURES: Gauge = Gauge::new("Store::textures", Place::Device, 256, 2
 pub static GROUPS: Gauge = Gauge::new("Store::groups", Place::Device, 1_024, 4_000_000);
 const GROUP_BYTES: u64 = std::mem::size_of::<MapsUniform>() as u64;
 
-/// A material's bind group: its index in draw keys and the store's textures it binds.
+/// A material's bind group's index in draw keys and the store's textures it binds; the group
+/// itself is the store's `indexed` entry under that index.
 struct Group {
     n: u32,
-    group: wgpu::BindGroup,
     textures: Vec<String>,
 }
 
@@ -170,6 +170,9 @@ pub struct Store {
     view_count: u64,
     // cache: entries 1_024, bytes 4_000_000
     groups: Kept<String, Group>,
+    /// #2657: each of `groups`' bind groups by its index, so a draw reads its own directly;
+    /// an entry leaves with its group.
+    indexed: HashMap<u32, wgpu::BindGroup>,
     /// The textures the last bind group made binds.
     bound: Vec<String>,
     pub none: wgpu::BindGroup,
@@ -238,6 +241,7 @@ impl Store {
             views: BTreeMap::new(),
             view_count: 0,
             groups: Kept::new(&GROUPS),
+            indexed: HashMap::new(),
             bound: Vec::new(),
             white,
             uploads: 0,
@@ -294,8 +298,8 @@ impl Store {
         let n = self.next;
         self.next += 1;
         let textures = std::mem::take(&mut self.bound);
-        self.groups
-            .insert(key, Group { n, group, textures }, GROUP_BYTES);
+        self.groups.insert(key, Group { n, textures }, GROUP_BYTES);
+        self.indexed.insert(n, group);
         n
     }
 
@@ -317,6 +321,9 @@ impl Store {
                 }
                 keep
             });
+        }
+        for n in &gone {
+            self.indexed.remove(n);
         }
         gone
     }
@@ -340,16 +347,20 @@ impl Store {
         }
         for (_, (_, n)) in old {
             let stale = format!("|view {n}");
-            self.groups.retain(|k, _| !k.ends_with(&stale));
+            let indexed = &mut self.indexed;
+            self.groups.retain(|k, g| {
+                let keep = !k.ends_with(&stale);
+                if !keep {
+                    indexed.remove(&g.n);
+                }
+                keep
+            });
         }
     }
 
     /// The bind group of maps with key `n`, or the stand-in.
     pub fn by_index(&self, n: u32) -> &wgpu::BindGroup {
-        self.groups
-            .values()
-            .find(|g| g.n == n)
-            .map_or(&self.none, |g| &g.group)
+        self.indexed.get(&n).unwrap_or(&self.none)
     }
 
     fn texture(

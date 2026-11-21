@@ -592,6 +592,7 @@ pub fn all() -> Vec<Fixture> {
         articulated(hinge_limit()),
         articulated(hinge_motor()),
     ]);
+    out.extend(super::laws::all());
     out
 }
 
