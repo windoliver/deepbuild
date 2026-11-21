@@ -10,12 +10,13 @@ import { seatbelt } from '@deepbuild/supervisor';
 import { codexLogRefused, codexReach, codexRefused, codexSignIn, codexWindows, shownVersion } from '../src/runner.js';
 
 describe('the version Codex shows', () => {
-  it('keeps its suffix where versions are exact, so a stable build is not its alpha', () => {
-    expect(shownVersion('codex-cli 0.163.0-alpha.10.2\n', true)).toBe('0.163.0-alpha.10.2');
-    expect(shownVersion('codex-cli 0.163.0\n', true)).toBe('0.163.0');
+  it('keeps its suffix, so a stable build is not its alpha', () => {
+    expect(shownVersion('codex-cli 0.163.0-alpha.10.2\n')).toBe('0.163.0-alpha.10.2');
+    expect(shownVersion('codex-cli 0.163.0\n')).toBe('0.163.0');
   });
-  it('stays the three numbers for an agent whose facts are a range', () => {
-    expect(shownVersion('2.1.142-beta (Claude Code)\n', false)).toBe('2.1.142');
+  it('keeps Claude Code\'s suffix too, as the hub reads it, so a beta is not the stable build', () => {
+    expect(shownVersion('2.1.142-beta (Claude Code)\n')).toBe('2.1.142-beta');
+    expect(shownVersion('2.1.142 (Claude Code)\n')).toBe('2.1.142');
   });
 });
 

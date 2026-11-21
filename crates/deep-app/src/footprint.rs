@@ -13,28 +13,28 @@ use serde_json::{json, Value};
 
 /// GPUI's glyph atlas: its pages, their tiles counted in entries, at the bounds its holder declares.
 static GLYPHS: Gauge = Gauge::new(
-    "MetalAtlasTextures::monochrome_textures",
+    "MetalAtlasTextures::monochrome_textures", // copy-exception: a gauge's key, read in the footprint record, never drawn
     Place::Device,
     65_536,
     256_000_000,
 );
 /// GPUI's sprite atlas, the images the app retains until it drops them: its pages, their tiles in entries.
 static SPRITES: Gauge = Gauge::new(
-    "MetalAtlasTextures::polychrome_textures",
+    "MetalAtlasTextures::polychrome_textures", // copy-exception: a gauge's key, read in the footprint record, never drawn
     Place::Device,
     16_384,
     512_000_000,
 );
 /// GPUI's path targets, one window's size each.
 static TARGETS: Gauge = Gauge::new(
-    "MetalRenderer::path_intermediate_texture",
+    "MetalRenderer::path_intermediate_texture", // copy-exception: a gauge's key, read in the footprint record, never drawn
     Place::Device,
     16,
     512_000_000,
 );
 /// GPUI's instance buffers, in its pool and in flight.
 static INSTANCES: Gauge = Gauge::new(
-    "InstanceBufferPool::buffers",
+    "InstanceBufferPool::buffers", // copy-exception: a gauge's key, read in the footprint record, never drawn
     Place::Device,
     64,
     512_000_000,

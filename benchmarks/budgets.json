@@ -268,7 +268,10 @@
         "idle"
       ],
       "margin": 0.5,
-      "limits": {},
+      "limits": {
+        "report.wakeupsPerSecond": 50,
+        "report.instructionsPerSecond": 4500000
+      },
       "initialReason": "Issue #16 first measurement: the merge base has no hub. One process starts the hub on a temp home and leaves it idle for seven seconds, reading its CPU and resident memory; the issue's 0.5% idle CPU and 150 MB with 30 days of history stay in tests/acceptance/16/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.",
       "criteria": [
         "#2646.0e7e5ac3"
@@ -447,7 +450,12 @@
         "benchmarks/command-check.mjs"
       ],
       "margin": 0.5,
-      "limits": {},
+      "limits": {
+        "report.overheadPercent": 1
+      },
+      "criteria": [
+        "#1009.542330be"
+      ],
       "initialReason": "Issue #30 first measurement: the merge base has no command check kind. One process opens a record, the asks core and the supervisor in a temp folder and runs a 200-test Vitest project through the platform sandbox 10 times as the command check kind (runCommandCheck, counting from its reporter) and 10 times as a plain run under the same hermetic environment and loaders, interleaved, so p50 includes Node's start and both arms; the issue's 1% for counting tests stays in tests/acceptance/30/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
@@ -2129,6 +2137,16 @@
       "initialReason": "Issue #194 first measurement: the merge base has no catalog probe, no catalog checks and no such task. On a release build of deep-catalog and the catalog plug-in's own runners: pack_10000_rows_ms, deep-catalog's own time packing one table of 10,000 rows and 20 columns, held to 1,000 ms; reach_5000_recipes_ms, catalog.reach's own time over a chain of 5,000 recipes, held to 200 ms; economy_5000_recipes_ms, catalog.economy's own time over 2,500 recipe-and-uncraft pairs, held to 200 ms; five runs after a warm-up, judged on a reference Mac. idle_work counts the steps of a 600-step release bake at which a logic item naming the plug-in's clean kit catalog spends other fuel than the same item naming none, judged anywhere: a piece that names a catalog gains no work per frame.",
       "criteria": [
         "#194.60b4ab87"
+      ]
+    },
+    {
+      "id": "net-seats",
+      "command": ["node", "benchmarks/net-seats.mjs"],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #277 first measurement (#277.2c9337c4): the merge base has no seats that change. node benchmarks/net-seats.mjs runs the criterion's blind acceptance test (tests/acceptance/277/ac4-budgets.test.ts), which plays the eight-seat piece's four copies over the test relay twice: once with seats that never change, counting the frames, bytes, messages, rollbacks and steps run against the merge base's counts for the same match, and once with copy 4 hidden for 20 s, recording its catch-up in steps a second (a reading, counted only on a reference Mac). The window times the run against its merge base; once main has this task, p50 and peak memory get a 50% merge-base margin.",
+      "criteria": [
+        "#277.2c9337c4"
       ]
     }
   ]

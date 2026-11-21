@@ -273,6 +273,8 @@ pub enum Read {
     World,
     /// Mirror j's range list (Logic: mirror reads).
     Mirror(usize),
+    /// #277: `net.seats`, the seat entries stamped since the item's last step.
+    Seats,
     /// A write entry.
     None,
 }

@@ -14,7 +14,7 @@ class Menu {
   constructor(id, { label, rows = [] }) {
     let s = MENUS.get(id);
     if (!s) {
-      s = { open: false, origin: null, rowUp: null, hi: -1 };
+      s = { open: false, origin: null, rowUp: null, hi: -1, shade: null };
       MENUS.set(id, s);
     }
     const close = () => {
@@ -56,6 +56,8 @@ class Menu {
           }
           return;
         }
+        // The highlight is drawn only once a key has moved it, so it takes the look's divider from this key's theme.
+        s.shade = cx.theme().colors.border;
         if (key === "escape") close();
         else if (key === "down") s.hi = Math.min(rows.length - 1, s.hi + 1);
         else if (key === "up") s.hi = Math.max(0, s.hi - 1);
@@ -96,7 +98,7 @@ class Menu {
           .on_mouse_up("left", () => {
             s.rowUp = row;
           });
-        if (at === s.hi) item = item.bg("#e7e5e4");
+        if (at === s.hi) item = item.bg(s.shade);
         if (!row.disabled) item = item.on_click((_event, cx) => pick(row, cx));
         root.child(item);
       });

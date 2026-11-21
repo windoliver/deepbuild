@@ -1,0 +1,294 @@
+// Helpers for #1865's acceptance tests (README): a sandboxed HOME, TMPDIR and XDG_* folders; the stand-ins for what the
+// repo doesn't own (the login service behind the DEEP_HUB_LAUNCHER seam, launchctl and systemctl themselves, the OS
+// confirmation behind DEEP_HUB_TEST_CONFIRM); the hub's socket; and, for the promotion, the watched repository main
+// watch (#1333) ticks on and the builds the tests plant. Nothing here imports the code under test: every surface is
+// reached by running it, as `deep`, `scripts/main-watch.mjs` and the socket (README: The surface).
+import assert from 'node:assert/strict';
+import { execFileSync, spawn } from 'node:child_process';
+import {
+  chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync,
+  symlinkSync, writeFileSync,
+} from 'node:fs';
+import net from 'node:net';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { rawCall } from './fixtures/client.mjs';
+
+export const CHECKOUT = realpathSync(fileURLToPath(new URL('../../../', import.meta.url)));
+export const CLI = join(CHECKOUT, 'packages', 'cli', 'dist', 'main.js');
+export const DEEP_HOOK = join(CHECKOUT, 'target', 'debug', 'deep-hook');
+export const NODE = process.execPath;
+const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url));
+export const CLIENT = join(FIXTURES, 'client.mjs');
+export const LONG = { timeout: 1_800_000 };
+/** The issue's bound on a restart asked for with the token alone. */
+export const BACK_MS = 60_000;
+/** How long a stopped hub is watched for a start the login service would make: three of launchd's 10 s throttles. */
+export const WATCH_MS = 35_000;
+
+export { assert };
+export const wait = (ms) => new Promise((done) => setTimeout(done, ms));
+export const sha7 = (sha) => String(sha).slice(0, 7);
+const script = (path, content) => {
+  writeFileSync(path, content);
+  chmodSync(path, 0o755);
+};
+export const lines = (file) => (existsSync(file) ? readFileSync(file, 'utf8').split('\n').filter(Boolean).flatMap((line) => { try { return [JSON.parse(line)]; } catch { return []; } }) : []);
+const ok = (path) => { try { return realpathSync(path); } catch { return undefined; } };
+
+/** What this suite needs built in this checkout before it runs (README: How to run). */
+export function built() {
+  const missing = [CLI, DEEP_HOOK].filter((path) => !existsSync(path));
+  assert.deepEqual(missing, [], `BLOCKED: build first (npm ci && npm run build --workspaces && cargo build --locked -p deep-hook); missing: ${missing.join(', ')}`);
+}
+
+/**
+ * A sandbox removed after the test: HOME, TMPDIR and XDG_* inside it, git's identity, the stand-ins first on PATH
+ * (the login service's launcher; launchctl and systemctl, which record any call and exit 1), the OS confirmation's
+ * stub (`confirm`, cancelled until a test says otherwise), and every process a test starts in a process group of its
+ * own, stopped by its PID at the end, with the supervisor and every job the login service's stand-in started.
+ */
+export async function sandbox(t) {
+  built();
+  // Short: a Unix socket path must fit in 104 bytes on macOS (the hub's is <home>/.deepbuild/hub.sock).
+  const dir = realpathSync(mkdtempSync('/tmp/d1865-'));
+  const home = join(dir, 'h'), temp = join(dir, 't'), bin = join(dir, 'bin'), state = join(dir, 'launchd'), builds = join(dir, 'builds');
+  for (const folder of [home, temp, bin, state, builds]) mkdirSync(folder, { recursive: true });
+  writeFileSync(join(home, '.gitconfig'), '[user]\n\tname = Fixture\n\temail = fixture@example.invalid\n[commit]\n\tgpgsign = false\n[tag]\n\tgpgsign = false\n[init]\n\tdefaultBranch = main\n[core]\n\thooksPath = /dev/null\n');
+  symlinkSync(NODE, join(bin, 'node'));
+  script(join(bin, 'launcher'), `#!/bin/sh\nT1865_LAUNCHD=${JSON.stringify(state)} exec ${JSON.stringify(NODE)} ${JSON.stringify(join(FIXTURES, 'launcher.mjs'))} "$@"\n`);
+  for (const name of ['launchctl', 'systemctl']) {
+    script(join(bin, name), `#!/bin/sh\nprintf '%s %s\\n' ${name} "$*" >> ${JSON.stringify(join(dir, 'service-calls.log'))}\necho "stand-in ${name}: the tests' service manager is DEEP_HUB_LAUNCHER" >&2\nexit 1\n`);
+  }
+  // The OS confirmation's stub, as the base's Confirmer runs an executable DEEP_HUB_TEST_CONFIRM: once per ask, with the
+  // prompt's words as its one argument; exit 0 is you confirming. Each ask is a line of asks.log; `confirm.mode` says
+  // whether you confirm.
+  const mode = join(dir, 'confirm.mode'), asksLog = join(dir, 'asks.log');
+  writeFileSync(mode, 'cancelled\n');
+  script(join(bin, 'confirm'), `#!/bin/sh\nprintf '%s\\n' "$1" >> ${JSON.stringify(asksLog)}\n[ "$(cat ${JSON.stringify(mode)})" = confirmed ]\n`);
+  const env = {};
+  for (const [name, value] of Object.entries(process.env)) {
+    if (/^(DEEP_|CLAUDE|CODEX_|GH_|GITHUB_|ANTHROPIC|OPENAI|XDG_|AWS_|GIT_|CARGO_TARGET)/.test(name)) continue;
+    if (['NODE_OPTIONS', 'NODE_TEST_CONTEXT', 'NO_PROXY', 'no_proxy', 'AI_AGENT'].includes(name)) continue;
+    env[name] = value;
+  }
+  Object.assign(env, {
+    HOME: home, TMPDIR: temp,
+    XDG_CONFIG_HOME: join(home, '.config'), XDG_CACHE_HOME: join(home, '.cache'), XDG_DATA_HOME: join(home, '.local', 'share'), XDG_STATE_HOME: join(home, '.local', 'state'),
+    PATH: `${bin}:/usr/bin:/bin:/usr/sbin:/sbin`,
+    DEEP_HUB_LAUNCHER: join(bin, 'launcher'),
+    DEEP_HUB_TEST_CONFIRM: join(bin, 'confirm'),
+    DEEP_DOCTOR_CANVAS_FAULT: 'render_skipped',
+    GIT_CONFIG_NOSYSTEM: '1', GIT_TERMINAL_PROMPT: '0', TZ: 'UTC', LC_ALL: 'C',
+  });
+  const root = join(home, '.deepbuild');
+  const box = { dir, home, temp, bin, state, builds, env, mode, asksLog, root, socket: join(root, 'hub.sock'), tokenFile: join(root, 'control.token'), children: [] };
+  t.after(async () => {
+    const groups = new Set();
+    for (const child of box.children) if (child.exitCode === null && child.signalCode === null && child.pid) groups.add(child.pid);
+    try { groups.add(Number(readFileSync(join(state, 'supervisor.pid'), 'utf8'))); } catch {}
+    for (const e of lines(join(state, 'launchd.jsonl'))) if (e.event === 'start' && e.pid) groups.add(e.pid);
+    for (const pid of box.devHubs ?? []) groups.add(pid);
+    for (const pid of groups) try { process.kill(-pid, 'SIGTERM'); } catch {}
+    for (const pid of groups) try { process.kill(pid, 'SIGTERM'); } catch {}
+    await wait(2000);
+    for (const pid of groups) try { process.kill(-pid, 'SIGKILL'); } catch {}
+    for (const pid of groups) try { process.kill(pid, 'SIGKILL'); } catch {}
+    rmSync(dir, { recursive: true, force: true });
+  });
+  return box;
+}
+
+/** Whether the OS confirms you at the next ask: 'confirmed' or 'cancelled'. */
+export const confirming = (box, mode) => writeFileSync(box.mode, `${mode}\n`);
+/** Every ask the hub made of the OS so far: the prompt's words, one per ask. */
+export const asks = (box) => (existsSync(box.asksLog) ? readFileSync(box.asksLog, 'utf8').split('\n').filter(Boolean) : []);
+/** What the login service's stand-in recorded: loads, starts and exits. */
+export const launchd = (box) => lines(join(box.state, 'launchd.jsonl'));
+/** Every call a test's processes made to launchctl or systemctl (each stand-in exits 1). */
+export const serviceCalls = (box) => (existsSync(join(box.dir, 'service-calls.log')) ? readFileSync(join(box.dir, 'service-calls.log'), 'utf8').split('\n').filter(Boolean) : []);
+
+/** Starts `argv` in the sandbox in a process group of its own; `done` resolves with its status and output. */
+export function launch(box, argv, { env = {}, cwd = box.dir } = {}) {
+  const child = spawn(argv[0], argv.slice(1), { cwd, env: { ...box.env, ...env }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  box.children.push(child);
+  let stdout = '', stderr = '';
+  child.stdout.on('data', (chunk) => { stdout += chunk; });
+  child.stderr.on('data', (chunk) => { stderr += chunk; });
+  child.started = Date.now();
+  child.done = new Promise((done) => {
+    child.on('error', (error) => { stderr += String(error); });
+    child.on('close', (status, signal) => done({ status, signal, stdout, stderr, started: child.started, ended: Date.now() }));
+  });
+  return child;
+}
+/** A child's end, or its group stopped by its PID after `ms`: a program that never ends fails at an assertion. */
+export function ended(child, ms) {
+  const stop = setTimeout(() => { try { process.kill(-child.pid, 'SIGKILL'); } catch {} }, ms);
+  return child.done.finally(() => clearTimeout(stop));
+}
+/** A run as an assertion message shows it, its token and home redacted. */
+export const shown = (run, box) => redact(run ? `exit ${run.status}${run.signal ? ` (${run.signal})` : ''}\nstdout:\n${String(run.stdout).slice(-3000)}\nstderr:\n${String(run.stderr).slice(-3000)}` : '(not run)', box);
+export function redact(text, box) {
+  let out = String(text);
+  if (box) {
+    try { const token = readFileSync(box.tokenFile, 'utf8').trim(); if (token) out = out.split(token).join('<token>'); } catch {}
+    out = out.split(box.dir).join('<sandbox>');
+  }
+  return out;
+}
+/** `deep <args>`, this checkout's CLI, in the sandbox. */
+export const deep = (box, args, o = {}) => ended(launch(box, [NODE, CLI, ...args], o), o.timeoutMs ?? 300_000);
+
+/** Polls `probe` every `every` ms until it gives a value or `ms` pass; undefined then. */
+export async function until(probe, ms, every = 250) {
+  const deadline = Date.now() + ms;
+  for (;;) {
+    const value = await probe();
+    if (value) return value;
+    if (Date.now() > deadline) return undefined;
+    await wait(every);
+  }
+}
+
+// ---- The hub's socket, as a process holding the control token reaches it (fixtures/client.mjs).
+/** The hub's hello at `socket` (the installed one by default), or undefined when no hub answers within `ms`. */
+export function hello(box, { socket = box.socket, ms = 3000 } = {}) {
+  return new Promise((done) => {
+    const sock = net.connect(socket);
+    let buffer = '';
+    const finish = (value) => { clearTimeout(timer); sock.destroy(); done(value); };
+    const timer = setTimeout(() => finish(undefined), ms);
+    sock.setEncoding('utf8');
+    sock.on('error', () => finish(undefined));
+    sock.on('close', () => finish(undefined));
+    sock.on('data', (chunk) => {
+      buffer += chunk;
+      const i = buffer.indexOf('\n');
+      if (i < 0) return;
+      try { finish(JSON.parse(buffer.slice(0, i))); } catch { finish(undefined); }
+    });
+  });
+}
+/** Polls the hello until one answers with a start other than `start`, within `ms`; that hello and when, or undefined. */
+export const backAfter = (box, start, ms) => until(async () => { const h = await hello(box, { ms: 2000 }); return h && h.start !== start ? { hello: h, t: Date.now() } : undefined; }, ms);
+/** One call with the CLI's credential: the reply line (`{ id, result }` or `{ id, error }`), or 'closed'/'timeout'. */
+export async function call(box, method, params = {}, { socket = box.socket, peer = false, ms = 60_000 } = {}) {
+  return (await rawCall({ socket, tokenFile: join(dirname(socket), 'control.token'), method, params, peer, ms })).reply;
+}
+/** The hub's PID, by `hub.health`; undefined when it doesn't answer. */
+export async function hubPid(box, o = {}) {
+  const reply = await call(box, 'hub.health', {}, o);
+  return typeof reply === 'object' && typeof reply.result?.pid === 'number' ? reply.result.pid : undefined;
+}
+/** Whether a process runs (signal 0 only asks). */
+export const runs = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+
+/** The installed hub, started as `deep hub start` starts it: through the login service. Its hello and PID. */
+export async function startInstalled(box) {
+  const run = await deep(box, ['hub', 'start']);
+  assert.equal(run.status, 0, `BLOCKED: deep hub start didn't start the installed hub in the sandbox: ${shown(run, box)}`);
+  const up = await hello(box, { ms: 30_000 });
+  assert.ok(up, 'BLOCKED: the installed hub never answered its hello after deep hub start');
+  const pid = await hubPid(box, { ms: 120_000 });
+  assert.ok(pid, 'BLOCKED: the installed hub never answered hub.health after deep hub start');
+  return { hello: up, pid };
+}
+
+/**
+ * A restart asked for with the token alone (README: The surface): `hub.restart`, or, where the hub serves no such
+ * method, `hub.stop` with `{ "restart": true }`. No peer is named: the token alone.
+ */
+export async function askRestart(box) {
+  const first = await call(box, 'hub.restart');
+  if (typeof first === 'object' && first.error?.code === 'unknown_method') return { method: 'hub.stop {"restart":true}', reply: await call(box, 'hub.stop', { restart: true }) };
+  return { method: 'hub.restart', reply: first };
+}
+
+// ---- The watched repository (#1333) for the promotion: `origin.git`, a bare repository standing for GitHub's;
+// `work`, the clone the tests land in; and `mac`, the clone main watch ticks in and `deep hub promote` runs in. Its
+// first commit holds this checkout's scripts/ (main watch's own job among them) with the fixture's lanes, one tested
+// function and its test.
+const SUM_TEST = "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { sum } from '../lib/sum.mjs';\ntest('adds two numbers', () => assert.equal(sum(2, 3), 5));\n";
+const LANES = `// The fixture's lanes (tests/acceptance/1865/README.md, The promotion).
+export * from './lanes-real.mjs';
+export const checks = [
+  { name: 'unit', commands: [[process.execPath, '--test', 'tests/sum.test.mjs']], fix: 'Repair the behavior named by the failing test.' },
+  { name: 'lint', commands: [[process.execPath, '-e', '']], fix: 'Nothing to lint in the fixture.' },
+];
+`;
+/** main watch's set number of landings (#1333): a tick runs the lanes once 5 landed since its last run. */
+export const LANDINGS = 5;
+const gitIn = (box, cwd) => (...args) => execFileSync('git', args, { cwd, env: box.env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+
+export function watched(box) {
+  const origin = join(box.dir, 'origin.git'), work = join(box.dir, 'work'), mac = join(box.dir, 'mac');
+  execFileSync('git', ['init', '-q', '--bare', '-b', 'main', origin], { env: box.env });
+  mkdirSync(work);
+  cpSync(join(CHECKOUT, 'scripts'), join(work, 'scripts'), { recursive: true });
+  renameSync(join(work, 'scripts', 'lanes.mjs'), join(work, 'scripts', 'lanes-real.mjs'));
+  writeFileSync(join(work, 'scripts', 'lanes.mjs'), LANES);
+  writeFileSync(join(work, 'scripts', 'known-failures.json'), `${JSON.stringify({ failures: {}, lint: {}, timing: [], skips: [] }, null, 2)}\n`);
+  mkdirSync(join(work, 'lib'));
+  mkdirSync(join(work, 'tests'));
+  writeFileSync(join(work, 'lib', 'sum.mjs'), 'export const sum = (a, b) => a + b;\n');
+  writeFileSync(join(work, 'tests', 'sum.test.mjs'), SUM_TEST);
+  writeFileSync(join(work, 'README.md'), "The repository #1865's promotion test watches and builds from.\n");
+  const git = gitIn(box, work);
+  git('init', '-q', '-b', 'main');
+  git('add', '-A');
+  git('commit', '-qm', 'c1: the watched repository');
+  git('remote', 'add', 'origin', origin);
+  git('push', '-q', 'origin', 'main');
+  gitIn(box, box.dir)('clone', '-q', origin, mac);
+  // The lanes' runner loads scripts/proof-binaries.mjs, which imports typescript: the fixture has no package.json, so
+  // Node finds it the way it finds any bare import, in a node_modules of a folder above main watch's tree.
+  mkdirSync(join(box.dir, 'node_modules'));
+  symlinkSync(join(CHECKOUT, 'node_modules', 'typescript'), join(box.dir, 'node_modules', 'typescript'));
+  return { origin, work, mac, git, c1: git('rev-parse', 'HEAD'), landings: [] };
+}
+/** A landing on origin's main: a commit adding `landings/<k>`, naming made-up issue #986<k>. */
+export function land(box, fx) {
+  const k = fx.landings.length + 1;
+  mkdirSync(join(fx.work, 'landings'), { recursive: true });
+  writeFileSync(join(fx.work, 'landings', String(k)), `${k}\n`);
+  fx.git('add', '-A');
+  fx.git('commit', '-qm', `Landing ${k} (Part of #${9860 + k})`);
+  fx.git('push', '-q', 'origin', 'main');
+  const sha = fx.git('rev-parse', 'HEAD');
+  fx.landings.push(sha);
+  return sha;
+}
+/** One scheduled run of main watch, `node scripts/main-watch.mjs tick`, in the clone it watches. */
+export const tick = (box, fx) => ended(launch(box, [NODE, 'scripts/main-watch.mjs', 'tick'], { cwd: fx.mac }), 900_000);
+/** main watch's `status` there: its exit and its output. */
+export const watchStatus = (box, fx) => ended(launch(box, [NODE, 'scripts/main-watch.mjs', 'status'], { cwd: fx.mac }), 120_000);
+
+/**
+ * A good build (README: The promotion): a folder holding build.json naming its commit, bin/deep and bin/deep-hook.
+ * Its bin/deep notes each run in <sandbox>/starts.jsonl (the build, its PID, the time in ms, its arguments), then runs
+ * this checkout's CLI; its bin/deep-hook is a copy of this checkout's target/debug/deep-hook.
+ */
+export function makeBuild(box, name, commit) {
+  const folder = join(box.builds, name);
+  mkdirSync(join(folder, 'bin'), { recursive: true });
+  writeFileSync(join(folder, 'build.json'), `${JSON.stringify({ commit, built_by: 'tests/acceptance/1865' }, null, 2)}\n`);
+  const note = `/usr/bin/perl -MTime::HiRes=time -e 'open(my $f, ">>", $ARGV[0]) or exit 0; my $a = $ARGV[3]; $a =~ s/["\\\\]//g; printf $f "{\\"build\\":\\"%s\\",\\"pid\\":%d,\\"t\\":%.0f,\\"args\\":\\"%s\\"}\\n", $ARGV[1], $ARGV[2], time*1000, $a' ${JSON.stringify(join(box.dir, 'starts.jsonl'))} ${JSON.stringify(name)} "$$" "$*"`;
+  script(join(folder, 'bin', 'deep'), `#!/bin/sh\n${note}\nexec ${JSON.stringify(NODE)} ${JSON.stringify(CLI)} "$@"\n`);
+  copyFileSync(DEEP_HOOK, join(folder, 'bin', 'deep-hook'));
+  chmodSync(join(folder, 'bin', 'deep-hook'), 0o755);
+  return { name, folder, commit };
+}
+/** Runs of the installed hub, `bin/deep hub run` as the login service runs it, by build `name`, after `since` ms. */
+export const hubStarts = (box, name, since = 0) => lines(join(box.dir, 'starts.jsonl')).filter((s) => s.build === name && s.args === 'hub run' && s.t >= since);
+/** `deep hub promote <folder>`, run in the clone main watch watches. */
+export const promote = (box, fx, build) => ended(launch(box, [NODE, CLI, 'hub', 'promote', build.folder], { cwd: fx.mac }), 900_000);
+/** The build `~/.deepbuild/versions/current` names: its folder and the commit its build.json names; undefined with none. */
+export function current(box) {
+  const link = join(box.root, 'versions', 'current');
+  let target;
+  try { target = resolve(dirname(link), readlinkSync(link)); } catch { return undefined; }
+  let commit;
+  try { commit = JSON.parse(readFileSync(join(target, 'build.json'), 'utf8')).commit; } catch { /* none */ }
+  return { folder: target, commit, inVersions: dirname(ok(target) ?? target) === (ok(join(box.root, 'versions')) ?? join(box.root, 'versions')) };
+}

@@ -1,6 +1,8 @@
 //! The relay DeepBuild ships, for you to run on one of your own hosts: it keeps only each match's
 //! open connections and forwards each frame to that match's other copies, and keeps nothing once a
-//! match's last copy leaves. DeepBuild runs no relay and no service.
+//! match's last copy leaves. DeepBuild runs no relay and no service. It speaks relay@1, and relay@2
+//! (#277) to a copy that asks for it by the WebSocket subprotocol: then it also hands a copy's
+//! `holds`, `seat` and `catch_up` on to its match's other copies, naming the sender.
 
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
@@ -74,8 +76,12 @@ pub fn serve(listener: TcpListener, tls: ServerConfig, planted: Option<Planted>)
     }
 }
 
-fn hello(planted: Option<Planted>) -> Value {
+fn hello(planted: Option<Planted>, two: bool) -> Value {
     let (protocol, digest) = match planted {
+        _ if two => (
+            wire::PROTOCOL2.to_string(),
+            wire::digest_of(wire::PROTOCOL2),
+        ),
         Some(Planted::HelloOtherProtocol) => ("relay@2".to_string(), wire::digest()),
         Some(Planted::HelloOtherDigest) => (
             "relay@1".to_string(),
@@ -127,11 +133,28 @@ fn connection(stream: TcpStream, tls: Arc<ServerConfig>, state: &State) {
     let Ok(tls) = ServerConnection::new(tls) else {
         return;
     };
-    let Ok(mut ws) = tungstenite::accept(StreamOwned::new(tls, stream)) else {
+    // #277: a copy that asks for relay@2 by the WebSocket subprotocol gets it.
+    let mut two = false;
+    let asked = |req: &tungstenite::handshake::server::Request,
+                 mut res: tungstenite::handshake::server::Response| {
+        let offered = req.headers().get_all("Sec-WebSocket-Protocol");
+        let offers = offered.iter().filter_map(|v| v.to_str().ok());
+        if offers
+            .flat_map(|v| v.split(','))
+            .any(|p| p.trim() == wire::SUBPROTOCOL2)
+        {
+            if let Ok(v) = wire::SUBPROTOCOL2.parse() {
+                res.headers_mut().insert("Sec-WebSocket-Protocol", v);
+                two = true;
+            }
+        }
+        Ok(res)
+    };
+    let Ok(mut ws) = tungstenite::accept_hdr(StreamOwned::new(tls, stream), asked) else {
         return;
     };
     if ws
-        .send(Message::text(hello(state.planted).to_string()))
+        .send(Message::text(hello(state.planted, two).to_string()))
         .is_err()
         || ws.get_ref().sock.set_read_timeout(Some(POLL)).is_err()
     {
@@ -145,7 +168,7 @@ fn connection(stream: TcpStream, tls: Arc<ServerConfig>, state: &State) {
             Ok(Message::Text(text)) => {
                 log(state, n, &text, text.as_bytes());
                 if let Ok(message) = serde_json::from_str::<Value>(&text) {
-                    control(state, &message, &outbox, &mut seat);
+                    control(state, &message, &outbox, &mut seat, two);
                 }
             }
             Ok(Message::Binary(frame)) => {
@@ -203,6 +226,7 @@ fn control(
     message: &Value,
     outbox: &Sender<Message>,
     seat: &mut Option<(MatchId, u8)>,
+    two: bool,
 ) {
     let text = |v: Value| Message::text(v.to_string());
     if let Some(join) = message.get("join") {
@@ -236,6 +260,26 @@ fn control(
         if held.seats.iter().all(Option::is_some) {
             for tx in held.seats.iter().flatten() {
                 let _ = tx.send(text(json!({"start": {"players": held.players}})));
+            }
+        }
+    } else if let (true, Some((game, from)), Some(key)) = (
+        two,
+        *seat,
+        ["holds", "seat", "catch_up"]
+            .into_iter()
+            .find(|k| message.get(*k).is_some()),
+    ) {
+        // #277: relay@2's messages go to the match's other copies, naming the sender, and
+        // nowhere else.
+        let mut handed = message[key].clone();
+        handed["sender"] = json!(from);
+        let text = json!({ key: handed }).to_string();
+        let matches = state.matches.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(held) = matches.get(&game) {
+            for (player, tx) in held.seats.iter().enumerate() {
+                if let (Some(tx), true) = (tx, player != from as usize) {
+                    let _ = tx.send(Message::text(text.clone()));
+                }
             }
         }
     } else if let (Some(signal), Some((game, from))) = (message.get("signal"), *seat) {

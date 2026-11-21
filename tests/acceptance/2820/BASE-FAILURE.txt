@@ -1,0 +1,256 @@
+# #2820 acceptance suite at base f17fa347c (origin/main), Linux arm64, 20 cores, load about 70, cargo 1.99.1.
+# Run: node --test --test-reporter=spec tests/acceptance/2820/*.test.mjs (under systemd-run, CARGO_BUILD_JOBS=2).
+# The checkout's path is shortened to <checkout>.
+#
+# Expected failures at the base, each on an assertion its criterion names:
+# - AC1, AC2, AC3: the log shows 0 build grants: the base takes its test grant first, and its binary build (AC3's,
+#   for DEEP_BIN_DIR) passes through on it, a "passed" build event after the test grant. In AC1 and AC2 the planted
+#   test's own cargo build printed "Compiling fixture-a" / "Compiling fixture-b", in the worktree and in each shard
+#   (the planted tests' notes).
+# - AC5a: no BLOCKED line names fixture-broken: the base took its test grant, ran the test, and read FAIL.
+# - AC5b: no "INCONCLUSIVE no grant" line: with both build slots held, the base took its test grant and ran (PASS).
+# - AC4 passes at the base, which takes no build grant for such a run; it guards that behaviour.
+
+✖ #2820.AC3 a binary a selected test reads through DEEP_BIN_DIR is built from the run's own checkout before any test starts, and before the run's test grant is granted (4683.688059ms)
+✖ #2820.AC5a when a binary's build fails, the run ends BLOCKED naming the binary, takes no test grant, and nothing passes (4213.288911ms)
+✖ #2820.AC5b when no build grant comes within the wait, the run ends INCONCLUSIVE no grant, takes no test grant, and nothing passes (3326.728365ms)
+✔ #2820.AC4 a run whose selected tests build no Rust binary and read none through DEEP_BIN_DIR takes no build grant (3675.413048ms)
+✖ #2820.AC2 selected tests run in shards: the binary is built in each shard before the run's test grant, and each test's own cargo build there compiles no crate (5167.384541ms)
+✖ #2820.AC1 a selected test that runs cargo build --locked --bin <name> in the worktree: the run's build grant is granted and released before its test grant, and the test's own cargo build compiles no crate (3704.602998ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 1
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7676.855587
+
+✖ failing tests:
+
+test at tests/acceptance/2820/bin-dir.test.mjs:10:1
+✖ #2820.AC3 a binary a selected test reads through DEEP_BIN_DIR is built from the run's own checkout before any test starts, and before the run's test grant is granted (4683.688059ms)
+  AssertionError [ERR_ASSERTION]: the run's log shows 0 build grants granted, not the one the run builds its binaries under
+  exit 0
+  stdout:
+  parallel node: tests/fixture-2820/bin-dir.test.mjs
+  PASS affected: 0 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 1 passed, in 3 s at load 75; logs in /tmp/deep-1115-w9Cxh1/tmp/deep-affected-W72hbo
+  
+  stderr:
+  
+  throttle log (/tmp/deep-1115-w9Cxh1/throttle/log):
+  {"at":"2026-11-18T21:28:09.591Z","event":"granted","class":"test","grant":"top-level","id":"ae0102f27b817fa5","pid":1014451,"index":1,"load":72.17,"cores":20,"wait":30}
+  {"at":"2026-11-18T21:28:10.432Z","event":"passed","class":"build","pid":1014582,"through":"test:ae0102f27b817fa5"}
+  {"at":"2026-11-18T21:28:12.004Z","event":"passed","class":"test","pid":1016315,"through":"test:ae0102f27b817fa5"}
+  {"at":"2026-11-18T21:28:12.020Z","event":"passed","class":"build","pid":1016328,"through":"test:ae0102f27b817fa5"}
+  {"at":"2026-11-18T21:28:12.035Z","event":"passed","class":"build","pid":1016361,"through":"test:ae0102f27b817fa5"}
+  {"at":"2026-11-18T21:28:12.127Z","event":"passed","class":"build","pid":1016352,"through":"test:ae0102f27b817fa5"}
+  {"at":"2026-11-18T21:28:12.262Z","event":"passed","class":"build","pid":1016584,"through":"test:ae0102f27b817fa5"}
+  {"at":"2026-11-18T21:28:12.279Z","event":"passed","class":"build","pid":1016575,"through":"test:ae0102f27b817fa5"}
+  {"at":"2026-11-18T21:28:12.326Z","event":"passed","class":"build","pid":1016522,"through":"test:ae0102f27b817fa5"}
+  {"at":"2026-11-18T21:28:12.347Z","event":"passed","class":"build","pid":1016565,"through":"test:ae0102f27b817fa5"}
+  {"at":"2026-11-18T21:28:12.350Z","event":"passed","class":"build","pid":1016596,"through":"test:ae0102f27b817fa5"}
+  {"at":"2026-11-18T21:28:12.379Z","event":"passed","class":"build","pid":1016749,"through":"test:ae0102f27b817fa5"}
+  {"at":"2026-11-18T21:28:12.380Z","event":"passed","class":"build","pid":1016633,"through":"test:ae0102f27b817fa5"}
+  {"at":"2026-11-18T21:28:12.393Z","event":"passed","class":"build","pid":1016739,"through":"test:ae0102f27b817fa5"}
+  {"at":"2026-11-18T21:28:12.426Z","event":"passed","class":"build","pid":1016775,"through":"test:ae0102f27b817fa5"}
+  {"at":"2026-11-18T21:28:12.586Z","event":"released","class":"test","id":"ae0102f27b817fa5","pid":1014582}
+  planted tests' notes:
+  {"file":"tests/fixture-2820/bin-dir.test.mjs","root":"/tmp/deep-1115-w9Cxh1/tree","pid":1016766,"at":1795037292246,"event":"start","dir":"/tmp/deep-1115-w9Cxh1/tmp/deep-affected-W72hbo/binaries/0/bin","exists":true}
+  {"file":"tests/fixture-2820/bin-dir.test.mjs","root":"/tmp/deep-1115-w9Cxh1/tree","pid":1016766,"at":1795037292255,"event":"ran","status":0,"stdout":"fixture-b f12675bfd88b"}
+  
+  0 !== 1
+  
+      at buildBeforeTest (file://<checkout>/tests/acceptance/2820/helpers.mjs:193:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2820/bin-dir.test.mjs:26:17)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2820/failures.test.mjs:13:1
+✖ #2820.AC5a when a binary's build fails, the run ends BLOCKED naming the binary, takes no test grant, and nothing passes (4213.288911ms)
+  AssertionError [ERR_ASSERTION]: no BLOCKED line names the binary fixture-broken
+  exit 1
+  stdout:
+  parallel node: tests/fixture-2820/self-build.test.mjs
+  NEW FAIL tests/fixture-2820/self-build.test.mjs › the planted binary builds in this checkout:    Compiling fixture-broken v0.1.0 (/tmp/deep-1115-iwXwnW/tree/crates/fixture-broken)
+  FAIL affected: 1 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 0 passed, in 2 s at load 75; logs in /tmp/deep-1115-iwXwnW/tmp/deep-affected-mA1sqE
+  
+  stderr:
+  
+  throttle log (/tmp/deep-1115-iwXwnW/throttle/log):
+  {"at":"2026-11-18T21:28:10.018Z","event":"granted","class":"test","grant":"top-level","id":"2a5d399ef6915cdf","pid":1014657,"index":1,"load":72.17,"cores":20,"wait":30}
+  {"at":"2026-11-18T21:28:11.173Z","event":"passed","class":"build","pid":1015554,"through":"test:2a5d399ef6915cdf"}
+  {"at":"2026-11-18T21:28:11.296Z","event":"passed","class":"build","pid":1015530,"through":"test:2a5d399ef6915cdf"}
+  {"at":"2026-11-18T21:28:11.323Z","event":"passed","class":"build","pid":1015570,"through":"test:2a5d399ef6915cdf"}
+  {"at":"2026-11-18T21:28:11.376Z","event":"passed","class":"build","pid":1015730,"through":"test:2a5d399ef6915cdf"}
+  {"at":"2026-11-18T21:28:11.381Z","event":"passed","class":"test","pid":1015471,"through":"test:2a5d399ef6915cdf"}
+  {"at":"2026-11-18T21:28:11.408Z","event":"passed","class":"build","pid":1015702,"through":"test:2a5d399ef6915cdf"}
+  {"at":"2026-11-18T21:28:11.409Z","event":"passed","class":"build","pid":1015848,"through":"test:2a5d399ef6915cdf"}
+  {"at":"2026-11-18T21:28:11.416Z","event":"passed","class":"build","pid":1015753,"through":"test:2a5d399ef6915cdf"}
+  {"at":"2026-11-18T21:28:11.487Z","event":"passed","class":"build","pid":1015994,"through":"test:2a5d399ef6915cdf"}
+  {"at":"2026-11-18T21:28:11.498Z","event":"passed","class":"build","pid":1015893,"through":"test:2a5d399ef6915cdf"}
+  {"at":"2026-11-18T21:28:11.502Z","event":"passed","class":"build","pid":1015787,"through":"test:2a5d399ef6915cdf"}
+  {"at":"2026-11-18T21:28:11.537Z","event":"passed","class":"build","pid":1016036,"through":"test:2a5d399ef6915cdf"}
+  {"at":"2026-11-18T21:28:11.581Z","event":"passed","class":"build","pid":1016023,"through":"test:2a5d399ef6915cdf"}
+  {"at":"2026-11-18T21:28:12.082Z","event":"released","class":"test","id":"2a5d399ef6915cdf","pid":1014799}
+  planted tests' notes:
+  {"file":"tests/fixture-2820/self-build.test.mjs","root":"/tmp/deep-1115-iwXwnW/tree","pid":1016179,"at":1795037291552,"event":"start"}
+  {"file":"tests/fixture-2820/self-build.test.mjs","root":"/tmp/deep-1115-iwXwnW/tree","pid":1016179,"at":1795037291716,"event":"built","status":101,"compiling":["   Compiling fixture-broken v0.1.0 (/tmp/deep-1115-iwXwnW/tree/crates/fixture-broken)"],"error":null,"stderr":"  |                  ---   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `u32`, found `&str`\n  |                  |\n  |                  expected due to this\n\nFor more information about this error, try `rustc --explain E0308`.\nerror: could not compile `fixture-broken` (bin \"fixture-broken\") due to 1 previous error"}
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2820/failures.test.mjs:22:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2820/failures.test.mjs:29:1
+✖ #2820.AC5b when no build grant comes within the wait, the run ends INCONCLUSIVE no grant, takes no test grant, and nothing passes (3326.728365ms)
+  AssertionError [ERR_ASSERTION]: no "INCONCLUSIVE no grant" line
+  exit 0
+  stdout:
+  parallel node: tests/fixture-2820/self-build.test.mjs
+  PASS affected: 0 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 1 passed, in 1 s at load 75; logs in /tmp/deep-1115-Q3Xt5j/tmp/deep-affected-zy2feJ
+  
+  stderr:
+  
+  throttle log (/tmp/deep-1115-Q3Xt5j/throttle/log):
+  {"at":"2026-11-18T21:28:12.792Z","event":"granted","class":"build","grant":"top-level","id":"d6552c5db47ef386","pid":1017477,"index":1,"load":74.96,"cores":20,"wait":1}
+  {"at":"2026-11-18T21:28:12.833Z","event":"granted","class":"build","grant":"top-level","id":"f09a588b7ff9cc30","pid":1017502,"index":2,"load":74.96,"cores":20,"wait":1}
+  {"at":"2026-11-18T21:28:13.784Z","event":"granted","class":"test","grant":"top-level","id":"4f9ee9a9028c0984","pid":1018032,"index":1,"load":74.96,"cores":20,"wait":0.02}
+  {"at":"2026-11-18T21:28:14.788Z","event":"passed","class":"test","pid":1018601,"through":"test:4f9ee9a9028c0984"}
+  {"at":"2026-11-18T21:28:14.811Z","event":"passed","class":"build","pid":1018616,"through":"test:4f9ee9a9028c0984"}
+  {"at":"2026-11-18T21:28:14.890Z","event":"passed","class":"build","pid":1018748,"through":"test:4f9ee9a9028c0984"}
+  {"at":"2026-11-18T21:28:14.905Z","event":"passed","class":"build","pid":1018638,"through":"test:4f9ee9a9028c0984"}
+  {"at":"2026-11-18T21:28:14.910Z","event":"passed","class":"build","pid":1018624,"through":"test:4f9ee9a9028c0984"}
+  {"at":"2026-11-18T21:28:14.925Z","event":"passed","class":"build","pid":1018802,"through":"test:4f9ee9a9028c0984"}
+  {"at":"2026-11-18T21:28:14.989Z","event":"passed","class":"build","pid":1018755,"through":"test:4f9ee9a9028c0984"}
+  {"at":"2026-11-18T21:28:15.005Z","event":"passed","class":"build","pid":1018843,"through":"test:4f9ee9a9028c0984"}
+  {"at":"2026-11-18T21:28:15.029Z","event":"passed","class":"build","pid":1018940,"through":"test:4f9ee9a9028c0984"}
+  {"at":"2026-11-18T21:28:15.040Z","event":"passed","class":"build","pid":1018858,"through":"test:4f9ee9a9028c0984"}
+  {"at":"2026-11-18T21:28:15.043Z","event":"passed","class":"build","pid":1018804,"through":"test:4f9ee9a9028c0984"}
+  {"at":"2026-11-18T21:28:15.115Z","event":"passed","class":"build","pid":1018943,"through":"test:4f9ee9a9028c0984"}
+  {"at":"2026-11-18T21:28:15.122Z","event":"passed","class":"build","pid":1018929,"through":"test:4f9ee9a9028c0984"}
+  {"at":"2026-11-18T21:28:15.477Z","event":"released","class":"test","id":"4f9ee9a9028c0984","pid":1018057}
+  planted tests' notes:
+  {"file":"tests/fixture-2820/self-build.test.mjs","root":"/tmp/deep-1115-Q3Xt5j/tree","pid":1018960,"at":1795037294949,"event":"start"}
+  {"file":"tests/fixture-2820/self-build.test.mjs","root":"/tmp/deep-1115-Q3Xt5j/tree","pid":1018960,"at":1795037295238,"event":"built","status":0,"compiling":["   Compiling fixture-a v0.1.0 (/tmp/deep-1115-Q3Xt5j/tree/crates/fixture-a)"],"error":null,"stderr":"Compiling fixture-a v0.1.0 (/tmp/deep-1115-Q3Xt5j/tree/crates/fixture-a)\n    Finished `dev` profile [unoptimized] target(s) in 0.25s"}
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2820/failures.test.mjs:42:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2820/shard.test.mjs:10:1
+✖ #2820.AC2 selected tests run in shards: the binary is built in each shard before the run's test grant, and each test's own cargo build there compiles no crate (5167.384541ms)
+  AssertionError [ERR_ASSERTION]: the run's log shows 0 build grants granted, not the one the run builds its binaries under
+  exit 0
+  stdout:
+  alone node: tests/acceptance/149/fixture-2820.test.mjs tests/acceptance/1523/fixture-2820.test.mjs
+  SHARD 1 /tmp/deep-1115-9mDDwW/home/deepbuild-shards/1: made, at tree 7b1e91e1ac4e3945824eeb97ef17ab078c55a785, node_modules cloned
+  SHARD 2 /tmp/deep-1115-9mDDwW/home/deepbuild-shards/2: made, at tree 7b1e91e1ac4e3945824eeb97ef17ab078c55a785, node_modules cloned
+  PASS affected: 0 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 2 passed, in 3 s at load 75; logs in /tmp/deep-1115-9mDDwW/tmp/deep-affected-gaQBip
+  
+  stderr:
+  
+  throttle log (/tmp/deep-1115-9mDDwW/throttle/log):
+  {"at":"2026-11-18T21:28:09.617Z","event":"granted","class":"test","grant":"top-level","id":"380cf7fb3afd2b66","pid":1014408,"index":1,"load":72.17,"cores":20,"wait":30}
+  {"at":"2026-11-18T21:28:12.132Z","event":"passed","class":"build","pid":1016480,"through":"test:380cf7fb3afd2b66"}
+  {"at":"2026-11-18T21:28:12.207Z","event":"passed","class":"build","pid":1016519,"through":"test:380cf7fb3afd2b66"}
+  {"at":"2026-11-18T21:28:12.330Z","event":"passed","class":"build","pid":1016453,"through":"test:380cf7fb3afd2b66"}
+  {"at":"2026-11-18T21:28:12.344Z","event":"passed","class":"build","pid":1016737,"through":"test:380cf7fb3afd2b66"}
+  {"at":"2026-11-18T21:28:12.346Z","event":"passed","class":"build","pid":1016742,"through":"test:380cf7fb3afd2b66"}
+  {"at":"2026-11-18T21:28:12.353Z","event":"passed","class":"build","pid":1016755,"through":"test:380cf7fb3afd2b66"}
+  {"at":"2026-11-18T21:28:12.389Z","event":"passed","class":"build","pid":1016703,"through":"test:380cf7fb3afd2b66"}
+  {"at":"2026-11-18T21:28:12.395Z","event":"passed","class":"build","pid":1016870,"through":"test:380cf7fb3afd2b66"}
+  {"at":"2026-11-18T21:28:12.397Z","event":"passed","class":"build","pid":1016781,"through":"test:380cf7fb3afd2b66"}
+  {"at":"2026-11-18T21:28:12.444Z","event":"passed","class":"build","pid":1016902,"through":"test:380cf7fb3afd2b66"}
+  {"at":"2026-11-18T21:28:12.492Z","event":"passed","class":"build","pid":1016918,"through":"test:380cf7fb3afd2b66"}
+  {"at":"2026-11-18T21:28:12.497Z","event":"passed","class":"test","pid":1016940,"through":"test:380cf7fb3afd2b66"}
+  {"at":"2026-11-18T21:28:12.505Z","event":"passed","class":"build","pid":1016801,"through":"test:380cf7fb3afd2b66"}
+  {"at":"2026-11-18T21:28:12.528Z","event":"passed","class":"test","pid":1016971,"through":"test:380cf7fb3afd2b66"}
+  {"at":"2026-11-18T21:28:13.058Z","event":"released","class":"test","id":"380cf7fb3afd2b66","pid":1014589}
+  planted tests' notes:
+  {"file":"tests/acceptance/149/fixture-2820.test.mjs","root":"/tmp/deep-1115-9mDDwW/home/deepbuild-shards/1","pid":1017404,"at":1795037292612,"event":"start"}
+  {"file":"tests/acceptance/1523/fixture-2820.test.mjs","root":"/tmp/deep-1115-9mDDwW/home/deepbuild-shards/2","pid":1017417,"at":1795037292642,"event":"start"}
+  {"file":"tests/acceptance/149/fixture-2820.test.mjs","root":"/tmp/deep-1115-9mDDwW/home/deepbuild-shards/1","pid":1017404,"at":1795037292859,"event":"built","status":0,"compiling":["   Compiling fixture-a v0.1.0 (/tmp/deep-1115-9mDDwW/home/deepbuild-shards/1/crates/fixture-a)"],"error":null,"stderr":"Compiling fixture-a v0.1.0 (/tmp/deep-1115-9mDDwW/home/deepbuild-shards/1/crates/fixture-a)\n    Finished `dev` profile [unoptimized] target(s) in 0.21s"}
+  {"file":"tests/acceptance/1523/fixture-2820.test.mjs","root":"/tmp/deep-1115-9mDDwW/home/deepbuild-shards/2","pid":1017417,"at":1795037292861,"event":"built","status":0,"compiling":["   Compiling fixture-b v0.1.0 (/tmp/deep-1115-9mDDwW/home/deepbuild-shards/2/crates/fixture-b)"],"error":null,"stderr":"Compiling fixture-b v0.1.0 (/tmp/deep-1115-9mDDwW/home/deepbuild-shards/2/crates/fixture-b)\n    Finished `dev` profile [unoptimized] target(s) in 0.19s"}
+  
+  0 !== 1
+  
+      at buildBeforeTest (file://<checkout>/tests/acceptance/2820/helpers.mjs:193:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2820/shard.test.mjs:28:3)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2820/worktree.test.mjs:9:1
+✖ #2820.AC1 a selected test that runs cargo build --locked --bin <name> in the worktree: the run's build grant is granted and released before its test grant, and the test's own cargo build compiles no crate (3704.602998ms)
+  AssertionError [ERR_ASSERTION]: the run's log shows 0 build grants granted, not the one the run builds its binaries under
+  exit 0
+  stdout:
+  parallel node: tests/fixture-2820/self-build.test.mjs
+  PASS affected: 0 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 1 passed, in 2 s at load 75; logs in /tmp/deep-1115-JmNXwF/tmp/deep-affected-6DVPOM
+  
+  stderr:
+  
+  throttle log (/tmp/deep-1115-JmNXwF/throttle/log):
+  {"at":"2026-11-18T21:28:09.504Z","event":"granted","class":"test","grant":"top-level","id":"769a94afb9c25cbb","pid":1014406,"index":1,"load":72.17,"cores":20,"wait":30}
+  {"at":"2026-11-18T21:28:10.689Z","event":"passed","class":"test","pid":1014918,"through":"test:769a94afb9c25cbb"}
+  {"at":"2026-11-18T21:28:10.737Z","event":"passed","class":"build","pid":1014947,"through":"test:769a94afb9c25cbb"}
+  {"at":"2026-11-18T21:28:10.849Z","event":"passed","class":"build","pid":1014982,"through":"test:769a94afb9c25cbb"}
+  {"at":"2026-11-18T21:28:10.884Z","event":"passed","class":"build","pid":1014955,"through":"test:769a94afb9c25cbb"}
+  {"at":"2026-11-18T21:28:10.948Z","event":"passed","class":"build","pid":1015100,"through":"test:769a94afb9c25cbb"}
+  {"at":"2026-11-18T21:28:11.036Z","event":"passed","class":"build","pid":1015130,"through":"test:769a94afb9c25cbb"}
+  {"at":"2026-11-18T21:28:11.050Z","event":"passed","class":"build","pid":1015200,"through":"test:769a94afb9c25cbb"}
+  {"at":"2026-11-18T21:28:11.105Z","event":"passed","class":"build","pid":1015111,"through":"test:769a94afb9c25cbb"}
+  {"at":"2026-11-18T21:28:11.115Z","event":"passed","class":"build","pid":1015215,"through":"test:769a94afb9c25cbb"}
+  {"at":"2026-11-18T21:28:11.137Z","event":"passed","class":"build","pid":1015174,"through":"test:769a94afb9c25cbb"}
+  {"at":"2026-11-18T21:28:11.226Z","event":"passed","class":"build","pid":1015313,"through":"test:769a94afb9c25cbb"}
+  {"at":"2026-11-18T21:28:11.290Z","event":"passed","class":"build","pid":1015359,"through":"test:769a94afb9c25cbb"}
+  {"at":"2026-11-18T21:28:11.294Z","event":"passed","class":"build","pid":1015375,"through":"test:769a94afb9c25cbb"}
+  {"at":"2026-11-18T21:28:11.571Z","event":"released","class":"test","id":"769a94afb9c25cbb","pid":1014526}
+  planted tests' notes:
+  {"file":"tests/fixture-2820/self-build.test.mjs","root":"/tmp/deep-1115-JmNXwF/tree","pid":1015360,"at":1795037290853,"event":"start"}
+  {"file":"tests/fixture-2820/self-build.test.mjs","root":"/tmp/deep-1115-JmNXwF/tree","pid":1015360,"at":1795037291283,"event":"built","status":0,"compiling":["   Compiling fixture-a v0.1.0 (/tmp/deep-1115-JmNXwF/tree/crates/fixture-a)"],"error":null,"stderr":"Compiling fixture-a v0.1.0 (/tmp/deep-1115-JmNXwF/tree/crates/fixture-a)\n    Finished `dev` profile [unoptimized] target(s) in 0.39s"}
+  
+  0 !== 1
+  
+      at buildBeforeTest (file://<checkout>/tests/acceptance/2820/helpers.mjs:193:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2820/worktree.test.mjs:20:3)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+EXIT 1

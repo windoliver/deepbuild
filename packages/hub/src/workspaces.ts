@@ -21,6 +21,7 @@ import { gitEnv } from '@deepbuild/gate';
 import type { StatePin } from './gate-runner.js';
 import { nameWorkspace, repoOf } from './paths.js';
 import type { SpaceTask, WorkspaceDeps } from './workspaces-port.js';
+import { forgeFetch } from '@deepbuild/github';
 
 type Obj = Record<string, unknown>;
 type Source = Omit<StateSource, 'fixture'>;
@@ -241,10 +242,7 @@ export class Workspaces {
       if (t.step !== 'entered') continue;
       const depends = t.blocked_by.filter((b) => issues.has(b)).map((b) => `- #${issues.get(b)!}`);
       const body = [...t.criteria.map((c) => `- [ ] ${c}`), ...(depends.length ? ['', '### Depends on', ...depends] : [])].join('\n');
-      const res = await fetch(`${this.o.forge}/repos/${repo}/issues`, {
-        method: 'POST', signal: AbortSignal.timeout(30_000), body: JSON.stringify({ title: t.title, body }),
-        headers: { accept: 'application/vnd.github+json', 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
-      });
+      const res = await forgeFetch(this.o.forge, `/repos/${repo}/issues`, { method: 'POST', token, body: { title: t.title, body }, signal: AbortSignal.timeout(30_000) });
       const made = await res.json().catch(() => undefined) as Obj | undefined;
       if (res.status !== 201 || typeof made?.number !== 'number') throw Error(`the forge answered ${res.status} for task #${t.task}'s issue; ${filed.length} filed before it`);
       issues.set(t.task, made.number);
