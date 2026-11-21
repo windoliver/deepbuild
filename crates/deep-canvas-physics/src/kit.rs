@@ -26,6 +26,7 @@ mod vehicles;
 pub mod walks;
 
 pub use fixtures::{all, test_capped};
+pub use vehicles::car_world;
 
 /// The physics interface's reference implementation, which the claim rule doesn't hold.
 pub const REFERENCE: &str = "rapier3d";
