@@ -135,6 +135,14 @@ pub(crate) fn bake(
         let rows = rows.as_array().into_iter().flatten().map(flat).collect();
         doc["occurrences"][format!("{id}.occurrences")] = Value::Array(rows);
     }
+    // #552: the occurrences this copy's player doesn't see leave every gated list.
+    let (items, me) = (doc["items"].clone(), doc["match.me"].clone());
+    if let Some(lists) = doc.get_mut("occurrences").and_then(Value::as_object_mut) {
+        let fogged = deep_logic::fog::gate(&items, &arrays, lists, &me);
+        if !fogged.is_empty() {
+            doc["fogged"] = Value::Object(fogged);
+        }
+    }
     Ok(Baked {
         arrays,
         rows: BTreeMap::new(),

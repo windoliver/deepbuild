@@ -46,7 +46,7 @@ const STEP: i64 = 11_760_000;
 /// `fires`, each with the form its reader takes (#1973); `wasm` is the program's bytes, which
 /// whoever holds the evidence store inlines by the program's hash before a frame, as a vector's
 /// outline is.
-const PARAMS: [(&str, &str); 18] = [
+const PARAMS: [(&str, &str); 21] = [
     ("program", "asset ID"),
     ("debug", "asset ID"),
     ("step_rate", "Hz"),
@@ -57,7 +57,7 @@ const PARAMS: [(&str, &str); 18] = [
         "writes",
         "{name → {type, count?: u32, interpolate?, unit?}}",
     ),
-    ("emits", "{kind → {fields, max_per_step?: u16}}"),
+    ("emits", "{kind → {fields, max_per_step?: u16, always_visible?: bool}}"),
     ("fires", "{world → [input ID]}"),
     (
         "budget",
@@ -71,12 +71,23 @@ const PARAMS: [(&str, &str); 18] = [
         "saves",
         "{slots?: integer, request?: name, ends?: name, migrate?}",
     ),
+    // #189: the record a giving item writes and the one a taking item reads (Logic: carry records).
+    ("carry", "{request: name, out: [name]}"),
+    (
+        "carry_in",
+        "{arrays: {name → {type, count?: u32}}, accepts: [sha256]}",
+    ),
     (
         "preview",
         "{reads?: [control ID | path], writes?: {name → {type, count?: u32}}}",
     ),
     ("services", "{service@major → {max_per_step: u16}}"),
     ("mirrors", "[{array: path, at: name}]"),
+    // #552: courtesy fog beyond rows (Net: this copy's player).
+    (
+        "fog",
+        "{grid: <logic>.<name> (i32, two bits a player), size: [cols, rows], origin?: [x, z], cell?: m}",
+    ),
     ("wasm", "text (the program's bytes, which the hub inlines)"),
 ];
 
@@ -488,8 +499,10 @@ fn step(v: &mut View<'_>) -> Result<(), OpError> {
     let doc = v.document()?;
     let t = v.t()?;
     let piece = piece_of(doc)?;
-    // The played form's input track (Input track): the entries of the controls its items read.
+    // The played form's input track (Input track): the entries of the controls its items read,
+    // and a carry record's entry where an item takes one (#189).
     let read = |c: &str| piece.items.iter().any(|i| i.reads.iter().any(|r| r == c));
+    let takes = piece.items.iter().any(|i| i.carry_in.is_some());
     let mut entries = Vec::new();
     for e in doc
         .get("track")
@@ -497,7 +510,8 @@ fn step(v: &mut View<'_>) -> Result<(), OpError> {
         .into_iter()
         .flatten()
     {
-        if e.get("control").and_then(Value::as_str).is_some_and(read) {
+        let carried = takes && e.get("carry").is_some();
+        if carried || e.get("control").and_then(Value::as_str).is_some_and(read) {
             entries.push(Entry::parse(e).ok_or_else(|| OpError::new("bad_input", e.to_string()))?);
         }
     }

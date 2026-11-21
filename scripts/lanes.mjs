@@ -821,6 +821,13 @@ alone.push('tests/acceptance/550/', 'tests/acceptance/550-oracle/');
 // #551's files each build deep-show (ac1 and the Oracle lane also the shipped relay) and play matches in process; ac1 and
 // the Oracle lane also play a live match between the app and headless Chrome's web player through the shipped relay.
 alone.push('tests/acceptance/551/', 'tests/acceptance/551-oracle/');
+// #552's files each build deep-show (ac5 builds deep-drive with env-plants instead) and play matches in process; ac1,
+// ac2, ac6 and ac7 draw on the GPU, ac7 the app's window, and ac7 waits on your taste call in tests/acceptance/552/TASTE.json.
+alone.push('tests/acceptance/552/');
+// #553's files each build deep-show and play matches in process, rendering each copy's sound; ac1 runs the network
+// seam's interop part, which builds deep-show and the shipped relay and plays the app against headless Chrome's web
+// player through it, and ac4 reads net.budget's five runs (INCONCLUSIVE off a reference Mac or under load).
+alone.push('tests/acceptance/553/');
 byHand.push('tests/acceptance/549/ac2-join-only.test.ts');
 // #297's files each build deep-show and run its scenarios; the Oracle lane runs thousands of frames through it.
 alone.push('tests/acceptance/297/', 'tests/acceptance/297-oracle/');
@@ -1219,6 +1226,18 @@ timed.push('tests/acceptance/981/ac8-budget.test.ts');
 
 // #2898's files (blind) each start real hubs, plug-ins and jobs and hold 40 s deep_wait calls; no timing.
 alone.push('tests/acceptance/2898/');
+// #189's saves and Oracle files build #189's assembler and deep-logic and write 32 MiB and 64 MiB memories' saves,
+// and ac11-budgets times opening, logic.layout and a migration; its carry files build deep-logic, and ac09 deep-show,
+// and play the pieces in headless Chrome.
+alone.push('tests/acceptance/189/saves/', 'tests/acceptance/189-oracle/', 'tests/acceptance/189/carry/');
+timed.push('tests/acceptance/189/saves/ac11-budgets.test.ts');
+// #189's lab files each build deep-show three times (full and two test physics builds); ac11's times a re-derivation.
+// The first draft's lab declares no grounded output, so the base refuses its logic item's read before any assertion
+// (tests/acceptance/189/lab-redraft/DISPUTE.md); its blind redraft runs in its place, and the first draft is kept by
+// hand until the owner swaps it.
+alone.push('tests/acceptance/189/lab-redraft/');
+timed.push('tests/acceptance/189/lab-redraft/ac11-rederive-budget.test.ts');
+byHand.push('tests/acceptance/189/lab/');
 
 // #2227's files type-check the hub and the CLI (AC1), run the whole workspace build in a copy of the checkout (AC2,
 // 485 s on the base) and a child Vitest of #1409's limit stop (AC3).

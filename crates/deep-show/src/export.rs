@@ -111,6 +111,8 @@ pub enum Guard {
     WebSavesKeyedByOrigin,
     /// #1041: the web player never asks the browser to keep the origin's storage persistent.
     WebSavesNeverAskPersistence,
+    /// #189: the web player's Import record takes a record without holding it to its name's hash.
+    WebCarryImportSkipsHash,
     /// #1040: the web export leaves out one font it names.
     WebLeavesOutFont,
     /// #1040: the page keys each logic item by its step hash alone.
@@ -188,6 +190,13 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         // #525's, reached by `--planted`: a golden verifier and a receipt writer.
         "golden_compares_across_digests" => Planted::GoldenComparesAcrossDigests,
         "receipt_omits_runtime_digest" => Planted::ReceiptOmitsRuntimeDigest,
+        // #189's, reached by `--planted`: a restore and a save's binding.
+        "restore_loads_old_world" => {
+            Planted::Physics(crate::physics::Planted::RestoreLoadsOldWorld)
+        }
+        "content_leaves_out_worlds" => {
+            Planted::Physics(crate::physics::Planted::ContentLeavesOutWorlds)
+        }
         "limiter_without_codec_margin" => Planted::Export(G::NoCodecMargin),
         "shard_rounds_first_sample" => Planted::Export(G::ShardStartRounds),
         "export_without_disk_gate" => Planted::Export(G::NoDiskGate),
@@ -216,6 +225,7 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "web_fragment_writes_entry" => Planted::Export(G::WebFragmentWritesEntry),
         "web_saves_keyed_by_origin" => Planted::Export(G::WebSavesKeyedByOrigin),
         "web_saves_never_ask_persistence" => Planted::Export(G::WebSavesNeverAskPersistence),
+        "web_carry_import_skips_hash" => Planted::Export(G::WebCarryImportSkipsHash),
         "web_leaves_out_font" => Planted::Export(G::WebLeavesOutFont),
         "page_keys_logic_by_step_hash" => Planted::Export(G::PageKeysLogicByStepHash),
         "page_keys_by_picture_and_logic" => Planted::Export(G::PageKeysByPictureAndLogic),
@@ -409,6 +419,9 @@ pub struct Job {
     pub readback: bool,
     /// #544: the input track the document's logic items read.
     pub track: Vec<Value>,
+    /// #552: the side the export draws, `match.me` (1 to 8, or "none" for every side): a recorded
+    /// match's own player unless the call names another, and a piece played alone's 1.
+    pub me: Value,
     /// #502: `captions: {profile, files, mode}` and `loudness_profile`.
     pub captions: Captions,
     pub loudness_profile: Option<String>,
@@ -457,6 +470,7 @@ impl Default for Job {
             software: false,
             readback: false,
             track: Vec::new(),
+            me: Value::Null,
             captions: Captions::default(),
             loudness_profile: None,
             quality: "standard".into(),
@@ -579,9 +593,19 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
             Some(a) => a.as_str()? == "software",
         },
         readback: c.get("readback").and_then(Value::as_bool).unwrap_or(false),
-        track: c
-            .get("track")
-            .map_or(Some(Vec::new()), |t| t.as_array().cloned())?,
+        // #552: a recorded match's merged track, which the export draws in place of the
+        // document's.
+        track: match (c.get("track"), c.get("record")) {
+            (Some(t), _) => t.as_array().cloned()?,
+            (None, Some(r)) => r.get("track")?.as_array().cloned()?,
+            (None, None) => Vec::new(),
+        },
+        me: match (c.get("me"), c.get("record")) {
+            (Some(Value::String(s)), _) if s == "none" => json!("none"),
+            (Some(m), _) => json!(m.as_u64().filter(|p| (1..=8).contains(p))?),
+            (None, Some(r)) => r.get("player").cloned().unwrap_or(Value::Null),
+            (None, None) => Value::Null,
+        },
         captions: {
             let cap = c.get("captions");
             Captions {

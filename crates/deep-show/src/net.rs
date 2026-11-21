@@ -33,6 +33,9 @@ pub struct Join {
     state: Option<State>,
     pressed: bool,
     log: Vec<Value>,
+    /// #552: the copy `match`'s `on_panel` put on the panel: its drawn form, through its own
+    /// `match.me`, and the time it stood at after the match's last step.
+    pub(crate) shown: Option<(Value, i64)>,
 }
 
 /// What a scenario gives a match: the link each document was opened through (`docs.<id>.link`),
@@ -125,6 +128,13 @@ pub struct MatchCall {
     on: Vec<String>,
     seeks: Vec<(u8, i64)>,
     full: bool,
+    /// #552: the seed of each copy's test source in place of its secure one, the copies' views
+    /// asked for, and the copy the document's panel shows after the match.
+    secure: Option<u64>,
+    views: Vec<crate::matched::ViewAsk>,
+    on_panel: Option<u8>,
+    /// #553: where each copy keeps its saves, `<saves_dir>/<player>/`.
+    saves_dir: Option<PathBuf>,
 }
 
 fn plays_of(v: &Value) -> Option<Vec<Play>> {
@@ -307,6 +317,22 @@ fn parse_match(c: &Map<String, Value>) -> Option<MatchCall> {
                 .is_some()
                 .then_some(true)?,
         },
+        secure: match c.get("secure") {
+            None => None,
+            Some(s) => Some(s.get("seed")?.as_u64()?),
+        },
+        views: match c.get("views") {
+            None => Vec::new(),
+            Some(v) => crate::matched::views_of(v)?,
+        },
+        on_panel: match c.get("on_panel") {
+            None => None,
+            Some(p) => Some(player(p)?),
+        },
+        saves_dir: match c.get("saves_dir") {
+            None => None,
+            Some(d) => Some(PathBuf::from(d.as_str()?)),
+        },
     })
 }
 
@@ -446,6 +472,18 @@ impl Hub<'_> {
             .or_else(|| self.piece_press(panel, event))
     }
 
+    /// #553: whether `doc`'s current revision holds a net item, read once a revision.
+    pub(crate) fn has_net(&self, doc: &str) -> bool {
+        self.presented_doc(doc)
+            .is_some_and(|rev| deep_net::kind::item(&rev).is_some())
+    }
+
+    /// #553: the net module's work in one frame of `doc`'s panel: the state of its match, which
+    /// the app's notice and overlay draw from.
+    pub(crate) fn net_frame(&mut self, doc: &str) -> bool {
+        self.join_mut(doc).is_some_and(|j| j.state.is_some())
+    }
+
     fn join_mut(&mut self, panel: &str) -> Option<&mut Join> {
         self.panel_scope(panel).ok().map(|s| &mut s.join)
     }
@@ -472,14 +510,23 @@ impl Hub<'_> {
             plays: m.plays.clone(),
             faults: m.faults.clone(),
             planted,
-            // #550: the planted copy that stamps a peer's entries with its own player is copy 1.
-            planted_on: (planted == Planted::StampsOwnPlayer).then_some(1),
+            // #550: the planted copy that stamps a peer's entries with its own player is copy 1;
+            // #552's guesser, and its copy whose bits are wrong or never come, copy 2.
+            planted_on: match planted {
+                Planted::StampsOwnPlayer => Some(1),
+                Planted::GuessesFromSeed | Planted::RevealsOtherBits | Planted::WithholdsBits => {
+                    Some(2)
+                }
+                _ => None,
+            },
             shows: m.renders.iter().map(|(p, t)| (*p, flicks(*t))).collect(),
             log: m.log,
             defect: m.plant.clone(),
+            draw_seed: m.secure.unwrap_or(m.faults.seed),
         };
         let (piece, track, doc) = (s.piece.clone(), s.track.clone(), s.doc.clone());
         let rounds = planted == Planted::HashRoundsFloats;
+        let first_bits = planted == Planted::DrawsFromFirstBits;
         let name = self.scenario.module_planted.as_deref();
         let ring = match m.full {
             true => Plant::Full,
@@ -488,13 +535,25 @@ impl Hub<'_> {
         // #297: every copy checks each entry to a text control an entry text shows alike.
         let form = self.forms.get(&m.doc).cloned().unwrap_or_default();
         let (ty, lax) = (self.entry_type(&form), self.entry_lax());
-        let make = &mut |_: u8| {
+        // #553: each copy's media module plays the drawn form's spawns.
+        let media = self.match_media(&m.doc);
+        let saves = m.saves_dir.clone();
+        let make = &mut |me: u8| {
             let mut l = Logic::new(piece.clone(), &track, true)?;
             l.rounds = rounds;
+            if first_bits {
+                l.draws_wrong(deep_logic::draws::Wrong::FirstBits);
+            }
             l.plant_ring(ring);
             l.worlds(&doc)?;
             l.range = deep_play::net::Range::of(&form, ty.clone(), lax);
-            Ok(l)
+            if let Some(dir) = &saves {
+                l.saves_in(dir.join(me.to_string()), planted == Planted::SavesPredicted);
+            }
+            if planted == Planted::KeepsReplacedRows {
+                l.keeps_replaced_rows();
+            }
+            Ok(crate::voiced::Voiced::new(l, media.clone(), planted))
         };
         let run = match m.check.as_deref() {
             None => deep_net::play::play(&s.cfg, &s.card, &ask, make).map(|p| (p, None)),
@@ -529,28 +588,84 @@ impl Hub<'_> {
                 Some(s)
             })
             .collect();
-        let copies: Vec<Value> = played
-            .copies
-            .iter()
+        // #552: each copy's merged track, which its views and its readers draw from.
+        let tracks: BTreeMap<u8, Vec<Value>> = (played.copies.iter())
             .map(|c| {
-                let mut report = c.report();
-                report.insert("steps".into(), json!(c.sim().rows));
-                report.insert("track".into(), json!(s.track));
-                // #297: a refusal of an entry text's range names its reason and grapheme.
-                if let Some(Value::Array(rows)) = report.get_mut("refused") {
-                    for row in rows.iter_mut() {
-                        let why = row["why"].clone();
-                        for k in ["reason", "grapheme", "code_points"] {
-                            if let Some(v) = why.get(k) {
-                                row[k] = v.clone();
-                            }
+                (
+                    c.me,
+                    c.record()["track"].as_array().cloned().unwrap_or_default(),
+                )
+            })
+            .collect();
+        let reads = (s.piece.items.iter()).any(|i| !i.emits.is_empty());
+        let mut copies = Vec::new();
+        for c in &played.copies {
+            let mut report = c.report();
+            report.insert("steps".into(), json!(c.sim().inner.rows));
+            report.insert("track".into(), json!(s.track));
+            // #553: the voices its media module started, its audio thread, and its saves.
+            if let Some(v) = c.sim().voices() {
+                report.insert("voices".into(), v);
+            }
+            if let Some((rate, blocks, out)) = c.sim().audio() {
+                let wav = crate::mixdown::float_wav(out, 2, rate);
+                let sha = crate::evidence::put(&self.scenario.evidence, &wav).ok();
+                report.insert(
+                    "audio".into(),
+                    json!({"sample_rate": rate, "blocks": blocks, "wav": sha}),
+                );
+            }
+            if m.saves_dir.is_some() {
+                report.insert("saves".into(), json!(c.sim().inner.saved()));
+            }
+            // #297: a refusal of an entry text's range names its reason and grapheme.
+            if let Some(Value::Array(rows)) = report.get_mut("refused") {
+                for row in rows.iter_mut() {
+                    let why = row["why"].clone();
+                    for k in ["reason", "grapheme", "code_points"] {
+                        if let Some(v) = why.get(k) {
+                            row[k] = v.clone();
                         }
                     }
                 }
-                Value::Object(report)
-            })
-            .collect();
+            }
+            // Every burst and voice this copy's readers made, through its own fog.
+            if reads {
+                let form = self.copy_form(&m.doc, &tracks[&c.me], &json!(c.me));
+                let effects = form.map(|f| self.copy_effects(&m.doc, &f));
+                report.insert("effects".into(), effects.map_or_else(|e| e, |e| json!(e)));
+            }
+            copies.push(Value::Object(report));
+        }
         let mut reply = json!({"copies": copies, "relay": played.relay(m.log)});
+        let len = s.cfg.step();
+        if !m.views.is_empty() {
+            match self.copy_views(&m.doc, &m.views, &tracks, len) {
+                Ok(v) => reply["views"] = json!(v),
+                Err(e) => return e,
+            }
+        }
+        if let Some(me) = m.on_panel {
+            let last = played
+                .copies
+                .iter()
+                .find(|c| c.me == me)
+                .map_or(0, |c| c.ran() - 1);
+            let form = match self.copy_form(
+                &m.doc,
+                &tracks.get(&me).cloned().unwrap_or_default(),
+                &json!(me),
+            ) {
+                Ok(f) => f,
+                Err(e) => return e,
+            };
+            let panel = self.scenario.docs.get(&m.doc).cloned().unwrap_or_default();
+            // That copy joined its match: the panel shows it playing, not the Join prompt.
+            if let Some(join) = self.join_mut(&panel) {
+                join.shown = Some((form, last.max(0) * len));
+                join.state = Some(State::Joined);
+            }
+        }
         if !m.seeks.is_empty() {
             reply["seeks"] = json!(seeks);
         }
@@ -675,7 +790,12 @@ impl Hub<'_> {
             return Value::Null;
         };
         let state = self.scopes.get(panel).and_then(|s| s.join.state.clone());
-        let mut p = prompt::prompt(&cfg.host, cfg.players, &state.unwrap_or(State::Open));
+        let mut p = prompt::prompt(
+            &cfg.host,
+            cfg.players,
+            cfg.courtesy,
+            &state.unwrap_or(State::Open),
+        );
         p["button"] = json!(self.join_button(panel));
         p
     }
@@ -921,6 +1041,15 @@ impl Hub<'_> {
             0,
         );
         copy.limit(p.steps);
+        // #552: a draw's bits come from the platform's secure random source.
+        copy.draw_source(
+            Box::new(|| {
+                random16().map_or(0, |b| {
+                    u64::from_le_bytes(b[..8].try_into().unwrap_or_default())
+                })
+            }),
+            Default::default(),
+        );
         copy.script(
             p.plays
                 .iter()

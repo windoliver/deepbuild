@@ -76,6 +76,26 @@ fn first_apart<V: PartialEq>(a: &BTreeMap<i64, V>, b: &BTreeMap<i64, V>) -> Opti
         .min()
 }
 
+/// #553: the kind of the first occurrence row one of two steps' `made` holds and the other
+/// doesn't, list by list.
+fn kind_apart(a: Option<&Value>, b: Option<&Value>) -> Option<Value> {
+    let lists = |m: Option<&Value>| m.and_then(|m| m["occurrences"].as_object()).cloned();
+    let (a, b) = (lists(a).unwrap_or_default(), lists(b).unwrap_or_default());
+    let rows = |m: &Map<String, Value>, k: &str| m.get(k).and_then(Value::as_array).cloned();
+    for name in a.keys().chain(b.keys()) {
+        let (x, y) = (
+            rows(&a, name).unwrap_or_default(),
+            rows(&b, name).unwrap_or_default(),
+        );
+        let only =
+            (x.iter().find(|r| !y.contains(r))).or_else(|| y.iter().find(|r| !x.contains(r)));
+        if let Some(r) = only {
+            return Some(r["kind"].clone());
+        }
+    }
+    None
+}
+
 /// The first step at which two tracks differ, by the entries' times.
 fn track_apart(a: &[Value], b: &[Value], len: i64) -> Option<i64> {
     let key = |e: &Value| json!([e["t"], e["player"], e["seq"], e["control"], e["value"]]);
@@ -158,8 +178,12 @@ pub fn rollback<S: Stepper>(
             make,
         )?;
         let got = left(&mut held);
-        let mut fail = |copy: u8, step: Option<i64>, what: String| {
-            failures.push(json!({"schedule": name, "copy": copy, "step": step, "what": what}));
+        let mut fail = |copy: u8, step: Option<i64>, kind: Option<Value>, what: String| {
+            let mut f = json!({"schedule": name, "copy": copy, "step": step, "what": what});
+            if let Some(kind) = kind {
+                f["kind"] = kind;
+            }
+            failures.push(f);
         };
         for ((c, a), b) in held.copies.iter().zip(&got).zip(&base) {
             let me = c.me;
@@ -167,6 +191,7 @@ pub fn rollback<S: Stepper>(
                 fail(
                     me,
                     f["step"].as_i64(),
+                    None,
                     format!("copy {me}'s match ended faulted: net.fault {f}"),
                 );
             }
@@ -174,6 +199,7 @@ pub fn rollback<S: Stepper>(
                 fail(
                     me,
                     Some(*to),
+                    None,
                     format!(
                         "copy {me} rolled back from step {at} to {to}, past its window of {}",
                         cfg.window
@@ -184,20 +210,29 @@ pub fn rollback<S: Stepper>(
                 fail(
                     me,
                     Some(step),
+                    None,
                     format!(
                         "copy {me}'s full-state hash at match step {step} isn't the on-time run's"
                     ),
                 );
             }
             if let Some(step) = first_apart(&a.made, &b.made) {
-                fail(me, Some(step), format!("copy {me} keeps an occurrence, a step hash or a checkpoint at step {step} that the on-time run doesn't"));
+                // #553: an occurrence the copy keeps or lacks there is named by its kind.
+                match kind_apart(a.made.get(&step), b.made.get(&step)) {
+                    Some(kind) => {
+                        let named = kind.as_str().unwrap_or("unnamed");
+                        let what = format!("copy {me} keeps another {named} occurrence at step {step} than the on-time run");
+                        fail(me, Some(step), Some(kind), what);
+                    }
+                    None => fail(me, Some(step), None, format!("copy {me} keeps an occurrence, a step hash or a checkpoint at step {step} that the on-time run doesn't")),
+                }
             }
             if let Some(step) = track_apart(&a.track, &b.track, cfg.step()) {
-                fail(me, Some(step), format!("copy {me} records another merged track than the on-time run from match step {step}"));
+                fail(me, Some(step), None, format!("copy {me} records another merged track than the on-time run from match step {step}"));
             }
             if a.end != b.end || a.ran < b.ran {
                 let ended = |e: Option<End>| e.map_or("running", End::name);
-                fail(me, Some(a.ran), format!("copy {me} ran {} steps and ended {}, where the on-time run ran {} and ended {}", a.ran, ended(a.end), b.ran, ended(b.end)));
+                fail(me, Some(a.ran), None, format!("copy {me} ran {} steps and ended {}, where the on-time run ran {} and ended {}", a.ran, ended(a.end), b.ran, ended(b.end)));
             }
         }
         let mut run = name;
@@ -223,6 +258,8 @@ struct Measured {
     /// Per frame: the live match step with its checkpoints, then the window restored and
     /// stepped again, each by module, in ns.
     frames: Vec<(BTreeMap<String, u64>, BTreeMap<String, u64>)>,
+    /// #553: per frame, the live match step's rollback checkpoints alone, in ns.
+    kept: Vec<u64>,
 }
 
 fn add(to: &mut BTreeMap<String, u64>, timed: Vec<(String, u64)>) {
@@ -246,11 +283,16 @@ fn measure<S: Stepper>(
     }
     let mut at = 0;
     let mut frames = Vec::new();
+    let mut kept = Vec::new();
     s.timed();
     for k in 0..steps {
         let mut live = BTreeMap::new();
+        let mut checkpoints = 0;
         if w > 0 {
             s.keep(k);
+            let took = s.timed();
+            checkpoints = took.iter().map(|(_, ns)| ns).sum();
+            add(&mut live, took);
         }
         while let Some(e) = track
             .get(at)
@@ -289,8 +331,9 @@ fn measure<S: Stepper>(
             add(&mut again, s.timed());
         }
         frames.push((live, again));
+        kept.push(checkpoints);
     }
-    Ok(Measured { frames })
+    Ok(Measured { frames, kept })
 }
 
 fn total(m: &BTreeMap<String, u64>) -> u64 {
@@ -389,7 +432,9 @@ pub fn budget<S: Stepper>(
             ));
         };
         let (step_ms, window_ms) = (ms(total(&f.0)), ms(total(&f.1)));
-        runs.push(json!({"step": k, "step_ms": step_ms, "window_ms": window_ms}));
+        // #553: the rollback checkpoints that frame's live match step took, 0 in lockstep.
+        let checkpoint_ms = ms(m.kept.get(k).copied().unwrap_or(0));
+        runs.push(json!({"step": k, "step_ms": step_ms, "window_ms": window_ms, "checkpoint_ms": checkpoint_ms}));
         let sum = step_ms + window_ms;
         if worst.as_ref().is_none_or(|(x, _, _)| sum > *x) {
             let mut both = f.0.clone();

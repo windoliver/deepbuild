@@ -232,6 +232,10 @@ test-sim-a-1-0-1 = ["test-sim"]
 test-sim-b-1-0-1 = ["test-sim"]
 test-sim-b-pin-feature = ["test-sim"]
 test-physics-rapier-patch = []
+# Issue #189: the full set with test-physics-rapier-patch's physics record, whose backend builds every
+# world under its gravity times 1.000001 (drift) or twice it (heavy) (tests/acceptance/189/lab/README.md: Builds).
+test-physics-rapier-patch-drift = ["test-physics-rapier-patch", "deep-physics-rapier/test-gravity-drift"]
+test-physics-rapier-patch-heavy = ["test-physics-rapier-patch", "deep-physics-rapier/test-gravity-heavy"]
 # Issue #1781: the full set with scene3d's fixture builder `test.attrs@1`, a 1 m box with the
 # attributes its params list (the #1781 acceptance README: The test build and its fixture builder).
 test-attrs = []
