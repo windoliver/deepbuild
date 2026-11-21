@@ -7,6 +7,7 @@ The scene3d canvas module's R2 subset (issues #378, #379, #381): marks in 3D (bo
 ## Where new code goes
 
 - Evaluating a document at t goes in `src/scene.rs`; frame-after-frame evaluation that rewrites only what moves goes in `src/frames.rs`.
+- The viewer's measure tool (#1217), its points, its readout and its state, goes in `src/measure.rs`; the app and the web player both hold it.
 - Labels in depth go in `src/label.rs`; anchored overlays in `src/overlay.rs`; what a 3D layer reads of the look in `src/look.rs`.
 - The manifest, kinds and the passes the module adds go in `src/module.rs`.
 - Tests sit in a `#[cfg(test)]` module in the file; acceptance tests are in `tests/acceptance/378`, `379` and `381`.

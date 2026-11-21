@@ -371,6 +371,7 @@ fn check_by(
                     check_controls(&lowered, sealed, &mut issues);
                     check_constraints(&lowered, sealed, &mut issues);
                     check_assemblies(&lowered, &mut issues);
+                    check_viewer_tools(&lowered, &mut issues);
                     check_card(&lowered, &mut issues);
                     super::variants::check(&lowered, &mut issues);
                     check_time_remaps(&lowered, &expansions, &mut issues);

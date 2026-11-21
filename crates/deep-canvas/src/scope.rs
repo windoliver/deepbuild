@@ -1283,6 +1283,11 @@ impl Scope {
         }
     }
 
+    /// #1217: the press under way ends with no click: a viewer tool took it.
+    pub fn release(&mut self) {
+        self.press = None;
+    }
+
     /// One input at `t` (flicks) with the router's `serial`, against the current revision `doc`.
     pub fn input(&mut self, doc: &Value, t: i64, serial: u64, event: &Event) -> Done {
         self.input_with(doc, t, serial, event, None)

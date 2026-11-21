@@ -125,6 +125,8 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     "rewind",
     // #210: a piece's ports, each its declared way out to one plug-in and back (Port).
     "ports",
+    // #1217: the tools the document offers its viewer (Selection: `viewer_tools.measure`).
+    "viewer_tools",
 ];
 
 /// An item's keys (Item and kind), in this slice.
