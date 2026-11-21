@@ -312,6 +312,12 @@ class SqliteRecord implements RecordStore {
   private readonly migrations = new Map<string, Migration>();
   private readonly evidenceWriter: EvidenceWriter | undefined;
   private readonly queue: Pending[] = [];
+  /** The FULL appends made in this turn of the event loop: they share one FULL commit at its end (#22). */
+  private readonly fulls: Pending[] = [];
+  /** FULL commits of a turn still syncing the evidence they name: a settle waits for them. */
+  private committingFulls = 0;
+  /** The last commit to have taken its place: the next one runs after it. */
+  private ordered: Promise<void> = Promise.resolve();
   private scheduled = false;
   /** A FULL commit waiting for the evidence it names to sync: every commit after it waits too, so the log keeps arrival order. */
   private syncing: Promise<void> | undefined;
@@ -602,13 +608,27 @@ class SqliteRecord implements RecordStore {
     }
     this.sealed(prepared);
     if (CORE_ONLY.has(input.kind) || this.options.commitEach) {
-      while (this.syncing) await this.syncing;
-      const mode = CORE_ONLY.has(input.kind) || this.resumes([prepared]) ? 'full' : 'normal';
-      const synced = this.evidenceSynced([prepared], mode);
-      if (synced) await synced;
-      const [outcome] = this.commit([prepared], mode);
-      if (!outcome!.ok) throw outcome!.error;
-      return outcome!.appended;
+      // FULL appends made in one turn sync once, so an answer and the decision it saves cost one sync, not two (#22).
+      if (CORE_ONLY.has(input.kind) || this.resumes([prepared])) {
+        return new Promise<Appended>((resolve, reject) => {
+          this.fulls.push({ prepared, resolve, reject });
+          if (this.fulls.length === 1) queueMicrotask(() => { const fulls = this.takeFulls(); void this.inOrder(() => this.commitFulls(fulls)); });
+        });
+      }
+      // It takes its place now, so it commits after what arrived before it and before what arrives after, even while a
+      // FULL commit ahead syncs its evidence (#1410). The FULL appends that arrived before it commit just before it.
+      const fulls = this.takeFulls();
+      return this.inOrder(async () => {
+        await this.commitFulls(fulls);
+        while (this.syncing) await this.syncing;
+        // Its mode is read from the log as it is now: a stop committed ahead of it can make it resume a session.
+        const mode = this.resumes([prepared]) ? 'full' : 'normal';
+        const synced = this.evidenceSynced([prepared], mode);
+        if (synced) await synced;
+        const [outcome] = this.commit([prepared], mode);
+        if (!outcome!.ok) throw outcome!.error;
+        return outcome!.appended;
+      });
     }
     // The core reads what a learned change cites in the evidence store before it is in force; a refusal is its
     // event, queued right behind the change so both land in one commit, and the projection never reads bytes.
@@ -649,27 +669,71 @@ class SqliteRecord implements RecordStore {
   }
 
   /**
-   * Commits the queued stream events in one NORMAL batch, each taking its log_pos inside the commit. A FULL one waits
-   * for the evidence it names, still scheduled, so a read that settles the queue waits for it too.
+   * Commits the queued stream events in one NORMAL batch, each taking its log_pos inside the commit, after the FULL
+   * appends of this turn (#22). A FULL one waits for the evidence it names, still scheduled, so a read that settles the
+   * queue waits for it too.
    */
   private async flush(): Promise<void> {
     const batch = this.queue.splice(0);
-    let outcomes: Outcome[] = [];
+    const fulls = this.takeFulls();
     try {
-      const items = batch.map((p) => p.prepared);
-      while (this.syncing) await this.syncing;
-      const mode = this.resumes(items) ? 'full' : 'normal';
-      const synced = this.evidenceSynced(items, mode);
-      if (synced) await synced;
-      if (items.length) outcomes = this.commit(items, mode);
-    } catch (error) {
-      for (const p of batch) p.reject(error as Error);
+      await this.inOrder(async () => {
+        await this.commitFulls(fulls);
+        await this.commitPending(batch, false);
+      });
     } finally {
       this.scheduled = false;
       if (this.queue.length) {
         this.scheduled = true;
         setImmediate(() => void this.flush());
       }
+    }
+  }
+
+  /** Runs a commit after every commit that took its place before it, so the log keeps arrival order. */
+  private inOrder<T>(commit: () => Promise<T>): Promise<T> {
+    const run = this.ordered.then(commit);
+    this.ordered = run.then(() => undefined, () => undefined);
+    return run;
+  }
+
+  /**
+   * The FULL appends that arrived so far, taken as their batch takes its place in the commit order, so a FULL append
+   * that arrives later never commits ahead of what arrived before it. A settle waits for the batch from here.
+   */
+  private takeFulls(): Pending[] {
+    const batch = this.fulls.splice(0);
+    if (batch.length) this.committingFulls++;
+    return batch;
+  }
+
+  /** Commits a batch of FULL appends made in one turn in one FULL commit (#22). */
+  private async commitFulls(batch: Pending[]): Promise<void> {
+    if (!batch.length) return;
+    try {
+      await this.commitPending(batch, true);
+    } finally {
+      this.committingFulls--;
+    }
+  }
+
+  /**
+   * Commits a batch of appends in one commit, FULL when asked or when it resumes an ended session, and answers each.
+   * It first waits for a FULL commit already waiting, then syncs the evidence a FULL one names (#1410).
+   */
+  private async commitPending(batch: Pending[], full: boolean): Promise<void> {
+    if (!batch.length) return;
+    let outcomes: Outcome[];
+    try {
+      const items = batch.map((p) => p.prepared);
+      while (this.syncing) await this.syncing;
+      const mode = full || this.resumes(items) ? 'full' : 'normal';
+      const synced = this.evidenceSynced(items, mode);
+      if (synced) await synced;
+      outcomes = this.commit(items, mode);
+    } catch (error) {
+      for (const p of batch) p.reject(error as Error);
+      return;
     }
     for (const [i, outcome] of outcomes.entries()) {
       const pending = batch[i]!;
@@ -973,7 +1037,7 @@ class SqliteRecord implements RecordStore {
 
   /** Waits for every queued stream event to commit or be refused. */
   private async settle(): Promise<void> {
-    while (this.queue.length || this.scheduled) await new Promise<void>((resolve) => setImmediate(resolve));
+    while (this.queue.length || this.fulls.length || this.committingFulls || this.scheduled) await new Promise<void>((resolve) => setImmediate(resolve));
   }
 
   /** A clean stop: no new appends, every one accepted committed or refused, the state recorded FULL. */
@@ -983,7 +1047,7 @@ class SqliteRecord implements RecordStore {
   }
   private async stop(): Promise<void> {
     await this.indexing.catch(() => undefined);
-    while (this.inFlight || this.queue.length || this.scheduled) await new Promise<void>((resolve) => setImmediate(resolve));
+    while (this.inFlight || this.queue.length || this.fulls.length || this.scheduled) await new Promise<void>((resolve) => setImmediate(resolve));
     const lost = this.db.prepare('INSERT OR IGNORE INTO lost_sessions (session) VALUES (?)');
     const put = this.db.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value');
     this.full(() => {

@@ -1,0 +1,94 @@
+== head 5388f2c932b3488bcc58fc0b8a72f75c34150901
+
+===== tests/acceptance/1459/identifier.test.ts  start 12:47:19 load { 18.69 41.07 46.29 } thermal 0 screen-lock flag 0 front app [Windows App]
+
+ RUN  v5.0.5 ~/private/dbc-22s
+
+ ✓ tests/acceptance/1459/identifier.test.ts (1 test) 952188ms
+   ✓ AC7 #1459.73dd3590 On the real app, an assistive client reads `accessibilityIdentifier` equal to the snapshot's `id` on a row. If the platform can't carry it, the issue reports BLOCKED, naming where it stopped (1)
+     ✓ AC7 each Needs you row's accessibilityIdentifier in the real app equals that row's id in the replica's snapshot of the same record 952060ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  12:47:19
+   Duration  952.55s (tests 100%)
+
+===== tests/acceptance/1459/identifier.test.ts exit=0 end 13:03:12 load { 28.71 64.16 59.84 } thermal 1 front app [Windows App]
+
+===== tests/acceptance/1459/panel.test.ts  start 13:03:12 load { 28.71 64.16 59.84 } thermal 1 screen-lock flag 0 front app [Windows App]
+
+ RUN  v5.0.5 ~/private/dbc-22s
+
+ ❯ tests/acceptance/1459/panel.test.ts (1 test | 1 failed) 21011ms
+   ❯ AC5 #1459.6759f060 A panel that calls `deepbuild.needs_you()` in the real app gets the open asks from the hub, with no fixture (1)
+     × AC5 in the real app, the panel reads the hub's three open asks, each by its question, and no fixture 20900ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1459/panel.test.ts > AC5 #1459.6759f060 A panel that calls `deepbuild.needs_you()` in the real app gets the open asks from the hub, with no fixture > AC5 in the real app, the panel reads the hub's three open asks, each by its question, and no fixture
+Error: BLOCKED: deep-app has no window to read
+ ❯ blocked tests/acceptance/1459/helpers.ts:40:56
+     38| /** The reference window, in points, at 2× (design: Decided). */
+     39| export const REFERENCE = { width: 1512, height: 982, scale: 2 } as con…
+     40| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     41| const LAUNCH_MS = 180_000;
+     42|
+ ❯ RealApp.lines tests/acceptance/1459/helpers.ts:469:103
+ ❯ tests/acceptance/1459/panel.test.ts:19:23
+ ❯ settled tests/acceptance/1459/helpers.ts:487:22
+ ❯ tests/acceptance/1459/panel.test.ts:18:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  13:03:13
+   Duration  21.18s (tests 100%)
+
+===== tests/acceptance/1459/panel.test.ts exit=1 end 13:03:34 load { 22.25 60.40 58.59 } thermal 1 front app [Windows App]
+
+===== tests/acceptance/1172/rows.test.ts  start 13:03:34 load { 22.25 60.40 58.59 } thermal 1 screen-lock flag 0 front app [Windows App]
+
+ RUN  v5.0.5 ~/private/dbc-22s
+
+ ✓ tests/acceptance/1172/rows.test.ts (2 tests) 88855ms
+   ✓ #1172 Needs you shows questions and presents their cards (2)
+     ✓ AC3 each row shows its ask's question, and a click on it presents that ask's question card in the window 49391ms
+     ✓ AC3 wrong program: a planted row that shows the ask's handle fails, naming the ask 39325ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  13:03:35
+   Duration  89.01s (tests 100%)
+
+===== tests/acceptance/1172/rows.test.ts exit=0 end 13:05:04 load { 9.48 46.29 53.33 } thermal 1 front app [Windows App]
+
+===== tests/acceptance/1172/panel.test.ts  start 13:05:04 load { 9.48 46.29 53.33 } thermal 1 screen-lock flag 0 front app [Windows App]
+
+ RUN  v5.0.5 ~/private/dbc-22s
+
+ ✓ tests/acceptance/1172/panel.test.ts (1 test) 21683ms
+   ✓ #1172 a plug-in panel draws in the app (1)
+     ✓ AC4 a bound value past its freshness draws in the look's muted role with its age, and a fresh one neither, on the window's pixels 21575ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  13:05:05
+   Duration  21.85s (tests 100%)
+
+===== tests/acceptance/1172/panel.test.ts exit=0 end 13:05:27 load { 8.17 43.02 51.95 } thermal 1 front app [Windows App]
+
+===== tests/acceptance/1460/cli.test.ts  start 13:05:27 load { 8.17 43.02 51.95 } thermal 1 screen-lock flag 0 front app [Windows App]
+
+ RUN  v5.0.5 ~/private/dbc-22s
+
+ ✓ tests/acceptance/1460/cli.test.ts (3 tests) 23104ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  13:05:28
+   Duration  23.24s (tests 100%)
+
+===== tests/acceptance/1460/cli.test.ts exit=0 end 13:05:51 load { 7.66 40.64 50.88 } thermal 1 front app [Windows App]

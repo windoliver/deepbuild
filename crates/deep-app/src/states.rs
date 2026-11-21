@@ -2,7 +2,7 @@
 //! with its extra (the round a claim was sent back in, the checks' expected time, when a quiet session was last
 //! seen), and draws the look's status-map entry and glyph for it. The state comes from the record alone.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::OnceLock;
 
 use serde_json::Value;
@@ -504,9 +504,6 @@ pub struct Table {
     agents: Vec<(String, Value)>,
     /// The asks each ask showed beside in its newest showing of several, the core's, in batch order (#1345).
     batches: HashMap<String, Vec<String>>,
-    /// Every ask a showing of the core's held, and whether the record holds any showing at all (#1345).
-    shown: HashSet<String>,
-    showings: bool,
 }
 
 /// What a start says of the session it became (#1348): the approval ask of the work run it's part of, and the real
@@ -641,8 +638,6 @@ impl Table {
                 .flatten()
                 .filter_map(|item| item["ask"].as_str().map(str::to_owned))
                 .collect();
-            self.showings = true;
-            self.shown.extend(asks.iter().cloned());
             if asks.len() > 1 {
                 for ask in &asks {
                     self.batches.insert(ask.clone(), asks.clone());
@@ -947,11 +942,6 @@ impl Table {
     /// The asks `handle` showed beside in its newest showing of several, itself among them; empty when it showed alone (#1345).
     pub fn batch(&self, handle: &str) -> &[String] {
         self.batches.get(handle).map_or(&[], Vec::as_slice)
-    }
-
-    /// Whether a showing of the core's held `handle`; `None` for a record that holds no showing at all (#1345).
-    pub fn shown(&self, handle: &str) -> Option<bool> {
-        self.showings.then(|| self.shown.contains(handle))
     }
 
     pub fn deadline(&self, ask: &Value) -> Option<u64> {

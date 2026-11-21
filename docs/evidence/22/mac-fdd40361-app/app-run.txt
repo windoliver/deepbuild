@@ -1,0 +1,33 @@
+World: home /private/tmp/dh27-Yp2v46/h; deep-app pid 201; machine Mac15,12
+
+$ deep inbox    # before the batch, 2026-11-13T14:13:11.924Z
+ask:01M7AM2HD3X712XFMVPWKRX934  taste  9f6f5af9-55a6-4d5a-b90d-76223c0b925f  4s  queued  A: which header colour for checkout screen 1?  [blue | green]
+ask:01M7AM2HNKPDM60GWXGJV30EDS  taste  ff088577-0873-41d1-ad87-ddcd6c729014  4s  queued  B: which header colour for checkout screen 1?  [blue | green]
+ask:01M7AM2HZY4TKV1R9Y7SHSTVMM  taste  131e424a-c4c5-4db8-8826-e886e8e21e4a  4s  queued  D: which header colour for checkout screen 1?  [blue | green]
+ask:01M7AM2J4E6KRS5MRBE2N5FJJ0  taste  131e424a-c4c5-4db8-8826-e886e8e21e4a  4s  queued  D: which header colour for checkout screen 2?  [blue | green]
+ask:01M7AM2JAZVVC513H4WZAJCXKC  taste  131e424a-c4c5-4db8-8826-e886e8e21e4a  3s  queued  D: which header colour for checkout screen 3?  [blue | green]
+ask:01M7AM2JHX6HM782YGR52VD1TW  taste  131e424a-c4c5-4db8-8826-e886e8e21e4a  3s  queued  D: which header colour for checkout screen 4?  [blue | green]
+ask:01M7AM2JR8M07HQB5B5K2F69H2  taste  131e424a-c4c5-4db8-8826-e886e8e21e4a  3s  queued  D: which header colour for checkout screen 5?  [blue | green]
+ask:01M7AM2JYQYTM5TEW8TEMQE4QD  exception  131e424a-c4c5-4db8-8826-e886e8e21e4a  3s  queued  This session keeps asking: answer its asks together, pause it, or leave them to their defaults?  [together | pause | defaults]
+ask:01M7AM2JYQF8G9KZCDYB0RTDNH  taste  131e424a-c4c5-4db8-8826-e886e8e21e4a  3s  folded  D: which header colour for checkout screen 6?  [blue | green]
+   screenshot 0-before-batch.png (window 516426)
+
+$ deep inbox    # after the 2026-11-13T14:14:00.000Z batch
+ask:01M7AM2HD3X712XFMVPWKRX934  taste  9f6f5af9-55a6-4d5a-b90d-76223c0b925f  58s  shown  A: which header colour for checkout screen 1?  [blue | green]
+ask:01M7AM2HNKPDM60GWXGJV30EDS  taste  ff088577-0873-41d1-ad87-ddcd6c729014  57s  shown  B: which header colour for checkout screen 1?  [blue | green]
+ask:01M7AM2HZY4TKV1R9Y7SHSTVMM  taste  131e424a-c4c5-4db8-8826-e886e8e21e4a  57s  shown  D: which header colour for checkout screen 1?  [blue | green]
+ask:01M7AM2J4E6KRS5MRBE2N5FJJ0  taste  131e424a-c4c5-4db8-8826-e886e8e21e4a  57s  shown  D: which header colour for checkout screen 2?  [blue | green]
+ask:01M7AM2JAZVVC513H4WZAJCXKC  taste  131e424a-c4c5-4db8-8826-e886e8e21e4a  57s  shown  D: which header colour for checkout screen 3?  [blue | green]
+ask:01M7AM2JHX6HM782YGR52VD1TW  taste  131e424a-c4c5-4db8-8826-e886e8e21e4a  56s  shown  D: which header colour for checkout screen 4?  [blue | green]
+ask:01M7AM2JR8M07HQB5B5K2F69H2  taste  131e424a-c4c5-4db8-8826-e886e8e21e4a  56s  shown  D: which header colour for checkout screen 5?  [blue | green]
+ask:01M7AM2JYQYTM5TEW8TEMQE4QD  exception  131e424a-c4c5-4db8-8826-e886e8e21e4a  56s  shown  This session keeps asking: answer its asks together, pause it, or leave them to their defaults?  [together | pause | defaults]
+ask:01M7AM2JYQF8G9KZCDYB0RTDNH  taste  131e424a-c4c5-4db8-8826-e886e8e21e4a  56s  folded  D: which header colour for checkout screen 6?  [blue | green]
+   screenshot 1-needs-you.png (window 516426)
+
+$ deep inbox answer ask:01M7AM2JYQYTM5TEW8TEMQE4QD together
+ask:01M7AM2JYQYTM5TEW8TEMQE4QD answered together; no decision saved (exit 0)
+
+$ deep inbox
+ask:01M7AM2HD3X712XFMVPWKRX934  taste  9f6f5af9-55a6-4d5a-b90d-76223c0b925f  1m  shown  A: which header colour for checkout screen 1?  [blue | green]
+ask:01M7AM2HNKPDM60GWXGJV30EDS  taste  ff088577-0873-41d1-ad87-ddcd6c729014  1m  shown  B: which header colour for checkout screen 1?  [blue | green]
+   screenshot 2-after-bulk-answer.png (window 516426)

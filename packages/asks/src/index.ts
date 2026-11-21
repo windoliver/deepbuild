@@ -148,8 +148,19 @@ export interface InboxRow {
   missing: Missing | null;
   /** What you typed beside an ask that typed text can't close, as its card shows it. */
   words: string[];
-  /** The exception "this session keeps asking" that holds it, while it shows only there (#667); null otherwise. */
+  /**
+   * True only on its session's "keeps asking" exception, the one its further asks fold into; false on every other row,
+   * other exceptions included. The app reads it to tell which exception holds a session's folded asks.
+   */
+  holder: boolean;
+  /**
+   * The exception that holds it while it shows only there (#667), which may be another session's of its thread; null
+   * otherwise. The app keeps a folded ask from a panel until this is in sight.
+   */
   folded: string | null;
+  /** Who raised it. A fold is one person's, so the app folds a live ask only into an exception of the same pair. */
+  actor: string;
+  scope: string;
 }
 export interface Asks {
   raise(connection: Connection, source: string, ask: unknown, plan?: PlanInput): Promise<string>;
@@ -166,6 +177,8 @@ export interface Asks {
    * and the time before you saw it, or before they were back on, moves its deadline later as `away` does.
    */
   notifications(off: boolean): Promise<void>;
+  /** Whether one of your batch times has come since the asks were last shown, by your settings as they are now: the hub's beat ticks then, with nothing else due. */
+  batchDue(): Promise<boolean>;
   card(ask: string): Promise<Card>;
   needsYou(): Promise<Card[]>;
   holds(session: string, step: Step): Promise<string[]>;
@@ -252,6 +265,12 @@ export async function draftAskSettings(home: string): Promise<void> {
   const next = `${file}.${process.pid}.tmp`;
   writeFileSync(next, `${JSON.stringify(config, null, 2)}\n`);
   renameSync(next, file);
+}
+
+/** Waits for every write to settle, then throws the first refusal: a write still under way never outlives the asks' lock. */
+async function allThrough(writes: readonly unknown[]): Promise<void> {
+  const refused = (await Promise.allSettled(writes)).find((w): w is PromiseRejectedResult => w.status === 'rejected');
+  if (refused) throw refused.reason;
 }
 
 /** b over a, key by key, one level into each map: how a repo's done.yaml overrides your settings. */
@@ -659,6 +678,8 @@ class AsksCore implements Asks {
       if (image !== undefined && (typeof image !== 'string' || !SHA256.test(image))) throw new AskRefused('a screenshot is named by its SHA-256, in lower-case hex', { field: 'image' });
       if (option === undefined && words === undefined && image === undefined) throw new AskRefused('an answer chooses an option or says something', { field: 'option' });
       if (token !== undefined && (typeof token !== 'string' || !token)) throw new AskRefused('the click token is text', { field: 'token' });
+      // The record refuses longer text or half a surrogate pair, and a refused answer must save no decision (they share one commit).
+      for (const [field, text] of [['words', words], ['token', token]] as const) if (typeof text === 'string' && (text.length > 16384 || /\p{Surrogate}/u.test(text) || [...text].length > 8192)) throw new AskRefused(`${field} are well-formed text of at most 8192 characters`, { field });
       if (steps !== undefined && (!Array.isArray(steps) || !steps.every((i) => Number.isInteger(i) && (i as number) >= 0))) throw new AskRefused('steps are the indices of the batch to run', { field: 'steps' });
       const now = this.options.now();
       if (via === 'channel') {
@@ -738,13 +759,17 @@ class AsksCore implements Asks {
       }
       // The same question from other threads, shown through this card, takes the same option.
       const riders = chosen ? this.open().filter((a) => this.rides(a) === ask) : [];
-      await this.options.record.append(asCore(connection), {
+      // An option you chose is saved as a decision for the ask's repo, or its session, whatever its words claim. A
+      // block's task saves none: "I did it" answers this block, and the next one of its kind needs doing again (#85).
+      // A card with a target only the agent read saves your answer for this ask only (#1098).
+      const scope = chosen && via !== 'channel' && !ask.fold && !ask.block && !this.unplaced(ask).length ? this.scopeOf(ask) : null;
+      await allThrough([this.options.record.append(asCore(connection), {
         v, id: ulid(now), kind: 'ask.answered', subject: ask.handle, ts: now,
         data: {
           answer: option ?? (words as string | undefined) ?? (image as string), option: chosen?.id ?? null, plan_hash: decision === 'allow' ? ask.plan?.hash ?? null : null, decision,
           via, verified: true, on: ask.data.pinned_to!, token: token ?? null, words: (words as string | undefined) ?? null, image: (image as string | undefined) ?? null,
         },
-      });
+      }), scope === null ? undefined : this.saveAt(connection, ask, scope, chosen!.id)]); // one turn, so one durable commit holds both (#22)
       await this.sync();
       this.hand(ask, chosen?.id ?? null, (words as string | undefined) ?? null, false, decision, null, null, null, (image as string | undefined) ?? null);
       for (const rider of riders) {
@@ -765,11 +790,6 @@ class AsksCore implements Asks {
         this.hand(member, allow.id, null, false, allow.decision);
         ask.receiptAlso.push(member.handle);
       }
-      // An option you chose is saved as a decision for the ask's repo, or its session, whatever its words claim. A
-      // block's task saves none: "I did it" answers this block, and the next one of its kind needs doing again (#85).
-      // A card with a target only the agent read saves your answer for this ask only (#1098).
-      const scope = chosen && via !== 'channel' && !ask.fold && !ask.block && !this.unplaced(ask).length ? this.scopeOf(ask) : null;
-      if (scope !== null) await this.saveAt(connection, ask, scope, chosen!.id);
       await this.settle();
       return scope === null ? null : String(ask.data.key);
     });
@@ -802,6 +822,8 @@ class AsksCore implements Asks {
       await this.settle();
     });
   }
+
+  batchDue(): Promise<boolean> { return this.exclusive(async () => this.showing.batchDue(this.options.now())); }
 
   card(handle: string): Promise<Card> {
     return this.exclusive(async () => {
@@ -895,7 +917,7 @@ class AsksCore implements Asks {
         ask: a.handle, kind: a.data.kind as AskKind, session: a.session, status: this.status(a),
         outcome: a.closed?.outcome ?? 'unanswered', owner: String(a.data.owner), age: now - a.created,
         request: a.request ? { ...a.request } : null, decision: a.closed?.decision ?? null, missing: a.closed ? null : a.missing ?? null, words: [...a.words],
-        folded: !a.closed && this.inFold(a) ? a.folded! : null,
+        holder: a.fold, folded: !a.closed && this.inFold(a) ? a.folded! : null, actor: a.who.actor, scope: a.who.scope,
       }));
     });
   }
@@ -1196,10 +1218,7 @@ class AsksCore implements Asks {
     const now = this.options.now();
     const id = ulid(now);
     const as = asCore(connection);
-    await this.options.record.append(as, { v: 1, id, kind: 'decision.created', subject: ask.handle, ts: now, data: { key: String(ask.data.key), scope, answer, ask: ask.handle } });
-    for (const d of contradicted) {
-      await this.options.record.append(as, { v: 2, id: ulid(now), kind: 'decision.overruled', subject: d.handle, ts: now, data: { decision: d.handle, at: scope } });
-    }
+    await allThrough([{ v: 1, id, kind: 'decision.created', subject: ask.handle, ts: now, data: { key: String(ask.data.key), scope, answer, ask: ask.handle } }, ...contradicted.map((d) => ({ v: 2, id: ulid(now), kind: 'decision.overruled', subject: d.handle, ts: now, data: { decision: d.handle, at: scope } }))].map((event) => this.options.record.append(as, event))); // one turn, in this order: durable in one commit (#22)
     await this.sync();
     return `decision:${id}`;
   }
@@ -1567,11 +1586,15 @@ class AsksCore implements Asks {
         const request = block?.theirs && !this.requested.has(block.handle) && d.key === requestKey(block) ? { to: String(block.data.owner), block: block.handle } : undefined;
         const inThread = this.openIn(thread);
         const open = inThread.filter((a) => !a.fold);
-        const holder = fold || theirs ? undefined : inThread.find((a) => a.fold && a.who.actor === e.actor && a.who.scope === e.scope);
+        // An agent's sign-in task (#1349) holds the work that needs the agent: it shows at once (showing.ts), so it never
+        // folds into an exception, and isn't held for your message, which the agent stopped on it won't take a step to read.
+        // Only the core files one, under an agent's sign-in signature, from a Send or a lapsed sign-in; an agent naming a probe files none.
+        const signIn = signature !== undefined && this.signInAgents.has(signature);
+        const holder = fold || theirs || signIn ? undefined : inThread.find((a) => a.fold && a.who.actor === e.actor && a.who.scope === e.scope);
         const ask: Ask = {
           id: e.id, handle: `ask:${e.id}`, data: d, options: d.options as Option[], session: e.session ?? '', who: { actor: e.actor, scope: e.scope }, thread, pos: e.log_pos,
-          fold, ...(holder ? { folded: holder.handle } : {}), theirs, ...(request ? { request } : {}), words: [], receiptAlso: [], decided: new Set(), pending: {}, conflict: [],
-          created: e.ts, wait: (d.deadline as number) - e.ts, due: d.deadline as number, since: e.ts, shown: false, unread: e.session !== undefined && this.unread.has(e.session), hubs: e.writer === 'core' && d.kind === 'exception',
+          fold, ...(holder ? { folded: holder.handle } : {}), theirs, ...(signIn ? { signIn: true as const } : {}), ...(request ? { request } : {}), words: [], receiptAlso: [], decided: new Set(), pending: {}, conflict: [],
+          created: e.ts, wait: (d.deadline as number) - e.ts, due: d.deadline as number, since: e.ts, shown: false, unread: !signIn && e.session !== undefined && this.unread.has(e.session), hubs: e.writer === 'core' && d.kind === 'exception',
           ...(signature === undefined ? {} : { block: { signature, stops: this.coveringStops(d) } }),
         };
         if (request) this.requested.set(request.block, ask.handle);
@@ -2283,7 +2306,7 @@ export async function openAsks(options: AsksOptions): Promise<Asks> {
   await core.tick();
   // Plain functions, so a caller can wrap one method and keep the rest.
   return {
-    raise: core.raise.bind(core), answer: core.answer.bind(core), tick: core.tick.bind(core), away: core.away.bind(core), notifications: core.notifications.bind(core), card: core.card.bind(core),
+    raise: core.raise.bind(core), answer: core.answer.bind(core), tick: core.tick.bind(core), away: core.away.bind(core), notifications: core.notifications.bind(core), batchDue: core.batchDue.bind(core), card: core.card.bind(core),
     needsYou: core.needsYou.bind(core), holds: core.holds.bind(core), authorized: core.authorized.bind(core),
     beforeStep: core.beforeStep.bind(core), batch: core.batch.bind(core), approveBatch: core.approveBatch.bind(core),
     later: core.later.bind(core), laterBefore: core.laterBefore.bind(core), undo: core.undo.bind(core), inbox: core.inbox.bind(core), stillFails: core.stillFails.bind(core), signIn: core.signIn.bind(core),
