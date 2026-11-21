@@ -275,6 +275,8 @@ pub enum Read {
     Mirror(usize),
     /// #552: `net.draws`, the draws the input track's reveals complete by the step.
     Draws,
+    /// #277: `net.seats`, the seat entries stamped since the item's last step.
+    Seats,
     /// A write entry.
     None,
 }

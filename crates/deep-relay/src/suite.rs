@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
-use crate::macos::{check_hello, Connection, Event, Limits};
+use crate::macos::{check_hello, check_hello_as, Connection, Event, Limits};
 use crate::wire::{self, Frame, MatchId};
 
 /// The relay suite's reader: every frame a copy of `game` received, read field by field. Each
@@ -171,7 +171,21 @@ impl Run {
 
     /// Opens a connection and joins `game`; the copy's index in the report.
     fn join(&mut self, game: MatchId, players: u8, open: bool) -> Result<usize, String> {
-        let (conn, _) = Connection::open(&self.relay, &self.ca)?;
+        self.join_as(game, players, open, None)
+    }
+
+    /// The same, asking for `protocol` by the WebSocket subprotocol (#277: relay@2).
+    fn join_as(
+        &mut self,
+        game: MatchId,
+        players: u8,
+        open: bool,
+        protocol: Option<&str>,
+    ) -> Result<usize, String> {
+        let (conn, _) = match protocol {
+            Some(p) => Connection::open_as(&self.relay, &self.ca, p)?,
+            None => Connection::open(&self.relay, &self.ca)?,
+        };
         let mut copy = Copy {
             conn: Some(conn),
             game,
@@ -341,10 +355,17 @@ pub fn run(relay: &str, ca: &[u8]) -> Value {
             frames_per_s: wire::FRAMES_PER_S,
             frame_bytes: wire::FRAME_BYTES,
         },
-        checks: ["hello", "joining", "forwarding", "keeps_nothing", "closing"]
-            .into_iter()
-            .map(|c| (c, vec![]))
-            .collect(),
+        checks: [
+            "hello",
+            "joining",
+            "forwarding",
+            "keeps_nothing",
+            "closing",
+            "relay@2",
+        ]
+        .into_iter()
+        .map(|c| (c, vec![]))
+        .collect(),
         next_match: 0,
     };
     let played = play(&mut run);
@@ -381,6 +402,8 @@ fn play(run: &mut Run) -> Result<(), String> {
         Ok(limits) => run.limits = limits,
         Err(why) => run.fail("hello", why),
     }
+
+    relay2(run)?;
 
     // Joining: two matches at once, each seated and started; a third copy is refused full, a join
     // to a match never opened unknown.
@@ -462,6 +485,56 @@ fn play(run: &mut Run) -> Result<(), String> {
     for c in [c1, d1] {
         run.copies[c].leave();
     }
+    Ok(())
+}
+
+/// #277: relay@2 beside relay@1. A connection that asks for it by the WebSocket subprotocol gets
+/// its hello, with its committed digest; in a match of two such copies, each of relay@2's messages
+/// one copy sends reaches the other, as sent, naming the sender's seat.
+fn relay2(run: &mut Run) -> Result<(), String> {
+    let host = crate::macos::host(&run.relay);
+    let (conn, hello) = Connection::open_as(&run.relay, &run.ca, wire::PROTOCOL2)?;
+    conn.close();
+    if let Err(why) = check_hello_as(&host, &hello, wire::PROTOCOL2) {
+        run.fail("relay@2", why);
+        return Ok(());
+    }
+    let game = run.new_match();
+    let a = run.join_as(game, 2, true, Some(wire::PROTOCOL2))?;
+    let b = run.join_as(game, 2, false, Some(wire::PROTOCOL2))?;
+    for c in [a, b] {
+        if run.copies[c].control("start", WAIT)?.is_none() {
+            run.fail(
+                "relay@2",
+                format!("a relay@2 match {} never started", wire::hex(&game)),
+            );
+            return Ok(());
+        }
+    }
+    let hex = wire::hex(&game);
+    let sent = [
+        json!({"holds": {"match": hex, "player": 1, "last": 7}}),
+        json!({"seat": {"match": hex, "player": run.copies[a].player, "state": "absent", "after": 3}}),
+        json!({"catch_up": {"match": hex, "from": 2}}),
+    ];
+    for m in &sent {
+        if let Some(conn) = run.copies[a].conn.as_mut() {
+            conn.send_control(m)?;
+        }
+        let key = m
+            .as_object()
+            .and_then(|o| o.keys().next())
+            .cloned()
+            .unwrap_or_default();
+        let mut want = m[&key].clone();
+        want["sender"] = json!(run.copies[a].player);
+        let got = run.copies[b].control(&key, WAIT)?;
+        if got.as_ref().map(|g| &g[&key]) != Some(&want) {
+            run.fail("relay@2", format!("a relay@2 copy of match {hex} sent {m}, and its peer was handed {got:?}, not {key} {want}"));
+        }
+    }
+    run.copies[a].leave();
+    run.copies[b].leave();
     Ok(())
 }
 
