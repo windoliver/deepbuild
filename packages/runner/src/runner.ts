@@ -47,11 +47,20 @@ const OUTPUT_BYTES = 8 * 1024 * 1024;
 const TEXT_CAP = 8192;
 /** A result's own subtype that names its stop. */
 const RESULT_CAUSES: Record<string, StopCause> = { error_max_turns: 'max_turns' };
-const KINDS = new Set(['draft', 'review', 'read', 'smoke', 'acceptance', 'eval']);
+const KINDS = new Set(['draft', 'review', 'read', 'smoke', 'acceptance', 'eval', 'work']);
 /** All a blind job may read (#1328): nothing of a branch, a transcript or a session has a handle here. */
 const INPUTS = new Set(['issue', 'design', 'base', 'criterion']);
-/** What refuses a kind's spec before anything of it is recorded: only an acceptance job writes, and only its issue's folder. */
+/**
+ * What refuses a kind's spec before anything of it is recorded: an acceptance job writes only its issue's folder, a
+ * work job only its workspace, and every other kind is read-only.
+ */
 function badWrites(spec: JobSpec): string | undefined {
+  if (spec.kind === 'work') {
+    if (spec.writes !== undefined || spec.inputs !== undefined || spec.checkout) return 'work job writes only its workspace, and names no inputs or checkout';
+    const folder = spec.workspace ?? '';
+    return isAbsolute(folder) && existsSync(folder) && statSync(folder).isDirectory() ? undefined : `work job runs in a folder the hub made for it, an absolute path, not ${JSON.stringify(folder)}`;
+  }
+  if (spec.workspace !== undefined) return `${spec.kind} job has no workspace`;
   if (spec.kind !== 'acceptance') return spec.writes === undefined && spec.inputs === undefined ? undefined : `${spec.kind} job is read-only and names no inputs`;
   if (!spec.checkout) return 'acceptance job runs on a checkout of its base';
   if (!/^tests\/acceptance\/\d+$/.test(spec.writes ?? '')) return `acceptance job writes only tests/acceptance/<issue>, not ${String(spec.writes)}`;
@@ -69,12 +78,6 @@ const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
 const sha256 = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
-const compare = (a: string, b: string): number => {
-  const x = a.split('.').map(Number);
-  const y = b.split('.').map(Number);
-  for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0);
-  return 0;
-};
 
 interface Facts { agent: string; versions: string[]; launch: { readOnlyJob: { args: string[] } }; billing: { apiKeyVariables: string[] }; errorTexts: { causes?: Record<string, string> }; stop: { cause: { errors: { field: string; values: Record<string, string> } } } }
 /** A binary as it was verified: where the PATH named it, the file it is, its bytes' digest, its version and its file's identity. */
@@ -145,7 +148,7 @@ class LocalRunner implements Runner {
   /** The starts each account took without a reading, by the clock, for its daily limit. */
   private readonly unread = new Map<string, number[]>();
   private readonly verified = new Map<Agent, Verified>();
-  /** Versions a planted runner widened the range to; tests only. */
+  /** Versions a planted runner added to what its facts cover; tests only. */
   private readonly widened = new Set<string>();
   private chain: Promise<unknown> = Promise.resolve();
   private cursor = 0;
@@ -285,7 +288,7 @@ class LocalRunner implements Runner {
 
   async submit(spec: JobSpec, evaluate?: EvaluationWork): Promise<JobRecord> {
     if (this.closed) throw Error('the runner is closed');
-    if (!isObj(spec) || !KINDS.has(spec.kind)) throw Error(`a job's kind is draft, review, read, smoke, acceptance or eval, not ${String(isObj(spec) ? spec.kind : spec)}`);
+    if (!isObj(spec) || !KINDS.has(spec.kind)) throw Error(`a job's kind is draft, review, read, smoke, acceptance, eval or work, not ${String(isObj(spec) ? spec.kind : spec)}`);
     if ((spec.kind === 'eval') !== (typeof evaluate === 'function')) throw Error('an eval needs its trusted evaluator, never an agent prompt alone');
     if (typeof spec.prompt !== 'string') throw Error('a job has a prompt');
     const bad = badWrites(spec);
@@ -297,8 +300,9 @@ class LocalRunner implements Runner {
     const id = `run:${ulid(this.o.now())}`;
     const jobs = join(this.o.root, 'jobs');
     mkdirSync(jobs, { recursive: true, mode: 0o700 });
-    const folder = join(realpathSync(jobs), id.slice(4));
-    mkdirSync(folder, { mode: 0o700 });
+    // A work job's folder is its workspace; any other job's is a folder of its own under <root>/jobs/.
+    const folder = spec.workspace ? realpathSync(spec.workspace) : join(realpathSync(jobs), id.slice(4));
+    if (!spec.workspace) mkdirSync(folder, { mode: 0o700 });
     const parts = AGENTS[spec.agent];
     const home = this.o.env.HOME ?? '';
     const account = spec.account ?? (parts && home ? parts.account(home, this.o.env) : null);
@@ -314,7 +318,7 @@ class LocalRunner implements Runner {
     }, id);
     if (evaluate) await this.o.record.sync();
     if (!parts) return this.refuse(job, `no agent ${String(spec.agent)}`);
-    if (spec.writes && !parts.writing) return this.refuse(job, `${spec.agent} has no job that writes yet`);
+    if ((spec.writes || spec.workspace) && !parts.writing) return this.refuse(job, `${spec.agent} has no job that writes yet`);
     if (spec.checkout) {
       const failed = await this.checkout(folder, spec.checkout).catch((error: unknown) => (error instanceof Error ? error.message : String(error)));
       job.preparing = false;
@@ -662,9 +666,9 @@ class LocalRunner implements Runner {
     const facts = this.facts(job.spec.agent);
     const binary = await this.binary(job, facts);
     if ('refused' in binary) return binary;
-    const covered = AGENTS[job.spec.agent]!.exactVersions ? facts.versions.includes(binary.version) : this.covers(facts, binary.version);
+    const covered = this.covers(facts, binary.version);
     if (!covered && job.spec.kind !== 'smoke') {
-      return { refused: `${facts.agent} ${binary.version} at ${binary.path} is outside what its facts cover, ${facts.versions[0]} to ${facts.versions[facts.versions.length - 1]}` };
+      return { refused: `${facts.agent} ${binary.version} at ${binary.path} is outside what its facts cover: ${facts.versions.join(', ')}` };
     }
     if (!covered) {
       // A smoke test of a version its facts don't cover runs under the one standing approval you gave for that agent.
@@ -698,10 +702,9 @@ class LocalRunner implements Runner {
     if (!facts) this.factsCache.set(agent, (facts = readFacts<Facts>(AGENTS[agent]!.facts)));
     return facts;
   }
+  /** The versions the facts list, and no other: the hub holds any other version's session watch-only. */
   private covers(facts: Facts, version: string): boolean {
-    if (this.widened.has(version)) return true;
-    const range = facts.versions;
-    return range.length > 0 && compare(version, range[0]!) >= 0 && compare(version, range[range.length - 1]!) <= 0;
+    return this.widened.has(version) || facts.versions.includes(version);
   }
 
   /** The agent's binary on the login shell's PATH, resolved once, its bytes and version verified again whenever its file changes. */
@@ -731,7 +734,7 @@ class LocalRunner implements Runner {
       const shown = await this.step([path, '--version'], job.rec.folder, { read: [...this.programs(real, AGENTS[agent]), ...(AGENTS[agent]?.packaged ? job.spec.grant?.read ?? [] : [])] }, { PATH: this.o.loginPath, HOME: this.o.env.HOME ?? '' });
       const after = existsSync(real) ? identity(statSync(real)) : '';
       if (realpathSync(path) !== real || after !== before || (await fileDigest(real)) !== digest) continue;
-      const version = shownVersion(shown.stdout.toString('utf8'), AGENTS[agent]!.exactVersions === true);
+      const version = shownVersion(shown.stdout.toString('utf8'));
       if (shown.code !== 0 || !version) return { refused: `${path} --version exited ${String(shown.code)} and printed no version: ${shown.stderr.trim().slice(0, 500)}` };
       const verified: Verified = { path, real, digest, version, id: before };
       this.verified.set(agent, verified);
@@ -981,8 +984,8 @@ class LocalRunner implements Runner {
     const billsKey = facts.billing.apiKeyVariables.some((name) => typeof this.o.env[name] === 'string' && this.o.env[name]);
     const token = billsKey || !home || !this.o.keychain ? undefined : await parts.token(home, this.o.keychain, this.o.env).catch(() => undefined);
     const env = { ...this.env(job.spec.agent), ...parts.reach({ temp, proxy: `http://127.0.0.1:${port}`, home, env: this.o.env, ...(token ? { token } : {}) }) };
-    // An acceptance job's one folder, there before the sandbox names it.
-    const writes = job.spec.writes ? join(job.rec.folder, job.spec.writes) : undefined;
+    // An acceptance job's one folder, there before the sandbox names it; a work job's is its workspace.
+    const writes = job.spec.writes ? join(job.rec.folder, job.spec.writes) : job.spec.workspace ? job.rec.folder : undefined;
     if (writes) mkdirSync(writes, { recursive: true });
     const grant: Grant = {
       read: [...this.programs(binary.real, parts), ...(home ? parts.signIn(home, this.o.env) : []), ...(job.spec.grant?.read ?? [])], write: [temp, ...(writes ? [writes] : [])], hosts: [`127.0.0.1:${port}`],
@@ -990,7 +993,7 @@ class LocalRunner implements Runner {
     };
     // A launch that ends in `-`, the prompt on stdin, keeps it last.
     const stdin = args.at(-1) === '-' ? args.splice(-1) : [];
-    const argv = [binary.path, ...args, ...parts.confine(job.spec.mcp ?? {}, job.spec.subagents ?? {}, job.spec.writes), ...stdin];
+    const argv = [binary.path, ...args, ...parts.confine(job.spec.mcp ?? {}, job.spec.subagents ?? {}, job.spec.writes ?? (job.spec.workspace ? '.' : undefined)), ...stdin];
     // The bytes it verified, or none: a file changed since is refused here and checked again next time.
     if (!this.unchanged(binary)) {
       this.verified.delete(job.spec.agent);

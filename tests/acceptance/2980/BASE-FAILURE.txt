@@ -1,0 +1,237 @@
+# #2980 acceptance tests, and #2924's redrafted test-grants.test.mjs, on the base ee05e7257 (darwin, the MacBook Pro,
+# 12 cores, 1-minute load about 125-160 from other sessions' builds).
+# Run: node --test 'tests/acceptance/2980/*.test.mjs'; node --test tests/acceptance/2924/test-grants.test.mjs (Node 24).
+# Paths redacted: the checkout to <checkout>, the home to <home>.
+# Expected reasons, each seen below:
+# - AC1 (darwin memory; load and cores): fail, scripts/throttle.mjs exports no machineReadings() (it exports acquire,
+#   ancestors, holds, release, roomForTest). AC1's Linux case is skipped on darwin.
+# - AC2 granted at exactly 16 GiB (#2980 AC2 and #2924 AC2 redrafted): fail, the second request is still waiting after
+#   15 s with the holder running, because the base budgets 24 GiB a run on darwin too (16 - 24 < 24).
+# - AC2 waits at 16 GiB - 1 byte (both suites): passes on the base, which already waits there (it waits below 48 GiB).
+# - AC3 (Linux, 48 GiB - 1 / 48 GiB): skipped on darwin; not run on Linux for this file. The base is expected to satisfy
+#   it already: these are #2924 AC2's numbers, unchanged, and the base budgets 24 GiB a run on every platform.
+# - AC4: section 6 and 13 state no kern.memorystatus_level reading and no 8 GiB a Mac run (4 fail); section 13 states
+#   24 GiB a run in no sentence naming the Spark or Linux (fails); section 6 already says each run on the Spark is
+#   capped at MemoryMax=24G beside the 24 GiB rule (passes on the base).
+# - The other #2924 test-grants cases (AC1, AC2 load, AC3) are unchanged and pass on the base.
+
+## node --test 'tests/acceptance/2980/*.test.mjs'
+
+✖ #2980.AC4 section 6 states that the Mac reads available memory from kern.memorystatus_level (0.773167ms)
+✖ #2980.AC4 section 6 states that the Mac budgets 8 GiB a run (0.198542ms)
+✔ #2980.AC4 section 6 states that the Spark budgets 24 GiB a run (0.187375ms)
+✖ #2980.AC4 section 13 states that the Mac reads available memory from kern.memorystatus_level (0.096ms)
+✖ #2980.AC4 section 13 states that the Mac budgets 8 GiB a run (0.064375ms)
+✖ #2980.AC4 section 13 states that the Spark budgets 24 GiB a run (0.076667ms)
+✖ #2980.AC1 on darwin, machineReadings().memory is kern.memorystatus_level × hw.memsize / 100 as sysctl reads them at the same time, not os.freemem() (1814.171042ms)
+﹣ #2980.AC1 on Linux, machineReadings().memory is os.freemem() (0.129541ms) # Linux only; this is darwin
+✖ #2980.AC1 machineReadings().load is os.loadavg()[0] and cores is os.cpus().length (0.299583ms)
+✔ #2980.AC2 on darwin, with one settling test grant held, a second request waits while the readings show memory 1 byte below 16 GiB and load below the cores (11175.236125ms)
+✖ #2980.AC2 on darwin, with one settling test grant held, a second request is granted at once under exactly 16 GiB and load below the cores (19013.662291ms)
+﹣ #2980.AC3 on Linux, with one settling test grant held, a second request waits while the readings show memory 1 byte below 48 GiB and load below the cores (0.624125ms) # Linux only; this is darwin
+﹣ #2980.AC3 on Linux, with one settling test grant held, a second request is granted at once under exactly 48 GiB and load below the cores (0.052042ms) # Linux only; this is darwin
+ℹ tests 13
+ℹ suites 0
+ℹ pass 2
+ℹ fail 8
+ℹ cancelled 0
+ℹ skipped 3
+ℹ todo 0
+ℹ duration_ms 30506.154958
+
+✖ failing tests:
+
+test at tests/acceptance/2980/design.test.mjs:31:5
+✖ #2980.AC4 section 6 states that the Mac reads available memory from kern.memorystatus_level (0.773167ms)
+  AssertionError [ERR_ASSERTION]: no sentence of section 6 names /\bMac\b|\bdarwin\b|\bmacOS\b/i together with /kern\.memorystatus_level/
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2980/design.test.mjs:33:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2980/design.test.mjs:31:5
+✖ #2980.AC4 section 6 states that the Mac budgets 8 GiB a run (0.198542ms)
+  AssertionError [ERR_ASSERTION]: no sentence of section 6 names /\bMac\b|\bdarwin\b|\bmacOS\b/i together with /(?<![\d.])8\s?(GiB|GB|G)\b/
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2980/design.test.mjs:33:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2980/design.test.mjs:31:5
+✖ #2980.AC4 section 13 states that the Mac reads available memory from kern.memorystatus_level (0.096ms)
+  AssertionError [ERR_ASSERTION]: no sentence of section 13 names /\bMac\b|\bdarwin\b|\bmacOS\b/i together with /kern\.memorystatus_level/
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2980/design.test.mjs:33:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2980/design.test.mjs:31:5
+✖ #2980.AC4 section 13 states that the Mac budgets 8 GiB a run (0.064375ms)
+  AssertionError [ERR_ASSERTION]: no sentence of section 13 names /\bMac\b|\bdarwin\b|\bmacOS\b/i together with /(?<![\d.])8\s?(GiB|GB|G)\b/
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2980/design.test.mjs:33:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2980/design.test.mjs:31:5
+✖ #2980.AC4 section 13 states that the Spark budgets 24 GiB a run (0.076667ms)
+  AssertionError [ERR_ASSERTION]: no sentence of section 13 names /\bSpark\b|\bLinux\b/ together with /(?<![\d.])24\s?(GiB|GB|G)\b/
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2980/design.test.mjs:33:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2980/readings.test.mjs:39:1
+✖ #2980.AC1 on darwin, machineReadings().memory is kern.memorystatus_level × hw.memsize / 100 as sysctl reads them at the same time, not os.freemem() (1814.171042ms)
+  AssertionError [ERR_ASSERTION]: scripts/throttle.mjs exports no machineReadings(); it exports: acquire, ancestors, holds, release, roomForTest
+  + actual - expected
+  
+  + 'undefined'
+  - 'function'
+  
+      at machineReadings (file://<checkout>/tests/acceptance/2980/readings.test.mjs:17:10)
+      at async bracketed (file://<checkout>/tests/acceptance/2980/readings.test.mjs:34:15)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/2980/readings.test.mjs:40:34)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'undefined',
+    expected: 'function',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2980/readings.test.mjs:57:1
+✖ #2980.AC1 machineReadings().load is os.loadavg()[0] and cores is os.cpus().length (0.299583ms)
+  AssertionError [ERR_ASSERTION]: scripts/throttle.mjs exports no machineReadings(); it exports: acquire, ancestors, holds, release, roomForTest
+  + actual - expected
+  
+  + 'undefined'
+  - 'function'
+  
+      at machineReadings (file://<checkout>/tests/acceptance/2980/readings.test.mjs:17:10)
+      at async bracketed (file://<checkout>/tests/acceptance/2980/readings.test.mjs:34:15)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/2980/readings.test.mjs:58:34)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'undefined',
+    expected: 'function',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2980/run-memory.test.mjs:33:3
+✖ #2980.AC2 on darwin, with one settling test grant held, a second request is granted at once under exactly 16 GiB and load below the cores (19013.662291ms)
+  AssertionError [ERR_ASSERTION]: second never ran its command under the throttle (its throttle.mjs ended first, or 15000 ms passed)
+  events:
+  {"name":"holder","throttle":"test:603f15adf3ee0977"}
+  log:
+  {"at":"2026-11-21T01:48:16.273Z","event":"granted","class":"test","grant":"top-level","id":"603f15adf3ee0977","pid":32344,"index":1,"load":157.69677734375,"cores":12,"wait":1,"readings":{"memory":17179869184,"load":1,"cores":64}}
+  second: still running
+  
+  holder: still running
+  
+      at started (file://<checkout>/tests/acceptance/2924/helpers.mjs:111:10)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/2980/run-memory.test.mjs:35:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+## node --test tests/acceptance/2924/test-grants.test.mjs
+
+✔ #2924.AC1 with no test grant held, a test request is granted at once under a load above the cores and 0 bytes of memory (2981.608292ms)
+✔ #2924.AC2 with one test grant held, a second request waits while the readings show load equal to the cores (9306.007875ms)
+✔ #2924.AC2 with one settling test grant held, a second request waits while the readings show memory 1 byte below 16 GiB (10072.465542ms)
+✖ #2924.AC2 with one test grant held, a second request is granted at once under load below the cores and exactly 16 GiB (17518.648125ms)
+✔ #2924.AC3 a request waiting on load is granted without a restart once its readings file is rewritten to allow it (9916.237167ms)
+✔ #2924.AC3 a request waiting on memory is granted without a restart once its readings file is rewritten to allow it (9564.333667ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 5
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 59718.796458
+
+✖ failing tests:
+
+test at tests/acceptance/2924/test-grants.test.mjs:44:1
+✖ #2924.AC2 with one test grant held, a second request is granted at once under load below the cores and exactly 16 GiB (17518.648125ms)
+  AssertionError [ERR_ASSERTION]: second never ran its command under the throttle (its throttle.mjs ended first, or 15000 ms passed)
+  events:
+  {"name":"holder","throttle":"test:7d2c90ec780e858c"}
+  log:
+  {"at":"2026-11-21T01:48:56.951Z","event":"granted","class":"test","grant":"top-level","id":"7d2c90ec780e858c","pid":46728,"index":1,"load":157.11572265625,"cores":12,"wait":1,"readings":{"memory":17179869184,"load":1,"cores":64}}
+  second: still running
+  
+  holder: still running
+  
+      at started (file://<checkout>/tests/acceptance/2924/helpers.mjs:111:10)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/2924/test-grants.test.mjs:46:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

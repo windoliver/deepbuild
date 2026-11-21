@@ -1,0 +1,212 @@
+$ uptime
+ 2:16  up  6:42, 3 users, load averages: 146.78 101.73 78.19
+$ NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/2563 --no-file-parallelism --reporter=verbose
+
+ RUN  v5.0.5 /Users/<you>/private/deepbuild-core/.claude/worktrees/fix-2563-inbox-option-ids-a4b643/tests/acceptance/2563
+
+stdout | inbox.test.ts > #2563.644f8f08 > #2563.644f8f08: an option ID that starts with -, typed back into a shell as deep inbox printed it, answers its ask with that option
+deep inbox:
+Which build mode for the release?  choice  work  2515468f-ca55-4f3a-ac36-2438d2d089e2  0s  If you don't answer: Normal build, on Sun 22 Nov at 15:56  ask:01M7W7W7B40AK781P52WN6HK35
+    answer with -fast (Fast build), normal (Normal build)
+Which margin goes around the table?  choice  work  2d96ce48-6d4f-492c-9364-55c6c755349a  0s  If you don't answer: Narrow, on Sun 22 Nov at 15:56  ask:01M7W7W7B4C4KVRB6CJQNWA3EX
+    answer with wide (padded) (Wide with padding), narrow
+Which joiner goes between the words?  choice  work  8b3972e8-3214-4bfd-a29a-c541c2e7b965  0s  If you don't answer: Plain space, on Sun 22 Nov at 15:56  ask:01M7W7W7B4G6896XPYC1B6X3HS
+    answer with zero\u{200b}width (No visible gap), plain (Plain space)
+Which key closes the dialog?  choice  work  98472047-69dc-4fe3-9362-7b551164d19b  0s  If you don't answer: Enter, on Sun 22 Nov at 15:56  ask:01M7W7W7B4GQ2ZH3T0HCXM33P4
+    answer with esc\x1bkey (Escape key), enter
+How are the headings cased?  choice  work  ac2bd21b-bf19-4d18-b2cc-169b083434b8  0s  If you don't answer: Lower case, on Sun 22 Nov at 15:56  ask:01M7W7W7B4P264D36X8E368RCH
+    answer with title case, lower (Lower case)
+Which colours does the chart use?  choice  work  0f7b6a2c-aa4a-4196-9c94-48735baca3b6  0s  If you don't answer: Blue only, on Sun 22 Nov at 15:56  ask:01M7W7W7B4PBV6X48BRRH22NXW
+    answer with red, green (Red and green), blue (Blue only)
+6 asks need you
+
+
+ × inbox.test.ts > #2563.644f8f08 > #2563.644f8f08: an option ID that starts with -, typed back into a shell as deep inbox printed it, answers its ask with that option 7938ms
+   → no form deep inbox printed of the option "-fast" answers ask:01M7W7W7B40AK781P52WN6HK35 when typed back; each was refused and the ask is still open:
+deep inbox answer ask:01M7W7W7B40AK781P52WN6HK35 -fast  →  exit 2, stdout "", stderr "Usage: deep inbox [--json]\n       deep inbox answer <ask> <option>\n       deep inbox undo <ask>\n       deep inbox save <offer>\n"
+stdout | inbox.test.ts > #2563.644f8f08 > #2563.644f8f08: an option ID that holds a control character (ESC), typed back into a shell as deep inbox printed it, answers its ask with that option
+deep inbox:
+Which build mode for the release?  choice  work  2515468f-ca55-4f3a-ac36-2438d2d089e2  0s  If you don't answer: Normal build, on Sun 22 Nov at 15:56  ask:01M7W7W7B40AK781P52WN6HK35
+    answer with -fast (Fast build), normal (Normal build)
+Which margin goes around the table?  choice  work  2d96ce48-6d4f-492c-9364-55c6c755349a  0s  If you don't answer: Narrow, on Sun 22 Nov at 15:56  ask:01M7W7W7B4C4KVRB6CJQNWA3EX
+    answer with wide (padded) (Wide with padding), narrow
+Which joiner goes between the words?  choice  work  8b3972e8-3214-4bfd-a29a-c541c2e7b965  0s  If you don't answer: Plain space, on Sun 22 Nov at 15:56  ask:01M7W7W7B4G6896XPYC1B6X3HS
+    answer with zero\u{200b}width (No visible gap), plain (Plain space)
+Which key closes the dialog?  choice  work  98472047-69dc-4fe3-9362-7b551164d19b  0s  If you don't answer: Enter, on Sun 22 Nov at 15:56  ask:01M7W7W7B4GQ2ZH3T0HCXM33P4
+    answer with esc\x1bkey (Escape key), enter
+How are the headings cased?  choice  work  ac2bd21b-bf19-4d18-b2cc-169b083434b8  0s  If you don't answer: Lower case, on Sun 22 Nov at 15:56  ask:01M7W7W7B4P264D36X8E368RCH
+    answer with title case, lower (Lower case)
+Which colours does the chart use?  choice  work  0f7b6a2c-aa4a-4196-9c94-48735baca3b6  0s  If you don't answer: Blue only, on Sun 22 Nov at 15:56  ask:01M7W7W7B4PBV6X48BRRH22NXW
+    answer with red, green (Red and green), blue (Blue only)
+6 asks need you
+
+
+ × inbox.test.ts > #2563.644f8f08 > #2563.644f8f08: an option ID that holds a control character (ESC), typed back into a shell as deep inbox printed it, answers its ask with that option 177ms
+   → deep inbox prints, with ask:01M7W7W7B4GQ2ZH3T0HCXM33P4 ("Which key closes the dialog?"), no run of characters that a POSIX shell reads as its option "esc\u001bkey"; what it prints with the ask: "Which key closes the dialog?  choice  work  98472047-69dc-4fe3-9362-7b551164d19b  0s  If you don't answer: Enter, on Sun 22 Nov at 15:56  ask:01M7W7W7B4GQ2ZH3T0HCXM33P4\n    answer with esc\\x1bkey (Escape key), enter": expected [] to not deeply equal []
+stdout | inbox.test.ts > #2563.644f8f08 > #2563.644f8f08: an option ID that holds an invisible character (zero-width space), typed back into a shell as deep inbox printed it, answers its ask with that option
+deep inbox:
+Which build mode for the release?  choice  work  2515468f-ca55-4f3a-ac36-2438d2d089e2  0s  If you don't answer: Normal build, on Sun 22 Nov at 15:56  ask:01M7W7W7B40AK781P52WN6HK35
+    answer with -fast (Fast build), normal (Normal build)
+Which margin goes around the table?  choice  work  2d96ce48-6d4f-492c-9364-55c6c755349a  0s  If you don't answer: Narrow, on Sun 22 Nov at 15:56  ask:01M7W7W7B4C4KVRB6CJQNWA3EX
+    answer with wide (padded) (Wide with padding), narrow
+Which joiner goes between the words?  choice  work  8b3972e8-3214-4bfd-a29a-c541c2e7b965  0s  If you don't answer: Plain space, on Sun 22 Nov at 15:56  ask:01M7W7W7B4G6896XPYC1B6X3HS
+    answer with zero\u{200b}width (No visible gap), plain (Plain space)
+Which key closes the dialog?  choice  work  98472047-69dc-4fe3-9362-7b551164d19b  0s  If you don't answer: Enter, on Sun 22 Nov at 15:56  ask:01M7W7W7B4GQ2ZH3T0HCXM33P4
+    answer with esc\x1bkey (Escape key), enter
+How are the headings cased?  choice  work  ac2bd21b-bf19-4d18-b2cc-169b083434b8  0s  If you don't answer: Lower case, on Sun 22 Nov at 15:56  ask:01M7W7W7B4P264D36X8E368RCH
+    answer with title case, lower (Lower case)
+Which colours does the chart use?  choice  work  0f7b6a2c-aa4a-4196-9c94-48735baca3b6  0s  If you don't answer: Blue only, on Sun 22 Nov at 15:56  ask:01M7W7W7B4PBV6X48BRRH22NXW
+    answer with red, green (Red and green), blue (Blue only)
+6 asks need you
+
+
+ × inbox.test.ts > #2563.644f8f08 > #2563.644f8f08: an option ID that holds an invisible character (zero-width space), typed back into a shell as deep inbox printed it, answers its ask with that option 449ms
+   → deep inbox prints, with ask:01M7W7W7B4G6896XPYC1B6X3HS ("Which joiner goes between the words?"), no run of characters that a POSIX shell reads as its option "zero​width"; what it prints with the ask: "Which joiner goes between the words?  choice  work  8b3972e8-3214-4bfd-a29a-c541c2e7b965  0s  If you don't answer: Plain space, on Sun 22 Nov at 15:56  ask:01M7W7W7B4G6896XPYC1B6X3HS\n    answer with zero\\u{200b}width (No visible gap), plain (Plain space)": expected [] to not deeply equal []
+stdout | inbox.test.ts > #2563.644f8f08 > #2563.644f8f08: an option ID that holds a space, typed back into a shell as deep inbox printed it, answers its ask with that option
+deep inbox:
+Which build mode for the release?  choice  work  2515468f-ca55-4f3a-ac36-2438d2d089e2  0s  If you don't answer: Normal build, on Sun 22 Nov at 15:56  ask:01M7W7W7B40AK781P52WN6HK35
+    answer with -fast (Fast build), normal (Normal build)
+Which margin goes around the table?  choice  work  2d96ce48-6d4f-492c-9364-55c6c755349a  0s  If you don't answer: Narrow, on Sun 22 Nov at 15:56  ask:01M7W7W7B4C4KVRB6CJQNWA3EX
+    answer with wide (padded) (Wide with padding), narrow
+Which joiner goes between the words?  choice  work  8b3972e8-3214-4bfd-a29a-c541c2e7b965  0s  If you don't answer: Plain space, on Sun 22 Nov at 15:56  ask:01M7W7W7B4G6896XPYC1B6X3HS
+    answer with zero\u{200b}width (No visible gap), plain (Plain space)
+Which key closes the dialog?  choice  work  98472047-69dc-4fe3-9362-7b551164d19b  0s  If you don't answer: Enter, on Sun 22 Nov at 15:56  ask:01M7W7W7B4GQ2ZH3T0HCXM33P4
+    answer with esc\x1bkey (Escape key), enter
+How are the headings cased?  choice  work  ac2bd21b-bf19-4d18-b2cc-169b083434b8  0s  If you don't answer: Lower case, on Sun 22 Nov at 15:56  ask:01M7W7W7B4P264D36X8E368RCH
+    answer with title case, lower (Lower case)
+Which colours does the chart use?  choice  work  0f7b6a2c-aa4a-4196-9c94-48735baca3b6  0s  If you don't answer: Blue only, on Sun 22 Nov at 15:56  ask:01M7W7W7B4PBV6X48BRRH22NXW
+    answer with red, green (Red and green), blue (Blue only)
+6 asks need you
+
+
+ × inbox.test.ts > #2563.644f8f08 > #2563.644f8f08: an option ID that holds a space, typed back into a shell as deep inbox printed it, answers its ask with that option 331ms
+   → deep inbox prints, with ask:01M7W7W7B4P264D36X8E368RCH ("How are the headings cased?"), no run of characters that a POSIX shell reads as its option "title case"; what it prints with the ask: "How are the headings cased?  choice  work  ac2bd21b-bf19-4d18-b2cc-169b083434b8  0s  If you don't answer: Lower case, on Sun 22 Nov at 15:56  ask:01M7W7W7B4P264D36X8E368RCH\n    answer with title case, lower (Lower case)": expected [] to not deeply equal []
+stdout | inbox.test.ts > #2563.644f8f08 > #2563.644f8f08: an option ID that holds a comma, typed back into a shell as deep inbox printed it, answers its ask with that option
+deep inbox:
+Which build mode for the release?  choice  work  2515468f-ca55-4f3a-ac36-2438d2d089e2  0s  If you don't answer: Normal build, on Sun 22 Nov at 15:56  ask:01M7W7W7B40AK781P52WN6HK35
+    answer with -fast (Fast build), normal (Normal build)
+Which margin goes around the table?  choice  work  2d96ce48-6d4f-492c-9364-55c6c755349a  0s  If you don't answer: Narrow, on Sun 22 Nov at 15:56  ask:01M7W7W7B4C4KVRB6CJQNWA3EX
+    answer with wide (padded) (Wide with padding), narrow
+Which joiner goes between the words?  choice  work  8b3972e8-3214-4bfd-a29a-c541c2e7b965  0s  If you don't answer: Plain space, on Sun 22 Nov at 15:56  ask:01M7W7W7B4G6896XPYC1B6X3HS
+    answer with zero\u{200b}width (No visible gap), plain (Plain space)
+Which key closes the dialog?  choice  work  98472047-69dc-4fe3-9362-7b551164d19b  0s  If you don't answer: Enter, on Sun 22 Nov at 15:56  ask:01M7W7W7B4GQ2ZH3T0HCXM33P4
+    answer with esc\x1bkey (Escape key), enter
+How are the headings cased?  choice  work  ac2bd21b-bf19-4d18-b2cc-169b083434b8  0s  If you don't answer: Lower case, on Sun 22 Nov at 15:56  ask:01M7W7W7B4P264D36X8E368RCH
+    answer with title case, lower (Lower case)
+Which colours does the chart use?  choice  work  0f7b6a2c-aa4a-4196-9c94-48735baca3b6  0s  If you don't answer: Blue only, on Sun 22 Nov at 15:56  ask:01M7W7W7B4PBV6X48BRRH22NXW
+    answer with red, green (Red and green), blue (Blue only)
+6 asks need you
+
+
+ × inbox.test.ts > #2563.644f8f08 > #2563.644f8f08: an option ID that holds a comma, typed back into a shell as deep inbox printed it, answers its ask with that option 310ms
+   → deep inbox prints, with ask:01M7W7W7B4PBV6X48BRRH22NXW ("Which colours does the chart use?"), no run of characters that a POSIX shell reads as its option "red, green"; what it prints with the ask: "Which colours does the chart use?  choice  work  0f7b6a2c-aa4a-4196-9c94-48735baca3b6  0s  If you don't answer: Blue only, on Sun 22 Nov at 15:56  ask:01M7W7W7B4PBV6X48BRRH22NXW\n    answer with red, green (Red and green), blue (Blue only)": expected [] to not deeply equal []
+stdout | inbox.test.ts > #2563.644f8f08 > #2563.644f8f08: an option ID that is shaped like x (y), typed back into a shell as deep inbox printed it, answers its ask with that option
+deep inbox:
+Which build mode for the release?  choice  work  2515468f-ca55-4f3a-ac36-2438d2d089e2  0s  If you don't answer: Normal build, on Sun 22 Nov at 15:56  ask:01M7W7W7B40AK781P52WN6HK35
+    answer with -fast (Fast build), normal (Normal build)
+Which margin goes around the table?  choice  work  2d96ce48-6d4f-492c-9364-55c6c755349a  0s  If you don't answer: Narrow, on Sun 22 Nov at 15:56  ask:01M7W7W7B4C4KVRB6CJQNWA3EX
+    answer with wide (padded) (Wide with padding), narrow
+Which joiner goes between the words?  choice  work  8b3972e8-3214-4bfd-a29a-c541c2e7b965  0s  If you don't answer: Plain space, on Sun 22 Nov at 15:56  ask:01M7W7W7B4G6896XPYC1B6X3HS
+    answer with zero\u{200b}width (No visible gap), plain (Plain space)
+Which key closes the dialog?  choice  work  98472047-69dc-4fe3-9362-7b551164d19b  0s  If you don't answer: Enter, on Sun 22 Nov at 15:56  ask:01M7W7W7B4GQ2ZH3T0HCXM33P4
+    answer with esc\x1bkey (Escape key), enter
+How are the headings cased?  choice  work  ac2bd21b-bf19-4d18-b2cc-169b083434b8  0s  If you don't answer: Lower case, on Sun 22 Nov at 15:56  ask:01M7W7W7B4P264D36X8E368RCH
+    answer with title case, lower (Lower case)
+Which colours does the chart use?  choice  work  0f7b6a2c-aa4a-4196-9c94-48735baca3b6  0s  If you don't answer: Blue only, on Sun 22 Nov at 15:56  ask:01M7W7W7B4PBV6X48BRRH22NXW
+    answer with red, green (Red and green), blue (Blue only)
+6 asks need you
+
+
+stdout | inbox.test.ts > #2563.1937a1ef > #2563.1937a1ef: an option ID an ask may not carry is refused when the ask is raised, naming the ID and why
+"-fast" (starts with -): raised
+"esc\u001bkey" (holds a control character (ESC)): raised
+"zero​width" (holds an invisible character (zero-width space)): raised
+"title case" (holds a space): raised
+"red, green" (holds a comma): raised
+"wide (padded)" (is shaped like x (y)): raised
+
+ × inbox.test.ts > #2563.644f8f08 > #2563.644f8f08: an option ID that is shaped like x (y), typed back into a shell as deep inbox printed it, answers its ask with that option 374ms
+   → deep inbox prints, with ask:01M7W7W7B4C4KVRB6CJQNWA3EX ("Which margin goes around the table?"), no run of characters that a POSIX shell reads as its option "wide (padded)"; what it prints with the ask: "Which margin goes around the table?  choice  work  2d96ce48-6d4f-492c-9364-55c6c755349a  0s  If you don't answer: Narrow, on Sun 22 Nov at 15:56  ask:01M7W7W7B4C4KVRB6CJQNWA3EX\n    answer with wide (padded) (Wide with padding), narrow": expected [] to not deeply equal []
+ ✓ inbox.test.ts > #2563.1937a1ef > #2563.1937a1ef: an option ID an ask may not carry is refused when the ask is raised, naming the ID and why 5ms
+ ✓ judges.test.ts > judges > shellWords reads quoting as a POSIX shell does, and refuses what would expand or run 2ms
+ ✓ judges.test.ts > judges > shellWords agrees with /bin/sh on the forms it reads 203ms
+ ✓ judges.test.ts > judges > givesOption: the ID alone, or after --, and nothing else 0ms
+ ✓ judges.test.ts > judges > printedForms: the base prints a typed-back form of the dash ID alone, and of none of the others 2217ms
+ ✓ judges.test.ts > judges > printedForms: forms a fix might print are found, in more than one format 3323ms
+ ✓ judges.test.ts > judges > printedForms: a form printed with another ask, or not printed, isn't found 1106ms
+ ✓ judges.test.ts > judges > refusalFailures: a refusal naming the ID and why passes; one that lacks either fails 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  inbox.test.ts > #2563.644f8f08 > #2563.644f8f08: an option ID that starts with -, typed back into a shell as deep inbox printed it, answers its ask with that option
+AssertionError: no form deep inbox printed of the option "-fast" answers ask:01M7W7W7B40AK781P52WN6HK35 when typed back; each was refused and the ask is still open:
+deep inbox answer ask:01M7W7W7B40AK781P52WN6HK35 -fast  →  exit 2, stdout "", stderr "Usage: deep inbox [--json]\n       deep inbox answer <ask> <option>\n       deep inbox undo <ask>\n       deep inbox save <offer>\n"
+ ❯ inbox.test.ts:64:14
+     62|         return;
+     63|       }
+     64|       expect.fail(`no form deep inbox printed of the option ${JSON.str…
+       |              ^
+     65|     }, 300_000);
+     66|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  inbox.test.ts > #2563.644f8f08 > #2563.644f8f08: an option ID that holds a control character (ESC), typed back into a shell as deep inbox printed it, answers its ask with that option
+AssertionError: deep inbox prints, with ask:01M7W7W7B4GQ2ZH3T0HCXM33P4 ("Which key closes the dialog?"), no run of characters that a POSIX shell reads as its option "esc\u001bkey"; what it prints with the ask: "Which key closes the dialog?  choice  work  98472047-69dc-4fe3-9362-7b551164d19b  0s  If you don't answer: Enter, on Sun 22 Nov at 15:56  ask:01M7W7W7B4GQ2ZH3T0HCXM33P4\n    answer with esc\\x1bkey (Escape key), enter": expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ inbox.test.ts:48:254
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  inbox.test.ts > #2563.644f8f08 > #2563.644f8f08: an option ID that holds an invisible character (zero-width space), typed back into a shell as deep inbox printed it, answers its ask with that option
+AssertionError: deep inbox prints, with ask:01M7W7W7B4G6896XPYC1B6X3HS ("Which joiner goes between the words?"), no run of characters that a POSIX shell reads as its option "zero​width"; what it prints with the ask: "Which joiner goes between the words?  choice  work  8b3972e8-3214-4bfd-a29a-c541c2e7b965  0s  If you don't answer: Plain space, on Sun 22 Nov at 15:56  ask:01M7W7W7B4G6896XPYC1B6X3HS\n    answer with zero\\u{200b}width (No visible gap), plain (Plain space)": expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ inbox.test.ts:48:254
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  inbox.test.ts > #2563.644f8f08 > #2563.644f8f08: an option ID that holds a space, typed back into a shell as deep inbox printed it, answers its ask with that option
+AssertionError: deep inbox prints, with ask:01M7W7W7B4P264D36X8E368RCH ("How are the headings cased?"), no run of characters that a POSIX shell reads as its option "title case"; what it prints with the ask: "How are the headings cased?  choice  work  ac2bd21b-bf19-4d18-b2cc-169b083434b8  0s  If you don't answer: Lower case, on Sun 22 Nov at 15:56  ask:01M7W7W7B4P264D36X8E368RCH\n    answer with title case, lower (Lower case)": expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ inbox.test.ts:48:254
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  inbox.test.ts > #2563.644f8f08 > #2563.644f8f08: an option ID that holds a comma, typed back into a shell as deep inbox printed it, answers its ask with that option
+AssertionError: deep inbox prints, with ask:01M7W7W7B4PBV6X48BRRH22NXW ("Which colours does the chart use?"), no run of characters that a POSIX shell reads as its option "red, green"; what it prints with the ask: "Which colours does the chart use?  choice  work  0f7b6a2c-aa4a-4196-9c94-48735baca3b6  0s  If you don't answer: Blue only, on Sun 22 Nov at 15:56  ask:01M7W7W7B4PBV6X48BRRH22NXW\n    answer with red, green (Red and green), blue (Blue only)": expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ inbox.test.ts:48:254
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  inbox.test.ts > #2563.644f8f08 > #2563.644f8f08: an option ID that is shaped like x (y), typed back into a shell as deep inbox printed it, answers its ask with that option
+AssertionError: deep inbox prints, with ask:01M7W7W7B4C4KVRB6CJQNWA3EX ("Which margin goes around the table?"), no run of characters that a POSIX shell reads as its option "wide (padded)"; what it prints with the ask: "Which margin goes around the table?  choice  work  2d96ce48-6d4f-492c-9364-55c6c755349a  0s  If you don't answer: Narrow, on Sun 22 Nov at 15:56  ask:01M7W7W7B4C4KVRB6CJQNWA3EX\n    answer with wide (padded) (Wide with padding), narrow": expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ inbox.test.ts:48:254
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  6 failed | 8 passed (14)
+   Start at  02:16:12
+   Duration  17.75s (tests 95%, transform 2%, import 2%)
+
+exit 1
+$ node node_modules/typescript/bin/tsc -p tests/acceptance/2563/tsconfig.json --noEmit
+exit 0

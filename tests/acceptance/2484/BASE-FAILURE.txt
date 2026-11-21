@@ -1,0 +1,103 @@
+12:28  up 16:54, 3 users, load averages: 66.86 81.37 88.50
+tsc exit 0
+
+ RUN  v5.0.5 <repo>
+
+ ❯ tests/acceptance/2484/lsof-warnings.test.ts (7 tests | 3 failed) 8147ms
+   ❯ #2484: lsof mount warnings and the environment kit (7)
+     × #2484.43cad8f7 the slot check's kit checks pass the environment kit on a machine whose lsof warns about a mount it can't stat 2961ms
+     × #2484.43cad8f7 the planted leaves-grandchild fill is refused with its own fault, not as an unreadable table, when lsof warns 1260ms
+     × #2484.43cad8f7 an environment that listens on nothing is refused for it, not read as unreadable, when lsof warns 548ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2484/lsof-warnings.test.ts > #2484: lsof mount warnings and the environment kit > #2484.43cad8f7 the slot check's kit checks pass the environment kit on a machine whose lsof warns about a mount it can't stat
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "planted proof leaves-grandchild: planted fill leaves-grandchild is first refused on health-route as BLOCKED \"the environment's listening ports can't be read (lsof failed), so whether it binds its lease alone is unknown\" not with its own message \"left its process running after down\"",
++ ]
+
+ ❯ tests/acceptance/2484/lsof-warnings.test.ts:109:70
+    107|     // They also run the clean fill on every fixed case, so a clean fi…
+    108|     const problems = kitProblems(kit());
+    109|     expect(problems.map((p) => `${p.check} ${p.name}: ${p.reason}`)).t…
+       |                                                                      ^
+    110|   }, LIMIT);
+    111|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/2484/lsof-warnings.test.ts > #2484: lsof mount warnings and the environment kit > #2484.43cad8f7 the planted leaves-grandchild fill is refused with its own fault, not as an unreadable table, when lsof warns
+AssertionError: expected [ …(2) ] to deeply equal [ [ 'FAIL', 'process_left' ], …(1) ]
+
+- Expected
++ Received
+
+  [
+    [
+-     "FAIL",
+-     "process_left",
++     "BLOCKED",
++     "listeners_unknown",
+    ],
+    [
+-     "FAIL",
+-     "process_left",
++     "BLOCKED",
++     "listeners_unknown",
+    ],
+  ]
+
+ ❯ tests/acceptance/2484/lsof-warnings.test.ts:117:30
+    115|     const planted = k.planted.find((p) => p.name === 'leaves-grandchil…
+    116|     const report = await runKit(k, planted.fill as EnvironmentFill, { …
+    117|     expect(outcomes(report)).toEqual([['FAIL', 'process_left'], ['FAIL…
+       |                              ^
+    118|     for (const c of report.cases) expect(c.message).toContain('left it…
+    119|   }, LIMIT);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/2484/lsof-warnings.test.ts > #2484: lsof mount warnings and the environment kit > #2484.43cad8f7 an environment that listens on nothing is refused for it, not read as unreadable, when lsof warns
+AssertionError: expected [ …(2) ] to deeply equal [ [ 'FAIL', 'unleased_port' ], …(1) ]
+
+- Expected
++ Received
+
+  [
+    [
+-     "FAIL",
+-     "unleased_port",
++     "BLOCKED",
++     "listeners_unknown",
+    ],
+    [
+-     "FAIL",
+-     "unleased_port",
++     "BLOCKED",
++     "listeners_unknown",
+    ],
+  ]
+
+ ❯ tests/acceptance/2484/lsof-warnings.test.ts:126:32
+    124|     try {
+    125|       const report = await runKit(kit(), listensOnNothing(children), {…
+    126|       expect(outcomes(report)).toEqual([['FAIL', 'unleased_port'], ['F…
+       |                                ^
+    127|       for (const c of report.cases) expect(c.message).toMatch(/listens…
+    128|     } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 4 passed (7)
+   Start at  12:28:09
+   Duration  8.85s (tests 94%, transform 4%, import 1%)
+
+vitest exit 1
