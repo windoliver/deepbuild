@@ -4034,7 +4034,7 @@ impl Renderer {
     pub fn prepare(&mut self, device: &Device, scene: &Scene, look: &Look3) {
         self.turn();
         let placed = self.placed(scene);
-        self.prepare_placed(device, placed.as_ref().unwrap_or(scene), look);
+        self.prepare_placed(device, placed.as_ref().unwrap_or(scene), look, false);
         self.free_unused();
     }
 
@@ -4051,8 +4051,9 @@ impl Renderer {
         moved
     }
 
-    /// [`Renderer::prepare`] for a scene already placed about its origin.
-    fn prepare_placed(&mut self, device: &Device, scene: &Scene, look: &Look3) {
+    /// [`Renderer::prepare`] for a scene already placed about its origin; `held` when it is a
+    /// kept scene the frame before prepared too, unchanged (#3024).
+    fn prepare_placed(&mut self, device: &Device, scene: &Scene, look: &Look3, held: bool) {
         self.crop = scene.crop;
         self.probe_ids = scene.probes.iter().map(|p| p.id.clone()).collect();
         // Level of detail at this view (#425): a scene whose solids still carry bands or mesh
@@ -4060,8 +4061,9 @@ impl Renderer {
         // the shadow maps' side hold (#2657).
         if leveled(scene) {
             let side = shadow::SIZE * self.shadow_scale.max(1);
-            let kept = match self.leveled.take().filter(|k| k.side == side && k.holds(scene)) {
-                Some(kept) => kept,
+            let leveled = self.leveled.take();
+            let (kept, held) = match leveled.filter(|k| k.side == side && k.holds(scene)) {
+                Some(kept) => (kept, true),
                 None => {
                     let mut chosen = scene.clone();
                     let mut choices = deep_canvas_scene3d::lod::select(scene);
@@ -4070,12 +4072,12 @@ impl Renderer {
                     proxy::resolve(&mut chosen, &choices);
                     let Some(edits) = kept::edits(scene, &chosen, |s| s.lod.is_some(), false)
                     else {
-                        return self.prepare_placed(device, &chosen, look);
+                        return self.prepare_placed(device, &chosen, look, false);
                     };
-                    Box::new(kept::Kept::new(scene, chosen, side, edits))
+                    (Box::new(kept::Kept::new(scene, chosen, side, edits)), false)
                 }
             };
-            self.prepare_placed(device, &kept.scene, look);
+            self.prepare_placed(device, &kept.scene, look, held);
             self.leveled = Some(kept);
             return;
         }
@@ -4084,21 +4086,21 @@ impl Renderer {
         if let Some(w) = scene.water.clone() {
             let wet = |s: &Solid| w.parts.contains(&s.id);
             if scene.layers.iter().flat_map(|l| &l.solids).any(wet) {
-                let kept = match self.dry.take().filter(|k| k.holds(scene)) {
-                    Some(kept) => kept,
+                let (kept, held) = match self.dry.take().filter(|k| k.holds(scene)) {
+                    Some(kept) => (kept, true),
                     None => {
                         let mut dry = scene.clone();
                         for layer in &mut dry.layers {
                             layer.solids.retain(|s| !wet(s));
                         }
                         let Some(edits) = kept::edits(scene, &dry, wet, true) else {
-                            self.prepare_placed(device, &dry, look);
+                            self.prepare_placed(device, &dry, look, false);
                             return self.prepare_water(device, scene, &w);
                         };
-                        Box::new(kept::Kept::new(scene, dry, 0, edits))
+                        (Box::new(kept::Kept::new(scene, dry, 0, edits)), false)
                     }
                 };
-                self.prepare_placed(device, &kept.scene, look);
+                self.prepare_placed(device, &kept.scene, look, held);
                 self.prepare_water(device, scene, &w);
                 self.dry = Some(kept);
                 return;
@@ -4284,8 +4286,12 @@ impl Renderer {
                     .water
                     .as_ref()
                     .is_none_or(|w| w.material != m.material);
-                if !self.planted.keeps_mirror {
-                    mirrorer.prepare(device, scene, internal, m, look, &self.picks, overlay);
+                // #506's planted core skips the mirror's prepare, so no later frame holds its view.
+                if self.planted.keeps_mirror {
+                    mirrorer.mirrored = None;
+                } else {
+                    let picks = &self.picks;
+                    mirrorer.prepare(device, scene, internal, m, look, picks, overlay, held);
                 }
                 true
             }
@@ -4814,7 +4820,7 @@ impl Renderer {
         let scene = placed.as_ref().unwrap_or(scene);
         if self.origin != was {
             self.turn();
-            self.prepare_placed(device, scene, look);
+            self.prepare_placed(device, scene, look, false);
             return self.free_unused();
         }
         self.prepare_moved_placed(device, scene, look, moved);
@@ -4841,7 +4847,7 @@ impl Renderer {
             || scene.mirror.is_some()
             || scene.water.is_some()
         {
-            return self.prepare_placed(device, scene, look);
+            return self.prepare_placed(device, scene, look, false);
         }
         // A tie rank is a function of the frame, so a part whose rank the move changed rewrites
         // too, and a frame draws the same however it was reached (#149, #450).
@@ -4860,7 +4866,7 @@ impl Renderer {
             };
             match index {
                 Some(k) => lobes.push(k),
-                None => return self.prepare_placed(device, scene, look),
+                None => return self.prepare_placed(device, scene, look, false),
             }
         }
         let generation = self.ao.generation;
