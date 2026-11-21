@@ -1,0 +1,8 @@
+{
+  "#2973.fe35afca": ["window-by-wall-clock", "window-never-slides"],
+  "#2973.19139acc": ["stop-refused-when-spent", "start-refused-when-spent"],
+  "#2973.5462ab8d": ["crash-spends"],
+  "#2973.47e2f0df": ["bad-file-reads-empty"],
+  "#2973.88dce79f": ["promote-needs-three", "rollback-without-restart"],
+  "#2973.ff5ebbbe": ["promote-room-for-one", "promote-checks-after-drain"]
+}
