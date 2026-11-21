@@ -225,6 +225,9 @@ pub struct Renderer {
     pub(super) mask: (wgpu::BindGroupLayout, wgpu::Sampler),
     pub(super) picks: BTreeMap<String, u32>,
     pub(super) next_generation: u64,
+    /// The hidden-style lines' spans it holds from frame to frame (#1782), so a still view
+    /// works none out again.
+    pub(super) spans: deep_canvas_scene3d::spans::Kept,
     pub(super) targets: Option<Targets>,
     /// The batches this frame draws, in layer order.
     pub(super) order: Vec<String>,

@@ -1,0 +1,22 @@
+# #189 Oracle lane at the base: this worktree's HEAD 531da1ef0 (no implementation of #189), on macOS 27.2 arm64
+# (shared and loaded), rustc 1.99.1, vitest 5.0.5.
+#
+# The lane's file was NOT run as committed at the base: the machine's throttle queue gave the logic-saves suite's run no
+# test grant ("INCONCLUSIVE no grant: no test grant came within 120 min"; see ../189/saves/BASE-FAILURE.txt), and the
+# coordinator asked for a short run instead. `npx tsc -p tests/acceptance/189-oracle/tsconfig.json` exits 0.
+#
+# What did run: a scratch copy of snapshot-cases.test.ts with its one header assertion (a save's `deep_hash`) taken
+# out, deleted after, against the base's deep-logic:
+#   npx vitest run --root tests/acceptance/189-oracle zz-scratch --testTimeout=600000 --no-file-parallelism
+#   ❯ zz-scratch.test.ts (4 tests | 1 failed) 6283ms
+#     × #189.43b8fb06 upstream's data_segment_at_end_of_memory under a planted save that leaves out the page whose one
+#       nonzero byte is at its last offset (save_drops_a_page): refused, naming the save and the module, and the slot's
+#       other save opens instead
+#   AssertionError: deep-logic --planted save_drops_a_page on darwin/arm64 exits 0 (no signal); stdout:
+#   {"ok":false,"code":"bad_input"} … expected 2 to be +0
+#   Tests  1 failed | 3 passed (4)
+#
+# So at the base the three ported cases' programs save and read upstream's values back (42, 42, 91 with 42, 2, 43, 4)
+# and each save holds exactly its nonzero pages, as #534's saves already keep them; as committed, each of those three
+# fails at the base on the header's missing `deep_hash` (the full-state hash a save records, new in #189), and the
+# planted case fails because the base has no twin `save_drops_a_page`.
