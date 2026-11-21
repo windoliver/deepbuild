@@ -29,6 +29,7 @@ mod test_guards;
 pub(crate) mod test_tools;
 pub(crate) mod tools;
 mod web;
+pub(crate) use web::full_player;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};

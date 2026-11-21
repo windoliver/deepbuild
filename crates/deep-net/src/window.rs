@@ -224,10 +224,12 @@ pub fn rollback<S: Stepper>(
 }
 
 /// One measured run: each frame's CPU time by canvas module, and each step's own.
-struct Measured {
+pub struct Measured {
     /// Per frame: the live match step with its checkpoints, then the window restored and
     /// stepped again, each by module, in ns.
     frames: Vec<(BTreeMap<String, u64>, BTreeMap<String, u64>)>,
+    /// #280: per frame, the part of the live step its checkpoints took, in ns.
+    kept: Vec<u64>,
 }
 
 fn add(to: &mut BTreeMap<String, u64>, timed: Vec<(String, u64)>) {
@@ -250,13 +252,16 @@ fn measure<S: Stepper>(
         s.hold(w as usize + 1);
     }
     let mut at = 0;
-    let mut frames = Vec::new();
+    let (mut frames, mut kept) = (Vec::new(), Vec::new());
     s.timed();
     for k in 0..steps {
         let mut live = BTreeMap::new();
         if w > 0 {
             s.keep(k);
         }
+        let checkpoints = s.timed();
+        kept.push(checkpoints.iter().map(|(_, ns)| ns).sum());
+        add(&mut live, checkpoints);
         while let Some(e) = track
             .get(at)
             .filter(|e| e["t"].as_i64().is_some_and(|t| t < (k + 1) * len))
@@ -295,25 +300,125 @@ fn measure<S: Stepper>(
         }
         frames.push((live, again));
     }
-    Ok(Measured { frames })
+    Ok(Measured { frames, kept })
 }
 
 fn total(m: &BTreeMap<String, u64>) -> u64 {
     m.values().sum()
 }
 
-/// The largest window, 0 to 16, whose worst frame fits `frame_ns`, estimated from a run measured
-/// with a window of `w`: each step's own time, and the restore's time a step of window.
-fn largest(m: &Measured, w: i64, frame_ns: f64) -> i64 {
-    let live = m.frames.iter().map(|(l, _)| total(l)).max().unwrap_or(0) as f64;
-    let again = m.frames.iter().map(|(_, a)| total(a)).max().unwrap_or(0) as f64;
-    // Restoring and stepping one step again, at worst: from the measured window, or in lockstep
-    // about a step's own time.
-    let per = if w > 0 { again / w as f64 } else { live };
-    (0..=MOST)
-        .rev()
-        .find(|n| live + per * *n as f64 <= frame_ns)
-        .unwrap_or(0)
+/// The largest window, 0 to 16, whose every frame fits `frame_ns`, estimated from a run measured
+/// with a window of `w`: each frame's live step with its checkpoints, and its restore's time a
+/// step of window, or in lockstep about the step's own time; 0 when only lockstep fits. The
+/// planted report (`net_budget_window_without_checkpoints`) takes each frame's match step cost
+/// without its checkpoints for both.
+pub fn largest(m: &Measured, w: i64, frame_ns: f64, from_step: bool) -> i64 {
+    let fits = |n: i64| {
+        m.frames.iter().zip(&m.kept).all(|((l, a), kept)| {
+            let (live, per) = if from_step {
+                let step = total(l).saturating_sub(*kept) as f64;
+                (step, step)
+            } else if w > 0 {
+                (total(l) as f64, total(a) as f64 / w as f64)
+            } else {
+                (total(l) as f64, total(l) as f64)
+            };
+            live + per * n as f64 <= frame_ns
+        })
+    };
+    (0..=MOST).rev().find(|n| fits(*n)).unwrap_or(0)
+}
+
+/// #280: the host's web part of net.budget: given `{track, steps, len, window, frame_ms,
+/// from_step}`, the part the web player measured in headless Chrome, as [`part`] gives it.
+pub type Web<'a> = &'a mut dyn FnMut(&Value) -> Result<Value, Value>;
+
+/// One host's part of net.budget: a warm-up run, then five of the match's stepping on `track`,
+/// each frame the live match step with its checkpoints and, with a window, the full window
+/// restored and stepped again; the five-run rule over each run's worst frame, and the largest
+/// window that fits. The app runs it here and the web player in headless Chrome.
+pub fn part<S: Stepper>(
+    track: &[Value],
+    steps: i64,
+    len: i64,
+    w: i64,
+    frame_ms: f64,
+    from_step: bool,
+    make: &mut dyn FnMut() -> Result<S, Value>,
+) -> Result<Value, Value> {
+    let ms = |ns: u64| ns as f64 / 1e6;
+    measure(&mut make()?, track, steps, len, w)?;
+    let mut runs = Vec::new();
+    let mut worst: Option<(f64, i64, BTreeMap<String, u64>)> = None;
+    let mut busiest: Option<(i64, f64)> = None;
+    let mut reported = MOST;
+    for _ in 0..5 {
+        let m = measure(&mut make()?, track, steps, len, w)?;
+        // The window every one of the five runs fits.
+        reported = reported.min(largest(&m, w, frame_ms * 1e6, from_step));
+        let frame = |(l, a): &(BTreeMap<String, u64>, BTreeMap<String, u64>)| total(l) + total(a);
+        let Some((k, f)) = m.frames.iter().enumerate().max_by_key(|(_, f)| frame(f)) else {
+            return Ok(json!({"verdict": "INCONCLUSIVE", "failures": [],
+                "blocked": [{"what": "no match step was timed"}], "frame_ms": frame_ms}));
+        };
+        let (step_ms, window_ms) = (ms(total(&f.0)), ms(total(&f.1)));
+        runs.push(json!({"step": k, "step_ms": step_ms, "window_ms": window_ms}));
+        let sum = step_ms + window_ms;
+        if worst.as_ref().is_none_or(|(x, _, _)| sum > *x) {
+            let mut both = f.0.clone();
+            for (name, ns) in &f.1 {
+                *both.entry(name.clone()).or_default() += ns;
+            }
+            worst = Some((sum, k as i64, both));
+        }
+        if let Some((k, l)) = m
+            .frames
+            .iter()
+            .enumerate()
+            .max_by_key(|(_, (l, _))| total(l))
+        {
+            if busiest.is_none_or(|(_, b)| ms(total(&l.0)) > b) {
+                busiest = Some((k as i64, ms(total(&l.0))));
+            }
+        }
+    }
+    let (worst_ms, worst_step, modules) = worst.expect("five runs");
+    // The five-run rule: within on all five passes, over on all five by more than the margin (the
+    // larger of 5% and the five runs' spread) fails, and anything else is INCONCLUSIVE.
+    let sums: Vec<f64> = runs
+        .iter()
+        .map(|r| r["step_ms"].as_f64().unwrap_or(0.0) + r["window_ms"].as_f64().unwrap_or(0.0))
+        .collect();
+    let (lo, hi) = sums
+        .iter()
+        .fold((f64::MAX, 0f64), |(a, b), x| (a.min(*x), b.max(*x)));
+    let margin = (0.05 * frame_ms).max(hi - lo);
+    let verdict = if sums.iter().all(|x| *x <= frame_ms) {
+        "PASS"
+    } else if sums.iter().all(|x| *x > frame_ms + margin) {
+        "FAIL"
+    } else {
+        "INCONCLUSIVE"
+    };
+    let costliest = modules
+        .iter()
+        .max_by_key(|(_, ns)| **ns)
+        .map(|(m, _)| m.clone());
+    let named = costliest.as_deref().unwrap_or("none");
+    let what = match w {
+        0 => format!("match step {worst_step} took {worst_ms:.3} ms, past the class's {frame_ms} ms frame time; {named} costs most"),
+        _ => format!("the frame at match step {worst_step} took {worst_ms:.3} ms with its window of {w} restored and stepped again, past the class's {frame_ms} ms frame time; {named} costs most"),
+    };
+    let failure = (verdict == "FAIL")
+        .then(|| json!({"step": worst_step, "ms": worst_ms, "module": costliest, "what": what}));
+    let by_module: Map<String, Value> = modules
+        .iter()
+        .map(|(m, ns)| (m.clone(), json!(ms(*ns))))
+        .collect();
+    Ok(json!({"verdict": verdict, "failure": failure, "runs": runs,
+        "worst": {"step": worst_step, "ms": worst_ms, "modules": by_module, "module": costliest},
+        "busiest": busiest.map(|(step, ms)| json!({"step": step, "ms": ms})),
+        "largest": reported}))
 }
 
 /// net.budget: five runs of the match's stepping, each frame the live match step with its
@@ -326,6 +431,7 @@ pub fn budget<S: Stepper>(
     make: &mut dyn FnMut(u8) -> Result<S, Value>,
     frame_ms: f64,
     on: &[String],
+    web: Option<Web<'_>>,
 ) -> Result<(Played<S>, Value), Value> {
     let quiet = Ask {
         faults: Faults::default(),
@@ -376,107 +482,98 @@ pub fn budget<S: Stepper>(
             bytes.insert(m, json!((b as f64 / seconds).round()));
         }
     }
-    let ms = |ns: u64| ns as f64 / 1e6;
-    // A warm-up run, then five.
-    measure(&mut make(1)?, &track, steps, len, w)?;
-    let mut runs = Vec::new();
-    let mut worst: Option<(f64, i64, BTreeMap<String, u64>)> = None;
-    let mut busiest: Option<(i64, f64)> = None;
-    let mut measured = None;
-    for _ in 0..5 {
-        let m = measure(&mut make(1)?, &track, steps, len, w)?;
-        let frame = |(l, a): &(BTreeMap<String, u64>, BTreeMap<String, u64>)| total(l) + total(a);
-        let Some((k, f)) = m.frames.iter().enumerate().max_by_key(|(_, f)| frame(f)) else {
-            return Ok((
-                played,
-                json!({"kind": "net.budget", "verdict": "INCONCLUSIVE", "failures": [],
-                "blocked": [{"what": "no match step was timed"}], "runs": [], "frame_ms": frame_ms}),
-            ));
-        };
-        let (step_ms, window_ms) = (ms(total(&f.0)), ms(total(&f.1)));
-        runs.push(json!({"step": k, "step_ms": step_ms, "window_ms": window_ms}));
-        let sum = step_ms + window_ms;
-        if worst.as_ref().is_none_or(|(x, _, _)| sum > *x) {
-            let mut both = f.0.clone();
-            for (name, ns) in &f.1 {
-                *both.entry(name.clone()).or_default() += ns;
-            }
-            worst = Some((sum, k as i64, both));
+    let from_step = ask.planted == crate::Planted::ReportsFromStep;
+    let mut parts = Map::new();
+    // The app's part, unless the check measures the web's alone.
+    if on.iter().any(|h| h == "app") || web.is_none() {
+        let app = part(&track, steps, len, w, frame_ms, from_step, &mut || make(1))?;
+        if app.get("runs").is_none() {
+            let mut r = app;
+            r["kind"] = json!("net.budget");
+            return Ok((played, r));
         }
-        if let Some((k, l)) = m
-            .frames
-            .iter()
-            .enumerate()
-            .max_by_key(|(_, (l, _))| total(l))
-        {
-            if busiest.is_none_or(|(_, b)| ms(total(&l.0)) > b) {
-                busiest = Some((k as i64, ms(total(&l.0))));
-            }
-        }
-        measured = Some(m);
+        parts.insert("app".into(), app);
     }
-    let measured = measured.expect("five runs");
-    let (worst_ms, worst_step, modules) = worst.expect("five runs");
-    // The five-run rule: within on all five passes, over on all five by more than the margin (the
-    // larger of 5% and the five runs' spread) fails, and anything else is INCONCLUSIVE.
-    let sums: Vec<f64> = runs
-        .iter()
-        .map(|r| r["step_ms"].as_f64().unwrap_or(0.0) + r["window_ms"].as_f64().unwrap_or(0.0))
-        .collect();
-    let (lo, hi) = sums
-        .iter()
-        .fold((f64::MAX, 0f64), |(a, b), x| (a.min(*x), b.max(*x)));
-    let margin = (0.05 * frame_ms).max(hi - lo);
-    let app = if sums.iter().all(|x| *x <= frame_ms) {
-        "PASS"
-    } else if sums.iter().all(|x| *x > frame_ms + margin) {
-        "FAIL"
-    } else {
-        "INCONCLUSIVE"
-    };
-    let costliest = modules
-        .iter()
-        .max_by_key(|(_, ns)| **ns)
-        .map(|(m, _)| m.clone());
-    let named = costliest.as_deref().unwrap_or("none");
+    // #280: the web part, where the host plays it in the web player: the same stretch of the
+    // same track, measured there.
+    let mut unrun = None;
+    if let (Some(web), true) = (web, on.iter().any(|h| h == "web")) {
+        let ask = json!({"track": track, "steps": steps, "len": len, "window": w,
+                         "frame_ms": frame_ms, "from_step": from_step});
+        match web(&ask) {
+            Ok(part) => {
+                parts.insert("web".into(), part);
+            }
+            Err(why) => unrun = Some(why),
+        }
+    }
     let mut failures = Vec::new();
-    if app == "FAIL" {
-        let what = match w {
-            0 => format!("match step {worst_step} took {worst_ms:.3} ms, past the class's {frame_ms} ms frame time; {named} costs most"),
-            _ => format!("the frame at match step {worst_step} took {worst_ms:.3} ms with its window of {w} restored and stepped again, past the class's {frame_ms} ms frame time; {named} costs most"),
-        };
-        failures
-            .push(json!({"step": worst_step, "ms": worst_ms, "module": costliest, "what": what}));
-    }
-    let by_module: Map<String, Value> = modules
-        .iter()
-        .map(|(m, ns)| (m.clone(), json!(ms(*ns))))
-        .collect();
     let mut windows = Map::new();
     let mut blocked = Vec::new();
+    let mut inconclusive = Vec::new();
     for host in on {
-        if host == "web" {
+        let Some(p) = parts.get(host) else {
+            let what = match &unrun {
+                Some(why) => format!("net.budget's {host} part didn't run: {why}"),
+                None => format!("net.budget's {host} part hasn't run"),
+            };
             blocked.push(json!({"host": host, "ask": "Run net.budget's web part in the web player in headless Chrome on the reference Mac.",
-                "what": "net.budget's web part hasn't run in headless Chrome"}));
+                "what": what}));
+            continue;
+        };
+        if p.get("runs").is_none() {
+            inconclusive.push(json!({"host": host, "what": p["blocked"]}));
             continue;
         }
-        windows.insert(host.clone(), json!(largest(&measured, w, frame_ms * 1e6)));
+        let reported = p["largest"].as_i64().unwrap_or(0);
+        windows.insert(host.clone(), json!(reported));
+        let named = p["worst"]["module"].as_str().unwrap_or("none").to_string();
+        match p["verdict"].as_str() {
+            Some("FAIL") => {
+                let mut f = p["failure"].clone();
+                f["host"] = json!(host);
+                f["what"] = json!(format!("on {host}: {}", f["what"].as_str().unwrap_or("")));
+                failures.push(f);
+            }
+            Some("INCONCLUSIVE") => inconclusive.push(json!({"host": host,
+                "what": "the five runs neither all fit nor all miss the frame time"})),
+            _ => {}
+        }
+        // A piece declares at most the window each host it plays on reports (#280).
+        if w > reported {
+            let fit = match reported {
+                0 => "only lockstep fits there".to_string(),
+                n => format!("its largest window that fits is {n}"),
+            };
+            failures.push(json!({"host": host, "declared": w, "reported": reported, "module": p["worst"]["module"],
+                "what": format!("net item {} declares window {w}, past {host}'s reported window of {reported}: {fit} within the class's {frame_ms} ms frame CPU; {named} costs most", cfg.item)}));
+        }
     }
-    // An undecided reading of the app's runs is no host left unrun: it reads apart.
-    let inconclusive: Vec<Value> = (app == "INCONCLUSIVE")
-        .then(|| json!({"host": "app", "what": "the five runs neither all fit nor all miss the frame time"}))
-        .into_iter()
+    let lockstep: Vec<&String> = windows
+        .iter()
+        .filter(|(_, n)| n.as_i64() == Some(0))
+        .map(|(h, _)| h)
         .collect();
-    let verdict = match app {
-        "FAIL" => "FAIL",
-        _ if blocked.iter().any(|b| b.get("host").is_some()) => "BLOCKED",
-        v => v,
+    let verdict = if !failures.is_empty() {
+        "FAIL"
+    } else if !blocked.is_empty() {
+        "BLOCKED"
+    } else if !inconclusive.is_empty() {
+        "INCONCLUSIVE"
+    } else {
+        "PASS"
     };
+    // The report's runs and worst frame are the first host's in `on` that ran: the app's, or the
+    // web's alone.
+    let none = json!({});
+    let first = on
+        .iter()
+        .chain(["app".to_string()].iter())
+        .find_map(|h| parts.get(h).filter(|p| p.get("runs").is_some()))
+        .unwrap_or(&none);
     let mut out = json!({"kind": "net.budget", "verdict": verdict, "failures": failures, "blocked": blocked, "inconclusive": inconclusive,
-        "frame_ms": frame_ms, "window": w, "runs": runs,
-        "worst": {"step": worst_step, "ms": worst_ms, "modules": by_module, "module": costliest},
-        "busiest": busiest.map(|(step, ms)| json!({"step": step, "ms": ms})),
-        "windows": windows, "snapshot_bytes_per_s": bytes});
+        "frame_ms": frame_ms, "window": w, "runs": first["runs"], "worst": first["worst"], "busiest": first["busiest"],
+        "windows": windows, "lockstep": lockstep, "parts": parts, "snapshot_bytes_per_s": bytes});
     if w == 0 {
         // Lockstep keeps no rollback ring.
         out["rollback_snapshot_bytes"] = json!(0);
