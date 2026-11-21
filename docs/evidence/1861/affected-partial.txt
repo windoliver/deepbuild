@@ -1,0 +1,200 @@
+# #1861 partial affected.mjs run at 28a70d412 (stopped 2026-11-15 ~17:00 to rerun on main with #2666's Linux shards)
+# Ran one shard at a time (cp -c not on Linux); not compared against main's known failures: these counts are not a verdict.
+
+parallel vitest: packages/checks-command/test/regressions.test.ts packages/cli/test/cli.test.ts packages/cli/test/engines.test.ts packages/cli/test/loads.test.ts packages/conformance/src/gate.test.ts 
+parallel node: tests/acceptance/1113/cli.test.mjs tests/acceptance/1113/drain.test.mjs tests/acceptance/1113/guard.test.mjs tests/acceptance/1113/measured.test.mjs tests/acceptance/1113/waits.test.mjs
+alone vitest: packages/checks-journey/test/unrun.test.ts packages/github/test/github.test.ts packages/hub/test/drive.test.ts tests/acceptance/1002/first-screen-redraft/first-screen.test.ts tests/accep
+alone node: tests/acceptance/2144/lint-on-main.test.mjs
+timed vitest: tests/acceptance/1018/budgets.test.ts tests/acceptance/1018/redraft-ac6/budgets.test.ts tests/acceptance/1097/budgets.test.ts tests/acceptance/111/budgets.test.ts tests/acceptance/1156/f
+timed node: tests/acceptance/1113/load.test.mjs tests/acceptance/1432/budgets.test.mjs tests/acceptance/246/lanes.test.mjs tests/acceptance/568/fingerprint.test.mjs tests/acceptance/568/judge.test.mjs
+slow vitest: packages/hub/test/loop-starters.test.ts packages/hub/test/loop-transcript.test.ts packages/hub/test/reopened-items.test.ts packages/pi/test/guards.test.ts tests/acceptance/1002/cli.test.t
+slow node: tests/acceptance/1113/before.test.mjs tests/acceptance/1114/lanes.test.mjs tests/acceptance/1117/proofs.test.mjs tests/acceptance/48/harness.test.mjs tests/acceptance/910/ac1-issue-link.tes
+parallel cargo test: deep-app deep-logic
+NOTE docs/evidence/1861/base-run.txt reaches no test
+
+alone lane, 56 shards: {'fail': 349, 'pass': 645, 'skip': 113} over 380 files
+files with a failure:
+  tests/acceptance/1100/busy.test.ts
+  tests/acceptance/1100/journey.test.ts
+  tests/acceptance/1100/plants.test.ts
+  tests/acceptance/1100/stops.test.ts
+  tests/acceptance/124/ac1-replay.test.ts
+  tests/acceptance/124/ac2-isolation.test.ts
+  tests/acceptance/124/ac3-repeat.test.ts
+  tests/acceptance/124/ac4-mask.test.ts
+  tests/acceptance/124/ac5-lease.test.ts
+  tests/acceptance/124/ac6-scrim.test.ts
+  tests/acceptance/124/ac7-ui-check.test.ts
+  tests/acceptance/124/ac8-shown.test.ts
+  tests/acceptance/124/ac9-journey-steps.test.ts
+  tests/acceptance/124/scope-ac9-device.test.ts
+  tests/acceptance/124/scope-merge-base.test.ts
+  tests/acceptance/1332/show.test.ts
+  tests/acceptance/1427/ac1-journeys.test.ts
+  tests/acceptance/1427/ac1-planted.test.ts
+  tests/acceptance/1427/ac2-reader.test.ts
+  tests/acceptance/1427/ac3-reduced.test.ts
+  tests/acceptance/1427/ac4-allowances.test.ts
+  tests/acceptance/1427/ac5-repeat.test.ts
+  tests/acceptance/1427/ac6-pacing.test.ts
+  tests/acceptance/1427/ac7-shipped.test.ts
+  tests/acceptance/1427/scope-recording.test.ts
+  tests/acceptance/1454/answer.test.ts
+  tests/acceptance/1454/canvas.test.ts
+  tests/acceptance/1454/commands.test.ts
+  tests/acceptance/1454/lint.test.ts
+  tests/acceptance/1454/panel-redraft/refused.test.ts
+  tests/acceptance/1454/panel.test.ts
+  tests/acceptance/1454/shown.test.ts
+  tests/acceptance/1459/chart.test.ts
+  tests/acceptance/1459/handle.test.ts
+  tests/acceptance/1459/identifier.test.ts
+  tests/acceptance/1459/ids.test.ts
+  tests/acceptance/1459/journey.test.ts
+  tests/acceptance/1459/kit.test.ts
+  tests/acceptance/1459/panel.test.ts
+  tests/acceptance/1459/parity.test.ts
+  tests/acceptance/1459/voiceover.test.ts
+  tests/acceptance/1461/box.test.ts
+  tests/acceptance/1461/moves.test.ts
+  tests/acceptance/1461/opens.test.ts
+  tests/acceptance/1461/page.test.ts
+  tests/acceptance/1461/redraft/moves.test.ts
+  tests/acceptance/1461/redraft/rows.test.ts
+  tests/acceptance/1461/redraft/tree.test.ts
+  tests/acceptance/1461/rows.test.ts
+  tests/acceptance/1461/tree.test.ts
+  tests/acceptance/1461/unread.test.ts
+  tests/acceptance/1463/budget.test.ts
+  tests/acceptance/1463/deep.test.ts
+  tests/acceptance/1463/list.test.ts
+  tests/acceptance/1463/notification.test.ts
+  tests/acceptance/1463/redraft-judges/table-judges.test.ts
+  tests/acceptance/1463/words.test.ts
+  tests/acceptance/154-redraft/cache.test.ts
+  tests/acceptance/154-redraft/determinism.test.ts
+  tests/acceptance/154-redraft/loop.test.ts
+  tests/acceptance/154-redraft/offline.test.ts
+  tests/acceptance/154-redraft/onsets.test.ts
+  tests/acceptance/154/cache.test.ts
+  tests/acceptance/154/loop.test.ts
+  tests/acceptance/154/onsets.test.ts
+  tests/acceptance/154/registry.test.ts
+  tests/acceptance/162/markers.test.ts
+  tests/acceptance/162/warnings.test.ts
+  tests/acceptance/1731/fetch.test.ts
+  tests/acceptance/1819/activity.test.ts
+  tests/acceptance/1819/beats.test.ts
+  tests/acceptance/1819/blocked.test.ts
+  tests/acceptance/1819/visemes.test.ts
+  tests/acceptance/1819/words.test.ts
+  tests/acceptance/1820/export-redraft/export.test.ts
+  tests/acceptance/1820/scope/reuse.test.ts
+  tests/acceptance/1922/pinned.test.ts
+  tests/acceptance/1983/ac01-golden-pass.test.ts
+  tests/acceptance/1983/ac02-step-37.test.ts
+  tests/acceptance/1983/ac03-same-arch.test.ts
+  tests/acceptance/1983/ac04-blocked.test.ts
+  tests/acceptance/1983/ac05-timings.test.ts
+  tests/acceptance/1983/ac06-network.test.ts
+  tests/acceptance/1983/ac07-merge.test.ts
+  tests/acceptance/2018/counts.test.ts
+  tests/acceptance/2018/kit.test.ts
+  tests/acceptance/2018/name.test.ts
+  tests/acceptance/2018/rename.test.ts
+  tests/acceptance/2018/states.test.ts
+  tests/acceptance/2018/why.test.ts
+  tests/acceptance/2019/agents.test.ts
+  tests/acceptance/2019/interrupted.test.ts
+  tests/acceptance/2019/repeating.test.ts
+  tests/acceptance/2019/retrying.test.ts
+  tests/acceptance/2019/watch-only.test.ts
+  tests/acceptance/25/routes/held.test.ts
+  tests/acceptance/25/routes/one-route.test.ts
+  tests/acceptance/25/routes/session-end.test.ts
+  tests/acceptance/25/routes/stalled.test.ts
+  tests/acceptance/26/ask.test.ts
+  tests/acceptance/26/binding.test.ts
+  tests/acceptance/26/errors.test.ts
+  tests/acceptance/26/tools.test.ts
+  tests/acceptance/30/places.test.ts
+  tests/acceptance/30/record.test.ts
+  tests/acceptance/321/deadline.test.ts
+  tests/acceptance/322/closes.test.ts
+  tests/acceptance/322/combine.test.ts
+  tests/acceptance/322/early-claim.test.ts
+  tests/acceptance/323/did-it.test.ts
+  tests/acceptance/323/final-message.test.ts
+  tests/acceptance/323/review.test.ts
+  tests/acceptance/323/todos.test.ts
+  tests/acceptance/324/figure.test.ts
+  tests/acceptance/324/size.test.ts
+  tests/acceptance/324/unreached.test.ts
+  tests/acceptance/325/release.test.ts
+  tests/acceptance/325/rerun.test.ts
+  tests/acceptance/325/waiting.test.ts
+  tests/acceptance/33/bootstrap.test.ts
+  tests/acceptance/33/part-of.test.ts
+  tests/acceptance/33/redraft-ac5/part-of.test.ts
+  tests/acceptance/33/reporting.test.ts
+  tests/acceptance/33/rows.test.ts
+  tests/acceptance/33/spine.test.ts
+  tests/acceptance/331/compose.test.ts
+  tests/acceptance/331/install.test.ts
+  tests/acceptance/331/kit.test.ts
+  tests/acceptance/331/leases.test.ts
+  tests/acceptance/331/stacks.test.ts
+  tests/acceptance/34/app.test.ts
+  tests/acceptance/34/stream.test.ts
+  tests/acceptance/340/app/contract.test.ts
+  tests/acceptance/340/flow/continuations.test.ts
+  tests/acceptance/340/flow/terminal.test.ts
+  tests/acceptance/412/dump.test.ts
+  tests/acceptance/412/tools.test.ts
+  tests/acceptance/46/status.test.ts
+  tests/acceptance/509/after.test.ts
+  tests/acceptance/509/asks.test.ts
+  tests/acceptance/509/blocked.test.ts
+  tests/acceptance/509/cost.test.ts
+  tests/acceptance/509/cut.test.ts
+  tests/acceptance/509/mix.test.ts
+  tests/acceptance/509/names.test.ts
+  tests/acceptance/509/overlap.test.ts
+  tests/acceptance/509/recording.test.ts
+  tests/acceptance/509/say.test.ts
+  tests/acceptance/509/tools.test.ts
+  tests/acceptance/580/budgets.test.ts
+  tests/acceptance/580/caches.test.ts
+  tests/acceptance/580/images.test.ts
+  tests/acceptance/580/isolation.test.ts
+  tests/acceptance/580/lanes.test.ts
+  tests/acceptance/580/pool.test.ts
+  tests/acceptance/580/sandbox.test.ts
+  tests/acceptance/580/start-steps-redraft.test.ts
+  tests/acceptance/580/start-steps.test.ts
+  tests/acceptance/580/store.test.ts
+  tests/acceptance/580/teardown.test.ts
+  tests/acceptance/82/answers.test.ts
+  tests/acceptance/82/budgets.test.ts
+  tests/acceptance/84/sort/held.test.ts
+
+lint and build jobs:
+  lint-scripts-blocking-call-guard-mjs.log: INCONCLUSIVE no grant: no build grant came within 30 min
+  lint-scripts-canvas-closures-mjs.log: deep lease: DeepBuild isn't set up here (no hub token), so `<HOME>/.local/opt/node-v24
+  lint-scripts-canvas-lint-mjs.log: INCONCLUSIVE no grant: no build grant came within 30 min
+  lint-scripts-color-literal-guard-mjs.log: deep lease: DeepBuild isn't set up here (no hub token), so `<HOME>/.local/opt/node-v24
+  lint-scripts-conformance-lint-mjs.log: deep lease: DeepBuild isn't set up here (no hub token), so `<HOME>/.local/opt/node-v24
+  lint-scripts-fetch-lock-mjs.log: INCONCLUSIVE no grant: no build grant came within 30 min
+  lint-scripts-guide-mjs.log: deep lease: DeepBuild isn't set up here (no hub token), so `<HOME>/.local/opt/node-v24
+  lint-scripts-keymap-guard-mjs.log: INCONCLUSIVE no grant: no build grant came within 30 min
+  lint-scripts-known-failures-check-mjs.log: INCONCLUSIVE no grant: no build grant came within 30 min
+  lint-scripts-panel-catalog-mjs.log: INCONCLUSIVE no grant: no build grant came within 30 min
+  lint-scripts-plant-lint-mjs.log: INCONCLUSIVE no grant: no build grant came within 30 min
+  lint-scripts-record-reader-guard-mjs.log: deep lease: DeepBuild isn't set up here (no hub token), so `<HOME>/.local/opt/node-v24
+  lint-scripts-render-lint-mjs.log: INCONCLUSIVE no grant: no build grant came within 30 min
+  lint-scripts-repo-rules-mjs.log: deep lease: DeepBuild isn't set up here (no hub token), so `<HOME>/.local/opt/node-v24
+  lint-scripts-size-ratchet-mjs.log: INCONCLUSIVE no grant: no build grant came within 30 min
+  lint-scripts-slots-check-mjs.log: deep lease: DeepBuild isn't set up here (no hub token), so `<HOME>/.local/opt/node-v24
+  lint-scripts-vendor-rebase-mjs.log: INCONCLUSIVE no grant: no build grant came within 30 min
+  build.log: INCONCLUSIVE no grant: no build grant came within 30 min
+  cargo.log: INCONCLUSIVE no grant: no build grant came within 30 min
