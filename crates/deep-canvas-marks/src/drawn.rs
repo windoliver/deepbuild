@@ -58,6 +58,14 @@ fn is_3d(item: &Value) -> bool {
 /// The camera of a document with no 3D item, at t; `None` for any other document. It takes the
 /// camera out of `items`, since from here on a 2D film is all there is to draw.
 pub fn view_of(doc: &Map<String, Value>, items: &mut Map<String, Value>) -> Option<View> {
+    let view = camera_of(doc, items)?;
+    items.retain(|_, i| i.get("kind").and_then(Value::as_str) != Some("camera@1"));
+    Some(view)
+}
+
+/// [`view_of`]'s camera as `items` hold it, which stay as they are: `Some` says the document is
+/// a 2D film's (#1561).
+pub fn camera_of(doc: &Map<String, Value>, items: &Map<String, Value>) -> Option<View> {
     let id = doc.get("camera")?.as_str()?;
     if items.values().any(is_3d) {
         return None;
@@ -71,13 +79,11 @@ pub fn view_of(doc: &Map<String, Value>, items: &mut Map<String, Value>) -> Opti
     let size = doc.get("size")?.as_array()?;
     let (w, h) = (size.first()?.as_f64()?, size.get(1)?.as_f64()?);
     let view_width = params.get("view_width")?.as_f64().filter(|v| *v > 0.0)?;
-    let view = View {
+    Some(View {
         target: [target.first()?.as_f64()?, target.get(1)?.as_f64()?],
         k: w / view_width,
         center: [w / 2.0, h / 2.0],
-    };
-    items.retain(|_, i| i.get("kind").and_then(Value::as_str) != Some("camera@1"));
-    Some(view)
+    })
 }
 
 /// Every item through the camera: its place scaled and moved, its stroke scaling with it.

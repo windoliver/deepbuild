@@ -1,0 +1,19 @@
+# Base run of tests/acceptance/2492 at eb027b613 (eb027b613c7f372ea097d3912a38aac1e7ed43fe), 2026-11-20T20:07Z, Node v24.22.0, macOS 27.2.1 (arm64), shared Mac under heavy load (1-min load 188 at start, 206 at end)
+# The base already holds d2942beb1 and ba6391e0c, which changed both extension-host test files for #2492: the suite passes here.
+# ./node_modules/.bin/vitest run --reporter=verbose tests/acceptance/2492, then tsc -p tests/acceptance/2492/tsconfig.json
+
+
+ RUN  v5.0.5 <repo>
+
+ ✓ tests/acceptance/2492/environment-tests.test.ts > #2492.406745f0 environment-runtime.test.ts and environment-timeout.test.ts both pass, every test in them, in one run of the repo's vitest 14116ms
+ ✓ tests/acceptance/2492/environment-tests.test.ts > #2492.eac47520 environment-timeout.test.ts, which covers the late handle's down, passes, every test in it 13674ms
+ ✓ tests/acceptance/2492/environment-tests.test.ts > #2492.eac47520 environment-runtime.test.ts, which covers the active handle's stop on disable, passes, every test in it 13007ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  12:07:38
+   Duration  41.03s (tests 100%)
+
+exit 0
+12:08  up 16:34, 3 users, load averages: 205.92 137.29 76.71
+tsc exit 0

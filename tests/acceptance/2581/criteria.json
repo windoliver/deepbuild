@@ -1,0 +1,17 @@
+[
+  {
+    "n": 1,
+    "id": "#2581.df46b19b",
+    "text": "**A flag isn't a root.** In an empty working directory, `deep hub start --root --typo` exits 2 and writes nothing. Today it exits 3 after writing `--typo/hub.key`, `--typo/hub.key.cert`, `--typo/control.token`, `--typo/hub-lock.sqlite` and `--typo/logs/hub.log` there. `deep hub status|stop|use --root --typo` exit 2 as well; today they exit 3, having written nothing. `deep hub run --root --typo` exits 2 and starts no server (not tried in #2200)."
+  },
+  {
+    "n": 2,
+    "id": "#2581.43938b6c",
+    "text": "**A single dash is a flag too.** `deep status -x --why`, `deep env up --root -x` and `deep install -x` each exit 2 with nothing set up in a fresh home. Today the first two take `-x` as the session and the root; the third exits 2 only because no manifest is at `-x`."
+  },
+  {
+    "n": 3,
+    "id": "#2581.995b5ffd",
+    "text": "**The other three.** `deep secret add --typo x`, `deep rules credit --typo` and `deep host changes --typo` each exit 2."
+  }
+]

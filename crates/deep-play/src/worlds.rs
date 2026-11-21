@@ -14,7 +14,7 @@ use deep_canvas_physics::doc::World;
 use deep_canvas_physics::module::changed;
 use deep_canvas_physics::occurrence::{step_flicks, timed};
 use deep_canvas_physics::written;
-use deep_physics_rapier::channels::{output_channels, states};
+use deep_physics_rapier::channels::output_channels;
 use deep_physics_rapier::runner::Run;
 use serde_json::{json, Map, Value};
 
@@ -194,7 +194,7 @@ pub fn inline(
         }
         let fired = (host.fired)(form);
         let kept =
-            crate::derive::kept(form, &w, core, &fired, host.modules_first).map_err(|r| {
+            crate::derive::kept(form, id, &w, core, &fired, host.modules_first).map_err(|r| {
                 refused(
                     id,
                     json!([{"code": r.code, "path": r.path, "what": r.what}]),
@@ -211,10 +211,10 @@ pub fn inline(
         }
         let rows = reply["occurrences"].as_array().cloned().unwrap_or_default();
         lists.insert(format!("{id}.occurrences"), json!(timed(&rows, &w)));
-        output_channels(id, &w, &states(&reply), &frames, whole, &mut channels)
+        output_channels(id, &w, &reply, &frames, whole, &mut channels)
             .map_err(|e| refused(id, e))?;
         arrays.extend(readings(form, id, &w, &reply["bodies"]).map_err(|e| refused(id, e))?);
-        arrays.extend(written::arrays(id, &w, form, &reply["bodies"]));
+        arrays.extend(written::arrays(id, &w, form, &reply));
         arrays.extend(deep_canvas_physics::skin::arrays(
             id,
             &w,

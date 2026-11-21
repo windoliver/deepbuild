@@ -1,0 +1,21 @@
+{
+  "#2308.e596080e": [
+    "wrapper_ignores_length_unit"
+  ],
+  "#2308.1cbd6c33": [
+    "wrapper_ignores_contact_hz"
+  ],
+  "#2308.3e70c06d": [
+    "wrapper_scales_speed_cap",
+    "wrapper_scales_sleep_speed"
+  ],
+  "#2308.567c906d": [
+    "wrapper_ignores_contact_hz"
+  ],
+  "#2308.762099ef": [
+    "lint_reads_first_shape"
+  ],
+  "#2308.66a34a77": [
+    "check_reads_range_only"
+  ]
+}

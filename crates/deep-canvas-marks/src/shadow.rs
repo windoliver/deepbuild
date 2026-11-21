@@ -4,7 +4,7 @@
 //! the light crosses an occluding outline, and a pixel inside an occluding outline is not
 //! shadowed by that outline. A sun's light runs along its angle, so its segment runs against the
 //! angle with no end. This is the segment test both renderers take: the CPU reference here in
-//! f64, and the GPU layer's light pass (`deep-gpu-layer`'s `lightfx`) in f32 over the same bins.
+//! f64, and the GPU layer's light pass (`deep-groups-render`'s `lightfx`) in f32 over the same bins.
 
 use std::fmt;
 

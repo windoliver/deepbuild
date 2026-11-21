@@ -67,9 +67,10 @@ pub const MEMORY_MIB: (u64, u64) = (4, MAX_MEMORY / MIB);
 pub const STACK_KIB: (u64, u64) = (64, 256);
 
 /// The exports a logic program may add to its role's (Logic `logic@1`: Exports), each with when.
-pub const OPTIONAL_EXPORTS: [(&str, &str); 5] = [
+pub const OPTIONAL_EXPORTS: [(&str, &str); 6] = [
     ("assets_at", "with assets"),
     ("emits_at", "with emits"),
+    ("fires_at", "with fires"),
     ("preview", "with preview: preview(k: i64)"),
     ("preview_at", "with preview"),
     (
@@ -101,7 +102,7 @@ pub fn listing() -> Value {
 }
 
 /// One field of a logic item this task doesn't build yet: refused by name, never ignored.
-const LATER: [&str; 3] = ["fires", "pages", "parallel"];
+const LATER: [&str; 2] = ["pages", "parallel"];
 /// A row's own columns: no declared field can take one of these names, so a reader can name each
 /// field beside them.
 const ROW_COLUMNS: [&str; 5] = ["step", "t", "kind", "a", "b"];
@@ -272,6 +273,11 @@ pub enum Read {
     World,
     /// Mirror j's range list (Logic: mirror reads).
     Mirror(usize),
+    /// #189: the carry record's entry (Logic: carry records); #276: the profile record's.
+    Carry,
+    Profile,
+    /// #277: `net.seats`, the seat entries stamped since the item's last step.
+    Seats,
     /// A write entry.
     None,
 }
@@ -561,16 +567,26 @@ pub struct Item {
     /// The kinds it emits, in declaration order, and where its emit region starts: `emits_at`.
     pub emits: Vec<Emit>,
     pub emits_at: u32,
+    /// The inputs it may fire, in declaration order, and where its fire region starts (#194).
+    pub fires: Vec<fires::Fire>,
+    pub fires_at: u32,
     /// The services it asks between steps, in declaration order, from `services_at`.
     pub services: Vec<crate::services::Asked>,
     pub services_at: u32,
     /// Its mirrors of other items' arrays, in declaration order (Logic: mirror reads).
     pub mirrors: Vec<crate::mirrors::Mirror>,
     pub preview: Option<Preview>,
+    /// The lane graph its `lanes` names, built at check from the piece's floor paths, whose bytes
+    /// are its asset 0 (#981).
+    pub lanes: Option<std::sync::Arc<crate::lanes::Graph>>,
     /// What the item's bake key covers of it: its rewritten program, its fields as given and
     /// its assets' hashes (Logic: checkpoints and bake).
     pub content: String,
     pub saves: Option<Saves>,
+    /// #189: the record it gives and the record it takes (Logic: carry records); #276: its profile.
+    pub carry: Option<crate::carry::Carry>,
+    pub carry_in: Option<crate::carry::CarryIn>,
+    pub profile: Option<crate::profile::Profile>,
 }
 
 /// A logic item's saves (Logic: saves): its slots, where its `request` and `ends` arrays sit in
@@ -1000,31 +1016,6 @@ pub(crate) fn align8(n: u32) -> u32 {
 /// entries from.
 pub type History = BTreeMap<String, Vec<Layout>>;
 
-/// The fields each item declares, before its program is checked.
-struct Declared {
-    program: String,
-    debug: Option<String>,
-    step: i64,
-    turn: bool,
-    due: Option<String>,
-    reads: Vec<String>,
-    writes: Vec<Write>,
-    fuel: i64,
-    memory: u64,
-    stack: i32,
-    every: i64,
-    ring: u64,
-    assets: Vec<String>,
-    links: Vec<(String, String)>,
-    saves: Option<Value>,
-    emits: Vec<Emit>,
-    services: Vec<(String, u32)>,
-    mirrors: Vec<(String, String)>,
-    preview: Option<(Vec<String>, Vec<Write>)>,
-    /// The item's fields as given, for its bake key.
-    given: String,
-}
-
 /// The kinds an item declares in `emits`, in declaration order, or the refusals naming each wrong
 /// one: at most 64 kinds, 8 numeric fields each, none named as a row's own column, and
 /// `max_per_step` at most 1,024.
@@ -1109,6 +1100,7 @@ fn emits_of(v: Option<&Value>) -> Result<Vec<Emit>, Vec<Value>> {
 }
 
 mod checks;
+pub mod fires;
 pub use checks::*;
 
 /// The most named values a series source's call holds (Series).

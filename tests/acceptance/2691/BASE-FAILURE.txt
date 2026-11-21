@@ -1,0 +1,118 @@
+Base: 89863843d85271d0aadcd9ca4702e411d67c7613 (origin/main, "Merge pull request #2834 ..."), work tree unchanged but
+for tests/acceptance/2691/. Mac17,10 (Apple M5 Max), macOS build 26B8119, this Mac's Metal GPU, 2026-11-19.
+Binary: cargo build --locked --release --bin deep-gpu, built from the unchanged base (the files build it themselves).
+
+Command, once per file (mirror-size, scale-one, half-size, estimate, taste), with fixtures/base/ in place:
+  NO_COLOR=1 node scripts/throttle.mjs test --wait 120 -- node node_modules/vitest/vitest.mjs run \
+    --root tests/acceptance/2691 --no-file-parallelism --testTimeout=1800000 <file>.test.ts
+
+Outcome: 7 tests: 5 failed, 2 passed. Every file loaded, every build succeeded, the binary found a Metal device, and
+no test ended at import, at start-up or at a timeout. Trimmed to each test's name, its result and the summary lines.
+
+------------------------------------------------------------------------------------------------------------------
+mirror-size.test.ts   (Test Files 1 failed (1) | Tests 1 failed (1) | 5.11 s)
+
+  stdout: #2691.ee689a34: the every-pass scene at 3456 × 2234 and internal scale 0.5: mirror undefined, the device's
+          bytes by frame 505151488, 536133632, 536133632, 536133632, 536133632, 536133632, 536133632, 536133632; kept
+          as target/acceptance/2691/every-pass.json
+
+  FAIL  #2691.ee689a34 on Metal the every-pass scene at 3456 × 2234 and internal scale 0.5 renders its mirror at
+        864 × 559, and the device holds at least 90 MB less for it than on the merge base, whose mirror is 1728 × 1117
+    AssertionError: the every-pass scene at 3456 × 2234 and internal scale 0.5 renders its mirror at 864 × 559, half of
+      its internal 1728 × 1117 rounded up: the reply names no size for the mirror's pass (surface.mirror_px is
+      undefined), as the merge base's names none: there the pass is half the frame's full 3456 × 2234, 1728 × 1117
+      (the issue): expected null to deeply equal [ 864, 559 ]
+     ❯ mirror-size.test.ts:50:143
+    AssertionError: the device holds at least 90000000 B less for the scene than on the merge base: 536133632 B here,
+      536133632 B on the merge base, 0 B less: expected 0 to be greater than or equal to 90000000
+     ❯ mirror-size.test.ts:56:180
+
+  Why: both halves of the criterion fail. The bytes are a reading: the base holds what the base holds. The size is
+  not: no reply of the base names the mirror's size, so the 1728 × 1117 in the first failure is the issue's figure,
+  said by the test, not read from the device. Read, it is the same test's failure on the base's mirror with only the
+  reply field added (README: The throwaway check):
+    AssertionError: ... the mirror's pass drew at 1728 × 1117, the merge base's size: half the frame's full size:
+      expected [ 1728, 1117 ] to deeply equal [ 864, 559 ]
+
+------------------------------------------------------------------------------------------------------------------
+scale-one.test.ts   (Test Files 1 failed (1) | Tests 1 failed | 1 passed (2) | 3.10 s)
+
+  stdout: #2691.49387bf5: 31 frames of 22 fixtures at internal scale 1; kept as target/acceptance/2691/scale-one.json
+
+  PASS  #2691.49387bf5 every fixture of tests/acceptance/465/ and tests/acceptance/166/ has, at internal scale 1, the
+        merge base's pixel hash at every frame those suites draw
+    Why: a no-change criterion. The base is the merge base, so all 31 hashes are the recorded ones (fixtures/base/
+    scale-one.json is the first run's file; this is the second run of the same binary on the same machine).
+
+  FAIL  #2691.49387bf5 a planted mirror that halves its size twice fails the same check, which names the size its pass
+        drew at
+    AssertionError: deep-gpu run --planted mirror_halves_twice exits 0 (no signal): the binary knows the planted
+      program mirror_halves_twice (README: Planted programs); stdout: {"ok":false,"code":"bad_input"}; stderr: :
+      expected 2 to be +0 // Object.is equality
+     ❯ runGpu helpers.ts:104:251   ❯ drawScaleOne helpers.ts:289:19   ❯ scale-one.test.ts:42:26
+    Why: the base has no such planted program; the implementer builds it.
+
+------------------------------------------------------------------------------------------------------------------
+half-size.test.ts   (Test Files 1 failed (1) | Tests 2 failed (2) | 1.76 s)
+
+  FAIL  #2691.ecd8e156 the reflection target of a 1280 × 720 view at internal scale 0.5 has the SHA-256 of the same
+        scene's canonical render at 640 × 360, for a plain mirror and for a still water's own
+    AssertionError: the room over a mirror: the reflection at internal scale 0.5
+      (99e88b29292084c4b83b537ba1e51a22c05e34ef8f6036421680bbc0796a54df) against the canonical render's at half the
+      size (ab4bb29b45d6a478ce476bf527937a465f476d314b07dc18a7ffb3b4d94a9bf5): 73920 of 230400 texels differ, and the
+      marker's reflection is offset by (0.11, 0.25) px against the canonical render's: expected '99e88b29...' to be
+      'ab4bb29b...' // Object.is equality
+     ❯ half-size.test.ts:49:49
+    AssertionError: the room over a still water: the reflection at internal scale 0.5
+      (b83a1bd9f02daa35d6602346625f16e960f79711a99e5b9772db17f5e9ec1fe1) against the canonical render's at half the
+      size (b89e4de17ff9cabf3ac0fa7c9327badc739287079311802f37517eeea5c93d22): 74010 of 230400 texels differ, and the
+      marker's reflection is offset by (0.11, 0.25) px against the canonical render's: expected 'b83a1bd9...' to be
+      'b89e4de1...' // Object.is equality
+     ❯ half-size.test.ts:50:42
+    Why: on the base the view's mirror is 640 × 360 and the canonical render's is 320 × 180, so the two pictures
+    differ in a third of their texels (the marker stands where it should, a fraction of a pixel off).
+
+  FAIL  #2691.ecd8e156 a planted mirror that samples its target with the wrong scale shows the reflection shifted and
+        fails, naming the offset
+    AssertionError: deep-gpu run --planted mirror_samples_full_frame exits 0 (no signal): the binary knows the planted
+      program mirror_samples_full_frame (README: Planted programs); stdout: {"ok":false,"code":"bad_input"}; stderr: :
+      expected 2 to be +0 // Object.is equality
+     ❯ runGpu helpers.ts:104:251   ❯ pairs half-size.test.ts:33:19   ❯ half-size.test.ts:55:22
+    Why: the base has no such planted program; the implementer builds it.
+
+------------------------------------------------------------------------------------------------------------------
+estimate.test.ts   (Test Files 1 passed (1) | Tests 1 passed (1) | 3.90 s)
+
+  stdout: #2691.f1acfa43: the every-pass scene at 3024 × 1964, internal scale 0.5: estimate 443289040 B, peak
+          457310208 B, -3.07%; the every-pass scene at 1280 × 800, internal scale 1: estimate 237468346 B, peak
+          244563968 B, -2.90%; kept as target/acceptance/2691/estimate.json
+
+  PASS  #2691.f1acfa43 the check's GPU memory estimate for the every-pass scene is within 10% of the device's peak at
+        internal scale 0.5 (3024 × 1964, its camera turning) and at 1 (1280 × 800, its camera at rest)
+    Why: the criterion holds on the base, where the estimate and the device both count the mirror at half the full
+    frame. It is the guard that the estimate follows the mirror. Its wrong program is the change with the estimate
+    left behind, run as a throwaway (README: The throwaway check), where this test fails:
+      AssertionError: the every-pass scene at 3024 × 1964, internal scale 0.5: the check's estimate 443289040 B is
+        17.44% from the device's peak 377470976 B, and within 10% is 37747097 B: expected 65818064 to be less than or
+        equal to 37747097.6
+
+------------------------------------------------------------------------------------------------------------------
+taste.test.ts   (Test Files 1 failed (1) | Tests 1 failed (1) | 1.91 s)
+
+  stdout: #2691.bf51397a: pictures written (the lake's mirror drew at a size the reply doesn't name):
+            docs/evidence/2691/lake-merge-base.png  26568c3046cbfbac574ac46cc21ccaf47cfa4ff9faf1b6d2cc51329bafea6316
+            docs/evidence/2691/lake-change.png  26568c3046cbfbac574ac46cc21ccaf47cfa4ff9faf1b6d2cc51329bafea6316
+
+  FAIL  #2691.bf51397a the run writes the castle's lake at 3024 × 1964 and internal scale 0.5 as the merge base draws
+        it and as this checkout does, the two differ, and the owner's recorded call on exactly those says the coarser
+        reflection looks right
+    AssertionError: the lake draws differently on the change than on the merge base: its reflection is coarser:
+      expected '26568c30...' not to be '26568c30...' // Object.is equality
+     ❯ taste.test.ts:55:137
+    Why: the base is the merge base, so its picture is the merge base's, byte for byte. On a change whose picture
+    differs, the test goes on to TASTE.json: with none, INCONCLUSIVE (README: The taste call).
+
+------------------------------------------------------------------------------------------------------------------
+The two pictures the taste run wrote under docs/evidence/2691/ and the readings every run kept under
+target/acceptance/2691/ were deleted after the run, as was Vitest's cache; `git status --short` lists only
+tests/acceptance/2691/. Type-check: npx tsc -p tests/acceptance/2691/tsconfig.json -> exit 0.
