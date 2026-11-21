@@ -264,6 +264,34 @@ fn flat(v: Option<&[[f64; 3]]>) -> Vec<f32> {
 /// The frames this process drew, s, in order: the planted inherit reads them.
 static DRAWN: Mutex<Vec<f64>> = Mutex::new(Vec::new());
 
+/// #265: where each item's anchor stood at each frame this process drew, with the frame's time
+/// in s, in order: the planted `anchor_kept_from_frame` reads them.
+static ANCHORED: Mutex<BTreeMap<String, Vec<(f64, [f64; 3])>>> = Mutex::new(BTreeMap::new());
+
+/// The planted `anchor_kept_from_frame`: each birth bucket's anchor where the last frame this
+/// process drew at or before the bucket placed it, and with no such frame where this frame does,
+/// never the bake's value at the bucket.
+fn anchored_from_frames(h: &Held, scene: &Scene, params: &Value, id: &str, t: f64) -> Held {
+    let mut b = h.0.clone();
+    let anchor = params["emit"]["anchor"].as_str().unwrap_or_default();
+    let now = item_pos(scene, anchor).unwrap_or_default();
+    let mut all = ANCHORED.lock().unwrap_or_else(|e| e.into_inner());
+    let drawn = all.entry(id.to_string()).or_default();
+    if let Some(a) = b.anchors.as_mut() {
+        for (k, at) in a.at.iter_mut().enumerate() {
+            let bucket = k as f64 * a.step + 1e-9;
+            *at = drawn
+                .iter()
+                .rev()
+                .find(|(s, _)| *s <= bucket)
+                .map_or(now, |(_, p)| *p);
+        }
+    }
+    drawn.push((t, now));
+    let tables = pack::tables(&b);
+    Arc::new((b, tables))
+}
+
 /// One item's reading: its particles, its turbulence table, and its rows at each time.
 #[allow(clippy::too_many_arguments)]
 fn reading(
@@ -637,6 +665,13 @@ pub(crate) fn frame(
                 b.drawn = DRAWN.lock().unwrap_or_else(|e| e.into_inner()).clone();
                 let tables = pack::tables(&b);
                 Some(Arc::new((b, tables)))
+            }
+            other => other,
+        };
+        // #265's planted anchor, kept from the frames this process drew.
+        let held = match held {
+            Some(h) if planted == Some(Planted::AnchorKeptFromFrame) && h.0.anchors.is_some() => {
+                Some(anchored_from_frames(&h, scene, &o.params, &sp.item, t))
             }
             other => other,
         };

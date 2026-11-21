@@ -81,6 +81,11 @@ pub trait Stepper {
     fn seek(&mut self, step: i64, _len: i64) -> Result<(i64, u64), Value> {
         Err(json!({"code": "no_ring", "step": step}))
     }
+    /// #265: each logic array as the copy holds it now, laid out as a bake (steps past
+    /// `confirmed` included, a replaced step's gone): what its frame draws; none by default.
+    fn drawn(&self) -> Option<Value> {
+        None
+    }
 }
 
 /// How a planted defect changes its field's value: `n` added to it, or bit `b` of its bits

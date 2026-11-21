@@ -40,10 +40,11 @@ pub fn read(params: &Value, path: &str) -> Result<Option<Trail>, Refused> {
 }
 
 /// Where `item` stood (world m) at each of `times`, read through the chain a trail reads (#450;
-/// #166's wake reads it in the water's plane): its channels and parents, or a physics bake's
-/// output kept through the world's span, `<world>#<body>`, never an earlier frame
-/// ([`crate::water::logic_moved`] refuses an item a logic array moves). An `#anchor` on an item
-/// reads the item's origin; a source that resolves to nothing is refused at `path`.
+/// #166's wake reads it in the water's plane): its channels and parents, the drivers that read a
+/// logic bake's earlier steps (#265), or a physics bake's output kept through the world's span,
+/// `<world>#<body>`, never an earlier frame ([`crate::water::dragged`] refuses an item a live
+/// drag moves). An `#anchor` on an item reads the item's origin; a source that resolves to
+/// nothing is refused at `path`.
 pub(crate) fn path_at(
     map: &Map<String, Value>,
     program: &Program,

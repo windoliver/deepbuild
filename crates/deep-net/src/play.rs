@@ -100,13 +100,15 @@ pub struct Carried {
     pub bytes: Option<String>,
 }
 
-/// What a copy showed at a time: its last step, and the app's notice then.
+/// What a copy showed at a time: its last step, the app's notice then, and (#265) its logic
+/// arrays as it held them then, which its frame draws.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Shown {
     pub player: u8,
     pub t: i64,
     pub step: i64,
     pub notice: Option<(u8, i64)>,
+    pub arrays: Option<Value>,
 }
 
 pub struct Played<S> {
@@ -209,14 +211,14 @@ pub fn play<S: Stepper>(
     };
     let show = |copies: &[Copy<S>], i: usize, now: i64| {
         let (player, t) = ask.shows[i];
-        let (step, notice) = copies
-            .get(player as usize - 1)
-            .map_or((-1, None), |c| c.shown(now));
+        let copy = copies.get(player as usize - 1);
+        let (step, notice) = copy.map_or((-1, None), |c| c.shown(now));
         Shown {
             player,
             t,
             step,
             notice,
+            arrays: copy.and_then(|c| c.sim().drawn()),
         }
     };
     // Past any match's own end: every hold, the timeout and each step at a tenth of its rate.
@@ -416,7 +418,8 @@ mod tests {
                 player: 1,
                 t: 10 * FLICKS + FLICKS * 4 / 5,
                 step: 203,
-                notice: Some((2, FLICKS * 3 / 5))
+                notice: Some((2, FLICKS * 3 / 5)),
+                arrays: None,
             }]
         );
         let clean = run(4, 400, Faults::default(), Planted::None);

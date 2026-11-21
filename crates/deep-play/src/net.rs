@@ -286,6 +286,10 @@ impl Stepper for Logic {
         Ok(())
     }
 
+    fn drawn(&self) -> Option<Value> {
+        Some(Value::Object(self.rec.arrays(&self.piece)))
+    }
+
     fn occurrences(&self) -> Vec<Value> {
         let len = self.len.max(1);
         let mut out = Vec::new();
