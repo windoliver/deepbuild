@@ -241,6 +241,8 @@ alone.push('tests/acceptance/533/');
 alone.push('tests/acceptance/194/', 'tests/acceptance/194-oracle/', 'tests/acceptance/194-redraft-ac11/');
 timed.push('tests/acceptance/194-redraft-ac11/ac11-budgets.test.ts');
 byHand.push('tests/acceptance/194/ac11-budgets.test.ts');
+// #832's files each start four replicas and an extension host and play the card duel thousands of times.
+alone.push('tests/acceptance/832/');
 // #1434's files build deep-replica and start a replica each, and ac5 runs #377's handoff suite; its live window files
 // run by hand on the reference Mac, the budgets as a timed file.
 alone.push('tests/acceptance/1434/');
