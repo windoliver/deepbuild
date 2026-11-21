@@ -9,10 +9,10 @@ import { asksNeedYou, databaseRead, hubDown, when } from './list.js';
 import { elapsed } from './promises.js';
 import { activePlant } from './plant.js';
 import type { Row as ListRow } from './rows.js';
-import { visible } from './visible.js';
+import { typed, visible } from './visible.js';
 import { startOf } from './wire.js';
 
-const USAGE = 'Usage: deep inbox [--json]\n       deep inbox answer <ask> <option>\n       deep inbox undo <ask>\n       deep inbox save <offer>';
+const USAGE = 'Usage: deep inbox [--json]\n       deep inbox answer <ask> [--] <option>\n       deep inbox undo <ask>\n       deep inbox save <offer>';
 /** One line of output: an ask's, a plan's or a call's text comes from the record, so it prints through `visible` (#1510). */
 const say = (line: string): void => void process.stdout.write(`${visible(line)}\n`);
 /** Refusals of what you typed: nothing ran. */
@@ -34,8 +34,11 @@ export async function inboxCommand(args: readonly string[], setUp: () => Promise
   const answering = args[0] === 'answer';
   const undoing = args[0] === 'undo';
   const saving = args[0] === 'save';
+  // `--` before the option ends the flags, so an option that starts with `-` is read as typed (#2563).
+  const ended = answering && args.length === 4 && args[2] === '--';
+  if (ended) args = [args[0]!, args[1]!, args[3]!];
   // A flag where an ask or option goes is a usage error, never read as one (#19's exit table).
-  if ((answering ? args.length !== 3 : undoing || saving ? args.length !== 2 : args.length !== 0) || args.slice(1).some((a) => a.startsWith('-'))) {
+  if ((answering ? args.length !== 3 : undoing || saving ? args.length !== 2 : args.length !== 0) || args.slice(1, ended ? 2 : undefined).some((a) => a.startsWith('-'))) {
     process.stderr.write(`${USAGE}\n`);
     return 2;
   }
@@ -110,7 +113,8 @@ export async function inboxCommand(args: readonly string[], setUp: () => Promise
     // Under it, the option IDs `deep inbox answer` takes (#2199), each with its label where that reads differently.
     // The planted wrong program prints the labels alone.
     const labels = activePlant() === 'inbox-labels-only';
-    if (a.actions.length) say(`    answer with ${a.actions.map((o) => (labels ? o.label : o.label.toLowerCase() === o.answer.toLowerCase() ? o.answer : `${o.answer} (${o.label})`)).join(', ')}`);
+    // Each ID as you type it back into a shell (#2563): quoted where it needs it, after `--` where it starts with `-`.
+    if (a.actions.length) say(`    answer with ${a.actions.map((o) => (labels ? o.label : o.label.toLowerCase() === o.answer.toLowerCase() ? typed(o.answer) : `${typed(o.answer)} (${o.label})`)).join(', ')}`);
     for (const f of inside.get(a.id) ?? []) say(`    folded here: ${line(f)}`);
     const r = extra.get(a.id);
     if (!r) continue;

@@ -127,18 +127,6 @@ pub fn bounds(shapes: &BTreeMap<String, Shape>, uses: &[ShapeUse]) -> Option<(V,
 }
 
 impl Reader {
-    /// A body's `inertia`, which this backend interface doesn't run yet.
-    pub(super) fn inertia(&mut self, b: &Map<String, Value>, p: &str) {
-        if let Some(x) = b.get("inertia") {
-            self.refuse(
-                "physics.unsupported",
-                join(p, "inertia"),
-                x,
-                "inertia isn't run by this backend interface yet; #2098 brings it".into(),
-            );
-        }
-    }
-
     /// A body's `centre_of_mass`: refused on any body but a dynamic one, and outside the bounds
     /// of the body's shapes, naming those bounds.
     pub(super) fn centre_of_mass(

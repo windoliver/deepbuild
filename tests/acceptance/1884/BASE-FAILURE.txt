@@ -1,0 +1,93 @@
+Base commit: dcb63a0a0a374d6759c1d352eb31439597792905 (origin/main, 2026-11-20; no implementation of #1884)
+Command, from the repo root, with Node 24.22.0 first on PATH (packages already built with npm run build --workspaces):
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1884 --no-file-parallelism --testTimeout=600000
+Date: 2026-11-20  Node v24.22.0  vitest 5.0.5  darwin-arm64. Load averages 85.81 75.70 81.99 (other sessions).
+This checkout has no target/ (no deep-hook built), and this job was told not to run cargo build.
+Exit code: 1
+Result: 2 files, 4 tests, 4 failed (AC2's two read BLOCKED), 0 passed.
+
+Why each test fails at the base:
+- AC1 #1884.ae94b96f (covered.test.ts) fails at its doctor assertion, as the criterion says it must: with the facts
+  listing 1.0.0 and 1.2.0 and the stand-in claude printing 1.1.0, `deep doctor --json` gives
+  "claude.binary ok (healthy): ... is Claude Code 1.1.0, which its facts cover"; expected version_uncovered. The base
+  doctor's `covered` (doctor.ts) reads the list as the range first..last. Expected reason.
+- AC2 #1884.158e699a, 1.0.0 and 1.2.0 (covered.test.ts): BLOCKED before any assertion: the hub proves its guard
+  entries through deep-hook at start, and this checkout has none built. Not a criterion failure; with deep-hook built
+  they are expected to pass on the base (see the check beside the run).
+- AC3 #1884.1f89e40b (source.test.ts) fails at its source assertion: the detector finds all four planted second rules,
+  then finds in packages/hub/src/doctor.ts `function compare`, `.split(/[.-]/)` and `compare(version, range[`, the
+  base's range rule. Expected reason.
+
+Checked beside the run (a scratch script, not part of the suite, that calls this suite's helpers.ts): the same copy
+with a deep-hook linked into its target/, built from another checkout whose crates/deep-hook is identical to the
+base's (git diff empty). Base results, per version: hub reply to the matched block entry, and the doctor's item:
+  1.1.0 blocked=false reply={"v":1,"exit":0,"stdout":"","stderr":""} | doctor: healthy ok ... Claude Code 1.1.0, which its facts cover
+  1.0.0 blocked=true reply={"v":1,"exit":2,"stdout":"","stderr":"DeepBuild blocked this: Guarded in this test. Leave it. (guard deep1884-<tag>)\n"} | doctor: healthy ok
+  1.2.0 blocked=true reply={"v":1,"exit":2,...} | doctor: healthy ok
+So on the base the hub already holds a 1.1.0 session watch-only while the doctor reads healthy (the issue's bug), and
+AC2's two cases pass on the base once deep-hook is built; AC1's hook part already holds there.
+
+---- The run's output ----
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/fix-2564-stream-flush-catch-7c0e0b/tests/acceptance/1884
+
+ ❯ covered.test.ts (3 tests | 3 failed) 2753ms
+   × AC1 #1884.ae94b96f facts listing 1.0.0 and 1.2.0, Claude Code 1.1.0 installed: deep doctor reports version_uncovered and the session's hook is watch-only 352ms
+   × AC2 #1884.158e699a Claude Code 1.0.0, listed in the facts: deep doctor reads it covered and the session's hook is gated, not watch-only 2ms
+   × AC2 #1884.158e699a Claude Code 1.2.0, listed in the facts: deep doctor reads it covered and the session's hook is gated, not watch-only 1ms
+ ❯ source.test.ts (1 test | 1 failed) 9ms
+   × AC3 #1884.1f89e40b doctor.ts holds no version comparison of its own: the detector finds each planted second rule, and none in doctor.ts 8ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  covered.test.ts > AC1 #1884.ae94b96f facts listing 1.0.0 and 1.2.0, Claude Code 1.1.0 installed: deep doctor reports version_uncovered and the session's hook is watch-only
+AssertionError: deep doctor reads Claude Code 1.1.0 as the hub does, uncovered by facts listing 1.0.0 and 1.2.0: ok (healthy): /private/tmp/dk1884-Dbh23i/bin-1.1.0/claude is Claude Code 1.1.0, which its facts cover: expected 'healthy' to be 'version_uncovered' // Object.is equality
+
+Expected: "version_uncovered"
+Received: "healthy"
+
+ ❯ covered.test.ts:42:181
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  covered.test.ts > AC2 #1884.158e699a Claude Code 1.0.0, listed in the facts: deep doctor reads it covered and the session's hook is gated, not watch-only
+ FAIL  covered.test.ts > AC2 #1884.158e699a Claude Code 1.2.0, listed in the facts: deep doctor reads it covered and the session's hook is gated, not watch-only
+Error: BLOCKED: the hub proves its guard entries through deep-hook, and none is built under ~/private/deepbuild-core/.claude/worktrees/fix-2564-stream-flush-catch-7c0e0b/target; run cargo build --locked -p deep-hook
+ ❯ startHub helpers.ts:185:90
+
+ ❯ oneHook covered.test.ts:31:21
+ ❯ covered.test.ts:51:44
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  source.test.ts > AC3 #1884.1f89e40b doctor.ts holds no version comparison of its own: the detector finds each planted second rule, and none in doctor.ts
+AssertionError: ~/private/deepbuild-core/.claude/worktrees/fix-2564-stream-flush-catch-7c0e0b/packages/hub/src/doctor.ts decides coverage with a version comparison of its own, a second rule beside the hub's: expected [ 'function compare', …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "function compare",
++   ".split(/[.-]/)",
++   "compare(version, range[",
++ ]
+
+ ❯ source.test.ts:51:133
+     49|   for (const [name, plant] of Object.entries(PLANTS)) expect(ownCompar…
+     50|   const source = readFileSync(DOCTOR, 'utf8');
+     51|   expect(ownComparisons(source), `${DOCTOR} decides coverage with a ve…
+       |                                                                                                                                     ^
+     52| });
+     53|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  4 failed (4)
+   Start at  12:35:12
+   Duration  3.25s (tests 97%, import 1%, transform 1%)
+
+exit=1
