@@ -8,7 +8,7 @@ import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { addedSince, readingWords, readRegistry, settled } from '../dist/dependencies.js';
+import { addedSince, readingWords, readRegistry, settled } from '../src/dependencies.js';
 
 const DAY = 86_400_000;
 const now = Date.now();

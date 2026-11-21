@@ -273,6 +273,9 @@ pub enum Read {
     World,
     /// Mirror j's range list (Logic: mirror reads).
     Mirror(usize),
+    /// #189: the carry record's entry (Logic: carry records); #276: the profile record's.
+    Carry,
+    Profile,
     /// #277: `net.seats`, the seat entries stamped since the item's last step.
     Seats,
     /// A write entry.
@@ -576,10 +579,16 @@ pub struct Item {
     /// The lane graph its `lanes` names, built at check from the piece's floor paths, whose bytes
     /// are its asset 0 (#981).
     pub lanes: Option<std::sync::Arc<crate::lanes::Graph>>,
+    /// process@1's kind names its `process` gives, by kind index (#980).
+    pub process: Option<Vec<String>>,
     /// What the item's bake key covers of it: its rewritten program, its fields as given and
     /// its assets' hashes (Logic: checkpoints and bake).
     pub content: String,
     pub saves: Option<Saves>,
+    /// #189: the record it gives and the record it takes (Logic: carry records); #276: its profile.
+    pub carry: Option<crate::carry::Carry>,
+    pub carry_in: Option<crate::carry::CarryIn>,
+    pub profile: Option<crate::profile::Profile>,
 }
 
 /// A logic item's saves (Logic: saves): its slots, where its `request` and `ends` arrays sit in
@@ -1008,34 +1017,6 @@ pub(crate) fn align8(n: u32) -> u32 {
 /// The layouts each item ID has had, in this process: what a `regions_digest` check names
 /// entries from.
 pub type History = BTreeMap<String, Vec<Layout>>;
-
-/// The fields each item declares, before its program is checked.
-struct Declared {
-    program: String,
-    debug: Option<String>,
-    step: i64,
-    turn: bool,
-    due: Option<String>,
-    reads: Vec<String>,
-    writes: Vec<Write>,
-    fuel: i64,
-    memory: u64,
-    stack: i32,
-    every: i64,
-    ring: u64,
-    assets: Vec<String>,
-    links: Vec<(String, String)>,
-    saves: Option<Value>,
-    emits: Vec<Emit>,
-    fires: Vec<fires::Fire>,
-    services: Vec<(String, u32)>,
-    mirrors: Vec<(String, String)>,
-    preview: Option<(Vec<String>, Vec<Write>)>,
-    /// `lanes`: its lane graph and vehicle kind, built at check (#981).
-    lanes: Option<Value>,
-    /// The item's fields as given, for its bake key.
-    given: String,
-}
 
 /// The kinds an item declares in `emits`, in declaration order, or the refusals naming each wrong
 /// one: at most 64 kinds, 8 numeric fields each, none named as a row's own column, and

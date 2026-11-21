@@ -176,12 +176,12 @@ export async function stopAsPeer(path: string, token: string, params: Obj, peer:
 
 /**
  * One control call on the hub at `path`, as the CLI, with the token `tokenFile` holds: the hub's hello within
- * `timeoutMs`, and the call's reply within `replyMs`.
+ * `timeoutMs`, and the call's reply within `replyMs`; with `peer`, the call names that process as its caller.
  */
-export async function control(path: string, tokenFile: string, method: string, params: Obj = {}, timeoutMs = 2000, replyMs = timeoutMs): Promise<Obj> {
+export async function control(path: string, tokenFile: string, method: string, params: Obj = {}, timeoutMs = 2000, replyMs = timeoutMs, peer?: { pid: number; start: string }): Promise<Obj> {
   const c = await connect(path, timeoutMs);
   try {
-    c.send({ hello: 'cli', token: readFileSync(tokenFile, 'utf8').trim() });
+    c.send({ hello: 'cli', token: readFileSync(tokenFile, 'utf8').trim(), ...(peer ? { peer } : {}) });
     const hello = await c.next();
     if (hello.error) throw Error(`the hub refused the CLI's credential: ${JSON.stringify(hello.error)}`);
     c.send({ id: method, method, params });
@@ -241,6 +241,10 @@ function definition(program: string[], logs: string): { file: string; text: stri
 `,
     };
   }
+  // 75 is the hub's restart (#1865, #2975): clean when systemd itself stops the unit, and restarted otherwise. RestartSec
+  // keeps signals sent back to back under systemd's start limit, 5 starts in 10 s, which would leave the hub down.
+  // SIGTERM, SIGINT and SIGHUP restart too: one that lands before the hub's handlers exist kills it, which systemd counts
+  // as clean. systemd's own stops are never restarted, whatever the exit.
   const config = process.env.XDG_CONFIG_HOME || join(homedir(), '.config');
   return {
     file: join(config, 'systemd', 'user', UNIT),
@@ -251,6 +255,9 @@ Description=DeepBuild hub
 ExecStart=${program.map(quoted).join(' ')}
 Environment=${Object.entries(env).map(([k, v]) => quoted(`${k}=${v}`)).join(' ')}
 Restart=on-failure
+RestartSec=3
+SuccessExitStatus=75
+RestartForceExitStatus=75 SIGTERM SIGINT SIGHUP
 LimitNOFILE=${FILES}
 
 [Install]

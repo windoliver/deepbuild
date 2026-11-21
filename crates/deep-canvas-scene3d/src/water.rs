@@ -753,42 +753,26 @@ impl Water {
     }
 }
 
-/// A wake or a trail (#450) behind an item a logic array moves is refused at check, naming the
-/// item: a driver whose target is the item or one of its parents and one of whose variables reads
-/// a `logic` item's array. A logic program's earlier steps aren't kept for either to read.
-pub fn logic_moved(doc: &serde_json::Map<String, Value>) -> Result<(), Refused> {
+/// A wake or a trail (#450) behind an item a live drag moves is refused at check, naming the
+/// item: a document control whose handle drags the item or one of its parents, whose earlier
+/// places nothing keeps for either to read. One a logic array moves reads the logic bake's
+/// earlier steps through its drivers (#265).
+pub fn dragged(doc: &serde_json::Map<String, Value>) -> Result<(), Refused> {
     let empty = serde_json::Map::new();
     let items = doc
         .get("items")
         .and_then(Value::as_object)
         .unwrap_or(&empty);
-    let kind = |id: &str| {
-        items
-            .get(id)
-            .and_then(|i| i.get("kind"))
-            .and_then(Value::as_str)
-    };
-    let drivers: Vec<&Value> = doc
-        .get("drivers")
+    let handles: Vec<&str> = doc
+        .get("controls")
         .and_then(Value::as_object)
         .into_iter()
-        .flat_map(|d| d.values())
+        .flat_map(|c| c.values())
+        .filter_map(|c| c.pointer("/handle/item").and_then(Value::as_str))
         .collect();
-    if drivers.is_empty() {
+    if handles.is_empty() {
         return Ok(());
     }
-    let from_logic = |d: &Value| {
-        d.get("vars")
-            .and_then(Value::as_object)
-            .is_some_and(|vars| {
-                vars.values().any(|v| {
-                    v.as_str()
-                        .and_then(|p| p.split_once('.'))
-                        .and_then(|(owner, _)| kind(owner))
-                        .is_some_and(|k| k.starts_with("logic"))
-                })
-            })
-    };
     for item in items.values() {
         let source = item
             .pointer("/params/water/wake/item")
@@ -800,26 +784,19 @@ pub fn logic_moved(doc: &serde_json::Map<String, Value>) -> Result<(), Refused> 
             continue;
         };
         // The item and its parents.
-        let mut chain = vec![wake.to_string()];
+        let mut chain = vec![wake];
         while let Some(p) = items
-            .get(chain.last().map_or("", String::as_str))
+            .get(chain[chain.len() - 1])
             .and_then(|i| i.get("parent"))
             .and_then(Value::as_str)
         {
-            if chain.iter().any(|c| c == p) {
+            if chain.contains(&p) {
                 break;
             }
-            chain.push(p.to_string());
+            chain.push(p);
         }
-        for d in &drivers {
-            let target = d.get("target").and_then(Value::as_str).unwrap_or("");
-            if from_logic(d)
-                && chain
-                    .iter()
-                    .any(|c| target.starts_with(&format!("items/{c}/")))
-            {
-                return Err(bad("out_of_range", format!("items/{wake}")));
-            }
+        if chain.iter().any(|c| handles.contains(c)) {
+            return Err(bad("out_of_range", format!("items/{wake}")));
         }
     }
     Ok(())

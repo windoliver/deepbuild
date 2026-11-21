@@ -83,3 +83,33 @@ fn an_integer_is_one_both_languages_hold_exactly() {
         assert!(int(wide).is_err(), "{wide}");
     }
 }
+
+#[test]
+fn a_lone_surrogate_is_refused_by_parse_and_read_as_the_replacement_character_by_parse_lossy() {
+    for (text, read) in [
+        (r#"["\ud800"]"#, "\u{FFFD}"),
+        (r#"["\udc00x"]"#, "\u{FFFD}x"),
+        (r#"["\ud800\u0041"]"#, "\u{FFFD}A"),
+        (r#"["git\ud800\u0020push"]"#, "git\u{FFFD} push"),
+        (r#"["\ud800\ud800\udc00"]"#, "\u{FFFD}\u{10000}"),
+    ] {
+        assert!(deep_contracts::parse(text).is_err(), "{text}");
+        assert_eq!(
+            deep_contracts::parse_lossy(text),
+            Ok(deep_contracts::Value::Array(vec![
+                deep_contracts::Value::String(read.to_string())
+            ])),
+            "{text}"
+        );
+    }
+    // Keys apart only by their lone halves would read as one key: a key with a lone half is refused.
+    for text in [r#"{"\ud800":1,"\udc00":2}"#, r#"{"\ud800":1}"#] {
+        assert!(deep_contracts::parse_lossy(text).is_err(), "{text}");
+    }
+    // A pair reads as its one character, whichever way it is read.
+    assert_eq!(canonical(r#"["\ud83d\ude00"]"#), "[\"\u{1F600}\"]");
+    assert_eq!(
+        deep_contracts::parse_lossy(r#"["\ud83d\ude00"]"#),
+        deep_contracts::parse(r#"["\ud83d\ude00"]"#)
+    );
+}

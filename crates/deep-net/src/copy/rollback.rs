@@ -89,6 +89,7 @@ impl<S: Stepper> Copy<S> {
         };
         self.logged(step, player, entries);
         self.roll.late = Some(at);
+        self.late_came();
     }
 
     /// The planted copy records each player's predicted input at step `k` as an entry.
@@ -176,6 +177,8 @@ impl<S: Stepper> Copy<S> {
         if s >= self.next || self.end.is_some() {
             return;
         }
+        // #280: what the copy drew before it rolls back, for net.feel's correction distance.
+        let before = self.shown_now();
         if let Err(why) = self.sim.back(s, s * self.cfg.step()) {
             let fault = json!({"step": s, "item": null, "kind": "rollback", "why": why});
             self.finish(End::Faulted, fault);
@@ -183,8 +186,11 @@ impl<S: Stepper> Copy<S> {
         }
         let (to, len) = (self.next, self.cfg.step());
         self.roll.rollbacks.push((to, s));
-        self.track
-            .retain(|e| e["t"].as_i64().is_some_and(|t| t < s * len));
+        // The track is in step order: what the replaced steps put on it is its tail.
+        let kept = self
+            .track
+            .partition_point(|e| e["t"].as_i64().is_some_and(|t| t < s * len));
+        self.track.truncate(kept);
         self.refused
             .retain(|r| r["step"].as_i64().is_some_and(|k| k < s));
         if let Some(h) = self.roll.trail.get(&s) {
@@ -200,6 +206,7 @@ impl<S: Stepper> Copy<S> {
         while self.next < to && self.roll.trapped.is_none() && self.end.is_none() {
             self.run(self.now);
         }
+        self.corrected(&before, to);
     }
 
     /// Steps confirmed and run with every player's entries become final: each one's full-state

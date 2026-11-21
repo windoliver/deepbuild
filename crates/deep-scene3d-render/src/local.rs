@@ -194,7 +194,7 @@ impl Locals {
         &mut self,
         scene: &Scene,
         kept: &[(usize, f64)],
-        casters: &[(String, [[f64; 3]; 8])],
+        casters: &[shadow::Caster],
         planted: Planted,
     ) -> bool {
         self.list.clear();
@@ -204,12 +204,6 @@ impl Locals {
         }
         let side = scene.shadowing.local_map;
         let mut first = 0;
-        let solids: std::collections::BTreeMap<&str, &Solid> = scene
-            .layers
-            .iter()
-            .flat_map(|l| &l.solids)
-            .map(|s| (s.id.as_str(), s))
-            .collect();
         for &(i, share) in kept.iter().take(SLOTS) {
             let l = &scene.lights[i];
             let map = shadow::local_map(l);
@@ -224,8 +218,7 @@ impl Locals {
             }
             l.caster_bit.hash(&mut h);
             let mut held = BTreeSet::new();
-            for (id, corners) in casters {
-                let s = solids[id.as_str()];
+            for (s, corners) in shadow::casters(scene, casters) {
                 if !shadow::meets(corners, l.pos, l.range)
                     || (l.caster_bit != 0 && s.caster_sets & l.caster_bit == 0)
                 {
@@ -235,7 +228,7 @@ impl Locals {
                     hash_caster(s, &mut h);
                     hash_time(s, planted, &mut h);
                 }
-                held.insert(id.clone());
+                held.insert(s.id.clone());
             }
             if !planted.ignores_cut && !planted.stale {
                 hash_cut(scene, &mut h);

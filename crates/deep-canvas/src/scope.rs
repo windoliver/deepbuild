@@ -21,6 +21,8 @@
 //! ([`Texts`]), crossing items in reading order. ⌘C asks the host for the selection's text, which only a press with a
 //! gesture serial may write to the clipboard. Text a control picks never selects.
 
+use std::sync::Arc;
+
 use serde_json::{json, Map, Value};
 
 use crate::area::{held, within, Area};
@@ -60,6 +62,8 @@ pub struct Planted {
     pub esc_to_root: bool,
     /// #504: a click on a control's target also selects the item and opens its panel.
     pub pick_selects: bool,
+    /// #2660: a hover keeps the targets it first built, whatever the document becomes.
+    pub keeps_targets: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -391,13 +395,25 @@ fn path_depth(view: &Projector, points: &[[f64; 3]], at: [f64; 2]) -> Option<f64
 
 /// An item the scope can hit: where it sits, its parent and where it stacks.
 struct Target {
-    id: String,
+    /// #2660: shared with the hover that rests on it.
+    id: Arc<str>,
     name: String,
     parent: Option<String>,
     order: String,
     bounds: Bounds,
     /// #536: a flat target's exact hit area inside its rect, which the host may hand in.
     area: Area,
+}
+
+/// #2660: the targets a hover reads, kept while what they were built from holds: the view's
+/// kind and filter, and the document's items and layers, the members a target or the filter
+/// reads.
+struct Kept {
+    flat: bool,
+    filter: (Vec<String>, Vec<String>, Option<String>),
+    items: Option<Value>,
+    layers: Option<Value>,
+    targets: Vec<Target>,
 }
 
 /// What a press landed on.
@@ -440,7 +456,7 @@ pub struct Scope {
     full_screen: bool,
     selection: Vec<String>,
     details: Option<String>,
-    hover: Option<String>,
+    hover: Option<Arc<str>>,
     levels: Vec<Level>,
     palette: Option<String>,
     press: Option<Press>,
@@ -448,6 +464,8 @@ pub struct Scope {
     last_click: Option<(i64, [f64; 2], Hit)>,
     view: View,
     planted: Planted,
+    /// #2660: the targets a hover between gestures reads.
+    kept: Option<Kept>,
     /// #504: the Tab stop with focus: a control's own UI, or one of its targets by option.
     pub focus: Option<(String, Option<String>)>,
     /// #1498: the text selection.
@@ -531,7 +549,7 @@ fn targets(doc: &Value, flat: bool) -> Vec<Target> {
             };
             let text = |k: &str| member(item, k).and_then(Value::as_str).map(str::to_string);
             Some(Target {
-                id: id.clone(),
+                id: id.as_str().into(),
                 name: text("name").unwrap_or_else(|| id.clone()),
                 parent: text("parent"),
                 order: text("order").unwrap_or_default(),
@@ -637,6 +655,7 @@ impl Scope {
             last_click: None,
             view: View::default(),
             planted,
+            kept: None,
             focus: None,
             text: None,
         })
@@ -705,7 +724,7 @@ impl Scope {
             ("image@1", Some(c)) => {
                 let bounds = targets(doc, true)
                     .into_iter()
-                    .find(|t| t.id == id)
+                    .find(|t| *t.id == *id)
                     .and_then(|t| match t.bounds {
                         Bounds::Rect(r) => Some(r),
                         _ => None,
@@ -856,7 +875,7 @@ impl Scope {
     fn shown_targets(&self, doc: &Value) -> Vec<Target> {
         let hidden = self.hidden(doc);
         let mut all = targets(doc, self.rig.flat);
-        all.retain(|t| hidden.binary_search(&t.id).is_err());
+        all.retain(|t| hidden.binary_search_by(|h| h.as_str().cmp(&t.id)).is_err());
         all
     }
 
@@ -1047,18 +1066,24 @@ impl Scope {
             return Hit::Empty;
         }
         let all = self.shown_targets(doc);
+        self.target_at(&all, p)
+            .map_or(Hit::Empty, |t| Hit::Item(t.id.to_string()))
+    }
+
+    /// The topmost of `all` under `p`, inside the canvas: in a flat view the last-stacked box
+    /// that holds it, in 3D the box whose face under it is nearest.
+    fn target_at<'t>(&self, all: &'t [Target], p: [f64; 2]) -> Option<&'t Target> {
         if self.rig.flat {
             let c = self.content(p, &self.offsets);
             return all
-                .into_iter()
+                .iter()
                 .rev()
-                .find(|t| matches!(t.bounds, Bounds::Rect(r) if within(r, c) && held(&t.area, c)))
-                .map_or(Hit::Empty, |t| Hit::Item(t.id));
+                .find(|t| matches!(t.bounds, Bounds::Rect(r) if within(r, c) && held(&t.area, c)));
         }
         let r = self.rect();
         let view = Projector::new(&self.pose(), [r[2], r[3]], [r[2], r[3]]);
         let at = [p[0] - r[0], p[1] - r[1]];
-        let mut best: Option<(f64, String)> = None;
+        let mut best: Option<(f64, &Target)> = None;
         for t in all.iter().rev() {
             let depth = match &t.bounds {
                 Bounds::Box { centre, half } => face_depth(&view, *centre, *half, at),
@@ -1066,12 +1091,45 @@ impl Scope {
                 Bounds::Rect(_) => None,
             };
             if let Some(depth) = depth {
-                if best.as_ref().is_none_or(|(d, _)| depth < *d) {
-                    best = Some((depth, t.id.clone()));
+                if best.is_none_or(|(d, _)| depth < d) {
+                    best = Some((depth, t));
                 }
             }
         }
-        best.map_or(Hit::Empty, |(_, id)| Hit::Item(id))
+        best.map(|(_, t)| t)
+    }
+
+    /// #2660: the pointer rests over what it hits, read from the kept targets, which are built
+    /// again only when the view's kind or filter, or the document's items or layers, changed:
+    /// a hover over a document that holds copies nothing.
+    fn hover_at(&mut self, doc: &Value, p: [f64; 2]) {
+        if self.button().is_some_and(|b| within(b, p)) || !within(self.rect(), p) {
+            self.hover = None;
+            return;
+        }
+        let v = &self.view;
+        let (items, layers) = (member(doc, "items"), member(doc, "layers"));
+        let holds = |k: &Kept| {
+            k.flat == self.rig.flat
+                && (k.filter.0 == v.kinds && k.filter.1 == v.writers && k.filter.2 == v.isolate)
+                && k.items.as_ref() == items
+                && k.layers.as_ref() == layers
+        };
+        let kept = match self.kept.take() {
+            Some(k) if self.planted.keeps_targets || holds(&k) => k,
+            _ => Kept {
+                flat: self.rig.flat,
+                filter: (v.kinds.clone(), v.writers.clone(), v.isolate.clone()),
+                items: items.cloned(),
+                layers: layers.cloned(),
+                targets: self.shown_targets(doc),
+            },
+        };
+        let hit = self.target_at(&kept.targets, p).map(|t| &t.id);
+        if self.hover.as_ref() != hit {
+            self.hover = hit.cloned();
+        }
+        self.kept = Some(kept);
     }
 
     /// Flies to `id`: the levels down to it, its nesting path, and in a flat view the camera that
@@ -1081,7 +1139,7 @@ impl Scope {
         let mut path = vec![id.to_string()];
         while let Some(parent) = all
             .iter()
-            .find(|t| &t.id == path.last().expect("not empty"))
+            .find(|t| *t.id == **path.last().expect("not empty"))
             .and_then(|t| t.parent.clone())
             .filter(|p| !path.contains(p))
         {
@@ -1100,7 +1158,7 @@ impl Scope {
                 id: step.clone(),
                 back: self.offsets,
             });
-            if let Some(t) = all.iter().find(|t| &t.id == step) {
+            if let Some(t) = all.iter().find(|t| *t.id == **step) {
                 self.frame(&t.bounds);
             }
         }
@@ -1225,6 +1283,11 @@ impl Scope {
         }
     }
 
+    /// #1217: the press under way ends with no click: a viewer tool took it.
+    pub fn release(&mut self) {
+        self.press = None;
+    }
+
     /// One input at `t` (flicks) with the router's `serial`, against the current revision `doc`.
     pub fn input(&mut self, doc: &Value, t: i64, serial: u64, event: &Event) -> Done {
         self.input_with(doc, t, serial, event, None)
@@ -1264,7 +1327,7 @@ impl Scope {
                     });
                 }
                 self.hover = match &hit {
-                    Hit::Item(id) => Some(id.clone()),
+                    Hit::Item(id) => Some(id.as_str().into()),
                     _ => None,
                 };
                 let double = matches!(hit, Hit::Item(_))
@@ -1299,7 +1362,7 @@ impl Scope {
                     if self.planted.pick_mid_gesture {
                         done.picks = 1;
                         self.hover = match self.hit(doc, *p) {
-                            Hit::Item(id) => Some(id),
+                            Hit::Item(id) => Some(id.into()),
                             _ => None,
                         };
                     }
@@ -1310,10 +1373,7 @@ impl Scope {
                 None => {
                     // A hover between gestures: the pointer rests over what it hits.
                     done.picks = 1;
-                    self.hover = match self.hit(doc, *p) {
-                        Hit::Item(id) => Some(id),
-                        _ => None,
-                    };
+                    self.hover_at(doc, *p);
                 }
             },
             Event::Up(p) => {
@@ -1384,7 +1444,7 @@ impl Scope {
                                 .iter()
                                 .find(|t| t.name == query)
                                 .or_else(|| all.iter().find(|t| t.name.starts_with(&query)))
-                                .map(|t| t.id.clone());
+                                .map(|t| t.id.to_string());
                             if let Some(id) = found {
                                 self.fly(doc, &id);
                             }
@@ -1477,7 +1537,7 @@ impl Scope {
                     .map_or(Value::Null, |t| json!(t.item)),
                 None => json!(control),
             }),
-            "hover": self.hover,
+            "hover": self.hover.as_deref(),
             "level": self.levels.iter().map(|l| &l.id).collect::<Vec<_>>(),
             "palette": {
                 "open": self.palette.is_some(),

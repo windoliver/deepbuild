@@ -164,11 +164,10 @@ pub fn numbers(doc: &Map<String, Value>) -> (Vec<Value>, Vec<Issue>) {
         shown.extend(text_numbers(doc, id, item));
         // A story number a template shows is unsourced where a status or a reading is bound.
         if let (true, Some(Value::String(t))) = (binds, item.pointer("/params/template")) {
-            let whole = Value::Object(doc.clone());
             if item.get("kind").and_then(Value::as_str) == Some("text@1")
                 && item.pointer("/params/name") != Some(&Value::Bool(true))
             {
-                deep_canvas::document::story_issues(&whole, id, t, &mut issues);
+                deep_canvas::document::story_issues(doc, id, t, &mut issues);
             }
         }
         issues.extend(changed_cells(id, item));
@@ -198,8 +197,7 @@ fn text_numbers(doc: &Map<String, Value>, id: &str, item: &Value) -> Vec<Value> 
             deep_canvas::template::Part::Words(_) => None,
         });
         let anchors: Vec<Value> = anchors.collect();
-        let doc = Value::Object(doc.clone());
-        return deep_canvas::template::story_numbers(&doc, t)
+        return deep_canvas::template::story_numbers(doc, t)
             .into_iter()
             .map(|(slot, text)| json!({"item": id, "text": text, "source": {"story": slot}}))
             .chain(anchors)

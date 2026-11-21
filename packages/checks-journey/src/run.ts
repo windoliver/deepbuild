@@ -1,8 +1,7 @@
 // The driver run (#37): runtime/driver.mjs started through host@1 against a stack, under the run's deadline, and
-// its report read back with the files it wrote, each with its digest and size. The browser is DeepBuild's own
-// runtime, so it runs as you, reaching only the stack's host; the page it drives is the repo's, served by the stack
-// env-local started from the run's checkout. Nothing here is a verdict.
-import { createHash } from 'node:crypto';
+// its report read back with the files it wrote. The browser is DeepBuild's own runtime, so it runs as you, reaching
+// only the stack's host; the page it drives is the repo's, served by the stack env-local started from the run's
+// checkout. Nothing here is a verdict.
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir, userInfo } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -17,7 +16,7 @@ export interface Profile { width: number; height: number; locale: string; timezo
 export const PROFILE: Profile = { width: 1280, height: 720, locale: 'en-US', timezone: 'UTC', colorScheme: 'light', reducedMotion: 'reduce' };
 
 interface JobStep { id: string; line: number | null; deadlineMs: number; timeoutMs: number; actions: unknown[]; expects: unknown[] }
-interface JobEnd { id: string; line: number | null; oracle: string; locator?: DriverLocator; text?: string; visible?: boolean; timeoutMs?: number }
+interface JobEnd { id: string; line: number | null; oracle: string; locator?: DriverLocator; text?: string; visible?: boolean }
 export interface Job { url: string; profile: Profile; video: boolean; trace: boolean; settle: boolean; settleMs: number; hold: boolean; masks: DriverLocator[]; steps: JobStep[]; endState: JobEnd[] }
 
 interface Control { role: string; name: string; testId?: string }
@@ -39,11 +38,10 @@ export interface Report {
   video: string | null; trace: string | null; redaction: { state: 'complete' | 'incomplete'; since: string | null; sinceMs?: number; field?: string }; secretTyped: boolean; bundle: Record<string, number>;
   ended: number | null; died: string | null; playwright: { started: number; ended: number; own: number };
 }
-/** A file the run wrote, kept with its digest and size, checked when read. */
-interface Artifact { name: string; path: string; sha256: string; size: number; kind: 'png' | 'webm' | 'zip' | 'json' }
-export interface DriverRun { report: Report | null; dir: string; out: string; artifacts: Artifact[]; exit: { code: number | null; cause: 'exit' | 'deadline' | 'stop'; failed: string | null; output: string }; wallMs: number; /** The driver process gone, awaited before its folder is removed. */ settled: Promise<unknown> }
+/** A file the run wrote, found by the name its report gives it. */
+interface Artifact { name: string; path: string }
+export interface DriverRun { report: Report | null; dir: string; artifacts: Artifact[]; exit: { code: number | null; cause: 'exit' | 'deadline' | 'stop'; failed: string | null; output: string }; /** The driver process gone, awaited before its folder is removed. */ settled: Promise<unknown> }
 
-const sha256 = (bytes: Uint8Array | string): string => createHash('sha256').update(bytes).digest('hex');
 /** Where Playwright installed its browsers: as told, else the cache under this home, else under the account's own home (a run with HOME moved aside still finds them). */
 function browsersPath(): string {
   if (process.env.PLAYWRIGHT_BROWSERS_PATH) return process.env.PLAYWRIGHT_BROWSERS_PATH;
@@ -55,13 +53,12 @@ const REPO = fileURLToPath(new URL('../../../', import.meta.url));
 export function playwrightVersion(): string {
   try { return (JSON.parse(readFileSync(join(REPO, 'node_modules/playwright/package.json'), 'utf8')) as { version: string }).version; } catch { return 'unknown'; }
 }
-const hostOf = (url: string): string => { const u = new URL(url); return `${u.hostname}:${u.port || (u.protocol === 'https:' ? 443 : 80)}`; };
 
 /**
- * Starts a process through the host, as you, writing in `dir` and reaching only `hosts`; its exit and output. With
- * `later`, the deadline isn't armed at the start: `later.arm(ms)` arms it, as a prestarted driver's job arrives.
+ * Starts a process through the host, as you, writing in `dir` and reaching only `hosts`; its exit and output. The
+ * deadline isn't armed at the start: `later.arm(ms)` arms it, as a prestarted driver's job arrives.
  */
-async function hosted(host: Host, run: string, argv: string[], cwd: string, env: Record<string, string>, dir: string, hosts: string[], deadline: number, stop?: AbortSignal, later?: { arm?: (ms: number) => void }): Promise<DriverRun['exit']> {
+async function hosted(host: Host, run: string, argv: string[], cwd: string, env: Record<string, string>, dir: string, hosts: string[], stop: AbortSignal | undefined, later: { arm?: (ms: number) => void }): Promise<DriverRun['exit']> {
   const chunks: Buffer[] = [];
   let cause: 'exit' | 'deadline' | 'stop' = 'exit';
   const started = host.start({
@@ -80,11 +77,10 @@ async function hosted(host: Host, run: string, argv: string[], cwd: string, env:
   if (stop?.aborted) halt('stop');
   stop?.addEventListener('abort', onStop);
   let disarm = (): void => undefined;
-  if (later) later.arm = (ms) => { disarm(); disarm = after(ms, () => halt('deadline')); };
+  later.arm = (ms) => { disarm(); disarm = after(ms, () => halt('deadline')); };
   try {
     const s = await started;
     if (s.status !== 'started') return { code: null, cause, output: '', failed: `BLOCKED: no ${s.kind} free` };
-    if (!later) disarm = after(deadline, () => halt('deadline'));
     const exit = await host.wait(run);
     await host.signal(run, 'SIGKILL').catch(() => undefined);
     return { code: exit.code, cause, output: Buffer.concat(chunks).toString('utf8'), failed: null };
@@ -97,11 +93,11 @@ async function hosted(host: Host, run: string, argv: string[], cwd: string, env:
   }
 }
 
-interface PrestartOptions { host: Host; run: string; hosts: string[]; dir?: string; secrets?: Record<string, string>; stop?: AbortSignal }
+interface PrestartOptions { host: Host; run: string; hosts: string[]; secrets?: Record<string, string>; stop?: AbortSignal }
 /** A driver process started ahead of its job: it boots while the stack comes up, then waits for the job file. */
 export interface Prestarted { dir: string; out: string; jobFile: string; running: Promise<DriverRun['exit']>; exited: () => boolean; /** Arms the run's deadline, from when its job is written. */ arm: (ms: number) => void; used: boolean }
 export function prestart(o: PrestartOptions): Prestarted {
-  const root = o.dir ?? join(tmpdir(), 'deep-journeys');
+  const root = join(tmpdir(), 'deep-journeys');
   mkdirSync(root, { recursive: true });
   const dir = mkdtempSync(join(root, 'run-'));
   const out = join(dir, 'out');
@@ -113,7 +109,7 @@ export function prestart(o: PrestartOptions): Prestarted {
   let exited = false;
   // No deadline while the stack comes up: the stack's own ready wait bounds that, and a stack that never comes up cancels the driver.
   const later: { arm?: (ms: number) => void } = {};
-  const running = hosted(o.host, o.run, [process.execPath, DRIVER], dirname(DRIVER), env, dir, o.hosts, 0, o.stop, later).finally(() => { exited = true; });
+  const running = hosted(o.host, o.run, [process.execPath, DRIVER], dirname(DRIVER), env, dir, o.hosts, o.stop, later).finally(() => { exited = true; });
   return { dir, out, jobFile, running, exited: () => exited, arm: (ms) => later.arm?.(ms), used: false };
 }
 /** Tells a prestarted driver its job won't come (the stack never came up), and waits for it to go. */
@@ -123,10 +119,10 @@ export async function cancel(p: Prestarted): Promise<void> {
   discard(p);
 }
 
-interface DriveOptions { host: Host; run: string; job: Job; dir?: string; deadline: number; secrets?: Record<string, string>; stop?: AbortSignal; /** The driver already started for this run, waiting for its job. */ pre?: Prestarted; /** Runs beside the driver, with the run's folder, a reader of its report so far and whether the driver has exited: a planted environment's hook. */ between?: (out: string, report: () => Report | null, exited: () => boolean) => Promise<void> }
-/** Runs the driver once: the report read back, and every file it wrote kept by digest. */
+interface DriveOptions { job: Job; deadline: number; /** The driver already started for this run, waiting for its job. */ pre: Prestarted; /** Runs beside the driver, with the run's folder, a reader of its report so far and whether the driver has exited: a planted environment's hook. */ between?: (out: string, report: () => Report | null, exited: () => boolean) => Promise<void> }
+/** Runs the driver once: the report read back, with the screenshots, video and trace it wrote. */
 export async function drive(o: DriveOptions): Promise<DriverRun> {
-  const p = o.pre ?? prestart({ host: o.host, run: o.run, hosts: [hostOf(o.job.url)], ...(o.dir ? { dir: o.dir } : {}), ...(o.secrets ? { secrets: o.secrets } : {}), ...(o.stop ? { stop: o.stop } : {}) });
+  const p = o.pre;
   p.used = true;
   const { dir, out } = p;
   // Written whole, then renamed, so the waiting driver never reads half a job.
@@ -134,7 +130,6 @@ export async function drive(o: DriveOptions): Promise<DriverRun> {
   renameSync(`${p.jobFile}.part`, p.jobFile);
   p.arm(o.deadline);
   const read = (): Report | null => { try { return JSON.parse(readFileSync(join(out, 'report.json'), 'utf8')) as Report; } catch { return null; } };
-  const started = Date.now();
   const between = o.between ? o.between(out, read, p.exited).catch(() => undefined) : Promise.resolve();
   // A driver that finished its report says so before it exits; its exit then overlaps storing what it wrote.
   let polling = true;
@@ -142,22 +137,17 @@ export async function drive(o: DriveOptions): Promise<DriverRun> {
     while (polling) { if (existsSync(join(out, 'done'))) return { code: 0, cause: 'exit', failed: null, output: '' }; await new Promise((r) => setTimeout(r, 5)); }
     return null;
   })();
-  const exit = (await Promise.race([p.running, finished])) ?? (await p.running);
-  polling = false;
+  let exit: DriverRun['exit'];
+  try {
+    exit = (await Promise.race([p.running, finished])) ?? (await p.running);
+  } finally {
+    polling = false;
+  }
   await between;
-  const wallMs = Date.now() - started;
   const report = read();
-  const artifacts: Artifact[] = [];
-  const keep = (name: string, kind: Artifact['kind']): void => {
-    const path = join(out, name);
-    if (!existsSync(path)) return;
-    const bytes = readFileSync(path);
-    artifacts.push({ name, path, sha256: sha256(bytes), size: bytes.length, kind });
-  };
-  for (const f of readdirSync(out)) { if (f.endsWith('.png')) keep(f, 'png'); else if (f.endsWith('.webm')) keep(f, 'webm'); }
-  keep('trace.zip', 'zip');
-  keep('report.json', 'json');
-  return { report, dir, out, artifacts, exit, wallMs, settled: p.running };
+  const artifacts: Artifact[] = readdirSync(out).filter((f) => f.endsWith('.png') || f.endsWith('.webm')).map((name) => ({ name, path: join(out, name) }));
+  if (existsSync(join(out, 'trace.zip'))) artifacts.push({ name: 'trace.zip', path: join(out, 'trace.zip') });
+  return { report, dir, artifacts, exit, settled: p.running };
 }
 /** Removes a run's folder once its artifacts are in the store. */
 export function discard(run: { dir: string }): void { rmSync(run.dir, { recursive: true, force: true }); }

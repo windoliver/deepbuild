@@ -15,11 +15,11 @@ use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{env, io};
 
-use deep_contracts::{parse, Value};
+use deep_contracts::{parse, parse_lossy, Value};
 
 use deep_hook::matcher;
 
@@ -114,7 +114,15 @@ fn setting(section: &str, key: &str) -> Option<Value> {
 }
 
 /// The hook's working folder, once its payload is read: a worktree `deep hub use --root` sent to a dev hub.
-static CWD: OnceLock<PathBuf> = OnceLock::new();
+static CWD: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+fn set_cwd(path: PathBuf) {
+    *CWD.lock().unwrap_or_else(|e| e.into_inner()) = Some(path);
+}
+
+fn current_cwd() -> Option<PathBuf> {
+    CWD.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
 
 /// The one address setting: `hub.address` in ~/.deepbuild/config.json, `unix:<path>`; absent, ~/.deepbuild/hub.sock.
 /// A worktree named in `hub.use`, `{<worktree>: "unix:<path>"}`, which `deep hub use --root` writes once the OS
@@ -136,10 +144,10 @@ fn address() -> PathBuf {
 /// The dev hub `deep hub use --root` sent this worktree to in `uses`, the `hub.use` setting, the longest such
 /// worktree winning.
 fn worktree_hub(uses: Option<&Value>) -> Option<PathBuf> {
-    let (Some(cwd), Some(Value::Object(uses))) = (CWD.get(), uses) else {
+    let (Some(cwd), Some(Value::Object(uses))) = (current_cwd(), uses) else {
         return None;
     };
-    let real = fs::canonicalize(cwd).unwrap_or_else(|_| cwd.clone());
+    let real = fs::canonicalize(&cwd).unwrap_or_else(|_| cwd.clone());
     uses.iter()
         .filter_map(|(worktree, value)| match value {
             Value::String(a) if a.starts_with("unix:") => Some((Path::new(worktree), &a[5..])),
@@ -664,7 +672,7 @@ fn matching() -> ExitCode {
         let Ok(input) = input else { break };
         let parsed = parse(&input).ok();
         if let Some(Value::String(cwd)) = parsed.as_ref().and_then(|p| member(p, "cwd")) {
-            let _ = CWD.set(PathBuf::from(cwd));
+            set_cwd(PathBuf::from(cwd));
         }
         let reply = match rules() {
             _ if parsed.is_none() => "{\"unread\":true,\"matched\":[],\"denials\":[]}".to_string(),
@@ -1054,6 +1062,60 @@ fn sleep_until(start: Instant, after: Duration) {
     }
 }
 
+/// Why a call whose lone halves deep-hook read as U+FFFD can't be matched as read, or None when it can. An MCP
+/// server is sent the escapes as they came, and its reader may make other text of them than U+FFFD (Python's
+/// surrogateescape turns them back into the bytes of any path), so such a call is one deep-hook can't read. The
+/// agent's own tools run in Node, which writes each lone half as U+FFFD, as deep-hook reads it.
+fn foreign_halves(halves: bool, read: &Result<Value, String>) -> Option<String> {
+    let tool = read.as_ref().ok().and_then(|p| member(p, "tool_name"));
+    (halves && matches!(tool, Some(Value::String(name)) if name.starts_with("mcp__")))
+        .then(|| "holds a lone surrogate escape in an MCP tool's call, which its server may read as other text".to_string())
+}
+
+/// What a payload that ends before its JSON is whole is, in its denial.
+const CUT: &str = "is cut short: it ends before its JSON is whole";
+
+/// Why a hook payload deep-hook can't read can't be read, in its denial's words (#2042), or None for one it can:
+/// `utf8` is Ok when its bytes were UTF-8, else whether they stop inside a character; `text` is what they read as, and `read` is the reader's verdict on it.
+fn unreadable(utf8: Result<(), bool>, text: &str, read: &Result<Value, String>) -> Option<String> {
+    match utf8 {
+        Err(true) => return Some(CUT.to_string()),
+        Err(false) => return Some("isn't UTF-8 text".to_string()),
+        Ok(()) => {}
+    }
+    let error = match read {
+        Ok(Value::Object(_)) => return None,
+        Ok(_) => return Some("is JSON but not an object".to_string()),
+        Err(error) => error,
+    };
+    if text.trim().is_empty() {
+        return Some("is empty".to_string());
+    }
+    if error.contains("nesting too deep") {
+        return Some("is nested past the 256 arrays or objects deep-hook reads".to_string());
+    }
+    if error.contains("no finite double") {
+        return Some("holds a number with no value (past what a double holds)".to_string());
+    }
+    // Cut short: the reader stopped where the text ends, or in a word, an escape's hex or a number the end cut.
+    let at = error
+        .rsplit_once("at byte ")
+        .and_then(|(_, at)| at.parse::<usize>().ok())
+        .unwrap_or(0);
+    let rest = text.get(at..).unwrap_or_default().trim_end();
+    let cut = rest.is_empty()
+        || ["true", "false", "null"]
+            .iter()
+            .any(|word| rest.len() < word.len() && word.starts_with(rest))
+        || (rest.len() < 4
+            && text.get(..at).is_some_and(|before| before.ends_with("\\u"))
+            && rest.bytes().all(|b| b.is_ascii_hexdigit()));
+    if cut {
+        return Some(CUT.to_string());
+    }
+    Some(format!("is {error}"))
+}
+
 /// Marks a request line late: a call let through because the hub was late is spooled so.
 fn mark_late(request: &mut String) {
     request.truncate(request.len() - 2);
@@ -1119,7 +1181,8 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     }
     READ_RULES.store(true, Ordering::SeqCst);
     // The call is one JSON object: read up to its end, or stdin's. An agent the machine gives no time may close stdin
-    // well after it wrote the call. Not UTF-8, it reads as nothing, as read_to_string leaves it.
+    // well after it wrote the call. Not UTF-8, it reads as nothing, as read_to_string leaves it. A lone surrogate
+    // escape reads as U+FFFD (#2042): a JavaScript JSON writer emits one for a string that holds half a pair.
     let mut bytes = Vec::new();
     let mut chunk = [0u8; 8192];
     loop {
@@ -1129,7 +1192,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
                 bytes.extend_from_slice(&chunk[..n]);
                 let whole = bytes.trim_ascii_end().ends_with(b"}")
                     && std::str::from_utf8(&bytes)
-                        .is_ok_and(|text| matches!(parse(text.trim()), Ok(Value::Object(_))));
+                        .is_ok_and(|text| matches!(parse_lossy(text.trim()), Ok(Value::Object(_))));
                 if whole {
                     break;
                 }
@@ -1138,13 +1201,40 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             Err(_) => break,
         }
     }
-    let mut input = String::from_utf8(bytes).unwrap_or_default();
-    let parsed = parse(&input).ok();
+    let text = String::from_utf8(bytes);
+    // Bytes that stop inside a character are cut short, not some other text.
+    let utf8 = match &text {
+        Ok(_) => Ok(()),
+        Err(error) => Err(error.utf8_error().error_len().is_none()),
+    };
+    let mut input = text.unwrap_or_default();
+    // Strictly first: the hub reads only JSON both languages read alike, which a lone surrogate isn't (#2042).
+    let strict = parse(&input);
+    let halves = strict.is_err();
+    let read = strict.or_else(|_| parse_lossy(&input));
+    // A payload deep-hook can't read holds no call it can match, so with a fail_closed entry installed it is denied
+    // (#2042): the denial is deep-hook's own, with the hub away and with it answering. It still goes on as it came.
+    let held = rules
+        .as_ref()
+        .is_ok_and(|r| r.guards.iter().any(|g| g.fail_closed))
+        .then(|| unreadable(utf8, &input, &read).or_else(|| foreign_halves(halves, &read)))
+        .flatten()
+        .map(|why| format!("DeepBuild blocked this: the {event} payload deep-hook was given {why}, so it can't read the call and check it against the guards that hold it. Retry it; if this comes again, the agent wrote a call deep-hook can't read."));
+    if let Some(held) = &held {
+        let _ = DENIAL.set(held.clone());
+    }
+    let parsed = read.ok();
+    // Read with its lone halves as U+FFFD, the call goes on as deep-hook read it, so the hub matches the same call.
+    let relaid = parsed.as_ref().filter(|_| halves).map(deep_contracts::jcs);
     if let Some(Value::String(cwd)) = parsed.as_ref().and_then(|p| member(p, "cwd")) {
-        let _ = CWD.set(PathBuf::from(cwd));
+        set_cwd(PathBuf::from(cwd));
     }
     // A clone of a project this machine joined reaches that project's hub, and the watchdog waits the route's time.
-    let joined = REMOTE.get_or_init(|| CWD.get().and_then(|cwd| remote::joined(&home(), cwd)));
+    let joined = REMOTE.get_or_init(|| {
+        current_cwd()
+            .as_deref()
+            .and_then(|cwd| remote::joined(&home(), cwd))
+    });
     if joined.is_some() {
         WATCH_MS.store(
             (remote::FAIL_OPEN - Duration::from_millis(2)).as_millis() as u64,
@@ -1152,7 +1242,9 @@ fn forward(agent: &str, event: &str) -> ExitCode {
         );
     }
     // The agent's hook JSON goes as it came: a raw newline in valid JSON is only whitespace, so it becomes a space.
-    let payload = if parsed.is_some() {
+    let payload = if let Some(relaid) = relaid {
+        relaid
+    } else if parsed.is_some() {
         // In the text's own buffer, which nothing reads again: a tool's output can pass 1 MiB, and a
         // second copy of it counts against the hook's memory. A space for a newline keeps it UTF-8.
         let mut bytes = std::mem::take(&mut input).into_bytes();
@@ -1278,6 +1370,10 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             decide();
             if let Some(why) = unread {
                 eprintln!("DeepBuild blocked this: ~/.deepbuild/rules.json {why}, so deep-hook matched this call against no guard. Retry it; if this comes again, fix that file.");
+                return ExitCode::from(2);
+            }
+            if let Some(held) = held {
+                eprintln!("{held}");
                 return ExitCode::from(2);
             }
             print!("{stdout}");
