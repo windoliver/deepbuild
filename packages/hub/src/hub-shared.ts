@@ -419,3 +419,19 @@ export function planOf(plansSeen: Map<string, { key: string; at: number; plan: P
   plansSeen.set(home, { key, at: now(), plan });
   return plan;
 }
+/** What setup wrote to <root>/config.json for the runner: the login shell's PATH and the plan's reserve. */
+export function hubConfig(dir: string): { loginPath: string; reservePct: number; rules: { margin: number; windowMs: number }; acceptance: { slots: number; gateKey: string | null } } {
+  let c: Obj = {};
+  try { c = JSON.parse(readFileSync(join(dir, 'config.json'), 'utf8')) as Obj; } catch { /* none yet: no binary resolves, so every job is refused saying so */ }
+  const runner = isObj(c.runner) ? c.runner : {};
+  const plan = isObj(c.plan) ? c.plan : {};
+  // Standing rules are judged at this margin over this window (#23): the design's 1.5 and 30 days unless you set them.
+  const rules = isObj(c.rules) ? c.rules : {};
+  return {
+    loginPath: typeof runner.login_path === 'string' ? runner.login_path : '',
+    reservePct: typeof plan.reserve_pct === 'number' ? plan.reserve_pct : 10,
+    rules: { margin: typeof rules.margin === 'number' ? rules.margin : 1.5, windowMs: (typeof rules.window_days === 'number' ? rules.window_days : 30) * DAY },
+    // The issues that run at once, and the gate identity's key (#1325): with none, a swap goes to you.
+    acceptance: { slots: isObj(c.acceptance) && typeof c.acceptance.slots === 'number' ? c.acceptance.slots : 1, gateKey: isObj(c.gate) && typeof c.gate.key === 'string' ? c.gate.key : null },
+  };
+}
