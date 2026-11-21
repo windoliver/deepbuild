@@ -241,6 +241,8 @@ function definition(program: string[], logs: string): { file: string; text: stri
 `,
     };
   }
+  // 75 is the hub's restart (#1865, #2975): clean when systemd itself stops the unit, and restarted otherwise. RestartSec
+  // keeps signals sent back to back under systemd's start limit, 5 starts in 10 s, which would leave the hub down.
   const config = process.env.XDG_CONFIG_HOME || join(homedir(), '.config');
   return {
     file: join(config, 'systemd', 'user', UNIT),
@@ -251,6 +253,9 @@ Description=DeepBuild hub
 ExecStart=${program.map(quoted).join(' ')}
 Environment=${Object.entries(env).map(([k, v]) => quoted(`${k}=${v}`)).join(' ')}
 Restart=on-failure
+RestartSec=3
+SuccessExitStatus=75
+RestartForceExitStatus=75
 LimitNOFILE=${FILES}
 
 [Install]
