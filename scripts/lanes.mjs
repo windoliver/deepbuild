@@ -33,7 +33,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   'tests/acceptance/453/',
   'tests/acceptance/1633/', 'packages/hub/test/reopened-items.test.ts',
   'tests/acceptance/46/', 'packages/github/test/',
-  'tests/acceptance/1172/', 'tests/acceptance/2078/', 'tests/acceptance/2218/', 'tests/acceptance/2698/',
+  'tests/acceptance/1172/', 'tests/acceptance/2078/', 'tests/acceptance/2218/', 'tests/acceptance/2698/', 'tests/acceptance/2648/',
   'tests/acceptance/1454/',
   'tests/acceptance/1459/',
   'tests/acceptance/1463/',
@@ -96,7 +96,7 @@ export const slow = [
   'tests/acceptance/910/ac1-issue-link.test.mjs', 'tests/acceptance/910/ac2-renamed-heading.test.mjs',
   'tests/acceptance/910/ac3-offline.test.mjs', 'tests/acceptance/965/background.test.ts',
   'tests/acceptance/965/grace.test.ts', 'tests/acceptance/965/starts.test.ts', 'tests/acceptance/992/agree.test.ts',
-  'tests/live-instancers.test.ts', 'tests/scene3d-interface.test.ts',
+  'tests/live-instancers.test.ts', 'tests/scene3d-interface.test.ts', 'tests/acceptance/2648/instructions.test.ts', 'tests/acceptance/2648/seen.test.ts',
   ...['held', 'judged', 'restart', 'plants', 'heap'].map((f) => `tests/acceptance/2653/${f}.test.ts`),
 ];
 /**
@@ -223,7 +223,7 @@ export const timed = [
   'tests/acceptance/896/dirty.test.ts', 'tests/acceptance/896/settled.test.ts',
   'tests/acceptance/906/prompt.test.ts', 'tests/acceptance/906/stop.test.ts', 'tests/acceptance/96/budgets.test.ts',
   'tests/benchmark.test.mjs', 'tests/acceptance/1432/budgets.test.mjs',
-  'tests/acceptance/1868/canvas-cells.test.mjs', 'tests/acceptance/1868/status-runs.test.mjs'
+  'tests/acceptance/1868/canvas-cells.test.mjs', 'tests/acceptance/1868/status-runs.test.mjs', 'tests/acceptance/2648/seen.test.ts'
 ];
 
 // #33's suite runs one file at a time, its live files by hand, and its budget as a timed file.
