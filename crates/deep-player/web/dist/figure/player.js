@@ -282,6 +282,42 @@ export class Player {
         }
     }
     /**
+     * The page reopens the profile record `name`, its bytes' SHA-256, when the piece starts:
+     * `{profile}` as JSON once the piece is made again with its entry at step 0, or its refusal
+     * as JSON, naming the first array that differs.
+     * @param {string} name
+     * @param {Uint8Array} bytes
+     * @returns {string}
+     */
+    open_profile(name, bytes) {
+        let deferred4_0;
+        let deferred4_1;
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            const ptr0 = passStringToWasm0(name, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len0 = WASM_VECTOR_LEN;
+            const ptr1 = passArray8ToWasm0(bytes, wasm.__wbindgen_export);
+            const len1 = WASM_VECTOR_LEN;
+            wasm.player_open_profile(retptr, this.__wbg_ptr, ptr0, len0, ptr1, len1);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+            var ptr3 = r0;
+            var len3 = r1;
+            if (r3) {
+                ptr3 = 0; len3 = 0;
+                throw takeObject(r2);
+            }
+            deferred4_0 = ptr3;
+            deferred4_1 = len3;
+            return getStringFromWasm0(ptr3, len3);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+            wasm.__wbindgen_export5(deferred4_0, deferred4_1, 1);
+        }
+    }
+    /**
      * The viewer opens the carry record `name`, its bytes' SHA-256, into the piece: `{record}` as
      * JSON once the piece is made again with its entry at step 0, or its refusal as JSON, naming
      * what differs.
@@ -362,6 +398,51 @@ export class Player {
         try {
             const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
             wasm.player_probe(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            deferred1_0 = r0;
+            deferred1_1 = r1;
+            return getStringFromWasm0(r0, r1);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+            wasm.__wbindgen_export5(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
+     * The profile record at `at` of [`Self::profiles_due`]: the bytes the page stores whole under
+     * their SHA-256.
+     * @param {number} at
+     * @returns {Uint8Array}
+     */
+    profile_bytes(at) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.player_profile_bytes(retptr, this.__wbg_ptr, at);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+            if (r3) {
+                throw takeObject(r2);
+            }
+            var v1 = getArrayU8FromWasm0(r0, r1).slice();
+            wasm.__wbindgen_export5(r0, r1 * 1, 1);
+            return v1;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * #276: the profile records the steps the shown time has reached since the last call wrote,
+     * as JSON in step order: each `{at, item, step, hash}`.
+     * @returns {string}
+     */
+    profiles_due() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.player_profiles_due(retptr, this.__wbg_ptr);
             var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
             var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
             deferred1_0 = r0;
@@ -463,9 +544,10 @@ export class Player {
         }
     }
     /**
-     * The piece's saves as the page keeps them (Logic: saves): `{piece, slots, gives, takes}` as
-     * JSON, the document's stable ID, the most slots its logic declares (0 for a piece with no
-     * saves), and whether its logic gives a carry record (`carry`) or takes one (`carry_in`).
+     * The piece's saves as the page keeps them (Logic: saves): `{piece, slots, gives, takes,
+     * profile}` as JSON, the document's stable ID, the most slots its logic declares (0 for a
+     * piece with no saves), whether its logic gives a carry record (`carry`) or takes one
+     * (`carry_in`), and whether it keeps a profile record (#276).
      * @returns {string}
      */
     saves() {
@@ -523,6 +605,23 @@ export class Player {
         } finally {
             wasm.__wbindgen_add_to_stack_pointer(16);
             wasm.__wbindgen_export5(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
+     * The viewer's start fresh, this run only: the piece made again from its start reading
+     * zeros, the stored profile record kept.
+     */
+    start_fresh() {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.player_start_fresh(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            if (r1) {
+                throw takeObject(r0);
+            }
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
         }
     }
     /**
@@ -816,7 +915,7 @@ function __wbg_get_imports() {
                     const a = state0.a;
                     state0.a = 0;
                     try {
-                        return __wasm_bindgen_func_elem_3349(a, state0.b, arg0, arg1);
+                        return __wasm_bindgen_func_elem_3354(a, state0.b, arg0, arg1);
                     } finally {
                         state0.a = a;
                     }
@@ -1424,22 +1523,22 @@ function __wbg_get_imports() {
         }, arguments); },
         __wbindgen_generic_0000000000000001: function(arg0, arg1) {
             // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 282, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_3347);
+            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_3352);
             return addHeapObject(ret);
         },
         __wbindgen_generic_0000000000000002: function(arg0, arg1) {
             // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("GPUDevice")], shim_idx: 95, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_1018);
+            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_1023);
             return addHeapObject(ret);
         },
         __wbindgen_generic_0000000000000003: function(arg0, arg1) {
             // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("any")], shim_idx: 95, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_1018_32);
+            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_1023_36);
             return addHeapObject(ret);
         },
         __wbindgen_generic_0000000000000004: function(arg0, arg1) {
             // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("undefined")], shim_idx: 95, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_1018_33);
+            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_1023_37);
             return addHeapObject(ret);
         },
         __wbindgen_generic_0000000000000005: function(arg0) {
@@ -1466,14 +1565,14 @@ function __wbg_get_imports() {
     };
 }
 
-function __wasm_bindgen_func_elem_3349(arg0, arg1, arg2, arg3) {
-    wasm.__wasm_bindgen_func_elem_3349(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
+function __wasm_bindgen_func_elem_3354(arg0, arg1, arg2, arg3) {
+    wasm.__wasm_bindgen_func_elem_3354(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
 }
 
-function __wasm_bindgen_func_elem_3347(arg0, arg1, arg2) {
+function __wasm_bindgen_func_elem_3352(arg0, arg1, arg2) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        wasm.__wasm_bindgen_func_elem_3347(retptr, arg0, arg1, addHeapObject(arg2));
+        wasm.__wasm_bindgen_func_elem_3352(retptr, arg0, arg1, addHeapObject(arg2));
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         if (r1) {
@@ -1484,10 +1583,10 @@ function __wasm_bindgen_func_elem_3347(arg0, arg1, arg2) {
     }
 }
 
-function __wasm_bindgen_func_elem_1018(arg0, arg1, arg2) {
+function __wasm_bindgen_func_elem_1023(arg0, arg1, arg2) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        wasm.__wasm_bindgen_func_elem_1018(retptr, arg0, arg1, addHeapObject(arg2));
+        wasm.__wasm_bindgen_func_elem_1023(retptr, arg0, arg1, addHeapObject(arg2));
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         if (r1) {
@@ -1498,10 +1597,10 @@ function __wasm_bindgen_func_elem_1018(arg0, arg1, arg2) {
     }
 }
 
-function __wasm_bindgen_func_elem_1018_32(arg0, arg1, arg2) {
+function __wasm_bindgen_func_elem_1023_36(arg0, arg1, arg2) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        wasm.__wasm_bindgen_func_elem_1018_32(retptr, arg0, arg1, addHeapObject(arg2));
+        wasm.__wasm_bindgen_func_elem_1023_36(retptr, arg0, arg1, addHeapObject(arg2));
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         if (r1) {
@@ -1512,10 +1611,10 @@ function __wasm_bindgen_func_elem_1018_32(arg0, arg1, arg2) {
     }
 }
 
-function __wasm_bindgen_func_elem_1018_33(arg0, arg1, arg2) {
+function __wasm_bindgen_func_elem_1023_37(arg0, arg1, arg2) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        wasm.__wasm_bindgen_func_elem_1018_33(retptr, arg0, arg1, addHeapObject(arg2));
+        wasm.__wasm_bindgen_func_elem_1023_37(retptr, arg0, arg1, addHeapObject(arg2));
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         if (r1) {
