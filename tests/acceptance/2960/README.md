@@ -8,6 +8,12 @@ guard; Dogfooding) and base `dcb63a0a0`. Read at the base: `scripts/count-childr
 `tests/acceptance/2646/` for shape. No implementation was seen. The implementing agent doesn't edit these files
 (AGENTS.md, Proof); a dispute goes to a blind redraft of this job.
 
+
+> **AC1 (`#2960.bb693bcf`) moved to `tests/acceptance/2960-redraft-ac1/` (2026-11-21).** The maintainer settled the
+> dispute for the blind redraft: `exit-counted.test.mjs` measured before building, so on a cold checkout the floor compiled
+> inside a measured run and read null. It and its twin `counter-ignores-exit` are removed; the rows below that name them
+> are kept as written, for the record.
+
 ## Criteria
 
 | ID | Criterion (in full) |
