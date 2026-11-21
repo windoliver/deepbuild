@@ -101,6 +101,8 @@ export type Plant = 'hub-unless-agent-built' | 'grants-only-in-record-query' | '
   | 'churn-keeps-every-answer' | 'churn-keeps-every-result' | 'churn-keeps-every-name-set' | 'forgets-request-runs-again'
   // #2402's: a host that counts a handler's failures and never clears them.
   | 'failures-never-cleared'
+  // #2651's: a host that hands every package one value of an event, which any of them can write.
+  | 'hands-one-writable-event'
   // #2648's: a host that reads notices.json once, at its start.
   | 'reads-files-at-start-only';
 
@@ -492,6 +494,14 @@ const REQUESTS_BYTES = 1024 * 1024;
 const ACTION_RECEIPT = 'action.call';
 /** How many readings through its edges a piece keeps by handle, for its model jobs (#103). */
 const EDGE_READS = 256;
+/** A value parsed from JSON, frozen through: what one package is handed, no other can change it (#2651). */
+function frozen<T>(value: T): T {
+  if (value && typeof value === 'object') {
+    for (const v of Object.values(value)) frozen(v);
+    Object.freeze(value);
+  }
+  return value;
+}
 /** Folder-safe, as extension.manifest@1 writes them. */
 const ID = /^[a-z0-9][a-z0-9_-]*\/[a-z0-9][a-z0-9_-]*$/;
 const VERSION = /^\d+\.\d+\.\d+([-+][0-9A-Za-z.+-]+)?$/;
@@ -2668,10 +2678,17 @@ class Host implements ExtensionHost {
    * workspace the grant names, with only its content-free fields unless the grant names text. A release package in
    * the hub sees every event whole.
    */
-  private visible(ext: Ext, e: Event): unknown {
+  private visible(ext: Ext, e: Event, views?: Map<Event, { whole?: unknown; free?: unknown }>): unknown {
     const { projects, text } = ext.entry.grant;
     if (!this.reaches(ext, e.kind) || (!ext.released && projects && !projects.includes(e.project ?? ''))) return undefined;
-    return JSON.parse(toJson(text || ext.released ? e : contentFree(e)));
+    const whole = Boolean(text || ext.released);
+    const made = () => JSON.parse(toJson(whole ? e : contentFree(e))) as unknown;
+    if (!views) return made();
+    let of = views.get(e);
+    if (!of) views.set(e, (of = {}));
+    const key = whole ? 'whole' : 'free';
+    // The planted wrong program hands every package the one value unfrozen, so one package's change reaches the rest.
+    return (of[key] ??= this.options.plant === 'hands-one-writable-event' ? made() : frozen(made()));
   }
   /**
    * What a passed run of a check whose input gives a seed lacks (Check input: plug-in reads, #184): each run its input
@@ -3240,9 +3257,12 @@ class Host implements ExtensionHost {
   }
   async deliver(events: Event[]): Promise<void> {
     const failed: string[] = [];
+    // Each event's view, whole or content-free, is made and frozen once, and every package it reaches is handed that
+    // one value, which none of them can change (#2651).
+    const views = new Map<Event, { whole?: unknown; free?: unknown }>();
     await Promise.all([...this.exts.values()].filter((ext) => ext.live).map(async (ext) => {
       // Filtered by its grant before anything crosses to it, as a query is.
-      const mine = events.filter((e) => ext.subscribed.has(e.kind)).map((e) => this.visible(ext, e)).filter((e) => e !== undefined);
+      const mine = events.filter((e) => ext.subscribed.has(e.kind)).map((e) => this.visible(ext, e, views)).filter((e) => e !== undefined);
       if (!mine.length) return;
       if (!ext.ask || (await this.revoked(ext))) return void failed.push(`${ext.entry.id}: it stopped, its project no longer trusted or unloaded`);
       await this.ask(ext, CALL_MS, 'events', 'deliver', { events: mine }).catch((e) => failed.push(`${ext.entry.id}: ${message(e)}`));
