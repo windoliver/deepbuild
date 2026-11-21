@@ -34,6 +34,8 @@ export interface Planted { name: string; before: string; after: string }
  * model, whose first line answers `new` or `nothing new`. At approval it must wake on `planted` and stay quiet on `twin`.
  */
 export interface Wake { test: string; planted: Planted; twin: Planted }
+/** A repeat job's costs in US dollars: its dry run's, the line one run may spend, and what a month comes to at most. */
+export interface Cost { dry_usd: number; run_usd: number; month_usd: number }
 export interface Brief {
   makes: Makes; software: boolean;
   lines: Line[]; promises: Promised[]; tasks: Task[];
@@ -46,6 +48,8 @@ export interface Brief {
   /** What a repeat job's wake test reads on each fire: a link or a file you gave. */
   watch?: string;
   wake?: Wake;
+  /** What a repeat job costs (#1527): a run's line and a month's most, from the dry run before its card. */
+  cost?: Cost;
 }
 
 type Obj = Record<string, unknown>;
@@ -255,6 +259,9 @@ export function pageOf(brief: Brief, heading: string): string {
   for (const t of brief.left_out) out.push(`- Left out: ${t.title}, because ${t.why}.`);
   out.push('');
   if (brief.every) out.push(`**It repeats:** ${EVERY[brief.every]}, under this same approval.`, '');
+  if (brief.cost) {
+    out.push(`**What it costs:** a line of ${usd(brief.cost.run_usd)} a run, so about ${usd(brief.cost.month_usd)} a month, from a dry run that cost ${usd(brief.cost.dry_usd)}. A run that has spent past ${usd(brief.cost.run_usd)} starts no next model turn; the turn that crossed it is already spent.`, '');
+  }
   if (brief.wake) {
     out.push(`**When it wakes a model:** only when its wake test, run on each fire with no model, finds something new in ${brief.watch}. It woke on ${brief.wake.planted.name} and stayed quiet on ${brief.wake.twin.name}. Your yes fixes this test; a changed one needs a new yes:`, '');
     out.push('```sh', brief.wake.test.trimEnd(), '```', '');

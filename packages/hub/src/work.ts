@@ -654,9 +654,6 @@ export class Work {
     const rule = space ? null : approval.rule ?? null;
     // Calls on you hold no reversible change (#1345), under a standing rule or a topic's card only.
     const on = !space && await this.callsOn(run.ask, approval);
-    // A job that repeats (#1527): each round wakes the model once per task, and an ended attempt isn't replaced; the
-    // next fire whose wake test finds something new starts the next round.
-    const repeats = ((await this.o.raw(`SELECT 1 FROM events WHERE kind = 'brief.drafted' AND json_extract(data, '$.ask') = ? AND json_extract(data, '$.brief.every') IS NOT NULL LIMIT 1`, [run.ask])) as unknown[]).length > 0;
     const readAll = async (fresh: boolean): Promise<Read> => {
       const none = { out: new Map<number, string>(), milestones: new Map<number, Listed['milestone']>() };
       if (space) return { ...(await this.readSpace(space, approval.issues)), reverts: [], set: approval.issues, ...none };
@@ -792,12 +789,6 @@ export class Work {
       if (other) { row('queued', `PR #${other.pr} from ${other.login || 'another account'}`, 'an open PR from another account links it'); continue; }
       const machine = unserved(i.body);
       if (machine) { row('queued', `a host that can serve ${machine}`, `its Runs on: line names ${machine}, which this host can't serve`); continue; }
-      // One that gave up its slot to wait on you goes on once you answered, as any attempt does; one whose process died is INVALID.
-      if (repeats && last?.ended && last.ended.cause !== 'gave up its slot') {
-        const word = last.ended.cause === 'crashed or interrupted' ? 'INVALID' : /^(BLOCKED|INCONCLUSIVE|INVALID)\b/.exec(last.ended.verdict ?? '')?.[1] ?? 'sent back';
-        row(word, null, `a round of a job that repeats makes one attempt, and its attempt ended: ${last.ended.cause}${last.ended.verdict ? ` (${last.ended.verdict})` : ''}`);
-        continue;
-      }
       if (replaced >= BREAKER * (breaker.level + 1)) {
         await this.breaker(run.ask, n, list, breaker.level);
         row('needs you', 'you', `${replaced} attempts were replaced`);
