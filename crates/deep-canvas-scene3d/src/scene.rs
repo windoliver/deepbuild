@@ -2121,6 +2121,7 @@ pub(crate) fn evaluate_compiled(
                                     mesh: crate::geom::Mesh,
                                     hash: u64|
                      -> Result<Option<Solid>, Refused> {
+                        let mesh = Arc::new(mesh);
                         let mut material = light::material(holder, |m| items.get(m), look, id)?;
                         // #224: a surface is two-sided unless it says not.
                         if k == "surface@1" && params.get("two_sided") != Some(&Value::Bool(false))
@@ -2154,7 +2155,7 @@ pub(crate) fn evaluate_compiled(
                                 &path,
                             )?,
                             lod: lod_of(item, &path, mesh.bounds(), Some((&mesh, hash)), map)?,
-                            mesh: Some(Arc::new(mesh)),
+                            mesh: Some(mesh),
                             mask: None,
                             cast_only: false,
                             receiver_sets: 0,
@@ -2232,6 +2233,7 @@ pub(crate) fn evaluate_compiled(
                                     extent: 1.0,
                                     lod_px,
                                     proxy: None,
+                                    proxy_source: None,
                                     proxy_mesh: None,
                                     tile: Some(t.at),
                                 }));

@@ -1,0 +1,121 @@
+The #2371 suite run at base commit 85203f458b85c999ac03a884c837398e56aeac8d ("Merge pull request #2852 …"; no
+implementation of #2371), on November 19, 2026, on macOS 27.2 arm64 (shared, 1-minute load about 280 while it ran),
+Node 24.22.2, vitest 5.0.5, TypeScript 5.9.3, cargo and rustc 1.99.1. The type-check first:
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/2371/tsconfig.json          (exit 0, no error)
+
+then each test file, one at a time, with
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node scripts/throttle.mjs test --wait 120 -- node node_modules/vitest/vitest.mjs run --root tests/acceptance/2371 \
+    --no-file-parallelism --testTimeout=600000 --reporter=verbose <file>
+
+The build the suite reads, the base's debug `deep-physics` (`cargo build --locked --bin deep-physics`), was in the
+target folder before the runs, made for this job through the machine's build slot. This job started no build of its
+own; each file's own cargo call (#2009's `prebuild`) only brought it up to date and copied it out (each file took
+about 3 s in all).
+
+Result, over the three runs: Test Files 3 failed (3); Tests 7 failed (7). Every test fails at an assertion in its own
+test file, for the reason the README gives: the base refuses the input kinds `set`, `activate` and `blast`, a poke's
+`address`, a drag `medium` and a spring `point` that name a channel, and a `strength` that names an input, each with
+`physics.unsupported` naming #2371, and it knows no planted program `set_applies_both`. None fails in a helper, at an
+import or at a timeout, and none is BLOCKED or INCONCLUSIVE.
+
+No test passes at the base, and none should: every test plays a world or an entry the base refuses. One clause
+already holds there and is not credited: `deactivate` (the base runs it since #191). It is tested inside the first
+test of ac1, whose world the base refuses for its `set`, `activate` and `blast`; the probes below show the base
+playing, replaying and seeking that world with the three taken out.
+
+Run twice, and why: `ac1-track-replay-seek.test.ts` was first run at 15:09 in an earlier draft (one seek, the four
+entries at steps 20, 40, 150 and 170, and a longer refusal text). Its three tests failed at the same three assertions
+for the same reasons. The draft was then changed (two seeks, the entries moved between the two checkpoints, the
+refusal's wording shortened), so it was run again with the other two files at 15:14, and that run is the one below.
+`ac2-…` and `ac3-…` were run once. No file was run again after it failed in its final form.
+
+ac1-track-replay-seek.test.ts (#2371.7fae183d)
+ × the yard played from its track of one set, one activate, one deactivate and one blast gives the same step hashes
+   on a replay and after a seek from the checkpoint at step 60 and from the one at step 120, and each of the four
+   entries changes the world
+   ac1-track-replay-seek.test.ts:64  AssertionError: the world with one input of each of set, activate, deactivate and
+   blast is played from its track, a step hash after each step: expected '…' to be ''
+     the yard, played from its track isn't baked: physics.unsupported at forces/push/strength: a strength set by an
+     input isn't run by this backend interface yet; #2371 brings it; physics.unsupported at inputs/throttle/kind: the
+     input kind set isn't run by this backend interface yet; #2371 brings it; physics.unsupported at inputs/wake/kind:
+     the input kind activate isn't run by this backend interface yet; #2371 brings it; physics.unsupported at
+     inputs/boom/kind: the input kind blast isn't run by this backend interface yet; #2371 brings it
+ × a second set on one step replaces the first: two sets of one strength stamped step 40 give the step hashes of the
+   one written second alone, written either way round
+   ac1-track-replay-seek.test.ts:94  AssertionError: two sets on step 40: expected [ Array(1) ] to deeply equal []
+     the yard with the set to 9 and then the set to 2 on step 40 isn't baked: physics.unsupported at
+     forces/push/strength: … (the four refusals above) (and 3 more of the four tracks aren't played)
+ × a planted set that applies both (set_applies_both) fails, naming the step
+   ac1-track-replay-seek.test.ts:99  AssertionError: deep-physics --planted set_applies_both answers: the planted
+   program runs: expected '…' to be ''
+     deep-physics --planted set_applies_both exits 2, not 0; stdout: {"ok":false,"code":"bad_input"}; stderr:
+
+ac2-poke-address-and-blast.test.ts (#2371.825e2c1b)
+ × a poke by address crate#rim gives the step hashes of the same poke at the anchor's point (0.25, 0, 0), and not
+   those of a poke at the centre or of no poke
+   ac2-poke-address-and-blast.test.ts:30  AssertionError: the crate poked by address is played, a step hash after each
+   step: expected '…' to be ''
+     the crate poked by address crate#rim isn't baked: physics.unsupported at track/0/address: poke.address isn't run
+     by this backend interface yet; #2371 brings it
+ × a blast with radius 1 m moves the body 0.9 m away and leaves the one 1.1 m away at rest
+   ac2-poke-address-and-blast.test.ts:52  AssertionError: the two beads and the blast with radius 1 m are played, a
+   state of each bead after each step: expected '…' to be ''
+     the two beads with the blast of radius 1 m isn't baked: physics.unsupported at inputs/boom/kind: the input kind
+     blast isn't run by this backend interface yet; #2371 brings it
+
+ac3-forces-channel-and-input.test.ts (#2371.aabc7fe9)
+ × the drag's medium, the spring's point and the force's strength each change the world at the step the channel's key
+   or the input's entry says: steps 33 and 153, 45 and 165, 41 and 191
+   ac3-forces-channel-and-input.test.ts:30  AssertionError: the world whose drag and spring read a channel and whose
+   force an input sets is played in its scene, a step hash after each step: expected '…' to be ''
+     the field, its forces reading two channels and an input isn't baked: physics.unsupported at
+     forces/breeze/kind/medium: a drag medium read from a channel isn't run by this backend interface yet; #2371 brings
+     it; physics.unsupported at forces/tether/kind/point: a spring point read from a channel isn't run by this backend
+     interface yet; #2371 brings it; physics.unsupported at forces/push/strength: a strength set by an input isn't run
+     by this backend interface yet; #2371 brings it; physics.unsupported at inputs/throttle/kind: the input kind set
+     isn't run by this backend interface yet; #2371 brings it
+ × a seek to step 130 from the checkpoint at step 120, played on to step 240, gives the straight run's step hashes
+   ac3-forces-channel-and-input.test.ts:46  AssertionError: the field is played 2 s into a store, a step hash after
+   each step: expected '…' to be ''
+     the field isn't baked: … (the four refusals above)
+
+Probed apart from the suite on the base's debug binary, through the suite's own worlds, calls and judges, to see that
+they are well formed where the base runs them (README: The worlds). Nothing below is a test, and no value below is
+asserted anywhere:
+  the yard with its `set`, `activate` and `blast` inputs taken out and `push`'s strength written 3 (the `deactivate`
+  stays): checked, no issue; played 240 steps from the deactivate stamped step 90: 241 step hashes, no issue in the
+  bake; `sleeper`, inactive, stays at (−4, 0, 0); `faller` falls to y = −2.767 m by step 90 and is there at steps 91
+  and 240; `puck` moves at 12.000 m/s along +x at step 240; `chip` stays at (0.9, 0, 4)
+    the track without the deactivate first differs at step 91; the per-entry judge passes
+    the same bake in a second process: the same 241 step hashes
+    a seek to step 65: from step 60, 181 step hashes, each the straight run's; a seek to step 130: from step 120,
+    121 step hashes, each the straight run's; with one hash of the second swapped for another step's the seek's judge
+    fails, naming the step; read against the other checkpoint it fails, naming step 60 and step 120
+  the crate: the poke at `point: [0.25, 0, 0]`, the same impulse at the centre, and none, each played 120 steps. The
+  poke at the point first differs from none at step 11 and from the poke at the centre at step 11: after step 11 the
+  crate moves at (0, 1, 0) m/s and turns at 343.77 deg/s about z (0.25 N·m·s over 1 ÷ 24 kg·m², 6 rad/s); poked at
+  its centre it doesn't turn
+  the beads with no blast input, played 60 steps: both stay exactly as built; the "left at rest" judge passes for
+  both and the "moved" judge fails for `near`, saying so
+  the field with `medium: [3, 0, 0]`, `point: [0.5, 2, 3]` and `strength: 3` written as numbers and no input, in its
+  scene: checked, no issue; played 240 steps: 241 step hashes, the same as the world document's alone; after the
+  first step `leaf` moves at 0.0500 m/s, `bob` at 0.1645 m/s and `puck` at 0.0500 m/s along +x; a seek to step 130:
+  from step 120, each hash the straight run's
+  the base's step time for a channel, in the suite's scene: a kinematic body following items/wind/at/pos is at
+  (0, 0, 0) after step 32, (3, 0, 0) after step 33, and (0, 0, −2) after step 153; the scene without the key `k1`
+  first differs at step 33 and without `k2` at step 153, and the suite's judge for "at the step the channel says"
+  passes on both, fails read for step 32, and fails read for another body
+  two entries of one kind and target on one step, at the base: two `launch` entries of `puck` stamped step 40, to
+  9 m/s and to 2 m/s along +x. The base applies both, in its track's order whichever way round they are written (the
+  two orders give the same step hashes), so the launch to 9 holds. The suite's judge for "the second replaces the
+  first" passes for the launch to 2 written first and fails for the launch to 9 written first, naming step 40 and
+  the step hash at step 41: what `set_applies_both` is to do with two sets
+  the base's answer to `--planted set_applies_both`: {"ok":false,"code":"bad_input"}, exit 2
+
+Not run at the base, because the base can't run them: nothing past each test's first failing assertion. No `set`,
+`activate` or `blast` was applied, no poke by address, no force read a channel or an input, and the planted program
+never answered, so the judges' passing side on the new fields and the planted program's failure are unproven until an
+implementation runs them.

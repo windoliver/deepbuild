@@ -1,0 +1,101 @@
+
+== 1. An hourly job with no wake test: its card is refused, naming the job
+$ deep every hour, check the release feed for new stories
+http://127.0.0.1:64561/feed.json
+Working on it: every hour, check the release feed for new stories. It shows in your list while the research runs.
+No card: "every hour, check the release feed for new stories" fires more than once a day, so it needs a wake test that says when a model is needed, and it has none.
+
+== 2. A wake test that stays quiet on its planted change: refused, naming the change
+$ deep every hour, check the design feed for new stories
+http://127.0.0.1:64561/feed.json
+Working on it: every hour, check the design feed for new stories. It shows in your list while the research runs.
+No card: The wake test of "every hour, check the design feed for new stories" stays quiet on its planted change, a third story in the feed (it answered nothing new), so it could never wake the job.
+
+== 3. The team feed watcher with a right wake test: its card
+$ deep every hour, check the team feed for new stories
+http://127.0.0.1:64561/feed.json
+Working on it: every hour, check the team feed for new stories. It shows in your list while the research runs.
+Its card is ready: deep inbox shows it (ask:01M7W4F97NZPQRM3ZERNGRDM7P).
+$ deep inbox
+# every hour, check the team feed for new stories\n\nIt makes a report, in a folder of its own.\n\n**What it makes:**\n- A note of each new story in the team feed\n\n**Who it's for:**\n- You, the person who asked. (picked for you)\n\n**What the first finished version holds:**\n- Each new story, noted once\n\n**What it leaves out:**\n- Anything your words don't ask for. (picked for you)\n\n**What would prove it:**\n- Every story in the team feed is in the notes — a document check: every claim names its source\n\n**Where it goes when finished:**\n- Kept in its own folder on this computer, where you open it. (picked for you)\n\n**Tasks:**\n1. Note the new stories\n\n**It repeats:** every hour, under this same approval.\n\n**When it wakes a model:** only when its wake test, run on each fire with no model, finds something new in http://127.0.0.1:64561/feed.json. It woke on a third story in the feed and stayed quiet on the same two stories, fetched again. Your yes fixes this test; a changed one needs a new yes:\n\n```sh\n#!/bin/sh\n# The wake test of the team feed (#1527 README: The contract), run on each fire with no model.\n# $1: the feed as the last fire read it. $2: the feed now. It answers new when the feed holds a story the\n# last copy did not, nothing new when its stories are the same, and fails (exit 2) on a feed that is not JSON.\ncase "$(head -c 1 "$2")" in\n  '{') ;;\n  *) echo "the feed is not JSON" >&2; exit 2 ;;\nesac\nwas=$(grep '"id"' "$1" 2>/dev/null | sort)\nnow=$(grep '"id"' "$2" | sort)\nif [ "$was" = "$now" ]; then echo "nothing new"; else echo "new"; fi\n```\n\n**Held for you, asked when it is due:**\n- Nothing to buy, book, post or send.\n\n**What it may spend:** up to your plan window, and no money: anything that costs money is held above.\n\n**What your links and files say, as their own text (it adds nothing to the brief):**\n- http://127.0.0.1:64561/feed.json: “{"fetched_at":"2026-11-20T00:00:00Z", "items":[ {"id":"s1","title":"The office moves to the third floor"}, {"id":"s2","title":"Friday lunch is at noon"} ]}”\n  authority  no repo    0s  If you don't answer: Don't, on Fri 27 Nov at 01:26  ask:01M7W4F97NZPQRM3ZERNGRDM7P
+    answer with allow (Make it and start), deny (Don't)
+    plan 6d85ef0980e1: 3 steps, 1 can't be undone
+    1. Make a folder of its own, /private/tmp/dh1342-QEa4gz/h/.deepbuild/workspaces/every-hour-check-the-team-feed-for-new-s-…, and save the brief in it  changes /private/tmp/dh1342-QEa4gz/h/.deepbuild/workspaces/every-hour-check-the-team-feed-for-new-s-…  undo: Remove it  cost $0.00
+    2. Add the task "Note the new stories"  changes the project you pick  undo: Remove the task  cost $0.00
+    3. Start the agent on 1 task, one at a time, each finishing only when its checks pass  changes copies of the project, plan usage, up to the whole window  undo: can't undo  cost $0.00
+1 ask needs you
+$ (the card in full, from deep inbox --json)
+**Tasks:**
+1. Note the new stories
+
+**It repeats:** every hour, under this same approval.
+
+**When it wakes a model:** only when its wake test, run on each fire with no model, finds something new in http://127.0.0.1:64561/feed.json. It woke on a third story in the feed and stayed quiet on the same two stories, fetched again. Your yes fixes this test; a changed one needs a new yes:
+
+```sh
+#!/bin/sh
+# The wake test of the team feed (#1527 README: The contract), run on each fire with no model.
+# $1: the feed as the last fire read it. $2: the feed now. It answers new when the feed holds a story the
+# last copy did not, nothing new when its stories are the same, and fails (exit 2) on a feed that is not JSON.
+case "$(head -c 1 "$2")" in
+  '{') ;;
+  *) echo "the feed is not JSON" >&2; exit 2 ;;
+esac
+was=$(grep '"id"' "$1" 2>/dev/null | sort)
+now=$(grep '"id"' "$2" | sort)
+if [ "$was" = "$now" ]; then echo "nothing new"; else echo "new"; fi
+```
+
+
+
+== 4. Your yes: the workspace, its approved wake test, and the first run
+$ deep inbox answer ask:01M7W4F97NZPQRM3ZERNGRDM7P allow
+ask:01M7W4F97NZPQRM3ZERNGRDM7P answered allow; no decision saved
+$ sh -c cat "$HOME"/.deepbuild/workspaces/*/.deepbuild/wake.sh | head -5
+#!/bin/sh
+# The wake test of the team feed (#1527 README: The contract), run on each fire with no model.
+# $1: the feed as the last fire read it. $2: the feed now. It answers new when the feed holds a story the
+# last copy did not, nothing new when its stories are the same, and fails (exit 2) on a feed that is not JSON.
+case "$(head -c 1 "$2")" in
+$ (the job runs, from the record)
+09:26  verdict INVALID  model turns: 1  task 1: INVALID, a round of a job that repeats makes one attempt, and its attempt ended: sent back past its rounds (INVALID: req:taskeveryhourcheckthe
+
+== 5. Two hours with nothing new in the feed: uncounted no-ops, no model
+$ (an hour passes on the hub clock)
+$ (an hour passes on the hub clock)
+$ (the job runs, from the record)
+09:26  verdict INVALID  model turns: 1  task 1: INVALID, a round of a job that repeats makes one attempt, and its attempt ended: sent back past its rounds (INVALID: req:taskeveryhourcheckthe
+10:27  no-op (uncounted)  model turns: 0  Its wake test found nothing new, so no model was woken.
+11:27  no-op (uncounted)  model turns: 0  Its wake test found nothing new, so no model was woken.
+
+== 6. The feed gets a new story: the next fire wakes the model once
+$ (an hour passes on the hub clock)
+$ (the job runs, from the record)
+09:26  verdict INVALID  model turns: 1  task 1: INVALID, a round of a job that repeats makes one attempt, and its attempt ended: sent back past its rounds (INVALID: req:taskeveryhourcheckthe
+10:27  no-op (uncounted)  model turns: 0  Its wake test found nothing new, so no model was woken.
+11:27  no-op (uncounted)  model turns: 0  Its wake test found nothing new, so no model was woken.
+12:28  verdict INVALID  model turns: 1  task 2: INVALID, a round of a job that repeats makes one attempt, and its attempt ended: sent back past its rounds (INVALID: req:taskeveryhourcheckthe
+
+== 7. The feed answers a page that isn't JSON: the wake test fails, a FAIL on the claim
+$ (an hour passes on the hub clock)
+$ (the job runs, from the record)
+09:26  verdict INVALID  model turns: 1  task 1: INVALID, a round of a job that repeats makes one attempt, and its attempt ended: sent back past its rounds (INVALID: req:taskeveryhourcheckthe
+10:27  no-op (uncounted)  model turns: 0  Its wake test found nothing new, so no model was woken.
+11:27  no-op (uncounted)  model turns: 0  Its wake test found nothing new, so no model was woken.
+12:28  verdict INVALID  model turns: 1  task 2: INVALID, a round of a job that repeats makes one attempt, and its attempt ended: sent back past its rounds (INVALID: req:taskeveryhourcheckthe
+13:28  verdict FAIL  model turns: 0  The wake test .deepbuild/wake.sh failed: it exited 2: the feed is not JSON
+
+== 8. Someone edits the approved wake test: the next fire is BLOCKED on its digest
+$ sh -c printf "#!/bin/sh\necho new\n" > "$(ls -d "$HOME"/.deepbuild/workspaces/everyhour*team* | head -1)"/.deepbuild/wake.sh && echo "wake.sh edited"
+wake.sh edited
+$ (an hour passes on the hub clock)
+$ (an hour passes on the hub clock)
+$ (the job runs, from the record)
+09:26  verdict INVALID  model turns: 1  task 1: INVALID, a round of a job that repeats makes one attempt, and its attempt ended: sent back past its rounds (INVALID: req:taskeveryhourcheckthe
+10:27  no-op (uncounted)  model turns: 0  Its wake test found nothing new, so no model was woken.
+11:27  no-op (uncounted)  model turns: 0  Its wake test found nothing new, so no model was woken.
+12:28  verdict INVALID  model turns: 1  task 2: INVALID, a round of a job that repeats makes one attempt, and its attempt ended: sent back past its rounds (INVALID: req:taskeveryhourcheckthe
+13:28  verdict FAIL  model turns: 0  The wake test .deepbuild/wake.sh failed: it exited 2: the feed is not JSON
+15:29  verdict BLOCKED  model turns: 0  The wake test .deepbuild/wake.sh in /private/tmp/dh1342-QEa4gz/h/.deepbuild/workspaces/everyhourchecktheteamfeedfornews-9e764c06 isn't the one you app
+
+== Done.

@@ -10,7 +10,7 @@ use deep_canvas::canon::sha256_hex;
 use deep_canvas::schedule::canonical;
 use serde_json::{json, Map, Value};
 
-use crate::doc::{resolved, Input, Refusal, World};
+use crate::doc::{addressed, resolved, Input, Refusal, World};
 
 /// One entry, resolved against the input it names: its fields over that input's defaults.
 #[derive(Clone, Debug, PartialEq)]
@@ -86,20 +86,38 @@ pub fn entry(w: &World, v: &Value, path: &str) -> Result<Entry, Box<Refusal>> {
         );
         return Err(refused("ref_unresolved", what));
     };
+    let data = resolved(input, v.get("data").unwrap_or(&Value::Null), path)?;
+    addressed(&w.bodies, &data, path)?;
     Ok(Entry {
         step,
         kind: input.kind.clone(),
         target: target.into(),
         input: id.clone(),
-        data: resolved(input, v.get("data").unwrap_or(&Value::Null), path)?,
+        data,
     })
 }
 
-/// The entries of `track`, a JSON array, resolved and in order.
-pub fn read(w: &World, track: &Value) -> Result<Vec<Entry>, Box<Refusal>> {
+/// #2371: drops from `entries` the one `e`, written after it, replaces: a `set` of `e`'s step,
+/// target and path (Input track entries: "a second `set` on the same step replaces the first").
+fn replace<T>(entries: &mut Vec<T>, e: &Entry, entry: impl Fn(&T) -> &Entry) {
+    if e.kind != "set" {
+        return;
+    }
+    let of = |x: &Entry| x.kind == "set" && x.step == e.step && x.target == e.target;
+    entries.retain(|x| !of(entry(x)) || entry(x).data.get("path") != e.data.get("path"));
+}
+
+/// The entries of `track`, a JSON array, resolved and in order, each `set` replacing the one
+/// written before it on its step; `both` (#2371's planted track) keeps the two, which then
+/// apply in the track's own order, never the order written.
+pub fn read(w: &World, track: &Value, both: bool) -> Result<Vec<Entry>, Box<Refusal>> {
     let mut out = Vec::new();
     for (i, v) in track.as_array().into_iter().flatten().enumerate() {
-        out.push(entry(w, v, &format!("track/{i}"))?);
+        let e = entry(w, v, &format!("track/{i}"))?;
+        if !both {
+            replace(&mut out, &e, |x| x);
+        }
+        out.push(e);
     }
     order(&mut out);
     Ok(out)
@@ -108,12 +126,12 @@ pub fn read(w: &World, track: &Value) -> Result<Vec<Entry>, Box<Refusal>> {
 /// Forks the track at `e`'s step: every entry after it is dropped, and `e` joins.
 pub fn fork(entries: &mut Vec<Entry>, e: Entry) {
     entries.retain(|x| x.step <= e.step);
-    entries.push(e);
-    order(entries);
+    join(entries, e);
 }
 
-/// A late entry joins at its own step and drops nothing.
+/// A late entry joins at its own step and drops nothing but a `set` it replaces.
 pub fn join(entries: &mut Vec<Entry>, e: Entry) {
+    replace(entries, &e, |x| x);
     entries.push(e);
     order(entries);
 }
@@ -164,9 +182,93 @@ pub fn from_controls(w: &World, h: i64, core: &[Value]) -> Vec<(usize, Entry)> {
                     input: id.clone(),
                     data: data.clone(),
                 };
+                replace(&mut out, &entry, |d: &(usize, Entry)| &d.1);
                 out.push((i, entry));
             }
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A world whose force `push` takes its strength from the set input `throttle`, which each
+    /// entry of the control `gas` derives with its value.
+    fn world() -> World {
+        let doc = json!({
+            "kind": "physics.world@1",
+            "capacity": {"bodies": 1, "shapes": 1, "joints": 0, "contacts": 0, "particles": 0},
+            "contact_materials": {"m": {"density": 1000}},
+            "shapes": {"ball": {"kind": "sphere", "radius": 0.25}},
+            "bodies": {"puck": {"kind": "dynamic", "shapes": [{"shape": "ball", "contact_material": "m"}]}},
+            "forces": {"push": {"kind": {"uniform": {"accel": [2, 0, 0]}}, "applies_to": ["puck"], "strength": "throttle"}},
+            "inputs": {"throttle": {"kind": "set", "targets": ["push"], "path": "strength", "value": 0,
+                                    "on": {"control": "gas"}, "data": {"value": "gas"}},
+                       "poke": {"kind": "poke", "targets": ["puck"]}}
+        });
+        crate::doc::read(&doc).unwrap_or_else(|e| panic!("{e:?}"))
+    }
+
+    fn set(step: u64, value: f64) -> Value {
+        json!({"step": step, "kind": "set", "target": "push", "data": {"value": value}})
+    }
+
+    /// Each entry's step and the value it sets, in the order they apply.
+    fn values(entries: &[Entry]) -> Vec<(u64, f64)> {
+        let value = |e: &Entry| e.data["value"].as_f64().unwrap();
+        entries.iter().map(|e| (e.step, value(e))).collect()
+    }
+
+    /// Of two sets of one force's strength on one step, the one written second holds, however a
+    /// track takes them: read from a call, joined late, forked in, or derived from a control.
+    #[test]
+    fn a_second_set_on_one_step_replaces_the_first() {
+        let w = world();
+        let read = |track: Value, both| values(&read(&w, &track, both).unwrap());
+        assert_eq!(
+            read(json!([set(40, 9.0), set(40, 2.0)]), false),
+            [(40, 2.0)]
+        );
+        assert_eq!(
+            read(json!([set(40, 2.0), set(40, 9.0)]), false),
+            [(40, 9.0)]
+        );
+        // Another step's set stays, and the planted track keeps both, the 9 applied last.
+        let apart = json!([set(40, 9.0), set(41, 2.0)]);
+        assert_eq!(read(apart, false), [(40, 9.0), (41, 2.0)]);
+        let both = [(40, 2.0), (40, 9.0)];
+        assert_eq!(read(json!([set(40, 9.0), set(40, 2.0)]), true), both);
+
+        let entry = |step, value| entry(&w, &set(step, value), "track/0").unwrap();
+        let mut late = vec![entry(40, 9.0), entry(50, 5.0)];
+        join(&mut late, entry(40, 2.0));
+        assert_eq!(values(&late), [(40, 2.0), (50, 5.0)]);
+        fork(&mut late, entry(40, 7.0));
+        assert_eq!(values(&late), [(40, 7.0)]);
+
+        // Two entries of the control inside step 1 and one inside step 2.
+        let h = crate::occurrence::step_flicks(&w);
+        let gas =
+            |t: i64, seq: i64, v: f64| json!({"t": t, "seq": seq, "control": "gas", "value": v});
+        let core = [gas(1, 0, 9.0), gas(2, 1, 2.0), gas(h + 1, 2, 4.0)];
+        let derived: Vec<Entry> = from_controls(&w, h, &core)
+            .into_iter()
+            .map(|d| d.1)
+            .collect();
+        assert_eq!(values(&derived), [(1, 2.0), (2, 4.0)]);
+    }
+
+    /// An entry's poke by the address of an anchor no body has is refused at the entry's field.
+    #[test]
+    fn a_poke_by_an_address_no_body_has_is_refused() {
+        let poke =
+            json!({"step": 3, "kind": "poke", "target": "puck", "data": {"address": "puck#rim"}});
+        let refused = entry(&world(), &poke, "track/0").unwrap_err();
+        assert_eq!(
+            (refused.code, refused.path.as_str()),
+            ("ref_unresolved", "track/0/address")
+        );
+    }
 }
