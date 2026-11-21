@@ -13,7 +13,7 @@ use serde_json::{json, Value};
 use crate::card::Card;
 use crate::copy::{Change, Defect, End, Stepper};
 use crate::kind::Config;
-use crate::play::{play, Ask, Faults, Played};
+use crate::play::{play, Ask, Fate, Faults, Played};
 
 /// The jitter net.rollback adds to the delay, in match steps.
 const JITTER: i64 = 2;
@@ -38,6 +38,56 @@ fn faulted<S: Stepper>(played: &Played<S>) -> Vec<Value> {
         .collect()
 }
 
+/// #277: in a piece whose rules play a changed seat, net.rollback and net.desync play their
+/// matches with seeded leaves and absences unless the ask names its own fates: one copy of three
+/// or more killed right after a seeded step before `before`, and, with `absent`, another hidden
+/// for twice the timeout, back well before `before`. `spare` is a copy no fate befalls.
+fn seat_fates(cfg: &Config, ask: &Ask, spare: u8, before: i64, absent: bool) -> Ask {
+    if !cfg.seats || !ask.faults.fates.is_empty() || cfg.players < 3 || before < 40 {
+        return ask.clone();
+    }
+    let seed = ask.faults.seed;
+    let others: Vec<u8> = (1..=cfg.players).filter(|p| *p != spare).collect();
+    let pick = |n: u64| others[(mix(seed, n) % others.len() as u64) as usize];
+    let killed = pick(11);
+    let mut fates = vec![Fate::Kill {
+        player: killed,
+        step: before / 2 + (mix(seed, 12) % (before / 4) as u64) as i64,
+    }];
+    let len = 2 * cfg.timeout;
+    let span = len / cfg.step() + 4 * cfg.window + 4 * cfg.delay + 10;
+    let hidden = others.iter().copied().find(|p| *p != killed);
+    if let (true, Some(player), true) = (absent, hidden, before / 2 > span) {
+        fates.push(Fate::Hide {
+            player,
+            step: (mix(seed, 13) % (before / 2 - span) as u64) as i64,
+            len,
+        });
+    }
+    let mut ask = ask.clone();
+    ask.faults.fates = fates;
+    ask
+}
+
+/// The relay of a run with every message on time: none of the ask's faults but its fates (#277).
+pub(crate) fn on_time(ask: &Ask) -> Faults {
+    Faults {
+        fates: ask.faults.fates.clone(),
+        ..Faults::default()
+    }
+}
+
+/// The copies a fate killed: none of them reports past it.
+pub(crate) fn killed(ask: &Ask) -> Vec<u8> {
+    let fates = ask.faults.fates.iter();
+    fates
+        .filter_map(|f| match f {
+            Fate::Kill { player, .. } => Some(*player),
+            _ => None,
+        })
+        .collect()
+}
+
 fn report(kind: &str, failures: Vec<Value>) -> Value {
     let verdict = if failures.is_empty() { "PASS" } else { "FAIL" };
     json!({"kind": kind, "verdict": verdict, "failures": failures})
@@ -52,6 +102,8 @@ pub fn rollback<S: Stepper>(
     ask: &Ask,
     make: &mut dyn FnMut(u8) -> Result<S, Value>,
 ) -> Result<(Played<S>, Value), Value> {
+    // #277: with a seeded leave in a piece whose rules play a changed seat.
+    let ask = &seat_fates(cfg, ask, 1, ask.steps, false);
     if cfg.window > 0 {
         return crate::window::rollback(cfg, card, ask, make);
     }
@@ -59,7 +111,7 @@ pub fn rollback<S: Stepper>(
         cfg,
         card,
         &Ask {
-            faults: Faults::default(),
+            faults: on_time(ask),
             shows: Vec::new(),
             ..ask.clone()
         },
@@ -177,15 +229,18 @@ pub fn desync<S: Stepper>(
         at,
         change,
     };
+    // #277: with a seeded leave and absence before the planted step, in a piece whose rules play
+    // a changed seat.
     let planted = Ask {
         defect: Some((copy, defect)),
-        ..ask.clone()
+        ..seat_fates(cfg, ask, copy, step, true)
     };
+    let gone = killed(&planted);
     let played = play(cfg, card, &planted, make)?;
     let by = step + every - step.rem_euclid(every);
     let mut failures = faulted(&played);
     let mut named = Vec::new();
-    for c in &played.copies {
+    for c in played.copies.iter().filter(|c| !gone.contains(&c.me)) {
         let d = c.desync().cloned().unwrap_or(Value::Null);
         named.push(json!({"copy": c.me, "end": c.end().map(End::name), "net.desync": d}));
         let what = if c.end() == Some(End::Faulted) {
@@ -270,6 +325,35 @@ mod tests {
             shows: Vec::new(),
             ..Ask::default()
         }
+    }
+
+    #[test]
+    fn with_seats_net_rollback_runs_a_seeded_leave_and_net_desync_an_absence_too() {
+        let make = &mut |_: u8| -> Result<Word, Value> { Ok(Word::default()) };
+        let four = Config {
+            players: 4,
+            window: 8,
+            seats: true,
+            ..cfg(2, 20)
+        };
+        let mut a = ask(Planted::None);
+        for p in 3..=4u8 {
+            let theirs = a.plays[&1].clone();
+            a.plays.insert(p, theirs);
+        }
+        let (held, r) = rollback(&four, &Card::default(), &a, make).unwrap();
+        assert_eq!(
+            (&r["verdict"], &r["failures"]),
+            (&json!("PASS"), &json!([])),
+            "{r}"
+        );
+        let left = held.copies[0].report()["seats"].clone();
+        assert_eq!(left.as_array().map(Vec::len), Some(1), "{left}");
+        let fated = seat_fates(&four, &a, 1, 1000, true);
+        assert!(matches!(
+            fated.faults.fates[..],
+            [Fate::Kill { .. }, Fate::Hide { .. }]
+        ));
     }
 
     #[test]

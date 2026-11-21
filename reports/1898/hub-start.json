@@ -1,0 +1,63 @@
+{
+  "issue": 1898,
+  "what": "deep hub run on a fresh home: ms from spawn to the ready line, and modules loaded (all threads) by ready + settle",
+  "settle_ms": 5000,
+  "date": "2026-11-21T02:48:23.867Z",
+  "node": "v24.22.0",
+  "machine": {
+    "platform": "darwin",
+    "release": "27.2.0",
+    "arch": "arm64",
+    "cpu": "Apple M6",
+    "cores": 12,
+    "memory": 34359738368
+  },
+  "load": [
+    19.876953125,
+    61.044921875,
+    100.22900390625
+  ],
+  "kits": [
+    "packages/checks-command/dist/index.js",
+    "packages/checks-numbers/dist/index.js",
+    "packages/checks-review/dist/index.js",
+    "packages/checks-work/dist/index.js",
+    "packages/conformance/dist/index.js"
+  ],
+  "without": {
+    "ms": [
+      495,
+      708,
+      835
+    ],
+    "median_ms": 708,
+    "modules": [
+      665,
+      665,
+      665
+    ],
+    "threads": {
+      "0": 147,
+      "1": 388,
+      "2": 130
+    }
+  },
+  "with": {
+    "ms": [
+      512,
+      469,
+      1754
+    ],
+    "median_ms": 512,
+    "modules": [
+      858,
+      858,
+      858
+    ],
+    "threads": {
+      "0": 215,
+      "1": 446,
+      "2": 197
+    }
+  }
+}

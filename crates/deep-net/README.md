@@ -7,7 +7,7 @@ The net module (#549, #550, #551; canvas primitives: Shared play over a relay; t
 ## Where new code goes
 
 - `src/kind.rs`: `net@1`, the module that holds it, its check (one relay, an https host) and a document's match as its net item declares it.
-- `src/copy.rs`: one copy of a match: one message a match step, relay@1's repeat rule, entries on the track by step, player and seq, full-state hashes with the track hash beside them, refusals, faults, the waiting notice, the timeout and the merged record; and planted defects, which a check or a test plants in one copy's state.
+- `src/copy.rs`: one copy of a match: one message a match step, relay@1's repeat rule, entries on the track by step, player and seq, full-state hashes with the track hash beside them, refusals, faults, the waiting notice, the timeout and the merged record; and planted defects, which a check or a test plants in one copy's state. `src/copy/seats.rs` (#277): in a piece whose logic reads `net.seats`, seats that change while the match runs: a leave agreed at one step after the `holds` exchange, an absent copy, its catch-up and its `back`.
 - `src/copy/rollback.rs`: a copy with a rollback window (#551): prediction, the window, one rollback a tick to the earliest late entry, hashes and the record only from confirmed steps, a trap held until its step is confirmed, the lead rule, a seek after the match.
 - `src/message.rs`: one player's message for one match step: its entries, the full-state and track hashes in 20 bytes, how its copy ended, and its locator's parts.
 - `src/locate.rs`: what a copy's locator finds and sends once a desync stopped its match, and where two copies parted.

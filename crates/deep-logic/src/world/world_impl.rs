@@ -489,6 +489,7 @@ impl World {
         let item = &piece.items[i];
         let k = self.lives[i].next;
         let t = k * item.step;
+        let before = self.lives[i].last * item.step; // #277: `net.seats` since the step before
         let read_started = web_time::Instant::now();
         // Each read control's entries stamped by now, at most PER_STEP a step, the step's own by
         // time, player and seq, never by arrival (Input track); each reading's values as recorded.
@@ -694,6 +695,7 @@ impl World {
                     k,
                     &mut region[at..at + e.size as usize],
                 ),
+                Read::Seats => seats::fill(&self.track, (before, t), item.step, &mut region[at..]),
                 Read::Mirror(_) | Read::None => {}
             }
         }

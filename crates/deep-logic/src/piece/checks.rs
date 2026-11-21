@@ -335,7 +335,9 @@ pub(super) fn region_map(
         reads.sort();
     }
     for r in &reads {
-        let (size, ty, read) = if let Some((size, ty)) = controls.get(r) {
+        let (size, ty, read) = if r == crate::world::seats::READ {
+            (crate::world::seats::SIZE, "seats".to_string(), Read::Seats)
+        } else if let Some((size, ty)) = controls.get(r) {
             (*size, ty.to_string(), Read::Control)
         } else if let Some(read) = series_read(r, sources) {
             // One series of a series source, read as a scalar (Logic: readings).

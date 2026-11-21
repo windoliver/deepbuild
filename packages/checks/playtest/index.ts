@@ -35,7 +35,7 @@ export function playtestSource(input: PlaytestInput): 'own' | 'definition' {
   return input.bots.length > 0 && input.bots.every((b) => b.by === 'agent') ? 'own' : 'definition';
 }
 
-interface Spec { play?: PlaytestInput; legal?: LegalInput; edges?: EdgesInput; reach?: ReachInput; shell?: ShellInput }
+interface Spec { play?: PlaytestInput; legal?: LegalInput; edges?: EdgesInput; reach?: ReachInput }
 interface Deep {
   registerCheck(type: string, runner: (spec: Spec) => Promise<CheckResult>): void;
   canvas: { play: Play };
@@ -70,7 +70,7 @@ export default function register(deep: Deep): void {
   // #851: shell.journeys plays a game shell's journeys with each device and at each size, and judges their rows.
   deep.registerCheck('shell.journeys', async (spec) => {
     // Its input is the spec's play, as a playtest's is.
-    const input = (spec.play as unknown as ShellInput | undefined) ?? spec.shell;
+    const input = spec.play as unknown as ShellInput | undefined;
     if (!input) return nothing('shell.journeys', 'the check gives no shell journeys input in its spec\'s play');
     return runShell(input, (piece, run) => deep.canvas.play(piece, run as never) as unknown as ReturnType<ShellPlay>);
   });

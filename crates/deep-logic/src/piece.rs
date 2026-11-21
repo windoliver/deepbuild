@@ -275,6 +275,8 @@ pub enum Read {
     Mirror(usize),
     /// #189: the carry record's entry (Logic: carry records).
     Carry,
+    /// #277: `net.seats`, the seat entries stamped since the item's last step.
+    Seats,
     /// A write entry.
     None,
 }
