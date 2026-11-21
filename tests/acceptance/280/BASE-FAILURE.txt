@@ -1,0 +1,650 @@
+#280's acceptance files, each run once at the base e575a47af (main, "Merge pull request #2953") on 2026-11-20, on a
+reference Mac (Mac17,10, Apple M5 Max, 64 GiB) at a 1-minute load of about 100 to 250, Node 24, the pinned Rust 1.99.1,
+the dev build of deep-show (`full`; ac7 also `core`), each file with:
+
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 sh scripts/lease \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/280 <file>.test.ts --testTimeout=600000 --hookTimeout=180000
+
+The lease printed that no hub answered, so each file ran unleased. ac1 and ac2 ran side by side, after the others had
+run one at a time; at the base neither reaches a timing. ac6's second test was rewritten after its first base run (the
+working agent's change, first a `set` patch op, which the base refuses for its missing item `id`, became its
+`deep_show` of the whole document); the run below is the rewritten file's. ac9's first launch died before vitest started
+(a stray Node binary on another session's temporary PATH failed to load); the run below is its second launch. Every
+test fails, each at an assertion for the reason the README gives, and none passes:
+
+- net.feel isn't a check kind: `match` with `check: "net.feel"` answers {"code": "bad_input", "path": "check"}
+  (ac3, ac4, ac5, ac6, ac8, ac9), and a claim's net.feel requirement reads BLOCKED with module_missing (ac7).
+- The six planted names are refused: every planted run answers {"ok": false, "code": "bad_input"}.
+- net.budget reports no window for the web (its web part stays BLOCKED; the scenario's `chrome` is ignored) and names
+  no lockstep (ac1, ac2).
+- deep_kinds lists no net.feel in either build (ac7); budgets.json names no task for #280.60cc3f22 (ac8).
+- The working agent's change to net.feel's bounds and profile is refused only for not_your_layer, naming no field of
+  net.feel's (ac6).
+- ac7's second test ran net.rollback with players 8 on the eight-seat fixture first, which passed at the base, and
+  failed on deep_run's net.feel after it.
+
+Scratch runs at the base, not saved as tests (README: What the base already does): `deep show` presents the eight-seat
+fixture with no issue; net.budget at window 8 on [app, web] with the scenario's `chrome` reads FAIL with
+windows {app: 2} and the web BLOCKED (826 s under load); the stored fixture with net.feel among its own checks loads and
+`read` shows it; the fixture's program validates in Node's own WebAssembly and steps in about 0.14 ms there.
+
+=== tests/acceptance/280/ac1-windows.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/280 ac1-windows.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/280
+
+ ❯ ac1-windows.test.ts (2 tests | 2 failed) 875751ms
+   ❯ AC1 #280.5334836f net.budget's window for each host on the eight-seat fixture (2)
+     × AC1 #280.5334836f net.budget on the eight-seat fixture reports a window for the app and for the web; declaring each host's reported window passes net.budget there, and declaring one more fails it, naming the canvas module that costs most 430092ms
+     × AC1 #280.5334836f a planted report computed from one match step's cost without its checkpoints reports a larger window, which then fails net.budget, naming the host 441088ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-windows.test.ts > AC1 #280.5334836f net.budget's window for each host on the eight-seat fixture > AC1 #280.5334836f net.budget on the eight-seat fixture reports a window for the app and for the web; declaring each host's reported window passes net.budget there, and declaring one more fails it, naming the canvas module that costs most
+AssertionError: AC1: net.budget reports a window for web (windows: {host → window}); its report: {"kind":"net.budget","verdict":"FAIL","failures":[{"step":589,"ms":11.017581999999999,"module":"logic","what":"the frame at match step 589 took 11.018 ms with its window of 8 restored and stepped again, past the class's 4 ms frame time; logic costs most"}],"blocked":[{"host":"web","ask":"Run net.budget's web part in the web player in headless Chrome on the reference Mac.","what":"net.budget's web part hasn't run in headless Chrome"}],"inconclusive":[],"frame_ms":4,"window":8,"runs":[{"step":7,"step_ms":0.913749,"window_ms":8.756668},{"step":589,"step_ms":1.188291,"window_ms":9.829291},{"step":548,"step_ms":0.676791,"window_ms":9.083625},{"step":310,"step_ms":0.743375,"window_ms":9.400751},{"step":7,"step_ms":1.1805,"window_ms":8.069085}],"worst":{"step":589,"ms":11.017581999999999,"modules":{"logic":9.033627,"physics":1.983955},"module":"logic"},"busiest":{"step":0,"ms":1.87454},"windows":{"app":2},"snapshot_bytes_per_s":{"logic":129761280,"physics":466718}}: expected undefined to be defined
+ ❯ windowOf helpers.ts:179:126
+    177| export function windowOf(b: Budgeted, host: Host, what: string): numbe…
+    178|   const w = b.windows[host];
+    179|   expect(w, `${what}: net.budget reports a window for ${host} (windows…
+       |                                                                                                                              ^
+    180|   expect(Number.isInteger(w) && w! >= 0 && w! <= 16, `${what}: ${host}…
+    181|   return w!;
+ ❯ ac1-windows.test.ts:34:88
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac1-windows.test.ts > AC1 #280.5334836f net.budget's window for each host on the eight-seat fixture > AC1 #280.5334836f a planted report computed from one match step's cost without its checkpoints reports a larger window, which then fails net.budget, naming the host
+AssertionError: AC1 the planted report on app (planted net_budget_window_without_checkpoints): deep-show run answers the scenario ok (it takes the planted net_budget_window_without_checkpoints); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ budgetRun helpers.ts:167:13
+ ❯ ac1-windows.test.ts:51:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  19:48:22
+   Duration  876.75s (tests 100%)
+
+
+[exited with code 1]
+
+=== tests/acceptance/280/ac2-web-window.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/280 ac2-web-window.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/280
+
+ ❯ ac2-web-window.test.ts (2 tests | 2 failed) 741113ms
+   ❯ AC2 #280.c693445e the web's window holds a piece that plays on the web, and 0 names lockstep (2)
+     × AC2 #280.c693445e a net item whose window exceeds the web's reported window, in a piece whose on lists web, fails net.budget naming web and both windows, while the same window passes with on: [app] where the app's report allows it 413677ms
+     × AC2 #280.c693445e a report of 0 names lockstep as the only fit 316324ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac2-web-window.test.ts > AC2 #280.c693445e the web's window holds a piece that plays on the web, and 0 names lockstep > AC2 #280.c693445e a net item whose window exceeds the web's reported window, in a piece whose on lists web, fails net.budget naming web and both windows, while the same window passes with on: [app] where the app's report allows it
+AssertionError: AC2: net.budget reports a window for web (windows: {host → window}); its report: {"kind":"net.budget","verdict":"FAIL","failures":[{"step":502,"ms":12.853746000000001,"module":"logic","what":"the frame at match step 502 took 12.854 ms with its window of 8 restored and stepped again, past the class's 4 ms frame time; logic costs most"}],"blocked":[{"host":"web","ask":"Run net.budget's web part in the web player in headless Chrome on the reference Mac.","what":"net.budget's web part hasn't run in headless Chrome"}],"inconclusive":[],"frame_ms":4,"window":8,"runs":[{"step":468,"step_ms":0.855833,"window_ms":9.571954},{"step":7,"step_ms":0.902334,"window_ms":8.412833},{"step":549,"step_ms":0.630708,"window_ms":8.978337},{"step":557,"step_ms":1.223083,"window_ms":9.063795},{"step":502,"step_ms":0.567249,"window_ms":12.286497}],"worst":{"step":502,"ms":12.853746000000001,"modules":{"logic":9.883124,"physics":2.970622},"module":"logic"},"busiest":{"step":235,"ms":2.175959},"windows":{"app":1},"snapshot_bytes_per_s":{"logic":129761280,"physics":466718}}: expected undefined to be defined
+ ❯ windowOf helpers.ts:179:126
+    177| export function windowOf(b: Budgeted, host: Host, what: string): numbe…
+    178|   const w = b.windows[host];
+    179|   expect(w, `${what}: net.budget reports a window for ${host} (windows…
+       |                                                                                                                              ^
+    180|   expect(Number.isInteger(w) && w! >= 0 && w! <= 16, `${what}: ${host}…
+    181|   return w!;
+ ❯ ac2-web-window.test.ts:32:57
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac2-web-window.test.ts > AC2 #280.c693445e the web's window holds a piece that plays on the web, and 0 names lockstep > AC2 #280.c693445e a report of 0 names lockstep as the only fit
+AssertionError: a report of 0 names lockstep as the only fit:
+  AC2: net.budget reports window 0 on app and names no lockstep for it (lockstep: [host]): {"kind":"net.budget","verdict":"FAIL","failures":[{"step":552,"ms":5.686582,"module":"logic","what":"the frame at match step 552 took 5.687 ms with its window of 1 restored and stepped again, past the class's 4 ms frame time; logic costs most"}],"blocked":[],"inconclusive":[],"frame_ms":4,"window":1,"runs":[{"step":416,"step_ms":2.432209,"window_ms":2.708084},{"step":0,"step_ms":2.644833,"window_ms":2.654499},{"step":552,"step_ms":2.694875,"window_ms":2.991707},{"step":339,"step_ms":2.49325,"window_ms":2.875584},{"step":157,"step_ms":2.438209,"window_ms":2.768874}],"worst":{"step":552,"ms":5.686582,"modules":{"logic":5.242125,"physics":0.444457},"module":"logic"},"busiest":{"step":118,"ms":2.70225},"windows":{"app":0},"snapshot_bytes_per_s":{"logic":7864320,"physics":227819}}: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "AC2: net.budget reports window 0 on app and names no lockstep for it (lockstep: [host]): {\"kind\":\"net.budget\",\"verdict\":\"FAIL\",\"failures\":[{\"step\":552,\"ms\":5.686582,\"module\":\"logic\",\"what\":\"the frame at match step 552 took 5.687 ms with its window of 1 restored and stepped again, past the class's 4 ms frame time; logic costs most\"}],\"blocked\":[],\"inconclusive\":[],\"frame_ms\":4,\"window\":1,\"runs\":[{\"step\":416,\"step_ms\":2.432209,\"window_ms\":2.708084},{\"step\":0,\"step_ms\":2.644833,\"window_ms\":2.654499},{\"step\":552,\"step_ms\":2.694875,\"window_ms\":2.991707},{\"step\":339,\"step_ms\":2.49325,\"window_ms\":2.875584},{\"step\":157,\"step_ms\":2.438209,\"window_ms\":2.768874}],\"worst\":{\"step\":552,\"ms\":5.686582,\"modules\":{\"logic\":5.242125,\"physics\":0.444457},\"module\":\"logic\"},\"busiest\":{\"step\":118,\"ms\":2.70225},\"windows\":{\"app\":0},\"snapshot_bytes_per_s\":{\"logic\":7864320,\"physics\":227819}}",
++ ]
+
+ ❯ none ../549/helpers.ts:93:73
+     91| /** No failures; the message lists them. */
+     92| export function none(failures: readonly string[], what: string): void {
+     93|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     94| }
+     95| /** A planted program's run: this suite's own judgement must fail it, …
+ ❯ ac2-web-window.test.ts:62:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  19:51:18
+   Duration  742.50s (tests 100%)
+
+
+[exited with code 1]
+
+=== tests/acceptance/280/ac3-stall.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/280 ac3-stall.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/280
+
+ ❯ ac3-stall.test.ts (3 tests | 3 failed) 192651ms
+   ❯ AC3 #280.f6f631ae net.feel's stall on the eight-seat fixture (3)
+     × AC3 #280.f6f631ae with every player at 40 ms one-way latency, 10 ms jitter and no spikes, net.feel reads 0 stall on every copy 91929ms
+     × AC3 #280.f6f631ae with no jitter and spikes that hold player 1's messages for 250 ms at 5, 15, 25, 35, 45 and 55 s, every other copy's stall reads 740 ms a minute, within one step length per spike 76196ms
+     × AC3 #280.f6f631ae a planted meter that counts each stall as the held message's whole delay reads 290 ms a spike, 1,740 ms a minute, and fails, naming the copy 1850ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac3-stall.test.ts > AC3 #280.f6f631ae net.feel's stall on the eight-seat fixture > AC3 #280.f6f631ae with every player at 40 ms one-way latency, 10 ms jitter and no spikes, net.feel reads 0 stall on every copy
+AssertionError: AC3 40 ms and 10 ms jitter: the match call answers, not refuses: {"code":"bad_input","path":"check","core":"core@0.0.0","set_digest":"c7f10aee3c745e72ae9cfdcbd2cd0214eb716aa0496967d1994a8acfeab6e9e7"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ copiesOf ../551/helpers.ts:109:87
+    107| export function copiesOf(reply: JsonObject | undefined, n: number, wha…
+    108|   const m = obj(reply, what);
+    109|   expect(m['code'], `${what}: the match call answers, not refuses: ${s…
+       |                                                                                       ^
+    110|   const copies = arr(m['copies'], `${what}: copies`).map((c, i) => cop…
+    111|   expect(copies.map((c) => c.player), `${what}: one copy a player, 1 t…
+ ❯ playFeel helpers.ts:120:20
+ ❯ ac3-stall.test.ts:38:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  ac3-stall.test.ts > AC3 #280.f6f631ae net.feel's stall on the eight-seat fixture > AC3 #280.f6f631ae with no jitter and spikes that hold player 1's messages for 250 ms at 5, 15, 25, 35, 45 and 55 s, every other copy's stall reads 740 ms a minute, within one step length per spike
+AssertionError: AC3 spikes: the match call answers, not refuses: {"code":"bad_input","path":"check","core":"core@0.0.0","set_digest":"c7f10aee3c745e72ae9cfdcbd2cd0214eb716aa0496967d1994a8acfeab6e9e7"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ copiesOf ../551/helpers.ts:109:87
+    107| export function copiesOf(reply: JsonObject | undefined, n: number, wha…
+    108|   const m = obj(reply, what);
+    109|   expect(m['code'], `${what}: the match call answers, not refuses: ${s…
+       |                                                                                       ^
+    110|   const copies = arr(m['copies'], `${what}: copies`).map((c, i) => cop…
+    111|   expect(copies.map((c) => c.player), `${what}: one copy a player, 1 t…
+ ❯ playFeel helpers.ts:120:20
+ ❯ ac3-stall.test.ts:43:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  ac3-stall.test.ts > AC3 #280.f6f631ae net.feel's stall on the eight-seat fixture > AC3 #280.f6f631ae a planted meter that counts each stall as the held message's whole delay reads 290 ms a spike, 1,740 ms a minute, and fails, naming the copy
+AssertionError: AC3 planted (planted net_feel_stall_whole_delay): deep-show run answers the scenario ok (it takes the planted net_feel_stall_whole_delay); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ playFeel helpers.ts:117:13
+ ❯ ac3-stall.test.ts:48:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  18:47:57
+   Duration  202.95s (tests 96%, transform 4%)
+
+
+[exited with code 1]
+
+=== tests/acceptance/280/ac4-depth.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/280 ac4-depth.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/280
+
+ ❯ ac4-depth.test.ts (2 tests | 2 failed) 83225ms
+   ❯ AC4 #280.3cddbab4 net.feel's rollback depth at a fixed 80 ms (2)
+     × AC4 #280.3cddbab4 with a fixed 80 ms one-way latency, no jitter, delay 2 at 60 Hz and every player's input changing every step, each rollback's depth is within one step of 3 73522ms
+     × AC4 #280.3cddbab4 a planted meter that counts depth from the step the late message arrived on reads 0 and fails, naming the copy 1859ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac4-depth.test.ts > AC4 #280.3cddbab4 net.feel's rollback depth at a fixed 80 ms > AC4 #280.3cddbab4 with a fixed 80 ms one-way latency, no jitter, delay 2 at 60 Hz and every player's input changing every step, each rollback's depth is within one step of 3
+AssertionError: AC4 80 ms: the match call answers, not refuses: {"code":"bad_input","path":"check","core":"core@0.0.0","set_digest":"c7f10aee3c745e72ae9cfdcbd2cd0214eb716aa0496967d1994a8acfeab6e9e7"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ copiesOf ../551/helpers.ts:109:87
+    107| export function copiesOf(reply: JsonObject | undefined, n: number, wha…
+    108|   const m = obj(reply, what);
+    109|   expect(m['code'], `${what}: the match call answers, not refuses: ${s…
+       |                                                                                       ^
+    110|   const copies = arr(m['copies'], `${what}: copies`).map((c, i) => cop…
+    111|   expect(copies.map((c) => c.player), `${what}: one copy a player, 1 t…
+ ❯ playFeel helpers.ts:120:20
+ ❯ ac4-depth.test.ts:33:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac4-depth.test.ts > AC4 #280.3cddbab4 net.feel's rollback depth at a fixed 80 ms > AC4 #280.3cddbab4 a planted meter that counts depth from the step the late message arrived on reads 0 and fails, naming the copy
+AssertionError: AC4 planted (planted net_feel_depth_from_arrival): deep-show run answers the scenario ok (it takes the planted net_feel_depth_from_arrival); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ playFeel helpers.ts:117:13
+ ❯ ac4-depth.test.ts:45:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  18:51:38
+   Duration  86.28s (tests 98%, transform 1%, import 1%)
+
+
+[exited with code 1]
+
+=== tests/acceptance/280/ac5-correction.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/280 ac5-correction.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/280
+
+ ❯ ac5-correction.test.ts (2 tests | 2 failed) 97415ms
+   ❯ AC5 #280.b13fcc01 net.feel's correction distance for a mover that reverses each second (2)
+     × AC5 #280.b13fcc01 with each of player 2's messages reaching copy 1 five steps late, copy 1's correction p99 for player 2's mover is 1.67 m within 1 cm, over 60 rollbacks, one per reversal 80172ms
+     × AC5 #280.b13fcc01 a planted meter that measures a mover's frame-to-frame move instead of its jump across the rollback reads 1.5 m at p99 (0.17 m at p50) and fails, naming the item 3402ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac5-correction.test.ts > AC5 #280.b13fcc01 net.feel's correction distance for a mover that reverses each second > AC5 #280.b13fcc01 with each of player 2's messages reaching copy 1 five steps late, copy 1's correction p99 for player 2's mover is 1.67 m within 1 cm, over 60 rollbacks, one per reversal
+AssertionError: AC5 5 steps late: the match call answers, not refuses: {"code":"bad_input","path":"check","core":"core@0.0.0","set_digest":"c7f10aee3c745e72ae9cfdcbd2cd0214eb716aa0496967d1994a8acfeab6e9e7"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ copiesOf ../551/helpers.ts:109:87
+    107| export function copiesOf(reply: JsonObject | undefined, n: number, wha…
+    108|   const m = obj(reply, what);
+    109|   expect(m['code'], `${what}: the match call answers, not refuses: ${s…
+       |                                                                                       ^
+    110|   const copies = arr(m['copies'], `${what}: copies`).map((c, i) => cop…
+    111|   expect(copies.map((c) => c.player), `${what}: one copy a player, 1 t…
+ ❯ playFeel helpers.ts:120:20
+ ❯ ac5-correction.test.ts:38:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac5-correction.test.ts > AC5 #280.b13fcc01 net.feel's correction distance for a mover that reverses each second > AC5 #280.b13fcc01 a planted meter that measures a mover's frame-to-frame move instead of its jump across the rollback reads 1.5 m at p99 (0.17 m at p50) and fails, naming the item
+AssertionError: AC5 planted (planted net_feel_correction_frame_to_frame): deep-show run answers the scenario ok (it takes the planted net_feel_correction_frame_to_frame); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ playFeel helpers.ts:117:13
+ ❯ ac5-correction.test.ts:46:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  18:53:18
+   Duration  100.46s (tests 98%, transform 1%)
+
+
+[exited with code 1]
+
+=== tests/acceptance/280/ac6-bounds.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/280 ac6-bounds.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/280
+
+ ❯ ac6-bounds.test.ts (3 tests | 3 failed) 163968ms
+   ❯ AC6 #280.456285f7 net.feel's bounds, where they come from, and its repeat (3)
+     × AC6 #280.456285f7 the fixture under the spike profile fails a bound of 500 ms of stall a minute, naming the copy, the reading and its 740 ms, and passes a bound of 1,000 ms 78925ms
+     × AC6 #280.456285f7 a net.feel whose profile or bounds a working agent's patch changed is refused, naming the field 2013ms
+     × AC6 #280.456285f7 two runs from one seed give byte-equal readings, while a planted meter on the wall clock gives two and fails, naming the reading 69815ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac6-bounds.test.ts > AC6 #280.456285f7 net.feel's bounds, where they come from, and its repeat > AC6 #280.456285f7 the fixture under the spike profile fails a bound of 500 ms of stall a minute, naming the copy, the reading and its 740 ms, and passes a bound of 1,000 ms
+AssertionError: AC6 a bound of 500 ms: the match call answers, not refuses: {"code":"bad_input","path":"check","core":"core@0.0.0","set_digest":"c7f10aee3c745e72ae9cfdcbd2cd0214eb716aa0496967d1994a8acfeab6e9e7"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ copiesOf ../551/helpers.ts:109:87
+    107| export function copiesOf(reply: JsonObject | undefined, n: number, wha…
+    108|   const m = obj(reply, what);
+    109|   expect(m['code'], `${what}: the match call answers, not refuses: ${s…
+       |                                                                                       ^
+    110|   const copies = arr(m['copies'], `${what}: copies`).map((c, i) => cop…
+    111|   expect(copies.map((c) => c.player), `${what}: one copy a player, 1 t…
+ ❯ playFeel helpers.ts:120:20
+ ❯ ac6-bounds.test.ts:34:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  ac6-bounds.test.ts > AC6 #280.456285f7 net.feel's bounds, where they come from, and its repeat > AC6 #280.456285f7 a net.feel whose profile or bounds a working agent's patch changed is refused, naming the field
+AssertionError: the working agent's patches to net.feel's profile and bounds are refused, naming the field:
+  AC6: no error issue of the refusal names the field checks/0/bounds/stall: [{"check":"document.validate","code":"not_your_layer","severity":"error","ids":["arena"],"path":"worlds/arena","actual":"arena","what":"another writer's layer holds this ID","fix":"Patch only items in your own layer."},{"check":"document.validate","code":"not_your_layer","severity":"error","ids":["cam"],"path":"items/cam","actual":"cam","what":"another writer's layer holds this ID","fix":"Patch only items in your own layer."},{"check":"document.validate","code":"not_your_layer","severity":"error","ids":["field"],"path":"items/field","actual":"field","what":"another writer's layer holds this ID","fix":"Patch only items in your own layer."},{"check":"document.validate","code":"not_your_layer","severity":"error","ids":["floor"],"path":"items/floor","actual":"floor","what":"another writer's layer holds this ID","fix":"Patch only items in your own layer."},{"check":"document.validate","code":
+  AC6: the refusal naming checks/0/bounds/stall doesn't say it's net.feel's: []
+  AC6: no error issue of the refusal names the field checks/0/profile/spikes/hold: [{"check":"document.validate","code":"not_your_layer","severity":"error","ids":["arena"],"path":"worlds/arena","actual":"arena","what":"another writer's layer holds this ID","fix":"Patch only items in your own layer."},{"check":"document.validate","code":"not_your_layer","severity":"error","ids":["cam"],"path":"items/cam","actual":"cam","what":"another writer's layer holds this ID","fix":"Patch only items in your own layer."},{"check":"document.validate","code":"not_your_layer","severity":"error","ids":["field"],"path":"items/field","actual":"field","what":"another writer's layer holds this ID","fix":"Patch only items in your own layer."},{"check":"document.validate","code":"not_your_layer","severity":"error","ids":["floor"],"path":"items/floor","actual":"floor","what":"another writer's layer holds this ID","fix":"Patch only items in your own layer."},{"check":"document.validate","code":
+  AC6: the refusal naming checks/0/profile/spikes/hold doesn't say it's net.feel's: []: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "AC6: no error issue of the refusal names the field checks/0/bounds/stall: [{\"check\":\"document.validate\",\"code\":\"not_your_layer\",\"severity\":\"error\",\"ids\":[\"arena\"],\"path\":\"worlds/arena\",\"actual\":\"arena\",\"what\":\"another writer's layer holds this ID\",\"fix\":\"Patch only items in your own layer.\"},{\"check\":\"document.validate\",\"code\":\"not_your_layer\",\"severity\":\"error\",\"ids\":[\"cam\"],\"path\":\"items/cam\",\"actual\":\"cam\",\"what\":\"another writer's layer holds this ID\",\"fix\":\"Patch only items in your own layer.\"},{\"check\":\"document.validate\",\"code\":\"not_your_layer\",\"severity\":\"error\",\"ids\":[\"field\"],\"path\":\"items/field\",\"actual\":\"field\",\"what\":\"another writer's layer holds this ID\",\"fix\":\"Patch only items in your own layer.\"},{\"check\":\"document.validate\",\"code\":\"not_your_layer\",\"severity\":\"error\",\"ids\":[\"floor\"],\"path\":\"items/floor\",\"actual\":\"floor\",\"what\":\"another writer's layer holds this ID\",\"fix\":\"Patch only items in your own layer.\"},{\"check\":\"document.validate\",\"code\":",
++   "AC6: the refusal naming checks/0/bounds/stall doesn't say it's net.feel's: []",
++   "AC6: no error issue of the refusal names the field checks/0/profile/spikes/hold: [{\"check\":\"document.validate\",\"code\":\"not_your_layer\",\"severity\":\"error\",\"ids\":[\"arena\"],\"path\":\"worlds/arena\",\"actual\":\"arena\",\"what\":\"another writer's layer holds this ID\",\"fix\":\"Patch only items in your own layer.\"},{\"check\":\"document.validate\",\"code\":\"not_your_layer\",\"severity\":\"error\",\"ids\":[\"cam\"],\"path\":\"items/cam\",\"actual\":\"cam\",\"what\":\"another writer's layer holds this ID\",\"fix\":\"Patch only items in your own layer.\"},{\"check\":\"document.validate\",\"code\":\"not_your_layer\",\"severity\":\"error\",\"ids\":[\"field\"],\"path\":\"items/field\",\"actual\":\"field\",\"what\":\"another writer's layer holds this ID\",\"fix\":\"Patch only items in your own layer.\"},{\"check\":\"document.validate\",\"code\":\"not_your_layer\",\"severity\":\"error\",\"ids\":[\"floor\"],\"path\":\"items/floor\",\"actual\":\"floor\",\"what\":\"another writer's layer holds this ID\",\"fix\":\"Patch only items in your own layer.\"},{\"check\":\"document.validate\",\"code\":",
++   "AC6: the refusal naming checks/0/profile/spikes/hold doesn't say it's net.feel's: []",
++ ]
+
+ ❯ none ../549/helpers.ts:93:73
+     91| /** No failures; the message lists them. */
+     92| export function none(failures: readonly string[], what: string): void {
+     93|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     94| }
+     95| /** A planted program's run: this suite's own judgement must fail it, …
+ ❯ ac6-bounds.test.ts:80:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  ac6-bounds.test.ts > AC6 #280.456285f7 net.feel's bounds, where they come from, and its repeat > AC6 #280.456285f7 two runs from one seed give byte-equal readings, while a planted meter on the wall clock gives two and fails, naming the reading
+AssertionError: AC6 the first run: the match call answers, not refuses: {"code":"bad_input","path":"check","core":"core@0.0.0","set_digest":"c7f10aee3c745e72ae9cfdcbd2cd0214eb716aa0496967d1994a8acfeab6e9e7"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ copiesOf ../551/helpers.ts:109:87
+    107| export function copiesOf(reply: JsonObject | undefined, n: number, wha…
+    108|   const m = obj(reply, what);
+    109|   expect(m['code'], `${what}: the match call answers, not refuses: ${s…
+       |                                                                                       ^
+    110|   const copies = arr(m['copies'], `${what}: copies`).map((c, i) => cop…
+    111|   expect(copies.map((c) => c.player), `${what}: one copy a player, 1 t…
+ ❯ playFeel helpers.ts:120:20
+ ❯ ac6-bounds.test.ts:86:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  19:05:01
+   Duration  166.86s (tests 99%, transform 1%)
+
+
+[exited with code 1]
+
+=== tests/acceptance/280/ac7-tools.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/280 ac7-tools.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/280
+
+ ❯ ac7-tools.test.ts (2 tests | 2 failed) 2348995ms
+   ❯ AC7 #280.9c96115f net.feel in the tools, and net.rollback with eight players (2)
+     × AC7 #280.9c96115f deep_kinds lists net.feel's fields and defaults in a build with the net module and marks it unavailable with module_missing in one without 36977ms
+     × AC7 #280.9c96115f net.rollback with players 8 passes on the eight-seat fixture with messages held back up to the window, and deep_run runs net.feel on it 2272697ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac7-tools.test.ts > AC7 #280.9c96115f net.feel in the tools, and net.rollback with eight players > AC7 #280.9c96115f deep_kinds lists net.feel's fields and defaults in a build with the net module and marks it unavailable with module_missing in one without
+AssertionError: deep_kinds lists net.feel's fields and defaults where the net module is, and marks it missing where it isn't:
+  AC7: net@1's check_kinds in the full build list no net.feel with its fields: ["net.rollback","net.desync","net.budget"]
+  AC7: the core build, which holds no net module, doesn't list net.feel: {"name":"net@1","registry":"kind@1","origin":"first_party","module":"net","binds":"all","schema":{"x-opaque":"params the drawing module reads; the kind registry holds no schema for them yet"},"example":null,"since":"R2","digest":"43292cc0b6035d5ec1f7866d47fa53dcbbc5357c767374b3abc7000fa1b5493a","kit":{"verdict":"BLOCKED","rules":[{"rule":"sealed","verdict":"BLOCKED"}]},"cost":null,"stability":"stable","available":false,"description":"a kind (net)","fields":[],"code":"module_missing","check_kinds":["net.rollback","net.desync","net.budget"]}: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "AC7: net@1's check_kinds in the full build list no net.feel with its fields: [\"net.rollback\",\"net.desync\",\"net.budget\"]",
++   "AC7: the core build, which holds no net module, doesn't list net.feel: {\"name\":\"net@1\",\"registry\":\"kind@1\",\"origin\":\"first_party\",\"module\":\"net\",\"binds\":\"all\",\"schema\":{\"x-opaque\":\"params the drawing module reads; the kind registry holds no schema for them yet\"},\"example\":null,\"since\":\"R2\",\"digest\":\"43292cc0b6035d5ec1f7866d47fa53dcbbc5357c767374b3abc7000fa1b5493a\",\"kit\":{\"verdict\":\"BLOCKED\",\"rules\":[{\"rule\":\"sealed\",\"verdict\":\"BLOCKED\"}]},\"cost\":null,\"stability\":\"stable\",\"available\":false,\"description\":\"a kind (net)\",\"fields\":[],\"code\":\"module_missing\",\"check_kinds\":[\"net.rollback\",\"net.desync\",\"net.budget\"]}",
++ ]
+
+ ❯ none ../549/helpers.ts:93:73
+     91| /** No failures; the message lists them. */
+     92| export function none(failures: readonly string[], what: string): void {
+     93|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     94| }
+     95| /** A planted program's run: this suite's own judgement must fail it, …
+ ❯ ac7-tools.test.ts:64:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac7-tools.test.ts > AC7 #280.9c96115f net.feel in the tools, and net.rollback with eight players > AC7 #280.9c96115f net.rollback with players 8 passes on the eight-seat fixture with messages held back up to the window, and deep_run runs net.feel on it
+AssertionError: net.rollback passes with eight players, and deep_run runs net.feel on the eight-seat fixture:
+  AC7: deep_run's net.feel on the eight-seat fixture reads BLOCKED, not PASS: {"id":"req:01JB280Q000000000000000001","kind":"net.feel","issues":[],"machines":"any","determinism":"exact","result":"BLOCKED","blocked":[{"code":"module_missing","kind":"net.feel","ids":[]}]}
+  AC7: deep_run's net.feel row returns no readings for the eight copies (results: [{readings}]): {"id":"req:01JB280Q000000000000000001","kind":"net.feel","issues":[],"machines":"any","determinism":"exact","result":"BLOCKED","blocked":[{"code":"module_missing","kind":"net.feel","ids":[]}]}: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "AC7: deep_run's net.feel on the eight-seat fixture reads BLOCKED, not PASS: {\"id\":\"req:01JB280Q000000000000000001\",\"kind\":\"net.feel\",\"issues\":[],\"machines\":\"any\",\"determinism\":\"exact\",\"result\":\"BLOCKED\",\"blocked\":[{\"code\":\"module_missing\",\"kind\":\"net.feel\",\"ids\":[]}]}",
++   "AC7: deep_run's net.feel row returns no readings for the eight copies (results: [{readings}]): {\"id\":\"req:01JB280Q000000000000000001\",\"kind\":\"net.feel\",\"issues\":[],\"machines\":\"any\",\"determinism\":\"exact\",\"result\":\"BLOCKED\",\"blocked\":[{\"code\":\"module_missing\",\"kind\":\"net.feel\",\"ids\":[]}]}",
++ ]
+
+ ❯ none ../549/helpers.ts:93:73
+     91| /** No failures; the message lists them. */
+     92| export function none(failures: readonly string[], what: string): void {
+     93|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     94| }
+     95| /** A planted program's run: this suite's own judgement must fail it, …
+ ❯ ac7-tools.test.ts:92:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  19:08:53
+   Duration  2352.48s (tests 100%)
+
+
+[exited with code 1]
+
+=== tests/acceptance/280/ac8-budgets.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/280 ac8-budgets.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/280
+
+ ❯ ac8-budgets.test.ts (2 tests | 2 failed) 52184ms
+   ❯ AC8 #280.60cc3f22 net.feel's and net.budget's readings, and no work for a piece without the net module (2)
+     × AC8 #280.60cc3f22 benchmarks/budgets.json records net.feel's run and net.budget's report as readings and a piece without the net module, in tasks naming this criterion, so the budget window measures them against the merge base 313ms
+     × AC8 #280.60cc3f22 on the reference Mac: net.feel's 3,600-step run of eight copies and net.budget's report recorded as readings in minutes, and a piece without the net module gaining no work against the merge base 45694ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac8-budgets.test.ts > AC8 #280.60cc3f22 net.feel's and net.budget's readings, and no work for a piece without the net module > AC8 #280.60cc3f22 benchmarks/budgets.json records net.feel's run and net.budget's report as readings and a piece without the net module, in tasks naming this criterion, so the budget window measures them against the merge base
+AssertionError: the budget window records the criterion's readings against the merge base:
+  AC8: no task of benchmarks/budgets.json names #280.60cc3f22 in its criteria
+  AC8: no task naming #280.60cc3f22 records net.feel's 3,600-step run of eight copies
+  AC8: no task naming #280.60cc3f22 records net.budget's report
+  AC8: no task naming #280.60cc3f22 measures a piece without the net module: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "AC8: no task of benchmarks/budgets.json names #280.60cc3f22 in its criteria",
++   "AC8: no task naming #280.60cc3f22 records net.feel's 3,600-step run of eight copies",
++   "AC8: no task naming #280.60cc3f22 records net.budget's report",
++   "AC8: no task naming #280.60cc3f22 measures a piece without the net module",
++ ]
+
+ ❯ none ../549/helpers.ts:93:73
+     91| /** No failures; the message lists them. */
+     92| export function none(failures: readonly string[], what: string): void {
+     93|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     94| }
+     95| /** A planted program's run: this suite's own judgement must fail it, …
+ ❯ ac8-budgets.test.ts:74:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac8-budgets.test.ts > AC8 #280.60cc3f22 net.feel's and net.budget's readings, and no work for a piece without the net module > AC8 #280.60cc3f22 on the reference Mac: net.feel's 3,600-step run of eight copies and net.budget's report recorded as readings in minutes, and a piece without the net module gaining no work against the merge base
+AssertionError: AC8 net.feel's run: the match call answers, not refuses: {"code":"bad_input","path":"check","core":"core@0.0.0","set_digest":"c7f10aee3c745e72ae9cfdcbd2cd0214eb716aa0496967d1994a8acfeab6e9e7"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ copiesOf ../551/helpers.ts:109:87
+    107| export function copiesOf(reply: JsonObject | undefined, n: number, wha…
+    108|   const m = obj(reply, what);
+    109|   expect(m['code'], `${what}: the match call answers, not refuses: ${s…
+       |                                                                                       ^
+    110|   const copies = arr(m['copies'], `${what}: copies`).map((c, i) => cop…
+    111|   expect(copies.map((c) => c.player), `${what}: one copy a player, 1 t…
+ ❯ playFeel helpers.ts:120:20
+ ❯ ac8-budgets.test.ts:80:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  19:46:37
+   Duration  53.60s (tests 98%, import 1%, transform 1%)
+
+
+[exited with code 1]
+
+=== tests/acceptance/280/ac9-loss.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/280 ac9-loss.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/280
+
+ ❯ ac9-loss.test.ts (2 tests | 2 failed) 102038ms
+   ❯ AC9 #280.4335448f net.feel with lost messages, and a resend that never comes (2)
+     × AC9 #280.4335448f with loss {rate: 0.01, seed: 7}, every copy's input track equals the lossless run's by hash, its stall is at least the lossless run's, and a second run from the same seed gives byte-equal readings 77360ms
+     × AC9 #280.4335448f a planted resend from the newest step instead of the lowest unconfirmed one leaves a copy waiting on a step never sent again, and the run fails at its deadline, naming the copy and the step, never hanging 2957ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac9-loss.test.ts > AC9 #280.4335448f net.feel with lost messages, and a resend that never comes > AC9 #280.4335448f with loss {rate: 0.01, seed: 7}, every copy's input track equals the lossless run's by hash, its stall is at least the lossless run's, and a second run from the same seed gives byte-equal readings
+AssertionError: AC9 lossless: the match call answers, not refuses: {"code":"bad_input","path":"check","core":"core@0.0.0","set_digest":"c7f10aee3c745e72ae9cfdcbd2cd0214eb716aa0496967d1994a8acfeab6e9e7"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ copiesOf ../551/helpers.ts:109:87
+    107| export function copiesOf(reply: JsonObject | undefined, n: number, wha…
+    108|   const m = obj(reply, what);
+    109|   expect(m['code'], `${what}: the match call answers, not refuses: ${s…
+       |                                                                                       ^
+    110|   const copies = arr(m['copies'], `${what}: copies`).map((c, i) => cop…
+    111|   expect(copies.map((c) => c.player), `${what}: one copy a player, 1 t…
+ ❯ playFeel helpers.ts:120:20
+ ❯ ac9-loss.test.ts:34:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac9-loss.test.ts > AC9 #280.4335448f net.feel with lost messages, and a resend that never comes > AC9 #280.4335448f a planted resend from the newest step instead of the lowest unconfirmed one leaves a copy waiting on a step never sent again, and the run fails at its deadline, naming the copy and the step, never hanging
+AssertionError: AC9 planted resend (planted net_resends_from_newest): deep-show run answers the scenario ok (it takes the planted net_resends_from_newest); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ playFeel helpers.ts:117:13
+ ❯ ac9-loss.test.ts:51:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  18:57:01
+   Duration  105.29s (tests 98%, transform 2%)
+
+
+[exited with code 1]

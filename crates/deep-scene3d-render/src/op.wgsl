@@ -7,8 +7,8 @@ var<private> op_frame: OpFrame;
 
 // The operator's outputs at a fragment: this target's camera and size, and the solid's own time
 // and seed, over its normal in its mesh's space, the world's, and the view's (x right, y up, z to
-// the eye).
-fn run_op(in: MeshOut) -> MatOut {
+// the eye), and its tangent frame `tangent`.
+fn run_op_with(in: MeshOut, tangent: vec4<f32>) -> MatOut {
     let size = frame.viewport.xy;
     op_frame = OpFrame(
         frame.clip,
@@ -21,9 +21,15 @@ fn run_op(in: MeshOut) -> MatOut {
     let world = normalize(in.normal);
     let toward = cross(frame.right.xyz, frame.up.xyz);
     let view = vec3<f32>(dot(world, frame.right.xyz), dot(world, frame.up.xyz), dot(world, toward));
-    // The planted bump_ignores_handedness (#486): every tangent's frame read as right-handed.
-    let tangent = select(in.tangent, vec4<f32>(in.tangent.xyz, 1.0), planted(P_BUMP_HAND));
     return op_material(MatGeom(in.pos, normalize(in.object_n), world, view, in.uv.xy, in.world, tangent));
+}
+
+// The operator's outputs over the mesh's tangent, or under the planted bump_ignores_handedness
+// (#486) every tangent's frame read as right-handed. The planted bits live in the light group,
+// which a shadow pass doesn't bind, so op_shadow_fs calls run_op_with instead (#3025).
+fn run_op(in: MeshOut) -> MatOut {
+    let tangent = select(in.tangent, vec4<f32>(in.tangent.xyz, 1.0), planted(P_BUMP_HAND));
+    return run_op_with(in, tangent);
 }
 
 // A shadow pass's fragment under a material operator (#446): the operator's alpha below the mask's
@@ -34,7 +40,7 @@ fn op_shadow_fs(in: MeshOut) {
         || !band_keeps(vec2<u32>(in.pos.xy), in.pick, in.mask.x) {
         discard;
     }
-    let o = run_op(in);
+    let o = run_op_with(in, in.tangent);
     if (o.wrote.x & 2u) != 0u && o.base.w < ALPHA_CUTOFF {
         discard;
     }

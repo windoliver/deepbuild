@@ -151,3 +151,30 @@ pub fn read_bytes(device: &Device, tex: &wgpu::Texture) -> Vec<u8> {
         .flat_map(|line| line[..(w * 4) as usize].iter().copied())
         .collect()
 }
+
+/// A mapped buffer's rows, each `width` bytes of a `row`-byte stride.
+pub fn map_rows(
+    device: &deep_gpu::counted::Wgpu,
+    buffer: &wgpu::Buffer,
+    row: usize,
+    width: usize,
+    rows: usize,
+) -> Result<Vec<u8>, String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    buffer.slice(..).map_async(wgpu::MapMode::Read, move |r| {
+        let _ = tx.send(r);
+    });
+    let _ = device.poll(wgpu::PollType::wait_indefinitely());
+    if !matches!(rx.recv(), Ok(Ok(()))) {
+        return Err("the read back didn't map".into());
+    }
+    let data = buffer
+        .slice(..)
+        .get_mapped_range()
+        .map_err(|_| "the read back didn't map".to_string())?;
+    let mut out = Vec::with_capacity(width * rows);
+    for y in 0..rows {
+        out.extend_from_slice(&data[y * row..y * row + width]);
+    }
+    Ok(out)
+}
