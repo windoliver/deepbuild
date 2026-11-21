@@ -8,8 +8,6 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use deep_canvas::gauge::{Gauge, Kept, Place};
-
 use crate::geom::{Mesh, V3};
 use crate::scene::{matmul, Affine3, Camera, Refused, Scene, Shape, Solid};
 
@@ -80,7 +78,11 @@ pub struct Lod {
     pub lod_px: f64,
     /// A proxy band's `params`: the share of triangles it keeps and the error it allows.
     pub proxy: Option<Proxy>,
-    /// For a mesh without levels, the proxy the simplify step made of it once per content key.
+    /// For a mesh without levels under a proxy band, the mesh its proxy is made from and the
+    /// content key it is stored by. scene3d never simplifies (#2738): the renderer does.
+    pub proxy_source: Option<(Arc<Mesh>, u64)>,
+    /// That mesh's proxy, which the renderer makes once per content key before it resolves a
+    /// view (`deep-scene3d-render`); none as a scene is evaluated.
     pub proxy_mesh: Option<Level>,
     /// A terrain plate's tile, its column and row (#2017): its levels' errors are in m, and
     /// project at its nearest point.
@@ -498,71 +500,6 @@ fn proxy_level(lod: &Lod, level: Option<usize>) -> Option<&Level> {
     lod.proxy_mesh.as_ref()
 }
 
-/// #1431: the proxies made (`proxy_of`'s process-wide map), a failed one counted in entries:
-/// past either bound, the proxies asked for longest ago go first.
-pub static PROXY_GAUGE: Gauge = Gauge::new("PROXIES", Place::Heap, 1_024, 64_000_000);
-
-/// The heap bytes a proxy level's mesh holds: its vertices' arrays and its indices.
-fn level_bytes(level: &Option<Level>) -> u64 {
-    level.as_ref().map_or(0, |l| {
-        let m = &l.mesh;
-        (24 * (m.positions.len() + m.normals.len())
-            + 16 * (m.uv0.len() + m.uv1.len())
-            + 32 * m.tangents.len()
-            + 4 * m.indices.len()) as u64
-    })
-}
-
-/// The proxy of `mesh` (keyed by `hash`) that keeps `p.ratio` of its triangles within `p.error`,
-/// made once per content key by meshoptimizer and stored by hash, never per frame.
-pub fn proxy_of(mesh: &Mesh, hash: u64, p: Proxy) -> Option<Level> {
-    use std::sync::{Mutex, OnceLock};
-    type Key = (u64, u64, u64);
-    // cache: entries 1_024, bytes 64_000_000
-    static PROXIES: OnceLock<Mutex<Kept<Key, Option<Level>>>> = OnceLock::new();
-    let key = (hash, p.ratio.to_bits(), p.error.unwrap_or(-1.0).to_bits());
-    let made = PROXIES.get_or_init(|| Mutex::new(Kept::new(&PROXY_GAUGE)));
-    {
-        let mut made = made.lock().ok()?;
-        made.turn();
-        if let Some(l) = made.get(&key) {
-            return l.clone();
-        }
-    }
-    let positions: Vec<f32> = mesh
-        .positions
-        .iter()
-        .flat_map(|q| q.map(|v| v as f32))
-        .collect();
-    let level = meshopt::VertexDataAdapter::new(meshopt::typed_to_bytes(&positions), 12, 0)
-        .ok()
-        .and_then(|adapter| {
-            let target = ((mesh.indices.len() / 3) as f64 * p.ratio) as usize * 3;
-            let mut error = 0.0f32;
-            let indices = meshopt::simplify(
-                &mesh.indices,
-                &adapter,
-                target.max(3),
-                p.error.unwrap_or(1.0) as f32,
-                meshopt::SimplifyOptions::None,
-                Some(&mut error),
-            );
-            if indices.is_empty() {
-                return None;
-            }
-            let leveled = Mesh {
-                lods: vec![(indices, f64::from(error))],
-                ..mesh.clone()
-            };
-            levels(&Arc::new(leveled), hash ^ 0x5052_4f58_5900_0000).pop()
-        });
-    if let Ok(mut m) = made.lock() {
-        m.insert(key, level.clone(), level_bytes(&level));
-        m.evict();
-    }
-    level
-}
-
 /// A mesh's levels as the simplify job stored them (`Mesh::lods`), each a mesh over the full
 /// one's vertices keyed by `hash`'s level, the full mesh first at error 0.
 pub fn levels(mesh: &Arc<Mesh>, hash: u64) -> Vec<Level> {
@@ -626,23 +563,6 @@ mod tests {
     }
 
     #[test]
-    fn a_proxy_band_draws_the_simplified_mesh_at_its_ratio() {
-        let mut s = scene(
-            json!({"bands": [{"below_px": 1000, "show": "proxy", "params": {"ratio": 0.25}}]}),
-            json!({"class": "work_product"}),
-        );
-        let full = ball(&s).mesh.as_ref().expect("a built mesh").triangles();
-        let choices = select(&s);
-        assert_eq!(choices[0].bands, vec![Show::Proxy]);
-        resolve(&mut s, &choices);
-        let drawn = ball(&s).mesh.as_ref().expect("the proxy").triangles();
-        assert!(
-            drawn > 0 && drawn as f64 <= 0.3 * full as f64,
-            "{drawn} of {full} triangles"
-        );
-    }
-
-    #[test]
     fn a_document_may_only_lower_lod_px() {
         let px = |lod_px: f64| {
             ball(&scene(
@@ -685,6 +605,7 @@ mod tests {
             extent: 2.0,
             lod_px: LOD_PX,
             proxy: None,
+            proxy_source: None,
             proxy_mesh: None,
             tile: None,
         }));

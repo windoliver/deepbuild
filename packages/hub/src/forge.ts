@@ -182,12 +182,19 @@ export class Forge {
     }
     return false;
   }
-  /** Whether the head's check runs, or a commit status it has, are still pending: a head with no status at all is not pending. */
+  /**
+   * Whether the head's check runs, on any page of them, or a commit status it has, are still pending: a head with no
+   * status at all is not pending. The forge pages the runs (GitHub 30 to a page), so its next link is followed, as
+   * far as the first page with a run still going.
+   */
   private async checksRunning(pr: Pr, head: string): Promise<boolean> {
     try {
-      const checks = await this.get(`/repos/${pr.owner}/${pr.repo}/commits/${head}/check-runs`);
-      const runs = isObj(checks) && Array.isArray(checks.check_runs) ? checks.check_runs : [];
-      if (runs.some((r) => isObj(r) && r.status !== 'completed')) return true;
+      for (let next: string | undefined = `/repos/${pr.owner}/${pr.repo}/commits/${head}/check-runs`; next;) {
+        const page = await this.page(next);
+        const runs = isObj(page.body) && Array.isArray(page.body.check_runs) ? page.body.check_runs : [];
+        if (runs.some((r) => isObj(r) && r.status !== 'completed')) return true;
+        next = page.next;
+      }
       const status = await this.get(`/repos/${pr.owner}/${pr.repo}/commits/${head}/status`);
       return isObj(status) && status.state === 'pending' && Array.isArray(status.statuses) && status.statuses.length > 0;
     } catch { return false; }

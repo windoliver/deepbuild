@@ -1,0 +1,127 @@
+#2973 acceptance tests: runs by the blind job (macOS, Node 24.22, node --test --test-concurrency=3)
+
+== 1. The base, 4b6ce2f41 (no restart budget): 5 of 8 fail, each for the expected reason; 3 pass there and are proven by twins (section 3).
+   18:03  up 22:30, 3 users, load averages: 122.31 119.65 107.44
+✖ #2973.47e2f0df with an unreadable or unparseable budget file, hub.restart is refused, the refusal names the file, and the hub stays up (18550.285583ms)
+✔ #2973.5462ab8d a hub that crashes 7 times, each on a signal the login service restarts, leaves the budget unspent: the next hub.restart restarts it (88887.399833ms)
+✔ #2973.88dce79f with 4 restarts spent, deep hub promote of a good build moves the installed hub to it with no prompt and exits 0 (99084.209ms)
+✖ #2973.ff5ebbbe with 5 restarts spent, deep hub promote exits 1 before draining, naming the budget, with current and the running hub unchanged (108849.106667ms)
+✔ #2973.88dce79f with 4 restarts spent, the promotion of a build that fails its health check rolls back to the last good build and exits 1, with both restarts done (101579.9585ms)
+✖ #2973.6813ca11 a token holder's 7 restarts of the installed hub, each once it is back: the first 6 restart it, the 7th is refused naming the budget, when the next frees up, deep hub stop and deep hub start, and the hub stays up (111013.659ms)
+✖ #2973.fe35afca with the budget spent, once the hub's clock moves past 60 minutes after the first restart, one more hub.restart restarts the hub (1.04825ms)
+✖ #2973.19139acc with the budget spent, a confirmed deep hub stop stops the installed hub, and deep hub start starts it (0.277833ms)
+ℹ tests 8
+ℹ pass 3
+ℹ fail 5
+ℹ duration_ms 212410.892833
+exit 1 after 212 s
+
+-- each failing test's message on the base:
+test at tests/acceptance/2973/badfile.test.mjs:21:1
+✖ #2973.47e2f0df with an unreadable or unparseable budget file, hub.restart is refused, the refusal names the file, and the hub stays up (18550.285583ms)
+  AssertionError [ERR_ASSERTION]: the installed hub must keep its restart budget in a file under its root, written before it exits for a restart: no file under ~/.deepbuild other than the base's own was written by the restart (files the base doesn't keep: [])
+test at tests/acceptance/2973/promote-refused.test.mjs:6:1
+✖ #2973.ff5ebbbe with 5 restarts spent, deep hub promote exits 1 before draining, naming the budget, with current and the running hub unchanged (108849.106667ms)
+  AssertionError [ERR_ASSERTION]: with 5 restarts spent the budget has room for 1 restart, not the promotion's 2, so deep hub promote of a good build of 5646d57 must exit 1 before draining: exit 0
+  stdout:
+  deep hub promote: 5646d571ae978cb09bc25e6947996e3aaaabb7d6 is in: its hub judged the health check's fixture claim PASS and stayed up
+  stderr:
+test at tests/acceptance/2973/spent.test.mjs:15:1
+✖ #2973.6813ca11 a token holder's 7 restarts of the installed hub, each once it is back: the first 6 restart it, the 7th is refused naming the budget, when the next frees up, deep hub stop and deep hub start, and the hub stays up (111013.659ms)
+  AssertionError [ERR_ASSERTION]: the 7th hub.restart within 60 minutes must be refused: 6 restarts in any 60 minutes are the budget. It got {"v":1,"id":1,"result":{"restarting":true}}, and the hub went down again: a new hub (start 01M7XXQF9B3JKXT16PM2FM6F3C) answered 14 s later
+test at tests/acceptance/2973/spent.test.mjs:43:1
+✖ #2973.fe35afca with the budget spent, once the hub's clock moves past 60 minutes after the first restart, one more hub.restart restarts the hub (1.04825ms)
+  AssertionError [ERR_ASSERTION]: this criterion needs the budget spent, and 6 restarts must spend it: the 7th restart wasn't refused ({"v":1,"id":1,"result":{"restarting":true}})
+test at tests/acceptance/2973/spent.test.mjs:62:1
+✖ #2973.19139acc with the budget spent, a confirmed deep hub stop stops the installed hub, and deep hub start starts it (0.277833ms)
+  AssertionError [ERR_ASSERTION]: this criterion needs the budget spent, and 6 restarts must spend it: the 7th restart wasn't refused ({"v":1,"id":1,"result":{"restarting":true}})
+
+== 2. The throwaway implementation (restart-budget.ts, hub.restart and hub.restarts in server.ts, the room check in promote.ts; twins/README.md describes it; not delivered): 8 of 8 pass.
+   17:56  up 22:23, 3 users, load averages: 102.83 128.48 103.45
+✔ #2973.47e2f0df with an unreadable or unparseable budget file, hub.restart is refused, the refusal names the file, and the hub stays up (75098.05925ms)
+✔ #2973.5462ab8d a hub that crashes 7 times, each on a signal the login service restarts, leaves the budget unspent: the next hub.restart restarts it (96036.749125ms)
+✔ #2973.88dce79f with 4 restarts spent, deep hub promote of a good build moves the installed hub to it with no prompt and exits 0 (111472.805041ms)
+✔ #2973.ff5ebbbe with 5 restarts spent, deep hub promote exits 1 before draining, naming the budget, with current and the running hub unchanged (111833.937458ms)
+✔ #2973.88dce79f with 4 restarts spent, the promotion of a build that fails its health check rolls back to the last good build and exits 1, with both restarts done (105928.671792ms)
+✔ #2973.6813ca11 a token holder's 7 restarts of the installed hub, each once it is back: the first 6 restart it, the 7th is refused naming the budget, when the next frees up, deep hub stop and deep hub start, and the hub stays up (117863.583959ms)
+✔ #2973.fe35afca with the budget spent, once the hub's clock moves past 60 minutes after the first restart, one more hub.restart restarts the hub (16931.922791ms)
+✔ #2973.19139acc with the budget spent, a confirmed deep hub stop stops the installed hub, and deep hub start starts it (85073.845209ms)
+ℹ tests 8
+ℹ pass 8
+ℹ fail 0
+ℹ duration_ms 333787.908
+exit 0 after 334 s
+
+== 3. Twins, each laid over an APFS copy of the throwaway tree, packages/hub built, the named test file run (twins/README.md).
+
+-- twin window-by-wall-clock:
+✔ #2973.6813ca11 a token holder's 7 restarts of the installed hub, each once it is back: the first 6 restart it, the 7th is refused naming the budget, when the next frees up, deep hub stop and deep hub start, and the hub stays up (114999.000834ms)
+✖ #2973.fe35afca with the budget spent, once the hub's clock moves past 60 minutes after the first restart, one more hub.restart restarts the hub (1715.2815ms)
+✔ #2973.19139acc with the budget spent, a confirmed deep hub stop stops the installed hub, and deep hub start starts it (1950.800917ms)
+  AssertionError [ERR_ASSERTION]: with the hub's clock at 2026-11-21T02:34:32.593Z (past 2026-11-21T01:34:16.983Z + 60 minutes, where the first restart drops out of the window), one more hub.restart must restart the hub; it got {"v":1,"id":1,"error":{"code":"budget","retryable":false,"remediation":"The hub restarts at most 6 times in any 60 minutes on the control token: 6 are spent. The next restart frees up at 2026-11-21T02:34:03.100Z. A person can still stop and start the hub with deep hub stop (which asks the OS to confirm you) and deep hub start.","path":"/method","actual":"hub.restart","evidence":[]}}, and no hub came back with a new start ID within 90 s
+exit 1 after 121 s
+
+-- twin window-never-slides:
+✔ #2973.6813ca11 a token holder's 7 restarts of the installed hub, each once it is back: the first 6 restart it, the 7th is refused naming the budget, when the next frees up, deep hub stop and deep hub start, and the hub stays up (114972.214333ms)
+✖ #2973.fe35afca with the budget spent, once the hub's clock moves past 60 minutes after the first restart, one more hub.restart restarts the hub (1440.073541ms)
+✔ #2973.19139acc with the budget spent, a confirmed deep hub stop stops the installed hub, and deep hub start starts it (1470.119083ms)
+  AssertionError [ERR_ASSERTION]: with the hub's clock at 2026-11-21T02:37:13.388Z (past 2026-11-21T01:36:57.814Z + 60 minutes, where the first restart drops out of the window), one more hub.restart must restart the hub; it got {"v":1,"id":1,"error":{"code":"budget","retryable":false,"remediation":"The hub restarts at most 6 times in any 60 minutes on the control token: 6 are spent. The next restart frees up at 2026-11-21T02:36:43.847Z. A person can still stop and start the hub with deep hub stop (which asks the OS to confirm you) and deep hub start.","path":"/method","actual":"hub.restart","evidence":[]}}, and no hub came back with a new start ID within 90 s
+exit 1 after 120 s
+
+-- twin stop-refused-when-spent:
+✔ #2973.6813ca11 a token holder's 7 restarts of the installed hub, each once it is back: the first 6 restart it, the 7th is refused naming the budget, when the next frees up, deep hub stop and deep hub start, and the hub stays up (114972.618875ms)
+✔ #2973.fe35afca with the budget spent, once the hub's clock moves past 60 minutes after the first restart, one more hub.restart restarts the hub (16528.431292ms)
+✖ #2973.19139acc with the budget spent, a confirmed deep hub stop stops the installed hub, and deep hub start starts it (78777.579417ms)
+  AssertionError [ERR_ASSERTION]: with the budget spent, deep hub stop, the OS confirming you, must stop the installed hub and exit 0: exit 3
+exit 1 after 212 s
+
+-- twin start-refused-when-spent:
+✔ #2973.6813ca11 a token holder's 7 restarts of the installed hub, each once it is back: the first 6 restart it, the 7th is refused naming the budget, when the next frees up, deep hub stop and deep hub start, and the hub stays up (116968.509083ms)
+✔ #2973.fe35afca with the budget spent, once the hub's clock moves past 60 minutes after the first restart, one more hub.restart restarts the hub (16602.704958ms)
+✖ #2973.19139acc with the budget spent, a confirmed deep hub stop stops the installed hub, and deep hub start starts it (81462.846792ms)
+  AssertionError [ERR_ASSERTION]: with the budget spent, deep hub start must start the installed hub and exit 0: exit 1
+exit 1 after 217 s
+
+-- twin crash-spends:
+✖ #2973.5462ab8d a hub that crashes 7 times, each on a signal the login service restarts, leaves the budget unspent: the next hub.restart restarts it (73294.989959ms)
+  AssertionError [ERR_ASSERTION]: after 7 crashes and no restart, the budget is unspent, so a hub.restart must restart the hub; it got {"v":1,"id":1,"error":{"code":"budget","retryable":false,"remediation":"The hub restarts at most 6 times in any 60 minutes on the control token: 7 are spent. The next restart frees up at 2026-11-21T02:37:38.186Z. A person can still stop and start the hub with deep hub stop (which asks the OS to confirm you) and deep hub start.","path":"/method","actual":"hub.restart","evidence":[]}}, and no hub came back with a new start ID within 90 s
+exit 1 after 74 s
+
+-- twin bad-file-reads-empty:
+✖ #2973.47e2f0df with an unreadable or unparseable budget file, hub.restart is refused, the refusal names the file, and the hub stays up (43819.535416ms)
+  AssertionError [ERR_ASSERTION]: with an unparseable budget file (restarts.json), hub.restart must be refused: such a file reads as spent and never grants a restart. It got {"v":1,"id":1,"result":{"restarting":true}}, and the hub restarted
+exit 1 after 44 s
+
+-- twin promote-needs-three:
+✖ #2973.88dce79f with 4 restarts spent, deep hub promote of a good build moves the installed hub to it with no prompt and exits 0 (70555.754416ms)
+  AssertionError [ERR_ASSERTION]: with 4 restarts spent the budget has room for the promotion's 2, so deep hub promote of a good build of 96ef549 must move the installed hub to it and exit 0: exit 1
+exit 1 after 71 s
+
+-- twin promote-needs-three:
+✖ #2973.88dce79f with 4 restarts spent, the promotion of a build that fails its health check rolls back to the last good build and exits 1, with both restarts done (76403.058958ms)
+  AssertionError [ERR_ASSERTION]: with 4 spent the budget has room for both of the promotion's restarts, so both must be done: one to the new build (the hub that was in, PID 29936, exiting 75) and one to roll back (the bad build's hub exiting 75). The login service's stand-in logged these exits 75 since the promotion began: []; the bad build's hub runs: []
+exit 1 after 77 s
+
+-- twin rollback-without-restart:
+✖ #2973.88dce79f with 4 restarts spent, the promotion of a build that fails its health check rolls back to the last good build and exits 1, with both restarts done (87867.469583ms)
+  AssertionError [ERR_ASSERTION]: with 4 spent the budget has room for both of the promotion's restarts, so both must be done: one to the new build (the hub that was in, PID 43084, exiting 75) and one to roll back (the bad build's hub exiting 75). The login service's stand-in logged these exits 75 since the promotion began: [{"t":1795225255855,"event":"exit","pid":43084,"code":75,"signal":null}]; the bad build's hub runs: [{"build":"misjudge-c2","pid":49684,"t":1795225256327,"args":"hub run"}]
+exit 1 after 88 s
+
+-- twin promote-room-for-one:
+✖ #2973.ff5ebbbe with 5 restarts spent, deep hub promote exits 1 before draining, naming the budget, with current and the running hub unchanged (106792.902125ms)
+  AssertionError [ERR_ASSERTION]: with 5 restarts spent the budget has room for 1 restart, not the promotion's 2, so deep hub promote of a good build of 48d6629 must exit 1 before draining: exit 0
+exit 1 after 107 s
+
+-- twin promote-checks-after-drain:
+✖ #2973.ff5ebbbe with 5 restarts spent, deep hub promote exits 1 before draining, naming the budget, with current and the running hub unchanged (88976.122417ms)
+  AssertionError [ERR_ASSERTION]: a promotion refused for the budget must refuse before draining: the hub still refuses session starts as drained: {"v":1,"id":1,"error":{"code":"unavailable","retryable":true,"remediation":"A promotion is draining the hub: no session starts until it restarts on the new build. Start it again then.","path":"/method","actual":"start.session","evidence":[]}}
+exit 1 after 89 s
+
+Every twin also type-checks on its own (tsc --noEmit -p packages/hub, each over a clean copy of the throwaway tree).
+start-refused-when-spent was first planted in server.ts (deep hub run refusing to start while spent); that broke AC1 itself
+(restart 6's hub never came back) and left AC3 BLOCKED, so it was replaced by the service.ts twin above, which AC3 alone catches.
+The twin runs of section 3 other than start-refused-when-spent and promote-needs-three on promote-rollback.test.mjs ran
+while each twin held only its faulted file, laid over the throwaway tree (which held the other files unchanged), so the
+program run is the same as the twins' delivered form (all of the throwaway's files, one faulted). helpers.mjs's list of
+the base's own files under the root gained more of the base's JSON file names during those runs; it only narrows what
+badfile.test.mjs corrupts, and the final base and throwaway runs (sections 1 and 2) use the delivered suite.

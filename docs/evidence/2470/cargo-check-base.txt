@@ -1,0 +1,29 @@
+# e0c90a5a5 (git archive export), 2026-11-20T08:52:55.337Z, load 140
+$ cargo check --locked -p deep-contracts
+    Blocking waiting for file lock on package cache
+    Checking deep-contracts v0.0.0 (<export>/crates/deep-contracts)
+error[E0428]: the name `RULE_340` is defined multiple times
+     --> crates/deep-contracts/src/generated.rs:86396:1
+      |
+84003 | static RULE_340: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: None, format: None, pattern: Some(PATTERN_...
+      | -------------------------------------------------------------------- previous definition of the value `RULE_340` here
+...
+86396 | static RULE_340: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: None, items: Some(&RULE_5) };
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `RULE_340` redefined here
+      |
+      = note: `RULE_340` must be defined only once in the value namespace of this module
+
+error[E0428]: the name `RULE_341` is defined multiple times
+     --> crates/deep-contracts/src/generated.rs:86398:1
+      |
+84005 | static RULE_341: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: None, items: Some(&RULE_340) };
+      | ------------------------------------------------------------------- previous definition of the value `RULE_341` here
+...
+86398 | static RULE_341: deep_contracts::Rule = deep_contracts::Rule::Nullable(&RULE_111);
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `RULE_341` redefined here
+      |
+      = note: `RULE_341` must be defined only once in the value namespace of this module
+
+For more information about this error, try `rustc --explain E0428`.
+error: could not compile `deep-contracts` (lib) due to 2 previous errors
+# exit 101 in 7.7 s
