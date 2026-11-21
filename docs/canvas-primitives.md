@@ -1497,6 +1497,8 @@ Every field list of the sealed listing, generated from it: each place where a se
 | `mark.line@1.ends.start` | `none`, `arrow`, `open`, `stealth`, `dot`, `ring`, `square`, `diamond`, `bar` | closed: draw_path | a line needs an end shape the list lacks | a `path@1` item drawn at the end |
 | `mark.line@1.join` | `miter`, `round`, `bevel` | closed: draw_path | never: the three joins every stroke draws | nothing |
 | `mark.line@1.points.rows` | `all` | closed: determinism | never: all reads every row of the array | a range `[from, to]` of rows |
+| `mark.line@1.trail.space` | `world`, `local` | closed: determinism | a trail needs its places held in a frame other than the world's or its source's parent's | nothing |
+| `mark.line@1.trail.window` | `since`, `whole` | closed: determinism | a trail needs a stretch of its source's path that none of span, since and whole draws | several trails on one source, each with its own window |
 | `mark.point@1.from` | `video` | closed: ring | a point cloud needs a source other than a video's depth | points written as data rows |
 | `mark.point@1.from.video.depth` | `luma`, `r` | closed: determinism | a point cloud needs its depth from another channel of the video | nothing |
 | `marks@1.columns.<name>.as` | `bool`, `u8`, `u16`, `u32`, `i32`, `f32`, `f64` | closed: determinism | a logic array holds a value type none of the seven is | leave `as` out to read the array as its own type |
