@@ -667,7 +667,7 @@ impl Hub<'_> {
             .collect();
         let reads = (s.piece.items.iter()).any(|i| !i.emits.is_empty());
         let mut copies = Vec::new();
-        for (i, c) in played.copies.iter().enumerate() {
+        for c in &played.copies {
             let mut report = c.report();
             // #276: the profile records its confirmed steps wrote, into its own folder.
             if let Some(dir) = m.saves_dirs.get(&c.me) {
