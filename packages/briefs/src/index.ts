@@ -26,7 +26,14 @@ export interface Task { title: string; serves: string[]; criteria: string[]; blo
 /** A step that buys, books, posts or sends: never in the card's plan, and asked once when it's due. */
 export interface Held { does: string; usd: number; due: string | null; at: string }
 export interface Promised { line: string; kind: Kind; /** A taste call's recommended answer. */ recommended?: string }
-export type Cadence = 'day' | 'week' | 'month' | 'year';
+export type Cadence = 'hour' | 'day' | 'week' | 'month' | 'year';
+/** An input as a wake test reads it before and after a change, under the name a refusal gives it. */
+export interface Planted { name: string; before: string; after: string }
+/**
+ * A repeat job's wake test (#1527): a small script the hub runs with `sh <test> <before> <after>` on each fire, with no
+ * model, whose first line answers `new` or `nothing new`. At approval it must wake on `planted` and stay quiet on `twin`.
+ */
+export interface Wake { test: string; planted: Planted; twin: Planted }
 export interface Brief {
   makes: Makes; software: boolean;
   lines: Line[]; promises: Promised[]; tasks: Task[];
@@ -36,6 +43,9 @@ export interface Brief {
   /** A project of yours this fits, by its id, offered as the other answer. */
   fits: string | null;
   every: Cadence | null;
+  /** What a repeat job's wake test reads on each fire: a link or a file you gave. */
+  watch?: string;
+  wake?: Wake;
 }
 
 type Obj = Record<string, unknown>;
@@ -67,12 +77,12 @@ export function headingOf(words: string): string {
   const at = cut.lastIndexOf(' ');
   return `${(at > 20 ? cut.slice(0, at) : cut).trim()}…`;
 }
-/** "every month", "monthly": a job that repeats, read with no model. */
+/** "every month", "monthly", "every hour": a job that repeats, read with no model. */
 export function cadenceOf(words: string): Cadence | null {
-  const m = /\b(?:every|each)\s+(day|week|month|year)\b|\b(daily|weekly|monthly|yearly|annually)\b/i.exec(words);
+  const m = /\b(?:every|each)\s+(hour|day|week|month|year)\b|\b(hourly|daily|weekly|monthly|yearly|annually)\b/i.exec(words);
   if (!m) return null;
   const w = (m[1] ?? m[2]!).toLowerCase();
-  return w.startsWith('da') ? 'day' : w.startsWith('w') ? 'week' : w.startsWith('m') ? 'month' : 'year';
+  return w.startsWith('h') ? 'hour' : w.startsWith('da') ? 'day' : w.startsWith('w') ? 'week' : w.startsWith('m') ? 'month' : 'year';
 }
 const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
 /** A fetched page as the text a person reads on it, so a quote from it matches. */
@@ -179,7 +189,18 @@ export function briefOf(answer: unknown, sources: ReadonlyMap<string, string>, p
     return does ? [{ does, usd, due, at: typeof h.at === 'string' ? h.at : '' }] : [];
   });
   const fits = typeof answer.fits === 'string' && projects.includes(answer.fits) ? answer.fits : null;
-  return { makes: makes as Makes, software: SOFTWARE.has(makes), lines, promises, tasks, left_out, held, fits, every: cadenceOf(typed) };
+  const every = cadenceOf(typed);
+  // A wake test reads only a link or a file you gave, and only a job that repeats has one.
+  const watch = every && typeof answer.watch === 'string' && sources.has(answer.watch) && answer.watch !== WORDS ? answer.watch : undefined;
+  const wake = watch ? wakeOf(answer.wake) : undefined;
+  return { makes: makes as Makes, software: SOFTWARE.has(makes), lines, promises, tasks, left_out, held, fits, every, ...(watch ? { watch } : {}), ...(wake ? { wake } : {}) };
+}
+function wakeOf(v: unknown): Wake | undefined {
+  const pair = (p: unknown): Planted | undefined => (isObj(p) && typeof p.name === 'string' && p.name.trim() && typeof p.before === 'string' && typeof p.after === 'string' ? { name: p.name.trim(), before: p.before, after: p.after } : undefined);
+  if (!isObj(v) || typeof v.test !== 'string' || !v.test.trim()) return undefined;
+  const planted = pair(v.planted);
+  const twin = pair(v.twin);
+  return planted && twin ? { test: v.test, planted, twin } : undefined;
 }
 function waitsOnItself(start: Task, tasks: readonly Task[]): boolean {
   const by = new Map(tasks.map((t) => [norm(t.title), t] as const));
@@ -204,7 +225,7 @@ const KIND_WORDS: Record<Kind, string> = {
   document: 'a document check: every claim names its source', data: 'a data check', message: 'a message check: it was delivered',
   money: 'a money check: totals add up', code: 'a code check', taste: 'how it looks, taking the recommended answer unless you change it',
 };
-const EVERY: Record<Cadence, string> = { day: 'every day', week: 'every week', month: 'every month', year: 'every year' };
+const EVERY: Record<Cadence, string> = { hour: 'every hour', day: 'every day', week: 'every week', month: 'every month', year: 'every year' };
 const usd = (n: number): string => `$${Number.isInteger(n) ? n : n.toFixed(2)}`;
 /** A held step in plain words: what it does, its price and when it's due. */
 export const heldWords = (h: Held): string => `${h.does}${h.usd ? `, for ${usd(h.usd)}` : ''}${h.at ? ` at ${h.at}` : ''}${h.due ? `, due ${h.due}` : ''}`;
@@ -234,6 +255,10 @@ export function pageOf(brief: Brief, heading: string): string {
   for (const t of brief.left_out) out.push(`- Left out: ${t.title}, because ${t.why}.`);
   out.push('');
   if (brief.every) out.push(`**It repeats:** ${EVERY[brief.every]}, under this same approval.`, '');
+  if (brief.wake) {
+    out.push(`**When it wakes a model:** only when its wake test, run on each fire with no model, finds something new in ${brief.watch}. It woke on ${brief.wake.planted.name} and stayed quiet on ${brief.wake.twin.name}. Your yes fixes this test; a changed one needs a new yes:`, '');
+    out.push('```sh', brief.wake.test.trimEnd(), '```', '');
+  }
   out.push('**Held for you, asked when it is due:**');
   out.push(...(brief.held.length ? brief.held.map((h) => `- ${heldWords(h)}`) : ['- Nothing to buy, book, post or send.']));
   out.push('', '**What it may spend:** up to your plan window, and no money: anything that costs money is held above.', '');
