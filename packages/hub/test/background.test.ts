@@ -60,12 +60,16 @@ it('a background job that fails is named in hub.health with its error, and clear
   dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-hub-background-')));
   const [home, root] = ['home', 'root'].map((p) => join(dir, p)) as [string, string];
   for (const p of [home, root]) mkdirSync(p);
-  // An ask already past its deadline, so the hub's asks tick takes its default at once: an append.
+  // An ask that had shown before the hub stopped, due ten minutes on. Its deadline stands at start (#908 moves only an
+  // unshown ask's), and the test steps the hub's clock past it once the disk is full: then its default is an append.
   const now = Date.now();
+  const due = 600_000;
   const record = await openRecord({ path: join(root, 'ledger.db'), now: () => now });
   const taste = askSources().find((row) => row.kind === 'taste')!.fixture.ask as Record<string, unknown>;
   const ask = ulid(now - 60_000);
-  await record.append({ writer: 'core', actor: 'you', scope: 'you' }, { v: 1, id: ask, kind: 'ask.created', ts: now - 60_000, data: { ...structuredClone(taste), deadline: now - 1000 } as never });
+  const you = { writer: 'core', actor: 'you', scope: 'you' } as const;
+  await record.append(you, { v: 1, id: ask, kind: 'ask.created', ts: now - 60_000, data: { ...structuredClone(taste), deadline: now + due } as never });
+  await record.append(you, { v: 1, id: ulid(now - 59_000), kind: 'ask.batched', ts: now - 59_000, data: { batch: `now:${new Date(now - 59_000).toISOString()}`, asks: [{ ask: `ask:${ask}`, plan_hash: null }] } as never });
   await record.close();
   // The test VFS reads the ledger as one serialized image, as its last FULL commit left it.
   const image = new Database(join(root, 'ledger.db'));
@@ -77,12 +81,13 @@ it('a background job that fails is named in hub.health with its error, and clear
   writeFileSync(join(root, 'ledger.db'), bytes);
   const refuse = join(dir, 'disk-full');
   hub = spawn(process.execPath, [MAIN, 'hub', 'run', '--root', root], {
-    stdio: ['ignore', 'pipe', 'inherit'], env: { PATH: '/usr/bin:/bin', HOME: home, DEEP_HUB_TEST_VFS: JSON.stringify({ refuse }) },
+    stdio: ['ignore', 'pipe', 'inherit'], env: { PATH: '/usr/bin:/bin', HOME: home, DEEP_HUB_TEST_VFS: JSON.stringify({ refuse }), DEEP_HUB_TEST_CLOCK_STEPS: '1' },
   });
   const ready = await new Promise<{ socket: string }>((done) => hub!.stdout!.once('data', (d) => done(JSON.parse(String(d).split('\n')[0]!))));
   const call = await cli(ready.socket, readFileSync(join(root, 'control.token'), 'utf8').trim());
-  // The disk fills once the hub is up: every write it tries is refused until the file goes.
+  // The disk fills once the hub is up: every write it tries is refused until the file goes. Then the ask comes due.
   writeFileSync(refuse, '');
+  await call('test.clock', { advance_ms: due });
 
   type Jobs = Record<string, { failing: { at: number; error: string } | null }>;
   const asks = await waitFor(async () => {
