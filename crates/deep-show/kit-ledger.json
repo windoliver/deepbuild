@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "b284a5f4354a67d638454e6e111653d74aed7c2e48dcb8419aa07ae18bdab8c9",
+    "digest": "ed25d44f0284238f80211c8987d122ab6b0d97e6df2cac0597700f22357f9048",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -134,8 +134,8 @@
   },
   "logic": {
     "version": "1.0.0",
-    "digest": "26571a47e334c1502a749d7acd1d841a12d2e22c74b5b52102d90994b178735b",
-    "verdict": "FAIL",
+    "digest": "8936db3c207732ee997a01330c77c40cf0f3320a0faa04b1bda1b7abc4cf6fa1",
+    "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
       "clean_rebuild": "PASS",
@@ -147,7 +147,7 @@
       "carried_state": "PASS",
       "late_entry": "PASS",
       "time_order": "PASS",
-      "catalog": "FAIL",
+      "catalog": "PASS",
       "references": "PASS"
     }
   },
@@ -239,7 +239,7 @@
   },
   "net": {
     "version": "1.0.0",
-    "digest": "82ba89449ac621bea477655210882f25bb5b694382d98db0246e052d5ae51677",
+    "digest": "978cd5ba2db15f1eaa9baed1533f401f288dc238fe6c0b8416ff2c27eb81564b",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -304,7 +304,7 @@
   },
   "scene3d": {
     "version": "1.0.0",
-    "digest": "3e4db763ac42bed5aff86fe62a38491a58dbf45b7644acadf43b0316f722ba85",
+    "digest": "5540adaa581ed6afddec92e9b3ce08f6af2912e49f3454867937b3b8a96f4bc8",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
