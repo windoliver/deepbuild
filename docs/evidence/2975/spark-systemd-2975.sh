@@ -43,11 +43,14 @@ run_case() {
   kill -TERM "$last"; for i in $(seq 1 200); do q=$(pid); [ "$q" != 0 ] && [ "$q" != "$last" ] && break; sleep 0.05; done
   kill -INT "$q" 2>/dev/null && echo "early kill -INT sent to $q"; ne=$(back 60 "$q"); echo "after an early kill -INT: back as $ne; $(state)"
   last=$ne
+  kill -TERM "$last"; for i in $(seq 1 200); do q=$(pid); [ "$q" != 0 ] && [ "$q" != "$last" ] && break; sleep 0.05; done
+  kill -HUP "$q" 2>/dev/null && echo "early kill -HUP sent to $q"; ne=$(back 60 "$q"); echo "after an early kill -HUP: back as $ne; $(state)"
+  last=$ne
   kill -INT "$last"; ni=$(back 60 "$last"); echo "after kill -INT: back as $ni"
   systemctl --user stop "$U"; sleep 15; echo "after systemctl --user stop and 15 s: $(state); answers: $(answers && echo yes || echo no)"
   rm -f "$UNITDIR/$U"; systemctl --user reset-failed "$U" 2>/dev/null; systemctl --user daemon-reload
 }
-run_case HEAD~2 base
+run_case origin/main base
 run_case HEAD fix
 git checkout -q HEAD -- packages/hub/src
 ls "$UNITDIR" | grep deep2975 || echo "no deep2975 units left"
