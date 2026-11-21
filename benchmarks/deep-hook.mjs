@@ -25,7 +25,7 @@
 // whose acknowledgement carries a hold (hold_until_ms) is left out: the overhead budget is "except holds".
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -70,25 +70,13 @@ async function stop(hub) {
   hub.kill('SIGTERM');
   await exited;
 }
-/**
- * The floor, a native no-op: a build output like deep-hook, kept under target/ after the run and built only when it
- * isn't there, so a measured run doesn't count the linker, whose children no count reaches (#2960).
- */
-function buildFloor() {
-  const floor = join(REPO, 'target', 'release', 'noop');
-  const source = 'fn main() {}\n';
-  // A build an interrupted rustc left is older than its source, or not there.
-  if (existsSync(floor) && existsSync(`${floor}.rs`) && readFileSync(`${floor}.rs`, 'utf8') === source && statSync(floor).mtimeMs >= statSync(`${floor}.rs`).mtimeMs) return floor;
-  writeFileSync(`${floor}.rs`, source);
-  // Built aside and renamed into place: a linker that writes in place leaves no truncated floor newer than its source.
-  execFileSync('rustc', ['-C', 'opt-level=3', '-o', `${floor}.${process.pid}`, `${floor}.rs`]);
-  renameSync(`${floor}.${process.pid}`, floor);
-  return floor;
-}
+// The floor, a native no-op: crates/deep-hook's deep-hook-floor binary, built with deep-hook by the release build below, so a
+// measured run compiles nothing once that build is current: the linker's children are in no count (#2960).
+const FLOOR = join(REPO, 'target/release/deep-hook-floor');
 
 const modes = {
   async overhead(home) {
-    const floor = buildFloor();
+    const floor = FLOOR;
     const { hub, cwd, call } = await setUp(home);
     try {
       const input = join(home, 'call.json');
@@ -242,7 +230,7 @@ const modes = {
   },
 
   async 'day-overhead'(home) {
-    const floor = buildFloor();
+    const floor = FLOOR;
     const up = await daySetUp(home);
     try {
       const calls = day(await unheld(up), up.s);
