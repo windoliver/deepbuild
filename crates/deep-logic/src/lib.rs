@@ -37,6 +37,7 @@ pub mod probe;
 pub mod profile;
 pub mod saves;
 pub mod services;
+pub mod shell;
 pub mod track;
 pub mod world;
 
