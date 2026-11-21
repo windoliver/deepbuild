@@ -463,7 +463,19 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                        items: &Map<String, Value>| {
         ix.as_ref().map(|ix| {
             let marks: Vec<Arc<Drawn>> = layers.iter().flatten().cloned().collect();
-            Arc::new(crate::indexed::frame(ix, &marks, items, "ground", planted))
+            let plant = match planted {
+                Some(crate::Planted::PartialCoverage) => {
+                    Some(crate::indexed::Plant::PartialCoverage)
+                }
+                Some(crate::Planted::PuffFullOpacity) => {
+                    Some(crate::indexed::Plant::PuffFullOpacity)
+                }
+                Some(crate::Planted::LightAfterUpscale) => {
+                    Some(crate::indexed::Plant::LightAfterUpscale)
+                }
+                _ => None,
+            };
+            Arc::new(crate::indexed::frame(ix, &marks, items, "ground", plant))
         })
     };
     let snap =

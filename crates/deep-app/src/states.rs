@@ -426,6 +426,13 @@ impl Reading {
             && event["subject"] == handle
         {
             self.deadline = event["data"]["deadline"].as_u64().or(self.deadline);
+        } else if self.closed == Some("ask.answered")
+            && event["kind"] == "approval.withdrawn"
+            && event["writer"] == "core"
+            && event["subject"] == handle
+        {
+            // Your yes withdrawn inside the hub's hold, before its steps started (#1101): the ask is open again.
+            self.closed = None;
         } else if self.closed == Some("ask.defaulted")
             && event["kind"] == "default.undone"
             && event["writer"] == "core"

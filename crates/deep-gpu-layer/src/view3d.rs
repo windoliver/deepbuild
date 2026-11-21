@@ -162,6 +162,7 @@ fn run_view(
     deep_canvas_effects::effect::lower(&mut args.doc);
     crate::physics::bake(&mut args.doc, &call["tracks"], &args.assets)?;
     crate::particles::refuse(&args.doc, app.planted)?;
+    crate::trails::refuse(&args.doc)?;
     // The frames the call draws and how each is reached (#173), the ones logic runs at first.
     let reached = history::order(args.from, args.frames, &args.seeks, &args.history, args.fps);
     let order: Vec<u64> = reached.iter().map(|(n, _)| *n).collect();
@@ -492,6 +493,12 @@ fn run_view(
             {
                 scene = evaluate_sourced(&fed, t, &args.look, &mut labels, &read, outlines)?;
             }
+            // #265's planted trails through a linear array's stored steps.
+            if app.planted == Some(Planted::TrailReadsStoredSteps) {
+                let stored = crate::trails::stored(&composed);
+                let held = evaluate_sourced(&stored, t, &args.look, &mut labels, &read, outlines)?;
+                crate::trails::take_trails(&mut scene, &held);
+            }
             axes_mapped = memo.borrow_mut().take_mapped();
             if args.axes {
                 let axes = crate::axes::report(&scene, &composed, t, plant)?;
@@ -681,6 +688,7 @@ fn run_view(
                 .any(|s| s.stroke.is_some());
             // #450: the planted trail, then each asked trail as it draws.
             crate::trails::plant(&mut scene, app.planted, t);
+            crate::trails::plant_wake(&mut scene, app.planted, t);
             let trails = crate::trails::report(&scene, &call["trails"]);
             let scene = Arc::new(scene);
             // #1381: the horizon tables this frame's build baked: those no earlier frame drew.

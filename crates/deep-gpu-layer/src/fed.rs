@@ -117,10 +117,22 @@ pub(crate) fn bake(
     if planted == Some(Planted::LineReadsPreviousStep) {
         points::plant_previous_step(&mut scratch);
     }
-    let arrays = match scratch["arrays"].take() {
+    let mut arrays = match scratch["arrays"].take() {
         Value::Object(m) => m,
         _ => Map::new(),
     };
+    // #265: a document that reads an item's place at earlier times (a trail, a wake, a
+    // world-space emitter's anchor) keeps every array whole in the document itself, so those reads
+    // fold the bake's earlier steps through the same chain a frame reads, and particles evaluated
+    // from the document see them too; nothing is left for a frame to settle.
+    if reads_earlier(doc) {
+        let all = doc
+            .as_object_mut()
+            .map(|o| o.entry("arrays").or_insert_with(|| json!({})));
+        if let Some(Value::Object(all)) = all {
+            all.append(&mut arrays);
+        }
+    }
     // #2760: each emitting item's list in the document's `occurrences`, where the readers of a
     // baked list read it: each row with its declared fields beside `t`, `step`, `kind`, `a` and
     // `b`, as Spawn and motion read a row (deep-play's `inline_logic` writes the same).
@@ -219,6 +231,7 @@ pub(crate) fn values(
     (assets, planted): (Assets<'_>, Option<Planted>),
 ) -> Result<Value, Value> {
     let items = placed_at(doc, t).map_err(refusal)?;
+    let moved = transforms(doc, t, paths);
     let mut out = Map::new();
     for path in paths {
         let rest = path.strip_prefix("items/").unwrap_or_default();
@@ -229,6 +242,12 @@ pub(crate) fn values(
                 .map_err(refusal)?
             {
                 Some(v) => v,
+                // #265: an item's `at` as its channels and drivers move it, a logic array's
+                // read included, where the placed item holds it as written.
+                None if field.starts_with("at/") && moved.contains_key(id) => moved[id]
+                    .pointer(&format!("/{field}"))
+                    .cloned()
+                    .unwrap_or(Value::Null),
                 None => (items.iter().find(|(i, _, _)| i == id))
                     .and_then(|(_, item, _)| item.pointer(&format!("/{field}")))
                     .cloned()
@@ -238,6 +257,33 @@ pub(crate) fn values(
         out.insert(path.clone(), value);
     }
     Ok(Value::Object(out))
+}
+
+/// #265: the items `paths` name whose `at` a channel or a driver writes, as the motion program
+/// evaluates them at `t`, each one's `at` from the transform those write.
+fn transforms(doc: &Value, t: i64, paths: &[String]) -> Map<String, Value> {
+    use deep_canvas_motion::{eval, program::Program};
+    let targets = |key: &str| {
+        (doc[key].as_object().into_iter().flatten()).filter_map(|(_, c)| c["target"].as_str())
+    };
+    let moved: Vec<&str> = targets("channels").chain(targets("drivers")).collect();
+    let asked = |id: &str| {
+        let at = format!("items/{id}/at/");
+        let named = paths.iter().any(|p| {
+            p.strip_prefix("items/")
+                .and_then(|r| r.split('/').next())
+                .is_some_and(|i| i == id)
+        });
+        named && moved.iter().any(|m| m.starts_with(&at))
+    };
+    let Some(Ok(program)) = doc.as_object().map(Program::compile) else {
+        return Map::new();
+    };
+    let mut state = program.state();
+    program.evaluate_local(t, eval::Validity::Full, &mut state);
+    let map = doc.as_object().expect("compiled above");
+    let written = eval::written_with(map, &program, &state, &asked);
+    written.into_iter().filter(|(id, _)| asked(id)).collect()
 }
 
 /// #468: what scene3d evaluates a path to at t, where it contributes: the camera's field of
@@ -288,6 +334,17 @@ pub(crate) fn framed(
     slots::drop_stale(doc, t, call, plant_name(planted));
     slots::drop_stale(doc, t, viewer, plant_name(planted));
     json!(call.iter().chain(viewer.iter()).collect::<Vec<_>>())
+}
+
+/// Whether `doc` reads an item's place at earlier times than the frame's (#265): a line's trail,
+/// a water material's wake, or a world-space particles item, each through the chain a trail reads.
+fn reads_earlier(doc: &Value) -> bool {
+    (doc["items"].as_object().into_iter().flatten()).any(|(_, i)| {
+        let p = &i["params"];
+        !p["trail"].is_null()
+            || p.pointer("/water/wake/item").is_some()
+            || (i["kind"] == "particles@1" && p["space"] == "world")
+    })
 }
 
 /// The lines of `doc` whose points read a logic array, or (#468) name an item's anchor.

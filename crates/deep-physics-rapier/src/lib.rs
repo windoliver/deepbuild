@@ -44,6 +44,7 @@ pub mod fp;
 mod inputs;
 mod joints;
 mod kinematic;
+mod laws;
 mod occurrences;
 pub mod planted;
 pub mod runner;
@@ -201,6 +202,16 @@ pub enum Twin {
     LinksAtZero,
     TreeCountsOnly,
     Small(runner::contact::Small),
+    /// #1931's wrong laws: an inverse square that falls off as 1 ÷ r; a magnetic law that holds
+    /// q (v × B) over the step; one that takes B × v; a pair law without the factor 2; and one
+    /// without the cutoff. And its wrong check, which admits a held central force at any
+    /// substeps.
+    LawFallsAsR,
+    LawHoldsQvb,
+    LawTakesBv,
+    LawWithoutTwo,
+    LawWithoutCutoff,
+    SubstepsAdmitted,
 }
 
 /// A Rapier world behind the backend interface.

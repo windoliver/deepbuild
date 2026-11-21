@@ -326,7 +326,13 @@ fn resolve(address: &Address, window: &mut Window, cx: &mut App) -> (Target, Add
                 .any(|event| event["kind"] == "ask.created" && states::handle(event) == handle);
             if !asked {
                 Target::Gone(no_match(&text))
-            } else if states::is_open(&events, &handle) {
+            } else if states::is_open(&events, &handle)
+                || matches!(
+                    crate::kinds::hold(&events, &handle),
+                    Some(crate::kinds::Hold::Waiting(_))
+                )
+            {
+                // An answered yes the hub still holds shows its card's receipt, counting down with Undo (#1101).
                 Target::Ask(handle)
             } else {
                 closed(&events, &handle)

@@ -2,11 +2,11 @@
   "wasm_bindgen": "0.2.129",
   "set": "game2d",
   "files": {
-    "player.js": "8403244bb8f20686c06b4e6c29220b81540c8f52f1d77c60920291c5685045f3",
-    "player_bg.wasm": "3c288a76b5f2379ba863ae14c04701213fe81cf3e2e7aa2022c8bb1257d77391"
+    "player.js": "8aae4a618bffbb40609fdf785e81bb5bc3d4145a352cb3666fc36e2c4e287c76",
+    "player_bg.wasm": "363d4cc473a70132e669e34fa161f8c446d8a90983ec6611d4e8add03026ea82"
   },
   "core_version": "0.0.0",
-  "set_digest": "b93ceda023c29049b92ca1ffa73e3a645e8d923b68d112652822b45f6948e4a5",
+  "set_digest": "8a8007913b172a9f3612cf8dbab36483315c801e27385d2889cbe417f2008da2",
   "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
   "modules": [
     "data",

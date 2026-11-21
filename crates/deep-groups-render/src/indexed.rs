@@ -1,4 +1,6 @@
-//! Issue #464: the indexed basis on the GPU (canvas primitives: Look `look@1`: indexed basis).
+//! Issue #464: the indexed basis on the GPU (canvas primitives: Look `look@1`: indexed basis),
+//! moved here from deep-gpu-layer by #1250 so deep-show's clips of a play draw the index target
+//! `film2d` draws.
 //! A frame's marks become integer outlines at 1/16 of a target pixel; `indexed.wgsl`, an operator
 //! of integers only, writes each target pixel's palette index and its resolved color, and the
 //! upscale draws the target at the look's scale by nearest. The index target is read back from
@@ -57,9 +59,18 @@ const FLAG_PARTIAL: u32 = 4;
 const FLAG_FULL_OPACITY: u32 = 8;
 const FLAG_LIGHT_AFTER: u32 = 16;
 
+/// The operator's wrong programs (#464's acceptance README: Planted programs), each reachable
+/// only through a binary's `--planted`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Plant {
+    PartialCoverage,
+    PuffFullOpacity,
+    LightAfterUpscale,
+}
+
 /// One frame of an indexed look, ready for the operator.
 #[derive(Clone, Debug, Default)]
-pub(crate) struct IndexFrame {
+pub struct IndexFrame {
     prims: Vec<Prim>,
     edges: Vec<[i32; 4]>,
     /// Each index's color packed 0x00BBGGRR, bit 24 on a protected index.
@@ -303,12 +314,12 @@ fn nearest(palette: &[(String, Rgb)], c: Rgb) -> u16 {
 }
 
 /// One frame of `ix` from its marks and evaluated items, each mark's index through its table.
-pub(crate) fn frame(
+pub fn frame(
     ix: &Indexed,
     marks: &[Arc<Drawn>],
     items: &Map<String, Value>,
     ground_role: &str,
-    planted: Option<crate::Planted>,
+    planted: Option<Plant>,
 ) -> IndexFrame {
     let scale = f64::from(ix.scale);
     let mut f = IndexFrame {
@@ -334,9 +345,9 @@ pub(crate) fn frame(
     f.flags = if ix.blend { FLAG_BLEND } else { 0 }
         | if ix.light.is_some() { FLAG_LIGHT } else { 0 }
         | match planted {
-            Some(crate::Planted::PartialCoverage) => FLAG_PARTIAL,
-            Some(crate::Planted::PuffFullOpacity) => FLAG_FULL_OPACITY,
-            Some(crate::Planted::LightAfterUpscale) => FLAG_LIGHT_AFTER,
+            Some(Plant::PartialCoverage) => FLAG_PARTIAL,
+            Some(Plant::PuffFullOpacity) => FLAG_FULL_OPACITY,
+            Some(Plant::LightAfterUpscale) => FLAG_LIGHT_AFTER,
             _ => 0,
         };
     let mut tables: BTreeMap<&str, Option<Vec<u16>>> = BTreeMap::new();
@@ -436,16 +447,16 @@ pub(crate) fn frame(
 }
 
 /// A target a frame wrote, with its size.
-pub(crate) type Written<T> = (T, [u32; 2]);
+pub type Written<T> = (T, [u32; 2]);
 
 /// What a call reads back: the last frame's index target, once written.
 #[derive(Clone, Default)]
-pub(crate) struct IndexTap {
+pub struct IndexTap {
     pub buffer: Arc<Mutex<Option<Written<wgpu::Buffer>>>>,
 }
 
 /// The operator and the upscale on one device.
-pub(crate) struct Indexer {
+pub struct Indexer {
     index: wgpu::ComputePipeline,
     index_layout: wgpu::BindGroupLayout,
     up: Option<(wgpu::TextureFormat, wgpu::RenderPipeline)>,
@@ -707,14 +718,68 @@ impl Indexer {
     }
 }
 
+/// #1250: the operator on a device, its index target read back alone (a clip's or a still's
+/// frames, and the live play's), the upscale drawn into a 1 × 1 target no one reads.
+pub struct Reader {
+    indexer: Indexer,
+    target: wgpu::Texture,
+}
+
+impl Reader {
+    pub fn new(device: &deep_gpu::counted::Wgpu) -> Reader {
+        let target = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("indexed read only"),
+            size: wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        Reader {
+            indexer: Indexer::new(device),
+            target,
+        }
+    }
+
+    /// The index target `ix` draws `marks` into, each mark's role read from its item in `items`:
+    /// one palette index a target pixel, rows top-down.
+    pub fn indices(
+        &mut self,
+        device: &deep_gpu::device::Device,
+        ix: &Indexed,
+        marks: &[Arc<Drawn>],
+        items: &Map<String, Value>,
+    ) -> Result<Vec<u8>, String> {
+        let f = frame(ix, marks, items, "ground", None);
+        let d = &device.device;
+        let tap = IndexTap::default();
+        let mut encoder = d.create_command_encoder(&Default::default());
+        let view = self.target.create_view(&Default::default());
+        let format = wgpu::TextureFormat::Rgba8Unorm;
+        self.indexer
+            .record(d, &mut encoder, &f, &view, format, &tap);
+        device.queue.submit([encoder.finish()]);
+        let taken = tap.buffer.lock().unwrap_or_else(|e| e.into_inner()).take();
+        let (buffer, size) = taken.ok_or("the index target wasn't drawn")?;
+        let words = read_indices(d, &buffer, size)?;
+        Ok(words.chunks_exact(2).map(|w| w[0]).collect())
+    }
+}
+
 /// The index target read back as u16 little-endian, rows top-down.
-pub(crate) fn read_indices(
+pub fn read_indices(
     device: &deep_gpu::counted::Wgpu,
     buffer: &wgpu::Buffer,
     size: [u32; 2],
 ) -> Result<Vec<u8>, String> {
     let w = size[0] as usize * 4;
-    let words = crate::print2d::map_rows(device, buffer, w, w, size[1] as usize)?;
+    let words = crate::read::map_rows(device, buffer, w, w, size[1] as usize)?;
     Ok(words
         .as_chunks::<4>()
         .0
