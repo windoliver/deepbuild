@@ -9,6 +9,13 @@ var<private> op_frame: OpFrame;
 // and seed, over its normal in its mesh's space, the world's, and the view's (x right, y up, z to
 // the eye).
 fn run_op(in: MeshOut) -> MatOut {
+    // The planted bump_ignores_handedness (#486): every tangent's frame read as right-handed.
+    return run_op_on(in, select(in.tangent, vec4<f32>(in.tangent.xyz, 1.0), planted(P_BUMP_HAND)));
+}
+
+// The operator over a given tangent. A shadow pass binds no light group, so its entry passes the
+// mesh's own tangent and reads no plant (#3025).
+fn run_op_on(in: MeshOut, tangent: vec4<f32>) -> MatOut {
     let size = frame.viewport.xy;
     op_frame = OpFrame(
         frame.clip,
@@ -21,8 +28,6 @@ fn run_op(in: MeshOut) -> MatOut {
     let world = normalize(in.normal);
     let toward = cross(frame.right.xyz, frame.up.xyz);
     let view = vec3<f32>(dot(world, frame.right.xyz), dot(world, frame.up.xyz), dot(world, toward));
-    // The planted bump_ignores_handedness (#486): every tangent's frame read as right-handed.
-    let tangent = select(in.tangent, vec4<f32>(in.tangent.xyz, 1.0), planted(P_BUMP_HAND));
     return op_material(MatGeom(in.pos, normalize(in.object_n), world, view, in.uv.xy, in.world, tangent));
 }
 
@@ -34,7 +39,7 @@ fn op_shadow_fs(in: MeshOut) {
         || !band_keeps(vec2<u32>(in.pos.xy), in.pick, in.mask.x) {
         discard;
     }
-    let o = run_op(in);
+    let o = run_op_on(in, in.tangent);
     if (o.wrote.x & 2u) != 0u && o.base.w < ALPHA_CUTOFF {
         discard;
     }
