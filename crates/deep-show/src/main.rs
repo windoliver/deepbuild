@@ -1954,6 +1954,12 @@ impl CanvasSide {
         };
         let mut call = call.clone();
         let out = call.remove("out");
+        // #2896: the bytes this call's reply may take, a fifth under what its client keeps; it is
+        // the hub's, never one of the call's fields, so the call kept for replay doesn't hold it.
+        let room = call
+            .remove("room")
+            .and_then(|r| r.as_u64())
+            .map(|r| r as usize);
         let doc = call.get("doc").and_then(Value::as_str).map(str::to_string);
         self.calls.push(Value::Object(call));
         let Some(scenario) = self.scenario(true) else {
@@ -1977,10 +1983,21 @@ impl CanvasSide {
             }
             _ => {
                 let mut hub = hub::Hub::new(&scenario, startup);
+                query::set_room(room);
                 let mut replies = hub.run_calls();
+                query::set_room(None);
                 let reply = replies.pop().unwrap_or(Value::Null);
-                // #412: deep_kinds reads and changes nothing, so it leaves no call to replay.
-                if self.calls.last().and_then(|c| c.get("call")) == Some(&json!("deep_kinds")) {
+                // #412: deep_kinds reads and changes nothing, so it leaves no call to replay. Nor does
+                // deep_query (#2896): it writes no state a later call reads (its cursor is a row index on
+                // the revision it names), and a walk paged to fit its client would otherwise evaluate
+                // every earlier page again on each new one.
+                if matches!(
+                    self.calls
+                        .last()
+                        .and_then(|c| c.get("call"))
+                        .and_then(Value::as_str),
+                    Some("deep_kinds" | "deep_query")
+                ) {
                     self.calls.pop();
                 }
                 let presented = match doc.as_deref() {

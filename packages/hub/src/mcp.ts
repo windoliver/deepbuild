@@ -83,14 +83,18 @@ class Hub {
 
   /** The client's own name, from its initialize. */
   private client: unknown;
+  /** The client's name and version, from its initialize: the hub holds each reply under what that client keeps (#2896). */
+  private info: { name: unknown; version: unknown } | undefined;
   /** Codex's `tool_timeout_sec`, read at each call; 0, so ANSWER_MS, until a Codex client names itself. */
   private toolS: () => number = () => 0;
   /**
    * Takes the client's name. Codex's settings load for Codex alone, since no other client's session reads them, and
    * what loading them leaves is given back as the start's garbage was.
    */
-  async named(client: unknown): Promise<void> {
+  async named(info: { name?: unknown; version?: unknown } | undefined): Promise<void> {
+    const client = info?.name;
     this.client = client;
+    this.info = { name: client ?? null, version: info?.version ?? null };
     if (!isCodex(client)) return;
     this.toolS = (await import('./codex-settings.js')).toolTimeoutS;
     shedStartup();
@@ -106,7 +110,7 @@ class Hub {
     const reply = await new Promise<Obj>((resolve) => {
       const timer = setTimeout(() => { this.waiting.delete(id); resolve({ error: unreachable('it did not answer in time') }); }, answerWaitMs(this.client, this.toolS));
       this.waiting.set(id, (message) => { clearTimeout(timer); resolve(message); });
-      this.sock!.write(line({ id, method: 'mcp.call', params: { tool, arguments: args ?? {} } }));
+      this.sock!.write(line({ id, method: 'mcp.call', params: { tool, arguments: args ?? {}, ...(this.info ? { client: this.info } : {}) } }));
     }).finally(() => { if (this.inFlight.get(mine) === id) this.inFlight.delete(mine); });
     return 'error' in reply ? { ok: false, value: reply.error } : { ok: true, value: reply.result };
   }
@@ -169,7 +173,7 @@ export async function runMcp(server: 'deep' | 'deep-actions' = 'deep'): Promise<
     if (id === undefined) continue; // a notification
     switch (method) {
       case 'initialize':
-        await hub.named((params.clientInfo as Obj | undefined)?.name);
+        await hub.named(params.clientInfo as Obj | undefined);
         send({ id, result: { protocolVersion: typeof params.protocolVersion === 'string' ? params.protocolVersion : '2025-06-18', capabilities: { tools: {}, resources: {} }, serverInfo: { name: server, version: '0.0.0' } } });
         break;
       case 'ping':

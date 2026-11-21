@@ -22,12 +22,15 @@ use serde_json::{json, Map, Value};
 
 use crate::hub::Hub;
 
-/// No reply passes this many bytes of JSON without a cursor.
-pub const REPLY_CAP: usize = 65_536;
-/// What a page's own content may take, leaving room for the fields every reply carries.
-const PAGE_BUDGET: usize = REPLY_CAP - 8_192;
-/// A page of a guide, in bytes of its text, so its reply stays under the cap.
-const GUIDE_PAGE: usize = 32_768;
+/// What a page's own content may take: the reply's cap (the call's room, #2896), leaving room for
+/// the fields every reply carries.
+fn page_budget() -> usize {
+    crate::query::reply_cap() - crate::query::margin()
+}
+/// A page of a guide or of the sheet, in bytes of its text, so its reply stays under the cap.
+fn text_page() -> usize {
+    page_budget().min(32_768)
+}
 /// The sheet's cap.
 pub const SHEET_CAP: usize = 32_768;
 
@@ -1036,7 +1039,7 @@ fn paged(all: &[Value], cursor: Option<&str>) -> (Vec<Value>, Option<String>) {
     let mut page = Vec::new();
     for (i, v) in all.iter().enumerate().skip(from) {
         let n = v.to_string().len() + 1;
-        if size + n > PAGE_BUDGET && !page.is_empty() {
+        if size + n > page_budget() && !page.is_empty() {
             return (page, Some(i.to_string()));
         }
         size += n;

@@ -319,7 +319,10 @@ export type Plant =
   // #1509's: a gate that asks for every package run straight from a registry, whatever its age.
   | 'asks-every-registry-run'
   // #1868's: a hub that builds the asks and readings of the canvas core's world once and reads them so ever after.
-  | 'canvas-world-built-once';
+  | 'canvas-world-built-once'
+  // #2896's: every client's reply cap left at 64 KB, a pager that drops the row at a page's edge, a refusal that
+  // carries a 12,000-character schema, and an unknown client given 64 KB.
+  | 'reply-cap-64kb' | 'pager-drops-edge-row' | 'refusal-schema-12000' | 'unknown-client-64kb';
 const PLANTS: readonly string[] = [
   'asks-every-registry-run',
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
@@ -442,6 +445,7 @@ const PLANTS: readonly string[] = [
   'hands-over-socket-chunk',
   'rubric-holds-every-rule', 'review-without-caller',
   'canvas-world-built-once',
+  'reply-cap-64kb', 'pager-drops-edge-row', 'refusal-schema-12000', 'unknown-client-64kb',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

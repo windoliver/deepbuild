@@ -162,6 +162,25 @@ function ruleLoadFactsCase(file, name, facts) {
   return missing.length ? [[`the ${name} facts' rule-load entry (${file}) lacks ${missing.join(', ')}`, fix]] : [];
 }
 
+/**
+ * The adapter-facts case for what an agent keeps of one tool result (#2896): per version, a result and an error limit
+ * with a figure each, what the agent does past them, and the source each was read from. The hub holds every deep_*
+ * reply a fifth under it; a version with no entry fails, naming the version.
+ */
+function toolResultFactsCase(file, name, facts) {
+  if (!facts) return [];
+  const fix = `Give adapters/${file} a toolResult entry for each version it lists: what ${name} keeps of a result and of an error (characters, tokens or bytes), what it does past them, and where each figure was read.`;
+  const entries = Array.isArray(facts.toolResult?.entries) ? facts.toolResult.entries : [];
+  const figured = (l) => ['chars', 'tokens', 'bytes'].some((k) => Number.isInteger(l?.[k])) && typeof l?.past === 'string';
+  const missing = [];
+  for (const version of facts.versions ?? []) {
+    const e = entries.find((x) => Array.isArray(x?.versions) && x.versions.includes(version));
+    if (!e) missing.push(`a toolResult entry for ${version}`);
+    else if (!figured(e.result) || !figured(e.error) || typeof e.source !== 'string') missing.push(`toolResult for ${version}: a result and an error figure, what ${name} does past each, and their source`);
+  }
+  return missing.length ? [[`the ${name} facts (${file}) lack ${missing.join('; ')}, so no deep_* reply knows what ${name} keeps of it`, fix]] : [];
+}
+
 async function replayCommand(options) {
   const started = performance.now();
   let failed = false;
@@ -191,6 +210,7 @@ async function checkCommand(options) {
   failures.push(...contextOutputFactsCase(facts['claude-code']?.facts));
   failures.push(...retriesFactsCase(facts['claude-code']?.facts));
   failures.push(...ruleLoadFactsCase('claude-code.facts.json', 'Claude Code', facts['claude-code']?.facts), ...ruleLoadFactsCase('codex.facts.json', 'Codex', facts.codex?.facts));
+  failures.push(...toolResultFactsCase('claude-code.facts.json', 'Claude Code', facts['claude-code']?.facts), ...toolResultFactsCase('codex.facts.json', 'Codex', facts.codex?.facts));
   const bytes = size(options.corpus);
   say({ type: 'size', bytes, limit: LIMIT });
   if (bytes >= LIMIT) failures.push([`the corpus is ${bytes} bytes, over the 200 MB limit (${LIMIT} bytes)`, 'Trim transcripts or drop sessions that add no event, version or tag.']);
