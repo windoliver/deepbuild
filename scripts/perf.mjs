@@ -334,7 +334,7 @@ try {
       const fix = status === 'BLOCKED' ? 'Repair the measured command so each run reports this metric.'
         : status === 'FAIL' ? `Bring ${budget.id} back under its ${metric} limit; a limit only moves down.`
         : /can't be read/.test(reason) ? `Have each run of ${budget.id} give its ${metric}: a count that can't be read is missing, never 0.`
-        : /reference Mac/.test(reason) ? 'Run perf on a reference Mac (Mac15,7, M3 Pro, 36 GB; Mac15,12, M3, 16 GB; or Mac17,10, M5 Max, 64 GB) on mains power, with Low Power Mode off and the thermal state nominal.'
+        : /reference Mac/.test(reason) ? 'Run perf on a reference Mac (Mac15,7, M3 Pro, 36 GB; Mac15,12, M3, 16 GB; Mac17,10, M5 Max, 64 GB; or Mac18,1, M6, 32 GB) on mains power, with Low Power Mode off and the thermal state nominal.'
         : 'Rerun perf on a quiet reference Mac; the five runs straddle the limit.';
       verdicts.push([status, `${budget.id}: ${metric}: ${reason}`, fix]);
     }

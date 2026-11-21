@@ -31,7 +31,10 @@ export function onReferenceMac(): boolean {
   if (reference !== undefined) return reference;
   if (process.platform !== 'darwin') return (reference = false);
   const sysctl = (key: string): string => spawnSync('sysctl', ['-n', key], { encoding: 'utf8' }).stdout.trim();
-  const macs: Record<string, { gb: number; cores: string }> = { 'Mac15,7': { gb: 36, cores: '12' }, 'Mac15,12': { gb: 16, cores: '8' } };
+  // scripts/benchmark.mjs's list (packages/checks/test/soak-reference.test.ts holds this to it).
+  const macs: Record<string, { gb: number; cores: string }> = {
+    'Mac15,7': { gb: 36, cores: '12' }, 'Mac15,12': { gb: 16, cores: '8' }, 'Mac17,10': { gb: 64, cores: '18' }, 'Mac18,1': { gb: 32, cores: '12' },
+  };
   const mac = macs[sysctl('hw.model')];
   return (reference = !!mac && sysctl('hw.memsize') === String(mac.gb * 2 ** 30) && sysctl('hw.ncpu') === mac.cores);
 }

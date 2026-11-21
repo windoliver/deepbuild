@@ -32,10 +32,11 @@ use crate::{refused, App, Planted};
 const FLICKS_PER_SECOND: i64 = 705_600_000;
 const RUNS: usize = 5;
 /// The reference Macs and their conditions, as scripts/benchmark.mjs lists them.
-const REFERENCES: [(&str, &str, u64); 3] = [
+const REFERENCES: [(&str, &str, u64); 4] = [
     ("Mac15,7", "Apple M3 Pro", 36 << 30),
     ("Mac15,12", "Apple M3", 16 << 30),
     ("Mac17,10", "Apple M5 Max", 64 << 30),
+    ("Mac18,1", "Apple M6", 32 << 30),
 ];
 
 /// The stub meter's readings for frames `from..=to` of every run.
@@ -767,4 +768,43 @@ fn uniform(seed: i64, run: u64) -> f64 {
         z ^ (z >> 31)
     };
     (mix(mix(seed as u64) ^ run) >> 11) as f64 / (1u64 << 53) as f64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_reference;
+    use serde_json::json;
+
+    fn mac(model: &str, chip: &str, gib: u64) -> serde_json::Value {
+        json!({ "model": model, "chip": chip, "memoryBytes": gib << 30, "power": "ac",
+                "lowPowerMode": false, "thermalState": "nominal", "macosBuild": "26B7131" })
+    }
+
+    // #2956: a GPU budget counts on each of the design's reference Macs (scripts/benchmark.mjs's list), and on no other.
+    #[test]
+    fn counts_on_each_reference_mac_and_no_other() {
+        for (model, chip, gib) in [
+            ("Mac15,7", "Apple M3 Pro", 36),
+            ("Mac15,12", "Apple M3", 16),
+            ("Mac17,10", "Apple M5 Max", 64),
+            ("Mac18,1", "Apple M6", 32),
+        ] {
+            assert!(
+                is_reference(&mac(model, chip, gib)),
+                "{model} is a reference Mac"
+            );
+        }
+        assert!(
+            !is_reference(&mac("Mac18,1", "Apple M6", 16)),
+            "a Mac18,1 with 16 GB is not"
+        );
+        assert!(
+            !is_reference(&mac("Mac18,1", "Apple M5", 32)),
+            "a Mac18,1 with another chip is not"
+        );
+        assert!(
+            !is_reference(&mac("Mac14,2", "Apple M2", 16)),
+            "a Mac14,2 is not"
+        );
+    }
 }
