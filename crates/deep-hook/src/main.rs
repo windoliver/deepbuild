@@ -15,7 +15,7 @@ use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{env, io};
 
@@ -114,7 +114,15 @@ fn setting(section: &str, key: &str) -> Option<Value> {
 }
 
 /// The hook's working folder, once its payload is read: a worktree `deep hub use --root` sent to a dev hub.
-static CWD: OnceLock<PathBuf> = OnceLock::new();
+static CWD: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+fn set_cwd(path: PathBuf) {
+    *CWD.lock().unwrap_or_else(|e| e.into_inner()) = Some(path);
+}
+
+fn current_cwd() -> Option<PathBuf> {
+    CWD.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
 
 /// The one address setting: `hub.address` in ~/.deepbuild/config.json, `unix:<path>`; absent, ~/.deepbuild/hub.sock.
 /// A worktree named in `hub.use`, `{<worktree>: "unix:<path>"}`, which `deep hub use --root` writes once the OS
@@ -136,10 +144,10 @@ fn address() -> PathBuf {
 /// The dev hub `deep hub use --root` sent this worktree to in `uses`, the `hub.use` setting, the longest such
 /// worktree winning.
 fn worktree_hub(uses: Option<&Value>) -> Option<PathBuf> {
-    let (Some(cwd), Some(Value::Object(uses))) = (CWD.get(), uses) else {
+    let (Some(cwd), Some(Value::Object(uses))) = (current_cwd(), uses) else {
         return None;
     };
-    let real = fs::canonicalize(cwd).unwrap_or_else(|_| cwd.clone());
+    let real = fs::canonicalize(&cwd).unwrap_or_else(|_| cwd.clone());
     uses.iter()
         .filter_map(|(worktree, value)| match value {
             Value::String(a) if a.starts_with("unix:") => Some((Path::new(worktree), &a[5..])),
@@ -664,7 +672,7 @@ fn matching() -> ExitCode {
         let Ok(input) = input else { break };
         let parsed = parse(&input).ok();
         if let Some(Value::String(cwd)) = parsed.as_ref().and_then(|p| member(p, "cwd")) {
-            let _ = CWD.set(PathBuf::from(cwd));
+            set_cwd(PathBuf::from(cwd));
         }
         let reply = match rules() {
             _ if parsed.is_none() => "{\"unread\":true,\"matched\":[],\"denials\":[]}".to_string(),
@@ -1141,10 +1149,14 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     let mut input = String::from_utf8(bytes).unwrap_or_default();
     let parsed = parse(&input).ok();
     if let Some(Value::String(cwd)) = parsed.as_ref().and_then(|p| member(p, "cwd")) {
-        let _ = CWD.set(PathBuf::from(cwd));
+        set_cwd(PathBuf::from(cwd));
     }
     // A clone of a project this machine joined reaches that project's hub, and the watchdog waits the route's time.
-    let joined = REMOTE.get_or_init(|| CWD.get().and_then(|cwd| remote::joined(&home(), cwd)));
+    let joined = REMOTE.get_or_init(|| {
+        current_cwd()
+            .as_deref()
+            .and_then(|cwd| remote::joined(&home(), cwd))
+    });
     if joined.is_some() {
         WATCH_MS.store(
             (remote::FAIL_OPEN - Duration::from_millis(2)).as_millis() as u64,
