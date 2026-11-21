@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 
 use deep_contracts::{jcs, parse, Value};
 
-use super::{address, home, member, quoted, read_line, setting, worktree_hub, Got, CWD};
+use super::{address, home, member, quoted, read_line, set_cwd, setting, worktree_hub, Got};
 
 /// The two tools and the codes' pages, as the hub lists them.
 const DATA: &str = include_str!("actions.json");
@@ -326,7 +326,7 @@ pub fn serve() -> ExitCode {
     let (pid, start) = parent();
     let folder = std::env::current_dir().unwrap_or_default();
     // A worktree `deep hub use --root` sent to a dev hub reaches that hub, as the session's hooks do.
-    let _ = CWD.set(folder.clone());
+    set_cwd(folder.clone());
     let cwd = folder.to_string_lossy().into_owned();
     let hub = Hub {
         hello: format!(

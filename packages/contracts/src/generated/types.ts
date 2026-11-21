@@ -3584,6 +3584,62 @@ export interface AnswerRefused {
   evidence?: Array<string>;
 }
 
+/** approval.held@1 */
+export interface ApprovalHeld {
+  v: 1;
+  id: string;
+  kind: "approval.held";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    until: number;
+    steps: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
+/** approval.started@1 */
+export interface ApprovalStarted {
+  v: 1;
+  id: string;
+  kind: "approval.started";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    steps: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
+/** approval.withdrawn@1 */
+export interface ApprovalWithdrawn {
+  v: 1;
+  id: string;
+  kind: "approval.withdrawn";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    steps: Array<string>;
+    restarted: boolean;
+  };
+  evidence?: Array<string>;
+}
+
 /** archive.quiet@1 */
 export interface ArchiveQuiet {
   v: 1;

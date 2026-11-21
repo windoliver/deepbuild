@@ -579,6 +579,8 @@ pub struct Item {
     /// The lane graph its `lanes` names, built at check from the piece's floor paths, whose bytes
     /// are its asset 0 (#981).
     pub lanes: Option<std::sync::Arc<crate::lanes::Graph>>,
+    /// process@1's kind names its `process` gives, by kind index (#980).
+    pub process: Option<Vec<String>>,
     /// What the item's bake key covers of it: its rewritten program, its fields as given and
     /// its assets' hashes (Logic: checkpoints and bake).
     pub content: String,

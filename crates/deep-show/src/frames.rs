@@ -548,7 +548,7 @@ impl<'a> Hub<'a> {
         if e.shown {
             let d = drawing.as_ref().and_then(|d| d.drawing.as_deref());
             let doc = document.as_ref().unwrap_or(&Value::Null);
-            let shown = crate::entries::shown_of(doc, d.map(|d| &d.frame), d.map(|d| &d.runs));
+            let shown = crate::entries::shown_of(doc, d.map(|d| &d.frame), d.map(|d| &*d.runs));
             reply["shown"] = Value::Object(shown);
         }
         let drawing = drawing.filter(|_| e.pixels);

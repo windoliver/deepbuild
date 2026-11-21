@@ -230,6 +230,14 @@ pub enum Call {
     Scope(String),
     /// The frames a panel presented up to now (#383).
     Presented(String),
+    /// #1250: those frames, each from `from` on with its index target as the live play drew it.
+    PresentedIndices(String, i64),
+    /// #1250: a player control run in a panel (Save clip, Save still), and a panel's cards.
+    Clip {
+        panel: String,
+        action: crate::clip::Action,
+    },
+    Clips(String),
     /// Your pop-out of a panel's view onto a display, with your input's serial (#400).
     PopOut {
         panel: String,

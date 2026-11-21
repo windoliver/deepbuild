@@ -208,7 +208,7 @@ const usage = [
   'deep open <address>   ask/<id>, session/<id>, project/<id> or page/<name> opened in the app, which opens and changes nothing',
   'deep inbox answer <ask> [--] <option>   answer one, once the OS confirms you, with an option as deep inbox printed it',
   'deep race <issue>   its sessions race: they settle on the first PASS and raise no "keep which?" ask',
-  'deep inbox undo <ask>   open a defaulted ask again, once the OS confirms you',
+  'deep inbox undo <ask>   open a defaulted ask again, or withdraw your yes while its step that can\'t be undone waits out its hold, once the OS confirms you',
   'deep start approve --repo <path> --issues <n,...> --agents <agent,...> [--home <agent>=<folder> ...] [--mode <agent>=<mode> ...] --at-once <n> --plan-share <percent> [--until <ISO time>] [--host <host> ...] [--json]   ask to approve a run of sessions started without your Send',
   'deep start --repo <path> --issue <n> --agent <agent> [--mode <mode>] --prompt <words> [--json]   start one under it, in its own worktree',
   'deep gate rules [--json]   the rulesets that make only the gate\'s status count on your repo, for you to apply',

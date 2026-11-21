@@ -1,0 +1,102 @@
+# #2974 acceptance tests: the run on the base, the throwaway implementation's, and the twins
+# Node v24.22.0, macOS 27.2.1, 12 cores; 'load averages' lines are uptime before and after each run (1, 5, 15 min).
+# Commands: node --test --test-concurrency=3 <files>, two runs of three files each. Assertion lines are cut at 600 characters.
+
+## The base, 40f05472b (this worktree), 2026-11-20
+### design, lease, shown
+Sat Nov 21 05:05:14 UTC 2026
+21:05  up 1 day,  1:31, 4 users, load averages: 12.33 34.71 77.98
+✖ #2974.5ff069d9 the design's threat table names a held drain and its mitigation (2.746416ms)
+✖ #2974.aaa94086 a token holder's one hub.drain(), its process gone, lapses: start.session is served again within 35 s with no restart (48459.368125ms)
+✖ #2974.aaa94086 a token holder's one hub.drain() naming no process lapses too, or is refused: start.session is served within 35 s (49276.879667ms)
+✔ #2974.be96e768 a caller that renews hub.drain() once a second keeps session starts paused past 30 s (45455.263042ms)
+✖ #2974.2d1e88a4 while a drain holds, deep status and the hub's health name it, its holder's process and since when, and a refused start names the holder and when it lapses (6114.1345ms)
+ℹ pass 1
+ℹ fail 4
+ℹ duration_ms 143235.14125
+✖ #2974.5ff069d9 the design's threat table names a held drain and its mitigation (2.746416ms)
+  AssertionError [ERR_ASSERTION]: the threat table must name a held drain: no row's threat or mitigation names a drain (its threats: Injected answers; Hostile text in what DeepBuild reads; Callers posing as others; Another machine's connection; Signatures used again; A hub left behind; A slow or cut link; Agents driving other agents' terminals; Sessions DeepBuild starts; Extensions that host shells; Agents gaming checks; Agents switching off what watches them; What a command's children do; Malicious extensions; MCP tools the guards can't see; Approvals that drift; Secrets; Untrusted repos; Unt
+✖ #2974.aaa94086 a token holder's one hub.drain(), its process gone, lapses: start.session is served again within 35 s with no restart (48459.368125ms)
+  AssertionError [ERR_ASSERTION]: hub.drain held session starts past 35 s with its caller gone: one hub.drain() sent straight to the installed hub's socket by a process that then exited must lapse, 30 s with no renewal, and start.session be served again with no restart; start.session was still refused 45 s after the drain: {"v":1,"id":1,"error":{"code":"unavailable","retryable":true,"remediation":"A promotion is draining the hub: no session starts until it restarts on the new build. Start it again then.","path":"/method","actual":"start.session","evidence":[]}}
+✖ #2974.aaa94086 a token holder's one hub.drain() naming no process lapses too, or is refused: start.session is served within 35 s (49276.879667ms)
+  AssertionError [ERR_ASSERTION]: hub.drain with the control token alone, naming no process, held session starts past 35 s with its caller gone (it answered {"v":1,"id":1,"result":{"turns":0}}); start.session was still refused: {"v":1,"id":1,"error":{"code":"unavailable","retryable":true,"remediation":"A promotion is draining the hub: no session starts until it restarts on the new build. Start it again then.","path":"/method","actual":"start.session","evidence":[]}}
+✖ #2974.2d1e88a4 while a drain holds, deep status and the hub's health name it, its holder's process and since when, and a refused start names the holder and when it lapses (6114.1345ms)
+  AssertionError [ERR_ASSERTION]: while a drain holds, the hub's health must name it: its holder's process, PID 42674 with its command line (it holds d2974-holder-e4557db7), and since when; hub.health reads {"pid":42573,"start":"01M7Y7X3HGJCGJ23WB1VZ0VNY0","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"reachable","network":"reachable","claude":{"relations":[],"readings":[]},"codex":{"relations":[],"readings":[],"trust":null},"sessions":[],"jobs":{"hook-programs":{"failing":null},"spool":{"failing":null},"asks":{"failing":null},"leases":{"fail
+21:07  up 1 day,  1:34, 4 users, load averages: 32.27 33.02 70.60
+
+### interrupted, timeout, promote
+Sat Nov 21 05:07:37 UTC 2026
+21:07  up 1 day,  1:34, 4 users, load averages: 32.27 33.02 70.60
+✖ #2974.b5722acf deep hub promote interrupted with SIGINT while it waits for a running turn leaves no drain: start.session is served within 1 s of its exit, the hub still on the build that was in (13820.4245ms)
+✔ #2974.b18056cd deep hub promote of a good build still moves the hub to it with no prompt, with no session started during its drain (65046.358209ms)
+✖ #2974.b5722acf deep hub promote whose drain call times out leaves no drain: start.session is served within 1 s of its exit, the hub still on the build that was in (24791.443208ms)
+ℹ pass 1
+ℹ fail 2
+ℹ duration_ms 130784.491292
+✖ #2974.b5722acf deep hub promote interrupted with SIGINT while it waits for a running turn leaves no drain: start.session is served within 1 s of its exit, the hub still on the build that was in (13820.4245ms)
+  AssertionError [ERR_ASSERTION]: deep hub promote interrupted with SIGINT while it waited for a running turn left its hub.drain holding: no start.session sent within 1 s of its exit was served (43 sent; the last: {"v":1,"id":1,"error":{"code":"unavailable","retryable":true,"remediation":"A promotion is draining the hub: no session starts until it restarts on the new build. Start it again then.","path":"/method","actual":"start.session","evidence":[]}}). It must lift its own drain when it is stopped before the hub stops. Its exit: SIGINT, 
+✖ #2974.b5722acf deep hub promote whose drain call times out leaves no drain: start.session is served within 1 s of its exit, the hub still on the build that was in (24791.443208ms)
+  AssertionError [ERR_ASSERTION]: deep hub promote whose hub.drain call timed out left its drain holding: no start.session sent within 1 s of its exit was served (51 sent; the last: {"v":1,"id":1,"error":{"code":"unavailable","retryable":true,"remediation":"A promotion is draining the hub: no session starts until it restarts on the new build. Start it again then.","path":"/method","actual":"start.session","evidence":[]}}). It must lift its own drain when it fails before the hub stops. The hub was paused 11 s; promote exited 11 s after the pause began, 3: deep hub promote: the hub couldn't be d
+21:09  up 1 day,  1:36, 4 users, load averages: 33.88 33.43 65.44
+
+On the base: AC1 (both tests), AC3, AC4 (both tests) and AC6 fail at their criterion's assertion; AC2's and AC5's tests pass (the base's drain holds for good, and its promotion works), so their twins below prove them.
+
+## The throwaway implementation (twins/README.md), in a scratch clone, not kept
+### design, lease, shown
+Sat Nov 21 05:09:59 UTC 2026
+21:09  up 1 day,  1:36, 4 users, load averages: 34.40 33.55 65.11
+✔ #2974.5ff069d9 the design's threat table names a held drain and its mitigation (3.584041ms)
+✔ #2974.aaa94086 a token holder's one hub.drain(), its process gone, lapses: start.session is served again within 35 s with no restart (34169.632458ms)
+✔ #2974.aaa94086 a token holder's one hub.drain() naming no process lapses too, or is refused: start.session is served within 35 s (34440.942458ms)
+✔ #2974.be96e768 a caller that renews hub.drain() once a second keeps session starts paused past 30 s (45383.563583ms)
+✔ #2974.2d1e88a4 while a drain holds, deep status and the hub's health name it, its holder's process and since when, and a refused start names the holder and when it lapses (6684.184833ms)
+ℹ pass 5
+ℹ fail 0
+ℹ duration_ms 114056.444417
+21:11  up 1 day,  1:38, 4 users, load averages: 31.94 32.97 60.89
+
+### interrupted, timeout, promote
+Sat Nov 21 05:12:03 UTC 2026
+21:12  up 1 day,  1:38, 4 users, load averages: 31.87 32.92 60.55
+✔ #2974.b5722acf deep hub promote interrupted with SIGINT while it waits for a running turn leaves no drain: start.session is served within 1 s of its exit, the hub still on the build that was in (12219.083375ms)
+✔ #2974.b18056cd deep hub promote of a good build still moves the hub to it with no prompt, with no session started during its drain (64394.408ms)
+✔ #2974.b5722acf deep hub promote whose drain call times out leaves no drain: start.session is served within 1 s of its exit, the hub still on the build that was in (26294.864583ms)
+ℹ pass 3
+ℹ fail 0
+ℹ duration_ms 204225.833375
+21:15  up 1 day,  1:42, 4 users, load averages: 66.66 35.68 54.95
+
+## The twins, each on the throwaway, one at a time
+### lease-from-first-drain (hub-control.ts) -> lease.test.mjs, the renewed test (--test-name-pattern=be96e768)
+21:01  up 1 day,  1:28, 4 users, load averages: 30.25 54.83 96.19
+✖ #2974.be96e768 a caller that renews hub.drain() once a second keeps session starts paused past 30 s (45452.821583ms)
+ℹ pass 0
+ℹ fail 1
+ℹ duration_ms 45514.147541
+✖ #2974.be96e768 a caller that renews hub.drain() once a second keeps session starts paused past 30 s (45452.821583ms)
+  AssertionError [ERR_ASSERTION]: a drain its caller renews once a second must keep every session start paused, past 30 s too; these starts weren't refused by the drain (its caller renewed it 43 times, 0 of them not served)
+
+### promote-renews-late (promote.ts) -> promote.test.mjs
+21:02  up 1 day,  1:29, 4 users, load averages: 28.95 49.72 91.23
+✖ #2974.b18056cd deep hub promote of a good build still moves the hub to it with no prompt, with no session started during its drain (62204.435125ms)
+ℹ pass 0
+ℹ fail 1
+ℹ duration_ms 62269.333125
+✖ #2974.b18056cd deep hub promote of a good build still moves the hub to it with no prompt, with no session started during its drain (62204.435125ms)
+  AssertionError [ERR_ASSERTION]: no session may start during the promotion's drain: these starts the hub that was in answered while deep hub promote waited 40 s for a running turn, and then restarted it, were served
+
+### drain-asks-confirm (server.ts) -> promote.test.mjs
+21:04  up 1 day,  1:31, 4 users, load averages: 14.03 36.96 80.04
+✖ #2974.b18056cd deep hub promote of a good build still moves the hub to it with no prompt, with no session started during its drain (9997.591709ms)
+ℹ pass 0
+ℹ fail 1
+ℹ duration_ms 10033.471958
+✖ #2974.b18056cd deep hub promote of a good build still moves the hub to it with no prompt, with no session started during its drain (9997.591709ms)
+  AssertionError [ERR_ASSERTION]: deep hub promote must ask the OS nothing: the promotion runs with no prompt (it exited 3 before waiting for the running turn: deep hub promote: the hub couldn't be drained, so e08404634b05acdaaa66ea8551b541731785d6ff isn't promoted: hub.drain was refused: {"code":"unconfirmed","retryable":true,"remediation":"deep off changed nothing: the OS didn't confirm you (the prompt was cancelled). It takes effect only once the OS confirms you; run it again and confirm.","path":"/params/command","actual":"deep off","evidence":[]}
+
+## Earlier runs on the base, under heavier load
+The same files ran on the base at 20:47-20:51 local time, 1-minute loads 87 to 178, with the same failures at the same
+assertions (AC1 "start.session was still refused 46 s after the drain"; AC3 "the hub's health must name it"; AC4
+"no start.session sent within 1 s of its exit was served", the timeout run's promote exiting 3 "the hub couldn't be
+drained ... no answer within 10000 ms"). AC5's test then also counted starts the promoted build's new hub served after
+the restart; it now counts only the hub that was in (by the hello's start ID), and passes on the base, as above.

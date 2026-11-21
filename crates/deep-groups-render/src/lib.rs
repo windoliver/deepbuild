@@ -1,7 +1,8 @@
 //! A 2D writer layer's frame on the GPU layer (issue #1561): the group compositor ([`groups`],
 //! #430), a drawn look's passes and the page they read ([`drawn`], #149), the paint and light
 //! built from a mark's coverage ([`paintfx`], #467; [`lightfx`], #2031), and a 2D document's
-//! frame under a look as `film2d` draws it ([`frame2`]). `deep-gpu`'s calls and `deep-show`'s
+//! frame under a look as `film2d` draws it ([`frame2`]), and an indexed look's index target
+//! ([`indexed`], #464, moved here for #1250's clips). `deep-gpu`'s calls and `deep-show`'s
 //! frames draw through it, so both draw one picture.
 
 use serde_json::{json, Value};
@@ -9,6 +10,7 @@ use serde_json::{json, Value};
 pub mod drawn;
 pub mod frame2;
 pub mod groups;
+pub mod indexed;
 pub mod lightfx;
 pub mod paintfx;
 pub mod read;

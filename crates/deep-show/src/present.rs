@@ -825,7 +825,7 @@ impl Hub<'_> {
     }
 
     /// `items` laid out by the canvas on a board `points` wide and tall, drawn at `size` pixels.
-    fn board_rgba(
+    pub(crate) fn board_rgba(
         &mut self,
         id: &str,
         items: Vec<Value>,

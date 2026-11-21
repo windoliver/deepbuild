@@ -1,0 +1,46 @@
+# #980 suite at the base: NOT RUN against deep-logic
+
+Base: 7a256fd4b (this worktree's HEAD; first parent 3f02bf52b), before any implementation.
+Host: the reference Mac, macOS arm64, one-minute load about 135 to 190 on 18 cores.
+
+The vitest run at the base was not done. It needs `deep-logic` built (a fresh worktree has no target/), and heavy
+builds on this shared Mac go through the build grant, `node scripts/throttle.mjs build --wait 120 -- sh scripts/lease
+cargo build --locked --bin deep-logic`, which holds one build at a time. The request waited from 23:56 to 00:04 (local
+time) behind builds queued for up to 51 minutes, at least ten of them, and was withdrawn (stopped by its own task)
+rather than held for hours. So no line below is a run of the suite.
+
+What each test calls first, and what the base answers there (read from the base, not run through the tests):
+
+- Every test of every file calls `processLib()` (helpers.ts) before anything of the implementation's but the layout
+  probe, after only its own node-side checks. `processLib()` sends `{"call": "first_party"}` and expects a first-party
+  pack that declares process@1. At the base, crates/deep-logic/src/first_party.rs embeds three packs, whose manifests
+  declare (node, at the base):
+
+    interfaces@1.0.0 interfaces: physics2d.lib@1, fsm@1, nn.mlp@1 | libs:
+    lanes@1.0.0 interfaces: lanes@1 | libs: lanes_ref@1.0.0
+    modslib@1.0.0 interfaces: mods.lib@1 | libs: mods.tree@1.0.0
+
+  so each test is expected to fail first on:
+    AssertionError: a first-party pack declares process@1 (packs: interfaces@1.0.0, lanes@1.0.0, modslib@1.0.0): expected undefined to be defined
+
+  ac01-steady (1 test), ac02-mm1 (1), ac03-belt (1), ac04-grant (1), ac05-pallet (1), ac06-planted (3), ac07-throughput
+  (2), ac08-hosts (2), ac09-budget (2), ac10-taste (1): 15 tests.
+- Past that, the base also lacks the rest of the surface: a logic item's `process` is refused
+  (crates/deep-logic/src/piece/checks.rs:33, "logic@1 has no field process"), `lib:process@1` resolves to no
+  interface, and `judge` reads only items with `lanes` (crates/deep-logic/src/judge.rs).
+
+- ac07-throughput and ac10-taste also build deep-show (the full set) before their tests; their first call of the
+  implementation's is the same `processLib()`.
+
+What was run here, without deep-logic (README: Checked before the base run): every program assembled as a relocatable
+object by #416's assembler (twelve: steady, belt, grant, grant2, pallet, mm1 and budget through the interface; steady,
+belt and grant2 by planted_process's name; budget's idle program; the warehouse's; each also as a whole module) and run as a whole module in
+Node's WebAssembly against a reference model of README: The step contract standing in for process@1's exports, held to
+fixtures.ts's closed-form arrays and to the judge's three rules; `npx tsc -p tests/acceptance/980/tsconfig.json` exits 0;
+`node scripts/public-text.mjs` finds no studied name.
+
+To run it once a build grant is free (paths redacted as <checkout>):
+
+  cd <checkout> && PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node scripts/throttle.mjs test --wait 600 -- sh scripts/lease \
+    npx vitest run --root tests/acceptance/980 --testTimeout=600000 --no-file-parallelism

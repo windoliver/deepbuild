@@ -11,8 +11,8 @@ use serde_json::Value;
 
 use super::core_ops::Edits;
 use super::{
-    view_input, Access, Bound, Key, Loaded, Node, OpError, Outside, Pool, Session, Tokens, Val,
-    VIEW_INPUTS,
+    view_input, Access, Bound, HashVersion, Key, Loaded, Node, OpError, Outside, Pool, Session,
+    Tokens, Val, VIEW_INPUTS,
 };
 use crate::registry::{Sealed, SealedOp, TableValue};
 
@@ -233,6 +233,14 @@ impl<'a> View<'a> {
             Some(src) => src.doc.as_ref(),
             None => self.l.doc.as_ref(),
         })
+    }
+
+    /// #2660: the key the revision keeps of the document's members but its ID and items, which
+    /// only a load changes, so an operator reading them needn't hash them each run; `None` under
+    /// `hash@1`, which keeps none.
+    pub fn envelope(&mut self) -> Result<Option<Key>, OpError> {
+        self.declared("refs")?;
+        Ok((self.session.hash == HashVersion::V2).then_some(self.l.envelope))
     }
 
     /// What this node reads instead of its item and document, under a source perturbation of
