@@ -26,20 +26,30 @@ full; warn.test.ts, install.test.ts and budgets.test.ts only searched for `build
 `crates/deep-hook/src/main.rs` its `rules()` and `classes()` readers and from `matcher.rs` `known()`, `CLASSES` and
 `EFFECTS`, to learn which `rules.json` it reads. At the base commit `8b1b2bfce`: `default-rules.json`'s entry names
 and matches, and the `no-delete-past-worktree` entry. For the run-in-place form, named in the follow-up: the
-`scripts/lanes.mjs` lines naming #2204 and the head of `tests/acceptance/2204-redraft-ac3/DISPUTE.md`. **What reached this job about the base run.** The base run's failing file
-(`tests/acceptance/1097/depth.test.ts`), test, message and cause reached this job in its instructions, as Proven on
-the base sends a check that fails elsewhere back to its drafting job with the base run's failing file, line and
-message, which come from the base commit alone. A follow-up corrected the cause (the commits and dates of the five
-entries above came in it; I checked their matches against the pinned `known()` and `EFFECTS`, not their history). I never read `crates/deep-hook/src` at the base commit, an implementation
-change for #1097, any diff, branch, pull request or other worktree.
+`scripts/lanes.mjs` lines naming #2204 and the head of `tests/acceptance/2204-redraft-ac3/DISPUTE.md`. I never read
+`crates/deep-hook/src` at the base commit, any diff, branch, pull request or other worktree. I did read part of
+#1097's implementation, in the hub: see the slip below.
+
+**What reached this job beyond its inputs.** Two things, both in its instructions:
+
+- The base run's failing file (`tests/acceptance/1097/depth.test.ts`), test, message and cause, as Proven on the base
+  sends a check that fails elsewhere back to its drafting job with the base run's failing file, line and message,
+  which come from the base commit alone.
+- A follow-up's corrected cause, which goes beyond that file, line and message: the five default entries added since
+  the pin whose match the pinned reader doesn't know, with each one's commit and date (#1294 0f65ca489, #84
+  d6aacc01b and #1156 79c9892fd, all 2026-11-05; #1507 551b365a8, 2026-11-09). I checked their matches against the
+  pinned `known()` and `EFFECTS`, not their history.
 
 **A slip in the reading list.** To check that the hub the tests start doesn't put entries the pinned reader can't
 read back into `rules.json` (which would defeat the fix), I searched `packages/hub/src` for `rules.json` writers and
 read `guards.ts` lines 1-20 and 100-131 (the install's merge and rewrite) and `hookmap.ts`'s `toolClasses`. They show
 the install keeps the entries `rules.json` holds, adds the given ones, and writes `classes` as `read` only, which the
-pinned reader reads. They also show the install's computed-program form for a `fail_closed` `effect:` entry; that
-bears on whether `deep guard add` installs `t-push` (the original's BLOCKED assertion, unchanged here), not on the
-redraft. Nothing in the tests comes from them.
+pinned reader reads. Those lines include #1097's own implementation: the install's computed-program refusal for a
+`fail_closed` `run:`/`effect:` entry (`computed(planted)`), which came in with #1097's change (ccd0a8c9e, "(#1097)";
+an independent review found this, not this job). So this job did read part of #1097's hub install code. No test line
+depends on it: the test bodies are the originals' apart from the seeding (`seedBaseDefaults`, and the `seed`
+argument `observe` takes), and nothing in the redraft was chosen from what those lines say. They bear only on whether
+`deep guard add` installs `t-push`, which the original's BLOCKED assertion, unchanged here, already holds.
 
 ## What changed since the suite was written
 
