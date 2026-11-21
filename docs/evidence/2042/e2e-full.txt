@@ -1,0 +1,29 @@
+== #2042 hand e2e: deep-hook 6395f3cfc (the fix), shipped rules.json, load { 56.94 92.08 117.24 }
+-- hub STOPPED (nothing listens at /tmp/e2e-2042/.deepbuild/hub.sock)
+01-nested-300            exit 2  DeepBuild blocked this: the PreToolUse payload deep-hook was given is nested past the 256 arrays or objects deep-hook reads, so it can't read the call and check it against the guards that hold it. Retry it; if this comes again, the agent wrote a call deep-hook can't read.
+02-cut-40-bytes          exit 2  DeepBuild blocked this: the PreToolUse payload deep-hook was given is cut short: it ends before its JSON is whole, so it can't read the call and check it against the guards that hold it. Retry it; if this comes again, the agent wrote a call deep-hook can't read.
+03-empty                 exit 2  DeepBuild blocked this: the PreToolUse payload deep-hook was given is empty, so it can't read the call and check it against the guards that hold it. Retry it; if this comes again, the agent wrote a call deep-hook can't read.
+04-not-json              exit 2  DeepBuild blocked this: the PreToolUse payload deep-hook was given is not JSON: expected a value at byte 0, so it can't read the call and check it against the guards that hold it. Retry it; if this comes again, the agent wrote a call deep-hook can't read.
+05-not-utf8              exit 2  DeepBuild blocked this: the PreToolUse payload deep-hook was given isn't UTF-8 text, so it can't read the call and check it against the guards that hold it. Retry it; if this comes again, the agent wrote a call deep-hook can't read.
+06-2MiB-cut-short        exit 2  DeepBuild blocked this: the PreToolUse payload deep-hook was given is cut short: it ends before its JSON is whole, so it can't read the call and check it against the guards that hold it. Retry it; if this comes again, the agent wrote a call deep-hook can't read.
+07-number-1e999          exit 2  DeepBuild blocked this: the PreToolUse payload deep-hook was given holds a number with no value (past what a double holds), so it can't read the call and check it against the guards that hold it. Retry it; if this comes again, the agent wrote a call deep-hook can't read.
+08-valid-ls              exit 0  (allowed, nothing printed)
+09-lone-surrogate-ls     exit 0  (allowed, nothing printed)
+10-lone-surrogate-push   exit 0  (allowed, nothing printed)
+11-valid-push            exit 0  (allowed, nothing printed)
+-- starting a dev hub
+-- hub RUNNING, pid 54050: {"v":1,"ready":true,"pid":54050,"socket":"/tmp/e2e-2042/.dee
+01-nested-300            exit 2  DeepBuild blocked this: the PreToolUse payload deep-hook was given is nested past the 256 arrays or objects deep-hook reads, so it can't read the call and check it against the guards that hold it. Retry it; if this comes again, the agent wrote a call deep-hook can't read.
+02-cut-40-bytes          exit 2  DeepBuild blocked this: the PreToolUse payload deep-hook was given is cut short: it ends before its JSON is whole, so it can't read the call and check it against the guards that hold it. Retry it; if this comes again, the agent wrote a call deep-hook can't read.
+03-empty                 exit 2  DeepBuild blocked this: the PreToolUse payload deep-hook was given is empty, so it can't read the call and check it against the guards that hold it. Retry it; if this comes again, the agent wrote a call deep-hook can't read.
+04-not-json              exit 2  DeepBuild blocked this: the PreToolUse payload deep-hook was given is not JSON: expected a value at byte 0, so it can't read the call and check it against the guards that hold it. Retry it; if this comes again, the agent wrote a call deep-hook can't read.
+05-not-utf8              exit 2  DeepBuild blocked this: the PreToolUse payload deep-hook was given isn't UTF-8 text, so it can't read the call and check it against the guards that hold it. Retry it; if this comes again, the agent wrote a call deep-hook can't read.
+06-2MiB-cut-short        exit 2  DeepBuild blocked this: the PreToolUse payload deep-hook was given is cut short: it ends before its JSON is whole, so it can't read the call and check it against the guards that hold it. Retry it; if this comes again, the agent wrote a call deep-hook can't read.
+07-number-1e999          exit 2  DeepBuild blocked this: the PreToolUse payload deep-hook was given holds a number with no value (past what a double holds), so it can't read the call and check it against the guards that hold it. Retry it; if this comes again, the agent wrote a call deep-hook can't read.
+08-valid-ls              exit 0  (allowed, nothing printed)
+09-lone-surrogate-ls     exit 0  (allowed, nothing printed)
+10-lone-surrogate-push   exit 2  DeepBuild denied this (guard push-needs-ask): no request you typed in this thread names it. DeepBuild is holding this: `git push origin main` needs your authority and waits for ask:01M7XZXTSJAS6H9WX8T5PBEGGT. Once you say yes, run the same call again.
+11-valid-push            exit 2  DeepBuild denied this (guard push-needs-ask): no request you typed in this thread names it. DeepBuild is holding this: `git push origin main` needs your authority and waits for ask:01M7XZXTSJAS6H9WX8T5PBEGGT. Once you say yes, run the same call again.
+-- stopping the hub this run started, by its pid 54050
+hub 54050 stopped
+== done
