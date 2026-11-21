@@ -11,8 +11,14 @@ pub mod cast;
 #[cfg(feature = "physics")]
 pub mod derive;
 pub mod drawing;
+#[cfg(feature = "logic")]
+pub mod fires;
 pub mod form;
 pub mod logic;
+#[cfg(feature = "net")]
+pub mod net;
+#[cfg(feature = "net")]
+pub mod net_worlds;
 pub mod read;
 #[cfg(feature = "scene3d")]
 pub mod scene;

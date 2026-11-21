@@ -1,0 +1,72 @@
+twin away-denial-dropped laid over crates/deep-hook/src/main.rs on base 74e6e2634001e76820c711bea05fe7bb6a7cf3b6
+Thu Nov 19 07:42:18 PST 2026
+cargo exit 0
+Thu Nov 19 07:45:39 PST 2026
+ 7:45  up 5 days, 17:54, 18 users, load averages: 111.20 162.60 164.54
+
+ RUN  v5.0.5 <repo>/tests/acceptance/2204-redraft-ac3
+
+stdout | ac3-hub-stopped.test.ts > #2204.7c1b9c13 with the hub stopped, rules.json cut to its first 40 bytes denies a PreToolUse for `pkill -f node`, naming the file and that it isn't JSON, as today
+`pkill -f node`: exit 0 after 20.6 ms, stdout "", stderr ""
+
+stdout | ac3-hub-stopped.test.ts > #2204.7c1b9c13 with the hub stopped, a readable rules.json that gains one entry whose match is effect:not-a-class denies a PreToolUse for `pkill -f node`, naming the file and the entry, as today
+`pkill -f node`: exit 0 after 12.5 ms, stdout "", stderr ""
+
+stdout | ac3-hub-stopped.test.ts
+the hub ran at /private/tmp/dh2204r3-pCxaOF/h/.deepbuild/hub.sock and was stopped (clean); rules.json then held 39 entries in 35581 bytes
+
+ ❯ ac3-hub-stopped.test.ts (2 tests | 2 failed) 996ms
+   × #2204.7c1b9c13 with the hub stopped, rules.json cut to its first 40 bytes denies a PreToolUse for `pkill -f node`, naming the file and that it isn't JSON, as today 25ms
+   × #2204.7c1b9c13 with the hub stopped, a readable rules.json that gains one entry whose match is effect:not-a-class denies a PreToolUse for `pkill -f node`, naming the file and the entry, as today 14ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac3-hub-stopped.test.ts > #2204.7c1b9c13 with the hub stopped, rules.json cut to its first 40 bytes denies a PreToolUse for `pkill -f node`, naming the file and that it isn't JSON, as today
+AssertionError: with the hub stopped and rules.json cut to its first 40 bytes, Claude Code's PreToolUse for `pkill -f node` must be denied (exit 2, or a deny decision), as today, but deep-hook lets it run: exit 0 after 20.6 ms, stdout "", stderr "": expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ judge ac3-hub-stopped.test.ts:68:190
+     66| function judge(r: Ran, file: string, why: RegExp, saying: string): voi…
+     67|   const { denied, reason } = verdict(r);
+     68|   expect(denied, `with the hub stopped and ${file}, Claude Code's PreT…
+       |                                                                                                                                                                                              ^
+     69|   // Past deep-hook's ruling limit its watchdog decides by the clock, …
+     70|   if (r.ms >= RULING_LIMIT_MS && !(/rules\.json/.test(reason) && why.t…
+ ❯ ac3-hub-stopped.test.ts:83:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac3-hub-stopped.test.ts > #2204.7c1b9c13 with the hub stopped, a readable rules.json that gains one entry whose match is effect:not-a-class denies a PreToolUse for `pkill -f node`, naming the file and the entry, as today
+AssertionError: with the hub stopped and a readable rules.json that gains the entry newer-46baa665, whose match is effect:not-a-class, Claude Code's PreToolUse for `pkill -f node` must be denied (exit 2, or a deny decision), as today, but deep-hook lets it run: exit 0 after 12.5 ms, stdout "", stderr "": expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ judge ac3-hub-stopped.test.ts:68:190
+     66| function judge(r: Ran, file: string, why: RegExp, saying: string): voi…
+     67|   const { denied, reason } = verdict(r);
+     68|   expect(denied, `with the hub stopped and ${file}, Claude Code's PreT…
+       |                                                                                                                                                                                              ^
+     69|   // Past deep-hook's ruling limit its watchdog decides by the clock, …
+     70|   if (r.ms >= RULING_LIMIT_MS && !(/rules\.json/.test(reason) && why.t…
+ ❯ ac3-hub-stopped.test.ts:92:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  07:45:40
+   Duration  1.10s (tests 98%, import 1%, transform 1%)
+
+vitest exit 1
+Thu Nov 19 07:45:41 PST 2026
+ 7:45  up 5 days, 17:54, 18 users, load averages: 106.86 160.85 163.91

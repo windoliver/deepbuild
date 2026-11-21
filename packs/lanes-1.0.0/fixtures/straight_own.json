@@ -1,0 +1,113 @@
+{
+  "name": "straight_own",
+  "items": {
+    "e": {
+      "kind": "path@1",
+      "params": {
+        "verbs": [
+          "M",
+          "L"
+        ],
+        "pts": [
+          0,
+          0,
+          20,
+          0
+        ]
+      }
+    }
+  },
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "85e0eba46035106bda95989f5bacdaef65fa44a2dc3fdcfc0da41e550c45b36e",
+      "step_rate": 10,
+      "writes": {
+        "pos": {
+          "type": "vec2",
+          "count": 1
+        },
+        "heading": {
+          "type": "f64",
+          "count": 1
+        },
+        "speed": {
+          "type": "f64",
+          "count": 1
+        },
+        "state": {
+          "type": "i32",
+          "count": 1
+        },
+        "fork": {
+          "type": "f64",
+          "count": 1
+        },
+        "load": {
+          "type": "vec3",
+          "count": 1
+        }
+      },
+      "lanes": {
+        "graph": {
+          "paths": [
+            "e"
+          ],
+          "two_way": [
+            "e"
+          ],
+          "speed": {
+            "e": 2
+          },
+          "bays": {
+            "park.a": [
+              0,
+              0
+            ],
+            "rack.b": [
+              20,
+              0
+            ]
+          }
+        },
+        "vehicle": {
+          "length": 2,
+          "width": 1,
+          "gap": 0.5,
+          "speed": 3,
+          "accel": 1,
+          "decel": 1
+        }
+      },
+      "links": [
+        {
+          "name": "lanes_ref@1.0.0",
+          "asset": "30472e40720d0dfbec009ad9b9949d8e6ef54cdd9bcb749266d3263f9b99b482"
+        }
+      ]
+    }
+  },
+  "track": [],
+  "steps": 126,
+  "expect": {
+    "arrays": {
+      "0": {
+        "state": [
+          1
+        ]
+      },
+      "125": {
+        "state": [
+          0
+        ],
+        "pos": [
+          [
+            20,
+            0
+          ]
+        ]
+      }
+    }
+  },
+  "answer": "The straight run of lanes@1's fixture straight, importing lanes_ref by its own name: driving at step 0, parked at rack.b (20, 0) from step 119."
+}

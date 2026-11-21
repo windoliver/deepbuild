@@ -22,8 +22,8 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use deep_canvas::document::{
-    apply_ops, canonical_in, check_packed, pack_kinds, recheck_with, rollback, store_migrations,
-    touched_in, Issue, Notice, Packs, Patched, Referrers, Writing, ID_MAPS,
+    apply_ops, canonical_in, check_packed, check_sized, pack_kinds, recheck_with, rollback,
+    store_migrations, touched_in, Issue, Notice, Packs, Patched, Referrers, Writing, ID_MAPS,
 };
 use deep_canvas::grammar::{Path as FieldPath, Section};
 use deep_canvas::kinds::{lookup, registry, Lookup};
@@ -219,6 +219,8 @@ enum Outcome {
         ids: Vec<String>,
         writers: Vec<Writer>,
     },
+    /// #1415: its ops left every item's content key as it was, so it made no revision.
+    NoChange,
 }
 
 /// An applied patch's result.
@@ -875,6 +877,43 @@ fn restore(
         }
         for (_, file) in newest.values() {
             take_layer(&mut shared.doc, &mut shared.owners, file);
+        }
+    }
+}
+
+/// #1801: each refusal that a removed item's dangling name raised (`ref_unresolved` at one of the
+/// fields naming it, or naming it as its value) gets as its `actual` every row that still names
+/// the item in `doc`, as `refs_to` lists them and in its order, so one refusal names them all.
+pub(crate) fn name_referrers(
+    refusals: &mut [Issue],
+    doc: &Value,
+    removed: &[&str],
+    sealed: &Sealed,
+    planted: Option<Planted>,
+) {
+    for id in removed {
+        let name = deep_canvas::refs::Name::Item(id.to_string());
+        let refs = deep_canvas::refs::refs_to(doc, sealed, &name);
+        if refs.is_empty() {
+            continue;
+        }
+        let mut rows: Vec<Value> = refs
+            .iter()
+            .map(|r| json!({"row": r.row, "path": r.path, "kind": r.kind}))
+            .collect();
+        if planted == Some(Planted::RefusalNamesFirstRef) {
+            rows.truncate(1);
+        }
+        for issue in refusals.iter_mut().filter(|i| i.code == "ref_unresolved") {
+            let at_field = refs
+                .iter()
+                .any(|r| issue.path == r.path || issue.path.starts_with(&format!("{}/", r.path)));
+            if at_field || issue.actual == json!(id) {
+                issue.actual = Value::Array(rows.clone());
+                if !issue.ids.iter().any(|x| x == id) {
+                    issue.ids.push(id.to_string());
+                }
+            }
         }
     }
 }

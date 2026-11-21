@@ -1,0 +1,13 @@
+{
+  "name": "shelf",
+  "version": "2.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #1962 acceptance suite, by an outside owner: planted, a move to a pack it does not require.",
+  "requires": {
+    "core": ">=0.0.0"
+  },
+  "moved": {
+    "shelf.bookcase@2": "furniture/case@1"
+  },
+  "assets": []
+}

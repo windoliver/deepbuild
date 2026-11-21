@@ -1,0 +1,191 @@
+{
+  "document": {
+    "format": 1,
+    "profile": "board",
+    "title": "A case saved at furniture.case@1",
+    "description": "One case saved at the kind's first major: a corpus document of the #1962 acceptance suite.",
+    "size": [
+      320,
+      360
+    ],
+    "packs": [
+      "acme/furniture@1.0.0"
+    ],
+    "items": {
+      "c1": {
+        "id": "c1",
+        "kind": "furniture.case@1",
+        "name": "Case 1",
+        "order": "a0",
+        "params": {
+          "width": 2,
+          "shelves": 4,
+          "depth": 0.5
+        }
+      }
+    }
+  },
+  "values": {
+    "c1.sides.0": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          2,
+          160
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "c1.sides.1": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          2,
+          160
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          198,
+          0,
+          0
+        ]
+      }
+    },
+    "c1.boards.0": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          200,
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "c1.boards.1": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          200,
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          40,
+          0
+        ]
+      }
+    },
+    "c1.boards.2": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          200,
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          80,
+          0
+        ]
+      }
+    },
+    "c1.boards.3": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          200,
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          120,
+          0
+        ]
+      }
+    },
+    "c1.plan": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          200,
+          50
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          170,
+          0
+        ]
+      }
+    }
+  }
+}

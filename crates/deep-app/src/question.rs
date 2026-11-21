@@ -15,10 +15,12 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
+#[cfg(test)]
+use crate::arming::HOLD_STILL;
 use crate::{
     answer::Answer,
-    arming::{Machine, Outcome, Press, Slot, Source, State, HOLD_STILL},
-    confirm,
+    arming::{Machine, Outcome, Press, Slot, Source, State},
+    confirm, copy,
     kinds::Model,
     states,
 };
@@ -27,10 +29,16 @@ use crate::{
 /// tall): a slot smaller than this, or than the card as drawn, never arms.
 pub const CARD_SIZE: [i64; 2] = [480, 560];
 /// What a card says before it arms when words or an image are set and no option is chosen: the answer is this
-/// ask's alone, never a decision for the key.
-pub const ANSWERS_THIS_ASK_ONLY: &str = "Answers this ask only";
+/// ask's alone, never a decision for the key. Each line's key in the app's table (#2403).
+pub const ANSWERS_THIS_ASK_ONLY: &str = "question.answers_this_ask_only";
 /// The same on an authority card: words never run the plan.
-pub const WONT_RUN: &str = "Sends your words as the reason; this won't run";
+pub const WONT_RUN: &str = "question.wont_run";
+/// The options a card shows before it folds the rest behind a count: about nine a level (#394, #1808).
+pub const SHOWN_OPTIONS: usize = 9;
+/// What a card says on a press while options folded behind its count were never shown (#1808).
+pub const OPEN_THE_FOLD: &str = "question.open_the_fold";
+/// What a long card says on a press while its end was never shown (#1808).
+pub const READ_TO_THE_END: &str = "question.read_to_the_end";
 
 /// Presentations are numbered across the process, so a card presented again after a relaunch gets a new `seq`.
 static NEXT_SEQ: AtomicU64 = AtomicU64::new(0);
@@ -75,6 +83,8 @@ pub enum Target {
     SignIn,
     /// A sign-in task's plan line, which opens the maker's price page (#1349).
     Page,
+    /// The count the options past the ninth fold behind, which shows them (#1808).
+    Fold,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -94,7 +104,7 @@ pub struct Input {
 }
 
 /// What the card says when you approve with the ask's own steps switched off.
-pub const SWITCH_FIRST: &str = "Switch on this ask's steps to approve it";
+pub const SWITCH_FIRST: &str = "question.switch_first";
 
 /// What the card did with an input.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -141,6 +151,11 @@ pub enum Row {
     SignIn,
     /// A sign-in task's plan line (#1349), which opens the maker's price page.
     Page(String),
+    /// The options past the ninth, folded behind their count until it's pressed (#1808).
+    Fold {
+        hidden: usize,
+        label: String,
+    },
 }
 
 impl Row {
@@ -148,10 +163,13 @@ impl Row {
     pub fn label(&self) -> &str {
         match self {
             Row::Text(text) | Row::Page(text) => text,
-            Row::Option { label, .. } | Row::Step { label, .. } | Row::Call { label, .. } => label,
-            Row::Send => "Send",
-            Row::Undo => "Undo",
-            Row::SignIn => "Sign in",
+            Row::Option { label, .. }
+            | Row::Step { label, .. }
+            | Row::Call { label, .. }
+            | Row::Fold { label, .. } => label,
+            Row::Send => copy::text("question.send"),
+            Row::Undo => copy::text("question.undo"),
+            Row::SignIn => copy::text("question.sign_in"),
         }
     }
 
@@ -252,6 +270,10 @@ pub struct Controller {
     switch_waiting: Option<SwitchWaiting>,
     /// What the card says after a refused press, until it arms.
     holding: Option<&'static str>,
+    /// Whether the card, as laid out, showed its end: unmeasured, not yet, or once (#1808).
+    end: Option<bool>,
+    /// The options folded behind their count were shown (#1808).
+    fold_open: bool,
     /// An approval was held back because the ask's own steps are off.
     switch_first: bool,
     receipt: Option<Receipt>,
@@ -287,11 +309,14 @@ impl Controller {
             send_waiting: None,
             switch_waiting: None,
             holding: None,
+            end: None,
+            fold_open: false,
             switch_first: false,
             receipt: None,
             answers: Vec::new(),
             usage: Vec::new(),
         };
+        controller.machine.hold(controller.held(), now);
         controller.record("presented", now);
         Some(controller)
     }
@@ -322,12 +347,56 @@ impl Controller {
         }
     }
 
-    /// Time passed to `now`: the card arms once its interval ran, and stops saying to hold still.
-    pub fn tick(&mut self, now: u64) {
+    /// Time passed to `now`: the card arms once its interval ran, and stops saying to hold still. Whether that
+    /// changed what the card shows (#1482): a tick that arms nothing draws nothing.
+    pub fn tick(&mut self, now: u64) -> bool {
+        let (state, holding) = (self.machine.state(), self.holding);
         self.machine.tick(now);
         if matches!(self.machine.state(), State::Armed { .. }) {
             self.holding = None;
         }
+        (self.machine.state(), self.holding) != (state, holding)
+    }
+
+    /// How many options are folded behind their count: those past the ninth, until it's pressed (#1808).
+    pub fn folded(&self) -> usize {
+        if self.fold_open {
+            0
+        } else {
+            self.model.options.len().saturating_sub(SHOWN_OPTIONS)
+        }
+    }
+
+    /// Why the card can't arm besides its interval and its slot (#1808): options never shown, or an end never shown.
+    /// #1808's planted card arms with its fold never opened.
+    fn held(&self) -> Option<&'static str> {
+        if self.folded() > 0 && !crate::plain::planted("card-arms-folded") {
+            Some(copy::text(OPEN_THE_FOLD))
+        } else if self.end == Some(false) {
+            Some(copy::text(READ_TO_THE_END))
+        } else {
+            None
+        }
+    }
+
+    /// Tells the machine what holds the card now; the line a refused press left says the reason now, or leaves.
+    fn rehold(&mut self, now: u64) {
+        self.machine.hold(self.held(), now);
+        if matches!(self.machine.state(), State::Armed { .. }) {
+            self.holding = None;
+        } else if self.holding.is_some() {
+            self.holding = Some(self.machine.says());
+        }
+    }
+
+    /// The card on its page, as laid out at `now`, showed its end (`true`), or its rows run past what shows and their
+    /// end hasn't (#1808). An end once shown stays shown while the card shows the same thing.
+    pub fn end_shown(&mut self, shown: bool, now: u64) {
+        if self.end == Some(true) || self.end == Some(shown) {
+            return;
+        }
+        self.end = Some(shown);
+        self.rehold(now);
     }
 
     /// The record changed while the card shows. Its scope and count stay as presented (the planted twin re-reads
@@ -377,6 +446,10 @@ impl Controller {
             self.model = fresh;
             self.switch_first = false;
             self.machine.present(now, self.slot);
+            // What it shows changed: its end and its fold are to be shown again (#1808).
+            self.end = None;
+            self.fold_open = false;
+            self.machine.hold(self.held(), now);
             self.send_down = None;
             self.send_waiting = None;
             self.holding = None;
@@ -387,6 +460,12 @@ impl Controller {
     /// The card as drawn measured `size` points: what its slot must hold to arm, never less than [`CARD_SIZE`].
     pub fn measured(&mut self, size: [i64; 2], now: u64) {
         let size = [size[0].max(CARD_SIZE[0]), size[1].max(CARD_SIZE[1])];
+        self.machine.measured(size, now);
+    }
+
+    /// The card on its ask's page measured `size` points (#1808): its rows scroll inside the page, so it needs no more
+    /// than the page, and no least size of its own.
+    pub fn measured_on_page(&mut self, size: [i64; 2], now: u64) {
         self.machine.measured(size, now);
     }
 
@@ -420,10 +499,10 @@ impl Controller {
             rows.push(Row::Text(crate::plain::PLANTED_PR_LINE.to_owned()));
         }
         if let Some(receipt) = &self.receipt {
-            rows.push(Row::Text(format!("Answered: {}", receipt.says)));
+            rows.push(Row::Text(copy::fill("question.answered", &[&receipt.says])));
             rows.push(Row::Undo);
             for (_, question) in &receipt.also {
-                rows.push(Row::Text(format!("Also answered: {question}")));
+                rows.push(Row::Text(copy::fill("question.also_answered", &[question])));
             }
             return rows;
         }
@@ -445,46 +524,57 @@ impl Controller {
             }));
             return rows;
         }
+        let folded = self.folded();
         for (index, option) in self.model.options.iter().enumerate() {
-            let mut label = option.label.clone();
-            if option.recommended {
-                label.push_str(" (recommended)");
+            if folded > 0 && index >= SHOWN_OPTIONS {
+                break;
             }
-            if let Some(cost) = &option.cost {
-                label.push_str(&format!(" · {cost}"));
-            }
+            let label = match (option.recommended, &option.cost) {
+                (true, Some(cost)) => {
+                    copy::fill("question.recommended_cost", &[&option.label, cost])
+                }
+                (true, None) => copy::fill("question.recommended", &[&option.label]),
+                (false, Some(cost)) => format!("{} · {cost}", option.label),
+                (false, None) => option.label.clone(),
+            };
             rows.push(Row::Option {
                 index,
                 label,
                 focused: self.focused == Some(index),
             });
         }
+        if folded > 0 {
+            rows.push(Row::Fold {
+                hidden: folded,
+                label: copy::count("question.more_options", folded as u64, &[]),
+            });
+        }
         if !self.faults.no_default {
-            rows.push(Row::Text(format!(
-                "Default: {} · at {}",
-                self.model.default, self.model.applies
+            rows.push(Row::Text(copy::fill(
+                "question.default_at",
+                &[&self.model.default, &self.model.applies],
             )));
         }
         for (name, value) in &self.model.fields {
-            if self.faults.diff_after_answer && (name == "moved" || name.starts_with("checks on")) {
+            if self.faults.diff_after_answer && crate::kinds::is_moved(name) {
                 continue;
             }
-            rows.push(Row::Text(format!("{name}: {value}")));
+            rows.push(Row::Text(copy::fill("question.field", &[name, value])));
         }
         // A step is a switch: its state is the node's value and its mark, never a word in its label (#1458).
         for (index, step) in self.model.steps.iter().enumerate() {
-            let mut label = format!(
-                "{} · {}",
-                step.does,
+            let mut label = copy::fill(
                 if step.undoable {
-                    "can be undone"
+                    "question.step_undoable"
                 } else {
-                    "can't be undone"
-                }
+                    "question.step_not_undoable"
+                },
+                &[&step.does],
             );
             // #1458's planted switch says its state as a word in its label.
             if crate::plain::planted("step-state-in-label") {
-                label.push_str(if step.on { " · on" } else { " · off" });
+                let state = if step.on { " · on" } else { " · off" }; // copy-exception: planted
+                label.push_str(state);
             }
             rows.push(Row::Step {
                 index,
@@ -501,17 +591,26 @@ impl Controller {
         let mut unannounced = crate::plain::planted("card-row-reverts-unannounced");
         let mut timeless = crate::plain::planted("card-row-without-time");
         for call in &self.model.calls {
-            let mut lines = vec![call.question.clone(), format!("{} (recommended)", call.yes)];
+            let mut lines = vec![
+                call.question.clone(),
+                copy::fill("question.recommended", &[&call.yes]),
+            ];
             if unannounced && call.sends == crate::kinds::REVERTS {
                 unannounced = false;
                 lines.push(call.back.clone());
             } else {
-                lines.push(format!("{} · {}", call.back, call.sends));
+                lines.push(copy::fill(
+                    "question.back_sends",
+                    &[&call.back, &copy::text(call.sends)],
+                ));
             }
             if timeless {
                 timeless = false;
             } else {
-                lines.push(format!("{} applies at {}", call.yes, call.applies));
+                lines.push(copy::fill(
+                    "question.applies_at",
+                    &[&call.yes, &call.applies],
+                ));
             }
             rows.push(Row::Call {
                 ask: call.ask.clone(),
@@ -520,36 +619,43 @@ impl Controller {
             });
         }
         for call in &self.model.past {
-            rows.push(Row::Text(format!(
-                "Past call: {} · {}",
-                call.question, call.answer
+            rows.push(Row::Text(copy::fill(
+                "question.past_call",
+                &[&call.question, &call.answer],
             )));
         }
         if let Some(scope) = self.model.scope.as_ref().filter(|_| !self.faults.no_scope) {
             rows.push(Row::Text(scope.words.clone()));
             if scope.also > 0 {
-                rows.push(Row::Text(format!("Answers {} more", scope.also)));
+                rows.push(Row::Text(copy::count(
+                    "question.answers_more",
+                    scope.also as u64,
+                    &[],
+                )));
             }
         }
         if !self.words.is_empty() {
-            rows.push(Row::Text(format!("Your words: {}", self.words)));
+            rows.push(Row::Text(copy::fill("question.your_words", &[&self.words])));
         }
         if let Some(image) = &self.image {
-            rows.push(Row::Text(format!("Your image: {}", &image[..12])));
+            rows.push(Row::Text(copy::fill(
+                "question.your_image",
+                &[&&image[..12]],
+            )));
         }
         if !self.words.is_empty() || self.image.is_some() {
             rows.push(Row::Text(
-                if self.allow_option().is_some() {
+                copy::text(if self.allow_option().is_some() {
                     WONT_RUN
                 } else {
                     ANSWERS_THIS_ASK_ONLY
-                }
+                })
                 .to_owned(),
             ));
         }
         rows.push(Row::Send);
         if self.switch_first && !self.model.own_on() {
-            rows.push(Row::Text(SWITCH_FIRST.to_owned()));
+            rows.push(Row::Text(copy::text(SWITCH_FIRST).to_owned()));
         }
         if let Some(holding) = self.holding {
             rows.push(Row::Text(holding.to_owned()));
@@ -560,30 +666,69 @@ impl Controller {
     /// The card's rows on an ask's page (#1461), where the box under it holds your words, the lines that say what
     /// they do and the send control: every row but those.
     pub fn page_rows(&self) -> Vec<Row> {
+        let words = (!self.words.is_empty())
+            .then(|| visible(&copy::fill("question.your_words", &[&self.words])));
         self.rows()
             .into_iter()
             .filter(|row| match row {
                 Row::Send => false,
                 Row::Text(text) => {
-                    !text.starts_with("Your words: ")
-                        && text != WONT_RUN
-                        && text != ANSWERS_THIS_ASK_ONLY
+                    words.as_ref() != Some(text)
+                        && text != copy::text(WONT_RUN)
+                        && text != copy::text(ANSWERS_THIS_ASK_ONLY)
                 }
                 _ => true,
             })
             .collect()
     }
 
+    /// The card's rows on its page, split where it scrolls (#1808): the rows read above, which scroll, and its last
+    /// block, which stays in view under them: its options and their count, its default, what it's saved as, the steps a
+    /// yes runs, the line held back for a switch and what a press was told; on a receipt, its Undo; on a sign-in task,
+    /// its button.
+    pub fn page_parts(&self) -> (Vec<Row>, Vec<Row>) {
+        let scope = self.model.scope.as_ref().filter(|_| !self.faults.no_scope);
+        let last: Vec<String> = [
+            (!self.faults.no_default).then(|| {
+                copy::fill(
+                    "question.default_at",
+                    &[&self.model.default, &self.model.applies],
+                )
+            }),
+            scope.map(|scope| scope.words.clone()),
+            scope
+                .filter(|scope| scope.also > 0)
+                .map(|scope| copy::count("question.answers_more", scope.also as u64, &[])),
+            self.model.approve_label(),
+            self.switch_first
+                .then(|| copy::text(SWITCH_FIRST).to_owned()),
+            self.holding.map(str::to_owned),
+        ]
+        .into_iter()
+        .flatten()
+        .map(|text| visible(&text))
+        .collect();
+        self.page_rows().into_iter().partition(|row| match row {
+            Row::Option { .. } | Row::Fold { .. } | Row::Undo | Row::SignIn => false,
+            Row::Text(text) => !last.contains(text),
+            _ => true,
+        })
+    }
+
     /// The box's send control on an ask's page (#1461), saying what the press does: Say no on an approval, whose words
     /// go as the reason, else Answer; and the lines above it once it holds words.
     pub fn words_send(&self) -> (&'static str, Vec<&'static str>) {
         let approval = self.allow_option().is_some();
-        let label = if approval { "Say no" } else { "Answer" };
+        let label = copy::text(if approval {
+            "question.say_no"
+        } else {
+            "question.answer"
+        });
         let mut lines = Vec::new();
         if !self.words.is_empty() || self.image.is_some() {
-            lines.push(ANSWERS_THIS_ASK_ONLY);
+            lines.push(copy::text(ANSWERS_THIS_ASK_ONLY));
             if approval {
-                lines.push(WONT_RUN);
+                lines.push(copy::text(WONT_RUN));
             }
         }
         (label, lines)
@@ -659,6 +804,14 @@ impl Controller {
                 (Some(page), Phase::Up) if shown => Did::Page(page.clone()),
                 _ => Did::Nothing,
             },
+            // The count shows the options folded behind it (#1808): it answers nothing.
+            Target::Fold => {
+                if phase == Phase::Up && shown && !self.fold_open {
+                    self.fold_open = true;
+                    self.rehold(now);
+                }
+                Did::Nothing
+            }
             // An approval whose own steps are off runs nothing the core would take: the card holds it back.
             Target::Option(index) if self.is_allow(index) && !self.model.own_on() => {
                 self.switch_first = true;
@@ -688,7 +841,8 @@ impl Controller {
                         self.send_down = Some(source);
                         Did::Nothing
                     } else {
-                        self.refuse(now)
+                        let says = self.machine.says();
+                        self.refuse(says, now)
                     }
                 }
                 Phase::Up => {
@@ -706,7 +860,10 @@ impl Controller {
                         self.send_waiting = Some(SendWaiting {
                             seq: self.machine.seq(),
                         });
-                        Did::NeedsConfirmation(confirm::reason(&self.model.question, "Send"))
+                        Did::NeedsConfirmation(confirm::reason(
+                            &self.model.question,
+                            copy::text("question.send"),
+                        ))
                     }
                 }
             },
@@ -718,7 +875,10 @@ impl Controller {
                 }
                 if !source.trusted() {
                     self.switch_waiting = Some(SwitchWaiting::Undo);
-                    return Did::NeedsConfirmation(confirm::reason(&self.model.question, "Undo"));
+                    return Did::NeedsConfirmation(confirm::reason(
+                        &self.model.question,
+                        copy::text("question.undo"),
+                    ));
                 }
                 self.undo_answer(t, now)
             }
@@ -875,7 +1035,7 @@ impl Controller {
     fn took(&mut self, outcome: Outcome, t: u64, events: &[Value], now: u64) -> Did {
         match outcome {
             Outcome::Ignored => Did::Nothing,
-            Outcome::Refused { .. } => self.refuse(now),
+            Outcome::Refused { says, .. } => self.refuse(says, now),
             Outcome::Answered { option, .. } => {
                 self.send_waiting = None;
                 self.answer_option(option, t, events, now);
@@ -898,8 +1058,8 @@ impl Controller {
         }
     }
 
-    fn refuse(&mut self, now: u64) -> Did {
-        self.holding = Some(HOLD_STILL);
+    fn refuse(&mut self, says: &'static str, now: u64) -> Did {
+        self.holding = Some(says);
         self.record("refused", now);
         Did::Refused
     }
@@ -1004,9 +1164,9 @@ impl Controller {
         }
         self.record("answered", now);
         let says = match (&answer.words, &answer.image) {
-            (Some(words), _) => format!("your words, “{words}”"),
-            (None, Some(_)) => "your image".to_owned(),
-            (None, None) => "nothing".to_owned(),
+            (Some(words), _) => copy::fill("question.said_words", &[words]),
+            (None, Some(_)) => copy::text("question.said_image").to_owned(),
+            (None, None) => copy::text("question.said_nothing").to_owned(),
         };
         self.receipt = Some(Receipt {
             says,

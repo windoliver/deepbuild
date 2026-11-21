@@ -11,7 +11,7 @@ use super::{
     kind_text, member, sort_issues, sort_notices, Issue, Notice, ADJUST_FIELDS, AT_RELATIONS,
     AT_VECTORS, BOX_POINTS, ENVELOPE_KEYS, ID_MAPS, ITEM_KEYS, ITEM_OWN_FIELDS, MAX_DESCRIPTION,
 };
-use crate::cost::Coefficients;
+use crate::cost::{Coefficients, Sizes};
 use crate::grammar::{
     forms_for, lower_frame_literals, Handle, Id, Path, Refusal, Section, Time, TimeContext,
     UnitContext, UnitLiteral,
@@ -78,13 +78,28 @@ pub fn check(doc: &Value) -> CheckResult {
 /// build lacks, through `requires.modules`, a kind or a field an absent module evaluates, is
 /// refused with `module_missing` naming the module.
 pub fn check_in(doc: &Value, sealed: &Sealed) -> CheckResult {
-    check_by(doc, sealed, sealed.kinds_ref(), None, &Packs::default())
+    let none = Sizes::new();
+    check_by(
+        doc,
+        sealed,
+        sealed.kinds_ref(),
+        None,
+        &none,
+        &Packs::default(),
+    )
 }
 
 /// [`check_in`] in a build that admitted `packs` (Pack): a document's `packs` resolve through
 /// them, and each recipe instance expands at check into its derived items.
 pub fn check_packed(doc: &Value, sealed: &Sealed, packs: &Packs) -> CheckResult {
-    check_by(doc, sealed, sealed.kinds_ref(), None, packs)
+    check_by(doc, sealed, sealed.kinds_ref(), None, &Sizes::new(), packs)
+}
+
+/// [`check_packed`] with the sizes of the document's assets, read from their files by the
+/// process that holds them (#1801): the budget counts each asset's bytes on the device once and a
+/// mesh's vertices as its item's.
+pub fn check_sized(doc: &Value, sealed: &Sealed, packs: &Packs, sizes: &Sizes) -> CheckResult {
+    check_by(doc, sealed, sealed.kinds_ref(), None, sizes, packs)
 }
 
 /// [`check_in`], estimating a document's cost from `coefficients` rather than the reference
@@ -95,6 +110,7 @@ pub fn check_costed(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -
         sealed,
         sealed.kinds_ref(),
         Some(coefficients),
+        &Sizes::new(),
         &Packs::default(),
     )
 }
@@ -102,7 +118,15 @@ pub fn check_costed(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -
 /// Checks `doc` as a build whose kinds are `kinds`, as an earlier release with an older minor
 /// of some kind reads it (Document envelope: `requires`); the core's own canvas modules.
 pub fn check_with(doc: &Value, kinds: &Registry) -> CheckResult {
-    check_by(doc, &registry::core(), kinds, None, &Packs::default())
+    let none = Sizes::new();
+    check_by(
+        doc,
+        &registry::core(),
+        kinds,
+        None,
+        &none,
+        &Packs::default(),
+    )
 }
 
 /// Checks `doc` in the build `sealed` describes, reading kinds by `kinds`, estimating its cost
@@ -112,6 +136,7 @@ fn check_by(
     sealed: &Sealed,
     kinds: &Registry,
     coefficients: Option<&Coefficients>,
+    sizes: &Sizes,
     packs: &Packs,
 ) -> CheckResult {
     let mut issues = Vec::new();
@@ -185,6 +210,7 @@ fn check_by(
                 }
             }
             super::pack_kinds::migrate::at_load(items, &resolved, packs.planted, &mut notices);
+            issues.extend(packs::removals(items, &resolved));
             // Expansion at check, never per frame (Recipe): the derived items join the lowered
             // items before any item is checked, so they meet the item contract, the module
             // checks and the budget as any item does.
@@ -340,7 +366,7 @@ fn check_by(
         for step in part.iter() {
             match step {
                 Tail::Modules => module_checks(&lowered, sealed, &mut issues, &mut notices),
-                Tail::Budget => budget_check(&lowered, sealed, coefficients, &mut issues),
+                Tail::Budget => budget_check(&lowered, sealed, coefficients, sizes, &mut issues),
                 Tail::Document => {
                     check_id_maps(&lowered, &mut issues);
                     check_controls(&lowered, sealed, &mut issues);
@@ -619,6 +645,41 @@ fn lights_check(lowered: &Value, issues: &mut Vec<Issue>) {
     }
 }
 
+/// The class's `fill_shaded` (#1634; Light and the light policy): every `light.*` item with
+/// `fill: true` counts, and a document with more than its class holds is refused, naming the
+/// count and the class. Here and not in the module that reads the lights, since a module's rule
+/// names no count.
+fn fill_check(lowered: &Value, issues: &mut Vec<Issue>) {
+    let Some((class, _)) = crate::budget::of(lowered) else {
+        return;
+    };
+    let fill: Vec<String> = member(lowered, "items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter(|(_, item)| {
+            kind_text(item).is_some_and(|k| k.starts_with("light."))
+                && item.pointer("/params/fill") == Some(&Value::Bool(true))
+        })
+        .map(|(id, _)| id.clone())
+        .collect();
+    let cap = class.fill_shaded();
+    if fill.len() > cap {
+        let mut issue = Issue::envelope(
+            "over_budget",
+            "budget/fill_shaded".into(),
+            json!({"fill_lights": fill.len(), "fill_shaded": cap, "class": class.name()}),
+            &format!(
+                "{} fill lights, past the {} class's fill_shaded of {cap}",
+                fill.len(),
+                class.name()
+            ),
+        );
+        issue.ids = fill;
+        issues.push(issue);
+    }
+}
+
 /// The budget estimate (issue #379; canvas primitives: The cost model, "Before it shows"): a
 /// document that names its budget class and whose estimated CPU time, GPU time or GPU memory
 /// per frame passes one of its caps is refused, naming its top three contributors, with the
@@ -627,14 +688,16 @@ fn budget_check(
     lowered: &Value,
     sealed: &Sealed,
     coefficients: Option<&Coefficients>,
+    sizes: &Sizes,
     issues: &mut Vec<Issue>,
 ) {
     lights_check(lowered, issues);
+    fill_check(lowered, issues);
     let Some((class, limits)) = crate::budget::of(lowered) else {
         return;
     };
     let coefficients = coefficients.unwrap_or(&sealed.costs);
-    let e = crate::cost::estimate_by(lowered, sealed, coefficients, |entries, work| {
+    let e = crate::cost::estimate_by(lowered, sealed, coefficients, sizes, |entries, work| {
         in_chunks(entries, work)
     });
     let over: Vec<String> = [
@@ -673,7 +736,7 @@ fn budget_check(
         "over_budget",
         "budget".into(),
         json!({
-            "cpu_ms": e.cpu_ms, "gpu_ms": e.gpu_ms, "gpu_mb": e.gpu_mb,
+            "cpu_ms": e.cpu_ms, "gpu_ms": e.gpu_ms, "gpu_mb": e.gpu_mb, "decoded_mb": e.decoded_mb,
             "operators": operators,
             "fingerprint": coefficients.fingerprint,
         }),
@@ -1399,8 +1462,8 @@ struct KindFacts<'a> {
     deprecation: Option<&'a (String, String)>,
     /// The close names an unknown kind's notice names (#412).
     close: Vec<Value>,
-    /// Of a pack the document names and this build lacks: kept as written, skipped (#1958).
-    pack_missing: bool,
+    /// Of a pack this build lacks (#1958) or a kind its version removed (#1962): kept, skipped.
+    skipped: bool,
 }
 
 impl<'a> KindFacts<'a> {
@@ -1430,7 +1493,7 @@ impl<'a> KindFacts<'a> {
                 }
                 _ => Vec::new(),
             },
-            pack_missing: packs::retired::skipped(text, resolved),
+            skipped: packs::retired::skipped(text, resolved) || packs::removed(text, resolved),
         }
     }
 }
@@ -1478,9 +1541,9 @@ fn check_item(
     let Some(facts) = ctx.facts.get(text) else {
         return false;
     };
-    // An instance of a pack this build lacks: its pack's notice names it, and nothing of it is
-    // read past its kind (#1958).
-    if facts.pack_missing {
+    // An instance of a pack this build lacks, or of a kind its version removed: its pack's notice
+    // or the removal's error names it, and nothing of it is read past its kind (#1958, #1962).
+    if facts.skipped {
         return false;
     }
     let instance = facts.instance;
@@ -2067,7 +2130,10 @@ fn check_params(
             // The forms the kind's reader declares (#1973): a value none takes is refused here,
             // naming the form it expected and the one it got; the reader checks the rest.
             ParamType::Json(declared) => {
-                if let Some(issue) = form_issue(key, name, param.unit, declared, value) {
+                if let Some((mut issue, form)) = form_issue(key, name, param.unit, declared, value)
+                {
+                    let field = format!("{}@{}.{name}", entry.full_name(), version.major);
+                    registry::fields::name_list(&mut issue, sealed, &field, &form, value);
                     issues.push(issue);
                 }
             }
@@ -2150,12 +2216,18 @@ fn check_params(
 /// A structured value no declared form takes, as `out_of_range` at its path: `size takes 3
 /// numbers in m; got 2 numbers`, with the forms it takes. A declaration the form language can't
 /// read refuses nothing here; the kit refuses it (#1973).
-fn form_issue(key: &str, name: &str, unit: &str, declared: &str, value: &Value) -> Option<Issue> {
+fn form_issue(
+    key: &str,
+    name: &str,
+    unit: &str,
+    declared: &str,
+    value: &Value,
+) -> Option<(Issue, crate::form::Form)> {
     let form = crate::form::parse(declared).ok()?;
     let got = form.miss(value)?;
     let gist = form.gist(unit);
     let forms: Vec<String> = form.alternatives().iter().map(|f| f.print()).collect();
-    Some(Issue {
+    let issue = Issue {
         fix: format!("Write {name} as {}: {gist}.", forms.join(" or ")),
         forms,
         ..Issue::error(
@@ -2165,7 +2237,8 @@ fn form_issue(key: &str, name: &str, unit: &str, declared: &str, value: &Value) 
             value.clone(),
             &format!("{name} takes {gist}; got {got}"),
         )
-    })
+    };
+    Some((issue, form))
 }
 
 /// A document's design size, as `fw` and `fh` read it.

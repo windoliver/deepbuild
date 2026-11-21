@@ -1,0 +1,11 @@
+// #2870 AC1's planted judge. A test lays this file, without its .txt, as scripts/benchmark.mjs in a scratch checkout
+// that holds copies of this checkout's scripts/ and benchmarks/, so that checkout's own `benchmarks/canvas.mjs judge`
+// runs as a judge that drops the loads: every export is this checkout's scripts/benchmark.mjs, and judgeLimit gets each
+// argument the judge gives it except `loads`. BENCHMARK_URL is that module's file URL, filled in when the test lays it.
+import * as real from 'BENCHMARK_URL';
+
+export * from 'BENCHMARK_URL';
+
+export function judgeLimit({ loads: _dropped, ...rest }) {
+  return real.judgeLimit(rest);
+}

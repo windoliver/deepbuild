@@ -26,6 +26,8 @@ pub enum Call {
     },
     /// #1901: the machine fingerprint kept output is keyed by.
     Fingerprint,
+    /// #1431: the process's footprint, its heap, every gauge and what's left unaccounted.
+    Footprint,
     /// #1901: a document's frame, capture or final at a time, through the kept-output cache.
     Draw {
         doc: String,
@@ -143,6 +145,10 @@ pub enum Call {
         doc: String,
         set: Option<Value>,
     },
+    /// #1415: a document's session closed, as you closing its panel.
+    Close(String),
+    /// #1415: what each state of a document session does with each call.
+    SessionTable,
     /// #501: the export's GPU hash pass on given BGRA8 frames.
     FrameHash {
         frames: Vec<([u32; 2], String)>,
@@ -216,11 +222,10 @@ pub enum Call {
         doc: String,
         world: String,
     },
-    /// #540: every copy of a document's lockstep match.
-    Match {
-        doc: String,
-        steps: i64,
-    },
+    /// #540, #549: the net module's calls: every copy of a document's lockstep match over the
+    /// test relay, this copy's live match through the declared relay, and every connection one
+    /// opened.
+    Net(Box<crate::net::NetCall>),
     /// A panel's interaction scope, with no input (#383).
     Scope(String),
     /// The frames a panel presented up to now (#383).
@@ -424,7 +429,10 @@ pub struct Scenario {
     pub docs: BTreeMap<String, String>,
     /// #504: the claim or ask each document was minted for (`docs.<id>.for`), where named.
     pub docs_for: BTreeMap<String, String>,
-    pub record: BTreeMap<String, RecordObject>,
+    /// #549: what the scenario gives a match: each document's link and the relay's authority.
+    pub net: crate::net::Given,
+    /// Shared (#1868): `canvas` reads its world's record once and plays every call on it.
+    pub record: std::sync::Arc<BTreeMap<String, RecordObject>>,
     /// #629: a replay's run record entries, each as a `run` call's reply gave it (`record` as a
     /// list).
     pub runs: Vec<Value>,

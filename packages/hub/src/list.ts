@@ -4,7 +4,7 @@
 // is; `--json` prints the rows. Every clock time is in your time zone.
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { call } from './client.js';
+import { call, clock, notAnswering, notAnsweringSince, Unanswered } from './client.js';
 import { StaleHub } from './generations.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant } from './plant.js';
@@ -21,11 +21,6 @@ interface Read { log_pos: number; rows: Row[]; detail?: Record<string, Detail>; 
 /** The one count sentence, as the app says it (crates/deep-app/src/views.rs: asks_need_you). */
 export const asksNeedYou = (n: number): string => (n === 1 ? '1 ask needs you' : `${n} asks need you`);
 
-/** `at` as a clock time in your time zone: 16:40. */
-const clock = (at: number): string => {
-  const d = new Date(at);
-  return Number.isNaN(d.getTime()) ? 'Invalid Date' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-};
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
 /**
@@ -150,8 +145,8 @@ function hub(): { socket: string; token: string } {
   return { socket, token: token ? readFileSync(token, 'utf8').trim() : '' };
 }
 
-/** What a list read from the hub's database says first: the hub isn't answering, and since when. */
-export const hubDown = (down: number): string => `The hub isn't answering, since ${clock(down)}; this is the list its database holds.`;
+/** What a list read from the hub's database says first: the one sentence, since when and its fix (#1812), and what follows. */
+export const hubDown = (down: number): string => `${notAnsweringSince(down)} This is the list its database holds.`;
 
 /**
  * The list read with the hub at `socket` down (`deep`, `deep status`, `deep inbox`): its database read-only, the
@@ -195,14 +190,16 @@ async function fromDatabase(ledger: string, detail: boolean, why?: string): Prom
  * `deep` (`detail` false) and `deep status` (true), each with `--json`: 0 read from the hub, 3 from its database or not
  * at all. `deep status <session> --why` prints why that session reads as it does (#2018), 2 when no session has that ID.
  */
-export async function listCommand(args: readonly string[], detail: boolean): Promise<number> {
+export async function listCommand(args: readonly string[], detail: boolean, setUp: () => Promise<number> = async () => 0): Promise<number> {
   const name = detail ? 'deep status' : 'deep';
-  const named = args.filter((a) => !a.startsWith('--'));
+  const named = args.filter((a) => !a.startsWith('-'));
   const asked = args.includes('--why');
-  if (args.some((a) => a.startsWith('--') && a !== '--json' && !(detail && a === '--why')) || named.length !== (asked ? 1 : 0)) {
+  if (args.some((a) => a.startsWith('-') && a !== '--json' && !(detail && a === '--why')) || named.length !== (asked ? 1 : 0)) {
     process.stderr.write(detail ? 'Usage: deep status [--json] | deep status <session> --why [--json]\n' : `Usage: ${name} [--json]\n`);
     return 2;
   }
+  const stopped = await setUp();
+  if (stopped) return stopped;
   const session = asked ? named[0]! : undefined;
   const [method, params] = session === undefined ? ['rows.read', { detail }] as const : ['row.why', { session }] as const;
   const json = args.includes('--json');
@@ -212,7 +209,7 @@ export async function listCommand(args: readonly string[], detail: boolean): Pro
     // A session's why: from the hub, the reply is the why with its log_pos; from the database, the read holds it.
     const why = session === undefined ? undefined : read.explained ?? (read as unknown as Why);
     if (why) {
-      const down = read.down !== undefined ? `The hub isn't answering, since ${clock(read.down)}; this is read from its database.\n` : '';
+      const down = read.down !== undefined ? `${notAnsweringSince(read.down)} This is read from its database.\n` : '';
       // The planted wrong program builds its why from a reading of its own, which says quiet for a row at work.
       const said = activePlant() === 'why-second-reading' && why.word === 'working' ? { ...why, word: 'quiet', why: 'no hook since' } : why;
       const { id, word, why: sentence, rule, facts, lacked, flag } = said;
@@ -246,7 +243,8 @@ export async function listCommand(args: readonly string[], detail: boolean): Pro
     process.stderr.write(`${name}: ${error instanceof Error ? error.message : String(error)}\n`);
     return unread;
   }
-  let why: string;
+  /** What the hub said when it refused this read, or another failure's own words; none for a hub that isn't answering. */
+  let why: string | undefined;
   try {
     const reply = await call(at.socket, at.token, method, params);
     if ('result' in reply) {
@@ -267,12 +265,12 @@ export async function listCommand(args: readonly string[], detail: boolean): Pro
       process.stderr.write(`${name}: ${error.message}\n`);
       return unread;
     }
-    why = error instanceof Error ? error.message : String(error);
+    if (!(error instanceof Unanswered)) why = error instanceof Error ? error.message : String(error);
   }
   // The hub's own folder holds its database: the socket's, or the installed root.
   const read = await databaseRead(at.socket, detail, session);
   if (!read) {
-    process.stderr.write(`${name}: the hub isn't answering (${why}), and there is no database to read; start it with deep hub start.\n`);
+    process.stderr.write(`${why === undefined ? await notAnswering(at.socket) : `${name}: ${why}`}\n`);
     return unread;
   }
   if ('refused' in read) {

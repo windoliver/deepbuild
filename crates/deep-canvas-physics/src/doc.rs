@@ -93,6 +93,10 @@ pub struct Body {
     /// deg/s, as written.
     pub angular: [f64; 3],
     pub mass: Option<f64>,
+    /// #2098: kg·m², its moments about its own axes through its centre of mass, when written.
+    pub inertia: Option<[f64; 3]>,
+    /// #2240: the local point its weight acts at, m; `None` leaves it where its shapes put it.
+    pub centre_of_mass: Option<[f64; 3]>,
     pub linear_damping: f64,
     pub angular_damping: f64,
     pub gravity_scale: f64,
@@ -160,6 +164,7 @@ pub struct Joint {
     pub breaks_at: Option<Breaks>,
     pub collide_connected: bool,
     pub active: bool,
+    pub articulated: bool,
     pub coupling: reads::Coupling,
 }
 
@@ -186,6 +191,8 @@ pub enum ForceKind {
         damping_ratio: f64,
         max_force: Option<f64>,
     },
+    /// #2098: a wind (`doc::wind`).
+    Wind(Wind),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -224,6 +231,8 @@ pub struct World {
     pub step_p95: f64,
     pub groups: Vec<String>,
     pub shapes: BTreeMap<String, Shape>,
+    /// #2098: a 2D world's shapes, which hold its bodies' in `shapes`' place.
+    pub flat: BTreeMap<String, Flat>,
     pub bodies: BTreeMap<String, Body>,
     pub joints: BTreeMap<String, Joint>,
     pub forces: BTreeMap<String, Force>,
@@ -236,19 +245,26 @@ pub struct World {
     pub solve: Option<Solve>,
 }
 
+mod centre;
 mod character;
 pub mod data;
+mod dims;
 mod heightfield;
 mod inputs;
 mod reads;
 mod soft;
 mod vehicle;
+mod wind;
+pub use centre::bounds;
 pub use character::{Character, FIELDS as CHARACTER_FIELDS};
+pub use dims::Flat;
 pub use heightfield::HEIGHTFIELD_SAMPLES;
-pub use inputs::{resolved, Input, On, INPUTS_LATER};
+pub use inputs::{number_fields, resolved, Input, On, INPUTS_LATER};
 pub use reads::{probe_pose, probe_shape, Output, Read, Skin, Solve, READS};
+pub use reads::{Formula, Reduce, Sampled};
 pub use soft::{sides, Pin, Soft, SoftShape, Stiffness, Tear, OPEN_MESH};
 pub use vehicle::{flat, Vehicle, Wheel, MOST_WHEELS};
+pub use wind::{Gust, Velocity, Wind};
 
 /// The world document's own fields; `kind` names it.
 const WORLD_KEYS: &[&str] = &[
@@ -300,6 +316,10 @@ pub fn read(doc: &Value) -> Result<World, Vec<Refusal>> {
 #[derive(Default)]
 struct Reader {
     out: Vec<Refusal>,
+    /// #2098: whether the world is 2D, so a point is `[x, y]` (`dims`); and the world's `seed`.
+    flat: bool,
+    seed: u64,
+    flats: BTreeMap<String, Flat>,
 }
 
 fn join(path: &str, key: &str) -> String {
@@ -410,36 +430,17 @@ impl Reader {
             .as_array()
             .map(|a| a.iter().map(Value::as_f64).collect::<Option<Vec<_>>>())
         {
-            Some(Some(a)) if a.len() == 3 => [a[0], a[1], a[2]],
+            Some(Some(a)) if a.len() == 3 && !self.flat => [a[0], a[1], a[2]],
+            Some(Some(a)) if a.len() == 2 && self.flat => [a[0], a[1], 0.0],
             _ => {
+                let n = if self.flat { "two" } else { "three" };
                 self.refuse(
                     "out_of_range",
                     join(path, key),
                     v,
-                    format!("{} must be three numbers", show(&join(path, key))),
+                    format!("{} must be {n} numbers", show(&join(path, key))),
                 );
                 default
-            }
-        }
-    }
-
-    fn bools3(&mut self, m: &Map<String, Value>, key: &str, path: &str) -> [bool; 3] {
-        let Some(v) = m.get(key) else {
-            return [false; 3];
-        };
-        match v
-            .as_array()
-            .map(|a| a.iter().map(Value::as_bool).collect::<Option<Vec<_>>>())
-        {
-            Some(Some(a)) if a.len() == 3 => [a[0], a[1], a[2]],
-            _ => {
-                self.refuse(
-                    "out_of_range",
-                    join(path, key),
-                    v,
-                    format!("{} must be three booleans", show(&join(path, key))),
-                );
-                [false; 3]
             }
         }
     }
@@ -507,6 +508,10 @@ impl Reader {
                 "dimensions must be 2 or 3".into(),
             );
         }
+        self.flat = dimensions == 2;
+        self.seed = m.get("seed").and_then(Value::as_u64).unwrap_or(0);
+        let run = self.flat.then(|| self.unrun(m));
+        let m = run.as_ref().unwrap_or(m);
         let step_rate = self.num(m, "step_rate", "", 120.0, f64::MIN_POSITIVE, 1e6);
         if let Err(e) = deep_canvas::time::step_length(step_rate) {
             self.refuse(
@@ -605,8 +610,10 @@ impl Reader {
         let groups = self.groups(m);
         let mut shapes = BTreeMap::new();
         for (id, v) in self.map(m, "shapes") {
-            if let Some(s) = self.shape(v, &format!("shapes/{id}")) {
-                shapes.insert(id.clone(), s);
+            let p = format!("shapes/{id}");
+            match self.shape2(v, &p) {
+                Some(f) => self.flats.extend(f.map(|f| (id.clone(), f))),
+                None => shapes.extend(self.shape(v, &p).map(|s| (id.clone(), s))),
             }
         }
         self.children(&shapes);
@@ -661,6 +668,7 @@ impl Reader {
             step_p95,
             groups,
             shapes,
+            flat: std::mem::take(&mut self.flats),
             bodies,
             joints,
             forces,
@@ -983,6 +991,9 @@ impl Reader {
     fn pose(&mut self, v: Option<&Value>, p: &str) -> Pose {
         let m = &self.obj(v.unwrap_or(&Value::Null), p, &["pos", "rot"]);
         let pos = self.vec3(m, "pos", p, [0.0; 3]);
+        if let Some(rot) = self.turn(m, p) {
+            return Pose { pos, rot };
+        }
         let rot = match m
             .get("rot")
             .and_then(Value::as_array)
@@ -1023,6 +1034,7 @@ impl Reader {
                 "velocity",
                 "mass",
                 "inertia",
+                "centre_of_mass",
                 "damping",
                 "gravity_scale",
                 "ccd",
@@ -1037,14 +1049,6 @@ impl Reader {
             ],
         );
         let (kind, vehicle) = (self.kind(b, p), self.vehicle(b, p));
-        if let Some(x) = b.get("inertia") {
-            self.refuse(
-                "physics.unsupported",
-                join(p, "inertia"),
-                x,
-                "inertia isn't run by this backend interface yet; #2098 brings it".into(),
-            );
-        }
         let follow = self.follow(b, p, kind);
         let mut uses = Vec::new();
         for (i, u) in b
@@ -1083,7 +1087,7 @@ impl Reader {
                 .and_then(Value::as_str)
                 .unwrap_or("")
                 .to_string();
-            if !shapes.contains_key(&shape) {
+            if !shapes.contains_key(&shape) && !self.flats.contains_key(&shape) {
                 self.refuse(
                     "ref_unresolved",
                     join(&up, "shape"),
@@ -1145,6 +1149,7 @@ impl Reader {
             );
         }
         let character = self.character(b, p, kind, &uses, shapes);
+        let centre_of_mass = self.centre_of_mass(b, p, kind, &uses, shapes);
         Body {
             kind,
             follow,
@@ -1159,15 +1164,17 @@ impl Reader {
             shapes: uses,
             pose: self.pose(b.get("pose"), &join(p, "pose")),
             linear: self.vec3(vel, "linear", &join(p, "velocity"), [0.0; 3]),
-            angular: self.vec3(vel, "angular", &join(p, "velocity"), [0.0; 3]),
+            angular: self.spin(vel, &join(p, "velocity")),
             mass: self.opt_num(b, "mass", p, f64::MIN_POSITIVE),
+            inertia: self.inertia(b, p),
+            centre_of_mass,
             linear_damping: self.num(damp, "linear", &join(p, "damping"), damping, 0.0, f64::MAX),
             angular_damping: self.num(damp, "angular", &join(p, "damping"), damping, 0.0, f64::MAX),
             gravity_scale: self.num(b, "gravity_scale", p, 1.0, f64::MIN, f64::MAX),
             ccd: self.flag(b, "ccd", p, false),
             sleep: self.flag(b, "sleep", p, true),
-            lock_linear: self.bools3(locks, "linear", &join(p, "locks")),
-            lock_angular: self.bools3(locks, "angular", &join(p, "locks")),
+            lock_linear: self.locks(locks, "linear", &join(p, "locks")),
+            lock_angular: self.locks(locks, "angular", &join(p, "locks")),
             active: self.flag(b, "active", p, true),
             anchors,
             character,
@@ -1256,6 +1263,7 @@ impl Reader {
                 "path",
                 "active",
                 "collide_connected",
+                "articulated",
                 "swing",
                 "twist",
             ],
@@ -1346,6 +1354,7 @@ impl Reader {
             breaks_at: self.breaks(j, p),
             collide_connected: self.flag(j, "collide_connected", p, false),
             active: self.flag(j, "active", p, true),
+            articulated: self.flag(j, "articulated", p, false),
             coupling: self.coupling(j, p, kind),
         })
     }
@@ -1407,12 +1416,9 @@ impl Reader {
                     max_force: self.opt_num(m, "max_force", &kp, 0.0),
                 }
             }
-            "wind" | "buoyancy" | "inverse_square" | "magnetic" | "lennard_jones" => {
-                let issue = match name {
-                    "wind" => "#2098",
-                    "buoyancy" => "#1786",
-                    _ => "#1931",
-                };
+            "wind" => ForceKind::Wind(self.wind(fields, &kp)?),
+            "buoyancy" | "inverse_square" | "magnetic" | "lennard_jones" => {
+                let issue = if name == "buoyancy" { "#1786" } else { "#1931" };
                 self.refuse(
                     "physics.unsupported",
                     kp,

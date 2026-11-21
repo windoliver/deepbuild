@@ -16,6 +16,10 @@ pub enum Plant {
     AnswersYourRecord,
     /// A panel's clipboard write reaches the system pasteboard.
     WritesClipboard,
+    /// #1498: ⌘C writes a text's selected graphemes in the order they are drawn, not in logical order.
+    CopiesDrawnOrder,
+    /// #1498: ⌘C joins the selected text items in their draw order, not in reading order.
+    CopiesDrawOrder,
     /// The replica takes the front of your screen when it is acted on.
     MovesFocus,
     /// The app's notification sound plays through the OS.
@@ -43,9 +47,28 @@ pub enum Plant {
     EntryOnChange,
     /// The explorer and the descender walk as if the grid had no links (#1048 criterion 4).
     IgnoresLinks,
+    /// Each pointer move the replica delivers also notifies the window's root view (#1482 criterion 5).
+    NotifiesRootPerMove,
+    /// Every read-back of a frame fails (#1482 criterion 4).
+    ReadBackFails,
+    /// The report names no notified entity: the record of `App::notify` dropped (#1482 criterion 6).
+    DropsNotifyRecord,
+    /// The lists arm's two views notify themselves on every wheel event they get (#1482 criterion 7).
+    WheelNotifiesEveryEvent,
+    /// GPUI reuses a cached view as it did before it kept the view's accessibility nodes (#1482 criterion 8).
+    ReuseDropsAccessibility,
     /// A play under `piece_seed: run` keeps the document's seed, so every run generates the same floors (#556
     /// criterion 3).
     KeepsDocumentSeed,
+    /// The process's footprint read fails, as the system call does on any error (#1431 criterion 2).
+    FootprintReadFails,
+    /// A reader that gives 0 for a footprint read that failed (#1431 criterion 2).
+    FootprintReadsZero,
+    /// A 1,000,000 B buffer outside the heap that no gauge counts, made at each whole minute since launch (#1431
+    /// criterion 3).
+    LeaksUngaugedBuffer,
+    /// The picture arm's image element asks for a frame at every vsync while it animates (#1489 criterion 3).
+    PictureFrameEachVsync,
 }
 
 impl Plant {
@@ -53,6 +76,8 @@ impl Plant {
         match name {
             "answers-your-record" => Some(Plant::AnswersYourRecord),
             "writes-clipboard" => Some(Plant::WritesClipboard),
+            "copies-drawn-order" => Some(Plant::CopiesDrawnOrder),
+            "copies-draw-order" => Some(Plant::CopiesDrawOrder),
             "moves-focus" => Some(Plant::MovesFocus),
             "starts-sound" => Some(Plant::StartsSound),
             "page-drops-param" => Some(Plant::PageDropsParam),
@@ -66,7 +91,16 @@ impl Plant {
             "drops-first-bot-entry" => Some(Plant::DropsFirstBotEntry),
             "entry-on-change" => Some(Plant::EntryOnChange),
             "explorer-ignores-links" => Some(Plant::IgnoresLinks),
+            "notifies-root-per-move" => Some(Plant::NotifiesRootPerMove),
+            "read-back-fails" => Some(Plant::ReadBackFails),
+            "drops-notify-record" => Some(Plant::DropsNotifyRecord),
+            "wheel-notifies-every-event" => Some(Plant::WheelNotifiesEveryEvent),
+            "reuse-drops-accessibility" => Some(Plant::ReuseDropsAccessibility),
             "keeps-document-seed" => Some(Plant::KeepsDocumentSeed),
+            "footprint-read-fails" => Some(Plant::FootprintReadFails),
+            "footprint-reads-zero" => Some(Plant::FootprintReadsZero),
+            "leaks-ungauged-buffer" => Some(Plant::LeaksUngaugedBuffer),
+            "picture-frame-each-vsync" => Some(Plant::PictureFrameEachVsync),
             _ => None,
         }
     }

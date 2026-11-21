@@ -15,7 +15,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { loadavg, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 
@@ -186,7 +186,11 @@ export async function playtest({ root, release, task, planted }) {
         : async () => ({ fixture_realtime_x: await throughput(bin, fixture, out) });
     await once();
     const runs = [];
-    for (let n = 0; n < 5; n++) runs.push(await once());
+    // Each run carries the one-minute load at its start and end, which canvas.mjs judge gives judgeLimit (#2870).
+    for (let n = 0; n < 5; n++) {
+      const loadStart = loadavg()[0];
+      runs.push({ ...(await once()), loadStart, loadEnd: loadavg()[0] });
+    }
     console.log(JSON.stringify({ task, fingerprint, runs }));
   } finally {
     rmSync(out, { recursive: true, force: true });

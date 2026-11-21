@@ -1263,6 +1263,10 @@
           "spec": "* path=../deep-relay",
           "why": "Issue #309: the network seam's macOS backend, which the seam_suite and relay_client calls run, and relay@1's wire."
         },
+        "deep-net": {
+          "spec": "* path=../deep-net",
+          "why": "Issue #549: the net module: net@1 and its check, a match's copies, the Join prompt's words, the start card and the net check kinds."
+        },
         "deep-canvas-vector": {
           "spec": "* path=../deep-canvas-vector",
           "why": "Issue #398: the vector canvas module, in the r2 build set and up."
@@ -1310,6 +1314,10 @@
         "deep-lottie-reader": {
           "spec": "* path=../deep-lottie-reader",
           "why": "Issue #162: `deep-show lottie-reader`, the reference renderer served as its own process for the export's read-back."
+        },
+        "deep-pptx-reader": {
+          "spec": "* path=../deep-pptx-reader",
+          "why": "Issue #732: the pptx export's fidelity reader, an Office Open XML reader apart from the writer and the pinned LibreOffice that draws each slide."
         },
         "unicode-normalization": {
           "spec": "^0.1",
@@ -1955,6 +1963,14 @@
         }
       }
     },
+    "packages/pi/package.json": {
+      "devDependencies": {
+        "@deepbuild/hub": {
+          "spec": "0.0.0",
+          "why": "tools.mjs reads the hub's dist at build time, so the workspace graph names the hub and the mutation lane rebuilds pi after it (#1120); never installed with the published package."
+        }
+      }
+    },
     "packages/conformance/package.json": {
       "dependencies": {
         "@deepbuild/adapters": {
@@ -2035,21 +2051,43 @@
           "spec": "* path=../deep-canvas-seams",
           "why": "Issue #309: the network seam's interface (Transport, Wire) the macOS backend implements and its suite."
         },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #309: relay@1's control messages, the committed digest and the relay suite's report."
+        }
+      },
+      "target.'cfg(not(target_arch = \"wasm32\"))'.dependencies": {
         "rustls": {
           "spec": "^0.23",
-          "why": "Issue #309: TLS for relay@1's https connection, client and shipped relay, with ring as its one provider; already in the lockfile."
+          "why": "Issue #309: TLS for relay@1's https connection, client and shipped relay, with ring as its one provider; already in the lockfile. Issue #549: off wasm32 only, since the web player links relay@1's wire alone and the page's WebSocket carries it."
+        },
+        "rustls-native-certs": {
+          "spec": "^0.8",
+          "why": "Issue #549: the platform's own authorities, which a Join's connection to the declared relay trusts; already in the lockfile."
         },
         "rustls-pki-types": {
           "spec": "^1",
           "why": "Issue #309: reading the relay's certificate and key and a copy's trusted authorities from PEM; already in the lockfile."
         },
-        "serde_json": {
-          "spec": "^1",
-          "why": "Issue #309: relay@1's control messages, the committed digest and the relay suite's report."
-        },
         "tungstenite": {
           "spec": "^0.29",
           "why": "Issue #309: the WebSocket relay@1 rides on over https, so a browser's web player can speak it too; already in the lockfile."
+        }
+      }
+    },
+    "crates/deep-net/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #549: the registry the net module registers net@1 and its check through, the seal a copy's start card reads, and the canonical form its digest hashes."
+        },
+        "deep-relay": {
+          "spec": "* path=../deep-relay",
+          "why": "Issue #549: relay@1's frame, which a copy's messages travel in, in the app and in the web player."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #549: a match's entries, messages, records and reports; already in the tree."
         }
       }
     },
@@ -2163,9 +2201,17 @@
           "spec": "* path=../deep-canvas-motion",
           "why": "Issue #1918: a world inside a scene reads the paths the scene's channels and drivers write, evaluated by the motion module at each step's time."
         },
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #2457: the SHA-256 a mesh asset's bytes are checked against, as every store read is, when deep-physics reads the assets its scene's soft volumes are built from. Already in the workspace tree."
+        },
         "rapier3d": {
           "spec": "=0.36.1",
           "why": "Issue #2009: physics.world@1's backend, the version the design pins (World and backend), with enhanced-determinism and serde-serialize and without simd8 or parallel."
+        },
+        "rapier2d": {
+          "spec": "=0.36.1",
+          "why": "Issue #2098: a dimensions: 2 world's backend, the version the design pins (World and backend), with rapier3d's features and without simd8 or parallel. It adds parry2d 0.31.1 to the lockfile and moves no crate rapier3d resolves."
         },
         "base64": {
           "spec": "^0.22",
@@ -2583,6 +2629,18 @@
         }
       }
     },
+    "crates/deep-pptx-reader/Cargo.toml": {
+      "dependencies": {
+        "roxmltree": {
+          "spec": "=0.21.1",
+          "why": "Issue #732: parses each part of a written deck in the pptx export's fidelity reader, a library the writer never uses (it writes its XML by hand); already in the workspace tree."
+        },
+        "zune-inflate": {
+          "spec": "=0.2.54",
+          "why": "Issue #732: inflates a deck's deflated zip entries in the pptx export's fidelity reader, apart from the writer's packing; already in the workspace tree."
+        }
+      }
+    },
     "spikes/2435/Cargo.toml": {
       "dependencies": {
         "wgpu": {
@@ -2821,6 +2879,14 @@
           "spec": "* path=../deep-play",
           "why": "Issue #172: the played form, made as the app makes it."
         },
+        "deep-net": {
+          "spec": "* path=../deep-net",
+          "why": "Issue #549: the net module the web player seals, and the copy of a lockstep match it plays after a person clicks Join."
+        },
+        "deep-relay": {
+          "spec": "* path=../deep-relay",
+          "why": "Issue #549: relay@1's wire and hello check, which the web player's network backend speaks over the page's WebSocket."
+        },
         "deep-marks-raster": {
           "spec": "* path=../deep-marks-raster",
           "why": "Issue #172: the 2D writer layers' painter, the same code the app's headless renders draw with."
@@ -2946,6 +3012,10 @@
         "deep-marks-raster": {
           "spec": "* path=../deep-marks-raster",
           "why": "Issue #172: the painter the played form draws with."
+        },
+        "deep-net": {
+          "spec": "* path=../deep-net",
+          "why": "Issue #549: the net module, whose copies step a document's logic items in the app and in the web player."
         },
         "deep-physics-rapier": {
           "spec": "* path=../deep-physics-rapier",

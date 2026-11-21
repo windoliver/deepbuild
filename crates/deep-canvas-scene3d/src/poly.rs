@@ -8,6 +8,7 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
+use crate::attrs::{self, Attribute, Domain, Typed};
 use crate::geom::{basis, cross, dot, first_seen, newell, spread, triangulate, unit, Mesh, V2, V3};
 
 /// A mesh as welded points and polygon faces.
@@ -28,6 +29,8 @@ pub struct Poly {
     /// Edge sharpness by sorted ends, in levels (Pixar's semi-sharp creases): 1 or more is sharp
     /// at the next level.
     pub sharp: BTreeMap<(u32, u32), f64>,
+    /// The typed attributes (#1781), by this view's points, faces, corners and edges.
+    pub typed: Typed,
 }
 
 pub fn key(a: u32, b: u32) -> (u32, u32) {
@@ -357,6 +360,8 @@ impl Poly {
             vertex: Vec::with_capacity(groups),
             origin: Vec::with_capacity(groups),
             uv: has_uv.then(|| Vec::with_capacity(groups)),
+            // A mesh's elements are this view's, so its typed attributes are too.
+            typed: m.typed.clone(),
             ..Poly::default()
         };
         let mut scratch = Scratch::default();
@@ -555,6 +560,21 @@ impl Poly {
         for (name, values) in &src.face_attributes {
             let v = origin_of.iter().map(|&o| values[o as usize]).collect();
             out.face_attributes.insert(name.clone(), v);
+        }
+        // The typed attributes, as the mesh numbers its elements: vertex v is this view's corner v.
+        if !self.typed.is_empty() {
+            let e = attrs::Elements::of(&out);
+            let first = e.first();
+            let point = |v: u32| point_of[v as usize];
+            out.typed = attrs::onto(
+                &self.typed,
+                self,
+                &e.poly,
+                &|p| point(first[p as usize]),
+                &|f| out.faces[e.poly.origin[f] as usize] as usize,
+                &|f, k| point(e.poly.vertex[f][k]),
+                true,
+            );
         }
         out
     }
@@ -904,6 +924,11 @@ pub struct Plants {
     /// Each face's edge from its first corner takes the midpoint, as if creased, so the result
     /// depends on where a face's list starts.
     pub first_corner_order: bool,
+    /// #1781's: a corner attribute kept as one value per welded point; a float point attribute's
+    /// edge point given one end's value; and a whole-number point attribute averaged.
+    pub corner_per_point: bool,
+    pub edge_copies_end: bool,
+    pub whole_averaged: bool,
 }
 
 impl Poly {
@@ -911,7 +936,22 @@ impl Poly {
     pub fn triangles_of(m: &Mesh) -> Poly {
         let mut one = m.clone();
         one.faces = (0..m.triangles() as u32).collect();
-        Poly::of(&one)
+        one.typed.clear();
+        let mut p = Poly::of(&one);
+        // Each triangle keeps its face's value, and each of its corners its face's corner's.
+        if !m.typed.is_empty() {
+            let e = attrs::Elements::of(m);
+            p.typed = attrs::onto(
+                &m.typed,
+                &e.poly,
+                &p,
+                &|q| q,
+                &|f| e.face[p.origin[f] as usize] as usize,
+                &|f, k| p.faces[f][k],
+                false,
+            );
+        }
+        p
     }
 
     /// `levels` of uniform refinement: positions by `scheme` with the edge sharpness, uv by
@@ -930,6 +970,105 @@ impl Poly {
             p = p.refined(scheme, boundary, uv, plants, blocks);
         }
         p
+    }
+
+    /// One level's typed attributes (Modifier; #1781), on the refined topology `next`: a point
+    /// attribute of a float type follows uv's rule on the point topology (`blended`), and one of
+    /// another type is never blended, so a new point takes the value of the lowest-indexed point
+    /// it was made from; a face's children take its value; a corner's value stays inside its
+    /// face, blended along the face's edges and at its centre (or the lowest-indexed corner's);
+    /// an edge attribute has no rule and is left out.
+    fn typed_refined(
+        &self,
+        next: &Topo,
+        quads: bool,
+        blended: &dyn Fn(&Rows) -> Rows,
+        plants: Plants,
+    ) -> Typed {
+        let mut out = Typed::new();
+        for (name, a) in &self.typed {
+            let w = a.ty.width();
+            let at = |i: usize| a.values[i * w..(i + 1) * w].to_vec();
+            let rows = |values: &[f64]| -> Rows { values.chunks(w).map(<[f64]>::to_vec).collect() };
+            let values: Vec<f64> = match a.domain {
+                Domain::Point if a.ty.blends() || plants.whole_averaged => {
+                    blended(&rows(&a.values)).concat()
+                }
+                Domain::Point => {
+                    // The points, then each edge's (by its sorted ends), then each face's, as
+                    // `refine` numbers them.
+                    let lowest = |c: &Vec<u32>| c.iter().min().map_or(0, |p| *p as usize);
+                    let edges = self.edges().into_keys().flat_map(|e| at(e.0 as usize));
+                    let faces = self.faces.iter().filter(|_| quads);
+                    let mut v = a.values.clone();
+                    v.extend(edges);
+                    v.extend(faces.flat_map(|c| at(lowest(c))));
+                    v
+                }
+                Domain::Face => self
+                    .faces
+                    .iter()
+                    .enumerate()
+                    .flat_map(|(f, c)| at(f).repeat(if quads { c.len() } else { 4 }))
+                    .collect(),
+                Domain::Corner => {
+                    let (mut values, mut start) = (Vec::new(), 0);
+                    for c in &self.faces {
+                        let k = c.len();
+                        let own = |i: usize| at(start + i % k);
+                        // Between two corners: their mean, or the lower-indexed one's value.
+                        let mid = |i: usize, j: usize| -> Vec<f64> {
+                            if a.ty.blends() {
+                                let pair = own(i).into_iter().zip(own(j));
+                                pair.map(|(x, y)| 0.5 * (x + y)).collect()
+                            } else {
+                                own((i % k).min(j % k))
+                            }
+                        };
+                        let children: Vec<Vec<f64>> = if quads {
+                            let all: Vec<Vec<f64>> = (0..k).map(own).collect();
+                            let centre = if a.ty.blends() {
+                                mean(all.iter().map(Vec::as_slice).collect())
+                            } else {
+                                own(0)
+                            };
+                            (0..k)
+                                .flat_map(|i| {
+                                    [own(i), mid(i, i + 1), centre.clone(), mid(i + k - 1, i)]
+                                })
+                                .collect()
+                        } else {
+                            let (ab, bc, ca) = (mid(0, 1), mid(1, 2), mid(2, 0));
+                            let (a0, a1, a2) = (own(0), own(1), own(2));
+                            [&a0, &ab, &ca, &ab, &a1, &bc, &ca, &bc, &a2, &ab, &bc, &ca]
+                                .map(Vec::clone)
+                                .to_vec()
+                        };
+                        values.extend(children.into_iter().flatten());
+                        start += k;
+                    }
+                    // Planted: one value per welded point, its first corner's.
+                    if plants.corner_per_point {
+                        let mut first = vec![None; next.points];
+                        for (corner, p) in next.faces.concat().into_iter().enumerate() {
+                            let from = *first[p as usize].get_or_insert(corner);
+                            values.copy_within(from * w..(from + 1) * w, corner * w);
+                        }
+                    }
+                    values
+                }
+                _ => continue,
+            };
+            out.insert(
+                name.clone(),
+                Attribute {
+                    values,
+                    domain: a.domain,
+                    ty: a.ty,
+                },
+            );
+        }
+        out
     }
 
     fn refined(
@@ -989,16 +1128,27 @@ impl Poly {
             ..Poly::default()
         };
         // Point attributes, on the point topology.
+        let plain = Topo {
+            sharp: BTreeMap::new(),
+            ..topo.clone()
+        };
+        let blended = |rows: &Rows| -> Rows {
+            let mut r = refine(&plain, rows, fv_scheme, fv_boundary, blocks).1;
+            // Planted (#1781): each edge's point takes its lower end's value.
+            if plants.edge_copies_end {
+                for (k, e) in self.edges().into_keys().enumerate() {
+                    r[self.points.len() + k] = rows[e.0 as usize].clone();
+                }
+            }
+            r
+        };
         for (name, values) in &self.attrs {
             let rows: Rows = values.iter().map(|v| vec![*v]).collect();
-            let topo = Topo {
-                sharp: BTreeMap::new(),
-                ..topo.clone()
-            };
-            let (_, r) = refine(&topo, &rows, fv_scheme, fv_boundary, blocks);
+            let r = blended(&rows);
             out.attrs
                 .insert(name.clone(), r.into_iter().map(|x| x[0]).collect());
         }
+        out.typed = self.typed_refined(&next, scheme != Scheme::Loop, &blended, plants);
         // uv, on its own topology: corners share a uv point where they share a point and a uv.
         if let Some(uv) = &self.uv {
             let mut ids: BTreeMap<(u32, u64, u64), u32> = BTreeMap::new();

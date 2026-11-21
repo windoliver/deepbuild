@@ -6,16 +6,21 @@ import { request } from 'node:http';
 import { createInterface } from 'node:readline';
 
 const socket = process.argv[2] ?? '';
+// Each tool's title and hints (#2898), as packages/hub/annotations.json states them, which scripts/skill.mjs generates;
+// written out here since the job's sandbox grants this file alone. Both only read the record, so a call changes nothing.
+const READS = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const TOOLS = [
   {
     name: 'read',
     description: 'One slice of what a handle names (session:<id>, session:<id>#<message>, ev:<sha256>, wiki:<page>#<claim>), at most 8,192 characters, as reading.slice@1 JSON. When the reply has `next`, call again with `slice` set to it for the rest.',
     inputSchema: { type: 'object', properties: { handle: { type: 'string' }, slice: { type: 'string' } }, required: ['handle'], additionalProperties: false },
+    annotations: { title: 'Read a slice of a handle', ...READS },
   },
   {
     name: 'find',
     description: 'Message handles of the sessions this job was given whose text holds the query, ignoring case, with a line of context each; `next` continues a cut reply.',
     inputSchema: { type: 'object', properties: { query: { type: 'string' }, slice: { type: 'string' } }, required: ['query'], additionalProperties: false },
+    annotations: { title: 'Find messages in the given sessions', ...READS },
   },
 ];
 

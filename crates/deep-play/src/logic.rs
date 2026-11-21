@@ -162,10 +162,14 @@ pub fn inline_logic(
     let span = deep_canvas_media::doc::time(form, form.pointer("/transport/span"))
         .unwrap_or(0)
         .max(0);
+    // A play that waits runs on the clock past the transport's span, the answers it takes
+    // arriving there: the bake reaches as far as the last entry's clock past the span (#1040).
+    let last = entries.iter().map(|e| e.t).max().unwrap_or(0);
+    let reach = if last > span { span + last } else { span };
     let steps = piece
         .items
         .iter()
-        .map(|i| (span + i.step - 1) / i.step.max(1))
+        .map(|i| (reach + i.step - 1) / i.step.max(1))
         .max()
         .unwrap_or(0);
     let piece = Rc::new(piece);
@@ -294,12 +298,27 @@ pub fn logic_piece(
     read: &dyn Fn(&str) -> Option<Vec<u8>>,
     cast_late: bool,
 ) -> Result<Option<Piece>, Box<Issue>> {
-    let Some(piece) = piece_json(form) else {
+    logic_piece_with(sealed, form, track, read, cast_late, &Default::default())
+}
+
+/// As `logic_piece`, checked with `planted`'s twins (#551: a page tracker a match's ring plants).
+#[cfg(feature = "logic")]
+pub fn logic_piece_with(
+    sealed: &Sealed,
+    form: &Value,
+    track: &[Value],
+    read: &dyn Fn(&str) -> Option<Vec<u8>>,
+    cast_late: bool,
+    planted: &deep_logic::Planted,
+) -> Result<Option<Piece>, Box<Issue>> {
+    let Some(mut piece) = piece_json(form) else {
         return Ok(None);
     };
+    // #194: each fired input's number fields, from the world that declares it.
+    crate::fires::expand(form, &mut piece)?;
     let piece = check_in(
         &piece,
-        &Default::default(),
+        planted,
         &mut History::new(),
         read,
         &crate::cast::services(sealed, form, track, cast_late),

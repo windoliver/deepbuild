@@ -74,11 +74,14 @@ impl Run {
             all_steps: self.all_steps,
             no_volume: self.no_volume,
             vehicle: self.vehicle,
+            centre: self.centre,
             declared_masses_only: self.declared_masses_only,
             twin: self.twin,
             test: self.test,
             kit_planted: self.kit_planted,
             leave_ccd_off: self.leave_ccd_off,
+            lint: self.lint,
+            ccd_on_kinematic: self.ccd_on_kinematic,
             views: std::cell::RefCell::default(),
         }
     }
@@ -532,6 +535,18 @@ fn prefix(record: &Value, w: &World, from: u64, drops_oldest: bool) -> Trace {
             });
         positions.insert(id.clone(), p.collect());
     }
+    // #2248: and each valued output's values after those states' steps.
+    let mut values = BTreeMap::new();
+    for (id, series) in record["values"].as_object().into_iter().flatten() {
+        let kept = series.as_array().into_iter().flatten().take(n);
+        let v = kept.map(|v| {
+            v.as_array()
+                .into_iter()
+                .flatten()
+                .map(|x| x.as_f64().unwrap_or(f64::NAN))
+        });
+        values.insert(id.clone(), v.map(Iterator::collect).collect());
+    }
     let occurrences = record["occurrences"]
         .as_array()
         .into_iter()
@@ -558,6 +573,7 @@ fn prefix(record: &Value, w: &World, from: u64, drops_oldest: bool) -> Trace {
     Trace {
         step_hashes,
         positions,
+        values,
         occurrences,
         peak: ring.bytes(),
         ring,

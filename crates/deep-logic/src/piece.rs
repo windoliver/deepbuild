@@ -67,9 +67,10 @@ pub const MEMORY_MIB: (u64, u64) = (4, MAX_MEMORY / MIB);
 pub const STACK_KIB: (u64, u64) = (64, 256);
 
 /// The exports a logic program may add to its role's (Logic `logic@1`: Exports), each with when.
-pub const OPTIONAL_EXPORTS: [(&str, &str); 5] = [
+pub const OPTIONAL_EXPORTS: [(&str, &str); 6] = [
     ("assets_at", "with assets"),
     ("emits_at", "with emits"),
+    ("fires_at", "with fires"),
     ("preview", "with preview: preview(k: i64)"),
     ("preview_at", "with preview"),
     (
@@ -101,7 +102,7 @@ pub fn listing() -> Value {
 }
 
 /// One field of a logic item this task doesn't build yet: refused by name, never ignored.
-const LATER: [&str; 3] = ["fires", "pages", "parallel"];
+const LATER: [&str; 2] = ["pages", "parallel"];
 /// A row's own columns: no declared field can take one of these names, so a reader can name each
 /// field beside them.
 const ROW_COLUMNS: [&str; 5] = ["step", "t", "kind", "a", "b"];
@@ -561,12 +562,18 @@ pub struct Item {
     /// The kinds it emits, in declaration order, and where its emit region starts: `emits_at`.
     pub emits: Vec<Emit>,
     pub emits_at: u32,
+    /// The inputs it may fire, in declaration order, and where its fire region starts (#194).
+    pub fires: Vec<fires::Fire>,
+    pub fires_at: u32,
     /// The services it asks between steps, in declaration order, from `services_at`.
     pub services: Vec<crate::services::Asked>,
     pub services_at: u32,
     /// Its mirrors of other items' arrays, in declaration order (Logic: mirror reads).
     pub mirrors: Vec<crate::mirrors::Mirror>,
     pub preview: Option<Preview>,
+    /// The lane graph its `lanes` names, built at check from the piece's floor paths, whose bytes
+    /// are its asset 0 (#981).
+    pub lanes: Option<std::sync::Arc<crate::lanes::Graph>>,
     /// What the item's bake key covers of it: its rewritten program, its fields as given and
     /// its assets' hashes (Logic: checkpoints and bake).
     pub content: String,
@@ -763,11 +770,13 @@ pub const MACHINE: &str = "same_machine.counter@1";
 /// #542: what a control's entries may hold: a text control's commit within `max` bytes, LF line
 /// ends and, with `many` false, none (Control: text); a scroll control's position within its
 /// range, `from` its default clamped there, which its first entry's delta counts from (Control:
-/// scroll).
+/// scroll). #1040: a choice's options in order, an entry of which a read region holds as its
+/// index (Control: a choice reads as the index of its option); a choice may hold any entry.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Limit {
     Text { max: u32, many: bool },
     Scroll { range: [i32; 2], from: i32 },
+    Choice(Vec<String>),
 }
 
 impl Limit {
@@ -808,6 +817,7 @@ impl Limit {
             (Limit::Scroll { range, .. }, Given::Number(n)) => {
                 n.fract() == 0.0 && *n >= f64::from(range[0]) && *n <= f64::from(range[1])
             }
+            (Limit::Choice(_), _) => true,
             _ => false,
         }
     }
@@ -1015,9 +1025,12 @@ struct Declared {
     links: Vec<(String, String)>,
     saves: Option<Value>,
     emits: Vec<Emit>,
+    fires: Vec<fires::Fire>,
     services: Vec<(String, u32)>,
     mirrors: Vec<(String, String)>,
     preview: Option<(Vec<String>, Vec<Write>)>,
+    /// `lanes`: its lane graph and vehicle kind, built at check (#981).
+    lanes: Option<Value>,
     /// The item's fields as given, for its bake key.
     given: String,
 }
@@ -1106,6 +1119,7 @@ fn emits_of(v: Option<&Value>) -> Result<Vec<Emit>, Vec<Value>> {
 }
 
 mod checks;
+pub mod fires;
 pub use checks::*;
 
 /// The most named values a series source's call holds (Series).

@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use crate::route::{self, Ask, Obstacle, Point, Side, Style};
 use crate::{
-    grouped, keep, layered, read_graph, read_layout, read_memory, Graph, GroupBox, Memory, Refused,
+    grouped, lay, read_graph, read_layout, read_memory, Algo, Graph, GroupBox, Memory, Refused,
 };
 
 /// How edges are routed: around obstacles, or #399 AC7's planted straight router.
@@ -29,10 +29,12 @@ pub struct Drawn {
 }
 
 /// The graph of a `graph@1` item's params and its nodes' boxes at `origin`: pinned to its memory,
-/// kept by it (the old picture when a change can't hold), or laid out afresh, in groups' boxes
-/// when its nodes name groups and `groups` isn't `none`.
+/// kept by it (the old picture when a change can't hold), or laid out afresh by its layout's
+/// `algo`, a layered one in groups' boxes when its nodes name groups and `groups` isn't `none`.
+/// A tree's edges come back in their children's order across each rank, the order [`routes`]
+/// spreads a side's ports in, so no two routes out of one parent cross.
 pub fn place(params: &Value, origin: [f64; 2]) -> Result<(Graph, Drawn), Refused> {
-    let graph = read_graph(&params["graph"])?;
+    let mut graph = read_graph(&params["graph"])?;
     let layout = read_layout(&params["layout"])?;
     let memory = match params.get("memory") {
         None | Some(Value::Null) => None,
@@ -40,27 +42,37 @@ pub fn place(params: &Value, origin: [f64; 2]) -> Result<(Graph, Drawn), Refused
     };
     let boxed = params.get("groups").and_then(Value::as_str) != Some("none")
         && graph.nodes.iter().any(|n| n.group.is_some());
-    let (places, groups): (Memory, BTreeMap<String, GroupBox>) = match (&memory, layout.pinned) {
-        (Some(m), true) => (m.clone(), BTreeMap::new()),
-        (None, true) => {
+    let mut boxes = BTreeMap::new();
+    let (places, groups): (Memory, BTreeMap<String, GroupBox>) = match (&memory, layout.algo) {
+        (Some(m), Algo::Pinned) => (m.clone(), BTreeMap::new()),
+        (None, Algo::Pinned) => {
             return Err(Refused {
                 code: "bad_input",
                 names: "memory".into(),
             })
         }
-        (Some(m), false) => match keep(&graph, &layout, m)? {
-            Ok((kept, _)) => (kept, BTreeMap::new()),
-            Err(_) => (m.clone(), BTreeMap::new()),
+        (None, Algo::Layered) if boxed => grouped(&graph, &layout)?,
+        _ => match lay(&graph, &layout, memory.as_ref())? {
+            Ok(laid) => {
+                boxes = laid.boxes;
+                (laid.memory, BTreeMap::new())
+            }
+            Err(_) => (memory.clone().unwrap_or_default(), BTreeMap::new()),
         },
-        (None, false) if boxed => grouped(&graph, &layout)?,
-        (None, false) => (layered(&graph, &layout)?, BTreeMap::new()),
     };
+    if layout.algo == Algo::Tree {
+        graph
+            .edges
+            .sort_by_key(|e| places.get(&e.b).map(|p| (p.rank, p.order)));
+    }
     let mut drawn = Drawn::default();
     for n in &graph.nodes {
         if let Some(p) = places.get(&n.id) {
+            // A treemap's leaf draws at its rectangle's size.
+            let [w, h] = boxes.get(&n.id).map_or([n.w, n.h], |b| [b[2], b[3]]);
             drawn
                 .nodes
-                .insert(n.id.clone(), [origin[0] + p.x, origin[1] + p.y, n.w, n.h]);
+                .insert(n.id.clone(), [origin[0] + p.x, origin[1] + p.y, w, h]);
         }
     }
     let at = |r: [f64; 4]| [origin[0] + r[0], origin[1] + r[1], r[2], r[3]];

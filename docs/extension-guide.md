@@ -218,7 +218,7 @@ Answers an ask with an option and the decision that covers it. The core applies 
 
 In R1 · preview · `d1:c1a0515e41f2a3869341f5cb779d2ce7e1098964f8aa4a1f1645968f95b4538c`
 
-A port a piece can declare to the plug-in: `entries` and `rows`, the entries and occurrences it asks for, each of which the piece must list, and what the piece lists is sent as it plays live; `sources`, the readings it gives back, each a source the plug-in has registered; and `sound`, whether its gear makes sound, which puts it under the device gate. Registering opens nothing: nothing flows until you click Connect on the app's prompt, and a seek, a replay or an export sends nothing.
+A plug-in's side of a piece's port: `entries` and `rows`, the entries and occurrence rows it takes, and `sources`, the sources it gives for readings in, each one the plug-in registers. The piece must list each of them, and the port carries what the piece lists, which may be more. `sound` says whether its gear makes sound, which makes the plug-in a device gate owner whatever the document says. Registering opens nothing: a port opens only after a person clicks Connect on the app's prompt, and sends only while the piece plays live and forward, never on a seek, a replay or an export.
 
 | Parameter | Type | Required |
 |---|---|---|
@@ -393,6 +393,16 @@ Reads the latest item under every key of the plug-in's own store.
 |---|---|---|
 | `kind` | string, `^ext\.[a-z0-9_-]+\.[a-z][a-z0-9_]*$` | yes |
 
+### `deep.schedule.read`
+
+In R1 · preview · `d1:05a2343b28cd68859192ba8971bcbac01e101886005a29242a5fd1c2cc72e493`
+
+Reads a source the job declared among its readings, for the run under way: a job calls it as its context's `read`, and outside a run it is refused. Listing `deep.schedule` in `requires.preview` covers it.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `source` | string, `^[a-z][a-z0-9_.-]*$` | yes |
+
 ### `deep.runner.run`
 
 In R1 · preview · `d1:867ba9b60a91e097afdb8ecb28794259d5f1bfa59f66065c0ede01b825b56ea0`
@@ -551,3 +561,4 @@ Each kind of thing a package registers fills a slot: its interface with a frozen
 | `deep.registerJobTool` | - | `job.kind@1` | many per kind | `job.kind@1` | `lowercases-last-letter` | R6 |
 | `deep.registerChannel` | - | `channel@1` | many | `channel@1` | `delivered-without-ack`, `signed-without-signature` | R2 |
 | `deep.registerStateSource` | - | `state-source@1` | many | `state-source@1` | `undo-fails`, `first-read-kept`, `compare-sees-nothing` | R2 |
+| `deep.registerPort` | - | `port@1` | many, at most 8 on a document | `port@1` | `sends-on-seek` | R6 |

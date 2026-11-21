@@ -2189,6 +2189,7 @@ dependencies = [
  "block2 0.6.2",
  "chrono",
  "deep-app",
+ "deep-canvas",
  "deep-canvas-cells",
  "deep-canvas-effects",
  "deep-canvas-marks",
@@ -2222,6 +2223,8 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "unicode-bidi",
+ "unicode-segmentation",
  "wgpu 30.0.1",
  "wgpu-profiler",
 ]
@@ -2412,11 +2415,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-catalog"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "deep-codecs"
 version = "0.0.0"
 dependencies = [
  "basisu_c_sys",
  "deep-canvas-cells",
+ "deep-catalog",
  "image",
  "libc",
  "libm",
@@ -2519,7 +2531,10 @@ name = "deep-images"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "gif 0.14.2",
  "image",
+ "image-webp",
+ "png 0.18.1",
  "sha2 0.10.9",
  "web-time",
 ]
@@ -2540,6 +2555,7 @@ dependencies = [
  "base64 0.22.1",
  "deep-canvas",
  "deep-canvas-sandbox",
+ "deep-catalog",
  "deep-sandbox-wasmtime",
  "gimli 0.33.0",
  "libc",
@@ -2644,6 +2660,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-net"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-relay",
+ "serde_json",
+]
+
+[[package]]
 name = "deep-panel-host"
 version = "0.0.0"
 dependencies = [
@@ -2660,9 +2685,11 @@ version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
  "bincode",
+ "deep-canvas",
  "deep-canvas-motion",
  "deep-canvas-physics",
  "deep-canvas-scene3d",
+ "rapier2d",
  "rapier3d",
  "serde_json",
  "simba",
@@ -2682,6 +2709,7 @@ dependencies = [
  "deep-canvas-vector",
  "deep-logic",
  "deep-marks-raster",
+ "deep-net",
  "deep-physics-rapier",
  "deep-text",
  "serde_json",
@@ -2707,12 +2735,15 @@ dependencies = [
  "deep-canvas-seams",
  "deep-canvas-sheet",
  "deep-canvas-vector",
+ "deep-codecs",
  "deep-gpu",
  "deep-images",
  "deep-logic",
  "deep-marks-raster",
+ "deep-net",
  "deep-physics-rapier",
  "deep-play",
+ "deep-relay",
  "deep-scene3d-render",
  "deep-text",
  "js-sys",
@@ -2725,11 +2756,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-pptx-reader"
+version = "0.0.0"
+dependencies = [
+ "roxmltree 0.21.1",
+ "zune-inflate",
+]
+
+[[package]]
 name = "deep-relay"
 version = "0.0.0"
 dependencies = [
  "deep-canvas-seams",
  "rustls",
+ "rustls-native-certs",
  "rustls-pki-types",
  "serde_json",
  "tungstenite",
@@ -2742,8 +2782,14 @@ dependencies = [
  "base64 0.22.1",
  "crc32fast",
  "deep-app",
+ "deep-canvas",
+ "deep-canvas-cells",
  "deep-canvas-input",
+ "deep-canvas-marks",
+ "deep-gpu",
  "deep-logic",
+ "deep-marks-raster",
+ "deep-text",
  "gpui-kit",
  "gpui-shell",
  "image",
@@ -2752,6 +2798,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "serde_json",
  "sha2 0.10.9",
+ "vello_cpu 0.3.0",
 ]
 
 [[package]]
@@ -2817,8 +2864,10 @@ dependencies = [
  "deep-lottie-reader",
  "deep-marks-raster",
  "deep-marks-vello",
+ "deep-net",
  "deep-physics-rapier",
  "deep-play",
+ "deep-pptx-reader",
  "deep-relay",
  "deep-replica",
  "deep-sandbox-wasmtime",
@@ -2870,6 +2919,7 @@ dependencies = [
 name = "deep-text-gpui"
 version = "0.0.0"
 dependencies = [
+ "deep-canvas",
  "deep-canvas-marks",
  "deep-text",
  "gpui-kit",
@@ -4265,6 +4315,7 @@ dependencies = [
  "gpui-pre-shared-string",
  "gpui-pre-sum-tree",
  "gpui-pre-util",
+ "hdrhistogram",
  "heapless 0.9.3",
  "image",
  "inventory",
@@ -8246,6 +8297,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "parry2d"
+version = "0.31.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe1ba500175e957aaa27ddc92290ec8ff503d73331365443660816d6302e2a31"
+dependencies = [
+ "approx",
+ "arrayvec",
+ "bitflags 2.13.2",
+ "downcast-rs 2.0.2",
+ "either",
+ "ena",
+ "foldhash 0.2.0",
+ "glamx",
+ "hashbrown 0.17.1",
+ "indexmap",
+ "log",
+ "num-derive 0.5.1",
+ "num-traits",
+ "ordered-float",
+ "serde",
+ "serde_arrays",
+ "simba",
+ "slab",
+ "smallvec",
+ "spade",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "parry3d"
 version = "0.31.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9235,6 +9315,28 @@ name = "rangemap"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a611d15b50743feb4c76b7d03edcb0e64f399c26961e4efe6975bc398be6aa3d"
+
+[[package]]
+name = "rapier2d"
+version = "0.36.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b73d84c8e78f4fbd46fb5c800bbdb15cad6ef2bd517de6a4d31fe60edd838f8d"
+dependencies = [
+ "approx",
+ "arrayvec",
+ "bitflags 2.13.2",
+ "glamx",
+ "log",
+ "nalgebra",
+ "num-traits",
+ "parry2d",
+ "profiling",
+ "serde",
+ "simba",
+ "static_assertions",
+ "thiserror 2.0.21",
+ "wide",
+]
 
 [[package]]
 name = "rapier3d"

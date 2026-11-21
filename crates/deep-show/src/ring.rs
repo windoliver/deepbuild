@@ -259,7 +259,8 @@ pub struct Ring {
     sends: BTreeMap<String, usize>,
     attempts: BTreeMap<String, Vec<Value>>,
     kb_focus: Option<String>,
-    clipboard: Option<Value>,
+    /// The last clipboard write a gesture let through; #1498's ⌘C of a text selection writes it too.
+    pub(crate) clipboard: Option<Value>,
     toasts: Vec<Toast>,
     pieces: BTreeMap<String, Piece>,
     turns: BTreeMap<String, Vec<Value>>,

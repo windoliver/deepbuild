@@ -21,10 +21,10 @@ interface Manifest {
 const list = (values: readonly string[] | undefined): string => (values?.length ? values.join(', ') : 'none');
 
 /** `deep install [--trust-key] <folder>`: exit 0 installed, 2 a usage error, 3 not decided, 1 refused. */
-export async function installCommand(args: readonly string[]): Promise<number> {
+export async function installCommand(args: readonly string[], setUp: () => Promise<number> = async () => 0): Promise<number> {
   const trustKey = args[0] === '--trust-key';
   const folders = trustKey ? args.slice(1) : args;
-  if (folders.length !== 1 || folders[0]!.startsWith('--')) {
+  if (folders.length !== 1 || folders[0]!.startsWith('-')) {
     process.stderr.write(`${USAGE}\n`);
     return 2;
   }
@@ -32,8 +32,10 @@ export async function installCommand(args: readonly string[]): Promise<number> {
   if (!existsSync(join(from, 'deepbuild.json')) && existsSync(join(from, 'pack.json'))) {
     try {
       const pack = readPack(from);
+      const stopped = await setUp();
+      if (stopped) return stopped;
       process.stdout.write(`Source: ${from}\n  ${pack.ref}, digest ${pack.digest}\n  Assets fetch only on first use after an authority ask or your standing rule.\n`);
-      const result = await callAsYou('extension.install', { from, digest: pack.digest }, 'nothing was installed');
+      const result = await callAsYou('extension.install', { from, digest: pack.digest });
       if (typeof result === 'number') return result;
       if (result.status !== 'installed') { process.stderr.write(`deep install: ${String(result.reason ?? JSON.stringify(result))}\n`); return 1; }
       process.stdout.write(`Installed ${pack.ref}\n`);
@@ -47,6 +49,8 @@ export async function installCommand(args: readonly string[]): Promise<number> {
     process.stderr.write(`deep install: ${from} has no readable deepbuild.json (${error instanceof Error ? error.message : String(error)})\n`);
     return 2;
   }
+  const stopped = await setUp();
+  if (stopped) return stopped;
   process.stdout.write([
     `Source: ${from}`,
     `  ${m.id}@${m.version}, digest ${m.digest}, ${m.publisher_key ? `signed by ${m.publisher_key}` : 'unsigned'}`,
@@ -66,7 +70,7 @@ export async function installCommand(args: readonly string[]): Promise<number> {
     ...deprecatedCalls(m).map((e) => `  deprecated: ${m.id} calls ${e.method}, deprecated since ${e.deprecated_since}; it is served through ${e.replaced_by}${e.stops_serving ? ` until ${e.stops_serving}` : ''}, so call ${e.replaced_by}`),
     '',
   ].join('\n'));
-  const result = await callAsYou('extension.install', { from, ...(trustKey ? { trust_key: true } : {}) }, 'nothing was installed');
+  const result = await callAsYou('extension.install', { from, ...(trustKey ? { trust_key: true } : {}) });
   if (typeof result === 'number') return result;
   process.stdout.write(`Installed ${String(result.id)}@${String(result.version)}\n`);
   if (typeof result.not_loaded === 'string') {

@@ -1,6 +1,7 @@
-// #1123: each run (and each proof side) owns a snapshot of its own Cargo executables, never links into target/.
+// #1123: each run (and each proof side) owns a snapshot of its own Cargo executables, never links into target/. #2817:
+// a test that can start the copy's hub also gets copies of the hub's binaries in that copy's target/debug/.
 import { fork, spawnSync } from 'node:child_process';
-import { constants, copyFileSync, existsSync, globSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { constants, copyFileSync, existsSync, globSync, mkdirSync, readFileSync, rmSync, utimesSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
@@ -59,12 +60,31 @@ function sourceSlice(file, source, requested) {
   return { forEachChild: (visit) => [...imports.filter((node) => !node.importClause || [node.importClause.name, ...(node.importClause.namedBindings && ts.isNamedImports(node.importClause.namedBindings) ? node.importClause.namedBindings.elements.map((n) => n.name) : [node.importClause.namedBindings?.name])].some((name) => name && used.has(name.text))), ...nodes].forEach(visit) };
 }
 
-/** Selected tests and the helper declarations they reach. */
-export function binaryNames(cwd, patterns) {
+// What a checkout's hub runs from that checkout's target/{release,debug}/ (#2817): deepHook() in
+// packages/hub/src/paths.ts and canvasCore() in packages/hub/src/canvas.ts. A test that names the hub's or the CLI's
+// package, in a literal, a template's text or the pieces of a join or resolve call, can start that hub; a whole
+// command such as `node packages/cli/dist/main.js hub run` names it too, and so does a test or helper inside either
+// package, which reaches the hub through ../src.
+const HUB_BINARIES = ['deep-hook', 'deep-show'];
+const HUB_ENTRY = /(?<![\w.@-])packages\/(?:hub|cli)(?![\w-]|\.\w)|(?<![\w./@-])@deepbuild\/(?:hub|cli)(?![\w-]|\.\w)/;
+
+/** Selected tests' DEEP_BIN_DIR binaries, for a run in the checkout itself, which keeps its own target/. */
+export const binaryNames = (cwd, patterns) => selectBinaries(cwd, patterns, false).bin;
+
+/**
+ * Selected tests and the helper declarations they reach: `bin`, the binaries their DEEP_BIN_DIR consumers name,
+ * `target`, the hub's binaries when one of them names the hub's or the CLI's package, and `hub`, the selected paths
+ * that do, which alone may find `target` in place (#2817).
+ */
+export function selectBinaries(cwd, patterns, hubBinaries = true) {
+  const hubRoots = [];
+  let reaches = false;
+  const names = (text) => { if (HUB_ENTRY.test(text)) reaches = true; };
   const sources = [], roots = patterns.flatMap((path) => path.includes('*') ? globSync(path, { cwd }) : [path]);
   for (const root of roots) {
     const seen = new Set(), own = [], queue = [{ path: root, requested: null }];
     let readsBin = false, executes = false;
+    reaches = false;
     while (queue.length) {
       const { path, requested } = queue.pop();
       const candidates = /\.(?:[cm]?[jt]s|tsx)$/.test(path) ? [path] : globSync(`${path.replace(/\/$/, '')}/**/*.{ts,mjs,js}`, { cwd });
@@ -74,6 +94,7 @@ export function binaryNames(cwd, patterns) {
         const key = `${full}:${requested?.join(',') ?? '*'}`;
         if (seen.has(key)) continue;
         seen.add(key);
+        names(relative(cwd, full));
         let source;
         try { source = readFileSync(full, 'utf8'); } catch { continue; }
         const follow = (dependency, names) => {
@@ -88,6 +109,13 @@ export function binaryNames(cwd, patterns) {
             const names = bindings && ts.isNamedImports(bindings) && !node.importClause?.name ? bindings.elements.filter((n) => !n.isTypeOnly).map((n) => (n.propertyName ?? n.name).text) : null;
             if (!node.importClause?.isTypeOnly) follow(node.moduleSpecifier.text, names);
           }
+          // A helper's re-export reaches the helper it names, as an import does.
+          if (ts.isExportDeclaration(node) && !node.isTypeOnly && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text.startsWith('.')) {
+            const clause = node.exportClause;
+            follow(node.moduleSpecifier.text, clause && ts.isNamedExports(clause) ? clause.elements.filter((n) => !n.isTypeOnly).map((n) => (n.propertyName ?? n.name).text) : null);
+          }
+          // Types are no run: a type-only import or export reaches no hub.
+          if ((ts.isImportDeclaration(node) && node.importClause?.isTypeOnly) || (ts.isExportDeclaration(node) && node.isTypeOnly)) return;
           if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && ts.isStringLiteral(node.arguments[0])) follow(node.arguments[0].text, null);
           if ((ts.isPropertyAccessExpression(node) && node.expression.getText() === 'process.env' && node.name.text === 'DEEP_BIN_DIR')
             || (ts.isElementAccessExpression(node) && node.expression.getText() === 'process.env' && ts.isStringLiteral(node.argumentExpression) && node.argumentExpression.text === 'DEEP_BIN_DIR')) readsBin = true;
@@ -95,28 +123,59 @@ export function binaryNames(cwd, patterns) {
             const command = node.arguments[0];
             if (!command || !ts.isStringLiteralLike(command) || !['cargo', 'git', 'npm', 'node', 'ps', 'sh'].includes(command.text)) executes = true;
           }
-          if (ts.isStringLiteralLike(node)) own.push(node.text);
+          if (ts.isCallExpression(node) && /^(?:join|resolve)$/.test(node.expression.getText().split('.').at(-1))) names(node.arguments.filter(ts.isStringLiteralLike).map((arg) => arg.text).join('/'));
+          if (ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) names(node.text);
+          if (ts.isStringLiteralLike(node)) {
+            own.push(node.text);
+            names(node.text);
+          }
           ts.forEachChild(node, visit);
         };
         sourceSlice(full, source, requested).forEachChild(visit);
       }
     }
     if (readsBin && executes) sources.push(own.join('\n'));
+    if (reaches) hubRoots.push(root);
   }
+  const hub = hubBinaries && hubRoots.length > 0;
   // Only actual redrafted consumers need a build; a missing workspace is not a wrong executable.
-  if (!sources.length) return [];
-  if (!existsSync(join(cwd, 'Cargo.toml'))) throw Error('BLOCKED test binaries: selected binary consumer has no Cargo.toml');
+  if (!sources.length && !hub) return { bin: [], target: [], hub: [] };
+  if (!existsSync(join(cwd, 'Cargo.toml'))) {
+    if (!sources.length) return { bin: [], target: [], hub: [] };
+    throw Error('BLOCKED test binaries: selected binary consumer has no Cargo.toml');
+  }
   const source = sources.join('\n');
   const metadata = spawnSync('cargo', ['metadata', '--no-deps', '--format-version', '1', '--offline'], { cwd, encoding: 'utf8', maxBuffer: 1 << 28 });
   if (metadata.status !== 0) throw Error(`BLOCKED test binaries: cargo metadata failed: ${metadata.error?.message ?? metadata.stderr}`);
   const mentions = (name) => source.match(new RegExp(`(?<![\\w-])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])`));
-  const bins = JSON.parse(metadata.stdout).packages.flatMap((pkg) => pkg.targets.filter((target) => target.kind.includes('bin') && (mentions(target.name) || mentions(pkg.name))).map((target) => target.name));
-  if (!bins.length) throw Error('BLOCKED test binaries: a selected consumer names DEEP_BIN_DIR but no workspace binary');
-  return [...new Set(bins)];
+  const packages = JSON.parse(metadata.stdout).packages;
+  const bins = sources.length ? packages.flatMap((pkg) => pkg.targets.filter((target) => target.kind.includes('bin') && (mentions(target.name) || mentions(pkg.name))).map((target) => target.name)) : [];
+  if (sources.length && !bins.length) throw Error('BLOCKED test binaries: a selected consumer names DEEP_BIN_DIR but no workspace binary');
+  const workspace = new Set(packages.flatMap((pkg) => pkg.targets.filter((target) => target.kind.includes('bin')).map((target) => target.name)));
+  const target = hub ? HUB_BINARIES.filter((name) => workspace.has(name)) : [];
+  return { bin: [...new Set(bins)], target, hub: target.length ? hubRoots : [] };
 }
 
-/** Build once before any consumer starts; copy only executables Cargo reports from this successful build. */
-export function buildBinaries(cwd, bin, names, run = spawnSync) {
+/**
+ * Puts `names`, built into `bin`, where the checkout's own hub looks: target/debug/, newer than any release build. A
+ * bay keeps target/ between uses, so what an earlier use put there goes first and a use that needs none finds none.
+ */
+export function placeHubBinaries(cwd, bin, names) {
+  const debug = join(cwd, 'target', 'debug');
+  for (const name of HUB_BINARIES) rmSync(join(debug, name), { force: true });
+  if (names.length) mkdirSync(debug, { recursive: true });
+  const now = new Date();
+  for (const name of names) {
+    copyFileSync(join(bin, name), join(debug, name), constants.COPYFILE_FICLONE);
+    utimesSync(join(debug, name), now, now);
+  }
+}
+
+/**
+ * Build once before any consumer starts; copy only executables Cargo reports from this successful build. `timeout` 0
+ * lets cargo run as long as it needs, as the lanes' builds do: a cold bay build runs past 20 minutes on a loaded machine.
+ */
+export function buildBinaries(cwd, bin, names, run = spawnSync, { timeout = 20 * 60_000 } = {}) {
   mkdirSync(bin, { recursive: true });
   // The proof tooling's JavaScript-only fixture repositories have no Rust build.
   if (!names.length) return bin;
@@ -132,7 +191,7 @@ export function buildBinaries(cwd, bin, names, run = spawnSync) {
       '--config', `build.build-dir=${JSON.stringify(join(cwd, 'target'))}`, '--message-format=json-render-diagnostics'];
     const started = spawnSync('ps', ['-o', 'lstart=', '-p', String(process.pid)], { encoding: 'utf8', env: { ...env, TZ: 'UTC', LC_ALL: 'C' } }).stdout?.trim();
     if (!started) throw Error('BLOCKED test binaries: cannot identify the build owner');
-    const result = run(lease, [process.execPath, buildSupervisor, dirname(bin), String(process.pid), started, 'cargo', ...args], { cwd, env, detached: true, encoding: 'utf8', maxBuffer: 1 << 28, timeout: 20 * 60_000 });
+    const result = run(lease, [process.execPath, buildSupervisor, dirname(bin), String(process.pid), started, 'cargo', ...args], { cwd, env, detached: true, encoding: 'utf8', maxBuffer: 1 << 28, timeout: timeout || undefined });
     if (result.status !== 0) throw Error(`BLOCKED test binaries: cargo build failed: ${result.error?.message ?? result.stderr?.trim() ?? result.signal ?? result.status}`);
     const artifacts = result.stdout.split('\n').filter(Boolean).map((line) => JSON.parse(line));
     if (!artifacts.some((artifact) => artifact.reason === 'build-finished' && artifact.success)) throw Error('BLOCKED test binaries: cargo reported no successful build');

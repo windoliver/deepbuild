@@ -1,0 +1,19 @@
+{
+  "format": 1,
+  "profile": "figure",
+  "title": "Revenue note",
+  "description": "A note of three lines about revenue, the last line naming a currency in Arabic between Latin words.",
+  "size": [800, 450],
+  "camera": "cam",
+  "items": {
+    "cam": {
+      "id": "cam", "kind": "camera@1", "name": "Camera", "order": "a0",
+      "params": { "projection": "orthographic", "target": [400, 225, 0], "view_width": 800, "user": { "zoom": [0.25, 8], "pan": { "bounds": "none" } } }
+    },
+    "dd-note": {
+      "id": "dd-note", "kind": "text@1", "name": "Revenue note", "role": "label", "order": "a1",
+      "params": { "text": "Revenue rose over the plan in the north\nMargins held across every region\nPaid in ريال سعودي and USD by March", "font": "body", "size": 20, "box": { "w": 640, "h": 100 } },
+      "at": { "pos": [40, 40, 0] }
+    }
+  }
+}

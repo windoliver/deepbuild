@@ -142,7 +142,8 @@ impl Viewer {
 pub struct LogicCall {
     pub doc: String,
     pub steps: i64,
-    pub check: bool,
+    /// The check the call runs: logic.determinism, or #194's logic.tuning.
+    pub check: Option<&'static str>,
     pub seeks: Vec<i64>,
     pub regions: bool,
     pub at_times: Option<Vec<f64>>,
@@ -152,8 +153,12 @@ pub struct LogicCall {
 
 pub fn parse(c: &Map<String, Value>) -> Option<LogicCall> {
     let check = match c.get("check") {
-        None => false,
-        Some(v) => v.as_str()? == "logic.determinism",
+        None => None,
+        Some(v) => Some(
+            ["logic.determinism", "logic.tuning"]
+                .into_iter()
+                .find(|k| v.as_str() == Some(*k))?,
+        ),
     };
     let steps = c
         .get("steps")?
@@ -253,26 +258,6 @@ fn seek_to(world: &World, to: i64, steps: i64, regions: bool) -> Result<Value, V
     Ok(
         json!({"to": to, "from": from, "regions": read, "hashes": hashes, "checkpoint": checkpoint, "steps": ran}),
     )
-}
-
-/// `piece` stepped from 0 to `count` − 1 on `entries`: each step's hash and arrays per item, as
-/// `logic` reports them (#540's `match` reports each copy's the same way), up to the first step
-/// that trapped and no further (#548), with that trap.
-pub(crate) fn stepped(
-    piece: &Rc<Piece>,
-    entries: &[Entry],
-    count: i64,
-) -> Result<(Vec<Value>, Option<Value>), Value> {
-    let mut rec = Record::default();
-    let mut world = World::new(
-        piece.clone(),
-        track_of(entries),
-        false,
-        Default::default(),
-        &mut rec,
-        None,
-    )?;
-    Ok(step_rows(&mut world, &mut rec, piece, count, false))
 }
 
 /// Each step 0 … `count` − 1 of `world`: its hash and arrays per item and, with `full` (#213's
@@ -819,7 +804,10 @@ impl Hub<'_> {
             }
             out["seeks"] = json!(seeks);
         }
-        if l.check {
+        if l.check == Some("logic.tuning") {
+            out["check"] = self.tuning_check(&form, &read, &piece, &entries, l.steps);
+        }
+        if l.check == Some("logic.determinism") {
             let at: Vec<i64> = match &l.at_times {
                 Some(ts) => ts
                     .iter()

@@ -32,16 +32,23 @@ pub mod codes;
 pub mod commands;
 pub mod confirm;
 pub mod connect;
+#[cfg(all(feature = "contact-sheet", target_os = "macos"))]
+pub mod contact_sheet;
+/// #2403: the app's own words, one table per language by key.
+pub mod copy;
 pub mod device;
 pub mod empties;
 #[cfg(feature = "fixtures")]
 pub mod events;
+pub mod footprint;
+pub mod frame;
 pub mod gpu_view;
 #[cfg(all(feature = "hdr-fixture", target_os = "macos"))]
 pub mod hdr_fixture;
 #[cfg(target_os = "macos")]
 pub mod hdr_layer;
 pub mod hub;
+pub mod icons;
 /// #1486: chrome thumbnails through the one image service.
 pub mod images;
 pub mod installed;
@@ -63,6 +70,8 @@ pub mod plain;
 pub mod question;
 pub mod record;
 pub mod rules;
+// Issue #1498: select and copy the text the window draws.
+pub mod select;
 pub mod setup;
 pub mod show;
 pub mod shown;
@@ -70,7 +79,6 @@ pub mod single;
 #[cfg(feature = "spike")]
 pub mod spike;
 pub mod states;
-pub mod table;
 pub mod text;
 pub mod views;
 pub mod welcome;
@@ -149,8 +157,8 @@ pub fn menu_bar_line() -> String {
     }
     match setup::count().or_else(|| reach.short().filter(|_| !reach.hub_down)) {
         Some(line) => line.to_owned(),
-        None if record::older().is_some() => "Hub is older".to_owned(),
-        None if !record::connected() && !reach.hub_down => "No hub".to_owned(),
+        None if record::older().is_some() => copy::text("lib.hub_older").to_owned(),
+        None if !record::connected() && !reach.hub_down => copy::text("lib.no_hub").to_owned(),
         // #2026's planted menu bar counts sessions, not asks.
         None if plain::planted("menu-bar-counts-sessions") => views::asks_need_you(
             record::with_view(|view| view.table().every_session().len()).unwrap_or(0),
@@ -362,6 +370,7 @@ pub fn init(cx: &mut App) {
     card::init(cx);
     commands::init(cx);
     actions::init(cx);
+    select::init(cx);
     // Chrome effects hold their still pose under macOS's Reduce Motion (#1436).
     #[cfg(target_os = "macos")]
     cx.set_reduce_motion(
@@ -436,7 +445,7 @@ pub fn mount_page(
     std::fs::write(
         dir.join(panel_module::PAGE_ENTRY),
         format!(
-            "import {{ View }} from \"@deepbuild/panel\";\nimport Panel from \"./main.js\";\n\nexport default class Page extends View {{\n  init(_props, cx) {{\n    this.panel = cx.new(Panel, {props});\n  }}\n\n  render() {{\n    return this.panel;\n  }}\n}}\n"
+            "import {{ View }} from \"@deepbuild/panel\";\nimport Panel from \"./main.js\";\n\nexport default class Page extends View {{\n  init(_props, cx) {{\n    this.panel = cx.new(Panel, {props});\n  }}\n\n  render() {{\n    return this.panel;\n  }}\n}}\n" // copy-exception: a page's entry script, written to disk
         ),
     )?;
     let loaded = runtime.load_application(dir, panel_module::PAGE_ENTRY)?;
@@ -456,5 +465,6 @@ pub fn fetched_dependency(dir: &Path) -> Option<String> {
 
 /// Why a panel whose manifest fetches a dependency is refused.
 pub fn fetch_refusal(dependency: &str) -> String {
+    // copy-exception: a refusal reason the kit and the loader report, never drawn
     format!("its manifest lists the Git dependency {dependency}; a panel loads nothing from the network")
 }

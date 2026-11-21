@@ -12,8 +12,12 @@ use deep_canvas::schedule::core_ops::{Datum, Edit, Edits};
 use deep_canvas::schedule::{OpError, Val, View};
 use serde_json::{json, Value};
 
+mod boom;
+pub use boom::boom;
 pub mod kinds;
 pub mod launch;
+mod paths;
+pub use paths::paths;
 mod time;
 pub use time::{cache, held, latch, native, tick};
 pub mod probe;
@@ -21,6 +25,7 @@ pub mod registries;
 pub mod sandbox;
 pub mod sim;
 pub mod swirl;
+pub mod tone;
 pub mod weight;
 
 fn manifest(name: &str, deps: &[(&str, bool)]) -> Manifest {

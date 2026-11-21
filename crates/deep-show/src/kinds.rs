@@ -165,6 +165,9 @@ const INSTALLED: &[(&str, &str)] = &[
         "logic-counter.wat",
         include_str!("../gallery/logic-counter.wat"),
     ),
+    // #550: net@1's example, a two-player piece, and its program's source.
+    ("net-rally.json", include_str!("../gallery/net-rally.json")),
+    ("net-rally.wat", include_str!("../gallery/net-rally.wat")),
     // #508: the figure the canvas skill embeds, its example of a 3D figure.
     ("figure.json", include_str!("../gallery/figure.json")),
 ];
@@ -742,6 +745,16 @@ pub(crate) fn kind_rows(sealed: &Sealed, planted: Option<Planted>) -> Vec<KindRo
             e["deprecated_since"] = json!(since);
             e["replaced_by"] = json!(by);
         }
+        // #2776: a kind that draws in 3D, with what each path does with it, and each field that
+        // carries answers of its own with them.
+        if let Some((_, p)) = sealed.paths_of(&name) {
+            e["paths"] = p.own.to_json();
+            for f in e["fields"].as_array_mut().into_iter().flatten() {
+                if let Some(own) = f["name"].as_str().and_then(|n| p.fields.get(n)) {
+                    f["paths"] = own.to_json();
+                }
+            }
+        }
         if let Some(entry) = entry {
             let migrations: Vec<Value> = entry
                 .migrations
@@ -806,6 +819,26 @@ pub(crate) fn kind_rows(sealed: &Sealed, planted: Option<Planted>) -> Vec<KindRo
             }
             row.entry["example"] = json!(text.as_deref().map(|t| sha256_hex(t.as_bytes())));
             row.example = text;
+        }
+    }
+    // #550: net@1 with its check kinds and its gallery example, a two-player piece; listed
+    // unavailable, naming why, in a build without the net module.
+    let net_text = INSTALLED.iter().find(|(f, _)| *f == "net-rally.json");
+    let net_text = net_text.map(|(_, t)| t.to_string());
+    let checks = json!(["net.rollback", "net.desync", "net.budget"]);
+    if let Some(row) = out.iter_mut().find(|r| r.entry["name"] == json!("net@1")) {
+        row.entry["check_kinds"] = checks;
+        row.entry["example"] = json!(net_text.as_deref().map(|t| sha256_hex(t.as_bytes())));
+        row.example = net_text;
+    } else if !named.iter().any(|n| n == "net@1") {
+        named.push("net@1".into());
+        push("net@1".into(), "net".into(), None, &mut out);
+        if let Some(e) = out.last_mut().map(|r| &mut r.entry) {
+            e["available"] = json!(false);
+            e["code"] = json!("module_missing");
+            e["check_kinds"] = checks;
+            e["kit"] =
+                json!({"verdict": "BLOCKED", "rules": [{"rule": "sealed", "verdict": "BLOCKED"}]});
         }
     }
     if drawn_by("scene3d") {
@@ -1144,8 +1177,10 @@ pub fn dump_value(sealed: &Sealed, planted: Option<Planted>) -> Value {
                     let mut d = json!({"name": e["name"], "registry": r["name"], "origin": e["origin"],
                                        "since": e["since"], "stability": e["stability"], "digest": e["digest"],
                                        "fields": fields});
-                    if let Some(m) = e.get("migrations") {
-                        d["migrations"] = m.clone();
+                    for k in ["migrations", "paths"] {
+                        if let Some(m) = e.get(k) {
+                            d[k] = m.clone();
+                        }
                     }
                     d
                 })
@@ -1156,6 +1191,8 @@ pub fn dump_value(sealed: &Sealed, planted: Option<Planted>) -> Value {
     let mut out = l.header;
     out["format"] = json!("kinds.dump@1");
     out["registries"] = json!(rows);
+    // #2777: every list of words a document sets that the build seals, with its closure.
+    out["field_lists"] = json!(sealed.lists.iter().map(|l| l.to_json()).collect::<Vec<_>>());
     out
 }
 

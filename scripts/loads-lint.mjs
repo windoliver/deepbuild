@@ -1,10 +1,11 @@
 // The loads lint (#1830): since #1555 scripts/benchmark.mjs's judgeLimit reads INCONCLUSIVE when a call gives no
 // `loads`, the one-minute load at each run's start and end, so a timing suite that leaves them out reads INCONCLUSIVE on
-// every machine. Under tests/acceptance, each call of judgeLimit with an object argument (by name, through a module, through
-// a variable holding it, or inside a string of code a suite runs in a child) must give `loads`; a spread in the object may
-// carry it. One `FAIL loads: <path>:<line>: ...` line per call that gives none, or one `PASS loads` line; exit 1 on a
-// finding. Planted copies of scripts/ under a twins/ folder aren't suites, and an original whose blind redraft has landed
-// (scripts/lanes.mjs `redrafted`) runs by hand only. `--root <dir>` checks another checkout.
+// every machine. Under tests/acceptance and benchmarks/ (whose judges call it too, #2870), each call of judgeLimit with an
+// object argument (by name, through a module, through a variable holding it, or inside a string of code a suite runs in a
+// child) must give `loads`; a spread in the object may carry it. One `FAIL loads: <path>:<line>: ...` line per call that
+// gives none, or one `PASS loads` line; exit 1 on a finding. Planted copies of scripts/ under a twins/ folder aren't suites,
+// and an original whose blind redraft has landed (scripts/lanes.mjs `redrafted`) runs by hand only. `--root <dir>` checks
+// another checkout, which may have no benchmarks/.
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join, relative, sep } from 'node:path';
@@ -67,7 +68,8 @@ const lineOf = (source, position) => source.getLineAndCharacterOfPosition(positi
 const count = (text, word) => text.split(word).length - 1;
 
 const findings = [];
-for (const path of files(join(root, 'tests', 'acceptance'))) {
+const benchmarks = join(root, 'benchmarks');
+for (const path of [...files(join(root, 'tests', 'acceptance')), ...(existsSync(benchmarks) ? files(benchmarks) : [])]) {
   const name = relative(root, path).split(sep).join('/');
   if (redrafted[name] && existsSync(join(root, redrafted[name]))) continue;
   const text = readFileSync(path, 'utf8');

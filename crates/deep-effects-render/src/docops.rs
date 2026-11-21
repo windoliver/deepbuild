@@ -61,6 +61,13 @@ pub struct Hooks {
     pub steps_per_frame: bool,
     /// #252: a carried output's ring keeps a checkpoint every `every` steps and never thins.
     pub keeps_every_checkpoint: bool,
+    /// #1993: a stepped operator's channel inputs read the frame's time, not their step's.
+    pub live_inputs: bool,
+    /// #1993: every second carried output's checkpoint is copied a step after the others'.
+    pub alternate_checkpoints: bool,
+    /// #1993: after a lost device the carried state starts from its clear value at the step the
+    /// frame shows, in place of being stepped again from the start.
+    pub restore_from_clear: bool,
 }
 
 /// One iterate step of a pass operator: its body's pipeline and its two ping-pong targets.
@@ -404,6 +411,8 @@ pub struct DocOps {
 /// ahead of it, `CHUNK` steps to a command buffer (#252).
 const IN_FRAME: u64 = 4;
 const CHUNK: u64 = 32;
+/// The steps a frame runs while the carried state is rebuilt after a lost device (#1993).
+const REBUILD: u64 = 64;
 
 /// No timer: work that writes its own timestamps, or runs outside a frame's marks.
 pub struct Untimed;
@@ -436,37 +445,107 @@ fn submit(device: &Device, parts: Vec<Part>) {
     device.queue.submit([enc.finish()]);
 }
 
-/// One carried storage output (#252; canvas primitives: Carried state; Checkpoint ring): its
-/// current state is the operator's storage buffer; `prev` the copy the previous step left, which
-/// a `step: previous` read binds; and its ring of checkpoints, each a GPU copy of the state after
-/// its step, spaced `spacing` steps apart, the spacing doubling whenever the ring passes its
-/// budget.
+/// What a carried output holds: a storage buffer, or a 2D texture (#1993).
+#[derive(Clone)]
+enum Held {
+    Buffer(wgpu::Buffer),
+    Texture(wgpu::Texture),
+}
+
+impl Held {
+    /// One more of its size, to copy it into and back from.
+    fn like(&self, d: &deep_gpu::counted::Wgpu, label: &str) -> Held {
+        match self {
+            Held::Buffer(b) => Held::Buffer(d.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(label),
+                size: b.size(),
+                usage: wgpu::BufferUsages::STORAGE
+                    | wgpu::BufferUsages::COPY_SRC
+                    | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            })),
+            Held::Texture(t) => Held::Texture(d.create_texture(&wgpu::TextureDescriptor {
+                label: Some(label),
+                size: t.size(),
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: t.format(),
+                usage: wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_SRC
+                    | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            })),
+        }
+    }
+
+    /// The copy of it into `to`, among a step's dispatches.
+    fn copy_to(&self, to: &Held) -> Part {
+        match (self, to) {
+            (Held::Texture(from), Held::Texture(to)) => {
+                Part::StepCopyTexture(from.clone(), to.clone())
+            }
+            (Held::Buffer(from), Held::Buffer(to)) => Part::StepCopy(from.clone(), to.clone()),
+            _ => unreachable!("a carried output's copies are of its own kind"),
+        }
+    }
+}
+
+/// One carried output (#252; #1993 for a texture; canvas primitives: Carried state; Checkpoint
+/// ring): its current state is the operator's storage buffer or texture; `prev` the copy the
+/// previous step left, which a `step: previous` read binds; and its ring of checkpoints, each a
+/// GPU copy of the state after its step, spaced `spacing` steps apart, the spacing doubling
+/// whenever the ring passes its budget.
 struct Carried {
     item: String,
     output: String,
-    prev: wgpu::Buffer,
+    prev: Held,
     bytes: u64,
     carry: graph::Carry,
     spacing: u64,
-    ring: Vec<(u64, wgpu::Buffer)>,
+    ring: Vec<(u64, Held)>,
 }
 
 impl Carried {
     fn held(&self) -> u64 {
         self.ring.len() as u64 * self.bytes
     }
+}
 
-    /// Thins the ring until it fits its budget: the spacing doubles and the checkpoints off it
-    /// go; a state larger than the budget keeps none.
-    fn thin(&mut self) {
-        if self.bytes > self.carry.budget {
-            self.ring.clear();
-            return;
+/// One operator's carried outputs are checkpointed together (#1993): they start on one spacing,
+/// the widest any of them declares.
+fn space_together(carried: &mut [Carried]) {
+    for k in 0..carried.len() {
+        let widest = carried
+            .iter()
+            .filter(|c| c.item == carried[k].item)
+            .map(|c| c.spacing)
+            .max();
+        carried[k].spacing = widest.unwrap_or(1);
+    }
+}
+
+/// Thins the rings until each fits its budget: the spacing doubles and the checkpoints off it
+/// go, for every carried output of an operator one of whose rings passed its budget (#1993), so
+/// they hold the same steps; an operator with a state larger than its budget keeps none.
+fn thin_together(carried: &mut [Carried]) {
+    let items: BTreeSet<String> = carried.iter().map(|c| c.item.clone()).collect();
+    for item in items {
+        let over = |c: &Carried| c.item == item && c.held() > c.carry.budget;
+        if carried
+            .iter()
+            .any(|c| c.item == item && c.bytes > c.carry.budget)
+        {
+            for c in carried.iter_mut().filter(|c| c.item == item) {
+                c.ring.clear();
+            }
         }
-        while self.held() > self.carry.budget {
-            self.spacing *= 2;
-            let spacing = self.spacing;
-            self.ring.retain(|(s, _)| s % spacing == 0);
+        while carried.iter().any(over) {
+            for c in carried.iter_mut().filter(|c| c.item == item) {
+                c.spacing *= 2;
+                let spacing = c.spacing;
+                c.ring.retain(|(s, _)| s % spacing == 0);
+            }
         }
     }
 }
@@ -478,6 +557,10 @@ struct Stepping {
     carried: Vec<Carried>,
     at: Option<u64>,
     restored: Option<(u64, u64)>,
+    /// After a lost device (#1993): the state is being stepped again from the start, across
+    /// frames; and whether the last frame planned drew before it reached that frame's step.
+    rebuilding: bool,
+    behind: bool,
 }
 
 /// The issue a rejected pipeline raises, naming its canvas module, operator and item, with the
@@ -522,6 +605,7 @@ fn scale_of(size: &Size) -> f64 {
 }
 
 mod methods;
+mod stepping;
 
 /// A blit bound, to record.
 pub struct Blit {
@@ -561,9 +645,12 @@ enum Part {
     Pre(Arc<Pre>),
     Plan(Arc<Plan>),
     Mips(Arc<Chain>),
-    /// A copy or a clear among a stepped operator's dispatches, recorded in their order (#252).
+    /// A copy or a clear among a stepped operator's dispatches, recorded in their order (#252;
+    /// #1993 for a texture).
     StepCopy(wgpu::Buffer, wgpu::Buffer),
     StepClear(wgpu::Buffer),
+    StepCopyTexture(wgpu::Texture, wgpu::Texture),
+    StepFill(Arc<Fill>),
 }
 
 /// One operator's run, bound, to record into the frame's encoder: its clears, then its passes,
@@ -695,6 +782,12 @@ impl Rec {
                 Part::Mips(c) => c.record(encoder),
                 Part::StepCopy(from, to) => encoder.copy_buffer_to_buffer(from, 0, to, 0, None),
                 Part::StepClear(b) => encoder.clear_buffer(b, 0, None),
+                Part::StepCopyTexture(from, to) => encoder.copy_texture_to_texture(
+                    from.as_image_copy(),
+                    to.as_image_copy(),
+                    from.size(),
+                ),
+                Part::StepFill(f) => f.record(encoder),
                 _ => {}
             }
         }

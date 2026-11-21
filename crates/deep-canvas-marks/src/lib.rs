@@ -11,6 +11,7 @@
 //! gradients on fills and strokes ([`paint`]), soft masks and each item's adjust, with the module's
 //! own check ([`check`]).
 
+pub mod animated;
 pub mod animator;
 pub mod arrays;
 pub mod atlas;
@@ -51,6 +52,9 @@ pub mod print;
 pub mod relations;
 pub mod runs;
 pub mod scene;
+// Issue #1498: where a text's graphemes are drawn, for a text selection.
+pub mod select;
+pub mod shadow;
 pub mod story;
 pub mod terrain;
 pub mod ticks;

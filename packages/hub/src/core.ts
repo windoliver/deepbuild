@@ -13,7 +13,7 @@ import { openAsks, signInSignature, type Asks } from '@deepbuild/asks';
 import { openLedger, type Ledger } from '@deepbuild/budget';
 import { canonicalize, contextBoundFor, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type EvidenceStore } from '@deepbuild/evidence';
-import { openExtensionHost, openTrust, type ExtensionHost, type ProjectTrust } from '@deepbuild/extension-host';
+import { openExtensionHost, openTrust, type ExtensionHost, type ProjectTrust, type ReleaseEntry } from '@deepbuild/extension-host';
 import { openRecord, RecordError, type Connection, type EventInput, type Message, type RecordStore } from '@deepbuild/record';
 import type { DecisionsProvider } from './decisions-port.js';
 import type { EnvironmentProvider, ComposeResource } from './environment-port.js';
@@ -39,6 +39,7 @@ import { PromptItems } from './prompt-items.js';
 import { SizeScope } from './scope.js';
 
 import { Holds } from './holds.js';
+import { HandlerFailures } from './handler-failures.js';
 import { Spool } from './spool.js';
 
 import { Questions } from './questions.js';
@@ -50,9 +51,8 @@ import { continueLine, fit, type Part } from './context-fit.js';
 
 import { briefing, headOf, loadsOf } from './session-facts.js';
 
-import { GateRunner } from './gate-runner.js';
+import { GateRunner, type KeptRow } from './gate-runner.js';
 import { Siblings } from './siblings.js';
-import type { KeyFacts } from './shared-runs.js';
 import { groupUnder } from './children.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
 import { OWNER, People, scopeOf } from './people.js';
@@ -62,7 +62,7 @@ import { Teardowns } from './teardowns.js';
 import { Agents, type Sync } from './agents.js';
 import { Box } from './box.js';
 import { NEWER_SET, OLDER_SET } from './status.js';
-import { aboutCall, aboutPermission } from './standing.js';
+import { aboutPermission, decide } from './standing.js';
 import { Channels } from './channels.js';
 import type { WorkspacesProvider, WorkspaceService } from './workspaces-port.js';
 import { Devices } from './trusted.js';
@@ -260,6 +260,8 @@ export class Core {
   private chain: Promise<unknown> = Promise.resolve();
   /** Whether the start has finished: from then on, work waiting for it joins the queue at once. */
   private opened = false;
+  /** Whether the start failed: nothing is replayed then, and the spool waits for the next start (#2783). */
+  private unstarted = false;
   private blocked: string | undefined;
   /** The hub's lock file was removed or replaced under it (#909): appends stop for good, so `blocked` never clears. */
   private lost = false;
@@ -304,6 +306,8 @@ export class Core {
    * next clean run (#909): one blip reads apart from a job that has failed for an hour.
    */
   private readonly jobs = new Map<string, { failures: number; since: number; at: number; error: string } | null>();
+  /** What a hook handler's failures leave on the record (#2402). */
+  private readonly handlerFailures = new HandlerFailures({ appendCore: (kind, data, extra, who) => this.appendCore(kind, data, extra, who), appendReading: (session, agent, reading) => this.appendReading(session, agent, reading) });
   private stopping = false;
   private replaying: Promise<unknown> | undefined;
   /** Only the drops-post-tool-use and replay-appends-twice plants read them. */
@@ -355,7 +359,7 @@ export class Core {
     this.flags = new SessionFlags({ services: lazyServices({ record: () => this.record, now: () => this.now, asks: () => this.asks, agents: () => this.agents, root: () => this.root, siblings: () => this.siblings, transcriptReader: () => this.transcriptReader }), state: () => this.state, mcp: () => this.mcp, events: { append: (connection, input, backfill) => this.append(connection, input, backfill), connection: (writer, extra) => this.connection(writer, extra) }, schedule: { queue: (work, starting) => this.queue(work, starting) }, readCodexTrust: (cwd) => this.readCodexTrust(cwd) });
     this.canvasSide = new HubCanvas({
       root: rootOf(options.root), now: () => this.now(), plant: options.plant, doneSpec: this.doneSpec,
-      record: () => this.record, store: () => this.store, libraries: () => this.libraries, sessions: () => this.state.sessions,
+      record: () => this.record, store: () => this.store, libraries: () => this.libraries, sessions: () => this.state.sessions, extensions: () => this.extensions,
       evidence: { stored: (put, what) => this.control.stored(put, what) },
       events: { append: (connection, input) => this.append(connection, input), connection: (writer, extra) => this.connection(writer, extra), agentConnection: (session) => this.mcp.agentConnection(session) },
       agentAbove: (peer) => this.state.agentAbove(peer),
@@ -570,7 +574,9 @@ export class Core {
         if (spec.kind === 'review') {
           const head = this.gate.snapshotOf(run.claim) ?? run.commit;
           const since = of.pr ? await this.reviewRounds.since(of.pr, run.claim) : null;
-          const { round, ...result } = await (await this.checkKinds()).run({ ...spec, head, since } as CheckSpec, { checkout: join(this.root.dir, 'objects'), deadline, now: this.now }, of);
+          // The rules page's text-only rules in scope of the diff go in the run's request from the hub (#1512).
+          const rules = await this.memory.reviewRules(join(this.root.dir, 'objects'), this.judging.claimFolder(run.claim), spec as unknown as { base: string }, since?.commit, head, (cwd) => this.judging.projectTrusted(cwd));
+          const { round, ...result } = await (await this.checkKinds()).run({ ...spec, head, since, rules } as CheckSpec, { checkout: join(this.root.dir, 'objects'), deadline, now: this.now }, of);
           if (round && of.pr && run.commit === head) await this.reviewRounds.read(of.pr, run.claim, head, round);
           return result;
         }
@@ -579,7 +585,7 @@ export class Core {
     });
     // Check implementations load for a claim or a kinds listing, never for the first session or tool hook.
     this.reviewRounds = new ReviewRounds({ outcomes: this.providers.checks.reviewOutcomes, raw: this.raw, appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), objects: join(this.root.dir, 'objects') });
-    this.checkKinds = this.providers.checks.kinds({ host: () => this.host, supervisor: () => this.supervisor, checkouts: () => this.checkouts, store: join(this.root.dir, 'objects'), submit: (spec) => this.runner.submit(spec), wait: (job) => this.runner.wait(job), cancel: (job) => this.runner.cancel(job), plant: options.plant, extensions: () => this.extensions });
+    this.checkKinds = this.providers.checks.kinds({ host: () => this.host, supervisor: () => this.supervisor, checkouts: () => this.checkouts, store: join(this.root.dir, 'objects'), submit: (spec) => this.runner.submit(spec), wait: (job) => this.runner.wait(job), cancel: (job) => this.runner.cancel(job), plant: options.plant, extensions: () => this.extensions, evidence: this.root.evidence });
     this.replicas = new Replicas({ folder: join(this.root.dir, 'replicas'), now: this.now, leases: () => this.leases, plant: options.plant });
     this.numbers = new Numbers({
       raw: this.raw, now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
@@ -590,7 +596,7 @@ export class Core {
       evidence: (sha) => this.store.read(sha).catch(() => null),
     });
     this.ready = this.init();
-    this.ready.then(() => { this.opened = true; }, () => undefined);
+    this.ready.then(() => { this.opened = true; }, () => { this.unstarted = true; });
     // A start that fails stops nothing else; each call then reports why.
     this.ready.catch(() => undefined);
   }
@@ -619,7 +625,9 @@ export class Core {
     if (process.env.DEEP_HUB_TEST_CRASH) this.record = crashing(this.record, process.env.DEEP_HUB_TEST_CRASH);
     if (process.env.DEEP_HUB_TEST_READS) this.record = readsLogged(this.record, process.env.DEEP_HUB_TEST_READS);
     // Every append reaches the stream, whoever appends it: the hub, the asks core, the supervisor or the leases.
-    this.record = streamed(this.record, ({ kind, subject, data }, connection) => {
+    this.record = streamed(this.record, (input, connection) => {
+      const { kind, subject, data } = input;
+      this.canvasSide.appended(input);
       this.log.stream();
       if (kind !== 'session.state' && kind !== 'row.set') {
         // The next state pass reads the sessions appended to since the last; an event of no session, every session.
@@ -672,9 +680,10 @@ export class Core {
     });
     await this.delivery.continues();
     this.askingSoon();
-    // The results every session's claims share (#1018): each kept run's key, from its finish, read once at start.
-    const kept = (await this.record.raw(`SELECT data FROM events WHERE kind = 'run.finished' AND json_extract(data, '$.key') IS NOT NULL ORDER BY log_pos`)) as { data: string }[];
-    this.gate.kept(kept.map((row) => JSON.parse(row.data) as { run: string; check: string; outcome: string; tests_run: number; findings: string[]; evidence: string[]; key: KeyFacts }));
+    // The results every session's claims share (#1018): each kept run's key, from its finish, read once at start, a row
+    // at a time and each parsed as the runner takes it, so the start never holds them all (#2652).
+    const kept = this.record.rows(`SELECT data FROM events WHERE kind = 'run.finished' AND json_extract(data, '$.key') IS NOT NULL ORDER BY log_pos`) as Iterable<{ data: string }>;
+    this.gate.kept((function* () { for (const row of kept) yield JSON.parse(row.data) as KeptRow; })());
     // Every second, once an open ask's deadline has passed, the asks core takes its default (showing it first if it
     // hadn't shown), so no ask waits on a read; once a stop or a verdict landed, or while a task waits on its check,
     // it reads them for the task, the continue or the resume they call for (#85). With nothing due it reads nothing,
@@ -848,6 +857,8 @@ export class Core {
     this.runner = await openRunner({
       record: this.record, asks, supervisor: this.supervisor, ledger, now: this.now, root: this.root.dir, loginPath: config.loginPath, env: process.env, keychain,
       settings: { plan: { reserve_pct: config.reservePct }, asks: { unblock: { deadline_ms: 2 * DAY } } },
+      // #2650's planted runner, selected with the hub's variable.
+      ...(this.options.plant === 'churn-keeps-every-output' ? { plant: this.options.plant } : {}),
     });
     this.sessionStarts = new Starts({
       credentials: this.providers.forge,
@@ -885,13 +896,19 @@ export class Core {
       sendBack: (r) => this.delivery.landingSendBack(r),
       appendCore: (kind, data, extra) => this.appendCore(kind, data, extra),
     });
-    // #1922's planted hosts build a tool's digest wrongly: the host's plants, selected with the hub's variable.
-    const plant = this.options.plant?.startsWith('job-build-') ? { plant: this.options.plant as 'job-build-entry-only' } : {};
-    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite'),
+    // #1922's planted hosts build a tool's digest wrongly, #2650's keep what they finished, and #2402's never clears a
+    // handler's failures: the host's plants, selected with the hub's variable.
+    const plant = this.options.plant?.startsWith('job-build-') ? { plant: this.options.plant as 'job-build-entry-only' }
+      : this.options.plant === 'churn-keeps-every-answer' || this.options.plant === 'churn-keeps-every-result' || this.options.plant === 'churn-keeps-every-name-set' || this.options.plant === 'failures-never-cleared' ? { plant: this.options.plant } : {};
+    // No package is in the hub's own release yet; a test may hand it one, which then loads in the hub (#2402).
+    const release = this.options.release ? (JSON.parse(readFileSync(this.options.release, 'utf8')) as ReleaseEntry[]) : [];
+    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release, now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite'),
       // A check runner's reads and plays of a canvas piece (#411, #184): the hub's canvas core, and a replica playing the
       // revision's canonical document, its programs from the evidence store. A job kind's qualification by the core
       // (#518) goes the same way, with the tools it names in the world.
-      canvas: (call) => this.canvasSide.qualifyTool(call), replica: (call) => this.play(call), ...plant });
+      canvas: (call) => this.canvasSide.qualifyTool(call), replica: (call) => this.play(call), ...plant, ...(this.options.safe ? { safe: true } : {}),
+      // Nothing in the hub records its source calls, so it keeps no answer (#2650).
+      recording: false });
     this.jobKinds = new Jobs({
       root: this.root.dir, now: this.now, host: () => this.extensions, plant: this.options.plant,
       keep: async (bytes, source) => (await this.control.stored(await this.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind: 'file', source, redaction: 'complete', license: { name: 'job output', allows: [] } }), `a job output from ${source}`)).sha256,
@@ -912,8 +929,9 @@ export class Core {
     for (const pkg of await extensions.installed()) {
       // One installed by a hub that ran no conformance at install has no kept result: it runs now, once, so the
       // package loads from its result at this start and each later one, as one installed since #785 does. A check
-      // that can't run (an untrusted project) is left to the load's refusal, which names it.
-      if (!extensions.checked(pkg)) await extensions.check(pkg).catch(() => undefined);
+      // that can't run (an untrusted project) is left to the load's refusal, which names it. In safe mode none runs:
+      // a check runs the package's code, and the load is refused anyway (#1879).
+      if (!this.options.safe && !extensions.checked(pkg)) await extensions.check(pkg).catch(() => undefined);
       const load = await extensions.load(pkg);
       if (load.status === 'refused') process.stderr.write(`deep hub: extension ${pkg.id}@${pkg.version} not loaded: ${load.reason}\n`);
       // One installed before panel@1 ran at install has no kept verdict for its views: they run now, once.
@@ -1266,7 +1284,8 @@ export class Core {
    * replayed then, beside the hooks that follow, rather than at the next start.
    */
   private replayLate(kept = false): void {
-    if (this.stopping) return;
+    // A start that failed leaves the spool where it is: asking again would find it again, without end (#2783).
+    if (this.stopping || this.unstarted) return;
     if (this.replaying) {
       this.retake ||= kept;
       return;
@@ -1800,7 +1819,7 @@ export class Core {
       // The lone-command hook retains its #83 reading; joined calls use the branch lookup.
       if (draft.kind === 'tool.after') await this.delivery.prAfter(meta, data.command);
       if (draft.kind === 'session.start') {
-        data.loads = await loadsOf(meta.cwd).catch(() => []);
+        data.loads = await loadsOf(meta.cwd, live.agent ?? meta.agent).catch(() => []);
         if (!foreign) void this.control.enteredProject(meta.session, meta.cwd);
         // Each server's tool list, read off this hook's path: recorded after the start, its changes held for you.
         if (!foreign && session) void this.holds.listed(meta.session, live.agent, meta.cwd).catch((error: unknown) => process.stderr.write(`deep hub: tool lists for ${meta.session} not recorded: ${error instanceof Error ? error.message : String(error)}\n`));
@@ -2220,9 +2239,9 @@ export class Core {
       const staged = await this.staging.gate(meta, call, true);
       if (staged.held) return staged;
     }
-    // A dependency or a cloud resource the plan doesn't name: answered by your standing rule, or asked (#23).
-    const about = call.decided?.length && call.command ? aboutCall(call.decided, call.command, homedir()) : undefined;
-    return about ? this.holds.decide(meta, about) : {};
+    // A dependency or a cloud resource the plan doesn't name: answered by your standing rule, or asked (#23); a dependency
+    // with its registry's reading, and a package run straight from one isn't asked once it's a week old (#1509).
+    return decide({ holds: this.holds, covered: (s, a) => this.delivery.covered(s, a), now: () => this.now(), reading: (s, a, t) => this.appendReading(s, a, t), registry: this.options.registry, plant: this.options.plant }, meta, call);
   }
   /** The session is on `display` once its switch ran, if that is a screen it leases. */
   private async switched(session: string, display: string): Promise<void> {
@@ -2511,9 +2530,11 @@ export class Core {
     const claim = unjudged ? undefined : live?.claim ?? (await newestClaim(this.raw, meta.session).then((id) => (id ? `claim:${id}` : undefined)));
     const state = claim ? await this.judging.stateOf(claim) : undefined;
     const [stop] = (await this.record.raw(`SELECT MAX(ts) AS at FROM events WHERE session_id = ? AND kind = 'agent.stop' AND json_extract(data, '$.child') IS NULL`, [meta.session])) as { at: number | null }[];
-    // The list's one count (#1463): its ask rows, as deep and the app count them.
+    // The list's one count (#1463, #1810): its ask rows, as deep and the app count them. #1810's planted reader counts
+    // an ask that took its default, which can still be undone, as open too.
     await this.state.statesSettled();
-    const needsYou = [...this.state.rows.keys()].filter((id) => id.startsWith('ask:')).length;
+    const defaulted = this.options.plant === 'needs-you-counts-defaulted' ? Number(((await this.record.raw(`SELECT COUNT(*) AS n FROM asks WHERE status = 'defaulted'`)) as { n: number }[])[0]?.n ?? 0) : 0;
+    const needsYou = [...this.state.rows.keys()].filter((id) => id.startsWith('ask:')).length + defaulted;
     return statusAnswer(state, { session: meta.session, agent: live?.agent ?? meta.agent, worktree: live?.cwd || meta.cwd, needsYou, now: this.now(), lastStop: stop?.at ?? null, state: claim ? undefined : live?.state });
   }
 
@@ -2558,12 +2579,15 @@ export class Core {
   /**
    * The extensions' joined reply to a tool.before, or null when it takes the hook's fail-open policy: while appends
    * fail every gate is watch-only, and the extensions' denies and context go with them. A handler that failed is
-   * named on stderr; its reply is already out of the join.
+   * named on stderr; its reply is already out of the join. Its failure, a set-aside and the reading of a session it
+   * would have judged go on the record after the reply (#2402).
    */
-  async extensionHook(data: unknown): Promise<ExtensionReply | null> {
+  async extensionHook(data: unknown, meta: { id?: string; session?: string; agent?: string } = {}): Promise<ExtensionReply | null> {
     if (this.blocked || !this.extensions) return null;
     const reply = await this.extensions.hook({ kind: 'tool.before', data, deadline: EXTENSION_HOOK_MS, bound: contextBoundFor(EXTENSION_HOOK_MS) });
     for (const { reason } of reply.failed) process.stderr.write(`deep hub: tool.before handler failed: ${reason}\n`);
+    const call = isObj(data) && typeof data.call === 'string' ? data.call : meta.id ?? 'unknown';
+    if (reply.failed.length || reply.aside) void this.queue(() => this.handlerFailures.note('tool.before', reply, call, meta.session, meta.agent)).catch(() => undefined);
     return { denies: reply.denies, context: reply.context };
   }
 
@@ -2572,7 +2596,9 @@ export class Core {
     const reading = `deep-hook let ${meta.event} ${meta.id} through as late, after the hub's answer missed its deadline; `
       + (matched.length ? `it matched ${matched.join(', ')}` : 'it matched no guard entry');
     // The ID is a ULID (checked before this is called), so it goes into the query as it is.
-    const known = await this.record.raw(`SELECT 1 FROM events WHERE kind = 'session.reading' AND instr(json_extract(data, '$.reading'), ?) > 0 LIMIT 1`, [meta.id]);
+    // The reading is its session's, after the call's own event: found from that event's ID, not among every reading (#1868).
+    const known = await this.record.raw(`SELECT 1 FROM events WHERE session_id = ? AND log_pos > COALESCE((SELECT log_pos FROM events WHERE id = ?), 0)
+      AND kind = 'session.reading' AND instr(json_extract(data, '$.reading'), ?) > 0 LIMIT 1`, [meta.session, meta.id, meta.id]);
     if (known.length) return;
     await this.appendReading(meta.session, meta.agent, reading);
   }
@@ -2636,7 +2662,7 @@ export class Core {
     // Each worktree's stack goes down with the hub, through the supervisor.
     await this.stacks.close();
     // Each running job is stopped through the supervisor; one still stopping is reaped on the next start.
-    const jobs = await this.runner.list().catch(() => [] as JobRecord[]);
+    const jobs = await this.runner.recent().catch(() => [] as JobRecord[]);
     await Promise.race([Promise.allSettled(jobs.filter((j) => j.state === 'running' || j.state === 'waiting').map((j) => this.runner.cancel(j.job))), new Promise((done) => setTimeout(done, 5000))]);
     await this.runner.close();
     await this.runs.settled();

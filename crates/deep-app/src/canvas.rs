@@ -18,8 +18,8 @@ use gpui_shell::{
 };
 use serde_json::{json, Value};
 
-pub const COMPONENT: &str = "Canvas";
-pub const SCENE: &str = "CanvasScene";
+pub const COMPONENT: &str = "Canvas"; // copy-exception: the script API's component name
+pub const SCENE: &str = "CanvasScene"; // copy-exception: the script API's state name
 
 thread_local! {
     static DRAWN: RefCell<BTreeMap<String, Value>> = const { RefCell::new(BTreeMap::new()) };
@@ -31,6 +31,7 @@ pub fn clear_items() {
     DRAWN.with(|drawn| drawn.borrow_mut().clear());
     PLACED.with(|placed| placed.borrow_mut().clear());
     crate::views::forget_drawn();
+    crate::show::forget_placed();
 }
 
 /// The items drawn since [`clear_items`], by ID, with their evaluated values.
@@ -167,15 +168,15 @@ pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
         StateDescriptor::new(SCENE, SCENE, Vec::new(), |_, _, cx| {
             Ok(Box::new(cx.new(|_| Scene::default())))
         })
-        .with_documentation("The items a Canvas draws, by ID, kept across renders.")
+        .with_documentation("The items a Canvas draws, by ID, kept across renders.") // copy-exception: the script API's documentation, for panel authors
         .with_methods(vec![StateMethodDescriptor::new::<Entity<Scene>>(
             "set",
-            "set(id: string, values: number[]): void",
+            "set(id: string, values: number[]): void", // copy-exception: the script API's signature
             |scene, arguments, _, cx| {
                 let [ComponentDataValue::String(id), ComponentDataValue::Array(values)] = arguments
                 else {
                     anyhow::bail!(
-                        "CanvasScene.set(id, values) expects an id and a list of numbers"
+                        "CanvasScene.set(id, values) expects an id and a list of numbers" // copy-exception: a script error, for panel authors
                     );
                 };
                 let values = values
@@ -183,7 +184,7 @@ pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
                     .map(|value| match value {
                         ComponentDataValue::Number(number) => Ok(*number),
                         other => Err(anyhow::anyhow!(
-                            "CanvasScene.set: {other:?} is not a number"
+                            "CanvasScene.set: {other:?} is not a number" // copy-exception: a script error, for panel authors
                         )),
                     })
                     .collect::<anyhow::Result<Vec<f64>>>()?;
@@ -220,7 +221,7 @@ pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
                     _ => Err("Canvas(scene, color?) expects a CanvasScene".into()),
                 },
             )])
-            .with_documentation("Draws a CanvasScene's items as lines."),
+            .with_documentation("Draws a CanvasScene's items as lines."), // copy-exception: the script API's documentation, for panel authors
     )?;
     Ok(())
 }

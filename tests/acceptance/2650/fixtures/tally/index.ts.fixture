@@ -1,0 +1,38 @@
+// The test tally plug-in (#2650 AC3): one change action whose every run can be told apart, and two reads.
+// - add (change, changes ext.tally.mark): returns { output, report }, the output { run, token, n }: `run` counts the
+//   handler's runs in this load and `token` is new at each run, so a call that ran again never returns the first
+//   call's output. It writes nothing, so 10,000 calls add no store item to the record.
+// - marks (read, reads ext.tally.mark): how many items the store holds.
+// - runs (read): how many times add ran in this load.
+import { randomUUID } from 'node:crypto';
+
+const MARK = 'ext.tally.mark';
+const strict = (properties: Record<string, unknown>) => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
+
+export default async function (deep: any): Promise<void> {
+  await deep.store(MARK, { generation: 1, schema: strict({ n: { type: 'integer' } }) });
+  let runs = 0;
+
+  deep.registerAction('ext.tally.add', {
+    declares: 'change',
+    changes: [MARK],
+    input: strict({ n: { type: 'integer' } }),
+    output: strict({ run: { type: 'integer' }, token: { type: 'string' }, n: { type: 'integer' } }),
+  }, async (input: { n: number }) => {
+    runs++;
+    return { output: { run: runs, token: randomUUID(), n: input.n }, report: { verified: true, checked: `run ${runs} of add` } };
+  });
+
+  deep.registerAction('ext.tally.marks', {
+    declares: 'read',
+    reads: [MARK],
+    input: strict({}),
+    output: strict({ marks: { type: 'integer' } }),
+  }, async () => ({ marks: ((await deep.store.list(MARK)) as unknown[]).length }));
+
+  deep.registerAction('ext.tally.runs', {
+    declares: 'read',
+    input: strict({}),
+    output: strict({ add: { type: 'integer' } }),
+  }, async () => ({ add: runs }));
+}

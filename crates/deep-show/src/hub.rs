@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use deep_canvas::document::{
-    canonical_in, check_costed, check_packed, Expansion, Issue, Notice, PackPlanted, Packs,
+    canonical_in, check_costed, check_sized, Expansion, Issue, Notice, PackPlanted, Packs,
 };
 use deep_canvas::grammar::{Time, TimeContext};
 use deep_canvas::registry::{core_name, Sealed};
@@ -46,6 +46,18 @@ const SETTLE_TIMEOUT: Duration = Duration::from_secs(2);
 /// The criteria's wrong programs, each reachable only through the scenario's `planted`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Planted {
+    /// #1415: a patch whose ops change nothing is committed as a new revision.
+    NoOpCommits,
+    /// #1415: a create of an ID the document holds replaces the item that holds it.
+    CreateOverwrites,
+    /// #1801: a refusal of a removal lists only the first row that names the removed item.
+    RefusalNamesFirstRef,
+    /// #1801: `refs_to` walks only items' parents.
+    RefsParentsOnly,
+    /// #1801: `refs_to` reads the caller's layer alone and answers as if it read the document.
+    RefsReadOneLayer,
+    /// #1801: `cost` leaves out the assets, which items share by their hash.
+    CostWithoutSharedAssets,
     /// #544: a start_on run on a logic item's occurrences starts at the first frame its session
     /// evaluates at or after the occurrence.
     StartOnAtFirstFrame,
@@ -233,6 +245,10 @@ pub enum Planted {
     MigrationRewritesChannelTargetsOnly,
     /// #1960: a writer's patch stores its items' migrated params under the major they were saved at.
     StoreMigratedParamsUnderSavedMajor,
+    /// #1962: the load drops every instance of a kind its pack's version moved.
+    LoaderDropsMovedInstances,
+    /// #1962: the load's move rewrites the kind and runs the target's steps, and carries no path.
+    MoveRewritesKindOnly,
     /// #306: a derived item's seed comes from a counter over expansion order.
     SeedsByExpansionOrder,
     /// #2015: a repeat over elements seeds each derived item with the part's element count too.
@@ -765,6 +781,10 @@ pub struct Hub<'a> {
     pub ring: crate::ring::Ring,
     /// When each revision of a document that isn't shared became current, by doc ID.
     pub shown_at: BTreeMap<String, Vec<(i64, u64)>>,
+    /// #1415: the documents whose session `close` closed.
+    pub closed: BTreeSet<String>,
+    /// #1415: the documents whose newest revision sent was refused, the last good one current.
+    pub refused: BTreeSet<String>,
     /// The messages each session was sent from an ask box, by session ID (#384).
     pub asks: BTreeMap<String, Vec<crate::ask::Asked>>,
     /// The verdicts made on each claim, in the order made, each as recorded (#403).
@@ -807,8 +827,8 @@ pub struct Hub<'a> {
     /// Who sent each document's last whole revision: a revision that arrives at a frame's latch
     /// comes from them (#856).
     pub vias: BTreeMap<String, Via>,
-    /// The times the shaper shaped each run's key in this process (#856).
-    pub shapings: HashMap<Arc<deep_text::cache::Key>, u32>,
+    /// The times the shaper shaped each paragraph's key in this process (#856, #1430).
+    pub shapings: HashMap<Arc<deep_text::cache::ShapeKey>, u32>,
     /// What answered the card: the option and the release's platform stamp (#327).
     pub card_answer: Option<(String, i64)>,
     /// #507: present mode, while it runs and after Esc ended it.
@@ -832,7 +852,7 @@ pub enum PressPhase {
 }
 
 /// The planted check's coefficients for `machine` (the hub's, or this one's): the reference
-/// Mac's on a reference Mac, and scaled by its own speed anywhere else.
+/// Mac's on a Mac of `reference-macs.json`, `scripts/benchmark.mjs`'s list, and scaled anywhere else.
 fn machine_factor(machine: Option<&Map<String, Value>>) -> f64 {
     let model = match machine.and_then(|m| m.get("model")).and_then(Value::as_str) {
         Some(m) => m.to_string(),
@@ -842,11 +862,9 @@ fn machine_factor(machine: Option<&Map<String, Value>>) -> f64 {
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .unwrap_or_default(),
     };
-    if ["Mac15,7", "Mac15,12"].contains(&model.as_str()) {
-        1.0
-    } else {
-        1.6
-    }
+    let macs = include_str!("../reference-macs.json");
+    let macs: Vec<String> = serde_json::from_str(macs).expect("the reference Macs' list parses");
+    [1.6, 1.0][usize::from(macs.contains(&model))]
 }
 
 /// The look render-back draws in: the shipped clean look, light.
@@ -918,9 +936,13 @@ impl<'a> Hub<'a> {
             migration_first_fault: scenario.planted == Some(Planted::MigrationFirstFault),
             migrate_one_major: scenario.planted == Some(Planted::MigrationOneMajor),
             migrate_zero_as_absent: scenario.planted == Some(Planted::MigrationZeroAsLeftOut),
-            migrate_params_only: scenario.planted == Some(Planted::MigrationRenamesParamsOnly),
+            migrate_params_only: matches!(
+                scenario.planted,
+                Some(Planted::MigrationRenamesParamsOnly | Planted::MoveRewritesKindOnly)
+            ),
             migrate_channels_only: scenario.planted
                 == Some(Planted::MigrationRewritesChannelTargetsOnly),
+            drops_moved: scenario.planted == Some(Planted::LoaderDropsMovedInstances),
             walk_inputs: (scenario.planted == Some(Planted::ExpandsInHashOrder))
                 .then_some(walk_in_hash_order as deep_canvas::document::packs::WalkInputs),
             // #222: the planted cue-list expander.
@@ -968,6 +990,8 @@ impl<'a> Hub<'a> {
                 ring
             },
             shown_at: BTreeMap::new(),
+            closed: BTreeSet::new(),
+            refused: BTreeSet::new(),
             asks: BTreeMap::new(),
             verdicts_made: BTreeMap::new(),
             audit_asks: BTreeMap::new(),
@@ -1336,7 +1360,7 @@ impl<'a> Hub<'a> {
     /// The record as one frame reads it: every object's state and reading.
     pub fn record(&self) -> Record {
         let mut record = Record::default();
-        for (handle, o) in &self.scenario.record {
+        for (handle, o) in self.scenario.record.iter() {
             if let Some(state) = &o.state {
                 record.states.insert(handle.clone(), state.clone());
             }
@@ -1465,11 +1489,24 @@ impl<'a> Hub<'a> {
                 deep_text::cache::scope(std::hash::Hasher::finish(&h) | 1);
             }
         }
+        // #1415: a session call its state's cell refuses is answered with the cell's code.
+        let called = crate::states::session_call(call).map(|(d, c)| (d.to_string(), c));
+        if let Some(mut refused) = called
+            .as_ref()
+            .and_then(|(d, c)| self.refused_by_state(d, *c))
+        {
+            self.stamp(&mut refused);
+            return refused;
+        }
+        let frozen = called.as_ref().map(|(d, _)| self.session_state(d));
+        let frozen = frozen == Some(crate::states::State::Frozen);
         if let Call::Show(show) = call {
             self.vias.insert(show.doc.clone(), show.via.clone());
         }
         let mut reply = match call {
             Call::Show(show) => self.show_call(show),
+            Call::Close(doc) => self.close(doc),
+            Call::SessionTable => crate::states::table(),
             Call::Mode(show, args) => {
                 self.vias.insert(show.doc.clone(), show.via.clone());
                 self.mode_show(show, args)
@@ -1547,6 +1584,9 @@ impl<'a> Hub<'a> {
             Call::Migrate(to) => self.migrate(*to),
             Call::Keys { doc, runs } => self.keys(doc, *runs),
             Call::Fingerprint => self.fingerprint_reply(),
+            Call::Footprint => {
+                json!({"reading": deep_gpu::footprint::read(deep_gpu::footprint::SYSTEM).json()})
+            }
             Call::Draw { doc, t, output } => self.draw_reply(doc, t, output),
             Call::PaddedKey { fields, seeds } => self.padded_key_reply(*fields, *seeds),
             Call::Fixtures => self.fixtures_reply(),
@@ -1615,7 +1655,7 @@ impl<'a> Hub<'a> {
                 event,
                 t,
                 gesture,
-            } => match self.piece_press(panel, event) {
+            } => match self.join_or_press(panel, event, gesture) {
                 Some(reply) => reply,
                 None => match self.ring_input(panel, event) {
                     Some(reply) => reply,
@@ -1626,7 +1666,7 @@ impl<'a> Hub<'a> {
                 },
             },
             Call::World { doc, world } => self.world_call(doc, world),
-            Call::Match { doc, steps } => self.match_call(doc, *steps),
+            Call::Net(c) => self.net_call(c),
             Call::Scope(panel) => self.scope_reply(panel),
             Call::Presented(panel) => self.presented(panel),
             Call::PopOut {
@@ -1726,6 +1766,7 @@ impl<'a> Hub<'a> {
             Call::RuntimeGolden(g) => self.golden_call(g),
             Call::Term(t) => self.term_call(t),
         };
+        self.after_session_call(called, frozen, &reply);
         for shaping in deep_text::cache::take_log() {
             *self.shapings.entry(shaping.key).or_default() += 1;
         }
@@ -1947,6 +1988,8 @@ impl<'a> Hub<'a> {
                 if self.scenario.planted == Some(Planted::ReadsWasmBytes) {
                     read_programs(&doc, &self.scenario.evidence);
                 }
+                // #1801: the meter holds each asset's bytes on the device and a mesh's vertices.
+                let sizes = self.asset_sizes(&doc);
                 let started = Instant::now();
                 let result = match self.scenario.planted {
                     Some(Planted::EstimatesOnThisMachine) => {
@@ -1957,7 +2000,7 @@ impl<'a> Hub<'a> {
                             .scaled(machine_factor(self.scenario.machine.as_ref()));
                         check_costed(&doc, &self.startup.sealed, &coefficients)
                     }
-                    _ => check_packed(&doc, &self.startup.sealed, &self.packs),
+                    _ => check_sized(&doc, &self.startup.sealed, &self.packs, &sizes),
                 };
                 let check_ms = started.elapsed().as_secs_f64() * 1000.0;
                 let timing = show.include.iter().any(|i| matches!(i, Include::Timing));
@@ -1970,6 +2013,7 @@ impl<'a> Hub<'a> {
                 blocked = self.blocked_in_claim(show, &result.notices);
                 let mut issues = crate::mixdown::score_plan::library_issues(&doc, result.issues);
                 issues.append(&mut probe_issues);
+                self.plant_axis_titles(&doc, &mut issues);
                 blocked.extend(self.missing_in_claim(show, &mut issues, &mut skipped));
                 // #488's planted check takes every sample rate from 8 to 192 kHz and refuses
                 // the rest.
@@ -2020,6 +2064,24 @@ impl<'a> Hub<'a> {
                         None
                     }
                 };
+                // #1801: an item the revision leaves out that rows still name: its refusal lists
+                // every one of them.
+                let removed: Vec<&str> = current_doc
+                    .as_ref()
+                    .and_then(|c| c.get("items")?.as_object())
+                    .into_iter()
+                    .flat_map(|items| items.keys())
+                    .filter(|id| doc["items"].get(id.as_str()).is_none())
+                    .map(String::as_str)
+                    .collect();
+                let planted = self.scenario.planted;
+                crate::shared::name_referrers(
+                    &mut issues,
+                    &doc,
+                    &removed,
+                    &self.startup.sealed,
+                    planted,
+                );
                 (Some(doc), issues, diff)
             }
         };

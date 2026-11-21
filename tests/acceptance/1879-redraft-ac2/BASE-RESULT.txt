@@ -1,0 +1,54 @@
+# #1879 criterion 2 (redraft) on the base commit 3c124dee55c22181cc716f325e9524488b8ffbb1 (main, detached; no #1879 fix)
+# 2026-11-17, Linux arm64 (aarch64), Node v24.22.0, Vitest v5.0.5, checkout already built (packages/*/dist)
+# Expected: the test PASSES. The criterion holds at the base: the hub ignores --safe and loads every installed
+# package, and this start is the one without --safe.
+# Each run: inside `systemd-run --user --scope -q -p MemoryMax=12G -p MemorySwapMax=1G`, the repo's Node first on PATH,
+# CLAUDE*, DEEP_* and VITEST* unset; 82 GB or more of memory available before it.
+# Paths: home as ~, temp folders as <tmp>.
+
+## Run 1, the README command
+## node node_modules/vitest/vitest.mjs run --root tests/acceptance/1879-redraft-ac2 --no-file-parallelism
+## started 2026-11-17T23:23:15Z, load average 117.94 127.46 103.68; ended 23:23:41Z, load average 109.87 124.74 103.40
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/base-1879-main/tests/acceptance/1879-redraft-ac2
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  15:23:16
+   Duration  25.10s (tests 99%, transform 1%)
+
+exit 0
+
+## Run 2, as the proof lanes run it: the repo's vitest.config.ts, no flag
+## node node_modules/vitest/vitest.mjs run tests/acceptance/1879-redraft-ac2
+## started 2026-11-17T23:24:00Z, load average 107.39 123.18 103.35; ended 23:24:22Z, load average 104.44 121.55 103.24
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/base-1879-main
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  15:24:02
+   Duration  19.86s (tests 98%, transform 2%)
+
+exit 0
+
+## Type check
+## node node_modules/typescript/bin/tsc -p tests/acceptance/1879-redraft-ac2/tsconfig.json
+exit 0, no output
+
+## Can it fail: a scratch run, not kept
+## A temporary copy of start.test.ts (deleted after the run) appended one comment line to the installed package's
+## index.ts between the two starts, so the second hub refused the package at its start. Run as run 2, load about 104.
+## The test failed in 11.3 s, naming the package:
+
+ × AC2 a hub started with `deep hub run` over a home with test/hello installed offers and runs its action, and names no refusal of it 11345ms
+AssertionError: the hub started without --safe did not load test/hello@1.0.0: deep-actions finds no ext.hello.greet (the hub's refusals: deep hub: extension test/hello@1.0.0 not loaded: changed since checked: its files' digest is d1:08884bbf…, and its checks ran on d1:853db8fb…): expected [] to include 'test/hello ext.hello.greet'
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+
+exit 1
+
+## Timings are from a machine at load 100 to 120; they are not a budget.

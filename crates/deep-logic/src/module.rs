@@ -14,6 +14,8 @@
 //! item that reads one is refused by the logic module's own check, as a piece without the
 //! source is.
 
+pub mod tuning;
+
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
@@ -188,7 +190,33 @@ fn register(r: &mut Registrar) {
         json!({"checks": [{"kind": "document.determinism"}], "oracles": ["seek_play"], "codes": [],
                "at_times": ["0s", "1s"], "inputs": [{"step": 20, "kind": "press", "value": 1}]}),
     )
-    .fixture_assets(vec![bytes]);
+    .fixture_assets(vec![bytes.clone()]);
+    // #2363: the module's program also supplies real array readers at frame zero.
+    // The copies, flip and mark set read the core's view, not a fabricated baked envelope.
+    // With no control read, the fixture program reads the seed at offset zero: keep it zero.
+    r.fixture("readers", json!({
+        "format": 1, "profile": "board", "title": "Array readers",
+        "description": "A counter selects a caption, a row label and a flip child.",
+        "size": [320, 200], "seed": 0, "transport": {"span": "1s"},
+        "data": {"copy": {"en": {"labels": {"0": "Ready", "missing": "Counting"}},
+                          "fr": {"labels": {"0": "Pret", "missing": "Compter"}}}},
+        "items": {
+            "counter": {"id": "counter", "kind": "logic@1", "name": "Counter", "order": "a0", "params": params},
+            "caption": {"id": "caption", "kind": "text@1", "name": "Caption", "order": "a1",
+                "params": {"text": {"copy": "labels[counter.presses]"}, "font": "body", "size": 13, "box": {"w": 200, "h": 20}}},
+            "choices": {"id": "choices", "kind": "group@1", "name": "Choices", "order": "a2",
+                "params": {"flip": {"array": "counter.presses", "map": {"0": "dot"}}}},
+            "dot": {"id": "dot", "kind": "circle@1", "name": "Dot", "order": "a3", "parent": "choices",
+                "params": {"center": [40, 60], "r": 8, "paint": {"fill": {"role": "accent"}}}},
+            "labels": {"id": "labels", "kind": "marks@1", "name": "Labels", "order": "a4",
+                "params": {"mark": "text", "n": 1, "key": "k",
+                    "columns": {"k": {"array": "counter.presses", "as": "i32", "dtype": "i32", "len": 1, "data": "AAAAAA=="},
+                                "text": {"copy": "labels", "key": "k"}},
+                    "encode": {"x": 20, "y": 100, "text": {"column": "text"}, "size": 13}}}
+        }
+    }), None).fixture_assets(vec![bytes]).sidecar(json!({
+        "checks": [{"kind": "document.validate"}], "oracles": ["analytic"], "codes": ["unknown_kind"],
+    }));
     // #548: deep_run's logic kinds (Check input: logic kinds), each on the lowered document's
     // logic items, their programs read from the assets the check names.
     r.check(
@@ -202,6 +230,17 @@ fn register(r: &mut Registrar) {
         issues(budget(d, i))
     })
     .check_report(budget);
+    // #194: a catalog's tuning rows, each moved, must each change the bake.
+    r.check("logic.tuning", "any", &["logic.tuning"], |d, i| {
+        issues(tuning(d, i))
+    })
+    .check_report(tuning);
+    r.code(
+        "logic.tuning",
+        "Moving a catalog's tuning row by a quarter leaves every step of the bake as it was: the program never reads the row, its value compiled in.",
+        "Read the value from the catalog's tuning row at init, by its name's hash, and use what you read.",
+        false,
+    );
     r.code(
         "logic.determinism",
         "Seeking a logic item doesn't equal playing it: a step or full-state hash, an array or a continuation probe differs.",
@@ -300,11 +339,31 @@ fn rate(doc: &Value) -> Option<i64> {
 pub struct State {
     pub saved: Value,
     pub arrays: BTreeMap<String, Vec<Value>>,
+    /// Each item's read region, its offset and size in bytes: what the host writes every step.
+    pub reads: Vec<(usize, usize)>,
 }
 
 impl Canonical for State {
+    /// The items' state as values, never the step each would run next, and never each item's
+    /// read region, which the host rewrites every step (its entries and the step's seed): two
+    /// plays that carry the same state hash equal whatever clock brought them there (Carried
+    /// state; #1040's pages).
     fn encode(&self, out: &mut Vec<u8>) {
-        out.extend(canonical(&self.saved));
+        for (i, item) in self.saved.as_array().into_iter().flatten().enumerate() {
+            let fields = item.as_object().into_iter().flatten();
+            for (k, v) in fields.filter(|(k, _)| *k != "next") {
+                out.extend(canonical(&Value::String(k.clone())));
+                match (k.as_str(), v.as_str(), self.reads.get(i)) {
+                    ("memory", Some(hex), Some(&(at, len))) => {
+                        // Two hex digits a byte.
+                        let (from, to) = ((2 * at).min(hex.len()), (2 * (at + len)).min(hex.len()));
+                        let masked = format!("{}{}", &hex[..from], &hex[to..]);
+                        out.extend(canonical(&Value::String(masked)));
+                    }
+                    _ => out.extend(canonical(v)),
+                }
+            }
+        }
     }
 }
 
@@ -481,6 +540,9 @@ fn step(v: &mut View<'_>) -> Result<(), OpError> {
         Val::typed(State {
             saved: world.saved(),
             arrays,
+            reads: (piece.items.iter())
+                .map(|i| (i.reads_at as usize, i.layout.size("reads") as usize))
+                .collect(),
         }),
     )
 }
@@ -579,8 +641,18 @@ fn issues(report: Report) -> Vec<(String, Raised)> {
 }
 
 /// The lowered document's logic items as one checked piece, its input track, and the steps its
-/// transport's span covers; or why it can't be read, as a blocked row.
-fn baked(doc: &Value, input: &Value) -> Result<(Rc<Piece>, Vec<Entry>, i64), Value> {
+/// transport's span covers; or why it can't be read, as a blocked row. #550's net check kinds
+/// read a document's match from it too.
+pub fn baked(doc: &Value, input: &Value) -> Result<(Rc<Piece>, Vec<Entry>, i64), Value> {
+    baked_with(doc, input, &Default::default())
+}
+
+/// As `baked`, its piece checked with `planted`'s twins (#551: a planted page tracker).
+pub fn baked_with(
+    doc: &Value,
+    input: &Value,
+    planted: &crate::Planted,
+) -> Result<(Rc<Piece>, Vec<Entry>, i64), Value> {
     let items: serde_json::Map<String, Value> = doc
         .get("items")
         .and_then(Value::as_object)
@@ -597,7 +669,7 @@ fn baked(doc: &Value, input: &Value) -> Result<(Rc<Piece>, Vec<Entry>, i64), Val
     let line = json!({"seed": doc.get("seed").and_then(Value::as_i64).unwrap_or(0),
         "controls": doc.get("controls").cloned().unwrap_or(json!({})), "items": items,
         "assets": input.get("assets").cloned().unwrap_or(json!({}))});
-    let piece = piece::check(&line, &Default::default(), &mut History::new()).map_err(|r| r.0)?;
+    let piece = piece::check(&line, planted, &mut History::new()).map_err(|r| r.0)?;
     let entries: Vec<Entry> = doc
         .get("track")
         .and_then(Value::as_array)
@@ -702,6 +774,53 @@ fn determinism(doc: &Value, input: &Value) -> Report {
     }
     out.results
         .push(json!({"kind": "logic.determinism", "steps": steps, "at": at}));
+    out
+}
+
+/// #194: `logic.tuning {catalog?}`: each tuning row of each catalog the piece's items name, moved
+/// in a copy the piece is baked again with, its full state compared with the unmoved bake's at
+/// every step, the copies left out; a row whose move changes no step fails, naming
+/// `tuning.<row ID>`. The catalogs' records come in `catalogs`, by hash, from the store.
+fn tuning(doc: &Value, input: &Value) -> Report {
+    let mut out = Report::default();
+    let (piece, entries, steps) = match baked(doc, input) {
+        Ok(b) => b,
+        Err(e) => {
+            out.blocked.push(e);
+            return out;
+        }
+    };
+    let wanted = input.get("catalog").and_then(Value::as_str);
+    let records = input.get("catalogs").and_then(Value::as_object);
+    // The moved copy in the catalog's place: in each item's assets and in the bytes the check reads.
+    let rebake = |sha: &str, moved: &[u8]| {
+        let moved_sha = sha256_hex(moved);
+        let (mut doc2, mut input2) = (doc.clone(), input.clone());
+        for i in doc2["items"]
+            .as_object_mut()
+            .into_iter()
+            .flat_map(|m| m.values_mut())
+        {
+            for a in i
+                .pointer_mut("/params/assets")
+                .and_then(Value::as_array_mut)
+                .into_iter()
+                .flatten()
+            {
+                if a == sha {
+                    *a = json!(moved_sha);
+                }
+            }
+        }
+        input2["assets"][&moved_sha] = json!(B64.encode(moved));
+        baked(&doc2, &input2).map(|(b, _, _)| b)
+    };
+    let found = tuning::run(&piece, &entries, steps, records, wanted, &rebake);
+    let (failures, rows) = (found.failures, found.rows);
+    out.blocked.extend(found.blocked);
+    out.raised = raised("logic.tuning", &failures, &piece);
+    out.results
+        .push(json!({"kind": "logic.tuning", "rows": rows}));
     out
 }
 

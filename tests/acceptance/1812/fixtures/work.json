@@ -1,0 +1,22 @@
+{
+  "readings": [
+    {
+      "source_id": "ACME-42",
+      "link": "https://tracker.example/acme/issues/42",
+      "title": "Totals round to cents",
+      "body": "Totals round to cents.",
+      "criteria": ["Totals round to cents, as the cart page shows it"],
+      "authors": [{ "handle": "you", "role": "you" }],
+      "updated": "2026-11-17T09:00:00Z"
+    },
+    {
+      "source_id": "ACME-43",
+      "link": "https://tracker.example/acme/issues/43",
+      "title": "Discounts show before tax",
+      "body": "Discounts show before tax.",
+      "criteria": ["Discounts show before tax, as the cart page shows it"],
+      "authors": [{ "handle": "you", "role": "you" }],
+      "updated": "2026-11-17T09:00:00Z"
+    }
+  ]
+}

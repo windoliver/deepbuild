@@ -66,6 +66,18 @@ impl Hub<'_> {
     ) -> Vec<Issue> {
         self.keep_first_positions(doc, form);
         let mut issues = self.column_view(form, t);
+        // #1928: an offset as wide as its face, and the sets a dissolve left for a hole, where
+        // the build holds scene3d.
+        let (sealed, planted) = (
+            &self.startup.sealed,
+            self.scenario.module_planted.as_deref(),
+        );
+        if sealed.modules.iter().any(|m| m.name == "scene3d") {
+            let (outlines, fills) = (&sealed.outlines, &sealed.fills);
+            issues.extend(deep_canvas_scene3d::faces::raised(
+                form, outlines, fills, planted,
+            ));
+        }
         let (unfit, ms) = copy_fit(form);
         issues.extend(unfit);
         if let Some(timing) = timing {
@@ -129,6 +141,12 @@ impl Hub<'_> {
     /// Each logic item of `form` stepped on `track` over the transport's span, its program read
     /// from the evidence store, after `form`'s worlds (shared with the web player, #172).
     fn inline_logic(&self, form: &mut Value, track: &[Value]) -> Result<(), Box<Issue>> {
+        // #194: what the items fire, baked before the worlds that take it.
+        if deep_play::fires::any(form) {
+            if let Some(p) = self.logic_piece(form, track)? {
+                deep_play::fires::inline(form, p, track)?;
+            }
+        }
         self.inline_worlds(form, track)?;
         let piece = self.logic_piece(form, track)?;
         let drops = self.scenario.module_planted.as_deref() == Some("hand_over_drops_last_range");
@@ -148,16 +166,27 @@ impl Hub<'_> {
         form: &Value,
         track: &[Value],
     ) -> Result<Option<Piece>, Box<Issue>> {
+        self.logic_piece_with(form, track, &Default::default())
+    }
+
+    /// As `logic_piece`, checked with `planted`'s twins (#551).
+    pub(crate) fn logic_piece_with(
+        &self,
+        form: &Value,
+        track: &[Value],
+        planted: &deep_logic::Planted,
+    ) -> Result<Option<Piece>, Box<Issue>> {
         let root = &self.scenario.evidence;
         let late = self.planted(crate::hub::Planted::Physics(
             crate::physics::Planted::CastAnswersLate,
         ));
-        deep_play::logic::logic_piece(
+        deep_play::logic::logic_piece_with(
             &self.startup.sealed,
             form,
             track,
             &|sha| crate::evidence::read(root, sha),
             late,
+            planted,
         )
     }
 
@@ -182,6 +211,63 @@ impl Hub<'_> {
         names.sort();
         names.dedup();
         self.logic_readings(form, core, &names)
+    }
+
+    /// #194: logic.tuning on `form`'s piece, baked on `entries` for `steps` steps: each catalog's
+    /// record read from beside its bytes (`catalogs/<sha256>.json`), and each moved copy kept in the
+    /// evidence store by its hash, so the piece checks again with it in the catalog's place.
+    pub(crate) fn tuning_check(
+        &self,
+        form: &Value,
+        track: &[Value],
+        piece: &Rc<Piece>,
+        entries: &[Entry],
+        steps: i64,
+    ) -> Value {
+        let root = &self.scenario.evidence;
+        let record = |sha: &str| {
+            let text = std::fs::read_to_string(root.join("catalogs").join(format!("{sha}.json")));
+            Some((
+                sha.to_string(),
+                serde_json::from_str::<Value>(&text.ok()?).ok()?,
+            ))
+        };
+        let assets = piece.items.iter().flat_map(|i| i.assets.iter());
+        let records: Map<String, Value> = assets.filter_map(|(sha, _)| record(sha)).collect();
+        let rebake = |sha: &str, moved: &[u8]| -> Result<Rc<Piece>, Value> {
+            let moved_sha = crate::evidence::put(root, moved)
+                .map_err(|_| json!({"code": "evidence_unwritable", "path": "evidence"}))?;
+            let mut f = form.clone();
+            for i in f["items"]
+                .as_object_mut()
+                .into_iter()
+                .flat_map(|m| m.values_mut())
+            {
+                for a in i
+                    .pointer_mut("/params/assets")
+                    .and_then(Value::as_array_mut)
+                    .into_iter()
+                    .flatten()
+                {
+                    if a == sha {
+                        *a = json!(moved_sha);
+                    }
+                }
+            }
+            match self.logic_piece(&f, track) {
+                Ok(Some(p)) => Ok(Rc::new(p)),
+                Ok(None) => Err(json!({"code": "no_logic"})),
+                Err(i) => Err(json!({"code": i.code, "issues": [i.to_json()]})),
+            }
+        };
+        let found =
+            deep_logic::module::tuning::run(piece, entries, steps, Some(&records), None, &rebake);
+        let verdict = match (found.failures.is_empty(), found.blocked.is_empty()) {
+            (false, _) => "FAIL",
+            (true, false) => "BLOCKED",
+            (true, true) => "PASS",
+        };
+        json!({"kind": "logic.tuning", "verdict": verdict, "failures": found.failures, "rows": found.rows, "blocked": found.blocked})
     }
 
     /// #548: deep_query's logic read of `form`: each of `items` baked on `track` over the span
@@ -280,10 +366,58 @@ impl Hub<'_> {
                 .find(|t| t["item"] == json!(id))
                 .cloned()
                 .unwrap_or(Value::Null);
-            // #1164: `hash`, the SHA-256 of the bytes the engine runs (sandbox@1's rewrite).
-            out.insert(id.clone(), json!({"region_map": region_map, "steps": read, "trap": trap, "hash": piece.items[i].hash}));
+            // #1164: `hash`, the SHA-256 of the bytes the engine runs (sandbox@1's rewrite); #194:
+            // `bake_key`, which covers its data assets' hashes too.
+            let key = deep_logic::bake_key(&piece, i, &entries);
+            out.insert(id.clone(), json!({"region_map": region_map, "steps": read, "trap": trap, "hash": piece.items[i].hash, "bake_key": key}));
         }
         json!({"logic": out})
+    }
+}
+
+impl Hub<'_> {
+    /// #1040's planted page (`page_keys_logic_by_step_hash`): each logic item of `form` keyed by
+    /// its step hash at `t` alone (its globals, the arrays it wrote and the rows it emitted, never
+    /// its memory), replayed on the form's track as the `logic` call replays it.
+    pub(crate) fn logic_step_rows(
+        &self,
+        form: &Value,
+        t: i64,
+    ) -> Vec<deep_canvas::schedule::CarriedState> {
+        let track = form["track"].as_array().cloned().unwrap_or_default();
+        let Ok(Some(piece)) = self.logic_piece(form, &track) else {
+            return Vec::new();
+        };
+        let piece = Rc::new(piece);
+        let entries: Vec<Entry> = track.iter().filter_map(Entry::parse).collect();
+        let mut rec = Record::default();
+        let world = World::new(
+            piece.clone(),
+            track_of(&entries),
+            false,
+            Default::default(),
+            &mut rec,
+            None,
+        );
+        let Ok(mut world) = world else {
+            return Vec::new();
+        };
+        let k = t / piece.items.first().map_or(1, |i| i.step.max(1));
+        world.run(k, &mut rec, &mut |_, _| {});
+        let rows = rec.rows();
+        let hash = |id: &str| {
+            let row = rows.get(&(k - 1)).and_then(|r| r.0.get(id));
+            row.and_then(|r| r.get("hash"))
+                .map_or(String::new(), Value::to_string)
+        };
+        (piece.items.iter())
+            .map(|i| deep_canvas::schedule::CarriedState {
+                module: "logic".into(),
+                kind: "step".into(),
+                key: i.id.clone(),
+                hash: hash(&i.id),
+            })
+            .collect()
     }
 }
 

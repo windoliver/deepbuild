@@ -13,9 +13,12 @@
 //! Everything is ordinary data over `BTreeMap`s and sorted `Vec`s: no static, no hash-map order,
 //! nothing read from the machine, as the canvas lint requires.
 
+mod bare;
 pub mod core_lists;
+pub mod fields;
 mod implementation;
 pub mod lists;
+pub mod paths;
 mod semver;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -24,6 +27,7 @@ use crate::canon::{self, CanonError, NoShape};
 use crate::kinds::Entry;
 use serde_json::{json, Value};
 
+use bare::BARE_MODULE_KINDS;
 pub use implementation::{Equivalence, Implementation, Pin, StateClass};
 pub use semver::{Range, Semver};
 
@@ -138,51 +142,6 @@ impl BuildSet {
         }
     }
 }
-
-/// The module kinds the design names without a family, with the module each is: the cell grid
-/// `cells@1` (#402), scene3d's builders and curve (Builder; Curve `curve@1`; #420; Builder
-/// `hull`, #440; Builder `surface`, #224) and its material (Material `material@1`; #421). Any other bare name is the core's.
-const BARE_MODULE_KINDS: &[(&str, &str)] = &[
-    ("cells", "cells"),
-    // #540: a lockstep match, Net `net@1`.
-    ("net", "net"),
-    ("slab", "scene3d"),
-    ("lathe", "scene3d"),
-    ("extrude", "scene3d"),
-    ("tube", "scene3d"),
-    ("ball", "scene3d"),
-    ("coil", "scene3d"),
-    ("plate", "scene3d"),
-    ("display", "scene3d"),
-    ("hull", "scene3d"),
-    ("surface", "scene3d"),
-    // #1636: trees from a seed.
-    ("tree", "scene3d"),
-    ("curve", "scene3d"),
-    ("material", "scene3d"),
-    ("sky", "scene3d"),
-    ("vector", "vector"),
-    // #494: a graph is the graph module's, so a match morph pairs its nodes by key.
-    ("graph", "graph"),
-    // #533: the logic item keeps the logic module's name, as the cell grid does.
-    ("logic", "logic"),
-    // R1's mark sets, scales and axes are the data module's, which marks2d draws.
-    ("marks", "data"),
-    ("axis", "data"),
-    ("scale", "data"),
-    // #226: 3D axes are the data module's too, beside its scales and axes.
-    ("axes3d", "data"),
-    // #225: a vector field is the data module's, beside its scales and 3D axes.
-    ("vector_field", "data"),
-    ("puff", "scene3d"),
-    ("cutaway", "scene3d"),
-    ("instance", "scene3d"),
-    ("effect", "scene3d"),
-    // #1732: placement by relation in 3D is the motion module's.
-    ("arrange", "motion"),
-    // #222: a cue list is the motion module's, expanded at check.
-    ("cues", "motion"),
-];
 
 /// The canvas modules every build set holds: a status mark needs text's shaper and look's status
 /// map (Registry and seal: `build_set`), so a build that leaves one out is refused at startup.
@@ -348,6 +307,15 @@ pub struct Kind {
     /// The param naming an asset whose probe the check reads (#499): the core has the decode
     /// worker probe it, so a module reads an asset without the media module.
     pub probes: Option<String>,
+    /// The params that name an item, a table row or an asset, each with its kind of reference
+    /// (#1801): what `refs_to` reads, and what the kit holds the module's fixtures to.
+    pub refs: Vec<crate::refs::Decl>,
+    /// The closures it declares for its own fields' lists of words, by path from the kind
+    /// (`field[.<object field or tag>…]`), for every major (#2777); a list it declares none for
+    /// takes the core's fill.
+    pub closes: Vec<(String, fields::Closure)>,
+    /// Whether it draws in 3D, so it says what each path does with it (#2776: `paths`).
+    pub in_3d: bool,
 }
 
 /// A preview kind's history (#412, #1802): the issue that tracks it, the release it became a
@@ -466,6 +434,10 @@ pub type Rule = fn(&Value, &str, &Value) -> Vec<Raised>;
 
 /// One item's CPU time per frame, in ms, for the budget estimate (`document.budget`).
 pub type Cost = fn(&Value) -> f64;
+
+/// The vertices an item of a kind builds, counted from `(document, item ID, item)` without
+/// building it (#1801: the cost model's per-vertex terms); `None` when its params don't say.
+pub type Vertices = fn(&Value, &str, &Value) -> Option<f64>;
 
 /// The elements of a built item's named part in one domain, in index order, each an object of
 /// `i`, `center`, `normal`, `area`, `size` and the part's attributes, for a recipe's repeat over
@@ -728,7 +700,7 @@ pub struct Report {
 pub type ReportRun = fn(&Value, &Value) -> Report;
 
 /// The core's own document check kinds (canvas primitives: Check input), each reading only the core's arrays and naming no module's kind.
-pub const CORE_CHECK_KINDS: [&str; 12] = [
+pub const CORE_CHECK_KINDS: [&str; 13] = [
     "document.validate",
     "document.budget",
     "document.frame_time",
@@ -736,6 +708,7 @@ pub const CORE_CHECK_KINDS: [&str; 12] = [
     "document.determinism",
     "geometry.audit",
     "geometry.shape",
+    "geometry.attributes",
     "film.audit",
     "film.flicker",
     "film.layout",
@@ -757,6 +730,7 @@ const MODULE_CHECK_KINDS: &[(&str, &str)] = &[
     ("logic.determinism", "logic"),
     ("logic.budget", "logic"),
     ("logic.layout", "logic"),
+    ("logic.tuning", "logic"), // #194's tuning rows.
     ("net.rollback", "net"),
     ("net.desync", "net"),
     ("net.budget", "net"),
@@ -787,6 +761,8 @@ pub struct Registrar {
     pub rules: Vec<(String, Rule)>,
     /// Its kinds' CPU cost per item, by kind (`family.name`).
     pub costs: Vec<(String, Cost)>,
+    /// The vertices its kinds' items build, by kind (`family.name`; #1801).
+    pub vertices: Vec<(String, Vertices)>,
     /// Its builders' elements by part and domain, by kind (`family.name`; #2015).
     pub elements: Vec<(String, Elements)>,
     /// Its kinds expanded at check, by kind (`family.name`; #222).
@@ -807,6 +783,12 @@ pub struct Registrar {
     pub pack_fields: Vec<(String, crate::document::packs::module_fields::PackField)>,
     /// The preview kinds it removed (#1802).
     pub removed: Vec<Removed>,
+    /// The lists of words a document sets outside its kinds' params that it reads (#2777).
+    pub word_lists: Vec<fields::Declared>,
+    /// The paths data it gives by kind, and the answers the seal admitted from it, by kind
+    /// (`family.name@major`), for every kind it draws in 3D (#2776).
+    pub paths_data: Vec<(String, Result<paths::KindPaths, String>)>,
+    pub paths: BTreeMap<String, paths::KindPaths>,
 }
 
 impl Registrar {
@@ -821,7 +803,39 @@ impl Registrar {
             preview: None,
             description: None,
             probes: None,
+            refs: Vec::new(),
+            closes: Vec::new(),
+            in_3d: false,
         });
+        self
+    }
+
+    /// The last kind registered closes its field's list of words at `path` (#2777).
+    pub fn closes(&mut self, path: &str, closure: fields::Closure) -> &mut Self {
+        if let Some(k) = self.kinds.last_mut() {
+            k.closes.push((path.into(), closure));
+        }
+        self
+    }
+
+    /// A list of words a document sets outside a kind's params, which this module reads with
+    /// `words` (#2777); its closure is the core's fill's.
+    pub fn word_list(&mut self, list: &str, entry: &str, field: &str, words: &[&str]) -> &mut Self {
+        self.word_lists.push(fields::Declared {
+            list: list.into(),
+            entry: entry.into(),
+            field: field.into(),
+            words: words.iter().map(|w| w.to_string()).collect(),
+        });
+        self
+    }
+
+    /// The last kind registered names something in these params (#1801), each with what it
+    /// holds and its kind of reference.
+    pub fn refs(&mut self, decls: &[crate::refs::Decl]) -> &mut Self {
+        if let Some(k) = self.kinds.last_mut() {
+            k.refs.extend_from_slice(decls);
+        }
         self
     }
 
@@ -916,6 +930,12 @@ impl Registrar {
     /// The CPU cost of an item of the kind `family.name`.
     pub fn cost(&mut self, kind: &str, cost: Cost) -> &mut Self {
         self.costs.push((kind.into(), cost));
+        self
+    }
+
+    /// The vertices an item of the kind `family.name` builds, as the estimate charges them (#1801).
+    pub fn vertices(&mut self, kind: &str, vertices: Vertices) -> &mut Self {
+        self.vertices.push((kind.into(), vertices));
         self
     }
 
@@ -1233,6 +1253,8 @@ pub enum Fault {
     /// The document check names a pack whose census maps a field before a kind that defines it
     /// (#1493).
     CensusPackFirst,
+    /// A word a closed field list lacks is refused naming only the bad value (#2777).
+    RefusalBadValueOnly,
     /// Hashes each implementation's pins into its interface's digest, so another patch of a
     /// pinned crate changes it (#238).
     DigestCoversPins,
@@ -1446,6 +1468,8 @@ pub struct Sealed {
     pub outlines: Vec<SealedOutline>,
     /// Each deform and kind a module fills for scene3d (#226), sorted by module then kind.
     pub fills: Vec<crate::contributed::Sealed>,
+    /// Every list of words a sealed kind's field offers, by name, with its closure (#2777).
+    pub lists: Vec<fields::FieldList>,
 }
 
 /// One outline source the seal admitted: its entry, module, form and Rust (#443).
@@ -1580,6 +1604,18 @@ impl Sealed {
             .map(|k| k.draws_as.as_str())
     }
 
+    /// The params of `kind_text` that name something, as its module declared them (#1801).
+    pub fn refs_of(&self, kind_text: &str) -> &[crate::refs::Decl] {
+        let Some((full, major)) = crate::kinds::parse_kind(kind_text) else {
+            return &[];
+        };
+        self.modules
+            .iter()
+            .flat_map(|m| m.shapes.kinds.iter())
+            .find(|k| k.entry.is(&full) && k.entry.version(major).is_some())
+            .map_or(&[], |k| k.refs.as_slice())
+    }
+
     /// The param of `kind_text` naming an asset the decode worker probes at check (#499).
     pub fn probed_param(&self, kind_text: &str) -> Option<&str> {
         let (full, major) = crate::kinds::parse_kind(kind_text)?;
@@ -1669,6 +1705,15 @@ impl Sealed {
             .flat_map(|m| m.shapes.elements.iter())
             .find(|(k, _)| k == full)
             .map(|(_, e)| *e)
+    }
+
+    /// The vertices an item of the kind `family.name` builds, from the first module that counts them.
+    pub fn vertices_for(&self, full: &str) -> Option<Vertices> {
+        self.modules
+            .iter()
+            .flat_map(|m| m.shapes.vertices.iter())
+            .find(|(k, _)| k == full)
+            .map(|(_, v)| *v)
     }
 
     /// Whether any module registered a cost: the budget estimate then sums the whole document.
@@ -1842,6 +1887,8 @@ pub struct Registry {
     /// `(module, kind)`: a bare kind name a test build lets that module keep (#412's fixture
     /// `ring`), beside the one the design names.
     bare: Vec<(String, String)>,
+    /// The lists of words the host's listing holds as a kind's fields past its params (#2777).
+    word_lists: Vec<fields::Declared>,
 }
 
 impl Registry {
@@ -1857,7 +1904,15 @@ impl Registry {
             declared: Vec::new(),
             admits_all: None,
             bare: Vec::new(),
+            word_lists: Vec::new(),
         }
+    }
+
+    /// The lists of words the host lists as a kind's fields past its params, of the kinds its
+    /// build lists, sealed beside the kinds' own (#2777).
+    pub fn word_lists(mut self, lists: Vec<fields::Declared>) -> Registry {
+        self.word_lists = lists;
+        self
     }
 
     /// Lets `module` keep the bare kind name `kind`: a test build's fixture only (#412).
@@ -2026,6 +2081,8 @@ impl Registry {
             (module.register)(&mut registrar);
             shapes.push((module.manifest.name.clone(), registrar));
         }
+        // #2776: every kind a module draws in 3D answers each path.
+        paths::check(&mut shapes)?;
 
         // Arrays: `module.x` named for its owner, one owner each, in a phase of the lists.
         let mut arrays: BTreeMap<String, SealedArray> = BTreeMap::new();
@@ -3179,6 +3236,7 @@ impl Registry {
                 .iter()
                 .flat_map(|m| m.shapes.kinds.iter().map(|k| k.entry.clone())),
         );
+        let lists = fields::sealed(&kinds, &modules, &registries, &self.word_lists)?;
         Ok(Sealed {
             build_set: self.build_set,
             modules,
@@ -3205,11 +3263,13 @@ impl Registry {
                         | Fault::CensusAccepted
                         | Fault::CensusSkipped
                         | Fault::CensusPackFirst
+                        | Fault::RefusalBadValueOnly
                 )
             }),
             camera_in_scene3d: self.fault == Some(Fault::CameraInScene3d),
             outlines,
             fills,
+            lists,
             costs: self
                 .costs
                 .take()

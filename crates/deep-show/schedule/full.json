@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "548de6d7067aa8a0fc1aac5a8a0d26b341b59a3b8b57f2862e64b04dc4d14f27",
+  "set_digest": "0827e5d9296f94bf4da8951de2a2ac734fcfbd18fe2d91c4e223a2e5d02133b6",
   "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
   "interfaces": {
     "building@1": {
@@ -122,7 +122,7 @@
       }
     },
     "export@1": {
-      "digest": "34526b4e8e03053b5515c9c0ccc3c0151cb2219375ce731e109658532ed51988",
+      "digest": "e752bec0aed97b3658ab3baa60a819865755a62add4d13430761b15a918486b3",
       "reference": "export",
       "kit": [
         "fixtures",
@@ -209,7 +209,7 @@
       }
     },
     "logic@1": {
-      "digest": "1d115c4a4e4c1759d89afdad4757c100e6537a076aa4e0a651f5e0643339cff4",
+      "digest": "26571a47e334c1502a749d7acd1d841a12d2e22c74b5b52102d90994b178735b",
       "reference": "logic",
       "kit": [
         "fixtures",
@@ -393,7 +393,7 @@
       }
     },
     "net@1": {
-      "digest": "7b4fcb5e872422d3812fae697247c15110c61a23e8de64702c3e13f2e6275bd7",
+      "digest": "82ba89449ac621bea477655210882f25bb5b694382d98db0246e052d5ae51677",
       "reference": "net",
       "kit": [
         "fixtures",
@@ -536,7 +536,7 @@
       }
     },
     "record@1": {
-      "digest": "65f77a1cb350e333bb96a1f36a254f4d489bbb36a3a919391654a723b30c1021",
+      "digest": "bb898cbc9fb55e00fbb24481f1a3970e63ed3c3dfe26e249fce8168444c9ef34",
       "reference": "record",
       "kit": [
         "fixtures",
@@ -605,7 +605,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "a526ef928823c3219e912b5c9c51c38a6db14112578f13ec863ddd5fb1db93f4",
+      "digest": "3e4db763ac42bed5aff86fe62a38491a58dbf45b7644acadf43b0316f722ba85",
       "reference": "scene3d",
       "kit": [
         "fixtures",
@@ -634,7 +634,7 @@
       }
     },
     "sheet@1": {
-      "digest": "d24e60e7c85d9663922617ca0d3c22f8d53e23caf3564cbc6ea1480cb4b57f18",
+      "digest": "2e95dc90884799f26e95ce8ad59f06509d8e63e2daa07bc8f5a71ac4340aca0e",
       "reference": "sheet",
       "kit": [
         "fixtures",
@@ -663,7 +663,7 @@
       }
     },
     "text@1": {
-      "digest": "adc297495eb1a9be4918d0a7e9620be4f459deb800ea168ecd3ca5a995d98350",
+      "digest": "99d7fa9d2b19eb54c6aa6e5386c05bed652703ec2b08008dbad34248a1acf51e",
       "reference": "text",
       "kit": [
         "fixtures",

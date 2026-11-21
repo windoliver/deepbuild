@@ -1,0 +1,81 @@
+The #2098 criterion 2 redraft run once at base commit 85203f458b85c999ac03a884c837398e56aeac8d ("Merge pull request
+#2852 …"; no implementation of #2098), on November 19, 2026, on macOS 27.2 arm64 (shared, 1-minute load about 160
+while this job worked), Node 24.22.2, vitest 5.0.5, TypeScript 5.9.3, cargo and rustc 1.99.1. The type-check first:
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/2098-redraft-ac2/tsconfig.json          (exit 0, no error)
+
+then the one test file, once, with
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/2098-redraft-ac2 --no-file-parallelism \
+    --testTimeout=3600000 --reporter=verbose ac2-wind.test.ts
+
+The one build the file reads, this checkout's release deep-physics, was in the target folder before the run. This job
+started no build of its own; the file's own cargo call found it made and copied it out. The run took 5 s.
+
+Result: Test Files 1 failed (1); Tests 3 failed (3). Every test fails at an assertion in its own test file, for the
+reason the README gives: the base refuses a `wind` force and doesn't know the planted name. None fails in a helper, at
+an import or at a timeout, and none is BLOCKED or INCONCLUSIVE. No test passes at the base, and none should. The file
+was not run twice.
+
+ac2-wind.test.ts (#2098.7c1127fe)
+ × a 1 kg cube of 1 m under wind {velocity: (2, 0, 0)} with coupling {kind: aero_triangles, coefficient: 1} is first
+   within 1% of 2 m/s at m × ln 100 ÷ (2 × coefficient × A) = 2.303 s, within 1% of that time, and stays there
+   ac2-wind.test.ts:32  AssertionError: a 1 kg cube of 1 m under wind {velocity: (2, 0, 0), coupling: {kind:
+   aero_triangles, coefficient: 1}} bakes: its state after each of 360 steps: expected '…' to be ''
+     a 1 kg cube of 1 m under wind {velocity: (2, 0, 0), coupling: {kind: aero_triangles, coefficient: 1}} isn't
+     baked: physics.unsupported at forces/wind/kind: a wind force isn't run by this backend interface yet; #2098
+     brings it
+   (its first assertion, that the closed form prints as the section's 2.303 s, passes: it holds the test's own
+   number, not the program)
+ × the gusts are the ones the formula gives the seed with the closed function list's noise: over every step the wind
+   the cube feels is velocity × (1 + amplitude × noise((p − d × speed × t) ÷ scale, seed)) at its four centroids
+   across the wind, within 0.001 m/s
+   ac2-wind.test.ts:43  AssertionError: the cube that can't turn, under that wind with gust {amplitude: 1, scale: 0.5,
+   speed: 2} and seed 7 bakes: its state after each of 240 steps: expected '…' to be ''
+     the cube that can't turn, under that wind with gust {amplitude: 1, scale: 0.5, speed: 2} and seed 7 isn't baked:
+     physics.unsupported at forces/wind/kind: a wind force isn't run by this backend interface yet; #2098 brings it
+ × a planted program whose wind noise comes from platform sin (wind_noise_from_platform_sin) is caught: it still
+   gusts, and its gusts aren't the ones the formula gives the seed with the integer lattice hash, the failure naming
+   the step
+   ac2-wind.test.ts:54  AssertionError: deep-physics --planted wind_noise_from_platform_sin answers: the planted
+   program runs: expected '…' to be ''
+     deep-physics --planted wind_noise_from_platform_sin exits 2, not 0; stdout: {"ok":false,"code":"bad_input"};
+     stderr:
+
+Probed by hand at the base, outside the suite, to see that the judges and the test's `noise` are well formed wherever
+the base already runs what they read. Each probe fed this folder's own documents and judges (helpers.ts) to the same
+release deep-physics, started directly; none is a test, none gave an expected value, and none is kept.
+
+- The test's `noise` against the base's own closed function list. A scene's world (#1918's surface: `{"call":
+  "bake", "scene", "world"}`) with one kinematic body following a path that three drivers write, each driver's
+  expression a `noise(vec3(…), seed)` along a line through the lattice: (0.3 + 2.5 t, −0.625, 1.375) under seed 7,
+  (−3.75 − 1.5 t, 0.2 + 0.75 t, −2.9) under seed 7 and (1 − 4 t, −1/3, 1/3 + 3 t) under seed 8, baked 240 steps. The
+  body's position after each step is the base's evaluator's value at that step's time, as f32. Over the 720 values,
+  between −0.375 and 0.385, the greatest difference from helpers.ts's `noise` at the same point and seed is 1.5e-8,
+  an f32's rounding. The first line held to seed 8 instead differs by up to 0.72.
+- The first test's judge, on the steady wind's world with its force's kind written as the base's drag that is the
+  same law on this cube, `{"drag": {"linear": 2, "medium": [2, 0, 0]}}` (2 × coefficient × A ÷ m = 2 /s), baked 360
+  steps: the cube moves 1.9799986 m/s after step 274 and 1.9803319 after step 275, so it is first within 1% after
+  step 275, at 2.2917 s, 0.5% before 2.3026 s, and stays; the judge finds nothing wrong. It fails with `linear: 1`,
+  the windward side alone ("never within 1% of the wind's 2 m/s in 360 steps (3.00 s): it ends at [1.9016683, 0, 0]
+  m/s"), with `linear: 4` ("first within 1% … after step 136, at 1.1333 s, not within 1% of … 2.3026 s (steps 274 to
+  279)") and with `quadratic: 2` in place of `linear` ("never within 1% …: it ends at [1.8471692, 0, 0] m/s").
+- The second test's judge with no gust, on the locked wind's world under that same drag (`locks: {angular: [true,
+  true, true]}` is taken at the base), baked 240 steps: the judge finds nothing wrong; the wind each step implies is
+  within 0.0000143 m/s of 2 m/s at every step, against the judge's 0.001; the cube neither turns nor moves across the
+  wind. Held to the gusts of seed 7 instead, the same run fails over 239 of the 240 steps, by up to 0.246 m/s, so the
+  formula's gusts are far outside the tolerance on this world.
+
+Worked in the test's own arithmetic, with no program: a model of the locked cube stepped as the base steps a force
+(the push from the state at t(k), held over four substeps, states rounded to f32), blown by helpers.ts's own formula.
+It shows only that the second judge tells these apart, on states of the precision a program answers:
+- the formula's gusts under seed 7: nothing wrong; held to no gust, 237 of 240 steps miss; held to seed 8, all 240;
+- a noise drawn from the platform's sine: all 240 steps miss, by up to 1.54 m/s, and it fails the no-gust judge too;
+- the steady wind held to no gust: nothing wrong;
+- the wind read at the faces' centres (240 steps miss, up to 0.216 m/s), at t(k + 1) (238, up to 0.028), across the
+  other diagonal (238, up to 0.101), a gust added in metres a second (236, up to 0.123), and a pattern not carried
+  along the wind (238, up to 0.415).
+
+Not run at the base, because nothing there can run it: any wind. That each test passes on a right program is therefore
+unproven here.

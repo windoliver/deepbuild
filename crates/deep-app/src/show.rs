@@ -13,15 +13,23 @@
 //!
 //! Issue #1485: a picture is decoded in a background task, never on the panel's entity, and a revision waits for its
 //! pictures while the panel shows the one it replaces, so a big picture never stalls the app.
+//!
+//! Issue #1498: on a session's page your pointer reaches the core's interaction scope, in the panel's px: a drag pans,
+//! a click selects, a double press flies in and ⌥-drag selects text, and a view the core presents again takes the
+//! panel's place at once. Each drawn item is a canvas item where it was drawn, and the core's text selection is
+//! outlined over the pictures, never filled and never in them.
 
+use std::cell::{Cell, RefCell};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::Arc;
 
 use gpui_kit::*;
 use serde_json::{json, Value};
 
 use crate::hub::{HubClient, HubError};
+use deep_canvas::gauge::{Gauge, Place};
 use deep_text_gpui::{measure, paint_label, Label};
 
 /// One layer as the panel composes it: its panel's bounds, its picture and the name its outline shows.
@@ -39,6 +47,14 @@ pub struct Layer {
     pub picture: Option<String>,
 }
 
+/// #1498: an item a presented revision draws: its ID, its value and its box in the panel's px.
+#[derive(Clone, Debug)]
+pub struct Item {
+    pub id: String,
+    pub value: Value,
+    pub rect: [f32; 4],
+}
+
 /// One presented revision: its document, revision, the panel's rect and the layers on it.
 #[derive(Clone, Debug)]
 pub struct Presented {
@@ -48,15 +64,22 @@ pub struct Presented {
     pub layers: Vec<Layer>,
     /// The session that drew it, none when it's yours.
     pub session: Option<String>,
+    /// #1498: the items it draws, where they are drawn.
+    pub items: Vec<Item>,
+}
+
+/// Four numbers, as `[x, y, w, h]`.
+fn rect_of(v: &Value) -> Option<[f32; 4]> {
+    let r: Vec<f32> = v
+        .as_array()?
+        .iter()
+        .map(|n| n.as_f64().map(|n| n as f32))
+        .collect::<Option<_>>()?;
+    <[f32; 4]>::try_from(r.as_slice()).ok()
 }
 
 impl Presented {
     pub fn from_json(v: &Value) -> Option<Presented> {
-        let rect: Vec<f32> = v["rect"]
-            .as_array()?
-            .iter()
-            .map(|n| n.as_f64().map(|n| n as f32))
-            .collect::<Option<_>>()?;
         let layers = v["layers"]
             .as_array()?
             .iter()
@@ -79,12 +102,25 @@ impl Presented {
                 })
             })
             .collect::<Option<_>>()?;
+        let items = v["items"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|i| {
+                Some(Item {
+                    id: i["id"].as_str()?.to_string(),
+                    value: i["value"].clone(),
+                    rect: rect_of(&i["box"])?,
+                })
+            })
+            .collect();
         Some(Presented {
             doc: v["doc"].as_str()?.to_string(),
             rev: v["rev"].as_u64()?,
-            rect: <[f32; 4]>::try_from(rect.as_slice()).ok()?,
+            rect: rect_of(&v["rect"])?,
             layers,
             session: v["session"].as_str().map(str::to_string),
+            items,
         })
     }
 
@@ -138,12 +174,29 @@ struct Picture {
     painted: bool,
 }
 
+/// #1431: the panel's pictures (`CanvasPanel.pictures`), decoded in the heap: only those a shown or waiting revision
+/// uses, one a panel's layer, so the bounds hold while the panels and their layers do.
+pub static PICTURES: Gauge = Gauge::new("CanvasPanel::pictures", Place::Heap, 256, 1_024_000_000);
+
+/// The bytes a decoded picture holds.
+fn picture_bytes(image: &RenderImage) -> u64 {
+    image.as_bytes(0).map_or(0, |b| b.len() as u64)
+}
+
+impl Drop for CanvasPanel {
+    fn drop(&mut self) {
+        let bytes = self.pictures.iter().map(|p| picture_bytes(&p.image)).sum();
+        PICTURES.sub(self.pictures.len() as u64, bytes);
+    }
+}
+
 /// The panel's view: the newest presented revision of each document, composed in its bands.
 pub struct CanvasPanel {
     evidence: PathBuf,
     shown: Vec<Presented>,
     /// The session whose page shows the panel; with none, every revision draws.
     session: Option<String>,
+    // cache: entries 256, bytes 1_024_000_000
     pictures: Vec<Picture>,
     /// Painted pictures no shown revision uses any more, freed from the GPU the next time the panel draws.
     unused: Vec<Arc<RenderImage>>,
@@ -153,6 +206,33 @@ pub struct CanvasPanel {
     /// #1485's fixture: the pictures the last frame painted, in paint order.
     #[cfg(feature = "canvas-fixture")]
     pub(crate) painted: Vec<String>,
+    /// #1498: where the panel's area was last drawn in the window, the core's text selection on the session's page
+    /// as boxes in the panel's px, and whether your press on it is down.
+    area: Rc<Cell<Option<Bounds<Pixels>>>>,
+    outline: Vec<[f32; 4]>,
+    pressing: bool,
+}
+
+/// #1498: where a session's page drew its panel: the session, the presented rect, and that rect in the window.
+#[derive(Clone, Debug)]
+pub struct Placed {
+    pub session: String,
+    pub rect: [f32; 4],
+    pub at: Bounds<Pixels>,
+}
+
+thread_local! {
+    static PLACED: RefCell<Option<Placed>> = const { RefCell::new(None) };
+}
+
+/// #1498: where the session's page drew its panel in the last frame.
+pub fn placed() -> Option<Placed> {
+    PLACED.with(|p| p.borrow().clone())
+}
+
+/// Forgets the earlier frames' placement, as [`crate::canvas::clear_items`] forgets their items.
+pub(crate) fn forget_placed() {
+    PLACED.with(|p| *p.borrow_mut() = None);
 }
 
 impl CanvasPanel {
@@ -167,7 +247,63 @@ impl CanvasPanel {
             decoding: BTreeSet::new(),
             #[cfg(feature = "canvas-fixture")]
             painted: Vec::new(),
+            area: Rc::new(Cell::new(None)),
+            outline: Vec::new(),
+            pressing: false,
         }
+    }
+
+    /// #1498: the newest revision the session's page shows, or waits on.
+    fn page(&self) -> Option<&Presented> {
+        let session = self.session.as_deref()?;
+        (self.waiting.iter().rev())
+            .chain(self.shown.iter().rev())
+            .find(|p| p.session.as_deref() == Some(session))
+    }
+
+    /// #1498: your pointer on the session's page, to the core in the panel's px: the view it presents again takes the
+    /// panel's place, and its text selection's outline is drawn over the pictures.
+    fn pointer(&mut self, kind: &str, at: Point<Pixels>, mods: &Modifiers, cx: &mut Context<Self>) {
+        let (Some(session), Some(area)) = (self.session.clone(), self.area.get()) else {
+            return;
+        };
+        let Some(rect) = self.page().map(|p| p.rect) else {
+            return;
+        };
+        let panel = bounds(rect, area);
+        if kind == "down" {
+            if !panel.contains(&at) {
+                return;
+            }
+            self.pressing = true;
+        } else if !self.pressing {
+            return;
+        }
+        if kind == "up" {
+            self.pressing = false;
+        }
+        let k = f32::from(panel.size.width) / rect[2].max(1.);
+        let x = rect[0] + f32::from(at.x - panel.origin.x) / k;
+        let y = rect[1] + f32::from(at.y - panel.origin.y) / k;
+        let held = [
+            (mods.alt, "alt"),
+            (mods.shift, "shift"),
+            (mods.platform, "cmd"),
+            (mods.control, "ctrl"),
+        ];
+        let mods: Vec<&str> = held.iter().filter(|(on, _)| *on).map(|(_, k)| *k).collect();
+        let event = json!({"type": kind, "pos": [x, y], "mods": mods});
+        let Some(reply) = crate::select::input(&crate::select::Surface::Page(session), event)
+        else {
+            return;
+        };
+        if let Some(p) = Presented::from_json(&reply["presented"]) {
+            self.present(p, cx);
+        }
+        if let Some(outline) = reply["outline"].as_array() {
+            self.outline = outline.iter().filter_map(rect_of).collect();
+        }
+        cx.notify();
     }
 
     /// Whether `session` has anything to show, as its page asks.
@@ -228,11 +364,23 @@ impl CanvasPanel {
         !self.decoding.is_empty()
     }
 
+    /// #1431: how many pictures the panel holds.
+    pub fn held(&self) -> usize {
+        self.pictures.len()
+    }
+
     /// A picture's decoding ended: every waiting revision none of whose pictures is still in decoding is shown, a
-    /// picture that didn't decode drawn as none.
+    /// picture that didn't decode drawn as none. One no revision uses any more, as a later one took its revision's
+    /// place while it decoded, is let go at once (#1431: the panel holds what it shows).
     fn decoded(&mut self, sha: String, image: Option<Arc<RenderImage>>) {
         self.decoding.remove(&sha);
-        if let Some(image) = image {
+        let used = (self.shown.iter().chain(&self.waiting)).any(|p| {
+            p.layers
+                .iter()
+                .any(|l| l.picture.as_deref() == Some(sha.as_str()))
+        });
+        if let Some(image) = image.filter(|_| used) {
+            PICTURES.add(1, picture_bytes(&image));
             self.pictures.push(Picture {
                 sha,
                 image,
@@ -263,8 +411,11 @@ impl CanvasPanel {
         let unused = &mut self.unused;
         self.pictures.retain(|h| {
             let keep = used(&h.sha);
-            if !keep && h.painted {
-                unused.push(h.image.clone());
+            if !keep {
+                PICTURES.sub(1, picture_bytes(&h.image));
+                if h.painted {
+                    unused.push(h.image.clone());
+                }
             }
             keep
         });
@@ -350,7 +501,7 @@ fn bounds(r: [f32; 4], area: Bounds<Pixels>) -> Bounds<Pixels> {
 }
 
 impl Render for CanvasPanel {
-    fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         for image in self.unused.drain(..) {
             let _ = window.drop_image(image);
         }
@@ -393,55 +544,122 @@ impl Render for CanvasPanel {
         let chrome = crate::chrome::of(window);
         let (muted, ground) = (chrome.ink_secondary, chrome.ground);
         let s = crate::chrome::sizes();
-        div().size_full().child(
-            canvas(
-                move |_, window, _| {
-                    for label in &names {
-                        deep_text_gpui::prepare(label, window.scale_factor());
-                    }
-                },
-                move |area, _, window, _| {
-                    for (rect, picture, name) in &layers {
-                        let panel = &bounds(*rect, area);
-                        window.with_content_mask(Some(ContentMask { bounds: *panel }), |w| {
-                            if let Some(picture) = picture {
-                                let _ = w.paint_image(
-                                    *panel,
-                                    *panel,
-                                    Corners::default(),
-                                    picture.clone(),
-                                    0,
-                                    false,
-                                );
-                            }
-                            if let Some(name) = name {
-                                w.paint_quad(quad(
-                                    *panel,
-                                    px(0.),
-                                    transparent_black(),
-                                    s.hairline,
-                                    muted,
-                                    BorderStyle::Solid,
-                                ));
-                                // The name's tab: the label with a step of space each side, a line tall.
-                                let label = Label::new(name.clone());
-                                let tab = Bounds {
-                                    origin: panel.origin,
-                                    size: size(measure(&label).width + s.space(1), s.body.line),
-                                };
-                                w.paint_quad(gpui_kit::fill(tab, muted));
-                                paint_label(
-                                    panel.origin + point(s.space(0), s.hairline),
-                                    &label,
-                                    ground,
-                                    w,
-                                );
-                            }
-                        });
-                    }
-                },
+        // #1498: the session's page, its items where they are drawn and its text selection's outline.
+        let page = self.page().map(|p| {
+            (
+                p.rect,
+                p.items.clone(),
+                self.session.clone().unwrap_or_default(),
             )
-            .size_full(),
-        )
+        });
+        let (outline, focus, area) = (self.outline.clone(), chrome.focus, self.area.clone());
+        div()
+            .size_full()
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, e: &MouseDownEvent, _, cx| {
+                    this.pointer("down", e.position, &e.modifiers, cx)
+                }),
+            )
+            .on_mouse_move(cx.listener(|this, e: &MouseMoveEvent, _, cx| {
+                this.pointer("move", e.position, &e.modifiers, cx)
+            }))
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(|this, e: &MouseUpEvent, _, cx| {
+                    this.pointer("up", e.position, &e.modifiers, cx)
+                }),
+            )
+            .on_mouse_up_out(
+                MouseButton::Left,
+                cx.listener(|this, e: &MouseUpEvent, _, cx| {
+                    this.pointer("up", e.position, &e.modifiers, cx)
+                }),
+            )
+            .child(
+                canvas(
+                    move |_, window, _| {
+                        for label in &names {
+                            deep_text_gpui::prepare(label, window.scale_factor());
+                        }
+                    },
+                    move |at, _, window, _| {
+                        area.set(Some(at));
+                        let area = at;
+                        for (rect, picture, name) in &layers {
+                            let panel = &bounds(*rect, area);
+                            window.with_content_mask(Some(ContentMask { bounds: *panel }), |w| {
+                                if let Some(picture) = picture {
+                                    let _ = w.paint_image(
+                                        *panel,
+                                        *panel,
+                                        Corners::default(),
+                                        picture.clone(),
+                                        0,
+                                        false,
+                                    );
+                                }
+                                if let Some(name) = name {
+                                    w.paint_quad(quad(
+                                        *panel,
+                                        px(0.),
+                                        transparent_black(),
+                                        s.hairline,
+                                        muted,
+                                        BorderStyle::Solid,
+                                    ));
+                                    // The name's tab: the label with a step of space each side, a line tall.
+                                    let label = Label::new(name.clone());
+                                    let tab = Bounds {
+                                        origin: panel.origin,
+                                        size: size(measure(&label).width + s.space(1), s.body.line),
+                                    };
+                                    w.paint_quad(gpui_kit::fill(tab, muted));
+                                    paint_label(
+                                        panel.origin + point(s.space(0), s.hairline),
+                                        &label,
+                                        ground,
+                                        w,
+                                    );
+                                }
+                            });
+                        }
+                        // #1498: each item the session's page draws is a canvas item where it is drawn, and the text
+                        // selection is outlined over the pictures.
+                        if let Some((rect, items, session)) = &page {
+                            let panel = bounds(*rect, area);
+                            let k = f32::from(panel.size.width) / rect[2].max(1.);
+                            let at = |r: [f32; 4]| Bounds {
+                                origin: panel.origin
+                                    + point(px((r[0] - rect[0]) * k), px((r[1] - rect[1]) * k)),
+                                size: size(px(r[2] * k), px(r[3] * k)),
+                            };
+                            for item in items {
+                                crate::canvas::record(&item.id, item.value.clone(), at(item.rect));
+                            }
+                            PLACED.with(|p| {
+                                *p.borrow_mut() = Some(Placed {
+                                    session: session.clone(),
+                                    rect: *rect,
+                                    at: panel,
+                                })
+                            });
+                            window.with_content_mask(Some(ContentMask { bounds: panel }), |w| {
+                                for r in &outline {
+                                    w.paint_quad(quad(
+                                        at(*r),
+                                        px(0.),
+                                        transparent_black(),
+                                        s.hairline,
+                                        focus,
+                                        BorderStyle::Solid,
+                                    ));
+                                }
+                            });
+                        }
+                    },
+                )
+                .size_full(),
+            )
     }
 }

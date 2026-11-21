@@ -41,13 +41,14 @@ fn refused<T>(code: &'static str, path: impl Into<String>) -> Result<T, Refused>
 }
 
 /// The scene3d kinds this subset draws, `family.name@major`.
-pub const KINDS: [&str; 6] = [
+pub const KINDS: [&str; 7] = [
     "mark.box@1",
     "mark.cylinder@1",
     "mark.sphere@1",
     "mark.line@1",
     "mark.point@1",
     "mark.text@1",
+    "mark.image@1",
 ];
 
 /// The 2D overlay a 3D writer layer's anchor places, drawn by scene3d too.
@@ -340,6 +341,8 @@ pub struct Line {
     /// #468: a `mark.line@1`'s written points in the world at t, an `ID#anchor` point at its
     /// anchor; empty for a line drawn from anything else.
     pub points: Vec<Vec3>,
+    /// Whether the sky's fog applies to it (Marks in 3D; #1992).
+    pub fog: bool,
 }
 
 /// A mesh-edge line's mesh, its kind, the matrix that places the mesh, and the edges it draws.
@@ -411,6 +414,8 @@ pub struct Point {
     pub color: [u8; 3],
     /// Its set from a depth video (#503), whose points the GPU writes: the point is its item.
     pub cloud: Option<Arc<crate::cloud::Cloud>>,
+    /// Whether the sky's fog applies to it (Marks in 3D; #1992).
+    pub fog: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -439,6 +444,26 @@ pub struct Label {
     /// The item's own axes, for `facing: fixed`: its rotation applied to +X and +Y.
     pub axes: [Vec3; 2],
     pub color: [u8; 3],
+    /// Whether the sky's fog applies to it (Marks in 3D; #1992): a label's color is its own
+    /// unless it says so.
+    pub fog: bool,
+}
+
+/// A picture on one quad (#1992; Marks in 3D), placed and turned as a label is.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Image {
+    pub id: String,
+    /// Its picture's SHA-256: the host makes its texels ready, as a material's maps (the
+    /// scene's `texels`).
+    pub asset: String,
+    pub pos: Vec3,
+    /// Its width and height, in m with `world`, else in px.
+    pub size: [f64; 2],
+    pub world: bool,
+    pub facing: Facing,
+    /// The item's own axes, for `facing: fixed`.
+    pub axes: [Vec3; 2],
+    pub fog: bool,
 }
 
 /// A 3D writer layer's marks, each family in item order.
@@ -449,6 +474,7 @@ pub struct Layer3 {
     pub lines: Vec<Line>,
     pub points: Vec<Point>,
     pub labels: Vec<Label>,
+    pub images: Vec<Image>,
     /// The opacity of each line and label a module's kind draws below full, by its ID (#226): a
     /// tick entering or leaving its axis's domain.
     pub fades: BTreeMap<String, f64>,
@@ -489,6 +515,7 @@ impl Layer3 {
         out.extend(self.lines.iter().map(|s| s.id.clone()));
         out.extend(self.points.iter().map(|s| s.id.clone()));
         out.extend(self.labels.iter().map(|s| s.id.clone()));
+        out.extend(self.images.iter().map(|s| s.id.clone()));
         out.extend(self.puffs.iter().map(|s| s.id.clone()));
         out
     }
@@ -1800,6 +1827,8 @@ pub(crate) fn evaluate_compiled(
     let mut puffs = 0u64;
     let mut others = Vec::new();
     let mut curves = BTreeMap::new();
+    // #2450: the images a module's marks picture 2D items on, whose pictures wait for the camera.
+    let mut pictured = Vec::new();
     // #226: what a module's deforms and kinds read.
     let lookup = |k: &str| items.get(k);
     let ask = crate::contributed::Ask {
@@ -1973,7 +2002,7 @@ pub(crate) fn evaluate_compiled(
                 {
                     let read = assets.expect("matched above");
                     let model = world(&items, id);
-                    let (solids, file_lights) = asset_scene(read, id, params, &model, look)?;
+                    let (solids, file_lights) = asset_scene(read, id, params, item, &model, look)?;
                     for s in solids {
                         bounds.extend(corners_of(&s));
                         layer.solids.push(s);
@@ -2066,7 +2095,7 @@ pub(crate) fn evaluate_compiled(
                     || k == "fixture.skin@1" =>
                 {
                     let (mesh, shared) = match (k, assets) {
-                        ("mesh.asset@1", Some(read)) => asset_mesh(read, id, params)?,
+                        ("mesh.asset@1", Some(read)) => asset_mesh(read, id, params, item)?,
                         // #419's stand-ins: a pre-skin per time, and a sequence's frame at t.
                         ("fixture.skin@1", _) => (crate::fixtures::skin(params, &path)?, None),
                         ("mesh.sequence@1", Some(read)) => {
@@ -2297,6 +2326,7 @@ pub(crate) fn evaluate_compiled(
                                 paint(look, params, &path)?,
                                 world,
                                 cap,
+                                fog(params, true),
                             )
                         }
                         None => line(&items, id, params, look, (map, t))?,
@@ -2321,6 +2351,11 @@ pub(crate) fn evaluate_compiled(
                     let l = label(id, params, &path, &world(&items, id), look, labels)?;
                     bounds.push(l.pos);
                     layer.labels.push(l);
+                }
+                "mark.image@1" => {
+                    let image = image(id, params, &path, &world(&items, id))?;
+                    bounds.push(image.pos);
+                    layer.images.push(image);
                 }
                 OVERLAY => overlay_items.push((layer_id.to_string(), id.clone())),
                 // #506: read once every solid is placed, below.
@@ -2371,7 +2406,7 @@ pub(crate) fn evaluate_compiled(
                 "sky@1" if sky.is_none() => {
                     sky = Some(crate::sky::parse(id, params, look, assets)?);
                 }
-                "light.sun@1" | "light.point@1" | "light.spot@1" | "light.area@1" => {
+                k if light::KINDS.contains(&k) => {
                     let m = world(&items, id);
                     let dir = normalize(turn(&m, [0.0, 0.0, -1.0]));
                     let flicker = flicker(program, &state, params, &path)?;
@@ -2449,6 +2484,7 @@ pub(crate) fn evaluate_compiled(
                     crate::contributed::Out {
                         layer: &mut layer,
                         bounds: &mut bounds,
+                        pictured: &mut pictured,
                     },
                 )?,
                 _ => others.push(Other {
@@ -2682,7 +2718,7 @@ pub(crate) fn evaluate_compiled(
     // #506: the insets: their windows join the layers; their pictures, views and casts, the scene.
     let get = |k: &str| items.get(k);
     let world_of = |k: &str| world(&items, k);
-    let insets = crate::inset::evaluate(
+    let mut insets = crate::inset::evaluate(
         &crate::inset::Ctx {
             doc: map,
             get: &get,
@@ -2694,6 +2730,9 @@ pub(crate) fn evaluate_compiled(
         look,
         &mut layers,
     )?;
+    insets
+        .pictures
+        .extend(crate::contributed::pictures(pictured, &camera, &mut layers));
 
     // A readout sits in the view's top-left corner, its text the template's (#419), filled from
     // the values that move the parts at t; a figure's card stacks its lines below (#504).
@@ -2744,6 +2783,7 @@ pub(crate) fn evaluate_compiled(
                 .role("stone")
                 .or(look.role("ink"))
                 .unwrap_or([255, 255, 255]),
+            fog: false,
         });
         top += quad[1] + 4.0;
     }
@@ -2783,6 +2823,16 @@ pub(crate) fn evaluate_compiled(
         return refused("out_of_range", "budget/puffs");
     }
     crate::sets::compile(map, &mut lights, &mut layers)?;
+    // #1634: a document holds its class's `fill_shaded` fill lights at most, and a light that
+    // names no range ends where the shot's exposure cuts it.
+    let class = deep_canvas::budget::of(&budget).map(|(class, _)| class);
+    if lights.iter().filter(|l| l.fill).count() > light::fill_shaded(class) {
+        return refused("out_of_range", "budget/fill_shaded");
+    }
+    // The planted wrong program keeps the fixed 0.05 lx.
+    if outlines.planted != Some("auto_range_fixed_cut") {
+        light::follow_exposure(&mut lights, exposure.unwrap_or(look.exposure));
+    }
     let probes = probes(map, probe_items, &lights, &layers, sky.as_ref())?;
     // #149: a drawing look lights its marks from its own light, with no Light item.
     if let (None, true, Some(l)) = (&sun, lights.is_empty(), drawn_light(look)) {
@@ -2848,8 +2898,8 @@ pub(crate) fn evaluate_compiled(
     scene.set_cutaway(cutaway);
     scene.mirror = crate::mirror::find(&scene.layers, scene.camera.eye, |id| items.get(id))?;
     // #166: the water, its wake's path, and its own mirror unless a material names one.
-    let seed = map.get("seed").and_then(Value::as_u64).unwrap_or(0) as u32;
-    if let Some(mut w) = crate::water::find(&scene.layers, |id| items.get(id), seed, seconds)? {
+    let found = crate::water::find(&scene.layers, |id| items.get(id), map, program, t);
+    if let Some(mut w) = found.map_err(|f| f.kept(outlines.memo))? {
         if let Some(wake) = &mut w.wake {
             let step = frame_interval(map);
             wake.step = step as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
@@ -3270,19 +3320,7 @@ fn overlay(
 
 /// A label's quad axes on screen: right and up, in world space, as its facing turns it.
 pub fn label_axes(label: &Label, camera: &Camera) -> [Vec3; 2] {
-    match label.facing {
-        Facing::Camera => [camera.right, camera.up],
-        Facing::Upright => {
-            let r = [camera.right[0], 0.0, camera.right[2]];
-            let r = if dot(r, r) > 1e-12 {
-                normalize(r)
-            } else {
-                [1.0, 0.0, 0.0]
-            };
-            [r, [0.0, 1.0, 0.0]]
-        }
-        Facing::Fixed => label.axes,
-    }
+    quad_axes(label.facing, label.axes, camera)
 }
 
 impl Scene {

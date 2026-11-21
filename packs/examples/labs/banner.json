@@ -2,7 +2,7 @@
   "format": 1,
   "profile": "scene",
   "title": "The banner",
-  "description": "A 28 by 10 banner pinned along its top edge to a pole, let go level so it swings down and settles, live on the physics module's soft bodies and drawn on its own plate by its skin (#524). Gusty wind arrives with #2098 and pokes by particle with #2371.",
+  "description": "A 28 by 10 banner pinned along its top edge to a pole, let go level so it swings down and settles, live on the physics module's soft bodies and drawn on its own plate by its skin (#524). Gusty wind arrives once a wind pushes a soft body, which #2098's follow-up brings, and pokes by particle with #2371.",
   "size": [
     1280,
     720

@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use gpui_kit::{base::test_support::snapshots, point, px, ElementId, HitboxBehavior, Window};
 use serde_json::{json, Value};
 
-use super::glyphs::{Glyphs, Run};
+use super::glyphs::{Drawn, Glyphs, Run};
 use crate::snapshot::{author_id, role_name};
 
 /// The roles of a form control, the things `{label}` names.
@@ -63,9 +63,14 @@ impl Target {
 pub struct Frame {
     pub elements: Vec<Target>,
     pub runs: Vec<Run>,
+    /// The SVGs the frame drew, such as icons and status marks (#1592).
+    pub svgs: Vec<Drawn>,
     pub items: Vec<(String, Value)>,
     /// Where each canvas item was drawn, in device pixels.
     placed: BTreeMap<String, [i64; 4]>,
+    /// #1498: each text item's carets in logical order, `[x, top, 1, height]` in device pixels: the one before each
+    /// grapheme of its source and the one after its last.
+    pub carets: BTreeMap<String, Vec<[i64; 4]>>,
     pub scale: f32,
 }
 
@@ -114,8 +119,10 @@ impl Frame {
         Frame {
             elements,
             runs: glyphs.runs(),
+            svgs: glyphs.svgs(),
             items: deep_app::canvas::items(),
             placed,
+            carets: BTreeMap::new(),
             scale,
         }
     }
@@ -154,6 +161,23 @@ impl Frame {
                     named
                 }
             }
+            Form::Caret(item, offset) => self
+                .carets
+                .get(item)
+                .and_then(|c| c.get(offset))
+                .map(|b| Target {
+                    role: "caret".into(),
+                    name: Some(item.to_owned()),
+                    value: Some(offset.to_string()),
+                    bounds: *b,
+                    visible: true,
+                    enabled: true,
+                    checked: None,
+                    text: None,
+                    path: Vec::new(),
+                })
+                .into_iter()
+                .collect(),
             Form::Item(id) => self
                 .items
                 .iter()
@@ -313,6 +337,8 @@ pub fn string(run: &Run) -> Target {
 enum Form<'a> {
     Role(Option<&'a str>, Option<&'a str>),
     Item(&'a str),
+    /// #1498: the caret before grapheme `offset` of a text item's source.
+    Caret(&'a str, usize),
     Id(&'a str),
     Handle(&'a str),
     Text(&'a str),
@@ -337,12 +363,22 @@ fn form(locator: &Value) -> Result<Form<'_>, String> {
     match keys.as_slice() {
         ["role"] | ["name"] | ["name", "role"] | ["role", "name"] => Ok(Form::Role(text("role")?, text("name")?)),
         ["item"] => Ok(Form::Item(text("item")?.unwrap_or_default())),
+        ["item", "offset"] | ["offset", "item"] => match fields["offset"].as_u64() {
+            Some(offset) => Ok(Form::Caret(
+                text("item")?.unwrap_or_default(),
+                offset as usize,
+            )),
+            None => Err(format!(
+                "a caret locator's offset is a grapheme count, not {}",
+                fields["offset"]
+            )),
+        },
         ["id"] => Ok(Form::Id(text("id")?.unwrap_or_default())),
         ["handle"] => Ok(Form::Handle(text("handle")?.unwrap_or_default())),
         ["text"] => Ok(Form::Text(text("text")?.unwrap_or_default())),
         ["label"] => Ok(Form::Label(text("label")?.unwrap_or_default())),
         _ => Err(format!(
-            "a locator has one form, {{role, name}}, {{item}}, {{id}}, {{handle}}, {{text}} or {{label}}; this one has {keys:?}"
+            "a locator has one form, {{role, name}}, {{item}}, {{item, offset}}, {{id}}, {{handle}}, {{text}} or {{label}}; this one has {keys:?}"
         )),
     }
 }

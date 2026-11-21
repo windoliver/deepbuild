@@ -1,0 +1,49 @@
+#971's suite on the change, 2026-11-19, Mac17,10, debug deep-gpu, machine loaded and its thermal state "fair".
+Full run with the taste call recorded on this run's bytes: 14 passed, 2 failed INCONCLUSIVE (AC8's timings).
+
+     × AC8 #971.ae60e422 local {strength: 0.5} adds under 0.6 ms of GPU at 1920 × 1080, in five runs 9843ms
+     × AC8 #971.ae60e422 local {strength: 0.5} adds under 2 ms of GPU at 3840 × 2160, in five runs 5293ms
+AC9 #971.573c2449: written from this run's frames:
+  docs/evidence/971/temple-local.png  e331ae9d40f812c3409bc25af67371e29806bec9d52bd8ee15da1637bc3ba227
+  docs/evidence/971/temple-plain.png  aa25aca3b9001bf75f2e0c288f5bb07eedf20b29fb508addfb19b31af2fbf34c
+  docs/evidence/971/walls-edge.png  61feaa8b72a3a8da045ceb3472e764a66d83d51932c7f77c05053afafd9896ce
+AC9 #971.573c2449: taste call recorded by This session's agent, on the owner's delegation ("show me scrresnhot or videos and vlaidte for me?", then "close the gaps that we can close the issue", Nov 18, 2026) at 2026-11-19T15:06:20Z: looks right
+AC6 #971.a3ad5af8: local changes 100.00% of the 1080p frame's pixels; the 4K render downsampled is off at 0.00%
+AC6 #971.a3ad5af8: under the planted pyramid: 4.30% of pixels are off: the 3840 × 2160 render, downsampled 2 × 2, lies more than 0.02 in OKLab from the 1920 × 1080 render there, and at most 1.00% may
+AC3 #971.fc809ae0: within 32 px of the edge the bright wall passes its own level by at most 0.0058 stop and the dark wall by at most 0.0058
+AC3 #971.fc809ae0: the planted base overshoots the bright wall by 1.9481 stop and the dark wall by 1.9482 within 32 px of the edge
+AC2 #971.5cd62ea3: bright wall 2.0001 stops, checker ±0.2396; dark wall -2.0009 stops, checker ±0.2397
+AC4 #971.0e27b835: over the 64 sampled pixels, hue differs by at most 0.0691° and chroma by at most 0.0708%
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: INCONCLUSIVE: local's GPU time counts only on a reference Mac at rest: a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): thermal state is "fair", not "nominal"; load 198.279296875 at a run's start or end is above the 18 cores; this is not a pass
+AssertionError: INCONCLUSIVE: local's GPU time counts only on a reference Mac at rest: a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): thermal state is "fair", not "nominal"; load 201.1396484375 at a run's start or end is above the 18 cores; this is not a pass
+ Test Files  1 failed | 8 passed (9)
+      Tests  2 failed | 14 passed (16)
+
+Readings, not budget results (debug build, load 36 to 89, outside the suite's judge): what local {strength: 0.5} adds to the temple's median gpu_ms over 300 frames, five runs a size, and the local pass's own time.
+1920x1080:
+  added 0.127 (with 2.161, without 2.033); local pass alone 0.277; load 40
+  added 0.194 (with 2.169, without 1.975); local pass alone 0.278; load 40
+  added 0.171 (with 2.128, without 1.957); local pass alone 0.276; load 38
+  added 0.163 (with 2.113, without 1.950); local pass alone 0.276; load 36
+  added 0.040 (with 2.093, without 2.053); local pass alone 0.276; load 37
+3840x2160:
+  added -0.731 (with 5.757, without 6.488); local pass alone 0.712; load 42
+  added -0.982 (with 4.934, without 5.916); local pass alone 0.588; load 45
+  added -1.673 (with 5.686, without 7.358); local pass alone 0.722; load 57
+  added 0.033 (with 7.695, without 7.661); local pass alone 0.996; load 72
+  added -0.055 (with 7.540, without 7.594); local pass alone 0.939; load 89
+
+The same reading on the pass before it read its base from a grid (load 37 to 61):
+1920x1080:
+  added 0.631 (with 2.637, without 2.006); local pass alone 0.834; load 41
+  added 0.635 (with 2.647, without 2.012); local pass alone 0.835; load 40
+  added 0.692 (with 2.631, without 1.938); local pass alone 0.832; load 37
+  added 0.694 (with 2.649, without 1.955); local pass alone 0.835; load 44
+  added 0.788 (with 2.742, without 1.954); local pass alone 0.837; load 47
+3840x2160:
+  added 1.156 (with 5.805, without 4.649); local pass alone 1.733; load 57
+  added 0.077 (with 6.090, without 6.012); local pass alone 1.745; load 57
+  added 0.889 (with 7.034, without 6.145); local pass alone 1.978; load 55
+  added -0.414 (with 6.428, without 6.843); local pass alone 1.762; load 55
+  added 1.583 (with 6.220, without 4.636); local pass alone 1.756; load 61

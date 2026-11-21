@@ -341,8 +341,10 @@ pub fn ground_points(item: &str, at: &[[f64; 2]], tiles: &Tiles, choices: &[Choi
         .collect::<Vec<_>>())
 }
 
-/// The frame's `light_cut` (Assumed surfaces 2).
+/// The frame's `light_cut` (Assumed surfaces 2): the key lights the policy shades and leaves
+/// out, and the fill lights the view shades, in the policy's order, each with its range (#1634).
 pub fn cut_json(scene: &Scene, policy: &Policy) -> Value {
+    let scores = light::scores(&scene.lights, &scene.camera);
     json!({
         "shaded": policy
             .shaded
@@ -350,5 +352,9 @@ pub fn cut_json(scene: &Scene, policy: &Policy) -> Value {
             .map(|&(i, w)| json!({"light": scene.lights[i].id, "weight": w}))
             .collect::<Vec<_>>(),
         "left_out": policy.left_out,
+        "fill": light::fill_order(&scene.lights, &scores)
+            .iter()
+            .map(|&(i, _)| json!({"light": scene.lights[i].id, "range": scene.lights[i].range}))
+            .collect::<Vec<_>>(),
     })
 }

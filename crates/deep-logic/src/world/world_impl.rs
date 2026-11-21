@@ -77,6 +77,7 @@ impl World {
                 asked: None,
                 dirty: BTreeSet::new(),
                 kdirty: BTreeSet::new(),
+                rdirty: BTreeSet::new(),
                 stored: Vec::new(),
                 checked: None,
                 spacing: item.every,
@@ -96,6 +97,7 @@ impl World {
             published,
             planted,
             saves_dir: None,
+            held: None,
             saved: Vec::new(),
             seen: 0,
             adapter: String::new(),
@@ -197,7 +199,7 @@ impl World {
             return;
         }
         l.checked = Some(at);
-        let deep = l.deep_hash();
+        let deep = if rec.deferred { 0 } else { l.deep_hash() };
         // The CPU time storing it; the full-state hash beside it is the record's evidence.
         let t = cpu_ns();
         rec.checkpoint(&id, at, deep, &l.arrays);
@@ -306,7 +308,7 @@ impl World {
                 }
             }
             if let Some(k) = self.at() {
-                if self.saves_dir.is_some() {
+                if self.saves_dir.is_some() || self.held.is_some() {
                     crate::saves::due(self, k, ended_at);
                 }
                 // #860: a rewind stamped by now comes before any step at this time, and the seen
@@ -377,9 +379,7 @@ impl World {
         let memory = l.runner.memory_mut("memory").expect("a memory");
         match services::serve(item, k, memory) {
             Ok((pages, n)) => {
-                let pages = pages.into_iter().map(|p| p as u32);
-                l.dirty.extend(pages.clone());
-                l.kdirty.extend(pages);
+                l.mark(pages.into_iter().map(|p| p as u32));
                 // The time answering what step k asked: 0 when it asked nothing.
                 let ns = if n == 0 {
                     0
@@ -505,7 +505,8 @@ impl World {
                 let q = l.pending.entry(r.name.clone()).or_default();
                 let mut fresh: Vec<Entry> = Vec::new();
                 while *c < list.len() && list[*c].t <= t {
-                    fresh.push(list[*c].clone());
+                    // Entries stamped since the last step that ran, never before it (#551).
+                    fresh.extend((list[*c].t > l.last * item.step).then(|| list[*c].clone()));
                     *c += 1;
                 }
                 if r.read == Read::Control {
@@ -622,15 +623,27 @@ impl World {
                 }
                 Read::Control => {
                     // Each entry a u32 player, 4 zero bytes, then its value as the control's
-                    // form lays it out; a value of another form leaves its bytes zero.
-                    // A string value (a choice's option) is no entry of a number's slot.
-                    let list: Vec<&Entry> = taken[e.name.as_str()]
+                    // form lays it out; a value of another form leaves its bytes zero. A
+                    // choice's option is its index in the choice's options as an f64 (#1040;
+                    // Control); any other string value is no entry of a number's slot.
+                    let options = match piece.limits.get(&e.name) {
+                        Some(crate::piece::Limit::Choice(options)) => &options[..],
+                        _ => &[],
+                    };
+                    let read = |x: &Entry| match &x.value {
+                        Given::Text(t) => {
+                            let i = options.iter().position(|o| o == t)?;
+                            Some(Given::Number(i as f64))
+                        }
+                        v => Some(v.clone()),
+                    };
+                    let list: Vec<(&Entry, Given)> = taken[e.name.as_str()]
                         .iter()
-                        .filter(|x| !matches!(x.value, Given::Text(_)))
+                        .filter_map(|x| Some((x, read(x)?)))
                         .collect();
                     let stride = (e.size as usize - 8) / PER_STEP;
                     region[at..at + 4].copy_from_slice(&(list.len() as u32).to_le_bytes());
-                    for (j, x) in list.iter().enumerate() {
+                    for (j, (x, value)) in list.iter().enumerate() {
                         let o = at + 8 + stride * j;
                         let player = if self.planted.read_region_drops_player {
                             0
@@ -638,7 +651,7 @@ impl World {
                             x.player
                         };
                         region[o..o + 4].copy_from_slice(&player.to_le_bytes());
-                        let v = x.value.bytes();
+                        let v = value.bytes();
                         if v.len() == stride - 8 {
                             region[o + 8..o + stride].copy_from_slice(&v);
                         }
@@ -725,12 +738,7 @@ impl World {
         if size > 0 {
             touched.extend(from as u64 / PAGE..=(from + size - 1) as u64 / PAGE);
         }
-        let mut at = item.emits_at as usize;
-        for e in &item.emits {
-            memory[at..at + 4].fill(0);
-            touched.push(at as u64 / PAGE);
-            at += e.size() as usize;
-        }
+        crate::piece::fires::clear(item, memory, &mut touched, PAGE);
         let mut words = vec![0u64; l.names.pages.len()];
         for p in touched {
             if let Some(w) = words.get_mut((p / 64) as usize) {
@@ -766,8 +774,7 @@ impl World {
                 }
             }
         }
-        l.dirty.extend(&pages);
-        l.kdirty.extend(&pages);
+        l.mark(pages.iter().copied());
         rec.fuel.entry(i).or_default().push((k, fuel));
         let trap = match out {
             Ok(o) => o.trap.map(|t| (t.kind, Some(t.function), Some(t.offset))),
@@ -783,6 +790,7 @@ impl World {
             return;
         }
         let memory = l.runner.memory("memory").expect("a memory");
+        let fires = crate::piece::fires::fired(item, memory);
         let mut rows = match emitted(item, memory, &self.planted) {
             Ok(rows) => rows,
             // A count past its kind's max_per_step traps as any trap does: no row is dropped.
@@ -839,6 +847,7 @@ impl World {
         }
         let h = l.step_hash(&rows);
         report(rec, item, k, l, Some(h), fuel, pages, &rows);
+        crate::piece::fires::record(rec, item, k, fires);
     }
 
     /// Runs each item's `preview` (Logic: preview) when the state it would read changed since its
@@ -1203,6 +1212,7 @@ impl World {
             cache: None,
             planted,
             saves_dir: None,
+            held: None,
             saved: Vec::new(),
             seen: 0,
             adapter: String::new(),
@@ -1364,6 +1374,7 @@ impl World {
             published,
             planted,
             saves_dir: None,
+            held: None,
             saved: Vec::new(),
             seen,
             adapter: String::new(),
@@ -1410,6 +1421,7 @@ impl World {
             // The restore wrote every page.
             dirty: (0..pages).collect(),
             kdirty: (0..pages).collect(),
+            rdirty: (0..pages).collect(),
             stored: Vec::new(),
             checked: None,
             spacing: item.every,
@@ -1471,6 +1483,7 @@ impl World {
             store: self.piece.rewind.is_some(),
             planted: self.planted,
             saves_dir: None,
+            held: None,
             saved: Vec::new(),
             seen: self.seen,
             adapter: self.adapter.clone(),
