@@ -210,6 +210,8 @@ export class Core {
   private archiveSession?: (session: string) => Promise<void>;
   /** The sessions whose transcripts their agents moved to an archived folder; unset until the archive opens. */
   private archivedSessions?: () => Promise<Set<string>>;
+  /** The archive pass under way, if one is: a stop waits for it before the record closes (#2573). */
+  private archiving: () => Promise<void> | undefined = () => undefined;
   /** Ask-tasks in the kernel (#303): a task for each prompt you typed that asks for a change, and its definition locked by hash. */
   private tasks!: AskTasks;
   private sizing!: SizeScope;
@@ -1006,6 +1008,7 @@ export class Core {
       return archiving;
     };
     archivePass();
+    this.archiving = () => archiving;
     this.archiveSession = (session) => archive.session(session);
     this.archivedSessions = () => archive.archived();
     this.every('archived-threads', ARCHIVED_THREADS_MS, () => this.state.archivedThreads());
@@ -2582,6 +2585,14 @@ export class Core {
     } catch {
       return;
     }
+    // A stop that came while the core was starting cleared the timers before the start armed its own and opened the
+    // work runs (#2573): those go now, and the archive's pass under way ends before the record closes. Up to 5 s: a
+    // pass can take minutes, and the hub gives its whole stop 20 s. One that runs longer reads a closed record, as before.
+    for (const timer of this.timers) clearInterval(timer);
+    this.work?.close();
+    let bound: NodeJS.Timeout | undefined;
+    await Promise.race([this.archiving(), new Promise<void>((done) => { bound = setTimeout(done, 5000); })]);
+    clearTimeout(bound);
     await this.replaying;
     await Promise.all(this.promptItems.pending);
     for (const session of [...this.unplaced.keys()]) await this.queue(() => this.placeHeld(session)).catch(() => undefined);
