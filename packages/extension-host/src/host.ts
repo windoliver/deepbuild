@@ -27,7 +27,7 @@
 // once a period while a view that binds its source is shown, as the app reports it; and a series call lands as one
 // batch file named by one reading.batch event, its windows' rollups as files named by reading.rollup events
 // (./series.ts), so a bound value resolves at a frame's pinned log position.
-import { createHash, createPublicKey, randomUUID, verify as verifySignature } from 'node:crypto';
+import { createPublicKey, randomUUID, verify as verifySignature } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createServer, type AddressInfo, type Socket } from 'node:net';
@@ -48,6 +48,7 @@ import { badDeadline, checkHost, type Host as RunHost, type Supervisor } from '@
 import { API, extensionSide, peer } from '../runtime/deep.mjs';
 import { cycleThrough, dependents, graph, refusal, resolve, servedAt, type Piece, type UseRow } from './compose.js';
 import { packageDigest } from './digest.js';
+import { botOf, canonical, playInput, runSeed, unpaired, type PlayInput, type Played } from './plays.js';
 import type { BuildPlant, HeldJobs, JobBytes, JobCall, JobCounter, Weight } from './job-kinds.js';
 import { Jobs, JobTools, type Answer, type JobListing } from './jobs.js';
 export type { JobListing } from './jobs.js';
@@ -550,24 +551,6 @@ function schemaBreak(name: string, schema: unknown, value: unknown): string | un
     return `/ (its schema can't be read: ${message(e)})`;
   }
 }
-/**
- * What a check's input gives `deep.canvas.play` (Check input: plug-in reads, #184): the piece, the seed, the runs (20
- * by default), the bots and the recorded tracks it may play; a playtest's input holds more, which the host ignores.
- */
-interface PlayInput { piece?: unknown; seed?: unknown; runs?: unknown; bots?: unknown; tracks?: unknown; play?: unknown }
-/** One play a running check made: its seed, its bot, its track's hash and whether it read values. */
-interface Played { seed: number; bot: unknown; track: string; values: boolean }
-/** JSON with every object's keys sorted, so two values parsed apart compare. */
-const canonical = (v: unknown): string => JSON.stringify(v, (_k, x: unknown) => (isPlain(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : x));
-/** Run i's seed: hash(the check's seed, i), the first 8 bytes of SHA-256(seed as u64 LE, i as u32 LE) big-endian, shifted right 11 bits to stay a JSON-safe integer. */
-function runSeed(seed: number, i: number): number {
-  const b = Buffer.alloc(12);
-  b.writeBigUInt64LE(BigInt(seed));
-  b.writeUInt32LE(i, 8);
-  return Number(createHash('sha256').update(b).digest().readBigUInt64BE(0) >> 11n);
-}
-/** A bot as a play runs it: without the authorship, bands and expectations a check's input adds (#184, #555). */
-const botOf = (bot: unknown): unknown => (isPlain(bot) ? Object.fromEntries(Object.entries(bot).filter(([k]) => k !== 'by' && k !== 'share' && k !== 'expect')) : bot);
 const nothing = (outcome: CheckResult['outcome'], failure?: string): CheckResult => ({
   outcome, testsRun: 0, evidence: [], read: [], mask: null,
   failures: failure ? [{ test: 'extension host', file: '', line: 0, stack: null, assertion: false, message: failure }] : [],
@@ -2097,6 +2080,11 @@ class Host implements ExtensionHost {
           const track = canonical(r.track);
           if (!tracks.includes(track) && !running.tracks.has(track)) throw Error(`deep.canvas.play: the track isn't one ${id}'s check input gives or a play of this run recorded`);
         }
+        // #832: a row's offers off only on the catalog and table a catalog.dominance check's input gives, at one of its rows.
+        const off = (isPlain(r.off) ? r.off : undefined) as { catalog?: unknown; table?: unknown; row?: unknown } | undefined;
+        if (r.off !== undefined && !(off && input.off && off.catalog === input.off.catalog && off.table === input.off.table && Number.isInteger(off.row) && (off.row as number) >= 0 && (off.row as number) < input.off.rows)) {
+          throw Error(`deep.canvas.play: the off isn't a row of the catalog and table ${id}'s check input gives`);
+        }
         if (!this.options.replica) throw Error('deep.canvas.play: this hub has no replica');
         const reply = await this.options.replica({ ...r, call: 'play', piece: target });
         if (reply.ok !== true) {
@@ -2105,7 +2093,7 @@ class Host implements ExtensionHost {
         }
         // #556: an array recorded only at the steps it changed is read as surely as one read at every step.
         const values = [reply.values, reply.changes].some((r) => isPlain(r) && Object.values(r).some((v) => Array.isArray(v) && v.length > 0));
-        running.played.push({ seed: seed as number, bot: r.bot === undefined ? undefined : canonical(botOf(r.bot)), track: String(reply.track), values });
+        running.played.push({ seed: seed as number, bot: r.bot === undefined ? undefined : canonical(botOf(r.bot)), track: String(reply.track), values, ...(off ? { off: off.row as number } : {}) });
         if (Array.isArray(reply.entries)) running.tracks.add(canonical(reply.entries));
         // #1048: a probe's track for each copy that trapped or broke a range, the run's recorded entries and what it
         // put, which the check plays again in a fresh replica.
@@ -2683,6 +2671,7 @@ class Host implements ExtensionHost {
     const input = running?.input;
     if (!running || typeof input?.seed !== 'number') return [];
     const runs = typeof input.runs === 'number' ? input.runs : 20;
+    if (input.off) return unpaired(running.played, input as PlayInput & { seed: number; off: { rows: number } }, runs, result);
     const bots: (string | undefined)[] = Array.isArray(input.bots) && input.bots.length ? input.bots.map((b) => canonical(botOf(b))) : [undefined];
     const lacks: string[] = [];
     // Each run's track, one copy a run: runs that recorded the same track need as many copies among the evidence.
@@ -3216,8 +3205,7 @@ class Host implements ExtensionHost {
     if (ctx.environment !== undefined) await this.usedFirstParty(ext.entry.id, ctx.environment);
     try {
       this.canvasKeys.set(ext, []);
-      const input = (spec as CheckSpec & { play?: unknown }).play;
-      this.plays.set(ext, { input: isPlain(input) ? input as PlayInput : undefined, played: [], tracks: new Set() });
+      this.plays.set(ext, { input: playInput(spec as CheckSpec & { play?: unknown }), played: [], tracks: new Set() });
       const result = await this.checkRun(ext, ctx, (context) => this.ask(ext, ctx.deadline, kind, 'run', { type: kind, spec, ctx: context }));
       const read = this.canvasKeys.get(ext) ?? [];
       const { isCheckResult } = await import('@deepbuild/conformance');

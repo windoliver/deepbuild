@@ -1,0 +1,61 @@
+# #1327 manual e2e, 2026-11-20T10:44Z, Node 24.22.0, Darwin arm64, scripts/ of branch commit 2b032b711
+# Script: scratch git repo whose origin/main holds the branch's scripts/; DEEP_PROOF_ISSUES plants #9998/#9999; no approval tags.
+
+
+=== 1. new suite #9999 with a real lane.json, commit says Part of #9999, no tag
+$ cat tests/acceptance/9999/lane.json
+{ "alone": true, "why": "Its tests start a hub on a fixed port." }
+$ node scripts/proof.mjs guard
+PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+proof: wall time 2.8 s
+exit 0
+alone lists: [ 'tests/acceptance/9999/' ]
+plan alone: [ 'tests/acceptance/9999/suite.test.ts' ]  parallel: [ 'tests/acceptance/9998/suite.test.ts' ]  skipped: []  timed: []
+
+=== 2. loosening lane.json: asks for a skip, by hand and a timed grant
+FAIL guard: tests/acceptance/9999/lane.json: a suite's lane file refused, since it says "skip", "byHand", "timed", and a lane file may say only "alone" and "why" (commit 0294ee471b9d; refused even as an approved proposal)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+proof: wall time 1.9 s
+exit 1
+alone lists: [ 'tests/acceptance/9999/' ]
+plan alone: [ 'tests/acceptance/9999/suite.test.ts' ]  parallel: [ 'tests/acceptance/9998/suite.test.ts' ]  skipped: []  timed: []
+
+=== 3. lane.json saying alone false (same branch, so step 2's commit is judged again too)
+FAIL guard: tests/acceptance/9999/lane.json: a suite's lane file refused, since it says "skip", "byHand", "timed", and a lane file may say only "alone" and "why" (commit 0294ee471b9d; refused even as an approved proposal)
+FAIL guard: tests/acceptance/9999/lane.json: a suite's lane file refused, since its "alone" is not true (commit f661b05e4d59; refused even as an approved proposal)
+exit 1
+
+=== 4. a well-shaped lane.json in another issue's folder (#9998), change names #9999
+FAIL guard: tests/acceptance/9998/lane.json: a lane file in #9998's folder, added by a change that names #9999; a new one lands only with its own issue's suite (commit c423e2901d52)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+proof: wall time 1.8 s
+exit 1
+
+=== 4b. a well-shaped lane.json added later to #9998's own folder, whose suite already landed (change names #9998)
+FAIL guard: tests/acceptance/9998/lane.json: a lane file added to tests/acceptance/9998/, whose files landed before it; a new one lands only with its suite (commit 644871294d40)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+proof: wall time 2.0 s
+exit 1
+
+=== 5. landed lane.json (merge #9999 good branch to main), then a change rewords and another removes it
+FAIL guard: tests/acceptance/9999/lane.json: a landed suite's lane file changed (commit 592a1b3e74e2)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+proof: wall time 2.2 s
+exit 1
+FAIL guard: tests/acceptance/9999/lane.json: a landed suite's lane file removed (commit cfacfdda8e0e)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+proof: wall time 2.1 s
+exit 1
+alone lists: []
+plan alone: []  parallel: [
+  'tests/acceptance/9999/suite.test.ts',
+  'tests/acceptance/9998/suite.test.ts'
+]  skipped: []  timed: []
+
+=== 6. a case-folded sibling name beside the landed file
+FAIL guard: tests/acceptance/9999/lane.jſon: a lane file named other than exactly tests/acceptance/9999/lane.json, which a disk that folds case reads in its place (commit 154d7c3c1c40; refused even as an approved proposal)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+FAIL guard: tests/acceptance/9999/lane.jſon: a lane file named other than exactly tests/acceptance/9999/lane.json, which a disk that folds case reads in its place (uncommitted changes; refused even as an approved proposal)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+proof: wall time 2.5 s
+exit 1

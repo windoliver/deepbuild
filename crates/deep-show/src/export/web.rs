@@ -724,7 +724,14 @@ impl Hub<'_> {
         // The player and its page glue.
         let (_, wasm_sha) = files.put(player(set, guard), Some("wasm"), Map::new());
         let (glue_path, _) = files.put(set.glue.to_vec(), Some("js"), Map::new());
-        let element = element(guard);
+        // #277's planted web copy: back in view, it jumps to the confirmed step.
+        let element = match self.scenario.module_planted.as_deref() {
+            Some("web_catch_up_jumps") => ELEMENT.replace(
+                "    const opened = JSON.parse(this.#player.join(",
+                "    this.#player.net_plant('web_catch_up_jumps');\n    const opened = JSON.parse(this.#player.join(",
+            ),
+            _ => element(guard),
+        };
         let (element_path, _) = files.put(element.clone().into_bytes(), Some("js"), Map::new());
         // The document as the app's frames draw it, and the recorded input track as the hub holds
         // it (#1164's `track` call), its bytes the ones its hash is of, so it is the app's by hash.

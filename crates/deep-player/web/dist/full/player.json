@@ -2,8 +2,8 @@
   "wasm_bindgen": "0.2.129",
   "set": "full",
   "files": {
-    "player.js": "6de949f44a5f19ebc8c685a5dc3050fba988d4f9bf1cda57296173e470ebb1ef",
-    "player_bg.wasm": "4ab7d733f982e2128bae79abf56e0669b558a6d0a82ea92b4d0d1383a968d878"
+    "player.js": "63f4869a561c7d0642a436dcecdcd4723f2e694224d8869aab2d0b1d9259c846",
+    "player_bg.wasm": "c6c69ca36bf62ea6e3d3e10357b1ce147980e56536e0388e96eb94a7a8575662"
   },
   "core_version": "0.0.0",
   "set_digest": "e5a2a2f7bd2eb17a5ad2d39eb78418b7a0ba56710af4b8409a01841f30b8e7ed",

@@ -1,0 +1,220 @@
+# #2256's blind redraft (#2047's sweep) on its base, e2bdc8ae0ba5edab340b85a54d676a3a6e22b049 ("blind base for #2256:
+# main e575a47af with the issue's bug present"), then on each twin laid over the base's bench, then on a stand-in that
+# parses. <checkout> stands for this checkout's path.
+#
+#   node --test tests/acceptance/2256-redraft-2047/ac1-canvas.test.mjs
+#
+# Run on 2026-11-20 with Node v24.22.2 on macOS, at a one-minute load of 345 to 365 on a shared Mac. Each run below was
+# made once with node's spec reporter (shown, NO_COLOR=1) and once with the proof lane's own reporter
+# (scripts/proof-reporter.mjs), whose failures were read by a copy of scripts/proof-runs.mjs's atAssertion: every
+# failure below is an AssertionError [ERR_ASSERTION] whose first stack frame is
+# tests/acceptance/2256-redraft-2047/ac1-canvas.test.mjs, so the before lane reads each as failed at its assertion.
+#
+# A twin was laid by copying its benchmarks/canvas.mjs over this checkout's for the run; the base's file was put back
+# after each run and its SHA-256 checked (5ba85fe611493f8bd476452e95f385c7e5b96ecae9dfb17dfe12c2775ee5816d).
+#
+# Summary
+#   base          node --check exits 1         AC1 node --check test FAILS at line 42   AC1 judge test FAILS at line 55
+#   unparsed      node --check exits 1         AC1 node --check test FAILS at line 42   AC1 judge test FAILS at line 55
+#   judge-throws  node --check exits 0         AC1 node --check test passes             AC1 judge test FAILS at line 55
+#   stand-in      node --check exits 0         AC1 node --check test passes             AC1 judge test passes
+#
+# The reason on the base and on unparsed is the issue's: "SyntaxError: Unexpected reserved word" at the dispatch's
+# `await workloads[task]();` (line 2069 of the base's bench, line 27 of the twin's), so the judge exits 1 with nothing on
+# stdout. On judge-throws the bench parses, and its judge exits 1 on "Error: Unknown class undefined" with nothing on
+# stdout.
+
+
+## The base: both tests fail at their assertion
+
+$ node --test tests/acceptance/2256-redraft-2047/ac1-canvas.test.mjs
+✖ AC1 #2256.6bb42fca node --check benchmarks/canvas.mjs exits 0 (1425.250917ms)
+✖ AC1 #2256.6bb42fca the issue's canvas-look-frames report piped to node benchmarks/canvas.mjs judge prints a judged line instead of a SyntaxError (1510.988083ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4190.503583
+
+✖ failing tests:
+
+test at tests/acceptance/2256-redraft-2047/ac1-canvas.test.mjs:40:1
+✖ AC1 #2256.6bb42fca node --check benchmarks/canvas.mjs exits 0 (1425.250917ms)
+  AssertionError [ERR_ASSERTION]: node --check benchmarks/canvas.mjs exits 1, not 0. Its stderr:
+  <checkout>/benchmarks/canvas.mjs:2069
+  await workloads[task]();
+  ^^^^^
+  
+  SyntaxError: Unexpected reserved word
+  
+  Node.js v24.22.2
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/2256-redraft-2047/ac1-canvas.test.mjs:42:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2256-redraft-2047/ac1-canvas.test.mjs:45:1
+✖ AC1 #2256.6bb42fca the issue's canvas-look-frames report piped to node benchmarks/canvas.mjs judge prints a judged line instead of a SyntaxError (1510.988083ms)
+  AssertionError [ERR_ASSERTION]: node benchmarks/canvas.mjs judge printed no judged line (an exit of 0, its last stdout line a JSON object whose status is one of PASS, FAIL, BLOCKED, INVALID, INCONCLUSIVE): it exited 1, its last stdout line (none). Its stderr:
+  <checkout>/benchmarks/canvas.mjs:2069
+  await workloads[task]();
+  ^^^^^
+  
+  SyntaxError: Unexpected reserved word
+  
+  Node.js v24.22.2
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/2256-redraft-2047/ac1-canvas.test.mjs:55:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+
+## The twin unparsed (twins/unparsed/benchmarks/canvas.mjs laid over benchmarks/canvas.mjs): both fail at their assertion
+
+$ node --test tests/acceptance/2256-redraft-2047/ac1-canvas.test.mjs
+✖ AC1 #2256.6bb42fca node --check benchmarks/canvas.mjs exits 0 (1364.335042ms)
+✖ AC1 #2256.6bb42fca the issue's canvas-look-frames report piped to node benchmarks/canvas.mjs judge prints a judged line instead of a SyntaxError (1463.845875ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4747.459292
+
+✖ failing tests:
+
+test at tests/acceptance/2256-redraft-2047/ac1-canvas.test.mjs:40:1
+✖ AC1 #2256.6bb42fca node --check benchmarks/canvas.mjs exits 0 (1364.335042ms)
+  AssertionError [ERR_ASSERTION]: node --check benchmarks/canvas.mjs exits 1, not 0. Its stderr:
+  <checkout>/benchmarks/canvas.mjs:27
+  await workloads[task]();
+  ^^^^^
+  
+  SyntaxError: Unexpected reserved word
+  
+  Node.js v24.22.2
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/2256-redraft-2047/ac1-canvas.test.mjs:42:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2256-redraft-2047/ac1-canvas.test.mjs:45:1
+✖ AC1 #2256.6bb42fca the issue's canvas-look-frames report piped to node benchmarks/canvas.mjs judge prints a judged line instead of a SyntaxError (1463.845875ms)
+  AssertionError [ERR_ASSERTION]: node benchmarks/canvas.mjs judge printed no judged line (an exit of 0, its last stdout line a JSON object whose status is one of PASS, FAIL, BLOCKED, INVALID, INCONCLUSIVE): it exited 1, its last stdout line (none). Its stderr:
+  <checkout>/benchmarks/canvas.mjs:27
+  await workloads[task]();
+  ^^^^^
+  
+  SyntaxError: Unexpected reserved word
+  
+  Node.js v24.22.2
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/2256-redraft-2047/ac1-canvas.test.mjs:55:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+
+## The twin judge-throws (twins/judge-throws/benchmarks/canvas.mjs laid over benchmarks/canvas.mjs): the judge test fails
+## at its assertion; the node --check test passes, as the bench parses
+
+$ node --test tests/acceptance/2256-redraft-2047/ac1-canvas.test.mjs
+✔ AC1 #2256.6bb42fca node --check benchmarks/canvas.mjs exits 0 (1831.57175ms)
+✖ AC1 #2256.6bb42fca the issue's canvas-look-frames report piped to node benchmarks/canvas.mjs judge prints a judged line instead of a SyntaxError (1708.375584ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5233.473292
+
+✖ failing tests:
+
+test at tests/acceptance/2256-redraft-2047/ac1-canvas.test.mjs:45:1
+✖ AC1 #2256.6bb42fca the issue's canvas-look-frames report piped to node benchmarks/canvas.mjs judge prints a judged line instead of a SyntaxError (1708.375584ms)
+  AssertionError [ERR_ASSERTION]: node benchmarks/canvas.mjs judge printed no judged line (an exit of 0, its last stdout line a JSON object whose status is one of PASS, FAIL, BLOCKED, INVALID, INCONCLUSIVE): it exited 1, its last stdout line (none). Its stderr:
+  <checkout>/benchmarks/canvas.mjs:18
+    if (!limits) throw Error(`Unknown class ${current.class}`);
+                       ^
+  
+  Error: Unknown class undefined
+  
+  Node.js v24.22.2
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/2256-redraft-2047/ac1-canvas.test.mjs:55:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+
+## A stand-in that parses: the twin unparsed with its two lost lines put back where it marks them, laid over
+## benchmarks/canvas.mjs (not committed). Both tests pass, so neither fails on every program.
+
+$ node --test tests/acceptance/2256-redraft-2047/ac1-canvas.test.mjs
+✔ AC1 #2256.6bb42fca node --check benchmarks/canvas.mjs exits 0 (1573.169375ms)
+✔ AC1 #2256.6bb42fca the issue's canvas-look-frames report piped to node benchmarks/canvas.mjs judge prints a judged line instead of a SyntaxError (2101.514625ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5549.245958
