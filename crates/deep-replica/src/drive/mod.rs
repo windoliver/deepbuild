@@ -2600,7 +2600,8 @@ fn copy_record(socket: &Path, token: &str) -> Result<Vec<Value>, String> {
             .call("events.read", json!({"after": after, "limit": PAGE}))
             .map_err(|e| format!("{e:?}"))?;
         let read = page["events"].as_array().cloned().unwrap_or_default();
-        let full = read.len() == PAGE;
+        // A page the hub's byte cap ended says `more` however few events it holds (#1576).
+        let full = read.len() == PAGE || page["more"] == true;
         events.extend(read.into_iter().map(redact));
         after = page["log_pos"].as_u64().unwrap_or(after);
         if !full {
