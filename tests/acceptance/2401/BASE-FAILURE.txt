@@ -1,0 +1,147 @@
+Acceptance tests for #2401 on the base b4a2049e8 (origin/main; it has no spikes/2401/), run on 2026-11-20 with Node
+24.22.0 on Mac15,12, load 7.3. All 7 fail, each on BLOCKED: the record of the 40 runs is not at
+spikes/2401/record.json. Every test reads the committed record first, so none reaches the write-up, the row under
+Decided or TASTE.json. Local paths are replaced by <checkout>.
+
+  node --test --test-concurrency=1 --test-reporter=tap 'tests/acceptance/2401/*.test.mjs'
+
+TAP version 13
+# Subtest: \#2401.ed54ac04 the 40 runs are on the record: 20 under each label, interleaved, one job, account, model and Claude Code version, each with its tokens from its stream and both windows before and after
+not ok 1 - \#2401.ed54ac04 the 40 runs are on the record: 20 under each label, interleaved, one job, account, model and Claude Code version, each with its tokens from its stream and both windows before and after
+  ---
+  duration_ms: 0.678291
+  type: 'test'
+  location: '<checkout>/tests/acceptance/2401/ac1-runs.test.mjs:11:1'
+  failureType: 'testCodeFailure'
+  error: 'BLOCKED: the record of the 40 runs is not at spikes/2401/record.json'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    readText (file://<checkout>/tests/acceptance/2401/helpers.mjs:56:32)
+    loadRecord (file://<checkout>/tests/acceptance/2401/helpers.mjs:62:16)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/2401/ac1-runs.test.mjs:12:13)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.start (node:internal/test_runner/test:1262:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+  ...
+# Subtest: \#2401.ed54ac04 a run whose 5-hour window moved by more than its own use is left out, and the record and the write-up say how many were
+not ok 2 - \#2401.ed54ac04 a run whose 5-hour window moved by more than its own use is left out, and the record and the write-up say how many were
+  ---
+  duration_ms: 0.142667
+  type: 'test'
+  location: '<checkout>/tests/acceptance/2401/ac1-runs.test.mjs:59:1'
+  failureType: 'testCodeFailure'
+  error: 'BLOCKED: the record of the 40 runs is not at spikes/2401/record.json'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    readText (file://<checkout>/tests/acceptance/2401/helpers.mjs:56:32)
+    loadRecord (file://<checkout>/tests/acceptance/2401/helpers.mjs:62:16)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/2401/ac1-runs.test.mjs:60:13)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+    Test.postRun (node:internal/test_runner/test:1542:19)
+    Test.run (node:internal/test_runner/test:1467:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+  ...
+# Subtest: \#2401.ed54ac04 the record and the write-up hold no account ID, session ID, key, home path or email address
+not ok 3 - \#2401.ed54ac04 the record and the write-up hold no account ID, session ID, key, home path or email address
+  ---
+  duration_ms: 0.091708
+  type: 'test'
+  location: '<checkout>/tests/acceptance/2401/ac1-runs.test.mjs:83:1'
+  failureType: 'testCodeFailure'
+  error: 'BLOCKED: the record of the 40 runs is not at spikes/2401/record.json'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    readText (file://<checkout>/tests/acceptance/2401/helpers.mjs:56:32)
+    loadRecord (file://<checkout>/tests/acceptance/2401/helpers.mjs:62:16)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/2401/ac1-runs.test.mjs:84:3)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+    Test.postRun (node:internal/test_runner/test:1542:19)
+    Test.run (node:internal/test_runner/test:1467:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# Subtest: \#2401.fb765468 the reading gives window percent per million tokens per label with its range over the kept runs and their ratio, for the 5-hour and the weekly window, as the runs give it; under 15 kept on a side it reads INCONCLUSIVE with no ratio
+not ok 4 - \#2401.fb765468 the reading gives window percent per million tokens per label with its range over the kept runs and their ratio, for the 5-hour and the weekly window, as the runs give it; under 15 kept on a side it reads INCONCLUSIVE with no ratio
+  ---
+  duration_ms: 0.577417
+  type: 'test'
+  location: '<checkout>/tests/acceptance/2401/ac2-reading.test.mjs:30:1'
+  failureType: 'testCodeFailure'
+  error: 'BLOCKED: the record of the 40 runs is not at spikes/2401/record.json'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    readText (file://<checkout>/tests/acceptance/2401/helpers.mjs:56:32)
+    loadRecord (file://<checkout>/tests/acceptance/2401/helpers.mjs:62:16)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/2401/ac2-reading.test.mjs:31:13)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.start (node:internal/test_runner/test:1262:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+  ...
+# Subtest: \#2401.96860f79 each label's tool list, read from every run's first entry, is the record's; the lists are the same, or each tool in one and not the other is listed with the job flag that removes it
+not ok 5 - \#2401.96860f79 each label's tool list, read from every run's first entry, is the record's; the lists are the same, or each tool in one and not the other is listed with the job flag that removes it
+  ---
+  duration_ms: 0.592458
+  type: 'test'
+  location: '<checkout>/tests/acceptance/2401/ac3-tools.test.mjs:10:1'
+  failureType: 'testCodeFailure'
+  error: 'BLOCKED: the record of the 40 runs is not at spikes/2401/record.json'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    readText (file://<checkout>/tests/acceptance/2401/helpers.mjs:56:32)
+    loadRecord (file://<checkout>/tests/acceptance/2401/helpers.mjs:62:16)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/2401/ac3-tools.test.mjs:11:13)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.start (node:internal/test_runner/test:1262:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+  ...
+# Subtest: \#2401.76fa3238 one row under Decided names the decision with the reading's date and Claude Code's version, reads not set or offered and off as the rule gives it, and on by default only beside a link to the maker's own statement
+not ok 6 - \#2401.76fa3238 one row under Decided names the decision with the reading's date and Claude Code's version, reads not set or offered and off as the rule gives it, and on by default only beside a link to the maker's own statement
+  ---
+  duration_ms: 0.611959
+  type: 'test'
+  location: '<checkout>/tests/acceptance/2401/ac4-decided.test.mjs:13:1'
+  failureType: 'testCodeFailure'
+  error: 'BLOCKED: the record of the 40 runs is not at spikes/2401/record.json'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    readText (file://<checkout>/tests/acceptance/2401/helpers.mjs:56:32)
+    loadRecord (file://<checkout>/tests/acceptance/2401/helpers.mjs:62:16)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/2401/ac4-decided.test.mjs:14:13)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.start (node:internal/test_runner/test:1262:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+  ...
+# Subtest: \#2401.4cfdbe12 the owner's taste call on exactly this write-up and record says it looks right; with none it reads INCONCLUSIVE, never PASS
+not ok 7 - \#2401.4cfdbe12 the owner's taste call on exactly this write-up and record says it looks right; with none it reads INCONCLUSIVE, never PASS
+  ---
+  duration_ms: 0.5175
+  type: 'test'
+  location: '<checkout>/tests/acceptance/2401/ac5-taste.test.mjs:10:1'
+  failureType: 'testCodeFailure'
+  error: 'BLOCKED: the record of the 40 runs is not at spikes/2401/record.json'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    readText (file://<checkout>/tests/acceptance/2401/helpers.mjs:56:32)
+    loadRecord (file://<checkout>/tests/acceptance/2401/helpers.mjs:62:16)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/2401/ac5-taste.test.mjs:11:3)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.start (node:internal/test_runner/test:1262:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+  ...
+1..7
+# tests 7
+# suites 0
+# pass 0
+# fail 7
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 323.605292
