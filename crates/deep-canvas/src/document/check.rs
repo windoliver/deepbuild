@@ -422,6 +422,20 @@ fn in_chunks<T: Send, R: Send>(entries: &mut [T], work: impl Fn(&mut [T]) -> R +
     in_threads(entries, threads, work)
 }
 
+/// Runs `work` on each index below `count`, a chunk of indexes per core, up to 8, on scoped threads
+/// when std reports more than one core, and on the caller's thread otherwise (#1172: a pack
+/// field's entries, each checked on its own).
+#[inline(never)]
+pub fn each_index(count: usize, work: &(dyn Fn(usize) + Sync)) {
+    let threads = std::thread::available_parallelism().map_or(1, |n| n.get().min(8).min(count));
+    let mut indexes: Vec<usize> = (0..count).collect();
+    in_threads(&mut indexes, threads, |chunk| {
+        for i in chunk.iter() {
+            work(*i);
+        }
+    });
+}
+
 /// The steps of a check after its items, in their order.
 #[derive(Clone, Copy)]
 enum Tail {

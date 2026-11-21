@@ -9,6 +9,7 @@ pub mod voice;
 
 use deep_canvas::registry::lists::RegistryDef;
 use serde_json::{json, Value};
+use std::sync::OnceLock;
 
 use preset::{Preset, RULE_COST, RULE_CYCLE, RULE_EDGE, RULE_NODE, RULE_PARAM};
 use voice::Twists;
@@ -103,27 +104,14 @@ pub fn presets_field_with(manifest: &Value, twists: Twists) -> Vec<(String, Stri
             (named, valid_key(key).then(|| Preset::compile(v)))
         })
         .collect();
-    let threads = std::thread::available_parallelism().map_or(1, |n| n.get().min(8));
-    let swept: Vec<Option<check::Refusal>> = std::thread::scope(|s| {
-        let handles: Vec<_> = compiled
-            .chunks(compiled.len().div_ceil(threads).max(1))
-            .map(|chunk| {
-                s.spawn(move || {
-                    chunk
-                        .iter()
-                        .map(|(named, p)| match p {
-                            Some(Ok(p)) => check::sweep(p, named, twists),
-                            _ => None,
-                        })
-                        .collect::<Vec<_>>()
-                })
-            })
-            .collect();
-        handles
-            .into_iter()
-            .flat_map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e)))
-            .collect()
+    let swept: Vec<OnceLock<Option<check::Refusal>>> =
+        compiled.iter().map(|_| OnceLock::new()).collect();
+    deep_canvas::document::each_index(compiled.len(), &|i| {
+        if let (named, Some(Ok(p))) = &compiled[i] {
+            let _ = swept[i].set(check::sweep(p, named, twists));
+        }
     });
+    let swept = swept.into_iter().map(|s| s.into_inner().flatten());
     let mut bad = Vec::new();
     for ((key, _), ((named, p), refusal)) in presets.iter().zip(compiled.into_iter().zip(swept)) {
         let Some(p) = p else {

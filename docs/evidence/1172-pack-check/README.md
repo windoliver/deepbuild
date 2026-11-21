@@ -30,13 +30,15 @@ INCONCLUSIVE too: the shipped check took 13,790 ms at the base and 10,368 ms at 
 ## The preset sweep
 
 Checked alone on the head's build, every pack takes under 1.3 s but `foley`, at 4.8 s: its 90 presets are each swept
-(27 or more 2 s renders apiece) one after another. The sweep now runs a chunk of presets per core, up to 8, and reads
-the refusals back in the presets' order. Stack samples of the canvas core during the check show eight threads in
+(27 or more 2 s renders apiece) one after another. The sweep now runs a chunk of presets per core, up to 8, through
+`deep_canvas::document::each_index` (the canvas crate's reviewed thread use, inline on one core, so the wasm lane
+still passes), and reads the refusals back in the presets' order; `sweep-checks.txt` has the order test, its
+wrong-order run and the wasm lane. Stack samples of the canvas core during the check show eight threads in
 `Voice::render_part` under `presets_field_with`.
 
 Its gain is **not measured**: `spark-foley-parallel.txt` (`foley-alone.mjs`) was taken at load 130 to 146 on 20
 cores, where it reads 4.8 s with every core and 11 to 28 s pinned to one. `cargo test -p deep-canvas-media synth`:
-9 passed.
+10 passed.
 
 Not shown here: that the two #1172 suites pass. They need the Mac's app window, and on the Spark the first check
 plus one call is still about 9 s of their 10 s.

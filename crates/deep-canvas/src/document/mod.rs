@@ -41,7 +41,7 @@ pub use apply::{
 };
 pub use check::{
     check, check_costed, check_in, check_packed, check_sized, check_with, duration, frame_of,
-    frame_rate_of, literal_forms, recheck, recheck_skipping_referrers, recheck_with, CheckResult,
+    each_index, frame_rate_of, literal_forms, recheck, recheck_skipping_referrers, recheck_with, CheckResult,
     Referrers,
 };
 pub use close::{field_names, kind_names, owners, undeclared};
