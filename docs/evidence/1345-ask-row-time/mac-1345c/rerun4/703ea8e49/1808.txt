@@ -1,0 +1,100 @@
+
+ RUN  v5.0.5 /private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-angry-chatelet-916a48/55578c1d-bd8a-4548-b218-4762505ace60/scratchpad/1345c/head/tests/acceptance/1808
+
+ × window.test.ts > AC2 #1808.86c051bf every page scrolls > AC2 #1808.86c051bf: a session page whose failure runs 400 lines shows its last line after scrolling 55855ms
+   → expected [ Array(1) ] to deeply equal []
+ ✓ window.test.ts > AC2 #1808.86c051bf every page scrolls > AC2 #1808.86c051bf wrong program: a planted page that clips fails, naming the page 4631ms
+ ✓ window.test.ts > AC4 #1808.ad9b29cb a narrow window keeps the count > AC4 #1808.ad9b29cb: at 700 wide with two open asks, the count shows on the page and one key reaches the ask rows 331ms
+ ✓ window.test.ts > AC4 #1808.ad9b29cb a narrow window keeps the count > AC4 #1808.ad9b29cb wrong program: a planted narrow window with no count fails, naming the window 289ms
+ ✓ window.test.ts > AC6 #1808.445ec374 a long title fits its slot > AC6 #1808.445ec374: a 200-character title, a Han title and an Arabic title each draw on one line inside their slot, with the full text as the accessible name 376ms
+ ✓ window.test.ts > AC6 #1808.445ec374 a long title fits its slot > AC6 #1808.445ec374 wrong program: a planted row whose title runs under its state word fails, naming the row 388ms
+ ✓ window.test.ts > AC7 #1808.98ed0a32 every state word leaves 12 characters of title > AC7 #1808.98ed0a32: at 260 wide, a row reading INCONCLUSIVE shows at least 12 characters of its title 933ms
+ ✓ window.test.ts > AC7 #1808.98ed0a32 every state word leaves 12 characters of title > AC7 #1808.98ed0a32 wrong program: a planted row that shows fewer fails, naming the row 345ms
+ × kept.test.ts > AC3 #1808.f340f4c7 it comes back as you left it > AC3 #1808.f340f4c7: after a resize to 1200×800 and the list dragged to 300, a quit and a launch show that frame and width with the first open ask selected 21655ms
+   → BLOCKED: the screen is locked, so the real window draws nothing a person could see and takes no key; run with the screen awake and unlocked (caffeinate -di)
+ × kept.test.ts > AC3 #1808.f340f4c7 it comes back as you left it > AC3 #1808.f340f4c7 wrong program: a planted app that opens at the opening size fails, naming the frame 34ms
+   → BLOCKED: the screen is locked, so the real window draws nothing a person could see and takes no key; run with the screen awake and unlocked (caffeinate -di)
+ × shown.test.ts > AC9 #1808.d5e52086 shown to you > AC9 #1808.d5e52086: the check run takes the list scrolled to its last row, the window at 700 wide on the list and on a page, a long card scrolled and rows with a long, a Han and an Arabic title from the real app, and reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right 41ms
+   → BLOCKED: the screen is locked, so the real window draws nothing a person could see and takes no key; run with the screen awake and unlocked (caffeinate -di)
+ ✓ list.test.ts > AC1 #1808.ba86d5b6 every list scrolls > AC1 #1808.ba86d5b6: at 960×640 with 700 rows, the last row is reached by the wheel and by Down, and the focused row is always in view 59562ms
+ ✓ list.test.ts > AC1 #1808.ba86d5b6 every list scrolls > AC1 #1808.ba86d5b6 wrong program: a planted list that clips fails, naming the first row that can't be reached 5367ms
+ ✓ card.test.ts > AC5 #1808.952d3557 every card can arm > AC5 #1808.952d3557: at 960×640, a fixture approval card with 30 rows arms and takes an answer, and a press 2 s after a card is shown never reads "Hold still" 5628ms
+ ✓ card.test.ts > AC5 #1808.952d3557 every card can arm > AC5 #1808.952d3557 wrong program: a planted card that grows past its slot and stays unarmed fails, naming the ask 3070ms
+ ✓ card.test.ts > AC8 #1808.d7b1f43e folded options are opened before the card arms > AC8 #1808.d7b1f43e: a 12-option card with three options folded arms only after the fold was opened 685ms
+ ✓ card.test.ts > AC8 #1808.d7b1f43e folded options are opened before the card arms > AC8 #1808.d7b1f43e wrong program: a planted card that arms with options never shown fails, naming them 613ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  kept.test.ts > AC3 #1808.f340f4c7 it comes back as you left it > AC3 #1808.f340f4c7: after a resize to 1200×800 and the list dragged to 300, a quit and a launch show that frame and width with the first open ask selected
+Error: BLOCKED: the screen is locked, so the real window draws nothing a person could see and takes no key; run with the screen awake and unlocked (caffeinate -di)
+ ❯ blocked helpers.ts:31:56
+     29| export type { Row, Run, SNode, Snapshot };
+     30| export const SUITE = fileURLToPath(new URL('./', import.meta.url));
+     31| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     32| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     33| const said = (v: unknown, n = 300): string => (JSON.stringify(v) ?? St…
+ ❯ realAppAccess helpers.ts:380:17
+ ❯ RealApp.launch helpers.ts:405:5
+ ❯ keptFailures kept.test.ts:59:15
+ ❯ kept.test.ts:105:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  kept.test.ts > AC3 #1808.f340f4c7 it comes back as you left it > AC3 #1808.f340f4c7 wrong program: a planted app that opens at the opening size fails, naming the frame
+Error: BLOCKED: the screen is locked, so the real window draws nothing a person could see and takes no key; run with the screen awake and unlocked (caffeinate -di)
+ ❯ blocked helpers.ts:31:56
+     29| export type { Row, Run, SNode, Snapshot };
+     30| export const SUITE = fileURLToPath(new URL('./', import.meta.url));
+     31| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     32| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     33| const said = (v: unknown, n = 300): string => (JSON.stringify(v) ?? St…
+ ❯ realAppAccess helpers.ts:380:17
+ ❯ RealApp.launch helpers.ts:405:5
+ ❯ keptFailures kept.test.ts:59:15
+ ❯ kept.test.ts:109:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  shown.test.ts > AC9 #1808.d5e52086 shown to you > AC9 #1808.d5e52086: the check run takes the list scrolled to its last row, the window at 700 wide on the list and on a page, a long card scrolled and rows with a long, a Han and an Arabic title from the real app, and reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right
+Error: BLOCKED: the screen is locked, so the real window draws nothing a person could see and takes no key; run with the screen awake and unlocked (caffeinate -di)
+ ❯ blocked helpers.ts:31:56
+     29| export type { Row, Run, SNode, Snapshot };
+     30| export const SUITE = fileURLToPath(new URL('./', import.meta.url));
+     31| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     32| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     33| const said = (v: unknown, n = 300): string => (JSON.stringify(v) ?? St…
+ ❯ realAppAccess helpers.ts:380:17
+ ❯ shown.test.ts:93:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  window.test.ts > AC2 #1808.86c051bf every page scrolls > AC2 #1808.86c051bf: a session page whose failure runs 400 lines shows its last line after scrolling
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the session page session/a50f09ba-4164-4042-ba1d-8cb44539bd5b doesn't show its last line \"line 400 of 400\" after scrolling: the wheel over it moves nothing further, with \"line 024 of 400\" the last line shown",
++ ]
+
+ ❯ window.test.ts:78:34
+     76| describe(`AC2 ${ID.page} every page scrolls`, () => {
+     77|   it(`AC2 ${ID.page}: a session page whose failure runs 400 lines show…
+     78|     expect(await pageFailures()).toEqual([]);
+       |                                  ^
+     79|   }, 30 * MIN);
+     80|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  3 failed | 2 passed (5)
+      Tests  4 failed | 13 passed (17)
+   Start at  04:17:16
+   Duration  177.01s (tests 99%)
+

@@ -1,0 +1,5 @@
+Mac18,1
+ProductName:		macOS ProductVersion:		27.2.1 BuildVersion:		26B7131 
+v24.22.0
+start 2026-11-21 00:40:28  0:40  up 1 day,  5:07, 3 users, load averages: 30.46 46.40 52.69 thermal Note: No thermal warning level has been recorded Note: No pe
+end 2026-11-21 02:07:31  2:07  up 1 day,  6:34, 4 users, load averages: 25.87 26.71 33.22

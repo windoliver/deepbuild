@@ -1,0 +1,10 @@
+ FAIL  guard.test.ts > #1458 the guard on bare sizes and distances > AC5 #1458.c735b2b1: the guard passes on main's three lines, and the merge base's failure is there to name in the PR
+ FAIL  redraft-ac13/shown.test.ts > #1458 shown to you > AC13 the check run takes each shipped page from the real app at 960 × 640 and 1512 × 982, in light and dark, and reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right
+ FAIL  replica.test.ts > #1458 what the shipped pages draw > AC11 #1458.5350b8ad: no row reads "… ago" or "in …", a planted one fails naming the string, and an ask's row, card and notification show one moment in one form
+ FAIL  replica.test.ts > #1458 what the shipped pages draw > AC7 #1458.0c2959d0: every chrome string draws in the chrome face, named in the clean look; a planted label in the canvas face on a row fails, naming the view
+ FAIL  replica.test.ts > #1458 what the shipped pages draw > AC8 #1458.52c35293: a time ticking from 9 s to 10 s moves no other glyph in its row
+ × guard.test.ts > #1458 the guard on bare sizes and distances > AC5 #1458.c735b2b1: the guard passes on main's three lines, and the merge base's failure is there to name in the PR
+ × redraft-ac13/shown.test.ts > #1458 shown to you > AC13 the check run takes each shipped page from the real app at 960 × 640 and 1512 × 982, in light and dark, and reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right
+ × replica.test.ts > #1458 what the shipped pages draw > AC11 #1458.5350b8ad: no row reads "… ago" or "in …", a planted one fails naming the string, and an ask's row, card and notification show one moment in one form
+ × replica.test.ts > #1458 what the shipped pages draw > AC7 #1458.0c2959d0: every chrome string draws in the chrome face, named in the clean look; a planted label in the canvas face on a row fails, naming the view
+ × replica.test.ts > #1458 what the shipped pages draw > AC8 #1458.52c35293: a time ticking from 9 s to 10 s moves no other glyph in its row

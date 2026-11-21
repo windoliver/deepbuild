@@ -1,0 +1,41 @@
+
+ RUN  v5.0.5 /private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-angry-chatelet-916a48/55578c1d-bd8a-4548-b218-4762505ace60/scratchpad/1345c/head/tests/acceptance/1345
+
+ ❯ batch.test.ts (3 tests | 1 failed) 5148703ms
+   ✓ AC3 #1345.9c5710a8 Five calls from five issues reach one person as one card, and that day raises one notification 5142683ms
+   ✓ AC7 #1345.aaa324a9 Five calls from five issues draw as #328's card with five rows, and the tree holds no second batch card. A row whose Send back would revert says so before it's pressed. A planted row that reverts unannounced fails, naming the issue 5466ms
+   × AC8 #1345.69fa185d On the five-row card each row shows when its recommended answer applies, and the five rows add up to the count. A planted card with no time on a row fails, naming the row 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  batch.test.ts > AC8 #1345.69fa185d On the five-row card each row shows when its recommended answer applies, and the five rows add up to the count. A planted card with no time on a row fails, naming the row
+AssertionError: each of the five rows shows when its recommended answer applies, and the rows add up to the count: expected [ …(5) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "#100's row card-row:01M7YZSKEJRSVYSNB45XNMB8F8 (ask:01M7YZSKEJRSVYSNB45XNMB8F8): the list has no row for ask:01M7YZSKEJRSVYSNB45XNMB8F8 to say when its recommended answer applies",
++   "#101's row card-row:01M7YZSKVYS1PTB74D59D9ABHY (ask:01M7YZSKVYS1PTB74D59D9ABHY): the list has no row for ask:01M7YZSKVYS1PTB74D59D9ABHY to say when its recommended answer applies",
++   "#102's row card-row:01M7YZSMAKAV2PBXTC88SDXAVE (ask:01M7YZSMAKAV2PBXTC88SDXAVE): the list has no row for ask:01M7YZSMAKAV2PBXTC88SDXAVE to say when its recommended answer applies",
++   "#103's row card-row:01M7YZSMR0NFSE33VMQBZQ5ZBK (ask:01M7YZSMR0NFSE33VMQBZQ5ZBK): the list has no row for ask:01M7YZSMR0NFSE33VMQBZQ5ZBK to say when its recommended answer applies",
++   "#104's row card-row:01M7YZSN5D4MKB37CVC5KG3MNW (ask:01M7YZSN5D4MKB37CVC5KG3MNW): the list has no row for ask:01M7YZSN5D4MKB37CVC5KG3MNW to say when its recommended answer applies",
++ ]
+
+ ❯ batch.test.ts:75:144
+     73| test(named(8), async () => {
+     74|   const { calls, plain, timeless } = await fiveCalls();
+     75|   expect(timeFailures(plain.seen, calls), 'each of the five rows shows…
+       |                                                                                                                                                ^
+     76|
+     77|   // The planted card draws no time on its first row: the same judgeme…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  02:37:24
+   Duration  5148.97s (tests 100%)
+
