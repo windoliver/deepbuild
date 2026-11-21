@@ -1,0 +1,44 @@
+== .deepbuild/journeys/cart.yaml: outcome passed, testsRun 4, failures 0, evidence 6
+{
+ "outcome": "passed",
+ "testsRun": 4,
+ "failures": [],
+ "evidence": [
+  "<sha#1>",
+  "<sha#2>",
+  "<sha#3>",
+  "<sha#4>",
+  "<sha#5>",
+  "<sha#6>"
+ ],
+ "read": [
+  ".deepbuild/journeys/cart.yaml"
+ ],
+ "mask": null
+}
+== .deepbuild/journeys/cart-wrong.yaml: outcome failed, testsRun 4, failures 1, evidence 5
+{
+ "outcome": "failed",
+ "testsRun": 4,
+ "failures": [
+  {
+   "test": "cart-wrong › total-shown",
+   "file": ".deepbuild/journeys/cart-wrong.yaml",
+   "line": 13,
+   "stack": null,
+   "assertion": true,
+   "message": "expect(getByRole('status', { name: 'Total' })).toContainText('$19.00') failed: found '$18.00'"
+  }
+ ],
+ "evidence": [
+  "<sha#1>",
+  "<sha#2>",
+  "<sha#7>",
+  "<sha#8>",
+  "<sha#9>"
+ ],
+ "read": [
+  ".deepbuild/journeys/cart-wrong.yaml"
+ ],
+ "mask": null
+}
