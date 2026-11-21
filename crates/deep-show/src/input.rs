@@ -22,6 +22,8 @@ use crate::placement::Grid;
 use crate::refused;
 use crate::shared::FLICKS;
 
+pub(crate) mod measure;
+
 /// What a frame draws besides the revision: the camera, and the view controls that choose the
 /// revision and what it hides.
 #[derive(Clone, PartialEq)]
@@ -55,6 +57,8 @@ pub struct PanelScope {
     /// #1498: the text its document draws, shaped as drawn, for its text selection: by the document and revision
     /// it was shaped from.
     pub(crate) texts: Option<((String, u64), Vec<TextBox>)>,
+    /// #1217: its measure tool, session state.
+    pub(crate) measure: measure::Viewer,
 }
 
 /// #1498: a panel's text, as its scope reads it.
@@ -236,6 +240,7 @@ impl Hub<'_> {
                     fields: Default::default(),
                     join: Default::default(),
                     texts: None,
+                    measure: Default::default(),
                 },
             );
             let first = self.seen(panel).ok_or_else(|| refused("not_presented"))?;
@@ -385,6 +390,12 @@ impl Hub<'_> {
         }
         let late = self.scenario.planted == Some(Planted::DragShowsOnRelease)
             && matches!(event, Event::Move(_));
+        // #1217: the measure tool takes its setting and, while it is on, its clicks and keys.
+        match self.measure_input(panel, &doc, event, g, serial) {
+            Ok(Some(reply)) => return reply,
+            Ok(None) => {}
+            Err(e) => return e,
+        }
         // #504: a value for one of the document's own controls goes to its input track or its
         // session state (Control), never to the scope's view.
         let doc_id = self.panel_doc(panel);
@@ -688,6 +699,8 @@ impl Hub<'_> {
                 if let Some(row) = s.picks.focused() {
                     state["focus"] = json!(row);
                 }
+                s.measure
+                    .shown_in(&doc, self.scenario.module_planted.as_deref(), &mut state);
                 state
             }
             _ => Value::Null,
