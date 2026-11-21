@@ -486,6 +486,8 @@ pub struct World {
     pub cache: Option<crate::keyframes::Cache>,
     /// #860: what the track's rewinds left: the current branch's stops and the closed branches.
     pub branches: Branches,
+    /// #552: the match whose draws its `net.draws` reads derive, and a planted derivation.
+    pub draw: crate::draws::Book,
 }
 
 pub type Failed = Value;

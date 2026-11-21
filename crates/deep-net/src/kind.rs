@@ -51,6 +51,8 @@ fn register(r: &mut Registrar) {
         ranged("window", "", 8.0, [0.0, 16.0]),
         ranged("hash_every", "", 60.0, [1.0, 100_000.0]),
         ranged("timeout", "s", 5.0, [0.05, 3600.0]),
+        // #552: the controls whose entries take a random draw (Net: random draws after commit).
+        param("draw_after", ParamType::Json("[control ID]"), "", json!([])),
     ];
     let net = Entry {
         family: "",
@@ -359,6 +361,10 @@ pub struct Config {
     pub timeout: i64,
     /// The document's `controls`: what a player's entry must name, within its range (#550).
     pub controls: Value,
+    /// #552: the controls whose entries take a random draw after commit.
+    pub draw_after: Vec<String>,
+    /// #552: the piece reads `match.me`, so its Join prompt says its fog is a courtesy.
+    pub courtesy: bool,
     /// #277: a logic item reads `net.seats`, so a leave, a drop or an absence hands the seat to
     /// the piece's bot at one agreed step; else the match ends as before, nothing playing it.
     pub seats: bool,
@@ -386,6 +392,13 @@ impl Config {
             hash_every: whole("hash_every", 60, [1, 100_000]),
             timeout: (timeout.max(0.05) * FLICKS as f64).round() as i64,
             controls: controls(form),
+            draw_after: p["draw_after"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|c| Some(c.as_str()?.to_string()))
+                .collect(),
+            courtesy: crate::prompt::reads_me(form),
             seats: reads_seats(form),
         })
     }
@@ -458,6 +471,10 @@ pub fn reads_seats(form: &Value) -> bool {
 }
 
 pub fn admit(controls: &Value, control: &str, value: &Value) -> Result<(), Value> {
+    // #552: a draw's commitment and bits are the net module's own entries.
+    if control == crate::draw::COMMIT || control == crate::draw::REVEAL {
+        return crate::draw::admit(control, value);
+    }
     if let Some(shape) = controls.get(PROFILE).filter(|_| control == PROFILE) {
         return admit_profile(&shape["profile"], value);
     }

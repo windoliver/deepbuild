@@ -17,11 +17,13 @@ use deep_relay::wire::{self, Frame, MatchId};
 use serde_json::{json, Map, Value};
 
 use crate::card::Card;
+use crate::draw::{self, Draws};
 use crate::kind::{self, Config, FLICKS};
 use crate::locate::{self, entries_hash, track_after, Found, FNV_START};
 pub use crate::message::Hashed;
 use crate::message::{hex, Message};
 
+mod draws;
 mod profile;
 mod rollback;
 mod seats;
@@ -96,6 +98,15 @@ pub trait Stepper {
     fn seek(&mut self, step: i64, _len: i64) -> Result<(i64, u64), Value> {
         Err(json!({"code": "no_ring", "step": step}))
     }
+    /// #552: the match whose draws its logic derives, by its ID.
+    fn matched(&mut self, _game: &[u8; 16]) {}
+    /// #552: this copy's own draw entry, made now, before it reaches the track at its step.
+    fn early(&mut self, _entry: &Value) {}
+    /// #552's planted guesser: the six-sided roll it guesses for an action at `step` from the
+    /// document's seed and the step alone.
+    fn guess(&mut self, _step: i64) -> Option<i64> {
+        None
+    }
 }
 
 /// How a planted defect changes its field's value: `n` added to it, or bit `b` of its bits
@@ -154,6 +165,17 @@ pub enum Planted {
     CatchesUpInArrivalOrder,
     /// #277: back from an absence, it jumps to the confirmed step without running the steps.
     JumpsToConfirmed,
+    /// #552: its messages carry its copy's `match.me`.
+    SendsMatchMe,
+    /// #552: it guesses each roll from the document's seed and the step before the action is
+    /// confirmed.
+    GuessesFromSeed,
+    /// #552: its bits differ from its commitment.
+    RevealsOtherBits,
+    /// #552: it never sends its bits.
+    WithholdsBits,
+    /// #552: its logic takes a draw from the bits that reached it first (the stepper's).
+    DrawsFromFirstBits,
 }
 
 impl Planted {
@@ -175,6 +197,11 @@ impl Planted {
             "net_skips_last_exchange" => Planted::SkipsLeaveExchange,
             "net_catch_up_in_arrival_order" => Planted::CatchesUpInArrivalOrder,
             "web_catch_up_jumps" => Planted::JumpsToConfirmed,
+            "net_sends_match_me" => Planted::SendsMatchMe,
+            "net_guesses_from_seed" => Planted::GuessesFromSeed,
+            "net_reveals_other_bits" => Planted::RevealsOtherBits,
+            "net_withholds_bits" => Planted::WithholdsBits,
+            "draws_from_first_bits" => Planted::DrawsFromFirstBits,
             _ => return None,
         })
     }
@@ -317,6 +344,10 @@ pub struct Copy<S> {
     defect: Option<Defect>,
     waits: Vec<Wait>,
     notices: Vec<Notice>,
+    /// #552: its draws after commit, and where their bits come from; the planted guesser's
+    /// guesses, `(step, roll)`.
+    draws: Draws,
+    guesses: Vec<(i64, i64)>,
     /// When it ran each step, and the steps it ran without every player's message (planted).
     ran_at: Vec<i64>,
     ran_early: Vec<i64>,
@@ -380,6 +411,11 @@ impl<S: Stepper> Copy<S> {
             defect: None,
             waits: Vec::new(),
             notices: Vec::new(),
+            // A host that plays a live match hands it the platform's secure source.
+            draws: Draws::new(draw::seeded(u64::from_le_bytes(
+                game[..8].try_into().expect("8 bytes"),
+            ))),
+            guesses: Vec::new(),
             ran_at: Vec::new(),
             ran_early: Vec::new(),
             end: None,
@@ -387,6 +423,7 @@ impl<S: Stepper> Copy<S> {
             seats: seats::Seats::new(players),
             cfg,
         };
+        copy.sim.matched(&game);
         // No entry can be stamped before step `delay`: those steps' messages are empty, but for
         // step 0's, which carries what its player brings (#276: its profile record).
         copy.bring();
@@ -397,6 +434,12 @@ impl<S: Stepper> Copy<S> {
             copy.through = vec![copy.cfg.delay; n];
         }
         copy
+    }
+
+    /// #552: where its draws' bits come from, and how a planted copy draws wrong.
+    pub fn draw_source(&mut self, source: draw::Source, wrong: draw::Wrong) {
+        self.draws = Draws::new(source);
+        self.draws.wrong = wrong;
     }
 
     /// Runs at most `steps` match steps.
@@ -588,11 +631,14 @@ impl<S: Stepper> Copy<S> {
                 let m = Message {
                     entries: seen_by(&made, self.me),
                     hash: self.owed.pop_front(),
+                    me: (self.planted == Planted::SendsMatchMe).then_some(self.me),
                     ..Message::default()
                 };
                 if made.iter().any(|e| e.2.is_some()) {
                     self.scoped.insert(self.through[self.me as usize - 1], made);
                 }
+                let at = self.through[self.me as usize - 1];
+                self.guessed(at, &m.entries);
                 self.send(m);
                 self.reached += 1;
             }
@@ -695,6 +741,8 @@ impl<S: Stepper> Copy<S> {
                           "writer": "net", "player": p});
         }
         let (writer, player) = match (p == self.me, self.planted) {
+            // #552: a draw's commitment and bits are the net module's, for their player.
+            _ if control == draw::COMMIT || control == draw::REVEAL => ("net", p),
             (true, _) => ("you", p),
             (false, Planted::StampsOwnPlayer) => ("peer", self.me),
             (false, _) => ("peer", p),
@@ -757,6 +805,13 @@ impl<S: Stepper> Copy<S> {
             self.ran_at.push(now);
         }
         self.next += 1;
+        // #552: in lockstep a step runs confirmed: its draws now (with a window, `settle`).
+        if self.cfg.window == 0 {
+            self.drawn(k);
+            if self.end.is_some() {
+                return;
+            }
+        }
         if k % self.cfg.hash_every == 0 {
             let h = Hashed {
                 step: k,
@@ -790,10 +845,27 @@ impl<S: Stepper> Copy<S> {
         }
     }
 
+    /// #552's planted guesser: as its own player's entries are stamped and as a peer's arrive,
+    /// before their step is confirmed, it guesses each action's roll from the seed and the step.
+    fn guessed(&mut self, step: i64, entries: &[(String, Value)]) {
+        if self.planted != Planted::GuessesFromSeed {
+            return;
+        }
+        let actions = entries
+            .iter()
+            .filter(|(c, _)| c != draw::COMMIT && c != draw::REVEAL);
+        for _ in actions {
+            if let Some(roll) = self.sim.guess(step) {
+                self.guesses.push((step, roll));
+            }
+        }
+    }
+
     /// A message of `player` (0-based) for `step`, taken once, in step order.
     fn take(&mut self, player: usize, step: i64, m: Message) {
         let who = player as u8 + 1;
         self.seat_of(player, step, &m);
+        self.guessed(step, &m.entries);
         if let Some(h) = m.hash {
             self.theirs.entry(h.step).or_default().push((who, h));
             self.compare(h.step);
@@ -1163,6 +1235,10 @@ impl<S: Stepper> Copy<S> {
             "module_set_digest": self.card.set,
             "runtime_digest": self.card.runtime,
             "players": self.players,
+            // #552: the copy's own player, whose side a replay or an export draws by default.
+            "player": self.me,
+            // #552: the match's ID, which every draw on its track hashes.
+            "match": wire::hex(&self.game),
             "track": self.merged(),
             "confirmed": self.last_confirmed(),
             "end": self.end().map(End::name),
@@ -1213,6 +1289,12 @@ impl<S: Stepper> Copy<S> {
         };
         out.insert("fault".into(), fault);
         out.insert("record".into(), self.record());
+        if self.planted == Planted::GuessesFromSeed {
+            let g: Vec<Value> = (self.guesses.iter())
+                .map(|(step, roll)| json!({"step": step, "roll": roll}))
+                .collect();
+            out.insert("guesses".into(), json!(g));
+        }
         out.insert(
             "ran_at".into(),
             json!(self.ran_at.iter().map(|t| s(*t)).collect::<Vec<_>>()),

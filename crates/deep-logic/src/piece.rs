@@ -273,6 +273,8 @@ pub enum Read {
     World,
     /// Mirror j's range list (Logic: mirror reads).
     Mirror(usize),
+    /// #552: `net.draws`, the draws the input track's reveals complete by the step.
+    Draws,
     /// #189: the carry record's entry (Logic: carry records); #276: the profile record's.
     Carry,
     Profile,
@@ -1042,7 +1044,7 @@ fn emits_of(v: Option<&Value>) -> Result<Vec<Emit>, Vec<Value>> {
     for (kind, e) in kinds {
         let other = e.as_object().and_then(|o| {
             o.keys()
-                .find(|k| !["fields", "max_per_step"].contains(&k.as_str()))
+                .find(|k| !["fields", "max_per_step", "always_visible"].contains(&k.as_str()))
         });
         if let Some(k) = other {
             refused.push(what(

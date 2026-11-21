@@ -33,6 +33,9 @@ pub struct Join {
     state: Option<State>,
     pressed: bool,
     log: Vec<Value>,
+    /// #552: the copy `match`'s `on_panel` put on the panel: its drawn form, through its own
+    /// `match.me`, and the time it stood at after the match's last step.
+    pub(crate) shown: Option<(Value, i64)>,
 }
 
 /// What a scenario gives a match: the link each document was opened through (`docs.<id>.link`),
@@ -127,6 +130,11 @@ pub struct MatchCall {
     full: bool,
     /// #276: each copy's own saves folder, its viewer's store (`saves_dirs: {"<player>": path}`).
     saves_dirs: BTreeMap<u8, PathBuf>,
+    /// #552: the seed of each copy's test source in place of its secure one, the copies' views
+    /// asked for, and the copy the document's panel shows after the match.
+    secure: Option<u64>,
+    views: Vec<crate::matched::ViewAsk>,
+    on_panel: Option<u8>,
 }
 
 fn plays_of(v: &Value) -> Option<Vec<Play>> {
@@ -360,6 +368,18 @@ fn parse_match(c: &Map<String, Value>) -> Option<MatchCall> {
                 .is_some()
                 .then_some(true)?,
         },
+        secure: match c.get("secure") {
+            None => None,
+            Some(s) => Some(s.get("seed")?.as_u64()?),
+        },
+        views: match c.get("views") {
+            None => Vec::new(),
+            Some(v) => crate::matched::views_of(v)?,
+        },
+        on_panel: match c.get("on_panel") {
+            None => None,
+            Some(p) => Some(player(p)?),
+        },
     })
 }
 
@@ -525,18 +545,24 @@ impl Hub<'_> {
             plays: m.plays.clone(),
             faults: m.faults.clone(),
             planted,
-            // #550: the planted copy that stamps a peer's entries with its own player is copy 1.
-            planted_on: matches!(
-                planted,
-                Planted::StampsOwnPlayer | Planted::ProfileFromOwnStore
-            )
-            .then_some(1),
+            // #550: the planted copy that stamps a peer's entries with its own player is copy 1, as
+            // is #276's that reads its profile from its own store; #552's guesser, and its copy
+            // whose bits are wrong or never come, copy 2.
+            planted_on: match planted {
+                Planted::StampsOwnPlayer | Planted::ProfileFromOwnStore => Some(1),
+                Planted::GuessesFromSeed | Planted::RevealsOtherBits | Planted::WithholdsBits => {
+                    Some(2)
+                }
+                _ => None,
+            },
             shows: m.renders.iter().map(|(p, t)| (*p, flicks(*t))).collect(),
             log: m.log,
             defect: m.plant.clone(),
+            draw_seed: m.secure.unwrap_or(m.faults.seed),
         };
         let (piece, track, doc) = (s.piece.clone(), s.track.clone(), s.doc.clone());
         let rounds = planted == Planted::HashRoundsFloats;
+        let first_bits = planted == Planted::DrawsFromFirstBits;
         let name = self.scenario.module_planted.as_deref();
         let ring = match m.full {
             true => Plant::Full,
@@ -562,6 +588,9 @@ impl Hub<'_> {
                 .get(&p)
                 .and_then(|d| deep_logic::profile::brought(&piece, d));
             l.rounds = rounds;
+            if first_bits {
+                l.draws_wrong(deep_logic::draws::Wrong::FirstBits);
+            }
             l.plant_ring(ring);
             l.worlds(&doc)?;
             l.range = deep_play::net::Range::of(&form, ty.clone(), lax);
@@ -600,40 +629,80 @@ impl Hub<'_> {
                 Some(s)
             })
             .collect();
-        let copies: Vec<Value> = played
-            .copies
-            .iter()
-            .enumerate()
-            .map(|(i, c)| {
-                let mut report = c.report();
-                // #276: the profile records its confirmed steps wrote, into its own folder.
-                if let Some(dir) = m.saves_dirs.get(&(i as u8 + 1)) {
-                    let upto = c.record()["confirmed"].as_i64().unwrap_or(-1);
-                    let written: Vec<Value> = c.sim().profiles(upto).into_iter().map(|r| {
-                        match deep_logic::profile::write(dir, &r["record"]) {
-                            Ok((hash, file)) => json!({"item": r["item"], "step": r["step"], "hash": hash, "file": file}),
-                            Err(e) => json!({"ok": false, "code": "profile_failed", "step": r["step"], "what": e}),
-                        }
-                    }).collect();
-                    report.insert("profiles".into(), json!(written));
-                }
-                report.insert("steps".into(), json!(c.sim().rows));
-                report.insert("track".into(), json!(s.track));
-                // #297: a refusal of an entry text's range names its reason and grapheme.
-                if let Some(Value::Array(rows)) = report.get_mut("refused") {
-                    for row in rows.iter_mut() {
-                        let why = row["why"].clone();
-                        for k in ["reason", "grapheme", "code_points"] {
-                            if let Some(v) = why.get(k) {
-                                row[k] = v.clone();
-                            }
+        // #552: each copy's merged track, which its views and its readers draw from.
+        let tracks: BTreeMap<u8, Vec<Value>> = (played.copies.iter())
+            .map(|c| {
+                (
+                    c.me,
+                    c.record()["track"].as_array().cloned().unwrap_or_default(),
+                )
+            })
+            .collect();
+        let reads = (s.piece.items.iter()).any(|i| !i.emits.is_empty());
+        let mut copies = Vec::new();
+        for (i, c) in played.copies.iter().enumerate() {
+            let mut report = c.report();
+            // #276: the profile records its confirmed steps wrote, into its own folder.
+            if let Some(dir) = m.saves_dirs.get(&(i as u8 + 1)) {
+                let upto = c.record()["confirmed"].as_i64().unwrap_or(-1);
+                let written: Vec<Value> = c.sim().profiles(upto).into_iter().map(|r| {
+                    match deep_logic::profile::write(dir, &r["record"]) {
+                        Ok((hash, file)) => json!({"item": r["item"], "step": r["step"], "hash": hash, "file": file}),
+                        Err(e) => json!({"ok": false, "code": "profile_failed", "step": r["step"], "what": e}),
+                    }
+                }).collect();
+                report.insert("profiles".into(), json!(written));
+            }
+            report.insert("steps".into(), json!(c.sim().rows));
+            report.insert("track".into(), json!(s.track));
+            // #297: a refusal of an entry text's range names its reason and grapheme.
+            if let Some(Value::Array(rows)) = report.get_mut("refused") {
+                for row in rows.iter_mut() {
+                    let why = row["why"].clone();
+                    for k in ["reason", "grapheme", "code_points"] {
+                        if let Some(v) = why.get(k) {
+                            row[k] = v.clone();
                         }
                     }
                 }
-                Value::Object(report)
-            })
-            .collect();
+            }
+            // Every burst and voice this copy's readers made, through its own fog.
+            if reads {
+                let form = self.copy_form(&m.doc, &tracks[&c.me], &json!(c.me));
+                let effects = form.map(|f| self.copy_effects(&m.doc, &f));
+                report.insert("effects".into(), effects.map_or_else(|e| e, |e| json!(e)));
+            }
+            copies.push(Value::Object(report));
+        }
         let mut reply = json!({"copies": copies, "relay": played.relay(m.log)});
+        let len = s.cfg.step();
+        if !m.views.is_empty() {
+            match self.copy_views(&m.doc, &m.views, &tracks, len) {
+                Ok(v) => reply["views"] = json!(v),
+                Err(e) => return e,
+            }
+        }
+        if let Some(me) = m.on_panel {
+            let last = played
+                .copies
+                .iter()
+                .find(|c| c.me == me)
+                .map_or(0, |c| c.ran() - 1);
+            let form = match self.copy_form(
+                &m.doc,
+                &tracks.get(&me).cloned().unwrap_or_default(),
+                &json!(me),
+            ) {
+                Ok(f) => f,
+                Err(e) => return e,
+            };
+            let panel = self.scenario.docs.get(&m.doc).cloned().unwrap_or_default();
+            // That copy joined its match: the panel shows it playing, not the Join prompt.
+            if let Some(join) = self.join_mut(&panel) {
+                join.shown = Some((form, last.max(0) * len));
+                join.state = Some(State::Joined);
+            }
+        }
         if !m.seeks.is_empty() {
             reply["seeks"] = json!(seeks);
         }
@@ -761,6 +830,7 @@ impl Hub<'_> {
         let mut p = prompt::prompt(
             &cfg.host,
             cfg.players,
+            cfg.courtesy,
             cfg.controls.get(deep_net::kind::PROFILE).is_some(),
             &state.unwrap_or(State::Open),
         );
@@ -1015,6 +1085,15 @@ impl Hub<'_> {
             0,
         );
         copy.limit(p.steps);
+        // #552: a draw's bits come from the platform's secure random source.
+        copy.draw_source(
+            Box::new(|| {
+                random16().map_or(0, |b| {
+                    u64::from_le_bytes(b[..8].try_into().unwrap_or_default())
+                })
+            }),
+            Default::default(),
+        );
         copy.script(
             p.plays
                 .iter()

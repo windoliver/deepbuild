@@ -104,6 +104,7 @@ impl World {
             adapter: String::new(),
             cache: None,
             branches: Branches::default(),
+            draw: Default::default(),
         })
     }
 
@@ -689,6 +690,9 @@ impl World {
                         .is_some_and(|i| matches!(list[i].value, Given::Number(n) if n != 0.0));
                     region[at..at + 4].copy_from_slice(&i32::from(on).to_le_bytes());
                 }
+                Read::Draws => self
+                    .draw
+                    .fill(&self.track, (t - item.step, t), &mut region[at..]),
                 Read::Carry | Read::Profile => {
                     crate::profile::fill_read(item, &self.track, e, k, &mut region)
                 }
@@ -1224,6 +1228,7 @@ impl World {
             seen: 0,
             adapter: String::new(),
             branches: Branches::default(),
+            draw: Default::default(),
         })
     }
 
@@ -1388,6 +1393,7 @@ impl World {
             adapter: String::new(),
             cache: None,
             branches: Branches::default(),
+            draw: Default::default(),
         }
     }
 
@@ -1498,6 +1504,7 @@ impl World {
             adapter: self.adapter.clone(),
             cache: None,
             branches,
+            draw: self.draw,
         })
     }
 
