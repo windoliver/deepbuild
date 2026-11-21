@@ -67,7 +67,7 @@ async function service() {
     try { body = JSON.parse(a.body); } catch { shapes.push(`answered ${a.status} with a body that isn't JSON`); continue; }
     if (a.status < 200 || a.status > 299) shapes.push(`answered ${a.status}`);
     for (const [field, type] of Object.entries(spec.shape)) {
-      if (typeof body !== 'object' || body === null || !(field in body)) shapes.push(`the answer lacks ${field}`);
+      if (typeof body !== 'object' || body === null || !Object.hasOwn(body, field)) shapes.push(`the answer lacks ${field}`);
       else if (typeOf(body[field]) !== type) shapes.push(`${field} is ${typeOf(body[field])}, not ${type}`);
     }
   }
@@ -87,7 +87,7 @@ function data() {
   const db = new DatabaseSync(join(checkout, spec.database), { readOnly: true });
   const rows = db.prepare(spec.query).all();
   db.close();
-  const show = (r) => JSON.stringify(r);
+  const show = (r) => JSON.stringify(r, (_, v) => (typeof v === 'bigint' ? Number(v) : v));
   if (rows.length !== spec.rows.length) at('data: rows', spec.database, 1, `the query returned ${rows.length} rows, not ${spec.rows.length}: ${rows.map(show).join(', ')}`);
   for (let i = 0; i < Math.min(rows.length, spec.rows.length); i++) {
     const want = spec.rows[i];
@@ -108,7 +108,7 @@ function pointed(doc, pointer) {
   let v = doc;
   for (const raw of pointer.split('/').slice(1)) {
     const key = decodeURIComponent(raw).replace(/~1/g, '/').replace(/~0/g, '~');
-    if (typeof v !== 'object' || v === null || !(key in v)) return undefined;
+    if (typeof v !== 'object' || v === null || !Object.hasOwn(v, key)) return undefined;
     v = v[key];
   }
   return v;
