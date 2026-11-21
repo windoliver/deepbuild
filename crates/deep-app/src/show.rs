@@ -232,6 +232,7 @@ pub fn placed() -> Option<Placed> {
 }
 
 /// Forgets the earlier frames' placement, as [`crate::canvas::clear_items`] forgets their items.
+#[cfg(feature = "fixtures")]
 pub(crate) fn forget_placed() {
     PLACED.with(|p| *p.borrow_mut() = None);
 }
@@ -636,7 +637,11 @@ impl Render for CanvasPanel {
                                 size: size(px(r[2] * k), px(r[3] * k)),
                             };
                             for item in items {
-                                crate::canvas::record(&item.id, item.value.clone(), at(item.rect));
+                                crate::canvas::record(
+                                    &item.id,
+                                    || item.value.clone(),
+                                    at(item.rect),
+                                );
                             }
                             PLACED.with(|p| {
                                 *p.borrow_mut() = Some(Placed {

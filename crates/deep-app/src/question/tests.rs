@@ -184,11 +184,12 @@ fn a_click_before_the_interval_is_refused_and_recorded_once_and_one_after_answer
 }
 
 #[test]
-fn an_approval_whose_own_step_cant_be_undone_waits_for_its_switch() {
+fn an_approval_whose_steps_hold_one_that_cant_be_undone_waits_for_its_switch() {
+    // Two steps: a card with one step has no switch, and Allow is its switch (#1101).
     let delete = approval("D");
     let events = vec![
         delete,
-        json!({"kind": "plan.proposed", "id": "p", "writer": "core", "session": "S", "log_pos": 2, "data": {"ask": "ask:D", "steps": [{"does": "delete the branch", "undo": "none", "public": true}], "diff": "d", "hash": "h"}}),
+        json!({"kind": "plan.proposed", "id": "p", "writer": "core", "session": "S", "log_pos": 2, "data": {"ask": "ask:D", "steps": [{"does": "delete the branch", "undo": "none", "public": true}, {"does": "say so", "undo": "take it back", "public": false}], "diff": "d", "hash": "h"}}),
     ];
     let mut card = Controller::present(&events, "ask:D", NOW, SLOT, Faults::default()).unwrap();
     assert_eq!(card.approve(), Some((0, 1)));
@@ -206,7 +207,7 @@ fn an_approval_whose_own_step_cant_be_undone_waits_for_its_switch() {
         Did::Switched
     );
     assert!(!card.lines().contains(&copy::text(SWITCH_FIRST).to_owned()));
-    assert_eq!(card.approve(), Some((1, 1)));
+    assert_eq!(card.approve(), Some((2, 1)));
     assert_eq!(
         click(&mut card, &events, NOW + ARM_AFTER + 200, Target::Option(0)),
         Did::Answered
@@ -219,7 +220,7 @@ fn switching_the_asks_own_steps_off_while_the_os_asks_sends_nothing() {
     let push = approval("P");
     let events = vec![
         push,
-        json!({"kind": "plan.proposed", "id": "p", "writer": "core", "session": "S", "log_pos": 2, "data": {"ask": "ask:P", "steps": [{"does": "push the branch", "undo": "force back", "public": true}], "diff": "d", "hash": "h"}}),
+        json!({"kind": "plan.proposed", "id": "p", "writer": "core", "session": "S", "log_pos": 2, "data": {"ask": "ask:P", "steps": [{"does": "push the branch", "undo": "force back", "public": true}, {"does": "tag it", "undo": "delete the tag", "public": true}], "diff": "d", "hash": "h"}}),
     ];
     let mut card = Controller::present(&events, "ask:P", NOW, SLOT, Faults::default()).unwrap();
     let t = NOW + ARM_AFTER;

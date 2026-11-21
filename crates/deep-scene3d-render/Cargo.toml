@@ -67,3 +67,22 @@ path = "../../tests/acceptance/3024/heap.rs"
 [[test]]
 name = "acceptance_3024_pixels"
 path = "../../tests/acceptance/3024/pixels.rs"
+
+# Issue #3016: the acceptance tests written blind in tests/acceptance/3016 (README there): the three heavy scenes' uploads,
+# pipelines, device bytes, heap and estimate, through this crate's renderer. `noop`, `heap` and `metal` read surfaces the
+# merge base has; `views` reads the surfaces and planted programs the README names.
+[[test]]
+name = "acceptance_3016_noop"
+path = "../../tests/acceptance/3016/noop.rs"
+
+[[test]]
+name = "acceptance_3016_heap"
+path = "../../tests/acceptance/3016/heap.rs"
+
+[[test]]
+name = "acceptance_3016_metal"
+path = "../../tests/acceptance/3016/metal.rs"
+
+[[test]]
+name = "acceptance_3016_views"
+path = "../../tests/acceptance/3016/views.rs"
