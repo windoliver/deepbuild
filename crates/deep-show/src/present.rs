@@ -584,6 +584,7 @@ impl Hub<'_> {
             samples: None,
             writer: Writer::You,
             serial: Some(serial as u32),
+            player: None,
         };
         let track = self.tracks.entry(doc.clone()).or_default();
         track.append(entry);
@@ -612,6 +613,7 @@ impl Hub<'_> {
             samples: None,
             writer: Writer::You,
             serial: Some(serial as u32),
+            player: None,
         });
         let written = track
             .entries()

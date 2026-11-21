@@ -32,7 +32,7 @@ import { codexTrusted } from './codex-settings.js';
 import { Holds } from './holds.js';
 import { countMcp } from './mcp-servers.js';
 import { reachOf, type Reach, type ReachTool } from './could-do.js';
-import { coveredBy } from './hookmap.js';
+import { coveredBy } from './adapter-facts.js';
 import { mergedWithMain, releaseSpec, switchesOff, unreadSpec } from './release.js';
 import { specChecks } from './spec-checks.js';
 import { repoOf } from './shared-runs.js';

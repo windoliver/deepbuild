@@ -176,6 +176,7 @@ struct Picture {
 
 /// #1431: the panel's pictures (`CanvasPanel.pictures`), decoded in the heap: only those a shown or waiting revision
 /// uses, one a panel's layer, so the bounds hold while the panels and their layers do.
+// copy-exception: a gauge's key, read in the footprint record, never drawn
 pub static PICTURES: Gauge = Gauge::new("CanvasPanel::pictures", Place::Heap, 256, 1_024_000_000);
 
 /// The bytes a decoded picture holds.

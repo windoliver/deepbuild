@@ -1,17 +1,19 @@
 //! The world check: the reader's refusals and what the backend's caps refuse, each naming its field
 //! and, where the backend can't run it, the backend.
 
-use serde_json::Value;
+use std::collections::{BTreeMap, BTreeSet};
+
+use serde_json::{json, Value};
 
 use crate::caps::Caps;
-use crate::doc::{read, BodyKind, Refusal, World};
+use crate::doc::{read, BodyKind, JointKind, Read, Refusal, World};
 use crate::roles::{self, Row};
 
 /// The code of a refusal by a backend's caps.
 pub const BACKEND_CAP: &str = "physics.backend_cap";
 
 /// The codes this module adds to the check catalog: each with its meaning and fix.
-pub const CODES: [(&str, &str, &str); 9] = [
+pub const CODES: [(&str, &str, &str); 11] = [
     (BACKEND_CAP, "The backend this build pins can't run the field as written; the issue names the field and the backend.", "Set the field to what the backend runs (most often 0), or use a construct the backend has."),
     ("physics.unsupported", "The field is in physics.world@1 but this backend interface doesn't run it yet; the issue names the issue that brings it.", "Remove the field until that issue lands."),
     ("physics.missing_field", "A required world field is missing.", "Add the field."),
@@ -20,8 +22,16 @@ pub const CODES: [(&str, &str, &str); 9] = [
     (crate::doc::OPEN_MESH, "A soft volume's source mesh isn't closed: some edge isn't on exactly two triangles; the issue names the first such edge by its two particles.", "Close the source mesh (or build the volume from a closed item), or draw it as cloth instead."),
     (SCALED, "A body is bound to an item, or built per element of an instancer, whose world transform scales it; a body's shapes carry sizes in metres and its pose has no scale.", "Size the shape in metres instead (double a box's half extents rather than scale its item) and draw the item at scale 1."),
     (crate::fast::FAST_BODY, "A body's fastest point (its move in a step plus its turn times its farthest extent from its centre of mass) moves farther in one step than half its thinnest extent where the backend's sweep doesn't hold it: a dynamic body with ccd off; a kinematic body, which starts no sweep (kind kinematic, with its own fix); or two bodies whose swept bounds meet where neither a sweep nor a body's contact prediction holds them and ccd on the fast one can't settle it (kind pair, with its own fix). The issue names the body or both, the step, the move and that half.", "Turn the body's ccd on, or slow it."),
-    (MASS_RATIO, "A joint's two dynamic bodies' masses, declared or density × volume, differ by more than 10:1, so the chain jitters or blows apart.", "Bring the two masses within 10:1: declare the lighter body's mass, or raise its density."),
+    (MASS_RATIO, "A joint's two dynamic bodies' masses, declared or density × volume, differ by more than 10:1, so the chain jitters or blows apart.", "Bring the two masses within 10:1: declare the lighter body's mass, raise its density, or make the joint articulated."),
+    (ARTICULATION_TREE, "The articulated joints of a world form trees: this one makes a body the b of two of them, or closes a loop of them; the issue names it.", "Leave the joint the issue names separate: a loop is closed by a separate joint."),
+    (ARTICULATION_GAP, "An articulated joint's two anchors are written more than 1 mm apart, and its second body starts where its coordinates put it; the issue names the joint and the gap in metres.", "Write the second body's pose so that its anchor lies on the first body's."),
 ];
+
+/// #2310: the code of an articulated joint that makes a body the `b` of two, or closes a loop;
+/// and of one whose two anchors are written more than 1 mm apart, which the backend raises as it
+/// builds the joint from its bodies' poses.
+pub const ARTICULATION_TREE: &str = "physics.articulation_tree";
+pub const ARTICULATION_GAP: &str = "physics.articulation_gap";
 
 /// #523: the code of a joint whose two dynamic bodies' masses differ by more than 10:1.
 pub const MASS_RATIO: &str = "physics.mass_ratio";
@@ -40,7 +50,8 @@ pub fn mass_ratios(
         (w.bodies.get(id)?.kind == crate::doc::BodyKind::Dynamic).then(|| id.clone())
     };
     let mut out = Vec::new();
-    for (id, j) in &w.joints {
+    // #2310: an articulated joint's anchors can't part, whatever the masses it holds.
+    for (id, j) in w.joints.iter().filter(|(_, j)| !j.articulated) {
         let (Some(a), Some(b)) = (dynamic(&j.a), dynamic(&j.b)) else {
             continue;
         };
@@ -78,6 +89,8 @@ pub fn check(doc: &Value, caps: &Caps, table: &[Row]) -> Result<World, Vec<Refus
             out.extend(springs(&w));
             out.extend(capacity(&w));
             out.extend(belts(&w));
+            out.extend(crate::wind::uncaught(&w));
+            out.extend(articulated(&w));
             if out.is_empty() {
                 return Ok(w);
             }
@@ -86,6 +99,8 @@ pub fn check(doc: &Value, caps: &Caps, table: &[Row]) -> Result<World, Vec<Refus
             out.extend(springs(&w));
             out.extend(capacity(&w));
             out.extend(belts(&w));
+            out.extend(crate::wind::uncaught(&w));
+            out.extend(articulated(&w));
         }
         Err(e) => out.extend(e),
     }
@@ -111,19 +126,11 @@ fn nonzero(v: Option<&Value>) -> Option<&Value> {
 /// What `caps` refuses in `doc`, read from the document as written.
 fn refused_by(doc: &Value, caps: &Caps) -> Vec<Refusal> {
     let mut out = Vec::new();
-    if let Some(d) = doc
-        .get("dimensions")
-        .filter(|d| d.as_f64() != Some(f64::from(caps.dimensions)))
-    {
-        out.push(cap(
-            "dimensions".into(),
-            d,
-            caps,
-            &format!(
-                "runs only {}D worlds (2D on rapier2d is #2098)",
-                caps.dimensions
-            ),
-        ));
+    // #2098: an unwritten `dimensions` is 3, which a 2D backend refuses as it does a written one.
+    let d = doc.get("dimensions").cloned().unwrap_or(Value::from(3));
+    if d.as_f64() != Some(f64::from(caps.dimensions)) {
+        let what = format!("runs only {}D worlds", caps.dimensions);
+        out.push(cap("dimensions".into(), &d, caps, &what));
     }
     if let Some(b) = doc.get("backend").and_then(Value::as_object) {
         if let Some(n) = b.get("name").filter(|n| n.as_str() != Some(caps.backend)) {
@@ -154,6 +161,17 @@ fn refused_by(doc: &Value, caps: &Caps) -> Vec<Refusal> {
                 v,
                 caps,
                 "has no restitution threshold (a new contact bounces at any speed); it must be 0",
+            ));
+        }
+    }
+    if !caps.scales_lengths {
+        let unit = doc.pointer("/solver/length_unit");
+        if let Some(v) = unit.filter(|v| v.as_f64() != Some(1.0)) {
+            out.push(cap(
+                "solver/length_unit".into(),
+                v,
+                caps,
+                "scales none of its lengths by a world's; solver.length_unit must be 1",
             ));
         }
     }
@@ -276,6 +294,14 @@ fn refused_by(doc: &Value, caps: &Caps) -> Vec<Refusal> {
         .into_iter()
         .flatten()
     {
+        // #2310: an articulated joint on a backend with no articulations, naming the joint.
+        if let Some(v) = j.get("articulated").filter(|v| v.as_bool() == Some(true)) {
+            if !claims("articulations") {
+                let what =
+                    format!("claims no articulations, so joint {id} can't be articulated on it");
+                out.push(cap(format!("joints/{id}/articulated"), v, caps, &what));
+            }
+        }
         let Some(k) = j
             .get("kind")
             .and_then(Value::as_str)
@@ -298,6 +324,109 @@ fn refused_by(doc: &Value, caps: &Caps) -> Vec<Refusal> {
                 path: format!("joints/{id}/kind"),
                 actual: j["kind"].clone(),
                 what: format!("a {k} joint isn't run by this backend interface yet"),
+            });
+        }
+    }
+    out
+}
+
+/// #2310: what an articulated joint is and holds (Joint: `articulated`). It is a fixed, ball, hinge
+/// or slider joint whose second body is a dynamic one; the articulated joints of a world form
+/// trees, so no body is the `b` of two of them and none closes a loop; and it has no lock to
+/// load, so `breaks_at`, `spring`, `active: false` and an output's `joint_force` on one are
+/// refused, and so is a velocity written on a body one holds. Each refusal names its field.
+fn articulated(w: &World) -> Vec<Refusal> {
+    let mut out = Vec::new();
+    // Each body's tree, the world's among them (`None`), and the joint that holds each body as
+    // its `b`, as the joints before this one in canonical order left them.
+    let mut tree: BTreeMap<Option<&str>, usize> = BTreeMap::new();
+    let mut trees = 0;
+    let mut held: BTreeMap<&str, &str> = BTreeMap::new();
+    for (id, j) in w.joints.iter().filter(|(_, j)| j.articulated) {
+        let mut refuse = |code: &'static str, field: &str, actual: Value, what: String| {
+            out.push(Refusal {
+                code,
+                path: format!("joints/{id}/{field}"),
+                actual,
+                what: format!("articulated joint {id} {what}"),
+            });
+        };
+        let kinds = [
+            JointKind::Fixed,
+            JointKind::Ball,
+            JointKind::Hinge,
+            JointKind::Slider,
+        ];
+        if !kinds.contains(&j.kind) {
+            refuse("out_of_range", "articulated", json!(true), "is neither a fixed, a ball, a hinge nor a slider joint, the kinds an articulation places a body by".into());
+        }
+        if j.breaks_at.is_some() {
+            refuse("out_of_range", "breaks_at", Value::Null, "writes breaks_at: its bodies are placed from its coordinates, so it has no lock whose load could pass a threshold; leave it separate to break it".into());
+        }
+        if j.spring.is_some() {
+            refuse(
+                "out_of_range",
+                "spring",
+                Value::Null,
+                "writes spring, which an articulated joint doesn't hold; leave it separate".into(),
+            );
+        }
+        if !j.active {
+            refuse("out_of_range", "active", json!(false), "writes active: false, and a link of an articulation is never let go; leave it separate".into());
+        }
+        let (a, b) = (j.a.body.as_deref(), j.b.body.as_deref());
+        let dynamic = b.and_then(|b| w.bodies.get(b));
+        if !dynamic.is_some_and(|x| x.kind == BodyKind::Dynamic && x.vehicle.is_none()) {
+            let named = b.unwrap_or("world");
+            refuse("out_of_range", "b", json!(named), format!("holds {named} as its b, which isn't a dynamic body; an articulation places only a dynamic body from a joint's coordinates"));
+        }
+        if let Some(first) = b.and_then(|b| held.insert(b, id.as_str())) {
+            let named = b.unwrap_or_default();
+            refuse(ARTICULATION_TREE, "articulated", json!(true), format!("is the second to hold {named} as its b, after {first}: the articulated joints of a world form trees, so no body is the b of two of them; leave one separate"));
+        }
+        // A joint whose two bodies an earlier one already joins, through any others, closes a loop.
+        let mut of = |end| {
+            *tree.entry(end).or_insert_with(|| {
+                trees += 1;
+                trees
+            })
+        };
+        let (ta, tb) = (of(a), of(b));
+        if ta == tb {
+            refuse(ARTICULATION_TREE, "articulated", json!(true), "closes a loop: the articulated joints of a world form trees; leave the joint that closes a loop separate".into());
+        } else {
+            tree.values_mut()
+                .filter(|t| **t == tb)
+                .for_each(|t| *t = ta);
+        }
+    }
+    // A body an articulation holds moves by its joints' coordinates alone, so a velocity written
+    // on one would move nothing.
+    let ends = w.joints.values().filter(|j| j.articulated);
+    let linked: BTreeSet<&str> = ends
+        .flat_map(|j| [j.a.body.as_deref(), j.b.body.as_deref()])
+        .flatten()
+        .collect();
+    for id in linked {
+        let moving = w.bodies.get(id).filter(|b| {
+            b.kind == BodyKind::Dynamic && (b.linear != [0.0; 3] || b.angular != [0.0; 3])
+        });
+        if let Some(b) = moving {
+            out.push(Refusal {
+                code: "out_of_range",
+                path: format!("bodies/{id}/velocity"),
+                actual: json!({"linear": b.linear, "angular": b.angular}),
+                what: format!("body {id} writes a velocity and an articulated joint holds it: a body of an articulation moves by its joints' coordinates alone, so the velocity would move nothing; start it at rest, or leave its joints separate"),
+            });
+        }
+    }
+    for (id, o) in &w.outputs {
+        if o.read == Read::JointForce && w.joints.get(&o.from).is_some_and(|j| j.articulated) {
+            out.push(Refusal {
+                code: "out_of_range",
+                path: format!("outputs/{id}/read"),
+                actual: json!("joint_force"),
+                what: format!("output {id} reads joint_force of articulated joint {}, whose bodies are placed from its coordinates, so it has no lock or limit impulse to read; read a separate joint's", o.from),
             });
         }
     }

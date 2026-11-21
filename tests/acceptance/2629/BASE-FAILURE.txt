@@ -1,0 +1,72 @@
+# tests/acceptance/2629 at base eb027b613 (origin/main), macOS arm64, Node 24, umask 0022, load ~130
+# rtk proxy npx vitest run tests/acceptance/2629  (exit 1)
+
+ RUN  v5.0.5 <repo>
+
+ ❯ tests/acceptance/2629/install.test.ts (1 test | 1 failed) 1292ms
+   ❯ AC1 #2629.aee527ff a package stamped at 644 installs from a 664 copy (1)
+     × AC1 #2629.aee527ff the installer takes a package stamped under umask 022 when its files are 664, as a umask 002 checkout leaves them, with the stamped digest 1170ms
+ ❯ tests/acceptance/2629/modes.test.ts (4 tests | 2 failed) 2319ms
+   ❯ AC1 #2629.aee527ff packageDigest hashes a file's mode as git records it, so umask 002 and umask 022 checkouts give one digest (2)
+     × AC1 #2629.aee527ff packages/jobs/score and packages/jobs/import checked out under umask 002 (664/775) give the digest stamped in their deepbuild.json, as under umask 022 (644/755) 1775ms
+     × AC1 #2629.aee527ff any mode with the owner execute bit set hashes as 755, any without it as 644: the digest is the 644/755 one 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2629/install.test.ts > AC1 #2629.aee527ff a package stamped at 644 installs from a 664 copy > AC1 #2629.aee527ff the installer takes a package stamped under umask 022 when its files are 664, as a umask 002 checkout leaves them, with the stamped digest
+AssertionError: test/umask-install, stamped at 644 and installed from 664 files, isn't refused at install: expected 'test/umask-install\'s envelope digest…' to be null
+
+- Expected:
+null
+
++ Received:
+"test/umask-install's envelope digest d1:bd4c1a57609ed54ca1bd61a7a73b8fd7c70a686b4cfb5a2f88b83f7c41a563a2 isn't its files' digest d1:c5e0f1ca4524457c45e369cc9375878844263588e871aaa5e95c4f55cfb070d3: it changed since it was built, so it isn't installed"
+
+ ❯ tests/acceptance/2629/install.test.ts:21:101
+     19|     const h = await openHost(await openWorld());
+     20|     const refused = await installError(h, dir);
+     21|     expect(refused, `${id}, stamped at 644 and installed from 664 file…
+       |                                                                                                     ^
+     22|     expect(await installedIds(h), `${id} is installed`).toContain(id);
+     23|     const row = (await h.installed()).find((p) => p.id === id);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/2629/modes.test.ts > AC1 #2629.aee527ff packageDigest hashes a file's mode as git records it, so umask 002 and umask 022 checkouts give one digest > AC1 #2629.aee527ff packages/jobs/score and packages/jobs/import checked out under umask 002 (664/775) give the digest stamped in their deepbuild.json, as under umask 022 (644/755)
+AssertionError: packages/jobs/score under umask 002 (664/775) gives the same digest as under umask 022, its stamped d1:fd6d8beac98c0b0fb915f2d46f54d62f6917e449d696af32ebf23bd71bd313f8: expected 'd1:12d86c45a86fd6b6a6693d4ce7074f5bea…' to be 'd1:fd6d8beac98c0b0fb915f2d46f54d62f69…' // Object.is equality
+
+Expected: "d1:fd6d8beac98c0b0fb915f2d46f54d62f6917e449d696af32ebf23bd71bd313f8"
+Received: "d1:12d86c45a86fd6b6a6693d4ce7074f5beae92d65b3aefec1dfd55150eaab8bb9"
+
+ ❯ tests/acceptance/2629/modes.test.ts:23:164
+     21|       expect(want, `${dir}'s deepbuild.json carries a stamped digest`)…
+     22|       expect(await packageDigest(join(at022.root, dir)), `${dir} under…
+     23|       expect(await packageDigest(join(at002.root, dir)), `${dir} under…
+       |                                                                                                                                                                    ^
+     24|     }
+     25|   }, 60_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/2629/modes.test.ts > AC1 #2629.aee527ff packageDigest hashes a file's mode as git records it, so umask 002 and umask 022 checkouts give one digest > AC1 #2629.aee527ff any mode with the owner execute bit set hashes as 755, any without it as 644: the digest is the 644/755 one
+AssertionError: the package with its files umask 002 (664/775) gives the 644/755 digest: expected 'd1:921d990947d3d458b5e94bd32add36e4aa…' to be 'd1:efbb4a758400cda053d0c59775b7ffaec3…' // Object.is equality
+
+Expected: "d1:efbb4a758400cda053d0c59775b7ffaec36cc1ac09c69d650f23911b8956740b"
+Received: "d1:921d990947d3d458b5e94bd32add36e4aa96f0dbc6019abaa417b388a6b833f7"
+
+ ❯ tests/acceptance/2629/modes.test.ts:43:106
+     41|     for (const [name, umask] of umasks) {
+     42|       setModes(folder, entries, umask);
+     43|       expect(await packageDigest(folder), `the package with its files …
+       |                                                                                                          ^
+     44|     }
+     45|     setModes(folder, entries, UMASK_022);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  3 failed | 3 passed (6)
+   Start at  02:47:00
+   Duration  2.62s (tests 82%, transform 16%, import 2%, setup 1%)
+

@@ -15,6 +15,7 @@ import type { HubCanvas } from './hub-canvas.js';
 import { dropKept, syncRejected } from './memory.js';
 import { AskTasks } from './ask-tasks.js';
 import { opensOf } from './questions.js';
+import { typed } from './visible.js';
 import { type Reach } from './could-do.js';
 
 import { type Root } from './paths.js';
@@ -157,7 +158,9 @@ export class HumanAnswers {
     const ask = JSON.parse(row.data) as { key: string; question: string; options: { id: string; label: string; decision?: string }[]; pinned_to?: { ref?: string } };
     const chosen = ask.options.find((o) => o.id === input.option);
     if (input.option !== undefined && !chosen) {
-      throw new Refused(refusal('enum', '/params/option', `${handle} has no option ${String(input.option)}; its options are ${ask.options.map((o) => o.id).join(', ')}.`, input.option));
+      // To `deep inbox answer`, each option as you type it back (#2563); the app and a channel get the IDs as held.
+      const named = (id: string): string => (context.role === 'cli' && !channel ? typed(id) : id);
+      throw new Refused(refusal('enum', '/params/option', `${handle} has no option ${String(input.option)}; its options are ${ask.options.map((o) => named(o.id)).join(', ')}.`, input.option));
     }
     // A channel's answer was checked by the channels (#65): a paired device's signature over the card it showed, or an account link.
     if (!channel) {

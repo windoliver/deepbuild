@@ -1,0 +1,329 @@
+{
+  "name": "lift",
+  "items": {
+    "p": {
+      "kind": "path@1",
+      "params": {
+        "verbs": [
+          "M",
+          "L"
+        ],
+        "pts": [
+          0,
+          0,
+          10.1,
+          0
+        ]
+      }
+    },
+    "q": {
+      "kind": "path@1",
+      "params": {
+        "verbs": [
+          "M",
+          "L"
+        ],
+        "pts": [
+          10.1,
+          0,
+          20,
+          0
+        ]
+      }
+    }
+  },
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "064de74223cd9f491d15579dadd90afa970e495b23cd857806e1703592b705fa",
+      "step_rate": 10,
+      "writes": {
+        "pos": {
+          "type": "vec2",
+          "count": 1
+        },
+        "heading": {
+          "type": "f64",
+          "count": 1
+        },
+        "speed": {
+          "type": "f64",
+          "count": 1
+        },
+        "state": {
+          "type": "i32",
+          "count": 1
+        },
+        "fork": {
+          "type": "f64",
+          "count": 1
+        },
+        "load": {
+          "type": "vec3",
+          "count": 1
+        },
+        "phase": {
+          "type": "i32"
+        }
+      },
+      "lanes": {
+        "graph": {
+          "paths": [
+            "p",
+            "q"
+          ],
+          "two_way": [
+            "p",
+            "q"
+          ],
+          "speed": {
+            "p": 2,
+            "q": 2
+          },
+          "bays": {
+            "dock.d": [
+              20,
+              0
+            ],
+            "park.p": [
+              0,
+              0
+            ],
+            "rack.r": [
+              10.1,
+              0
+            ]
+          }
+        },
+        "vehicle": {
+          "length": 2,
+          "width": 1,
+          "gap": 0.5,
+          "speed": 2,
+          "accel": 1,
+          "decel": 1,
+          "lift": {
+            "max": 6,
+            "speed": 1
+          }
+        }
+      }
+    }
+  },
+  "track": [],
+  "steps": 260,
+  "expect": {
+    "arrays": {
+      "0": {
+        "fork": [
+          0.1
+        ],
+        "state": [
+          0
+        ]
+      },
+      "1": {
+        "pos": [
+          [
+            0.005,
+            0
+          ]
+        ],
+        "fork": [
+          0.1
+        ],
+        "load": [
+          [
+            1.005,
+            0.1,
+            0
+          ]
+        ],
+        "phase": [
+          1
+        ]
+      },
+      "10": {
+        "pos": [
+          [
+            0.5,
+            0
+          ]
+        ],
+        "fork": [
+          0.1
+        ],
+        "load": [
+          [
+            1.5,
+            0.1,
+            0
+          ]
+        ],
+        "phase": [
+          1
+        ]
+      },
+      "30": {
+        "pos": [
+          [
+            4,
+            0
+          ]
+        ],
+        "fork": [
+          0.1
+        ],
+        "load": [
+          [
+            5,
+            0.1,
+            0
+          ]
+        ],
+        "phase": [
+          1
+        ]
+      },
+      "50": {
+        "pos": [
+          [
+            8,
+            0
+          ]
+        ],
+        "fork": [
+          0.1
+        ],
+        "load": [
+          [
+            9,
+            0.1,
+            0
+          ]
+        ],
+        "phase": [
+          1
+        ]
+      },
+      "70": {
+        "pos": [
+          [
+            10.09875,
+            0
+          ]
+        ],
+        "fork": [
+          0.1
+        ],
+        "load": [
+          [
+            11.09875,
+            0.1,
+            0
+          ]
+        ],
+        "phase": [
+          1
+        ]
+      },
+      "72": {
+        "fork": [
+          0.2
+        ],
+        "state": [
+          3
+        ],
+        "phase": [
+          2
+        ]
+      },
+      "100": {
+        "fork": [
+          3
+        ],
+        "state": [
+          3
+        ]
+      },
+      "124": {
+        "fork": [
+          5.4
+        ],
+        "load": [
+          [
+            11.1,
+            5.4,
+            0
+          ]
+        ]
+      },
+      "125": {
+        "load": [
+          [
+            11.1,
+            5.4,
+            0
+          ]
+        ],
+        "phase": [
+          3
+        ],
+        "state": [
+          4
+        ]
+      },
+      "150": {
+        "fork": [
+          2.8
+        ],
+        "load": [
+          [
+            11.1,
+            5.4,
+            0
+          ]
+        ]
+      },
+      "178": {
+        "fork": [
+          0.1
+        ],
+        "phase": [
+          4
+        ],
+        "state": [
+          1
+        ]
+      },
+      "259": {
+        "pos": [
+          [
+            20,
+            0
+          ]
+        ],
+        "fork": [
+          0.1
+        ],
+        "load": [
+          [
+            11.1,
+            5.4,
+            0
+          ]
+        ],
+        "state": [
+          0
+        ],
+        "phase": [
+          4
+        ]
+      }
+    },
+    "tolerance": {
+      "abs": 0.000001
+    }
+  },
+  "answer": "One vehicle with a 1 m/s mast at park.p, at 10 Hz. Step 0 lifts the forks from 0 to 0.1 m in one step; step 1 takes the load and sends it 10.1 m to rack.r (from 0.1 s, at rest at 7.15 s, step 71), the load on the forks' point, 1 m ahead of the centre at 0.1 m. Step 72 lifts to 5.4 m at 0.1 m a step (3 m at step 100, 5.4 m at step 124, 5.3 s); step 125 sets the load down at the forks' point, (11.1, 5.4, 0) as [x, height, y], and lowers (2.8 m at step 150, 0.1 m at step 177); step 178 goes on to dock.d, parked there at step 259 with the load still at the rack level's pose."
+}

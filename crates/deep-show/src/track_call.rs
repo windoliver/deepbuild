@@ -31,6 +31,17 @@ impl Hub<'_> {
     }
 }
 
+/// The recorded input track as the hub holds it, the bytes a web export writes and a match's
+/// start card hashes, so the app's copy and the web player's agree by hash (#551); `None` for an
+/// entry that isn't one.
+pub(crate) fn held_bytes(track: &[Value]) -> Option<Vec<u8>> {
+    let mut held = deep_canvas_input::track::Track::default();
+    for e in track {
+        held.append(entry_of(e)?);
+    }
+    Some(held.bytes())
+}
+
 /// An entry in the form [`Entry::to_json`] writes; `seq` is the track's to give again.
 pub(crate) fn entry_of(v: &Value) -> Option<Entry> {
     // #860: a rewind names no control either; the logic module reads where it returns.
@@ -74,11 +85,17 @@ pub(crate) fn entry_of(v: &Value) -> Option<Entry> {
             "you" => Writer::You,
             "tour" => Writer::Tour,
             "agent" => Writer::Agent,
+            "peer" => Writer::Peer,
             _ => return None,
         },
         serial: match v.get("serial") {
             None => None,
             Some(s) => Some(u32::try_from(s.as_u64()?).ok()?),
+        },
+        // #297: a match's record names each entry's player, 1 to 8.
+        player: match v.get("player") {
+            None => None,
+            Some(p) => Some(u8::try_from(p.as_u64().filter(|p| (1..=8).contains(p))?).ok()?),
         },
     })
 }
@@ -97,6 +114,7 @@ mod tests {
             samples: None,
             writer: Writer::You,
             serial: Some(4),
+            player: None,
         };
         assert_eq!(entry_of(&e.to_json()), Some(e));
         assert_eq!(

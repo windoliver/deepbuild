@@ -16,6 +16,6 @@ An adapter-side package pi loads on its own: at run time only `node:` built-ins,
 
 ## Deviations
 
-- `package.json`: not private and with no workspace dependencies, since it is the published package pi installs (`pi.extensions`, `files: dist`).
+- `package.json`: not private and with no runtime workspace dependencies, since it is the published package pi installs (`pi.extensions`, `files: dist`). Its one devDependency, `@deepbuild/hub`, only names in the workspace graph what `tools.mjs` reads, so a build of the hub's dependents rebuilds pi too (#1120).
 - `tools.mjs`: reads `../hub/dist/tools.js` at build time so the published package carries the tool list and needs nothing of the workspace.
 - `src/index.ts`: `DEEP_PI_PLANT` selects the wrong programs the #40 tests plant; only tests set it.
