@@ -23,7 +23,6 @@ mod columns;
 mod compare;
 mod compile;
 mod conformance;
-mod drawn;
 mod effects;
 mod envelope;
 #[cfg(feature = "test-faults")]
@@ -37,7 +36,6 @@ mod flows2d;
 mod frames;
 mod full_lane;
 mod golden;
-mod groups;
 mod guard;
 mod hdr;
 mod host;
@@ -46,14 +44,12 @@ mod insets;
 mod interp_suite;
 mod levels;
 mod live;
-mod lightfx;
 mod liveview;
 mod lod;
 mod look_ops;
 mod marks2d;
 mod op_transition;
 mod opframe;
-mod paintfx;
 mod parity;
 mod particles;
 mod physics;
@@ -94,6 +90,10 @@ use deep_gpu::seam::Startup;
 use deep_gpu::surface::Path;
 use gpui_kit::HeadlessAppContext;
 use serde_json::{json, Value};
+
+// #1561: the 2D compositor and the drawn passes are a render crate's, which deep-show draws
+// through too.
+pub(crate) use deep_groups_render::{drawn, groups, lightfx};
 
 use crate::scene::Scene;
 use crate::window::Win;
@@ -229,6 +229,11 @@ pub enum Planted {
     FlareFixedGhosts,
     /// #465: the flare built as if nothing covered its light.
     FlareIgnoresOcclusion,
+    /// #2691's wrong programs (tests/acceptance/2691/README.md: Planted programs): the mirror's
+    /// pass at half of half the internal size; a plain mirror's lookup by the pixel's place over
+    /// the frame's full size.
+    MirrorHalvesTwice,
+    MirrorSamplesFullFrame,
     /// #468: a circle of confusion linear in |d − s|, matched to the physical one at 10 m.
     CocLinearInDistance,
     /// #166: the water's foam carried from frame to frame as simulation state.
@@ -356,6 +361,11 @@ pub enum Planted {
     HalftonePopTakesDotPasses,
     InkFillFlat,
     RimKeepsFirst,
+    /// #1561's wrong programs (tests/acceptance/1561/README.md: Planted programs): a live window
+    /// that hands a 2D document's frames no page and none of its look's drawn fields; and a
+    /// frame that reuses the last frame's marks drawn with no page.
+    LivePassesNoPage,
+    ReuseDropsPage,
     DropsClouds,
     /// #424's wrong programs.
     AddWritesDepth,
@@ -548,6 +558,35 @@ pub enum Planted {
 }
 
 impl Planted {
+    /// The compositor's wrong program this one is, if it is one of the render crate's (#1561).
+    pub(crate) fn composed(self) -> Option<deep_groups_render::Planted> {
+        use deep_groups_render::Planted as P;
+        Some(match self {
+            Planted::GroupPassAtLayerEnd => P::GroupPassAtLayerEnd,
+            Planted::GroupPassReadsEarlier => P::GroupPassReadsEarlier,
+            Planted::GroupPassPastGrow => P::GroupPassPastGrow,
+            Planted::BackdropReadsLaterItems => P::BackdropReadsLaterItems,
+            Planted::BackdropPastCoverage => P::BackdropPastCoverage,
+            Planted::BevelLitOpposite => P::BevelLitOpposite,
+            Planted::LightLinearFalloff => P::LightLinearFalloff,
+            Planted::LightEncodedSum => P::LightEncodedSum,
+            Planted::LightDefaultAmbientZero => P::LightDefaultAmbientZero,
+            Planted::LightEveryChild => P::LightEveryChild,
+            Planted::LightStaleList => P::LightStaleList,
+            Planted::VividLightAsLinearLight => P::VividLightAsLinearLight,
+            Planted::PassLinearIn2d => P::PassLinearIn2d,
+            Planted::PassEncodedIn3d => P::PassEncodedIn3d,
+            Planted::InkFillFlat => P::InkFillFlat,
+            Planted::RimKeepsFirst => P::RimKeepsFirst,
+            Planted::ShadowBoundingBoxes => P::ShadowBoundingBoxes,
+            Planted::SunFarPointLight => P::SunFarPointLight,
+            Planted::ShadowInsideOutline => P::ShadowInsideOutline,
+            Planted::ShadowRemovesAmbient => P::ShadowRemovesAmbient,
+            Planted::ShadowEdgeAliased => P::ShadowEdgeAliased,
+            _ => return None,
+        })
+    }
+
     fn parse(name: &str) -> Option<Planted> {
         Some(match name {
             "warms_in_use_at_t0" => Planted::WarmsInUseAtT0,
@@ -649,6 +688,8 @@ impl Planted {
             "loads_everything" => Planted::LoadsEverything,
             "slow_gpu_frame" => Planted::SlowGpuFrame,
             "flare_fixed_ghosts" => Planted::FlareFixedGhosts,
+            "mirror_halves_twice" => Planted::MirrorHalvesTwice,
+            "mirror_samples_full_frame" => Planted::MirrorSamplesFullFrame,
             "coc_linear_in_distance" => Planted::CocLinearInDistance,
             "flare_ignores_occlusion" => Planted::FlareIgnoresOcclusion,
             "water_foam_keeps_state" => Planted::WaterFoamKeepsState,
@@ -749,6 +790,8 @@ impl Planted {
             "halftone_pop_takes_dot_passes" => Planted::HalftonePopTakesDotPasses,
             "ink_fill_flat" => Planted::InkFillFlat,
             "rim_keeps_first" => Planted::RimKeepsFirst,
+            "live_passes_no_page" => Planted::LivePassesNoPage,
+            "reuse_drops_page" => Planted::ReuseDropsPage,
             "drops_clouds" => Planted::DropsClouds,
             "add_writes_depth" => Planted::AddWritesDepth,
             "add_skips_depth_test" => Planted::AddWithoutDepthTest,
@@ -922,6 +965,11 @@ pub fn refused(code: &str, reason: impl Into<String>) -> Value {
 }
 
 impl App {
+    /// The app's planted program as the compositor's render crate names it (#1561).
+    pub(crate) fn composed(&self) -> Option<deep_groups_render::Planted> {
+        self.planted.and_then(Planted::composed)
+    }
+
     pub fn scene(&mut self, path: &str) -> Result<Arc<Scene>, Value> {
         if let Some(s) = self.scenes.get(path) {
             return Ok(s.clone());

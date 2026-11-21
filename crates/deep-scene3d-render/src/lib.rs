@@ -35,6 +35,7 @@ mod op;
 mod origin;
 mod planted;
 pub mod print;
+pub mod proxy;
 mod readouts;
 mod set;
 pub mod shadow;
@@ -4054,7 +4055,7 @@ impl Renderer {
                 &mut choices,
                 shadow_texels(&chosen, side),
             );
-            deep_canvas_scene3d::lod::resolve(&mut chosen, &choices);
+            proxy::resolve(&mut chosen, &choices);
             return self.prepare_placed(device, &chosen, look);
         }
         // #166: the water's parts draw in a pass of their own, after the mirror's view.
@@ -4239,7 +4240,7 @@ impl Renderer {
         // #465: the mirror's view at t, drawn whole each frame.
         self.mirroring = match &scene.mirror {
             Some(m) => {
-                let planted = self.planted;
+                let (planted, internal) = (self.planted, self.internal());
                 let mirrorer = self
                     .mirrorer
                     .get_or_insert_with(|| Box::new(mirror::Mirrorer::new(device, planted)));
@@ -4249,7 +4250,7 @@ impl Renderer {
                     .as_ref()
                     .is_none_or(|w| w.material != m.material);
                 if !self.planted.keeps_mirror {
-                    mirrorer.prepare(device, scene, m, look, &self.picks, overlay);
+                    mirrorer.prepare(device, scene, internal, m, look, &self.picks, overlay);
                 }
                 true
             }
