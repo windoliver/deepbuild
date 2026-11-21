@@ -128,6 +128,8 @@ pub struct MatchCall {
     on: Vec<String>,
     seeks: Vec<(u8, i64)>,
     full: bool,
+    /// #276: each copy's own saves folder, its viewer's store (`saves_dirs: {"<player>": path}`).
+    saves_dirs: BTreeMap<u8, PathBuf>,
     /// #552: the seed of each copy's test source in place of its secure one, the copies' views
     /// asked for, and the copy the document's panel shows after the match.
     secure: Option<u64>,
@@ -345,6 +347,19 @@ fn parse_match(c: &Map<String, Value>) -> Option<MatchCall> {
                 })
                 .collect::<Option<_>>()?,
         },
+        saves_dirs: match c.get("saves_dirs") {
+            None => BTreeMap::new(),
+            Some(d) => d
+                .as_object()?
+                .iter()
+                .map(|(p, dir)| {
+                    Some((
+                        player(&json!(p.parse::<u64>().ok()?))?,
+                        dir.as_str()?.into(),
+                    ))
+                })
+                .collect::<Option<_>>()?,
+        },
         full: match c.get("ring") {
             None => false,
             Some(r) => r
@@ -530,10 +545,11 @@ impl Hub<'_> {
             plays: m.plays.clone(),
             faults: m.faults.clone(),
             planted,
-            // #550: the planted copy that stamps a peer's entries with its own player is copy 1;
-            // #552's guesser, and its copy whose bits are wrong or never come, copy 2.
+            // #550: the planted copy that stamps a peer's entries with its own player is copy 1, as
+            // is #276's that reads its profile from its own store; #552's guesser, and its copy
+            // whose bits are wrong or never come, copy 2.
             planted_on: match planted {
-                Planted::StampsOwnPlayer => Some(1),
+                Planted::StampsOwnPlayer | Planted::ProfileFromOwnStore => Some(1),
                 Planted::GuessesFromSeed | Planted::RevealsOtherBits | Planted::WithholdsBits => {
                     Some(2)
                 }
@@ -564,8 +580,13 @@ impl Hub<'_> {
                 .unwrap_or_default(),
             false => deep_logic::Planted::default(),
         };
-        let make = &mut |_: u8| {
+        let dirs = m.saves_dirs.clone();
+        let make = &mut |p: u8| {
             let mut l = Logic::planted(piece.clone(), &track, true, logic)?;
+            // #276: the newest whole profile record in the copy's own folder, brought to step 0.
+            l.brings = dirs
+                .get(&p)
+                .and_then(|d| deep_logic::profile::brought(&piece, d));
             l.rounds = rounds;
             if first_bits {
                 l.draws_wrong(deep_logic::draws::Wrong::FirstBits);
@@ -619,8 +640,19 @@ impl Hub<'_> {
             .collect();
         let reads = (s.piece.items.iter()).any(|i| !i.emits.is_empty());
         let mut copies = Vec::new();
-        for c in &played.copies {
+        for (i, c) in played.copies.iter().enumerate() {
             let mut report = c.report();
+            // #276: the profile records its confirmed steps wrote, into its own folder.
+            if let Some(dir) = m.saves_dirs.get(&(i as u8 + 1)) {
+                let upto = c.record()["confirmed"].as_i64().unwrap_or(-1);
+                let written: Vec<Value> = c.sim().profiles(upto).into_iter().map(|r| {
+                    match deep_logic::profile::write(dir, &r["record"]) {
+                        Ok((hash, file)) => json!({"item": r["item"], "step": r["step"], "hash": hash, "file": file}),
+                        Err(e) => json!({"ok": false, "code": "profile_failed", "step": r["step"], "what": e}),
+                    }
+                }).collect();
+                report.insert("profiles".into(), json!(written));
+            }
             report.insert("steps".into(), json!(c.sim().rows));
             report.insert("track".into(), json!(s.track));
             // #297: a refusal of an entry text's range names its reason and grapheme.
@@ -799,6 +831,7 @@ impl Hub<'_> {
             &cfg.host,
             cfg.players,
             cfg.courtesy,
+            cfg.controls.get(deep_net::kind::PROFILE).is_some(),
             &state.unwrap_or(State::Open),
         );
         p["button"] = json!(self.join_button(panel));

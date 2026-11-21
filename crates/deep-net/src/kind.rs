@@ -391,7 +391,7 @@ impl Config {
             window: whole("window", 8, [0, 16]),
             hash_every: whole("hash_every", 60, [1, 100_000]),
             timeout: (timeout.max(0.05) * FLICKS as f64).round() as i64,
-            controls: form.get("controls").cloned().unwrap_or(json!({})),
+            controls: controls(form),
             draw_after: p["draw_after"]
                 .as_array()
                 .into_iter()
@@ -406,6 +406,52 @@ impl Config {
     /// One match step, in flicks.
     pub fn step(&self) -> i64 {
         FLICKS / self.step_rate
+    }
+}
+
+/// The document's `controls`, and under [`PROFILE`] the shape of the profile record a logic item
+/// keeps (#276), which each player's step-0 entry is held to.
+fn controls(form: &Value) -> Value {
+    let mut c = form.get("controls").cloned().unwrap_or(json!({}));
+    let items = form
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten();
+    if let Some(arrays) = items
+        .filter_map(|(_, i)| i.pointer("/params/profile/arrays"))
+        .next()
+    {
+        c[PROFILE] = json!({"profile": arrays});
+    }
+    c
+}
+
+/// #276: the control key a player's profile record entry travels under, at step 0 only.
+pub const PROFILE: &str = ":profile";
+
+/// #276: a profile record's entry, `{profile: sha256, arrays}`, holds an array of each name the
+/// piece's profile declares, of its count, and nothing else.
+fn admit_profile(shape: &Value, value: &Value) -> Result<(), Value> {
+    let fits = |name: &str, want: &Value| {
+        let n = want.get("count").and_then(Value::as_u64).unwrap_or(1) as usize;
+        value["arrays"][name]
+            .as_array()
+            .is_some_and(|a| a.len() == n && a.iter().all(|x| x.is_number() || x.is_boolean()))
+    };
+    let shape = shape.as_object().cloned().unwrap_or_default();
+    let ok = value["profile"].as_str().is_some_and(|h| h.len() == 64)
+        && value["arrays"]
+            .as_object()
+            .is_some_and(|a| a.len() == shape.len())
+        && shape.iter().all(|(n, w)| fits(n, w));
+    if ok {
+        Ok(())
+    } else {
+        Err(
+            json!({"code": "out_of_range", "control": PROFILE, "value": value,
+            "what": "a profile record's entry holds the arrays the piece's profile declares"}),
+        )
     }
 }
 
@@ -428,6 +474,9 @@ pub fn admit(controls: &Value, control: &str, value: &Value) -> Result<(), Value
     // #552: a draw's commitment and bits are the net module's own entries.
     if control == crate::draw::COMMIT || control == crate::draw::REVEAL {
         return crate::draw::admit(control, value);
+    }
+    if let Some(shape) = controls.get(PROFILE).filter(|_| control == PROFILE) {
+        return admit_profile(&shape["profile"], value);
     }
     // #277: a seat entry the net module writes, never a player's control.
     if control == crate::copy::SEAT {

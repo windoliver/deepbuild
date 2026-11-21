@@ -109,6 +109,7 @@ impl Match {
             &self.cfg.host,
             self.cfg.players,
             self.cfg.courtesy,
+            self.cfg.controls.get(deep_net::kind::PROFILE).is_some(),
             &self.state,
         )
     }

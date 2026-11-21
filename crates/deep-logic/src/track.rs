@@ -30,6 +30,18 @@ pub enum Given {
     /// #552: a draw's commitment `{step, hash}` or bits `{step, bits}`, the net module's own
     /// entries (Net: random draws after commit), which no control's read region holds.
     Draw(Value),
+    /// #189: a carry record's entry, by hash, with the record's arrays once read from where
+    /// saves are kept (Logic: carry records).
+    Carry {
+        hash: String,
+        arrays: Value,
+    },
+    /// #276: a profile record's entry, by hash, with the record's arrays beside it, so a replay
+    /// reads the record its run read (Logic: saves).
+    Profile {
+        hash: String,
+        arrays: Value,
+    },
 }
 
 /// #860: the key a track keeps its rewinds under, which no control's ID can be (each of an ID's
@@ -112,6 +124,7 @@ impl Given {
             Given::Rewind(To::Stop(n)) => json!({"to": {"stop": n}}),
             Given::Rewind(To::Step(k)) => json!({"to": {"step": k}}),
             Given::Draw(v) => v.clone(),
+            Given::Carry { hash, .. } | Given::Profile { hash, .. } => json!(hash),
         }
     }
     /// The value as its control's read region lays it out: an f64 (8 B), a pick's `u32 set,
@@ -135,8 +148,9 @@ impl Given {
             }
             Given::Vector(v) => v.iter().flat_map(|x| x.to_le_bytes()).collect(),
             Given::Record(b) => b.clone(),
-            // No read region holds a rewind or a draw's entry.
-            Given::Rewind(_) | Given::Draw(_) => Vec::new(),
+            // No read region holds a rewind or a draw's entry; a carry record fills its own entry
+            // (`carry::fill`).
+            Given::Rewind(_) | Given::Draw(_) | Given::Carry { .. } | Given::Profile { .. } => Vec::new(),
         }
     }
 }
@@ -159,6 +173,46 @@ pub struct Entry {
 
 impl Entry {
     pub fn parse(v: &Value) -> Option<Entry> {
+        // #189: a carry record's entry, only at step 0: `{t: 0, carry: sha256}`, with beside its
+        // hash the record's arrays where a host read them by it (the web player's form).
+        if let Some(hash) = v.get("carry") {
+            let hash = hash.as_str().filter(|h| h.len() == 64)?;
+            return Some(Entry {
+                t: Some(v.get("t")?.as_i64()?).filter(|t| *t == 0)?,
+                seq: v.get("seq").map_or(Some(0), Value::as_u64)? as u32,
+                control: crate::carry::CARRY.into(),
+                value: Given::Carry {
+                    hash: hash.into(),
+                    arrays: v.get("arrays").cloned().unwrap_or(Value::Null),
+                },
+                writer: v
+                    .get("writer")
+                    .map_or(Some("you"), Value::as_str)?
+                    .to_string(),
+                player: v.get("player").map_or(Some(1), Value::as_u64)? as u32,
+                as_of: None,
+                arrived: 0,
+            });
+        }
+        // #276: a profile record's entry, only at step 0: `{t: 0, profile: sha256, arrays}`.
+        if let Some(hash) = v.get("profile") {
+            return Some(Entry {
+                t: Some(v.get("t")?.as_i64()?).filter(|t| *t == 0)?,
+                seq: v.get("seq").map_or(Some(0), Value::as_u64)? as u32,
+                control: crate::profile::PROFILE.into(),
+                value: Given::Profile {
+                    hash: hash.as_str().filter(|h| h.len() == 64)?.into(),
+                    arrays: v.get("arrays").cloned().unwrap_or(Value::Null),
+                },
+                writer: v
+                    .get("writer")
+                    .map_or(Some("you"), Value::as_str)?
+                    .to_string(),
+                player: v.get("player").map_or(Some(1), Value::as_u64)? as u32,
+                as_of: None,
+                arrived: 0,
+            });
+        }
         // #860: a rewind names no control: `{rewind: {to: {stop: n} | {step: k}}}`.
         let rewind = match v.get("rewind") {
             None => None,
@@ -235,6 +289,12 @@ impl Entry {
         }
         if let Given::Rewind(_) = self.value {
             return json!({"t": self.t, "seq": self.seq, "rewind": value, "writer": self.writer, "player": self.player});
+        }
+        if let Given::Carry { .. } = self.value {
+            return json!({"t": self.t, "seq": self.seq, "carry": value, "writer": self.writer, "player": self.player});
+        }
+        if let Given::Profile { arrays, .. } = &self.value {
+            return json!({"t": self.t, "seq": self.seq, "profile": value, "arrays": arrays, "writer": self.writer, "player": self.player});
         }
         match self.as_of {
             None => {

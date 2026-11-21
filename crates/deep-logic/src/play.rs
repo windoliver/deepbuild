@@ -80,6 +80,18 @@ pub fn piece_of(form: &Value) -> Option<Value> {
     if let Some(libraries) = form.get("libraries") {
         piece["packs"] = libraries.clone();
     }
+    // #276: a match's seats, each with its block of a profile's read entry.
+    let net = form
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten();
+    if let Some(n) = net
+        .filter_map(|(_, i)| (i["kind"] == "net@1").then(|| i.pointer("/params/players")))
+        .next()
+    {
+        piece["players"] = n.cloned().unwrap_or(json!(2));
+    }
     // #860: the document's rewind, which the logic module checks against its items.
     if let Some(r) = form.get("rewind") {
         piece["rewind"] = r.clone();
@@ -163,7 +175,7 @@ fn track_hash(entries: &[Value]) -> String {
 }
 
 /// The piece's full state as one hash: each of its items' deep hashes, in piece order.
-fn full(hashes: &Map<String, Value>, ids: &[String]) -> String {
+pub(crate) fn full(hashes: &Map<String, Value>, ids: &[String]) -> String {
     let mut b = Vec::new();
     for id in ids {
         b.extend(id.as_bytes());

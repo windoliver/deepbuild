@@ -1,0 +1,25 @@
+# #2975 criterion 7, macOS half: the real launchd (gui domain), 2026-11-20, on the MacBook Pro
+# Script: mac-launchd-2975.sh beside this file; a fresh GitHub clone, scratch labels com.deepbuild.check2975.*, a temp HOME.
+# Base = d481286e5 (the tests commit, main's hub), fix = 25a5b8044. The plist keys are service.ts's, unchanged by the fix.
+
+dir <sandbox> load: { 96.48 122.90 163.39 } 27.2.1
+== base at d481286e5: KeepAlive SuccessfulExit=false
+started: pid 16454
+after kill -TERM: back as none; state=not running runs=1 last exit code=0 
+== fix at 25a5b8044: KeepAlive SuccessfulExit=false
+started: pid 51247
+after kill -TERM: back as 72875; state=running runs=2 pid=72875 last exit code=75: EX_TEMPFAIL 
+kill 1 of 5 in a row: back as 86089
+kill 2 of 5 in a row: back as 2170
+kill 3 of 5 in a row: back as 23970
+kill 4 of 5 in a row: back as 41996
+kill 5 of 5 in a row: back as 63528
+early kill -TERM sent to 82433
+after an early kill -TERM: back as 85393; state=running runs=9 pid=85393 
+early kill -INT sent to 95339
+after an early kill -INT: back as 98542; state=running runs=11 pid=98542 
+after kill -INT: back as 7772; state=running runs=12 pid=7772 last exit code=75: EX_TEMPFAIL 
+after launchctl bootout and 15 s: loaded: no; answers: no; last pid alive: no
+head: illegal line count -- 0
+no check2975 jobs left
+removed <sandbox>

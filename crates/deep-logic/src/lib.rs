@@ -13,6 +13,7 @@
 pub mod bake;
 pub mod bindings;
 pub mod budget;
+pub mod carry;
 pub mod checks;
 pub mod draws;
 pub mod first_party;
@@ -31,11 +32,14 @@ pub mod live;
 pub mod mirrors;
 pub mod module;
 pub mod piece;
+mod planted;
 pub mod play;
 pub mod point;
 pub mod probe;
+pub mod profile;
 pub mod saves;
 pub mod services;
+pub mod shell;
 pub mod track;
 pub mod world;
 
@@ -55,127 +59,7 @@ use world::{track_of, Entry, Record, World};
 /// imports, on the browser's own WebAssembly.
 pub const WEB_RUNNER: &str = include_str!("../web/logic.mjs");
 
-/// The planted twins `deep-logic --planted <name>` runs, each one criterion's wrong program.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct Planted {
-    pub rewrite: rewrite::Faults,
-    pub runs_unchecked: bool,
-    pub digest_total_sizes: bool,
-    pub mapper_ignores_shift: bool,
-    pub budget_first_line: bool,
-    pub check_step_hashes_only: bool,
-    pub budget_sums_only_fuel: bool,
-    pub checkpoint_drops_globals: bool,
-    pub restore_keeps_regions_only: bool,
-    pub restore_copies_assets: bool,
-    pub simulate_runs_all_steps: bool,
-    pub linker_adds_linking_section: bool,
-    pub pack_check_skips_library_subset: bool,
-    pub linker_links_in_listing_order: bool,
-    pub read_region_orders_by_arrival: bool,
-    pub read_region_drops_player: bool,
-    pub save_drops_globals: bool,
-    pub save_drops_input_position: bool,
-    pub open_reapplies_segments: bool,
-    pub replay_changes_step_37: bool,
-    pub budget_counts_lane_reading: bool,
-    pub seek_repeats_occurrences: bool,
-    pub occurrences_keep_cap: bool,
-    pub occurrences_sort_ties_by_payload: bool,
-    pub turn_runs_at_frame_boundary: bool,
-    pub turn_ignores_due: bool,
-    pub linear_blends_forward: bool,
-    pub seek_restores_arrays_only: bool,
-    pub open_span_reads_zero: bool,
-    pub judder_checks_shots_only: bool,
-    pub budget_holds_steps_to_fuel_budget: bool,
-    pub budget_web_passes_from_fuel: bool,
-    pub pipeline_draws_before_step_ends: bool,
-    pub ranges_drop_second_at_step_5000: bool,
-    pub ring_drops_oldest: bool,
-    pub keyframes_held_in_ring: bool,
-    pub store_fails_at_step_120: bool,
-    pub mirror_lists_first: bool,
-    pub mirror_restores_whole: bool,
-    pub services_after_checkpoint: bool,
-    /// #548: a preview that runs on the item's own instance rather than a throwaway copy.
-    pub preview_writes_item_memory: bool,
-    /// #548: a preview that runs only when a control it reads changes, not after a step or seek.
-    pub preview_runs_on_hover_only: bool,
-    /// #548: a region map that lays the reads out by name rather than in declaration order.
-    pub map_reads_by_name: bool,
-    /// #1164: the restore a seek to step 225 starts from zeroes the u32 at the program's
-    /// `moves_at`, a count it keeps only in memory.
-    pub restore_zeroes_move_count: bool,
-    /// #416: a resolver that gives an outside pack's interface a first-party pack's binding.
-    pub outside_interface_binds_all: bool,
-    /// #210: an `each` reading's read region that keeps only the last value a step received.
-    pub read_region_keeps_last: bool,
-    /// #860: a rewind that puts back only each item's arrays as the stop left them, leaving the
-    /// rest of its memory and its globals as they stood when the rewind came.
-    pub rewind_restores_arrays_only: bool,
-    /// #860: a rewind that zeroes the carried seen array instead of keeping it.
-    pub rewind_clears_seen: bool,
-}
-
-impl Planted {
-    /// Each named twin applied to `self`; None for an unknown name.
-    pub fn and(mut self, name: &str) -> Option<Planted> {
-        let p = &mut self;
-        match name {
-            "check_compares_step_hashes" => p.check_step_hashes_only = true,
-            "read_region_orders_by_arrival" => p.read_region_orders_by_arrival = true,
-            "read_region_drops_player" => p.read_region_drops_player = true,
-            "budget_sums_fuel_only" => p.budget_sums_only_fuel = true,
-            "checkpoint_drops_globals" => p.checkpoint_drops_globals = true,
-            "restore_keeps_regions_only" => p.restore_keeps_regions_only = true,
-            "restore_copies_assets" => p.restore_copies_assets = true,
-            "simulate_runs_all_steps" => p.simulate_runs_all_steps = true,
-            "save_drops_globals" => p.save_drops_globals = true,
-            "save_drops_input_position" => p.save_drops_input_position = true,
-            "open_reapplies_segments" => p.open_reapplies_segments = true,
-            "tracker_skips_memory_copy" => p.rewrite.skip_copy_pages = true,
-            "tracker_skips_memory_fill" => p.rewrite.skip_fill_pages = true,
-            "ranges_drop_second_at_step_5000" => p.ranges_drop_second_at_step_5000 = true,
-            "ring_drops_oldest" => p.ring_drops_oldest = true,
-            "keyframes_held_in_ring" => p.keyframes_held_in_ring = true,
-            "store_fails_at_step_120" => p.store_fails_at_step_120 = true,
-            "runs_unchecked" => p.runs_unchecked = true,
-            "digest_compares_total_sizes" => p.digest_total_sizes = true,
-            "mapper_ignores_fuel_shift" => p.mapper_ignores_shift = true,
-            "budget_charges_function_first_line" => p.budget_first_line = true,
-            "linker_adds_linking_section" => p.linker_adds_linking_section = true,
-            "pack_check_skips_library_subset" => p.pack_check_skips_library_subset = true,
-            "linker_links_in_listing_order" => p.linker_links_in_listing_order = true,
-            "replay_changes_step_37" => p.replay_changes_step_37 = true,
-            "budget_counts_lane_reading" => p.budget_counts_lane_reading = true,
-            "seek_repeats_occurrences" => p.seek_repeats_occurrences = true,
-            "occurrences_keep_cap" => p.occurrences_keep_cap = true,
-            "occurrences_sort_ties_by_payload" => p.occurrences_sort_ties_by_payload = true,
-            "turn_runs_at_frame_boundary" => p.turn_runs_at_frame_boundary = true,
-            "turn_ignores_due" => p.turn_ignores_due = true,
-            "linear_blends_forward" => p.linear_blends_forward = true,
-            "seek_restores_arrays_only" => p.seek_restores_arrays_only = true,
-            "open_span_reads_zero" => p.open_span_reads_zero = true,
-            "judder_checks_shots_only" => p.judder_checks_shots_only = true,
-            "budget_holds_steps_to_fuel_budget" => p.budget_holds_steps_to_fuel_budget = true,
-            "budget_web_passes_from_fuel" => p.budget_web_passes_from_fuel = true,
-            "pipeline_draws_before_step_ends" => p.pipeline_draws_before_step_ends = true,
-            "mirror_lists_before_reads" => p.mirror_lists_first = true,
-            "mirror_whole_after_restore" => p.mirror_restores_whole = true,
-            "services_after_checkpoint" => p.services_after_checkpoint = true,
-            "preview_writes_item_memory" => p.preview_writes_item_memory = true,
-            "preview_runs_on_hover_only" => p.preview_runs_on_hover_only = true,
-            "restore_zeroes_move_count" => p.restore_zeroes_move_count = true,
-            "outside_interface_binds_all" => p.outside_interface_binds_all = true,
-            "read_region_keeps_last" => p.read_region_keeps_last = true,
-            "rewind_restores_arrays_only" => p.rewind_restores_arrays_only = true,
-            "rewind_clears_seen" => p.rewind_clears_seen = true,
-            _ => return None,
-        }
-        Some(self)
-    }
-}
+pub use planted::Planted;
 
 /// The logic module's version, as a bake key and a golden name it.
 pub const VERSION: &str = concat!("logic@1 ", env!("CARGO_PKG_VERSION"));
@@ -273,7 +157,7 @@ fn flicks(seconds: f64) -> i64 {
 
 /// The piece's input track: your entries, or, with none of yours, its tour's keys as entries of
 /// writer `tour`, each at idle_after past the start plus its own time, over the bake's span.
-fn track(piece: &Piece, line: &Value, steps: i64) -> Option<Vec<Entry>> {
+fn track(piece: &Piece, line: &Value, steps: i64, planted: &Planted) -> Option<Vec<Entry>> {
     let mut entries: Vec<Entry> = match line.get("track") {
         None => Vec::new(),
         Some(t) => t
@@ -282,6 +166,10 @@ fn track(piece: &Piece, line: &Value, steps: i64) -> Option<Vec<Entry>> {
             .map(Entry::parse)
             .collect::<Option<_>>()?,
     };
+    // #189: a carry record's entry reads its record by hash from where the piece's saves are kept.
+    carry::resolve(piece, saves_dir(line).as_deref(), &mut entries).ok()?;
+    // #276: a profile entry's arrays, by hash from the same folder where the track didn't carry them.
+    profile::resolve(saves_dir(line).as_deref(), planted, &mut entries).ok()?;
     // #542: a text or scroll control's entry holds only what the control may (Control: text,
     // Control: scroll); any other refuses the track.
     let fits = |e: &Entry| {
@@ -648,6 +536,8 @@ impl Logic {
             Some("judge") => self.judge(line).unwrap_or_else(|e| e),
             Some("append") => self.append(line).unwrap_or_else(|e| e),
             Some("open_save") => self.open_save(line).unwrap_or_else(|e| e),
+            Some("open_carry") => self.open_carry(line).unwrap_or_else(|e| e),
+            Some("layout") => self.layout(line).unwrap_or_else(|e| e),
             _ => json!({"ok": false, "code": "bad_input"}),
         }
     }
@@ -668,7 +558,7 @@ impl Logic {
             .and_then(Value::as_i64)
             .filter(|n| *n >= 0)
             .ok_or_else(|| bad("steps"))?;
-        let entries = track(&piece, line, steps).ok_or_else(|| bad("track"))?;
+        let entries = track(&piece, line, steps, &self.planted).ok_or_else(|| bad("track"))?;
         let restores = forks(line.get("restores"), "from").ok_or_else(|| bad("restores"))?;
         let probes = forks(line.get("probes"), "at").ok_or_else(|| bad("probes"))?;
         let seeks = seeks_of(line.get("seeks")).ok_or_else(|| bad("seeks"))?;
@@ -742,13 +632,18 @@ impl Logic {
                 .ok_or_else(|| bad("peek"))?;
             peeks.push(json!({"item": item, "at": at, "len": len, "hex": hex}));
         }
+        let carries = carry::written(&mut world);
+        if let Some(f) = carries.iter().find(|c| c["ok"] == json!(false)) {
+            return Err(f.clone());
+        }
+        let profiles = profile::reply(&mut world);
         let saves = saves::written(&mut world)?;
         let frames = frames(&piece, line.get("frames"), &rec, None)?;
         let budgets = self.budgets(&piece, &entries, &rec)?;
         let keys = keys(&piece, &entries);
         Ok(json!({
             "ok": true, "items": items(&piece), "keys": keys, "steps": rec.steps_json(&piece, only), "occurrences": rec.occurrences(&piece), "checkpoints": rec.checkpoints, "ranges": rec.ranges_json(&piece, only), "ring": world.ring(),
-            "traps": libraries_in(&piece, rec.traps), "issues": rec.issues, "budgets": budgets, "saves": saves, "frames": frames, "restores": restores_out, "probes": probes_out, "seeks": seeks_out, "peeks": peeks,
+            "traps": libraries_in(&piece, rec.traps), "issues": rec.issues, "budgets": budgets, "saves": saves, "carries": carries, "profiles": profiles, "frames": frames, "restores": restores_out, "probes": probes_out, "seeks": seeks_out, "peeks": peeks,
             "track": entries.iter().map(Entry::to_json).collect::<Vec<_>>(), "closed": world.branches.closed_json(),
         }))
     }
@@ -762,7 +657,7 @@ impl Logic {
             .and_then(Value::as_i64)
             .filter(|n| *n >= 0)
             .ok_or_else(|| bad("steps"))?;
-        let entries = track(&piece, line, steps).ok_or_else(|| bad("track"))?;
+        let entries = track(&piece, line, steps, &self.planted).ok_or_else(|| bad("track"))?;
         let at: Vec<i64> = line
             .get("at")
             .and_then(Value::as_array)
@@ -798,7 +693,9 @@ impl Logic {
             .and_then(Value::as_i64)
             .filter(|n| *n >= 0)
             .ok_or_else(|| bad("steps"))?;
-        let entries = track(&piece, line, steps).ok_or_else(|| bad("track"))?;
+        let mut entries = track(&piece, line, steps, &self.planted).ok_or_else(|| bad("track"))?;
+        // #276: a check's replica starts with zeros unless the call names a fixture record.
+        profile::fixture(&piece, line, &self.planted, &mut entries)?;
         if !piece.items.windows(2).all(|w| w[0].step == w[1].step) {
             return Err(bad("checks need every item at one step rate"));
         }
@@ -1093,7 +990,7 @@ impl Logic {
             .and_then(Value::as_i64)
             .filter(|n| *n >= 0)
             .ok_or_else(|| bad("steps"))?;
-        let entries = track(&piece, line, steps).ok_or_else(|| bad("track"))?;
+        let entries = track(&piece, line, steps, &self.planted).ok_or_else(|| bad("track"))?;
         // The web runner fills no reading's slot yet: a plan it would run short is refused.
         let draws = piece.items.iter().flat_map(|i| &i.layout.entries);
         if !piece.sources.is_empty() || draws.clone().any(|e| e.read == piece::Read::Draws) {
@@ -1114,6 +1011,8 @@ impl Logic {
                             piece::Read::Reading { .. } | piece::Read::World | piece::Read::Draws => unreachable!("refused above"),
                             piece::Read::Array { item, offset } => ("array", json!(item), *offset),
                             piece::Read::Seed => ("seed", Value::Null, 0),
+                            piece::Read::Carry => ("carry", Value::Null, 0),
+                            piece::Read::Profile => ("profile", Value::Null, 0),
                             piece::Read::Seats => ("seats", Value::Null, 0),
                             piece::Read::Mirror(_) | piece::Read::None => ("write", Value::Null, 0),
                         };
@@ -1286,7 +1185,9 @@ impl Logic {
 
     fn open(&mut self, line: &Value) -> Result<Value, Value> {
         let piece = Rc::new(self.check(line)?);
-        let entries = track(&piece, line, 0).ok_or_else(|| bad("track"))?;
+        let mut entries = track(&piece, line, 0, &self.planted).ok_or_else(|| bad("track"))?;
+        // #276: the piece starting in the app reopens its newest whole profile record.
+        let reopened = profile::reopen(&piece, line, &self.planted, &mut entries);
         let mut rec = Record::default();
         let mut world = World::new(
             piece.clone(),
@@ -1313,7 +1214,11 @@ impl Logic {
         }
         let session = format!("s{}", self.sessions.len() + 1);
         self.sessions.insert(session.clone(), world);
-        Ok(json!({"ok": true, "session": session, "items": items(&piece)}))
+        let mut out = json!({"ok": true, "session": session, "items": items(&piece)});
+        if let Some(r) = reopened {
+            out["profile"] = r;
+        }
+        Ok(out)
     }
 
     fn step(&mut self, line: &Value) -> Result<Value, Value> {
@@ -1329,8 +1234,10 @@ impl Logic {
         let mut rec = Record::default();
         w.run(to + 1, &mut rec, &mut |_, _| {});
         let track: Vec<Value> = w.entries().iter().map(Entry::to_json).collect();
+        let profiles = profile::reply(w);
         let saves = saves::written(w)?;
         Ok(json!({
+            "profiles": profiles,
             "ok": true,
             "step": to,
             "failed": w.failed(),
@@ -1410,6 +1317,57 @@ impl Logic {
         };
         w.run(to + 1, &mut Record::default(), &mut |_, _| {});
         Ok(json!({"ok": true, "to": to, "from": from, "deep_hash": w.deep_hashes()}))
+    }
+
+    /// logic.layout (#189): the piece's fixture saves opened under its current program and the
+    /// program that wrote each, fed the continuation probes.
+    fn layout(&mut self, line: &Value) -> Result<Value, Value> {
+        let current = Rc::new(self.check(line)?);
+        let (adapter, planted) = (adapter(line), self.planted);
+        let mut old_of = |programs: &Map<String, Value>| {
+            let mut l = line.clone();
+            for (id, sha) in programs {
+                l["piece"]["items"][id]["params"]["program"] = sha.clone();
+            }
+            self.check(&l).map(Rc::new)
+        };
+        Ok(checks::layout::layout(
+            current,
+            &mut old_of,
+            line,
+            planted,
+            &adapter,
+        ))
+    }
+
+    /// The viewer opens a carry record into the taking piece from the app (Logic: carry records):
+    /// refused when it doesn't fit, else the piece runs from step 0 with the record's entry on
+    /// its track, by hash.
+    fn open_carry(&mut self, line: &Value) -> Result<Value, Value> {
+        let piece = self.check(line)?;
+        let dir = saves_dir(line).ok_or_else(|| bad("saves_dir"))?;
+        let hash = line
+            .get("record")
+            .and_then(Value::as_str)
+            .ok_or_else(|| bad("record"))?;
+        let record = carry::read(&dir, hash)?;
+        let differs = carry::differs(&piece, &record);
+        if !differs.is_empty() {
+            return Err(
+                json!({"ok": false, "code": "carry_refused", "record": hash, "differs": differs}),
+            );
+        }
+        let mut track = line
+            .get("track")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        track.insert(0, carry::entry(hash, &record).to_json());
+        let mut baked = line.clone();
+        baked["track"] = json!(track);
+        let mut out = self.bake(&baked)?;
+        out["record"] = json!(hash);
+        Ok(out)
     }
 
     /// The viewer opens a slot's save from the app (Logic: saves), never the piece's logic.
