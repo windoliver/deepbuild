@@ -22,6 +22,8 @@ pub struct Fired {
     pub step: u64,
     pub kind: String,
     pub data: Value,
+    /// The input it fires, when its module names one (a logic item's fire, #194).
+    pub input: Option<String>,
 }
 
 /// World `w`'s entries from the core's input track `track` (the input module's control entries,
@@ -31,6 +33,7 @@ pub struct Fired {
 /// module's (a planted build's order). A choice of `form` reads as its option's index (#1040).
 pub fn kept(
     form: &Value,
+    world: &str,
     w: &World,
     track: &[Value],
     fired: &[Fired],
@@ -38,6 +41,8 @@ pub fn kept(
 ) -> Result<Vec<Value>, Box<Refusal>> {
     let track = &indexed(form, track)[..];
     let h = step_flicks(w);
+    let logic = logic_fired(form, world, w);
+    let fired: Vec<&Fired> = fired.iter().chain(&logic).collect();
     // The core input track as the modules wrote it: each step's input-module entries and the
     // other modules' in the order the build writes them; each entry's place in it, by its source.
     let (control_rank, module_rank) = if modules_first { (1, 0) } else { (0, 1) };
@@ -74,7 +79,8 @@ pub fn kept(
             let Some(On::Module { module, item }) = &input.on else {
                 continue;
             };
-            if *module != f.module || *item != f.item || input.kind != f.kind {
+            let other = f.input.as_ref().is_some_and(|i| i != id);
+            if *module != f.module || *item != f.item || input.kind != f.kind || other {
                 continue;
             }
             let data = resolved(input, &f.data, &format!("inputs/{id}/data"))?;
@@ -117,6 +123,30 @@ pub fn kept(
     };
     out.sort_by_key(key);
     Ok(out)
+}
+
+/// #194: the entries `form`'s logic items fire into world `world`, which the form keeps as
+/// `logic_fires` (fires.rs), each at the world's first step at or after its logic step's time.
+fn logic_fired(form: &Value, world: &str, w: &World) -> Vec<Fired> {
+    let h = step_flicks(w).max(1);
+    let fires = form.get("logic_fires").and_then(Value::as_array);
+    fires
+        .into_iter()
+        .flatten()
+        .filter(|f| f["world"] == world)
+        .filter_map(|f| {
+            let input = f["input"].as_str()?;
+            let t = f["t"].as_i64()?.max(0);
+            Some(Fired {
+                module: "logic".into(),
+                item: f["item"].as_str()?.into(),
+                step: ((t + h - 1) / h) as u64,
+                kind: w.inputs.get(input)?.kind.clone(),
+                data: f["data"].clone(),
+                input: Some(input.into()),
+            })
+        })
+        .collect()
 }
 
 /// `track` with each entry of a choice of `form` valued as its option's index (Control: in an

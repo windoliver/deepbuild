@@ -147,6 +147,15 @@ impl Rapier {
             if self.character_input(&i.kind, &i.target, d) {
                 continue;
             }
+            // #2310: a body of an articulation moves by its joints' coordinates alone, so an
+            // input that sets its velocity would move nothing.
+            let stills = i.kind == "release" && d.get("keeps_velocity") == Some(&json!(false));
+            let sets = matches!(i.kind.as_str(), "launch" | "poke") || stills;
+            if sets && self.world.multibody_joints.rigid_body_link(h).is_some() {
+                let what = format!("the input {} sets the velocity of {}, which an articulated joint holds: a body of an articulation moves by its joints' coordinates alone; grab it instead, or leave its joints separate", i.kind, i.target);
+                let (path, named) = ("inputs/target".to_string(), json!(i.target));
+                return Err(Box::new(refusal("out_of_range", path, named, what)));
+            }
             match i.kind.as_str() {
                 "launch" => {
                     let rb = &mut self.world.bodies[h];

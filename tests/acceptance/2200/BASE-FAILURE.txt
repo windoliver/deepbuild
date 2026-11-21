@@ -1,0 +1,784 @@
+Issue: #2200 (A deep command with arguments it can't read sets nothing up, and a flag is never read as an argument)
+Base: 72fe11a11 (a clean worktree, built, no implementation)
+Acceptance tests: tests/acceptance/2200, a blind draft from the issue, the design and the base.
+Machine: Linux arm64, Node 24.22.0. The service manager is systemctl here, so setup's login-service file is
+<home>/.config/systemd/user/deepbuild-hub.service; on macOS it is a plist under <home>/Library/LaunchAgents.
+<checkout> is the worktree, <tmp> a test's temporary folder, <home> is <tmp>/h. Timings are cut: the machine was loaded.
+
+Part 1. The suite on the base.
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/2200 --reporter=verbose
+Exit 1. 15 tests: 14 failed, 1 passed.
+- usage.test.ts, 10 tests (criteria 1 and 2): each fails at its one assertion, usage.test.ts:18, with exit 2 but the
+  files setup wrote and the launcher's call in the message. (On this machine the base's exit code is already 2; the
+  issue's "exits 3" is the reference Mac's. The assertion holds the three values together, so it fails on both.)
+- flags.test.ts, 4 tests (criterion 4): each fails at its one assertion, flags.test.ts:14, with exit 1, 1, 1 and 3.
+- first-command.test.ts, 1 test (criterion 3): passes, as a guard must on the base.
+
+
+ RUN  v5.0.5 <checkout>
+
+ × tests/acceptance/2200/flags.test.ts > #2200.0122400d a flag isn't an argument > #2200.0122400d deep open --typo is a usage error: exit 2
+   → deep open --typo has a flag where its argument goes, so it must exit 2: exit 1, stdout "", stderr "deep open: the app is not running\n": expected 1 to be 2 // Object.is equality
+ × tests/acceptance/2200/flags.test.ts > #2200.0122400d a flag isn't an argument > #2200.0122400d deep backup --typo is a usage error: exit 2
+   → deep backup --typo has a flag where its argument goes, so it must exit 2: exit 1, stdout "", stderr "deep backup: no hub answered (ENOENT: no such file or directory, open '<home>/.deepbuild/control.token'); the record is backed up through the hub. Start it with deep hub start, then run deep backup again.\n": expected 1 to be 2 // Object.is equality
+ × tests/acceptance/2200/flags.test.ts > #2200.0122400d a flag isn't an argument > #2200.0122400d deep run follow --typo is a usage error: exit 2
+   → deep run follow --typo has a flag where its argument goes, so it must exit 2: exit 1, stdout "", stderr "BLOCKED: ENOENT: no such file or directory, open '<home>/.deepbuild/control.token'\n": expected 1 to be 2 // Object.is equality
+ × tests/acceptance/2200/flags.test.ts > #2200.0122400d a flag isn't an argument > #2200.0122400d deep session rules --typo is a usage error: exit 2
+   → deep session rules --typo has a flag where its argument goes, so it must exit 2: exit 3, stdout "", stderr "BLOCKED: ENOENT: no such file or directory, open '<home>/.deepbuild/control.token'; nothing was read\n": expected 3 to be 2 // Object.is equality
+ × tests/acceptance/2200/usage.test.ts > #2200.3594285f a usage error sets nothing up > #2200.3594285f deep status --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+   → deep status --typo can't read its arguments, so it must exit 2, leave no new file and call no stand-in: exit 2, stdout "", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\nUsage: deep status [--json] | deep status <session> --why [--json]\n": expected { exit: 2, written: [ …(24) ], …(1) } to deeply equal { exit: 2, written: [], called: [] }
+ ✓ tests/acceptance/2200/first-command.test.ts > #2200.b9e90749 the first command still sets up > #2200.b9e90749 deep status in a home with no .deepbuild sets up as on the merge base: the files deep setup writes, its hooks in the settings, the launcher called with the login-service file, exit 3
+ × tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep inbox --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+   → deep inbox --typo can't read its arguments, so it must exit 2, leave no new file and call no stand-in: exit 2, stdout "", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\nUsage: deep inbox [--json]\n       deep inbox answer <ask> <option>\n       deep inbox undo <ask>\n       deep inbox save <offer>\n": expected { exit: 2, written: [ …(24) ], …(1) } to deeply equal { exit: 2, written: [], called: [] }
+ × tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep secret --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+   → deep secret --typo can't read its arguments, so it must exit 2, leave no new file and call no stand-in: exit 2, stdout "", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\nusage: deep secret add <package> <name> | deep secret list [--json]\n": expected { exit: 2, written: [ …(24) ], …(1) } to deeply equal { exit: 2, written: [], called: [] }
+ × tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep off --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+   → deep off --typo can't read its arguments, so it must exit 2, leave no new file and call no stand-in: exit 2, stdout "", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\nUnsupported command. Run deep --help for available commands.\n": expected { exit: 2, written: [ …(24) ], …(1) } to deeply equal { exit: 2, written: [], called: [] }
+ × tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep on --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+   → deep on --typo can't read its arguments, so it must exit 2, leave no new file and call no stand-in: exit 2, stdout "", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\nUnsupported command. Run deep --help for available commands.\n": expected { exit: 2, written: [ …(24) ], …(1) } to deeply equal { exit: 2, written: [], called: [] }
+ × tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep env --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+   → deep env --typo can't read its arguments, so it must exit 2, leave no new file and call no stand-in: exit 2, stdout "", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\nUsage: deep env up|down [--root <folder>] [--json]\n": expected { exit: 2, written: [ …(24) ], …(1) } to deeply equal { exit: 2, written: [], called: [] }
+ × tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep install --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+   → deep install --typo can't read its arguments, so it must exit 2, leave no new file and call no stand-in: exit 2, stdout "", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\nUsage: deep install [--trust-key] <package folder>\n": expected { exit: 2, written: [ …(24) ], …(1) } to deeply equal { exit: 2, written: [], called: [] }
+ × tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep guard --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+   → deep guard --typo can't read its arguments, so it must exit 2, leave no new file and call no stand-in: exit 2, stdout "", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\nUsage: deep guard add <file>\n": expected { exit: 2, written: [ …(24) ], …(1) } to deeply equal { exit: 2, written: [], called: [] }
+ × tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep memory --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+   → deep memory --typo can't read its arguments, so it must exit 2, leave no new file and call no stand-in: exit 2, stdout "", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\nUsage: deep memory [--json]\n       deep memory keep <lesson>\n       deep memory remove <lesson>\n       deep memory overrule <decision>\n": expected { exit: 2, written: [ …(24) ], …(1) } to deeply equal { exit: 2, written: [], called: [] }
+ × tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep env in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+   → deep env can't read its arguments, so it must exit 2, leave no new file and call no stand-in: exit 2, stdout "", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\nUsage: deep env up|down [--root <folder>] [--json]\n": expected { exit: 2, written: [ …(24) ], …(1) } to deeply equal { exit: 2, written: [], called: [] }
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 14 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2200/flags.test.ts > #2200.0122400d a flag isn't an argument > #2200.0122400d deep open --typo is a usage error: exit 2
+AssertionError: deep open --typo has a flag where its argument goes, so it must exit 2: exit 1, stdout "", stderr "deep open: the app is not running\n": expected 1 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ tests/acceptance/2200/flags.test.ts:14:113
+     12|   it.each(FORMS.map((args) => [args.join(' '), args] as const))('#2200…
+     13|     const { ran, exit } = await outcome(freshHome(), args);
+     14|     expect(exit, `deep ${args.join(' ')} has a flag where its argument…
+       |                                                                                                                 ^
+     15|   }, 300_000);
+     16| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/14]⎯
+
+ FAIL  tests/acceptance/2200/flags.test.ts > #2200.0122400d a flag isn't an argument > #2200.0122400d deep backup --typo is a usage error: exit 2
+AssertionError: deep backup --typo has a flag where its argument goes, so it must exit 2: exit 1, stdout "", stderr "deep backup: no hub answered (ENOENT: no such file or directory, open '<home>/.deepbuild/control.token'); the record is backed up through the hub. Start it with deep hub start, then run deep backup again.\n": expected 1 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ tests/acceptance/2200/flags.test.ts:14:113
+     12|   it.each(FORMS.map((args) => [args.join(' '), args] as const))('#2200…
+     13|     const { ran, exit } = await outcome(freshHome(), args);
+     14|     expect(exit, `deep ${args.join(' ')} has a flag where its argument…
+       |                                                                                                                 ^
+     15|   }, 300_000);
+     16| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/14]⎯
+
+ FAIL  tests/acceptance/2200/flags.test.ts > #2200.0122400d a flag isn't an argument > #2200.0122400d deep run follow --typo is a usage error: exit 2
+AssertionError: deep run follow --typo has a flag where its argument goes, so it must exit 2: exit 1, stdout "", stderr "BLOCKED: ENOENT: no such file or directory, open '<home>/.deepbuild/control.token'\n": expected 1 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ tests/acceptance/2200/flags.test.ts:14:113
+     12|   it.each(FORMS.map((args) => [args.join(' '), args] as const))('#2200…
+     13|     const { ran, exit } = await outcome(freshHome(), args);
+     14|     expect(exit, `deep ${args.join(' ')} has a flag where its argument…
+       |                                                                                                                 ^
+     15|   }, 300_000);
+     16| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/14]⎯
+
+ FAIL  tests/acceptance/2200/flags.test.ts > #2200.0122400d a flag isn't an argument > #2200.0122400d deep session rules --typo is a usage error: exit 2
+AssertionError: deep session rules --typo has a flag where its argument goes, so it must exit 2: exit 3, stdout "", stderr "BLOCKED: ENOENT: no such file or directory, open '<home>/.deepbuild/control.token'; nothing was read\n": expected 3 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 3
+
+ ❯ tests/acceptance/2200/flags.test.ts:14:113
+     12|   it.each(FORMS.map((args) => [args.join(' '), args] as const))('#2200…
+     13|     const { ran, exit } = await outcome(freshHome(), args);
+     14|     expect(exit, `deep ${args.join(' ')} has a flag where its argument…
+       |                                                                                                                 ^
+     15|   }, 300_000);
+     16| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/14]⎯
+
+ FAIL  tests/acceptance/2200/usage.test.ts > #2200.3594285f a usage error sets nothing up > #2200.3594285f deep status --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+AssertionError: deep status --typo can't read its arguments, so it must exit 2, leave no new file and call no stand-in: exit 2, stdout "", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\nUsage: deep status [--json] | deep status <session> --why [--json]\n": expected { exit: 2, written: [ …(24) ], …(1) } to deeply equal { exit: 2, written: [], called: [] }
+
+- Expected
++ Received
+
+  {
+-   "called": [],
++   "called": [
++     "launcher <tmp>/h/.config/systemd/user/deepbuild-hub.service",
++   ],
+    "exit": 2,
+-   "written": [],
++   "written": [
++     "bin/calls.log",
++     "h/.claude/settings.json",
++     "h/.claude/skills",
++     "h/.claude/skills/deepbuild",
++     "h/.claude/skills/deepbuild/SKILL.md",
++     "h/.claude.json",
++     "h/.codex/config.toml",
++     "h/.codex/hooks.json",
++     "h/.config",
++     "h/.config/systemd",
++     "h/.config/systemd/user",
++     "h/.config/systemd/user/deepbuild-hub.service",
++     "h/.deepbuild",
++     "h/.deepbuild/bin",
++     "h/.deepbuild/bin/deep-hook",
++     "h/.deepbuild/claude-hooks.json",
++     "h/.deepbuild/codex-hooks.json",
++     "h/.deepbuild/config.json",
++     "h/.deepbuild/logs",
++     "h/.deepbuild/originals",
++     "h/.deepbuild/originals/7905214a0c570990006b4e2a71b3778020d8cf62a9ff6bad5a8f80bbb230978d",
++     "h/.deepbuild/rules.json",
++     "h/.deepbuild/setup-stopped.json",
++     "h/.deepbuild/setup.json",
++   ],
+  }
+
+ ❯ setsNothingUp tests/acceptance/2200/usage.test.ts:18:162
+     16| async function setsNothingUp(args: readonly string[]): Promise<void> {
+     17|   const { ran, exit, written, called } = await outcome(freshHome(), ar…
+     18|   expect({ exit, written, called }, `deep ${args.join(' ')} can't read…
+       |                                                                                                                                                                  ^
+     19| }
+     20|
+ ❯ tests/acceptance/2200/usage.test.ts:23:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/14]⎯
+
+ FAIL  tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep inbox --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+AssertionError: deep inbox --typo can't read its arguments, so it must exit 2, leave no new file and call no stand-in: exit 2, stdout "", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\nUsage: deep inbox [--json]\n       deep inbox answer <ask> <option>\n       deep inbox undo <ask>\n       deep inbox save <offer>\n": expected { exit: 2, written: [ …(24) ], …(1) } to deeply equal { exit: 2, written: [], called: [] }
+
+- Expected
++ Received
+
+  {
+-   "called": [],
++   "called": [
++     "launcher <tmp>/h/.config/systemd/user/deepbuild-hub.service",
++   ],
+    "exit": 2,
+-   "written": [],
++   "written": [
++     "bin/calls.log",
++     "h/.claude/settings.json",
++     "h/.claude/skills",
++     "h/.claude/skills/deepbuild",
++     "h/.claude/skills/deepbuild/SKILL.md",
++     "h/.claude.json",
++     "h/.codex/config.toml",
++     "h/.codex/hooks.json",
++     "h/.config",
++     "h/.config/systemd",
++     "h/.config/systemd/user",
++     "h/.config/systemd/user/deepbuild-hub.service",
++     "h/.deepbuild",
++     "h/.deepbuild/bin",
++     "h/.deepbuild/bin/deep-hook",
++     "h/.deepbuild/claude-hooks.json",
++     "h/.deepbuild/codex-hooks.json",
++     "h/.deepbuild/config.json",
++     "h/.deepbuild/logs",
++     "h/.deepbuild/originals",
++     "h/.deepbuild/originals/7905214a0c570990006b4e2a71b3778020d8cf62a9ff6bad5a8f80bbb230978d",
++     "h/.deepbuild/rules.json",
++     "h/.deepbuild/setup-stopped.json",
++     "h/.deepbuild/setup.json",
++   ],
+  }
+
+ ❯ setsNothingUp tests/acceptance/2200/usage.test.ts:18:162
+     16| async function setsNothingUp(args: readonly string[]): Promise<void> {
+     17|   const { ran, exit, written, called } = await outcome(freshHome(), ar…
+     18|   expect({ exit, written, called }, `deep ${args.join(' ')} can't read…
+       |                                                                                                                                                                  ^
+     19| }
+     20|
+ ❯ tests/acceptance/2200/usage.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/14]⎯
+
+ FAIL  tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep secret --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+AssertionError: deep secret --typo can't read its arguments, so it must exit 2, leave no new file and call no stand-in: exit 2, stdout "", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\nusage: deep secret add <package> <name> | deep secret list [--json]\n": expected { exit: 2, written: [ …(24) ], …(1) } to deeply equal { exit: 2, written: [], called: [] }
+
+- Expected
++ Received
+
+  {
+-   "called": [],
++   "called": [
++     "launcher <tmp>/h/.config/systemd/user/deepbuild-hub.service",
++   ],
+    "exit": 2,
+-   "written": [],
++   "written": [
++     "bin/calls.log",
++     "h/.claude/settings.json",
++     "h/.claude/skills",
++     "h/.claude/skills/deepbuild",
++     "h/.claude/skills/deepbuild/SKILL.md",
++     "h/.claude.json",
++     "h/.codex/config.toml",
++     "h/.codex/hooks.json",
++     "h/.config",
++     "h/.config/systemd",
++     "h/.config/systemd/user",
++     "h/.config/systemd/user/deepbuild-hub.service",
++     "h/.deepbuild",
++     "h/.deepbuild/bin",
++     "h/.deepbuild/bin/deep-hook",
++     "h/.deepbuild/claude-hooks.json",
++     "h/.deepbuild/codex-hooks.json",
++     "h/.deepbuild/config.json",
++     "h/.deepbuild/logs",
++     "h/.deepbuild/originals",
++     "h/.deepbuild/originals/7905214a0c570990006b4e2a71b3778020d8cf62a9ff6bad5a8f80bbb230978d",
++     "h/.deepbuild/rules.json",
++     "h/.deepbuild/setup-stopped.json",
++     "h/.deepbuild/setup.json",
++   ],
+  }
+
+ ❯ setsNothingUp tests/acceptance/2200/usage.test.ts:18:162
+     16| async function setsNothingUp(args: readonly string[]): Promise<void> {
+     17|   const { ran, exit, written, called } = await outcome(freshHome(), ar…
+     18|   expect({ exit, written, called }, `deep ${args.join(' ')} can't read…
+       |                                                                                                                                                                  ^
+     19| }
+     20|
+ ❯ tests/acceptance/2200/usage.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/14]⎯
+
+ FAIL  tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep off --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+AssertionError: deep off --typo can't read its arguments, so it must exit 2, leave no new file and call no stand-in: exit 2, stdout "", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\nUnsupported command. Run deep --help for available commands.\n": expected { exit: 2, written: [ …(24) ], …(1) } to deeply equal { exit: 2, written: [], called: [] }
+
+- Expected
++ Received
+
+  {
+-   "called": [],
++   "called": [
++     "launcher <tmp>/h/.config/systemd/user/deepbuild-hub.service",
++   ],
+    "exit": 2,
+-   "written": [],
++   "written": [
++     "bin/calls.log",
++     "h/.claude/settings.json",
++     "h/.claude/skills",
++     "h/.claude/skills/deepbuild",
++     "h/.claude/skills/deepbuild/SKILL.md",
++     "h/.claude.json",
++     "h/.codex/config.toml",
++     "h/.codex/hooks.json",
++     "h/.config",
++     "h/.config/systemd",
++     "h/.config/systemd/user",
++     "h/.config/systemd/user/deepbuild-hub.service",
++     "h/.deepbuild",
++     "h/.deepbuild/bin",
++     "h/.deepbuild/bin/deep-hook",
++     "h/.deepbuild/claude-hooks.json",
++     "h/.deepbuild/codex-hooks.json",
++     "h/.deepbuild/config.json",
++     "h/.deepbuild/logs",
++     "h/.deepbuild/originals",
++     "h/.deepbuild/originals/7905214a0c570990006b4e2a71b3778020d8cf62a9ff6bad5a8f80bbb230978d",
++     "h/.deepbuild/rules.json",
++     "h/.deepbuild/setup-stopped.json",
++     "h/.deepbuild/setup.json",
++   ],
+  }
+
+ ❯ setsNothingUp tests/acceptance/2200/usage.test.ts:18:162
+     16| async function setsNothingUp(args: readonly string[]): Promise<void> {
+     17|   const { ran, exit, written, called } = await outcome(freshHome(), ar…
+     18|   expect({ exit, written, called }, `deep ${args.join(' ')} can't read…
+       |                                                                                                                                                                  ^
+     19| }
+     20|
+ ❯ tests/acceptance/2200/usage.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/14]⎯
+
+ FAIL  tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep on --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+AssertionError: deep on --typo can't read its arguments, so it must exit 2, leave no new file and call no stand-in: exit 2, stdout "", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\nUnsupported command. Run deep --help for available commands.\n": expected { exit: 2, written: [ …(24) ], …(1) } to deeply equal { exit: 2, written: [], called: [] }
+
+- Expected
++ Received
+
+  {
+-   "called": [],
++   "called": [
++     "launcher <tmp>/h/.config/systemd/user/deepbuild-hub.service",
++   ],
+    "exit": 2,
+-   "written": [],
++   "written": [
++     "bin/calls.log",
++     "h/.claude/settings.json",
++     "h/.claude/skills",
++     "h/.claude/skills/deepbuild",
++     "h/.claude/skills/deepbuild/SKILL.md",
++     "h/.claude.json",
++     "h/.codex/config.toml",
++     "h/.codex/hooks.json",
++     "h/.config",
++     "h/.config/systemd",
++     "h/.config/systemd/user",
++     "h/.config/systemd/user/deepbuild-hub.service",
++     "h/.deepbuild",
++     "h/.deepbuild/bin",
++     "h/.deepbuild/bin/deep-hook",
++     "h/.deepbuild/claude-hooks.json",
++     "h/.deepbuild/codex-hooks.json",
++     "h/.deepbuild/config.json",
++     "h/.deepbuild/logs",
++     "h/.deepbuild/originals",
++     "h/.deepbuild/originals/7905214a0c570990006b4e2a71b3778020d8cf62a9ff6bad5a8f80bbb230978d",
++     "h/.deepbuild/rules.json",
++     "h/.deepbuild/setup-stopped.json",
++     "h/.deepbuild/setup.json",
++   ],
+  }
+
+ ❯ setsNothingUp tests/acceptance/2200/usage.test.ts:18:162
+     16| async function setsNothingUp(args: readonly string[]): Promise<void> {
+     17|   const { ran, exit, written, called } = await outcome(freshHome(), ar…
+     18|   expect({ exit, written, called }, `deep ${args.join(' ')} can't read…
+       |                                                                                                                                                                  ^
+     19| }
+     20|
+ ❯ tests/acceptance/2200/usage.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/14]⎯
+
+ FAIL  tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep env --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+AssertionError: deep env --typo can't read its arguments, so it must exit 2, leave no new file and call no stand-in: exit 2, stdout "", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\nUsage: deep env up|down [--root <folder>] [--json]\n": expected { exit: 2, written: [ …(24) ], …(1) } to deeply equal { exit: 2, written: [], called: [] }
+
+- Expected
++ Received
+
+  {
+-   "called": [],
++   "called": [
++     "launcher <tmp>/h/.config/systemd/user/deepbuild-hub.service",
++   ],
+    "exit": 2,
+-   "written": [],
++   "written": [
++     "bin/calls.log",
++     "h/.claude/settings.json",
++     "h/.claude/skills",
++     "h/.claude/skills/deepbuild",
++     "h/.claude/skills/deepbuild/SKILL.md",
++     "h/.claude.json",
++     "h/.codex/config.toml",
++     "h/.codex/hooks.json",
++     "h/.config",
++     "h/.config/systemd",
++     "h/.config/systemd/user",
++     "h/.config/systemd/user/deepbuild-hub.service",
++     "h/.deepbuild",
++     "h/.deepbuild/bin",
++     "h/.deepbuild/bin/deep-hook",
++     "h/.deepbuild/claude-hooks.json",
++     "h/.deepbuild/codex-hooks.json",
++     "h/.deepbuild/config.json",
++     "h/.deepbuild/logs",
++     "h/.deepbuild/originals",
++     "h/.deepbuild/originals/7905214a0c570990006b4e2a71b3778020d8cf62a9ff6bad5a8f80bbb230978d",
++     "h/.deepbuild/rules.json",
++     "h/.deepbuild/setup-stopped.json",
++     "h/.deepbuild/setup.json",
++   ],
+  }
+
+ ❯ setsNothingUp tests/acceptance/2200/usage.test.ts:18:162
+     16| async function setsNothingUp(args: readonly string[]): Promise<void> {
+     17|   const { ran, exit, written, called } = await outcome(freshHome(), ar…
+     18|   expect({ exit, written, called }, `deep ${args.join(' ')} can't read…
+       |                                                                                                                                                                  ^
+     19| }
+     20|
+ ❯ tests/acceptance/2200/usage.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/14]⎯
+
+ FAIL  tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep install --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+AssertionError: deep install --typo can't read its arguments, so it must exit 2, leave no new file and call no stand-in: exit 2, stdout "", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\nUsage: deep install [--trust-key] <package folder>\n": expected { exit: 2, written: [ …(24) ], …(1) } to deeply equal { exit: 2, written: [], called: [] }
+
+- Expected
++ Received
+
+  {
+-   "called": [],
++   "called": [
++     "launcher <tmp>/h/.config/systemd/user/deepbuild-hub.service",
++   ],
+    "exit": 2,
+-   "written": [],
++   "written": [
++     "bin/calls.log",
++     "h/.claude/settings.json",
++     "h/.claude/skills",
++     "h/.claude/skills/deepbuild",
++     "h/.claude/skills/deepbuild/SKILL.md",
++     "h/.claude.json",
++     "h/.codex/config.toml",
++     "h/.codex/hooks.json",
++     "h/.config",
++     "h/.config/systemd",
++     "h/.config/systemd/user",
++     "h/.config/systemd/user/deepbuild-hub.service",
++     "h/.deepbuild",
++     "h/.deepbuild/bin",
++     "h/.deepbuild/bin/deep-hook",
++     "h/.deepbuild/claude-hooks.json",
++     "h/.deepbuild/codex-hooks.json",
++     "h/.deepbuild/config.json",
++     "h/.deepbuild/logs",
++     "h/.deepbuild/originals",
++     "h/.deepbuild/originals/7905214a0c570990006b4e2a71b3778020d8cf62a9ff6bad5a8f80bbb230978d",
++     "h/.deepbuild/rules.json",
++     "h/.deepbuild/setup-stopped.json",
++     "h/.deepbuild/setup.json",
++   ],
+  }
+
+ ❯ setsNothingUp tests/acceptance/2200/usage.test.ts:18:162
+     16| async function setsNothingUp(args: readonly string[]): Promise<void> {
+     17|   const { ran, exit, written, called } = await outcome(freshHome(), ar…
+     18|   expect({ exit, written, called }, `deep ${args.join(' ')} can't read…
+       |                                                                                                                                                                  ^
+     19| }
+     20|
+ ❯ tests/acceptance/2200/usage.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/14]⎯
+
+ FAIL  tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep guard --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+AssertionError: deep guard --typo can't read its arguments, so it must exit 2, leave no new file and call no stand-in: exit 2, stdout "", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\nUsage: deep guard add <file>\n": expected { exit: 2, written: [ …(24) ], …(1) } to deeply equal { exit: 2, written: [], called: [] }
+
+- Expected
++ Received
+
+  {
+-   "called": [],
++   "called": [
++     "launcher <tmp>/h/.config/systemd/user/deepbuild-hub.service",
++   ],
+    "exit": 2,
+-   "written": [],
++   "written": [
++     "bin/calls.log",
++     "h/.claude/settings.json",
++     "h/.claude/skills",
++     "h/.claude/skills/deepbuild",
++     "h/.claude/skills/deepbuild/SKILL.md",
++     "h/.claude.json",
++     "h/.codex/config.toml",
++     "h/.codex/hooks.json",
++     "h/.config",
++     "h/.config/systemd",
++     "h/.config/systemd/user",
++     "h/.config/systemd/user/deepbuild-hub.service",
++     "h/.deepbuild",
++     "h/.deepbuild/bin",
++     "h/.deepbuild/bin/deep-hook",
++     "h/.deepbuild/claude-hooks.json",
++     "h/.deepbuild/codex-hooks.json",
++     "h/.deepbuild/config.json",
++     "h/.deepbuild/logs",
++     "h/.deepbuild/originals",
++     "h/.deepbuild/originals/7905214a0c570990006b4e2a71b3778020d8cf62a9ff6bad5a8f80bbb230978d",
++     "h/.deepbuild/rules.json",
++     "h/.deepbuild/setup-stopped.json",
++     "h/.deepbuild/setup.json",
++   ],
+  }
+
+ ❯ setsNothingUp tests/acceptance/2200/usage.test.ts:18:162
+     16| async function setsNothingUp(args: readonly string[]): Promise<void> {
+     17|   const { ran, exit, written, called } = await outcome(freshHome(), ar…
+     18|   expect({ exit, written, called }, `deep ${args.join(' ')} can't read…
+       |                                                                                                                                                                  ^
+     19| }
+     20|
+ ❯ tests/acceptance/2200/usage.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/14]⎯
+
+ FAIL  tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep memory --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+AssertionError: deep memory --typo can't read its arguments, so it must exit 2, leave no new file and call no stand-in: exit 2, stdout "", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\nUsage: deep memory [--json]\n       deep memory keep <lesson>\n       deep memory remove <lesson>\n       deep memory overrule <decision>\n": expected { exit: 2, written: [ …(24) ], …(1) } to deeply equal { exit: 2, written: [], called: [] }
+
+- Expected
++ Received
+
+  {
+-   "called": [],
++   "called": [
++     "launcher <tmp>/h/.config/systemd/user/deepbuild-hub.service",
++   ],
+    "exit": 2,
+-   "written": [],
++   "written": [
++     "bin/calls.log",
++     "h/.claude/settings.json",
++     "h/.claude/skills",
++     "h/.claude/skills/deepbuild",
++     "h/.claude/skills/deepbuild/SKILL.md",
++     "h/.claude.json",
++     "h/.codex/config.toml",
++     "h/.codex/hooks.json",
++     "h/.config",
++     "h/.config/systemd",
++     "h/.config/systemd/user",
++     "h/.config/systemd/user/deepbuild-hub.service",
++     "h/.deepbuild",
++     "h/.deepbuild/bin",
++     "h/.deepbuild/bin/deep-hook",
++     "h/.deepbuild/claude-hooks.json",
++     "h/.deepbuild/codex-hooks.json",
++     "h/.deepbuild/config.json",
++     "h/.deepbuild/logs",
++     "h/.deepbuild/originals",
++     "h/.deepbuild/originals/7905214a0c570990006b4e2a71b3778020d8cf62a9ff6bad5a8f80bbb230978d",
++     "h/.deepbuild/rules.json",
++     "h/.deepbuild/setup-stopped.json",
++     "h/.deepbuild/setup.json",
++   ],
+  }
+
+ ❯ setsNothingUp tests/acceptance/2200/usage.test.ts:18:162
+     16| async function setsNothingUp(args: readonly string[]): Promise<void> {
+     17|   const { ran, exit, written, called } = await outcome(freshHome(), ar…
+     18|   expect({ exit, written, called }, `deep ${args.join(' ')} can't read…
+       |                                                                                                                                                                  ^
+     19| }
+     20|
+ ❯ tests/acceptance/2200/usage.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/14]⎯
+
+ FAIL  tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep env in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+AssertionError: deep env can't read its arguments, so it must exit 2, leave no new file and call no stand-in: exit 2, stdout "", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\nUsage: deep env up|down [--root <folder>] [--json]\n": expected { exit: 2, written: [ …(24) ], …(1) } to deeply equal { exit: 2, written: [], called: [] }
+
+- Expected
++ Received
+
+  {
+-   "called": [],
++   "called": [
++     "launcher <tmp>/h/.config/systemd/user/deepbuild-hub.service",
++   ],
+    "exit": 2,
+-   "written": [],
++   "written": [
++     "bin/calls.log",
++     "h/.claude/settings.json",
++     "h/.claude/skills",
++     "h/.claude/skills/deepbuild",
++     "h/.claude/skills/deepbuild/SKILL.md",
++     "h/.claude.json",
++     "h/.codex/config.toml",
++     "h/.codex/hooks.json",
++     "h/.config",
++     "h/.config/systemd",
++     "h/.config/systemd/user",
++     "h/.config/systemd/user/deepbuild-hub.service",
++     "h/.deepbuild",
++     "h/.deepbuild/bin",
++     "h/.deepbuild/bin/deep-hook",
++     "h/.deepbuild/claude-hooks.json",
++     "h/.deepbuild/codex-hooks.json",
++     "h/.deepbuild/config.json",
++     "h/.deepbuild/logs",
++     "h/.deepbuild/originals",
++     "h/.deepbuild/originals/7905214a0c570990006b4e2a71b3778020d8cf62a9ff6bad5a8f80bbb230978d",
++     "h/.deepbuild/rules.json",
++     "h/.deepbuild/setup-stopped.json",
++     "h/.deepbuild/setup.json",
++   ],
+  }
+
+ ❯ setsNothingUp tests/acceptance/2200/usage.test.ts:18:162
+     16| async function setsNothingUp(args: readonly string[]): Promise<void> {
+     17|   const { ran, exit, written, called } = await outcome(freshHome(), ar…
+     18|   expect({ exit, written, called }, `deep ${args.join(' ')} can't read…
+       |                                                                                                                                                                  ^
+     19| }
+     20|
+ ❯ tests/acceptance/2200/usage.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/14]⎯
+
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  14 failed | 1 passed (15)
+
+
+Part 2. The suite on the twin never-sets-up, laid by hand over a copy of the base outside the repository
+(<copy>: the base's packages/cli with the twin's main.ts, built with tsc -p; every other package the base's own).
+Command: the same, in <copy>.
+Exit 1. 15 tests: 5 failed, 10 passed. The criterion 3 test fails at its first assertion, first-command.test.ts:23;
+the ten tests of criteria 1 and 2 pass, which shows they can; the four of criterion 4 fail as on the base.
+
+
+ RUN  v5.0.5 <copy>
+
+ ✓ tests/acceptance/2200/usage.test.ts > #2200.3594285f a usage error sets nothing up > #2200.3594285f deep status --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+ × tests/acceptance/2200/flags.test.ts > #2200.0122400d a flag isn't an argument > #2200.0122400d deep open --typo is a usage error: exit 2
+   → deep open --typo has a flag where its argument goes, so it must exit 2: exit 1, stdout "", stderr "deep open: the app is not running\n": expected 1 to be 2 // Object.is equality
+ × tests/acceptance/2200/first-command.test.ts > #2200.b9e90749 the first command still sets up > #2200.b9e90749 deep status in a home with no .deepbuild sets up as on the merge base: the files deep setup writes, its hooks in the settings, the launcher called with the login-service file, exit 3
+   → deep status, the first command in this home, must set DeepBuild up: exit 3, stdout "", stderr "deep status: the hub isn't answering (can't reach the hub at <home>/.deepbuild/hub.sock: connect ENOENT <home>/.deepbuild/hub.sock), and there is no database to read; start it with deep hub start.\n": expected [] to deeply equal ArrayContaining{…}
+ ✓ tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep inbox --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+ ✓ tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep secret --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+ ✓ tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep off --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+ × tests/acceptance/2200/flags.test.ts > #2200.0122400d a flag isn't an argument > #2200.0122400d deep backup --typo is a usage error: exit 2
+   → deep backup --typo has a flag where its argument goes, so it must exit 2: exit 1, stdout "", stderr "deep backup: no hub answered (ENOENT: no such file or directory, open '<home>/.deepbuild/control.token'); the record is backed up through the hub. Start it with deep hub start, then run deep backup again.\n": expected 1 to be 2 // Object.is equality
+ ✓ tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep on --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+ × tests/acceptance/2200/flags.test.ts > #2200.0122400d a flag isn't an argument > #2200.0122400d deep run follow --typo is a usage error: exit 2
+   → deep run follow --typo has a flag where its argument goes, so it must exit 2: exit 1, stdout "", stderr "BLOCKED: ENOENT: no such file or directory, open '<home>/.deepbuild/control.token'\n": expected 1 to be 2 // Object.is equality
+ × tests/acceptance/2200/flags.test.ts > #2200.0122400d a flag isn't an argument > #2200.0122400d deep session rules --typo is a usage error: exit 2
+   → deep session rules --typo has a flag where its argument goes, so it must exit 2: exit 3, stdout "", stderr "BLOCKED: ENOENT: no such file or directory, open '<home>/.deepbuild/control.token'; nothing was read\n": expected 3 to be 2 // Object.is equality
+ ✓ tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep env --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+ ✓ tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep install --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+ ✓ tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep guard --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+ ✓ tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep memory --typo in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+ ✓ tests/acceptance/2200/usage.test.ts > #2200.3e626bd2 the same for the other eight > #2200.3e626bd2 deep env in a home with no .deepbuild exits 2, leaves no new file and the stand-ins log no call
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2200/first-command.test.ts > #2200.b9e90749 the first command still sets up > #2200.b9e90749 deep status in a home with no .deepbuild sets up as on the merge base: the files deep setup writes, its hooks in the settings, the launcher called with the login-service file, exit 3
+AssertionError: deep status, the first command in this home, must set DeepBuild up: exit 3, stdout "", stderr "deep status: the hub isn't answering (can't reach the hub at <home>/.deepbuild/hub.sock: connect ENOENT <home>/.deepbuild/hub.sock), and there is no database to read; start it with deep hub start.\n": expected [] to deeply equal ArrayContaining{…}
+
+- Expected
++ Received
+
+- ArrayContaining [
+-   ".claude/settings.json",
+-   ".claude/skills/deepbuild/SKILL.md",
+-   ".claude.json",
+-   ".deepbuild/config.json",
+-   ".deepbuild/rules.json",
+- ]
++ []
+
+ ❯ tests/acceptance/2200/first-command.test.ts:23:180
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/acceptance/2200/flags.test.ts > #2200.0122400d a flag isn't an argument > #2200.0122400d deep open --typo is a usage error: exit 2
+AssertionError: deep open --typo has a flag where its argument goes, so it must exit 2: exit 1, stdout "", stderr "deep open: the app is not running\n": expected 1 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ tests/acceptance/2200/flags.test.ts:14:113
+     12|   it.each(FORMS.map((args) => [args.join(' '), args] as const))('#2200…
+     13|     const { ran, exit } = await outcome(freshHome(), args);
+     14|     expect(exit, `deep ${args.join(' ')} has a flag where its argument…
+       |                                                                                                                 ^
+     15|   }, 300_000);
+     16| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/2200/flags.test.ts > #2200.0122400d a flag isn't an argument > #2200.0122400d deep backup --typo is a usage error: exit 2
+AssertionError: deep backup --typo has a flag where its argument goes, so it must exit 2: exit 1, stdout "", stderr "deep backup: no hub answered (ENOENT: no such file or directory, open '<home>/.deepbuild/control.token'); the record is backed up through the hub. Start it with deep hub start, then run deep backup again.\n": expected 1 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ tests/acceptance/2200/flags.test.ts:14:113
+     12|   it.each(FORMS.map((args) => [args.join(' '), args] as const))('#2200…
+     13|     const { ran, exit } = await outcome(freshHome(), args);
+     14|     expect(exit, `deep ${args.join(' ')} has a flag where its argument…
+       |                                                                                                                 ^
+     15|   }, 300_000);
+     16| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/acceptance/2200/flags.test.ts > #2200.0122400d a flag isn't an argument > #2200.0122400d deep run follow --typo is a usage error: exit 2
+AssertionError: deep run follow --typo has a flag where its argument goes, so it must exit 2: exit 1, stdout "", stderr "BLOCKED: ENOENT: no such file or directory, open '<home>/.deepbuild/control.token'\n": expected 1 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ tests/acceptance/2200/flags.test.ts:14:113
+     12|   it.each(FORMS.map((args) => [args.join(' '), args] as const))('#2200…
+     13|     const { ran, exit } = await outcome(freshHome(), args);
+     14|     expect(exit, `deep ${args.join(' ')} has a flag where its argument…
+       |                                                                                                                 ^
+     15|   }, 300_000);
+     16| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/acceptance/2200/flags.test.ts > #2200.0122400d a flag isn't an argument > #2200.0122400d deep session rules --typo is a usage error: exit 2
+AssertionError: deep session rules --typo has a flag where its argument goes, so it must exit 2: exit 3, stdout "", stderr "BLOCKED: ENOENT: no such file or directory, open '<home>/.deepbuild/control.token'; nothing was read\n": expected 3 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 3
+
+ ❯ tests/acceptance/2200/flags.test.ts:14:113
+     12|   it.each(FORMS.map((args) => [args.join(' '), args] as const))('#2200…
+     13|     const { ran, exit } = await outcome(freshHome(), args);
+     14|     expect(exit, `deep ${args.join(' ')} has a flag where its argument…
+       |                                                                                                                 ^
+     15|   }, 300_000);
+     16| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  5 failed | 10 passed (15)
+

@@ -37,7 +37,7 @@ pub struct Input {
 }
 
 /// One body as a step left it.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct BodyState {
     pub id: String,
     pub pos: [f64; 3],
@@ -50,6 +50,12 @@ pub struct BodyState {
     /// here, every substep's.
     pub contact_impulse: f64,
     pub sleeping: bool,
+    /// #2248: kg, as the backend steps it.
+    pub mass: f64,
+    /// #2248: J: its kinetic energy plus its potential where it stands, −m g·p.
+    pub energy: f64,
+    /// #2248: the pairs of shape uses it is one of that touch after the step.
+    pub contacts: u32,
 }
 
 /// The world as the last step left it, bodies in canonical (ID) order.
@@ -114,6 +120,13 @@ pub const FIELDS: [&str; 13] = [
     "angular.x",
     "angular.y",
     "angular.z",
+];
+
+/// #2098: the fields of a 2D world's body in the canonical state: its position, its rotation as
+/// the backend holds it, the cosine and sine of its turn about +Z, then its velocity, `angular`
+/// rad/s about +Z.
+pub const FLAT_FIELDS: [&str; 7] = [
+    "pos.x", "pos.y", "rot.cos", "rot.sin", "linear.x", "linear.y", "angular",
 ];
 
 /// The fields of a soft body's particle in the canonical state, after every body's (#524):

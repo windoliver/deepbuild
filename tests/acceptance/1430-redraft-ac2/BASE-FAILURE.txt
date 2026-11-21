@@ -1,0 +1,21 @@
+Base commit: a4d0290b5df74c4fb2da4a9ce69a26df9d0309cd
+Command: NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease npx vitest run --root tests/acceptance/1430-redraft-ac2 --no-file-parallelism
+
+NOT RUN. This file notes the first failure each test is expected to give at the base; the drafting job ran neither the
+test nor a Rust build (the machine is shared and loaded, and the field the test reads doesn't exist at the base, so a
+base run shows only that). The type-check ran and exits 0:
+  node node_modules/typescript/bin/tsc -p tests/acceptance/1430-redraft-ac2/tsconfig.json
+
+What the base has: `deep-text shape` (#856) answers every line the test sends, with `glyphs`, `width`, `shown`,
+`shaped` and `cache`, and ignores `run: true`, so its replies carry no `run`; it has no `--planted key_without_font` (an
+unknown name answers {"ok":false,"code":"bad_input"} and exits 2). `deep-text fonts` answers as the test reads it: body's
+family `Inter`, whose twin `Inter Variable` (crates/deep-text/fonts/InterVariable.ttf) the faces hold, so body is held
+to Inter Variable, mono to JetBrains Mono, math to STIX Two Math.
+
+ac2-property.test.ts
+  AC2 #1430.c8134c7e over 160 layouts from seed 1430 …
+    The cases' meetings hold (checked by the drafting job: 6, 62 and 17 pairs) and `deep-text fonts` answers; expected
+    to fail at the reader of the first case laid out alone: "…, alone: run is an object, got undefined" (the base ignores
+    `run: true`).
+  AC2 #1430.c8134c7e the planted key missing the font …
+    Expected to fail before its assertion: `deep-text shape --planted key_without_font exits 0` (exit 2, bad_input).

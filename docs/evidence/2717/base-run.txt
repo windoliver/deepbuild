@@ -1,0 +1,64 @@
+Base run of the #2717 acceptance tests at a0d3713a7 (origin/main when the suite was written), November 19, 2026, on
+the shared Mac (not a reference Mac; 1-minute load about 80 to 95 on 18 cores during the run).
+
+Who wrote this file, and why it is here. The suite's README names a BASE-FAILURE.txt in its own folder. The blind job
+that wrote the suite ran listing.test.ts on the base, and had not written that file when this change was delivered:
+its runs wait their turn in the machine's one build slot. This record is the implementing session's: it ran the
+unchanged suite once in the blind job's own checkout, a worktree detached at the base that held only the base's build
+and the suite, and copied each test's failing assertion from vitest's output. It is kept out of tests/acceptance/2717/
+so that folder holds only what the blind job wrote: six files, unchanged (their SHA-256s are below).
+
+Built first, in that checkout's own target/, through the machine's build slot:
+  cargo build --locked --bin deep-show            (default features: full)
+(cargo from the rustup toolchain, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0; each file's own build then relinked
+or was a no-op.)
+
+Commands, one grant of the build slot for both:
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/2717 --no-file-parallelism --testTimeout=600000 listing.test.ts
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/2717 --no-file-parallelism --testTimeout=600000 defaults.test.ts
+
+Result: 2 files, 3 tests, 3 failed, each at an assertion in its own file (none at load, none at a helper, none at a
+timeout).
+
+listing.test.ts (1 test, 1 failed)
+
+  × #2717.6803fbfb deep_kinds lists the vehicle body with every field of its vehicle and each default the world reader
+    takes when the field is left out
+    It first passes its reading of the base's own entry (body@1.character, character.slope_limit printed "deg = 45"),
+    then fails at listing.test.ts:32:
+      AssertionError: the physics module's row lists body@1.vehicle with the 11 fields of its vehicle and each default
+      the world reader takes: expected [ Array(1) ] to deeply equal []
+      + "the physics module's row lists no body@1.vehicle; it lists body@1.character"
+
+defaults.test.ts (2 tests, 2 failed)
+
+  × #2717.6803fbfb a defaults run builds the car with every field left out and reads those values back
+    A soft assertion at defaults.test.ts:40 fails first:
+      AssertionError: deep_kinds prints a default for each field the run leaves out, for the run to read back:
+      expected [ Array(1) ] to deeply equal []
+      + "the physics module's row lists no body@1.vehicle; it lists body@1.character"
+    and the test stops at defaults.test.ts:47:
+      AssertionError: the run's report names the vehicle body it built: {"ok":true,"verdict":"PASS","reason":"all 300
+      fields with a default give the same build left out as set","count":300,"listed":300,"first_skipped":null,
+      "failures":[],"skipped":[]}: expected 'the report holds no lists (its member…' to be ''
+      + the report holds no lists (its members: ok, verdict, reason, count, listed, first_skipped, failures, skipped,
+        kinds), so it names no body kind it built
+    The base's defaults run is #1974's: PASS over 300 registry fields, with no `lists` and no body kind in its report.
+
+  × #2717.6803fbfb (twin: vehicle_reader_takes_other_defaults) a world reader that takes other values for the fields
+    left out fails the run, which reads the reader's values back
+    Fails at defaults.test.ts:62:
+      AssertionError: deep-show kinds --defaults --planted vehicle_reader_takes_other_defaults answers one report
+      holding its verdict word: exit 2, no signal; stdout: {"ok":false,"code":"bad_input"}; stderr: : expected
+      undefined to be defined
+    The base knows no such plant.
+
+No test passes on the base.
+
+The suite's files as run, SHA-256:
+  795e8caae08a384a10a494ddf45c41037313d556da075efec9e88c117c07427c  README.md
+  6f7d9c4a1faa57e15b29945de5293d217fe9e52279508bb48e5a40c7d736f635  defaults.test.ts
+  012aa63ad48d19f3502b093946e6d1bc4e8b15d0dec5e6274388038dd8a1cb83  helpers.ts
+  b30358f38eecabdb76fa7da13e2eb60bc3f8192cb565bbee4556b491f5d694d6  listing.test.ts
+  5d625241c741d480e7c662c1af14ea3031735dcb844684145f77ef65167308f1  tsconfig.json
+  fa1d965dedd41a8e2645a8c7b9b736368645c27813ca76a09b4c16c509dd43e9  twins.json

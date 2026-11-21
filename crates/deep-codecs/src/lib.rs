@@ -11,6 +11,7 @@
 #[cfg(target_os = "macos")]
 mod apple;
 mod audio;
+pub mod catalog;
 mod chunks;
 pub mod color;
 mod export;
@@ -986,7 +987,7 @@ pub fn run(job: &Map<String, Value>, caps: &Caps, planted: &Planted) -> (Value, 
         return (v, sha);
     }
     let Some(path) = job.s("path") else {
-        return (json!({"error": "a job names its path"}), None);
+        return catalog::job(&job, planted);
     };
     let opened = match open(path, caps, planted) {
         Ok(o) => o,

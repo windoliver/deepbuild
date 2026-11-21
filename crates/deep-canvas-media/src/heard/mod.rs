@@ -82,7 +82,7 @@ fn say_eq(t: &Tok, s: &Tok) -> bool {
     t.text == s.text && std::mem::discriminant(&t.kind) == std::mem::discriminant(&s.kind)
 }
 
-fn heard_eq(e: &Tok, h: &Tok) -> bool {
+pub(crate) fn heard_eq(e: &Tok, h: &Tok) -> bool {
     match (&e.kind, &h.kind) {
         (Kind::Han(reading), Kind::Han(_)) => {
             let heard = readings(&h.text);

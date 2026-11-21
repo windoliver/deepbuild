@@ -56,7 +56,7 @@ impl Run {
         };
         let reads = reads(&plan, plan.steps);
         let key = self.key(world, &reads, &track.json(), &rate, plan.steps, None);
-        let digest = self.build.runtime_digest();
+        let digest = self.build_of(world).runtime_digest();
         let here = machine(&self.build.target);
         let machines = golden::machines(g, &here);
         let mut reply = json!({"ok": true, "verdict": "FAIL", "bake_key": key, "runtime_digest": digest,

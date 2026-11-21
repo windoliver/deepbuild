@@ -1,0 +1,218 @@
+{
+  "name": "stack",
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "994b5c41cdb80bc2f7d8aecd92cb2cfcb0c6a7f29277f1bce717435fd82f0927",
+      "writes": {
+        "totals": {
+          "type": "f64",
+          "count": 14
+        },
+        "last": {
+          "type": "i32"
+        }
+      },
+      "assets": [
+        "e24618a0803f99a2a6b17e34c704500fd7920300e158f456c2f3f8a0e182c679",
+        "524c387b456d4911a8c5484e432ea2ca2244cf9a7ce854d698eb5f8ca623779b"
+      ]
+    }
+  },
+  "track": [],
+  "steps": 9,
+  "expect": {
+    "arrays": {
+      "0": {
+        "totals": [
+          0,
+          0,
+          5,
+          4,
+          16,
+          3,
+          20,
+          8,
+          8,
+          -2,
+          0,
+          0,
+          10,
+          3
+        ],
+        "last": [
+          2
+        ]
+      },
+      "1": {
+        "totals": [
+          0,
+          0,
+          5,
+          4,
+          18,
+          3,
+          20,
+          8,
+          8,
+          -2,
+          0,
+          0,
+          10,
+          3
+        ],
+        "last": [
+          2
+        ]
+      },
+      "2": {
+        "totals": [
+          0,
+          0,
+          7,
+          4,
+          9,
+          3,
+          9,
+          8,
+          7,
+          -2,
+          0,
+          0,
+          10,
+          3
+        ],
+        "last": [
+          4
+        ]
+      },
+      "3": {
+        "totals": [
+          0,
+          0,
+          7,
+          4,
+          11,
+          3,
+          11,
+          8,
+          7,
+          -2,
+          0,
+          0,
+          10,
+          3
+        ],
+        "last": [
+          5
+        ]
+      },
+      "4": {
+        "totals": [
+          0,
+          0,
+          7,
+          4,
+          11,
+          3,
+          11,
+          -2,
+          7,
+          -2,
+          0,
+          0,
+          10,
+          3
+        ],
+        "last": [
+          7
+        ]
+      },
+      "5": {
+        "totals": [
+          2,
+          0,
+          7,
+          3,
+          11,
+          3,
+          11,
+          -3,
+          7,
+          -2,
+          2,
+          0,
+          12,
+          3
+        ],
+        "last": [
+          9
+        ]
+      },
+      "6": {
+        "totals": [
+          2,
+          0,
+          7,
+          3,
+          11,
+          3,
+          11,
+          -3,
+          7,
+          -2,
+          2,
+          0,
+          12,
+          3
+        ],
+        "last": [
+          9
+        ]
+      },
+      "7": {
+        "totals": [
+          0,
+          0,
+          7,
+          3,
+          11,
+          3,
+          11,
+          -3,
+          7,
+          -2,
+          0,
+          0,
+          10,
+          3
+        ],
+        "last": [
+          9
+        ]
+      },
+      "8": {
+        "totals": [
+          0,
+          0,
+          7,
+          3,
+          11,
+          3,
+          12,
+          8,
+          7,
+          -2,
+          0,
+          0,
+          10,
+          3
+        ],
+        "last": [
+          9
+        ]
+      }
+    }
+  },
+  "answer": "Side 0 holds hero 1 (archer 2, swordsman 3) and pikeman 4; side 5 holds archer 6. Step 0: hero 1's +5, +20% and archers' cap 16 on attack, reach down: archer 2 reads 16, swordsman 3 20. Step 1 removes the cap: archer 2 reads 18. Step 2: a set 7 from side 0 (reach side) and 9 from hero 1 (reach down): nodes 2 and 3 read 9 (source 1 beats source 0), 1 and 4 read 7, side blue its bases. Step 3: a later set 11 from hero 1 beats its first. Step 4: swordsmen's defense −13 and −50% from all: (8 − 13) × 0.5 = −2.5 reads −2. Step 5: +2 attack to all for 2 turns, and −1 defense to all at level ≥ 3 and defense ≤ 10 (hero, swordsman). Step 6: a turn and a round pass; the +2 holds. Step 7: the second turn ends it. Step 8: swordsman 3 detached reads its bases, 12 and 8."
+}

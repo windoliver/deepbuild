@@ -1,0 +1,84 @@
+#2856: each test's run at the base a0d3713a7 ("Merge pull request #2847"), one run per file.
+
+How: in this job's worktree at the base, after `npm ci` and `npm run build --workspaces` (both exit 0) and with the
+pinned toolchain first on PATH (deep-show `full` and deep-logic built beforehand, so each file's build found them
+fresh), each file was run once, the four browser files side by side, as the README says:
+
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/2856 <file> --testTimeout=3600000 --hookTimeout=180000 --silent=false
+
+scripts/lease found no hub here and ran each unleased, saying so. The machine is shared: its 1-, 5- and 15-minute load
+averages are given at each file's start and end (18 cores). Chrome 157.0.8103.79, headless with WebGPU on; every
+browser leg got a WebGPU adapter, so nothing read BLOCKED. Each lab export took 10 to 47 minutes of wall time at these
+loads (one deep-show process on one core at most, starved as the load rose); that is most of each file's time.
+The type check (`node node_modules/typescript/bin/tsc -p tests/acceptance/2856/tsconfig.json`) exits 0.
+
+Before these runs, a throwaway test (deleted, never committed) ran helpers.ts's checks on bundles patched by hand from
+one base export of the lab: the stand-in right program put the line in index.html (<p> with <a href> to the fallback
+page) and an element script that removed it as its first act, caught a throw from #draw in #tick into a `stopped`
+notice ("The piece stopped at step <the core's probe() step>: <the error's first line>") and set probe().stopped; its
+integrity attribute was updated. What it gave:
+  - AC1 on the stand-in: no failure (the frame call asked for 5.0155 s; at the next display frame paused true, one
+    stopped notice, shown, "The piece stopped at step 300: deep test shim: the frame call failed on purpose"; 0
+    animation callbacks asked for in the 5.1 s after; ended 0; probe().step 300 and stopped.step 300).
+  - AC1 on a player that catches the throw and plays on: five failures, each naming step 300 (paused false, no stopped
+    notice, 300 animation callbacks asked for in the 5.1 s after, ended fired once, probe().stopped null).
+  - AC2 on the stand-in, script as text/plain and with its last byte changed: no failure (one line, the link shown and
+    followed to the fallback page, which the server sent with the receipt's SHA-256).
+  - AC3 on the stand-in: no failure (the page's text "" at the first view and at ready); on an element that leaves the
+    line: two failures, each naming the line's text.
+  - On the base bundle itself: AC1 and AC2 failed as below.
+
+Per test:
+
+- stopped.test.ts (start 16:04:09 PST, load 56.68 93.74 122.34; end 16:24:23 PST, load 179.82 150.15 130.15; 1213 s)
+  - AC1 #2856.4a55999e the core's frame call thrown at step 300 …: FAILS. The shim threw (the frame call asked for
+    5.0014 s; probe() then read step 300); the check's failures, which `none` lists:
+      the lab: after the core's frame call threw at step 300, paused reads false at the next display frame, not true
+      the lab: after the throw at step 300, the page shows 0 notices of kind stopped at the next display frame, not
+        one; its notices: []
+      the lab: after the throw at step 300, probe() answers stopped = null, not one naming step 300 ({step: 300, …})
+    (0 animation callbacks were asked for in the 5.2 s after and ended didn't fire: the base's callback dies with the
+    throw, uncaught, and asks for nothing; the issue's "paused reads false and no notice shows" is what fails it.)
+  - AC1 #2856.4a55999e the planted player web_plays_on_failure …: FAILS at its export, before any page:
+      the lab (planted web_plays_on_failure): deep-show run takes the scenario (planted web_plays_on_failure):
+      {"ok":false,"code":"bad_input"}: expected false to be true
+    (the base knows no such planted name.)
+
+- refused.test.ts (start 16:04:10 PST, load 56.68 93.74 122.34; end 16:24:18 PST, load 173.98 148.51 129.46; 1208 s)
+  - AC2 #2856.7e832739 the element's script served as text/plain, then with one byte changed …: FAILS. In both runs
+    the browser refused the script (<deep-player> stayed undefined; the server sent it as text/plain, then with its
+    last byte, 25000, changed from 0x0a to 0x20), and `none` lists:
+      the page whose element script was served as text/plain: the page shows nothing inside <deep-player>: no line
+        and no link
+      the page whose element script was served with one byte changed (byte 25000, 0x0a to 0x20): the page shows
+        nothing inside <deep-player>: no line and no link
+
+- untouched.test.ts (start 16:04:09 PST, load 56.68 93.74 122.34; end 16:24:20 PST, load 173.98 148.51 129.46; 1210 s)
+  - AC3 #2856.168ff773 served untouched, the page's text holds no such line …: FAILS at its first assertion:
+      the lab, served untouched: the index page carries a line of text inside <deep-player> (the line a page whose
+      script never ran shows); it carries "": expected '' not to be ''
+    (the player was ready, drew its first view and fired ready; the page's text was "" at both.)
+  - AC3 #2856.168ff773 the planted element web_element_leaves_line …: FAILS at its export:
+      the lab (planted web_element_leaves_line): deep-show run takes the scenario (planted web_element_leaves_line):
+      {"ok":false,"code":"bad_input"}: expected false to be true
+
+- unchanged.test.ts (start 16:04:09 PST, load 56.68 93.74 122.34; end 17:11:08 PST, load 265.65 200.72 171.08; 4018 s)
+  - AC4 #2856.f84ce6b9 the content-security policy is the merge base's byte for byte …: PASSES, as it must at the
+    base, where the merge base is the base itself:
+      comparing with the merge base a0d3713a74ce (this checkout's code is the merge base's, so its build is)
+    Both exports' index pages set one policy, the same bytes:
+      default-src 'none'; script-src 'self' 'wasm-unsafe-eval' 'sha256-R4c+aLhHUcfMscUk4BaCrx5uaVmH/NhcYr+zikISOnQ=';
+      connect-src 'self'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'
+    The policy one byte off was told apart, naming the content-security policy; both bundles, played to ended and
+    seeked to every step 0 … 600, read the same steps and step hashes, and the same checkpoint hashes at the end; the
+    merge base's reading held step 600 with field's and scorer's step hashes. Its second export alone took about 47
+    minutes, starved at loads near 200 to 265. Only the same-code path of the merge base ran here; the `git archive`
+    and build path runs when a change touches what deep-show is built from.
+    After this run the test's own timeout was raised from 7,200,000 to 10,800,000 ms, one constant; no other line of
+    the test files changed after the runs: this run took 4,018 s with no merge-base build, and a change's run adds one.
+
+- taste.test.ts (start and end 16:04:10 PST, load 56.68 93.74 122.34)
+  - AC5 #2856.a9fe9384 …: INCONCLUSIVE, never a pass:
+      INCONCLUSIVE: the check run's pictures are not in docs/evidence/2856/: player-stopped.png,
+      player-script-refused.png; this is not a pass
