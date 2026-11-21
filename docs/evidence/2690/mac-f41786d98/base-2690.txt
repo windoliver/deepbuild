@@ -1,0 +1,44 @@
+
+ RUN  v5.0.5 ~/mac-runs/d2690b/tests/acceptance/2690
+
+stdout | row-word.test.ts > #2690.50174a03 `deep`, the hub's list row and the app's drawn row agree on an open ask's word > #2690.50174a03: each open ask's word in the hub's row.set is the word deep status --json, deep and the app's drawn row give it
+the hub's ask rows: ask:01M7YCK051NEE1AR267TFFC3J0 "Push release-1.4 to origin?" word "needs you"; ask:01M7YCMTR1MD9GB9G18JC88WV8 "Which header colour on the login page?" word "needs you"; ask:01M7YCPNB1QACEFFSD9J84HAM6 "Keep the cart on SQLite or plain files?" word "needs you"
+
+ ❯ row-word.test.ts (3 tests | 1 failed) 256281ms
+   ❯ #2690.50174a03 `deep`, the hub's list row and the app's drawn row agree on an open ask's word (1)
+     × #2690.50174a03: each open ask's word in the hub's row.set is the word deep status --json, deep and the app's drawn row give it 239594ms
+   ✓ #2690.9af6aab5 An open ask's row in the app still draws its kind in its state-word slot (#1461 AC27) (2)
+     ✓ #2690.9af6aab5: each open ask's state-word slot draws its kind: Approval, How it looks, Pick one 1ms
+     ✓ #2690.9af6aab5 wrong program: ask-words-alike, every ask row drawing "needs you" in its slot, fails naming each row 16623ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  row-word.test.ts > #2690.50174a03 `deep`, the hub's list row and the app's drawn row agree on an open ask's word > #2690.50174a03: each open ask's word in the hub's row.set is the word deep status --json, deep and the app's drawn row give it
+AssertionError: the app's drawn ask rows against the hub's rows: each row's node holds the hub's word: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "row ask:01M7YCK051NEE1AR267TFFC3J0's node reads \"Push release-1.4 to origin? needs_you ! needs_you Push release-1.4 to origin?  Push release-1.4 to…  Approval\", which lacks its word \"needs you\"",
++   "row ask:01M7YCMTR1MD9GB9G18JC88WV8's node reads \"Which header colour on the login page? needs_you ! needs_you Which header colour on the login page?  Which header co…  How it looks\", which lacks its word \"needs you\"",
++   "row ask:01M7YCPNB1QACEFFSD9J84HAM6's node reads \"Keep the cart on SQLite or plain files? needs_you ! needs_you Keep the cart on SQLite or plain files?  Keep the cart on SQ…  Pick one\", which lacks its word \"needs you\"",
++ ]
+
+ ❯ row-word.test.ts:117:151
+    115|     // The app's drawn row: the node carrying the ask's id holds the h…
+    116|     const s = await windowOf(w);
+    117|     expect(drawnFailures(s as unknown as Snapshot1463, hub), "the app'…
+       |                                                                                                                                                       ^
+    118|   }, 30 * MIN);
+    119| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  22:32:03
+   Duration  256.97s (tests 100%)
+

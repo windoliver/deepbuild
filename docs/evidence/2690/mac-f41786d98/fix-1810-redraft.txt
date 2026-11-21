@@ -1,0 +1,24 @@
+
+ RUN  v5.0.5 ~/mac-runs/d2690f/tests/acceptance/1810
+
+stdout | redraft-replica/list.test.ts > #1810.eebcb4a2 > #1810.eebcb4a2: with two asks answered and one open, deep and the app's list say 1 at the same log position
+deep status --json at 35 and 35; the app's list at 35: [["session:c73dbc62-4724-46d9-b1bb-37320fd005e8","Cart totals","needs you"],["ask:01M7YEXCJVARJQ5V1JECCHX83A","Which header colour on the login page?","needs you"]]; its window's counts [1]
+deep:
+shop
+  Cart totals  claude-code  needs you · an ask open, 0s
+Needs you
+  Which header colour on the login page?  needs you  shop, 0s
+1 session
+1 ask needs you
+
+
+ ✓ redraft-replica/list.test.ts (1 test) 45282ms
+   ✓ #1810.eebcb4a2 (1)
+     ✓ #1810.eebcb4a2: with two asks answered and one open, deep and the app's list say 1 at the same log position 45217ms
+ ✓ redraft-replica/judges.test.ts (5 tests) 2ms
+
+ Test Files  2 passed (2)
+      Tests  6 passed (6)
+   Start at  22:57:08
+   Duration  45.86s (tests 99%, transform 1%)
+

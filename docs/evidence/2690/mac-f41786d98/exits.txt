@@ -1,0 +1,25 @@
+start; cc --version exit 0; screen-lock flag 0; 'AC Power'; front app [Claude] 22:29:37 load { 51.01 34.29 25.82 } thermal 1 free KB 99851352
+BASE clone at 703ea8e49fcb84502acab9f3cef01851db8b0834 exit=0; origin/claude/fix-2690-ask-row-word f41786d98c41e8df09285e0cc6587e109c001f40; origin/main 9905e7428bc42954b2f35063b0f8b0731e3ad403; merge-base 703ea8e49fcb84502acab9f3cef01851db8b0834 22:30:09 load { 42.02 33.68 25.89 } thermal 1 free KB 98265968
+base copied tests: 5 changed paths (base-copied-tests.txt) 22:30:09 load { 42.02 33.68 25.89 } thermal 1 free KB 98265584
+setup base (npm ci, workspace build, deep-hook) exit=0 22:32:02 load { 30.28 31.80 26.13 } thermal 1 free KB 92788728
+base-2690.txt: Tests 1 failed | 2 passed (3) exit=1 22:36:20 load { 34.18 37.39 30.41 } thermal 1 free KB 80971720
+base-1459-ac6.txt: test result: FAILED. 0 passed; 1 failed exit=1; no snapshots found 22:42:35 load { 50.87 48.73 37.98 } thermal 1 free KB 59881916
+clone ~/mac-runs/d2690b removed 22:42:47 load { 49.47 48.53 38.10 } thermal 1 free KB 78995016
+FIX clone at f41786d98c41e8df09285e0cc6587e109c001f40 exit=0; origin/claude/fix-2690-ask-row-word f41786d98c41e8df09285e0cc6587e109c001f40; origin/main 7a358fb6b16c1c4e3d3641a588cfee2e8234d472 22:43:38 load { 51.25 49.20 38.94 } thermal 1 free KB 74700956
+setup fix (npm ci, workspace build, deep-hook) exit=0 22:46:57 load { 63.18 53.18 42.59 } thermal 1 free KB 60986728
+fix-2690.txt: Tests 3 passed (3) exit=0 22:52:13 load { 57.02 63.31 51.26 } thermal 1 free KB 46403592
+fix-1461-ac27.txt: Tests 2 passed | 6 skipped (8) exit=0 22:52:23 load { 54.28 62.52 51.11 } thermal 1 free KB 46032692
+fix-1172-rows.txt: Tests 2 failed (2) exit=1 22:57:07 load { 69.07 71.40 58.09 } thermal 0 free KB 34275084
+fix-1810-redraft.txt: Tests 6 passed (6) exit=0 22:57:53 load { 40.80 63.38 55.88 } thermal 0 free KB 32008688
+fix-1546-ac1.txt: Tests 5 failed | 1 passed (6) exit=1 23:07:13 load { 74.28 84.12 71.44 } thermal 0 free KB 29240896
+fix-1427-ac7.txt: Tests 4 failed (4) exit=1 23:07:58 load { 76.44 83.22 71.75 } thermal 0 free KB 26321572
+fix-1459-ac6-before.txt: test result: FAILED. 0 passed; 1 failed exit=1; no snapshots found 23:09:42 load { 105.79 90.86 75.98 } thermal 0 free KB 19571840
+retake: view:exit needs-you:0 sidebar:0 session:0; files copied: needs-you.json session.json sidebar.json 23:11:07 load { 98.58 91.56 77.62 } thermal 0 free KB 16217328
+live-diff:  3 files changed, 208 insertions(+), 208 deletions(-) 23:11:07 load { 98.58 91.56 77.62 } thermal 0 free KB 16223356
+fix-1459-ac6-after.txt: test result: FAILED. 0 passed; 1 failed exit=1 23:11:13 load { 97.01 91.35 77.63 } thermal 0 free KB 16067332
+fix-1459-parity.txt: Tests 2 failed | 1 passed (3) exit=1 23:12:42 load { 78.48 87.40 77.51 } thermal 0 free KB 11732576
+fix git status --porcelain lines after (retaken captures included): 3 23:12:42 load { 78.48 87.40 77.51 } thermal 0 free KB 11724944
+clone ~/mac-runs/d2690f removed 23:12:53 load { 74.23 86.20 77.20 } thermal 0 free KB 27263348
+ALL DONE front app [Terminal] 23:12:53 load { 74.23 86.20 77.20 } thermal 0 free KB 27262724
+note: the headless test writes snapshots to $TMPDIR/deep-338-<pid>, not under the clone, so the script's 'no snapshots found' lines are its own search miss; base-replica/ copied by hand from deep-338-59450 (written 22:42:33), fix-replica/ from deep-338-48815 (written 23:09:40)
+secret scan hits=0 (login, email, secret patterns, key=value tokens; login paths redacted to ~) 23:13:11 load { 69.85 84.45 76.78 } thermal 0 free KB 26166344
