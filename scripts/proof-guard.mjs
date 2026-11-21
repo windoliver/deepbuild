@@ -17,8 +17,9 @@ const DECISIONS = {
 // edit of the checks. So is an edit of a test runner's config (RUNNER_CONFIG), which can stub the code under test
 // only where it finds the change. The x86_64 lane and its image pin decide which replay counts as another machine.
 const LANES_CODE = /^scripts\/(?:(?:proof[^/]*|lanes|throttle|perf|budget-window|benchmark|affected|bays|shards|lane-x86)\.mjs|lane-x86\.json)$/;
-// The skips the lanes let stand are a decision of the same weight, so that key is guarded. Only that key: affected.mjs
-// --record rewrites the rest of the file on main.
+// The skips the lanes let stand are a decision of the same weight, so that key is guarded. So is every other key
+// (#1872, #2818): a listed failure reads as no new one, so an entry added, or changed in any way but a lint count that
+// falls, needs an approval naming it (`scripts/known-failures.json › <id>`); a removed entry or a lowered count needs none.
 const SKIPS_FILE = 'scripts/known-failures.json';
 const skipsIn = (text) => {
   try {
@@ -27,6 +28,32 @@ const skipsIn = (text) => {
     return text;
   }
 };
+/** The entries `after` adds or changes against `before`, skips aside, as { id, detail }; the whole file when it doesn't parse. */
+function entryEdits(before, after) {
+  let was, now;
+  try {
+    was = JSON.parse(before ?? '{}');
+    now = JSON.parse(after ?? '{}');
+  } catch {
+    return [{ id: null, detail: `${SKIPS_FILE}: it doesn't parse as JSON` }];
+  }
+  const edits = [];
+  for (const [key, value] of Object.entries(now ?? {})) {
+    if (key === 'skips') continue;
+    const old = was?.[key];
+    if (Array.isArray(value)) {
+      const had = new Set((Array.isArray(old) ? old : []).map((entry) => JSON.stringify(entry)));
+      for (const id of value) if (!had.has(JSON.stringify(id))) edits.push({ id: String(id), detail: `${SKIPS_FILE}: ${key} entry ${id} added` });
+    } else if (value && typeof value === 'object') {
+      for (const [id, entry] of Object.entries(value)) {
+        const prior = old?.[id];
+        if (prior === undefined) edits.push({ id, detail: `${SKIPS_FILE}: ${key} entry ${id} added` });
+        else if (key === 'lint' ? entry > prior : JSON.stringify(entry) !== JSON.stringify(prior)) edits.push({ id, detail: `${SKIPS_FILE}: ${key} entry ${id} ${key === 'lint' ? `raised from ${prior} to ${entry}` : 'changed'}` });
+      }
+    } else if (JSON.stringify(value) !== JSON.stringify(old)) edits.push({ id: key, detail: `${SKIPS_FILE}: its ${key} changed` });
+  }
+  return edits;
+}
 // A row of the carried-patch table may hold hunks over budget (#1426). The numbers it allows, in the table's order, are
 // guarded, so the count over budget falls or rises only by a signature; a README with no table yet guards none.
 const CARRIED_TABLE = 'vendor/gpui-pre-apple/upstream/README.md';
@@ -133,11 +160,17 @@ export function guard({ root, change, issue }, approvals, say) {
     if (commit.merge?.conflicts.includes(APPROVERS)) judge({ detail: `${APPROVERS}: changed in resolving a merge conflict` }, APPROVERS);
     // A conflict's resolution keeps either side's list, or it is an edit of its own.
     if (lanesOnMain && commit.merge?.conflicts.includes(SKIPS_FILE) && !commit.merge.parents.some((parent) => skipsIn(show(root, parent, SKIPS_FILE)) === skipsIn(show(root, commit.sha, SKIPS_FILE)))) judge({ detail: `${SKIPS_FILE}: the skips key changed in resolving a merge conflict` }, SKIPS_FILE);
+    // An entry the resolution adds or changes against both sides is an edit of its own.
+    if (lanesOnMain && commit.merge?.conflicts.includes(SKIPS_FILE)) {
+      const [first, ...others] = commit.merge.parents.map((parent) => entryEdits(show(root, parent, SKIPS_FILE), show(root, commit.sha, SKIPS_FILE)));
+      for (const edit of first.filter(({ id }) => others.every((edits) => edits.some((other) => other.id === id)))) judge({ detail: `${edit.detail} in resolving a merge conflict` }, edit.id === null ? SKIPS_FILE : `${SKIPS_FILE} › ${edit.id}`);
+    }
     if (lanesOnMain && commit.merge?.conflicts.includes(CARRIED_TABLE) && !commit.merge.parents.some((parent) => budgetsIn(show(root, parent, CARRIED_TABLE)) === budgetsIn(show(root, commit.sha, CARRIED_TABLE)))) judge({ detail: `${CARRIED_TABLE}: a budget number changed in resolving a merge conflict` }, CARRIED_TABLE);
     for (const file of commit.files) {
       if (commit.merge?.conflicts.includes(file.path)) continue;
       if (lanesOnMain && isCheck(file.path) && file.hunks.length) judge(checkEdit(file.path, ''), file.path);
       if (lanesOnMain && file.path === SKIPS_FILE && skipsIn(show(root, commit.parent, file.path)) !== skipsIn(show(root, commit.sha, file.path))) judge({ detail: `${file.path}: the skips key changed` }, file.path);
+      if (lanesOnMain && file.path === SKIPS_FILE) for (const edit of entryEdits(show(root, commit.parent, file.path), show(root, commit.sha, file.path))) judge(edit, edit.id === null ? file.path : `${file.path} › ${edit.id}`);
       // Node resolves a bare import through each node_modules folder above the importing file, so a
       // package committed in one may stand in for the one installed.
       if (lanesOnMain && file.hunks.length && underTests(file.path)) judge({ detail: `${file.path}: a package committed under node_modules, which a test's import may resolve to in place of the one installed` }, file.path);

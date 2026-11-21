@@ -20,7 +20,8 @@
 //
 // Paths stand for the change, which is otherwise the worktree against its merge base with origin/main. --list prints
 // the selection without running it. A test that starts a package's build is selected when the change is in that
-// package or the test is in the changed file's own package; otherwise it is WIDE, and --wide also runs it (select, below). --record, run on main, writes what failed into known-failures.json.
+// package or the test is in the changed file's own package; otherwise it is WIDE, and --wide also runs it (select, below). --record, run on main, writes what failed into known-failures.json,
+// once each new failure has run again alone: one that then passes is flaky, filed and left out (record, below).
 import { spawn, spawnSync } from 'node:child_process';
 import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync, writeSync } from 'node:fs';
 import { availableParallelism, constants, loadavg, tmpdir } from 'node:os';
@@ -335,6 +336,79 @@ export function classify(failures, findings, baseline, load = loadavg()[0]) {
   return { known, fresh, unsure };
 }
 
+const REPEATS = 3;
+const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const short = (sha) => sha.slice(0, 10);
+// GitHub keeps 256 characters of an issue's title; a longer one is cut there, and the body names the test whole.
+const titled = (title) => (title.length <= 256 ? title : `${title.slice(0, 255)}…`);
+// The issues that name a failure's cause: those the main watch files for a failure that holds, and those a record files.
+const CAUSE = /^(?:Known failure|Main is red): /;
+
+/** gh in the checkout, its output; a call that fails is tried twice more, then stops the record BLOCKED. */
+function gh(args) {
+  let why = '';
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const result = spawnSync('gh', args, { cwd: root, encoding: 'utf8', maxBuffer: 1 << 28 });
+    if (result.status === 0) return result.stdout;
+    why = (result.error?.message ?? result.stderr).trim().split('\n')[0];
+  }
+  throw Error(`BLOCKED record: gh ${args.slice(0, 2).join(' ')} failed: ${why}`);
+}
+
+/**
+ * --record (#2818). Each new failure of the run runs again alone, as scripts/main-watch.mjs runs one, up to three times,
+ * until it passes: `once(target, ids)` runs a file with only those tests, or a cargo target with only them, and answers
+ * the IDs that passed and failed. One that passes on a repeat is flaky: it reads INCONCLUSIVE, is filed once as the main
+ * watch files one (`Flaky: <id>`) and isn't listed. Each other is listed in `baseline`, `fails on main <head>: <message>
+ * (#<issue>, added <day>)`, its issue an open `Known failure:` or `Main is red:` one naming its file, or its cargo target,
+ * found or else filed. An entry whose test passed, or whose file or crate the tree no longer holds, goes. Answers `fresh`
+ * less the flaky ones, which join `unsure`.
+ */
+async function record(baseline, { fresh, unsure, passed, workspace, once }) {
+  const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout.trim();
+  if (!head) throw Error('BLOCKED record: git names no HEAD here, so no entry could name the head it fails at');
+  const day = new Date().toISOString().slice(0, 10);
+  const tests = fresh.filter(({ message }) => message !== 'lint');
+  const runs = new Map(tests.map(({ id }) => [id, []]));
+  for (const [target, list] of Map.groupBy(tests, ({ id }) => id.split(' › ')[0])) {
+    let pending = list.map(({ id }) => id);
+    for (let repeat = 1; repeat <= REPEATS && pending.length; repeat++) {
+      const { passed: ran, failed } = await once(target, pending);
+      for (const id of pending) runs.get(id).push(ran.has(id) ? 'PASS' : failed.has(id) ? 'FAIL' : 'UNRUN');
+      pending = pending.filter((id) => !ran.has(id));
+    }
+  }
+  let issues = null;
+  const open = () => (issues ??= JSON.parse(gh(['issue', 'list', '--state', 'open', '--limit', '5000', '--json', 'number,title,body'])));
+  const file = (title, body) => {
+    const number = Number(gh(['issue', 'create', '--title', title, '--body', body]).trim().match(/(\d+)\/?$/)?.[1]);
+    if (!number) throw Error(`BLOCKED record: gh issue create named no issue for ${title}`);
+    open().push({ number, title, body });
+    return number;
+  };
+  const flaky = tests.filter(({ id }) => runs.get(id).includes('PASS'));
+  for (const { id, message } of flaky) {
+    const title = titled(`Flaky: ${id}`);
+    const lines = [`FAIL on ${short(head)} in the record's run`, ...runs.get(id).map((state, at) => `${state} on ${short(head)} run alone, repeat ${at + 1} of ${REPEATS}`)];
+    const number = open().find((issue) => issue.title === title)?.number ?? file(title, `INCONCLUSIVE: ${id} failed on main at ${short(head)} and passed when run alone again (\`node scripts/affected.mjs --record\`, #2818, filed as the main watch files one, #1333).\n\n${message}\n\nRuns:\n${lines.map((line) => `- ${line}`).join('\n')}`);
+    unsure.push({ id, state: 'INCONCLUSIVE', message: `failed on main at ${short(head)} and passed run alone, so it reads flaky and isn't listed (#${number})` });
+  }
+  for (const id of passed) delete baseline.failures[id];
+  const crates = new Set(workspace.map(({ name }) => name));
+  const gone = (id) => {
+    const target = id.split(' › ')[0], crate = target.match(/^cargo -p (\S+)/)?.[1];
+    return crate ? !crates.has(crate) : !target.startsWith('cargo ') && !existsSync(join(root, target));
+  };
+  for (const id of Object.keys(baseline.failures)) if (gone(id)) delete baseline.failures[id];
+  const held = tests.filter((failure) => !flaky.includes(failure));
+  for (const [target, list] of Map.groupBy(held, ({ id }) => id.split(' › ')[0])) {
+    const number = open().find((issue) => CAUSE.test(issue.title) && `${issue.title}\n${issue.body}`.includes(target))?.number
+      ?? file(titled(`Known failure: ${target} fails on main`), `\`node scripts/affected.mjs --record\` (#2818) found ${list.length === 1 ? 'this test' : 'these tests'} failing on main at ${short(head)}, and none passed when run alone again, so it lists ${list.length === 1 ? 'it' : 'them'} in \`scripts/known-failures.json\`, added ${day}:\n\n${list.map(({ id, message }) => `- \`${id}\`${message ? `: ${message}` : ''}`).join('\n')}\n\nA listed failure lapses 14 days after it was added (#1333): fix each and take its entry out, or the lint lane fails it then.`);
+    for (const { id, message } of list) baseline.failures[id] = `fails on main ${short(head)}: ${(message || 'it fails there').slice(0, 300)} (#${number}, added ${day})`;
+  }
+  return { fresh: fresh.filter((failure) => !flaky.includes(failure)), unsure };
+}
+
 // Each job runs through the machine's throttle table (docs/parallel-proof.md, section 6): the workspace build, clippy and
 // cargo test as build, the vitest and node --test blocks as test, each passing through on the run's one test grant
 // (queued, below), and the timed ones as timed, waiting at most 30 minutes for their own; each, its parallel blocks
@@ -572,10 +646,33 @@ async function main(args) {
     }
     const baseline = JSON.parse(readFileSync(join(root, BASELINE), 'utf8'));
     const { covered, open } = readSkips(skips, baseline.skips, timed);
-    const { known, fresh, unsure } = classify([...failures, ...open], findings, baseline);
+    let { known, fresh, unsure } = classify([...failures, ...open], findings, baseline);
     if (args.includes('--record')) {
-      for (const id of passed) delete baseline.failures[id];
-      for (const { id, message } of fresh.filter(({ message }) => message !== 'lint')) baseline.failures[id] = message || 'fails on main';
+      // Each new failure runs again alone, after everything else: its file with only its failing tests, or its cargo
+      // target with only its tests, each asking for its grant as the timed blocks do.
+      let reran = 0;
+      const once = async (target, ids) => {
+        const label = `rerun-${reran++}`;
+        if (target.startsWith('cargo -p ')) {
+          const names = ids.map((id) => id.split(' › ')[1]).filter(Boolean);
+          const job = await run(logs, `cargo-${label}`, 'cargo', ['test', '--locked', ...target.slice(6).split(' '), ...(names.length === ids.length ? ['--', '--exact', ...names] : [])], own);
+          const ran = cargoResults(job.output, job.status, workspace), whole = ids.filter((id) => !id.includes(' › '));
+          return { passed: new Set([...ran.passed, ...(job.status === 0 ? whole : [])]), failed: new Set([...ran.failures.map(({ id }) => id), ...(job.status === 0 ? [] : whole)]) };
+        }
+        if (!existsSync(join(root, target))) return { passed: new Set(), failed: new Set() };
+        const titles = ids.map((id) => id.split(' › ').at(-1)), whole = titles.includes('(file)'), slot = listed(timed, target) ? '-timed' : '';
+        const job = runnerOf(target, readFileSync(join(root, target), 'utf8')) === 'vitest'
+          ? await vitest([target], [...slot ? ['--testTimeout=600000'] : [], ...whole ? [] : ['-t', titles.map(escapeRegex).join('|')]], `vitest-${label}${slot}`, root, own)
+          : await node([target], whole ? [] : titles.map((title) => `--test-name-pattern=${escapeRegex(title)}`), `node-${label}${slot}`, root, own);
+        let report = '';
+        try { report = readFileSync(join(logs, `${job.label}.jsonl`), 'utf8'); } catch {}
+        const results = reportResults(root, report, job.label);
+        const failed = new Set(results.failures.filter(({ state }) => state === 'FAIL').map(({ id }) => id)), ran = new Set(results.passed);
+        // A file that reported no test passes alone once it reports its tests and none of them fails.
+        if (whole) (ran.size && !results.failures.length ? ran : failed).add(named(target, '(file)'));
+        return { passed: ran, failed };
+      };
+      ({ fresh, unsure } = await record(baseline, { fresh, unsure, passed, workspace, once }));
       const counts = new Map();
       for (const { state, key } of findings) if (state === 'FAIL') counts.set(key, (counts.get(key) ?? 0) + 1);
       for (const [key, count] of counts) baseline.lint[key] = Math.max(count, baseline.lint[key] ?? 0);
