@@ -1,0 +1,551 @@
+# #2487 acceptance tests: the run on the base
+
+Base: 9905e7428 (origin/main; no implementation of #2487), in a git worktree at that commit, clean but for this suite.
+Date: 2026-11-21 06:45 UTC
+Node: v24.22.0
+Command: node --test --test-reporter=tap 'tests/acceptance/2487/*.test.mjs'   (from the checkout's root)
+Load before the run: 97.35 104.64 112.14. Exit 1. Duration 71 s.
+Paths: the checkout reads <checkout>, the user's home ~, temporary folders <tmp>, the twin's tree <twin tree>.
+
+Summary: 12 top-level tests, no subtests; 7 fail, 5 pass. Every failure is an AssertionError [ERR_ASSERTION]
+(failureType testCodeFailure) whose innermost frame is under tests/acceptance/2487/ (helpers.mjs's expectRefused or
+expectPassed, called from the test file); none is ERR_TEST_FAILURE, an import error or a timeout.
+
+- #2487.1131a9b0 (criterion 1), refused.test.mjs, 5 tests: FAIL, '<edit> ... passed the guard'. For each edit of a
+  test tagged for #9350 by a change naming #9044 (the file of four tagged tests and its three fixtures deleted, in the
+  second of three commits; a tagged test weakened; one of two tagged tests deleted, by a change saying Closes #9044;
+  the file deletion under an unsigned tag; the file deletion under a signed tag in a commit that carries other code),
+  the base guard prints 'PASS guard: N commits checked: no guarded edit lacks its own approved proposal' and exits 0.
+  The first reproduces the issue's 'PASS guard: 3 commits checked'. Expected reason.
+- #2487.1131a9b0 (criterion 1), approved.test.mjs, 2 tests: FAIL, 'the guard passed ... without judging it: no PASS
+  line names <file>'. The base passes the approved commits as it passes the unapproved ones: it never judged them.
+- #2487.8f2af318 (criterion 2), own-tests.test.mjs, 5 tests: PASS on the base, as they should. They need a planted
+  wrong program to fail: twins.json names every-test-edit-refused for the tag.
+
+The twin run. A temporary tree held a copy of scripts/, tests/acceptance/2487/ and tests/fixtures/approver.mjs, a link
+to the checkout's node_modules, and twins/every-test-edit-refused/scripts/proof-guard.mjs laid over
+scripts/proof-guard.mjs (byte for byte, checked with cmp). Same command from that tree's root, 2026-11-21 06:48 UTC,
+load before 98.82 107.43 112.38, exit 1: 6 fail, 6 pass. Each of criterion 2's 5 tests FAILs there at expectPassed's
+first assertion, AssertionError [ERR_ASSERTION], '<edit>, with no tag, failed the guard', on the twin's line
+'FAIL guard: <file>: a test file added|changed, which this planted guard refuses whatever its tags'. So each fails on
+its planted wrong program at its assertion. (Criterion 1's tests are not the twin's to judge: the 5 refusals pass
+there since the twin refuses every edit of a test file, and of the 2 approvals one fails, its tag naming the test and
+not the file.) The twin's output follows the base's below.
+
+Two checks by hand, on the base, not part of the suite:
+- The suite can pass. The same tree with one expression of scripts/proof-guard.mjs changed so the guard keeps every
+  tag whatever issue the change names (never saved in the repo, and no claim about how the fix is made) ran the same
+  command: 12 pass, 0 fail, exit 0. So the scenes are edits the guard can see, and criterion 2's cases stay free.
+- A change naming #9044 that adds a file of tests carrying #9044's tag and edits one in its next commit FAILs the
+  base guard ('... changed (criterion #9044.73bdbdbd)'), so that case is not among criterion 2's "still passes"
+  (README: Readings of the issue).
+
+---- output: the base ----
+
+TAP version 13
+# Subtest: \#2487.1131a9b0 the deletion of \#9350's test file and fixtures, as its own commit of a change naming \#9044 under a signed approval tag naming each file, passes the guard, by a PASS line naming the file
+not ok 1 - \#2487.1131a9b0 the deletion of \#9350's test file and fixtures, as its own commit of a change naming \#9044 under a signed approval tag naming each file, passes the guard, by a PASS line naming the file
+  ---
+  duration_ms: 22407.332125
+  type: 'test'
+  location: '<checkout>/tests/acceptance/2487/approved.test.mjs:8:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    the guard passed a deletion of tests/acceptance/9350/staged.test.ts under a signed tag naming it without judging it: no PASS line names tests/acceptance/9350/staged.test.ts
+    exit 0
+    stdout:
+    PASS guard: 2 commits checked: no guarded edit lacks its own approved proposal
+    proof: wall time 16.3 s
+    
+    stderr:
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    expectPassed (file://<checkout>/tests/acceptance/2487/helpers.mjs:205:20)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/2487/approved.test.mjs:13:3)
+    process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    async Test.run (node:internal/test_runner/test:1409:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+  ...
+# Subtest: \#2487.1131a9b0 the weakened test tagged for \#9350, as its own commit of a change naming \#9044 under a signed approval tag naming the test, passes the guard, by a PASS line naming the file
+not ok 2 - \#2487.1131a9b0 the weakened test tagged for \#9350, as its own commit of a change naming \#9044 under a signed approval tag naming the test, passes the guard, by a PASS line naming the file
+  ---
+  duration_ms: 10865.598
+  type: 'test'
+  location: '<checkout>/tests/acceptance/2487/approved.test.mjs:16:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    the guard passed a changed tagged test of tests/acceptance/9350/kept.test.mjs under a signed tag naming it without judging it: no PASS line names tests/acceptance/9350/kept.test.mjs
+    exit 0
+    stdout:
+    PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+    proof: wall time 5.9 s
+    
+    stderr:
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    expectPassed (file://<checkout>/tests/acceptance/2487/helpers.mjs:205:20)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/2487/approved.test.mjs:20:3)
+    process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    async Test.run (node:internal/test_runner/test:1409:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# Subtest: \#2487.8f2af318 a change naming \#9044 that changes a line of its own issue's untagged test, and the code it reads, passes the guard with no approval tag
+ok 3 - \#2487.8f2af318 a change naming \#9044 that changes a line of its own issue's untagged test, and the code it reads, passes the guard with no approval tag
+  ---
+  duration_ms: 13888.207917
+  type: 'test'
+  ...
+# Subtest: \#2487.8f2af318 a change naming \#9044 that deletes one of its own issue's untagged tests passes the guard with no approval tag
+ok 4 - \#2487.8f2af318 a change naming \#9044 that deletes one of its own issue's untagged tests passes the guard with no approval tag
+  ---
+  duration_ms: 10388.202167
+  type: 'test'
+  ...
+# Subtest: \#2487.8f2af318 a change naming \#9044 that adds a test file whose tests carry \#9044's tag passes the guard with no approval tag
+ok 5 - \#2487.8f2af318 a change naming \#9044 that adds a test file whose tests carry \#9044's tag passes the guard with no approval tag
+  ---
+  duration_ms: 9379.3315
+  type: 'test'
+  ...
+# Subtest: \#2487.8f2af318 a change naming \#9044 that adds a test carrying \#9044's tag beside its own issue's untagged tests passes the guard with no approval tag
+ok 6 - \#2487.8f2af318 a change naming \#9044 that adds a test carrying \#9044's tag beside its own issue's untagged tests passes the guard with no approval tag
+  ---
+  duration_ms: 6830.238042
+  type: 'test'
+  ...
+# Subtest: \#2487.8f2af318 a change naming \#9044 that adds an untagged test file in one commit and edits it in the next passes the guard with no approval tag
+ok 7 - \#2487.8f2af318 a change naming \#9044 that adds an untagged test file in one commit and edits it in the next passes the guard with no approval tag
+  ---
+  duration_ms: 11697.184333
+  type: 'test'
+  ...
+# Subtest: \#2487.1131a9b0 a change naming \#9044 whose second of three commits deletes \#9350's test file of four tagged tests and its three fixtures, with no approval tag, fails the guard, naming the file
+not ok 8 - \#2487.1131a9b0 a change naming \#9044 whose second of three commits deletes \#9350's test file of four tagged tests and its three fixtures, with no approval tag, fails the guard, naming the file
+  ---
+  duration_ms: 22599.559417
+  type: 'test'
+  location: '<checkout>/tests/acceptance/2487/refused.test.mjs:10:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    a deletion of tests/acceptance/9350/staged.test.ts and its fixtures, with no tag, passed the guard
+    exit 0
+    stdout:
+    PASS guard: 3 commits checked: no guarded edit lacks its own approved proposal
+    proof: wall time 15.9 s
+    
+    stderr:
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: 0
+  operator: '=='
+  stack: |-
+    expectRefused (file://<checkout>/tests/acceptance/2487/helpers.mjs:194:10)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/2487/refused.test.mjs:15:3)
+    process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    async Test.run (node:internal/test_runner/test:1409:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+  ...
+# Subtest: \#2487.1131a9b0 a change naming \#9044 that weakens the assertion of a test tagged for \#9350, with no approval tag, fails the guard, naming the file
+not ok 9 - \#2487.1131a9b0 a change naming \#9044 that weakens the assertion of a test tagged for \#9350, with no approval tag, fails the guard, naming the file
+  ---
+  duration_ms: 9674.086
+  type: 'test'
+  location: '<checkout>/tests/acceptance/2487/refused.test.mjs:18:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    a changed tagged test of tests/acceptance/9350/kept.test.mjs, with no tag, passed the guard
+    exit 0
+    stdout:
+    PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+    proof: wall time 5.6 s
+    
+    stderr:
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: 0
+  operator: '=='
+  stack: |-
+    expectRefused (file://<checkout>/tests/acceptance/2487/helpers.mjs:194:10)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/2487/refused.test.mjs:21:3)
+    process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    async Test.run (node:internal/test_runner/test:1409:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# Subtest: \#2487.1131a9b0 a change that says Closes \#9044 and deletes one of two tests tagged for \#9350 from their file, with no approval tag, fails the guard, naming the file
+not ok 10 - \#2487.1131a9b0 a change that says Closes \#9044 and deletes one of two tests tagged for \#9350 from their file, with no approval tag, fails the guard, naming the file
+  ---
+  duration_ms: 6693.740417
+  type: 'test'
+  location: '<checkout>/tests/acceptance/2487/refused.test.mjs:24:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    a tagged test deleted from tests/acceptance/9350/kept.test.mjs, with no tag, passed the guard
+    exit 0
+    stdout:
+    PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+    proof: wall time 3.4 s
+    
+    stderr:
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: 0
+  operator: '=='
+  stack: |-
+    expectRefused (file://<checkout>/tests/acceptance/2487/helpers.mjs:194:10)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/2487/refused.test.mjs:27:3)
+    async Test.run (node:internal/test_runner/test:1409:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# Subtest: \#2487.1131a9b0 the deletion of \#9350's test file and fixtures, as its own commit under an unsigned approval tag naming each file, fails the guard, naming the file
+not ok 11 - \#2487.1131a9b0 the deletion of \#9350's test file and fixtures, as its own commit under an unsigned approval tag naming each file, fails the guard, naming the file
+  ---
+  duration_ms: 13364.127458
+  type: 'test'
+  location: '<checkout>/tests/acceptance/2487/refused.test.mjs:30:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    a deletion of tests/acceptance/9350/staged.test.ts under an unsigned tag passed the guard
+    exit 0
+    stdout:
+    PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+    proof: wall time 10.0 s
+    
+    stderr:
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: 0
+  operator: '=='
+  stack: |-
+    expectRefused (file://<checkout>/tests/acceptance/2487/helpers.mjs:194:10)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/2487/refused.test.mjs:34:3)
+    process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    async Test.run (node:internal/test_runner/test:1409:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# Subtest: \#2487.1131a9b0 the deletion of \#9350's test file and fixtures in a commit that also changes other code, under a signed approval tag naming the deleted files, fails the guard, naming the file
+not ok 12 - \#2487.1131a9b0 the deletion of \#9350's test file and fixtures in a commit that also changes other code, under a signed approval tag naming the deleted files, fails the guard, naming the file
+  ---
+  duration_ms: 18752.6835
+  type: 'test'
+  location: '<checkout>/tests/acceptance/2487/refused.test.mjs:37:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    a deletion of tests/acceptance/9350/staged.test.ts in a commit that is not its own proposal passed the guard
+    exit 0
+    stdout:
+    PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+    proof: wall time 11.1 s
+    
+    stderr:
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: 0
+  operator: '=='
+  stack: |-
+    expectRefused (file://<checkout>/tests/acceptance/2487/helpers.mjs:194:10)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/2487/refused.test.mjs:41:3)
+    process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    async Test.run (node:internal/test_runner/test:1409:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+1..12
+# tests 12
+# suites 0
+# pass 5
+# fail 7
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 71242.399
+
+---- output: the twin every-test-edit-refused ----
+
+TAP version 13
+# Subtest: \#2487.1131a9b0 the deletion of \#9350's test file and fixtures, as its own commit of a change naming \#9044 under a signed approval tag naming each file, passes the guard, by a PASS line naming the file
+ok 1 - \#2487.1131a9b0 the deletion of \#9350's test file and fixtures, as its own commit of a change naming \#9044 under a signed approval tag naming each file, passes the guard, by a PASS line naming the file
+  ---
+  duration_ms: 10127.880583
+  type: 'test'
+  ...
+# Subtest: \#2487.1131a9b0 the weakened test tagged for \#9350, as its own commit of a change naming \#9044 under a signed approval tag naming the test, passes the guard, by a PASS line naming the file
+not ok 2 - \#2487.1131a9b0 the weakened test tagged for \#9350, as its own commit of a change naming \#9044 under a signed approval tag naming the test, passes the guard, by a PASS line naming the file
+  ---
+  duration_ms: 6020.8775
+  type: 'test'
+  location: '<twin tree>/tests/acceptance/2487/approved.test.mjs:16:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    a changed tagged test of tests/acceptance/9350/kept.test.mjs under a signed tag naming it failed the guard
+    exit 1
+    stdout:
+    FAIL guard: tests/acceptance/9350/kept.test.mjs: a test file changed, which this planted guard refuses whatever its tags (commit 4eccfd8bca67; the approval names no such item)
+      Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+    proof: wall time 3.6 s
+    
+    stderr:
+    
+    + actual - expected
+    
+    + [
+    +   'FAIL guard: tests/acceptance/9350/kept.test.mjs: a test file changed, which this planted guard refuses whatever its tags (commit 4eccfd8bca67; the approval names no such item)'
+    + ]
+    - []
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual:
+    0: 'FAIL guard: tests/acceptance/9350/kept.test.mjs: a test file changed, which this planted guard refuses whatever its tags (commit 4eccfd8bca67; the approval names no such item)'
+  operator: 'deepStrictEqual'
+  stack: |-
+    expectPassed (file://<twin tree>/tests/acceptance/2487/helpers.mjs:202:10)
+    TestContext.<anonymous> (file://<twin tree>/tests/acceptance/2487/approved.test.mjs:20:3)
+    process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    async Test.run (node:internal/test_runner/test:1409:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# Subtest: \#2487.8f2af318 a change naming \#9044 that changes a line of its own issue's untagged test, and the code it reads, passes the guard with no approval tag
+not ok 3 - \#2487.8f2af318 a change naming \#9044 that changes a line of its own issue's untagged test, and the code it reads, passes the guard with no approval tag
+  ---
+  duration_ms: 7162.027916
+  type: 'test'
+  location: '<twin tree>/tests/acceptance/2487/own-tests.test.mjs:9:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    an edit of an untagged test of tests/acceptance/9044/mine.test.mjs, with no tag, failed the guard
+    exit 1
+    stdout:
+    FAIL guard: tests/acceptance/9044/mine.test.mjs: a test file changed, which this planted guard refuses whatever its tags (commit 1878e2ed8f0b)
+      Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+    proof: wall time 4.0 s
+    
+    stderr:
+    
+    + actual - expected
+    
+    + [
+    +   'FAIL guard: tests/acceptance/9044/mine.test.mjs: a test file changed, which this planted guard refuses whatever its tags (commit 1878e2ed8f0b)'
+    + ]
+    - []
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual:
+    0: 'FAIL guard: tests/acceptance/9044/mine.test.mjs: a test file changed, which this planted guard refuses whatever its tags (commit 1878e2ed8f0b)'
+  operator: 'deepStrictEqual'
+  stack: |-
+    expectPassed (file://<twin tree>/tests/acceptance/2487/helpers.mjs:202:10)
+    TestContext.<anonymous> (file://<twin tree>/tests/acceptance/2487/own-tests.test.mjs:13:3)
+    async Test.run (node:internal/test_runner/test:1409:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+  ...
+# Subtest: \#2487.8f2af318 a change naming \#9044 that deletes one of its own issue's untagged tests passes the guard with no approval tag
+not ok 4 - \#2487.8f2af318 a change naming \#9044 that deletes one of its own issue's untagged tests passes the guard with no approval tag
+  ---
+  duration_ms: 4824.456625
+  type: 'test'
+  location: '<twin tree>/tests/acceptance/2487/own-tests.test.mjs:16:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    an untagged test deleted from tests/acceptance/9044/mine.test.mjs, with no tag, failed the guard
+    exit 1
+    stdout:
+    FAIL guard: tests/acceptance/9044/mine.test.mjs: a test file changed, which this planted guard refuses whatever its tags (commit beaee14965f2)
+      Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+    proof: wall time 3.0 s
+    
+    stderr:
+    
+    + actual - expected
+    
+    + [
+    +   'FAIL guard: tests/acceptance/9044/mine.test.mjs: a test file changed, which this planted guard refuses whatever its tags (commit beaee14965f2)'
+    + ]
+    - []
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual:
+    0: 'FAIL guard: tests/acceptance/9044/mine.test.mjs: a test file changed, which this planted guard refuses whatever its tags (commit beaee14965f2)'
+  operator: 'deepStrictEqual'
+  stack: |-
+    expectPassed (file://<twin tree>/tests/acceptance/2487/helpers.mjs:202:10)
+    TestContext.<anonymous> (file://<twin tree>/tests/acceptance/2487/own-tests.test.mjs:19:3)
+    async Test.run (node:internal/test_runner/test:1409:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# Subtest: \#2487.8f2af318 a change naming \#9044 that adds a test file whose tests carry \#9044's tag passes the guard with no approval tag
+not ok 5 - \#2487.8f2af318 a change naming \#9044 that adds a test file whose tests carry \#9044's tag passes the guard with no approval tag
+  ---
+  duration_ms: 4926.544541
+  type: 'test'
+  location: '<twin tree>/tests/acceptance/2487/own-tests.test.mjs:22:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    an added file of tagged tests, tests/acceptance/9044/added.test.mjs, with no tag, failed the guard
+    exit 1
+    stdout:
+    FAIL guard: tests/acceptance/9044/added.test.mjs: a test file added, which this planted guard refuses whatever its tags (commit 8c6a1ff5865e)
+      Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+    proof: wall time 2.8 s
+    
+    stderr:
+    
+    + actual - expected
+    
+    + [
+    +   'FAIL guard: tests/acceptance/9044/added.test.mjs: a test file added, which this planted guard refuses whatever its tags (commit 8c6a1ff5865e)'
+    + ]
+    - []
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual:
+    0: 'FAIL guard: tests/acceptance/9044/added.test.mjs: a test file added, which this planted guard refuses whatever its tags (commit 8c6a1ff5865e)'
+  operator: 'deepStrictEqual'
+  stack: |-
+    expectPassed (file://<twin tree>/tests/acceptance/2487/helpers.mjs:202:10)
+    TestContext.<anonymous> (file://<twin tree>/tests/acceptance/2487/own-tests.test.mjs:25:3)
+    process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    async Test.run (node:internal/test_runner/test:1409:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# Subtest: \#2487.8f2af318 a change naming \#9044 that adds a test carrying \#9044's tag beside its own issue's untagged tests passes the guard with no approval tag
+not ok 6 - \#2487.8f2af318 a change naming \#9044 that adds a test carrying \#9044's tag beside its own issue's untagged tests passes the guard with no approval tag
+  ---
+  duration_ms: 13406.760042
+  type: 'test'
+  location: '<twin tree>/tests/acceptance/2487/own-tests.test.mjs:28:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    a tagged test added to tests/acceptance/9044/mine.test.mjs, with no tag, failed the guard
+    exit 1
+    stdout:
+    FAIL guard: tests/acceptance/9044/mine.test.mjs: a test file changed, which this planted guard refuses whatever its tags (commit dbd189db8a42)
+      Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+    proof: wall time 11.4 s
+    
+    stderr:
+    
+    + actual - expected
+    
+    + [
+    +   'FAIL guard: tests/acceptance/9044/mine.test.mjs: a test file changed, which this planted guard refuses whatever its tags (commit dbd189db8a42)'
+    + ]
+    - []
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual:
+    0: 'FAIL guard: tests/acceptance/9044/mine.test.mjs: a test file changed, which this planted guard refuses whatever its tags (commit dbd189db8a42)'
+  operator: 'deepStrictEqual'
+  stack: |-
+    expectPassed (file://<twin tree>/tests/acceptance/2487/helpers.mjs:202:10)
+    TestContext.<anonymous> (file://<twin tree>/tests/acceptance/2487/own-tests.test.mjs:31:3)
+    async Test.run (node:internal/test_runner/test:1409:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# Subtest: \#2487.8f2af318 a change naming \#9044 that adds an untagged test file in one commit and edits it in the next passes the guard with no approval tag
+not ok 7 - \#2487.8f2af318 a change naming \#9044 that adds an untagged test file in one commit and edits it in the next passes the guard with no approval tag
+  ---
+  duration_ms: 32375.839167
+  type: 'test'
+  location: '<twin tree>/tests/acceptance/2487/own-tests.test.mjs:34:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    an edit of an untagged test the change added, tests/acceptance/9044/added.test.mjs, with no tag, failed the guard
+    exit 1
+    stdout:
+    FAIL guard: tests/acceptance/9044/added.test.mjs: a test file added, which this planted guard refuses whatever its tags (commit df9554b99501)
+      Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+    FAIL guard: tests/acceptance/9044/added.test.mjs: a test file changed, which this planted guard refuses whatever its tags (commit a0e62145460f)
+      Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+    proof: wall time 19.3 s
+    
+    stderr:
+    
+    + actual - expected
+    
+    + [
+    +   'FAIL guard: tests/acceptance/9044/added.test.mjs: a test file added, which this planted guard refuses whatever its tags (commit df9554b99501)',
+    +   'FAIL guard: tests/acceptance/9044/added.test.mjs: a test file changed, which this planted guard refuses whatever its tags (commit a0e62145460f)'
+    + ]
+    - []
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual:
+    0: 'FAIL guard: tests/acceptance/9044/added.test.mjs: a test file added, which this planted guard refuses whatever its tags (commit df9554b99501)'
+    1: 'FAIL guard: tests/acceptance/9044/added.test.mjs: a test file changed, which this planted guard refuses whatever its tags (commit a0e62145460f)'
+  operator: 'deepStrictEqual'
+  stack: |-
+    expectPassed (file://<twin tree>/tests/acceptance/2487/helpers.mjs:202:10)
+    TestContext.<anonymous> (file://<twin tree>/tests/acceptance/2487/own-tests.test.mjs:38:3)
+    process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    async Test.run (node:internal/test_runner/test:1409:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# Subtest: \#2487.1131a9b0 a change naming \#9044 whose second of three commits deletes \#9350's test file of four tagged tests and its three fixtures, with no approval tag, fails the guard, naming the file
+ok 8 - \#2487.1131a9b0 a change naming \#9044 whose second of three commits deletes \#9350's test file of four tagged tests and its three fixtures, with no approval tag, fails the guard, naming the file
+  ---
+  duration_ms: 10932.389208
+  type: 'test'
+  ...
+# Subtest: \#2487.1131a9b0 a change naming \#9044 that weakens the assertion of a test tagged for \#9350, with no approval tag, fails the guard, naming the file
+ok 9 - \#2487.1131a9b0 a change naming \#9044 that weakens the assertion of a test tagged for \#9350, with no approval tag, fails the guard, naming the file
+  ---
+  duration_ms: 5053.553792
+  type: 'test'
+  ...
+# Subtest: \#2487.1131a9b0 a change that says Closes \#9044 and deletes one of two tests tagged for \#9350 from their file, with no approval tag, fails the guard, naming the file
+ok 10 - \#2487.1131a9b0 a change that says Closes \#9044 and deletes one of two tests tagged for \#9350 from their file, with no approval tag, fails the guard, naming the file
+  ---
+  duration_ms: 8924.757792
+  type: 'test'
+  ...
+# Subtest: \#2487.1131a9b0 the deletion of \#9350's test file and fixtures, as its own commit under an unsigned approval tag naming each file, fails the guard, naming the file
+ok 11 - \#2487.1131a9b0 the deletion of \#9350's test file and fixtures, as its own commit under an unsigned approval tag naming each file, fails the guard, naming the file
+  ---
+  duration_ms: 37547.407
+  type: 'test'
+  ...
+# Subtest: \#2487.1131a9b0 the deletion of \#9350's test file and fixtures in a commit that also changes other code, under a signed approval tag naming the deleted files, fails the guard, naming the file
+ok 12 - \#2487.1131a9b0 the deletion of \#9350's test file and fixtures in a commit that also changes other code, under a signed approval tag naming the deleted files, fails the guard, naming the file
+  ---
+  duration_ms: 33684.958167
+  type: 'test'
+  ...
+1..12
+# tests 12
+# suites 0
+# pass 6
+# fail 6
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 96351.35925
