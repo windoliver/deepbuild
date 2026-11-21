@@ -24,6 +24,7 @@ pub mod held;
 pub mod history;
 pub mod inset;
 pub mod local;
+pub mod local_tone;
 pub mod maps;
 mod mesh;
 pub mod mirror;
@@ -2771,6 +2772,10 @@ impl Renderer {
             flaring: false,
             doffer: None,
             dofing: false,
+            toner: None,
+            toning: false,
+            toned_bind: None,
+            pictured: false,
             waterer: None,
             watering: false,
             reflection: None,
@@ -3732,7 +3737,7 @@ impl Renderer {
             *slot = self.light_rows(scene, &scene.lights[i], weight, local);
         }
         // The fill lights at this view (#1634), by the policy's order, for their clusters' pass.
-        let ordering = std::time::Instant::now();
+        let ordering = web_time::Instant::now();
         let mut order = light::fill_order(&scene.lights, scores);
         // The planted wrong programs: the lights in the document's order, and the key lights' cut
         // at 32 with its margin.
@@ -4443,6 +4448,7 @@ impl Renderer {
                 .views
                 .entry(v.id.clone())
                 .or_insert_with(|| Box::new(Renderer::new(device, planted)));
+            r.pictured = true;
             r.prepare(device, &deep_canvas_scene3d::views::seen(scene, v), look);
             if let Some((_, view)) = r.linear() {
                 pictures.insert(deep_canvas_scene3d::inset::view_key(&v.id), view.clone());
@@ -5447,7 +5453,7 @@ impl Renderer {
             .filter(|s| s.shadow && !cascaded)
             .and_then(|s| shadow::light_clip(scene, s.toward, 0.0));
         self.prepare_cascades(device, scene, &frame);
-        let scoring = std::time::Instant::now();
+        let scoring = web_time::Instant::now();
         let policy = scene
             .light_cut
             .clone()
@@ -5548,6 +5554,25 @@ impl Renderer {
                 bytemuck::bytes_of(&tone),
             )
         });
+        // #971: the look's local tone map at the internal size the targets draw; at its
+        // identity it draws nothing.
+        self.toning = match look.local.filter(|l| !l.is_identity() && !self.pictured) {
+            Some(l) => {
+                let exposure = scene.exposure.unwrap_or(look.exposure);
+                let (internal, planted) = (self.internal(), self.planted.local_tone);
+                self.toner
+                    .get_or_insert_with(|| Box::new(local_tone::Toner::new(device)))
+                    .prepare(device, &l, exposure, internal, planted);
+                true
+            }
+            None => {
+                if let Some(t) = self.toner.as_mut() {
+                    t.rest();
+                }
+                self.toned_bind = None;
+                false
+            }
+        };
         self.ground = [
             decode(scene.ground[0]),
             decode(scene.ground[1]),
@@ -7487,6 +7512,22 @@ impl Renderer {
                 jobs.push((FLARE_PASS.into(), job));
             }
         }
+        // #971: the local tone map over the linear image the output would read; the output
+        // reads the image it resolves instead.
+        if let (true, Some(l)) = (self.toning, self.toner.as_mut()) {
+            let source = self
+                .pre_tone
+                .clone()
+                .unwrap_or_else(|| t.linear_view.clone());
+            let (job, resolved) = l.job(device, t.size, &source, &self.profiler);
+            jobs.push((local_tone::LOCAL_TONE_PASS.into(), job));
+            let kept = match &self.toned_bind {
+                Some((r, c, b)) if *r == resolved && *c == self.covered.1 => Some(b.clone()),
+                _ => None,
+            };
+            bind = kept.unwrap_or_else(|| self.output_bind(&device.device, &resolved));
+            self.toned_bind = Some((resolved, self.covered.1.clone(), bind.clone()));
+        }
         // With passes after the finish, the output writes the finished frame, and they write
         // the slot from it (#382). Below scale 1 the output and the guard write the internal
         // frame, which the upscale and sharpen return to the slot's size (#386).
@@ -8251,6 +8292,20 @@ impl Renderer {
         let t = self.targets.as_ref()?;
         let texture = self.pre_tone.as_ref().map_or(&t.linear, |v| v.texture());
         let half = read_texture(device, texture, t.size, 8)?;
+        Some(
+            half.as_chunks::<2>()
+                .0
+                .iter()
+                .flat_map(|h| f16_to_f32(u16::from_le_bytes(*h)).to_le_bytes())
+                .collect(),
+        )
+    }
+
+    /// #971: the image the look's local tone map resolved from that one, which the output pass
+    /// read in its place, laid out the same; `None` in a frame with no local tone map.
+    pub fn read_toned(&self, device: &Device) -> Option<Vec<u8>> {
+        let (texture, size) = self.toner.as_ref().filter(|_| self.toning)?.resolved()?;
+        let half = read_texture(device, texture, size, 8)?;
         Some(
             half.as_chunks::<2>()
                 .0

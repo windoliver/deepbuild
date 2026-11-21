@@ -1,0 +1,9 @@
+22:21  up  2:48, 3 users, load averages: 32.27 45.03 69.85
+ ✓ tests/acceptance/2699/unchanged.test.ts > AC1 #2699.de6fa40e after a claim that ended every check, a turn runs git status and one shell command and changes no file, and the session stops: that stop makes no checkout, and its verdict and runs are the ones the merge base gives 4437ms
+ ✓ tests/acceptance/2699/changed-byte.test.ts > AC3 #2699.d256b2af after a claim whose checks passed, src/price.cjs changes by one byte and the session stops: the stop makes its checkout of the new snapshot and runs its checks there, and the claim is judged on the changed src/price.cjs, never the last claim's PASS carried 4601ms
+ ✓ tests/acceptance/2699/inputs-changed.test.ts > AC4 #2699.2f2544a1 not ended: on an unchanged tree, price had not ended on the last claim when the session stops again: the stop makes its checkout and runs price there 7208ms
+ ✓ tests/acceptance/2699/inputs-changed.test.ts > AC4 #2699.2f2544a1 recorded reads changed: on an unchanged tree, state's recorded reads (the workspace's state/now.json) changed since the last claim: the stop makes its checkout and runs state there on the new reading 4618ms
+ ✓ tests/acceptance/2699/unchanged.test.ts > AC2 #2699.aefbe26c that stop writes no file under the checkouts' folder and starts no process beyond the snapshot's: every git process it starts is one a stop after reads alone on the same tree also starts 7482ms
+ Test Files  3 passed (3)
+      Tests  5 passed (5)
+exit 0

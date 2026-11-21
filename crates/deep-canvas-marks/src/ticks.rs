@@ -91,7 +91,7 @@ pub(crate) fn span(p: &Map<String, Value>, value: f64, out: f64) -> [f64; 2] {
 }
 
 /// A UTC civil date from days since the epoch (Howard Hinnant's `civil_from_days`).
-fn civil(days: i64) -> (i64, u32, u32) {
+pub fn civil(days: i64) -> (i64, u32, u32) {
     let z = days + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z.rem_euclid(146_097);

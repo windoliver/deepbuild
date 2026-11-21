@@ -18,7 +18,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{json, Map, Value};
 
 use super::super::packs::{
-    input_fault, rule_number, Input, Pack, PackId, Packs, Planted, Resolved, RuleScope,
+    input_fault, moved_notice, moved_to, rule_number, Input, Pack, PackId, Packs, Planted,
+    Resolved, RuleScope,
 };
 use super::super::{kind_text, Issue, Notice};
 use super::PackKind;
@@ -706,6 +707,14 @@ pub fn at_load(
     planted: Planted,
     notices: &mut Vec<Notice>,
 ) {
+    // #1962's planted loader: every instance of a kind its pack moved is dropped, never opened.
+    if planted.drops_moved {
+        items.retain(|_, item| {
+            kind_text(item)
+                .and_then(|k| moved_to(k, resolved))
+                .is_none()
+        });
+    }
     // #1959's planted loader: one saved major, the lowest a pack-kind item holds, for every item.
     let whole = planted
         .migrate_one_major
@@ -767,15 +776,24 @@ fn migrate_item(
     planted: (Option<u64>, bool),
     notices: &mut Vec<Notice>,
 ) -> bool {
-    let Some(text) = kind_text(item).map(str::to_string) else {
+    let Some(mut text) = kind_text(item).map(str::to_string) else {
         return false;
     };
+    // A kind its pack moved becomes the kind it moved to, then takes that kind's steps from the
+    // major the move names (#1962).
+    let moved = moved_to(&text, resolved);
+    if let (Some(to), Some(fields)) = (&moved, item.as_object_mut()) {
+        notices.push(moved_notice(key, &text, to));
+        fields.insert("kind".into(), json!(to));
+        text.clone_from(to);
+    }
+    let moved = moved.is_some();
     let Some((full, saved)) = text.rsplit_once('@') else {
-        return false;
+        return moved;
     };
-    let saved = planted.0.or(saved.parse::<u64>().ok());
+    let saved = planted.0.filter(|_| !moved).or(saved.parse::<u64>().ok());
     let (Some(saved), Some((family, _))) = (saved, full.split_once('.')) else {
-        return false;
+        return moved;
     };
     let Some((major, kind)) = resolved
         .by_name
@@ -783,17 +801,17 @@ fn migrate_item(
         .and_then(|pack| current(pack, full))
         .filter(|(m, _)| saved < *m)
     else {
-        return false;
+        return moved;
     };
     // The pack check holds every step from major 1, so an admitted pack carries the chain.
     let Some(chain) = (saved..major)
         .map(|f| kind.migrate.get(&f))
         .collect::<Option<Vec<_>>>()
     else {
-        return false;
+        return moved;
     };
     let Some(fields) = item.as_object_mut() else {
-        return false;
+        return moved;
     };
     let mut params = fields
         .get("params")

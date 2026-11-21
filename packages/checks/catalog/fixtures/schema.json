@@ -1,0 +1,12 @@
+{
+  "items": {"id": "id", "columns": {"name": {"type": "copy items"}, "weight": {"type": "f64", "unit": "kg", "range": [0, 50]}}},
+  "recipes": {"id": "id", "columns": {"inputs": {"type": "refs items"}, "tools": {"type": "refs items"}, "outputs": {"type": "refs items"}}},
+  "creatures": {"id": "id", "columns": {"hp": {"type": "i32", "range": [1, 1000]}, "drops": {"type": "refs items"}}},
+  "kits": {"id": "id", "columns": {"items": {"type": "refs items"}}},
+  "loot": {"id": "id", "columns": {"drops": {"type": "refs items"}}},
+  "forms": {"id": "id"},
+  "sides": {"id": "id"},
+  "kinds": {"id": "id"},
+  "messages": {"id": "id", "columns": {"text": {"type": "copy messages"}}},
+  "triggers": {"id": "id", "columns": {"trigger": {"type": "ref forms"}, "n": {"type": "i32"}, "side": {"type": "ref sides"}, "kind": {"type": "ref kinds"}, "shows": {"type": "refs messages"}, "allow": {"type": "refs kinds"}, "deny": {"type": "refs kinds"}}}
+}

@@ -21,18 +21,7 @@ pub const KIND: &str = "foley.render";
 pub const TOOL: &str = "foley-render@1.0.0";
 pub const LEVELS: usize = 3;
 pub const ROUND_ROBINS: usize = 4;
-const MATERIALS: [&str; 10] = [
-    "paper",
-    "wood",
-    "metal",
-    "glass",
-    "plastic",
-    "rubber",
-    "ink",
-    "cloth",
-    "stone",
-    "electronic",
-];
+use deep_canvas_media::foley::MATERIALS;
 /// #155's planted spawn: a foley job named by its action alone takes the first bound collection's
 /// material for every occurrence.
 const FIRST_COLLECTION: &str = "foley_first_collection_material";

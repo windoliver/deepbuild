@@ -73,6 +73,13 @@
       "items": {
         "$ref": "#/$defs/registry"
       }
+    },
+    "field_lists": {
+      "$comment": "#2777: every list of words a document sets that the build seals, by name: a sealed kind's field's, or one a canvas module reads outside its kinds' params, each with its closure: {registry}, {closed, reopens_if, instead} or {open}.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/field_list"
+      }
     }
   },
   "required": [
@@ -85,6 +92,37 @@
   ],
   "additionalProperties": false,
   "$defs": {
+    "field_list": {
+      "type": "object",
+      "properties": {
+        "list": {
+          "type": "string"
+        },
+        "entry": {
+          "type": "string"
+        },
+        "field": {
+          "type": "string"
+        },
+        "words": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "closure": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "list",
+        "entry",
+        "field",
+        "words",
+        "closure"
+      ],
+      "additionalProperties": false
+    },
     "registry": {
       "type": "object",
       "properties": {

@@ -56,6 +56,7 @@ pub fn fixture(
         answer,
         tolerance,
         never_past: false,
+        past: false,
         caps: Vec::new(),
     }
 }
@@ -580,5 +581,6 @@ pub fn all() -> Vec<Fixture> {
     out.extend(super::sensors::all());
     out.extend(super::walks::all());
     out.extend(super::vehicles::all());
+    out.extend(super::centres::all());
     out
 }

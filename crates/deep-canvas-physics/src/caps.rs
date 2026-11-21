@@ -109,3 +109,41 @@ pub const RAPIER3D: Caps = Caps {
     },
     scales_lengths: true,
 };
+
+/// #2098: Rapier 0.36.1 in 2D, which a `dimensions: 2` world runs on, beside `RAPIER3D`.
+pub const RAPIER2D: Caps = Caps {
+    backend: "rapier2d",
+    dimensions: 2,
+    declared: &[
+        "Each substep caps a body's linear speed at solver.max_speed and its turn at about 45° a step; a step it caps writes fault {kind: speed_cap}.",
+        "It has no restitution threshold: a new contact bounces at any approach speed.",
+        "It has no rolling resistance; a disc that should roll to rest takes angular damping.",
+        "A contact with restitution 1 or more never comes to rest.",
+        "A contact is a spring at solver.contact_hz, twice that against a static body, so a resting body sinks g ÷ (2π × f)² under its own weight at the frequency f of its contact, and a stack sinks by its loads.",
+        "The lint physics.fast_body watches no body of a 2D world, so a fast one raises no issue.",
+    ],
+    claims: &[],
+    sweep: Sweep {
+        starts: &[],
+        without_ccd: &[],
+        with_ccd: &[],
+        holds_ccd: false,
+        holds_fast: false,
+        predicts: false,
+    },
+    ..RAPIER3D
+};
+
+/// #2098: the backend of this build that `doc` asks for: the one its `backend.name` names, else
+/// the one that runs its `dimensions`; Rapier in 3D for a name or a dimension neither has, which
+/// its check then refuses.
+pub fn asked(doc: &serde_json::Value) -> &'static Caps {
+    let name = doc.pointer("/backend/name").and_then(|n| n.as_str());
+    let dimensions = doc.get("dimensions").and_then(|d| d.as_f64());
+    let all = [&RAPIER3D, &RAPIER2D];
+    let named = all.iter().find(|c| name == Some(c.backend));
+    let sized = all
+        .iter()
+        .find(|c| dimensions == Some(f64::from(c.dimensions)));
+    named.or(sized).copied().unwrap_or(&RAPIER3D)
+}

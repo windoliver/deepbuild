@@ -27,6 +27,9 @@ opus-rs = { version = "0.1.42", default-features = false, features = ["libm"] }
 libm = "0.2.16"
 # Issue #1967: terminal recordings, converted at import by the cells module's emulator.
 deep-canvas-cells = { path = "../deep-canvas-cells" }
+# Issue #194: a catalog's tables packed into table.layout@1 by the data module's probe, whose CSV
+# reader the table probe shares.
+deep-catalog = { path = "../deep-catalog" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2"
