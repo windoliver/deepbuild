@@ -33,7 +33,7 @@ test('a replacement during readback commits no mixed generation; the next pass c
     appendClaude(t, [{ uuid: 'm2', role: 'user', text: 'new second message' }]);
     const replacement = readFileSync(t.path, 'utf8').replace('old first message', 'new first message');
     w.bend = () => {
-      w.bend = undefined;
+      delete w.bend;
       writeFileSync(`${t.path}.replacement`, replacement);
       renameSync(`${t.path}.replacement`, t.path);
     };

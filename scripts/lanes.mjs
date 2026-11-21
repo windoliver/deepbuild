@@ -1029,6 +1029,9 @@ alone.push('tests/acceptance/2310/');
 alone.push('tests/acceptance/2308/', 'tests/acceptance/191-redraft-2308/');
 // #2371's files build deep-physics.
 alone.push('tests/acceptance/2371/');
+// #1931's files build deep-physics (release and test-backends) and the wasm32 library; the blind redraft of #191's
+// first criterion's test under it builds deep-physics (shipped) and the wasm32 library, as #191's file does.
+alone.push('tests/acceptance/1931/', 'tests/acceptance/191-redraft-1931/');
 
 // #2742's files build deep-gpu; ac1 compares two films' GPU time on any Mac, and ac2 runs #417's suite.
 alone.push('tests/acceptance/2742/');
@@ -1265,6 +1268,10 @@ timed.push('tests/acceptance/189/saves/ac11-budgets.test.ts');
 alone.push('tests/acceptance/189/lab-redraft/');
 timed.push('tests/acceptance/189/lab-redraft/ac11-rederive-budget.test.ts');
 byHand.push('tests/acceptance/189/lab/');
+// #851's files start replicas and a hub and play the fixture shell's journeys, levels of 3,700 steps, for minutes.
+alone.push('tests/acceptance/851/');
+// #851's criterion 8 ends INCONCLUSIVE until your taste call on its frames; it runs by hand.
+byHand.push('tests/acceptance/851/ac08-shown.test.ts');
 // #276's files build their assembler and deep-logic; record's run processes under a file-size limit, match's build
 // deep-show (full) and play two-seat matches in process, and web's play the piece in headless Chrome.
 alone.push('tests/acceptance/276/record/', 'tests/acceptance/276/match/', 'tests/acceptance/276/web/');
@@ -1294,6 +1301,14 @@ alone.push('tests/acceptance/953/', 'tests/acceptance/953-oracle/');
 // tree, and build deep-gpu to draw two frames on the GPU; no timing.
 alone.push('tests/acceptance/2738/');
 slow.push('tests/acceptance/2738/ac1-linux-build.test.ts');
+
+// #265's files (blind) build deep-gpu (ac4 deep-show), draw on the GPU and play a match; ac6 times eight movers' frame CPU.
+alone.push('tests/acceptance/265/');
+timed.push('tests/acceptance/265/ac6-budgets.test.ts');
+
+// #1576's files each start hubs on records of up to 100,000 sessions, and AC5 runs a busy process per core, at the
+// lowest priority, beside two runs: one file at a time. Every number they judge is a count, so none is timed.
+alone.push('tests/acceptance/1576/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

@@ -126,7 +126,8 @@ export function scrubPrefix(text: Buffer, values: readonly string[], target: num
   // Whatever the rule, a continued copy holds only when the copied lines scrub alone as they do with what follows.
   if (from && (ranges.some(([open, close]) => open < from && close > from) || !scrub(text.subarray(0, from), values).equals(render(0, from)))) return { ...none, stale: true };
   if (ceiling <= from) return none;
-  let end = text.lastIndexOf(10, Math.min(from + target, ceiling) - 1) + 1;
+  const limit = Math.min(from + target, ceiling);
+  let end = limit > 0 ? text.lastIndexOf(10, limit - 1) + 1 : 0;
   // A single long line is indivisible. It is eligible only when its complete line and lookahead are present.
   if (end <= from) {
     const newline = text.indexOf(10, from);
@@ -279,7 +280,7 @@ function merge(ranges: Range[]): Range[] {
 function patternRanges(text: string, hits: [number, Rule[]][]): Range[] {
   const windows = new Map<number, Set<Rule>>();
   for (const [at, found] of hits) {
-    const start = text.lastIndexOf('\n', at - 1) + 1;
+    const start = at > 0 ? text.lastIndexOf('\n', at - 1) + 1 : 0;
     const set = windows.get(start) ?? new Set();
     for (const rule of found) set.add(rule);
     windows.set(start, set);

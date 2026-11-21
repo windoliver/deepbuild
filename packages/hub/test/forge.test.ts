@@ -3,6 +3,7 @@
 // requests left out.
 import { afterEach, describe, expect, it } from 'vitest';
 import { closesIssue, Forge, isPrCreate, parsePrUrl } from '../src/forge.js';
+import { prBody, prCommands } from '../src/pr-commands.js';
 
 type Route = (url: URL) => { body: unknown; next?: string } | undefined;
 const realFetch = globalThis.fetch;
@@ -118,5 +119,17 @@ describe('Forge.nextIssue', () => {
     serve((u) => (u.pathname.endsWith('/issues/83') ? { body: { number: 83, state: 'closed', body: 'no epic here', html_url: '' } } : undefined));
     expect(await new Forge(api, undefined).nextIssue(pr, 83)).toBeNull();
     expect(asked).toHaveLength(1);
+  });
+});
+
+describe('prBody', () => {
+  it('reads --body after boolean flags such as --remove-milestone and -h', async () => {
+    for (const cmd of [
+      'gh pr edit 42 --remove-milestone --body "Closes #41"',
+      'gh pr edit 42 -h --body "Closes #41"',
+    ]) {
+      const [pr] = prCommands(cmd);
+      expect(await prBody(pr!, process.cwd()), cmd).toBe('Closes #41');
+    }
   });
 });

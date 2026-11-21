@@ -149,6 +149,39 @@ fn sha(bytes: &[u8]) -> String {
 
 /// The records the steps before step `k` asked for, written now that every item is at step k
 /// (into the saves folder, or held for the host where none keeps them, as in the web player).
+/// The record an item with `carry` gives from its arrays as `step` left them, and its bytes' hash.
+fn record_of(piece: &Piece, item: &Item, arrays: &[u8], step: i64) -> Option<(String, Value)> {
+    let c = item.carry.as_ref()?;
+    let out: Map<String, Value> = c
+        .out
+        .iter()
+        .map(|(n, ty, at, count)| {
+            let size = ty.size() as usize;
+            let values = (0..*count as usize)
+                .map(|j| ty.value(&arrays[*at as usize + j * size..][..size]))
+                .collect();
+            (n.clone(), Value::Array(values))
+        })
+        .collect();
+    let record = json!({
+        "from": {"layout": crate::saves::layout_of(item), "document": piece.document, "program": item.program},
+        "step": step, "arrays": out,
+    });
+    Some((sha(record.to_string().as_bytes()), record))
+}
+
+/// #851: the record the piece's first item with `carry` gives from its arrays as step `k` left them, as if its
+/// request were 1 there: a game shell writes it the step a level is completed.
+pub fn record_now(w: &World, k: i64) -> Option<(String, Value)> {
+    let piece = &w.piece;
+    piece
+        .items
+        .iter()
+        .zip(&w.lives)
+        .find(|(item, _)| item.carry.is_some())
+        .and_then(|(item, l)| record_of(piece, item, &l.arrays, k))
+}
+
 pub(crate) fn due(w: &mut World, k: i64) {
     let piece = w.piece.clone();
     for (item, l) in piece.items.iter().zip(&w.lives) {
@@ -157,23 +190,8 @@ pub(crate) fn due(w: &mut World, k: i64) {
         if l.last != k - 1 || asked != Some(&1i32.to_le_bytes()[..]) {
             continue;
         }
-        let arrays: Map<String, Value> = c
-            .out
-            .iter()
-            .map(|(n, ty, at, count)| {
-                let size = ty.size() as usize;
-                let values = (0..*count as usize)
-                    .map(|j| ty.value(&l.arrays[*at as usize + j * size..][..size]))
-                    .collect();
-                (n.clone(), Value::Array(values))
-            })
-            .collect();
-        let record = json!({
-            "from": {"layout": crate::saves::layout_of(item), "document": piece.document, "program": item.program},
-            "step": k - 1, "arrays": arrays,
-        });
+        let Some((hash, record)) = record_of(&piece, item, &l.arrays, k - 1) else { continue };
         let bytes = record.to_string().into_bytes();
-        let hash = sha(&bytes);
         let out = match &w.saves_dir {
             None => json!({"item": item.id, "step": k - 1, "hash": hash, "record": record}),
             Some(dir) => match write(dir, &hash, &bytes) {
