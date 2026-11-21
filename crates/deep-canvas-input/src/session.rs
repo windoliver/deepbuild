@@ -363,6 +363,7 @@ impl Session {
                 samples: None,
                 writer: Writer::You,
                 serial: Some(self.serial),
+                player: None,
             });
         }
         Ok(())
@@ -604,6 +605,7 @@ impl Session {
             samples,
             writer: Writer::You,
             serial: Some(serial),
+            player: None,
         })
     }
 
@@ -1211,6 +1213,7 @@ impl Session {
             samples: None,
             writer,
             serial,
+            player: None,
         });
         Ok(json!({"appended": 1, "dropped": dropped}))
     }
@@ -1234,6 +1237,7 @@ impl Session {
             samples: None,
             writer: Writer::Agent,
             serial: None,
+            player: None,
         });
         Ok(1)
     }

@@ -27,6 +27,7 @@ import { openSupervisor, openUnder, type Host, type Supervisor } from '@deepbuil
 
 import { ClaudeSettings, readJson, STOP_HOLD_MS, words } from './claude-settings.js';
 import { statKey } from './agent-files.js';
+import { Beats } from './beat.js';
 import { Confirmer } from './confirm.js';
 import { keychain } from './keychain.js';
 import { recordedHome, saveTrust } from './codex-settings.js';
@@ -302,6 +303,8 @@ export class Core {
    */
   private readonly inflight = new Map<Promise<unknown>, string>();
   private readonly timers: NodeJS.Timeout[] = [];
+  /** The background jobs whose beat stops while they have nothing to do, and an event wakes (#2648). */
+  private readonly beats = new Beats((name, job) => this.run(name, job), (name) => this.jobs.set(name, null));
   /**
    * Each background job's failures in a row, when the first of them was and the last one's error, cleared by its
    * next clean run (#909): one blip reads apart from a job that has failed for an hour.
@@ -357,7 +360,7 @@ export class Core {
   private wireHookServices(): void {
     const options = this.options;
     this.transcriptReader = new TranscriptReader({ plant: options.plant, now: () => this.now() });
-    this.flags = new SessionFlags({ services: lazyServices({ record: () => this.record, now: () => this.now, asks: () => this.asks, agents: () => this.agents, root: () => this.root, siblings: () => this.siblings, transcriptReader: () => this.transcriptReader }), state: () => this.state, mcp: () => this.mcp, events: { append: (connection, input, backfill) => this.append(connection, input, backfill), connection: (writer, extra) => this.connection(writer, extra) }, schedule: { queue: (work, starting) => this.queue(work, starting) }, readCodexTrust: (cwd) => this.readCodexTrust(cwd) });
+    this.flags = new SessionFlags({ services: lazyServices({ record: () => this.record, now: () => this.now, asks: () => this.asks, agents: () => this.agents, root: () => this.root, siblings: () => this.siblings, transcriptReader: () => this.transcriptReader }), state: () => this.state, mcp: () => this.mcp, events: { append: (connection, input, backfill) => this.append(connection, input, backfill), connection: (writer, extra) => this.connection(writer, extra) }, schedule: { queue: (work, starting) => this.queue(work, starting) }, readCodexTrust: (cwd) => this.readCodexTrust(cwd), wake: (job) => this.beats.wake(job) });
     this.canvasSide = new HubCanvas({
       root: rootOf(options.root), now: () => this.now(), plant: options.plant, doneSpec: this.doneSpec,
       record: () => this.record, store: () => this.store, libraries: () => this.libraries, sessions: () => this.state.sessions, extensions: () => this.extensions,
@@ -630,6 +633,7 @@ export class Core {
       const { kind, subject, data } = input;
       this.canvasSide.appended(input);
       this.log.stream();
+      this.flags.appended(kind, connection.session);
       if (kind !== 'session.state' && kind !== 'row.set') {
         // The next state pass reads the sessions appended to since the last; an event of no session, every session.
         if (this.state.touched !== 'all') { if (connection.session) this.state.touched.add(connection.session); else this.state.touched = 'all'; }
@@ -747,7 +751,7 @@ export class Core {
     // One compile job pool per host (#1016): every build deep lease runs joins it.
     this.pool = new JobPool(join(this.root.dir, 'jobserver'), poolTokens(CORES));
     this.heavy = new HeavyQueue({
-      table: leases, slow: SLOW_SLOT, now: this.now, pool: this.pool, ...(this.options.plant ? { plant: this.options.plant } : {}),
+      table: leases, slow: SLOW_SLOT, now: this.now, pool: this.pool, ...(this.options.plant ? { plant: this.options.plant } : {}), wake: () => this.beats.wake('heavy'),
       append: async (kind, v, data, subject, session) => {
         const ts = this.now();
         const id = ulid(ts);
@@ -760,7 +764,7 @@ export class Core {
     });
     await this.heavy.recover(this.raw);
     await this.heavy.tick();
-    this.every('heavy', 500, () => this.heavy.tick());
+    this.beats.start('heavy', 500, () => this.heavy.tick());
     this.every('gone', 1000, () => this.state.goneSessions());
     // Each session's state as last recorded, then any change since; a session goes quiet after a day with no hook.
     for (const row of (await this.record.raw("SELECT session_id, json_extract(data, '$.state') AS state, json_extract(data, '$.cause') AS cause FROM events WHERE kind = 'session.state' AND session_id IS NOT NULL ORDER BY log_pos")) as { session_id: string; state: string; cause: string }[]) this.state.states.set(row.session_id, `${row.state}/${row.cause}`);
@@ -775,8 +779,8 @@ export class Core {
     this.every('states', 60_000, async () => this.state.minutePassed());
     this.every('unpushed', 60_000, () => this.flags.unpushedAgain());
     void this.run('unpushed', () => this.flags.unpushedAgain());
-    this.every('gates', 1000, () => this.flags.gatesWatched());
-    this.every('agents-reach', 1000, () => this.flags.agentsReached());
+    this.beats.start('gates', 1000, () => this.flags.gatesWatched());
+    this.beats.start('agents-reach', 1000, () => this.flags.agentsReached());
     // A live session's transcript is read between its hooks too: an agent retrying a model call fires none (#2019).
     this.every('transcripts', 2000, () => this.flags.transcriptsRead());
     // A background command whose process group has ended no longer holds its session's slow checks (#907); one that
@@ -897,10 +901,10 @@ export class Core {
       sendBack: (r) => this.delivery.landingSendBack(r),
       appendCore: (kind, data, extra) => this.appendCore(kind, data, extra),
     });
-    // #1922's planted hosts build a tool's digest wrongly, #2650's keep what they finished, and #2402's never clears a
-    // handler's failures: the host's plants, selected with the hub's variable.
+    // #1922's planted hosts build a tool's digest wrongly, #2650's keep what they finished, #2402's never clears a
+    // handler's failures and #2648's reads notices once: the host's plants, selected with the hub's variable.
     const plant = this.options.plant?.startsWith('job-build-') ? { plant: this.options.plant as 'job-build-entry-only' }
-      : this.options.plant === 'churn-keeps-every-answer' || this.options.plant === 'churn-keeps-every-result' || this.options.plant === 'churn-keeps-every-name-set' || this.options.plant === 'failures-never-cleared' ? { plant: this.options.plant } : {};
+      : this.options.plant === 'churn-keeps-every-answer' || this.options.plant === 'churn-keeps-every-result' || this.options.plant === 'churn-keeps-every-name-set' || this.options.plant === 'failures-never-cleared' || this.options.plant === 'reads-files-at-start-only' ? { plant: this.options.plant } : {};
     // No package is in the hub's own release yet; a test may hand it one, which then loads in the hub (#2402).
     const release = this.options.release ? (JSON.parse(readFileSync(this.options.release, 'utf8')) as ReleaseEntry[]) : [];
     const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release, now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite'),
@@ -1167,7 +1171,9 @@ export class Core {
     if (this.now() < this.hookCheckDue) return;
     this.hookCheckDue = this.now() + HOOK_CHECK_MS;
     const found = unrunnable(this.root.dir);
+    const before = this.cantRun.join(' ');
     this.cantRun = [...new Set(found.flatMap((u) => RUN_BY[u.agent]))].sort();
+    if (this.cantRun.join(' ') !== before) this.flags.reachSoon();
     this.askingSoon();
     for (const [owner, agents] of Object.entries(RUN_BY)) {
       const problem = found.filter((u) => u.agent === owner).map(describe).join('; ');
@@ -2633,6 +2639,8 @@ export class Core {
     this.stopping = true;
     plantedStop();
     for (const timer of this.timers) clearInterval(timer);
+    this.beats.stop();
+    this.flags.close();
     this.siblings.stop();
     this.work?.close();
     // The pool's pipe goes with the hub, as its socket does: left in the root with no writer, any read of it blocks.

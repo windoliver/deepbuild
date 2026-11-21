@@ -1,0 +1,84 @@
+Base commit: cb29c46ba8a1454eb4a4f7c3d0f29734444a7bf9 ("Blind base for #2109: main 197e759a9 as it would read without the
+issue's work; never merged"), no implementation of #2109, with this folder added and nothing else. The workspaces built
+(npm run build --workspaces, over an install of the base's package-lock.json), target/debug/deep-hook built from the
+base's crates/deep-hook, crates/deep-contracts and Cargo.lock.
+Command: nice -n 10 npx vitest run tests/acceptance/2109 --testTimeout=600000
+         (here with --reporter=default --reporter=json --outputFile=<scratch> added, for the times)
+Node 24.22.2, vitest 5.0.5, darwin-arm64, 18 cores; the Mac shared with other sessions' builds and proof runs.
+
+== Run 1: the base, 2026-11-20 08:06:22 to 08:07:23 PST
+
+Load (uptime): 173.46 193.22 203.47 at the start; 216.54 202.78 206.38 at the end.
+Exit code: 1. Result: 1 file, 3 tests, 3 failed, 56 s.
+
+  x  AC1 #2109.37a6aeb4 (5 ms)
+      fails at "tests/acceptance/83/redraft-669/ is a folder of this checkout": expected false to be true
+  x  AC2 #2109.875b4f4e (1 ms)
+      fails at "tests/acceptance/83/redraft-669/ holds the redraft's test file": expected [] to not deeply equal []
+  x  AC3 #2109.dcf2b9e6 (51.1 s)
+      fails at "the AC11 tests main runs (tests/acceptance/83/redraft-1460/goldens.test.ts)": expected [ …(12) ] to deeply
+      equal [], the twelve problems being:
+        tests/acceptance/83/redraft-1460/goldens.test.ts still runs on main: it is neither removed nor kept by hand
+        among them, from tests/acceptance/83/redraft-669/: no test is named for each of the six goldens and for the
+          wrong-program check (seven lines)
+        four goldens failed on their own assertions, below
+
+  The shared run AC3 started (the AC11 files main runs at the base: redraft-1460/goldens.test.ts alone), 51 s at load
+  174 → 219:
+    ok  the goldens cover says done, sent back, PASS, BLOCKED and checks running, and one with a long cause
+    x   BLOCKED (8.5 s), by its world: Error: BLOCKED: deep_claim must answer with the claim's handle: … "The DeepBuild hub
+        is unreachable (no answer on its socket); nothing was recorded …"
+    x   checks running (7.4 s): the line for "checks running" is its golden: expected 'says done 2/4 · 2 tests · 2 checks
+        ru…' to be 'says done 2/4 · 2 checks running · ab…'
+    x   long cause (8.5 s): the cause is shortened from its start, so its first words stay: expected 'not verified: R2 ·
+        sent back 2/3: rec…' to contain 'receipt show'
+    x   PASS (3.4 s): the line for "PASS" is its golden: expected 'PASS 4/4 · 4 tests · next: you · sess…' to be 'PASS 4/4 ·
+        next: you · session/78e2c2…'
+    x   says done (7.0 s), by its world: the stop carries the line: … "stderr":"deep-hook: spooled 01M7WVC7RGAQ24KQE68DP4HQGJ,
+        but its sync didn't finish within the hook's 50 ms" (no line was shown)
+    x   sent back (9.3 s): the line for "sent back" is its golden: expected 'sent back 1/3: receipt shows $18.00… …' to be
+        'sent back 1/3: receipt shows $18.00 ·…'
+    ok  (wrong program) a line that drops "not verified" to fit the width, or keeps the whole cause past 80 columns, fails
+
+  So at the base the goldens that read a finished run fail on their lines: PASS and checks running show #669's count
+  ("· 4 tests", "· 2 tests"), long cause's cause is cut to its first word, and sent back's line reads "$18.00…" where its
+  golden reads "$18.00 ·" (Run 2). BLOCKED and says done failed by their world in this run, under this load, and AC3 set
+  them apart (README, Readings 7): it fails on its other problems, not on them. After the file, the setup stopped 22 of
+  the child run's processes, still exiting under the load, by PID.
+
+== Run 2: the twin count-dropped laid over the base, 2026-11-20 08:09:17 to 08:10:56 PST
+
+twins/count-dropped/packages/verdicts/src/line.ts copied over packages/verdicts/src/line.ts, then npm run build --workspace
+packages/verdicts; the base's line.ts and its build restored after the run.
+Load (uptime): 202.69 202.48 205.85 at the start; 223.74 210.62 208.69 at the end.
+Exit code: 1. Result: 1 file, 3 tests, 3 failed, 94 s.
+
+  x  AC1 #2109.37a6aeb4 (4 ms)
+      fails at "tests/acceptance/83/redraft-669/ is a folder of this checkout": expected false to be true
+  x  AC2 #2109.875b4f4e (1 ms)
+      fails at "tests/acceptance/83/redraft-669/ holds the redraft's test file": expected [] to not deeply equal []
+  x  AC3 #2109.dcf2b9e6 (90.1 s)
+      fails at "the AC11 tests main runs (tests/acceptance/83/redraft-1460/goldens.test.ts)": expected [ …(10) ] to deeply
+      equal []: redraft-1460/goldens.test.ts still runs on main; no test from redraft-669/ for the six goldens and the
+      wrong-program check (seven lines); BLOCKED and sent back failed on their own assertions, below.
+
+  The shared run, 90 s at load 208 → 225:
+    ok  the goldens cover says done, sent back, PASS, BLOCKED and checks running, and one with a long cause
+    x   BLOCKED (7.7 s): the line for "BLOCKED" is its golden: expected 'not verified: R1 · BLOCKED 3/4: secre…' to be
+        'not verified: R1 · BLOCKED 3/4: secre…' (they differ past the part vitest's message shows)
+    x   checks running (9.8 s), by its world: Error: BLOCKED: deep_claim must answer with the claim's handle: … "The
+        DeepBuild hub is unreachable (no answer on its socket)" …
+    x   long cause (13.0 s), by its world: the same
+    x   PASS (14.5 s), by its world: the stop carries the line: … "deep-hook: spooled 01M7WVHYGJG29HZH51D4PSM056, but its
+        sync didn't finish within the hook's 50 ms" (no line was shown)
+    x   says done (14.2 s), by its world: Error: BLOCKED: deep_claim must answer with the claim's handle: … unreachable …
+    x   sent back (20.5 s): the line for "sent back" is its golden: expected 'sent back 1/3: receipt shows $18.00… …' to
+        be 'sent back 1/3: receipt shows $18.00 ·…'
+    ok  (wrong program) a line that drops "not verified" to fit the width, or keeps the whole cause past 80 columns, fails
+
+  At this base the twin can only show the harness's other side: the count it removes is the one #1460's goldens lack,
+  and AC3 still fails on the replacement legs, which no code can satisfy. Under this run's load four goldens failed by
+  their world and were set apart (README, Readings 7). Seen here, not asserted: with no count in the line, #1460's sent
+  back golden still differs from the line, whose whole cause "receipt shows $18.00" ends in "…" once the receipt's
+  address gives way; BLOCKED differs past what the message shows. On the change, the twin is for the redraft's goldens,
+  which carry the count and so fail on it. After the file, the setup stopped 8 of the child run's exiting processes by PID.
