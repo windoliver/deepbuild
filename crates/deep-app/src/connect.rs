@@ -115,8 +115,10 @@ fn button(id: &str, text: &str, filled: bool, window: &Window) -> impl IntoEleme
 /// connected, and its one button closes it).
 pub fn prompt_card(prompt: &Prompt, open: bool, window: &Window) -> Div {
     let (chrome, s) = (chrome::of(window), sizes());
+    // A card as wide as two sidebars, as a notice is at its widest; its labels take a quarter of it.
+    let wide = s.sidebar * 2.;
     let mut card = div()
-        .w(px(560.))
+        .w(wide)
         .flex()
         .flex_col()
         .gap(s.space(2))
@@ -134,7 +136,7 @@ pub fn prompt_card(prompt: &Prompt, open: bool, window: &Window) -> Div {
                 .gap(s.space(3))
                 .child(
                     div()
-                        .w(px(120.))
+                        .w(wide / 4.)
                         .text_color(chrome.ink_secondary)
                         .child(line(format!("connect:{id}:label"), label.to_string())),
                 )
