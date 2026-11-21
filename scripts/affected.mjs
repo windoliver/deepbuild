@@ -22,7 +22,7 @@
 // the selection without running it. A test that starts a package's build is selected when the change is in that
 // package or the test is in the changed file's own package; otherwise it is WIDE, and --wide also runs it (select, below).
 import { spawn, spawnSync } from 'node:child_process';
-import { closeSync, constants as modes, existsSync, mkdtempSync, openSync, readFileSync, readSync, renameSync, rmSync, writeFileSync, writeSync } from 'node:fs';
+import { closeSync, constants as modes, existsSync, mkdtempSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { availableParallelism, constants, loadavg, tmpdir } from 'node:os';
 import { dirname, join, posix, relative, sep } from 'node:path';
@@ -34,7 +34,7 @@ import { namedByConfig } from './proof-guard.mjs';
 import { childEnv } from './proof-runs.mjs';
 import { binaryNames, binaryPlan, buildBinaries, buildInPlace, watchBinaries } from './proof-binaries.mjs';
 import { claimShards, cloneBuilds, roomy } from './shards.mjs';
-import { acquire, release } from './throttle.mjs';
+import { acquire, descendants, killTree, release } from './throttle.mjs';
 
 export { cargoResults, crates, reportResults };
 
@@ -348,19 +348,57 @@ const LIGHT = /^lint scripts\/(?:repo-rules|conformance-lint|slots-check|canvas-
 // no job: each reads as run by none.
 const live = new Set();
 let stopped = null;
+// A test job whose log and report have both stood still for IDLE minutes is stopped (#2627): a test that starves its
+// worker's event loop defeats vitest's own limit (#2783), and a handle a test leaks keeps its file from exiting (#2804),
+// either for ever. The bound is above the longest stretch a test may write nothing: #1781's 120 min build hook runs
+// before its 120 min tests with no result between, and the timed lane's limits reach 240 min (#416, #140). SIGTERM to the job, and
+// 10 s later SIGKILL to every process of its tree, by PID and start, as the throttle does for a grant past its bound
+// (#2744); the job's throttle, then, ends by itself and gives its grant back. The job ends once they have, and reads
+// by what it reported before the stop. DEEP_JOB_IDLE_MIN sets the bound in minutes, for tests.
+const IDLE_MIN = Number(process.env.DEEP_JOB_IDLE_MIN ?? 360);
+const size = (path) => { try { return statSync(path).size; } catch { return 0; } };
 // The run's jobserver while its builds share it (jobserver, below); each job's end may fill it again.
 let pool = null;
 function run(logs, label, command, args, env = {}, cwd = root) {
   if (stopped) return Promise.resolve({ label, log: null, status: null, output: `stopped by ${stopped}` });
   const log = join(logs, `${label.replace(/\W+/g, '-')}.log`);
+  const report = /^(?:vitest|node)/.test(label) ? join(logs, `${label}.jsonl`) : null;
   const descriptor = openSync(log, 'w');
   const cls = label.endsWith('timed') ? 'timed' : /^(?:vitest|node)/.test(label) ? 'test' : 'build';
   const leased = [join(root, 'scripts/lease'), command, ...args];
   return new Promise((done) => {
     const child = spawn(LIGHT.test(label) ? leased[0] : process.execPath, LIGHT.test(label) ? leased.slice(1) : [join(root, 'scripts/throttle.mjs'), cls, '--wait', '30', '--', ...leased], { cwd, stdio: ['ignore', descriptor, descriptor], env: childEnv(env) });
     live.add(child);
-    child.on('error', (error) => { live.delete(child); closeSync(descriptor); done({ label, log, status: null, output: String(error) }); });
-    child.on('close', (status) => { live.delete(child); closeSync(descriptor); pool?.refill(); done({ label, log, status, output: readFileSync(log, 'utf8') }); });
+    let idle = null, watch = null;
+    if (report) {
+      let seen = '', since = performance.now();
+      watch = setInterval(() => {
+        const now = `${size(log)} ${size(report)}`;
+        if (now !== seen) [seen, since] = [now, performance.now()];
+        else if (!idle && performance.now() - since >= IDLE_MIN * 60_000) {
+          // Without a listing, nothing is stopped: the next look tries again.
+          let tree;
+          try { tree = descendants(child.pid); } catch { return; }
+          // What the report holds now stands; what a job writes as it is stopped, a cancelled file's error, is no result.
+          idle = { cut: size(report), minutes: IDLE_MIN };
+          child.kill('SIGTERM');
+          idle.killed = new Promise((killed) => setTimeout(() => {
+            try { killTree([...tree, ...child.exitCode === null && child.signalCode === null ? descendants(child.pid) : []]); } catch {}
+            // The throttle ends once its command has; one that doesn't is ended too.
+            setTimeout(() => { child.kill('SIGKILL'); killed(); }, 5_000);
+          }, 10_000));
+        }
+      }, Math.min(10_000, IDLE_MIN * 10_000));
+    }
+    child.on('error', (error) => { clearInterval(watch); live.delete(child); closeSync(descriptor); done({ label, log, status: null, output: String(error) }); });
+    child.on('close', async (status) => {
+      clearInterval(watch);
+      await idle?.killed;
+      live.delete(child);
+      closeSync(descriptor);
+      pool?.refill();
+      done({ label, log, status, output: readFileSync(log, 'utf8'), idle });
+    });
   });
 }
 
@@ -696,7 +734,9 @@ async function main(args) {
     for (const job of jobs) {
       const tests = /^(?:vitest|node)/.test(job.label);
       let report = '';
-      try { if (tests) report = readFileSync(join(logs, `${job.label}.jsonl`), 'utf8'); } catch {}
+      try { if (tests) report = readFileSync(join(logs, `${job.label}.jsonl`)).subarray(0, job.idle?.cut).toString('utf8'); } catch {}
+      // A stopped job's report may end part way through a row.
+      if (job.idle) report = report.slice(0, report.lastIndexOf('\n') + 1);
       const results = reportResults(job.cwd ?? root, report, job.label);
       // A job the throttle didn't run, for want of a grant or of its table, ran nothing, so none of its results is read:
       // it is unrun, never a failure on main. A vitest job's marker names each of its files; any other's output says so.
@@ -713,8 +753,11 @@ async function main(args) {
         failures.push(...results.failures);
         passed.push(...results.passed);
         skips.push(...results.skips ?? []);
-        // A file that reported no test didn't run, and nothing unrun passes.
-        for (const file of files.filter((file) => !report.includes(file))) failures.push({ id: named(file, '(file)'), state: results.noGrant ? 'INCONCLUSIVE' : 'FAIL', message: results.noGrant ?? 'reported no test' });
+        // A file that reported no test didn't run, and nothing unrun passes. A job stopped for standing still may have
+        // stopped part way through a file that reported, so it reads INCONCLUSIVE itself, and the run with it.
+        const stuck = job.idle && `its job reported nothing for ${job.idle.minutes} min and was stopped`;
+        if (stuck) failures.push({ id: `${job.label} job`, state: 'INCONCLUSIVE', message: `${stuck}; a file it reported may be part run (${job.log})` });
+        for (const file of files.filter((file) => !report.includes(file))) failures.push({ id: named(file, '(file)'), state: results.noGrant || stuck ? 'INCONCLUSIVE' : 'FAIL', message: results.noGrant ?? stuck ?? 'reported no test' });
       }
     }
     const baseline = JSON.parse(readFileSync(join(root, BASELINE), 'utf8'));

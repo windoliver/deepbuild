@@ -1297,6 +1297,14 @@ alone.push('tests/acceptance/953/', 'tests/acceptance/953-oracle/');
 alone.push('tests/acceptance/2738/');
 slow.push('tests/acceptance/2738/ac1-linux-build.test.ts');
 
+// #265's files (blind) build deep-gpu (ac4 deep-show), draw on the GPU and play a match; ac6 times eight movers' frame CPU.
+alone.push('tests/acceptance/265/');
+timed.push('tests/acceptance/265/ac6-budgets.test.ts');
+
+// #1576's files each start hubs on records of up to 100,000 sessions, and AC5 runs a busy process per core, at the
+// lowest priority, beside two runs: one file at a time. Every number they judge is a count, so none is timed.
+alone.push('tests/acceptance/1576/');
+
 // #1255's folder (blind) runs alone by its lane.json; ac5-budget.test.ts times conflicts over forty movers with judgeLimit.
 timed.push('tests/acceptance/1255/ac5-budget.test.ts');
 

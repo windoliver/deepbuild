@@ -27,7 +27,7 @@ import { type ChannelAsk } from './channels.js';
 import { OpenItems } from './open-items.js';
 import { Runs } from './runs.js';
 
-import { refuse, Refused, refusal, ulid, type CoreOptions, type HookMeta } from './wire.js';
+import { cursorAt, cursorOf, refuse, Refused, refusal, SETTLED_PAGE, ulid, type CoreOptions, type HookMeta } from './wire.js';
 import type { CallContext } from './session-types.js';
 
 import { letters, LATER_BEFORE_MS, signInCommands, type Obj, asRefused } from "./hub-shared.js";
@@ -74,22 +74,39 @@ export class HumanAnswers {
     return changed ?? ask.pinned_to?.ref ?? 'unpinned';
   }
 
-  /** Every ask, as the inbox projection holds it, with each one's question and options; `deep inbox` lists the open ones. */
-  async inbox(): Promise<Obj> {
-    const rows = (await this.options.services.record.raw('SELECT id, question, options FROM asks')) as { id: string; question: string | null; options: string | null }[];
+  /**
+   * The asks as a phone can afford them (#1576), with each one's question and options: every open ask, then the 25 newest
+   * settled, by when each settled; `rest`, the older settled asks no page has held, and `next`, the cursor whose `page`
+   * reads them, 25 at a time. `deep inbox` lists the open ones.
+   */
+  async inbox(params: Obj = {}): Promise<Obj> {
+    const all = await this.options.services.asks.inbox();
+    const from = params.page === undefined ? undefined : cursorAt(params.page);
+    const older = all.filter((r) => r.closed_at !== null && (!from || r.closed_at < from.at || (r.closed_at === from.at && r.ask < from.id)))
+      .sort((a, b) => b.closed_at! - a.closed_at! || (a.ask < b.ask ? 1 : -1));
+    const settled = older.slice(0, SETTLED_PAGE);
+    const page = [...(from ? [] : all.filter((r) => r.closed_at === null)), ...settled];
+    const last = settled.at(-1);
+    const rest = older.length - settled.length;
+    const raw: RecordStore['raw'] = (sql, values) => this.options.services.record.raw(sql, values);
+    const ids = JSON.stringify(page.map((r) => r.ask.slice(4)));
+    // The planted wrong program reads each ask on the page with a query of its own.
+    if (this.options.settings.plant === 'query-per-row') for (const r of page) await raw('SELECT id FROM asks WHERE id = ?', [r.ask.slice(4)]);
+    const rows = (await raw('SELECT id, question, options FROM asks WHERE id IN (SELECT value FROM json_each(?))', [ids])) as { id: string; question: string | null; options: string | null }[];
     const texts = new Map(rows.map((r) => [r.id, r]));
     // What each decision answered, for the asks it decided for you (#27).
-    const saved = new Map(((await this.options.services.record.raw('SELECT id, answer FROM decisions')) as { id: string; answer: string | null }[]).map((d) => [`decision:${d.id}`, d.answer === null ? null : JSON.parse(d.answer) as string]));
+    const decided = JSON.stringify(page.flatMap((r) => (r.decision ? [r.decision.slice('decision:'.length)] : [])));
+    const saved = new Map(((await raw('SELECT id, answer FROM decisions WHERE id IN (SELECT value FROM json_each(?))', [decided])) as { id: string; answer: string | null }[]).map((d) => [`decision:${d.id}`, d.answer === null ? null : JSON.parse(d.answer) as string]));
     // An authority ask's plan, by the digest an approval binds: what `deep inbox` shows before you answer (#69).
     // The first the core proposed for each ask, as the asks core holds it; an agent's plan.proposed binds nothing.
-    const plans = (await this.options.services.record.raw("SELECT data FROM events WHERE kind = 'plan.proposed' AND writer = 'core' ORDER BY log_pos")) as { data: string }[];
+    const plans = (await raw("SELECT data FROM events WHERE kind = 'plan.proposed' AND writer = 'core' ORDER BY log_pos")) as { data: string }[];
     const planOf = new Map<string, { hash: string; steps: unknown }>();
     for (const { data } of plans) {
       const d = JSON.parse(data) as { ask: string; hash: string; steps: unknown };
       if (!planOf.has(d.ask)) planOf.set(d.ask, { hash: d.hash, steps: d.steps });
     }
     return {
-      asks: (await this.options.services.asks.inbox()).map((row) => {
+      asks: page.map((row) => {
         const text = texts.get(row.ask.slice(4));
         const url = this.options.settings.plant === 'link-from-agent-url' ? /https?:\/\/\S+/.exec(text?.question ?? '')?.[0] : undefined;
         const opens = row.kind === 'unblock' && text?.question ? opensOf(text.question, signInCommands()) : undefined;
@@ -98,10 +115,11 @@ export class HumanAnswers {
           ...(row.outcome === 'decided_for_you' && row.decision ? { answer: saved.get(row.decision) ?? null } : {}),
         };
       }),
+      rest, next: rest && last ? cursorOf(last.closed_at!, last.ask) : null,
       // Permissions you said yes to in the terminal, offered back as decisions to save: never asks (#23).
       offers: await this.options.delivery().openOffers(),
       // The open asks' rows, as every reader of the list holds them (#1463).
-      rows: (await listRows((q) => this.options.services.record.raw(q))).filter((p) => p.row.id.startsWith('ask:')).map((p) => p.row) as unknown as Obj[],
+      rows: (await listRows((q) => raw(q))).filter((p) => p.row.id.startsWith('ask:')).map((p) => p.row) as unknown as Obj[],
     };
   }
 
