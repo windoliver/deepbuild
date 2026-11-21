@@ -220,6 +220,7 @@ impl Hub<'_> {
                 full_screen_only_3d: p == Some(Planted::FullScreenOnly3d),
                 esc_to_root: p == Some(Planted::EscToRoot),
                 pick_selects: p == Some(Planted::PickSelectsItem),
+                ..scope::Planted::default()
             };
             let scope = Scope::new(&doc, rect, display, planted)
                 .map_err(|r| json!({"code": r.code, "path": r.path}))?;

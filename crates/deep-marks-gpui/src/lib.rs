@@ -29,6 +29,8 @@ pub fn paint(mesh: &Mesh, offset: [f32; 2], color: Hsla, window: &mut Window) {
     };
     let solid = (point(0., 1.), point(0., 1.), point(0., 1.));
     let mut path = Path::new(at(first[0]));
+    // Its three vertices a triangle, sized once (#2660).
+    path.vertices.reserve_exact(mesh.indices.len() / 3 * 3);
     path.push_triangle((at(first[0]), at(first[1]), at(first[2])), solid);
     for t in triangles {
         path.push_triangle((at(t[0]), at(t[1]), at(t[2])), solid);
@@ -170,6 +172,7 @@ pub fn paint_strip(strip: &Strip, offset: [f32; 2], color: Hsla, window: &mut Wi
         return;
     };
     let mut path = Path::new(at(first[0].0));
+    path.vertices.reserve_exact(strip.corners.len() / 3 * 3);
     for t in std::iter::once(first).chain(triangles) {
         path.push_triangle(
             (at(t[0].0), at(t[1].0), at(t[2].0)),
