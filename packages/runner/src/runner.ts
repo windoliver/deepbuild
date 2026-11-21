@@ -47,11 +47,20 @@ const OUTPUT_BYTES = 8 * 1024 * 1024;
 const TEXT_CAP = 8192;
 /** A result's own subtype that names its stop. */
 const RESULT_CAUSES: Record<string, StopCause> = { error_max_turns: 'max_turns' };
-const KINDS = new Set(['draft', 'review', 'read', 'smoke', 'acceptance', 'eval']);
+const KINDS = new Set(['draft', 'review', 'read', 'smoke', 'acceptance', 'eval', 'work']);
 /** All a blind job may read (#1328): nothing of a branch, a transcript or a session has a handle here. */
 const INPUTS = new Set(['issue', 'design', 'base', 'criterion']);
-/** What refuses a kind's spec before anything of it is recorded: only an acceptance job writes, and only its issue's folder. */
+/**
+ * What refuses a kind's spec before anything of it is recorded: an acceptance job writes only its issue's folder, a
+ * work job only its workspace, and every other kind is read-only.
+ */
 function badWrites(spec: JobSpec): string | undefined {
+  if (spec.kind === 'work') {
+    if (spec.writes !== undefined || spec.inputs !== undefined || spec.checkout) return 'work job writes only its workspace, and names no inputs or checkout';
+    const folder = spec.workspace ?? '';
+    return isAbsolute(folder) && existsSync(folder) && statSync(folder).isDirectory() ? undefined : `work job runs in a folder the hub made for it, an absolute path, not ${JSON.stringify(folder)}`;
+  }
+  if (spec.workspace !== undefined) return `${spec.kind} job has no workspace`;
   if (spec.kind !== 'acceptance') return spec.writes === undefined && spec.inputs === undefined ? undefined : `${spec.kind} job is read-only and names no inputs`;
   if (!spec.checkout) return 'acceptance job runs on a checkout of its base';
   if (!/^tests\/acceptance\/\d+$/.test(spec.writes ?? '')) return `acceptance job writes only tests/acceptance/<issue>, not ${String(spec.writes)}`;
@@ -279,7 +288,7 @@ class LocalRunner implements Runner {
 
   async submit(spec: JobSpec, evaluate?: EvaluationWork): Promise<JobRecord> {
     if (this.closed) throw Error('the runner is closed');
-    if (!isObj(spec) || !KINDS.has(spec.kind)) throw Error(`a job's kind is draft, review, read, smoke, acceptance or eval, not ${String(isObj(spec) ? spec.kind : spec)}`);
+    if (!isObj(spec) || !KINDS.has(spec.kind)) throw Error(`a job's kind is draft, review, read, smoke, acceptance, eval or work, not ${String(isObj(spec) ? spec.kind : spec)}`);
     if ((spec.kind === 'eval') !== (typeof evaluate === 'function')) throw Error('an eval needs its trusted evaluator, never an agent prompt alone');
     if (typeof spec.prompt !== 'string') throw Error('a job has a prompt');
     const bad = badWrites(spec);
@@ -291,8 +300,9 @@ class LocalRunner implements Runner {
     const id = `run:${ulid(this.o.now())}`;
     const jobs = join(this.o.root, 'jobs');
     mkdirSync(jobs, { recursive: true, mode: 0o700 });
-    const folder = join(realpathSync(jobs), id.slice(4));
-    mkdirSync(folder, { mode: 0o700 });
+    // A work job's folder is its workspace; any other job's is a folder of its own under <root>/jobs/.
+    const folder = spec.workspace ? realpathSync(spec.workspace) : join(realpathSync(jobs), id.slice(4));
+    if (!spec.workspace) mkdirSync(folder, { mode: 0o700 });
     const parts = AGENTS[spec.agent];
     const home = this.o.env.HOME ?? '';
     const account = spec.account ?? (parts && home ? parts.account(home, this.o.env) : null);
@@ -308,7 +318,7 @@ class LocalRunner implements Runner {
     }, id);
     if (evaluate) await this.o.record.sync();
     if (!parts) return this.refuse(job, `no agent ${String(spec.agent)}`);
-    if (spec.writes && !parts.writing) return this.refuse(job, `${spec.agent} has no job that writes yet`);
+    if ((spec.writes || spec.workspace) && !parts.writing) return this.refuse(job, `${spec.agent} has no job that writes yet`);
     if (spec.checkout) {
       const failed = await this.checkout(folder, spec.checkout).catch((error: unknown) => (error instanceof Error ? error.message : String(error)));
       job.preparing = false;
@@ -974,8 +984,8 @@ class LocalRunner implements Runner {
     const billsKey = facts.billing.apiKeyVariables.some((name) => typeof this.o.env[name] === 'string' && this.o.env[name]);
     const token = billsKey || !home || !this.o.keychain ? undefined : await parts.token(home, this.o.keychain, this.o.env).catch(() => undefined);
     const env = { ...this.env(job.spec.agent), ...parts.reach({ temp, proxy: `http://127.0.0.1:${port}`, home, env: this.o.env, ...(token ? { token } : {}) }) };
-    // An acceptance job's one folder, there before the sandbox names it.
-    const writes = job.spec.writes ? join(job.rec.folder, job.spec.writes) : undefined;
+    // An acceptance job's one folder, there before the sandbox names it; a work job's is its workspace.
+    const writes = job.spec.writes ? join(job.rec.folder, job.spec.writes) : job.spec.workspace ? job.rec.folder : undefined;
     if (writes) mkdirSync(writes, { recursive: true });
     const grant: Grant = {
       read: [...this.programs(binary.real, parts), ...(home ? parts.signIn(home, this.o.env) : []), ...(job.spec.grant?.read ?? [])], write: [temp, ...(writes ? [writes] : [])], hosts: [`127.0.0.1:${port}`],
@@ -983,7 +993,7 @@ class LocalRunner implements Runner {
     };
     // A launch that ends in `-`, the prompt on stdin, keeps it last.
     const stdin = args.at(-1) === '-' ? args.splice(-1) : [];
-    const argv = [binary.path, ...args, ...parts.confine(job.spec.mcp ?? {}, job.spec.subagents ?? {}, job.spec.writes), ...stdin];
+    const argv = [binary.path, ...args, ...parts.confine(job.spec.mcp ?? {}, job.spec.subagents ?? {}, job.spec.writes ?? (job.spec.workspace ? '.' : undefined)), ...stdin];
     // The bytes it verified, or none: a file changed since is refused here and checked again next time.
     if (!this.unchanged(binary)) {
       this.verified.delete(job.spec.agent);
