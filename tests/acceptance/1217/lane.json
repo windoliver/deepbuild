@@ -1,0 +1,1 @@
+{ "alone": true, "why": "each file builds deep-show with cargo, draws 3D on the GPU, and two start headless Chrome with WebGPU" }
