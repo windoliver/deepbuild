@@ -1301,6 +1301,10 @@ slow.push('tests/acceptance/2738/ac1-linux-build.test.ts');
 alone.push('tests/acceptance/265/');
 timed.push('tests/acceptance/265/ac6-budgets.test.ts');
 
+// #1576's files each start hubs on records of up to 100,000 sessions, and AC5 runs a busy process per core, at the
+// lowest priority, beside two runs: one file at a time. Every number they judge is a count, so none is timed.
+alone.push('tests/acceptance/1576/');
+
 // #3016's files (blind) read process-wide gauges and the Metal device's allocated size, and frames.test.ts runs four
 // Metal suites (465, 506, 462, 166) one after another for hours; query.test.ts builds deep-show. No timing.
 alone.push('tests/acceptance/3016/');
