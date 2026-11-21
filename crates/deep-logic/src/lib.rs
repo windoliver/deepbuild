@@ -34,6 +34,7 @@ mod planted;
 pub mod play;
 pub mod point;
 pub mod probe;
+pub mod profile;
 pub mod saves;
 pub mod services;
 pub mod track;
@@ -153,7 +154,7 @@ fn flicks(seconds: f64) -> i64 {
 
 /// The piece's input track: your entries, or, with none of yours, its tour's keys as entries of
 /// writer `tour`, each at idle_after past the start plus its own time, over the bake's span.
-fn track(piece: &Piece, line: &Value, steps: i64) -> Option<Vec<Entry>> {
+fn track(piece: &Piece, line: &Value, steps: i64, planted: &Planted) -> Option<Vec<Entry>> {
     let mut entries: Vec<Entry> = match line.get("track") {
         None => Vec::new(),
         Some(t) => t
@@ -164,6 +165,8 @@ fn track(piece: &Piece, line: &Value, steps: i64) -> Option<Vec<Entry>> {
     };
     // #189: a carry record's entry reads its record by hash from where the piece's saves are kept.
     carry::resolve(piece, saves_dir(line).as_deref(), &mut entries).ok()?;
+    // #276: a profile entry's arrays, by hash from the same folder where the track didn't carry them.
+    profile::resolve(saves_dir(line).as_deref(), planted, &mut entries).ok()?;
     // #542: a text or scroll control's entry holds only what the control may (Control: text,
     // Control: scroll); any other refuses the track.
     let fits = |e: &Entry| {
@@ -552,7 +555,7 @@ impl Logic {
             .and_then(Value::as_i64)
             .filter(|n| *n >= 0)
             .ok_or_else(|| bad("steps"))?;
-        let entries = track(&piece, line, steps).ok_or_else(|| bad("track"))?;
+        let entries = track(&piece, line, steps, &self.planted).ok_or_else(|| bad("track"))?;
         let restores = forks(line.get("restores"), "from").ok_or_else(|| bad("restores"))?;
         let probes = forks(line.get("probes"), "at").ok_or_else(|| bad("probes"))?;
         let seeks = seeks_of(line.get("seeks")).ok_or_else(|| bad("seeks"))?;
@@ -630,13 +633,14 @@ impl Logic {
         if let Some(f) = carries.iter().find(|c| c["ok"] == json!(false)) {
             return Err(f.clone());
         }
+        let profiles = profile::reply(&mut world);
         let saves = saves::written(&mut world)?;
         let frames = frames(&piece, line.get("frames"), &rec, None)?;
         let budgets = self.budgets(&piece, &entries, &rec)?;
         let keys = keys(&piece, &entries);
         Ok(json!({
             "ok": true, "items": items(&piece), "keys": keys, "steps": rec.steps_json(&piece, only), "occurrences": rec.occurrences(&piece), "checkpoints": rec.checkpoints, "ranges": rec.ranges_json(&piece, only), "ring": world.ring(),
-            "traps": libraries_in(&piece, rec.traps), "issues": rec.issues, "budgets": budgets, "saves": saves, "carries": carries, "frames": frames, "restores": restores_out, "probes": probes_out, "seeks": seeks_out, "peeks": peeks,
+            "traps": libraries_in(&piece, rec.traps), "issues": rec.issues, "budgets": budgets, "saves": saves, "carries": carries, "profiles": profiles, "frames": frames, "restores": restores_out, "probes": probes_out, "seeks": seeks_out, "peeks": peeks,
             "track": entries.iter().map(Entry::to_json).collect::<Vec<_>>(), "closed": world.branches.closed_json(),
         }))
     }
@@ -650,7 +654,7 @@ impl Logic {
             .and_then(Value::as_i64)
             .filter(|n| *n >= 0)
             .ok_or_else(|| bad("steps"))?;
-        let entries = track(&piece, line, steps).ok_or_else(|| bad("track"))?;
+        let entries = track(&piece, line, steps, &self.planted).ok_or_else(|| bad("track"))?;
         let at: Vec<i64> = line
             .get("at")
             .and_then(Value::as_array)
@@ -686,7 +690,9 @@ impl Logic {
             .and_then(Value::as_i64)
             .filter(|n| *n >= 0)
             .ok_or_else(|| bad("steps"))?;
-        let entries = track(&piece, line, steps).ok_or_else(|| bad("track"))?;
+        let mut entries = track(&piece, line, steps, &self.planted).ok_or_else(|| bad("track"))?;
+        // #276: a check's replica starts with zeros unless the call names a fixture record.
+        profile::fixture(&piece, line, &self.planted, &mut entries)?;
         if !piece.items.windows(2).all(|w| w[0].step == w[1].step) {
             return Err(bad("checks need every item at one step rate"));
         }
@@ -981,7 +987,7 @@ impl Logic {
             .and_then(Value::as_i64)
             .filter(|n| *n >= 0)
             .ok_or_else(|| bad("steps"))?;
-        let entries = track(&piece, line, steps).ok_or_else(|| bad("track"))?;
+        let entries = track(&piece, line, steps, &self.planted).ok_or_else(|| bad("track"))?;
         // The web runner fills no reading's slot yet: a plan it would run short is refused.
         if !piece.sources.is_empty() {
             return Err(bad("the web player doesn't read readings yet"));
@@ -1002,6 +1008,7 @@ impl Logic {
                             piece::Read::Array { item, offset } => ("array", json!(item), *offset),
                             piece::Read::Seed => ("seed", Value::Null, 0),
                             piece::Read::Carry => ("carry", Value::Null, 0),
+                            piece::Read::Profile => ("profile", Value::Null, 0),
                             piece::Read::Mirror(_) | piece::Read::None => ("write", Value::Null, 0),
                         };
                         json!({"region": e.region, "name": e.name, "offset": e.offset, "size": e.size, "type": e.ty, "read": kind, "from": from, "from_offset": offset})
@@ -1173,7 +1180,9 @@ impl Logic {
 
     fn open(&mut self, line: &Value) -> Result<Value, Value> {
         let piece = Rc::new(self.check(line)?);
-        let entries = track(&piece, line, 0).ok_or_else(|| bad("track"))?;
+        let mut entries = track(&piece, line, 0, &self.planted).ok_or_else(|| bad("track"))?;
+        // #276: the piece starting in the app reopens its newest whole profile record.
+        let reopened = profile::reopen(&piece, line, &self.planted, &mut entries);
         let mut rec = Record::default();
         let mut world = World::new(
             piece.clone(),
@@ -1200,7 +1209,11 @@ impl Logic {
         }
         let session = format!("s{}", self.sessions.len() + 1);
         self.sessions.insert(session.clone(), world);
-        Ok(json!({"ok": true, "session": session, "items": items(&piece)}))
+        let mut out = json!({"ok": true, "session": session, "items": items(&piece)});
+        if let Some(r) = reopened {
+            out["profile"] = r;
+        }
+        Ok(out)
     }
 
     fn step(&mut self, line: &Value) -> Result<Value, Value> {
@@ -1216,8 +1229,10 @@ impl Logic {
         let mut rec = Record::default();
         w.run(to + 1, &mut rec, &mut |_, _| {});
         let track: Vec<Value> = w.entries().iter().map(Entry::to_json).collect();
+        let profiles = profile::reply(w);
         let saves = saves::written(w)?;
         Ok(json!({
+            "profiles": profiles,
             "ok": true,
             "step": to,
             "failed": w.failed(),

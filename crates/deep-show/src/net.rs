@@ -125,6 +125,8 @@ pub struct MatchCall {
     on: Vec<String>,
     seeks: Vec<(u8, i64)>,
     full: bool,
+    /// #276: each copy's own saves folder, its viewer's store (`saves_dirs: {"<player>": path}`).
+    saves_dirs: BTreeMap<u8, PathBuf>,
 }
 
 fn plays_of(v: &Value) -> Option<Vec<Play>> {
@@ -295,6 +297,19 @@ fn parse_match(c: &Map<String, Value>) -> Option<MatchCall> {
                     Some((
                         player(s.get("player")?)?,
                         s.get("step")?.as_i64().filter(|k| *k >= 0)?,
+                    ))
+                })
+                .collect::<Option<_>>()?,
+        },
+        saves_dirs: match c.get("saves_dirs") {
+            None => BTreeMap::new(),
+            Some(d) => d
+                .as_object()?
+                .iter()
+                .map(|(p, dir)| {
+                    Some((
+                        player(&json!(p.parse::<u64>().ok()?))?,
+                        dir.as_str()?.into(),
                     ))
                 })
                 .collect::<Option<_>>()?,
@@ -473,7 +488,11 @@ impl Hub<'_> {
             faults: m.faults.clone(),
             planted,
             // #550: the planted copy that stamps a peer's entries with its own player is copy 1.
-            planted_on: (planted == Planted::StampsOwnPlayer).then_some(1),
+            planted_on: matches!(
+                planted,
+                Planted::StampsOwnPlayer | Planted::ProfileFromOwnStore
+            )
+            .then_some(1),
             shows: m.renders.iter().map(|(p, t)| (*p, flicks(*t))).collect(),
             log: m.log,
             defect: m.plant.clone(),
@@ -488,8 +507,13 @@ impl Hub<'_> {
         // #297: every copy checks each entry to a text control an entry text shows alike.
         let form = self.forms.get(&m.doc).cloned().unwrap_or_default();
         let (ty, lax) = (self.entry_type(&form), self.entry_lax());
-        let make = &mut |_: u8| {
+        let dirs = m.saves_dirs.clone();
+        let make = &mut |p: u8| {
             let mut l = Logic::new(piece.clone(), &track, true)?;
+            // #276: the newest whole profile record in the copy's own folder, brought to step 0.
+            l.brings = dirs
+                .get(&p)
+                .and_then(|d| deep_logic::profile::brought(&piece, d));
             l.rounds = rounds;
             l.plant_ring(ring);
             l.worlds(&doc)?;
@@ -532,8 +556,20 @@ impl Hub<'_> {
         let copies: Vec<Value> = played
             .copies
             .iter()
-            .map(|c| {
+            .enumerate()
+            .map(|(i, c)| {
                 let mut report = c.report();
+                // #276: the profile records its confirmed steps wrote, into its own folder.
+                if let Some(dir) = m.saves_dirs.get(&(i as u8 + 1)) {
+                    let upto = c.record()["confirmed"].as_i64().unwrap_or(-1);
+                    let written: Vec<Value> = c.sim().profiles(upto).into_iter().map(|r| {
+                        match deep_logic::profile::write(dir, &r["record"]) {
+                            Ok((hash, file)) => json!({"item": r["item"], "step": r["step"], "hash": hash, "file": file}),
+                            Err(e) => json!({"ok": false, "code": "profile_failed", "step": r["step"], "what": e}),
+                        }
+                    }).collect();
+                    report.insert("profiles".into(), json!(written));
+                }
                 report.insert("steps".into(), json!(c.sim().rows));
                 report.insert("track".into(), json!(s.track));
                 // #297: a refusal of an entry text's range names its reason and grapheme.
@@ -675,7 +711,12 @@ impl Hub<'_> {
             return Value::Null;
         };
         let state = self.scopes.get(panel).and_then(|s| s.join.state.clone());
-        let mut p = prompt::prompt(&cfg.host, cfg.players, &state.unwrap_or(State::Open));
+        let mut p = prompt::prompt(
+            &cfg.host,
+            cfg.players,
+            cfg.controls.get(deep_net::kind::PROFILE).is_some(),
+            &state.unwrap_or(State::Open),
+        );
         p["button"] = json!(self.join_button(panel));
         p
     }
