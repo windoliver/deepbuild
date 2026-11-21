@@ -1,0 +1,49 @@
+# Runs for tests/acceptance/1097-redraft-defaults on main 8b1b2bfce92b06196310cc0b198260d0cbc158dc (Linux arm64 dev box, load 160-450)
+# Each in a systemd unit capped at MemoryMax=24G, CARGO_BUILD_JOBS=2. Paths redacted; trimmed to results and failing assertions.
+
+## 1. The frozen originals on main: both wrong-program tests fail, the pinned reader failing closed on main's defaults
+## npx vitest run --root tests/acceptance/1097 depth.test.ts computed.test.ts --no-file-parallelism --testTimeout=600000
+     ✓ AC1 with t-push installed, "$(printf git)" push origin main and G=git; "$G" push origin main are each denied by it, $(printf git) named, hub up and stopped, and "$CC" -o app main.c is allowed 4910ms
+     × AC1 (wrong program) deep-hook on the merge base reads the program as empty, allows the push and fails this test, naming the call 19568ms
+     ✓ AC2 sh -c 13 deep around pkill node (16470 characters) is denied by no-kill-by-name, saying it nests past what the reader reads, hub up and stopped 5772ms
+     × AC2 (wrong program) a reader that stops at its depth and allows the call (deep-hook on the merge base) fails this test, naming the depth 2556ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  computed.test.ts > AC1 #1097.35142c93 computed pushes are denied by the fail_closed push entry, naming the unreadable program; "$CC" runs > AC1 (wrong program) deep-hook on the merge base reads the program as empty, allows the push and fails this test, naming the call
+AssertionError: the merge base allows `"$(printf git)" push origin main` with the hub up: exit 2 after 34.8 ms, stdout "", stderr "deep-hook: spooled 01M7XXTZ73HBS9Q43279QM5ZNA, but its sync didn't finish within the hook's 50 ms\nDeepBuild blocked this: ~/.deepbuild/rules.json has an entry no-delete-past-worktree that isn't a guard@1 entry, so deep-hook can't check its guards while the hub doesn't answer. Fix that file, then retry.\n": expected 'deny' to be 'allow' // Object.is equality
+ FAIL  depth.test.ts > AC2 #1097.68b4ff24 a line nesting sh -c 13 deep around pkill node is denied by the kill-by-name entry, saying it nests past the reader > AC2 (wrong program) a reader that stops at its depth and allows the call (deep-hook on the merge base) fails this test, naming the depth
+AssertionError: the failure names the depth: expected 'the line nesting sh -c 12 deep around…' to match /depth of 12/
+      Tests  2 failed | 2 passed (4)
+
+## 2. The redraft on main: all four pass (each file's right-program test, and the twin that meets the defaults it shipped with)
+## npx vitest run --root tests/acceptance/1097-redraft-defaults --no-file-parallelism --testTimeout=600000
+ ✓ computed.test.ts (2 tests) 22634ms
+   ✓ AC1 #1097.35142c93 computed pushes are denied by the fail_closed push entry, naming the unreadable program; "$CC" runs (2)
+     ✓ AC1 with t-push installed, "$(printf git)" push origin main and G=git; "$G" push origin main are each denied by it, $(printf git) named, hub up and stopped, and "$CC" -o app main.c is allowed 10127ms
+     ✓ AC1 (wrong program) deep-hook on the merge base reads the program as empty, allows the push and fails this test, naming the call (redraft defaults) 9702ms
+ ✓ depth.test.ts (2 tests) 14583ms
+   ✓ AC2 #1097.68b4ff24 a line nesting sh -c 13 deep around pkill node is denied by the kill-by-name entry, saying it nests past the reader (2)
+     ✓ AC2 sh -c 13 deep around pkill node (16470 characters) is denied by no-kill-by-name, saying it nests past what the reader reads, hub up and stopped 6185ms
+     ✓ AC2 (wrong program) a reader that stops at its depth and allows the call (deep-hook on the merge base) fails this test, naming the depth (redraft defaults) 5025ms
+      Tests  4 passed (4)
+## node node_modules/typescript/bin/tsc -p tests/acceptance/1097-redraft-defaults/tsconfig.json
+exit 0
+
+## 3. Mutant: a scratch copy of this folder with the twin slot given main's own deep-hook (buildDeepHook in place of
+## buildBase, still with the merge base's defaults), a reader that is right. Both twins fail, as they must. Copy deleted after.
+## npx vitest run --root <copy> --no-file-parallelism --testTimeout=600000 -t "wrong program"
+     × AC1 (wrong program) deep-hook on the merge base reads the program as empty, allows the push and fails this test, naming the call (redraft defaults) 9234ms
+     × AC2 (wrong program) a reader that stops at its depth and allows the call (deep-hook on the merge base) fails this test, naming the depth (redraft defaults) 5361ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: deep-hook on the merge base must fail the criterion: expected null not to be null
+AssertionError: the reader that stops at its depth must fail the criterion: expected null not to be null
+      Tests  2 failed | 2 skipped (4)
+
+## 4. node scripts/affected.mjs --list tests/acceptance/1097/depth.test.ts tests/acceptance/1097/computed.test.ts (with this change's lanes.mjs)
+SKIP tests/acceptance/1097/computed.test.ts (by hand)
+SKIP tests/acceptance/1097/depth.test.ts (by hand)
+
+## 5. node scripts/affected.mjs on this folder's three files, twice: no test grant came within 30 min either time (shared slots held)
+INCONCLUSIVE no grant: no test grant came within 30 min
+INCONCLUSIVE tests/acceptance/1097-redraft-defaults/computed.test.ts: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1097-redraft-defaults/depth.test.ts: not run, for want of a test grant
+INCONCLUSIVE affected: 0 new, 0 already failing on main, 2 inconclusive or blocked, 0 listed skips, 0 passed, in 1834 s at load 166; no job started

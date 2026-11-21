@@ -1,0 +1,163 @@
+# The redraft PASSES at the base f17fa347c: main already meets #2741's criterion (#2743's jobserver). So this file holds
+# that passing run, and the runs that show the test fails on a wrong program. Home paths read ~/, the sandbox's
+# temporary folder $TMPDIR/, and this job's scratch folder $SCRATCH/. Each run: node --test --test-reporter=spec
+# tests/acceptance/2741-redraft-2820/cores.test.mjs, in a checkout whose scripts/ is the one named.
+
+## 1. The base, f17fa347c, unchanged: PASS (peak 19 rustc under the run's grants on 20 cores)
+# started 2026-11-19T04:13:42Z, one-minute load 64.55 at the start and 65.50 at the end, 20 cores (os.availableParallelism()), Linux 7.0.0-1025-nvidia, in a systemd-run --user unit (MemoryMax=24G; the unit's CARGO_BUILD_JOBS=2 is stripped by the test).
+✔ #2741 AC: an affected.mjs run whose alone block builds with cargo in three shards, each on a target/ that must recompile, never has more rustc processes under its grant than the machine has cores, sampled once a second (15859.991691ms)
+ℹ peak: 19 rustc processes under the run's grant at +4 s (shard 3: 17, shard 2: 1, shard 1: 1), on 20 cores
+ℹ rustc processes under the run's grant, read once a second (time from the run's start: count; 16 readings, 0 failed, the other 3 counted 0): +3 s: 18, +4 s: 19, +5 s: 19, +6 s: 19, +7 s: 19, +8 s: 19, +9 s: 18, +10 s: 17, +11 s: 18, +12 s: 17, +13 s: 14, +14 s: 6, +15 s: 1
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 15924.009533
+EXIT 0
+
+## 2. Wrong program: the base's scripts/ with the jobserver never handed to cargo: FAIL (peak 60 on 20 cores)
+# A copy of this checkout (scripts/, this folder, node_modules linked) with one line of scripts/affected.mjs changed:
+#   diff -r ~/deepbuild/.claude/worktrees/agent-a6be54733c4da31a4/scripts/affected.mjs scripts/affected.mjs
+#   388c388
+#   <   process.env.CARGO_MAKEFLAGS = `-j --jobserver-auth=fifo:${fifo}`;
+#   ---
+#   >   // planted wrong program: the jobserver is never handed to cargo
+# started 2026-11-19T04:13:58Z, one-minute load 65.50 at the start and 67.60 at the end, 20 cores (os.availableParallelism()), Linux 7.0.0-1025-nvidia, in a systemd-run --user unit (MemoryMax=24G; the unit's CARGO_BUILD_JOBS=2 is stripped by the test).
+✖ #2741 AC: an affected.mjs run whose alone block builds with cargo in three shards, each on a target/ that must recompile, never has more rustc processes under its grant than the machine has cores, sampled once a second (13128.777518ms)
+ℹ peak: 60 rustc processes under the run's grant at +3 s (shard 3: 20, shard 2: 20, shard 1: 20), on 20 cores
+ℹ rustc processes under the run's grant, read once a second (time from the run's start: count; 13 readings, 0 failed, the other 3 counted 0): +3 s: 60, +4 s: 60, +5 s: 60, +6 s: 60, +7 s: 55, +8 s: 52, +9 s: 45, +10 s: 30, +11 s: 10, +12 s: 1
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 13195.270696
+
+✖ failing tests:
+
+test at tests/acceptance/2741-redraft-2820/cores.test.mjs:170:1
+✖ #2741 AC: an affected.mjs run whose alone block builds with cargo in three shards, each on a target/ that must recompile, never has more rustc processes under its grant than the machine has cores, sampled once a second (13128.777518ms)
+  AssertionError [ERR_ASSERTION]: 60 rustc processes ran under the run's grant at once at +3 s (shard 3: 20, shard 2: 20, shard 1: 20), more than the machine's 20 cores; 8 of 13 readings were above 20
+  rustc processes under the run's grant, read once a second (time from the run's start: count; 13 readings, 0 failed, the other 3 counted 0): +3 s: 60, +4 s: 60, +5 s: 60, +6 s: 60, +7 s: 55, +8 s: 52, +9 s: 45, +10 s: 30, +11 s: 10, +12 s: 1
+  the machine's cores: 20
+  builds:
+  {"file":"tests/acceptance/1523/fixture-2741.test.mjs","root":"$TMPDIR/deep-2741r-9z3Wt8/home/deepbuild-shards/3","pid":1068739,"at":1795061640810,"event":"start"}
+  {"file":"tests/acceptance/149/fixture-2741.test.ts","root":"$TMPDIR/deep-2741r-9z3Wt8/home/deepbuild-shards/2","pid":1069095,"at":1795061641172,"event":"start"}
+  {"file":"tests/acceptance/149-redraft-ac5/fixture-2741.test.ts","root":"$TMPDIR/deep-2741r-9z3Wt8/home/deepbuild-shards/1","pid":1069201,"at":1795061641391,"event":"start"}
+  {"file":"tests/acceptance/149-redraft-ac5/fixture-2741.test.ts","root":"$TMPDIR/deep-2741r-9z3Wt8/home/deepbuild-shards/1","pid":1069201,"at":1795061650377,"event":"end","status":0,"compiled":21,"error":null,"tail":"   Compiling planted-leaf-19 v0.1.0 ($TMPDIR/deep-2741r-9z3Wt8/home/deepbuild-shards/1/crates/planted-leaf-19)\n   Compiling planted-bin v0.1.0 ($TMPDIR/deep-2741r-9z3Wt8/home/deepbuild-shards/1/crates/planted-bin)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.96s"}
+  {"file":"tests/acceptance/1523/fixture-2741.test.mjs","root":"$TMPDIR/deep-2741r-9z3Wt8/home/deepbuild-shards/3","pid":1068739,"at":1795061650542,"event":"end","status":0,"compiled":21,"error":null,"tail":"   Compiling planted-leaf-13 v0.1.0 ($TMPDIR/deep-2741r-9z3Wt8/home/deepbuild-shards/3/crates/planted-leaf-13)\n   Compiling planted-bin v0.1.0 ($TMPDIR/deep-2741r-9z3Wt8/home/deepbuild-shards/3/crates/planted-bin)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 9.71s"}
+  {"file":"tests/acceptance/149/fixture-2741.test.ts","root":"$TMPDIR/deep-2741r-9z3Wt8/home/deepbuild-shards/2","pid":1069095,"at":1795061650899,"event":"end","status":0,"compiled":21,"error":null,"tail":"   Compiling planted-leaf-09 v0.1.0 ($TMPDIR/deep-2741r-9z3Wt8/home/deepbuild-shards/2/crates/planted-leaf-09)\n   Compiling planted-bin v0.1.0 ($TMPDIR/deep-2741r-9z3Wt8/home/deepbuild-shards/2/crates/planted-bin)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 9.69s"}
+  exit 0
+  stdout:
+  …ets.test.ts tests/acceptance/556-redraft-ac5/ac5-budgets.test.ts tests/acceptance/2516/timing.test.ts tests/acceptance/457/ac9-budgets.test.ts tests/acceptance/1636/ac8-budget.test.ts tests/acceptance/210/ac8-budgets.test.ts tests/acceptance/2031/ac8-budget.test.ts tests/acceptance/182/ac11-budgets.test.ts tests/acceptance/192/voxel/ac10-budgets.test.ts tests/acceptance/416/layouts/budgets.test.ts tests/acceptance/1015/budgets.test.ts tests/acceptance/1017/budgets.test.ts tests/acceptance/1425/budgets.test.ts tests/acceptance/148/budgets.test.ts tests/acceptance/149/budgets.test.ts tests/acceptance/1515/budgets.test.ts tests/acceptance/160/budgets.test.ts tests/acceptance/167/budgets.test.ts tests/acceptance/222/budgets.test.ts tests/acceptance/308/budgets.test.ts tests/acceptance/405/budgets.test.ts tests/acceptance/45/budgets.test.ts tests/acceptance/67/budgets.test.ts tests/acceptance/1555/budget-load.test.mjs tests/acceptance/408/machines.test.ts tests/acceptance/501/exports.test.ts tests/acceptance/824/sessions/budgets.long.test.ts tests/acceptance/990/access.test.ts tests/acceptance/990/queries.test.ts tests/acceptance/990/taste.test.ts tests/acceptance/103-redraft-1830/budgets.test.ts tests/acceptance/365-redraft-1830/budgets.test.ts tests/acceptance/262-redraft-1830/budgets.test.ts tests/acceptance/761-redraft-1830/budgets.test.ts tests/acceptance/1098-redraft-1830/budgets.test.ts tests/acceptance/148-redraft-1830/budgets.test.ts tests/acceptance/417-redraft-1830/budgets.test.ts tests/acceptance/1425-redraft-1830/budgets.test.ts tests/acceptance/149-redraft-1830/budgets.test.ts tests/acceptance/311-redraft-1830/budgets.test.ts tests/acceptance/1018-redraft-1830/budgets.test.ts tests/acceptance/166-redraft-1830/budgets.test.ts tests/acceptance/268-redraft-1830/budgets.test.ts tests/acceptance/465-redraft-1830/budgets.test.ts tests/acceptance/968-redraft-1830/budgets.test.ts tests/acceptance/124-redraft-1830/ac5-budgets.live.test.ts tests/acceptance/1427-redraft-1830/ac8-budget.live.test.ts tests/acceptance/1830/ac2-timing.test.ts tests/acceptance/568-redraft-1830/judge.test.mjs tests/acceptance/903/ac6-export.test.ts tests/acceptance/508/ac6-effects.test.ts tests/acceptance/1381/ac6-budget.test.ts tests/acceptance/1992/cost.test.ts tests/acceptance/2650/budgets.long.test.ts
+  PASS affected: 0 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 3 passed, in 12 s at load 68; logs in $TMPDIR/deep-2741r-9z3Wt8/tmp/deep-affected-2dxf0W
+  
+  stderr:
+  
+      at TestContext.<anonymous> (file://$SCRATCH/wrong/tests/acceptance/2741-redraft-2820/cores.test.mjs:230:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+EXIT 1
+
+## 3. The design as #2820 leaves it: a stand-in that pre-builds the planted binary in each shard first: PASS
+# Not #2820's code (this job may not read it): a copy of the base's scripts/affected.mjs that, after its own binaries
+# and before the alone block, runs the planted test's written-out `cargo build --offline -p planted-bin` in each shard,
+# one at a time, then once more to show the shard's target/ is fresh (the original test's precondition then fails: its
+# build would compile 0 of 21 crates). Its record, then the run: the planted builds still compile all 21 crates, and
+# the peak (20) is the stand-in's own one-at-a-time builds ("other"), within the cores; a pass asserts each planted
+# build compiled all 21 crates and was seen under the grant (the readings from +26 s are theirs).
+#   0a1
+#   > import { appendFileSync } from 'node:fs';
+#   505a507,511
+#   >     // stand-in for #2820's pre-build: each shard's written-out `cargo build --offline -p planted-bin`, one at a time, then a second build showing it fresh
+#   >     for (const { dir } of shards) for (const pass of ['build', 'recheck']) {
+#   >       const r = spawnSync('cargo', ['build', '--offline', '-p', 'planted-bin'], { cwd: dir, encoding: 'utf8' });
+#   >     }
+#   record: {"dir":"$TMPDIR/deep-2741r-u9Apj6/home/deepbuild-shards/1","pass":"build","status":0,"compiled":21}
+#   record: {"dir":"$TMPDIR/deep-2741r-u9Apj6/home/deepbuild-shards/1","pass":"recheck","status":0,"compiled":0}
+#   record: {"dir":"$TMPDIR/deep-2741r-u9Apj6/home/deepbuild-shards/2","pass":"build","status":0,"compiled":21}
+#   record: {"dir":"$TMPDIR/deep-2741r-u9Apj6/home/deepbuild-shards/2","pass":"recheck","status":0,"compiled":0}
+#   record: {"dir":"$TMPDIR/deep-2741r-u9Apj6/home/deepbuild-shards/3","pass":"build","status":0,"compiled":21}
+#   record: {"dir":"$TMPDIR/deep-2741r-u9Apj6/home/deepbuild-shards/3","pass":"recheck","status":0,"compiled":0}
+# started 2026-11-19T04:12:27Z, one-minute load 26.83 at the start and 74.32 at the end, 20 cores (os.availableParallelism()), Linux 7.0.0-1025-nvidia, in a systemd-run --user unit (MemoryMax=24G; the unit's CARGO_BUILD_JOBS=2 is stripped by the test).
+✔ #2741 AC: an affected.mjs run whose alone block builds with cargo in three shards, each on a target/ that must recompile, never has more rustc processes under its grant than the machine has cores, sampled once a second (45295.209253ms)
+ℹ peak: 20 rustc processes under the run's grant at +3 s (other: 20), on 20 cores
+ℹ rustc processes under the run's grant, read once a second (time from the run's start: count; 45 readings, 0 failed, the other 4 counted 0): +3 s: 20, +4 s: 20, +5 s: 20, +6 s: 18, +7 s: 13, +8 s: 4, +9 s: 2, +10 s: 20, +11 s: 20, +12 s: 19, +13 s: 16, +14 s: 11, +15 s: 5, +16 s: 1, +17 s: 20, +18 s: 20, +19 s: 17, +20 s: 15, +21 s: 12, +22 s: 7, +23 s: 6, +24 s: 4, +26 s: 17, +27 s: 19, +28 s: 19, +29 s: 19, +30 s: 18, +31 s: 19, +32 s: 19, +33 s: 19, +34 s: 17, +35 s: 19, +36 s: 18, +37 s: 18, +38 s: 18, +39 s: 18, +40 s: 16, +41 s: 11, +42 s: 5, +43 s: 2, +44 s: 1
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 45414.451984
+EXIT 0
+
+## 4. Wrong program under that stand-in: the pre-build of 3 with the jobserver of 2 removed too: FAIL (peak 60)
+# A run that pre-builds before its test grant, as #2820 has it, still fails this test when its shards' builds don't
+# share the jobserver.
+#   record: {"dir":"$TMPDIR/deep-2741r-smeb1Q/home/deepbuild-shards/1","pass":"build","status":0,"compiled":21}
+#   record: {"dir":"$TMPDIR/deep-2741r-smeb1Q/home/deepbuild-shards/1","pass":"recheck","status":0,"compiled":0}
+#   record: {"dir":"$TMPDIR/deep-2741r-smeb1Q/home/deepbuild-shards/2","pass":"build","status":0,"compiled":21}
+#   record: {"dir":"$TMPDIR/deep-2741r-smeb1Q/home/deepbuild-shards/2","pass":"recheck","status":0,"compiled":0}
+#   record: {"dir":"$TMPDIR/deep-2741r-smeb1Q/home/deepbuild-shards/3","pass":"build","status":0,"compiled":21}
+#   record: {"dir":"$TMPDIR/deep-2741r-smeb1Q/home/deepbuild-shards/3","pass":"recheck","status":0,"compiled":0}
+# started 2026-11-19T04:14:11Z, one-minute load 67.60 at the start and 81.06 at the end, 20 cores (os.availableParallelism()), Linux 7.0.0-1025-nvidia, in a systemd-run --user unit (MemoryMax=24G; the unit's CARGO_BUILD_JOBS=2 is stripped by the test).
+✖ #2741 AC: an affected.mjs run whose alone block builds with cargo in three shards, each on a target/ that must recompile, never has more rustc processes under its grant than the machine has cores, sampled once a second (36451.078118ms)
+ℹ peak: 60 rustc processes under the run's grant at +25 s (shard 3: 20, shard 2: 20, shard 1: 20), on 20 cores
+ℹ rustc processes under the run's grant, read once a second (time from the run's start: count; 36 readings, 0 failed, the other 3 counted 0): +3 s: 20, +4 s: 20, +5 s: 17, +6 s: 14, +7 s: 12, +8 s: 10, +9 s: 3, +10 s: 20, +11 s: 20, +12 s: 20, +13 s: 18, +14 s: 14, +15 s: 10, +16 s: 2, +17 s: 20, +18 s: 20, +19 s: 20, +20 s: 18, +21 s: 14, +22 s: 7, +23 s: 1, +24 s: 17, +25 s: 60, +26 s: 60, +27 s: 58, +28 s: 56, +29 s: 56, +30 s: 52, +31 s: 50, +32 s: 41, +33 s: 33, +34 s: 24, +35 s: 8
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 36538.327775
+
+✖ failing tests:
+
+test at tests/acceptance/2741-redraft-2820/cores.test.mjs:170:1
+✖ #2741 AC: an affected.mjs run whose alone block builds with cargo in three shards, each on a target/ that must recompile, never has more rustc processes under its grant than the machine has cores, sampled once a second (36451.078118ms)
+  AssertionError [ERR_ASSERTION]: 60 rustc processes ran under the run's grant at once at +25 s (shard 3: 20, shard 2: 20, shard 1: 20), more than the machine's 20 cores; 10 of 36 readings were above 20
+  rustc processes under the run's grant, read once a second (time from the run's start: count; 36 readings, 0 failed, the other 3 counted 0): +3 s: 20, +4 s: 20, +5 s: 17, +6 s: 14, +7 s: 12, +8 s: 10, +9 s: 3, +10 s: 20, +11 s: 20, +12 s: 20, +13 s: 18, +14 s: 14, +15 s: 10, +16 s: 2, +17 s: 20, +18 s: 20, +19 s: 20, +20 s: 18, +21 s: 14, +22 s: 7, +23 s: 1, +24 s: 17, +25 s: 60, +26 s: 60, +27 s: 58, +28 s: 56, +29 s: 56, +30 s: 52, +31 s: 50, +32 s: 41, +33 s: 33, +34 s: 24, +35 s: 8
+  the machine's cores: 20
+  builds:
+  {"file":"tests/acceptance/1523/fixture-2741.test.mjs","root":"$TMPDIR/deep-2741r-smeb1Q/home/deepbuild-shards/3","pid":1080612,"at":1795061675785,"event":"start"}
+  {"file":"tests/acceptance/149/fixture-2741.test.ts","root":"$TMPDIR/deep-2741r-smeb1Q/home/deepbuild-shards/2","pid":1081116,"at":1795061676661,"event":"start"}
+  {"file":"tests/acceptance/149-redraft-ac5/fixture-2741.test.ts","root":"$TMPDIR/deep-2741r-smeb1Q/home/deepbuild-shards/1","pid":1081139,"at":1795061676713,"event":"start"}
+  {"file":"tests/acceptance/149/fixture-2741.test.ts","root":"$TMPDIR/deep-2741r-smeb1Q/home/deepbuild-shards/2","pid":1081116,"at":1795061687479,"event":"end","status":0,"compiled":21,"error":null,"tail":"   Compiling planted-leaf-19 v0.1.0 ($TMPDIR/deep-2741r-smeb1Q/home/deepbuild-shards/2/crates/planted-leaf-19)\n   Compiling planted-bin v0.1.0 ($TMPDIR/deep-2741r-smeb1Q/home/deepbuild-shards/2/crates/planted-bin)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 10.79s"}
+  {"file":"tests/acceptance/1523/fixture-2741.test.mjs","root":"$TMPDIR/deep-2741r-smeb1Q/home/deepbuild-shards/3","pid":1080612,"at":1795061687499,"event":"end","status":0,"compiled":21,"error":null,"tail":"   Compiling planted-leaf-05 v0.1.0 ($TMPDIR/deep-2741r-smeb1Q/home/deepbuild-shards/3/crates/planted-leaf-05)\n   Compiling planted-bin v0.1.0 ($TMPDIR/deep-2741r-smeb1Q/home/deepbuild-shards/3/crates/planted-bin)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 11.69s"}
+  {"file":"tests/acceptance/149-redraft-ac5/fixture-2741.test.ts","root":"$TMPDIR/deep-2741r-smeb1Q/home/deepbuild-shards/1","pid":1081139,"at":1795061687529,"event":"end","status":0,"compiled":21,"error":null,"tail":"   Compiling planted-leaf-00 v0.1.0 ($TMPDIR/deep-2741r-smeb1Q/home/deepbuild-shards/1/crates/planted-leaf-00)\n   Compiling planted-bin v0.1.0 ($TMPDIR/deep-2741r-smeb1Q/home/deepbuild-shards/1/crates/planted-bin)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 10.78s"}
+  exit 0
+  stdout:
+  …ets.test.ts tests/acceptance/556-redraft-ac5/ac5-budgets.test.ts tests/acceptance/2516/timing.test.ts tests/acceptance/457/ac9-budgets.test.ts tests/acceptance/1636/ac8-budget.test.ts tests/acceptance/210/ac8-budgets.test.ts tests/acceptance/2031/ac8-budget.test.ts tests/acceptance/182/ac11-budgets.test.ts tests/acceptance/192/voxel/ac10-budgets.test.ts tests/acceptance/416/layouts/budgets.test.ts tests/acceptance/1015/budgets.test.ts tests/acceptance/1017/budgets.test.ts tests/acceptance/1425/budgets.test.ts tests/acceptance/148/budgets.test.ts tests/acceptance/149/budgets.test.ts tests/acceptance/1515/budgets.test.ts tests/acceptance/160/budgets.test.ts tests/acceptance/167/budgets.test.ts tests/acceptance/222/budgets.test.ts tests/acceptance/308/budgets.test.ts tests/acceptance/405/budgets.test.ts tests/acceptance/45/budgets.test.ts tests/acceptance/67/budgets.test.ts tests/acceptance/1555/budget-load.test.mjs tests/acceptance/408/machines.test.ts tests/acceptance/501/exports.test.ts tests/acceptance/824/sessions/budgets.long.test.ts tests/acceptance/990/access.test.ts tests/acceptance/990/queries.test.ts tests/acceptance/990/taste.test.ts tests/acceptance/103-redraft-1830/budgets.test.ts tests/acceptance/365-redraft-1830/budgets.test.ts tests/acceptance/262-redraft-1830/budgets.test.ts tests/acceptance/761-redraft-1830/budgets.test.ts tests/acceptance/1098-redraft-1830/budgets.test.ts tests/acceptance/148-redraft-1830/budgets.test.ts tests/acceptance/417-redraft-1830/budgets.test.ts tests/acceptance/1425-redraft-1830/budgets.test.ts tests/acceptance/149-redraft-1830/budgets.test.ts tests/acceptance/311-redraft-1830/budgets.test.ts tests/acceptance/1018-redraft-1830/budgets.test.ts tests/acceptance/166-redraft-1830/budgets.test.ts tests/acceptance/268-redraft-1830/budgets.test.ts tests/acceptance/465-redraft-1830/budgets.test.ts tests/acceptance/968-redraft-1830/budgets.test.ts tests/acceptance/124-redraft-1830/ac5-budgets.live.test.ts tests/acceptance/1427-redraft-1830/ac8-budget.live.test.ts tests/acceptance/1830/ac2-timing.test.ts tests/acceptance/568-redraft-1830/judge.test.mjs tests/acceptance/903/ac6-export.test.ts tests/acceptance/508/ac6-effects.test.ts tests/acceptance/1381/ac6-budget.test.ts tests/acceptance/1992/cost.test.ts tests/acceptance/2650/budgets.long.test.ts
+  PASS affected: 0 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 3 passed, in 35 s at load 81; logs in $TMPDIR/deep-2741r-smeb1Q/tmp/deep-affected-Ixjjnk
+  
+  stderr:
+  
+      at TestContext.<anonymous> (file://$SCRATCH/prebuild-wrong/tests/acceptance/2741-redraft-2820/cores.test.mjs:230:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+EXIT 1
