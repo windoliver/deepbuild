@@ -37,6 +37,7 @@ mod dims;
 pub mod fast;
 mod held;
 pub mod kit;
+pub mod links;
 #[cfg(not(target_arch = "wasm32"))]
 mod live;
 pub mod net;
@@ -358,6 +359,8 @@ struct Trace {
     /// #523: each joint output's reading after each step: whether it is joint_force's
     /// `{force, torque}`, and the values.
     readings: BTreeMap<String, (bool, Vec<[f64; 2]>)>,
+    /// #2248: each valued output's value after each step (reading.rs).
+    values: BTreeMap<String, Vec<Vec<f64>>>,
     /// The occurrence list, each step's rows sorted (#1918).
     occurrences: Vec<occurrence::Row>,
     /// The list as #2011's shape uses, for `bake` with `occurrences: true`.
@@ -505,7 +508,8 @@ impl Run {
                     && !contact::planted(name, &mut run)
                     && !centre::planted(name, &mut run)
                     && !fast::planted(name, &mut run)
-                    && !dims::planted(name, &mut run) =>
+                    && !dims::planted(name, &mut run)
+                    && !links::planted(name, &mut run) =>
             {
                 return None
             }
@@ -588,7 +592,7 @@ impl Run {
     /// The world `v` holds, built, or the issues that refuse it.
     fn build(&self, v: &Value) -> Result<(World, Rapier), Value> {
         let refused = |e: Vec<Refusal>| refused(&e);
-        let w = centre::check(v, self).map_err(refused)?;
+        let w = links::check(v, self).map_err(refused)?;
         let mut b = Rapier {
             restore_any_version: self.restore_any_version,
             reverse_pairs: cfg!(feature = "test-reverse-pairs"),
@@ -636,16 +640,16 @@ impl Run {
         let bodies = c.iter().filter(|x| x.values.len() == FIELDS.len());
         t.fast
             .step(k, bodies.map(|x| (x.id.as_str(), x.values.as_slice())));
-        for (id, o) in &w.outputs {
+        for (id, o) in w.outputs.iter().filter(|(_, o)| !o.valued()) {
             let (Some(at), Some(x)) = (o.read.vec3_at(), c.iter().find(|x| x.id == o.from)) else {
                 continue;
             };
             let p = [x.values[at], x.values[at + 1], x.values[at + 2]];
             t.positions.entry(id.clone()).or_default().push(p);
         }
-        let walkers = walk::readings(b, w, &mut t.readings);
+        let walkers = walk::readings(b, w, &joints, t);
         for (id, o) in w.outputs.iter().filter(|(_, o)| o.read.of_joint()) {
-            if let Some(j) = joints.iter().find(|j| j.id == o.from) {
+            if let Some(j) = joints.iter().find(|j| j.id == o.from && !o.valued()) {
                 let (pair, v) = match o.read {
                     Read::JointCoordinate => (false, [j.coordinate.unwrap_or(0.0), 0.0]),
                     _ => (true, [j.force, j.torque]),
@@ -798,7 +802,7 @@ impl Run {
         t.shaped = shape_uses(&t.occurrences, w);
         let record = json!({"key": key, "step_hashes": t.step_hashes, "ring": ring(t),
                             "checkpoints": t.ring.kept.iter().map(|k| checkpoint(&k.checkpoint)).collect::<Vec<_>>(),
-                            "outputs": outputs, "positions": t.positions, "track": track,
+                            "outputs": outputs, "positions": t.positions, "values": t.values, "track": track,
                             "occurrences": occurrence::listed(&t.occurrences),
                             "occurrences_hash": occurrence::hash(&t.occurrences, &rank)});
         (key, record)
@@ -817,7 +821,7 @@ impl Run {
                 {
                     Ok((w, b)) => {
                         let (soft, backend) = held::held(&w, &b.held());
-                        json!({"ok": true, "issues": self.mass_ratios(&w, &b), "built": b.built(),
+                        json!({"ok": true, "issues": contact::warned(self, &w, self.mass_ratios(&w, &b)), "built": b.built(),
                                "soft": soft, "backend": backend})
                     }
                     Err(e) => json!({"ok": true, "issues": e["issues"]}),

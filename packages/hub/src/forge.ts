@@ -2,6 +2,7 @@
 // next unblocked issue in an epic. Read when the receipt is read, through the forge's REST API (GitHub's shape),
 // with the token given; a forge that doesn't answer within the receipt's budget leaves the state unknown, never a guess.
 import { isRecord as isObj } from '@deepbuild/contracts/json';
+import { forgeFetch } from '@deepbuild/github';
 
 type Obj = Record<string, unknown>;
 /** How long one receipt may spend on the forge in all, in ms. */
@@ -108,9 +109,7 @@ export class Forge {
   private async page(path: string): Promise<{ body: unknown; next: string | undefined }> {
     const left = this.deadline - Date.now();
     if (left <= 0) throw Error('the receipt\'s forge budget is spent');
-    const headers: Record<string, string> = { accept: 'application/vnd.github+json' };
-    if (this.token) headers.authorization = `Bearer ${this.token}`;
-    const res = await fetch(path.startsWith('https://') || path.startsWith('http://') ? path : `${this.api}${path}`, { headers, signal: AbortSignal.timeout(left) });
+    const res = await forgeFetch(this.api, path, { token: this.token, signal: AbortSignal.timeout(left) });
     if (!res.ok) throw Error(`the forge answered ${res.status} for ${path}`);
     const next = /<([^>]+)>;\s*rel="next"/.exec(res.headers.get('link') ?? '')?.[1];
     return { body: await res.json(), next };

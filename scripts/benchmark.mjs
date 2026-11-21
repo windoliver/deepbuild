@@ -165,7 +165,8 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000, f
 // Alternates current and merge-base runs so both see the same machine load, and swaps which side runs first each
 // round, so a cache one run leaves warm favors neither: one warmup round, then 20 rounds.
 // Returns [current] or [current, base], each with its sample count, its instructions retired per round, in round order,
-// what started a child no count covers, and its CPU time at each QoS class over its rounds.
+// the one-minute load at each round's start and end, what started a child no count covers, and its CPU time at each QoS
+// class over its rounds.
 export function measure(command, cwd, base) {
   const sides = base ? [[command, cwd], [base.command, base.cwd]] : [[command, cwd]];
   const samples = sides.map(() => []);
@@ -175,10 +176,10 @@ export function measure(command, cwd, base) {
       const [argv, directory] = sides[side];
       const result = measureOnce(argv, directory);
       if (result.status !== 0) throw Error(`${argv[0]} exited ${result.status}: ${result.output}`);
-      if (round) samples[side].push({ ms: result.elapsedMs, peakBytes: result.peakBytes, instructions: result.instructions, uncounted: result.uncounted, qos: result.qos });
+      if (round) samples[side].push({ ms: result.elapsedMs, peakBytes: result.peakBytes, instructions: result.instructions, load: { start: result.loadStart, end: result.loadEnd }, uncounted: result.uncounted, qos: result.qos });
     }
   }
-  return samples.map((side) => ({ ...summarize(side), samples: side.length, instructions: side.map(({ instructions }) => instructions), uncounted: [...new Set(side.flatMap(({ uncounted }) => uncounted))], qos: sumQos(side.map(({ qos }) => qos)) }));
+  return samples.map((side) => ({ ...summarize(side), samples: side.length, instructions: side.map(({ instructions }) => instructions), loads: side.map(({ load }) => load), uncounted: [...new Set(side.flatMap(({ uncounted }) => uncounted))], qos: sumQos(side.map(({ qos }) => qos)) }));
 }
 
 // A rise in instructions retired is judged against 2%, by 10,000 sign flips decided at p under 0.01.
@@ -484,7 +485,7 @@ export function judgeTask(budget, established, cwd, baseCwd) {
   } catch (error) {
     regression = error.message;
   }
-  return { now, then, machine, limits, instructions, outcome, regression };
+  return { now, then, machine, loads, limits, instructions, outcome, regression };
 }
 
 // A task's report is its command's last stdout line; `<bench> judge` reads it on stdin and prints its verdict.

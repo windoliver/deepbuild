@@ -26,6 +26,8 @@ pub struct Caps {
     /// #2239: what its swept collision holds, which the check and the lint `physics.fast_body`
     /// read.
     pub sweep: Sweep,
+    /// #2308: whether it scales its own lengths by `solver.length_unit`; else that must be 1.
+    pub scales_lengths: bool,
 }
 
 /// #2239: what a backend's swept collision holds, as data, by body kind as a document writes it.
@@ -64,14 +66,16 @@ impl Sweep {
 }
 
 /// #191: the features a backend's caps may claim: swept collision for a body with `ccd`, soft
-/// bodies, a character controller, (#251) a vehicle controller and (#2241) belts, a contact
-/// material's `tangent_speed`.
-pub const CLAIMS: [&str; 5] = [
+/// bodies, a character controller, (#251) a vehicle controller, (#2241) belts, a contact
+/// material's `tangent_speed`, and (#2310) articulations, the joints of one tree placed from
+/// their own coordinates.
+pub const CLAIMS: [&str; 6] = [
     "ccd",
     "soft_bodies",
     "character_controller",
     "vehicle_controller",
     "belts",
+    "articulations",
 ];
 
 /// Rapier 0.36.1 in 3D, as the design pins it.
@@ -95,8 +99,10 @@ pub const RAPIER3D: Caps = Caps {
         "A contact is a spring at solver.contact_hz, twice that against a static body, so a resting body sinks g ÷ (2π × f)² under its own weight at the frequency f of its contact, and a stack sinks by its loads.",
         "Only a dynamic body starts a sweep: with ccd off it sweeps fixed shapes only, and with ccd on it also holds a body that moves or rests, but only one that has ccd off and is not itself fast.",
         "A body with ccd on also predicts its contacts along its own move in a step, which holds a body in its path whatever that body's ccd, and reaches neither its own turn nor the other body's move.",
+        "An articulated joint's turning coordinates are damped at 0.1 N·m·s/rad, the engine's own, which no world field sets; a sliding one's aren't.",
+        "A body an articulated joint holds moves by its joints' coordinates alone: a velocity written on it, a launch and a poke are refused, and a grab's force moves it.",
     ],
-    claims: &["ccd", "soft_bodies", "character_controller", "vehicle_controller", "belts"],
+    claims: &["ccd", "soft_bodies", "character_controller", "vehicle_controller", "belts", "articulations"],
     sweep: Sweep {
         starts: &["dynamic"],
         without_ccd: &["static"],
@@ -105,6 +111,7 @@ pub const RAPIER3D: Caps = Caps {
         holds_fast: false,
         predicts: true,
     },
+    scales_lengths: true,
 };
 
 /// #2098: Rapier 0.36.1 in 2D, which a `dimensions: 2` world runs on, beside `RAPIER3D`.
@@ -128,6 +135,7 @@ pub const RAPIER2D: Caps = Caps {
         holds_fast: false,
         predicts: false,
     },
+    scales_lengths: false,
     ..RAPIER3D
 };
 

@@ -1,0 +1,6 @@
+{
+  "edits": { "seed": 953001, "cases": 1000, "releaseCases": 100000, "maxNodes": 64, "maxRows": 128, "edits": 50 },
+  "large": { "seed": 953002, "releaseCases": 100, "maxNodes": 500, "maxRows": 2000, "edits": 1000 },
+  "order": { "seed": 953003, "cases": 25, "maxNodes": 64, "maxRows": 128 },
+  "budget": { "seed": 953004, "nodes": 500, "rows": 2000, "edits": 60 }
+}

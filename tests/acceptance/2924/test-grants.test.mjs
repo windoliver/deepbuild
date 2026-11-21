@@ -9,6 +9,8 @@ import { GiB, dump, readings, request, running, sandbox, started, waits } from '
 // started 8 s after the request: a base that grants at once starts the command well inside 8 s.
 const AT_ONCE = 15_000;
 const WAIT = 8_000;
+// Two runs' memory with one grant settling (#2980): 24 GiB a run on Linux, 8 GiB a run on darwin.
+const TWO_RUNS = process.platform === 'darwin' ? 16 : 48;
 
 /** One test grant held under `file`'s readings, then a second request under the same file. */
 async function heldThenSecond(t, value) {
@@ -34,13 +36,13 @@ test('#2924.AC2 with one test grant held, a second request waits while the readi
   await waits(box, second, WAIT, [holder], 'while the readings show load 8 on 8 cores');
 });
 
-test('#2924.AC2 with one settling test grant held, a second request waits while the readings show memory 1 byte below 48 GiB', { timeout: 60_000 }, async (t) => {
-  const { box, holder, second } = await heldThenSecond(t, { memory: 48 * GiB - 1, load: 1, cores: 64 });
-  await waits(box, second, WAIT, [holder], 'while the readings show memory below 48 GiB and the held grant is under 5 min old');
+test(`#2924.AC2 with one settling test grant held, a second request waits while the readings show memory 1 byte below ${TWO_RUNS} GiB`, { timeout: 60_000 }, async (t) => {
+  const { box, holder, second } = await heldThenSecond(t, { memory: TWO_RUNS * GiB - 1, load: 1, cores: 64 });
+  await waits(box, second, WAIT, [holder], `while the readings show memory below ${TWO_RUNS} GiB and the held grant is under 5 min old`);
 });
 
-test('#2924.AC2 with one test grant held, a second request is granted at once under load below the cores and exactly 48 GiB', { timeout: 60_000 }, async (t) => {
-  const { box, holder, second } = await heldThenSecond(t, { memory: 48 * GiB, load: 1, cores: 64 });
+test(`#2924.AC2 with one test grant held, a second request is granted at once under load below the cores and exactly ${TWO_RUNS} GiB`, { timeout: 60_000 }, async (t) => {
+  const { box, holder, second } = await heldThenSecond(t, { memory: TWO_RUNS * GiB, load: 1, cores: 64 });
   await started(box, second, AT_ONCE, [holder]);
   assert.equal(await second.done, 0, dump(box, holder, second));
   assert.ok(running(holder), `the holder ended\n${dump(box, holder, second)}`);
