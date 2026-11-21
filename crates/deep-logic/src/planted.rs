@@ -85,6 +85,9 @@ pub struct Planted {
     pub pagers: crate::pages::Pagers,
     pub page_store: crate::pages::Plants,
     pub save_drops_page_map: bool,
+    /// #1250: a piece that reads the wall clock: after every step of the first item, the wall
+    /// clock's nanoseconds join the first value of its first array, in a play and its replica alike.
+    pub reads_wall_clock: bool,
 }
 
 impl Planted {
@@ -122,6 +125,7 @@ impl Planted {
             "pack_check_skips_library_subset" => p.pack_check_skips_library_subset = true,
             "linker_links_in_listing_order" => p.linker_links_in_listing_order = true,
             "replay_changes_step_37" => p.replay_changes_step_37 = true,
+            "logic_reads_wall_clock" => p.reads_wall_clock = true,
             "budget_counts_lane_reading" => p.budget_counts_lane_reading = true,
             "seek_repeats_occurrences" => p.seek_repeats_occurrences = true,
             "occurrences_keep_cap" => p.occurrences_keep_cap = true,

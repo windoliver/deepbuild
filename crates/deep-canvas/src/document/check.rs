@@ -2374,12 +2374,16 @@ fn check_transport(doc: &Value, issues: &mut Vec<Issue>) {
 
 /// A duration field's flicks: a time span (`"2s"`, `"120f"` at the transport's rate), above 0.
 pub fn duration(doc: &Value, value: &Value) -> Result<i64, String> {
+    duration_in(member(doc, "transport"), value)
+}
+
+/// [`duration`] read with the document's `transport` alone, so a caller holding the document's
+/// members needn't build a document to read one (#2660).
+pub fn duration_in(transport: Option<&Value>, value: &Value) -> Result<i64, String> {
     let Value::String(text) = value else {
         return Err("not a time literal".into());
     };
-    let rate = member(doc, "transport")
-        .and_then(frame_rate_of)
-        .unwrap_or((60, 1));
+    let rate = transport.and_then(frame_rate_of).unwrap_or((60, 1));
     let ctx = TimeContext {
         frame_rate: rate,
         ..TimeContext::default()

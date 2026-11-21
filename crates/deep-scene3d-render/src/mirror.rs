@@ -35,8 +35,10 @@ pub struct Planted {
 /// The mirror's pass: its own renderer and the pass that lays its picture over the parts.
 pub struct Mirrorer {
     planted: Planted,
-    view: Box<Renderer>,
-    /// The mirrored view of the scene and the size it was made at, kept while the scene holds.
+    /// #3016: the mirrored view's renderer, which draws from what the view lends it.
+    pub(crate) view: Box<Renderer>,
+    /// The mirrored view of the scene and the size it was made at, kept while the scene holds
+    /// (#3024) and made the frame's in place when it doesn't (#3016).
     pub(crate) mirrored: Option<(Scene, [u32; 2])>,
     layout: wgpu::BindGroupLayout,
     /// The overlay without and with #166's `reflection` target.
@@ -160,7 +162,7 @@ impl Mirrorer {
         });
         Mirrorer {
             planted: planted.mirror,
-            view: Box::new(Renderer::new(device, planted)),
+            view: Renderer::view_of(device, planted),
             mirrored: None,
             layout,
             pipeline,
@@ -192,11 +194,16 @@ impl Mirrorer {
         } else {
             half(internal)
         };
+        // #3024: a held scene draws the view made then at the same size; #3016: any other frame
+        // makes the kept view this frame's in place, so no frame copies the scene.
         let view = match self.mirrored.take() {
             Some((view, s)) if held && s == size => view,
-            _ => deep_canvas_scene3d::mirror::view(scene, mirror, size),
+            Some((mut view, _)) => {
+                deep_canvas_scene3d::mirror::view_into(&mut view, scene, mirror, size);
+                view
+            }
+            None => deep_canvas_scene3d::mirror::view(scene, mirror, size),
         };
-        self.view.pictured = true;
         self.view.prepare(device, &view, look);
         self.mirrored = Some((view, size));
         let mut ids: Vec<u32> = mirror

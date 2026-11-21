@@ -13,26 +13,34 @@ use crate::hub::{HubClient, HubError};
 /// Signs `params`, the card's `ask.answer` params, for `ask.answer` on this hub, and sends them. A device the hub no
 /// longer knows, as after a restore, pairs again, once.
 pub fn send(params: &Value) -> Result<Value, HubError> {
-    // A replica's copy of the hub takes the answer as the card wrote it: it has no device to pair (#1462).
+    signed("ask.answer", params)
+}
+
+/// The receipt's Undo inside the hub's hold (#1101): `ask.undo`, the hub's undo that `deep inbox undo` calls, signed
+/// as an answer is, so the held step never starts.
+pub fn undo(params: &Value) -> Result<Value, HubError> {
+    signed("ask.undo", params)
+}
+
+/// Signs `params` for `method` on this hub as the device you paired, and sends them.
+fn signed(method: &str, params: &Value) -> Result<Value, HubError> {
+    // A replica's copy of the hub takes the call as the card wrote it: it has no device to pair (#1462).
     if let Some(local) = crate::hub::local() {
-        return local("ask.answer", params);
+        return local(method, params);
     }
     let mut client = HubClient::app()?;
     let params = params.as_object().cloned().unwrap_or_default();
     // The hub's ID, as its hello names it: what the signature is for (#1579).
     let hub = client.hello["hub"].as_str().unwrap_or_default().to_owned();
     let device = Device::paired(&mut client)?;
-    match client.call(
-        "ask.answer",
-        device.sign("ask.answer", &hub, params.clone())?,
-    ) {
+    match client.call(method, device.sign(method, &hub, params.clone())?) {
         Err(HubError::Refused(refusal))
             if refusal["code"] == "credential"
                 && refusal["path"] == "/params/signature/signed/device" =>
         {
             Device::forget();
             let device = Device::paired(&mut client)?;
-            client.call("ask.answer", device.sign("ask.answer", &hub, params)?)
+            client.call(method, device.sign(method, &hub, params)?)
         }
         reply => reply,
     }
