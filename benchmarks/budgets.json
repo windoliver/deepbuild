@@ -1159,6 +1159,23 @@
       ]
     },
     {
+      "id": "canvas-atlas-draw",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "atlas-draw"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "draw_rows_frame_ms": 0.1
+      },
+      "initialReason": "Issue #2386 first measurement: the merge base draws every atlas row as its grid's cell and has no such task. A release deep-show's frames of 10,000 atlas rows on a 100 x 100 square grid of 4 u cells, each a 4 x 8 px tile with draw [4, 8] and anchor [0.5, 0.75], against the same set without the two fields, each sliding 15 u a second along x by a keyed channel so each of the 300 frames a side places every row again, five runs after a warm-up one, each a fresh process, the side that goes first alternating; the difference of the sides' median frame time is what draw adds. canvas.mjs judge holds the time on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#2386.b3f6fe16"
+      ]
+    },
+    {
       "id": "canvas-local-tone-map",
       "command": [
         "node",

@@ -1352,7 +1352,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_motion::module::PLANTED.contains(p)
                 || deep_canvas_motion::cues::planted(p)
                 || *p == deep_canvas_motion::lengths::ONE_VALUE
-                || deep_canvas_marks::arrays::PLANTED.contains(p)
+                || deep_canvas_marks::arrays::PLANTED.contains(p) || deep_canvas_marks::atlas::PLANTED.contains(p) || *p == spatial::HIT_READS_QUADS
                 // #1967's wrong programs live in the cells module's playback and conversion, #194's in the catalog job.
                 || deep_canvas_cells::recording::PLANTED.contains(p) || deep_codecs::catalog::PLANTED.contains(p)
                 || deep_canvas_export::lottie::PLANTED.contains(p)

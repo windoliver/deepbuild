@@ -551,13 +551,16 @@ impl Hub<'_> {
                 .get(panel)
                 .and_then(|s| s.scope.time())
                 .unwrap_or(self.now);
+            let quads =
+                self.scenario.module_planted.as_deref() == Some(crate::spatial::HIT_READS_QUADS);
             for (row, b, hull) in drawn.map(|d| self.row_boxes(&d, t)).unwrap_or_default() {
                 let set = row.split('#').next().unwrap_or_default();
                 if picked.iter().any(|s| s == set) {
                     continue;
                 }
                 let order = &doc["items"][set]["order"];
-                let target = json!({"id": row, "order": order, "params": {"box": b, "hull": hull}});
+                let hull = hull.as_ref().filter(|_| !quads);
+                let target = crate::spatial::target(&row, order, b, hull);
                 if let Some(items) = doc["items"].as_object_mut() {
                     items.insert(row, target);
                 }

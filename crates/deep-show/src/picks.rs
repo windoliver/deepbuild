@@ -470,14 +470,10 @@ impl Hub<'_> {
             .iter()
             .map(|r| {
                 let order = &doc["items"][r.id.split('#').next().unwrap_or_default()]["order"];
-                let hull = if quads {
-                    Value::Null
-                } else {
-                    r.hull.clone().unwrap_or(Value::Null)
-                };
+                let hull = r.hull.as_ref().filter(|_| !quads);
                 (
                     r.id.clone(),
-                    json!({"id": r.id, "order": order, "params": {"box": r.b, "hull": hull}}),
+                    crate::spatial::target(&r.id, order, r.b, hull),
                 )
             })
             .collect();

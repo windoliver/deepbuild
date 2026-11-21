@@ -1980,7 +1980,7 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     // #223's twin: a flow that finds its stream table by a vector field's kind.
     let planted = match v.planted() {
         Some(crate::warp::FLOW_BY_KIND) => scene::Planted::WarpFlowByKind,
-        _ => scene::Planted::None,
+        p => crate::atlas::planted(p, &mut items),
     };
     let (frame, basis) = match scene::frame_prebuilt(
         doc,
