@@ -3,6 +3,8 @@
 //! and the target it draws into. A pipeline made while a frame draws is listed in that frame; one
 //! the warm-up made at check never is.
 
+use std::collections::BTreeSet;
+
 /// One pipeline made: its key, the items it was made for, their feature set and its target
 /// (`view`, or a shadow map's name).
 #[derive(Clone, Debug, PartialEq)]
@@ -121,16 +123,39 @@ pub struct Log {
     frame_from: usize,
     /// While the warm-up runs at check: what it makes is never a frame's.
     pub warming: bool,
+    /// #3016: the keys another view of the scene, lent this log, listed before the view that
+    /// holds it made the same pipeline, which it then doesn't list again; and whether the view
+    /// that lent it is warming up, as what the other view makes meanwhile is listed.
+    lent: BTreeSet<u128>,
+    pub lender_warming: bool,
 }
 
 impl Log {
     pub fn push(&mut self, c: Created) {
+        if self.lent.remove(&c.key) {
+            return;
+        }
         self.made.push((c, self.warming));
+    }
+
+    /// #3016: a pipeline another view of the scene made, listed once for the scene: it is the
+    /// same pipeline, by its name, feature set, target and sample count, wherever it draws.
+    pub fn push_lent(&mut self, c: Created) {
+        if self.made.iter().any(|(m, _)| m.key == c.key) {
+            return;
+        }
+        self.lent.insert(c.key);
+        self.made.push((c, self.lender_warming));
     }
 
     /// Starts a frame's list.
     pub fn begin_frame(&mut self) {
         self.frame_from = self.made.len();
+    }
+
+    /// #3016: everything it holds, the warm-up's included, in the order made.
+    pub fn made(&self) -> impl Iterator<Item = &Created> {
+        self.made.iter().map(|(c, _)| c)
     }
 
     /// What was made since the frame began, the warm-up's left out.

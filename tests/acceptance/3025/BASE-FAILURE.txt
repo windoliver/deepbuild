@@ -1,0 +1,37 @@
+# #3025 acceptance suite at the base, e9d73de96 (Merge pull request #2952), before any fix.
+#
+# Not run against the binary: this job read the base's code to say why the test fails there; it didn't build deep-gpu.
+# Run here:
+#   node node_modules/typescript/bin/tsc -p tests/acceptance/3025/tsconfig.json   -> exit 0, no errors
+#   The fixture's own numbers, from a scratch script over 446/helpers.ts's orthoPoint and orthoProject alone:
+#     every ring band holds 1,008 pixels and every beside band 576 (over 400 each), six of each across three disks;
+#     the disk hides 0.5 m (30 px) of the plate in the view, and the ring starts 0.6 m out (6 px clear);
+#     a cap's shadow reaches 1.2195 m (bottom cap) to 1.2821 m (top cap); the ring's farthest pixel centre is 1.020 m
+#     out and its corner 1.031 m, 0.189 m (11 px) inside the bottom cap's shadow and the side wall's arc; the beside
+#     band starts 1.45 m out, 0.168 m (10 px) past the top cap's shadow, and reaches at most 18.65° off its spot's axis
+#     (inner 28°); a disk's rim is 14.04° off its spot's axis; the nearest band is 41.02° off any other spot's axis
+#     (outer 30°); the outermost bands sit at x = 21 and 939 px of 960, inside the plate (±8 m);
+#     lit, a ring reads 0.5418 and its beside band 0.4627 (ρ I cos θ ÷ (π d²) with the range fade), a ratio of 1.171,
+#     over the test's 0.9; a 0.02 m spot gives a 0.06 m penumbra and a 512-texel map 11.3 mm a texel at the plate;
+#     on all 94 cap rim vertices of the unit cylinder (mesh.rs) turned by Rx(90°) (scene.rs's local_of), uv0.u < 0.5
+#     is exactly world x < the centre.
+#
+# Why the test fails at the base, read from its code:
+#
+#   holes.test.ts  AC1  Both operators can cut: `halve` has a discard_if@1 step and `hollow_op` an alpha output, so
+#                       crates/deep-scene3d-render/src/op.rs's compile builds each one's shadow pipeline, its layout
+#                       [frame, None, None, operator inputs], over op_shadow_fs (op.wgsl), which calls run_op, which
+#                       calls planted(P_BUMP_HAND) (#486), and planted() (scene3d.wgsl) reads lights.count.z, group 1
+#                       binding 0. The device rejects that pipeline inside compile's error scope, so compile returns
+#                       "the device rejects its pipeline: …" for each operator; lib.rs's material_op files both under
+#                       counts.operators_refused, and crates/deep-gpu-layer/src/view3d.rs refuses the frame with
+#                       {"code": "operator_compile", "reason": "<the first refused operator>: the device rejects its
+#                       pipeline: …"}. No pixels are drawn, so the test fails with two failures, one naming `halved`
+#                       (operator halve) and one naming `hollow` (operator hollow_op), each quoting that reason.
+#                       (Were the frame drawn with the solids' own materials instead, as the issue puts it, both would
+#                       throw their whole shadow, and the test would fail naming `halved` for its −x half and `hollow`
+#                       for both halves.)
+#   446/caster-t   AC2  #446's AC6 fails at the base the same way: its `gate` operator has a discard_if@1 step, so its
+#                       frame is refused with operator_compile (the issue quotes the error).
+#
+# A run at the base, when one is made, is recorded beside this note by the job that runs it.

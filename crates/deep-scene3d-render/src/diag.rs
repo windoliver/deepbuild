@@ -666,8 +666,11 @@ fn draw(
             .as_ref()
             .filter(|s| s.shadow && scene.camera.perspective)
         {
+            let mut casters = Vec::new();
+            crate::shadow::caster_corners(scene, false, &mut casters);
             let fitted = crate::shadow::cascades(
                 scene,
+                &casters,
                 sun.toward,
                 &sun.cascades,
                 crate::shadow::SIZE,

@@ -1,0 +1,114 @@
+#3023's acceptance tests at the base e9d73de96 ("Merge pull request #2952 …"), on a Mac with Metal (machine load
+about 150-190). Each test was run once; both fail for the reason the issue names: the seal refuses test.gpu with
+list_unclosed, naming `test.texture@1`, field `mips`, list `test.texture@1.mips`. `Compiling` lines are left out of the
+cargo output; nothing else is cut. `scripts/lease` found no `deep` CLI on this checkout, so it ran the commands
+unleased (its own message, below). The test-meter `deep-gpu` was built first with
+`PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease nice -n 10 cargo build --locked --bin deep-gpu --features test-meter`
+(36 min from a cloned target); the suite's own build of it waited on cargo's lock while the AC2 test compiled, then
+found it fresh (the file's 688 s are that wait; the two tests took 9 s).
+
+A one-off probe at the base (not kept) parsed each JSON form test.gpu's kinds declare with `deep_canvas::form::parse`
+and listed `word_lists()`: `[w, h]`, `u32`, `bytes` and `integer` offer none, `all` offers `["all"]`. So
+`test.texture@1.mips` is test.gpu's one field list, and the field-list check is the seal's last step
+(`fields::sealed` just before `Ok(Sealed {…})` in crates/deep-canvas/src/registry/mod.rs), which the base reaches with
+every earlier check passed: closing that one list is all AC2's seal lacks.
+
+================================================================================================================
+AC2: seal.rs
+
+$ PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease nice -n 10 cargo test --locked -p deep-canvas-test-modules --test acceptance_3023 --no-fail-fast
+
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `nice -n 10 cargo test --locked -p deep-canvas-test-modules --test acceptance_3023 --no-fail-fast` runs unleased
+    Blocking waiting for file lock on package cache
+    Finished `test` profile [unoptimized] target(s) in 11m 30s
+     Running ../../tests/acceptance/3023/seal.rs (target/debug/deps/acceptance_3023-bf623e1891a31dd5)
+
+running 1 test
+test test_gpu_seals_with_the_core_canvas_and_its_texture_mips_list_is_closed_for_record ... FAILED
+
+failures:
+
+---- test_gpu_seals_with_the_core_canvas_and_its_texture_mips_list_is_closed_for_record stdout ----
+
+thread 'test_gpu_seals_with_the_core_canvas_and_its_texture_mips_list_is_closed_for_record' (166712330) panicked at crates/deep-canvas-test-modules/../../tests/acceptance/3023/seal.rs:24:19:
+test.gpu seals with the core canvas, but the seal refused it: code list_unclosed, modules ["test.gpu"]: `test.texture@1` field `mips` offers the words all with no closure: give the list `test.texture@1.mips` a registry, a closed reason with reopens_if and instead, or open
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    test_gpu_seals_with_the_core_canvas_and_its_texture_mips_list_is_closed_for_record
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p deep-canvas-test-modules --test acceptance_3023`
+error: 1 target failed:
+    `-p deep-canvas-test-modules --test acceptance_3023`
+exit 101
+
+================================================================================================================
+AC1: live.test.ts
+
+$ PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run tests/acceptance/3023/ --testTimeout=600000
+
+ RUN  v5.0.5 /Users/taofeng/dev/claude-worktrees/youthful-blackburn-8d95e8/agent-a7f90fd6e0d482577
+
+ ❯ tests/acceptance/3023/live.test.ts (2 tests | 2 failed) 688298ms
+   ❯ AC1 #3023 a test-meter deep-gpu's live path seals test.gpu and opens sessions (2)
+     × AC1 #3023 opens a live session on a document holding a test.texture@1 item without the list_unclosed seal panic; the run call answers 6226ms
+     × AC1 #3023 the live calls #425's climb, hold and taste tests send get past the seal and answer 2941ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/3023/live.test.ts > AC1 #3023 a test-meter deep-gpu's live path seals test.gpu and opens sessions > AC1 #3023 opens a live session on a document holding a test.texture@1 item without the list_unclosed seal panic; the run call answers
+AssertionError: deep-gpu run panics at the seal with list_unclosed:
+thread 'deep-gpu render' (166714915) panicked at crates/deep-gpu-layer/src/live.rs:136:14:
+the live build's canvas modules seal: SealError { code: "list_unclosed", modules: ["test.gpu"], arrays: [], operators: [], interface: None, implementations: [], registry: Some(RegistryRefusal { name: "kind@1", entries: [String("test.texture@1")], rules: [], passes: [], report: {"field": String("mips"), "list": String("test.texture@1.mips")} }), overrun_bytes: None, what: "`test.texture@1` field `mips` offers the words all with no closure: give the list `test.texture@1.mips` a registry, a closed reason with reopens_if and instead, or open" }
+thread 'main' (166714261) panicked at crates/deep-gpu-layer/src/worker.rs:158:29:: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ runGpu tests/acceptance/3023/helpers.ts:103:100
+    101|   const stderr = run.stderr ?? '';
+    102|   const panic = stderr.split('\n').filter((l) => /panicked|list_unclos…
+    103|   expect(/list_unclosed/.test(stderr), `${name} panics at the seal wit…
+       |                                                                                                    ^
+    104|   expect(run.status, `${name} exited 0 (${run.signal ?? 'no signal'});…
+    105|   const lines = stdout.split('\n').filter((l) => l !== '');
+ ❯ tests/acceptance/3023/live.test.ts:38:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/3023/live.test.ts > AC1 #3023 a test-meter deep-gpu's live path seals test.gpu and opens sessions > AC1 #3023 the live calls #425's climb, hold and taste tests send get past the seal and answer
+AssertionError: deep-gpu run --backend noop panics at the seal with list_unclosed:
+thread 'deep-gpu render' (166715507) panicked at crates/deep-gpu-layer/src/live.rs:136:14:
+the live build's canvas modules seal: SealError { code: "list_unclosed", modules: ["test.gpu"], arrays: [], operators: [], interface: None, implementations: [], registry: Some(RegistryRefusal { name: "kind@1", entries: [String("test.texture@1")], rules: [], passes: [], report: {"field": String("mips"), "list": String("test.texture@1.mips")} }), overrun_bytes: None, what: "`test.texture@1` field `mips` offers the words all with no closure: give the list `test.texture@1.mips` a registry, a closed reason with reopens_if and instead, or open" }
+thread 'main' (166715501) panicked at crates/deep-gpu-layer/src/worker.rs:158:29:: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ runGpu tests/acceptance/3023/helpers.ts:103:100
+    101|   const stderr = run.stderr ?? '';
+    102|   const panic = stderr.split('\n').filter((l) => /panicked|list_unclos…
+    103|   expect(/list_unclosed/.test(stderr), `${name} panics at the seal wit…
+       |                                                                                                    ^
+    104|   expect(run.status, `${name} exited 0 (${run.signal ?? 'no signal'});…
+    105|   const lines = stdout.split('\n').filter((l) => l !== '');
+ ❯ tests/acceptance/3023/live.test.ts:45:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  02:09:57
+   Duration  691.41s (tests 100%)
+
+exit 1

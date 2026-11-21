@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 
 use deep_canvas_physics::backend::Backend;
 use deep_canvas_physics::caps::{Caps, RAPIER3D};
+use deep_canvas_physics::doc::LAWS;
 use deep_canvas_physics::fast::{self, Flag};
 use deep_canvas_physics::kit::{self, Planted};
 use serde_json::{json, Value};
@@ -50,6 +51,12 @@ const NO_BELTS_CAPS: Caps = Caps {
     backend: "no_belts",
     ..TEST_CAPS
 };
+/// #1931: a test backend that claims the three force laws, under its own name.
+const LAWS_CAPS: Caps = Caps {
+    backend: "claims_force_laws",
+    claims: &["ccd", "inverse_square", "magnetic", "lennard_jones"],
+    ..RAPIER3D
+};
 
 /// #2308: a test backend whose caps say it scales no lengths, under its own name, so a refusal
 /// by its caps names it.
@@ -83,8 +90,9 @@ const fn test(name: &'static str, twin: Twin, caps: &'static Caps) -> TestBacken
     }
 }
 
-/// #191's test backends by name, and #251's, #182's, #2241's, #2243's, #2308's and #2310's.
-pub const TEST_BACKENDS: [TestBackend; 18] = [
+/// #191's test backends by name, and #251's, #182's, #2241's, #2243's, #2308's, #2310's and
+/// #1931's.
+pub const TEST_BACKENDS: [TestBackend; 19] = [
     test("friction_average", Twin::FrictionAverage, &TEST_CAPS),
     test("no_joint_limits", Twin::NoJointLimits, &TEST_CAPS),
     test("restitution_min", Twin::RestitutionMin, &TEST_CAPS),
@@ -116,6 +124,8 @@ pub const TEST_BACKENDS: [TestBackend; 18] = [
     // #2243: one that leaves each moved character body's pose stale until the backend's step.
     test("stale_character_poses", Twin::StalePoses, &CHARACTER_CAPS),
     test("no_length_unit", Twin::None, &NO_LENGTH_CAPS),
+    // #1931: Rapier as a candidate that claims the three force laws.
+    test("claims_force_laws", Twin::None, &LAWS_CAPS),
 ];
 
 /// The test backend named `name`, in a `test-backends` build only.
@@ -149,11 +159,15 @@ pub fn planted(name: &str, run: &mut Run) -> bool {
     true
 }
 
-/// The interface's fixtures, with the test fixture in a `test-backends` build.
-fn fixtures() -> Vec<kit::Fixture> {
+/// The interface's fixtures, with the test fixture in a `test-backends` build; #1931's planted
+/// kit holds them less each one that names a force law in its caps.
+fn fixtures(planted: Planted) -> Vec<kit::Fixture> {
     let mut all = kit::all();
     if cfg!(feature = "test-backends") {
         all.push(kit::test_capped());
+    }
+    if planted == Planted::WithoutLaws {
+        all.retain(|f| !f.caps.iter().any(|c| LAWS.contains(c)));
     }
     all
 }
@@ -192,11 +206,13 @@ impl Run {
                 reply
             }
             "behavior_fixtures" => {
-                json!({"ok": true, "fixtures": fixtures().iter().map(kit::Fixture::json).collect::<Vec<_>>()})
+                let held = fixtures(self.kit_planted);
+                json!({"ok": true, "fixtures": held.iter().map(kit::Fixture::json).collect::<Vec<_>>()})
             }
             "behavior_kit" => {
                 let new = || -> Box<dyn Backend> { Box::new(self.backend()) };
-                let mut reply = kit::run(&new, &fixtures(), self.kit_planted).json();
+                let held = fixtures(self.kit_planted);
+                let mut reply = kit::run(&new, &held, self.kit_planted).json();
                 reply["ok"] = json!(true);
                 reply["target"] = json!(self.build.target);
                 reply

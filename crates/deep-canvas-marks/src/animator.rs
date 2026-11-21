@@ -8,7 +8,7 @@
 
 use std::sync::Arc;
 
-use deep_canvas::document::duration;
+use deep_canvas::document::duration_in;
 use deep_canvas::expr::{Expr, Resolve};
 use deep_text::{Glyph, Shaped};
 use serde_json::{Map, Value};
@@ -1246,7 +1246,7 @@ fn held_keys(doc: &Map<String, Value>, target: &str) -> Option<Vec<(i64, f64)>> 
         .values()
         .find(|c| c.get("target").and_then(Value::as_str) == Some(target))?;
     let keys = ch.get("keys")?.as_object()?;
-    let wrap = Value::Object(doc.clone());
+    let transport = doc.get("transport");
     let mut out = Vec::new();
     for k in keys.values() {
         let interp = k.get("interp");
@@ -1257,7 +1257,7 @@ fn held_keys(doc: &Map<String, Value>, target: &str) -> Option<Vec<(i64, f64)>> 
         }
         let t = match k.get("t")? {
             Value::String(s) if s == "0s" || s == "0f" || s == "0" => 0,
-            v => duration(&wrap, v).ok()?,
+            v => duration_in(transport, v).ok()?,
         };
         out.push((t, num(k.get("value"))?));
     }
@@ -1274,10 +1274,9 @@ fn roll_at(
         return Ok(None);
     };
     let path = format!("items/{}/params/text/counter/roll", input.id);
-    let wrap = Value::Object(input.doc.clone());
     let span = roll
         .get("span")
-        .and_then(|s| duration(&wrap, s).ok())
+        .and_then(|s| duration_in(input.doc.get("transport"), s).ok())
         .ok_or_else(|| bad(format!("{path}/span")))?;
     let ease = match roll.get("interp") {
         None => deep_canvas::ease::named("in_out_cubic", None),
