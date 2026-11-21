@@ -5,9 +5,10 @@ fail_closed entries installed), writes the payloads of `payloads.py`, and pipes 
 `target/debug/deep-hook claude-code PreToolUse`: first with no hub, then with a dev hub (`deep hub run` from
 `packages/cli/dist`) that it starts, and stops by the PID it started. Exit 2 is a denial, 0 a call let through.
 
-- `e2e-hub-stopped-and-running.png`: the run in a Terminal window on 2026-11-20 at 93def2016 (the fix), title bar
-  cropped. Its lines are cut at 118 characters on purpose; an agent checked it: no error, every row as expected.
-- `e2e-full.txt`: the same run at the merge of main 6395f3cfc, with each denial whole.
+- `e2e-hub-stopped-and-running.png`: the run in a Terminal window on 2026-11-20 at 067ded8ba, the branch's code
+  (the commit that adds this note changes only `docs/evidence/2042`), title bar cropped. Its lines are cut at 118
+  characters on purpose; an agent checked it: no error, every row as expected.
+- `e2e-full.txt`: the same run at 067ded8ba, with each denial whole.
 
 What it shows: payloads 01–07 (nested inside 300 arrays, cut to 40 bytes, empty, not JSON, not UTF-8, 2 MiB cut
 short, `1e999`) are each denied with the same words naming the payload and why, with the hub stopped and running.
