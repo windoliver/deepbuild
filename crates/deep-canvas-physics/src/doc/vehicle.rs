@@ -13,6 +13,42 @@ use super::{join, BodyKind, Reader, Refusal};
 /// The most wheels a vehicle body holds.
 pub const MOST_WHEELS: usize = 8;
 
+/// What the reader takes for a field of `vehicle` left out.
+const DAMPING_RATIO: f64 = 0.3;
+const GRIP: f64 = 1.0;
+const STEERS: bool = false;
+const DRIVES: bool = false;
+const BRAKES: bool = true;
+const STEER_MAX: f64 = 35.0;
+
+/// A default the reader takes, as `deep_kinds` prints it after its field's unit or type.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Taken {
+    Num(f64),
+    Flag(bool),
+}
+
+/// #2717: the fields of `vehicle` as `deep_kinds` lists them, each with its path under
+/// `vehicle`, its unit or type, and the default the reader takes when it is left out; a field
+/// with none is one a wheel must give.
+pub const FIELDS: [(&str, &str, Option<Taken>); 11] = [
+    ("wheels.<name>.at", "local point, m", None),
+    ("wheels.<name>.radius", "m", None),
+    ("wheels.<name>.suspension.rest", "m", None),
+    ("wheels.<name>.suspension.travel", "m", None),
+    ("wheels.<name>.suspension.hz", "f32", None),
+    (
+        "wheels.<name>.suspension.damping_ratio",
+        "f32",
+        Some(Taken::Num(DAMPING_RATIO)),
+    ),
+    ("wheels.<name>.grip", "f32", Some(Taken::Num(GRIP))),
+    ("wheels.<name>.steers", "bool", Some(Taken::Flag(STEERS))),
+    ("wheels.<name>.drives", "bool", Some(Taken::Flag(DRIVES))),
+    ("wheels.<name>.brakes", "bool", Some(Taken::Flag(BRAKES))),
+    ("steer_max", "deg", Some(Taken::Num(STEER_MAX))),
+];
+
 /// One wheel: its mount point on the chassis, its radius, its suspension, its grip and whether it
 /// steers, drives and brakes. Its ray points down the chassis's −Y, its axle along X and its
 /// heading along +Z.
@@ -184,17 +220,17 @@ impl Reader {
                     rest: self.num(s, "rest", &sp, 0.0, 0.0, f64::MAX),
                     travel: self.num(s, "travel", &sp, 0.0, 0.0, f64::MAX),
                     hz: self.num(s, "hz", &sp, 1.0, f64::MIN_POSITIVE, f64::MAX),
-                    damping_ratio: self.num(s, "damping_ratio", &sp, 0.3, 0.0, f64::MAX),
-                    grip: self.num(w, "grip", &p, 1.0, 0.0, f64::MAX),
-                    steers: self.flag(w, "steers", &p, false),
-                    drives: self.flag(w, "drives", &p, false),
-                    brakes: self.flag(w, "brakes", &p, true),
+                    damping_ratio: self.num(s, "damping_ratio", &sp, DAMPING_RATIO, 0.0, f64::MAX),
+                    grip: self.num(w, "grip", &p, GRIP, 0.0, f64::MAX),
+                    steers: self.flag(w, "steers", &p, STEERS),
+                    drives: self.flag(w, "drives", &p, DRIVES),
+                    brakes: self.flag(w, "brakes", &p, BRAKES),
                 },
             );
         }
         Some(Vehicle {
             wheels: out,
-            steer_max: self.num(m, "steer_max", &p, 35.0, 0.0, 89.0),
+            steer_max: self.num(m, "steer_max", &p, STEER_MAX, 0.0, 89.0),
         })
     }
 }

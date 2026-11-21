@@ -621,10 +621,18 @@ fn copy_columns_op(
         locale,
         plurals: &plurals,
     };
+    let entries = crate::entries::Frame {
+        doc: frame.doc,
+        t,
+        planted: crate::entries::planted(v.planted()),
+    };
+    let shown = entries.columns(item).into_iter().map(|(n, c, _)| (n, c));
     let edits = frame
         .columns(item)
         .into_iter()
-        .map(|(name, column, _)| Edit {
+        .map(|(n, c, _)| (n, c))
+        .chain(shown)
+        .map(|(name, column)| Edit {
             add: false,
             path: vec!["params".into(), "columns".into(), name],
             value: Datum::Typed(Val::json(column)),
@@ -639,7 +647,8 @@ fn plurals() -> deep_canvas::registry::TableValue {
 
 /// A text holding a lookup: `text: {copy, args}` or a template with a `{copy: …}` slot.
 pub fn is_keyed(_: &Value, _: &str, item: &Value) -> bool {
-    item["kind"] == "text@1" && !lookups_of(item).is_empty()
+    item["kind"] == "text@1"
+        && (!lookups_of(item).is_empty() || crate::entries::is_entry_text(item))
 }
 
 fn copy(v: &mut deep_canvas::schedule::View<'_>) -> Result<(), deep_canvas::schedule::OpError> {
@@ -657,6 +666,27 @@ fn copy(v: &mut deep_canvas::schedule::View<'_>) -> Result<(), deep_canvas::sche
     let id = v.id().unwrap_or_default().to_string();
     let empty = Map::new();
     let doc = doc.as_object().unwrap_or(&empty);
+    // #297: an entry text shows its player's latest entry, read from the track.
+    if let Some(Ok(e)) = item
+        .pointer("/params/text")
+        .filter(|t| crate::entries::is_entry(t))
+        .map(crate::entries::spec)
+    {
+        let frame = crate::entries::Frame {
+            doc,
+            t,
+            planted: crate::entries::planted(planted),
+        };
+        // An entry shows as text does, never as a bound number: it ellipsizes when it overflows.
+        let shown = crate::scene::Shown {
+            bound: "copy".into(),
+            text: frame.text(&e).unwrap_or_default(),
+            stale: false,
+            age: None,
+            changes_at: None,
+        };
+        return v.write("text.copy", Val::typed(Some(shown)));
+    }
     let frame = Frame {
         doc,
         t,
@@ -799,7 +829,8 @@ fn copy_columns(set: &Value) -> Vec<(&str, &Value)> {
 
 /// A mark set holding a copy column.
 pub fn has_copy_column(_: &Value, _: &str, item: &Value) -> bool {
-    item["kind"] == "marks@1" && !copy_columns(item).is_empty()
+    item["kind"] == "marks@1"
+        && (!copy_columns(item).is_empty() || crate::entries::has_entry_column(item))
 }
 
 impl Frame<'_> {
@@ -881,9 +912,12 @@ pub fn apply(
     t: i64,
     locale: &str,
 ) -> Option<Map<String, Value>> {
+    // #297: entry texts and columns first, then keyed copy over what they show.
+    let entered = crate::entries::apply(doc, items, t, crate::entries::Planted::None);
+    let items = entered.as_ref().unwrap_or(items);
     let keyed = |i: &Value| is_keyed(&Value::Null, "", i) || has_copy_column(&Value::Null, "", i);
     if !items.values().any(keyed) {
-        return None;
+        return entered;
     }
     let plurals = Table::pinned();
     let frame = Frame {

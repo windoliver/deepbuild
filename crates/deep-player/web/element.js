@@ -494,8 +494,11 @@ class DeepPlayer extends HTMLElement {
         tick();
       }
     });
-    ws.addEventListener('open', () => { timer = setInterval(tick, 8); });
-    ws.addEventListener('close', () => { clearInterval(timer); this.#player.net_disconnected(); this.#notify(0); this.#prompt(); });
+    // #551: a person's keys while the match plays are entries of this copy's player, on each control whose keys name
+    // them; a key a script dispatched is left alone.
+    const keys = (e) => { if (e.isTrusted && this.#player.net_key(e.key)) e.preventDefault(); };
+    ws.addEventListener('open', () => { timer = setInterval(tick, 8); window.addEventListener('keydown', keys); });
+    ws.addEventListener('close', () => { clearInterval(timer); window.removeEventListener('keydown', keys); this.#player.net_disconnected(); this.#notify(0); this.#prompt(); });
   }
 
   /** The waiting notice, the player's own: shown once this copy has waited 0.25 s for a player's message. */

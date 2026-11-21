@@ -3738,7 +3738,7 @@ impl Renderer {
             *slot = self.light_rows(scene, &scene.lights[i], weight, local);
         }
         // The fill lights at this view (#1634), by the policy's order, for their clusters' pass.
-        let ordering = std::time::Instant::now();
+        let ordering = web_time::Instant::now();
         let mut order = light::fill_order(&scene.lights, scores);
         // The planted wrong programs: the lights in the document's order, and the key lights' cut
         // at 32 with its margin.
@@ -5454,7 +5454,7 @@ impl Renderer {
             .filter(|s| s.shadow && !cascaded)
             .and_then(|s| shadow::light_clip(scene, s.toward, 0.0));
         self.prepare_cascades(device, scene, &frame);
-        let scoring = std::time::Instant::now();
+        let scoring = web_time::Instant::now();
         let policy = scene
             .light_cut
             .clone()

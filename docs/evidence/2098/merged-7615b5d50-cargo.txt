@@ -1,0 +1,83 @@
+# #2098 on the second merge of main (7615b5d50 = d685cd167 + origin/main 54f9bdb94): cargo test of the seven crates the change reaches
+# (deep-canvas-physics deep-gpu-layer deep-logic deep-physics-rapier deep-play deep-player deep-show), as node scripts/affected.mjs ran it under a test grant,
+# November 20, 2026, finished 08:28. That run's vitest files were void (the worktree's packages weren't built, so vitest.config.ts didn't load) and it was stopped;
+# only its cargo job is read here.
+
+ok 184, FAILED 2, ignored 1
+
+## the two physics crates' unit tests
+test doc::data::tests::another_controls_field_is_its_last_entry_at_the_flick ... ok
+test doc::dims::tests::a_2d_world_refuses_what_its_backend_does_not_run_yet ... ok
+test doc::dims::tests::a_world_refuses_the_other_dimensions_shapes_and_points ... ok
+test doc::dims::tests::an_inertia_is_three_moments_above_zero ... ok
+test kit::scan::tests::primitives_meet_where_their_geometry_says ... ok
+test ring::tests::doubles_within_budget_and_the_planted_ring_forgets ... ok
+test wind::tests::a_steady_wind_pushes_both_faces_across_it_and_slows_a_spin ... ok
+test wind::tests::a_velocity_reads_t_and_p_and_a_gust_scales_it_by_the_lattice_noise ... ok
+test wind::tests::a_wind_is_refused_where_it_is_not_written_whole_or_cannot_push ... ok
+test doc::data::tests::a_throw_reads_each_entrys_own_ray ... ok
+test doc::dims::tests::a_2d_world_reads_its_shapes_points_and_turns ... ok
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test cast::tests::a_result_keeps_the_nearest_8_by_distance_then_id ... ok
+test tests::the_bounds_a_centre_of_mass_is_held_to_are_the_built_shapes ... ok
+test tests::a_written_centre_of_mass_keeps_the_mass_the_shapes_give ... ok
+test tests::a_ray_down_meets_a_heightfield_on_its_shipped_split ... ok
+test runner::dims::tests::a_2d_world_caps_a_speed_aloud_and_refuses_what_reads_it_elsewhere ... ok
+test belt::tests::a_kinematic_bodys_belt_carries_as_a_static_bodys_does ... ok
+test vehicle::tests::a_sleeping_car_wakes_on_the_step_the_body_under_it_wakes_or_moves ... ok
+test runner::dims::tests::a_checkpoint_of_the_other_backend_is_refused_naming_both ... ok
+test runner::dims::tests::a_2d_world_writes_its_contacts_and_its_rest_and_keys_by_rapier2d ... ok
+test belt::tests::the_kit_holds_a_backend_to_each_belts_own_direction ... ok
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.44s
+
+## every target's result
+Running unittests src/lib.rs (deep_canvas_physics) :: test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running unittests src/main.rs (deep_gpu) :: test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/ambient_class.rs (ambient_class) :: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running unittests src/lib.rs (deep_logic) :: test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running unittests src/main.rs (deep_logic) :: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/controls_542.rs (controls_542) :: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/fixture_once.rs (fixture_once) :: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/held_saves.rs (held_saves) :: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/library_trap.rs (library_trap) :: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/play_184.rs (play_184) :: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running unittests src/lib.rs (deep_physics_rapier) :: test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running unittests src/main.rs (deep_physics) :: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/simd_backend_determinism.rs (simd_backend_determinism) :: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/simd_backend_parity.rs (simd_backend_parity) :: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/snapshot_portability.rs (snapshot_portability) :: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/snapshot_roundtrip.rs (snapshot_roundtrip) :: test result: ok. 8 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out
+Running unittests src/lib.rs (deep_play) :: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running unittests src/lib.rs (deep_player) :: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running unittests src/main.rs (deep_show) :: test result: ok. 51 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/arranged_screen.rs (arranged_screen) :: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/capture.rs (capture) :: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/composites.rs (composites) :: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/full_screen.rs (full_screen) :: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/gallery.rs (gallery) :: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/live_forms.rs (live_forms) :: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/logic_canvas.rs (logic_canvas) :: test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/readouts_export.rs (readouts_export) :: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/recipe_frames.rs (recipe_frames) :: test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/render_back_pipeline.rs (render_back_pipeline) :: test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/render_back_vector_title.rs (render_back_vector_title) :: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/render_back_world.rs (render_back_world) :: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/serve_answers.rs (serve_answers) :: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/shared.rs (shared) :: test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/spoken_times.rs (spoken_times) :: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/stdin_lines.rs (stdin_lines) :: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Running tests/view_clock.rs (view_clock) :: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Doc-tests deep_canvas_physics :: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Doc-tests deep_logic :: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Doc-tests deep_physics_rapier :: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Doc-tests deep_play :: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Doc-tests deep_player :: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+## the two failures, which also fail in the affected runs of #2240, #2241, #2243 and #2371 on this machine
+thread 'an_export_draws_a_recipe_instance_like_the_items_it_derives' (148245600) panicked at crates/deep-show/tests/recipe_frames.rs:123:9:
+assertion `left == right` failed: {"outcome":"failed","code":"export.frames","issues":[{"check":"film.blank","code":"film.blank","severity":"error","kind":"flat","first":0,"last":0,"frames":[0],"what":"frames 0 to 0 (0.100 s) are flat: one luma window from 253 holds 98% of their pixels; declare the span an exception if it is mea
+thread 'render_back_draws_the_sprite_as_the_base_commit_did' (148246668) panicked at crates/deep-show/tests/render_back_pipeline.rs:98:5:
+216 pixels off the base commit's draw, first (pixel, drawn, base): Some(((3, 2), [255, 255, 255, 255], [248, 248, 253, 255]))
+error: 2 targets failed:
+    `-p deep-show --test recipe_frames`
+    `-p deep-show --test render_back_pipeline`

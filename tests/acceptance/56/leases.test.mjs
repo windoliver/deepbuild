@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  ATTEMPTS, assertNoLeases, busyPorts, HOLD_MS, holdCheck, leases, POOL, RANDOMIZED_RUNS, random, request, seedFromEnv, SESSIONS, setup, sleep, VARIANTS, waitFor, waitGone, within,
+  ATTEMPTS, assertNoLeases, busyPorts, HOLD_MS, holdCheck, leases, living, POOL, RANDOMIZED_RUNS, random, request, seedFromEnv, SESSIONS, setup, sleep, VARIANTS, waitFor, waitGone, within,
 } from './helpers.mjs';
 
 const ID = '#56.80ab2a58';
@@ -34,10 +34,43 @@ function sampler(socket, ports) {
   return { problems, most: () => most, stop: async () => { running = false; await done; } };
 }
 
+// setup() and the sampler, with one step when the test ends, pass or fail (#2804): stop the sampler,
+// kill the hub, then stop every process its checks left. A test that fails mid-workload ends with
+// the sampler polling and holds still running. The step is registered before setup() so it runs
+// before the helpers' own end steps, which would otherwise race checks still writing to the scratch
+// folder they delete.
+async function setupLeases(t, variant) {
+  let started;
+  const end = async () => {
+    if (!started) return;
+    const { hub, fx, leasesSeen } = started;
+    await leasesSeen?.stop();
+    if (hub.child.exitCode === null && hub.child.signalCode === null) try { process.kill(hub.pid, 'SIGKILL'); } catch {}
+    await hub.exited;
+    // A check still running can show in `ps` without its arguments, so without the marker, and
+    // start a marked grandchild after a pass. Keep stopping marked processes for a second after the
+    // hub is gone and until a pass finds none, 5 s at most, polling through waitFor. A `ps` that
+    // fails counts as finding none, and running out of time ends the sweep without throwing.
+    const since = Date.now();
+    await waitFor(() => {
+      let left;
+      try { left = living(fx.run); } catch { left = []; }
+      for (const pid of left) try { process.kill(pid, 'SIGKILL'); } catch {}
+      return !left.length && Date.now() - since >= 1000;
+    }, 5000, 'no marked process left').catch(() => {});
+  };
+  t.after(end);
+  started = await setup(t, variant);
+  // A test that timed out inside setup() may have run this step before `started` was set, or may
+  // be about to run it, so run it here too instead of starting the sampler (twice is harmless).
+  if (t.signal.aborted) { await end(); throw t.signal.reason; }
+  started.leasesSeen = sampler(started.hub.socket, started.ports);
+  return started;
+}
+
 for (const variant of VARIANTS) {
   test(`${ID} [${variant}] 50 sessions holding hooks share a pool of 10 ports, never more than 10 leased at once, and every lease comes back`, { timeout: 120_000 }, async (t) => {
-    const { hub, fx, ports } = await setup(t, variant);
-    const leasesSeen = sampler(hub.socket, ports);
+    const { hub, fx, ports, leasesSeen } = await setupLeases(t, variant);
     const holds = Array.from({ length: SESSIONS }, (_, index) => holdCheck(hub.socket, fx.check(`s${index}`, ['pass'], 1)));
     for (const { handle } of holds) {
       const ack = await within(handle.ack, 5000, 'an acknowledgement');
@@ -61,8 +94,7 @@ for (const variant of VARIANTS) {
   test(`${ID} [${variant}] 1,000 randomized runs with flaky checks, random cancels and an extension that ignores its abort signal leak no lease`, { timeout: 300_000 }, async (t) => {
     const seed = seedFromEnv();
     const draw = random(seed);
-    const { hub, fx, ports } = await setup(t, variant);
-    const leasesSeen = sampler(hub.socket, ports);
+    const { hub, fx, ports, leasesSeen } = await setupLeases(t, variant);
     // What each script must end as when nothing cancels it and it isn't still queued at 2 s.
     const scripts = [
       { script: ['pass'], outcome: 'pass', attempts: 1, weight: 28 },
