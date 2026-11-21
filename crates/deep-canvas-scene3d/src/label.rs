@@ -68,6 +68,8 @@ pub struct Labels {
     /// #450: whole trails' samples, taken once at check and kept by their source chain's key for
     /// the session that evaluates the scene, so a frame never takes them again.
     pub(crate) trails: crate::trail::Held,
+    /// #265: the places trails and wakes read at earlier times, kept by their document.
+    pub(crate) places: crate::trail::Memo,
 }
 
 impl Default for Labels {
@@ -86,6 +88,7 @@ impl Labels {
             runs: BTreeMap::new(),
             fixed_em: false,
             trails: BTreeMap::new(),
+            places: Default::default(),
         }
     }
 

@@ -1390,6 +1390,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || *p == deep_canvas_marks::entries::FIT_SKIPS_ENTRIES
                 || entries::PLANTED.contains(p)
                 || deep_net::PLANTED.contains(p)
+                // #265's trail that keeps the points a copy read from predicted steps.
+                || *p == net::TRAIL_KEEPS_PREDICTED
                 // #225's in the data module's integrator; #2450's in its reading of axis titles.
                 || *p == deep_canvas_marks::vector_field::PLANTED_EULER
                 || *p == deep_canvas_marks::axes3d::TAKES_ANY_KIND
