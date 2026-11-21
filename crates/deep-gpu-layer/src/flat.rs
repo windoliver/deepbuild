@@ -398,3 +398,32 @@ fn mark_pass(
         ..Default::default()
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::is_flat;
+
+    /// #1561: under a camera only a 2D film is 2D. A document that holds anything of scene3d's
+    /// stays the 3D path's, whatever its camera's projection.
+    #[test]
+    fn a_camera_makes_a_document_2d_only_when_it_holds_nothing_of_scene3ds() {
+        let camera = json!({"kind": "camera@1", "params": {
+            "projection": "orthographic", "target": [160, 90, 0], "view_width": 320}});
+        let rect = json!({"kind": "rect@1", "params": {"box": [0, 0, 60, 60]}});
+        let doc = |items| json!({"size": [320, 180], "camera": "cam", "items": items});
+        assert!(is_flat(&json!({"size": [320, 180], "items": {"r": rect}})));
+        assert!(is_flat(&doc(json!({"cam": camera, "r": rect}))));
+        let ball = json!({"kind": "ball@1", "params": {"radius": 5, "segments": 16}});
+        assert!(
+            !is_flat(&doc(json!({"cam": camera, "ball": ball}))),
+            "a ball under an orthographic camera"
+        );
+        let sky = json!({"kind": "sky@1", "params": {}});
+        assert!(
+            !is_flat(&doc(json!({"cam": camera, "r": rect, "sky": sky}))),
+            "a sky over 2D marks"
+        );
+    }
+}
