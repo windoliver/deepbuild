@@ -474,6 +474,12 @@ impl Program {
                         inputs_of.push((name.as_str(), CoreInput::Array(Arc::new(read))));
                         continue;
                     }
+                    // #290: this copy's player, a view value (Net: this copy's player).
+                    if array == crate::me::VAR {
+                        let me = crate::me::read(&self.motion.control_defaults);
+                        inputs_of.push((name.as_str(), me));
+                        continue;
+                    }
                     let why = "motion's drivers read only a logic item's scalar f64 output or one element of an i32 or f64 one, baked into the document, or a spectrum's bands";
                     let detail = Some(Box::new(
                         json!({"driver": driver.id, "array": array, "why": why}),

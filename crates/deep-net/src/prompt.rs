@@ -47,10 +47,12 @@ pub fn reads_me(doc: &Value) -> bool {
         }
     }
     let items = doc.get("items").and_then(Value::as_object);
-    items.into_iter().flatten().any(|(_, item)| {
-        let p = &item["params"];
-        p.get("fog").is_some_and(|f| f.get("grid").is_some()) || walk(item)
-    })
+    // #290: a driver's var names it in the document's `drivers`.
+    doc.get("drivers").is_some_and(walk)
+        || items.into_iter().flatten().any(|(_, item)| {
+            let p = &item["params"];
+            p.get("fog").is_some_and(|f| f.get("grid").is_some()) || walk(item)
+        })
 }
 
 /// The prompt as its host shows it: `{state, relay, players, courtesy, refused, text}`, where
@@ -123,6 +125,10 @@ mod tests {
             {"seen": {"array": "rules.sight", "as": "i32"}}}}});
         let paddle = json!({"items": {"ball": {"kind": "marks@1", "params": {"x": 1}}}});
         assert!(reads_me(&fog) && !reads_me(&paddle));
+        // #290: a driver that reads it, as a hidden view's opacity does.
+        let driven = json!({"items": {}, "drivers": {"d": {"target": "items/a/hidden_view/opacity",
+            "expr": "me", "vars": {"me": "match.me"}}}});
+        assert!(reads_me(&driven));
         let p = prompt("relay.test", 2, reads_me(&fog), &State::Open);
         assert_eq!(p["courtesy"], json!(COURTESY));
         assert!(p["text"]

@@ -2630,7 +2630,7 @@ pub(crate) fn resolve(
                 unreachable()
             }
         }
-        ["adjust", name] if ADJUST_FIELDS.contains(name) => Ok(()),
+        [group, name] if super::item_channel(group, name) => Ok(()),
         [field] if ITEM_OWN_FIELDS.contains(field) => Ok(()),
         // A part of a module's kind, such as a vector's SVG ids (#398): its role, opacity and
         // offset. The parts come from the module's import, so the module resolves the part.

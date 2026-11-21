@@ -487,6 +487,72 @@ pub fn inside(clip: &[f64; 16], corners: &[[f64; 3]; 8]) -> bool {
     (0..2).all(|a| hi[a] >= -1.0 && lo[a] <= 1.0)
 }
 
+impl crate::Renderer {
+    /// view3d's `shadow` target (#290): the depth texels of every shadow map the lights of the
+    /// frame just drawn read, f32 each, rows top-down: the key sun's cascades in order, then each
+    /// local map's layers, in the order a frame's `shadows` report lists the maps. Empty for a
+    /// frame that reads none.
+    pub fn read_shadows(&self, device: &deep_gpu::device::Device) -> Option<Vec<u8>> {
+        let mut out = Vec::new();
+        if let Some((array, _)) = &self.cascaded.texture {
+            for z in 0..self.cascaded.list.len() as u32 {
+                out.extend(read_layer(device, array.texture(), z, self.cascaded.size)?);
+            }
+        }
+        if let Some((array, _)) = &self.locals.texture {
+            for m in &self.locals.list {
+                for z in m.first..m.first + m.map.faces.len() as u32 {
+                    out.extend(read_layer(device, array.texture(), z, self.locals.size)?);
+                }
+            }
+        }
+        Some(out)
+    }
+}
+
+/// Layer `z` of a square depth array `side` texels across, read back as tightly packed rows.
+fn read_layer(
+    device: &deep_gpu::device::Device,
+    texture: &wgpu::Texture,
+    z: u32,
+    side: u32,
+) -> Option<Vec<u8>> {
+    let row = side * 4;
+    let padded =
+        row.div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT) * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+    let bytes = u64::from(padded) * u64::from(side);
+    let data = crate::read_back(
+        device,
+        "scene3d shadow read back",
+        bytes,
+        |encoder, staging| {
+            encoder.copy_texture_to_buffer(
+                wgpu::TexelCopyTextureInfo {
+                    texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d { x: 0, y: 0, z },
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::TexelCopyBufferInfo {
+                    buffer: staging,
+                    layout: wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(padded),
+                        rows_per_image: Some(side),
+                    },
+                },
+                crate::extent([side; 2]),
+            );
+        },
+    )?;
+    let mut out = Vec::with_capacity((row * side) as usize);
+    for y in 0..side as usize {
+        let start = y * padded as usize;
+        out.extend_from_slice(&data[start..start + row as usize]);
+    }
+    Some(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

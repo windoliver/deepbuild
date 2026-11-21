@@ -2207,7 +2207,8 @@ fn run_view(
                     .collect();
                 frame.insert("clicks".into(), json!(answered));
             }
-            frames.push(Value::Object(frame));
+            let row = crate::hidden::reported(app, out, &args.targets, &drawn.counts, frame)?;
+            frames.push(row);
         }
         Ok(())
     })();

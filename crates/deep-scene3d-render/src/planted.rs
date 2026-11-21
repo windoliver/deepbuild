@@ -139,4 +139,6 @@ pub struct Planted {
     pub horizon_unbaked: bool,
     /// #1381: a terrain plate's sky occlusion from its slope alone, (1 + n.y) ÷ 2.
     pub occlusion_from_slope: bool,
+    /// #290: the hidden view's wrong programs.
+    pub hidden: crate::hidden::Planted,
 }

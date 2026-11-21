@@ -93,6 +93,12 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         horizon_unbaked: p == Some(Planted::TerrainNoHorizonBake),
         occlusion_from_slope: p == Some(Planted::TerrainOcclusionFromSlope),
         ids_ignore_mask: p == Some(Planted::IdsIgnoreMask),
+        hidden: deep_scene3d_render::hidden::Planted {
+            draws_visible: p == Some(Planted::HiddenViewDrawsWhereVisible),
+            stacks_layers: p == Some(Planted::HiddenViewWithoutOwnDepth),
+            writes_ids: p == Some(Planted::HiddenViewWritesIds),
+            after_status: p == Some(Planted::HiddenViewAfterStatus),
+        },
         cuts_color_only: p == Some(Planted::CutsColorOnly),
         local: deep_scene3d_render::local::Planted {
             stale: p == Some(Planted::LocalMapStale),
@@ -664,6 +670,21 @@ pub fn view_depth(app: &App) -> Result<Option<Vec<u8>>, Value> {
             let shared = lock(&s.shared);
             let r = shared.renderer.as_ref().ok_or("no renderer")?;
             Ok(r.read_view_depth(&device))
+        })
+        .map_err(|e| refused("render_failed", e))
+}
+
+/// #290: the shadow maps the frame the session drew last read, f32 depths: view3d's `shadow`
+/// target.
+pub fn shadows(app: &App) -> Result<Vec<u8>, Value> {
+    app.worker
+        .call(move |state| -> Result<Vec<u8>, String> {
+            let s = state.scene3d.as_mut().ok_or("no session")?;
+            let device = s.view.device().clone();
+            let shared = lock(&s.shared);
+            let r = shared.renderer.as_ref().ok_or("no renderer")?;
+            r.read_shadows(&device)
+                .ok_or("no shadow map read back".into())
         })
         .map_err(|e| refused("render_failed", e))
 }
