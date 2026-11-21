@@ -75,7 +75,7 @@ pub mod water;
 
 /// The wrong programs #420's, #441's and #440's criteria plant in scene3d's and the building
 /// module's operators, each reachable only through a proof surface's `planted`.
-pub const PLANTED: [&str; 56] = [
+pub const PLANTED: [&str; 58] = [
     "torus_genus_0",
     "vertex_count_off_by_one",
     "cap_left_open",
