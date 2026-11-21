@@ -32,6 +32,7 @@ pub fn leaked_world() -> rapier3d::prelude::PhysicsWorld {
     PhysicsWorld::default()
 }
 
+mod articulated;
 mod belt;
 pub mod bound;
 pub mod cast;
@@ -191,6 +192,14 @@ pub enum Twin {
     FlatOnRapier3d,
     WindNoiseFromSin,
     InertiaIgnored,
+    /// #2310's wrong wrappers: one that builds every articulated joint as a separate one; one
+    /// that drops an articulated joint's limits; and one that leaves every articulated joint at
+    /// coordinate 0, whatever its two bodies' poses. And the wrapper under its planted check,
+    /// which builds nothing for an articulated joint the engine's trees can't take.
+    LinksSeparate,
+    LinksWithoutLimits,
+    LinksAtZero,
+    TreeCountsOnly,
 }
 
 /// A Rapier world behind the backend interface.
@@ -221,6 +230,10 @@ pub struct Rapier {
     /// #523's planted twin, if any.
     pub twin: Twin,
     motors: Vec<(String, ImpulseJointHandle, JointKind, Motor)>,
+    /// #2310: every articulated joint, by ID, with its kind; and those whose motor target a
+    /// channel sets.
+    links: Vec<(String, MultibodyJointHandle, JointKind)>,
+    link_motors: Vec<(String, MultibodyJointHandle, JointKind, Motor)>,
     /// Each tagged shape use's material tag, by (body, shape-use index).
     tags: BTreeMap<(String, u32), String>,
     hit_threshold: f32,
@@ -558,7 +571,7 @@ impl Rapier {
         &mut self,
         handles: &BTreeMap<String, RigidBodyHandle>,
         id: &str,
-        j: &Joint,
+        (j, link): (&Joint, bool),
         out: &mut Vec<Refusal>,
     ) {
         let (h1, h2) = (self.handle(handles, &j.a), self.handle(handles, &j.b));
@@ -569,6 +582,8 @@ impl Rapier {
         let length = (at(&self.world, h1, p1) - at(&self.world, h2, p2)).length();
         let axis = v3(j.a.axis).normalize();
         let deg = |x: f64| x as f32 * PI / 180.0;
+        let unlimited =
+            self.twin == Twin::NoJointLimits || (link && self.twin == Twin::LinksWithoutLimits);
         let mut data: GenericJoint = match j.kind {
             JointKind::Fixed => FixedJointBuilder::new()
                 .local_anchor1(p1)
@@ -593,7 +608,7 @@ impl Rapier {
                 let mut b = RevoluteJointBuilder::new(axis)
                     .local_anchor1(p1)
                     .local_anchor2(p2);
-                if let Some([lo, hi]) = j.limits.filter(|_| self.twin != Twin::NoJointLimits) {
+                if let Some([lo, hi]) = j.limits.filter(|_| !unlimited) {
                     b = b.limits([deg(lo), deg(hi)]);
                 }
                 if let Some(m) = &j.motor {
@@ -614,7 +629,7 @@ impl Rapier {
                 let mut b = PrismaticJointBuilder::new(axis)
                     .local_anchor1(p1)
                     .local_anchor2(p2);
-                if let Some([lo, hi]) = j.limits.filter(|_| self.twin != Twin::NoJointLimits) {
+                if let Some([lo, hi]) = j.limits.filter(|_| !unlimited) {
                     b = b.limits([lo as f32, hi as f32]);
                 }
                 if let Some(m) = &j.motor {
@@ -671,6 +686,9 @@ impl Rapier {
         };
         data.set_contacts_enabled(j.collide_connected);
         data.set_enabled(j.active);
+        if link {
+            return self.link(id, j, (h1, h2), data, out);
+        }
         let h = self.world.insert_impulse_joint(h1, h2, data);
         self.joints.push((id.into(), h, j.kind));
         if let Some(b) = &j.breaks_at {
@@ -750,13 +768,9 @@ impl Rapier {
             let Some(j) = self.world.impulse_joints.get_mut(*h, true) else {
                 continue;
             };
-            let (k, c) = spring(m.hz, m.damping_ratio);
-            if m.velocity {
-                j.data.set_motor_velocity(axis, x, c);
-            } else {
-                j.data.set_motor_position(axis, x, k, c);
-            }
+            articulated::drive(&mut j.data, *kind, m, *target);
         }
+        self.aim_links(t);
         self.jams = self.solve_step(t).into_iter().collect();
     }
 }
@@ -896,6 +910,8 @@ impl Backend for Rapier {
         self.breakable.clear();
         self.joints.clear();
         self.motors.clear();
+        self.links.clear();
+        self.link_motors.clear();
         self.jams.clear();
         self.watched = w
             .outputs
@@ -1044,8 +1060,11 @@ impl Backend for Rapier {
             self.bodies.push((id.clone(), h));
         }
         self.aero = forces::aero(w);
+        // #2310: an articulated joint is a link of the engine's articulation; in kinematic mode
+        // the solve places every body, so it is built as any other.
+        let links = w.mode != Mode::Kinematic && self.twin != Twin::LinksSeparate;
         for (id, j) in &w.joints {
-            self.joint(&handles, id, j, &mut out);
+            self.joint(&handles, id, (j, j.articulated && links), &mut out);
         }
         self.vehicles.build(w, &handles);
         self.kinematic(w);
@@ -1185,6 +1204,7 @@ impl Backend for Rapier {
                     angular: back(rb.angvel() * (180.0 / PI)),
                     contact_impulse: f64::from(impulse.length()),
                     sleeping: rb.is_sleeping(),
+                    ..self.measured(rb)
                 }
             })
             .collect();

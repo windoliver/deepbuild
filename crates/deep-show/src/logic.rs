@@ -80,6 +80,12 @@ impl Hub<'_> {
         }
         let (unfit, ms) = copy_fit(form);
         issues.extend(unfit);
+        // #297: entry texts' widest, with a seat's number, in every locale alike.
+        if let Some(map) = form.as_object() {
+            let skip = planted == Some(deep_canvas_marks::entries::FIT_SKIPS_ENTRIES);
+            let ty = deep_canvas_marks::scene::Type::default();
+            deep_canvas_marks::entries::fit_issues(map, &ty, skip, &mut issues);
+        }
         if let Some(timing) = timing {
             timing.insert("copy_fit_ms".into(), json!(ms));
         }

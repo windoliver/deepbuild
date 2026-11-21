@@ -7,6 +7,7 @@ import { openRecord } from '@deepbuild/record';
 import { verdictLine } from '@deepbuild/verdicts';
 import { afterEach, expect, it } from 'vitest';
 import { decide, repeatOf, sessionStates, type Call, type SessionFacts } from '../src/status.js';
+import { watchWords } from '../src/watch.js';
 import { ulid } from '../src/wire.js';
 
 const NOW = 1_800_000_000_000;
@@ -45,12 +46,12 @@ it('a watch-only session whose FAIL no send-back reached never reads sent back; 
   const claim = { made: at(5, 'claim.made'), outcome: 'FAIL', judged: at(6, 'verdict.made'), round: 1, owner: null, evidence: null };
   const watch = { cause: 'version' as const, version: '2.1.400', at: at(2, 'holds.watch') };
   const held = decide(facts({ status: 'finished', claim, watch, stopped: at(7, 'agent.stop') }), NOW);
-  expect([held.state, held.flag?.code, held.flag?.text]).toEqual(['finished', 'watch-only', 'it runs claude-code 2.1.400, past the versions its facts cover']);
+  expect([held.state, held.flag?.code, held.flag?.text]).toEqual(['finished', 'watch-only', 'it runs claude-code 2.1.400, not a version its facts cover']);
   expect(decide(facts({ status: 'finished', claim: { ...claim, sent: at(7, 'claim.sent_back') }, watch }), NOW).state).toBe('sent back');
   process.env.DEEP_HUB_PLANT = 'sent-back-without-hold';
   expect(decide(facts({ status: 'finished', claim, watch }), NOW).state).toBe('sent back');
-  const line = verdictLine({ outcome: 'FAIL', requirements: [{ req: 'req:c#R1', outcome: 'FAIL', smallest: null, points_to: null }], round: 1, running: [], watch: { why: '2.1.400 past its facts', unsent: true } });
-  expect(line).toMatch(/^watch-only: 2\.1\.400 past its facts · FAIL 0\/1 · next: you/);
+  const line = verdictLine({ outcome: 'FAIL', requirements: [{ req: 'req:c#R1', outcome: 'FAIL', smallest: null, points_to: null }], round: 1, running: [], watch: { why: watchWords(watch, 'claude-code').short, unsent: true } });
+  expect(line).toMatch(/^watch-only: 2\.1\.400 not in its facts · FAIL 0\/1 · next: you/);
   expect(line).not.toMatch(/sent back/);
 });
 

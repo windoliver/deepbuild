@@ -18,6 +18,7 @@ mod data_hash;
 mod defaults;
 mod determinism;
 mod efficiency;
+mod entries;
 mod evidence;
 mod export;
 mod extended;
@@ -798,6 +799,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 track: optional(c.get("track"), |t| t.as_array().cloned())?,
                 data_hash: flag("data_hash")?,
                 texts: flag("texts")?,
+                shown: flag("shown")?,
                 carried: flag("carried")?,
                 tour_pointer: flag("tour_pointer")?,
             })));
@@ -1368,6 +1370,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 // #223's in the marks2d module's warp.
                 || deep_canvas_marks::warp::PLANTED.contains(p)
                 || deep_net::Planted::named(p).is_some()
+                // #297's in the text module's entry texts and the text control's range.
+                || deep_canvas_marks::entries::planted(Some(p)) != Default::default()
+                || *p == deep_canvas_marks::entries::FIT_SKIPS_ENTRIES
+                || entries::PLANTED.contains(p)
                 || deep_net::PLANTED.contains(p)
                 // #225's in the data module's integrator; #2450's in its reading of axis titles.
                 || *p == deep_canvas_marks::vector_field::PLANTED_EULER
