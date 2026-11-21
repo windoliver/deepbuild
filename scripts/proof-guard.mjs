@@ -157,8 +157,8 @@ function laneFileProblem(text) {
 }
 
 export function guard({ root, change, issue }, approvals, say) {
-  // With an issue, the guard keeps its tags; with none, every tag.
-  const relevant = (text) => tagsIn(text).filter((tag) => !issue?.number || tag.startsWith(`#${issue.number}.`));
+  // Every tag, whatever issue the change names (#2487): another issue's tagged test is as guarded as its own.
+  const relevant = tagsIn;
   let refused = 0;
   // A key that signs with no person there approves nothing, and the list the change leaves holds none.
   for (const why of approvals.refused ?? []) {

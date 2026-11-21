@@ -79,6 +79,11 @@ fn register(r: &mut Registrar) {
         issues(budget_report(d, i))
     })
     .check_report(budget_report);
+    // #280: net.feel, what players would feel on a seeded network.
+    r.check("net.feel", "any", &["net.feel"], |d, i| {
+        issues(feel_report(d, i))
+    })
+    .check_report(feel_report);
     r.code(
         "net.rollback",
         "A copy ran a match step before it held every player's entries for it, or a held-back run parted from the on-time run.",
@@ -93,13 +98,19 @@ fn register(r: &mut Registrar) {
     );
     r.code(
         "net.budget",
-        "A match step passes the class's frame time.",
-        "Split the work across steps with its progress in memory.",
+        "A match step passes the class's frame time, or the net item declares a window past the one a host it plays on reports.",
+        "Split the work across steps with its progress in memory, or declare at most the reported window, 0 for lockstep.",
+        false,
+    );
+    r.code(
+        "net.feel",
+        "A copy's stall, rollback depth or correction distance passed its bound on the seeded network, or a copy waited past its deadline.",
+        "Raise the delay to the latency the players need, lighten the step, or play lockstep.",
         false,
     );
     // Each code's planted fixture (#138's kit): a match whose logic traps at its first step, so
     // every copy ends it faulted and no net check kind can pass on it.
-    for code in ["net.rollback", "net.desync", "net.budget"] {
+    for code in ["net.rollback", "net.desync", "net.budget", "net.feel"] {
         planted(r, code);
     }
 }
@@ -135,6 +146,7 @@ pub struct Runs {
     pub rollback: ReportRun,
     pub desync: ReportRun,
     pub budget: ReportRun,
+    pub feel: ReportRun,
 }
 
 static RUNS: OnceLock<Runs> = OnceLock::new();
@@ -165,6 +177,11 @@ fn desync_report(doc: &Value, input: &Value) -> Report {
 fn budget_report(doc: &Value, input: &Value) -> Report {
     RUNS.get()
         .map_or_else(|| unbound("net.budget"), |r| (r.budget)(doc, input))
+}
+
+fn feel_report(doc: &Value, input: &Value) -> Report {
+    RUNS.get()
+        .map_or_else(|| unbound("net.feel"), |r| (r.feel)(doc, input))
 }
 
 fn issues(report: Report) -> Vec<(String, Raised)> {

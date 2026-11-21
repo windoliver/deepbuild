@@ -734,6 +734,7 @@ const MODULE_CHECK_KINDS: &[(&str, &str)] = &[
     ("net.rollback", "net"),
     ("net.desync", "net"),
     ("net.budget", "net"),
+    ("net.feel", "net"), // #280's readings of a seeded network.
 ];
 
 /// An entry in an existing agent tool.

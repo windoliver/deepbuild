@@ -196,5 +196,6 @@ console.log(`Left out by name, ending with the code of the program they run: ${[
 const wrong = rows.filter(([, code]) => !codes.includes(code));
 for (const [where, code] of wrong) console.log(`FAIL exits: ${where}: a command can exit ${code}, which exit.code@1 doesn't hold\n  Fix: exit with 0 done, 1 failed or refused, 2 not understood, nothing ran, or 3 not decided or not checked`);
 if (!rows.length) console.log('FAIL exits: no exit was read from the code, so the table proves nothing');
-if (wrong.length || !rows.length) process.exit(1);
-console.log(`PASS exits: ${rows.length} rows, each ${codes.join(', ')}`);
+// exitCode, never process.exit(): exiting at once can cut off what is still being written to a pipe, the FAIL line with it.
+if (wrong.length || !rows.length) process.exitCode = 1;
+else console.log(`PASS exits: ${rows.length} rows, each ${codes.join(', ')}`);

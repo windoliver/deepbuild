@@ -1,0 +1,247 @@
+# #2869 acceptance tests: the run on the base
+
+## The base (6a2b68d44, no #2869 implementation), in this worktree, on macOS (test limit 2)
+
+$ env -u DEEP_THROTTLE -u DEEP_PERF_LOCK -u NODE_TEST_CONTEXT node --test 'tests/acceptance/2869/*.test.mjs'
+(Node v24.22.0; load before the run: 31.42 37.80 31.33; stack-trace lines dropped; the checkout's path reads <checkout>, the temp folder <tmp>, home paths ~)
+
+✔ #2869.fd8c32fe a waiting request whose table write fails with EIO (an I/O error on the write) still ends BLOCKED throttle, exit 2, its command never run (443.496917ms)
+✔ #2869.fd8c32fe a waiting request whose table write fails with EACCES (permission refused at the open) still ends BLOCKED throttle, exit 2, its command never run (384.10775ms)
+✖ #2869.48e3b6ea a waiting request whose writes fail with ENOSPC (every write into the table folder fails, the lock file's first) leaves no temp file of its own in the table folder, while it waits and once it ends (4478.093333ms)
+✖ #2869.48e3b6ea a waiting request whose writes fail with ENOSPC (only the table's own write fails, its temp file) leaves no temp file of its own in the table folder, while it waits and once it ends (4451.588ms)
+✖ #2869.08271434 two requests waiting for a test slot while the disk is full (every write into the table folder fails, ENOSPC) keep waiting and keep their places: once space comes back, each free slot goes to the next in line, first, second, then a third queued after them whose writes never failed (3492.033584ms)
+✖ #2869.08271434 two requests waiting for a test slot while the disk is full (only the table's own write fails, ENOSPC) keep waiting and keep their places: once space comes back, each free slot goes to the next in line, first, second, then a third queued after them whose writes never failed (3425.366917ms)
+✖ #2869.08271434 a request whose wait runs out while the disk stays full reads INCONCLUSIVE no grant (exit 3), not BLOCKED, and not before its --wait ran out (472.386708ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 2
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 9967.925625
+
+✖ failing tests:
+
+test at tests/acceptance/2869/temp.test.mjs:14:3
+✖ #2869.48e3b6ea a waiting request whose writes fail with ENOSPC (every write into the table folder fails, the lock file's first) leaves no temp file of its own in the table folder, while it waits and once it ends (4478.093333ms)
+  AssertionError [ERR_ASSERTION]: the waiter's failed writes left table.lock.4344 in the table folder (at each of 4 looks, 400 ms apart, the disk full)
+  events:
+  {"name":"holder-2","event":"start","t":1795150767280,"pid":4314,"throttle":"test:483c841cbca3f5b1"}
+  {"name":"holder-1","event":"start","t":1795150767284,"pid":4316,"throttle":"test:d90eee7cc2ad127b"}
+  injected faults:
+  {"pid":4344,"code":"ENOSPC","syscall":"write","path":"<tmp>/deep-2869-cdjaVg/table/table.lock.4344","t":1795150767629}
+  table folder: log table.json table.lock.4344
+  table requests: [{"id":"9ce5756345c4a143","class":"test","pid":4344,"start":"Fri Nov 20 04:59:27 2026","nested":false,"window":false,"seq":3}]
+  waiter (pid 4344): exit 2
+  BLOCKED throttle: ENOSPC: no space left on device, write
+    Fix: Repair what the line names: ~/.deepbuild/throttle/ this user's to write, its table readable, ps runnable.
+  
+  holder-1 (pid 4093): still running
+  
+  holder-2 (pid 4096): still running
+  
+  + actual - expected
+  
+  + [
+  +   'table.lock.4344'
+  + ]
+  - []
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'table.lock.4344' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2869/temp.test.mjs:14:3
+✖ #2869.48e3b6ea a waiting request whose writes fail with ENOSPC (only the table's own write fails, its temp file) leaves no temp file of its own in the table folder, while it waits and once it ends (4451.588ms)
+  AssertionError [ERR_ASSERTION]: the waiter's failed writes left table.json.5268 in the table folder (at each of 4 looks, 400 ms apart, the disk full)
+  events:
+  {"name":"holder-1","event":"start","t":1795150771718,"pid":5253,"throttle":"test:64e6ceb5e32208a8"}
+  {"name":"holder-2","event":"start","t":1795150771727,"pid":5265,"throttle":"test:34045224036d423c"}
+  injected faults:
+  {"pid":5268,"code":"ENOSPC","syscall":"write","path":"<tmp>/deep-2869-3p6abx/table/table.json.5268","t":1795150772009}
+  table folder: log table.json table.json.5268
+  table requests: [{"id":"e084c78d0af66b1d","class":"test","pid":5268,"start":"Fri Nov 20 04:59:31 2026","nested":false,"window":false,"seq":3}]
+  waiter (pid 5268): exit 2
+  BLOCKED throttle: ENOSPC: no space left on device, write
+    Fix: Repair what the line names: ~/.deepbuild/throttle/ this user's to write, its table readable, ps runnable.
+  
+  holder-1 (pid 5178): still running
+  
+  holder-2 (pid 5179): still running
+  
+  + actual - expected
+  
+  + [
+  +   'table.json.5268'
+  + ]
+  - []
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'table.json.5268' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2869/wait.test.mjs:13:3
+✖ #2869.08271434 two requests waiting for a test slot while the disk is full (every write into the table folder fails, ENOSPC) keep waiting and keep their places: once space comes back, each free slot goes to the next in line, first, second, then a third queued after them whose writes never failed (3492.033584ms)
+  AssertionError [ERR_ASSERTION]: the first waiter gave up while the disk was full, though its --wait of 1 min hadn't run out
+  events:
+  {"name":"holder-1","event":"start","t":1795150767271,"pid":4311,"throttle":"test:8b8c02231d4c06d9"}
+  {"name":"holder-2","event":"start","t":1795150767276,"pid":4313,"throttle":"test:e037852e870dc6b0"}
+  injected faults:
+  {"pid":4345,"code":"ENOSPC","syscall":"write","path":"<tmp>/deep-2869-ugIRW2/table/table.lock.4345","t":1795150767617}
+  {"pid":4506,"code":"ENOSPC","syscall":"write","path":"<tmp>/deep-2869-ugIRW2/table/table.lock.4506","t":1795150767680}
+  table folder: log table.json
+  table requests: [{"id":"dab851a09772a985","class":"test","pid":4646,"start":"Fri Nov 20 04:59:27 2026","nested":false,"window":false,"seq":5}]
+  first (pid 4345): exit 2
+  BLOCKED throttle: ENOSPC: no space left on device, write
+    Fix: Repair what the line names: ~/.deepbuild/throttle/ this user's to write, its table readable, ps runnable.
+  
+  second (pid 4506): exit 2
+  BLOCKED throttle: ENOSPC: no space left on device, write
+    Fix: Repair what the line names: ~/.deepbuild/throttle/ this user's to write, its table readable, ps runnable.
+  
+  third (pid 4646): still running
+  
+  holder-1 (pid 4094): still running
+  
+  holder-2 (pid 4097): still running
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2869/wait.test.mjs:13:3
+✖ #2869.08271434 two requests waiting for a test slot while the disk is full (only the table's own write fails, ENOSPC) keep waiting and keep their places: once space comes back, each free slot goes to the next in line, first, second, then a third queued after them whose writes never failed (3425.366917ms)
+  AssertionError [ERR_ASSERTION]: the first waiter gave up while the disk was full, though its --wait of 1 min hadn't run out
+  events:
+  {"name":"holder-2","event":"start","t":1795150770737,"pid":5044,"throttle":"test:6a5c84fa9c32fcce"}
+  {"name":"holder-1","event":"start","t":1795150770740,"pid":5045,"throttle":"test:cdb5b0ecd507a178"}
+  injected faults:
+  {"pid":5081,"code":"ENOSPC","syscall":"write","path":"<tmp>/deep-2869-zrd5ix/table/table.json.5081","t":1795150771125}
+  {"pid":5046,"code":"ENOSPC","syscall":"write","path":"<tmp>/deep-2869-zrd5ix/table/table.json.5046","t":1795150771222}
+  table folder: log table.json
+  table requests: [{"id":"989b67d452f9bfd8","class":"test","pid":5116,"start":"Fri Nov 20 04:59:30 2026","nested":false,"window":false,"seq":5}]
+  first (pid 5046): exit 2
+  BLOCKED throttle: ENOSPC: no space left on device, write
+    Fix: Repair what the line names: ~/.deepbuild/throttle/ this user's to write, its table readable, ps runnable.
+  
+  second (pid 5081): exit 2
+  BLOCKED throttle: ENOSPC: no space left on device, write
+    Fix: Repair what the line names: ~/.deepbuild/throttle/ this user's to write, its table readable, ps runnable.
+  
+  third (pid 5116): still running
+  
+  holder-1 (pid 4973): still running
+  
+  holder-2 (pid 4974): still running
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2869/wait.test.mjs:51:1
+✖ #2869.08271434 a request whose wait runs out while the disk stays full reads INCONCLUSIVE no grant (exit 3), not BLOCKED, and not before its --wait ran out (472.386708ms)
+  AssertionError [ERR_ASSERTION]: a full disk ended the wait BLOCKED
+  events:
+  {"name":"holder-2","event":"start","t":1795150774171,"pid":5664,"throttle":"test:d949fc48857951a0"}
+  {"name":"holder-1","event":"start","t":1795150774182,"pid":5665,"throttle":"test:c21aeb95163a29a0"}
+  injected faults:
+  {"pid":5668,"code":"ENOSPC","syscall":"write","path":"<tmp>/deep-2869-IqOcrA/table/table.lock.5668","t":1795150774503}
+  table folder: log table.json table.lock.5668
+  table requests: [{"id":"8d33e20fa4ff229a","class":"test","pid":5668,"start":"Fri Nov 20 04:59:34 2026","nested":false,"window":false,"seq":3}]
+  waiter (pid 5668): exit 2
+  BLOCKED throttle: ENOSPC: no space left on device, write
+    Fix: Repair what the line names: ~/.deepbuild/throttle/ this user's to write, its table readable, ps runnable.
+  
+  holder-1 (pid 5587): still running
+  
+  holder-2 (pid 5588): still running
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: "BLOCKED throttle: ENOSPC: no space left on device, write\n  Fix: Repair what the line names: ~/.deepbuild/throttle/ this user's to write, its table readable, ps runnable.\n",
+    expected: /BLOCKED/,
+    operator: 'doesNotMatch',
+    diff: 'simple'
+  }
+
+## The reference fix (scratch copy of scripts/, never committed): all 7 pass
+
+✔ #2869.fd8c32fe a waiting request whose table write fails with EIO (an I/O error on the write) still ends BLOCKED throttle, exit 2, its command never run (709.292375ms)
+✔ #2869.fd8c32fe a waiting request whose table write fails with EACCES (permission refused at the open) still ends BLOCKED throttle, exit 2, its command never run (561.935917ms)
+✔ #2869.48e3b6ea a waiting request whose writes fail with ENOSPC (every write into the table folder fails, the lock file's first) leaves no temp file of its own in the table folder, while it waits and once it ends (4800.211ms)
+✔ #2869.48e3b6ea a waiting request whose writes fail with ENOSPC (only the table's own write fails, its temp file) leaves no temp file of its own in the table folder, while it waits and once it ends (4795.881125ms)
+✔ #2869.08271434 two requests waiting for a test slot while the disk is full (every write into the table folder fails, ENOSPC) keep waiting and keep their places: once space comes back, each free slot goes to the next in line, first, second, then a third queued after them whose writes never failed (9759.684542ms)
+✔ #2869.08271434 two requests waiting for a test slot while the disk is full (only the table's own write fails, ENOSPC) keep waiting and keep their places: once space comes back, each free slot goes to the next in line, first, second, then a third queued after them whose writes never failed (9643.312834ms)
+✔ #2869.08271434 a request whose wait runs out while the disk stays full reads INCONCLUSIVE no grant (exit 3), not BLOCKED, and not before its --wait ran out (6320.143709ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 26759.19825
+
+## Planted twins of the reference fix (scratch copies, never committed): each caught by its criterion's tests
+
+### leaves-temp
+✔ #2869.fd8c32fe a waiting request whose table write fails with EIO (an I/O error on the write) still ends BLOCKED throttle, exit 2, its command never run (470.212917ms)
+✔ #2869.fd8c32fe a waiting request whose table write fails with EACCES (permission refused at the open) still ends BLOCKED throttle, exit 2, its command never run (388.092292ms)
+✖ #2869.48e3b6ea a waiting request whose writes fail with ENOSPC (every write into the table folder fails, the lock file's first) leaves no temp file of its own in the table folder, while it waits and once it ends (4481.9135ms)
+✖ #2869.48e3b6ea a waiting request whose writes fail with ENOSPC (only the table's own write fails, its temp file) leaves no temp file of its own in the table folder, while it waits and once it ends (4460.319292ms)
+✔ #2869.08271434 two requests waiting for a test slot while the disk is full (every write into the table folder fails, ENOSPC) keep waiting and keep their places: once space comes back, each free slot goes to the next in line, first, second, then a third queued after them whose writes never failed (9916.690333ms)
+✔ #2869.08271434 two requests waiting for a test slot while the disk is full (only the table's own write fails, ENOSPC) keep waiting and keep their places: once space comes back, each free slot goes to the next in line, first, second, then a third queued after them whose writes never failed (9486.637334ms)
+✔ #2869.08271434 a request whose wait runs out while the disk stays full reads INCONCLUSIVE no grant (exit 3), not BLOCKED, and not before its --wait ran out (6261.765458ms)
+  AssertionError [ERR_ASSERTION]: the waiter's failed writes left table.lock.11582 in the table folder (at each of 4 looks, 400 ms apart, the disk full)
+  AssertionError [ERR_ASSERTION]: the waiter's failed writes left table.json.12409 in the table folder (at each of 4 looks, 400 ms apart, the disk full)
+
+### give-up
+✔ #2869.fd8c32fe a waiting request whose table write fails with EIO (an I/O error on the write) still ends BLOCKED throttle, exit 2, its command never run (655.636542ms)
+✔ #2869.fd8c32fe a waiting request whose table write fails with EACCES (permission refused at the open) still ends BLOCKED throttle, exit 2, its command never run (439.892583ms)
+✖ #2869.48e3b6ea a waiting request whose writes fail with ENOSPC (every write into the table folder fails, the lock file's first) leaves no temp file of its own in the table folder, while it waits and once it ends (4482.555292ms)
+✖ #2869.48e3b6ea a waiting request whose writes fail with ENOSPC (only the table's own write fails, its temp file) leaves no temp file of its own in the table folder, while it waits and once it ends (4425.414042ms)
+✖ #2869.08271434 two requests waiting for a test slot while the disk is full (every write into the table folder fails, ENOSPC) keep waiting and keep their places: once space comes back, each free slot goes to the next in line, first, second, then a third queued after them whose writes never failed (3486.932458ms)
+✖ #2869.08271434 two requests waiting for a test slot while the disk is full (only the table's own write fails, ENOSPC) keep waiting and keep their places: once space comes back, each free slot goes to the next in line, first, second, then a third queued after them whose writes never failed (3384.601584ms)
+✖ #2869.08271434 a request whose wait runs out while the disk stays full reads INCONCLUSIVE no grant (exit 3), not BLOCKED, and not before its --wait ran out (393.443167ms)
+  AssertionError [ERR_ASSERTION]: the waiter ended while the disk was full, its wait not run out
+  AssertionError [ERR_ASSERTION]: the first waiter gave up while the disk was full, though its --wait of 1 min hadn't run out
+  AssertionError [ERR_ASSERTION]: the waiter gave up after 255 ms, before its 6 s wait ran out
+
+### wait-all
+✖ #2869.fd8c32fe a waiting request whose table write fails with EIO (an I/O error on the write) still ends BLOCKED throttle, exit 2, its command never run (40268.946834ms)
+✖ #2869.fd8c32fe a waiting request whose table write fails with EACCES (permission refused at the open) still ends BLOCKED throttle, exit 2, its command never run (40213.426584ms)
+✔ #2869.48e3b6ea a waiting request whose writes fail with ENOSPC (every write into the table folder fails, the lock file's first) leaves no temp file of its own in the table folder, while it waits and once it ends (4820.669041ms)
+✔ #2869.48e3b6ea a waiting request whose writes fail with ENOSPC (only the table's own write fails, its temp file) leaves no temp file of its own in the table folder, while it waits and once it ends (4642.772833ms)
+✔ #2869.08271434 two requests waiting for a test slot while the disk is full (every write into the table folder fails, ENOSPC) keep waiting and keep their places: once space comes back, each free slot goes to the next in line, first, second, then a third queued after them whose writes never failed (9494.331625ms)
+✔ #2869.08271434 two requests waiting for a test slot while the disk is full (only the table's own write fails, ENOSPC) keep waiting and keep their places: once space comes back, each free slot goes to the next in line, first, second, then a third queued after them whose writes never failed (9448.53ms)
+✔ #2869.08271434 a request whose wait runs out while the disk stays full reads INCONCLUSIVE no grant (exit 3), not BLOCKED, and not before its --wait ran out (6254.772084ms)
+  AssertionError [ERR_ASSERTION]: the waiter went on waiting 40 s after its table writes began to fail with EIO
+  AssertionError [ERR_ASSERTION]: the waiter went on waiting 40 s after its table writes began to fail with EACCES
+
+### requeue
+✔ #2869.fd8c32fe a waiting request whose table write fails with EIO (an I/O error on the write) still ends BLOCKED throttle, exit 2, its command never run (443.830625ms)
+✔ #2869.fd8c32fe a waiting request whose table write fails with EACCES (permission refused at the open) still ends BLOCKED throttle, exit 2, its command never run (420.614ms)
+✔ #2869.48e3b6ea a waiting request whose writes fail with ENOSPC (every write into the table folder fails, the lock file's first) leaves no temp file of its own in the table folder, while it waits and once it ends (4812.707625ms)
+✔ #2869.48e3b6ea a waiting request whose writes fail with ENOSPC (only the table's own write fails, its temp file) leaves no temp file of its own in the table folder, while it waits and once it ends (4711.511958ms)
+✖ #2869.08271434 two requests waiting for a test slot while the disk is full (every write into the table folder fails, ENOSPC) keep waiting and keep their places: once space comes back, each free slot goes to the next in line, first, second, then a third queued after them whose writes never failed (6303.438333ms)
+✖ #2869.08271434 two requests waiting for a test slot while the disk is full (only the table's own write fails, ENOSPC) keep waiting and keep their places: once space comes back, each free slot goes to the next in line, first, second, then a third queued after them whose writes never failed (6227.757584ms)
+✔ #2869.08271434 a request whose wait runs out while the disk stays full reads INCONCLUSIVE no grant (exit 3), not BLOCKED, and not before its --wait ran out (6325.762208ms)
+  AssertionError [ERR_ASSERTION]: once holder-1's slot freed, the waiters granted were third, not first next in line
+
