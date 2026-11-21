@@ -1,6 +1,6 @@
 ---
 name: deepbuild-canvas
-description: Teaches writing DeepBuild canvas documents (figures, films, boards and pieces) as JSON, and the craft rules their checks hold them to. Use it to draw in DeepBuild. Generated from DeepBuild 0.0.0's kinds' schemas, module set 71e5dc5942352e62689158ffe04599d68536e78534dab48b727f7ac0c11385a4; never edit by hand.
+description: Teaches writing DeepBuild canvas documents (figures, films, boards and pieces) as JSON, and the craft rules their checks hold them to. Use it to draw in DeepBuild. Generated from DeepBuild 0.0.0's kinds' schemas, module set 671c3287c2b617189764ba42f5f24c7f871010ca419c567ef304bd7a4a5bc13a; never edit by hand.
 version: 0.0.0
 ---
 
@@ -119,7 +119,7 @@ A film's brief names the checks it wants; each runs only when named and never pa
 }
 ```
 
-## Kinds (module set 71e5dc5942352e62689158ffe04599d68536e78534dab48b727f7ac0c11385a4)
+## Kinds (module set 671c3287c2b617189764ba42f5f24c7f871010ca419c567ef304bd7a4a5bc13a)
 
 Each entry as name@major, with its origin when not first party and its stability when not stable; then its fields as name: type, unit, [min, max] and = default, each left out when it has none. Entries with no fields share one line.
 
@@ -157,7 +157,7 @@ Each entry as name@major, with its origin when not first party and its stability
 - mark.box@1: size: m | [x, y, z]; size_space: string = "screen"; paint: {fill: {role: role, fill: text, noise}, stroke: {role: role, width: px, line: text}}; status: {source: text, as_of?, legend?}; open: {at_px: px, doc: doc ID}
 - mark.cylinder@1: size: m | [x, y, z]; size_space: string = "screen"; paint: {fill: {role: role, fill: text, noise}, stroke: {role: role, width: px, line: text}}; status: {source: text, as_of?, legend?}; open: {at_px: px, doc: doc ID}
 - mark.sphere@1: size: m | [x, y, z]; size_space: string = "screen"; paint: {fill: {role: role, fill: text, noise}, stroke: {role: role, width: px, line: text}}; status: {source: text, as_of?, legend?}; open: {at_px: px, doc: doc ID}
-- mark.line@1: points: [[x, y, z] | ID] | {array: <logic>.<name>, rows: [from, to] | all}; mode: string = "strip"; width: px | [px]; dash: [px] ≤ 2; ends: {start?: none | arrow | open | stealth | dot | ring | square | diamond | bar, end?: none | arrow | open | stealth | dot | ring | square | diamond | bar, size: f32, width: f32}; cap: butt | round | square; join: miter | round | bevel; edges: {of: ID (or ID#part), kind: all | quads | cage | crease {angle: deg}, border: bool}; fog: bool = true; size_space: string = "screen"; paint: {fill: {role: role, fill: text, noise}, stroke: {role: role, width: px, line: text}}; status: {source: text, as_of?, legend?}; open: {at_px: px, doc: doc ID}
+- mark.line@1: points: [[x, y, z] | ID] | {array: <logic>.<name>, rows: [from, to] | all}; mode: string = "strip"; width: px | [px]; dash: [px] ≤ 2; ends: {start?: none | arrow | open | stealth | dot | ring | square | diamond | bar, end?: none | arrow | open | stealth | dot | ring | square | diamond | bar, size: f32, width: f32}; cap: butt | round | square; join: miter | round | bevel; edges: {of: ID (or ID#part), kind: all | quads | cage | crease {angle: deg}, border: bool, material: bool}; hidden: {dash: [px] ≤ 2, paint}; fog: bool = true; size_space: string = "screen"; paint: {fill: {role: role, fill: text, noise}, stroke: {role: role, width: px, line: text}}; status: {source: text, as_of?, legend?}; open: {at_px: px, doc: doc ID}
 - mark.point@1: size: px; shape: string = "dot"; from: video {asset, frames, depth: luma | r, near, far, fov: [deg, deg], step}; fog: bool = true; size_space: string = "screen"; paint: {fill: {role: role, fill: text, noise}, stroke: {role: role, width: px, line: text}}; status: {source: text, as_of?, legend?}; open: {at_px: px, doc: doc ID}
 - mark.text@1: text: string = ""; font: string = "body"; size: px | m; facing: string = "camera"; fog: bool = false; size_space: string = "screen"; paint: {fill: {role: role, fill: text, noise}, stroke: {role: role, width: px, line: text}}; status: {source: text, as_of?, legend?}; open: {at_px: px, doc: doc ID}
 - mark.image@1: asset: sha256; alt: string = ""; size: [w, h]; facing: string = "camera"; fog: bool = true; size_space: string = "screen"; paint: {fill: {role: role, fill: text, noise}, stroke: {role: role, width: px, line: text}}; status: {source: text, as_of?, legend?}; open: {at_px: px, doc: doc ID}
