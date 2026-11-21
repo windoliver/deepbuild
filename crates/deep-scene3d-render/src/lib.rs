@@ -4240,7 +4240,7 @@ impl Renderer {
         // #465: the mirror's view at t, drawn whole each frame.
         self.mirroring = match &scene.mirror {
             Some(m) => {
-                let planted = self.planted;
+                let (planted, internal) = (self.planted, self.internal());
                 let mirrorer = self
                     .mirrorer
                     .get_or_insert_with(|| Box::new(mirror::Mirrorer::new(device, planted)));
@@ -4250,7 +4250,7 @@ impl Renderer {
                     .as_ref()
                     .is_none_or(|w| w.material != m.material);
                 if !self.planted.keeps_mirror {
-                    mirrorer.prepare(device, scene, m, look, &self.picks, overlay);
+                    mirrorer.prepare(device, scene, internal, m, look, &self.picks, overlay);
                 }
                 true
             }

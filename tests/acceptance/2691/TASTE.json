@@ -1,0 +1,12 @@
+{
+  "issue": 2691,
+  "criterion": "#2691.bf51397a",
+  "verdict": "looks_right",
+  "who": "the session's agent, on the owner's delegation",
+  "when": "2026-11-21T02:58:50Z",
+  "screenshots": {
+    "lake-merge-base.png": "26568c3046cbfbac574ac46cc21ccaf47cfa4ff9faf1b6d2cc51329bafea6316",
+    "lake-change.png": "268f076c9a292fbc83c12183535a14a9ce90477a360169ce2467263efb97a9f0"
+  },
+  "note": "Both pictures were shown to the owner in the session and in PR #2885. The owner then asked the session to close the gaps so the issue can close, and gave no visual assessment of their own. The agent's reading: at the whole frame the two are alike; at full size the reflected windows and battlements are softer on the change, with nothing misplaced and no artifact. The owner may overturn this call."
+}
