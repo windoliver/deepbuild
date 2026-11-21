@@ -6,4 +6,7 @@
 - **Head 8e653d798** (the deferred pointer replay, and a shell reset since removed): #1546's seeds 1546, 7 and 2026 pass with no panic, 4 of 6. #1427 AC7 still fails 4 of 4 in `card::tick`: the reset it had was of the wrong thread-local.
 - **Still failing at this head in #1546:** the planted `record-in-thread-local` test and `seed 1546 with the planted view`. Both want a finding that names a `needs-you` view; since #1461 the Needs you section is drawn inside the sidebar's view, so the findings name `deepbuild/sidebar`.
 
-The commit after 8e653d798 clears the card's thread-locals when an app starts. It has not run on the Mac.
+`mac-ca8c6312f/` (same Mac, 2026-11-21, unlocked): the head with the card's thread-locals cleared when an app starts.
+
+- **No panic in either suite.** #1546 AC1 is 4 of 6 as above.
+- **#1427 AC7 still fails 4 of 4, on assertions the panic hid:** no element of the needs-you recording holds a session's ID; that recording's hash differs between processes; the session and project journeys end INCONCLUSIVE, under the planted jump too; so `scripts/motion.mjs` exits 1. By reading, the shipped journeys in `crates/deep-replica/src/drive/motion.rs` are as #1427 left them and the app moved under them: one list with asks first (#1461) and only rows in view drawn (#1808) put the session rows they hover below the window's fold, and the row's tooltip (#1458) fades on the real clock. Not fixed here.
