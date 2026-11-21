@@ -1,5 +1,5 @@
-12:53:45 locked=0 front=Claude
-12:54:05 locked=0 front=deep-app-plain
-12:54:26 locked=0 front=Claude
-12:54:46 locked=0 front=Claude
-12:55:06 locked=0 front=Claude
+12:53:45 locked=0 front=<app>
+12:54:05 locked=0 front=<app>
+12:54:26 locked=0 front=<app>
+12:54:46 locked=0 front=<app>
+12:55:06 locked=0 front=<app>
