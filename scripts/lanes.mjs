@@ -841,6 +841,15 @@ alone.push('tests/acceptance/550/', 'tests/acceptance/550-oracle/');
 // #551's files each build deep-show (ac1 and the Oracle lane also the shipped relay) and play matches in process; ac1 and
 // the Oracle lane also play a live match between the app and headless Chrome's web player through the shipped relay.
 alone.push('tests/acceptance/551/', 'tests/acceptance/551-oracle/');
+// #280's files each build deep-show (ac7 in two feature sets; ac8 also the merge base) and play matches of eight copies
+// in process; ac1 and ac2 run net.budget's web part in headless Chrome, and ac8 times net.feel and net.budget itself.
+alone.push('tests/acceptance/280/');
+timed.push('tests/acceptance/280/ac8-budgets.test.ts');
+// #280's first draft of AC4 holds each copy's last two rollbacks, which come after it ran its last step and so can only
+// re-run to that step, to a depth of 3; its blind redraft, 280-redraft-ac4/, runs in its place, and the first draft's
+// file runs by hand (tests/acceptance/280-redraft-ac4/DISPUTE.md).
+alone.push('tests/acceptance/280-redraft-ac4/');
+byHand.push('tests/acceptance/280/ac4-depth.test.ts');
 // #277's files each build deep-show (ac1 and ac5 also the shipped relay) and play matches in process; ac1 and ac5 also
 // play live matches between app copies and headless Chrome's web player through the shipped relay.
 alone.push('tests/acceptance/277/');
@@ -1307,6 +1316,10 @@ slow.push('tests/acceptance/2738/ac1-linux-build.test.ts');
 // #265's files (blind) build deep-gpu (ac4 deep-show), draw on the GPU and play a match; ac6 times eight movers' frame CPU.
 alone.push('tests/acceptance/265/');
 timed.push('tests/acceptance/265/ac6-budgets.test.ts');
+
+// #1576's files each start hubs on records of up to 100,000 sessions, and AC5 runs a busy process per core, at the
+// lowest priority, beside two runs: one file at a time. Every number they judge is a count, so none is timed.
+alone.push('tests/acceptance/1576/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

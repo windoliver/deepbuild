@@ -64,6 +64,12 @@ macro_rules! set {
 /// the one before it.
 static SETS: [Set; 3] = [set!("figure"), set!("game2d"), set!("full")];
 
+/// #280: the full set's player and its page glue, which net.budget's web part plays a piece in.
+pub(crate) fn full_player() -> (&'static [u8], &'static [u8]) {
+    let full = &SETS[SETS.len() - 1];
+    (full.wasm, full.glue)
+}
+
 impl Set {
     /// The set as its build recorded it.
     fn about(&self) -> Value {

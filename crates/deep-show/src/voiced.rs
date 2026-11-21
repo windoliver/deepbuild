@@ -450,6 +450,10 @@ impl<S: Stepper> Stepper for Voiced<S> {
     fn drawn(&self) -> Option<Value> {
         self.inner.drawn()
     }
+
+    fn positions(&mut self, t: i64) -> deep_net::copy::Positions {
+        self.inner.positions(t)
+    }
 }
 
 #[cfg(test)]
