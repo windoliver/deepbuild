@@ -58,3 +58,12 @@ path = "../../tests/acceptance/2657/ensure_casters.rs"
 [[test]]
 name = "acceptance_2657_sway"
 path = "../../tests/acceptance/2657/sway.rs"
+
+# Issue #3024: the acceptance tests, written blind in tests/acceptance/3024.
+[[test]]
+name = "acceptance_3024_heap"
+path = "../../tests/acceptance/3024/heap.rs"
+
+[[test]]
+name = "acceptance_3024_pixels"
+path = "../../tests/acceptance/3024/pixels.rs"
