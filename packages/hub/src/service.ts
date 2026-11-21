@@ -13,6 +13,8 @@ import { line } from './wire.js';
 const LABEL = 'com.deepbuild.hub';
 const UNIT = 'deepbuild-hub.service';
 const WAIT_MS = 15_000;
+/** How long a stop waits for you to answer the OS prompt it asks inside the hub (#1865). */
+const CONFIRM_MS = 600_000;
 /** How long `deep hub start` waits, once the hub answers, for its core to start: a busy machine's start takes seconds (#2801). */
 const CORE_WAIT_MS = 120_000;
 /**
@@ -135,6 +137,40 @@ async function waitForStop(path: string, connection: Connection): Promise<void> 
     }
   } finally {
     connection.close();
+  }
+}
+
+/**
+ * `hub.stop` of the installed hub as this process (#1865): the hello names `peer`, so the hub asks the OS to confirm you
+ * before it stops. A hub whose hello doesn't list `hub.restart` is from before #1865 and stops on the token alone, so
+ * `older` asks the OS first, as then. The refusal's words, or undefined once the hub closed this connection at its exit
+ * and no other gets a hello, as `control` reads a stop. Rejects with Unanswered when no hub answers at `path`.
+ */
+export async function stopAsPeer(path: string, token: string, params: Obj, peer: { pid: number; start: string }, older: () => Promise<string | undefined>): Promise<string | undefined> {
+  const reach = () => connect(path).catch((error: unknown) => { throw new Unanswered(`can't reach the hub at ${path}: ${error instanceof Error ? error.message : String(error)}`); });
+  let c = await reach();
+  const features = c.hello.features;
+  if (!(Array.isArray(features) && features.includes('hub.restart'))) {
+    c.close();
+    const why = await older();
+    if (why) return why;
+    c = await reach();
+  }
+  try {
+    c.send({ hello: 'cli', token, peer });
+    const hello = await c.next();
+    if (hello.error) return `the hub refused the CLI's credential: ${JSON.stringify(hello.error)}`;
+    c.send({ id: 'hub.stop', method: 'hub.stop', params });
+    // The OS prompt is yours to answer: the reply waits for it.
+    const reply = await c.next(CONFIRM_MS);
+    if (reply.error) {
+      const remediation = (reply.error as Obj).remediation;
+      return typeof remediation === 'string' ? remediation : `hub.stop was refused: ${JSON.stringify(reply.error)}`;
+    }
+    await waitForStop(path, c);
+    return undefined;
+  } finally {
+    c.close();
   }
 }
 
@@ -384,15 +420,4 @@ export function removeService(): void {
   if (process.platform === 'linux') run('systemctl', ['--user', 'disable', '--now', UNIT]);
   rmSync(file, { force: true });
   if (process.platform === 'linux') run('systemctl', ['--user', 'daemon-reload']);
-}
-/** Stops the hub at `root` if one answers there; a live hub that cannot stop is still a failure. */
-export async function stopIfRunning(root: string): Promise<number> {
-  const path = rootOf(root).socket;
-  try {
-    (await connect(path)).close();
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    return code === 'ENOENT' || code === 'ECONNREFUSED' ? 0 : stopFailed(path, error);
-  }
-  return stopHub({ root });
 }

@@ -1,0 +1,44 @@
+# #1887 AC3 redraft (#1887.4a851c74): the one run of the check at the base
+
+Base: main 0f34aacbe0b9d607dc64bff279c771701bab68c6 (2026-11-17 16:28:51 -0800, "Merge pull request #2755 ..."; no
+implementation of #1887), a read-only checkout with its packages already built (packages/contracts/dist and
+packages/conformance/dist present). 2026-11-18 02:04:51-02:05:01 UTC, Node 24.22.0, Linux aarch64, load average about
+51. No lsof wrapper: on this run `/usr/bin/lsof -v` and `lsof -p <pid>` exited 0, and the check printed no
+deep.registerEnvironment finding. `git status --porcelain` was empty before and after. The test file itself was not
+run anywhere; what it would conclude is read off this output below.
+
+$ NO_COLOR=1 node scripts/slots-check.mjs
+FAIL slots: deep.registerPort, -: deep.registerPort has 0 rows in the hub-slot table; a slot the API publishes needs exactly one
+exit 1        (real 0m10.4s)
+
+The count the check would print, by its own rule over the same published API (packages/contracts/extension-api.json
+at 0f34aacbe, read with node; packages/contracts/dist's extensionApi() returns the same 45 entries):
+
+  45 entries, 14 deep.register* methods: registerCheck, registerResolver, registerSource [stream, polled, mcp,
+  library], registerPort, registerEnvironment, registerView, registerAdapter, registerStateSource, registerChannel,
+  registerRoute, registerIndex, registerAction, registerJob, registerJobTool
+  slots = 13 x 1 + 4 = 17
+  deep.schedule.read is not published (the issue's gap); the runtime's table has 46 methods.
+
+What the test concludes at this base:
+
+1. Guard: at the base, HEAD is 0f34aacbe and so is its merge base with origin/main (that checkout's origin/main is
+   d4cef00fb, a descendant, whose published API also counts 17); 0f34aacbe's published API counts 17 by the rule, so
+   the guard passes and the check is judged.
+2. The check prints no `PASS slots:` line, so the test FAILS at its first judging assertion:
+
+   node scripts/slots-check.mjs prints its slot count on its one `PASS slots:` line, and printed 0:
+   exit 1
+   --- stdout
+   FAIL slots: deep.registerPort, -: deep.registerPort has 0 rows in the hub-slot table; a slot the API publishes needs exactly one
+   --- stderr
+
+This failure is not the work's and not the issue's reason: it is #2793 (open; deep.registerPort, published by #210,
+has no row in packages/contracts/hub-slots.json). The criterion is about the work ("unchanged"), so like the first
+draft's AC3 it has no failing reason of its own at the base; at the base it can only pass once #2793's row lands, and
+then it prints 17 and passes. Until #2793 is fixed on the branch (or on main, merged in), a right #1887 branch fails
+this test the same way: the count is not printed, so it can't be shown unchanged, and the test does not pass it.
+
+What fails it on a wrong program (not run; read off the code): a check that counts deep.schedule.read, or every
+published method, as a slot prints 18 or more and fails at "the check counts <n> slots; the base counts 17"; a check
+that drops the `PASS slots: <n> slots` start fails at "doesn't start with its slot count".

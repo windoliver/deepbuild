@@ -14,6 +14,7 @@ import type { Asks } from '@deepbuild/asks';
 import { scrubText, type EvidenceStore, type Writer } from '@deepbuild/evidence';
 import type { Connection, Event, EventInput, RecordStore } from '@deepbuild/record';
 import { ulid } from '@deepbuild/record/ids';
+import { forgeFetch } from '@deepbuild/github';
 import { copyTranscript, sourceStamp, type Part, type Prefix } from './copy.js';
 
 export interface ArchiveOptions {
@@ -289,24 +290,11 @@ export async function openArchive(options: ArchiveOptions): Promise<Archive> {
 
   async function forgeRuns(forge: NonNullable<ArchiveOptions['forge']>): Promise<void> {
     const token = options.env.GH_TOKEN ?? options.env.GITHUB_TOKEN;
-    const headers = { accept: 'application/vnd.github+json', ...(token && { authorization: `Bearer ${token}` }) };
-    const origin = new URL(forge.api).origin;
     const get = async (path: string): Promise<Response> => {
-      // One deadline covers redirects and the final body's consumption. Never carry credentials to another origin.
-      const signal = AbortSignal.timeout(10_000);
-      let url = new URL(`${forge.api}${path}`);
-      for (let hop = 0; ; hop++) {
-        if (url.origin !== origin || url.username || url.password) throw Error('the forge redirected outside its declared origin');
-        const res = await fetch(url, { headers, redirect: 'manual', signal });
-        if (res.status >= 300 && res.status < 400 && res.headers.has('location')) {
-          await res.body?.cancel();
-          if (hop >= 5) throw Error('the forge exceeded five redirects');
-          url = new URL(res.headers.get('location')!, url);
-          continue;
-        }
-        if (!res.ok) { await res.body?.cancel(); throw Error(`the forge answered ${res.status} for ${path}`); }
-        return res;
-      }
+      // One deadline covers redirects and the final body's consumption.
+      const res = await forgeFetch(forge.api, path, { token, signal: AbortSignal.timeout(10_000) });
+      if (!res.ok) { await res.body?.cancel(); throw Error(`the forge answered ${res.status} for ${path}`); }
+      return res;
     };
     for (const repo of forge.repos) {
       // Newest first: a page whose runs were all copied already ends the walk.

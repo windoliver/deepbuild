@@ -1819,6 +1819,10 @@
           "spec": "0.0.0",
           "why": "Issue #20: each copy is stored as evidence by hash, scrubbed by the store's own text scrub, and read back."
         },
+        "@deepbuild/github": {
+          "spec": "0.0.0",
+          "why": "Issue #1904: CI runs are read through the one GitHub REST client, which bounds redirects to the forge's origin."
+        },
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #20: each copy is linked by a transcript.archived event, and what was already copied is read back from the record."
@@ -1960,6 +1964,14 @@
         "@deepbuild/reading": {
           "spec": "0.0.0",
           "why": "deep find and deep read are the reading package's query API (#63)."
+        }
+      }
+    },
+    "packages/pi/package.json": {
+      "devDependencies": {
+        "@deepbuild/hub": {
+          "spec": "0.0.0",
+          "why": "tools.mjs reads the hub's dist at build time, so the workspace graph names the hub and the mutation lane rebuilds pi after it (#1120); never installed with the published package."
         }
       }
     },
@@ -2200,6 +2212,10 @@
         "rapier3d": {
           "spec": "=0.36.1",
           "why": "Issue #2009: physics.world@1's backend, the version the design pins (World and backend), with enhanced-determinism and serde-serialize and without simd8 or parallel."
+        },
+        "rapier2d": {
+          "spec": "=0.36.1",
+          "why": "Issue #2098: a dimensions: 2 world's backend, the version the design pins (World and backend), with rapier3d's features and without simd8 or parallel. It adds parry2d 0.31.1 to the lockfile and moves no crate rapier3d resolves."
         },
         "base64": {
           "spec": "^0.22",

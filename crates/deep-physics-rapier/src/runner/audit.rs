@@ -132,7 +132,7 @@ impl Run {
             limit("/penetration/max", 0.01),
             limit("/soft/max_stretch", 1.1),
         );
-        let (w, mut b) = match self.build(&world) {
+        let (w, mut b) = match self.build(&world).and_then(dims::solid("physics.audit")) {
             Ok(x) => x,
             Err(e) => return Some(e),
         };

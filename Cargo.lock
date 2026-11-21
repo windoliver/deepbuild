@@ -2415,11 +2415,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-catalog"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "deep-codecs"
 version = "0.0.0"
 dependencies = [
  "basisu_c_sys",
  "deep-canvas-cells",
+ "deep-catalog",
  "image",
  "libc",
  "libm",
@@ -2546,6 +2555,7 @@ dependencies = [
  "base64 0.22.1",
  "deep-canvas",
  "deep-canvas-sandbox",
+ "deep-catalog",
  "deep-sandbox-wasmtime",
  "gimli 0.33.0",
  "libc",
@@ -2679,6 +2689,7 @@ dependencies = [
  "deep-canvas-motion",
  "deep-canvas-physics",
  "deep-canvas-scene3d",
+ "rapier2d",
  "rapier3d",
  "serde_json",
  "simba",
@@ -2901,6 +2912,7 @@ dependencies = [
  "parley_engine",
  "serde_json",
  "skrifa 0.44.0",
+ "unicode-security",
  "vello_cpu 0.3.0",
 ]
 
@@ -8286,6 +8298,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "parry2d"
+version = "0.31.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe1ba500175e957aaa27ddc92290ec8ff503d73331365443660816d6302e2a31"
+dependencies = [
+ "approx",
+ "arrayvec",
+ "bitflags 2.13.2",
+ "downcast-rs 2.0.2",
+ "either",
+ "ena",
+ "foldhash 0.2.0",
+ "glamx",
+ "hashbrown 0.17.1",
+ "indexmap",
+ "log",
+ "num-derive 0.5.1",
+ "num-traits",
+ "ordered-float",
+ "serde",
+ "serde_arrays",
+ "simba",
+ "slab",
+ "smallvec",
+ "spade",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "parry3d"
 version = "0.31.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9275,6 +9316,28 @@ name = "rangemap"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a611d15b50743feb4c76b7d03edcb0e64f399c26961e4efe6975bc398be6aa3d"
+
+[[package]]
+name = "rapier2d"
+version = "0.36.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b73d84c8e78f4fbd46fb5c800bbdb15cad6ef2bd517de6a4d31fe60edd838f8d"
+dependencies = [
+ "approx",
+ "arrayvec",
+ "bitflags 2.13.2",
+ "glamx",
+ "log",
+ "nalgebra",
+ "num-traits",
+ "parry2d",
+ "profiling",
+ "serde",
+ "simba",
+ "static_assertions",
+ "thiserror 2.0.21",
+ "wide",
+]
 
 [[package]]
 name = "rapier3d"
@@ -11993,6 +12056,16 @@ name = "unicode-script"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "383ad40bb927465ec0ce7720e033cb4ca06912855fc35db31b5755d0de75b1ee"
+
+[[package]]
+name = "unicode-security"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4a23f3d0a5f302dbfdc8c5303c943c325e67cb478611bf1f44fb4c1520c64eb7"
+dependencies = [
+ "unicode-normalization",
+ "unicode-script",
+]
 
 [[package]]
 name = "unicode-segmentation"

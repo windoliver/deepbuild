@@ -18,7 +18,7 @@ node spikes/2401/record.mjs --claude <path> --own-use <pct/Mtok> --basis "<words
 ```
 
 The last form spends plan usage. It makes one opening run (`lead`, under neither label), then 40 runs alternating
-between the labels. It writes `record.json` in the shape `tests/acceptance/2401/README.md` gives. Raw streams go to
+between the labels. It writes `record.json` in the shape the issue's acceptance tests read (`tests/acceptance/2401/README.md`, on [PR 2907](https://github.com/windoliver/deepbuild/pull/2907)). Raw streams go to
 `--streams`, which must be outside the checkout, and the record pins each one by SHA-256.
 
 - **The job** is the review check's. Its prompt is the one `packages/hub/src/kinds.ts` builds, over that file's
@@ -158,4 +158,6 @@ runs read the tool lists again from every run's init entry.
 
 ## Checks
 
-`node --test --test-concurrency=1 'tests/acceptance/2401/*.test.mjs'` stays BLOCKED until the record exists.
+The issue's acceptance tests are on [PR 2907](https://github.com/windoliver/deepbuild/pull/2907), not here. They stay
+BLOCKED until the record exists, and that PR carries them with the record. This PR adds no test and changes no code
+outside `spikes/2401/`.

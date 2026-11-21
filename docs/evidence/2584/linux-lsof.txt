@@ -1,0 +1,15 @@
+== Linux (the Spark, arm64), real /usr/bin/lsof: -w keeps its errors; for a free port it answers exit 1 with nothing on stderr
+$ lsof -v | grep revision
+    revision: 4.95.0
+$ /usr/bin/lsof -nP -w -iTCP:NaN -sTCP:LISTEN -Fp
+lsof: unknown service NaN for tcp in: -i TCP:NaN
+lsof 4.95.0
+   (exit 1)
+$ /usr/bin/lsof -nP -w -iTCP:1.5 -sTCP:LISTEN -Fp
+lsof: unacceptable port specification in: -i TCP:1.5
+lsof 4.95.0
+   (exit 1)
+$ /usr/bin/lsof -nP -iTCP:59999 -sTCP:LISTEN -Fp
+   (exit 1)
+$ /usr/bin/lsof -nP -w -iTCP:59999 -sTCP:LISTEN -Fp
+   (exit 1)
