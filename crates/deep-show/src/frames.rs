@@ -797,6 +797,8 @@ impl<'a> Hub<'a> {
         let mut out = Vec::with_capacity(f.count);
         let mut revised_now = false;
         let mut seen = BTreeMap::new();
+        // #553: the net module works in a frame only for a piece with a net item.
+        let mut net = self.has_net(&f.doc);
         for k in 0..f.count {
             if f.paced {
                 let due = started + period * k as u32;
@@ -820,6 +822,7 @@ impl<'a> Hub<'a> {
                 let (document, _) = pending.take().expect("checked above");
                 revised = self.revise(&f.doc, document);
                 revised_now = true;
+                net = self.has_net(&f.doc);
             }
             let t = f.from + f.step * k as i64;
             self.load_frame(&f.doc, t);
@@ -836,6 +839,15 @@ impl<'a> Hub<'a> {
             let (ran, allocs) =
                 crate::count_allocations(|| session.frame(&mut self.sched, t, &view));
             let ms = frame_started.elapsed().as_secs_f64() * 1000.0;
+            // #553: the net module's work in the frame: its match's state on the panel.
+            let net_ns = match net {
+                true => {
+                    let before = thread_cpu_ns();
+                    self.net_frame(&f.doc);
+                    thread_cpu_ns() - before
+                }
+                false => 0,
+            };
             // #855: the JSON values the frame's operators wrote, each counted by the heap
             // allocations it takes, which a copy of it takes again, and its shared handle.
             let json_values: u64 = self
@@ -846,7 +858,7 @@ impl<'a> Hub<'a> {
                 .sum();
             let mut frame = json!({"t": t, "ran": ran, "allocs": allocs, "scheduler_ms": ms,
                                    "frame_ms": ms, "settling": pending.is_some(),
-                                   "json_values": json_values});
+                                   "json_values": json_values, "net_ns": net_ns});
             // #1732: the solves of each arrangement this frame ran, from the scheduler's nodes.
             frame["solves"] = solves(&self.sched, &self.sessions[&f.doc], revised_now);
             frame["remaps"] = remaps(&self.sched, &self.sessions[&f.doc]);

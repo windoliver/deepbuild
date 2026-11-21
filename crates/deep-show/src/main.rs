@@ -117,6 +117,8 @@ mod track_call;
 mod twins;
 mod verdict;
 mod video;
+// #553: a match copy's media module, its voices and its audio thread.
+mod voiced;
 mod warps;
 mod workers;
 

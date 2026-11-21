@@ -91,6 +91,13 @@ pub trait Stepper {
     fn guess(&mut self, _step: i64) -> Option<i64> {
         None
     }
+    /// #553: the media module's audio thread renders the output up to `t` flicks after the
+    /// match's start, each sample once and in order; a voice whose occurrence a rollback dropped
+    /// fades out from where it renders next.
+    fn sound(&mut self, _t: i64) {}
+    /// #553: the steps before `upto` are confirmed: a save, an ended slot or a carry record one of
+    /// them asked for takes effect now, from that step's state.
+    fn confirmed(&mut self, _upto: i64) {}
 }
 
 /// How a planted defect changes its field's value: `n` added to it, or bit `b` of its bits
@@ -150,6 +157,17 @@ pub enum Planted {
     WithholdsBits,
     /// #552: its logic takes a draw from the bits that reached it first (the stepper's).
     DrawsFromFirstBits,
+    /// #553: a rollback keeps the occurrence rows of the steps it replaces, beside the rows the
+    /// corrected run makes (the stepper's).
+    KeepsReplacedRows,
+    /// #553: the media module keeps a checkpoint of its voices and its write head at each match
+    /// step and restores it on a rollback, rendering the replaced steps' samples again.
+    MediaRestoresCheckpoint,
+    /// #553: the full-state hash also covers the media module's state.
+    HashCoversMedia,
+    /// #553: a save, an ended slot or a carry record is written when its step runs, confirmed or
+    /// not.
+    SavesPredicted,
 }
 
 impl Planted {
@@ -171,6 +189,10 @@ impl Planted {
             "net_reveals_other_bits" => Planted::RevealsOtherBits,
             "net_withholds_bits" => Planted::WithholdsBits,
             "draws_from_first_bits" => Planted::DrawsFromFirstBits,
+            "net_keeps_replaced_rows" => Planted::KeepsReplacedRows,
+            "media_restores_checkpoint" => Planted::MediaRestoresCheckpoint,
+            "net_hash_covers_media" => Planted::HashCoversMedia,
+            "net_saves_predicted" => Planted::SavesPredicted,
             _ => return None,
         })
     }
@@ -1083,9 +1105,13 @@ impl<S: Stepper> Copy<S> {
     /// confirmed, oldest first.
     pub fn tick(&mut self, now: i64) -> Option<Vec<u8>> {
         self.now = self.now.max(now);
+        // #553: the output up to now first, so a step runs ahead of the samples it sounds in.
+        self.sim.sound((now - self.start).max(0));
         self.rewind();
         self.advance(now);
         self.settle();
+        let settled = self.settled();
+        self.sim.confirmed(settled);
         self.watch(now);
         // A copy that ran every step it was given still sends the hashes it owes.
         if self.next >= self.limit && self.end.is_none() {

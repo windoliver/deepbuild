@@ -414,12 +414,47 @@ fn made(w: &mut World, k: i64, slot: i32, ended: bool) -> (Value, Vec<u8>) {
 fn write(w: &mut World, k: i64, slot: i32, ended: bool) -> Result<(String, PathBuf, bool), String> {
     let dir = w.saves_dir.clone().ok_or("no saves folder")?;
     let (header, state) = made(w, k, slot, ended);
-    let ours = listed(&dir, slot.into());
+    let keeps = w.planted.ended_keeps_earlier_save;
+    store(&dir, slot, ended, &header, &state, keeps)
+}
+
+/// #553: a save a match held until its step was confirmed, written into `dir` as a step writes
+/// one: `{item, slot, step, hash, file, ended, deep_hash}`. A slot whose newest save is ended takes
+/// no later one.
+pub fn store_held(dir: &Path, h: &Held) -> Result<Value, Value> {
+    let failed = |what: String| json!({"ok": false, "code": "save_failed", "item": h.item, "slot": h.slot, "step": h.step, "what": what});
+    fs::create_dir_all(dir).map_err(|e| failed(format!("{}: {e}", dir.display())))?;
+    if listed(dir, h.slot.into())
+        .first()
+        .is_some_and(|s| s.header["ended"] == json!(true))
+    {
+        return Ok(Value::Null);
+    }
+    let (hash, file, _) =
+        store(dir, h.slot, h.ended, &h.header, &h.state, false).map_err(failed)?;
+    Ok(
+        json!({"item": h.item, "slot": h.slot, "step": h.step, "hash": hash, "file": file,
+              "ended": h.ended, "deep_hash": h.deep_hash}),
+    )
+}
+
+/// A save's header and state written into `dir` under a temporary name, renamed once it reads
+/// back whole; then the slot keeps it and its last good save before it (only it, once ended,
+/// unless `keeps`).
+fn store(
+    dir: &Path,
+    slot: i32,
+    ended: bool,
+    header: &Value,
+    state: &[u8],
+    keeps: bool,
+) -> Result<(String, PathBuf, bool), String> {
+    let ours = listed(dir, slot.into());
     let seq = ours
         .first()
         .and_then(|s| s.header["seq"].as_u64())
         .map_or(1, |n| n + 1);
-    let bytes = file_bytes(&header, seq, &state);
+    let bytes = file_bytes(header, seq, state);
     let io = |e: std::io::Error| format!("{}: {e}", dir.display());
     // Hashed, written, synced, read back and renamed on a writer thread, never the caller's.
     let (sha, path, on_main) = std::thread::scope(|s| {
@@ -442,7 +477,7 @@ fn write(w: &mut World, k: i64, slot: i32, ended: bool) -> Result<(String, PathB
         .join()
         .map_err(|_| "the save writer panicked".to_string())?
     })?;
-    let good = if ended && !w.planted.ended_keeps_earlier_save {
+    let good = if ended && !keeps {
         None
     } else {
         ours.iter().position(|s| s.whole().is_some())

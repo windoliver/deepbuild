@@ -16,9 +16,10 @@ The net module (#549, #550, #551; canvas primitives: Shared play over a relay; t
 - `src/draw.rs`: random draws after commit (#552): a copy's commitment once it confirms a drawn step, its bits once it holds every commitment, the check of each player's bits against their commitment, and the seeded test source a check plays with in place of the platform's secure one.
 - `src/play.rs`: the test relay, which runs every copy of a match in one process on its own clock and drops, holds or holds back frames by its seed, holds a chosen message from one copy until it has run a step, and gives each player a one-way latency.
 - `src/checks.rs`: net.rollback, net.desync and net.budget; `kind.rs` registers them, run through what the build binds (`deep-play`'s runs over a document's logic items and worlds).
-- `src/window.rs`: net.rollback's schedules for a window and net.budget's five runs, each frame the live step and the full window restored and stepped again (#551).
+- `src/window.rs`: net.rollback's schedules for a window and net.budget's five runs, each frame the live step and the full window restored and stepped again (#551), with each run's `checkpoint_ms` and a failure that names an occurrence's `kind` (#553).
+- `src/message.rs` also writes a draw's commitment and reveal compactly, beside the other entries as JSON (#553).
 
-The piece a copy steps is a `Stepper`; `deep-play` gives the one over a document's logic items and its worlds. Connections live in `deep-relay` (the app's backend and its direct path) and in the web player's page.
+The piece a copy steps is a `Stepper`; `deep-play` gives the one over a document's logic items and its worlds, which holds the saves its steps ask for until `confirmed` reaches their step (#553). A copy hands its stepper its clock (`sound`) before each tick's rollback, so `deep-show`'s media module (`src/voiced.rs`) renders the output a block behind the steps, starts voices from new occurrences and fades out over 5 ms those a rollback dropped. Connections live in `deep-relay` (the app's backend and its direct path) and in the web player's page.
 
 ## What it may import
 
