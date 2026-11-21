@@ -29,7 +29,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 /** The checkout root (tests/acceptance/2691 is three levels down). */
 export const REPO = join(HERE, '..', '..', '..');
 /** The merge base these tests were written at, whose readings fixtures/base/ holds. */
-export const BASE_SHA = '89863843d85271d0aadcd9ca4702e411d67c7613';
+export const BASE_SHA = 'f7f61b54aa4717706dd89fbaaee9e79ee3569201';
 
 /** Each criterion's ID: the first 8 hex digits of SHA-256 of its text, trimmed, white space collapsed (README). */
 export const AC = {
