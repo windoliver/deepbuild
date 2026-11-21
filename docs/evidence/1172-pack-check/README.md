@@ -6,18 +6,22 @@ checks every installed pack again at each call. A pack's library check compiles 
 wasmtime's compiler, which the dev profile built unoptimized.
 
 `time-calls.mjs <repo> <tmp>` times the hub's own code (`Packs.shipped`, then `Canvas.call` with and without the
-store's packs) on the checkout's debug `deep-show`. On the Spark, load about 50, so the times are INCONCLUSIVE as
-absolute numbers; both runs had the same load:
+store's packs) on the checkout's debug `deep-show`, and prints the load and each shipped pack's state. Both runs are
+the same commit and the same hub build on the Spark, one after the other: `spark-fix-35471fdf1.txt` is the head, and
+`spark-base-b6b99ad8c.txt` is the head built with the ten profile entries set back to opt-level 0
+(`cargo build --config 'profile.dev.package.<name>.opt-level=0'` for each, into its own target folder), which is
+main b6b99ad8c's build. Load was 22 to 26, so the absolute times are INCONCLUSIVE.
 
-| | main 7a256fd4b | with the compiler at opt-level 3 |
+| | base | head |
 |---|---|---|
-| shipped packs checked, fresh store | 30,001 ms | 7,148 ms |
-| new process, all packs, first call | 23,588 ms | 7,217 ms |
-| later calls, all packs | 14,698 ms | 1,382 ms |
-| later calls, all but lanes | 4,370 ms | 510 ms |
-| a call with no packs | 4 ms | 3 ms |
+| shipped packs checked, fresh store (15 installed in both) | 21,154 ms | 7,413 ms |
+| new process, all packs, first call | 21,515 ms | 6,707 ms |
+| later calls, all packs | 16,333 ms | 1,640 ms |
+| later calls, all but lanes | 5,017 ms | 626 ms |
+| a call with no packs | 5 ms | 4 ms |
 
-Not run here: the two #1172 suites themselves, which need the Mac's app window.
+Not shown here: that the two #1172 suites pass. They need the Mac's app window, and on the Spark the first check
+plus one call is still about 9 s of their 10 s.
 
-Left open: the canvas core still checks every installed pack at every call (1.4 s a call here); the design says once
+Left open: the canvas core still checks every installed pack at every call (1.6 s a call here); the design says once
 per version.
