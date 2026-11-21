@@ -28,7 +28,7 @@
 // batch file named by one reading.batch event, its windows' rollups as files named by reading.rollup events
 // (./series.ts), so a bound value resolves at a frame's pinned log position.
 import { createHash, createPublicKey, randomUUID, verify as verifySignature } from 'node:crypto';
-import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createServer, type AddressInfo, type Socket } from 'node:net';
 import { homedir } from 'node:os';
@@ -100,7 +100,9 @@ export type Plant = 'hub-unless-agent-built' | 'grants-only-in-record-query' | '
   // that keeps every set of names, and a host that forgets a request ID and runs its call again.
   | 'churn-keeps-every-answer' | 'churn-keeps-every-result' | 'churn-keeps-every-name-set' | 'forgets-request-runs-again'
   // #2402's: a host that counts a handler's failures and never clears them.
-  | 'failures-never-cleared';
+  | 'failures-never-cleared'
+  // #2648's: a host that reads notices.json once, at its start.
+  | 'reads-files-at-start-only';
 
 /** One hook request to every loaded handler of its kind (#350). */
 export interface HookRequest {
@@ -705,7 +707,7 @@ class Host implements ExtensionHost {
       saved: (name, settings) => this.save('schedules.json', { ...this.read('schedules.json'), [name]: settings }),
     });
     this.work = new WorkSources(this.workHost());
-    this.sourceHost = new HostSources({ record: options.record, now: options.now, files: this.files, exts: this.exts, ask: (ext, ms, what, method, params) => this.ask(ext, ms, what, method, params) }, this.sources, series);
+    this.sourceHost = new HostSources({ record: options.record, now: options.now, files: this.files, exts: this.exts, ask: (ext, ms, what, method, params) => this.ask(ext, ms, what, method, params), ...(options.plant === 'reads-files-at-start-only' ? { plant: options.plant } : {}) }, this.sources, series);
     this.scheduleHost = new HostSchedules({ record: options.record, exts: this.exts, sources: { holds: (id, name) => this.sources.holds(id, name), workExt: (source) => this.sourceHost.workExt(source) }, sending: this.sending }, this.scheduler);
     this.routing = new AdapterRouting({ usable: async (ext) => !(await this.revoked(ext)), ask: (ext, ms, what, method, params) => this.ask(ext, ms, what, method, params), plant: options.plant });
     this.modelJobs = new Jobs({ record: options.record, now: options.now, runner: options.runner, access: { reaches: (ext, kind) => this.reaches(ext, kind), visible: (ext, event) => this.visible(ext, event), refuse: (ext, scope, clause, given) => this.refused(this.connection(ext, scope), 'deep.runner.run', 'grant', clause, [given]) } });
@@ -851,7 +853,7 @@ class Host implements ExtensionHost {
     const before = this.entries[id];
     let entry: Entry;
     try {
-      copyPackage(from.from, folder);
+      cpSync(from.from, folder, { recursive: true });
       const hosts = from.grant?.hosts?.map((h) => ({ host: h.host, quota: { calls: h.quota.calls, per_ms: h.quota.per_ms } }));
       const digest = this.options.plant === 'trusts-envelope-digest' ? manifest.digest! : packageDigest(folder);
       entry = {
@@ -1655,7 +1657,7 @@ class Host implements ExtensionHost {
   private snapshot(entry: Entry): { folder: string; digest: string } {
     const folder = mkdtempSync(join(this.options.home, 'run-'));
     try {
-      copyPackage(entry.folder, folder);
+      cpSync(entry.folder, folder, { recursive: true });
       return { folder, digest: packageDigest(folder) };
     } catch (e) {
       rmSync(folder, { recursive: true, force: true });
@@ -3415,22 +3417,6 @@ class Host implements ExtensionHost {
     await Promise.all(stopping.map((t) => this.terminals.stop(t).catch(() => undefined)));
     this.terminals.close();
   }
-}
-
-/**
- * Copies a package's folder with each file's mode as it is: the digest counts modes, and a copy made under a tighter
- * umask (the hub's is 077) would otherwise digest differently from the folder it was checked as.
- */
-function copyPackage(from: string, to: string): void {
-  cpSync(from, to, { recursive: true });
-  const modes = (src: string, dst: string): void => {
-    for (const name of readdirSync(src)) {
-      const stat = lstatSync(join(src, name));
-      if (stat.isDirectory()) modes(join(src, name), join(dst, name));
-      else if (stat.isFile()) chmodSync(join(dst, name), stat.mode & 0o7777);
-    }
-  };
-  modes(from, to);
 }
 
 export async function openExtensionHost(options: ExtensionHostOptions): Promise<ExtensionHost> {

@@ -1,0 +1,842 @@
+#551's acceptance files and its Oracle lane, each run once at the base 2bfb67db1 ("Merge #550's branch … as #551's base")
+on 2026-11-20, on a reference Mac (Mac17,10, Apple M5 Max, 64 GiB), Node 24, the pinned Rust 1.99.1, the dev build of
+deep-show (`full`) and deep-relay, one file at a time:
+
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 sh scripts/lease \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/<folder> <file>.test.ts --testTimeout=600000 --hookTimeout=180000
+
+The lease printed that no hub answered, so each file ran unleased. ac2-replay-export.test.ts was run a second time after
+its export range was put in the document's frames (the time grammar's "<n>f"); its second run is the one below, and both
+runs fail at the same assertions, before the export. Every test fails, each for the reason the README gives, and none
+passes:
+
+- The planted names are refused: every planted run answers {"ok": false, "code": "bad_input"}.
+- A match whose window is above 0 plays in lockstep: no copy rolls back (rollbacks 0), no report holds rolled_back,
+  occurrences or seeks, and net.rollback and net.budget answer BLOCKED ("this match declares a rollback window; rolling
+  back lands with #551, and until then a copy plays in lockstep"), so net.budget gives no runs and no
+  snapshot_bytes_per_s, net.rollback no schedules, and the web part's blocked entry names no host.
+- A 7 Hz logic item in the 20 Hz match is presented (no rate rule).
+- ac10's delay 31 and window 17 are refused at check, naming the field, and delay 30 with window 0 is accepted, as the
+  README says; the same test then fails on net.budget.
+- ac1's live part and the Oracle lane's portability case stop at the web player: at the base, headless Chrome's player
+  stops before `ready` with the notice "unreachable" on every 3D piece with a mark this job tried, #549's lockstep piece
+  included (a scratch run of this job's, which the README records), so neither live match starts.
+
+Scratch runs at the base, not saved as tests: `deep show` presents the paddle piece, its three-player form, the economy
+piece and the burning pieces with no error issue; net.budget in lockstep reads the burning program's busiest step at
+0.74, 1.45 and 2.18 ms for 50,000, 100,000 and 150,000 iterations (fixtures.ts's ITERATIONS_PER_MS); the rules program
+validates and writes pages 40 and 50 as fixtures.ts says, in Node's own WebAssembly.
+
+=== tests/acceptance/551/ac2-replay-export.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/551 ac2-replay-export.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/551
+
+ ❯ ac2-replay-export.test.ts (2 tests | 2 failed) 15539ms
+   ❯ AC2 #551.9b064904 a recorded match of 3,600 steps with rollbacks, replayed and exported (2)
+     × AC2 #551.9b064904 either copy's merged track replays alone, with the network off, to the same full-state hash at every hash interval; the tracks agree on every step both confirmed; the export equals a second replay's 12386ms
+     × AC2 #551.9b064904 a planted copy that records a predicted entry fails, naming the step 449ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac2-replay-export.test.ts > AC2 #551.9b064904 a recorded match of 3,600 steps with rollbacks, replayed and exported > AC2 #551.9b064904 either copy's merged track replays alone, with the network off, to the same full-state hash at every hash interval; the tracks agree on every step both confirmed; the export equals a second replay's
+AssertionError: the recorded match:
+  the match rolled back 0 times (copy 1 0, copy 2 0), fewer than 50: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the match rolled back 0 times (copy 1 0, copy 2 0), fewer than 50",
++ ]
+
+ ❯ none ../549/helpers.ts:93:73
+     91| /** No failures; the message lists them. */
+     92| export function none(failures: readonly string[], what: string): void {
+     93|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     94| }
+     95| /** A planted program's run: this suite's own judgement must fail it, …
+ ❯ ac2-replay-export.test.ts:55:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac2-replay-export.test.ts > AC2 #551.9b064904 a recorded match of 3,600 steps with rollbacks, replayed and exported > AC2 #551.9b064904 a planted copy that records a predicted entry fails, naming the step
+AssertionError: AC2 planted (planted net_records_predicted): deep-show run answers the scenario ok (it takes the planted net_records_predicted); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ play helpers.ts:143:13
+ ❯ ac2-replay-export.test.ts:100:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  10:10:33
+   Duration  16.07s (tests 97%, transform 2%, import 1%)
+
+=== exit 1
+=== tests/acceptance/551/ac3-budget-window.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/551 ac3-budget-window.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/551
+
+ ❯ ac3-budget-window.test.ts (2 tests | 2 failed) 50014ms
+   ❯ AC3 #551.5f93fc7b net.budget on the paddle piece and on a piece whose window can't be stepped again in a frame (2)
+     × AC3 #551.5f93fc7b net.budget passes the two-player piece 13941ms
+     × AC3 #551.5f93fc7b net.budget fails a planted piece whose full window can't be restored and stepped again within its class's frame time, naming the canvas module that costs most 32078ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac3-budget-window.test.ts > AC3 #551.5f93fc7b net.budget on the paddle piece and on a piece whose window can't be stepped again in a frame > AC3 #551.5f93fc7b net.budget passes the two-player piece
+AssertionError: AC3 the paddle piece: check.runs (net.budget's five runs, each {step_ms, window_ms}) is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr ../549/helpers.ts:79:72
+     77| }
+     78| export function arr(v: JsonValue | undefined, what: string): JsonValue…
+     79|   expect(Array.isArray(v), `${what} is an array, got ${show(v, 600)}`)…
+       |                                                                        ^
+     80|   return v as JsonValue[];
+     81| }
+ ❯ budgetOf helpers.ts:256:16
+ ❯ ac3-budget-window.test.ts:23:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac3-budget-window.test.ts > AC3 #551.5f93fc7b net.budget on the paddle piece and on a piece whose window can't be stepped again in a frame > AC3 #551.5f93fc7b net.budget fails a planted piece whose full window can't be restored and stepped again within its class's frame time, naming the canvas module that costs most
+AssertionError: AC3 the planted piece: check.runs (net.budget's five runs, each {step_ms, window_ms}) is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr ../549/helpers.ts:79:72
+     77| }
+     78| export function arr(v: JsonValue | undefined, what: string): JsonValue…
+     79|   expect(Array.isArray(v), `${what} is an array, got ${show(v, 600)}`)…
+       |                                                                        ^
+     80|   return v as JsonValue[];
+     81| }
+ ❯ budgetOf helpers.ts:256:16
+ ❯ ac3-budget-window.test.ts:31:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  09:33:59
+   Duration  50.82s (tests 99%, transform 1%)
+
+=== exit 1
+=== tests/acceptance/551/ac4-page-snapshots.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/551 ac4-page-snapshots.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/551
+
+ ❯ ac4-page-snapshots.test.ts (3 tests | 3 failed) 119860ms
+   ❯ AC4 #551.44ef3626 logic's rollback ring as page diffs (3)
+     × AC4 #551.44ef3626 net.budget counts under 12 MiB/s of logic snapshot bytes at 60 Hz, where full copies of its 4 MiB memory would move 240 MiB/s 30205ms
+     × AC4 #551.44ef3626 a rollback from these snapshots reaches the same full-state hash at every confirmed step as one from full copies 47989ms
+     × AC4 #551.44ef3626 a planted ring that misses a page written only by memory.fill fails net.rollback, naming the first step that differs 38769ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac4-page-snapshots.test.ts > AC4 #551.44ef3626 logic's rollback ring as page diffs > AC4 #551.44ef3626 net.budget counts under 12 MiB/s of logic snapshot bytes at 60 Hz, where full copies of its 4 MiB memory would move 240 MiB/s
+AssertionError: AC4 page diffs: net.budget counts each canvas module's rollback snapshot bytes a second (snapshot_bytes_per_s.logic): {"kind":"net.budget","verdict":"BLOCKED","failures":[],"blocked":[{"what":"this match declares a rollback window; rolling back lands with #551, and until then a copy plays in lockstep"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ logicBytes ac4-page-snapshots.test.ts:31:193
+
+ ❯ ac4-page-snapshots.test.ts:40:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  ac4-page-snapshots.test.ts > AC4 #551.44ef3626 logic's rollback ring as page diffs > AC4 #551.44ef3626 a rollback from these snapshots reaches the same full-state hash at every confirmed step as one from full copies
+AssertionError: rollbacks from page diffs and from whole copies:
+  copy 1 never rolled back from its page diffs
+  copy 2 never rolled back from its page diffs: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "copy 1 never rolled back from its page diffs",
++   "copy 2 never rolled back from its page diffs",
++ ]
+
+ ❯ none ../549/helpers.ts:93:73
+     91| /** No failures; the message lists them. */
+     92| export function none(failures: readonly string[], what: string): void {
+     93|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     94| }
+     95| /** A planted program's run: this suite's own judgement must fail it, …
+ ❯ ac4-page-snapshots.test.ts:56:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  ac4-page-snapshots.test.ts > AC4 #551.44ef3626 logic's rollback ring as page diffs > AC4 #551.44ef3626 a planted ring that misses a page written only by memory.fill fails net.rollback, naming the first step that differs
+AssertionError: AC4 net.rollback, planted (planted net_ring_misses_fill): deep-show run answers the scenario ok (it takes the planted net_ring_misses_fill); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ play helpers.ts:143:13
+ ❯ ac4-page-snapshots.test.ts:62:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  09:34:51
+   Duration  120.59s (tests 100%)
+
+=== exit 1
+=== tests/acceptance/551/ac5-rate-rule.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/551 ac5-rate-rule.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/551
+
+ ❯ ac5-rate-rule.test.ts (3 tests | 3 failed) 64537ms
+   ❯ AC5 #551.25b0bcea the rate rule: a 1 Hz economy and a 120 Hz world in a 20 Hz match (3)
+     × AC5 #551.25b0bcea the 20 Hz match with a 1 Hz economy item and a 120 Hz world passes net.rollback with late entries held up to the window, both copies agreeing at every confirmed step 45749ms
+     × AC5 #551.25b0bcea a 7 Hz item in that match is refused at check, naming both step lengths 13571ms
+     × AC5 #551.25b0bcea a planted rule that accepts only faster items refuses the 1 Hz economy, failing this criterion 928ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac5-rate-rule.test.ts > AC5 #551.25b0bcea the rate rule: a 1 Hz economy and a 120 Hz world in a 20 Hz match > AC5 #551.25b0bcea the 20 Hz match with a 1 Hz economy item and a 120 Hz world passes net.rollback with late entries held up to the window, both copies agreeing at every confirmed step
+AssertionError: the economy piece in a 20 Hz match under held-back entries:
+  AC5: net.rollback gives BLOCKED: {"kind":"net.rollback","verdict":"BLOCKED","failures":[],"blocked":[{"what":"this match declares a rollback window; rolling back lands with #551, and until then a copy plays in lockstep"}]}
+  AC5: copy 1 never rolled back, so nothing came late
+  AC5: copy 2 never rolled back, so nothing came late: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "AC5: net.rollback gives BLOCKED: {\"kind\":\"net.rollback\",\"verdict\":\"BLOCKED\",\"failures\":[],\"blocked\":[{\"what\":\"this match declares a rollback window; rolling back lands with #551, and until then a copy plays in lockstep\"}]}",
++   "AC5: copy 1 never rolled back, so nothing came late",
++   "AC5: copy 2 never rolled back, so nothing came late",
++ ]
+
+ ❯ none ../549/helpers.ts:93:73
+     91| /** No failures; the message lists them. */
+     92| export function none(failures: readonly string[], what: string): void {
+     93|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     94| }
+     95| /** A planted program's run: this suite's own judgement must fail it, …
+ ❯ ac5-rate-rule.test.ts:60:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  ac5-rate-rule.test.ts > AC5 #551.25b0bcea the rate rule: a 1 Hz economy and a 120 Hz world in a 20 Hz match > AC5 #551.25b0bcea a 7 Hz item in that match is refused at check, naming both step lengths
+AssertionError: the match with a 7 Hz item isn't presented: {"rev":1,"expansions":[],"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[],"changed":[],"unchanged":[],"created":["ball","cam","court","economy","market","match","pad1","pad2","paddle1","paddle2","serve","spin","table"],"removed":[],"outcome":"presented","backends":{"fonts":{"name":"fonts.bundled","version":"1.1.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"d7ddca506aefb38de043045901f4adb38f0f37556140cd91545da6379a4456a8"}: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ ac5-rate-rule.test.ts:65:95
+     63|   it(`${AC[5]} a 7 Hz item in that match is refused at check, naming b…
+     64|     const s = await shown(economyDoc({ seven: true }), 'AC5 the 7 Hz i…
+     65|     expect(s.presented, `the match with a 7 Hz item isn't presented: $…
+       |                                                                                               ^
+     66|     const named = s.errors.filter((i) => namesItem(i, MARKET) && names…
+     67|     expect(named.length, `an error issue names the item ${MARKET} and …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  ac5-rate-rule.test.ts > AC5 #551.25b0bcea the rate rule: a 1 Hz economy and a 120 Hz world in a 20 Hz match > AC5 #551.25b0bcea a planted rule that accepts only faster items refuses the 1 Hz economy, failing this criterion
+AssertionError: AC5 planted: the economy piece (planted net_rate_faster_only): deep-show run answers the scenario ok (it takes the planted net_rate_faster_only); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ shown ac5-rate-rule.test.ts:31:13
+ ❯ judge ac5-rate-rule.test.ts:48:13
+ ❯ ac5-rate-rule.test.ts:72:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  09:36:53
+   Duration  65.72s (tests 99%, import 1%)
+
+=== exit 1
+=== tests/acceptance/551/ac6-page-before-image.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/551 ac6-page-before-image.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/551
+
+ ❯ ac6-page-before-image.test.ts (2 tests | 2 failed) 67666ms
+   ❯ AC6 #551.8bad0f6c a page written at 610 and 627, rolled back to 625 from its before-images (2)
+     × AC6 #551.8bad0f6c player 2's entry for step 625, arriving after step 628, rolls back to 625 with the on-time run's hash there and every confirmed step's after, though logic's checkpoints at 600 and 660 lie outside the window 64206ms
+     × AC6 #551.8bad0f6c a planted ring that keeps each step's pages as the step left them fails net.rollback, naming step 625 830ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac6-page-before-image.test.ts > AC6 #551.8bad0f6c a page written at 610 and 627, rolled back to 625 from its before-images > AC6 #551.8bad0f6c player 2's entry for step 625, arriving after step 628, rolls back to 625 with the on-time run's hash there and every confirmed step's after, though logic's checkpoints at 600 and 660 lie outside the window
+AssertionError: AC6: copy 1 reports each rollback (rolled_back: [{from, to}]); its report holds player, ran, rollbacks, hashes, waits, notices, match, refused, end, desync, fault, record, ran_at, steps, track: expected null not to be null
+ ❯ rollbacksOf helpers.ts:116:158
+    114| /** A copy's rollbacks; a report without `rolled_back` fails, naming w…
+    115| export function rollbacksOf(c: Copy551, what: string): Rollback[] {
+    116|   expect(c.rolledBack, `${what}: copy ${c.player} reports each rollbac…
+       |                                                                                                                                                              ^
+    117|   return c.rolledBack!;
+    118| }
+ ❯ judge ac6-page-before-image.test.ts:35:14
+ ❯ ac6-page-before-image.test.ts:48:14
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac6-page-before-image.test.ts > AC6 #551.8bad0f6c a page written at 610 and 627, rolled back to 625 from its before-images > AC6 #551.8bad0f6c a planted ring that keeps each step's pages as the step left them fails net.rollback, naming step 625
+AssertionError: AC6 net.rollback, planted (planted net_ring_keeps_after): deep-show run answers the scenario ok (it takes the planted net_ring_keeps_after); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ play helpers.ts:143:13
+ ❯ ac6-page-before-image.test.ts:52:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  09:38:00
+   Duration  68.75s (tests 99%, transform 1%)
+
+=== exit 1
+=== tests/acceptance/551/ac7-replaced-checkpoint.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/551 ac7-replaced-checkpoint.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/551
+
+ ❯ ac7-replaced-checkpoint.test.ts (2 tests | 2 failed) 37163ms
+   ❯ AC7 #551.9ce1e5fd a late entry replaces logic's checkpoint at step 600 (2)
+     × AC7 #551.9ce1e5fd player 2's entry stamped at step 598, arriving after step 601, replaces the checkpoint at 600, and a seek to step 610 after the match gives a straight replay's hash 33574ms
+     × AC7 #551.9ce1e5fd a planted rollback that keeps the replaced checkpoint fails that seek, naming checkpoint 600 989ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac7-replaced-checkpoint.test.ts > AC7 #551.9ce1e5fd a late entry replaces logic's checkpoint at step 600 > AC7 #551.9ce1e5fd player 2's entry stamped at step 598, arriving after step 601, replaces the checkpoint at 600, and a seek to step 610 after the match gives a straight replay's hash
+AssertionError: AC7: the late entry: seeks (each seek after the match) is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr ../549/helpers.ts:79:72
+     77| }
+     78| export function arr(v: JsonValue | undefined, what: string): JsonValue…
+     79|   expect(Array.isArray(v), `${what} is an array, got ${show(v, 600)}`)…
+       |                                                                        ^
+     80|   return v as JsonValue[];
+     81| }
+ ❯ play helpers.ts:148:23
+ ❯ seekAndReplay ac7-replaced-checkpoint.test.ts:34:16
+ ❯ ac7-replaced-checkpoint.test.ts:56:40
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac7-replaced-checkpoint.test.ts > AC7 #551.9ce1e5fd a late entry replaces logic's checkpoint at step 600 > AC7 #551.9ce1e5fd a planted rollback that keeps the replaced checkpoint fails that seek, naming checkpoint 600
+AssertionError: AC7 planted: the late entry (planted net_keeps_replaced_checkpoint): deep-show run answers the scenario ok (it takes the planted net_keeps_replaced_checkpoint); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ play helpers.ts:143:13
+ ❯ seekAndReplay ac7-replaced-checkpoint.test.ts:34:16
+ ❯ ac7-replaced-checkpoint.test.ts:61:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  09:39:10
+   Duration  37.91s (tests 99%, transform 1%)
+
+=== exit 1
+=== tests/acceptance/551/ac8-lead-rule.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/551 ac8-lead-rule.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/551
+
+ ❯ ac8-lead-rule.test.ts (2 tests | 2 failed) 21812ms
+   ❯ AC8 #551.1600fba6 the lead rule evens rollback depth between copies at 5 ms and 80 ms from the relay (2)
+     × AC8 #551.1600fba6 with one-way latencies of 5 ms and 80 ms both copies' mean rollback depth stays within one step of each other and no copy waits at the window 17475ms
+     × AC8 #551.1600fba6 a planted copy that ignores the lead rule fails on its depth histogram 794ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac8-lead-rule.test.ts > AC8 #551.1600fba6 the lead rule evens rollback depth between copies at 5 ms and 80 ms from the relay > AC8 #551.1600fba6 with one-way latencies of 5 ms and 80 ms both copies' mean rollback depth stays within one step of each other and no copy waits at the window
+AssertionError: AC8: copy 1 reports each rollback (rolled_back: [{from, to}]); its report holds player, ran, rollbacks, hashes, waits, notices, match, refused, end, desync, fault, record, ran_at, steps, track: expected null not to be null
+ ❯ rollbacksOf helpers.ts:116:158
+    114| /** A copy's rollbacks; a report without `rolled_back` fails, naming w…
+    115| export function rollbacksOf(c: Copy551, what: string): Rollback[] {
+    116|   expect(c.rolledBack, `${what}: copy ${c.player} reports each rollbac…
+       |                                                                                                                                                              ^
+    117|   return c.rolledBack!;
+    118| }
+ ❯ ac8-lead-rule.test.ts:27:20
+ ❯ judge ac8-lead-rule.test.ts:26:24
+ ❯ ac8-lead-rule.test.ts:42:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac8-lead-rule.test.ts > AC8 #551.1600fba6 the lead rule evens rollback depth between copies at 5 ms and 80 ms from the relay > AC8 #551.1600fba6 a planted copy that ignores the lead rule fails on its depth histogram
+AssertionError: AC8 planted (planted net_ignores_lead_rule): deep-show run answers the scenario ok (it takes the planted net_ignores_lead_rule); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ play helpers.ts:143:13
+ ❯ ac8-lead-rule.test.ts:46:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  09:39:49
+   Duration  22.65s (tests 98%, transform 1%, import 1%)
+
+=== exit 1
+=== tests/acceptance/551/ac9-budget-together.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/551 ac9-budget-together.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/551
+
+ ❯ ac9-budget-together.test.ts (2 tests | 2 failed) 95628ms
+   ❯ AC9 #551.75e2a4bd net.budget holds a frame's step and window together, and its web part waits for a browser (2)
+     × AC9 #551.75e2a4bd a planted piece whose step with its checkpoints and whose window stepped again each fit the frame alone but not together fails net.budget, naming the canvas module that costs most 83391ms
+     × AC9 #551.75e2a4bd the paddle piece's web part reads BLOCKED until its headless Chrome run 8407ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac9-budget-together.test.ts > AC9 #551.75e2a4bd net.budget holds a frame's step and window together, and its web part waits for a browser > AC9 #551.75e2a4bd a planted piece whose step with its checkpoints and whose window stepped again each fit the frame alone but not together fails net.budget, naming the canvas module that costs most
+AssertionError: AC9 the planted piece: check.runs (net.budget's five runs, each {step_ms, window_ms}) is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr ../549/helpers.ts:79:72
+     77| }
+     78| export function arr(v: JsonValue | undefined, what: string): JsonValue…
+     79|   expect(Array.isArray(v), `${what} is an array, got ${show(v, 600)}`)…
+       |                                                                        ^
+     80|   return v as JsonValue[];
+     81| }
+ ❯ budgetOf helpers.ts:256:16
+ ❯ ac9-budget-together.test.ts:27:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac9-budget-together.test.ts > AC9 #551.75e2a4bd net.budget holds a frame's step and window together, and its web part waits for a browser > AC9 #551.75e2a4bd the paddle piece's web part reads BLOCKED until its headless Chrome run
+AssertionError: the paddle piece's web part reads BLOCKED:
+  net.budget's blocked holds 0 entries for host web, not one with its unblock ask: [{"what":"this match declares a rollback window; rolling back lands with #551, and until then a copy plays in lockstep"}]
+  net.budget blocks a host besides web: [{"what":"this match declares a rollback window; rolling back lands with #551, and until then a copy plays in lockstep"}]: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "net.budget's blocked holds 0 entries for host web, not one with its unblock ask: [{\"what\":\"this match declares a rollback window; rolling back lands with #551, and until then a copy plays in lockstep\"}]",
++   "net.budget blocks a host besides web: [{\"what\":\"this match declares a rollback window; rolling back lands with #551, and until then a copy plays in lockstep\"}]",
++ ]
+
+ ❯ none ../549/helpers.ts:93:73
+     91| /** No failures; the message lists them. */
+     92| export function none(failures: readonly string[], what: string): void {
+     93|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     94| }
+     95| /** A planted program's run: this suite's own judgement must fail it, …
+ ❯ ac9-budget-together.test.ts:47:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  09:40:12
+   Duration  96.11s (tests 100%)
+
+=== exit 1
+=== tests/acceptance/551/ac10-lockstep-budget.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/551 ac10-lockstep-budget.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/551
+
+ ❯ ac10-lockstep-budget.test.ts (1 test | 1 failed) 26912ms
+   ❯ AC10 #551.4b4f0458 a piece whose busiest match step costs 3 ms, with window 8 and in lockstep; delay and window limits (1)
+     × AC10 #551.4b4f0458 net.budget fails the 3 ms piece with window 8, naming logic, and passes it with window 0 and delay 6, reporting that one step's time; delay 31 and window 17 are refused at check, naming the field, and delay 30 with window 0 is accepted 24069ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac10-lockstep-budget.test.ts > AC10 #551.4b4f0458 a piece whose busiest match step costs 3 ms, with window 8 and in lockstep; delay and window limits > AC10 #551.4b4f0458 net.budget fails the 3 ms piece with window 8, naming logic, and passes it with window 0 and delay 6, reporting that one step's time; delay 31 and window 17 are refused at check, naming the field, and delay 30 with window 0 is accepted
+AssertionError: AC10 window 8: check.runs (net.budget's five runs, each {step_ms, window_ms}) is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr ../549/helpers.ts:79:72
+     77| }
+     78| export function arr(v: JsonValue | undefined, what: string): JsonValue…
+     79|   expect(Array.isArray(v), `${what} is an array, got ${show(v, 600)}`)…
+       |                                                                        ^
+     80|   return v as JsonValue[];
+     81| }
+ ❯ budgetOf helpers.ts:256:16
+ ❯ ac10-lockstep-budget.test.ts:59:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  09:41:49
+   Duration  27.32s (tests 99%, transform 1%)
+
+=== exit 1
+=== tests/acceptance/551/ac11-three-players.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/551 ac11-three-players.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/551
+
+ ❯ ac11-three-players.test.ts (3 tests | 3 failed) 91870ms
+   ❯ AC11 #551.b7783405 three players, two late entries for different steps in one frame (3)
+     × AC11 #551.b7783405 the three-player paddle piece passes net.rollback under 8 seeded schedules and one that holds every message 8 steps 26857ms
+     × AC11 #551.b7783405 a frame that brings player 2's entry for step 640 and player 3's for step 636 to copy 1 at step 643 rolls it back to step 636, matching the on-time run at every confirmed step 61424ms
+     × AC11 #551.b7783405 a planted rollback that rewinds to the last entry it read, step 640, fails, naming step 636 797ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac11-three-players.test.ts > AC11 #551.b7783405 three players, two late entries for different steps in one frame > AC11 #551.b7783405 the three-player paddle piece passes net.rollback under 8 seeded schedules and one that holds every message 8 steps
+AssertionError: net.rollback on the three-player piece:
+  net.rollback gives BLOCKED: []
+  net.rollback played 0 seeded schedules, not 8: []
+  net.rollback didn't play one schedule holding every message exactly 8 steps: []
+  net.rollback played 0 schedules, not 9: []: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "net.rollback gives BLOCKED: []",
++   "net.rollback played 0 seeded schedules, not 8: []",
++   "net.rollback didn't play one schedule holding every message exactly 8 steps: []",
++   "net.rollback played 0 schedules, not 9: []",
++ ]
+
+ ❯ none ../549/helpers.ts:93:73
+     91| /** No failures; the message lists them. */
+     92| export function none(failures: readonly string[], what: string): void {
+     93|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     94| }
+     95| /** A planted program's run: this suite's own judgement must fail it, …
+ ❯ ac11-three-players.test.ts:39:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  ac11-three-players.test.ts > AC11 #551.b7783405 three players, two late entries for different steps in one frame > AC11 #551.b7783405 a frame that brings player 2's entry for step 640 and player 3's for step 636 to copy 1 at step 643 rolls it back to step 636, matching the on-time run at every confirmed step
+AssertionError: AC11: copy 1 reports each rollback (rolled_back: [{from, to}]); its report holds player, ran, rollbacks, hashes, waits, notices, match, refused, end, desync, fault, record, ran_at, steps, track: expected null not to be null
+ ❯ rollbacksOf helpers.ts:116:158
+    114| /** A copy's rollbacks; a report without `rolled_back` fails, naming w…
+    115| export function rollbacksOf(c: Copy551, what: string): Rollback[] {
+    116|   expect(c.rolledBack, `${what}: copy ${c.player} reports each rollbac…
+       |                                                                                                                                                              ^
+    117|   return c.rolledBack!;
+    118| }
+ ❯ ac11-three-players.test.ts:47:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  ac11-three-players.test.ts > AC11 #551.b7783405 three players, two late entries for different steps in one frame > AC11 #551.b7783405 a planted rollback that rewinds to the last entry it read, step 640, fails, naming step 636
+AssertionError: AC11 net.rollback, planted (planted net_rewinds_to_last_read): deep-show run answers the scenario ok (it takes the planted net_rewinds_to_last_read); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ play helpers.ts:143:13
+ ❯ ac11-three-players.test.ts:54:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  09:42:17
+   Duration  92.38s (tests 100%)
+
+=== exit 1
+=== tests/acceptance/551/ac1-app-and-web.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/551 ac1-app-and-web.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/551
+
+ ❯ ac1-app-and-web.test.ts (2 tests | 2 failed) 395497ms
+   ❯ AC1 #551.6a2c4947 the paddle piece between the app and the web player, its messages held back (2)
+     × AC1 #551.6a2c4947 the app's copy and headless Chrome's reach the on-time run's full-state hash at every confirmed step, hold no occurrence from a replaced step and record its merged track 336816ms
+     × AC1 #551.6a2c4947 a planted copy that applies a late entry at the step it arrived fails net.rollback, naming the first step that differs 52255ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-app-and-web.test.ts > AC1 #551.6a2c4947 the paddle piece between the app and the web player, its messages held back > AC1 #551.6a2c4947 the app's copy and headless Chrome's reach the on-time run's full-state hash at every confirmed step, hold no occurrence from a replaced step and record its merged track
+AssertionError: AC1: the web player: the player (<deep-player>) is ready within 180000 ms; it shows a player, notices ["unreachable"], page errors []: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ Tab.mustBeReady ../549/helpers.ts:969:235
+
+ ❯ appAndWeb helpers.ts:332:3
+ ❯ ac1-app-and-web.test.ts:38:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac1-app-and-web.test.ts > AC1 #551.6a2c4947 the paddle piece between the app and the web player, its messages held back > AC1 #551.6a2c4947 a planted copy that applies a late entry at the step it arrived fails net.rollback, naming the first step that differs
+AssertionError: net.rollback passes the honest copies: {"kind":"net.rollback","verdict":"BLOCKED","failures":[],"blocked":[{"what":"this match declares a rollback window; rolling back lands with #551, and until then a copy plays in lockstep"}]}: expected [ 'BLOCKED', [] ] to deeply equal [ 'PASS', [] ]
+
+- Expected
++ Received
+
+  [
+-   "PASS",
++   "BLOCKED",
+    [],
+  ]
+
+ ❯ ac1-app-and-web.test.ts:72:154
+     70|     // The honest copies pass the same check under the same schedule, …
+     71|     const honest = await play(builds.show(), temp(), 'AC1 net.rollback…
+     72|     expect([honest.check!.verdict, honest.check!.failures], `net.rollb…
+       |                                                                                                                                                          ^
+     73|     const twin = await play(builds.show(), temp(), 'AC1 net.rollback, …
+     74|     const parted = firstParted(twin.copies, onTime.copies);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  09:43:50
+   Duration  396.02s (tests 100%)
+
+=== exit 1
+=== tests/acceptance/551-oracle/rollback.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/551-oracle rollback.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/551-oracle
+
+ ❯ rollback.test.ts (5 tests | 5 failed) 345195ms
+   ❯ the upstream rollback, resimulation and snapshot tests, on our copies (5)
+     × AC1 #551.6a2c4947 resimulated steps land on the run that never stopped, and a change made during the resimulation of step 310 desyncs the copies from that step, naming one field 50063ms
+     × AC1 #551.6a2c4947 the app's copy, native, and the web player's, on wasm32, reach the same full-state hash at every confirmed step 217121ms
+     × AC2 #551.9b064904 an entry lands 2 steps after it is made, nothing predicted reaches the record, and a late entry rolls the copy back to its own step 11462ms
+     × AC4 #551.44ef3626 with every message held back exactly 2 steps every step rolls back and lands on the on-time run, two runs agree, and a ring that misses the page memory.fill writes fails net.rollback 36089ms
+     × AC11 #551.b7783405 entries for steps 640 and 636 that reach copy 1 together roll it back to 636, the earliest over every player's queue 26630ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  rollback.test.ts > the upstream rollback, resimulation and snapshot tests, on our copies > AC1 #551.6a2c4947 resimulated steps land on the run that never stopped, and a change made during the resimulation of step 310 desyncs the copies from that step, naming one field
+AssertionError: resimulation in sync, and a change during it named:
+  copy 1 never rolled back, so nothing was resimulated
+  copy 2 never rolled back, so nothing was resimulated: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "copy 1 never rolled back, so nothing was resimulated",
++   "copy 2 never rolled back, so nothing was resimulated",
++ ]
+
+ ❯ none ../549/helpers.ts:93:73
+     91| /** No failures; the message lists them. */
+     92| export function none(failures: readonly string[], what: string): void {
+     93|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     94| }
+     95| /** A planted program's run: this suite's own judgement must fail it, …
+ ❯ rollback.test.ts:70:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  rollback.test.ts > the upstream rollback, resimulation and snapshot tests, on our copies > AC1 #551.6a2c4947 the app's copy, native, and the web player's, on wasm32, reach the same full-state hash at every confirmed step
+AssertionError: the oracle: the web player: the player (<deep-player>) is ready within 180000 ms; it shows a player, notices ["unreachable"], page errors []: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ Tab.mustBeReady ../549/helpers.ts:969:235
+
+ ❯ appAndWeb ../551/helpers.ts:332:3
+ ❯ rollback.test.ts:75:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  rollback.test.ts > the upstream rollback, resimulation and snapshot tests, on our copies > AC2 #551.9b064904 an entry lands 2 steps after it is made, nothing predicted reaches the record, and a late entry rolls the copy back to its own step
+AssertionError: the oracle: copy 1 reports each rollback (rolled_back: [{from, to}]); its report holds player, ran, rollbacks, hashes, waits, notices, match, refused, end, desync, fault, record, ran_at, steps, track: expected null not to be null
+ ❯ rollbacksOf ../551/helpers.ts:116:158
+    114| /** A copy's rollbacks; a report without `rolled_back` fails, naming w…
+    115| export function rollbacksOf(c: Copy551, what: string): Rollback[] {
+    116|   expect(c.rolledBack, `${what}: copy ${c.player} reports each rollbac…
+       |                                                                                                                                                              ^
+    117|   return c.rolledBack!;
+    118| }
+ ❯ rollback.test.ts:87:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  rollback.test.ts > the upstream rollback, resimulation and snapshot tests, on our copies > AC4 #551.44ef3626 with every message held back exactly 2 steps every step rolls back and lands on the on-time run, two runs agree, and a ring that misses the page memory.fill writes fails net.rollback
+AssertionError: a rollback every step, deterministic:
+  net.rollback gives BLOCKED: []
+  copy 1 rolled back 0 times in 200 steps, not about every step
+  copy 2 rolled back 0 times in 200 steps, not about every step: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "net.rollback gives BLOCKED: []",
++   "copy 1 rolled back 0 times in 200 steps, not about every step",
++   "copy 2 rolled back 0 times in 200 steps, not about every step",
++ ]
+
+ ❯ none ../549/helpers.ts:93:73
+     91| /** No failures; the message lists them. */
+     92| export function none(failures: readonly string[], what: string): void {
+     93|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     94| }
+     95| /** A planted program's run: this suite's own judgement must fail it, …
+ ❯ rollback.test.ts:109:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  rollback.test.ts > the upstream rollback, resimulation and snapshot tests, on our copies > AC11 #551.b7783405 entries for steps 640 and 636 that reach copy 1 together roll it back to 636, the earliest over every player's queue
+AssertionError: the oracle: copy 1 reports each rollback (rolled_back: [{from, to}]); its report holds player, ran, rollbacks, hashes, waits, notices, match, refused, end, desync, fault, record, ran_at, steps, track: expected null not to be null
+ ❯ rollbacksOf ../551/helpers.ts:116:158
+    114| /** A copy's rollbacks; a report without `rolled_back` fails, naming w…
+    115| export function rollbacksOf(c: Copy551, what: string): Rollback[] {
+    116|   expect(c.rolledBack, `${what}: copy ${c.player} reports each rollbac…
+       |                                                                                                                                                              ^
+    117|   return c.rolledBack!;
+    118| }
+ ❯ rollback.test.ts:123:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+ Test Files  1 failed (1)
+      Tests  5 failed (5)
+   Start at  09:50:27
+   Duration  346.01s (tests 100%)
+
+=== exit 1

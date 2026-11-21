@@ -1,0 +1,149 @@
+$ node --test tests/acceptance/2649/spike.test.mjs  (base b4a2049e8, Node 24)
+✖ AC1 a table lists every process start of one sandboxed command check and of one hour-long idle run, by caller, with count and instructions that the kept counter output recomputes (3.177583ms)
+✖ AC2 each start is needed, repeated or replaceable; a replaceable one names its replacement and what a person or test would see change (0.5735ms)
+✖ AC3 each cut tried is measured on sandbox-setup, runner-job and command-check-count: 15 alternated rounds a side against the merge base, with the command (9.746083ms)
+✖ AC4 the time from a fork to its process.tracked event is read at p50 and p95 from the kept samples (0.27025ms)
+✖ AC5 the recommendation names cuts, each with a drafted criterion, or says none is worth one (0.616791ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 0
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 245.221375
+
+✖ failing tests:
+
+test at tests/acceptance/2649/spike.test.mjs:15:1
+✖ AC1 a table lists every process start of one sandboxed command check and of one hour-long idle run, by caller, with count and instructions that the kept counter output recomputes (3.177583ms)
+  AssertionError [ERR_ASSERTION]: 
+  no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded
+  + actual - expected
+  
+  + [
+  +   "no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded"
+  + ]
+  - []
+  
+      at holds (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:8:36)
+      at TestContext.<anonymous> (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:11:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ "no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2649/spike.test.mjs:16:1
+✖ AC2 each start is needed, repeated or replaceable; a replaceable one names its replacement and what a person or test would see change (0.5735ms)
+  AssertionError [ERR_ASSERTION]: 
+  no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded
+  + actual - expected
+  
+  + [
+  +   "no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded"
+  + ]
+  - []
+  
+      at holds (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:8:36)
+      at TestContext.<anonymous> (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:11:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ "no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2649/spike.test.mjs:17:1
+✖ AC3 each cut tried is measured on sandbox-setup, runner-job and command-check-count: 15 alternated rounds a side against the merge base, with the command (9.746083ms)
+  AssertionError [ERR_ASSERTION]: 
+  no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded
+  + actual - expected
+  
+  + [
+  +   "no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded"
+  + ]
+  - []
+  
+      at holds (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:8:36)
+      at TestContext.<anonymous> (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:11:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ "no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2649/spike.test.mjs:18:1
+✖ AC4 the time from a fork to its process.tracked event is read at p50 and p95 from the kept samples (0.27025ms)
+  AssertionError [ERR_ASSERTION]: 
+  no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded
+  + actual - expected
+  
+  + [
+  +   "no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded"
+  + ]
+  - []
+  
+      at holds (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:8:36)
+      at TestContext.<anonymous> (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:11:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ "no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2649/spike.test.mjs:19:1
+✖ AC5 the recommendation names cuts, each with a drafted criterion, or says none is worth one (0.616791ms)
+  AssertionError [ERR_ASSERTION]: 
+  no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded
+  + actual - expected
+  
+  + [
+  +   "no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded"
+  + ]
+  - []
+  
+      at holds (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:8:36)
+      at TestContext.<anonymous> (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:11:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ "no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

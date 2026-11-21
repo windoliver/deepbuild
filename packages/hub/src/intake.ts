@@ -21,6 +21,7 @@ import { briefOf, cardOf, headingOf, heldWords, linksOf, pageOf, pageText, repoL
 import { ulid } from '@deepbuild/record';
 import { bubblewrap, seatbelt } from '@deepbuild/supervisor';
 import type { IntakeDeps, IntakeService } from './intake-port.js';
+import { forgeFetch } from '@deepbuild/github';
 
 type Obj = Record<string, unknown>;
 const sha256 = (v: string | Uint8Array): string => createHash('sha256').update(v).digest('hex');
@@ -329,9 +330,9 @@ export class Intake implements IntakeService {
   private async repo(heading: string): Promise<Made> {
     const token = await this.o.token();
     const name = slug(heading);
-    const res = await fetch(`${this.o.forge}/user/repos`, {
-      method: 'POST', signal: AbortSignal.timeout(30_000), headers: headers(token),
-      body: JSON.stringify({ name, description: heading.slice(0, 300), private: this.o.plant !== 'repo-public-by-default', auto_init: false }),
+    const res = await forgeFetch(this.o.forge, '/user/repos', {
+      method: 'POST', token, signal: AbortSignal.timeout(30_000),
+      body: { name, description: heading.slice(0, 300), private: this.o.plant !== 'repo-public-by-default', auto_init: false },
     });
     const made = await res.json().catch(() => undefined) as Obj | undefined;
     if (res.status !== 201 || typeof made?.full_name !== 'string' || typeof made.clone_url !== 'string') throw Error(`the forge answered ${res.status} when making ${name}`);
@@ -350,7 +351,7 @@ export class Intake implements IntakeService {
   }
   private async issue(repo: string, title: string, criteria: string[], blocked_by: number[]): Promise<number> {
     const body = [...criteria.map((c) => `- [ ] ${c}`), ...(blocked_by.length ? ['', '### Depends on', ...blocked_by.map((n) => `- #${n}`)] : [])].join('\n');
-    const res = await fetch(`${this.o.forge}/repos/${repo}/issues`, { method: 'POST', signal: AbortSignal.timeout(30_000), body: JSON.stringify({ title, body }), headers: headers(await this.o.token()) });
+    const res = await forgeFetch(this.o.forge, `/repos/${repo}/issues`, { method: 'POST', token: await this.o.token(), body: { title, body }, signal: AbortSignal.timeout(30_000) });
     const made = await res.json().catch(() => undefined) as Obj | undefined;
     if (res.status !== 201 || typeof made?.number !== 'number') throw Error(`the forge answered ${res.status} for the task "${title}"`);
     return made.number;
@@ -548,7 +549,6 @@ function woke(f: Fold, tasks: unknown): void {
   const run = f.runs.at(-1);
   if (run && !run.ended && Array.isArray(tasks)) run.tasks = tasks as number[];
 }
-const headers = (token: string | undefined): Record<string, string> => ({ accept: 'application/vnd.github+json', 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) });
 /**
  * A wake test run once, with no model: `sh <test> <before> <after>` in a folder of its own, the approved text (never a
  * copy on disk) as the test, confined by the supervisor's sandbox to reading that folder and the system's programs, with

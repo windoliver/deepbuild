@@ -1,0 +1,16 @@
+The Oracle lane at the base commit 6f225f46d, before any implementation, on macOS arm64, one cheap file:
+
+  PATH=$HOME/.local/share/fnm/node-versions/v24.22.0/installation/bin:/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 \
+    CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/194-oracle \
+    fnv-go.test.ts --testTimeout=3600000 --no-file-parallelism --reporter=verbose
+
+ × fnv-go.test.ts > #194.a290ef32 FNV-1a 32 names IDs, columns and tables (Go's TestGolden32a) > #194.a290ef32 the
+   packed directory, columns and ID columns hold Go's golden32a hashes for a, ab and abc, in rising order
+AssertionError: the probe builds: cargo build --locked -p deep-catalog --bin deep-catalog: expected 'cargo build
+--locked -p deep-catalog …' to be '' // Object.is equality
++ error: package ID specification `deep-catalog` did not match any packages
+
+      Tests  1 failed (1)        (2.1 s)
+
+The suite's own FNV-1a 32 agreed with all four golden32a vectors before that (the precondition passed). Not run at
+the base: csv-spectrum.test.ts, whose 22 tests each pack first and fail at the same build.

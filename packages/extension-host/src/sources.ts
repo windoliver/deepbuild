@@ -29,6 +29,8 @@ interface HostSourcesOptions {
   record: RecordStore; now(): number; files: HostFiles;
   exts: ReadonlyMap<string, Ext>;
   ask(ext: Ext, ms: number, what: string, method: string, params: unknown): Promise<unknown>;
+  /** #2648's planted host, which reads notices.json once, at its start. */
+  plant?: 'reads-files-at-start-only';
 }
 /** Loaded source calls, cursor and visibility state belong to this host's source service. */
 export class HostSources {
@@ -42,7 +44,11 @@ export class HostSources {
   /** The work-source calls under way, by the call ID their context's fetch names (#66). */
   private readonly workCalls = new Map<string, { ext: Ext; source: string; work: Omit<WorkDecl, 'delivers'>; library?: LibraryDecl; noAnswer: boolean }>();
   private workCount = 0;
-  constructor(private readonly options: HostSourcesOptions, private readonly sources: Sources, private readonly series: SeriesStore | undefined) {}
+  /** The notices #2648's planted host read at its start, which it reads no more. */
+  private readonly noticesAtStart: Readonly<Record<string, SavedNotice>> | undefined;
+  constructor(private readonly options: HostSourcesOptions, private readonly sources: Sources, private readonly series: SeriesStore | undefined) {
+    if (options.plant) this.noticesAtStart = options.files.read<SavedNotice>('notices.json');
+  }
   workExt(source: string): Ext | undefined {
     return [...this.options.exts.values()].find((e) => e.live && e.ask && e.mode === 'loaded' && (e.sources.get(source) as { work?: unknown } | undefined)?.work);
   }
@@ -194,13 +200,14 @@ export class HostSources {
    */
   async shownTick(): Promise<void> {
     const now = this.options.now();
-    const standIn = new Map<string, number>();
-    for (const n of Object.values(this.options.files.read<SavedNotice>('notices.json'))) if (n.every !== null) standIn.set(n.source, Math.min(standIn.get(n.source) ?? Infinity, n.every));
+    // A notice stands in only for a shown source: with none shown notices.json isn't looked at, and with one shown it
+    // is read again only once it changed (#2648).
+    let standIn: Map<string, number> | undefined;
     for (const ext of [...this.options.exts.values()].filter((e) => e.live)) {
       for (const source of ext.sources.values()) {
         if (source.variant !== 'polled' || !source.whileShown) continue;
         const every = source.whileShown.every;
-        if (!this.sourceShown(source.name, now) || (standIn.get(source.name) ?? Infinity) <= every) {
+        if (!this.sourceShown(source.name, now) || ((standIn ??= this.standIns()).get(source.name) ?? Infinity) <= every) {
           this.shownNext.delete(source.name);
           continue;
         }
@@ -210,6 +217,13 @@ export class HostSources {
         await this.readPolled(ext, source.name);
       }
     }
+  }
+
+  /** The shortest schedule a saved notice gives each source's checking job, which stands in for its while-shown cadence. */
+  private standIns(): Map<string, number> {
+    const by = new Map<string, number>();
+    for (const n of Object.values(this.noticesAtStart ?? this.options.files.kept<SavedNotice>('notices.json'))) if (n.every !== null) by.set(n.source, Math.min(by.get(n.source) ?? Infinity, n.every));
+    return by;
   }
 
   /** Whether a view that binds the source is shown: the app reported it in the last 10 s, visible, not minimized, on an awake display, unlocked, and not a replica's. */

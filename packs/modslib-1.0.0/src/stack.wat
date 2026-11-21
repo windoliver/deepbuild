@@ -1,0 +1,57 @@
+(module
+  (import "env" "__linear_memory" (memory 24 24))
+  (import "lib:mods.lib@1" "attach" (func $attach (param i32 i32 i32 i32)))
+  (import "lib:mods.lib@1" "detach" (func $detach (param i32 i32)))
+  (import "lib:mods.lib@1" "add" (func $add (param i32 i32) (result i32)))
+  (import "lib:mods.lib@1" "remove" (func $remove (param i32 i32)))
+  (import "lib:mods.lib@1" "tick" (func $tick (param i32 i32)))
+  (import "lib:mods.lib@1" "total" (func $total (param i32 i32 i32) (result i64)))
+  (global (export "reads_at") i32 (i32.const 0))
+  (global (export "writes_at") i32 (i32.const 4096))
+  (global (export "assets_at") i32 (i32.const 1179648))
+  (func (export "init") (param $seed i64)
+    (memory.copy (i32.const 65536) (i32.const 1179652) (i32.const 128))
+    (i32.store (i32.const 65536) (i32.add (i32.add (i32.const 1179652) (i32.load (i32.const 1179648))) (i32.const 4)))
+    (i32.store (i32.const 32768) (i32.const 1179780))
+    (i32.store (i32.const 4208) (i32.const -1)))
+  (func (export "step") (param $k i64) (local $p i32) (local $op i32) (local $r i32) (local $n i32) (local $end i32) (local $s i32)
+    (local.set $p (i32.load (i32.const 32768)))
+    (block $done (loop $next
+      (local.set $op (i32.load (local.get $p)))
+      (br_if $done (i32.eq (local.get $op) (i32.const 7)))
+      (local.set $p (i32.add (local.get $p) (i32.const 4)))
+      (br_if $done (i32.eqz (local.get $op)))
+      (if (i32.eq (local.get $op) (i32.const 1)) (then
+        (call $attach (i32.const 65536) (i32.load (local.get $p)) (i32.load offset=4 (local.get $p)) (i32.load offset=8 (local.get $p)))
+        (local.set $p (i32.add (local.get $p) (i32.const 12)))))
+      (if (i32.eq (local.get $op) (i32.const 2)) (then
+        (call $detach (i32.const 65536) (i32.load (local.get $p)))
+        (local.set $p (i32.add (local.get $p) (i32.const 4)))))
+      (if (i32.eq (local.get $op) (i32.const 3)) (then
+        (i32.store (i32.const 4208) (call $add (i32.const 65536) (local.get $p)))
+        (local.set $p (i32.add (local.get $p) (i32.const 104)))))
+      (if (i32.eq (local.get $op) (i32.const 4)) (then
+        (call $remove (i32.const 65536) (i32.load (local.get $p)))
+        (local.set $p (i32.add (local.get $p) (i32.const 4)))))
+      (if (i32.eq (local.get $op) (i32.const 5)) (then
+        (call $tick (i32.const 65536) (i32.load (local.get $p)))
+        (local.set $p (i32.add (local.get $p) (i32.const 4)))))
+      (if (i32.eq (local.get $op) (i32.const 6)) (then
+        (local.set $n (i32.load (local.get $p)))
+        (local.set $end (i32.add (local.get $n) (i32.load offset=4 (local.get $p))))
+        (local.set $p (i32.add (local.get $p) (i32.const 8)))
+        (block $nodes (loop $node
+          (br_if $nodes (i32.ge_s (local.get $n) (local.get $end)))
+          (local.set $s (i32.const 0))
+          (block $stats (loop $stat
+            (br_if $stats (i32.ge_u (local.get $s) (i32.load offset=12 (i32.const 65536))))
+            (f64.store (i32.add (i32.const 4096) (i32.shl (local.get $r) (i32.const 3)))
+              (f64.convert_i64_s (call $total (i32.const 65536) (local.get $n) (local.get $s))))
+            (local.set $r (i32.add (local.get $r) (i32.const 1)))
+            (local.set $s (i32.add (local.get $s) (i32.const 1)))
+            (br $stat)))
+          (local.set $n (i32.add (local.get $n) (i32.const 1)))
+          (br $node)))))
+      (br $next)))
+    (i32.store (i32.const 32768) (local.get $p)))
+  (data (i32.const 32768) "\00"))

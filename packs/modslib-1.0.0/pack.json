@@ -1,0 +1,163 @@
+{
+  "name": "modslib",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "description": "mods.lib@1 (#953): stat modifiers on a tree of nodes with reach down, side or all, filters on the receiving node's catalog row, (base + adds) × (1 + percents ÷ 100), the last set by source and row, the lowest cap and one rounding toward zero, kept in cached totals that a change marks only where it can reach. Its fixtures' expected totals are recomputed from the whole tree after every edit; its planted library leaves a moved node's descendants' totals stale, and fails the seeded edits. Written by scripts/modslib-pack.mjs; the library is src/mods.rs and each program's text is in src/.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "logic": ">=0.0.0",
+      "sandbox": ">=0.0.0"
+    }
+  },
+  "interfaces": {
+    "mods.lib@1": {
+      "exports": [
+        {
+          "name": "attach",
+          "params": [
+            "i32",
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": []
+        },
+        {
+          "name": "detach",
+          "params": [
+            "i32",
+            "i32"
+          ],
+          "results": []
+        },
+        {
+          "name": "add",
+          "params": [
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "remove",
+          "params": [
+            "i32",
+            "i32"
+          ],
+          "results": []
+        },
+        {
+          "name": "tick",
+          "params": [
+            "i32",
+            "i32"
+          ],
+          "results": []
+        },
+        {
+          "name": "total",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i64"
+          ]
+        }
+      ],
+      "fixtures": [
+        "591c731aacd9f29ce15a79c57603bd0de925de598ec0c6854096d92d5ae375ab",
+        "061ba8f1a153406003a5589ffb344d55bec2340a5b3dabbf42cd03f82d2d2bc9"
+      ],
+      "planted": [
+        "92d03626d8f790ae3d49ad093c424c5cb178a6d52f8e08b52dcf8100152fd978"
+      ],
+      "digest": "ca9b47703bc432a3aa87d28cde7d509f0f2b35321ad6552396575b351d07e745"
+    }
+  },
+  "libs": {
+    "mods.tree@1.0.0": {
+      "asset": "5f3b8f4420a9235d947d177a74fd6ec45f981bfec9d4f6876b99dee710d94381",
+      "exports": [
+        "attach",
+        "detach",
+        "add",
+        "remove",
+        "tick",
+        "total"
+      ],
+      "fixtures": [
+        "b453c6cc3e2094942b14359c08b27a95350dd024e6aa3314fedc18c9d6b61f5d"
+      ],
+      "implements": [
+        "mods.lib@1"
+      ]
+    }
+  },
+  "assets": [
+    {
+      "path": "objects/mods_tree.wasm",
+      "sha256": "5f3b8f4420a9235d947d177a74fd6ec45f981bfec9d4f6876b99dee710d94381",
+      "size": 7697
+    },
+    {
+      "path": "objects/mods_stale.wasm",
+      "sha256": "92d03626d8f790ae3d49ad093c424c5cb178a6d52f8e08b52dcf8100152fd978",
+      "size": 7864
+    },
+    {
+      "path": "data/units.bin",
+      "sha256": "524c387b456d4911a8c5484e432ea2ca2244cf9a7ce854d698eb5f8ca623779b",
+      "size": 392
+    },
+    {
+      "path": "objects/stack.wasm",
+      "sha256": "994b5c41cdb80bc2f7d8aecd92cb2cfcb0c6a7f29277f1bce717435fd82f0927",
+      "size": 803
+    },
+    {
+      "path": "data/stack.bin",
+      "sha256": "e24618a0803f99a2a6b17e34c704500fd7920300e158f456c2f3f8a0e182c679",
+      "size": 1508
+    },
+    {
+      "path": "fixtures/stack.json",
+      "sha256": "591c731aacd9f29ce15a79c57603bd0de925de598ec0c6854096d92d5ae375ab",
+      "size": 3875
+    },
+    {
+      "path": "objects/edits.wasm",
+      "sha256": "8855a878ccd5ce9e9e441db513c32382f2773c3676478376c0a00748ff1cc5f0",
+      "size": 803
+    },
+    {
+      "path": "data/edits.bin",
+      "sha256": "2bf0a5838ac72cc14ce5c48c2e8865c0b2185e8c5dbdecf544c7aa366b8fbdd0",
+      "size": 8448
+    },
+    {
+      "path": "fixtures/edits.json",
+      "sha256": "061ba8f1a153406003a5589ffb344d55bec2340a5b3dabbf42cd03f82d2d2bc9",
+      "size": 44545
+    },
+    {
+      "path": "objects/archer_own.wasm",
+      "sha256": "a2b07571c3df68a805e0c42e281b34f6c2d05bf1a5283a4d2b378d5fcbf8bc30",
+      "size": 797
+    },
+    {
+      "path": "data/archer_own.bin",
+      "sha256": "2c52aca747338b988787184295ac1d28056f1412dea3b2d39efed922f1206822",
+      "size": 304
+    },
+    {
+      "path": "fixtures/archer_own.json",
+      "sha256": "b453c6cc3e2094942b14359c08b27a95350dd024e6aa3314fedc18c9d6b61f5d",
+      "size": 1150
+    }
+  ]
+}
