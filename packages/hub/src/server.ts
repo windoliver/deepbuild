@@ -1309,7 +1309,7 @@ class Hub {
         );
       }
       case 'hub.restart': {
-        // The token alone only restarts (#1865): a failed exit, which the login service starts again at once. A hub up
+        // The token alone only restarts (#1865): an exit the login service restarts. A hub up
         // under RESTART_AFTER_MS waits that out first, so restarts asked back to back can't keep it down between the
         // login service's throttled starts, nor spend systemd's start limit.
         if (this.confirming) return conn.write({ id, error: refusal('unavailable', '/method', 'A deep hub stop is waiting for you to answer the OS; restart once it is answered.', method, true) });
