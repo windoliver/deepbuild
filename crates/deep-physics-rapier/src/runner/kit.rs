@@ -59,6 +59,13 @@ const NO_LENGTH_CAPS: Caps = Caps {
     ..TEST_CAPS
 };
 
+/// #2310: a test backend that leaves articulations out of its caps, under its own name, so a
+/// refusal by its caps names it.
+const NO_ARTICULATIONS_CAPS: Caps = Caps {
+    backend: "no_articulations",
+    ..TEST_CAPS
+};
+
 /// A test backend: Rapier running `twin`, under `caps`, declaring `tolerances` of its own.
 pub struct TestBackend {
     pub name: &'static str,
@@ -76,8 +83,8 @@ const fn test(name: &'static str, twin: Twin, caps: &'static Caps) -> TestBacken
     }
 }
 
-/// #191's test backends by name, and #251's, #182's, #2241's, #2243's and #2308's.
-pub const TEST_BACKENDS: [TestBackend; 17] = [
+/// #191's test backends by name, and #251's, #182's, #2241's, #2243's, #2308's and #2310's.
+pub const TEST_BACKENDS: [TestBackend; 18] = [
     test("friction_average", Twin::FrictionAverage, &TEST_CAPS),
     test("no_joint_limits", Twin::NoJointLimits, &TEST_CAPS),
     test("restitution_min", Twin::RestitutionMin, &TEST_CAPS),
@@ -93,6 +100,7 @@ pub const TEST_BACKENDS: [TestBackend; 17] = [
     },
     test("no_vehicle_controller", Twin::None, &NO_VEHICLE_CAPS),
     test("no_belts", Twin::None, &NO_BELTS_CAPS),
+    test("no_articulations", Twin::None, &NO_ARTICULATIONS_CAPS),
     // #182: no character controller in its caps; one climbing steps a quarter higher than its
     // step height; one ignoring snap; one whose ground distance is 0.001 m; and one ignoring a
     // launch off the ground.

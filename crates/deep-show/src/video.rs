@@ -18,6 +18,28 @@ use crate::hub::{Hub, Planted};
 use deep_canvas::budget::{self, Class};
 use deep_canvas::document::Issue;
 
+/// Whether a channel on the item's `visible` holds it hidden at `t`: its last key at or before
+/// `t`, or its first before any.
+pub(crate) fn hidden_at(doc: &Value, id: &str, t: i64) -> bool {
+    let target = format!("items/{id}/visible");
+    (doc["channels"].as_object().into_iter().flatten())
+        .filter(|(_, c)| c["target"] == target.as_str())
+        .any(|(_, c)| {
+            let listed: Vec<&Value> = match &c["keys"] {
+                Value::Object(m) => m.values().collect(),
+                Value::Array(a) => a.iter().collect(),
+                _ => Vec::new(),
+            };
+            let mut keys: Vec<(i64, bool)> = listed
+                .into_iter()
+                .filter_map(|k| Some((k["t"].as_i64()?, k["value"].as_bool()?)))
+                .collect();
+            keys.sort_by_key(|k| k.0);
+            let at = keys.iter().rev().find(|k| k.0 <= t).or(keys.first());
+            at.is_some_and(|k| !k.1)
+        })
+}
+
 /// A video stream as its probe gives it.
 #[derive(Clone)]
 pub struct Stream {
@@ -153,8 +175,9 @@ impl Hub<'_> {
     }
 
     /// Every video image item of `doc` at `t`: the `video` block (each item's source frame and
-    /// planes) and the pictures to draw, by asset. `seek` marks a canonical seek, which the
-    /// planted `seek_reads_proxy` reads from the asset's proxy.
+    /// planes) and the pictures to draw, by asset; an item a channel holds hidden at `t` is left
+    /// out (#1518: a cut recording's pictures of one asset take turns). `seek` marks a canonical
+    /// seek, which the planted `seek_reads_proxy` reads from the asset's proxy.
     pub(crate) fn videos_at(
         &mut self,
         doc: &Value,
@@ -168,6 +191,9 @@ impl Hub<'_> {
             .map(|(id, i)| (id.clone(), i["params"].clone()))
             .collect();
         for (id, params) in items {
+            if hidden_at(doc, &id, t) {
+                continue;
+            }
             let Some(sha) = params["asset"].as_str().map(str::to_ascii_lowercase) else {
                 continue;
             };

@@ -37,6 +37,7 @@ mod dims;
 pub mod fast;
 mod held;
 pub mod kit;
+pub mod links;
 #[cfg(not(target_arch = "wasm32"))]
 mod live;
 pub mod net;
@@ -507,7 +508,8 @@ impl Run {
                     && !contact::planted(name, &mut run)
                     && !centre::planted(name, &mut run)
                     && !fast::planted(name, &mut run)
-                    && !dims::planted(name, &mut run) =>
+                    && !dims::planted(name, &mut run)
+                    && !links::planted(name, &mut run) =>
             {
                 return None
             }
@@ -590,7 +592,7 @@ impl Run {
     /// The world `v` holds, built, or the issues that refuse it.
     fn build(&self, v: &Value) -> Result<(World, Rapier), Value> {
         let refused = |e: Vec<Refusal>| refused(&e);
-        let w = centre::check(v, self).map_err(refused)?;
+        let w = links::check(v, self).map_err(refused)?;
         let mut b = Rapier {
             restore_any_version: self.restore_any_version,
             reverse_pairs: cfg!(feature = "test-reverse-pairs"),

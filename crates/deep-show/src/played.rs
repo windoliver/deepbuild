@@ -260,6 +260,21 @@ impl Hub<'_> {
         if !crate::fields::admits(c, &value) {
             return Err(json!({"code": "out_of_range", "control": control, "value": value}));
         }
+        // #297: and a text an entry text shows, only what its faces draw (Text `text@1`: entries).
+        if let Some(r) = value
+            .as_str()
+            .and_then(|v| self.entry_refused(form, control, v))
+        {
+            return Err(crate::entries::refusal_json(control, &value, &r));
+        }
+        // Planted (#297): an entry an entry text shows, normalized to NFC on the track.
+        let value = match value.as_str() {
+            Some(v) if self.normalizes_entries(form, control) => {
+                use unicode_normalization::UnicodeNormalization;
+                json!(v.nfc().collect::<String>())
+            }
+            _ => value,
+        };
         let options = variants::option_names(form, c);
         if value.is_string()
             && !options.is_empty()
@@ -278,6 +293,7 @@ impl Hub<'_> {
                     samples: None,
                     writer: Writer::You,
                     serial: Some(serial as u32),
+                    player: None,
                 };
                 appended = Some(entry.to_json());
                 self.tracks
