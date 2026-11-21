@@ -14,8 +14,9 @@ use serde_json::Value;
 
 use crate::hub::Hub;
 
-/// A mesh's vertex on the device: position, normal and one uv set in f32.
-const VERTEX_BYTES: f64 = 32.0;
+/// A mesh's vertex on the device, as the 3D renderer uploads it (#3016): position, normal, color,
+/// two uv sets and a tangent, 15 f32s.
+const VERTEX_BYTES: f64 = 60.0;
 /// An index on the device.
 const INDEX_BYTES: f64 = 4.0;
 /// A full mip chain adds a third.

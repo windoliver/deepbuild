@@ -35,7 +35,8 @@ pub struct Planted {
 /// The mirror's pass: its own renderer and the pass that lays its picture over the parts.
 pub struct Mirrorer {
     planted: Planted,
-    view: Box<Renderer>,
+    /// #3016: the mirrored view's renderer, which draws from what the view lends it.
+    pub(crate) view: Box<Renderer>,
     layout: wgpu::BindGroupLayout,
     /// The overlay without and with #166's `reflection` target.
     pipeline: [wgpu::RenderPipeline; 2],
@@ -158,7 +159,7 @@ impl Mirrorer {
         });
         Mirrorer {
             planted: planted.mirror,
-            view: Box::new(Renderer::new(device, planted)),
+            view: Renderer::view_of(device, planted),
             layout,
             pipeline,
             sampler,
@@ -187,9 +188,16 @@ impl Mirrorer {
         } else {
             half(internal)
         };
-        let view = deep_canvas_scene3d::mirror::view(scene, mirror, size);
-        self.view.pictured = true;
+        // #3016: the mirrored scene the frame before drew, made this frame's in place.
+        let view = match self.view.seen.take() {
+            Some(mut s) => {
+                deep_canvas_scene3d::mirror::view_into(&mut s, scene, mirror, size);
+                s
+            }
+            None => Box::new(deep_canvas_scene3d::mirror::view(scene, mirror, size)),
+        };
         self.view.prepare(device, &view, look);
+        self.view.seen = Some(view);
         let mut ids: Vec<u32> = mirror
             .parts
             .iter()
