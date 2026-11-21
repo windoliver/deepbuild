@@ -109,6 +109,41 @@ impl Hub<'_> {
         Ok((rgba, scene))
     }
 
+    /// #3017: `doc`'s 3D frame at `t` and `size` ([`Hub::painted3d`]) with its visible table,
+    /// read from the object-ID pass that frame drew. Under the planted `visible_table_as_boxes`
+    /// nothing is read; under `visible_picks_before_cutaway` the frame is drawn again without its
+    /// cutaway for its picks.
+    pub(crate) fn shown3d(
+        &mut self,
+        doc: &Value,
+        t: i64,
+        size: [u16; 2],
+    ) -> Result<(Vec<u8>, crate::scene3d::Shown), Unfit> {
+        use crate::scene3d::{Shown, AS_BOXES, BEFORE_CUTAWAY};
+        let (rgba, scene) = self.painted3d(doc, t, size)?;
+        let plant = self.scenario.module_planted.clone();
+        let plant = plant.as_deref();
+        if plant == Some(AS_BOXES) {
+            return Ok((rgba, Shown::of_boxes(scene.boxes(), size)));
+        }
+        let unfit = || Unfit {
+            code: "unsupported_platform",
+            path: String::new(),
+        };
+        let targets = if plant == Some(BEFORE_CUTAWAY) {
+            let posed = crate::film::posed(doc, t);
+            let (_, look) = self.evaluate3d(posed.as_ref().unwrap_or(doc), t, size)?;
+            let mut uncut = scene.clone();
+            uncut.set_cutaway(None);
+            let gpu = self.gpu3().ok_or_else(unfit)?;
+            gpu.draw_scene(&uncut, &look, false).ok_or_else(unfit)?.1
+        } else {
+            let gpu = self.gpu3().ok_or_else(unfit)?;
+            gpu.targets(size.map(u32::from), false).ok_or_else(unfit)?
+        };
+        Ok((rgba, targets.shown(scene.boxes(), size, plant)))
+    }
+
     /// `doc`'s frame at `t` and `size` with what #506 sets in and over it (see the module's note).
     /// `drawing`, where given, is the 2D items as the session's operators drew them; else the
     /// document's own 2D items are drawn.

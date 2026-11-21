@@ -487,6 +487,10 @@ timed.push('tests/acceptance/1939/ac2-budget.test.ts');
 // deep-show for release there).
 alone.push('tests/acceptance/2513/');
 timed.push('tests/acceptance/2513/ac2-budget.test.ts');
+// #3017's files each build deep-show and draw on the GPU; budget.test.ts times the table on a reference Mac (building
+// deep-show for release there); suites.test.ts runs other suites' files that build and draw.
+alone.push('tests/acceptance/3017/');
+timed.push('tests/acceptance/3017/budget.test.ts');
 // #456's files each build deep-show and draw on the GPU; shots.test.ts writes docs/evidence/456/ and waits on your
 // taste call in tests/acceptance/456/TASTE.json.
 alone.push('tests/acceptance/456/');
@@ -841,6 +845,15 @@ alone.push('tests/acceptance/550/', 'tests/acceptance/550-oracle/');
 // #551's files each build deep-show (ac1 and the Oracle lane also the shipped relay) and play matches in process; ac1 and
 // the Oracle lane also play a live match between the app and headless Chrome's web player through the shipped relay.
 alone.push('tests/acceptance/551/', 'tests/acceptance/551-oracle/');
+// #280's files each build deep-show (ac7 in two feature sets; ac8 also the merge base) and play matches of eight copies
+// in process; ac1 and ac2 run net.budget's web part in headless Chrome, and ac8 times net.feel and net.budget itself.
+alone.push('tests/acceptance/280/');
+timed.push('tests/acceptance/280/ac8-budgets.test.ts');
+// #280's first draft of AC4 holds each copy's last two rollbacks, which come after it ran its last step and so can only
+// re-run to that step, to a depth of 3; its blind redraft, 280-redraft-ac4/, runs in its place, and the first draft's
+// file runs by hand (tests/acceptance/280-redraft-ac4/DISPUTE.md).
+alone.push('tests/acceptance/280-redraft-ac4/');
+byHand.push('tests/acceptance/280/ac4-depth.test.ts');
 // #277's files each build deep-show (ac1 and ac5 also the shipped relay) and play matches in process; ac1 and ac5 also
 // play live matches between app copies and headless Chrome's web player through the shipped relay.
 alone.push('tests/acceptance/277/');
@@ -1304,6 +1317,10 @@ timed.push('tests/acceptance/265/ac6-budgets.test.ts');
 // #1576's files each start hubs on records of up to 100,000 sessions, and AC5 runs a busy process per core, at the
 // lowest priority, beside two runs: one file at a time. Every number they judge is a count, so none is timed.
 alone.push('tests/acceptance/1576/');
+
+// #3016's files (blind) read process-wide gauges and the Metal device's allocated size, and frames.test.ts runs four
+// Metal suites (465, 506, 462, 166) one after another for hours; query.test.ts builds deep-show. No timing.
+alone.push('tests/acceptance/3016/');
 
 // #2661's files (blind) build the app's test binary, the shipping app and deep-live, start windows and run benchmarks;
 // AC4 samples a real window's UI thread on this Mac's display, and AC7 reads two budgets over hours.
