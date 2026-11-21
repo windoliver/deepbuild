@@ -319,7 +319,10 @@ export type Plant =
   // #1509's: a gate that asks for every package run straight from a registry, whatever its age.
   | 'asks-every-registry-run'
   // #1868's: a hub that builds the asks and readings of the canvas core's world once and reads them so ever after.
-  | 'canvas-world-built-once';
+  | 'canvas-world-built-once'
+  // #1576's: a sessions.read that returns every row, a page sent a frame more for each event, and an inbox.read that
+  // reads each ask with a query of its own.
+  | 'reads-every-row' | 'page-hook-frame-per-event' | 'query-per-row';
 const PLANTS: readonly string[] = [
   'asks-every-registry-run',
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
@@ -442,6 +445,7 @@ const PLANTS: readonly string[] = [
   'hands-over-socket-chunk',
   'rubric-holds-every-rule', 'review-without-caller',
   'canvas-world-built-once',
+  'reads-every-row', 'page-hook-frame-per-event', 'query-per-row',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

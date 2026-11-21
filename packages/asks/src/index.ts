@@ -137,6 +137,8 @@ export interface InboxRow {
   status: InboxStatus;
   /** 'unanswered' while open; otherwise how it closed. */
   outcome: string;
+  /** When it closed, in ms, by the event that closed it; null while open. */
+  closed_at: number | null;
   owner: string;
   /** How long since it was raised, in ms. */
   age: number;
@@ -893,7 +895,7 @@ class AsksCore implements Asks {
       // A block someone else owns never reaches your inbox; the request drafted for it does.
       return [...this.asks.values()].filter((a) => !a.theirs).map((a) => ({
         ask: a.handle, kind: a.data.kind as AskKind, session: a.session, status: this.status(a),
-        outcome: a.closed?.outcome ?? 'unanswered', owner: String(a.data.owner), age: now - a.created,
+        outcome: a.closed?.outcome ?? 'unanswered', closed_at: a.closed?.at ?? null, owner: String(a.data.owner), age: now - a.created,
         request: a.request ? { ...a.request } : null, decision: a.closed?.decision ?? null, missing: a.closed ? null : a.missing ?? null, words: [...a.words],
         folded: !a.closed && this.inFold(a) ? a.folded! : null,
       }));

@@ -18,6 +18,10 @@ pub struct Planted {
     pub emission_thresholds_color: bool,
     /// #458: the core velocity target leaves out an instancer's elements.
     pub instanced_skips_velocity: bool,
+    /// #2657: `ensure_casters` makes nothing once either caster kind's pipeline exists.
+    pub casters_once_any: bool,
+    /// #2657: once the sway pass has run, no later frame records or submits it.
+    pub sway_first_frame_only: bool,
     /// #458: the normal target leaves out an instancer's elements.
     pub instances_skip_normal: bool,
     /// #458: the output pass applies exposure after the tone map.
