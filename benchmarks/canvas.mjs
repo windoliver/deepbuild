@@ -276,7 +276,8 @@ workloads.costs = () => {
       rmSync(dir, { recursive: true, force: true });
     }
   }
-  const report = { fingerprint: machine, build: measured.build, terms, declared: declared.terms, declaredFingerprint: declared.fingerprint };
+  // #1430: the hits and misses of the text's run and shape caches over the bench.
+  const report = { fingerprint: machine, build: measured.build, terms, caches: measured.caches, declared: declared.terms, declaredFingerprint: declared.fingerprint };
   if (write) {
     if (!references.some((reference) => reference.model === machine.model)) throw Error(`coefficients come from a reference Mac; this is ${machine.model}`);
     const { model, chip, memoryBytes, macosBuild } = machine;
@@ -1115,6 +1116,33 @@ workloads['water-flow'] = () => {
   }
 };
 
+// #971: what the look's local tone map adds to a frame's GPU time on a release `deep-gpu`, at 1920 × 1080 and at
+// 3840 × 2160: the difference of two sides' median `gpu_ms` over 300 frames of #465's stage, with
+// `local: {strength: 0.5}` on the look and without; one warm-up run and five, each a fresh process.
+// tests/acceptance/971/budgets.test.ts holds the issue's numbers on its own fixture.
+workloads['local-tone-map'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const look2d = JSON.parse(readFileSync(join(root, 'tests', 'acceptance', '465', 'fixtures', 'look.json'), 'utf8'));
+  const look = { ...look2d, id: 'local-971', basis: 'physical', palette: { ...look2d.palette, night: '#101114', graphite: '#1b1d22', slate: '#8b8f97', white: '#ffffff' },
+    roles: { ...look2d.roles, ground: 'night', ink: 'graphite', muted: 'slate' }, tone_map: 'filmic', exposure: 0, finish: [], deband: 'none', bloom: 'none', ao: 'none', ground_3d: { kind: 'none' } };
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const doc = join(dir, 'stage.json');
+    writeFileSync(doc, JSON.stringify(flareStage()));
+    const side = (size, local) => ({ call: 'view3d', doc, look: local ? { ...look, local: { strength: 0.5 } } : look, size, frames: 300, fps: 30, timings: true });
+    const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+    const measured = runs(() => {
+      const answer = once('deep-gpu', ['run'], { out: dir, calls: [[1920, 1080], [3840, 2160]].flatMap((size) => [side(size, true), side(size, false)]) });
+      if (answer.ok !== true || answer.replies.some((r) => r.code)) throw Error(`deep-gpu answered ${JSON.stringify(answer).slice(0, 1500)}`);
+      const [full, fullPlain, uhd, uhdPlain] = answer.replies.map((r) => median(r.frames.map((f) => f.gpu_ms)));
+      return { local_1080p_gpu_ms: Math.max(0, full - fullPlain), local_2160p_gpu_ms: Math.max(0, uhd - uhdPlain), plain_1080p_gpu_ms: fullPlain, plain_2160p_gpu_ms: uhdPlain };
+    });
+    console.log(JSON.stringify({ task: 'canvas-local-tone-map', fingerprint, runs: measured }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
 // #2017: the modeling, scatter, terrain and wind task's budgets (#442) on release builds, one warm-up run and five,
 // each a fresh process per binary. `deep-show`'s `geometry` with `timings` reads a bevel with weighted normals on a
 // 10,000-face prop, two levels of subdivision of a 1,000-face mesh, distributing 100,000 points with pruning, and a
@@ -1334,6 +1362,7 @@ const EFFICIENCY = {
   'canvas-water-shore': { shore_lake_gpu_ms: (r) => r.shore_lake_gpu_ms },
   'canvas-water-flow': { flow_sheet_gpu_ms: (r) => r.flow_sheet_gpu_ms },
   'canvas-water-rings': { rings_pond_gpu_ms: (r) => r.rings_pond_gpu_ms },
+  'canvas-local-tone-map': { local_1080p_gpu_ms: (r) => r.local_1080p_gpu_ms, local_2160p_gpu_ms: (r) => r.local_2160p_gpu_ms },
   'canvas-ground': {
     bevel_ms: (r) => r.bevel_ms, subdivide_ms: (r) => r.subdivide_ms, distribute_ms: (r) => r.distribute_ms, arc_length_ms: (r) => r.arc_length_ms,
     still_steps: (r) => r.still_steps, sway_gpu_ms: (r) => r.sway_gpu_ms,
@@ -1349,11 +1378,14 @@ const EFFICIENCY = {
   'canvas-logic-budgets': Object.fromEntries(['occurrences_64_ms', 'linear_1000_vec3_ms', 'preview_4mib_ms', 'checkpoint_3_pages_ms'].map((k) => [k, (r) => r[k]])),
   // #1968: each reading by its own name (benchmarks/code-film.mjs).
   'canvas-code-film': Object.fromEntries(['tokens_2000_lines_ms', 'diff_400_lines_ms', 'seek_10_min_ms', 'still_code_steps'].map((k) => [k, (r) => r[k]])),
+  // #1430: each reading by its own name (benchmarks/text-reflow.mjs).
+  'canvas-text-reflow': Object.fromEntries(['width_change_50kb_ms', 'typed_char_50kb_ms'].map((k) => [k, (r) => r[k]])),
   // #184: each reading by its own name (benchmarks/playtest.mjs).
   'playtest-maze': { maze_40_runs_s: (r) => r.maze_40_runs_s, idle_work: (r) => r.idle_work },
   'playtest-throughput': { fixture_realtime_x: (r) => r.fixture_realtime_x },
   // #556: each reading by its own name (benchmarks/playtest.mjs).
   'playtest-crawler': Object.fromEntries(['crawler_80_runs_s', 'legal_added_s', 'reach_200_floors_s', 'idle_work'].map((k) => [k, (r) => r[k]])),
+  'catalog-budgets': Object.fromEntries(['pack_10000_rows_ms', 'reach_5000_recipes_ms', 'economy_5000_recipes_ms', 'idle_work'].map((k) => [k, (r) => r[k]])), // #194 (benchmarks/catalog.mjs)
 };
 const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps', 'still_code_steps', 'idle_work', 'frame_expansions', 'forest_draws_per_variant_material', 'light_lists_bytes']);
 /** Targets that are floors, each reading at or above its limit (#184's multiple of real time). */
@@ -1973,6 +2005,49 @@ workloads['lottie-export'] = () => {
     rmSync(evidence, { recursive: true, force: true });
   }
 };
+
+// #732: the pptx deck of a 20-stage piece with two 3D stages (a display whose screen carries an inset, in view at stages
+// 7 and 14), its fidelity check included; prints the receipt's timing.wall (under 5 s, which
+// tests/acceptance/732/ac10-budgets.test.ts judges on a reference Mac).
+workloads['pptx-export'] = () => {
+  const evidence = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const step = 0.5;
+    const holds = (target, value) => ({ target, type: 'f32', keys: Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`k${i}`, { t: `${i * step}s`, value: value(i + 1), interp: 'hold' }])) });
+    const item = (id, kind, order, params, extra = {}) => ({ id, kind, name: id, order, params, ...extra });
+    const markers = {};
+    for (let k = 1; k <= 20; k++) markers[`s${k}`] = { kind: 'stage', name: `Stop ${String.fromCharCode(64 + k)}`, t: `${(k - 1) * step}s`, notes: `Talk through stop ${String.fromCharCode(64 + k)}.` };
+    const items = [
+      item('cam', 'camera@1', 'a00', { projection: 'perspective', position: [0, 0, 3], target: [0, 0, 0], fov: 40 }),
+      item('sky', 'sky@1', 'a01', { top: [0.9, 0.92, 0.95, 1], low: [0.9, 0.92, 0.95, 1], ambient_top: [0.6, 0.6, 0.6], ambient_low: [0.6, 0.6, 0.6] }),
+      item('mat', 'material@1', 'a02', { base_color: [0.8, 0.8, 0.8, 1], unlit: true, double_sided: true }),
+      item('screen', 'display@1', 'a03', { size: [1.6, 1.0], bezel: 0.04 }, { at: { pos: [0, 20, 0] }, material: 'mat' }),
+      item('screen-inset', 'inset@1', 'a04', {
+        face: 'screen#screen', size: [1.52, 0.92], px_per_unit: 400, overflow: 'mask',
+        content: { ground: { kind: 'rect@1', order: 'a0', params: { box: [0, 0, 608, 368], paint: { fill: { role: 'accent' } } } } },
+      }),
+      item('card', 'rect@1', 'a05', { box: [0, 760, 360, 200], radius: 24, paint: { fill: { role: 'muted' } } }),
+      item('heading', 'text@1', 'a06', { text: 'Field walk', font: 'body', size: 72, weight: 700, box: { w: 900, h: 110 }, autosize: 'none', paint: { fill: { role: 'ink' } } }, { at: { pos: [120, 80, 0] } }),
+    ];
+    const document = {
+      format: 1, id: 'bench-732', profile: 'film', title: 'Twenty stages', description: 'A 20-stage piece with two 3D stages, exported as a deck.', size: [1920, 1080], camera: 'cam',
+      requires: { modules: { scene3d: '^1', marks2d: '^1', effects: '^1' } }, transport: { span: '10s', frame_rate: [30, 1] }, markers,
+      items: Object.fromEntries(items.map((i) => [i.id, i])),
+      channels: { card_x: holds('items/card/at/pos/0', (k) => 80 + 70 * (k - 1)), screen_y: holds('items/screen/at/pos/1', (k) => (k === 7 || k === 14 ? 0 : 20)) },
+    };
+    const out = join(evidence, 'deck.pptx');
+    const peer = { pid: 3002, start: 3_000 };
+    const processes = [{ pid: 1, ppid: 0, start: 0 }, { pid: 3000, ppid: 1, start: 100 }, { pid: 3001, ppid: 3000, start: 110 }, { pid: 3002, ppid: 3001, start: 3_000 }];
+    const calls = [{ call: 'deep show', peer, doc: DOC, document }, { call: 'export', doc: DOC, out, range: 'stages', video: { codec: 'pptx' }, pptx: { slide: [1920, 1080] } }];
+    const sc = { evidence, sessions: {}, processes, panels: { main: { rect: [0, 0, 1280, 720] } }, docs: { [DOC]: { panel: 'main' } }, calls };
+    const [answer] = run('deep-show', 'run', [JSON.stringify(sc)]);
+    const reply = answer.replies?.[1];
+    if (reply?.outcome !== 'exported') throw Error(`the export wasn't delivered: ${JSON.stringify(reply ?? answer).slice(0, 2000)}`);
+    console.log(JSON.stringify({ task: 'pptx-export', wall_seconds: reply.receipt.timing?.wall }));
+  } finally {
+    rmSync(evidence, { recursive: true, force: true });
+  }
+};
 // #538's budgets: live game state's compares, remaps, uploads and fit check (benchmarks/game-state.mjs).
 workloads['game-state'] = async () => (await import('./game-state.mjs')).gameState({ root, release, once, runs });
 // #548's budgets: the logic module's occurrence rows, linear writes, previews and checkpoints of pages
@@ -1985,6 +2060,8 @@ workloads.surface = async () => (await import('./surface.mjs')).surface({ releas
 // #1968's budgets: a long file's tokens mapped to runs, two versions aligned, a seek into a long terminal recording and a
 // still code item's steps per frame (benchmarks/code-film.mjs).
 workloads['code-film'] = async () => (await import('./code-film.mjs')).codeFilm({ release, once, runs });
+// #1430's budgets: a width change and a typed character on a 50 KB text (benchmarks/text-reflow.mjs).
+workloads['text-reflow'] = async () => (await import('./text-reflow.mjs')).textReflow({ release, run, runs });
 // #233's budgets: a math@1 document against its expansion written by hand, and a frame's own expansions (benchmarks/math.mjs).
 workloads.math = async () => (await import('./math.mjs')).math({ root, release, once, runs });
 workloads['between-steps'] = async () => (await import('./between-steps.mjs')).betweenSteps({ root, release, once, runs });
@@ -1992,6 +2069,7 @@ workloads['water-rings'] = async () => (await import('./water-rings.mjs')).water
 // #184's budgets: the maze's 40 runs and replays on two replicas with no work added to a piece played without the
 // plug-in, and 20 runs of the 2-minute maze on four replicas as a multiple of real time (benchmarks/playtest.mjs).
 for (const task of ['playtest-maze', 'playtest-throughput', 'playtest-crawler']) workloads[task] = async () => (await import('./playtest.mjs')).playtest({ root, release, task, planted: planted() });
+workloads.catalog = async () => (await import('./catalog.mjs')).catalogBudgets({ root, release, once }); // #194's budgets
 
 const task = process.argv[2];
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);

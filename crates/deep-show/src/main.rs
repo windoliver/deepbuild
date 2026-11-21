@@ -18,6 +18,7 @@ mod data_hash;
 mod defaults;
 mod determinism;
 mod efficiency;
+mod entries;
 mod evidence;
 mod export;
 mod extended;
@@ -669,7 +670,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "terrain_rays" => return terrain::parse(c).map(|r| Call::TerrainRays(Box::new(r))),
         "physics_bake" => return physics::parse(c).map(|b| Call::PhysicsBake(Box::new(b))),
         "world" => return points::parse_world(c).map(|(doc, world)| Call::World { doc, world }),
-        "match" | "play_match" | "sockets" => return net::parse(name, c),
+        "match" | "play_match" | "sockets" | "replay" => return net::parse(name, c),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
             return Some(Call::InstallPack {
@@ -798,6 +799,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 track: optional(c.get("track"), |t| t.as_array().cloned())?,
                 data_hash: flag("data_hash")?,
                 texts: flag("texts")?,
+                shown: flag("shown")?,
                 carried: flag("carried")?,
                 tour_pointer: flag("tour_pointer")?,
             })));
@@ -1086,6 +1088,21 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     }
 }
 
+/// The record's objects by handle, as an input's `record` object gives them.
+fn record_objects(input: &Map<String, Value>) -> Option<BTreeMap<String, RecordObject>> {
+    entries(input, "record", |o| {
+        Some(RecordObject {
+            session: match o.get("session")? {
+                Value::Null => None,
+                v => Some(v.as_str()?.to_string()),
+            },
+            state: optional(o.get("state"), |s| Some(s.as_str()?.to_string()))?,
+            value: optional(o.get("value"), Value::as_f64)?,
+            as_of: optional(o.get("as_of"), Value::as_i64)?,
+        })
+    })
+}
+
 fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     let sessions = entries(input, "sessions", |s| {
         let p = s.get("process")?.as_object()?;
@@ -1225,20 +1242,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 .map(|e| runs::entry(e).map(|_| e.clone()))
                 .collect::<Option<Vec<_>>>()?,
         ),
-        _ => (
-            entries(input, "record", |o| {
-                Some(RecordObject {
-                    session: match o.get("session")? {
-                        Value::Null => None,
-                        v => Some(v.as_str()?.to_string()),
-                    },
-                    state: optional(o.get("state"), |s| Some(s.as_str()?.to_string()))?,
-                    value: optional(o.get("value"), Value::as_f64)?,
-                    as_of: optional(o.get("as_of"), Value::as_i64)?,
-                })
-            })?,
-            Vec::new(),
-        ),
+        _ => (record_objects(input)?, Vec::new()),
     };
     let claims = entries(input, "claims", |c| {
         let session = c.get("session")?.as_str()?.to_string();
@@ -1349,8 +1353,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_motion::cues::planted(p)
                 || *p == deep_canvas_motion::lengths::ONE_VALUE
                 || deep_canvas_marks::arrays::PLANTED.contains(p)
-                // #1967's wrong programs live in the cells module's playback and conversion.
-                || deep_canvas_cells::recording::PLANTED.contains(p)
+                // #1967's wrong programs live in the cells module's playback and conversion, #194's in the catalog job.
+                || deep_canvas_cells::recording::PLANTED.contains(p) || deep_codecs::catalog::PLANTED.contains(p)
                 || deep_canvas_export::lottie::PLANTED.contains(p)
                 || deep_canvas_input::rows::PLANTED.contains(p)
                 // #540's in the input module's point control and scene3d's pointer math.
@@ -1366,13 +1370,18 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 // #223's in the marks2d module's warp.
                 || deep_canvas_marks::warp::PLANTED.contains(p)
                 || deep_net::Planted::named(p).is_some()
+                // #297's in the text module's entry texts and the text control's range.
+                || deep_canvas_marks::entries::planted(Some(p)) != Default::default()
+                || *p == deep_canvas_marks::entries::FIT_SKIPS_ENTRIES
+                || entries::PLANTED.contains(p)
+                || deep_net::PLANTED.contains(p)
                 // #225's in the data module's integrator; #2450's in its reading of axis titles.
                 || *p == deep_canvas_marks::vector_field::PLANTED_EULER
                 || *p == deep_canvas_marks::axes3d::TAKES_ANY_KIND
                 // #548's deep_query region map that lays the reads out by name.
                 || *p == logic::MAP_READS_BY_NAME
                 // #466's boil and blur in deep-show's frames.
-                || films::PLANTED.contains(p) || sandbox::PLANTED.contains(p)
+                || films::PLANTED.contains(p) || sandbox::PLANTED.contains(p) || *p == frames::VALIDATED_PER_FRAME
                 || caption_design::PLANTED.contains(p)
         })
         .map(str::to_string);
@@ -1383,6 +1392,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         .filter(|p| familiar::PLANTED.contains(p) || math_twins::PLANTED.contains(p))
         .map(str::to_string);
     let logic_planted = crate::logic::planted(input.get("planted"))?;
+    // #551: the planted rate rule is the net kind's own, read at every check this run makes.
+    deep_net::kind::plant_rate_rule(module_planted.as_deref() == Some("net_rate_faster_only"));
     let planted = match input.get("planted").map(Value::as_str) {
         None => None,
         Some(_) if logic_planted.is_some() => None,
@@ -1514,6 +1525,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "store_migrated_params_under_saved_major" => {
                     Planted::StoreMigratedParamsUnderSavedMajor
                 }
+                "loader_drops_moved_instances" => Planted::LoaderDropsMovedInstances,
+                "move_rewrites_kind_only" => Planted::MoveRewritesKindOnly,
                 "checkpoint_nearest_in_distance" => Planted::CheckpointNearestInDistance,
                 "merges_in_finish_order" => Planted::MergesInFinishOrder,
                 "runs_every_node" => Planted::RunsEveryNode,
@@ -1787,7 +1800,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         docs,
         docs_for,
         net: net::given(input)?,
-        record,
+        record: std::sync::Arc::new(record),
         runs,
         claims,
         window,
@@ -1864,12 +1877,22 @@ const CANVAS_SPACING: i64 = 10 * (shared::FLICKS / 120);
 /// the same calls in the same order. A fault holds only the call that sends it, not the earlier ones
 /// played again before it.
 struct CanvasSide {
+    /// The world but its record's objects, which `record` holds.
     world: Map<String, Value>,
+    /// The world's record objects (#1868): read once when the hub sends its world, then shared by
+    /// every call's scenario, so a call that draws nothing from the record pays nothing for it.
+    record: std::sync::Arc<BTreeMap<String, RecordObject>>,
     calls: Vec<Value>,
 }
 
 impl CanvasSide {
     fn scenario(&self, fault: bool) -> Option<Scenario> {
+        let mut scenario = self.scenario_of_world(fault)?;
+        scenario.record = self.record.clone();
+        Some(scenario)
+    }
+
+    fn scenario_of_world(&self, fault: bool) -> Option<Scenario> {
         let mut input = self.world.clone();
         if !fault {
             input.remove("fault");
@@ -1906,11 +1929,24 @@ impl CanvasSide {
             return bad_input();
         };
         if let Some(Value::Object(world)) = input.get("world") {
-            let before = std::mem::replace(&mut self.world, world.clone());
+            // The record's objects are read here, once; a replay's run entries (a list) stay in the world.
+            let mut world = world.clone();
+            let record = match world.get("record") {
+                Some(Value::Object(_)) => {
+                    let Some(record) = record_objects(&world) else {
+                        return bad_input();
+                    };
+                    world.remove("record");
+                    record
+                }
+                _ => BTreeMap::new(),
+            };
+            let before = std::mem::replace(&mut self.world, world);
             if self.scenario(false).is_none() {
                 self.world = before;
                 return bad_input();
             }
+            self.record = std::sync::Arc::new(record);
             return json!({"ok": true});
         }
         let Some(Value::Object(call)) = input.get("call") else {
@@ -2534,7 +2570,9 @@ fn declared(held: &[Module]) -> Vec<deep_canvas::registry::Interface> {
 /// The registry of a `set` build holding `held`: every interface it seals against, the seams'
 /// backends and its canvas modules.
 fn assemble(set: BuildSet, held: Vec<Module>) -> Registry {
-    let mut registry = Registry::new(set);
+    // #2777: the lists of words the fields the listing holds past kinds' params offer.
+    let lists = forms::lists(|m| held.iter().any(|h| h.manifest.name == m));
+    let mut registry = Registry::new(set).word_lists(lists);
     for interface in declared(&held) {
         registry = registry.declare(interface);
     }
@@ -2836,6 +2874,7 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         "census_accepts" => Ok(StartPlanted::Seal(Fault::CensusAccepted)),
         "census_skipped" => Ok(StartPlanted::Seal(Fault::CensusSkipped)),
         "census_pack_first" => Ok(StartPlanted::Seal(Fault::CensusPackFirst)),
+        "refusal_bad_value_only" => Ok(StartPlanted::Seal(Fault::RefusalBadValueOnly)),
         "pages_capped_at_64mib" => Ok(StartPlanted::Layouts(
             deep_canvas_sandbox::layouts::Planted {
                 pages_pack_cap: true,
@@ -3011,6 +3050,7 @@ fn main() {
     let stdin = io::stdin();
     let mut canvas = CanvasSide {
         world: Map::new(),
+        record: Default::default(),
         calls: Vec::new(),
     };
     canvas.world.insert("evidence".into(), json!(""));

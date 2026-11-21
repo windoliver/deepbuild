@@ -1481,15 +1481,10 @@ pub fn lay_out(input: &Input<'_>, host: &mut dyn Host) -> Result<Laid, Refused> 
             let Some(u) = *unit else { continue };
             let x = &mut acc[g];
             let own = ((progress - u as f64 * lag * w) / w).clamp(0.0, 1.0);
-            if !write {
-                x.opacity *= own;
-            } else if own <= 0.0 {
-                x.opacity = 0.0;
-            } else if own < 1.0 {
-                // #1969: the outline draws over the first half of the unit's span, then its fill
-                // comes in while the outline turns into its own stroke (Text `text@1`).
-                x.paint.write = Some([(2.0 * own).min(1.0), (2.0 * own - 1.0).max(0.0)]);
-            }
+            // #1969: a write's outline draws first, then its fill (Text `text@1`).
+            let (kept, written) = crate::animated::revealed(own, write);
+            x.opacity *= kept;
+            x.paint.write = written.or(x.paint.write);
             if let Some(a) = afterglow.get(u) {
                 x.paint.brightness *= 1.0 + a;
             }

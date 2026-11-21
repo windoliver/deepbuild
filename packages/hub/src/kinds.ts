@@ -32,7 +32,29 @@ interface Held { fill: CheckRunnerFill; routes: Route[] }
  * The check kinds a first-party plug-in holds, by the plug-in (#184): a definition reaches each through the extension
  * host, and with its plug-in off the check is BLOCKED, naming the plug-in, never run as a command.
  */
-const PLUGIN_KINDS: Record<string, string> = { playtest: 'deepbuild/playtest' };
+const PLUGIN_KINDS: Record<string, string> = {
+  playtest: 'deepbuild/playtest',
+  ...Object.fromEntries(['catalog.refs', 'catalog.reach', 'catalog.economy', 'catalog.bounds', 'catalog.copy', 'scenario.reach', 'catalog.dominance'].map((k) => [k, 'deepbuild/catalog'])),
+};
+/** #194: the spec field each catalog kind's input sits in, which names its catalog by asset ID (#832: dominance too). */
+const CATALOG_FIELDS = ['refs', 'reach', 'economy', 'bounds', 'copy', 'scenario', 'dominance'] as const;
+/**
+ * #194: `spec` with every catalog its kind's input names carried in `catalogs`, the bytes in base64 and the probe's
+ * record kept beside them (`catalogs/<sha256>.json`), from the evidence root `evidence`; one it doesn't hold is left
+ * out, and the plug-in refuses the check, naming it.
+ */
+function withCatalogs(spec: CheckSpec, evidence: string | undefined): CheckSpec {
+  if (!evidence || PLUGIN_KINDS[spec.kind] !== 'deepbuild/catalog') return spec;
+  const named = CATALOG_FIELDS.map((f) => (spec as unknown as Record<string, unknown>)[f] as { catalog?: unknown } | undefined).map((i) => i?.catalog).filter((c): c is string => typeof c === 'string' && /^[0-9a-f]{64}$/.test(c));
+  const catalogs: Record<string, { bytes: string; record: unknown }> = {};
+  for (const sha of named) {
+    try {
+      const bytes = readFileSync(join(evidence, sha.slice(0, 2), sha.slice(2)));
+      catalogs[sha] = { bytes: bytes.toString('base64'), record: JSON.parse(readFileSync(join(evidence, 'catalogs', `${sha}.json`), 'utf8')) };
+    } catch { /* not held: the plug-in names it */ }
+  }
+  return { ...spec, catalogs } as CheckSpec;
+}
 /** A plug-in kind's deadline when its check names none. */
 const PLUGIN_MS = 3_600_000;
 
@@ -148,7 +170,7 @@ class Kinds {
     const held = this.held.get(spec.kind);
     const plugin = PLUGIN_KINDS[spec.kind];
     if (!held && plugin) {
-      const ran = await this.o.extensions()?.runCheck(spec.kind, spec, ctx);
+      const ran = await this.o.extensions()?.runCheck(spec.kind, withCatalogs(spec, this.o.evidence), ctx);
       if (ran && ran.outcome !== 'missing') return ran;
       return result('missing', `${spec.kind}: run`, '', `BLOCKED: the check kind ${spec.kind} is the ${plugin} plug-in's, which isn't loaded`);
     }

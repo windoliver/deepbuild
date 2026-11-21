@@ -8,7 +8,7 @@
 
 use std::f32::consts::PI;
 
-use deep_canvas_physics::backend::{hinge_angle, turn, JointState};
+use deep_canvas_physics::backend::{hinge_angle, turn, BodyState, JointState};
 use deep_canvas_physics::doc::{JointKind, Read};
 use deep_canvas_physics::occurrence::{code, Payload, Raw};
 use rapier3d::prelude::*;
@@ -243,9 +243,26 @@ impl Rapier {
         out
     }
 
+    /// #2248: what an output reads of body `rb` beside its pose and velocity: its mass, kg, its
+    /// energy, J (kinetic plus its potential where it stands, −m g·p), and the pairs of shape
+    /// uses it is one of that touch.
+    pub(crate) fn measured(&self, rb: &RigidBody) -> BodyState {
+        let energy =
+            rb.kinetic_energy() + rb.gravitational_potential_energy(0.0, self.world.gravity);
+        let pairs = rb.colliders().iter();
+        let pairs = pairs.flat_map(|c| self.world.contact_pairs_with(*c));
+        BodyState {
+            mass: f64::from(rb.mass()),
+            energy: f64::from(energy),
+            contacts: pairs.filter(|p| p.has_any_active_contact()).count() as u32,
+            ..BodyState::default()
+        }
+    }
+
     /// Every joint's state and readings, by ID.
     pub(crate) fn joint_states(&self) -> Vec<JointState> {
-        self.joints
+        let mut all: Vec<JointState> = self
+            .joints
             .iter()
             .map(|(id, h, kind)| {
                 let u = self
@@ -263,6 +280,12 @@ impl Rapier {
                     torque: f64::from(torque),
                 }
             })
-            .collect()
+            .collect();
+        // #2310: the articulated joints among them, each at its place by ID.
+        if !self.links.is_empty() {
+            all.extend(self.link_states());
+            all.sort_by(|a, b| a.id.cmp(&b.id));
+        }
+        all
     }
 }

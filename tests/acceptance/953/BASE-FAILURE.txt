@@ -1,0 +1,89 @@
+Base run, criteria 1 to 5, at the base 86b99ac36 with only this job's files added (no implementation of #953 exists).
+Run on macOS arm64 (the reference Mac) under a test grant, 2026-11-20:
+
+  node scripts/throttle.mjs test --wait 360 -- sh scripts/lease npx vitest run --root tests/acceptance --testTimeout=600000 --no-file-parallelism --reporter=verbose 953/ 953-oracle/
+
+One vitest run covered ../953/ and ../953-oracle/ (and two temporary check files, since deleted: ../953/README.md,
+Checked before the base run). Home paths are redacted. Every test fails at its first step: `first_party` lists only
+interfaces@1.0.0, so no first-party pack modslib@1, no mods.lib@1 and no mods.tree exist at the base.
+
+Results (each test):
+
+ × 953/ac05-planted-budget.test.ts > #953.7fa9a285 the interface's planted library, and reads within the step ceiling > #953.7fa9a285 the interface's planted library fails one of its fixtures, or the pack is refused, naming the interface 610ms
+ × 953/ac05-planted-budget.test.ts > #953.7fa9a285 the interface's planted library, and reads within the step ceiling > #953.7fa9a285 2,000 total reads a step over a 500-node tree stay under the casual class's step ceiling on a reference Mac, against its merge base; unmeasured or with no ceiling it is never PASS 18ms
+ × 953/ac01-seeded-edits.test.ts > #953.ab5c01d3 every total, read after each seeded edit, equals a brute-force recompute from the whole tree > #953.ab5c01d3 on 1,000 seeded trees of up to 64 nodes and 128 modifiers, each edited by 50 seeded attaches, detaches, moves, adds and removes, every node's total for every stat read after each edit equals the brute-force recompute 556ms
+ × 953/ac01-seeded-edits.test.ts > #953.ab5c01d3 every total, read after each seeded edit, equals a brute-force recompute from the whole tree > #953.ab5c01d3 a planted library that caches totals without marking a moved node's descendants returns a stale total and fails, naming the edit, the node and the stat 6ms
+ × 953/ac04-reach-order.test.ts > #953.e5d20c0f side reach, durations by round, order independence and one rounding > #953.e5d20c0f a modifier with reach side reaches every node under its side and none under the other's, and a modifier of 3 rounds is present at the read before the 3rd round's boundary and gone at the read after it 677ms
+ × 953/ac04-reach-order.test.ts > #953.e5d20c0f side reach, durations by round, order independence and one rounding > #953.e5d20c0f the same rows listed in another order give the same totals 7ms
+ × 953/ac04-reach-order.test.ts > #953.e5d20c0f side reach, durations by round, order independence and one rounding > #953.e5d20c0f a planted library that rounds at each add differs on at least one seeded tree and fails, naming the tree and the node 6ms
+ × 953/ac02-filters.test.ts > #953.cfdaeec8 a filter on the receiving node's catalog row decides which stacks an item's modifier raises > #953.cfdaeec8 an item adding 2 to attack for kind = archer raises every archer stack its holder carries by 2 and no other stack, and after the item moves to another holder the first holder's archers lose it at the next read 845ms
+ × 953/ac02-filters.test.ts > #953.cfdaeec8 a filter on the receiving node's catalog row decides which stacks an item's modifier raises > #953.cfdaeec8 a planted library that tests filters on the source instead of the receiving node fails, naming the stack 14ms
+ × 953/ac03-stacking.test.ts > #953.a587d88d adds, then percents, then the lowest cap, rounded once > #953.a587d88d base 10 with add 5, percent 20 and cap 16 totals 16, and without the cap totals 18 809ms
+ × 953/ac03-stacking.test.ts > #953.a587d88d adds, then percents, then the lowest cap, rounded once > #953.a587d88d a planted library that applies the percent before the add (giving 17) fails, naming the stat 7ms
+
+The first failure of each file:
+
+ FAIL  953/ac01-seeded-edits.test.ts > #953.ab5c01d3 every total, read after each seeded edit, equals a brute-force recompute from the whole tree > #953.ab5c01d3 on 1,000 seeded trees of up to 64 nodes and 128 modifiers, each edited by 50 seeded attaches, detaches, moves, adds and removes, every node's total for every stat read after each edit equals the brute-force recompute
+AssertionError: a first-party pack modslib@1 (name modslib, version 1.x) ships mods.lib@1; the packs are interfaces@1.0.0: expected undefined to be defined
+ ❯ modsPack 953/helpers.ts:63:172
+     61|   const packs = arr(reply!['packs'], 'first_party.packs').map((p, i) =…
+     62|   const found = packs.find((p) => p['name'] === 'modslib' && typeof p[…
+     63|   expect(found, `a first-party pack modslib@1 (name modslib, version 1…
+       |                                                                                                                                                                            ^
+     64|   const p = found!;
+     65|   expect(p['origin'], 'modslib is first party').toBe('first_party');
+ ❯ 953/ac01-seeded-edits.test.ts:56:15
+
+
+ FAIL  953/ac02-filters.test.ts > #953.cfdaeec8 a filter on the receiving node's catalog row decides which stacks an item's modifier raises > #953.cfdaeec8 an item adding 2 to attack for kind = archer raises every archer stack its holder carries by 2 and no other stack, and after the item moves to another holder the first holder's archers lose it at the next read
+AssertionError: a first-party pack modslib@1 (name modslib, version 1.x) ships mods.lib@1; the packs are interfaces@1.0.0: expected undefined to be defined
+ ❯ modsPack 953/helpers.ts:63:172
+     61|   const packs = arr(reply!['packs'], 'first_party.packs').map((p, i) =…
+     62|   const found = packs.find((p) => p['name'] === 'modslib' && typeof p[…
+     63|   expect(found, `a first-party pack modslib@1 (name modslib, version 1…
+       |                                                                                                                                                                            ^
+     64|   const p = found!;
+     65|   expect(p['origin'], 'modslib is first party').toBe('first_party');
+ ❯ linkOf 953/helpers.ts:148:61
+ ❯ archers 953/ac02-filters.test.ts:23:35
+ ❯ 953/ac02-filters.test.ts:35:19
+
+
+ FAIL  953/ac03-stacking.test.ts > #953.a587d88d adds, then percents, then the lowest cap, rounded once > #953.a587d88d base 10 with add 5, percent 20 and cap 16 totals 16, and without the cap totals 18
+AssertionError: a first-party pack modslib@1 (name modslib, version 1.x) ships mods.lib@1; the packs are interfaces@1.0.0: expected undefined to be defined
+ ❯ modsPack 953/helpers.ts:63:172
+     61|   const packs = arr(reply!['packs'], 'first_party.packs').map((p, i) =…
+     62|   const found = packs.find((p) => p['name'] === 'modslib' && typeof p[…
+     63|   expect(found, `a first-party pack modslib@1 (name modslib, version 1…
+       |                                                                                                                                                                            ^
+     64|   const p = found!;
+     65|   expect(p['origin'], 'modslib is first party').toBe('first_party');
+ ❯ linkOf 953/helpers.ts:148:61
+ ❯ stacks 953/ac03-stacking.test.ts:19:35
+ ❯ 953/ac03-stacking.test.ts:31:19
+
+
+ FAIL  953/ac04-reach-order.test.ts > #953.e5d20c0f side reach, durations by round, order independence and one rounding > #953.e5d20c0f a modifier with reach side reaches every node under its side and none under the other's, and a modifier of 3 rounds is present at the read before the 3rd round's boundary and gone at the read after it
+AssertionError: a first-party pack modslib@1 (name modslib, version 1.x) ships mods.lib@1; the packs are interfaces@1.0.0: expected undefined to be defined
+ ❯ modsPack 953/helpers.ts:63:172
+     61|   const packs = arr(reply!['packs'], 'first_party.packs').map((p, i) =…
+     62|   const found = packs.find((p) => p['name'] === 'modslib' && typeof p[…
+     63|   expect(found, `a first-party pack modslib@1 (name modslib, version 1…
+       |                                                                                                                                                                            ^
+     64|   const p = found!;
+     65|   expect(p['origin'], 'modslib is first party').toBe('first_party');
+ ❯ linkOf 953/helpers.ts:148:61
+ ❯ 953/ac04-reach-order.test.ts:57:37
+
+
+ FAIL  953/ac05-planted-budget.test.ts > #953.7fa9a285 the interface's planted library, and reads within the step ceiling > #953.7fa9a285 the interface's planted library fails one of its fixtures, or the pack is refused, naming the interface
+AssertionError: a first-party pack modslib@1 (name modslib, version 1.x) ships mods.lib@1; the packs are interfaces@1.0.0: expected undefined to be defined
+ ❯ modsPack 953/helpers.ts:63:172
+     61|   const packs = arr(reply!['packs'], 'first_party.packs').map((p, i) =…
+     62|   const found = packs.find((p) => p['name'] === 'modslib' && typeof p[…
+     63|   expect(found, `a first-party pack modslib@1 (name modslib, version 1…
+       |                                                                                                                                                                            ^
+     64|   const p = found!;
+     65|   expect(p['origin'], 'modslib is first party').toBe('first_party');
+ ❯ 953/ac05-planted-budget.test.ts:37:15
+

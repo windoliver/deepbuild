@@ -267,6 +267,7 @@ type PlacedKey = (ImageKey, [u64; 4], [u64; 4]);
 /// drawn size in device pixels (GPUI's sprite sampler is linear and can't change per draw).
 type ResampleKey = (ImageKey, ImageSampling, [u32; 2]);
 
+mod animated;
 mod held;
 use held::{held, picture_bytes, resampled, room, IMAGES, PLACED, RESAMPLED};
 
@@ -347,6 +348,8 @@ struct Session {
     video_until: Option<i64>,
     hash_next: bool,
     run_start: Option<Instant>,
+    /// #1489: the revision's animated image items and what the presented frame did with them.
+    anim: animated::Anims,
 }
 
 /// What a frame draws for an image mark: its level as GPUI's sprite, the level's size and sha256,
@@ -384,6 +387,7 @@ fn image_of(
 ) -> Result<Option<Pictured>, Value> {
     let store = image_store(session);
     let mut ask = crate::asset::ask(&store, asset, (crop, tile), (bounds, fit), zoom, item)?;
+    ask.key.frame = session.anim.asked(item);
     let shown = ask.key.shown();
     if session.live {
         let drawn = [ask.to[2] * zoom, ask.to[3] * zoom];
@@ -418,14 +422,18 @@ fn image_of(
         }
         let at = [bounds[0] + x, bounds[1] + y, bounds[2], bounds[3]];
         let asked = ask.key.level;
-        let (level, drawn) = match images.show(&store, ask.key, deep_images::Queue::Visible, at) {
-            deep_images::Shown::Exact(l) => (Some(l), Some(asked)),
-            deep_images::Shown::Nearest(l, k) => (Some(l), Some(k)),
-            deep_images::Shown::Nothing => match images.failed(&ask.key) {
-                Some(r) => return Err(no(r)),
-                None => (None, None),
-            },
-        };
+        let frame = ask.key.frame;
+        let (level, drawn, shown) =
+            match images.show(&store, ask.key, deep_images::Queue::Visible, at) {
+                deep_images::Shown::Exact(l) => (Some(l), Some(asked), Some(frame)),
+                deep_images::Shown::Nearest(l, k) => (Some(l), Some(k), Some(frame)),
+                deep_images::Shown::Frame(l, f) => (Some(l), Some(asked), Some(f)),
+                deep_images::Shown::Nothing => match images.failed(&ask.key) {
+                    Some(r) => return Err(no(r)),
+                    None => (None, None, None),
+                },
+            };
+        session.anim.drew(item, shown);
         session
             .frame_levels
             .insert(item.to_string(), (asked, drawn));
@@ -631,6 +639,9 @@ fn compile(session: &mut Session, doc: &Map<String, Value>) -> Result<(), Value>
             }
         }
     }
+    // #1489: the revision's animated image items, each asset probed once.
+    let store = image_store(session);
+    session.anim = animated::Anims::compile(doc, &store, &program)?;
     session.compiled = Some((program, state));
     Ok(())
 }
@@ -1539,6 +1550,13 @@ impl Renderer {
         }
         // #499: each video item in view shows its source frame at t.
         session.video_until = Self::videos(session, doc, Some(&items), t, view.zoom)?;
+        // #1489: each animated image item in view shows the frame its delays put at t, and the
+        // next frame's start arms the clock as any change does.
+        let region = session.region.map(|(r, _)| r);
+        let anim_until = session.anim.frame(&items, region, t, view.reduced);
+        if let Some((_, v)) = &mut self.vello {
+            v.frames().clone_from(&session.anim.asked);
+        }
         let palette = palette_of(look, view.theme);
         let ty = crate::type_of(look, view.theme);
         let frame = scene::frame_planted(
@@ -1680,9 +1698,11 @@ impl Renderer {
             .enumerate()
             .map(|(i, key)| {
                 dirty_below |= changed_layers.contains(&frame.layers[i].id);
-                // #499: a layer showing a video is never cached as a picture: its frames move.
+                // #499, #1489: a layer showing a video or an animation is never cached as a
+                // picture: its frames move.
                 dirty_below |= frame.layers[i].marks.iter().any(|m| {
-                    matches!(&m.mark, Mark::Image { item, .. } if session.players.contains_key(item))
+                    matches!(&m.mark, Mark::Image { item, .. }
+                        if session.players.contains_key(item) || session.anim.asked.contains_key(item))
                 });
                 match session.stable.get(i) {
                     Some((prev, n)) if prev == key && !dirty_below => (*key, n + 1),
@@ -1864,7 +1884,7 @@ impl Renderer {
             session.layers.clear();
         }
         session.stable = stable;
-        session.valid_until = valid_until;
+        session.valid_until = [valid_until, anim_until].into_iter().flatten().min();
         session.stale_at = shown.values().filter_map(|s| s.changes_at).min();
         session.bound = Value::Object(
             shown
@@ -1947,7 +1967,11 @@ impl Renderer {
             ) else {
                 continue;
             };
-            if item["kind"] != "image@1" || !crate::video::is_video(session.store.as_deref(), sha) {
+            // #1489: an animated picture is no video, and its file isn't opened again each frame to say so.
+            if item["kind"] != "image@1"
+                || session.anim.items.contains_key(id)
+                || !crate::video::is_video(session.store.as_deref(), sha)
+            {
                 continue;
             }
             if !session.players.contains_key(id) {
@@ -2081,6 +2105,7 @@ impl Renderer {
             video_until: None,
             hash_next: true,
             run_start: None,
+            anim: animated::Anims::default(),
         }
     }
 
@@ -2337,13 +2362,15 @@ impl Renderer {
                         (id.clone(), json!({"asked": asked, "drawn": drawn}))
                     })
                     .collect();
-                let settling = (session.frame_levels.values()).any(|(a, d)| *d != Some(*a));
+                let settling = (session.frame_levels.values()).any(|(a, d)| *d != Some(*a))
+                    || session.anim.settling();
                 let started = session.started;
                 let s = started.stats;
                 frames.push(json!({
                     "frame": k, "phase": crate::PHASES[phase], "at_ms": ms(at), "done_ms": ms(done),
                     "rect": rect, "levels": levels, "settling": settling,
                     "stats": stats_json(&s), "drawn_bytes": started.drawn_bytes,
+                    "animations": session.anim.report(),
                 }));
                 Ok((settling, s.pending))
             };
@@ -2463,6 +2490,7 @@ impl Renderer {
                     "gpu_ns": after.gpu_ns - before.gpu_ns,
                     "bound": session.bound,
                     "images": {"reads": reads, "decodes": decodes, "uploads": uploads},
+                    "animations": session.anim.report(),
                 }));
                 for (_, path) in captures.iter().filter(|(v, _)| i64::from(*v) == k) {
                     self.capture(&session, path)?;
@@ -2505,6 +2533,7 @@ impl Renderer {
         let mut view = View {
             zoom: 1.0,
             theme: Theme::Light,
+            reduced: false,
         };
         let mut record = Record::default();
         let mut out = Vec::with_capacity(steps.len());

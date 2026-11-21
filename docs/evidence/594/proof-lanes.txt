@@ -1,0 +1,18 @@
+#594 proof lanes on b8b714cd8 (merge base b4a2049e8), Mac15,12, AC power, Node 24.22.0:
+$ node scripts/proof.mjs guard before trace
+Fri Nov 20 00:20:58 PST 2026
+ 0:20  up 6 days, 17:23, 3 users, load averages: 3.96 6.47 16.18
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Now drawing from 'AC Power'
+npm ci exit=0
+build exit=0
+PASS guard: 2 commits checked: no guarded edit lacks its own approved proposal
+PASS before: tests/acceptance/594/build-dirs.test.mjs › #594.5f88bcfc #594.18edc4ce a second preflight builds no dependency in either copy: each side reuses a build directory of its own, kept between runs, outside the working tree's target/: failed on build-dirs-not-kept at its assertion
+PASS before: tests/acceptance/594/margin.test.mjs › #594.fb185499 #594.18edc4ce criteria 2 and 3: a change that only adds a dependency passes perf within the margin; the same change slowed by 3 s of CPU fails perf on cpuMs: failed on margin-widened-on-lock at its assertion
+PASS trace: Closes #594: each of its 3 criteria has a tagged test that ran, passed and failed on a wrong program
+lanes exit=0
+Fri Nov 20 01:12:06 PST 2026
+ 1:12  up 6 days, 18:14, 3 users, load averages: 7.63 7.15 7.03
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
