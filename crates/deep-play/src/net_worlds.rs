@@ -39,6 +39,8 @@ pub struct Worlds {
     /// #280: each item net.feel names: the world and the body whose pose a world output puts at
     /// its `at`.
     named: Vec<(String, usize, usize)>,
+    /// #280: entries came since the worlds last derived their inputs from the track.
+    stale: bool,
 }
 
 impl Worlds {
@@ -76,6 +78,7 @@ impl Worlds {
             written: 0,
             ns: 0,
             named: Vec::new(),
+            stale: false,
         }))
     }
 
@@ -135,17 +138,22 @@ impl Worlds {
         self.size = size;
     }
 
+    /// An entry joins the track; the worlds derive their inputs from it before they next step.
     pub fn enter(&mut self, entry: &Value) {
         self.entries.push(entry.clone());
-        for w in &mut self.worlds {
-            w.live.track(&self.entries);
-        }
+        self.stale = true;
     }
 
     /// Every world step that starts before `until`.
     pub fn run(&mut self, until: i64) -> Result<(), Value> {
         let before = deep_logic::budget::cpu_ns();
+        // #280: once a match step, not once an entry: eight players' entries a step each
+        // deriving the whole track again made a match's cost grow with its length squared.
+        let stale = std::mem::take(&mut self.stale);
         for w in &mut self.worlds {
+            if stale {
+                w.live.track(&self.entries);
+            }
             while (w.live.steps as i64) * w.h < until {
                 let rows = w.live.step()?;
                 w.rows.insert(w.live.steps, rows);
@@ -182,13 +190,13 @@ impl Worlds {
         let before = deep_logic::budget::cpu_ns();
         self.entries
             .retain(|e| e["t"].as_i64().is_some_and(|x| x < t));
+        self.stale = true;
         for w in &mut self.worlds {
             let Some(at) = w.ring.iter().position(|(k, _, _)| *k == step) else {
                 return Err(json!({"code": "past_window", "world": w.id, "step": step}));
             };
             let (_, c, steps) = w.ring.drain(at..).next().expect("the checkpoint");
             w.live.restore(&c, steps)?;
-            w.live.track(&self.entries);
             w.rows.retain(|k, _| *k <= steps);
             w.poses.retain(|t, _| *t <= steps as i64 * w.h);
         }
