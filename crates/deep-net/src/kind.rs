@@ -79,6 +79,11 @@ fn register(r: &mut Registrar) {
         issues(budget_report(d, i))
     })
     .check_report(budget_report);
+    // #280: net.feel, what players would feel on a seeded network.
+    r.check("net.feel", "any", &["net.feel"], |d, i| {
+        issues(feel_report(d, i))
+    })
+    .check_report(feel_report);
     r.code(
         "net.rollback",
         "A copy ran a match step before it held every player's entries for it, or a held-back run parted from the on-time run.",
@@ -93,13 +98,19 @@ fn register(r: &mut Registrar) {
     );
     r.code(
         "net.budget",
-        "A match step passes the class's frame time.",
-        "Split the work across steps with its progress in memory.",
+        "A match step passes the class's frame time, or the net item declares a window past the one a host it plays on reports.",
+        "Split the work across steps with its progress in memory, or declare at most the reported window, 0 for lockstep.",
+        false,
+    );
+    r.code(
+        "net.feel",
+        "A copy's stall, rollback depth or correction distance passed its bound on the seeded network, or a copy waited past its deadline.",
+        "Raise the delay to the latency the players need, lighten the step, or play lockstep.",
         false,
     );
     // Each code's planted fixture (#138's kit): a match whose logic traps at its first step, so
     // every copy ends it faulted and no net check kind can pass on it.
-    for code in ["net.rollback", "net.desync", "net.budget"] {
+    for code in ["net.rollback", "net.desync", "net.budget", "net.feel"] {
         planted(r, code);
     }
 }
@@ -135,6 +146,7 @@ pub struct Runs {
     pub rollback: ReportRun,
     pub desync: ReportRun,
     pub budget: ReportRun,
+    pub feel: ReportRun,
 }
 
 static RUNS: OnceLock<Runs> = OnceLock::new();
@@ -165,6 +177,11 @@ fn desync_report(doc: &Value, input: &Value) -> Report {
 fn budget_report(doc: &Value, input: &Value) -> Report {
     RUNS.get()
         .map_or_else(|| unbound("net.budget"), |r| (r.budget)(doc, input))
+}
+
+fn feel_report(doc: &Value, input: &Value) -> Report {
+    RUNS.get()
+        .map_or_else(|| unbound("net.feel"), |r| (r.feel)(doc, input))
 }
 
 fn issues(report: Report) -> Vec<(String, Raised)> {
@@ -385,7 +402,7 @@ impl Config {
             window: whole("window", 8, [0, 16]),
             hash_every: whole("hash_every", 60, [1, 100_000]),
             timeout: (timeout.max(0.05) * FLICKS as f64).round() as i64,
-            controls: form.get("controls").cloned().unwrap_or(json!({})),
+            controls: controls(form),
             seats: reads_seats(form),
         })
     }
@@ -393,6 +410,52 @@ impl Config {
     /// One match step, in flicks.
     pub fn step(&self) -> i64 {
         FLICKS / self.step_rate
+    }
+}
+
+/// The document's `controls`, and under [`PROFILE`] the shape of the profile record a logic item
+/// keeps (#276), which each player's step-0 entry is held to.
+fn controls(form: &Value) -> Value {
+    let mut c = form.get("controls").cloned().unwrap_or(json!({}));
+    let items = form
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten();
+    if let Some(arrays) = items
+        .filter_map(|(_, i)| i.pointer("/params/profile/arrays"))
+        .next()
+    {
+        c[PROFILE] = json!({"profile": arrays});
+    }
+    c
+}
+
+/// #276: the control key a player's profile record entry travels under, at step 0 only.
+pub const PROFILE: &str = ":profile";
+
+/// #276: a profile record's entry, `{profile: sha256, arrays}`, holds an array of each name the
+/// piece's profile declares, of its count, and nothing else.
+fn admit_profile(shape: &Value, value: &Value) -> Result<(), Value> {
+    let fits = |name: &str, want: &Value| {
+        let n = want.get("count").and_then(Value::as_u64).unwrap_or(1) as usize;
+        value["arrays"][name]
+            .as_array()
+            .is_some_and(|a| a.len() == n && a.iter().all(|x| x.is_number() || x.is_boolean()))
+    };
+    let shape = shape.as_object().cloned().unwrap_or_default();
+    let ok = value["profile"].as_str().is_some_and(|h| h.len() == 64)
+        && value["arrays"]
+            .as_object()
+            .is_some_and(|a| a.len() == shape.len())
+        && shape.iter().all(|(n, w)| fits(n, w));
+    if ok {
+        Ok(())
+    } else {
+        Err(
+            json!({"code": "out_of_range", "control": PROFILE, "value": value,
+            "what": "a profile record's entry holds the arrays the piece's profile declares"}),
+        )
     }
 }
 
@@ -412,6 +475,9 @@ pub fn reads_seats(form: &Value) -> bool {
 }
 
 pub fn admit(controls: &Value, control: &str, value: &Value) -> Result<(), Value> {
+    if let Some(shape) = controls.get(PROFILE).filter(|_| control == PROFILE) {
+        return admit_profile(&shape["profile"], value);
+    }
     // #277: a seat entry the net module writes, never a player's control.
     if control == crate::copy::SEAT {
         return match crate::copy::Seat::named(value.as_str().unwrap_or_default()) {

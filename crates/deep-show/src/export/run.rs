@@ -91,6 +91,10 @@ impl Hub<'_> {
         if job.codec == "gltf" {
             return self.export_gltf(job, &doc);
         }
+        // #1250: an indexed look's GIF, each frame its index target (clip.rs).
+        if job.codec == "gif" {
+            return self.export_gif(job, &doc);
+        }
         // #518: a named tool is one the brief pins, or the export is refused at check.
         self.pinned(job)?;
         // Planted: whatever is at the destination goes before the export finds its tool.

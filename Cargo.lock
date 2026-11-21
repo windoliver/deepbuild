@@ -2532,6 +2532,7 @@ dependencies = [
  "deep-marks-render",
  "deep-scene3d-render",
  "image",
+ "naga 30.0.1",
  "serde_json",
  "wgpu 30.0.1",
 ]
@@ -2895,6 +2896,7 @@ dependencies = [
  "deep-scene3d-render",
  "deep-text",
  "deep-text-gpui",
+ "gif 0.14.2",
  "gpui-kit",
  "gpui-pre-apple",
  "gpui-pre-macos",
@@ -2902,6 +2904,7 @@ dependencies = [
  "libc",
  "objc2 0.6.5",
  "objc2-foundation 0.3.2",
+ "png 0.18.1",
  "rav1e",
  "raw-window-handle",
  "serde_json",

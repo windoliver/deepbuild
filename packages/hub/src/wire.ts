@@ -43,6 +43,19 @@ export class Refused extends Error {
 export const refuse = (code: string, path: string, remediation: string, actual: unknown = '', retryable = false): Refused =>
   new Refused(refusal(code, path, remediation, actual, retryable), actualText(actual));
 
+/** The settled asks or sessions one page of a list read holds, newest first, after every open one (#1576). */
+export const SETTLED_PAGE = 25;
+/**
+ * A read's `next` (#1576): where the last item its page held stands (when it settled, or its log_pos) and its ID; the
+ * read's `page` takes it back.
+ */
+export const cursorOf = (at: number, id: string): string => `${at}:${id}`;
+export function cursorAt(page: unknown): { at: number; id: string } {
+  const m = typeof page === 'string' ? /^(\d+):(.+)$/.exec(page) : null;
+  if (!m) throw new Refused(refusal('pattern', '/params/page', 'Read the next page with the `next` the read before gave.', page));
+  return { at: Number(m[1]), id: m[2]! };
+}
+
 /** One socket line: the object with the protocol version first; a bigint (a seq) is written as its decimal string. */
 export const line = (o: object): string => `${JSON.stringify({ v: VERSION, ...o }, (_, v: unknown) => (typeof v === 'bigint' ? v.toString() : v))}\n`;
 

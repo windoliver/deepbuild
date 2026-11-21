@@ -64,6 +64,12 @@ macro_rules! set {
 /// the one before it.
 static SETS: [Set; 3] = [set!("figure"), set!("game2d"), set!("full")];
 
+/// #280: the full set's player and its page glue, which net.budget's web part plays a piece in.
+pub(crate) fn full_player() -> (&'static [u8], &'static [u8]) {
+    let full = &SETS[SETS.len() - 1];
+    (full.wasm, full.glue)
+}
+
 impl Set {
     /// The set as its build recorded it.
     fn about(&self) -> Value {
@@ -467,6 +473,11 @@ fn element(guard: Option<Guard>) -> String {
             "      if (!this.#asked) await this.#persist();\n",
             "",
         ),
+        // Planted (#189 AC9): Import record takes a record without holding it to the SHA-256 its name gives.
+        Some(Guard::WebCarryImportSkipsHash) => ELEMENT.replace(
+            r"const hash = /^([0-9a-f]{64})\.carry$/.exec(file.name)?.[1] ?? await sha256(bytes);",
+            "const hash = await sha256(bytes);",
+        ),
         // Planted (#1045 AC1): no accessibility tree beside the canvas, and no live region.
         Some(Guard::WebNoTree) => ELEMENT.replace("    this.#keepTree();\n", ""),
         // Planted (#1045 AC1): each readout announced on every frame drawn, changed or not.
@@ -613,6 +624,7 @@ impl Hub<'_> {
             Guard::WebFragmentWritesEntry,
             Guard::WebSavesKeyedByOrigin,
             Guard::WebSavesNeverAskPersistence,
+            Guard::WebCarryImportSkipsHash,
             Guard::WebLeavesOutFont,
             Guard::WebIndexChecksWebgpuOnly,
             Guard::WebIndexRequiresEveryAnyOf,

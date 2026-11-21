@@ -39,7 +39,7 @@ mod golden;
 mod guard;
 mod hdr;
 mod host;
-mod indexed;
+use deep_groups_render::indexed;
 mod insets;
 mod interp_suite;
 mod levels;
@@ -314,6 +314,9 @@ pub enum Planted {
     CreaseBelowAngle,
     EdgesDeriveEveryFrame,
     EdgesDashOtherSpace,
+    /// #1782's, by name (tests/acceptance/1782/README.md: Planted programs): a crease line's
+    /// wrong picker, and a hidden style's wrong span classifiers, cache, edge IDs and dash.
+    HiddenLines(&'static str),
     ReleasesAtRevision,
     /// #417's: the look switch's clock stops at the request, before the new look is on screen.
     StopsAtRequest,
@@ -545,6 +548,12 @@ pub enum Planted {
     BoundsBindPose,
     /// #450's: a whole trail drawn from the frames drawn so far (tests/acceptance/450/README.md).
     TrailAppendsPerFrame,
+    /// #265's (tests/acceptance/265/README.md: Planted programs): a world-space emitter's anchor
+    /// kept from the frames drawn, a trail through a linear array's stored steps, and a wake
+    /// that keeps the last frame's samples.
+    AnchorKeptFromFrame,
+    TrailReadsStoredSteps,
+    WakeKeepsLastFrame,
     /// #451's: particles on a vector field's stream move instead in a straight line along the
     /// field's arrow at their birth point (tests/acceptance/451/README.md: The planted program).
     ParticlesFollowArrows,
@@ -751,6 +760,9 @@ impl Planted {
             "inherit_previous_frame" => Planted::InheritPreviousFrame,
             "bounds_bind_pose" => Planted::BoundsBindPose,
             "trail_appends_per_frame" => Planted::TrailAppendsPerFrame,
+            "anchor_kept_from_frame" => Planted::AnchorKeptFromFrame,
+            "trail_reads_stored_steps" => Planted::TrailReadsStoredSteps,
+            "wake_keeps_last_frame" => Planted::WakeKeepsLastFrame,
             "particles_follow_arrows" => Planted::ParticlesFollowArrows,
             "axes_mod_applies_transform" => Planted::AxesModAppliesTransform,
             "axes3d_own_tick_rule" => Planted::Axes3dOwnTickRule,
@@ -929,7 +941,10 @@ impl Planted {
             "part_pose_in_world_space" => Planted::PartPoseInWorldSpace,
             "terrain_no_horizon_bake" => Planted::TerrainNoHorizonBake,
             "terrain_occlusion_from_slope" => Planted::TerrainOcclusionFromSlope,
-            _ => return None,
+            _ => {
+                let planted = deep_canvas_scene3d::spans::PLANTED;
+                Planted::HiddenLines(planted.iter().find(|p| p.0 == name)?.0)
+            }
         })
     }
 }

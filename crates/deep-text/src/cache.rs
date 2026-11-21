@@ -126,6 +126,15 @@ impl Key {
         }
     }
 
+    /// The same key for the text's whole run, not cut to fit (#2660: a text that fits builds
+    /// its key once).
+    pub(crate) fn whole(self) -> Key {
+        Key {
+            fitted: false,
+            ..self
+        }
+    }
+
     /// The text the run is of.
     pub fn text(&self) -> &str {
         &self.shape.text

@@ -96,6 +96,12 @@ pub struct Logic {
     /// #551: the document's worlds, stepped beside the logic items, and the match step's length.
     worlds: Option<crate::net_worlds::Worlds>,
     len: i64,
+    /// #280: the items net.feel names that no world output places, at their own `at.pos`.
+    fixed: Vec<(String, [f64; 3])>,
+    /// #276: the profile record entry this copy's player brings to step 0, from its own store,
+    /// and the records its steps wrote, by logic step, as the steps that stand left them.
+    pub brings: Option<Value>,
+    profiles: BTreeMap<i64, Value>,
 }
 
 impl Logic {
@@ -140,7 +146,40 @@ impl Logic {
             spent: 0,
             worlds: None,
             len: 1,
+            fixed: Vec::new(),
+            brings: None,
+            profiles: BTreeMap::new(),
         })
+    }
+
+    /// #280: the items net.feel names (`items/<id>`), whose evaluated positions its correction
+    /// distance reads: where a world output puts a body's pose, the body's; else the item's own
+    /// `at.pos` in `doc`.
+    pub fn name_items(&mut self, doc: &Value, paths: &[String]) {
+        let left = match self.worlds.as_mut() {
+            Some(w) => w.name(paths),
+            None => paths.to_vec(),
+        };
+        self.fixed = left
+            .into_iter()
+            .filter_map(|p| {
+                let id = p.strip_prefix("items/")?;
+                let pos = doc.pointer(&format!("/items/{id}/at/pos"))?.as_array()?;
+                let x = |i: usize| pos.get(i).and_then(Value::as_f64).unwrap_or(0.0);
+                Some((p.clone(), [x(0), x(1), x(2)]))
+            })
+            .collect();
+    }
+
+    /// #276: the profile records the logic steps through match step `confirmed` wrote, in step
+    /// order, each `{item, step, record}`: what a copy writes once those steps are confirmed.
+    pub fn profiles(&self, confirmed: i64) -> Vec<Value> {
+        let len = self.piece.items.first().map_or(1, |i| i.step).max(1);
+        let upto = ((confirmed + 1) * self.len + len - 1) / len;
+        self.profiles
+            .range(..upto)
+            .map(|(_, r)| r.clone())
+            .collect()
     }
 
     /// #277: the copy's own golden of the steps it ran (Logic: checkpoints and bake): each logic
@@ -216,6 +255,9 @@ impl Stepper for Logic {
         let before = cpu_ns();
         self.world.run_through(until - 1, &mut self.rec);
         self.ns += cpu_ns() - before;
+        for r in deep_logic::profile::written(&mut self.world) {
+            self.profiles.insert(r["step"].as_i64().unwrap_or(0), r);
+        }
         if let Some(trap) = self.rec.traps.first() {
             self.spent += cpu_ns() - before;
             return Err(trap.clone());
@@ -278,10 +320,18 @@ impl Stepper for Logic {
             .collect()
     }
 
+    fn brings(&self) -> Vec<(String, Value)> {
+        self.brings
+            .iter()
+            .map(|v| (deep_net::kind::PROFILE.to_string(), v.clone()))
+            .collect()
+    }
+
     fn again(&self) -> Result<Self, Value> {
         let mut again =
             Logic::planted(self.piece.clone(), &self.start, false, self.world.planted())?;
         again.rounds = self.rounds;
+        again.brings = self.brings.clone();
         again.range = self.range.as_ref().map(|r| Range {
             form: r.form.clone(),
             ty: r.ty.clone(),
@@ -326,10 +376,17 @@ impl Stepper for Logic {
         self.ns += cpu_ns() - before;
         self.rows
             .retain(|r| r["step"].as_i64().is_some_and(|k| k < step));
+        // #276: a record of a step rolled back is written again only if that step asks again.
+        let first = t / self.piece.items.first().map_or(1, |i| i.step).max(1);
+        self.profiles.retain(|k, _| *k < first);
         if let Some(w) = self.worlds.as_mut() {
             w.back(step, t)?;
         }
         Ok(())
+    }
+
+    fn drawn(&self) -> Option<Value> {
+        Some(Value::Object(self.rec.arrays(&self.piece)))
     }
 
     fn occurrences(&self) -> Vec<Value> {
@@ -362,6 +419,16 @@ impl Stepper for Logic {
             self.worlds = w.replayed((step + 1) * len)?;
         }
         Ok((from, self.hash()))
+    }
+
+    fn positions(&mut self, t: i64) -> deep_net::copy::Positions {
+        let mut out = self
+            .worlds
+            .as_ref()
+            .map(|w| w.positions(t))
+            .unwrap_or_default();
+        out.extend(self.fixed.iter().cloned());
+        out
     }
 
     fn timed(&mut self) -> Vec<(String, u64)> {
@@ -525,6 +592,7 @@ pub const RUNS: deep_net::kind::Runs = deep_net::kind::Runs {
     rollback: rollback_report,
     desync: desync_report,
     budget: budget_report,
+    feel: feel_report,
 };
 
 /// What a net check runs: the document's match, a stepper over its logic items at their start,
@@ -715,11 +783,19 @@ fn run_check(
     };
     let (piece, track, ring) = (s.piece.clone(), s.track.clone(), s.ring);
     let rounds = s.planted == deep_net::Planted::HashRoundsFloats;
+    // #280: the items net.feel names.
+    let items: Vec<String> = input["items"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|p| p.as_str().map(str::to_string))
+        .collect();
     let make = &mut |_: u8| {
         let mut l = Logic::new(piece.clone(), &track, false)?;
         l.rounds = rounds;
         l.plant_ring(ring);
         l.worlds(doc)?;
+        l.name_items(doc, &items);
         Ok(l)
     };
     match check(&s, &ask, make) {
@@ -764,8 +840,19 @@ fn budget_report(doc: &Value, input: &Value) -> Report {
         .unwrap_or(deep_logic::budget::FRAME_NS / 1e6);
     run_check(doc, input, "net.budget", |s, ask, make| {
         let on = hosts(input);
-        deep_net::checks::budget(&s.cfg, &Default::default(), ask, make, frame_ms, &on)
+        deep_net::checks::budget(&s.cfg, &Default::default(), ask, make, frame_ms, &on, None)
             .map(|(_, r)| r)
+    })
+}
+
+/// #280: net.feel over the document's match, its profile, items and bounds the check input's.
+fn feel_report(doc: &Value, input: &Value) -> Report {
+    let feel = match deep_net::feel::Feel::of(input) {
+        Ok(f) => f,
+        Err(why) => return blocked("net.feel", why),
+    };
+    run_check(doc, input, "net.feel", |s, ask, make| {
+        deep_net::feel::feel(&s.cfg, &Default::default(), ask, make, &feel).map(|(_, r)| r)
     })
 }
 

@@ -285,6 +285,15 @@ impl Solid {
             None => corners(&self.model),
         }
     }
+
+    /// Whether it hides what lies behind it (#457's occluded share; #1782's spans): not glass,
+    /// blended or additive, and not drawn below full coverage.
+    pub fn opaque(&self) -> bool {
+        let m = self.material.as_ref();
+        !(self.alpha < 1.0
+            || self.per_pixel
+            || m.is_some_and(|m| m.alpha_mode.see_through() || m.lobes.transmission > 0.0))
+    }
 }
 
 /// An object's outline: its silhouette drawn `width` device px wide in `color`, which a status
@@ -347,6 +356,21 @@ pub struct EdgesOf {
     pub list: Arc<Vec<[crate::geom::V3; 2]>>,
     /// Whether this evaluation derived `list` rather than reusing a crease set (#1640).
     pub derived: bool,
+    /// Each of the mesh's triangles' material on its item, for a crease kind that picks by it
+    /// (#1782).
+    pub materials: Option<Arc<Vec<u32>>>,
+    /// Its hidden style (#1782), with one.
+    pub hidden: Option<Hidden>,
+}
+
+/// A mesh-edge line's `hidden` (#1782): the paint and the dash, in the line's size space, that
+/// each stretch of an edge behind opaque geometry draws in ([`crate::spans`]).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Hidden {
+    pub color: [u8; 3],
+    pub dash: [f64; 2],
+    /// The planted wrong program its spans come from, reachable only through `--planted`.
+    pub planted: Option<crate::spans::Planted>,
 }
 
 impl EdgesOf {
@@ -993,15 +1017,26 @@ impl Scene {
     /// read from the unwelded mesh, or drawn over what is in front of them; and #1640's
     /// (`crease_below_angle`, `edges_derive_every_frame`, `edges_dash_other_space`).
     pub fn plant_edges(&mut self, unwelded: bool, over: bool, planted: Option<&str>) {
+        let spans = planted.and_then(crate::spans::Planted::named);
         for line in self.layers.iter_mut().flat_map(|l| &mut l.lines) {
-            let Some(edges) = line.edges.clone() else {
+            let Some(mut edges) = line.edges.clone() else {
                 continue;
             };
-            if let (crate::geom::EdgeKind::Crease { angle, border }, Some(name)) =
+            // #1782's: a line with a hidden style reads its spans from the planted program.
+            if spans.is_some() && edges.hidden.is_some() {
+                if let Some(h) = Arc::make_mut(&mut edges).hidden.as_mut() {
+                    h.planted = spans;
+                }
+                line.edges = Some(edges.clone());
+            }
+            if let (crate::geom::EdgeKind::Crease { angle, border, .. }, Some(name)) =
                 (edges.kind, planted)
             {
-                if matches!(name, "crease_below_angle" | "edges_derive_every_frame") {
-                    let (list, derived) = edges.mesh.crease_set(angle, border, planted);
+                if matches!(name, "crease_below_angle" | "edges_derive_every_frame")
+                    || name == crate::geom::PLANTED_SHARED
+                {
+                    let materials = edges.materials.as_deref().map(Vec::as_slice);
+                    let (list, derived) = edges.mesh.crease_set(angle, border, materials, planted);
                     let source = EdgesOf {
                         list,
                         derived,
@@ -1730,6 +1765,12 @@ pub(crate) fn evaluate_compiled(
         None => eval::written(map, program, &state),
     };
     let mut items = Items::new(doc_items, &written, &state, program);
+    // #265: the places trails and wakes read at earlier times, kept across frames by the
+    // document and program they were read from.
+    let memo = std::cell::RefCell::new(std::mem::take(&mut labels.places));
+    if crate::trail::samples(doc_items) {
+        memo.borrow_mut().of(map, program);
+    }
     // #2013: a frame draws each rested item where its rest puts it; the check reports a rest
     // that finds no support.
     rest(
@@ -2265,8 +2306,7 @@ pub(crate) fn evaluate_compiled(
                         Some(tr) => {
                             let at = |times: &[i64]| {
                                 crate::trail::path_at(
-                                    map,
-                                    program,
+                                    (map, program, &memo),
                                     &items,
                                     &tr.of,
                                     times,
@@ -2877,7 +2917,8 @@ pub(crate) fn evaluate_compiled(
             wake.step = step as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
             let times = crate::water::wake_times(t, step, wake.span);
             let path = format!("items/{}/params/water/wake/item", w.material);
-            let at = crate::trail::path_at(map, program, &items, &wake.item, &times, &path)?;
+            let at =
+                crate::trail::path_at((map, program, &memo), &items, &wake.item, &times, &path)?;
             wake.path = at.iter().map(|p| [p[0], p[2]]).collect();
         }
         // #268: the shore's field, baked once per key.
@@ -2903,6 +2944,7 @@ pub(crate) fn evaluate_compiled(
         }
         scene.water = Some(Arc::new(w));
     }
+    labels.places = memo.into_inner();
     Ok(scene)
 }
 

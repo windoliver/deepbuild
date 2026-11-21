@@ -145,7 +145,7 @@ fn hit(id: &str, o: V3, d: V3, dist: f64, n: V3) -> Hit {
 
 /// The ray through view px `at`, with a unit direction: from the eye in perspective, from the
 /// eye's plane in orthographic.
-fn ray(cam: &Camera, at: [f64; 2]) -> (V3, V3) {
+pub(crate) fn ray(cam: &Camera, at: [f64; 2]) -> (V3, V3) {
     if cam.perspective {
         (
             cam.eye,
@@ -158,7 +158,7 @@ fn ray(cam: &Camera, at: [f64; 2]) -> (V3, V3) {
 
 /// How far along `d` the ray from `o` meets triangle `t`, either face, ahead of `o`
 /// (Möller–Trumbore).
-fn meet(o: V3, d: V3, t: &[V3; 3]) -> Option<f64> {
+pub(crate) fn meet(o: V3, d: V3, t: &[V3; 3]) -> Option<f64> {
     let (e1, e2) = (sub(t[1], t[0]), sub(t[2], t[0]));
     let p = cross(d, e2);
     let det = dot(e1, p);
@@ -179,16 +179,16 @@ fn meet(o: V3, d: V3, t: &[V3; 3]) -> Option<f64> {
     (dist > 0.0).then_some(dist)
 }
 
-fn along(o: V3, d: V3, k: f64) -> V3 {
+pub(crate) fn along(o: V3, d: V3, k: f64) -> V3 {
     [o[0] + d[0] * k, o[1] + d[1] * k, o[2] + d[2] * k]
 }
-fn sub(a: V3, b: V3) -> V3 {
+pub(crate) fn sub(a: V3, b: V3) -> V3 {
     [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 }
-fn dot(a: V3, b: V3) -> f64 {
+pub(crate) fn dot(a: V3, b: V3) -> f64 {
     a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
-fn cross(a: V3, b: V3) -> V3 {
+pub(crate) fn cross(a: V3, b: V3) -> V3 {
     [
         a[1] * b[2] - a[2] * b[1],
         a[2] * b[0] - a[0] * b[2],

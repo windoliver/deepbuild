@@ -162,6 +162,7 @@ fn run_view(
     deep_canvas_effects::effect::lower(&mut args.doc);
     crate::physics::bake(&mut args.doc, &call["tracks"], &args.assets)?;
     crate::particles::refuse(&args.doc, app.planted)?;
+    crate::trails::refuse(&args.doc)?;
     // The frames the call draws and how each is reached (#173), the ones logic runs at first.
     let reached = history::order(args.from, args.frames, &args.seeks, &args.history, args.fps);
     let order: Vec<u64> = reached.iter().map(|(n, _)| *n).collect();
@@ -391,8 +392,11 @@ fn run_view(
             Some(Planted::CreaseBelowAngle) => Some("crease_below_angle"),
             Some(Planted::EdgesDeriveEveryFrame) => Some("edges_derive_every_frame"),
             Some(Planted::EdgesDashOtherSpace) => Some("edges_dash_other_space"),
+            Some(Planted::HiddenLines(name)) => Some(name),
             _ => None,
         };
+        // #1782: the spans this run holds from frame to frame, for what it reports of them.
+        let mut kept_spans = deep_canvas_scene3d::spans::Kept::default();
         for &(n, reach) in &reached {
             let frame_started = std::time::Instant::now();
             if args.lose_at == Some(n) && device_losses == 0 {
@@ -491,6 +495,12 @@ fn run_view(
                 crate::particles::meshes(&composed, &scene, t as f64 / 705_600_000.0, app.planted)?
             {
                 scene = evaluate_sourced(&fed, t, &args.look, &mut labels, &read, outlines)?;
+            }
+            // #265's planted trails through a linear array's stored steps.
+            if app.planted == Some(Planted::TrailReadsStoredSteps) {
+                let stored = crate::trails::stored(&composed);
+                let held = evaluate_sourced(&stored, t, &args.look, &mut labels, &read, outlines)?;
+                crate::trails::take_trails(&mut scene, &held);
             }
             axes_mapped = memo.borrow_mut().take_mapped();
             if args.axes {
@@ -625,6 +635,21 @@ fn run_view(
                 .flat_map(|l| &l.lines)
                 .filter_map(|l| Some((l.id.clone(), json!(u32::from(l.edges.as_ref()?.derived)))))
                 .collect();
+            // #1782: each hidden-style line's spans in this frame's view, the stretches of them
+            // the frame inks, and how many times this frame computed the spans.
+            let mut edge_spans = [Map::new(), Map::new(), Map::new()];
+            for l in scene.layers.iter().flat_map(|l| &l.lines) {
+                let Some(r) = deep_canvas_scene3d::spans::report(&scene, l, &mut kept_spans) else {
+                    continue;
+                };
+                let rows = |list: &[deep_canvas_scene3d::spans::Span]| -> Value {
+                    let row = |s: &deep_canvas_scene3d::spans::Span| json!({"edge": s.edge, "from": s.from, "to": s.to, "hidden": s.hidden});
+                    list.iter().map(row).collect()
+                };
+                edge_spans[0].insert(l.id.clone(), rows(&r.spans));
+                edge_spans[1].insert(l.id.clone(), rows(&r.dashes));
+                edge_spans[2].insert(l.id.clone(), json!(u32::from(r.computed)));
+            }
             // Each mesh-edge line's segments, in world metres, as `counts` reports them.
             let edge_segments: Map<String, Value> = scene
                 .layers
@@ -666,6 +691,7 @@ fn run_view(
                 .any(|s| s.stroke.is_some());
             // #450: the planted trail, then each asked trail as it draws.
             crate::trails::plant(&mut scene, app.planted, t);
+            crate::trails::plant_wake(&mut scene, app.planted, t);
             let trails = crate::trails::report(&scene, &call["trails"]);
             let scene = Arc::new(scene);
             // #1381: the horizon tables this frame's build baked: those no earlier frame drew.
@@ -2025,6 +2051,10 @@ fn run_view(
                 frame.insert("compiled".into(), json!(compiled));
                 frame.insert("segments".into(), Value::Object(edge_segments));
                 frame.insert("edge_sets_derived".into(), Value::Object(edge_sets_derived));
+                let [spans, dashes, computed] = edge_spans;
+                frame.insert("spans".into(), Value::Object(spans));
+                frame.insert("dashes".into(), Value::Object(dashes));
+                frame.insert("edge_spans_computed".into(), Value::Object(computed));
             }
             if args.lod {
                 frame.insert("lod".into(), crate::lod::rows(&choices));

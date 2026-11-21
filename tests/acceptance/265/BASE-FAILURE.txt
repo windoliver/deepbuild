@@ -1,0 +1,414 @@
+Each file of tests/acceptance/265 run once at the base, e575a47af ("Merge pull request #2953 …"), one at a time, as the
+README's "Run them" says (the machine's lease answered "the hub isn't answering", so each ran unleased). Every test fails,
+each at a surface the base lacks; none fails on a guard. The checkout path reads <checkout>, temporary folders <tmp>.
+
+======================================================================================================================
+ac1-emitter-buckets.test.ts
+======================================================================================================================
+RUN  v5.0.5 <checkout>/tests/acceptance/265
+
+ ❯ ac1-emitter-buckets.test.ts (3 tests | 3 failed) 70253ms
+   ❯ AC1 #265.535c93ba a world-space emitter on a logic-moved anchor, read from the logic bake (3)
+     × AC1 #265.535c93ba (buckets) it emits at the same birth buckets on a 60 Hz and a 144 Hz display, the logic bake's anchor at each, as a channel holding the same steps gives 7800ms
+     × AC1 #265.535c93ba (seek) 20 sampled times, each opened by a seek in a fresh process, give the played frames' pixel hashes 5399ms
+     × AC1 #265.535c93ba (planted) a source that reads the anchor's drawn position kept from the last frame differs after a seek and fails, naming the source 125ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-emitter-buckets.test.ts > AC1 #265.535c93ba a world-space emitter on a logic-moved anchor, read from the logic bake > AC1 #265.535c93ba (buckets) it emits at the same birth buckets on a 60 Hz and a 144 Hz display, the logic bake's anchor at each, as a channel holding the same steps gives
+AssertionError: the walker (logic) at 60 fps was drawn, not refused: {"code":"ref_unresolved","reason":"items/dust/params/emit/anchor","path":"items/dust/params/emit/anchor","what":"dust: its anchor's scene at bucket 0: drivers/walker-0/vars/v"}: expected 'ref_unresolved' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"ref_unresolved"
+
+ ❯ framesOf ../449/helpers.ts:518:75
+    516| export function framesOf(reply: JsonObject, what: string, items: reado…
+    517|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    518|   expect(reply['code'], `${what} was drawn, not refused: ${show(reply)…
+       |                                                                           ^
+    519|   return arr(reply['frames'], `${what}: frames`).map((v, i) => {
+    520|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ display ac1-emitter-buckets.test.ts:53:14
+ ❯ played ac1-emitter-buckets.test.ts:47:39
+ ❯ ac1-emitter-buckets.test.ts:79:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  ac1-emitter-buckets.test.ts > AC1 #265.535c93ba a world-space emitter on a logic-moved anchor, read from the logic bake > AC1 #265.535c93ba (seek) 20 sampled times, each opened by a seek in a fresh process, give the played frames' pixel hashes
+AssertionError: the walker (logic) at 60 fps was drawn, not refused: {"code":"ref_unresolved","reason":"items/dust/params/emit/anchor","path":"items/dust/params/emit/anchor","what":"dust: its anchor's scene at bucket 0: drivers/walker-0/vars/v"}: expected 'ref_unresolved' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"ref_unresolved"
+
+ ❯ framesOf ../449/helpers.ts:518:75
+    516| export function framesOf(reply: JsonObject, what: string, items: reado…
+    517|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    518|   expect(reply['code'], `${what} was drawn, not refused: ${show(reply)…
+       |                                                                           ^
+    519|   return arr(reply['frames'], `${what}: frames`).map((v, i) => {
+    520|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ display ac1-emitter-buckets.test.ts:53:14
+ ❯ played ac1-emitter-buckets.test.ts:47:39
+ ❯ seekProblems ac1-emitter-buckets.test.ts:62:16
+ ❯ ac1-emitter-buckets.test.ts:96:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  ac1-emitter-buckets.test.ts > AC1 #265.535c93ba a world-space emitter on a logic-moved anchor, read from the logic bake > AC1 #265.535c93ba (planted) a source that reads the anchor's drawn position kept from the last frame differs after a seek and fails, naming the source
+AssertionError: deep-gpu run --planted anchor_kept_from_frame exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu ../449/helpers.ts:229:151
+    227|   if (run.error) throw Error(`${what}: ${run.error.message}`);
+    228|   const stdout = run.stdout ?? '';
+    229|   expect(run.status, `${what} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    230|   const lines = stdout.split('\n').filter((l) => l !== '');
+    231|   expect(lines.length, `${what}: one answer line for the one scenario …
+ ❯ run helpers.ts:41:10
+ ❯ display ac1-emitter-buckets.test.ts:52:19
+ ❯ played ac1-emitter-buckets.test.ts:47:39
+ ❯ seekProblems ac1-emitter-buckets.test.ts:62:16
+ ❯ ac1-emitter-buckets.test.ts:101:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  18:40:45
+   Duration  72.28s (tests 99%, transform 1%)
+
+exit 1
+
+======================================================================================================================
+ac2-trail-drawn.test.ts
+======================================================================================================================
+RUN  v5.0.5 <checkout>/tests/acceptance/265
+
+ ❯ ac2-trail-drawn.test.ts (2 tests | 2 failed) 34072ms
+   ❯ AC2 #265.18266a41 a mark.line trail behind a linear write starts at the item as drawn (2)
+     × AC2 #265.18266a41 at every sampled frame its newest point lies within 1e-6 m of the runner's drawn position, and each point where the runner was drawn then 8253ms
+     × AC2 #265.18266a41 (planted) a trail that reads the stored step values starts up to 0.17 m ahead and fails, naming the trail 1319ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac2-trail-drawn.test.ts > AC2 #265.18266a41 a mark.line trail behind a linear write starts at the item as drawn > AC2 #265.18266a41 at every sampled frame its newest point lies within 1e-6 m of the runner's drawn position, and each point where the runner was drawn then
+AssertionError: the runner at 144 fps was drawn, not refused: {"code":"out_of_range","reason":"items/runner"}: expected 'out_of_range' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"out_of_range"
+
+ ❯ trailFrames ../450/helpers.ts:155:75
+    153| export function trailFrames(reply: JsonObject, what: string, ids: read…
+    154|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    155|   expect(reply['code'], `${what} was drawn, not refused: ${show(reply)…
+       |                                                                           ^
+    156|   return arr(reply['frames'], `${what}: frames`).map((v, i) => {
+    157|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ judge ac2-trail-drawn.test.ts:47:26
+ ❯ ac2-trail-drawn.test.ts:78:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac2-trail-drawn.test.ts > AC2 #265.18266a41 a mark.line trail behind a linear write starts at the item as drawn > AC2 #265.18266a41 (planted) a trail that reads the stored step values starts up to 0.17 m ahead and fails, naming the trail
+AssertionError: deep-gpu run --planted trail_reads_stored_steps exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu ../449/helpers.ts:229:151
+    227|   if (run.error) throw Error(`${what}: ${run.error.message}`);
+    228|   const stdout = run.stdout ?? '';
+    229|   expect(run.status, `${what} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    230|   const lines = stdout.split('\n').filter((l) => l !== '');
+    231|   expect(lines.length, `${what}: one answer line for the one scenario …
+ ❯ run helpers.ts:41:10
+ ❯ judge ac2-trail-drawn.test.ts:45:19
+ ❯ ac2-trail-drawn.test.ts:83:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  18:42:18
+   Duration  35.62s (tests 98%, transform 1%)
+
+exit 1
+
+======================================================================================================================
+ac3-wake-seek.test.ts
+======================================================================================================================
+RUN  v5.0.5 <checkout>/tests/acceptance/265
+
+ ❯ ac3-wake-seek.test.ts (2 tests | 2 failed) 60211ms
+   ❯ AC3 #265.4bf8a6ac a wake behind a swimmer a logic array moves, read from the logic bake (2)
+     × AC3 #265.4bf8a6ac the wake gives one pixel hash at 20 s seeked and played, the one a channel holding the same steps gives, and it shows 24196ms
+     × AC3 #265.4bf8a6ac (planted) a wake that keeps the last frame's samples draws a different wake after the seek and fails, naming the material 573ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac3-wake-seek.test.ts > AC3 #265.4bf8a6ac a wake behind a swimmer a logic array moves, read from the logic bake > AC3 #265.4bf8a6ac the wake gives one pixel hash at 20 s seeked and played, the one a channel holding the same steps gives, and it shows
+AssertionError: the swimmer played to 20 s was drawn, not refused: {"code":"out_of_range","reason":"items/swimmer"}: expected 'out_of_range' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"out_of_range"
+
+ ❯ framesOf ../449/helpers.ts:518:75
+    516| export function framesOf(reply: JsonObject, what: string, items: reado…
+    517|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    518|   expect(reply['code'], `${what} was drawn, not refused: ${show(reply)…
+       |                                                                           ^
+    519|   return arr(reply['frames'], `${what}: frames`).map((v, i) => {
+    520|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ hashAt ac3-wake-seek.test.ts:33:13
+ ❯ seekProblems ac3-wake-seek.test.ts:44:18
+ ❯ ac3-wake-seek.test.ts:52:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac3-wake-seek.test.ts > AC3 #265.4bf8a6ac a wake behind a swimmer a logic array moves, read from the logic bake > AC3 #265.4bf8a6ac (planted) a wake that keeps the last frame's samples draws a different wake after the seek and fails, naming the material
+AssertionError: deep-gpu run --planted wake_keeps_last_frame exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu ../449/helpers.ts:229:151
+    227|   if (run.error) throw Error(`${what}: ${run.error.message}`);
+    228|   const stdout = run.stdout ?? '';
+    229|   expect(run.status, `${what} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    230|   const lines = stdout.split('\n').filter((l) => l !== '');
+    231|   expect(lines.length, `${what}: one answer line for the one scenario …
+ ❯ run helpers.ts:41:10
+ ❯ seekProblems ac3-wake-seek.test.ts:42:15
+ ❯ ac3-wake-seek.test.ts:63:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  18:43:08
+   Duration  63.32s (tests 99%, transform 1%)
+
+exit 1
+
+======================================================================================================================
+ac4-rollback-trail.test.ts
+======================================================================================================================
+RUN  v5.0.5 <checkout>/tests/acceptance/265
+
+ ❯ ac4-rollback-trail.test.ts (2 tests | 2 failed) 585662ms
+   ❯ AC4 #265.69afee79 a trail behind a logic-moved item in a match draws again after a rollback (2)
+     × AC4 #265.69afee79 after a rollback that replaces steps 120 to 123, the runner's trail equals the straight run's by pixel hash 11198ms
+     × AC4 #265.69afee79 (planted) a trail that keeps the predicted points fails, naming the step 2533ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac4-rollback-trail.test.ts > AC4 #265.69afee79 a trail behind a logic-moved item in a match draws again after a rollback > AC4 #265.69afee79 after a rollback that replaces steps 120 to 123, the runner's trail equals the straight run's by pixel hash
+AssertionError: AC4: the steering piece is presented: [{"check":"document.validate","code":"out_of_range","severity":"error","ids":["streak","runner"],"path":"items/runner","actual":{"id":"runner","name":"runner","order":"a0002","kind":"mark.box@1","params":{"size":[0.5,0.5,0.5]},"at":{"pos":[-12,0.25,0]},"layer":"you-231b11069cb5"},"what":"streak's trail: items/runner","fix":"Give the field a value of its type inside its range."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["streak"],"path":"items/streak/params/trail","actual":{"of":"runner","span":0.5,"segments":16,"width":6},"what":"mark.line@1.0 does not define `trail`","fix":"Remove the field, or require the kind's minor that defines it."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented ../549/helpers.ts:334:81
+    332|   const r = obj(reply, what);
+    333|   const issues = Array.isArray(r['issues']) ? r['issues'].filter(isObj…
+    334|   expect(r['outcome'], `${what} is presented: ${show(r['issues'] ?? r,…
+       |                                                                                 ^
+    335|   expect(issues.filter((i) => i['severity'] === 'error'), `${what} is …
+    336| }
+ ❯ ac4-rollback-trail.test.ts:109:24
+ ❯ played ac4-rollback-trail.test.ts:109:9
+ ❯ ac4-rollback-trail.test.ts:131:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac4-rollback-trail.test.ts > AC4 #265.69afee79 a trail behind a logic-moved item in a match draws again after a rollback > AC4 #265.69afee79 (planted) a trail that keeps the predicted points fails, naming the step
+AssertionError: AC4 planted trail_keeps_predicted_points (planted trail_keeps_predicted_points): deep-show run answers the scenario ok (it takes the planted trail_keeps_predicted_points); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ played ac4-rollback-trail.test.ts:108:13
+ ❯ ac4-rollback-trail.test.ts:150:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  18:47:38
+   Duration  592.16s (tests 99%, transform 1%)
+
+exit 1
+
+======================================================================================================================
+ac5-refusals.test.ts
+======================================================================================================================
+RUN  v5.0.5 <checkout>/tests/acceptance/265
+
+ ❯ ac5-refusals.test.ts (1 test | 1 failed) 55334ms
+   ❯ AC5 #265.8c765c23 a trail past the bake's oldest step and a source a live drag moves, refused at check (1)
+     × AC5 #265.8c765c23 a trail whose 3 s span reaches before the 2 s bake's oldest kept step is refused naming the trail and the span (its 0.5 s twin is drawn), and a world-space source a live drag moves is still refused naming it (its keyed twin is drawn) 15958ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac5-refusals.test.ts > AC5 #265.8c765c23 a trail past the bake's oldest step and a source a live drag moves, refused at check > AC5 #265.8c765c23 a trail whose 3 s span reaches before the 2 s bake's oldest kept step is refused naming the trail and the span (its 0.5 s twin is drawn), and a world-space source a live drag moves is still refused naming it (its keyed twin is drawn)
+AssertionError: the refusals at check and their drawn twins:
+  the trail streak with a 3 s span over a 2 s bake isn't refused at check with an error naming streak and its span (items/streak/params/trail/span, or 3 s in its actual): {"code":"out_of_range","reason":"items/runner"}
+  the trail streak with a 0.5 s span, which the bake reaches, isn't drawn: {"code":"out_of_range","reason":"items/runner"}: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the trail streak with a 3 s span over a 2 s bake isn't refused at check with an error naming streak and its span (items/streak/params/trail/span, or 3 s in its actual): {\"code\":\"out_of_range\",\"reason\":\"items/runner\"}",
++   "the trail streak with a 0.5 s span, which the bake reaches, isn't drawn: {\"code\":\"out_of_range\",\"reason\":\"items/runner\"}",
++ ]
+
+ ❯ none ../449/helpers.ts:79:144
+     77| /** No failures; the message lists them. */
+     78| export function none(failures: readonly string[], what: string): void {
+     79|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}$…
+       |                                                                                                                                                ^
+     80| }
+     81| /** At least one failure, and one that names each of `names`: what a p…
+ ❯ ac5-refusals.test.ts:61:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  18:44:40
+   Duration  58.66s (tests 98%, transform 2%)
+
+exit 1
+
+======================================================================================================================
+ac6-budgets.test.ts
+======================================================================================================================
+RUN  v5.0.5 <checkout>/tests/acceptance/265
+
+ ❯ ac6-budgets.test.ts (1 test | 1 failed) 33020ms
+   ❯ AC6 #265.e3eb2a00 eight movers with emitters, trails and wakes within the showpiece's frame CPU (1)
+     × AC6 #265.e3eb2a00 the perf lane carries the budget beside the merge base, the movers draw, and on the reference Mac they read their past steps within 4 ms of frame CPU at p95, five runs by the lane's rule 11718ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac6-budgets.test.ts > AC6 #265.e3eb2a00 eight movers with emitters, trails and wakes within the showpiece's frame CPU > AC6 #265.e3eb2a00 the perf lane carries the budget beside the merge base, the movers draw, and on the reference Mac they read their past steps within 4 ms of frame CPU at p95, five runs by the lane's rule
+AssertionError: the budget's place in the perf lane and the movers drawn:
+  benchmarks/budgets.json has no task whose criteria name #265.e3eb2a00
+  scripts/lanes.mjs does not list tests/acceptance/265/ac6-budgets.test.ts in timed, the local preflight's perf step
+  the eight movers aren't drawn: {"code":"out_of_range","reason":"items/mover-0"}: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "benchmarks/budgets.json has no task whose criteria name #265.e3eb2a00",
++   "scripts/lanes.mjs does not list tests/acceptance/265/ac6-budgets.test.ts in timed, the local preflight's perf step",
++   "the eight movers aren't drawn: {\"code\":\"out_of_range\",\"reason\":\"items/mover-0\"}",
++ ]
+
+ ❯ none ../449/helpers.ts:79:144
+     77| /** No failures; the message lists them. */
+     78| export function none(failures: readonly string[], what: string): void {
+     79|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}$…
+       |                                                                                                                                                ^
+     80| }
+     81| /** At least one failure, and one that names each of `names`: what a p…
+ ❯ ac6-budgets.test.ts:84:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  18:45:55
+   Duration  36.21s (tests 94%, transform 5%, import 1%)
+
+exit 1
+
+======================================================================================================================
+ac7-taste.test.ts
+======================================================================================================================
+RUN  v5.0.5 <checkout>/tests/acceptance/265
+
+ ❯ ac7-taste.test.ts (1 test | 1 failed) 24205ms
+   ❯ AC7 #265.34736230 the screenshots and the recording, and the one taste call on them (1)
+     × AC7 #265.34736230 the run writes a particle trail, a mark.line trail and a swimmer's wake behind logic-moved items and a recording of the movers, from the canvas's own frames, and the recorded call on exactly those says they look right 12376ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac7-taste.test.ts > AC7 #265.34736230 the screenshots and the recording, and the one taste call on them > AC7 #265.34736230 the run writes a particle trail, a mark.line trail and a swimmer's wake behind logic-moved items and a recording of the movers, from the canvas's own frames, and the recorded call on exactly those says they look right
+AssertionError: particle-trail.png was drawn, not refused: {"code":"ref_unresolved","reason":"items/dust/params/emit/anchor","path":"items/dust/params/emit/anchor","what":"dust: its anchor's scene at bucket 0: drivers/walker-0/vars/v"}: expected 'ref_unresolved' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"ref_unresolved"
+
+ ❯ framesOf ../449/helpers.ts:518:75
+    516| export function framesOf(reply: JsonObject, what: string, items: reado…
+    517|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    518|   expect(reply['code'], `${what} was drawn, not refused: ${show(reply)…
+       |                                                                           ^
+    519|   return arr(reply['frames'], `${what}: frames`).map((v, i) => {
+    520|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ ac7-taste.test.ts:52:19
+ ❯ ac7-taste.test.ts:51:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  18:46:55
+   Duration  26.72s (tests 96%, transform 3%, import 1%)
+
+exit 1
+

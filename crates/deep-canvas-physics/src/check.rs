@@ -91,6 +91,7 @@ pub fn check(doc: &Value, caps: &Caps, table: &[Row]) -> Result<World, Vec<Refus
             out.extend(belts(&w));
             out.extend(crate::wind::uncaught(&w));
             out.extend(articulated(&w));
+            out.extend(crate::doc::held(&w));
             if out.is_empty() {
                 return Ok(w);
             }
@@ -101,6 +102,7 @@ pub fn check(doc: &Value, caps: &Caps, table: &[Row]) -> Result<World, Vec<Refus
             out.extend(belts(&w));
             out.extend(crate::wind::uncaught(&w));
             out.extend(articulated(&w));
+            out.extend(crate::doc::held(&w));
         }
         Err(e) => out.extend(e),
     }
@@ -225,6 +227,21 @@ fn refused_by(doc: &Value, caps: &Caps) -> Vec<Refusal> {
             let from = caps.sweep.starts.join(" or ");
             let what = format!("starts no sweep from a {kind} body, only from a {from} one");
             out.push(cap(format!("bodies/{id}/ccd"), v, caps, &what));
+        }
+    }
+    // #1931: a force law on a backend that claims no such law, naming the force.
+    for (id, f) in doc
+        .get("forces")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
+        let kind = f.get("kind").unwrap_or(&Value::Null);
+        let written = kind.as_object().and_then(|o| o.keys().next());
+        let name = kind.as_str().or(written.map(String::as_str));
+        if let Some(law) = name.filter(|n| crate::doc::LAWS.contains(n) && !claims(n)) {
+            let what = format!("claims no {law} force law to run force {id}");
+            out.push(cap(format!("forces/{id}/kind"), kind, caps, &what));
         }
     }
     // #251: a vehicle body on a backend with no vehicle controller, naming the body.

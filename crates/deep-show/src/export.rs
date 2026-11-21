@@ -29,6 +29,7 @@ mod test_guards;
 pub(crate) mod test_tools;
 pub(crate) mod tools;
 mod web;
+pub(crate) use web::full_player;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -111,6 +112,8 @@ pub enum Guard {
     WebSavesKeyedByOrigin,
     /// #1041: the web player never asks the browser to keep the origin's storage persistent.
     WebSavesNeverAskPersistence,
+    /// #189: the web player's Import record takes a record without holding it to its name's hash.
+    WebCarryImportSkipsHash,
     /// #1040: the web export leaves out one font it names.
     WebLeavesOutFont,
     /// #1040: the page keys each logic item by its step hash alone.
@@ -188,6 +191,13 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         // #525's, reached by `--planted`: a golden verifier and a receipt writer.
         "golden_compares_across_digests" => Planted::GoldenComparesAcrossDigests,
         "receipt_omits_runtime_digest" => Planted::ReceiptOmitsRuntimeDigest,
+        // #189's, reached by `--planted`: a restore and a save's binding.
+        "restore_loads_old_world" => {
+            Planted::Physics(crate::physics::Planted::RestoreLoadsOldWorld)
+        }
+        "content_leaves_out_worlds" => {
+            Planted::Physics(crate::physics::Planted::ContentLeavesOutWorlds)
+        }
         "limiter_without_codec_margin" => Planted::Export(G::NoCodecMargin),
         "shard_rounds_first_sample" => Planted::Export(G::ShardStartRounds),
         "export_without_disk_gate" => Planted::Export(G::NoDiskGate),
@@ -216,6 +226,7 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "web_fragment_writes_entry" => Planted::Export(G::WebFragmentWritesEntry),
         "web_saves_keyed_by_origin" => Planted::Export(G::WebSavesKeyedByOrigin),
         "web_saves_never_ask_persistence" => Planted::Export(G::WebSavesNeverAskPersistence),
+        "web_carry_import_skips_hash" => Planted::Export(G::WebCarryImportSkipsHash),
         "web_leaves_out_font" => Planted::Export(G::WebLeavesOutFont),
         "page_keys_logic_by_step_hash" => Planted::Export(G::PageKeysLogicByStepHash),
         "page_keys_by_picture_and_logic" => Planted::Export(G::PageKeysByPictureAndLogic),
@@ -437,6 +448,8 @@ pub struct Job {
     /// one for the codec, and `brief: {tools}`, the tools the brief pins.
     pub tool: Option<String>,
     pub pins: Vec<String>,
+    /// #1250: `gif: {scale}` (or `video.gif`), an indexed look's GIF's options.
+    pub gif: Value,
 }
 
 impl Default for Job {
@@ -471,6 +484,7 @@ impl Default for Job {
             srgb: false,
             tool: None,
             pins: Vec::new(),
+            gif: Value::Null,
         }
     }
 }
@@ -642,6 +656,11 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
             .flatten()
             .filter_map(|t| t.as_str().map(str::to_string))
             .collect(),
+        gif: c
+            .get("gif")
+            .or_else(|| video.and_then(|v| v.get("gif")))
+            .cloned()
+            .unwrap_or(Value::Null),
     })
 }
 

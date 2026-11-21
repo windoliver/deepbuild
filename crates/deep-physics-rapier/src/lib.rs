@@ -44,6 +44,7 @@ pub mod fp;
 mod inputs;
 mod joints;
 mod kinematic;
+mod laws;
 mod occurrences;
 pub mod planted;
 pub mod runner;
@@ -201,6 +202,16 @@ pub enum Twin {
     LinksAtZero,
     TreeCountsOnly,
     Small(runner::contact::Small),
+    /// #1931's wrong laws: an inverse square that falls off as 1 ÷ r; a magnetic law that holds
+    /// q (v × B) over the step; one that takes B × v; a pair law without the factor 2; and one
+    /// without the cutoff. And its wrong check, which admits a held central force at any
+    /// substeps.
+    LawFallsAsR,
+    LawHoldsQvb,
+    LawTakesBv,
+    LawWithoutTwo,
+    LawWithoutCutoff,
+    SubstepsAdmitted,
 }
 
 /// A Rapier world behind the backend interface.
@@ -275,6 +286,16 @@ pub struct Rapier {
     /// #2098: the triangles a wind pushes, by body, in the body's frame.
     aero: BTreeMap<String, Vec<deep_canvas_physics::wind::Triangle>>,
 }
+
+/// #189's test builds of the physics implementation: a document's every world built as if it
+/// declared its gravity this many times over; none in every shipped build.
+pub const GRAVITY_TIMES: Option<f64> = if cfg!(feature = "test-gravity-heavy") {
+    Some(2.0)
+} else if cfg!(feature = "test-gravity-drift") {
+    Some(1.000_001)
+} else {
+    None
+};
 
 fn v3(a: [f64; 3]) -> Vector {
     Vector::new(a[0] as f32, a[1] as f32, a[2] as f32)

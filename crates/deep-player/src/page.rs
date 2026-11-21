@@ -43,6 +43,15 @@ pub struct Player {
     /// holds the net module.
     #[cfg(feature = "full")]
     net: Option<crate::net::Match>,
+    /// #1217: the viewer's measure tool, and the 3D frame last drawn while it is on, which a
+    /// click's ray is met on.
+    #[cfg(feature = "full")]
+    measure: deep_canvas_scene3d::measure::Tool,
+    #[cfg(feature = "full")]
+    measured: Option<Box<deep_canvas_scene3d::scene::Scene>>,
+    /// #1217: the frame a click landed on, kept while its object-ID target is read back.
+    #[cfg(feature = "full")]
+    clicked: Option<(Box<deep_canvas_scene3d::scene::Scene>, crate::gpu::IdsRead)>,
 }
 
 #[wasm_bindgen]
@@ -69,6 +78,12 @@ impl Player {
             maps: Default::default(),
             #[cfg(feature = "full")]
             net: None,
+            #[cfg(feature = "full")]
+            measure: Default::default(),
+            #[cfg(feature = "full")]
+            measured: None,
+            #[cfg(feature = "full")]
+            clicked: None,
         })
     }
 
@@ -269,7 +284,11 @@ impl Player {
         match draw.frame(p, size, &self.maps) {
             crate::draw::Frame::Pixels(rgba) => gpu.show(&rgba, size),
             #[cfg(feature = "full")]
-            crate::draw::Frame::Scene(scene, look, over) => gpu.show3d(&scene, &look, &over, size),
+            crate::draw::Frame::Scene(scene, look, over) => {
+                let drew = gpu.show3d(&scene, &look, &over, size);
+                self.measured = self.measure.on.then_some(scene);
+                drew
+            }
         }
     }
 
@@ -285,11 +304,99 @@ impl Player {
         Ok(())
     }
 
-    /// The piece's saves as the page keeps them (Logic: saves): `{piece, slots}` as JSON, the
-    /// document's stable ID and the most slots its logic declares, 0 for a piece with no saves.
+    /// The piece's saves as the page keeps them (Logic: saves): `{piece, slots, gives, takes,
+    /// profile}` as JSON, the document's stable ID, the most slots its logic declares (0 for a
+    /// piece with no saves), whether its logic gives a carry record (`carry`) or takes one
+    /// (`carry_in`), and whether it keeps a profile record (#276).
     pub fn saves(&self) -> String {
         let p = self.played.as_ref();
-        json!({"piece": p.map_or("", Played::id), "slots": p.map_or(0, Played::slots)}).to_string()
+        let declares = |f: &str| p.is_some_and(|p| p.declares(f));
+        json!({"piece": p.map_or("", Played::id), "slots": p.map_or(0, Played::slots),
+               "gives": declares("carry"), "takes": declares("carry_in"), "profile": declares("profile")})
+        .to_string()
+    }
+
+    /// #276: the profile records the steps the shown time has reached since the last call wrote,
+    /// as JSON in step order: each `{at, item, step, hash}`.
+    pub fn profiles_due(&mut self) -> String {
+        Value::Array(
+            self.played
+                .as_mut()
+                .map(Played::profiles_due)
+                .unwrap_or_default(),
+        )
+        .to_string()
+    }
+
+    /// The profile record at `at` of [`Self::profiles_due`]: the bytes the page stores whole under
+    /// their SHA-256.
+    pub fn profile_bytes(&self, at: usize) -> Result<Vec<u8>, JsValue> {
+        self.played
+            .as_ref()
+            .and_then(|p| p.profile(at))
+            .ok_or_else(|| fail("the piece wrote no such profile record"))
+    }
+
+    /// The page reopens the profile record `name`, its bytes' SHA-256, when the piece starts:
+    /// `{profile}` as JSON once the piece is made again with its entry at step 0, or its refusal
+    /// as JSON, naming the first array that differs.
+    pub fn open_profile(&mut self, name: &str, bytes: Vec<u8>) -> Result<String, JsValue> {
+        let files = &self.files;
+        let read = |sha: &str| files.get(sha).cloned();
+        let p = self
+            .played
+            .as_mut()
+            .ok_or_else(|| fail("no piece is loaded"))?;
+        p.take_profile(self.sealed, name, &bytes, &read)
+            .map(|v| v.to_string())
+            .map_err(fail)
+    }
+
+    /// The viewer's start fresh, this run only: the piece made again from its start reading
+    /// zeros, the stored profile record kept.
+    pub fn start_fresh(&mut self) -> Result<(), JsValue> {
+        let files = &self.files;
+        let read = |sha: &str| files.get(sha).cloned();
+        match self.played.as_mut() {
+            Some(p) => p.fresh(self.sealed, &read).map_err(fail),
+            None => Ok(()),
+        }
+    }
+
+    /// #189: the carry records the steps the shown time has reached since the last call wrote, as
+    /// JSON in step order: each `{at, item, step, hash, layout}`.
+    pub fn records_due(&mut self) -> String {
+        Value::Array(
+            self.played
+                .as_mut()
+                .map(Played::records_due)
+                .unwrap_or_default(),
+        )
+        .to_string()
+    }
+
+    /// The record at `at` of [`Self::records_due`]: the bytes the page stores whole under their
+    /// SHA-256, as the app's record file holds them.
+    pub fn record_bytes(&self, at: usize) -> Result<Vec<u8>, JsValue> {
+        self.played
+            .as_ref()
+            .and_then(|p| p.record(at))
+            .ok_or_else(|| fail("the piece wrote no such record"))
+    }
+
+    /// The viewer opens the carry record `name`, its bytes' SHA-256, into the piece: `{record}` as
+    /// JSON once the piece is made again with its entry at step 0, or its refusal as JSON, naming
+    /// what differs.
+    pub fn open_record(&mut self, name: &str, bytes: Vec<u8>) -> Result<String, JsValue> {
+        let files = &self.files;
+        let read = |sha: &str| files.get(sha).cloned();
+        let p = self
+            .played
+            .as_mut()
+            .ok_or_else(|| fail("no piece is loaded"))?;
+        p.take_record(self.sealed, name, &bytes, &read)
+            .map(|v| v.to_string())
+            .map_err(fail)
     }
 
     /// The saves asked for by the steps the shown time has reached since the last call, as JSON
@@ -353,7 +460,130 @@ impl Player {
         if let Some(net) = &self.net {
             out.insert("match".into(), net.probe());
         }
+        // #1217: the measure tool's state, in a piece that offers it.
+        #[cfg(feature = "full")]
+        if let Some(doc) = self.offers_measure() {
+            out.insert("measure".into(), self.measure.to_json(doc, None));
+        }
         Value::Object(out).to_string()
+    }
+}
+
+/// #1217: the viewer's measure tool (Selection: `viewer_tools.measure`), the app's own
+/// (`deep_canvas_scene3d::measure`), as session state of the page: nothing it does writes an
+/// input entry or reaches the piece.
+#[cfg(feature = "full")]
+#[wasm_bindgen]
+impl Player {
+    /// Whether the tool is on.
+    pub fn measure_on(&self) -> bool {
+        self.measure.on
+    }
+
+    /// The viewer's setting: on in a piece that offers the tool; off drops its points.
+    pub fn measure_set(&mut self, on: bool) {
+        if let Some(p) = self.played.as_ref() {
+            self.measure.set(p.document(), on);
+        }
+        if !self.measure.on {
+            self.measured = None;
+        }
+    }
+
+    /// Esc: both points go; whether there was one.
+    pub fn measure_clear(&mut self) -> bool {
+        self.measure.clear()
+    }
+
+    /// A click lands on the frame last drawn: that frame's object-ID target starts to read
+    /// back; false before a 3D frame is drawn with the tool on.
+    pub fn measure_press(&mut self) -> bool {
+        let read = self.gpu.as_ref().and_then(crate::gpu::Gpu::read_ids);
+        self.clicked = self.measured.clone().zip(read);
+        self.clicked.is_some()
+    }
+
+    /// That click at frame px (`x`, `y`), once its target is read: a point where the click's
+    /// ray meets the item named there. 0 while the device still maps the target, 1 for a point
+    /// placed, 2 for none.
+    pub fn measure_click(&mut self, x: f64, y: f64) -> u8 {
+        use deep_canvas_scene3d::{measure, pointer};
+        let Some(ids) = self.clicked.as_ref().map(|(_, read)| read.take()) else {
+            return 2;
+        };
+        let Some(ids) = ids else {
+            return 0;
+        };
+        let Some(gpu) = self.gpu.as_ref() else {
+            return 2;
+        };
+        let (Some((scene, _)), Some((size, picks))) = (self.clicked.take(), gpu.picks()) else {
+            return 2;
+        };
+        let target = pointer::Ids {
+            size,
+            ids: &ids,
+            picks: &picks,
+        };
+        let named = pointer::topmost(
+            &scene,
+            &target,
+            [x, y],
+            measure::MARGIN,
+            &|_: &str| true,
+            None,
+        );
+        let placed = named.and_then(|t| measure::place(&scene, [x, y], &t, self.measure.snap));
+        placed.map_or(2, |p| {
+            self.measure.put(p);
+            1
+        })
+    }
+
+    /// Tab or Enter with the tool on: Tab moves among the parts' anchors and Enter places a
+    /// point at the one focused; whether the tool took the key (Tab past the last anchor is the
+    /// page's again).
+    pub fn measure_key(&mut self, key: &str) -> bool {
+        use deep_canvas_scene3d::measure;
+        let (Some(p), Some(scene)) = (self.played.as_ref(), self.measured.as_ref()) else {
+            return false;
+        };
+        let anchors = measure::anchors(scene, p.document());
+        match key {
+            "Tab" => {
+                self.measure.tab(&anchors);
+                self.measure.focus.is_some()
+            }
+            "Enter" => self.measure.enter(&anchors),
+            _ => false,
+        }
+    }
+
+    /// The measure as the page draws it over the canvas, JSON `{a, b, text, color, ground}`:
+    /// each point where the frame last drawn shows it, in frame px, or null; the readout's
+    /// line; and the look's accent and ground. `null` while the tool is off.
+    pub fn measure_shown(&self) -> String {
+        use deep_canvas_scene3d::measure;
+        let (Some(p), Some(scene)) = (self.played.as_ref(), self.measured.as_ref()) else {
+            return "null".into();
+        };
+        let [a, b] = measure::shown(&self.measure, scene);
+        let readout = self.measure.readout(p.document(), None);
+        let role = |name: &str| p.look.light.get(name).copied();
+        let hex = |[r, g, b]: [u8; 3]| format!("#{r:02x}{g:02x}{b:02x}");
+        let color = role("accent").or(role("ink")).unwrap_or([0; 3]);
+        json!({"a": a, "b": b, "text": readout.as_ref().map(measure::label),
+               "color": hex(color), "ground": hex(role("ground").unwrap_or([255; 3]))})
+        .to_string()
+    }
+}
+
+#[cfg(feature = "full")]
+impl Player {
+    /// The piece's document, when it offers the measure tool.
+    fn offers_measure(&self) -> Option<&Value> {
+        let doc = self.played.as_ref()?.document();
+        deep_canvas_scene3d::measure::Tool::offered(doc).then_some(doc)
     }
 }
 
@@ -446,6 +676,24 @@ impl Player {
     /// Whether the match ended or its Join was refused, so the page closes its connection.
     pub fn net_ended(&self) -> bool {
         self.net.as_ref().is_some_and(crate::net::Match::ended)
+    }
+
+    /// #280: net.budget's web part: the document and the track recorded before the match by
+    /// their files' SHA-256, and `request` (`{track, steps, len, window, frame_ms, from_step}`);
+    /// the match's stepping measured here, five runs after a warm-up, as the app measures its own.
+    pub fn net_budget(&self, doc: &str, track: &str, request: &str) -> Result<String, JsValue> {
+        let text = |sha: &str| {
+            self.files
+                .get(sha)
+                .ok_or_else(|| fail(format!("the page gave no file {sha}")))
+        };
+        let doc: Value = serde_json::from_slice(text(doc)?).map_err(fail)?;
+        let track: Value = serde_json::from_slice(text(track)?).map_err(fail)?;
+        let track = track["entries"].as_array().cloned().unwrap_or_default();
+        let request: Value = serde_json::from_str(request).map_err(fail)?;
+        let files = &self.files;
+        let read = |sha: &str| files.get(sha).cloned();
+        Ok(crate::net::budget(self.sealed, &doc, &track, &read, &request).to_string())
     }
 }
 
