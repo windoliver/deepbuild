@@ -643,13 +643,14 @@ fn opened(
                 .to_json()
             }
         };
-        let kept = match derive::kept(scene, &w, viewer) {
+        let kept = match derive::kept(scene, &id, &w, viewer) {
             Ok(x) => x,
             Err(r) => return refused(&id, json!([{"code": r.code, "what": r.what}])).to_json(),
         };
         let step = step_flicks(&w);
         let bodies: Vec<&String> = w.bodies.keys().collect();
-        let checkpoint = json!({"step": k, "backend": wh["backend"], "state": base64::encode(state)});
+        let checkpoint =
+            json!({"step": k, "backend": wh["backend"], "state": base64::encode(state)});
         let call = json!({"call": "restore", "scene": scene, "world": id, "checkpoint": checkpoint, "steps": (steps - k).max(0),
                           "read": bodies, "track": derive::track_of(&kept), "checkpoints": true});
         let reply = run.answer(&call).unwrap_or(Value::Null);
