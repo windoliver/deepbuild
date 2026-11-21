@@ -314,6 +314,7 @@ fn parse_match(c: &Map<String, Value>) -> Option<MatchCall> {
                 .filter(|r| *r == "full")
                 .is_some()
                 .then_some(true)?,
+        },
         secure: match c.get("secure") {
             None => None,
             Some(s) => Some(s.get("seed")?.as_u64()?),
