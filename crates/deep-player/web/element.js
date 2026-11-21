@@ -726,16 +726,31 @@ class DeepPlayer extends HTMLElement {
     const opened = JSON.parse(this.#player.join(location.href, crypto.getRandomValues(new Uint8Array(16))));
     this.#prompt();
     if (!opened.url) return;
-    const ws = new WebSocket(opened.url);
+    // #277: a piece whose rules play a changed seat asks for relay@2 by the subprotocol.
+    const ws = new WebSocket(opened.url, opened.protocols ?? []);
     ws.binaryType = 'arraybuffer';
     this.#socket = ws;
     let timer = 0;
+    // #277: relay@2's messages and the frames of other players' messages the copy forwards.
+    const sends = () => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      const s = JSON.parse(this.#player.net_sends());
+      for (const c of s.controls) ws.send(c);
+      for (const f of s.frames) ws.send(new Uint8Array(f.match(/../g).map((h) => parseInt(h, 16))));
+    };
     const tick = () => {
       const now = performance.now();
       const frame = this.#player.net_tick(now);
       if (frame.length && ws.readyState === WebSocket.OPEN) ws.send(frame);
+      sends();
       this.#notify(this.#player.net_waiting(now));
       if (this.#player.net_ended()) { clearInterval(timer); ws.close(); this.#notify(0); this.#prompt(); }
+    };
+    // #277: a page about to be hidden says its copy is absent, at once; shown again, it catches up.
+    const shown = () => {
+      const frame = this.#player.net_visible(document.visibilityState === 'hidden', performance.now());
+      if (frame.length && ws.readyState === WebSocket.OPEN) ws.send(frame);
+      sends();
     };
     ws.addEventListener('message', (e) => {
       const now = performance.now();
@@ -749,12 +764,13 @@ class DeepPlayer extends HTMLElement {
         this.#player.net_receive(new Uint8Array(e.data), now);
         tick();
       }
+      sends();
     });
     // #551: a person's keys while the match plays are entries of this copy's player, on each control whose keys name
     // them; a key a script dispatched is left alone.
     const keys = (e) => { if (e.isTrusted && this.#player.net_key(e.key)) e.preventDefault(); };
-    ws.addEventListener('open', () => { timer = setInterval(tick, 8); window.addEventListener('keydown', keys); });
-    ws.addEventListener('close', () => { clearInterval(timer); window.removeEventListener('keydown', keys); this.#player.net_disconnected(); this.#notify(0); this.#prompt(); });
+    ws.addEventListener('open', () => { timer = setInterval(tick, 8); window.addEventListener('keydown', keys); document.addEventListener('visibilitychange', shown); });
+    ws.addEventListener('close', () => { clearInterval(timer); window.removeEventListener('keydown', keys); document.removeEventListener('visibilitychange', shown); this.#player.net_disconnected(); this.#notify(0); this.#prompt(); });
   }
 
   /** The waiting notice, the player's own: shown once this copy has waited 0.25 s for a player's message. */

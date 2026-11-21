@@ -276,6 +276,8 @@ pub enum Read {
     /// #189: the carry record's entry (Logic: carry records); #276: the profile record's.
     Carry,
     Profile,
+    /// #277: `net.seats`, the seat entries stamped since the item's last step.
+    Seats,
     /// A write entry.
     None,
 }

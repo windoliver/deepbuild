@@ -19,6 +19,8 @@ use crate::piece::{check_in, h64, History};
 use crate::world::{track_of, Entry, Given, Record, To, World, REWIND};
 use crate::Planted;
 
+mod off;
+
 const F: i64 = 705_600_000;
 
 /// The ID a logic bot takes in the replica's copy of the piece.
@@ -468,12 +470,18 @@ pub fn play(
         }
         piece["items"][BOT] = json!({"kind": "logic@1", "params": params});
     }
+    // #832: the catalog without a row, in the catalog's place under its own hash.
+    let off = off::of(call, stored, &mut piece)?;
+    let swapped = |sha: &str| match &off {
+        Some(o) if o.sha256 == sha => Some(o.bytes.clone()),
+        _ => stored(sha),
+    };
     let piece = Rc::new(
         check_in(
             &piece,
             &Planted::default(),
             &mut History::new(),
-            stored,
+            &swapped,
             &[],
         )
         .map_err(|r| r.0)?,
@@ -847,5 +855,6 @@ pub fn play(
         "final": end,
         "frames": frames,
         "memory": memory,
+        "off": off.map(|o| o.answer),
     }))
 }
