@@ -217,6 +217,7 @@ impl Tour {
                 .map(|(t, v)| vec![sample(stop.t, stop.value.clone()), sample(t, json!(v))]),
             writer: Writer::Tour,
             serial: None,
+            player: None,
         }
     }
 

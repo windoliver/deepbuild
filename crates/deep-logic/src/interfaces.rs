@@ -172,14 +172,19 @@ impl Tolerance {
     }
 
     /// Whether `actual` stands for `expected`: numbers within the tolerance (exact: the same
-    /// value), anything else equal.
+    /// value), a vector's numbers each so (#981), anything else equal.
     pub fn holds(&self, expected: &Value, actual: &Value) -> bool {
-        match (expected.as_f64(), actual.as_f64()) {
-            (Some(e), Some(a)) => match self {
-                Tolerance::Exact => e == a,
-                Tolerance::Within { abs, rel } => (a - e).abs() <= abs.max(rel * e.abs()),
+        match (expected, actual) {
+            (Value::Array(e), Value::Array(a)) => {
+                e.len() == a.len() && e.iter().zip(a).all(|(e, a)| self.holds(e, a))
+            }
+            _ => match (expected.as_f64(), actual.as_f64()) {
+                (Some(e), Some(a)) => match self {
+                    Tolerance::Exact => e == a,
+                    Tolerance::Within { abs, rel } => (a - e).abs() <= abs.max(rel * e.abs()),
+                },
+                _ => expected == actual,
             },
-            _ => expected == actual,
         }
     }
 }
@@ -491,8 +496,14 @@ impl crate::Logic {
         ];
         packs.extend(piece_v["packs"].as_array().cloned().unwrap_or_default());
         item["params"]["links"] = json!([{"name": under.label, "asset": under.hash}]);
-        let mut piece =
-            json!({"seed": 0, "packs": packs, "items": {"fixture": item}, "assets": assets});
+        // The fixture's other items beside its own, such as a lane graph's floor paths (#981).
+        let mut items = fixture
+            .get("items")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+        items.insert("fixture".into(), item);
+        let mut piece = json!({"seed": 0, "packs": packs, "items": items, "assets": assets});
         if let Some(c) = fixture.get("controls") {
             piece["controls"] = c.clone();
         }

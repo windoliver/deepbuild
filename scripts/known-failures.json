@@ -3,8 +3,7 @@
     "tests/acceptance/2032-redraft-ac8/ac8-budget.test.ts › AC8 #2032.1a4ae9f6 the budget of 16 lights and 4,096 occluder segments at 1920 × 1080 › AC8 #2032.1a4ae9f6 16 lights and 4,096 occluder segments at 1920 × 1080 cost under 2 ms of GPU time a frame, on the reference Mac": "FAIL 2.8468, 2.8548, 2.8281, 2.8392, 2.8241 against 2 on a Mac17,10 at rest: the shadows' GPU budget, #2032's criterion 8, moved to its own task (#2844, added 2026-11-18)",
     "tests/acceptance/1463/list.test.ts › #1463.f9ab70a8 › #1463.f9ab70a8: on one fixture, the app's list and deep status --json hold the same rows, IDs, words and order at one log_pos": "fails on main d8c46f0d5: the window draws see's rows, by their ids, in their order: expected [ …(5) ] to deeply equal []. The window draws Needs you's asks first, each with its kind in the state-word slot (#1461), against the judge's rows' order and word; a blind redraft (#2668, added 2026-11-15)",
     "tests/acceptance/1463/words.test.ts › #1463.cc5d1e3f › #1463.cc5d1e3f: 992/agree still holds": "fails on main d8c46f0d5: tests/acceptance/992's agree.test.ts must pass as it is: exit 1. It fails as 992/agree does, below (#2668, added 2026-11-15)",
-    "tests/acceptance/992/agree.test.ts › AC3 #992.45c506d1 › AC3 #992.45c506d1: for each of 12 recorded sessions covering every state, deep status and the app's row name the same state; a planted app that maps waiting to Working fails, naming the session": "fails on main d8c46f0d5: deep status and the app name these sessions differently. It finds deep status's rows by short ID and knows six words, where #2018 gave each session one name and the word says done; a blind redraft (#2668, added 2026-11-15)",
-    "tests/acceptance/1477/record.test.ts › #1477.e66d9bdb the record gives all arms with their fingerprint, and an unrun arm reads INCONCLUSIVE. It ends in one line: stop, or build › #1477.e66d9bdb an arm left out reads INCONCLUSIVE and so does the decision; a full run and the committed record give every arm measured with its fingerprint on a quiet reference Mac, net of the blank arm, and end in the same stop or build": "fails on main 212f16d09: this run's record: problems: expected [ …(2) ] to deeply equal []. It is the first draft of the criterion's test and knows two arm readings, measured and INCONCLUSIVE; since the criterion was amended on 2026-11-09 the panel arm reads missed and decides build, which the blind redraft in tests/acceptance/1477/redraft/record.test.ts judges in its place. It ends when the first draft's test is withdrawn or the record's panel arm is measured again (#2806, added 2026-11-17)"
+    "tests/acceptance/992/agree.test.ts › AC3 #992.45c506d1 › AC3 #992.45c506d1: for each of 12 recorded sessions covering every state, deep status and the app's row name the same state; a planted app that maps waiting to Working fails, naming the session": "fails on main d8c46f0d5: deep status and the app name these sessions differently. It finds deep status's rows by short ID and knows six words, where #2018 gave each session one name and the word says done; a blind redraft (#2668, added 2026-11-15)"
   },
   "lint": {
     "canvas-lint: crates/deep-canvas-cells/src/recording.rs the env! macro, the building machine's environment compiled into the check": 1,
@@ -491,6 +490,12 @@
       "note": "",
       "reason": "retired by #1887's owner: tests/acceptance/1887/redraft-ac3/slot-count.test.mjs is AC3's test (this draft fixes the count at 16; #210's deep.registerPort made the base's own count 17)",
       "approval": "#1887, the owner on PR #2537, 2026-11-18 (this commit lands only with the owner's touch-key tag)"
+    },
+    {
+      "id": "tests/acceptance/33/spine.test.ts › AC8 #33.9c912eb7 the 25 spine tasks, each with its merged commit › AC8 #33.9c912eb7 node scripts/spine.mjs list names the 25 spine tasks, each with a merged commit of this checkout's history",
+      "note": "",
+      "reason": "retired by the owner's ruling \"Keep GitHub's hash\": a spine row names the merge commit GitHub records, which for PRs merged before the 2026-11-09 history rewrite is not in main's history (#13's 96ee0fc4d, as #1831 AC2 requires); 33/redraft-ac8/spine-list.test.ts is AC8's offline test",
+      "approval": "#33, the owner's ruling on #13's spine row, 2026-11-19 (the owner's touch-key tag on this commit)"
     }
   ]
 }

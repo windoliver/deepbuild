@@ -22,7 +22,7 @@ pub use fonts::provide;
 pub use fonts::LICENSES;
 pub use fonts::{face_of, Face, Role, FACES};
 pub use parley::FontData;
-pub use shape::{Align, Decoration, Fit, Glyph, Shaped, Shaper, Shift, Span, Spec};
+pub use shape::{Align, Decoration, Drawn, Fit, Glyph, Shaped, Shaper, Shift, Span, Spec};
 pub use unicode::{Bidi, Dir};
 pub use vertical::{Columns, Flow, Stand};
 
