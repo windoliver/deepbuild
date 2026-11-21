@@ -422,7 +422,7 @@ impl<E: IntoElement + 'static> Element for AnimationElement<E> {
                     // Reduce modulo the duration before f32 conversion, which loses sub-second precision at scale.
                     Duration::from_nanos((elapsed.as_nanos() % duration.as_nanos()) as u64)
                 } else {
-                    now.saturating_duration_since(state.start) // DeepBuild patch (windoliver/deepbuild#1427)
+                    now.saturating_duration_since(state.start).max(Duration::from_nanos(1)) // DeepBuild patch (windoliver/deepbuild#1427): never 0, as `elapsed` never was
                 };
                 let mut delta = elapsed.as_secs_f32() / duration.as_secs_f32();
 
