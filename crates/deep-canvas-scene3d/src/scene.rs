@@ -1761,6 +1761,12 @@ pub(crate) fn evaluate_compiled(
         None => eval::written(map, program, &state),
     };
     let mut items = Items::new(doc_items, &written, &state, program);
+    // #265: the places trails and wakes read at earlier times, kept across frames by the
+    // document and program they were read from.
+    let memo = std::cell::RefCell::new(std::mem::take(&mut labels.places));
+    if crate::trail::samples(doc_items) {
+        memo.borrow_mut().of(map, program);
+    }
     // #2013: a frame draws each rested item where its rest puts it; the check reports a rest
     // that finds no support.
     rest(
@@ -2296,8 +2302,7 @@ pub(crate) fn evaluate_compiled(
                         Some(tr) => {
                             let at = |times: &[i64]| {
                                 crate::trail::path_at(
-                                    map,
-                                    program,
+                                    (map, program, &memo),
                                     &items,
                                     &tr.of,
                                     times,
@@ -2907,7 +2912,8 @@ pub(crate) fn evaluate_compiled(
             wake.step = step as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
             let times = crate::water::wake_times(t, step, wake.span);
             let path = format!("items/{}/params/water/wake/item", w.material);
-            let at = crate::trail::path_at(map, program, &items, &wake.item, &times, &path)?;
+            let at =
+                crate::trail::path_at((map, program, &memo), &items, &wake.item, &times, &path)?;
             wake.path = at.iter().map(|p| [p[0], p[2]]).collect();
         }
         // #268: the shore's field, baked once per key.
@@ -2933,6 +2939,7 @@ pub(crate) fn evaluate_compiled(
         }
         scene.water = Some(Arc::new(w));
     }
+    labels.places = memo.into_inner();
     Ok(scene)
 }
 

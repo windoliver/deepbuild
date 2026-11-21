@@ -432,9 +432,10 @@ pub fn cost(item: &Value) -> f64 {
     evaluations * CHAIN_MS
 }
 
-/// The item of a trail's source chain (the source and its parents) that a driver reading a
-/// `logic` item's array moves: a live simulation keeps no earlier steps for a trail to read.
-fn logic_moved(doc: &Map<String, Value>, of: &str) -> Option<String> {
+/// The item of a trail's source chain (the source and its parents) that a live drag moves, the
+/// handle of a document control: nothing keeps its earlier places for a trail to read. A chain a
+/// logic array moves reads the logic bake's earlier steps through its drivers (#265).
+fn dragged(doc: &Map<String, Value>, of: &str) -> Option<String> {
     let items = doc.get("items").and_then(Value::as_object)?;
     let mut chain = Vec::new();
     let mut at = of.split('#').next();
@@ -442,30 +443,16 @@ fn logic_moved(doc: &Map<String, Value>, of: &str) -> Option<String> {
         chain.push(id);
         at = items.get(id)?.get("parent").and_then(Value::as_str);
     }
-    let logic = |v: &Value| {
-        let owner = v.as_str().and_then(|p| p.split_once('.')).map(|(o, _)| o);
-        owner
-            .and_then(|o| items.get(o)?.get("kind")?.as_str())
-            .is_some_and(|k| k.starts_with("logic"))
-    };
-    let drivers = doc.get("drivers").and_then(Value::as_object)?;
-    drivers.values().find_map(|d| {
-        let target = d.get("target").and_then(Value::as_str).unwrap_or("");
-        let reads = d
-            .get("vars")
-            .and_then(Value::as_object)?
-            .values()
-            .any(logic);
-        let moved = chain
-            .iter()
-            .find(|c| target.starts_with(&format!("items/{c}/")));
-        moved.filter(|_| reads).map(|c| c.to_string())
+    let controls = doc.get("controls").and_then(Value::as_object)?;
+    controls.values().find_map(|c| {
+        let item = c.pointer("/handle/item").and_then(Value::as_str)?;
+        chain.contains(&item).then(|| item.to_string())
     })
 }
 
-/// The check over an item's trail: a field out of its range, a source a logic array moves, a list
-/// or a marker it names that doesn't resolve, or a whole window past its `max_points`, each refused
-/// naming the trail or the moved item.
+/// The check over an item's trail: a field out of its range, a source a live drag moves, a list
+/// or a marker it names that doesn't resolve, a whole window past its `max_points`, or (#265) a
+/// span past the logic bake's oldest step, each refused naming the trail or the moved item.
 pub fn rule(doc: &Value, id: &str, item: &Value) -> Vec<deep_canvas::registry::Raised> {
     let path = format!("items/{id}/params");
     let raised = |r: Refused| deep_canvas::registry::Raised {
@@ -483,12 +470,17 @@ pub fn rule(doc: &Value, id: &str, item: &Value) -> Vec<deep_canvas::registry::R
     let Some(map) = doc.as_object() else {
         return Vec::new();
     };
-    if let Some(moved) = logic_moved(map, &trail.of) {
+    if let Some(moved) = dragged(map, &trail.of) {
         return vec![raised(Refused {
             code: "out_of_range",
             path: format!("items/{moved}"),
             detail: None,
         })];
+    }
+    // #265: read from the document, since a host checks before it bakes the logic arrays the
+    // program's drivers read.
+    if let Err(r) = before_bake(&trail, doc, map, &path) {
+        return vec![raised(r)];
     }
     let Ok(program) = Program::compile(map) else {
         return Vec::new();
@@ -507,6 +499,66 @@ pub fn rule(doc: &Value, id: &str, item: &Value) -> Vec<deep_canvas::registry::R
         Window::Span => Ok(()),
     };
     checked.err().map(raised).into_iter().collect()
+}
+
+/// #265: a span window behind a source a logic array moves reads the logic bake, whose oldest
+/// kept step is step 0, at t = 0: a span longer than the transport reaches before it at every
+/// frame, the last one's too, so the check refuses it, naming the span.
+fn before_bake(
+    trail: &Trail,
+    doc: &Value,
+    map: &Map<String, Value>,
+    path: &str,
+) -> Result<(), Refused> {
+    let at = |key: &str| {
+        let v = map.get("transport")?.get(key)?;
+        deep_canvas::document::duration(doc, v).ok()
+    };
+    let end = at("span").map(|span| at("start").unwrap_or(0) + span);
+    let span = (trail.span * F).round() as i64;
+    match end {
+        Some(end) if trail.window == Window::Span && end < span && logic_moved(map, &trail.of) => {
+            bad(&format!("{path}/trail/span"))
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Whether a driver that reads a `logic` item's array moves an item of the trail's source
+/// chain (the source and its parents): its earlier places are the logic bake's (#265).
+pub fn logic_moved(doc: &Map<String, Value>, of: &str) -> bool {
+    let Some(items) = doc.get("items").and_then(Value::as_object) else {
+        return false;
+    };
+    let mut chain = Vec::new();
+    let mut at = of.split('#').next();
+    while let Some(id) = at.filter(|id| !chain.contains(id)) {
+        chain.push(id);
+        at = items
+            .get(id)
+            .and_then(|i| i.get("parent"))
+            .and_then(Value::as_str);
+    }
+    let logic = |v: &Value| {
+        let owner = v.as_str().and_then(|p| p.split_once('.')).map(|(o, _)| o);
+        owner
+            .and_then(|o| items.get(o)?.get("kind")?.as_str())
+            .is_some_and(|k| k.starts_with("logic"))
+    };
+    let drivers = doc.get("drivers").and_then(Value::as_object);
+    drivers.into_iter().flatten().any(|(_, d)| {
+        let target = d.get("target").and_then(Value::as_str).unwrap_or("");
+        let reads = (d
+            .get("vars")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten())
+        .any(|(_, v)| logic(v));
+        reads
+            && chain
+                .iter()
+                .any(|c| target.starts_with(&format!("items/{c}/")))
+    })
 }
 
 /// A 2D item's place at its parents' places: each parent's `at` (pos, then a rotation in degrees

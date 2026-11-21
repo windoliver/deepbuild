@@ -13,13 +13,13 @@
       "module_set_digest": "e0d535adac31c58c7a65fae890f5575ca14ffaa5a44cc71d4a5fd148fe14ea47",
       "wasm": {
         "path": "crates/deep-player/web/dist/figure/player_bg.wasm",
-        "sha256": "3426d5e9a1cc2755081c6afd04443039d62f089d79b6a7cc2e596a9022fb3caf"
+        "sha256": "5b22874f96ac3a938ccce9c1bdf5c878163fa502c4185719f08a261d6fabdfe5"
       },
       "glue": {
         "path": "crates/deep-player/web/dist/figure/player.js",
         "sha256": "4c3134dfbfd147ab8f28eef934e695a8272dc91cddbd475f17782c1d84687290"
       },
-      "compressed": 2502642
+      "compressed": 2524123
     },
     "game2d": {
       "modules": [
@@ -36,13 +36,13 @@
       "module_set_digest": "a427143baee4e6a9b766ba96679cd476b53fac6c8ebfefaf0e3020bdf19a2883",
       "wasm": {
         "path": "crates/deep-player/web/dist/game2d/player_bg.wasm",
-        "sha256": "4afa18b45ed8851d29f410ebf894a31b4b9321233019065639f627138a76f72c"
+        "sha256": "afb3d30aea771a83d4eaa2a19522b9d4279e755445c208d20d0c102ab6d08ae5"
       },
       "glue": {
         "path": "crates/deep-player/web/dist/game2d/player.js",
-        "sha256": "a5d8837bc66fae7f9cd6557fe3bbe9e7fe734e413b6f101ac350b4200e8770b0"
+        "sha256": "1747517011c64191a6b1cdbbd5a7d3a5b813e69cd90db54ba82ad4d12940f4d0"
       },
-      "compressed": 4792227
+      "compressed": 4826107
     },
     "full": {
       "modules": [
@@ -67,16 +67,16 @@
         "text",
         "vector"
       ],
-      "module_set_digest": "50063636a2f068a0eaa73530f281b18ddd112a5b3ba13fd9dc9b9c48436b8f30",
+      "module_set_digest": "241e0153b7ed8ce8f07dcea8fbb4246d48d4875c64f0cb52441d7ffad9afa13b",
       "wasm": {
         "path": "crates/deep-player/web/dist/full/player_bg.wasm",
-        "sha256": "f5d5b5a91226275bbe61bae5a6b21d7444b5d7625538753de1d190979e8e66f3"
+        "sha256": "60a2083d971543e29372a94b97976108318f0595aca64a524204751edd53c154"
       },
       "glue": {
         "path": "crates/deep-player/web/dist/full/player.js",
-        "sha256": "c31aaaa98ee4938941e3390c49765536cc60fb6b712ba1c25d74f63c59f06721"
+        "sha256": "5eb8c294ef21e24ea5cb2a1bfc019435a5bc433785f2346c386acb0d9e733edf"
       },
-      "compressed": 7460483
+      "compressed": 7538189
     }
   }
 }
