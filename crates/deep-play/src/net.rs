@@ -94,6 +94,15 @@ pub struct Logic {
     /// #551: the document's worlds, stepped beside the logic items, and the match step's length.
     worlds: Option<crate::net_worlds::Worlds>,
     len: i64,
+    /// #552: the entries the planted draw module took before their step.
+    early: Vec<Value>,
+}
+
+impl Logic {
+    /// #552: the planted derivation of its draws (`deep_logic::draws::Wrong`).
+    pub fn draws_wrong(&mut self, wrong: deep_logic::draws::Wrong) {
+        self.world.draw.wrong = wrong;
+    }
 }
 
 impl Logic {
@@ -121,6 +130,7 @@ impl Logic {
             keep: rows,
             rows: Vec::new(),
             rounds: false,
+            early: Vec::new(),
             ring: None,
             plant: Default::default(),
             ns: 0,
@@ -234,7 +244,10 @@ impl Stepper for Logic {
     }
 
     fn again(&self) -> Result<Self, Value> {
-        let mut again = Logic::new(self.piece.clone(), &self.start, false)?;
+        // The planted module's early bits went on its track before their step: a run again takes
+        // them at the same times.
+        let start: Vec<Value> = self.start.iter().chain(&self.early).cloned().collect();
+        let mut again = Logic::new(self.piece.clone(), &start, false)?;
         again.rounds = self.rounds;
         again.range = self.range.as_ref().map(|r| Range {
             form: r.form.clone(),
@@ -249,6 +262,7 @@ impl Stepper for Logic {
         if let Some((size, _)) = self.ring.as_ref() {
             again.hold(*size);
         }
+        again.world.draw = self.world.draw;
         Ok(again)
     }
 
@@ -375,6 +389,32 @@ impl Stepper for Logic {
             };
         }
         out
+    }
+
+    /// The planted guesser's roll: 1 + the step's seed as a u64, mod 6, from the document's
+    /// seed, the first logic item and the step, as a piece rolling from the step's seed rolls.
+    fn guess(&mut self, step: i64) -> Option<i64> {
+        let item = self.piece.items.first()?;
+        let seed = deep_logic::piece::step_seed(self.piece.seed, &item.id, step) as u64;
+        Some(1 + (seed % 6) as i64)
+    }
+
+    fn matched(&mut self, game: &[u8; 16]) {
+        self.world.draw.game = *game;
+    }
+
+    /// The planted module that delivers a draw from the bits that reached it first takes this
+    /// copy's own bits the moment it makes them, before they reach the track at their step.
+    fn early(&mut self, entry: &Value) {
+        if self.world.draw.wrong == deep_logic::draws::Wrong::FirstBits
+            && entry["control"] == deep_logic::draws::REVEAL
+        {
+            if let Some(e) = Entry::parse(entry) {
+                if self.world.append(e).is_ok() {
+                    self.early.push(entry.clone());
+                }
+            }
+        }
     }
 
     /// A field is `<item>.<write>`, whose first value changes in the program's write region,

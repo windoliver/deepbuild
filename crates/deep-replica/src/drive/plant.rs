@@ -69,6 +69,11 @@ pub enum Plant {
     LeaksUngaugedBuffer,
     /// The picture arm's image element asks for a frame at every vsync while it animates (#1489 criterion 3).
     PictureFrameEachVsync,
+    /// A piece played alone takes its bits from the platform's secure source, not hash(the run's seed, the draw's
+    /// number) (#552 criterion 5).
+    AloneBitsFromSecure,
+    /// A draw hashes its drawn step in place of its number (#552 criterion 5).
+    DrawHashesStep,
 }
 
 impl Plant {
@@ -101,6 +106,8 @@ impl Plant {
             "footprint-reads-zero" => Some(Plant::FootprintReadsZero),
             "leaks-ungauged-buffer" => Some(Plant::LeaksUngaugedBuffer),
             "picture-frame-each-vsync" => Some(Plant::PictureFrameEachVsync),
+            "alone-bits-from-secure" => Some(Plant::AloneBitsFromSecure),
+            "draw-hashes-step" => Some(Plant::DrawHashesStep),
             _ => None,
         }
     }
