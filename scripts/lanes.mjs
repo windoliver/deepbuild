@@ -1024,6 +1024,9 @@ alone.push('tests/acceptance/2310/');
 alone.push('tests/acceptance/2308/', 'tests/acceptance/191-redraft-2308/');
 // #2371's files build deep-physics.
 alone.push('tests/acceptance/2371/');
+// #1931's files build deep-physics (release and test-backends) and the wasm32 library; the blind redraft of #191's
+// first criterion's test under it builds deep-physics (shipped) and the wasm32 library, as #191's file does.
+alone.push('tests/acceptance/1931/', 'tests/acceptance/191-redraft-1931/');
 
 // #2742's files build deep-gpu; ac1 compares two films' GPU time on any Mac, and ac2 runs #417's suite.
 alone.push('tests/acceptance/2742/');
