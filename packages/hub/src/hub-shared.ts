@@ -15,6 +15,7 @@ import { type Connection, type EventInput, type Receipt, type RecordStore } from
 
 import { readJson } from './claude-settings.js';
 import { statKey } from './agent-files.js';
+import { claudeOnPath, loginPlan } from './mods.js';
 
 import { ownHome } from './keychain.js';
 
@@ -382,4 +383,39 @@ export function crashing(record: RecordStore, point: string): RecordStore {
     return event;
   };
   return withAppend(record, append);
+}
+/**
+ * A wait on `key`, woken by whoever wakes `waits` for it, by the hub stopping or after `ms`. It counts from the
+ * call, so a wake that comes while the caller still reads what it waits on isn't missed; `cancel` ends it.
+ */
+export function wakeable(waits: Map<string, Set<() => void>>, key: string, ms: number): { woken: Promise<void>; cancel: () => void } {
+  const set = waits.get(key) ?? new Set();
+  waits.set(key, set);
+  let wake = (): void => undefined;
+  const woken = new Promise<void>((done) => {
+    wake = () => {
+      clearTimeout(timer);
+      set.delete(wake);
+      if (!set.size && waits.get(key) === set) waits.delete(key);
+      done();
+    };
+  });
+  const timer = setTimeout(wake, Math.max(0, ms));
+  set.add(wake);
+  return { woken, cancel: wake };
+}
+/**
+ * The login plan of a Claude Code home (#1033), read again only after MODS_MS or once a file a sign-in rewrites
+ * changes: each read starts claude, about 175 ms of CPU, on every Claude Code session's start.
+ */
+export function planOf(plansSeen: Map<string, { key: string; at: number; plan: Promise<unknown> }>, now: () => number, home: string): Promise<unknown> {
+  const claude = claudeOnPath(process.env);
+  if (!claude) return Promise.resolve(undefined);
+  const files = [join(home, '.credentials.json'), join(home, '..', '.claude.json'), join(home, '.claude.json')];
+  const key = JSON.stringify([claude, ...files.map(statKey)]);
+  const seen = plansSeen.get(home);
+  if (seen && seen.key === key && now() - seen.at < MODS_MS) return seen.plan;
+  const plan = loginPlan(claude, { ...process.env, ...(home ? { CLAUDE_CONFIG_DIR: home } : {}) });
+  plansSeen.set(home, { key, at: now(), plan });
+  return plan;
 }
