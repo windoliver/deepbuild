@@ -4603,9 +4603,6 @@ impl Shell {
         // The box is this window's, set once it's made (#1461).
         BOX.with(|b| *b.borrow_mut() = None);
         FOCUS_BOX.with(|f| f.set(false));
-        // So is the shell `show_page_region` reaches: the one before this, of a window or an app since closed, is
-        // never updated by what this one opens on (#1427).
-        SHELL.with(|shell| *shell.borrow_mut() = None);
         // A layout showing a session's page shows the record's first session (#1738); any other opens as the window
         // does once the record is read.
         let showing = layout.center.get(layout.active).map(String::as_str);

@@ -1,0 +1,50 @@
+start; caffeinate parent /bin/bash; 'AC Power' 00:06:49 load { 100.44 95.44 94.16 } thermal 0 lock 0 front [Windows App] free KB 16714580
+BASE clone at 7a256fd4b9651f5ed1f5255d3520603320803eb4 exit=0; origin/main 736300c4bf57086812f393b869d4652261015436; porcelain 0 00:07:33 load { 114.87 100.18 95.98 } thermal 0 lock 0 front [WeChat] free KB 13162308
+setup base exit=0 00:09:54 load { 53.59 82.91 89.72 } thermal 0 lock 0 front [Claude] free KB 25256448
+base-1459-ac6.txt: test result: FAILED. 0 passed; 1 failed exit=1 00:14:57 load { 46.64 66.71 80.44 } thermal 0 lock 0 front [Claude] free KB 4983704
+disk guard: removed own clone's target/debug/incremental (5.4 GB) at 00:15:10; free KB 8183732
+base-1546-ac1.txt: Tests 6 failed (6) exit=1 00:15:17 load { 37.68 62.98 78.70 } thermal 0 lock 0 front [Claude] free KB 8409800
+base-1427-ac7.txt:  exit=130 00:15:37 load { 37.48 61.32 77.74 } thermal 0 lock 0 front [Claude] free KB 6655356
+base-1172-a.txt:  exit=130; 'wrong program' test wall [] 00:15:43 load { 36.96 60.82 77.46 } thermal 0 lock 0 front [Claude] free KB 6200340
+base-1172-a-ps.txt lines 3; sample file present 00:15:46 load { 36.96 60.82 77.46 } thermal 0 lock 0 front [Claude] free KB 5947972
+RESUME at step 2 in the existing base clone (first attempt's step-2 run lost its deep-drive build to my deletion of the clone's incremental cache; steps 2-4a of that attempt were then stopped). caffeinate parent /bin/bash 00:18:00 load { 41.95 59.81 75.06 } thermal 0 lock 0 front [Claude] free KB 40659388
+disk guard ok before base step 2 00:18:00 load { 41.95 59.81 75.06 } thermal 0 lock 0 front [Claude] free KB 40710912
+base-1546-ac1.txt: Tests 5 failed | 1 passed (6) exit=1 00:18:39 load { 36.00 56.05 72.99 } thermal 0 lock 0 front [Windows App] free KB 42172048
+base-1427-ac7.txt: Tests 4 failed (4) exit=1 00:19:06 load { 35.17 54.19 71.82 } thermal 0 lock 0 front [Windows App] free KB 41456688
+base-1172-a.txt: Tests 2 failed (2) exit=1; 'wrong program' test wall [10895ms] 00:26:10 load { 34.30 45.83 61.46 } thermal 0 lock 0 front [Windows App] free KB 27308492
+base-1172-a-ps.txt lines 419; sample file present 00:26:12 load { 34.30 45.83 61.46 } thermal 0 lock 0 front [Windows App] free KB 27175388
+base-1172-a2.txt: Tests 2 failed (2) exit=1; 'wrong program' test wall [10815ms] 00:26:36 load { 31.64 44.27 60.44 } thermal 0 lock 0 front [Claude] free KB 25762124
+moved out lanes-1.0.0 and modslib-1.0.0 exit=0; packs now 15 00:26:36 load { 31.64 44.27 60.44 } thermal 0 lock 0 front [Claude] free KB 25758852
+note: base-1172-a-sample.txt sampled pid 80943, another worktree's long-running deep-show canvas (the grep matched any deep-show canvas); this clone's canvas (pid 22470) first showed at 00:25:49 after the build and was not sampled. From 4b on, sampler.txt / *-sample.txt come from a side sampler matching only mb-base processes
+base-1172-no-two.txt: Tests 2 failed (2) exit=1; 'wrong program' test wall [0ms] 00:26:42 load { 32.15 44.16 60.31 } thermal 0 lock 0 front [Claude] free KB 25454028
+lanes-1.0.0 back exit=0; packs now 16 00:26:42 load { 32.15 44.16 60.31 } thermal 0 lock 0 front [Claude] free KB 25452088
+base-1172-no-modslib.txt: Tests 2 failed (2) exit=1; 'wrong program' test wall [0ms] 00:26:48 load { 31.65 43.66 59.95 } thermal 0 lock 0 front [Claude] free KB 25179004
+modslib-1.0.0 back exit=0; packs now 17; porcelain 0 00:26:48 load { 31.65 43.66 59.95 } thermal 0 lock 0 front [Claude] free KB 25191560
+clone mb-base removed 00:26:58 load { 31.30 43.18 59.58 } thermal 0 lock 0 front [Claude] free KB 43193592
+disk guard ok before AC6 clone 00:26:58 load { 31.30 43.18 59.58 } thermal 0 lock 0 front [Claude] free KB 43191632
+AC6 clone at fb6a79d23ada72abdd20701a3e1ad55ffb2b83d5 exit=0; origin/main 88dcecc8b509d1a7b11f6193731e336e8b0a2ed7; merge-base 7a256fd4b9651f5ed1f5255d3520603320803eb4 00:27:43 load { 37.19 43.06 58.69 } thermal 0 lock 0 front [WeChat] free KB 39071992
+setup ac6 exit=0 00:30:32 load { 36.55 40.79 55.03 } thermal 0 lock 0 front [Google Chrome] free KB 32158196
+fix-1459-ac6-before.txt:  exit=101; snapshots from deep-338-68205: needs-you.json session.json sidebar.json 00:39:31 load { 42.45 51.31 54.75 } thermal 0 lock 0 front [Windows App] free KB 271448
+STOPPED 00:40:10: disk full (ENOSPC, free fell to ~250 MB) during step 5: ld write() failed, errno=28 (No space left on device) linking deep_replica and headless in mb-ac6; fix-1459-ac6-before.txt is that build failure, not a test reading. Its 'snapshots from deep-338-68205' were another run's old files (no test ran), so fix-replica/ was deleted. Run stopped by closing its tab; clone mb-ac6 removed. free KB 156131936
+RESUME 2 at the AC6 clone (attempt 2 died of a full disk in step 5; its files are in attempt2/). caffeinate parent /bin/bash 00:40:30 load { 30.46 46.40 52.69 } thermal 0 lock 0 front [Windows App] free KB 156088852
+disk guard ok before AC6 clone 00:40:30 load { 30.46 46.40 52.69 } thermal 0 lock 0 front [Windows App] free KB 156088840
+AC6 clone at fb6a79d23ada72abdd20701a3e1ad55ffb2b83d5 exit=0; origin/main 88dcecc8b509d1a7b11f6193731e336e8b0a2ed7; merge-base 7a256fd4b9651f5ed1f5255d3520603320803eb4 00:41:34 load { 43.32 46.56 52.25 } thermal 0 lock 0 front [Windows App] free KB 150275328
+setup ac6 exit=0 00:46:24 load { 59.43 54.40 54.21 } thermal 0 lock 0 front [Windows App] free KB 129374096
+disk guard ok before step 5 00:46:24 load { 59.43 54.40 54.21 } thermal 0 lock 0 front [Windows App] free KB 129370404
+fix-1459-ac6-before.txt: test result: FAILED. 0 passed; 1 failed exit=1; snapshots from deep-338-59017: needs-you.json session.json sidebar.json 00:52:35 load { 64.71 65.80 59.78 } thermal 0 lock 0 front [Windows App] free KB 103051544
+retake view:exit needs-you:0 sidebar:0 session:0; live-diff:  3 files changed, 121 insertions(+), 121 deletions(-) 00:53:19 load { 50.56 61.89 58.65 } thermal 0 lock 0 front [Windows App] free KB 100497896
+disk guard ok before step 7 00:53:19 load { 50.56 61.89 58.65 } thermal 0 lock 0 front [Windows App] free KB 100497884
+fix-1459-ac6-after.txt: test result: FAILED. 0 passed; 1 failed exit=1 00:53:23 load { 50.56 61.89 58.65 } thermal 0 lock 0 front [Windows App] free KB 100003104
+fix-1459-parity.txt: Tests 2 failed | 1 passed (3) exit=1 00:57:38 load { 33.64 49.66 54.22 } thermal 0 lock 0 front [Windows App] free KB 88754028
+fix-popout-tree.txt: Tests 1 failed | 4 passed (5) exit=1 01:02:23 load { 35.04 45.56 51.37 } thermal 0 lock 0 front [Claude] free KB 77075632
+ac6 porcelain after: M docs/spikes/338/out/live/needs-you.json M docs/spikes/338/out/live/session.json M docs/spikes/338/out/live/sidebar.json 01:02:23 load { 35.04 45.56 51.37 } thermal 0 lock 0 front [Claude] free KB 77139864
+clone mb-ac6 removed 01:02:30 load { 31.79 44.52 50.93 } thermal 0 lock 0 front [Claude] free KB 102404708
+disk guard ok before DRIVE clone 01:02:30 load { 31.79 44.52 50.93 } thermal 0 lock 0 front [Claude] free KB 102402196
+DRIVE clone at 8e653d7980a75349493940d46746a0a4a8d15fb1 exit=0; origin/main 6d145d7839edd8d64aeb3f480e705da6ec2d9b63; merge-base 7a256fd4b9651f5ed1f5255d3520603320803eb4 01:03:18 load { 28.57 41.70 49.55 } thermal 0 lock 0 front [Windows App] free KB 97752124
+setup drive exit=0 01:05:00 load { 22.93 36.04 46.43 } thermal 0 lock 0 front [Claude] free KB 90533952
+fix-1546-ac1.txt: Tests 2 failed | 4 passed (6) exit=1 01:09:59 load { 35.74 37.84 44.18 } thermal 0 lock 0 front [Claude] free KB 68999724
+fix-1427-ac7.txt: Tests 4 failed (4) exit=1 01:10:13 load { 31.12 36.72 43.67 } thermal 0 lock 0 front [Claude] free KB 68285660
+drive porcelain after: 0 01:10:14 load { 31.12 36.72 43.67 } thermal 0 lock 0 front [Claude] free KB 68148444
+clone mb-drive removed 01:10:19 load { 29.58 36.31 43.48 } thermal 0 lock 0 front [Claude] free KB 81355844
+ALL DONE 01:10:19 load { 29.58 36.31 43.48 } thermal 0 lock 0 front [Claude] free KB 81352488
+secret scan hits=0 01:10:31
