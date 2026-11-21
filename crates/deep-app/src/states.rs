@@ -761,7 +761,10 @@ impl Table {
                 })
                 .count();
         }
-        self.open_asks(Some(session)).len()
+        self.asks
+            .iter()
+            .filter(|ask| self.open_of(ask, Some(session)))
+            .count()
     }
 
     /// The list's order key of the row with this ID.
@@ -821,7 +824,7 @@ impl Table {
     /// A session's state.
     pub fn state(&self, session: &str) -> State {
         // An ask the session raised, still open, leaves it needing you.
-        if !self.open_asks(Some(session)).is_empty() {
+        if self.asks_you(session) {
             return State::NeedsYou;
         }
         self.sessions
@@ -849,7 +852,7 @@ impl Table {
         }
         // The claim the row adds is its stop's, which only later work hides.
         let claim = match self.sessions.get(session) {
-            Some(own) if self.open_asks(Some(session)).is_empty() => own.read(own.work),
+            Some(own) if !self.asks_you(session) => own.read(own.work),
             _ => self.state(session),
         };
         let Some((listed, cause)) = self.sessions.get(session).and_then(|s| s.listed.as_ref())
@@ -932,9 +935,19 @@ impl Table {
     pub fn open_asks(&self, session: Option<&str>) -> Vec<&Value> {
         self.asks
             .iter()
-            .filter(|ask| session.is_none_or(|session| ask["session"] == session))
-            .filter(|ask| self.is_open(&handle(ask)))
+            .filter(|ask| self.open_of(ask, session))
             .collect()
+    }
+
+    /// Whether `ask` is open, and of `session` when it names one: a count or a test of the open asks reads each through
+    /// this and builds no list (#2661).
+    fn open_of(&self, ask: &Value, session: Option<&str>) -> bool {
+        session.is_none_or(|session| ask["session"] == session) && self.is_open(&handle(ask))
+    }
+
+    /// Whether `session` has an ask open.
+    fn asks_you(&self, session: &str) -> bool {
+        self.asks.iter().any(|ask| self.open_of(ask, Some(session)))
     }
 
     /// How many asks a decision applied for you closed: #2026's planted count adds them back.

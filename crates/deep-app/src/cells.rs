@@ -178,6 +178,19 @@ fn label(text: &str) -> Label {
     }
 }
 
+/// The terminal tab's grid's item ID.
+pub(crate) const TERMINAL: &str = "terminal";
+
+thread_local! {
+    /// Where the terminal tab's grid last drew, which your pointer on it is read against (#1498), in every build (#2661).
+    static TERMINAL_AT: std::cell::Cell<Option<Bounds<Pixels>>> = const { std::cell::Cell::new(None) };
+}
+
+/// Where the terminal tab's grid last drew, in window points.
+pub(crate) fn terminal_at() -> Option<Bounds<Pixels>> {
+    TERMINAL_AT.with(std::cell::Cell::get)
+}
+
 /// The grid as a canvas element: `screen` painted in its bounds from the top left.
 pub fn cells(id: &str, screen: Screen) -> Canvas<()> {
     let id = id.to_owned();
@@ -217,14 +230,19 @@ pub fn cells(id: &str, screen: Screen) -> Canvas<()> {
                 );
                 sprites += painted.sprites;
             }
+            if id == TERMINAL {
+                TERMINAL_AT.with(|at| at.set(Some(bounds)));
+            }
             record(
                 &id,
-                json!({
-                    "kind": "cells@1",
-                    "revision": screen.revision,
-                    "text": screen.rows.iter().map(|r| r.text.clone()).collect::<Vec<_>>(),
-                    "sprites": sprites,
-                }),
+                || {
+                    json!({
+                        "kind": "cells@1",
+                        "revision": screen.revision,
+                        "text": screen.rows.iter().map(|r| r.text.clone()).collect::<Vec<_>>(),
+                        "sprites": sprites,
+                    })
+                },
                 bounds,
             );
         },
