@@ -131,6 +131,7 @@ pub const RAPIER2D: Caps = Caps {
         holds_fast: false,
         predicts: false,
     },
+    scales_lengths: false,
     ..RAPIER3D
 };
 

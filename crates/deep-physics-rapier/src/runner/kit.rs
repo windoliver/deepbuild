@@ -159,7 +159,7 @@ impl Run {
         }
         (self.test, self.caps) = (Some(t), *t.caps);
         // #2308's planted check reads the range of solver.length_unit alone.
-        self.caps.scales_lengths |= self.twin == Twin::LengthRangeOnly;
+        self.caps.scales_lengths |= self.twin == Twin::Small(super::contact::Small::RangeOnly);
         Some(self)
     }
 
