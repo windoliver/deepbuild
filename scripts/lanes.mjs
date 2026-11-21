@@ -1329,6 +1329,12 @@ alone.push('tests/acceptance/1576/');
 // Metal suites (465, 506, 462, 166) one after another for hours; query.test.ts builds deep-show. No timing.
 alone.push('tests/acceptance/3016/');
 
+// #2661's files (blind) build the app's test binary, the shipping app and deep-live, start windows and run benchmarks;
+// AC4 samples a real window's UI thread on this Mac's display, and AC7 reads two budgets over hours.
+alone.push('tests/acceptance/2661/');
+byHand.push('tests/acceptance/2661/ac4-tick.live.test.mjs', 'tests/acceptance/2661/ac7-budgets.test.mjs');
+timed.push('tests/acceptance/2661/ac4-tick.live.test.mjs', 'tests/acceptance/2661/ac7-budgets.test.mjs');
+
 // #980's files (blind) each build deep-logic and #416's assembler, ac07 and ac10 deep-show too; ac08 starts headless
 // Chrome, ac02 runs 100,000 arrivals three times, ac10 writes docs/evidence/980/, and ac09 judges a step's time on the
 // reference Mac.
