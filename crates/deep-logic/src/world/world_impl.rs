@@ -98,6 +98,7 @@ impl World {
             planted,
             saves_dir: None,
             held: None,
+            saves_ns: 0,
             saved: Vec::new(),
             seen: 0,
             adapter: String::new(),
@@ -308,7 +309,7 @@ impl World {
                 }
             }
             if let Some(k) = self.at() {
-                if self.saves_dir.is_some() || self.held.is_some() {
+                if self.keeps() {
                     crate::saves::due(self, k, ended_at);
                 }
                 // #860: a rewind stamped by now comes before any step at this time, and the seen
@@ -488,6 +489,7 @@ impl World {
         let item = &piece.items[i];
         let k = self.lives[i].next;
         let t = k * item.step;
+        let before = self.lives[i].last * item.step; // #277: `net.seats` since the step before
         let read_started = web_time::Instant::now();
         // Each read control's entries stamped by now, at most PER_STEP a step, the step's own by
         // time, player and seq, never by arrival (Input track); each reading's values as recorded.
@@ -687,6 +689,10 @@ impl World {
                         .is_some_and(|i| matches!(list[i].value, Given::Number(n) if n != 0.0));
                     region[at..at + 4].copy_from_slice(&i32::from(on).to_le_bytes());
                 }
+                Read::Carry | Read::Profile => {
+                    crate::profile::fill_read(item, &self.track, e, k, &mut region)
+                }
+                Read::Seats => seats::fill(&self.track, (before, t), item.step, &mut region[at..]),
                 Read::Mirror(_) | Read::None => {}
             }
         }
@@ -1213,6 +1219,7 @@ impl World {
             planted,
             saves_dir: None,
             held: None,
+            saves_ns: 0,
             saved: Vec::new(),
             seen: 0,
             adapter: String::new(),
@@ -1375,6 +1382,7 @@ impl World {
             planted,
             saves_dir: None,
             held: None,
+            saves_ns: 0,
             saved: Vec::new(),
             seen,
             adapter: String::new(),
@@ -1484,6 +1492,7 @@ impl World {
             planted: self.planted,
             saves_dir: None,
             held: None,
+            saves_ns: 0,
             saved: Vec::new(),
             seen: self.seen,
             adapter: self.adapter.clone(),

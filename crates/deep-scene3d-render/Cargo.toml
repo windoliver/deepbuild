@@ -26,6 +26,9 @@ wgpu = { version = "30", default-features = false, features = ["std", "wgsl"] }
 wgpu-profiler = "0.28"
 # #172: a time read on the page's clock in the web player, the system's elsewhere.
 web-time = "=1.1.0"
+# Issue #2738 (from #425): a proxy band's mesh, simplified once per content key where a scene is
+# drawn, so scene3d, and deep-physics through it, links no C++.
+meshopt = "0.7"
 
 [dev-dependencies]
 serde_json = "1"

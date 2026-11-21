@@ -298,7 +298,7 @@ fn dist(a: [f64; 3], b: [f64; 3]) -> f64 {
 
 /// Steps `b` through `f` from its built world `w`.
 fn trace(b: &mut dyn Backend, w: &World, f: &Fixture) -> Result<Trace, String> {
-    let entries = track::read(w, &f.track).map_err(|r| r.what)?;
+    let entries = track::read(w, &f.track, false).map_err(|r| r.what)?;
     let by_step = track::by_step(&entries);
     let rank = occurrence::ranks(w);
     let rate = w.step_rate;

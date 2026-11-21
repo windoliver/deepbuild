@@ -13,6 +13,6 @@ test('affected stops before starting consumers when its required binary cannot b
   commit(box, 'fixture'); git(box, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
   const result = run(box, process.execPath, ['scripts/affected.mjs', 'tests/binary.test.mjs']);
   assert.notEqual(result.status, 0, dump(result));
-  assert.match(result.stdout, /BLOCKED test binaries: cargo build failed/);
+  assert.match(result.stdout, /BLOCKED test binaries: cargo build failed for deep-hook:/, dump(result));
   assert.deepEqual(observations(box), [], 'no consumer may start without its required build');
 });

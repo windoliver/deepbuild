@@ -1,0 +1,44 @@
+Runs on plain main f7f61b54a (no work on #2691), Mac17,10, release deep-gpu, 2026-11-20, taken by the implementing
+session with tests/acceptance/2691's fixtures re-read there and the redraft of #2189's third criterion.
+No test grant came (two were held for hours), so these ran outside the throttle, one file at a time, never beside a timed run.
+
+== mirror-size
+#2691.ee689a34: the every-pass scene at 3456 × 2234 and internal scale 0.5: mirror undefined, the device's bytes by frame 505839616, 536821760, 536821760, 536821760, 536821760, 536821760, 536821760, 536821760; kept as target/acceptance/2691/every-pass.json
+ × mirror-size.test.ts > #2691.ee689a34 the every-pass scene's mirror at full screen and internal scale 0.5 > #2691.ee689a34 on Metal the every-pass scene at 3456 × 2234 and internal scale 0.5 renders its mirror at 864 × 559, and the device holds at least 90 MB less for it than on the merge base, whose mirror is 1728 × 1117 3516ms
+   → the every-pass scene at 3456 × 2234 and internal scale 0.5 renders its mirror at 864 × 559, half of its internal 1728 × 1117 rounded up: the reply names no size for the mirror's pass (surface.mirror_px is undefined), as the merge base's names none: there the pass is half the frame's full 3456 × 2234, 1728 × 1117 (the issue): expected null to deeply equal [ 864, 559 ]
+   → the device holds at least 90000000 B less for the scene than on the merge base: 536821760 B here, 536821760 B on the merge base, 0 B less: expected 0 to be greater than or equal to 90000000
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed (1)
+== scale-one
+#2691.49387bf5: 31 frames of 22 fixtures at internal scale 1; kept as target/acceptance/2691/scale-one.json
+ ✓ scale-one.test.ts > #2691.49387bf5 at internal scale 1 nothing changes > #2691.49387bf5 every fixture of tests/acceptance/465/ and tests/acceptance/166/ has, at internal scale 1, the merge base's pixel hash at every frame those suites draw 5095ms
+ × scale-one.test.ts > #2691.49387bf5 at internal scale 1 nothing changes > #2691.49387bf5 a planted mirror that halves its size twice fails the same check, which names the size its pass drew at 35ms
+   → deep-gpu run --planted mirror_halves_twice exits 0 (no signal): the binary knows the planted program mirror_halves_twice (README: Planted programs); stdout: {"ok":false,"code":"bad_input"}
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed | 1 passed (2)
+== half-size
+#2691.ecd8e156: the room over a mirror: the reflection at internal scale 0.5 (99e88b29292084c4b83b537ba1e51a22c05e34ef8f6036421680bbc0796a54df) against the canonical render's at half the size (ab4bb29b45d6a478ce476bf527937a465f476d314b07dc18a7ffb3b4d94a9bf5): 73920 of 230400 texels differ, and the marker's reflection is offset by (0.11, 0.25) px against the canonical render's
+#2691.ecd8e156: the room over a still water: the reflection at internal scale 0.5 (b83a1bd9f02daa35d6602346625f16e960f79711a99e5b9772db17f5e9ec1fe1) against the canonical render's at half the size (b89e4de17ff9cabf3ac0fa7c9327badc739287079311802f37517eeea5c93d22): 74010 of 230400 texels differ, and the marker's reflection is offset by (0.11, 0.25) px against the canonical render's
+ × half-size.test.ts > #2691.ecd8e156 at internal scale 0.5 the mirrored picture is a half-size canonical render's > #2691.ecd8e156 the reflection target of a 1280 × 720 view at internal scale 0.5 has the SHA-256 of the same scene's canonical render at 640 × 360, for a plain mirror and for a still water's own 2908ms
+   → the room over a mirror: the reflection at internal scale 0.5 (99e88b29292084c4b83b537ba1e51a22c05e34ef8f6036421680bbc0796a54df) against the canonical render's at half the size (ab4bb29b45d6a478ce476bf527937a465f476d314b07dc18a7ffb3b4d94a9bf5): 73920 of 230400 texels differ, and the marker's reflection is offset by (0.11, 0.25) px against the canonical render's: expected '99e88b29292084c4b83b5
+   → the room over a still water: the reflection at internal scale 0.5 (b83a1bd9f02daa35d6602346625f16e960f79711a99e5b9772db17f5e9ec1fe1) against the canonical render's at half the size (b89e4de17ff9cabf3ac0fa7c9327badc739287079311802f37517eeea5c93d22): 74010 of 230400 texels differ, and the marker's reflection is offset by (0.11, 0.25) px against the canonical render's: expected 'b83a1bd9f02daa35
+ × half-size.test.ts > #2691.ecd8e156 at internal scale 0.5 the mirrored picture is a half-size canonical render's > #2691.ecd8e156 a planted mirror that samples its target with the wrong scale shows the reflection shifted and fails, naming the offset 43ms
+   → deep-gpu run --planted mirror_samples_full_frame exits 0 (no signal): the binary knows the planted program mirror_samples_full_frame (README: Planted programs); stdout: {"ok":false,"code":"bad_input"}
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  2 failed (2)
+== estimate
+#2691.f1acfa43: the every-pass scene at 3024 × 1964, internal scale 0.5: estimate 443289040 B, peak 458555392 B, -3.33%; the every-pass scene at 1280 × 800, internal scale 1: estimate 237468346 B, peak 245809152 B, -3.39%; kept as target/acceptance/2691/estimate.json
+ ✓ estimate.test.ts > #2691.f1acfa43 the check's estimate beside the device's peak > #2691.f1acfa43 the check's GPU memory estimate for the every-pass scene is within 10% of the device's peak at internal scale 0.5 (3024 × 1964, its camera turning) and at 1 (1280 × 800, its camera at rest) 6511ms
+      Tests  1 passed (1)
+== taste
+#2691.bf51397a: pictures written (the lake's mirror drew at a size the reply doesn't name):
+ × taste.test.ts > #2691.bf51397a the castle's lake at internal scale 0.5, and the one taste call on it > #2691.bf51397a the run writes the castle's lake at 3024 × 1964 and internal scale 0.5 as the merge base draws it and as this checkout does, the two differ, and the owner's recorded call on exactly those says the coarser reflection looks right 3414ms
+   → the lake draws differently on the change than on the merge base: its reflection is coarser: expected '26568c3046cbfbac574ac46cc21ccaf47cfa4…' not to be '26568c3046cbfbac574ac46cc21ccaf47cfa4…' // Object.is equality
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed (1)
+== ac3
+ × ac3-full-screen.test.ts > #2189 the bytes the full-screen refusal names, against what the device holds since #2691 > #2189.e5d176fb the bytes the over_budget refusal names for the every-pass scene at 3456 × 2234 are within 10% of the 557,318,144 the device holds at the floors since #2691 2650ms
+   → the refusal names bytes within 10% of 557318144 (501586330 to 613049958): expected [ Array(1) ] to deeply equal []
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
++   "over_budget issue 0's actual.gpu_bytes is 627985168: +12.7% (70667024 B over) from the 557318144 the device holds, past 10%",
+      Tests  1 failed (1)

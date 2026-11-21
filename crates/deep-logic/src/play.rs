@@ -19,6 +19,8 @@ use crate::piece::{check_in, h64, History};
 use crate::world::{track_of, Entry, Given, Record, To, World, REWIND};
 use crate::Planted;
 
+mod off;
+
 const F: i64 = 705_600_000;
 
 /// The ID a logic bot takes in the replica's copy of the piece.
@@ -73,6 +75,18 @@ pub fn piece_of(form: &Value) -> Option<Value> {
     // them, which its items' `links` reach (#190).
     if let Some(libraries) = form.get("libraries") {
         piece["packs"] = libraries.clone();
+    }
+    // #276: a match's seats, each with its block of a profile's read entry.
+    let net = form
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten();
+    if let Some(n) = net
+        .filter_map(|(_, i)| (i["kind"] == "net@1").then(|| i.pointer("/params/players")))
+        .next()
+    {
+        piece["players"] = n.cloned().unwrap_or(json!(2));
     }
     // #860: the document's rewind, which the logic module checks against its items.
     if let Some(r) = form.get("rewind") {
@@ -456,12 +470,18 @@ pub fn play(
         }
         piece["items"][BOT] = json!({"kind": "logic@1", "params": params});
     }
+    // #832: the catalog without a row, in the catalog's place under its own hash.
+    let off = off::of(call, stored, &mut piece)?;
+    let swapped = |sha: &str| match &off {
+        Some(o) if o.sha256 == sha => Some(o.bytes.clone()),
+        _ => stored(sha),
+    };
     let piece = Rc::new(
         check_in(
             &piece,
             &Planted::default(),
             &mut History::new(),
-            stored,
+            &swapped,
             &[],
         )
         .map_err(|r| r.0)?,
@@ -835,5 +855,6 @@ pub fn play(
         "final": end,
         "frames": frames,
         "memory": memory,
+        "off": off.map(|o| o.answer),
     }))
 }
