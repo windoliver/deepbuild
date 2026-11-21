@@ -51,6 +51,14 @@ const NO_BELTS_CAPS: Caps = Caps {
     ..TEST_CAPS
 };
 
+/// #2308: a test backend whose caps say it scales no lengths, under its own name, so a refusal
+/// by its caps names it.
+const NO_LENGTH_CAPS: Caps = Caps {
+    backend: "no_length_unit",
+    scales_lengths: false,
+    ..TEST_CAPS
+};
+
 /// #2310: a test backend that leaves articulations out of its caps, under its own name, so a
 /// refusal by its caps names it.
 const NO_ARTICULATIONS_CAPS: Caps = Caps {
@@ -75,8 +83,8 @@ const fn test(name: &'static str, twin: Twin, caps: &'static Caps) -> TestBacken
     }
 }
 
-/// #191's test backends by name, and #251's, #182's, #2241's, #2243's and #2310's.
-pub const TEST_BACKENDS: [TestBackend; 17] = [
+/// #191's test backends by name, and #251's, #182's, #2241's, #2243's, #2308's and #2310's.
+pub const TEST_BACKENDS: [TestBackend; 18] = [
     test("friction_average", Twin::FrictionAverage, &TEST_CAPS),
     test("no_joint_limits", Twin::NoJointLimits, &TEST_CAPS),
     test("restitution_min", Twin::RestitutionMin, &TEST_CAPS),
@@ -107,6 +115,7 @@ pub const TEST_BACKENDS: [TestBackend; 17] = [
     ),
     // #2243: one that leaves each moved character body's pose stale until the backend's step.
     test("stale_character_poses", Twin::StalePoses, &CHARACTER_CAPS),
+    test("no_length_unit", Twin::None, &NO_LENGTH_CAPS),
 ];
 
 /// The test backend named `name`, in a `test-backends` build only.
@@ -157,6 +166,8 @@ impl Run {
             self.twin = t.twin;
         }
         (self.test, self.caps) = (Some(t), *t.caps);
+        // #2308's planted check reads the range of solver.length_unit alone.
+        self.caps.scales_lengths |= self.twin == Twin::Small(super::contact::Small::RangeOnly);
         Some(self)
     }
 

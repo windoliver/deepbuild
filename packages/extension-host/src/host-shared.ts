@@ -1,5 +1,5 @@
 // Internal host primitives shared by the loading, source and job seams.
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Connection } from '@deepbuild/record';
 import { after } from '@deepbuild/supervisor';
@@ -17,16 +17,33 @@ export function trustedPath(connection: Connection, what: string): void {
 
 /** The host's existing atomic JSON files, kept under extensions/. */
 export class HostFiles {
+  /** What `kept` last read of each file, with that file's identity, size and time. */
+  private readonly last = new Map<string, { key: string; value: unknown }>();
   constructor(private readonly home: string) {}
   read<T>(name: string): Record<string, T> {
     const path = join(this.home, 'extensions', name);
     return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) as Record<string, T> : {};
+  }
+  /** A file as `read` gives it, read again only once its identity, size or time changed (#2648); not for changing. */
+  kept<T>(name: string): Readonly<Record<string, T>> {
+    const path = join(this.home, 'extensions', name);
+    let key = 'none';
+    try {
+      const s = statSync(path);
+      key = `${s.ino}:${s.size}:${s.mtimeMs}`;
+    } catch { /* none yet */ }
+    const last = this.last.get(name);
+    if (last?.key === key) return last.value as Record<string, T>;
+    const value = key === 'none' ? {} : JSON.parse(readFileSync(path, 'utf8')) as Record<string, T>;
+    this.last.set(name, { key, value });
+    return value;
   }
   save(name: string, value: unknown): void {
     const path = join(this.home, 'extensions', name);
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(`${path}.tmp`, JSON.stringify(value, null, 2));
     renameSync(`${path}.tmp`, path);
+    this.last.delete(name);
   }
 }
 

@@ -1,0 +1,65 @@
+Run of tests/acceptance/16-redraft-1865 on the candidate #1865 implementation in this worktree (packages/*/dist built by another job;
+base dcb63a0a0 plus uncommitted changes this job didn't read), 2026-11-20, macOS, Node 24.22.0, Vitest 5.0.5.
+Command: npx vitest run tests/acceptance/16-redraft-1865/service.test.ts tests/acceptance/16-redraft-1865/roles.test.ts --reporter=verbose --no-file-parallelism
+Uptime before and after (1/5/15-minute loads) are the first and last lines. Paths: <checkout> is this worktree.
+
+13:09  up 17:36, 4 users, load averages: 50.65 46.54 65.92
+
+ RUN  v5.0.5 <checkout>
+
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 hook from hook is allowed 1350ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 hook from mcp:A is refused 2ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 hook from app is refused 2ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 hook from cli is refused 1ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 hub.health from hook is refused 1ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 hub.health from mcp:A is refused 1ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 hub.health from app is allowed 224ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 hub.health from cli is allowed 94ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 events.read from hook is refused 1ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 events.read from mcp:A is refused 1ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 events.read from app is allowed 4ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 events.read from cli is allowed 2ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 stream.subscribe from hook is refused 1ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 stream.subscribe from mcp:A is refused 8ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 stream.subscribe from app is allowed 11ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 stream.subscribe from cli is allowed 4ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 ask.answer from hook is refused 1ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 ask.answer from mcp:A is refused 2ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 ask.answer from app is allowed 3ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 ask.answer from cli is allowed 3ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 gates.off from hook is refused 1ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 gates.off from mcp:A is refused 1ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 gates.off from app is allowed 1ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 gates.off from cli is allowed 1ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 mcp.call from hook is refused 1ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 mcp.call from mcp:A is allowed 3ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 mcp.call from app is refused 1ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 mcp.call from cli is refused 1ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 evidence.paste from hook is refused 1ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 evidence.paste from mcp:A is refused 1ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 evidence.paste from app is allowed 4ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 evidence.paste from cli is refused 2ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 run.start from hook is refused 1ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 run.start from mcp:A is refused 1ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 run.start from app is allowed 19ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 run.start from cli is allowed 22ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 test.load from hook is refused 1ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 test.load from mcp:A is refused 2ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 test.load from app is allowed 13ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 test.load from cli is allowed 4ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: hub.stop, each role on a hub of its own > AC15 hub.stop from hook is refused 1542ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: hub.stop, each role on a hub of its own > AC15 hub.stop from mcp:A is refused 1554ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: hub.stop, each role on a hub of its own > AC15 hub.stop from app is allowed (redr… 4308ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 the role table: hub.stop, each role on a hub of its own > AC15 hub.stop from cli is allowed (redr… 1361ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 a hook connection that subscribes, answers an ask or calls deep off is refused, naming its role > AC15 a hook connection is refused stream.subscribe, ask.answer and gates.off, naming hook, and none of them takes effect 1797ms
+ ✓ tests/acceptance/16-redraft-1865/roles.test.ts > AC15 #16.ffcc7e73 credentials: the control token is new each launch, yours alone, and never on a command line > AC15 control.token has mode 0600, changes at each launch, is not on the hub's command line, and an old or wrong one is refused 1341ms
+ ✓ tests/acceptance/16-redraft-1865/service.test.ts > AC7 #16.d8339694 closing the terminal or SSH session that started the hub leaves it running; every stop records its reason > AC7 started by `deep hub start`, the hub outlives the terminal that started it and its hangups, with the secret store and the network still reachable 2637ms
+ ✓ tests/acceptance/16-redraft-1865/service.test.ts > AC7 #16.d8339694 closing the terminal or SSH session that started the hub leaves it running; every stop records its reason > AC7 every stop records its reason: SIGTERM, SIGINT, hub.stop from the CLI, and a kill -9 found at the next start (redraft 1865) 3282ms
+
+ Test Files  2 passed (2)
+      Tests  48 passed (48)
+   Start at  13:09:46
+   Duration  23.67s (tests 100%)
+
+exit=0
+13:10  up 17:36, 4 users, load averages: 45.14 45.49 64.97
