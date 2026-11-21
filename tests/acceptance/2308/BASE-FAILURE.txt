@@ -1,0 +1,129 @@
+The #2308 suite, each file run once at base commit 85203f458 ("Merge pull request #2852 …"; no implementation of
+#2308), on macOS 27.2 arm64 (shared, 1-minute load about 260 while it ran), Node 24.22.0, vitest 5.0.5, with
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/2308 --no-file-parallelism \
+    --testTimeout=3600000 --reporter=verbose <file>
+
+after the builds it reads were made from the unchanged base, each as
+`nice -n 10 sh scripts/lease cargo build --locked -j 6 …` (scripts/lease ran them unleased: "no deep on PATH and no
+built CLI at packages/cli/dist"): this checkout's release deep-physics, its debug build and its debug build with
+`test-backends`, rebuilt after the throwaway right program (README) was put back, the release binary byte-identical to
+the one built before it; and the merge base's release deep-physics in target/acceptance-191-base/85203f458b85 (about
+7 minutes). At the base the merge base is 85203f458 itself. `git status --short` listed only tests/acceptance/2308/.
+
+Result: Test Files 6 failed (6); Tests 14 failed | 1 passed (15); 1 to 7 s a file with the builds made. An earlier run
+of the same files, before the judges' sentences were shortened, failed the same fourteen at the same assertions.
+
+Passing at the base, as it should:
+- ac6 "a world that writes no length_unit gives step hashes byte-identical to the merge base's": the merge base is the
+  base.
+    step hashes with no length_unit: 1441 here, 1441 on the merge base 85203f458b85; the last ec31abb75a6b453a and
+    ec31abb75a6b453a
+  It fails on a program that changes what an unwritten world does; its judge is shown failing on the same run with one
+  hash swapped.
+
+Every other test fails at an assertion in its own file, for the reason the README gives: the base's reader refuses
+`solver.length_unit`, its kit holds none of the five fixtures, its check raises no `physics.small_body`, and it knows
+neither `--backend no_length_unit` nor any of the six planted names. None fails in the harness and none is BLOCKED or
+INCONCLUSIVE.
+
+ac1-edge.test.ts
+ × the cube has dropped 0.5 mm before its centre is 1.6 sides past the edge, and the kit's small_edge holds that world
+   and passes on it
+   AssertionError: the edge at step_rate 480, 4 substeps, contact_hz 240 and length_unit 0.01:
+     the edge isn't baked: unknown_field at solver/length_unit: solver/length_unit is not a field here; the fields
+     are contact_hz, contact_damping, max_speed, restitution_threshold, hit_threshold, sleep, ccd
+     the behavior kit: the kit's data holds small_edge 0 times, once expected, among its 64 fixtures
+   (ac1-edge.test.ts:26)
+ × a planted wrapper that ignores length_unit has not dropped until 2.09 sides past and fails, naming the body and the
+   step
+   AssertionError: deep-physics --planted wrapper_ignores_length_unit answers: expected
+     'deep-physics --planted wrapper_ignores_length_unit exits 2, not 0; stdout: {"ok":false,"code":"bad_input"};
+     stderr: ' to be ''   (ac1-edge.test.ts:31)
+
+ac2-stack-bounce-slide.test.ts
+ × five cubes end 4.5 sides up within 2% of a side, within 1% aside and under 1 mm/s through the third second; the
+   ball first bounces to 0.025 m and the cube slides 0.05 m to rest, each within 3%; the kit's three fixtures hold
+   those worlds and pass
+   AssertionError: the stack, the bounce and the slide:
+     the stack isn't baked: unknown_field at solver/length_unit: …
+     the bounce isn't baked: unknown_field at solver/length_unit: …
+     the slide isn't baked: unknown_field at solver/length_unit: …
+     the behavior kit: the kit's data holds small_stack 0 times, once expected, among its 64 fixtures
+     the behavior kit: the kit's data holds small_bounce 0 times, once expected, among its 64 fixtures
+     the behavior kit: the kit's data holds small_slide 0 times, once expected, among its 64 fixtures
+   (ac2-stack-bounce-slide.test.ts:36)
+ × a planted wrapper that ignores solver.contact_hz and keeps the backend's own leaves the stack more than half a side
+   low and fails, naming the top body
+   AssertionError: deep-physics --planted wrapper_ignores_contact_hz answers: … exits 2, not 0; stdout:
+     {"ok":false,"code":"bad_input"}   (ac2-stack-bounce-slide.test.ts:41)
+
+ac3-big-among-small.test.ts
+ × a 1 m ball dropped 10 m first bounces to 2.5 m within 3%, and a 1 cm cube sliding to rest from 0.2 m/s writes rest
+   within the world's sleep time plus 2 steps of its speed falling under 0.05 m/s
+   AssertionError: big among small at step_rate 480, contact_hz 240 and length_unit 0.01:
+     the 1 m ball isn't baked: unknown_field at solver/length_unit: …
+     the 1 cm cube isn't baked: unknown_field at solver/length_unit: …
+   (ac3-big-among-small.test.ts:29)
+ × a planted wrapper that lets the length scale the backend's speed cap reads the ball's bounce more than 90% low and
+   fails, naming the body
+   AssertionError: deep-physics --planted wrapper_scales_speed_cap answers: … exits 2, not 0; stdout:
+     {"ok":false,"code":"bad_input"}   (ac3-big-among-small.test.ts:34)
+ × a planted wrapper that lets the length scale the sleep speed sleeps later than the world's sleep time plus 2 steps
+   and fails, naming the step
+   AssertionError: deep-physics --planted wrapper_scales_sleep_speed answers: … exits 2, not 0; stdout:
+     {"ok":false,"code":"bad_input"}   (ac3-big-among-small.test.ts:43)
+
+ac4-dominoes.test.ts
+ × all ten pass 45° in order, the last between 0.6 s and 0.8 s, and at 4 s no two neighbours are more than 0.05 of a
+   thickness inside each other; the kit's small_dominoes holds that world and passes on it
+   AssertionError: the dominoes:
+     the dominoes isn't baked: unknown_field at solver/length_unit: …
+     the behavior kit: the kit's data holds small_dominoes 0 times, once expected, among its 64 fixtures
+   (ac4-dominoes.test.ts:28)
+ × the planted wrapper that ignores solver.contact_hz leaves two more than 0.2 of a thickness inside each other and
+   fails, naming the pair
+   AssertionError: deep-physics --planted wrapper_ignores_contact_hz answers: … exits 2, not 0; stdout:
+     {"ok":false,"code":"bad_input"}   (ac4-dominoes.test.ts:33)
+
+ac5-small-body-lint.test.ts
+ × a 1 cm die at the defaults raises kind unit (the die, 0.01 m, 0.01) and kind soft (0.55 mm, 50 Hz, no change of
+   step_rate), a die whose thin shape is its second the same, a 5 cm cube none of kind unit, and the die neither in
+   the fixture's world
+   AssertionError: physics.small_body at check:
+     die: a 1 cm die at the defaults raises 0 physics.small_body issues of kind unit, one expected; it raises []
+     die: a 1 cm die at the defaults raises 0 physics.small_body issues of kind soft, one expected; it raises []
+     die: a die at the defaults whose thin shape is its second raises 0 physics.small_body issues of kind unit, one
+     expected; it raises []
+     die: a die at the defaults whose thin shape is its second raises 0 physics.small_body issues of kind soft, one
+     expected; it raises []
+     the 1 cm die in the fixture's world isn't accepted at check: unknown_field at solver/length_unit: …
+   (ac5-small-body-lint.test.ts:32. The clause that holds at the base, a 5 cm cube raising none of kind unit, is in
+   this test: the base raises nothing for any body, the program the criterion's first sentence fails.)
+ × a planted lint that reads only the first shape of each body misses a die whose thin shape is its second and fails,
+   naming the body
+   AssertionError: deep-physics --planted lint_reads_first_shape answers: … exits 2, not 0; stdout:
+     {"ok":false,"code":"bad_input"}   (ac5-small-body-lint.test.ts:37)
+
+ac6-unwritten-keys-caps.test.ts
+ ✓ a world that writes no length_unit gives step hashes byte-identical to the merge base's (above)
+ × two worlds that differ only in length_unit have different bake keys, and the field is held to its range: at or
+   below 0 and above 1 are refused naming solver/length_unit
+   AssertionError: each of the three worlds bakes and has a key: expected [ …(3) ] to deeply equal []
+     no key: unknown_field at solver/length_unit: …   (three times; ac6-unwritten-keys-caps.test.ts:46)
+ × on the test backend no_length_unit, whose caps() say it scales no lengths, length_unit 0.01 is refused naming
+   solver/length_unit and the backend, while the reference backend of the same build accepts it
+   AssertionError: deep-physics --backend no_length_unit answers: the test-backends build holds the test backend
+     no_length_unit: … exits 2, not 0; stdout: {"ok":false,"code":"bad_input"}
+   (ac6-unwritten-keys-caps.test.ts:59)
+ × a planted check that reads only the field's range accepts length_unit 0.01 on no_length_unit and fails, naming
+   solver/length_unit and the backend
+   AssertionError: deep-physics --backend no_length_unit --planted check_reads_range_only answers: … exits 2, not 0;
+     stdout: {"ok":false,"code":"bad_input"}   (ac6-unwritten-keys-caps.test.ts:73)
+
+Probed apart from the suite on the base's release binary (README: Readings; where the base stands, not expected values):
+  the edge's world with `length_unit` left out, at contact_hz 240: the cube has dropped 0.5 mm at step 33, its centre
+    2.0913 sides past the edge (the issue's 2.09 for a wrapper that ignores the field); with contact_hz left out too:
+    step 33, 2.0913 sides
+  `behavior_kit` on the base: 64 fixtures, verdict pass

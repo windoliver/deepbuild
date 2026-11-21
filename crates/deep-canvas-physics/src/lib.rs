@@ -19,6 +19,7 @@ pub mod reading;
 pub mod ring;
 pub mod roles;
 pub mod skin;
+pub mod small;
 pub mod track;
 pub mod wind;
 pub mod written;

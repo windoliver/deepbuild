@@ -200,6 +200,7 @@ pub enum Twin {
     LinksWithoutLimits,
     LinksAtZero,
     TreeCountsOnly,
+    Small(runner::contact::Small),
 }
 
 /// A Rapier world behind the backend interface.
@@ -951,15 +952,14 @@ impl Backend for Rapier {
         p.dt = (1.0 / w.step_rate) as f32;
         // The world's substeps are the solver's iterations, not repeated steps (World and backend).
         p.num_solver_iterations = w.substeps as usize;
-        p.contact_softness =
-            SpringCoefficients::new(w.solver.contact_hz as f32, w.solver.contact_damping as f32);
+        let (hz, unit, cap, sleep) = runner::contact::lengths(self.twin, w);
+        p.contact_softness = SpringCoefficients::new(hz, w.solver.contact_damping as f32);
         // Rapier holds a contact with a fixed body at twice the frequency; the world keeps that.
         let fixed = if self.twin == Twin::StaticContactSame { 1.0 } else { 2.0 };
-        p.static_contact_softness = SpringCoefficients::new(
-            fixed * w.solver.contact_hz as f32,
-            w.solver.contact_damping as f32,
-        );
-        p.normalized_max_linear_velocity = w.solver.max_speed as f32;
+        p.static_contact_softness =
+            SpringCoefficients::new(fixed * hz, w.solver.contact_damping as f32);
+        p.length_unit = unit as f32;
+        p.normalized_max_linear_velocity = (w.solver.max_speed / cap) as f32;
         p.max_ccd_substeps = usize::from(w.solver.ccd && self.twin != Twin::NoSweep);
         let mut handles = BTreeMap::new();
         for id in deep_canvas_physics::occurrence::built_order(w) {
@@ -1010,7 +1010,7 @@ impl Backend for Rapier {
                 .locked_axes(locks)
                 .build();
             let a = rb.activation_mut();
-            a.normalized_linear_threshold = w.solver.sleep.speed as f32;
+            a.normalized_linear_threshold = (w.solver.sleep.speed / sleep) as f32;
             a.time_until_sleep = w.solver.sleep.time as f32;
             let colliders: Vec<(usize, ColliderBuilder)> = (0..b.shapes.len())
                 .filter_map(|i| Some((i, self.collider(w, id, b, i, &mut out)?)))
