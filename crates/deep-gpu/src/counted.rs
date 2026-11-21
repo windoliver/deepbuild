@@ -20,6 +20,7 @@ pub struct Counts {
     pipelines: AtomicU64,
     uploaded: AtomicU64,
     writes: AtomicU64,
+    readbacks: AtomicU64,
     index_buffers: AtomicU64,
     command_buffers: AtomicU64,
 }
@@ -34,6 +35,8 @@ pub struct Reading {
     pub uploaded: u64,
     /// The queue's writes to buffers and textures: wgpu stages each in a buffer of its own.
     pub writes: u64,
+    /// #2494: the buffers made with `MAP_READ`, the only kind the CPU reads the GPU's bytes through.
+    pub readbacks: u64,
     /// #2657: the buffers among `buffers` made for indices.
     pub index_buffers: u64,
     /// #2657: the command buffers handed to the queue.
@@ -48,6 +51,7 @@ impl Reading {
             pipelines: self.pipelines - earlier.pipelines,
             uploaded: self.uploaded - earlier.uploaded,
             writes: self.writes - earlier.writes,
+            readbacks: self.readbacks - earlier.readbacks,
             index_buffers: self.index_buffers - earlier.index_buffers,
             command_buffers: self.command_buffers - earlier.command_buffers,
         }
@@ -62,6 +66,7 @@ impl Counts {
             pipelines: self.pipelines.load(Ordering::Relaxed),
             uploaded: self.uploaded.load(Ordering::Relaxed),
             writes: self.writes.load(Ordering::Relaxed),
+            readbacks: self.readbacks.load(Ordering::Relaxed),
             index_buffers: self.index_buffers.load(Ordering::Relaxed),
             command_buffers: self.command_buffers.load(Ordering::Relaxed),
         }
@@ -249,6 +254,9 @@ impl Wgpu {
         add(&self.counts.buffers, 1);
         if usage.contains(wgpu::BufferUsages::INDEX) {
             add(&self.counts.index_buffers, 1);
+        }
+        if usage.contains(wgpu::BufferUsages::MAP_READ) {
+            add(&self.counts.readbacks, 1);
         }
     }
 

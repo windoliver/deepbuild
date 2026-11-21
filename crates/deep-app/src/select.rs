@@ -123,9 +123,7 @@ pub(crate) fn grid(
     (cols, rows): (u16, usize),
     pressing: &mut bool,
 ) -> Option<Vec<[u16; 3]>> {
-    let (_, drawn) = crate::canvas::placed()
-        .into_iter()
-        .find(|(id, _)| id == "terminal")?;
+    let drawn = crate::cells::terminal_at()?;
     match kind {
         "down" if drawn.contains(&at) => *pressing = true,
         "down" => return None,

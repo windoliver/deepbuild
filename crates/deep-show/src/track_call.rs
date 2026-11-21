@@ -26,8 +26,14 @@ impl Hub<'_> {
             let now = self.now;
             self.rebake(doc, now);
         }
-        let held = self.tracks.get(doc).cloned().unwrap_or_default();
-        json!({"track": self.track_json(doc), "hash": held.hash(), "fork_at": held.fork_at})
+        let held = self.tracks.get(doc);
+        let (hash, fork_at) = held.map_or_else(
+            || (Track::default().hash(), None),
+            |t| (t.hash(), t.fork_at),
+        );
+        // #1250: every byte the app holds to keep the track, its entries, values and index.
+        let kept = held.map_or(0, Track::kept_bytes);
+        json!({"track": self.track_json(doc), "hash": hash, "fork_at": fork_at, "kept_bytes": kept})
     }
 }
 

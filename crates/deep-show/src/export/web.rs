@@ -64,6 +64,12 @@ macro_rules! set {
 /// the one before it.
 static SETS: [Set; 3] = [set!("figure"), set!("game2d"), set!("full")];
 
+/// #280: the full set's player and its page glue, which net.budget's web part plays a piece in.
+pub(crate) fn full_player() -> (&'static [u8], &'static [u8]) {
+    let full = &SETS[SETS.len() - 1];
+    (full.wasm, full.glue)
+}
+
 impl Set {
     /// The set as its build recorded it.
     fn about(&self) -> Value {
@@ -681,6 +687,25 @@ impl Hub<'_> {
                 .iter()
                 .any(|o| o["item"] == r["item"] && o["code"] == r["code"])
             {
+                refused.push(r);
+            }
+        }
+        // #211: a logic item whose world could outgrow the web player's store, which keeps it in
+        // memory up to web_max, is refused, naming the field.
+        let init_only = self.planted(Planted::WebExportChecksInitOnly);
+        let root = &self.scenario.evidence;
+        for (id, item) in doc["items"].as_object().into_iter().flatten() {
+            let Some(pages) = item.pointer("/params/pages") else {
+                continue;
+            };
+            let init = pages["init"]
+                .as_str()
+                .or_else(|| pages.pointer("/init/asset").and_then(Value::as_str))
+                .and_then(|sha| crate::evidence::read(root, sha))
+                .map(|b| b.len() as u64);
+            if let Some(mut r) = deep_logic::pages::web_refused(pages, init, init_only) {
+                r["item"] = json!(id);
+                r["code"] = json!("web.pages");
                 refused.push(r);
             }
         }

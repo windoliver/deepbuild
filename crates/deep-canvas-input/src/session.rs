@@ -398,7 +398,9 @@ impl Session {
         } else {
             self.track.last_at(&c.id, t)
         };
-        let mut v = e.map_or_else(|| c.default.clone(), |e| e.value_at(t));
+        let mut v = e
+            .as_ref()
+            .map_or_else(|| c.default.clone(), |e| e.value_at(t));
         if self.planted.recompute {
             let px = e.and_then(|e| e.samples.as_ref()?.last()?.px);
             if let Some(px) = px {

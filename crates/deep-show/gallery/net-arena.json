@@ -1,0 +1,203 @@
+{
+  "format": 1,
+  "profile": "figure",
+  "title": "Net: an eight-seat arena",
+  "description": "The net module's eight-seat fixture: eight movers driven by their players' entries, 100 projectiles each tested against 64 boxes, and a 128 by 128 grid stamped 3 times a step, in the logic item arena. net.budget, net.rollback with players 8 and net.feel play it. Its program's source is net-arena.wat.",
+  "size": [
+    400,
+    240
+  ],
+  "seed": 280,
+  "camera": "cam",
+  "transport": {
+    "span": "70s",
+    "frame_rate": [
+      60,
+      1
+    ]
+  },
+  "budget": {
+    "class": "showpiece"
+  },
+  "requires": {
+    "modules": {
+      "input": "^1",
+      "logic": "^1",
+      "net": "^1"
+    }
+  },
+  "controls": {
+    "move1": {
+      "kind": "slider",
+      "class": "document",
+      "label": "Seat 1's mover",
+      "role": "slider",
+      "range": [
+        -1,
+        1
+      ],
+      "default": 0,
+      "increment": 1
+    },
+    "move2": {
+      "kind": "slider",
+      "class": "document",
+      "label": "Seat 2's mover",
+      "role": "slider",
+      "range": [
+        -1,
+        1
+      ],
+      "default": 0,
+      "increment": 1
+    },
+    "move3": {
+      "kind": "slider",
+      "class": "document",
+      "label": "Seat 3's mover",
+      "role": "slider",
+      "range": [
+        -1,
+        1
+      ],
+      "default": 0,
+      "increment": 1
+    },
+    "move4": {
+      "kind": "slider",
+      "class": "document",
+      "label": "Seat 4's mover",
+      "role": "slider",
+      "range": [
+        -1,
+        1
+      ],
+      "default": 0,
+      "increment": 1
+    },
+    "move5": {
+      "kind": "slider",
+      "class": "document",
+      "label": "Seat 5's mover",
+      "role": "slider",
+      "range": [
+        -1,
+        1
+      ],
+      "default": 0,
+      "increment": 1
+    },
+    "move6": {
+      "kind": "slider",
+      "class": "document",
+      "label": "Seat 6's mover",
+      "role": "slider",
+      "range": [
+        -1,
+        1
+      ],
+      "default": 0,
+      "increment": 1
+    },
+    "move7": {
+      "kind": "slider",
+      "class": "document",
+      "label": "Seat 7's mover",
+      "role": "slider",
+      "range": [
+        -1,
+        1
+      ],
+      "default": 0,
+      "increment": 1
+    },
+    "move8": {
+      "kind": "slider",
+      "class": "document",
+      "label": "Seat 8's mover",
+      "role": "slider",
+      "range": [
+        -1,
+        1
+      ],
+      "default": 0,
+      "increment": 1
+    }
+  },
+  "assets": {
+    "arena_program": {
+      "sha256": "abea634f0a25c2f51378e2f6215e0692a3b6f3c6b7e11cbc2575276eb3874f3d",
+      "license": {
+        "id": "CC0-1.0",
+        "terms": "Public domain dedication.",
+        "shareable": true,
+        "credit": "The net module's eight-seat fixture."
+      }
+    }
+  },
+  "items": {
+    "cam": {
+      "id": "cam",
+      "kind": "camera@1",
+      "name": "Camera",
+      "order": "a0",
+      "params": {
+        "projection": "orthographic",
+        "target": [
+          64,
+          64,
+          0
+        ],
+        "view_width": 160
+      }
+    },
+    "match": {
+      "id": "match",
+      "kind": "net@1",
+      "name": "Match",
+      "order": "a1",
+      "params": {
+        "relay": "https://relay.example",
+        "players": 8,
+        "step_rate": 60,
+        "delay": 2,
+        "window": 8,
+        "hash_every": 60,
+        "timeout": 5
+      }
+    },
+    "arena": {
+      "id": "arena",
+      "kind": "logic@1",
+      "name": "Arena",
+      "order": "a2",
+      "params": {
+        "program": "abea634f0a25c2f51378e2f6215e0692a3b6f3c6b7e11cbc2575276eb3874f3d",
+        "step_rate": 60,
+        "reads": [
+          "move1",
+          "move2",
+          "move3",
+          "move4",
+          "move5",
+          "move6",
+          "move7",
+          "move8"
+        ],
+        "writes": {
+          "movers": {
+            "type": "f64",
+            "count": 8,
+            "unit": "m"
+          },
+          "hits": {
+            "type": "i32"
+          },
+          "stamped": {
+            "type": "i32"
+          }
+        }
+      }
+    }
+  }
+}

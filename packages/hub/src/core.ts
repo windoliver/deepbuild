@@ -9,7 +9,7 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ADAPTERS } from '@deepbuild/adapters';
-import { openAsks, signInSignature, type Asks } from '@deepbuild/asks';
+import { HOLD_PLANTS, openAsks, signInSignature, type Asks, type AsksPlant } from '@deepbuild/asks';
 import { openLedger, type Ledger } from '@deepbuild/budget';
 import { canonicalize, contextBoundFor, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type EvidenceStore } from '@deepbuild/evidence';
@@ -685,7 +685,8 @@ export class Core {
       // Each open sign-in task's probe, on the recorded login PATH (#1349).
       signIn: signInCheck(() => this.agents.loginPath(), (agent) => this.runner?.account(agent as Agent) ?? null, this.now),
       // The hub's own adapters answer, so the facts it maps hooks by are the facts that decide a continue.
-      errorTurnHook: (agent) => adapterOf(agent)?.caps.errorTurnHook === true, ...(this.options.plant === 'asks-without-tool-before' ? { plant: this.options.plant } : {}),
+      // The asks core plays its own planted programs: #2646's, and #1101's of the hold.
+      errorTurnHook: (agent) => adapterOf(agent)?.caps.errorTurnHook === true, ...(this.options.plant === 'asks-without-tool-before' || (HOLD_PLANTS as readonly string[]).includes(this.options.plant ?? '') ? { plant: this.options.plant as AsksPlant } : {}),
     });
     await this.delivery.continues();
     this.askingSoon();
@@ -708,6 +709,9 @@ export class Core {
     const due = async (): Promise<boolean> => {
       const pos = await landed();
       if (pos > ticked) { ticked = pos; return true; }
+      // A held yes starts its step once its hold is over (#1101).
+      const held = asks.heldUntil();
+      if (held !== null && held <= this.now()) return true;
       if (this.now() - looked >= 60_000 && (await this.record.raw(`SELECT 1 FROM asks WHERE status = 'open' AND batch_id IS NULL LIMIT 1`)).length) { looked = this.now(); return true; }
       return (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND (deadline <= ? OR kind = 'unblock') LIMIT 1`, [this.now()])).length > 0;
     };
