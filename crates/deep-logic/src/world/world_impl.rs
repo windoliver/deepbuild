@@ -1120,31 +1120,7 @@ impl World {
     /// (`module`). Entries still waiting stay with it; its place on the track doesn't, since the
     /// world that loads it reads a track of its own.
     pub fn saved(&mut self) -> Value {
-        let items: Vec<Value> = self
-            .lives
-            .iter_mut()
-            .map(|l| {
-                let globals: Vec<Value> = l
-                    .globals()
-                    .iter()
-                    .map(|v| match v {
-                        Val::I32(x) => json!(["i32", x]),
-                        Val::I64(x) => json!(["i64", x]),
-                        Val::F32(x) => json!(["f32", x]),
-                        Val::F64(x) => json!(["f64", x]),
-                        _ => Value::Null,
-                    })
-                    .collect();
-                let pending: Map<String, Value> = l
-                    .pending
-                    .iter()
-                    .map(|(k, q)| (k.clone(), q.iter().map(Entry::to_json).collect()))
-                    .collect();
-                json!({"next": l.next, "failed": l.failed, "memory": hex(l.memory()), "globals": globals,
-                       "arrays": hex(&l.arrays), "pending": pending})
-            })
-            .collect();
-        Value::Array(items)
+        World::saved_of(&self.snapshot())
     }
 
     /// A world on `track` holding the state `saved` gave, each item in a fresh instance; the start
@@ -1158,10 +1134,11 @@ impl World {
         let bad =
             || json!({"ok": false, "code": "bad_input", "what": "a saved state of another piece"});
         let unhex = |v: &Value| -> Option<Vec<u8>> {
-            let s = v.as_str()?;
-            (0..s.len())
-                .step_by(2)
-                .map(|i| u8::from_str_radix(s.get(i..i + 2)?, 16).ok())
+            let s = v.as_str()?.as_bytes();
+            let digit = |c: u8| char::from(c).to_digit(16);
+            (s.len() % 2 == 0).then_some(())?;
+            (s.chunks_exact(2))
+                .map(|p| Some((digit(p[0])? * 16 + digit(p[1])?) as u8))
                 .collect()
         };
         let mut lives = Vec::new();
