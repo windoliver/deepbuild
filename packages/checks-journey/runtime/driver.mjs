@@ -58,16 +58,15 @@ process.on('SIGTERM', () => { report.died = 'stopped'; flush(); process.exit(143
 function locate(scope, l) {
   if (l.container) scope = locate(scope, l.container);
   if (l.testId) return scope.getByTestId(l.testId);
-  if (l.label) return scope.getByLabel(l.label, { exact: l.exact ?? false });
-  if (l.role) return scope.getByRole(l.role, l.name === undefined ? {} : { name: l.name, exact: l.exact ?? false });
+  if (l.label) return scope.getByLabel(l.label, { exact: false });
+  if (l.role) return scope.getByRole(l.role, l.name === undefined ? {} : { name: l.name, exact: false });
   if (l.name) return scope.getByLabel(l.name, { exact: true });
-  if (l.text) return scope.getByText(l.text, { exact: l.exact ?? false });
   throw Error(`a locator names a role and name, a label, a test ID or text: ${JSON.stringify(l)}`);
 }
 const q = (s) => `'${String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 /** A locator as Playwright writes it: getByRole('button', { name: 'Export' }). */
 const describe = (l) => {
-  const own = l.testId ? `getByTestId(${q(l.testId)})` : l.label ? `getByLabel(${q(l.label)})` : l.role ? `getByRole(${q(l.role)}${l.name === undefined ? '' : `, { name: ${q(l.name)} }`})` : l.name ? `getByLabel(${q(l.name)}, { exact: true })` : `getByText(${q(l.text ?? '')})`;
+  const own = l.testId ? `getByTestId(${q(l.testId)})` : l.label ? `getByLabel(${q(l.label)})` : l.role ? `getByRole(${q(l.role)}${l.name === undefined ? '' : `, { name: ${q(l.name)} }`})` : l.name ? `getByLabel(${q(l.name)}, { exact: true })` : "getByText('')";
   return l.container ? `${describe(l.container)}.${own}` : own;
 };
 /** The one element a locator names, or why not: none, or more than one. */
@@ -378,12 +377,11 @@ async function watchFirstFrame(l) {
 }
 async function act(step, a, timeout, entry) {
   const line = a.line;
-  const target = a.click ?? a.fill ?? a.check ?? a.select ?? a.hover ?? a.scrollIntoView;
+  const target = a.click ?? a.fill ?? a.hover ?? a.scrollIntoView;
   try {
     // A navigation waits on the server, so only the step's deadline bounds it; a wait on an element is bounded under the deadline, as an expect is.
     if (a.goto !== undefined) { await page.goto(new URL(a.goto, job.url).href, { timeout: step.deadlineMs, waitUntil: 'load' }); return; }
     if (a.wait !== undefined) { await sleep(Math.min(a.wait, timeout)); return; }
-    if (a.scroll !== undefined) { await page.mouse.wheel(0, a.scroll); return; }
     if (a.press !== undefined) { await page.keyboard.press(a.press, { timeout }); return; }
     if (a.scrollIntoView) {
       const seen = watchFirstFrame(target);
@@ -396,8 +394,6 @@ async function act(step, a, timeout, entry) {
     const loc = locate(page, target);
     if (a.click) await loc.click({ timeout });
     else if (a.hover) await loc.hover({ timeout });
-    else if (a.check) await loc.check({ timeout });
-    else if (a.select) await loc.selectOption(a.text, { timeout });
     else if (a.fill) {
       const value = a.secret !== undefined ? secret(a.secret) : a.text;
       if (a.secret !== undefined && value === undefined) throw Object.assign(Error(`the secret ${a.secret} isn't leased to this run`), { failure: failure(step, line, false, `the secret ${a.secret} isn't leased to this run`, { outside: true }) });
@@ -476,7 +472,7 @@ async function endState(c, index) {
     {
       const { loc, error } = await resolve(c.locator);
       if (error) throw Error(error);
-      await loc.waitFor({ state: c.visible === false ? 'hidden' : 'visible', timeout: c.timeoutMs ?? 2000 });
+      await loc.waitFor({ state: c.visible === false ? 'hidden' : 'visible', timeout: 2000 });
       entry.box = await boxOf(loc);
       if (c.text !== undefined) {
         const text = (await loc.textContent()) ?? '';
