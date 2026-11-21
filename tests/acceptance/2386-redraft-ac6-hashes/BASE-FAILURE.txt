@@ -1,0 +1,85 @@
+#2386 criterion 6's pixel-hash clause, blind redraft, at the base b6b99ad8ccdd5155bed00b7d4b4647c7e066a9ea, before
+any implementation.
+
+The file was run once there, on macOS arm64, through the machine's build slot, with `deep-canvas-render` built by the
+file (`cargo build --locked --bin deep-canvas-render`; the base build had already made it):
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node scripts/throttle.mjs build --wait 180 -- sh scripts/lease node node_modules/vitest/vitest.mjs run \
+    --root tests/acceptance/2386-redraft-ac6-hashes --no-file-parallelism --testTimeout=600000 ac6-hashes.test.ts
+
+(scripts/lease ran it unleased: no `deep` on PATH and no built CLI.) Test Files 1 failed (1); Tests 1 failed | 1
+passed (2); exit 1; vitest 5.0.5, 4.67 s. `node node_modules/typescript/bin/tsc --noEmit -p
+tests/acceptance/2386-redraft-ac6-hashes/tsconfig.json` exits 0. The failure is on an assertion the file names,
+because the behaviour is missing: no crash, no timeout, no refusal, no missing fixture or tool.
+
+ac6-hashes.test.ts (1 failed of 2)
+
+- "AC6 #2386.b3f6fe16 each fixture of #1653 and #536, its sets without draw and anchor, draws the grid's cell,
+  centered, as at the merge base: the named pixels read the row's tile and the bare page under its cell, and the
+  pixel hash is the merge base's": PASSES at the base, as it should: a guard of behaviour that must not change
+  (design: Proven on the base). The layout worked out in the test put each named pixel where the base drew it: every
+  `inside` read its row's tile and every `below` the bare page, and each picture's pixel hash was base-hashes.json's.
+  The run printed them:
+
+    1653-floor             zoom 1, 320 × 240 px  20ae5c977582642929eb1bad539f7cb2e522df30d0f06cce56307eb203fc8a3c
+    1653-animated          zoom 1, 176 × 48 px   1903132676dcaf4dcc975d013f8c6500c63430913e56fe075ca91ea980defba4
+    1653-isometric         zoom 1, 128 × 64 px   63a01c735f032d9b19c07e21d7a15028af31e73fecdb760acaa307b9b9405ec4
+    1653-flip-none         zoom 1, 240 × 120 px  aff7ea228bd11d4238e51f9d0d3c874e4cf04407080b8b49deec25daba0ccf21
+    1653-flip-h            zoom 1, 240 × 120 px  332c7c1a0925aa97e97076fdba21caee8052bf4b16c7ce2f56896324a3e20657
+    1653-flip-v            zoom 1, 240 × 120 px  c5345d0e4c483acace1e29242f2b11b0b3f698076cc5f0e7b32717e6d3a69a9e
+    536-board-pointy-odd   zoom 1, 240 × 200 px  f65ffece137da82d9a252bf4b736e4adbd8c0aa0d9f7510f21ff0975a4707cc9
+    536-board-pointy-even  zoom 1, 240 × 200 px  7a1d49a1147e21ccf63f9e0ae1e185dc0d7352c7c1ecec4d72aafb5203770937
+    536-board-flat-odd     zoom 1, 240 × 200 px  10ceb264e4c5d717f0343ba500f195a29693d744da6cd085f19ea182126c5320
+    536-terrain            zoom 2, 448 × 296 px  d3a912c1147a00424bf7f260ed5f4d2b898e26b60b0ad00e86a8806f198cfd27
+    536-tiles              zoom 2, 608 × 364 px  87668544090a9be60cd92337518c36785818b161bdc6db950008455adde526f7
+
+  What fails it: any program that changes one pixel of one of the eleven pictures.
+
+- "AC6 #2386.b3f6fe16 the hashes see a set's pixels: the same sets with draw [w, 2h] and anchor [0.5, 0.25] hang
+  each tile from its cell's top edge, so the pixel under the cell reads the row's tile where the page was bare, and
+  no pixel hash is the merge base's": fails at ac6-hashes.test.ts:95 (`none`, ../467/helpers.ts:70):
+  "AssertionError: each fixture with draw and anchor draws another picture than at the merge base: … expected
+  [ …(22) ] to deeply equal []", two lines a picture, for all eleven:
+
+    1653-floor hung: pixel (96, 118), under the cell of floor (3, 4), reads [255, 255, 255, 255], not its hung tile
+      [120, 140, 60, 255]
+    1653-floor hung: its pixel hash is the merge base's own, 20ae5c97…, though its tiles reach under their cells
+    1653-animated hung: pixel (16, 34), under the cell of plain (1, 1), reads [255, 255, 255, 255], not …
+      [230, 25, 75, 255]
+    1653-isometric hung: pixel (10, 42), under the cell of iso (2, 1), reads [255, 255, 255, 255], not …
+      [200, 40, 40, 255]
+    1653-flip-none, -h, -v hung: pixel (30, 90), under the cell of tiles (1, 1), reads [255, 255, 255, 255], not …
+      [40, 60, 220, 255]
+    536-board-pointy-odd hung: pixel (80, 138), under the cell of board (2, 5), reads [255, 255, 255, 255], not …
+      [200, 120, 40, 255]
+    536-board-pointy-even hung: pixel (96, 138), under the cell of board (3, 5), reads [255, 255, 255, 255], not …
+      [200, 120, 40, 255]
+    536-board-flat-odd hung: pixel (48, 174), under the cell of board (2, 5), reads [255, 255, 255, 255], not …
+      [200, 120, 40, 255]
+    536-terrain hung: pixel (216, 284), under the cell of floor (2, 5), reads [255, 255, 255, 255], not …
+      [46, 112, 186, 255]
+    536-tiles hung: pixel (120, 312), under the cell of sheet (1, 4), reads [255, 255, 255, 255], not …
+      [46, 112, 186, 255]
+    and for each of the eleven: "its pixel hash is the merge base's own, <its hash above>, though its tiles reach
+    under their cells"
+
+  Why: the base reads neither `atlas.draw` nor `atlas.anchor`. `raster` takes each set that writes them and draws it
+  as the set without them: the grid's cell, centred, to the same pixel hash. The layout the test worked out first,
+  from the issue's rule, puts the row's hung quad on top at each of those pixels; that part passed.
+
+Before the record run, scratch probes (plain node, the base's binary run directly, no cargo, not committed) took the
+hashes and tried what the base can't show. They are where base-hashes.json's numbers come from, and the record run
+above confirms them.
+
+- Each picture hashed the same drawn alone in a process of its own as drawn after the others in one.
+- Each recipe's expansion, written out as a `marks@1` set, drew the recipe's own hash.
+- Not shown by the base itself, since it reads neither field: that the second test passes on a program that reads
+  them. Tried instead with the base's renderer drawing the quads each rule gives, as free rows (at the base a free
+  row's quad is its grid's cell centred on its (x, y); free rows laid as a fixture's own quads hashed the same as
+  the fixture, for all eleven). Quads by the issue's rule: every `below` read the hung tile and every hash differed,
+  so the second test's expectations held on all eleven. Quads with `anchor` not read, and with `draw` not read: the
+  expectations failed on ten each, all but `536-terrain`.
+- With the issue's standing shape, `draw: [w, 2h]` and `anchor: [0.5, 0.75]`, `1653-isometric` and
+  `536-board-flat-odd` drew the same hash as with neither field, and the layout gives no changed pixel for them:
+  the reason the twin hangs (README: Readings).
