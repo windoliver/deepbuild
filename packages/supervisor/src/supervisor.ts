@@ -134,6 +134,8 @@ class LocalSupervisor implements Supervisor {
   private warmAt = 0;
   /** The first warm-up of the denial stream; a sandboxed launch waits for it, opening doesn't. */
   private warming: Promise<unknown> = Promise.resolve();
+  /** The warm-up's canary probe while it runs, and its end: reaped, so nothing this process started outlives it (#2998). */
+  private probe: { child: ChildProcess; ended: Promise<unknown> } | undefined;
   private ticking: Promise<void> | undefined;
   private readonly cleaning = new Set<Promise<unknown>>();
   /** Each run between leaving the queue and its launch settling. */
@@ -469,9 +471,14 @@ class LocalSupervisor implements Supervisor {
     this.canary = `run:canary${randomBytes(8).toString('hex')}`;
     const profile = `(version 1)\n(deny default (with message "dev.deepbuild.${this.canary}"))\n(import "system.sb")\n(allow file-read* process-exec)`;
     // Each try refused on a path of its own: the kernel folds identical reports into one, later.
-    for (let n = 0; this.warmAt < since && this.log?.exitCode === null && Date.now() < since + ms; n++) {
+    // A closed supervisor starts no probe: one started as the hub stops would outlive it, never reaped (#2998).
+    for (let n = 0; !this.closed && this.warmAt < since && this.log?.exitCode === null && Date.now() < since + ms; n++) {
       const target = `/tmp/deep-canary-${this.canary.slice(4)}-${n}`;
-      await new Promise((done) => spawn('/usr/bin/sandbox-exec', ['-p', profile, HELPER, 'probe', '/dev/null', 'write', target], { stdio: 'ignore' }).on('close', done).on('error', done));
+      const child = spawn('/usr/bin/sandbox-exec', ['-p', profile, HELPER, 'probe', '/dev/null', 'write', target], { stdio: 'ignore' });
+      const ended = new Promise((done) => child.on('close', done).on('error', done));
+      this.probe = { child, ended };
+      await ended;
+      this.probe = undefined;
       for (let i = 0; i < 10 && this.warmAt < since; i++) await sleep(25);
     }
     return this.warmAt >= since;
@@ -1145,6 +1152,12 @@ class LocalSupervisor implements Supervisor {
   async close(): Promise<void> {
     this.closed = true;
     if (this.timer) clearInterval(this.timer);
+    // The warm-up's probe in flight is ended and waited for, so it is reaped here, not left to whoever outlives us.
+    const probe = this.probe;
+    if (probe) {
+      probe.child.kill('SIGKILL');
+      await probe.ended;
+    }
     await Promise.allSettled([this.scanning, this.pumping, this.ticking, ...this.cleaning]);
     await Promise.allSettled([...this.runs.values()].map((r) => r.egress?.close()));
     if (this.log?.pid) try { process.kill(this.log.pid, 'SIGTERM'); } catch { /* gone */ }
