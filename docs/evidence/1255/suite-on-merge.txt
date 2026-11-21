@@ -1,21 +1,23 @@
-#1255's suite on the merge with main 410675243 (d86debf3f), one build grant: the build, deep-logic's unit tests for the change, the pack's own check, the seven untimed files and the budget's structure test. macOS arm64; Linux is linux/amd64 in Docker under emulation; Chrome is headless.
+#1255's suite on the merge with main 0fe5994eb (6d59e488d), which brought process@1 beside separation@1, one build grant: the build, deep-logic's unit tests for the change, the pack's own check, the seven untimed files, the budget's structure test, cargo test -p deep-logic, and #980's and #981's files that reach judge. macOS arm64; Linux is linux/amd64 in Docker under emulation; Chrome is headless.
 
-== granted 11:41:10 head d86debf3f load 8.91 6.65 8.50
-    Finished `dev` profile [unoptimized] target(s) in 0.36s
-== build done 11:41:10
+== granted 14:38:03 head 6d59e488d load 6.63 13.21 26.94
+    Finished `dev` profile [unoptimized] target(s) in 41.68s
+== build done 14:38:45
+   Compiling thiserror-impl v2.0.21
+   Compiling thiserror v2.0.21
+test separation::tests::exact_holds_a_delay_to_its_seconds_and_every_speed_to_its_band ... ok
 test separation::tests::the_table_holds_each_fix_with_its_speed_band_and_name ... ok
 test separation::tests::clear_finds_a_breach_between_two_whole_seconds_in_closed_form ... ok
 test separation::tests::a_row_with_no_basis_is_refused_naming_it_and_no_other ... ok
-test separation::tests::exact_holds_a_delay_to_its_seconds_and_every_speed_to_its_band ... ok
 test separation::tests::clear_reads_a_row_that_holds_always_and_one_measured_at_a_fix ... ok
+test lanes::tests::a_short_edge_is_refused ... ok
 test separation::tests::the_judge_reads_the_movers_from_the_items_arrays ... ok
 test lanes::tests::zones_are_cut_from_the_junction_reach ... ok
-test lanes::tests::a_short_edge_is_refused ... ok
 test lanes::tests::a_bay_no_other_bay_reaches_is_refused ... ok
 test lanes::tests::the_rules_read_zones_footprints_and_waits ... ok
 test first_party::tests::the_binary_holds_every_asset_the_first_party_packs_list ... ok
-test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 27 filtered out; finished in 0.00s
-== unit tests done 11:41:11
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 28 filtered out; finished in 0.00s
+== unit tests done 14:39:24
    5        "verdict": "PASS",
    2       "separation.clear"
    2       "separation.exact"
@@ -27,30 +29,54 @@ test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 27 filtered out; fi
    1      "verdict": "PASS",
    1    "name": "separation.separation@1",
    2  "ok": true,
-   1 first_party: interfaces@1.0.0, lanes@1.0.0, modslib@1.0.0, separation@1.0.0
-== pack check done 11:41:20
+   1 first_party: interfaces@1.0.0, lanes@1.0.0, modslib@1.0.0, process@1.0.0, separation@1.0.0
+== pack check done 14:39:30
 scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/1255 --no-file-parallelism --testTimeout=600000 --reporter=verbose ac1-crossing ac2-by-pair ac3-delay ac4-solver ac5-hosts ac6-basis ac7-kit` runs unleased
  RUN  v5.0.5 <checkout>/tests/acceptance/1255
- ✓ ac5-hosts.test.ts > #1255.a22f4ff6 forty movers' conflicts, equal on every host by state hash > #1255.a22f4ff6 forty movers over two hours: the result of conflicts over the whole span is equal on macOS, Linux and in headless Chrome by state hash 59972ms
- ✓ ac1-crossing.test.ts > #1255.34150321 closest approach and a breach between two samples, in closed form > #1255.34150321 two movers on straight crossing routes at fixture speeds: closest gives the analytic smallest distance and its time within 1e-6 m and 1e-6 s 3589ms
- ✓ ac1-crossing.test.ts > #1255.34150321 closest approach and a breach between two samples, in closed form > #1255.34150321 on a fixture whose pair is under its 5,556 m minimum for 0.6 s between two whole seconds, conflicts returns that window within 1e-6 s, and the planted once-a-second library returns none and fails separation.clear, naming the pair 3802ms
- ✓ ac3-delay.test.ts > #1255.cfaf0d3e a delay by speed, by path or by hold, or a refusal that names the band > #1255.cfaf0d3e delay(follower, 60) with a band that allows it returns a speed control; after apply, the follower passes the threshold 60 s later within 0.5 s, every speed stays inside its band, separation.exact passes and conflicts is empty 3700ms
- ✓ ac3-delay.test.ts > #1255.cfaf0d3e a delay by speed, by path or by hold, or a refusal that names the band > #1255.cfaf0d3e with a band too narrow for 60 s it returns a stretch, and for a departure not yet started a hold; with neither possible it refuses, naming the band 3118ms
- ✓ ac4-solver.test.ts > #1255.32464096 a solver that leaves the band fails separation.exact > #1255.32464096 a planted solver that gives the speed for 60 s even when it's below the band's minimum fails separation.exact, naming the mover, the fix and the speed 4505ms
- ✓ ac2-by-pair.test.ts > #1255.6e2a9493 a row by pair of classes, measured when the leader passes a fix > #1255.6e2a9493 a heavy leader and a light follower on one final approach, the follower 9,260 m behind at the threshold fix, with a by-pair row of 11,112 m at that fix: conflicts returns one window naming the row and its basis, and with the row removed it returns none 4018ms
- ✓ ac6-basis.test.ts > #1255.eba2ab94 every row carries its basis > #1255.eba2ab94 a row with no basis is refused at check, naming the row, and an invented row's basis reaches the layout so a bound value can show it 3515ms
- ✓ ac7-kit.test.ts > #1255.fcafb56d the interface's kind kit > #1255.fcafb56d the interface's kind kit holds: each planted twin of the reference library fails the rule its criterion names 3265ms
+ ✓ ac5-hosts.test.ts > #1255.a22f4ff6 forty movers' conflicts, equal on every host by state hash > #1255.a22f4ff6 forty movers over two hours: the result of conflicts over the whole span is equal on macOS, Linux and in headless Chrome by state hash 236760ms
+ ✓ ac1-crossing.test.ts > #1255.34150321 closest approach and a breach between two samples, in closed form > #1255.34150321 two movers on straight crossing routes at fixture speeds: closest gives the analytic smallest distance and its time within 1e-6 m and 1e-6 s 3837ms
+ ✓ ac1-crossing.test.ts > #1255.34150321 closest approach and a breach between two samples, in closed form > #1255.34150321 on a fixture whose pair is under its 5,556 m minimum for 0.6 s between two whole seconds, conflicts returns that window within 1e-6 s, and the planted once-a-second library returns none and fails separation.clear, naming the pair 3881ms
+ ✓ ac3-delay.test.ts > #1255.cfaf0d3e a delay by speed, by path or by hold, or a refusal that names the band > #1255.cfaf0d3e delay(follower, 60) with a band that allows it returns a speed control; after apply, the follower passes the threshold 60 s later within 0.5 s, every speed stays inside its band, separation.exact passes and conflicts is empty 3765ms
+ ✓ ac3-delay.test.ts > #1255.cfaf0d3e a delay by speed, by path or by hold, or a refusal that names the band > #1255.cfaf0d3e with a band too narrow for 60 s it returns a stretch, and for a departure not yet started a hold; with neither possible it refuses, naming the band 3220ms
+ ✓ ac4-solver.test.ts > #1255.32464096 a solver that leaves the band fails separation.exact > #1255.32464096 a planted solver that gives the speed for 60 s even when it's below the band's minimum fails separation.exact, naming the mover, the fix and the speed 4551ms
+ ✓ ac2-by-pair.test.ts > #1255.6e2a9493 a row by pair of classes, measured when the leader passes a fix > #1255.6e2a9493 a heavy leader and a light follower on one final approach, the follower 9,260 m behind at the threshold fix, with a by-pair row of 11,112 m at that fix: conflicts returns one window naming the row and its basis, and with the row removed it returns none 3743ms
+ ✓ ac6-basis.test.ts > #1255.eba2ab94 every row carries its basis > #1255.eba2ab94 a row with no basis is refused at check, naming the row, and an invented row's basis reaches the layout so a bound value can show it 3573ms
+ ✓ ac7-kit.test.ts > #1255.fcafb56d the interface's kind kit > #1255.fcafb56d the interface's kind kit holds: each planted twin of the reference library fails the rule its criterion names 3371ms
  Test Files  7 passed (7)
       Tests  9 passed (9)
-   Start at  11:41:20
-   Duration  92.68s (tests 100%)
-== seven files done 11:42:53
+   Start at  14:39:31
+   Duration  270.55s (tests 100%)
+== seven files done 14:44:01
 scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/1255 --no-file-parallelism --testTimeout=600000 --reporter=verbose ac5-budget -t gives every window` runs unleased
  RUN  v5.0.5 <checkout>/tests/acceptance/1255
- ✓ ac5-budget.test.ts > #1255.a22f4ff6 conflicts over two hours of forty movers, on the reference Mac > #1255.a22f4ff6 forty movers over two hours: conflicts over the whole span gives every window of the closed form, and its result holds conflicts and clear pairs 3554ms
+ ✓ ac5-budget.test.ts > #1255.a22f4ff6 conflicts over two hours of forty movers, on the reference Mac > #1255.a22f4ff6 forty movers over two hours: conflicts over the whole span gives every window of the closed form, and its result holds conflicts and clear pairs 3638ms
  ↓ ac5-budget.test.ts > #1255.a22f4ff6 conflicts over two hours of forty movers, on the reference Mac > #1255.a22f4ff6 forty movers over two hours: conflicts over the whole span runs in under 20 ms on the reference Mac
  Test Files  1 passed (1)
       Tests  1 passed | 1 skipped (2)
-   Start at  11:42:53
-   Duration  3.98s (tests 99%)
-== the budget's structure done 11:42:57
+   Start at  14:44:01
+   Duration  4.09s (tests 99%)
+== the budget's structure done 14:44:06
+test result: ok. 39 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+== cargo test -p deep-logic done 14:44:21
+ ✓ ac06-planted.test.ts > #980.764570b6 the planted libraries and the interface's pack > #980.764570b6 the planted library that drops a case when the belt end blocks fail
+ ✓ ac06-planted.test.ts > #980.764570b6 the planted libraries and the interface's pack > #980.764570b6 a planted library that grants a third request on a resource of capa
+ ✓ ac06-planted.test.ts > #980.764570b6 the planted libraries and the interface's pack > #980.764570b6 the interface's pack is refused without its planted library 5312ms
+ ✓ ac01-steady.test.ts > #980.9b7dca8c one source into one resource: a share of 0.75, no waits, 45 s in system, Little's law > #980.9b7dca8c over 10 simulated hours at a 
+ ✓ ac04-grant.test.ts > #980.20657dee three requests on two resources of capacity 1 > #980.20657dee three requests at one step on two resources of capacity 1: the two low
+ Test Files  3 passed (3)
+      Tests  5 passed (5)
+== tests/acceptance/980 ac01-steady ac04-grant ac06-planted done 14:44:52
+ ✓ ac6-refusals.test.ts > #981.ba627540 refusals and the planted library > #981.ba627540 a lane graph with a rack bay no park bay can reach is refused at check, naming th
+ ✓ ac6-refusals.test.ts > #981.ba627540 refusals and the planted library > #981.ba627540 the planted library that enters a held zone fails lanes.clear, naming both vehicl
+ ✓ ac6-refusals.test.ts > #981.ba627540 refusals and the planted library > #981.ba627540 the interface's pack is refused without its planted library 1569ms
+ ✓ ac2-junction.test.ts > #981.c3385bed two vehicles at one junction > #981.c3385bed two vehicles reach one junction at the same step: the lower ID goes first, the other 
+ Test Files  2 passed (2)
+      Tests  4 passed (4)
+== tests/acceptance/981 ac2-junction ac6-refusals done 14:45:07

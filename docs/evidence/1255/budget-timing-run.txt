@@ -12,3 +12,9 @@ node scripts/throttle.mjs timed --wait 60 -- node node_modules/vitest/vitest.mjs
     Isolate  8 workers spawned · ~48ms startup each (spawn + environment, per file)
              at least ~337ms faster with isolate: false — reuses workers across files instead of one per file
 == ended 11:43:47 load 4.75 6.87 8.38
+
+The same test on the later merge with main 0fe5994eb (6d59e488d), under a timed grant: INCONCLUSIVE, not a budget result, because the Mac had gone onto battery power. Its readings:
+
+== granted 14:46:22 head 6d59e488d load 8.19 8.97 18.59
+== ended 14:46:25 load 8.19 8.97 18.59
+#1255.a22f4ff6 conflicts over two hours of forty movers: 0.020, 0.019, 0.020, 0.020, 0.021 ms against 20 ms, one-minute load at each run's start and end 8.2/8.2, 8.2/8.2, 8.2/8.2, 8.2/8.2, 8.2/8.2, on Mac17,10: INCONCLUSIVE (a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): power (mains) is "battery", not "ac")
