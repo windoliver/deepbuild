@@ -1,0 +1,83 @@
+
+ RUN  v5.0.5 ~/mac-runs/d2690m
+
+ ❯ tests/acceptance/1427/ac7-shipped.test.ts (4 tests | 4 failed) 35718ms
+   ❯ #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each (3)
+     × a report for each of the three, from a real recording of the journey: its steps, its inputs and the ids the record gave its rows 13395ms
+     × the same shipped journeys in another process give the same recordings and findings, byte for byte 7266ms
+     × a replica planted with a jump on every action fails all three, naming the jump, and the report says which journey 7020ms
+   ❯ #1427 AC7 the lane (1)
+     × scripts/lanes.mjs has a motion lane, and running its commands reports each shipped journey with its recording's hash 7993ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1427/ac7-shipped.test.ts > #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each > a report for each of the three, from a real recording of the journey: its steps, its inputs and the ids the record gave its rows
+AssertionError: BLOCKED: deep-drive gave no JSON reply to motion_check: {"exited":true,"stderr":"\nthread 'main' (57558222) panicked at vendor/gpui-pre/src/app/entity_map.rs:174:9:\nused a entity with the wrong context\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"}
+ ❯ Drive.call tests/acceptance/124/helpers.ts:162:80
+    160|     const reply = await answer;
+    161|     const ms = performance.now() - at;
+    162|     if (reply.exited || reply.timedOut || reply.unparsed !== undefined…
+       |                                                                                ^
+    163|     return { reply, ms };
+    164|   }
+ ❯ motionCheck tests/acceptance/1427/helpers.ts:174:11
+ ❯ checked tests/acceptance/1427/helpers.ts:178:17
+ ❯ shipped tests/acceptance/1427/ac7-shipped.test.ts:32:12
+ ❯ tests/acceptance/1427/ac7-shipped.test.ts:41:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/acceptance/1427/ac7-shipped.test.ts > #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each > the same shipped journeys in another process give the same recordings and findings, byte for byte
+AssertionError: BLOCKED: deep-drive gave no JSON reply to motion_check: {"exited":true,"stderr":"\nthread 'main' (57567457) panicked at vendor/gpui-pre/src/app/entity_map.rs:174:9:\nused a entity with the wrong context\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"}
+ ❯ Drive.call tests/acceptance/124/helpers.ts:162:80
+    160|     const reply = await answer;
+    161|     const ms = performance.now() - at;
+    162|     if (reply.exited || reply.timedOut || reply.unparsed !== undefined…
+       |                                                                                ^
+    163|     return { reply, ms };
+    164|   }
+ ❯ motionCheck tests/acceptance/1427/helpers.ts:174:11
+ ❯ checked tests/acceptance/1427/helpers.ts:178:17
+ ❯ shipped tests/acceptance/1427/ac7-shipped.test.ts:32:12
+ ❯ tests/acceptance/1427/ac7-shipped.test.ts:64:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/acceptance/1427/ac7-shipped.test.ts > #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each > a replica planted with a jump on every action fails all three, naming the jump, and the report says which journey
+AssertionError: BLOCKED: deep-drive gave no JSON reply to motion_check: {"exited":true,"stderr":"\nthread 'main' (57573130) panicked at vendor/gpui-pre/src/app/entity_map.rs:174:9:\nused a entity with the wrong context\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"}
+ ❯ Drive.call tests/acceptance/124/helpers.ts:162:80
+    160|     const reply = await answer;
+    161|     const ms = performance.now() - at;
+    162|     if (reply.exited || reply.timedOut || reply.unparsed !== undefined…
+       |                                                                                ^
+    163|     return { reply, ms };
+    164|   }
+ ❯ motionCheck tests/acceptance/1427/helpers.ts:174:11
+ ❯ checked tests/acceptance/1427/helpers.ts:178:17
+ ❯ shipped tests/acceptance/1427/ac7-shipped.test.ts:32:12
+ ❯ tests/acceptance/1427/ac7-shipped.test.ts:70:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/acceptance/1427/ac7-shipped.test.ts > #1427 AC7 the lane > scripts/lanes.mjs has a motion lane, and running its commands reports each shipped journey with its recording's hash
+AssertionError: BLOCKED: deep-drive gave no JSON reply to motion_check: {"exited":true,"stderr":"\nthread 'main' (57578254) panicked at vendor/gpui-pre/src/app/entity_map.rs:174:9:\nused a entity with the wrong context\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"}
+ ❯ Drive.call tests/acceptance/124/helpers.ts:162:80
+    160|     const reply = await answer;
+    161|     const ms = performance.now() - at;
+    162|     if (reply.exited || reply.timedOut || reply.unparsed !== undefined…
+       |                                                                                ^
+    163|     return { reply, ms };
+    164|   }
+ ❯ motionCheck tests/acceptance/1427/helpers.ts:174:11
+ ❯ checked tests/acceptance/1427/helpers.ts:178:17
+ ❯ shipped tests/acceptance/1427/ac7-shipped.test.ts:32:12
+ ❯ tests/acceptance/1427/ac7-shipped.test.ts:90:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  23:38:04
+   Duration  36.34s (tests 99%, transform 1%)
+
