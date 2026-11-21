@@ -160,7 +160,7 @@ fn run_view(
         return Err(json!({"code": "refused", "issues": broken}));
     }
     deep_canvas_effects::effect::lower(&mut args.doc);
-    crate::physics::bake(&mut args.doc, &call["tracks"])?;
+    crate::physics::bake(&mut args.doc, &call["tracks"], &args.assets)?;
     crate::particles::refuse(&args.doc, app.planted)?;
     // The frames the call draws and how each is reached (#173), the ones logic runs at first.
     let reached = history::order(args.from, args.frames, &args.seeks, &args.history, args.fps);
@@ -269,6 +269,7 @@ fn run_view(
         "linear",
         "ids",
         "pre_tone",
+        "pre_curve",
         "backdrop",
         "depth",
         "reflection",
@@ -389,8 +390,11 @@ fn run_view(
             Some(Planted::CreaseBelowAngle) => Some("crease_below_angle"),
             Some(Planted::EdgesDeriveEveryFrame) => Some("edges_derive_every_frame"),
             Some(Planted::EdgesDashOtherSpace) => Some("edges_dash_other_space"),
+            Some(Planted::HiddenLines(name)) => Some(name),
             _ => None,
         };
+        // #1782: the spans this run holds from frame to frame, for what it reports of them.
+        let mut kept_spans = deep_canvas_scene3d::spans::Kept::default();
         for &(n, reach) in &reached {
             let frame_started = std::time::Instant::now();
             if args.lose_at == Some(n) && device_losses == 0 {
@@ -621,6 +625,21 @@ fn run_view(
                 .flat_map(|l| &l.lines)
                 .filter_map(|l| Some((l.id.clone(), json!(u32::from(l.edges.as_ref()?.derived)))))
                 .collect();
+            // #1782: each hidden-style line's spans in this frame's view, the stretches of them
+            // the frame inks, and how many times this frame computed the spans.
+            let mut edge_spans = [Map::new(), Map::new(), Map::new()];
+            for l in scene.layers.iter().flat_map(|l| &l.lines) {
+                let Some(r) = deep_canvas_scene3d::spans::report(&scene, l, &mut kept_spans) else {
+                    continue;
+                };
+                let rows = |list: &[deep_canvas_scene3d::spans::Span]| -> Value {
+                    let row = |s: &deep_canvas_scene3d::spans::Span| json!({"edge": s.edge, "from": s.from, "to": s.to, "hidden": s.hidden});
+                    list.iter().map(row).collect()
+                };
+                edge_spans[0].insert(l.id.clone(), rows(&r.spans));
+                edge_spans[1].insert(l.id.clone(), rows(&r.dashes));
+                edge_spans[2].insert(l.id.clone(), json!(u32::from(r.computed)));
+            }
             // Each mesh-edge line's segments, in world metres, as `counts` reports them.
             let edge_segments: Map<String, Value> = scene
                 .layers
@@ -752,7 +771,7 @@ fn run_view(
             if args.look.drawn.is_some() {
                 let assets = Map::new();
                 *lock(&opened.drawn) =
-                    crate::drawn::frame3(&args.doc, &args.look, &assets, &scene, app.planted)?;
+                    crate::drawn::frame3(&args.doc, &args.look, &assets, &scene, app.composed())?;
             }
             let label_report = if args.labels {
                 Some(labels_json(&scene, out)?)
@@ -1408,7 +1427,7 @@ fn run_view(
                     }
                     let kept_fx = std::mem::replace(&mut lock(&fx).settings, settings);
                     let drawn_k =
-                        crate::drawn::frame3(&args.doc, &look_k, &Map::new(), &sc, app.planted)?;
+                        crate::drawn::frame3(&args.doc, &look_k, &Map::new(), &sc, app.composed())?;
                     let kept_drawn = std::mem::replace(&mut *lock(&opened.drawn), drawn_k);
                     let mut kept_layer = None;
                     if let (Some(own), Some(stage), Some(status)) = (
@@ -1771,6 +1790,29 @@ fn run_view(
                 if let (Some(pre), true) = (&drawn.pre_tone, args.targets.contains("pre_tone")) {
                     frame.insert("pre_tone".into(), json!(write_named(out, pre, "f32")?));
                 }
+                // #971: the linear values the tone curve reads: that image after the look's
+                // local tone map, the exposure and the grade's white balance.
+                if let (Some(pre), true) = (
+                    drawn.toned.as_ref().or(drawn.pre_tone.as_ref()),
+                    args.targets.contains("pre_curve"),
+                ) {
+                    let scale = scene.exposure.unwrap_or(args.look.exposure);
+                    let balance = args.look.grade.white_balance();
+                    let read: Vec<u8> = pre
+                        .as_chunks::<16>()
+                        .0
+                        .iter()
+                        .flat_map(|p| {
+                            let c =
+                                |k: usize| f32::from_le_bytes([p[k], p[k + 1], p[k + 2], p[k + 3]]);
+                            let lit = [0, 4, 8].map(|k| f64::from(c(k)) * scale);
+                            let rgb = deep_canvas_marks::finish::mul(&balance, lit);
+                            let e = |x: f64| (x as f32).to_le_bytes();
+                            [e(rgb[0]), e(rgb[1]), e(rgb[2]), c(12).to_le_bytes()].concat()
+                        })
+                        .collect();
+                    frame.insert("pre_curve".into(), json!(write_named(out, &read, "f32")?));
+                }
                 if let Some(name) = &dirt_file {
                     frame.insert("dirt".into(), json!(name));
                 }
@@ -2010,6 +2052,10 @@ fn run_view(
                 frame.insert("compiled".into(), json!(compiled));
                 frame.insert("segments".into(), Value::Object(edge_segments));
                 frame.insert("edge_sets_derived".into(), Value::Object(edge_sets_derived));
+                let [spans, dashes, computed] = edge_spans;
+                frame.insert("spans".into(), Value::Object(spans));
+                frame.insert("dashes".into(), Value::Object(dashes));
+                frame.insert("edge_spans_computed".into(), Value::Object(computed));
             }
             if args.lod {
                 frame.insert("lod".into(), crate::lod::rows(&choices));
@@ -2195,7 +2241,7 @@ fn run_view(
             p.overlays.clear();
         }
     }
-    let (msaa, render_targets) = session3::render_targets(app);
+    let (msaa, render_targets, mirror_px) = session3::render_targets(app);
     session3::close(app);
     // An over-cap document is refused, its imports still reported: the import comes before the
     // count it makes (#423).
@@ -2267,7 +2313,7 @@ fn run_view(
         "internal_scale": scale,
         "upscale": upscale,
         "sharpen": args.surface.sharpen,
-        "size_px": size, "internal_px": internal, "msaa": msaa,
+        "size_px": size, "internal_px": internal, "mirror_px": mirror_px, "msaa": msaa,
     });
     let mut reply = json!({
         "frames": frames, "passes": passes, "status": status_report, "surface": drew,

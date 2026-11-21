@@ -118,4 +118,79 @@ mod tests {
             assert!((a[0] - b[0]).abs() + (a[1] - b[1]).abs() + (a[2] - b[2]).abs() < 1e-12);
         }
     }
+
+    /// #2457: a mesh asset under a soft volume's skin draws each vertex its file holds at its
+    /// welded point's particle, with the item's paint and with its file's own material; with no
+    /// skin it draws where the item is placed.
+    #[test]
+    fn a_mesh_asset_takes_its_particles() {
+        let item = json!({"kind": "slab@1", "params": {"size": [1, 1, 1]}});
+        let m = crate::build::built(&json!({}), "c", &item, &Default::default(), 0.0)
+            .unwrap()
+            .mesh
+            .unwrap();
+        let mut bin: Vec<u8> = (m.positions.iter().flatten())
+            .flat_map(|x| (*x as f32).to_le_bytes())
+            .collect();
+        let at = bin.len();
+        bin.extend(m.indices.iter().flat_map(|i| i.to_le_bytes()));
+        let w = m.welded();
+        let particles: Vec<V3> = (0..8)
+            .map(|i| {
+                let p = m.positions[w.iter().position(|x| *x == i).unwrap()];
+                [p[0] + 3.0, p[1] * 2.0, p[2] - 1.0]
+            })
+            .collect();
+        let look = crate::look::Look3::read(&json!({"roles": {"accent": "#1aa3c8"}})).unwrap();
+        for material in [false, true] {
+            let mut primitive = json!({"attributes": {"POSITION": 0}, "indices": 1});
+            if material {
+                primitive["material"] = json!(0);
+            }
+            let file = json!({"asset": {"version": "2.0"}, "scene": 0, "scenes": [{"nodes": [0]}],
+                "nodes": [{"mesh": 0}], "materials": [{}], "meshes": [{"primitives": [primitive]}],
+                "accessors": [
+                    {"bufferView": 0, "componentType": 5126, "count": m.positions.len(), "type": "VEC3"},
+                    {"bufferView": 1, "componentType": 5125, "count": m.indices.len(), "type": "SCALAR"}],
+                "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": at},
+                    {"buffer": 0, "byteOffset": at, "byteLength": bin.len() - at}],
+                "buffers": [{"byteLength": bin.len(), "uri": format!(
+                    "data:application/octet-stream;base64,{}", deep_canvas::base64::encode(&bin))}]});
+            let drawn = |cube: Value| -> Vec<V3> {
+                let doc = json!({"size": [400, 300], "camera": "cam", "items": {"cube": cube,
+                    "cam": {"kind": "camera@1", "params": {"projection": "perspective",
+                        "position": [0, 2, 10], "target": [0, 0, 0], "fov": 40}}}});
+                let read = |_: &str| Some(file.to_string().into_bytes());
+                let labels = &mut crate::scene::Labels::new();
+                let scene = crate::scene::evaluate_with(&doc, 0, &look, labels, &read).unwrap();
+                let solids = scene.layers.iter().flat_map(|l| &l.solids);
+                solids
+                    .filter(|s| s.id == "cube")
+                    .flat_map(|s| {
+                        let mesh = s.mesh.as_ref().unwrap();
+                        mesh.positions
+                            .iter()
+                            .map(|p| crate::scene::apply(&s.model, *p))
+                    })
+                    .collect()
+            };
+            let cube = json!({"kind": "mesh.asset@1", "at": {"pos": [5, 0, 0]},
+                "params": {"sha256": "0".repeat(64), "node": 0, "paint": {"fill": {"role": "accent"}}}});
+            let placed: Vec<V3> = m
+                .positions
+                .iter()
+                .map(|p| add(*p, [5.0, 0.0, 0.0]))
+                .collect();
+            assert_eq!(
+                drawn(cube.clone()),
+                placed,
+                "its file's material: {material}"
+            );
+            let mut skinned = cube;
+            skinned["skin"] = json!({"positions": particles});
+            skinned.as_object_mut().unwrap().remove("at");
+            let moved: Vec<V3> = w.iter().map(|i| particles[*i as usize]).collect();
+            assert_eq!(drawn(skinned), moved, "its file's material: {material}");
+        }
+    }
 }

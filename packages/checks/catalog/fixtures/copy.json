@@ -1,0 +1,10 @@
+{
+  "en": {
+    "items": {"1001": "Log", "1002": "Plank", "1003": "Board", "1004": "Knife", "1005": "Cudgel", "1006": "Hide", "1007": "Nails", "1099": "Lantern"},
+    "messages": {"2001": "The mines are yours"}
+  },
+  "fr": {
+    "items": {"1001": "Bûche", "1002": "Planche", "1003": "Panneau", "1004": "Couteau", "1005": "Gourdin", "1006": "Peau", "1007": "Clous"},
+    "messages": {"2001": "Les mines sont à vous"}
+  }
+}

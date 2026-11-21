@@ -469,11 +469,13 @@ pub(super) fn flicker(
 }
 
 /// A `mesh.asset@1`'s mesh, read from the store, with the name every item of that asset and
-/// node shares.
+/// node shares; with a soft volume's skin written on `item` (#2457) its vertices are where the
+/// skin puts them, and the mesh is that item's alone.
 pub(super) fn asset_mesh(
     read: Assets<'_>,
     id: &str,
     params: &Value,
+    item: &Value,
 ) -> Result<(crate::geom::Mesh, Option<String>), Refused> {
     let path = format!("items/{id}/params");
     let Some(sha) = params.get("sha256").and_then(Value::as_str) else {
@@ -487,7 +489,14 @@ pub(super) fn asset_mesh(
         code: "out_of_range",
         path: format!("{path}/sha256"),
     })?;
-    Ok((mesh, Some(format!("{sha}#{node}"))))
+    if item.get("skin").is_none() {
+        return Ok((mesh, Some(format!("{sha}#{node}"))));
+    }
+    let mesh = crate::skin::applied(mesh, item).map_err(|at| Refused {
+        code: "out_of_range",
+        path: format!("items/{id}/{at}"),
+    })?;
+    Ok((mesh, None))
 }
 
 /// An item's level of detail (#425): its `lod` bands and, for a mesh the simplify job gave
@@ -496,7 +505,7 @@ pub(super) fn lod_of(
     item: &Value,
     path: &str,
     bounds: [Vec3; 2],
-    mesh: Option<(&crate::geom::Mesh, u64)>,
+    mesh: Option<(&Arc<crate::geom::Mesh>, u64)>,
     doc: &Map<String, Value>,
 ) -> Result<Option<Arc<crate::lod::Lod>>, Refused> {
     let bands = crate::lod::bands_of(item, path.trim_end_matches("/params"))?;
@@ -514,12 +523,12 @@ pub(super) fn lod_of(
         proxy: None,
     });
     let (levels, extent) = match leveled {
-        Some((m, h)) => (crate::lod::levels(&Arc::new(m.clone()), h), m.lod_extent),
+        Some((m, h)) => (crate::lod::levels(m, h), m.lod_extent),
         None => (Vec::new(), 0.0),
     };
-    // A mesh without levels takes its proxy from the simplify step, once per content key.
-    let proxy_mesh = match (proxy, mesh) {
-        (Some(p), Some((m, h))) if levels.is_empty() => crate::lod::proxy_of(m, h, p),
+    // A mesh without levels draws a proxy band as the proxy the renderer makes of it (#2738).
+    let proxy_source = match (proxy, mesh) {
+        (Some(_), Some((m, h))) if levels.is_empty() => Some((m.clone(), h)),
         _ => None,
     };
     Ok(Some(Arc::new(crate::lod::Lod {
@@ -530,7 +539,8 @@ pub(super) fn lod_of(
         extent,
         lod_px: crate::lod::lod_px(doc),
         proxy,
-        proxy_mesh,
+        proxy_source,
+        proxy_mesh: None,
         tile: None,
     })))
 }
@@ -568,31 +578,25 @@ pub(super) fn by_material(
     let Some(named) = named.as_object() else {
         return refused("out_of_range", format!("items/{id}/materials"));
     };
-    // Each triangle's material: the first part naming it, else the item's own.
     let own = item.get("material").and_then(Value::as_str);
-    let mut of: Vec<Option<Option<&str>>> = vec![None; mesh.triangles()];
     for (part, m) in named {
         let unresolved = || Refused {
             code: "ref_unresolved",
             path: format!("items/{id}/materials/{part}"),
         };
-        let tris = (mesh.parts.get(part))
-            .or_else(|| mesh.closed.get(part).map(|c| &c.0))
-            .ok_or_else(unresolved)?;
+        if !mesh.parts.contains_key(part) && !mesh.closed.contains_key(part) {
+            return Err(unresolved());
+        }
         let material = |m: &&str| {
             let kind = items.get(m).and_then(|i| i.get("kind"));
             kind.and_then(Value::as_str) == Some("material@1")
         };
-        let m = m.as_str().filter(material).ok_or_else(unresolved)?;
-        for &t in tris {
-            if let Some(slot) = of.get_mut(t as usize).filter(|s| s.is_none()) {
-                *slot = Some(Some(m));
-            }
-        }
+        m.as_str().filter(material).ok_or_else(unresolved)?;
     }
+    // Each triangle's material: the first part naming it, else the item's own.
     let mut groups: BTreeMap<Option<&str>, Vec<u32>> = BTreeMap::new();
-    for (t, m) in of.iter().enumerate() {
-        groups.entry(m.unwrap_or(own)).or_default().push(t as u32);
+    for (t, m) in mesh.materials(named, own).into_iter().enumerate() {
+        groups.entry(m).or_default().push(t as u32);
     }
     let holder = |m: Option<&str>| {
         let mut h = item.clone();
@@ -653,12 +657,15 @@ pub(super) fn asset_has_materials(read: Assets<'_>, params: &Value) -> bool {
 /// A `mesh.asset@1` naming a file's scene (#423): one solid per triangle primitive of each node,
 /// picked as `<item>#<node name>` (or its index), placed at the item's `model` × the node's world
 /// matrix, shaded by the `material@1` the import made of its glTF material. Naming one node, it
-/// draws that node's primitives alone, in the node's own space, picked as the item.
+/// draws that node's primitives alone, in the node's own space, picked as the item; with a soft
+/// volume's skin written on `item` (#2457) their vertices are where the skin puts them, welded
+/// across the node's primitives as its mesh is.
 #[allow(clippy::type_complexity)]
 pub(super) fn asset_scene(
     read: Assets<'_>,
     id: &str,
     params: &Value,
+    item: &Value,
     model: &Affine3,
     look: &Look3,
 ) -> Result<(Vec<Solid>, Vec<([[f64; 4]; 3], Value)>), Refused> {
@@ -678,6 +685,19 @@ pub(super) fn asset_scene(
         code: "out_of_range",
         path: format!("items/{id}/{p}"),
     })?;
+    let skinned = match one.filter(|_| item.get("skin").is_some()) {
+        Some(node) => {
+            let mesh = crate::gltf::mesh(&bytes, node).map_err(|_| "params/sha256".to_string());
+            let mesh = mesh.and_then(|m| crate::skin::applied(m, item));
+            Some(mesh.map_err(|at| Refused {
+                code: "out_of_range",
+                path: format!("items/{id}/{at}"),
+            })?)
+        }
+        None => None,
+    };
+    // How many of the skinned mesh's vertices the primitives before this one hold.
+    let mut before = 0;
     let mut out = Vec::new();
     // The file's punctual lights at their world transforms under the item's (#428).
     let lights = imported
@@ -699,7 +719,18 @@ pub(super) fn asset_scene(
             None => matmul(model, &node.world),
         };
         for (p, prim) in node.primitives.iter().enumerate() {
-            if prim.mesh.triangles() == 0 {
+            let mut mesh = prim.mesh.clone();
+            if let Some(s) = &skinned {
+                let own = before..before + mesh.positions.len();
+                before = own.end;
+                let (Some(positions), Some(normals)) =
+                    (s.positions.get(own.clone()), s.normals.get(own))
+                else {
+                    return refused("out_of_range", format!("items/{id}/skin/positions"));
+                };
+                (mesh.positions, mesh.normals) = (positions.to_vec(), normals.to_vec());
+            }
+            if mesh.triangles() == 0 {
                 continue;
             }
             let pick = match one {
@@ -716,7 +747,11 @@ pub(super) fn asset_scene(
             let material = light::material(&holder, named, look, id)?;
             let maps = light::maps(&holder, named)?;
             let mut h = deep_canvas::schedule::Hasher::new("scene3d.mesh");
-            h.text(&format!("{sha}#scene{scene_i}#{k}#{p}"));
+            match &skinned {
+                // A skinned mesh is drawn as what it holds, as a built item's is.
+                Some(_) => h.bytes(&deep_canvas::schedule::Canonical::canonical_bytes(&mesh)),
+                None => h.text(&format!("{sha}#scene{scene_i}#{k}#{p}")),
+            };
             let key = h.finish().0;
             let hash = u64::from_le_bytes([
                 key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7],
@@ -735,7 +770,7 @@ pub(super) fn asset_scene(
                     .as_ref()
                     .map_or([204; 3], |m| [m.base[0], m.base[1], m.base[2]].map(encode8)),
                 stroke: None,
-                mesh: Some(Arc::new(prim.mesh.clone())),
+                mesh: Some(Arc::new(mesh)),
                 lod: None,
                 mask: None,
                 cast_only: false,

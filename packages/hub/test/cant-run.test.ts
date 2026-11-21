@@ -33,7 +33,7 @@ describe('a hook while its hook program can\'t run', () => {
       await send('UserPromptSubmit', { prompt: 'go', prompt_id: 'p1' });
       // Checked again within seconds, with no 10 minutes passed: the session opened after the last check reads BLOCKED.
       expect(await until(() => readings().some((r) => r.startsWith("BLOCKED: hooks can't run"))), `readings: ${JSON.stringify(readings())}`).toBe(true);
-      expect(readings().filter((r) => /past the versions its facts cover/.test(r))).toEqual([]);
+      expect(readings().filter((r) => /not a version its facts cover/.test(r))).toEqual([]);
 
       mkdirSync(join(program, '..'), { recursive: true });
       writeFileSync(program, '#!/bin/sh\n');

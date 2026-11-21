@@ -65,8 +65,16 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             fixed_ghosts: p == Some(Planted::FlareFixedGhosts),
             ignores_occlusion: p == Some(Planted::FlareIgnoresOcclusion),
         },
+        mirror: deep_scene3d_render::mirror::Planted {
+            halves_twice: p == Some(Planted::MirrorHalvesTwice),
+            samples_full_frame: p == Some(Planted::MirrorSamplesFullFrame),
+        },
         dof: deep_scene3d_render::dof::Planted {
             linear_coc: p == Some(Planted::CocLinearInDistance),
+        },
+        local_tone: deep_scene3d_render::local_tone::Planted {
+            edge_blind: p == Some(Planted::LocalBaseIgnoresEdges),
+            fixed_levels: p == Some(Planted::LocalPyramidFixedLevels),
         },
         ties_by_submission: p == Some(Planted::TiesBySubmission),
         spot_counts_cone: p == Some(Planted::SpotCountsCone),
@@ -530,16 +538,19 @@ pub fn pipelines(app: &mut App) -> Vec<&'static str> {
     })
 }
 
-/// The surface's `msaa` and the targets the session's geometry pass draws into (#1173).
-pub fn render_targets(app: &mut App) -> (Value, Value) {
+/// The surface's `msaa`, the targets the session's geometry pass draws into (#1173) and the size
+/// its mirror's pass drew its last frame's picture at, null with no mirror (#2691).
+pub fn render_targets(app: &mut App) -> (Value, Value, Value) {
     let claims = app.planted == Some(Planted::ClaimsMsaaOverSingleSample);
     app.worker
         .call(move |state| {
             let s = state.scene3d.as_ref()?;
             let shared = lock(&s.shared);
-            Some(msaa(shared.renderer.as_ref()?, claims))
+            let renderer = shared.renderer.as_ref()?;
+            let (count, targets) = msaa(renderer, claims);
+            Some((count, targets, json!(renderer.mirror_px())))
         })
-        .unwrap_or((Value::Null, Value::Null))
+        .unwrap_or((Value::Null, Value::Null, Value::Null))
 }
 
 /// `renderer`'s sample count, as the surface reports it (4 under the planted claim), and its
@@ -590,6 +601,8 @@ pub struct Drawn {
     pub targets: Option<(Vec<u8>, Vec<u8>)>,
     /// The linear image the output pass read, f32 RGBA, read with the targets (#418).
     pub pre_tone: Option<Vec<u8>>,
+    /// #971: that image as the look's local tone map left it, in a frame that has one.
+    pub toned: Option<Vec<u8>>,
     /// The frame's GPU time and each pass's share, ms.
     pub timing: Option<(f64, std::collections::BTreeMap<String, f64>)>,
     /// What the passes' declared costs price this frame at, ms (#1637).
@@ -779,6 +792,11 @@ pub fn draw_on(
                 },
                 pre_tone: if read_targets && !noop {
                     r.read_pre_tone(&device)
+                } else {
+                    None
+                },
+                toned: if read_targets && !noop {
+                    r.read_toned(&device)
                 } else {
                     None
                 },

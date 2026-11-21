@@ -59,6 +59,18 @@ pub struct Field {
     pub form: Option<Form>,
 }
 
+/// One list of words a form offers (#2777; canvas primitives: Registries and closed lists): a
+/// place where a document writes a bare word, either a choice with a word or a tagged word among
+/// its alternatives (`m | auto` offers one, `auto`) or a word or tagged word that is a whole form
+/// on its own, at the path of object fields, tags and named tuple slots that leads to it from the
+/// field. An object's fields are fields, never words.
+#[derive(Clone, Debug, PartialEq)]
+pub struct WordList {
+    /// `.`-joined from the field; empty at the field itself.
+    pub path: String,
+    pub words: Vec<String>,
+}
+
 /// A declaration the language can't read: the text and why.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Unreadable {
@@ -662,6 +674,173 @@ impl Form {
                 }
             }
             Form::Bounded(form, _) | Form::Noted(form, _) => form.missed(v),
+        }
+    }
+
+    /// Every list of words the form offers, in the order it declares them; two choices at one
+    /// path are one list (#2777).
+    pub fn word_lists(&self) -> Vec<WordList> {
+        let mut out = Vec::new();
+        self.lists_at(String::new(), &mut out);
+        out
+    }
+
+    fn lists_at(&self, path: String, out: &mut Vec<WordList>) {
+        let at = |name: &str| match path.is_empty() {
+            true => name.to_string(),
+            false => format!("{path}.{name}"),
+        };
+        let mut offer = |words: Vec<&str>| {
+            let i = match out.iter().position(|l| l.path == path) {
+                Some(i) => i,
+                None => {
+                    out.push(WordList {
+                        path: path.clone(),
+                        words: Vec::new(),
+                    });
+                    out.len() - 1
+                }
+            };
+            for w in words {
+                if !out[i].words.iter().any(|x| x == w) {
+                    out[i].words.push(w.to_string());
+                }
+            }
+        };
+        match self {
+            Form::OneOf(_) => {
+                let alts: Vec<&Form> = self.alternatives().into_iter().map(Form::bare).collect();
+                let words: Vec<&str> = alts.iter().filter_map(|a| a.word()).collect();
+                if !words.is_empty() {
+                    offer(words);
+                }
+                for a in alts {
+                    match a {
+                        Form::Word(_) => {}
+                        Form::Tagged(w, body) => body.lists_at(at(w), out),
+                        other => other.lists_at(path.clone(), out),
+                    }
+                }
+            }
+            Form::Word(w) => offer(vec![w]),
+            Form::Tagged(w, body) => {
+                offer(vec![w]);
+                body.lists_at(at(w), out);
+            }
+            // A slot named by a word that is no type is a number, and names no place.
+            Form::Tuple(slots) => {
+                for (name, f) in slots {
+                    match name {
+                        Some(n) if !matches!(f, Form::Number(u) if u.is_empty()) => {
+                            f.lists_at(at(n), out)
+                        }
+                        _ => f.lists_at(path.clone(), out),
+                    }
+                }
+            }
+            Form::Object(fields) => {
+                for f in fields {
+                    if let Some(form) = &f.form {
+                        form.lists_at(at(&f.name), out);
+                    }
+                }
+            }
+            Form::List(of, _) | Form::Map(_, of) | Form::Bounded(of, _) | Form::Noted(of, _) => {
+                of.lists_at(path, out)
+            }
+            Form::Number(_) | Form::Bool | Form::Text(_) => {}
+        }
+    }
+
+    /// The form under its bound and its note.
+    fn bare(&self) -> &Form {
+        match self {
+            Form::Bounded(f, _) | Form::Noted(f, _) => f.bare(),
+            other => other,
+        }
+    }
+
+    /// The word a word or a tagged word offers, through its bound and its note.
+    fn word(&self) -> Option<&str> {
+        match self {
+            Form::Word(w) | Form::Tagged(w, _) => Some(w),
+            Form::Bounded(f, _) | Form::Noted(f, _) => f.word(),
+            _ => None,
+        }
+    }
+
+    /// The path of the list of words `v` misses, as [`Form::word_lists`] names it: where `v`
+    /// holds a word, or a tagged word's one key, that no word of the list offered there takes
+    /// (#2777). `None` when the form takes `v` or it misses elsewhere.
+    pub fn missed_list(&self, v: &Value) -> Option<String> {
+        self.missed_list_at(v, String::new())
+    }
+
+    fn missed_list_at(&self, v: &Value, path: String) -> Option<String> {
+        self.missed(v)?;
+        let at = |name: &str| match path.is_empty() {
+            true => name.to_string(),
+            false => format!("{path}.{name}"),
+        };
+        // A word, or a tagged word's one key, where the form offers words.
+        let key = v.as_str().or_else(|| {
+            v.as_object()
+                .filter(|o| o.len() == 1)?
+                .keys()
+                .next()
+                .map(String::as_str)
+        });
+        match self {
+            Form::OneOf(alts) => {
+                let flat: Vec<&Form> = self.alternatives().into_iter().map(Form::bare).collect();
+                let tagged = flat.iter().any(|a| matches!(a, Form::Tagged(..)));
+                let a_word = v.is_string() || (tagged && key.is_some());
+                if a_word
+                    && flat.iter().any(|a| a.word().is_some())
+                    && !flat.iter().any(|a| a.word() == key)
+                {
+                    return Some(path);
+                }
+                let same: Vec<&Form> = alts.iter().filter(|a| a.holds_type_of(v)).collect();
+                match same.as_slice() {
+                    [one] => one.missed_list_at(v, path),
+                    _ => None,
+                }
+            }
+            Form::Word(_) => v.is_string().then_some(path),
+            Form::Tagged(w, body) => match v.as_object() {
+                Some(o) if o.len() == 1 && o.contains_key(w) => body.missed_list_at(&o[w], at(w)),
+                _ => key.map(|_| path),
+            },
+            Form::Tuple(slots) => {
+                v.as_array()?
+                    .iter()
+                    .zip(slots)
+                    .find_map(|(x, (name, f))| match name {
+                        Some(n) if !matches!(f, Form::Number(u) if u.is_empty()) => {
+                            f.missed_list_at(x, at(n))
+                        }
+                        _ => f.missed_list_at(x, path.clone()),
+                    })
+            }
+            Form::List(of, _) => v
+                .as_array()?
+                .iter()
+                .find_map(|x| of.missed_list_at(x, path.clone())),
+            Form::Object(fields) => {
+                let o = v.as_object()?;
+                fields.iter().find_map(|f| {
+                    f.form
+                        .as_ref()?
+                        .missed_list_at(o.get(&f.name)?, at(&f.name))
+                })
+            }
+            Form::Map(_, value) => v
+                .as_object()?
+                .values()
+                .find_map(|x| value.missed_list_at(x, path.clone())),
+            Form::Bounded(f, _) | Form::Noted(f, _) => f.missed_list_at(v, path),
+            Form::Number(_) | Form::Bool | Form::Text(_) => None,
         }
     }
 

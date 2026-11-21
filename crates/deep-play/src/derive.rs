@@ -22,6 +22,8 @@ pub struct Fired {
     pub step: u64,
     pub kind: String,
     pub data: Value,
+    /// The input it fires, when its module names one (a logic item's fire, #194).
+    pub input: Option<String>,
 }
 
 /// World `w`'s entries from the core's input track `track` (the input module's control entries,
@@ -31,6 +33,7 @@ pub struct Fired {
 /// module's (a planted build's order). A choice of `form` reads as its option's index (#1040).
 pub fn kept(
     form: &Value,
+    world: &str,
     w: &World,
     track: &[Value],
     fired: &[Fired],
@@ -38,6 +41,8 @@ pub fn kept(
 ) -> Result<Vec<Value>, Box<Refusal>> {
     let track = &indexed(form, track)[..];
     let h = step_flicks(w);
+    let logic = logic_fired(form, world, w);
+    let fired: Vec<&Fired> = fired.iter().chain(&logic).collect();
     // The core input track as the modules wrote it: each step's input-module entries and the
     // other modules' in the order the build writes them; each entry's place in it, by its source.
     let (control_rank, module_rank) = if modules_first { (1, 0) } else { (0, 1) };
@@ -74,7 +79,8 @@ pub fn kept(
             let Some(On::Module { module, item }) = &input.on else {
                 continue;
             };
-            if *module != f.module || *item != f.item || input.kind != f.kind {
+            let other = f.input.as_ref().is_some_and(|i| i != id);
+            if *module != f.module || *item != f.item || input.kind != f.kind || other {
                 continue;
             }
             let data = resolved(input, &f.data, &format!("inputs/{id}/data"))?;
@@ -90,6 +96,20 @@ pub fn kept(
             }
         }
     }
+    // #2371: of two sets of one target and path on one step, only the one written later holds
+    // (Input track entries), as when an item fires its input twice in a step.
+    let set = |v: &Value| {
+        let path = v["data"]["path"].to_string();
+        (v["kind"] == "set").then(|| (v["step"].as_u64(), v["target"].to_string(), path))
+    };
+    let mut last = BTreeMap::new();
+    for v in &out {
+        if let Some(k) = set(v) {
+            let n = last.entry(k).or_insert(0);
+            *n = v["written"].as_u64().unwrap_or(0).max(*n);
+        }
+    }
+    out.retain(|v| set(v).is_none_or(|k| last[&k] == v["written"].as_u64().unwrap_or(0)));
     // The order they apply in: by step, then (kind, target ID), then input and data.
     let key = |v: &Value| {
         let s = |k: &str| v[k].as_str().unwrap_or_default().to_string();
@@ -103,6 +123,30 @@ pub fn kept(
     };
     out.sort_by_key(key);
     Ok(out)
+}
+
+/// #194: the entries `form`'s logic items fire into world `world`, which the form keeps as
+/// `logic_fires` (fires.rs), each at the world's first step at or after its logic step's time.
+fn logic_fired(form: &Value, world: &str, w: &World) -> Vec<Fired> {
+    let h = step_flicks(w).max(1);
+    let fires = form.get("logic_fires").and_then(Value::as_array);
+    fires
+        .into_iter()
+        .flatten()
+        .filter(|f| f["world"] == world)
+        .filter_map(|f| {
+            let input = f["input"].as_str()?;
+            let t = f["t"].as_i64()?.max(0);
+            Some(Fired {
+                module: "logic".into(),
+                item: f["item"].as_str()?.into(),
+                step: ((t + h - 1) / h) as u64,
+                kind: w.inputs.get(input)?.kind.clone(),
+                data: f["data"].clone(),
+                input: Some(input.into()),
+            })
+        })
+        .collect()
 }
 
 /// `track` with each entry of a choice of `form` valued as its option's index (Control: in an
@@ -142,4 +186,40 @@ pub fn missing(id: &str, w: &World, held: impl Fn(&str) -> bool) -> Option<Issue
         )),
         _ => None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #2371: a logic item that fires its set input twice in one step leaves the set it fired
+    /// second, and its set of another step stays.
+    #[test]
+    fn a_set_fired_twice_in_a_step_keeps_the_second() {
+        let doc = json!({
+            "kind": "physics.world@1",
+            "capacity": {"bodies": 1, "shapes": 1, "joints": 0, "contacts": 0, "particles": 0},
+            "contact_materials": {"m": {"density": 1000}},
+            "shapes": {"ball": {"kind": "sphere", "radius": 0.25}},
+            "bodies": {"puck": {"kind": "dynamic", "shapes": [{"shape": "ball", "contact_material": "m"}]}},
+            "forces": {"push": {"kind": {"uniform": {"accel": [2, 0, 0]}}, "applies_to": ["puck"], "strength": "throttle"}},
+            "inputs": {"throttle": {"kind": "set", "targets": ["push"], "on": {"logic": "coach"}}}
+        });
+        let w = deep_canvas_physics::doc::read(&doc).unwrap_or_else(|e| panic!("{e:?}"));
+        let fire = |step, value: f64| Fired {
+            module: "logic".into(),
+            item: "coach".into(),
+            step,
+            kind: "set".into(),
+            data: json!({"value": value}),
+            input: None,
+        };
+        let fired = [fire(40, 9.0), fire(40, 2.0), fire(41, 5.0)];
+        let kept = kept(&json!({}), "lab", &w, &[], &fired, false).unwrap();
+        let values: Vec<_> = kept
+            .iter()
+            .map(|k| (k["step"].clone(), k["data"]["value"].clone()))
+            .collect();
+        assert_eq!(values, [(json!(40), json!(2.0)), (json!(41), json!(5.0))]);
+    }
 }

@@ -97,7 +97,9 @@ pub(crate) const POINTS: &str =
     "[[x, y, z] | ID] | {array: <logic>.<name>, rows: [from, to] | all}";
 /// A line of a mesh's edges (`geom::EdgeKind::read`).
 pub(crate) const EDGES: &str =
-    "{of: ID (or ID#part), kind: all | quads | cage | crease {angle: deg}, border: bool}";
+    "{of: ID (or ID#part), kind: all | quads | cage | crease {angle: deg}, border: bool, material: bool}";
+/// A mesh-edge line's hidden style (`scene::edge_line`; #1782).
+pub(crate) const HIDDEN: &str = "{dash: [px] ≤ 2, paint}";
 /// A line's ends, as Path `path@1` takes them; scene3d doesn't draw them yet.
 pub(crate) const ENDS: &str = "{start | end: none | arrow | open | stealth | dot | ring | square | diamond | bar, size: f32, width: f32}";
 /// A line's trail (`deep_canvas_motion::trail::read`).
@@ -523,6 +525,18 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 json!([6, 2]),
             )
             .takes("[px] ≤ 2"),
+            // #1782: the style a mesh-edge line's spans behind opaque geometry draw in; the sweep
+            // leaves it unset, as it does `edges`.
+            p(
+                "hidden",
+                "{dash, paint}",
+                "",
+                Value::Null,
+                S,
+                json!(null),
+                json!(null),
+            )
+            .takes(HIDDEN),
             p(
                 "ends",
                 "{start, end}",
@@ -980,7 +994,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             // #166: water on a plate's part; the sweep leaves it unset, as it does the mirror.
             // `water::parse` also takes a wind's fields bare, in place of `{wind: {..}}`.
             p("water", "{waves: wind {speed, direction} | [{direction, length, amplitude, steepness}], ripples: {scale, strength}, rain, absorption: {color, depth}, distort: px, foam: {threshold, speed}, flow: {along, speed, cycle} | none, wake: {item, span} | none, rings: {on, speed, span, strength} | none}", "m", Value::Null, S, Value::Null, Value::Null)
-                .takes("{waves: wind {speed, direction} | {speed, direction} | [{direction, length, amplitude, steepness}] ≤ 4, ripples, rain: f32, absorption, distort: px, foam: {threshold, speed: m/s | none}, flow: {along: curve ID | field {x, z}, speed: m/s, cycle: s} | none, wake: {item, span} | none, rings: {on: occurrence list + filter, speed: m/s, span: s, strength: 0..1} | none, shore}"),
+                .takes("{waves: wind {speed, direction} | {speed, direction} | [{direction, length, amplitude, steepness}] ≤ 4, ripples, rain: f32, absorption, distort: px, foam: {threshold, speed: m/s | none}, flow: {along: curve ID | field {x, z}, speed: m/s, cycle: s} | none, wake: {item, span} | none, rings: {on: occurrence list | {list: occurrence list} (filtered by kind, tags and where, as Spawn takes it), speed: m/s, span: s, strength: 0..1} | none, shore}"),
             p(
                 "pattern",
                 "none | plaster | stone_courses | roof_tiles | wood | rock | grass | cobbles | glass_curtain | concrete | asphalt",

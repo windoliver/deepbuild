@@ -1,0 +1,164 @@
+{
+ "format": 1,
+ "id": "blown-leaf-1561",
+ "profile": "figure",
+ "title": "A leaf blowing over a pond",
+ "description": "The #1561 reuse fixture: a leaf that only moves, over a washed pond whose buoy changes size between some frames.",
+ "size": [
+  480,
+  270
+ ],
+ "seed": 1561,
+ "transport": {
+  "span": "4s"
+ },
+ "requires": {
+  "modules": {
+   "effects": "^1"
+  }
+ },
+ "budget": {
+  "class": "figure"
+ },
+ "layers": {
+  "main": {
+   "writer": "agent-a",
+   "title": "Main",
+   "order": "a1"
+  }
+ },
+ "channels": {
+  "drift": {
+   "target": "items/leaf/at/pos/0",
+   "type": "f32",
+   "keys": {
+    "k0": {
+     "t": "0s",
+     "value": 0,
+     "interp": "linear"
+    },
+    "k1": {
+     "t": "4s",
+     "value": 240,
+     "interp": "linear"
+    }
+   }
+  },
+  "bob": {
+   "target": "items/buoy/params/r",
+   "type": "f32",
+   "keys": {
+    "k0": {
+     "t": "0s",
+     "value": 8,
+     "interp": "hold"
+    },
+    "k1": {
+     "t": "0.5s",
+     "value": 12,
+     "interp": "hold"
+    },
+    "k2": {
+     "t": "1.5s",
+     "value": 8,
+     "interp": "hold"
+    },
+    "k3": {
+     "t": "2.5s",
+     "value": 12,
+     "interp": "hold"
+    },
+    "k4": {
+     "t": "3.5s",
+     "value": 8,
+     "interp": "hold"
+    }
+   }
+  }
+ },
+ "items": {
+  "pond": {
+   "id": "pond",
+   "kind": "rect@1",
+   "layer": "main",
+   "name": "pond",
+   "order": "b0",
+   "params": {
+    "box": [
+     30,
+     130,
+     420,
+     110
+    ],
+    "paint": {
+     "fill": {
+      "fill": "pool",
+      "role": "accent"
+     }
+    }
+   }
+  },
+  "bank": {
+   "id": "bank",
+   "kind": "path@1",
+   "layer": "main",
+   "name": "bank",
+   "order": "b1",
+   "params": {
+    "d": "M 20 128 C 140 112 320 140 460 122",
+    "paint": {
+     "stroke": {
+      "line": "nib",
+      "role": "moss"
+     }
+    }
+   }
+  },
+  "buoy": {
+   "id": "buoy",
+   "kind": "circle@1",
+   "layer": "main",
+   "name": "buoy",
+   "order": "b2",
+   "params": {
+    "center": [
+     360,
+     180
+    ],
+    "r": 8,
+    "paint": {
+     "fill": {
+      "role": "vermilion"
+     }
+    }
+   }
+  },
+  "leaf": {
+   "id": "leaf",
+   "kind": "rect@1",
+   "layer": "main",
+   "name": "leaf",
+   "order": "b3",
+   "params": {
+    "box": [
+     60,
+     50,
+     36,
+     14
+    ],
+    "paint": {
+     "fill": {
+      "role": "ochre"
+     }
+    }
+   },
+   "at": {
+    "pos": [
+     0,
+     0,
+     0
+    ]
+   }
+  }
+ }
+}

@@ -1,0 +1,484 @@
+// @deepbuild/checks-command: the first-party command check kind (#30). It runs a check's shell command in its
+// checkout, hermetically: a cleared environment with allowlisted variables and those the check is given, a home of
+// its own, DO_NOT_TRACK=1, and one process per check. It starts, signals and waits for that process only through
+// host@1 (#236), whose supervisor sandboxes it, so it builds no sandbox of its own and never learns where it ran.
+// It reports a closed run outcome, never a verdict: the exit, the output scrubbed by value before its digest, the
+// variables allowed through by name, and from the tools' own reports (Vitest's, Jest's, node:test's, pytest's and
+// go test's) the tests that ran,
+// every attempt of each, where each failed test failed, the files the run read and a numeric contract's counts. A run
+// passes only if every test a Vitest, Jest, node:test or pytest file it ran holds ran, as listed apart from the run (listing.ts).
+import { createHash, randomBytes } from 'node:crypto';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync } from 'node:fs';
+import { homedir, tmpdir, userInfo } from 'node:os';
+import { basename, dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import type { CheckResult, CheckRunnerFill, CheckSpec, RunOutcome } from '@deepbuild/conformance';
+import { scrubValues } from '@deepbuild/evidence';
+import { after, badDeadline, type Exit, type Host } from '@deepbuild/supervisor';
+import { segmentsOf } from '@deepbuild/gate';
+import { isControl, plantControls, removeControls, unheld, type Control } from './controls.js';
+import { listSource, unrun, type Listed } from './listing.js';
+import { evidence, goTest, nodeTest, under, vitest, type Listing, type Ran, type Reported } from './report.js';
+import { seededBy, type Seeded } from './seeded.js';
+import { absent, DOES_NOTHING, filtersIn, firstLine, GO_TEST, hiddenChild, maskOf, programsIn, scriptOf, untraced, type Spawned } from './shell.js';
+
+export type { Seeded } from './seeded.js';
+
+/** Planted twins the criteria name, selected per check; tests only. */
+export type Plant = 'exit-code-only' | 'last-attempt-only' | 'no-do-not-track';
+export interface CommandCheck {
+  /** Where every start, signal and wait goes. */
+  host: Host;
+  run: string;
+  /** Kind `command`: `runner` is the command line, `inputs` the declared paths. */
+  spec: CheckSpec;
+  checkout: string;
+  /** Ms from the start; past it the run is stopped and ends overran. */
+  deadline: number;
+  /** Variables passed in for this run, such as NODE_ENV or a leased PORT. */
+  env?: Record<string, string>;
+  /** Credentials env-local loaded for this check: passed in, and scrubbed from the output by value. */
+  secrets?: Record<string, string>;
+  /** Hosts the run's grant names, "127.0.0.1:<port>". */
+  hosts?: string[];
+  /** Commands a base has no entry for (#874): each is on the run's PATH as a program that does nothing, exits 0 and prints nothing. */
+  standIns?: string[];
+  /** A numeric contract (#28, the verdict engine's NumericContract): the outputs whose counts the report gives. */
+  contract?: { tolerances: { output: string; size: number }[] };
+  /** A timing check (#87): how many timed repeats it runs, numbered 1 to `repeats`; each says in the report whether its caches were flushed. */
+  timing?: { repeats: number };
+  /** The hub going down: the run is stopped and ends stopped. */
+  stop?: AbortSignal;
+  /**
+   * Run as you, outside the sandbox and the tracer's rules on untraced programs: a suite your repo's spec lists as
+   * starting sandboxes of its own, which macOS can't nest (#33). Its result still comes from its tool's report.
+   */
+  outside?: boolean;
+  plant?: Plant;
+}
+export interface Attempt { test: string; outcome: 'passed' | 'failed' }
+export interface ContractCount { output: string; size: number; compared: number | null; largest_error: number | null }
+/** One timed repeat: flushed only when the tool's report says so for it; a repeat the report leaves out is not flushed, never cold. */
+export interface TimedRepeat { repeat: number; flushed: boolean }
+export interface CommandRun extends CheckResult {
+  run: string;
+  exit: { code: number | null; signal: NodeJS.Signals | null; cause: 'exit' | 'deadline' | 'stop' | 'limit' } | null;
+  /** Scrubbed by value, then digested. */
+  output: { stdout: string; stderr: string; sha256: { stdout: string; stderr: string } };
+  /** The name of every variable the run's process got, never a value. */
+  env: string[];
+  /** Every attempt the tool's report lists. */
+  attempts: Attempt[];
+  /** The flag that turned the tool's own retries off, for a tool whose report can't list attempts; null when it can. */
+  retries: string | null;
+  seeded: Seeded[];
+  /** Per output of the contract, from the tool's report; null without a contract. */
+  contract: ContractCount[] | null;
+  /** One per timed repeat the check declares, from the tool's report; null without a timing declaration. */
+  timing: TimedRepeat[] | null;
+  /** Ms the run's clock was moved ahead. */
+  clock: number;
+}
+
+const RUNTIME = fileURLToPath(new URL('../runtime/', import.meta.url));
+/**
+ * The conformance package's check runtime, the tracer and node:test reporter its check.kind@1 kit loads too, found
+ * beside its public entry (src/index.ts or dist/index.js) without loading the kits, which a hub that runs checks never
+ * otherwise needs.
+ */
+const CHECK_RUNTIME = fileURLToPath(new URL('../runtime/check-kind/', import.meta.resolve('@deepbuild/conformance')));
+/**
+ * The locale and zone every run gets, whatever the host's: a pass can't lean on your machine's. CI, so a tool never
+ * writes an expected value it lacks (a missing snapshot) from what the program gives and passes on it.
+ */
+const FIXED = { LANG: 'en_US.UTF-8', TZ: 'UTC', CI: 'true' };
+/** The Node the hub runs on, and its package managers: a run's own bin folder links these, never the folder's other programs. */
+const NODE_BIN = dirname(process.execPath);
+const TOOLS = ['node', 'npm', 'npx'];
+/** Each tool's real file, found once: the hub's Node doesn't move while it runs. */
+let toolFiles: [string, string][] | undefined;
+const tools = (): [string, string][] => (toolFiles ??= TOOLS.flatMap((tool) => (existsSync(join(NODE_BIN, tool)) ? [[tool, realpathSync(join(NODE_BIN, tool))]] : [])));
+/** The temp folder's real path, read once: a folder made inside it has its real path already. */
+let tempRoot: string | undefined;
+/** Where a run's programs are: its own bin folder, then the system's. */
+const SYSTEM = ['/usr/bin', '/bin', '/usr/sbin', '/sbin'];
+const pathOf = (bin: string): string => [bin, ...SYSTEM].join(':');
+/** What marks a folder as one program's own install: a package, a Go tree, a conda base, a venv, Python's library. */
+const INSTALLS = (name: string): string[] => ['package.json', 'pkg/tool', 'conda-meta', 'pyvenv.cfg', `lib/${name}`];
+/**
+ * What the run may read to run a program whose real file is `real`: the folder it's installed in, where that folder is
+ * the program's own install, else the program alone: a shared
+ * `bin` folder's parent holds other things. Never `/`, the home folder or one above it.
+ */
+const broad = (root: string): boolean => root === '/' || [homedir(), userInfo().homedir].some((home) => `${home}/`.startsWith(`${root}/`));
+function installOf(real: string): string {
+  const root = dirname(dirname(real));
+  const own = !broad(root) && INSTALLS(basename(real)).some((m) => existsSync(join(root, m)));
+  return own ? root : real;
+}
+const PYTHON_FILE = /^python\d+(\.\d+)*$/;
+/** A `#!` script's interpreter, by its absolute path, or null. */
+function interpreterOf(path: string): string | null {
+  try {
+    const head = firstLine(path);
+    const first = head.startsWith('#!') ? head.slice(2).trim().split(/\s+/)[0] : undefined;
+    return first?.startsWith('/') && existsSync(first) ? first : null;
+  } catch { return null; }
+}
+/**
+ * The programs the command itself names that the hub has outside the system's folders (python3, pnpm, go), linked by
+ * their real paths into the run's bin folder, with what the run may read to run them (`installOf`); and for a
+ * program named by its path (a venv's python in the checkout, a script it installed), the install of the Python it
+ * runs on. A program the hub finds
+ * in a venv isn't linked: by its real file it would run without the venv. It's named in `refused`.
+ */
+function linkPrograms(runner: string, checkout: string, bin: string): { roots: string[]; refused: string[] } {
+  const roots: string[] = [];
+  const refused: string[] = [];
+  for (const name of programsIn(runner, checkout)) {
+    if (name.includes('/')) {
+      // A link or a `#!` line in the checkout can point anywhere: only a Python it comes to gets its install.
+      const at = resolve(checkout, name);
+      if (!existsSync(at)) continue;
+      for (const p of [at, interpreterOf(at)]) {
+        const real = p && realpathSync(p);
+        if (real && PYTHON_FILE.test(basename(real)) && statSync(real).isFile()) roots.push(installOf(real));
+      }
+      continue;
+    }
+    if (existsSync(join(bin, name))) continue;
+    const dir = (process.env.PATH ?? '').split(':').find((d) => d && !SYSTEM.includes(d) && existsSync(join(d, name)));
+    if (!dir) continue;
+    if (existsSync(join(dir, '..', 'pyvenv.cfg'))) { refused.push(name); continue; }
+    const real = realpathSync(join(dir, name));
+    if (!statSync(real).isFile()) continue;
+    symlinkSync(real, join(bin, name));
+    roots.push(installOf(real));
+  }
+  return { roots, refused };
+}
+/** The pytest reporter and Python's read tracer. */
+const PYTHON_RUNTIME = join(RUNTIME, 'python');
+const MONTH = 30 * 86_400_000;
+/** How long a stopped run's tool gets to hand its last results to its report before its group is killed: Vitest sends them every 100 ms. */
+const SETTLE_MS = 500;
+
+const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
+const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+/** A run handle, `run:<ULID>`. */
+function runHandle(): string {
+  let id = '';
+  for (let t = BigInt(Date.now()), i = 0; i < 10; i++, t >>= 5n) id = CROCKFORD[Number(t & 31n)] + id;
+  for (const byte of randomBytes(16)) id += CROCKFORD[byte & 31];
+  return `run:${id}`;
+}
+
+/** The tests each Vitest, Jest or node:test file the run ran holds, from the file's source in the checkout; `only`: the command runs node:test's focused tests alone. */
+async function listedIn(checkout: string, files: { file: string; tool: Listing['files'][number]['tool'] | 'node' }[], only: boolean): Promise<Listed[]> {
+  const listed: Listed[] = [];
+  for (const [file, tool] of new Map(files.map((f) => [f.file, f.tool]))) {
+    let source: string;
+    try {
+      // A link in the checkout to a file outside it isn't the check's.
+      if (under(checkout, realpathSync(join(checkout, file))) === null) continue;
+      source = readFileSync(join(checkout, file), 'utf8');
+    } catch { continue; }
+    listed.push(...(await listSource(source, file, tool === 'vitest' ? ' > ' : ' ', tool === 'node' ? { node: true, focus: only } : {})));
+  }
+  return listed;
+}
+
+/** Runs one command check. */
+export async function runCommandCheck(check: CommandCheck): Promise<CommandRun> {
+  return (await runOnce(check, 0)).run;
+}
+
+/** Five runs of the full suite on today's clock, then one with the clock a month ahead; a run in which any of `tests` ran no test ran nothing for it. */
+export async function runAddedTests(check: CommandCheck, tests: string[]): Promise<CommandRun[]> {
+  const runs: CommandRun[] = [];
+  for (const [i, clock] of [0, 0, 0, 0, 0, MONTH].entries()) {
+    const { run, ran } = await runOnce({ ...check, run: i === 0 ? check.run : runHandle() }, clock);
+    const missed = tests.filter((file) => !ran.some((t) => t.file === file));
+    // A run that didn't pass keeps its own outcome; a pass that never ran an added file ran nothing for it.
+    runs.push(missed.length && run.outcome === 'passed' ? { ...run, outcome: 'ran_nothing', evidence: [...run.evidence, ...missed.map((file) => `no test ran in ${file}`)] } : run);
+  }
+  return runs;
+}
+
+/** The check.kind@1 fill (#13, kit from #314) for the kind `command`, on `host`. */
+export function commandCheckKind(host: Host): CheckRunnerFill {
+  return {
+    slot: 'check.kind@1', revision: 1, kind: 'command',
+    run: async (spec, ctx) => {
+      const r = await runCommandCheck({ host, run: runHandle(), spec, checkout: ctx.checkout, deadline: ctx.deadline });
+      return { outcome: r.outcome, testsRun: r.testsRun, failures: r.failures, evidence: r.evidence, read: r.read, mask: r.mask };
+    },
+  };
+}
+
+/**
+ * A timing check's repeats, 1 to `repeats`: each flushed only when a test's report says so for it (`task.meta.timing`,
+ * as the contract's counts are read), never from printed output; a repeat no test reports is not flushed, never cold.
+ */
+function repeatsOf(repeats: number, ran: Ran[]): TimedRepeat[] {
+  const said = new Set<number>();
+  for (const t of ran) {
+    const timing = t.meta.timing as { repeat?: unknown; flushed?: unknown } | undefined;
+    if (typeof timing?.repeat === 'number' && timing.flushed === true) said.add(timing.repeat);
+  }
+  return Array.from({ length: Math.max(0, Math.floor(repeats)) }, (_, i) => ({ repeat: i + 1, flushed: said.has(i + 1) }));
+}
+
+async function runOnce(check: CommandCheck, clock: number): Promise<{ run: CommandRun; ran: Ran[] }> {
+  // Refused before anything of the run starts.
+  const bad = badDeadline('deadline', check.deadline);
+  if (bad) throw Error(`a check's ${bad}`);
+  const { host, run, spec, plant } = check;
+  const secrets = check.secrets ?? {};
+  const empty = { stdout: '', stderr: '', sha256: { stdout: sha256(''), stderr: sha256('') } };
+  const result = (outcome: RunOutcome, rest: Partial<CommandRun> = {}): CommandRun => ({
+    run, outcome, testsRun: 0, failures: [], evidence: [], read: [], mask: null, exit: null, output: empty, env: [], attempts: [], retries: null, seeded: [],
+    contract: check.contract ? check.contract.tolerances.map((t) => ({ output: t.output, size: t.size, compared: null, largest_error: null })) : null,
+    timing: check.timing ? repeatsOf(check.timing.repeats, []) : null, clock, ...rest,
+  });
+  if (!existsSync(check.checkout)) return { run: result('missing'), ran: [] };
+  // The command's mask, or one in a script it runs (the hub's drafted checks run as `sh file`), by the core's one rule.
+  const mask = maskOf(spec.runner, check.checkout);
+  if (mask !== null && plant !== 'exit-code-only') return { run: result('uncounted', { mask }), ran: [] };
+  // The tracer and the reporters name files by their real paths; a checkout reached through a link is compared by its real path too.
+  const checkout = realpathSync(check.checkout);
+
+  // The run's own folder, its temp folder: its home, its programs, and the evidence files its processes write (where
+  // check.kind@1's erases-evidence case looks for them: a suite that alters them is found out by their trailers).
+  // Named by the run, whose handle is unique while the hub runs, so no random name is drawn; a folder a crash left
+  // with that name makes the plain mkdir fail, and a random one is drawn then.
+  const root = (tempRoot ??= realpathSync(tmpdir()));
+  let temp = join(root, `deep-check-${run.replace(/[^A-Za-z0-9._-]/g, '-')}`);
+  try { mkdirSync(temp); } catch { temp = mkdtempSync(join(root, 'deep-check-')); }
+  let kill: NodeJS.Timeout | undefined;
+  let controls: Control[] = [];
+  try {
+    const bin = join(temp, 'bin');
+    mkdirSync(bin);
+    for (const [tool, real] of tools()) symlinkSync(real, join(bin, tool));
+    for (const name of check.standIns ?? []) if (/^[\w.+@-]+$/.test(name) && !existsSync(join(bin, name))) symlinkSync(DOES_NOTHING, join(bin, name));
+    const { roots, refused } = linkPrograms(spec.runner, checkout, bin);
+    const PATH = pathOf(bin);
+    const go = GO_TEST.test(spec.runner);
+    const filters = filtersIn(spec.runner);
+    // Vitest reports its pattern's source, in which a `/` the command gave is escaped.
+    const named = (filter: string): boolean => filters.some(({ value: v }) => v === filter || v.replaceAll('/', '\\/') === filter);
+    if (refused.length) return { run: result('uncounted', { mask: `venv ${refused[0]}: name the venv's program by its path` }), ran: [] };
+    // A tool that isn't installed can't start: the run is missing, not untraced.
+    const gone = absent(spec.runner, checkout, PATH);
+    if (gone !== null) return { run: result('missing', { failures: [{ test: '(run)', file: spec.inputs[0] ?? '.', line: 1, stack: null, assertion: false, message: `${gone} isn't on the run's PATH` }] }), ran: [] };
+    const hidden = plant === 'exit-code-only' || check.outside ? null : untraced(spec.runner, checkout, PATH, { writable: [checkout, temp] });
+    if (hidden !== null) return { run: result('uncounted', { mask: `untraced ${hidden}` }), ran: [] };
+    // The run's folder is its own already: the evidence files' folder inside it needs no second random name.
+    const work = join(temp, 'deep-check-run-evidence');
+    mkdirSync(work);
+    const files = { reads: join(work, 'reads.txt'), spawns: join(work, 'spawns.jsonl'), node: join(work, 'report.jsonl'), vitest: join(work, 'vitest.jsonl') };
+    mkdirSync(join(temp, 'home'));
+    const token = randomBytes(24).toString('base64url');
+    const env: Record<string, string> = {
+      // What the check is given first: none of it can take the place of what makes the run hermetic.
+      ...check.env, ...secrets, ...FIXED,
+      // Plain text output, so a stored line reads as the tool wrote it, whatever the tool guesses about its terminal.
+      PATH, HOME: join(temp, 'home'), TMPDIR: temp, NO_COLOR: '1', ...(plant === 'no-do-not-track' ? {} : { DO_NOT_TRACK: '1' }),
+      DEEP_CHECK_READS: files.reads, DEEP_CHECK_SPAWNS: files.spawns, DEEP_CHECK_REPORT: files.vitest, DEEP_CHECK_CLOCK_MS: String(clock),
+      // The preload first, so it takes the report's name before the tracer hides the runner's variables from the run.
+      NODE_OPTIONS: `--import=${join(RUNTIME, 'preload.mjs')} --import=${join(CHECK_RUNTIME, 'tracer.mjs')} --test-reporter=spec --test-reporter-destination=stdout --test-reporter=${join(CHECK_RUNTIME, 'reporter.mjs')} --test-reporter-destination=${files.node}`,
+      // Python loads the runner's read tracer and pytest its reporter; the check's own entries follow.
+      PYTHONPATH: [PYTHON_RUNTIME, check.env?.PYTHONPATH].filter(Boolean).join(':'),
+      PYTEST_PLUGINS: ['deep_check_pytest', check.env?.PYTEST_PLUGINS].filter(Boolean).join(','),
+      // Python's compiled files go to the run's own folder: one the checkout holds, never checked against its source, isn't run.
+      PYTHONPYCACHEPREFIX: join(temp, 'pycache'),
+      ...(go ? { GOFLAGS: ['-json', check.env?.GOFLAGS].filter(Boolean).join(' ') } : {}),
+      DEEP_RUN_TOKEN: token,
+    };
+    const chunks = { stdout: [] as Buffer[], stderr: [] as Buffer[] };
+    let cause = 'exit' as 'exit' | 'deadline' | 'stop' | 'limit';
+    // A run that names its tests runs only those, so a control it never selects proves nothing either way (#1099 adds theirs).
+    if (!filters.length) controls = await plantControls(checkout);
+    const started = host.start({
+      run, argv: ['/bin/sh', '-c', spec.runner], cwd: checkout, env, inherit: false, ...(check.outside ? { own_sandbox: true } : {}),
+      // Its checkout and its temp folder are its own; it reads the Node it runs on, the programs it names and the runner's loaders.
+      grant: { read: [dirname(NODE_BIN), CHECK_RUNTIME, RUNTIME, ...roots], write: [checkout, temp], ...(check.hosts?.length ? { hosts: check.hosts } : {}) },
+      output: { stdout: (c) => chunks.stdout.push(c), stderr: (c) => chunks.stderr.push(c) },
+    });
+    // The deadline, or the hub going down, stops the run's process group through host@1, once its tool has had a
+    // moment to report the tests that ended.
+    const halt = (why: 'deadline' | 'stop'): void => {
+      if (cause !== 'exit') return;
+      cause = why;
+      kill = setTimeout(() => void started.then((s) => (s.status === 'started' ? host.signal(run, 'SIGKILL') : undefined)).catch(() => undefined), SETTLE_MS);
+    };
+    let disarm = (): void => undefined;
+    const onStop = (): void => halt('stop');
+    if (check.stop?.aborted) halt('stop');
+    check.stop?.addEventListener('abort', onStop);
+    let exit: Exit | null = null;
+    let failed: string | null = null;
+    let stopping: Promise<void> = Promise.resolve();
+    try {
+      const s = await started;
+      if (s.status === 'started') {
+        // The deadline counts from the process's start, not from the wait for its sandbox or a lease.
+        disarm = after(check.deadline, () => halt('deadline'));
+        exit = await host.wait(run);
+        // Stopped at a limit its host held it to (#1409): what it measured says nothing of the product.
+        if (exit.limit && cause === 'exit') cause = 'limit';
+        // Nothing the run started outlives it: what it left running is stopped through host@1 too, while the output,
+        // whole once the process closed, is scrubbed; the evidence files are read only once that stop is done.
+        stopping = host.signal(run, 'SIGKILL').catch(() => undefined);
+      } else failed = `BLOCKED: no ${s.kind} free`;
+    } catch (error) {
+      failed = error instanceof Error ? error.message : String(error);
+    } finally {
+      disarm();
+      check.stop?.removeEventListener('abort', onStop);
+    }
+
+    // Everything kept of the run, scrubbed by value of everything it was given that marks a secret, the output before its digest.
+    const marks = { env: { ...check.env, ...secrets }, held: [...Object.values(secrets), token] };
+    // No text with fewer bytes than the shortest printed form of any value can hold one: raw, or base64 after 0, 1
+    // or 2 leading bytes (the URL form is longer than raw). Most test names are shorter, and are kept as they are.
+    const shortest = (value: string): number => {
+      const n = Buffer.byteLength(value);
+      return Math.min(n, ...[0, 1, 2].map((lead) => Math.floor((8 * (lead + n)) / 6) - Math.ceil((8 * lead) / 6)));
+    };
+    const floor = Math.min(...[...marks.held, ...Object.values(marks.env)].filter(Boolean).map(shortest));
+    const scrub = (text: string): string => {
+      const s = String(text);
+      return s.length < floor && Buffer.byteLength(s) < floor ? s : scrubValues(s, marks);
+    };
+    const scrubbed = (r: CommandRun): CommandRun => ({
+      ...r, mask: r.mask === null ? null : scrub(r.mask), evidence: r.evidence.map(scrub), attempts: r.attempts.map((a) => ({ ...a, test: scrub(a.test) })),
+      failures: r.failures.map((f) => ({ ...f, test: scrub(f.test), message: scrub(f.message), stack: f.stack === null ? null : scrub(f.stack) })),
+    });
+    const done = (outcome: RunOutcome, rest: Partial<CommandRun>, ran: Ran[]): { run: CommandRun; ran: Ran[] } => ({ run: scrubbed(result(outcome, rest)), ran });
+    // Taken out of `chunks`, which the host's record of the run holds while it keeps the run answerable: the output
+    // stays with this run's record alone (#2652).
+    const stdout = scrub(Buffer.concat(chunks.stdout.splice(0)).toString('utf8'));
+    const stderr = scrub(Buffer.concat(chunks.stderr.splice(0)).toString('utf8'));
+    const output = { stdout, stderr, sha256: { stdout: sha256(stdout), stderr: sha256(stderr) } };
+    const limited = exit?.limit ? [`stopped at its ${exit.limit.limit} of ${exit.limit.max} MiB${exit.limit.reading === undefined ? '' : `, reading ${exit.limit.reading.toFixed(1)} MiB`}`] : [];
+    const ended = { output, env: Object.keys(env).sort(), exit: exit ? { code: exit.code, signal: exit.signal, cause } : null, evidence: [`stdout ${output.sha256.stdout}`, `stderr ${output.sha256.stderr}`, ...limited] };
+    await stopping;
+    if (failed !== null) return done('missing', { ...ended, failures: [{ test: '(run)', file: spec.inputs[0] ?? '.', line: 1, stack: null, assertion: false, message: failed }] }, []);
+
+    // The evidence files are the runner's, but the run could write them: a line no reporter wrote that breaks a
+    // reading leaves the run uncounted, as a stray line does, never ended without a record.
+    try {
+      const reads = evidence(files.reads);
+      const spawns = evidence(files.spawns);
+      const nodeReport = evidence(files.node);
+      const vitestReport = evidence(files.vitest, true);
+      const vitestRun = vitestReport && vitest(vitestReport.lines, checkout, plant === 'last-attempt-only', named);
+      const nodeRun = nodeReport && nodeTest(nodeReport.lines, checkout, stderr);
+      const reported: Reported[] = [
+        ...(nodeRun ? [nodeRun] : []),
+        ...(vitestRun ? [vitestRun] : []),
+        ...(go ? [goTest(stdout, checkout)] : []),
+      ];
+      const malformed = reported.reduce((n, r) => n + r.malformed, 0);
+      // Controls are never the check's tests: out of its counts and failures; a run whose report shows one of a file it
+      // ran passed, missing or failed elsewhere can't record a failure, so its result isn't kept (#1099).
+      const reportedFailures = reported.flatMap((r) => r.failures);
+      const ranFiles = new Set([...(vitestRun?.files ?? []).map((f) => f.file), ...(nodeRun?.files ?? [])]);
+      const unrecorded = unheld(controls, reported.flatMap((r) => r.ran), reportedFailures, ranFiles);
+      const ran = reported.flatMap((r) => r.ran).filter((t) => !isControl(t.test));
+      const failures = reportedFailures.filter((f) => !isControl(f.test));
+      const controlsFailed = reportedFailures.length > 0 && !failures.length;
+      const read = new Set<string>();
+      for (const path of new Set(reads?.lines ?? [])) { const rel = under(checkout, path); if (rel) read.add(rel); }
+      for (const t of ran) if (t.file) read.add(t.file);
+      // The shell read the script it ran, which no tracer records: it's the check's own file, read all the same.
+      for (const segment of segmentsOf(spec.runner)) { const script = scriptOf(segment, checkout); const rel = script && under(checkout, script.file); if (rel) read.add(rel); }
+      const readSet = [...read].sort();
+      const counts = (output: string): { compared: number | null; largest_error: number | null } => {
+        const given = ran.map((t) => (t.meta.contract as Record<string, { compared?: unknown; largest_error?: unknown }> | undefined)?.[output]).filter((c) => c !== undefined);
+        const numbers = (key: 'compared' | 'largest_error') => given.map((c) => c[key]).filter((v): v is number => typeof v === 'number');
+        const compared = numbers('compared');
+        const largest = numbers('largest_error');
+        return { compared: compared.length ? compared.reduce((a, b) => a + b, 0) : null, largest_error: largest.length ? Math.max(...largest) : null };
+      };
+      const rest: Partial<CommandRun> = {
+        ...ended, testsRun: ran.length, failures, read: readSet, seeded: seededBy(checkout, readSet),
+        attempts: ran.flatMap((t) => t.attempts.map((outcome) => ({ test: t.test, outcome }))),
+        contract: check.contract ? check.contract.tolerances.map((t) => ({ output: t.output, size: t.size, ...counts(t.output) })) : null,
+        timing: check.timing ? repeatsOf(check.timing.repeats, ran) : null,
+      };
+      const code = exit!.code;
+      if (cause === 'deadline') {
+        // A test still running at the deadline: where it was, so a base run can tell an overrun after a test started from one before any did (#31).
+        const unended = (vitestRun?.started ?? []).filter((s) => !ran.some((t) => t.test === s.test && t.file === s.file));
+        return done('overran', { ...rest, failures: [...failures, ...unended.map((s) => ({ test: s.test, file: s.file ?? '.', line: 1, stack: null, assertion: false, unended: true, message: `${s.test} was still running at the deadline` }))] }, ran);
+      }
+      // #2227's planted twin limit-stop-fails: a run stopped at a limit ends failed, a product failure, not stopped.
+      if (cause === 'limit') return done('failed', rest, ran);
+      if (cause === 'stop') return done('stopped', rest, ran);
+      if (plant === 'exit-code-only') return done(code === 0 ? 'passed' : 'failed', { ...rest, mask }, ran);
+      // A program the run started that the tracer can't see into, or a child outside its group, leaves it uncounted.
+      for (const spawned of check.outside ? [] : spawns?.lines ?? []) {
+        let child: Spawned;
+        try { child = JSON.parse(spawned) as Spawned; } catch { continue; }
+        if (typeof child.file !== 'string') continue;
+        const why = hiddenChild(child, checkout, `${join(checkout, 'node_modules/.bin')}:${PATH}`, process.execPath, [checkout, temp]);
+        // Uncounted, it counts no test either way.
+        if (why !== null) return done('uncounted', { ...ended, mask: why, evidence: [...ended.evidence, `a child of the run: ${[child.file, ...child.args].join(' ')}`] }, []);
+      }
+      if (code === 127) return done('missing', rest, ran);
+      // A run that ended on its own left every evidence file whole, or the suite got at the runner's record. A go
+      // test run may start no traced process, so leave no trace: it can't pass anyway.
+      const absent = go ? null : { altered: 'no trailer' };
+      for (const [name, file] of [['reads', reads ?? absent], ['spawns', spawns ?? absent], ['report', nodeReport], ['vitest report', vitestReport]] as const) {
+        if (file?.altered) return done('uncounted', { ...rest, mask: `evidence altered ${name}`, evidence: [...ended.evidence, `${name}: ${file.altered}`] }, ran);
+      }
+      if (malformed) return done('uncounted', { ...rest, mask: 'evidence altered report', evidence: [...ended.evidence, `report: ${malformed} lines its reporter didn't write`] }, ran);
+      if (unrecorded) return done('uncounted', { ...rest, mask: unrecorded, evidence: [...ended.evidence, unrecorded] }, ran);
+      if (failures.length) return done('failed', rest, ran);
+      // A crash of what the check runs, or any other failing exit: a failed run.
+      // The tool's failing exit for the controls alone is no failure of the check's.
+      if ((code !== 0 && !(controlsFailed && code === 1)) || exit!.signal !== null) {
+        const message = exit!.signal !== null ? `the command was killed by ${exit!.signal}` : `the command exited ${code}`;
+        return done('failed', { ...rest, failures: [{ test: '(run)', file: spec.inputs[0] ?? '.', line: 1, stack: stderr.trim() || null, assertion: false, message }] }, ran);
+      }
+      // go test's reads reach no read set: its run can fail, never pass.
+      if (go && ran.length) return done('uncounted', { ...rest, mask: 'untraced program go' }, ran);
+      // A command that starts no test tool, such as a typecheck, has one result, its exit status (#33): a clean exit
+      // is its pass. A test tool that ran and counted no test ran nothing: Vitest's, Jest's or pytest's reporter
+      // opened its report, even with no line to write, as for a pytest file whose every test the source skips.
+      const tool = go || vitestReport !== null || (nodeReport?.lines.length ?? 0) > 0;
+      if (!ran.length) return tool ? done('ran_nothing', rest, ran) : done('passed', { ...rest, testsRun: 1 }, ran);
+      // Every test a file the run ran holds ran, but those the check's own command left out (see listing.ts).
+      const runFiles = [...(vitestRun?.files ?? []), ...(nodeRun?.files ?? []).map((file) => ({ file, tool: 'node' as const }))];
+      const listed = [...(vitestRun?.listed ?? []), ...(await listedIn(checkout, runFiles, filters.some((f) => f.option === '--test-only')))];
+      const missed = unrun(listed.filter((l) => !isControl(l.test)), [...(vitestRun?.ran ?? []), ...(nodeRun?.seen ?? [])], vitestRun?.left ?? [], filters, named);
+      const dropped = missed.map((t) => ({ test: t.test, file: t.file, line: t.line, stack: null, assertion: false, message: `${t.test} never ran: something other than its source or the check's command left it out` }));
+      return done(dropped.length ? 'failed' : 'passed', { ...rest, failures: dropped }, ran);
+    } catch (error) {
+      const why = `evidence unreadable: ${error instanceof Error ? error.message : String(error)}`;
+      // #2227's planted twin limit-stop-fails: here too a run stopped at a limit ends failed.
+      if (cause !== 'exit') return done(cause === 'deadline' ? 'overran' : cause === 'limit' ? 'failed' : 'stopped', { ...ended, evidence: [...ended.evidence, why] }, []);
+      return done('uncounted', { ...ended, mask: 'evidence altered report', evidence: [...ended.evidence, why] }, []);
+    }
+  } finally {
+    clearTimeout(kill);
+    await removeControls(checkout, controls);
+    try {
+      rmSync(temp, { recursive: true, force: true });
+    } catch {
+      // A folder the run left read-only: made writable and removed. The run's result stands whatever is left.
+      try { unlock(temp); rmSync(temp, { recursive: true, force: true }); } catch { /* left for the OS to clear */ }
+    }
+  }
+}
+/** Makes every folder under `dir` its owner's to write, following no link. */
+function unlock(dir: string): void {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    if (!e.isDirectory()) continue;
+    chmodSync(join(dir, e.name), 0o700);
+    unlock(join(dir, e.name));
+  }
+}

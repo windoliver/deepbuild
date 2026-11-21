@@ -1,0 +1,12 @@
+{
+  "note": "Claude Code 2.1.308's /usage through -p, at $0 (no model call: 0 tokens, total_cost_usd 0). Only the window lines are kept; the rest of its answer (per-machine usage tips) is left out.",
+  "ran_at": "2026-11-20T09:56Z",
+  "command": "claude -p /usage --output-format stream-json --verbose --setting-sources user --max-turns 1",
+  "result_entry": { "subtype": "success", "num_turns": 0, "total_cost_usd": 0 },
+  "window_lines": [
+    "Current week (all models): 100% used · resets Nov 23 at 11:59pm (America/Los_Angeles)",
+    "Current week (Fable): 99% used · resets Nov 23 at 11:59pm (America/Los_Angeles)"
+  ],
+  "five_hour_line": null,
+  "binary_doc": "unifiedWindows (2.1.308's rate_limit_event schema): 'Windows absent from the account state are absent here.'"
+}

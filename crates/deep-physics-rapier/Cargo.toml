@@ -14,14 +14,20 @@ deep-canvas-physics = { path = "../deep-canvas-physics" }
 # Issue #1918: a world inside the scene that lists it reads the paths its scene's channels and
 # drivers write, evaluated by the motion module at each step's time.
 deep-canvas-motion = { path = "../deep-canvas-motion" }
+# Issue #2457: the SHA-256 a mesh asset's bytes are checked against, as every store read is, when
+# deep-physics reads the assets its scene's soft volumes are built from.
+deep-canvas = { path = "../deep-canvas" }
 rapier3d = { version = "=0.36.1", default-features = false, features = ["dim3", "f32", "std", "enhanced-determinism", "serde-serialize"] }
+# Issue #2098: a `dimensions: 2` world's backend, at the same pin and features as rapier3d, beside
+# it behind the one backend interface (src/dim2.rs).
+rapier2d = { version = "=0.36.1", default-features = false, features = ["dim2", "f32", "std", "enhanced-determinism", "serde-serialize"] }
 base64 = "0.22"
 bincode = "1"
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 
 # Issue #524: a soft volume's source item's welded mesh and a balloon's geodesic ball, built by the
 # scene3d builders its skin draws, so the particles are the drawn lattice's vertices. Native builds
-# only: scene3d links meshopt, whose C++ doesn't build for wasm32 (#2466).
+# only: the wasm32 runner still refuses balloons and volumes (#2466). scene3d links no C++ (#2738).
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 

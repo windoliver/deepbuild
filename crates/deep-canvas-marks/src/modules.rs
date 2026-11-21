@@ -511,7 +511,7 @@ fn animate(v: &mut View<'_>) -> Result<(), OpError> {
     let reduced = v.reduced_motion()?;
     let t = 0;
     let id = v.id().unwrap_or_default().to_string();
-    let mut out: Vec<[f64; 2]> = vec![[0.0, 1.0]; run.shaped.glyphs.len()];
+    let mut out = vec![crate::animated::UNIT; run.shaped.glyphs.len()];
     let animators = fields
         .get("params")
         .and_then(|p| p.get("animators"))
@@ -542,15 +542,9 @@ fn animate(v: &mut View<'_>) -> Result<(), OpError> {
             }
         }
     }
-    // #466 (#2456): a reveal at the progress this frame evaluated, each glyph by its unit's share.
+    // #466 (#2456): a reveal at the progress this frame evaluated, as a fade or a write draws it.
     if let Some(Value::Object(params)) = fields.get("params") {
-        if let Some(shares) =
-            crate::animator::reveal_opacity(params, &run.shaped, &id).map_err(refused)?
-        {
-            for (unit, share) in out.iter_mut().zip(shares) {
-                unit[1] *= share;
-            }
-        }
+        crate::animated::reveal(&mut out, params, &run.shaped, &id).map_err(refused)?;
     }
     v.write("text.animated", Val::typed(out))
 }
@@ -890,27 +884,35 @@ pub fn look_tokens(look: &crate::look::Look) -> BTreeMap<String, Value> {
             (bundled.family(role) != Some(family)).then(|| (role.clone(), json!(family)))
         })
         .collect();
-    if !fonts.is_empty() {
-        out.insert(TYPE_TOKEN.into(), json!({ "fonts": fonts }));
+    // #297: and its fallback faces, so a grapheme the run's face lacks is set in the first that
+    // has it, as an entry text's range assumes.
+    let fallback = &look.light_type.fallback;
+    if !fonts.is_empty() || !fallback.is_empty() {
+        out.insert(TYPE_TOKEN.into(), json!({ "fonts": fonts, "fallback": fallback }));
     }
     out
 }
 
-/// The type a session's tokens set text in: [`TYPE_TOKEN`]'s font roles over the bundled ones.
+/// The type a session's tokens set text in: [`TYPE_TOKEN`]'s font roles over the bundled ones,
+/// and its fallback faces.
 fn type_of(tokens: &BTreeMap<String, Value>) -> scene::Type {
     let mut ty = scene::Type::default();
     let fonts = tokens
         .get(TYPE_TOKEN)
         .and_then(|t| t.get("fonts"))
         .and_then(Value::as_object);
+    let face = |f: &Value| {
+        let f = f.as_str()?;
+        deep_text::FACES.iter().find(|face| face.family == f)
+    };
     for (role, family) in fonts.into_iter().flatten() {
-        let face = family
-            .as_str()
-            .and_then(|f| deep_text::FACES.iter().find(|face| face.family == f));
-        if let Some(face) = face {
+        if let Some(face) = face(family) {
             ty.fonts.insert(role.clone(), face.family);
         }
     }
+    let fallback = tokens.get(TYPE_TOKEN).and_then(|t| t.get("fallback"));
+    let fallback = fallback.and_then(Value::as_array).into_iter().flatten();
+    ty.fallback = fallback.filter_map(|f| face(f).map(|face| face.family)).collect();
     ty
 }
 
@@ -1254,13 +1256,13 @@ pub fn marks2d_planted(planted: relations::Planted) -> Module {
     }
 }
 
-/// What the frame draws: the draw list, each text's shaped run and each animated text's units as
-/// `[lift, opacity]`. The status marks are the text module's (`text.status`).
+/// What the frame draws: the draw list, each text's shaped run and each animated text's units
+/// ([`crate::animated::Unit`]). The status marks are the text module's (`text.status`).
 #[derive(Debug)]
 pub struct Drawing {
     pub frame: Frame,
     pub runs: BTreeMap<String, Arc<Run>>,
-    pub animated: BTreeMap<String, Vec<[f64; 2]>>,
+    pub animated: BTreeMap<String, Vec<crate::animated::Unit>>,
     /// The marks this frame put into its draw list: every mark when it built the list, the
     /// changed items' when it replaced them in the last one (#896).
     pub built: usize,
@@ -1957,7 +1959,7 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     }
     let mut animated = BTreeMap::new();
     for (id, a) in v.every("text.animated")? {
-        if let Some(units) = a.as_typed::<Vec<[f64; 2]>>() {
+        if let Some(units) = a.as_typed::<Vec<crate::animated::Unit>>() {
             animated.insert(id.to_string(), (*units).clone());
         }
     }

@@ -414,15 +414,20 @@ fn index_html(
     let stamp = stamp
         .map(|s| format!("<meta name=\"exported\" content=\"{s}\">\n"))
         .unwrap_or_default();
+    // #2856: a line the player's element removes as its first act, so only a page whose script never ran shows it.
+    // The element's script is render-blocking: the page paints nothing until it has arrived, so an untouched page
+    // doesn't flash the line while the script loads.
+    let fallback = escape(manifest["fallback"]["index"].as_str().unwrap_or_default());
     format!(
         "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
 <meta http-equiv=\"Content-Security-Policy\" content=\"{policy}\">\n<meta name=\"referrer\" content=\"no-referrer\">\n{stamp}<title>{}</title>\n\
-<style>html,body{{margin:0;background:#101012;color:#e8e8ec;font:14px system-ui,sans-serif}}deep-player{{display:block}}\
-deep-player canvas{{display:block;width:100%;height:auto;max-height:100vh;object-fit:contain}}[data-deep-notice]{{margin:8px 12px}}\
+<style>html,body{{margin:0;background:#101012;color:#e8e8ec;font:14px system-ui,sans-serif}}deep-player{{display:block;position:relative}}\
+deep-player canvas{{display:block;width:100%;height:auto;max-height:100vh;object-fit:contain}}[data-deep-notice],[data-deep-unstarted]{{margin:8px 12px}}\
+[data-deep-notice=stopped]{{position:absolute;top:12px;left:12px;max-width:560px;margin:0;padding:8px 12px;background:#1b1b20;border:1px solid #55555f;border-radius:6px}}deep-player a{{color:#9db4ff}}\
 [data-deep-saves]{{display:flex;gap:8px;margin:8px 12px}}[data-deep-saves] button,[data-deep-saves] select{{font:inherit;color:inherit;background:#232329;border:1px solid #4a4a55;border-radius:6px;padding:4px 10px}}</style>\n\
-<script type=\"importmap\">{map}</script>\n</head>\n<body>\n<deep-player></deep-player>\n\
-<script type=\"application/json\" id=\"deep-bundle\">{data}</script>\n\
-<script type=\"module\" src=\"./{}\" integrity=\"{}\"></script>\n</body>\n</html>\n",
+<script type=\"importmap\">{map}</script>\n<script type=\"module\" src=\"./{}\" integrity=\"{}\" blocking=\"render\"></script>\n</head>\n<body>\n\
+<deep-player><p data-deep-unstarted>The player hasn't started: the host may have changed its script or served it under the wrong type. <a href=\"./{fallback}\">Open the fallback page</a></p></deep-player>\n\
+<script type=\"application/json\" id=\"deep-bundle\">{data}</script>\n</body>\n</html>\n",
         escape(title),
         element.0,
         integrity(element.1),
@@ -468,6 +473,15 @@ fn element(guard: Option<Guard>) -> String {
         Some(Guard::WebAnnouncesEveryFrame) => ELEMENT.replace(
             "      if (was !== undefined && was !== text) said.push(text);",
             "      said.push(text);",
+        ),
+        // Planted (#2856 AC1): a throw from the core while the piece plays is caught, and the play goes on.
+        Some(Guard::WebPlaysOnFailure) => {
+            ELEMENT.replace("      this.#stop(e);\n      return;\n", "")
+        }
+        // Planted (#2856 AC3): the index page's line that the player hasn't started stays in place.
+        Some(Guard::WebElementLeavesLine) => ELEMENT.replace(
+            "    this.querySelector('[data-deep-unstarted]')?.remove();\n",
+            "",
         ),
         _ => ELEMENT.to_string(),
     }
@@ -604,6 +618,8 @@ impl Hub<'_> {
             Guard::WebIndexRequiresEveryAnyOf,
             Guard::WebNoTree,
             Guard::WebAnnouncesEveryFrame,
+            Guard::WebPlaysOnFailure,
+            Guard::WebElementLeavesLine,
         ]
         .into_iter()
         .find(|g| self.planted(Planted::Export(*g)))
@@ -689,20 +705,23 @@ impl Hub<'_> {
         // The player and its page glue.
         let (_, wasm_sha) = files.put(player(set, guard), Some("wasm"), Map::new());
         let (glue_path, _) = files.put(set.glue.to_vec(), Some("js"), Map::new());
-        let element = element(guard);
+        // #277's planted web copy: back in view, it jumps to the confirmed step.
+        let element = match self.scenario.module_planted.as_deref() {
+            Some("web_catch_up_jumps") => ELEMENT.replace(
+                "    const opened = JSON.parse(this.#player.join(",
+                "    this.#player.net_plant('web_catch_up_jumps');\n    const opened = JSON.parse(this.#player.join(",
+            ),
+            _ => element(guard),
+        };
         let (element_path, _) = files.put(element.clone().into_bytes(), Some("js"), Map::new());
         // The document as the app's frames draw it, and the recorded input track as the hub holds
         // it (#1164's `track` call), its bytes the ones its hash is of, so it is the app's by hash.
         let doc_bytes = serde_json::to_vec(doc).map_err(|_| json!({"code": "bad_input"}))?;
         let (doc_path, doc_sha) = files.put(doc_bytes, Some("json"), Map::new());
-        let mut held = deep_canvas_input::track::Track::default();
-        for e in &job.track {
-            let e = crate::track_call::entry_of(e).ok_or_else(
-                || json!({"code": "bad_input", "what": "track: each entry is {t, control, value, writer}"}),
-            )?;
-            held.append(e);
-        }
-        let (_, track_sha) = files.put(held.bytes(), Some("json"), Map::new());
+        let held = crate::track_call::held_bytes(&job.track).ok_or_else(
+            || json!({"code": "bad_input", "what": "track: each entry is {t, control, value, writer}"}),
+        )?;
+        let (_, track_sha) = files.put(held, Some("json"), Map::new());
         // Everything the document names by hash.
         for (_, path, sha) in crate::extended::hashes(doc, true) {
             let bytes = crate::evidence::read(&root, &sha).ok_or_else(|| {

@@ -207,3 +207,13 @@ fault and the tests it failed. It isn't kept, so it isn't the program under test
 - `BASE-FAILURE.txt`: the run on the base and the planted wrong programs, with paths redacted.
 
 No fixture holds a secret or personal data. Issue 9115 is made up.
+
+## Redraft for #1872
+
+#1872 amends AC5: every key of `known-failures.json` is now guarded, so an entry added to `failures` needs a signed tag
+naming it (`Approves: scripts/known-failures.json › <test ID>`), and `affected.mjs --record` is gone. Its test here was
+retired by #1872. In the merge test, the change's own commit listing `b › two` under `failures` had no tag, so the
+guard now refused that commit and "the resolution keeps skips" failed though the merge was fine. That commit now carries
+a signed tag naming `scripts/known-failures.json › b › two`, so only the merge's resolution is judged; both subtests
+keep their meaning. The header of `guard.test.mjs` no longer says the other keys are free. Run against #1115's base
+scripts (`58862789`), "the resolution adds an entry" still fails ("passed the guard") and "keeps skips" passes, as before.

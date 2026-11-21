@@ -1,0 +1,45 @@
+# node --test --test-reporter=spec tests/acceptance/2848/refill.test.mjs at base 8005f72fb (no fix), started 2026-11-19T20:28:15Z,
+# Linux, 20 cores (os.availableParallelism()), one-minute load 222 at the start. It exited 1 after 31 s, failing at its
+# last assertion (refill.test.mjs:177): the later job found 16 of the run's 19 tokens, and the run read PASS. Home paths read ~/.
+✖ #2848 AC: a later build in an affected.mjs run gets the run's full compile share, or the run says it cannot, after a jobserver client holding tokens was SIGKILLed earlier in the run (30596.700097ms)
+ℹ tokens: the live job held 2 and found 14 more free after the killed client's job ended (in all 16); the later job found 16; the share is 19 on 20 cores
+ℹ the run's summary: PASS affected: 0 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 3 passed, in 24 s at load 215; logs in /tmp/deep-1115-0SVO9p/tmp/deep-affected-f1O17X
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 30943.023337
+
+✖ failing tests:
+
+test at tests/acceptance/2848/refill.test.mjs:134:1
+✖ #2848 AC: a later build in an affected.mjs run gets the run's full compile share, or the run says it cannot, after a jobserver client holding tokens was SIGKILLed earlier in the run (30596.700097ms)
+  AssertionError [ERR_ASSERTION]: the later job found 16 tokens in the run's jobserver, not the run's share of 19 (20 cores less one, no shards), after a client holding 3 was SIGKILLed, and the run did not say it cannot give the share (PASS affected: 0 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 3 passed, in 24 s at load 215; logs in /tmp/deep-1115-0SVO9p/tmp/deep-affected-f1O17X)
+  the machine's cores: 20; the run's share: 19 tokens (no shards)
+  record:
+  {"pid":3220713,"ppid":3219227,"cwd":"/tmp/deep-1115-0SVO9p/tree","fifo":"/tmp/deep-1115-0SVO9p/tmp/deep-jobserver-s0d0hI/tokens","makeflags":"-j --jobserver-auth=fifo:/tmp/deep-1115-0SVO9p/tmp/deep-jobserver-s0d0hI/tokens","at":1795120105421,"event":"held","count":2}
+  {"pid":3219554,"ppid":3219411,"cwd":"/tmp/deep-1115-0SVO9p/tree","fifo":"/tmp/deep-1115-0SVO9p/tmp/deep-jobserver-s0d0hI/tokens","makeflags":"-j --jobserver-auth=fifo:/tmp/deep-1115-0SVO9p/tmp/deep-jobserver-s0d0hI/tokens","at":1795120105980,"event":"client-held","client":3220987,"count":3}
+  {"pid":3219554,"ppid":3219411,"cwd":"/tmp/deep-1115-0SVO9p/tree","fifo":"/tmp/deep-1115-0SVO9p/tmp/deep-jobserver-s0d0hI/tokens","makeflags":"-j --jobserver-auth=fifo:/tmp/deep-1115-0SVO9p/tmp/deep-jobserver-s0d0hI/tokens","at":1795120105994,"event":"killed","client":3220987,"signal":"SIGKILL"}
+  {"pid":3220713,"ppid":3219227,"cwd":"/tmp/deep-1115-0SVO9p/tree","fifo":"/tmp/deep-1115-0SVO9p/tmp/deep-jobserver-s0d0hI/tokens","makeflags":"-j --jobserver-auth=fifo:/tmp/deep-1115-0SVO9p/tmp/deep-jobserver-s0d0hI/tokens","at":1795120119463,"event":"counted","held":2,"free":14,"jobEnded":true}
+  {"pid":3226392,"ppid":3226354,"cwd":"/tmp/deep-1115-0SVO9p/tree","fifo":"/tmp/deep-1115-0SVO9p/tmp/deep-jobserver-s0d0hI/tokens","makeflags":"-j --jobserver-auth=fifo:/tmp/deep-1115-0SVO9p/tmp/deep-jobserver-s0d0hI/tokens","at":1795120123593,"event":"later","free":16}
+  exit 0
+  stdout:
+  …test.ts tests/acceptance/457/ac9-budgets.test.ts tests/acceptance/1636/ac8-budget.test.ts tests/acceptance/210/ac8-budgets.test.ts tests/acceptance/2031/ac8-budget.test.ts tests/acceptance/2032/ac8-budget.test.ts tests/acceptance/2032-redraft-ac8/ac8-budget.test.ts tests/acceptance/182/ac11-budgets.test.ts tests/acceptance/192/voxel/ac10-budgets.test.ts tests/acceptance/416/layouts/budgets.test.ts tests/acceptance/1015/budgets.test.ts tests/acceptance/1017/budgets.test.ts tests/acceptance/1425/budgets.test.ts tests/acceptance/148/budgets.test.ts tests/acceptance/149/budgets.test.ts tests/acceptance/1515/budgets.test.ts tests/acceptance/160/budgets.test.ts tests/acceptance/167/budgets.test.ts tests/acceptance/222/budgets.test.ts tests/acceptance/308/budgets.test.ts tests/acceptance/405/budgets.test.ts tests/acceptance/45/budgets.test.ts tests/acceptance/67/budgets.test.ts tests/acceptance/1555/budget-load.test.mjs tests/acceptance/408/machines.test.ts tests/acceptance/501/exports.test.ts tests/acceptance/824/sessions/budgets.long.test.ts tests/acceptance/990/access.test.ts tests/acceptance/990/queries.test.ts tests/acceptance/990/taste.test.ts tests/acceptance/103-redraft-1830/budgets.test.ts tests/acceptance/365-redraft-1830/budgets.test.ts tests/acceptance/262-redraft-1830/budgets.test.ts tests/acceptance/761-redraft-1830/budgets.test.ts tests/acceptance/1098-redraft-1830/budgets.test.ts tests/acceptance/148-redraft-1830/budgets.test.ts tests/acceptance/417-redraft-1830/budgets.test.ts tests/acceptance/1425-redraft-1830/budgets.test.ts tests/acceptance/149-redraft-1830/budgets.test.ts tests/acceptance/311-redraft-1830/budgets.test.ts tests/acceptance/1018-redraft-1830/budgets.test.ts tests/acceptance/166-redraft-1830/budgets.test.ts tests/acceptance/268-redraft-1830/budgets.test.ts tests/acceptance/465-redraft-1830/budgets.test.ts tests/acceptance/968-redraft-1830/budgets.test.ts tests/acceptance/124-redraft-1830/ac5-budgets.live.test.ts tests/acceptance/1427-redraft-1830/ac8-budget.live.test.ts tests/acceptance/1830/ac2-timing.test.ts tests/acceptance/568-redraft-1830/judge.test.mjs tests/acceptance/903/ac6-export.test.ts tests/acceptance/508/ac6-effects.test.ts tests/acceptance/1381/ac6-budget.test.ts tests/acceptance/1992/cost.test.ts tests/acceptance/2650/budgets.long.test.ts
+  PASS affected: 0 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 3 passed, in 24 s at load 215; logs in /tmp/deep-1115-0SVO9p/tmp/deep-affected-f1O17X
+  
+  stderr:
+  
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/strange-blackburn-2f257a/tests/acceptance/2848/refill.test.mjs:177:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

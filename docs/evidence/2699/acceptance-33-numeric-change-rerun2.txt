@@ -1,0 +1,5 @@
+22:17  up  2:44, 3 users, load averages: 33.79 59.50 81.19
+ ✓ tests/acceptance/33/numeric.test.ts > AC12 #33.75c6e9ae the numeric fakes, each refused while its clean twin passes > AC12 #33.75c6e9ae the corpus holds the five numeric fakes with their marks, and the kit refuses each claim and passes each twin 48240ms
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+exit 0

@@ -24,6 +24,7 @@ pub mod held;
 pub mod history;
 pub mod inset;
 pub mod local;
+pub mod local_tone;
 pub mod maps;
 mod mesh;
 pub mod mirror;
@@ -34,6 +35,7 @@ mod op;
 mod origin;
 mod planted;
 pub mod print;
+pub mod proxy;
 mod readouts;
 mod set;
 pub mod shadow;
@@ -2771,6 +2773,10 @@ impl Renderer {
             flaring: false,
             doffer: None,
             dofing: false,
+            toner: None,
+            toning: false,
+            toned_bind: None,
+            pictured: false,
             waterer: None,
             watering: false,
             reflection: None,
@@ -2807,6 +2813,7 @@ impl Renderer {
             mask: (mask_layout, sampler),
             picks: BTreeMap::new(),
             next_generation: 0,
+            spans: Default::default(),
             targets: None,
             order: Vec::new(),
             ground: [0.0, 0.0, 0.0, 1.0],
@@ -3732,7 +3739,7 @@ impl Renderer {
             *slot = self.light_rows(scene, &scene.lights[i], weight, local);
         }
         // The fill lights at this view (#1634), by the policy's order, for their clusters' pass.
-        let ordering = std::time::Instant::now();
+        let ordering = web_time::Instant::now();
         let mut order = light::fill_order(&scene.lights, scores);
         // The planted wrong programs: the lights in the document's order, and the key lights' cut
         // at 32 with its margin.
@@ -4049,7 +4056,7 @@ impl Renderer {
                 &mut choices,
                 shadow_texels(&chosen, side),
             );
-            deep_canvas_scene3d::lod::resolve(&mut chosen, &choices);
+            proxy::resolve(&mut chosen, &choices);
             return self.prepare_placed(device, &chosen, look);
         }
         // #166: the water's parts draw in a pass of their own, after the mirror's view.
@@ -4185,7 +4192,7 @@ impl Renderer {
         }
         self.counts.upload_ms.extend(self.tints.upload_ms.clone());
         for layer in &scene.layers {
-            self.prepare_batch(device, layer, &scene.camera);
+            self.prepare_batch(device, layer, scene);
         }
         self.sways.move_all(device, scene);
         self.counts.overlay_rows = self.tints.table(device, &scene.tints, &self.picks);
@@ -4234,7 +4241,7 @@ impl Renderer {
         // #465: the mirror's view at t, drawn whole each frame.
         self.mirroring = match &scene.mirror {
             Some(m) => {
-                let planted = self.planted;
+                let (planted, internal) = (self.planted, self.internal());
                 let mirrorer = self
                     .mirrorer
                     .get_or_insert_with(|| Box::new(mirror::Mirrorer::new(device, planted)));
@@ -4244,7 +4251,7 @@ impl Renderer {
                     .as_ref()
                     .is_none_or(|w| w.material != m.material);
                 if !self.planted.keeps_mirror {
-                    mirrorer.prepare(device, scene, m, look, &self.picks, overlay);
+                    mirrorer.prepare(device, scene, internal, m, look, &self.picks, overlay);
                 }
                 true
             }
@@ -4443,6 +4450,7 @@ impl Renderer {
                 .views
                 .entry(v.id.clone())
                 .or_insert_with(|| Box::new(Renderer::new(device, planted)));
+            r.pictured = true;
             r.prepare(device, &deep_canvas_scene3d::views::seen(scene, v), look);
             if let Some((_, view)) = r.linear() {
                 pictures.insert(deep_canvas_scene3d::inset::view_key(&v.id), view.clone());
@@ -4815,7 +4823,7 @@ impl Renderer {
         if self.ao.generation != generation {
             // The solids' ao bind group changed: every batch with solids encodes again.
             for layer in &scene.layers {
-                self.prepare_batch(device, layer, &scene.camera);
+                self.prepare_batch(device, layer, scene);
             }
             self.sways.move_all(device, scene);
             self.count_draws(scene);
@@ -5447,7 +5455,7 @@ impl Renderer {
             .filter(|s| s.shadow && !cascaded)
             .and_then(|s| shadow::light_clip(scene, s.toward, 0.0));
         self.prepare_cascades(device, scene, &frame);
-        let scoring = std::time::Instant::now();
+        let scoring = web_time::Instant::now();
         let policy = scene
             .light_cut
             .clone()
@@ -5548,6 +5556,25 @@ impl Renderer {
                 bytemuck::bytes_of(&tone),
             )
         });
+        // #971: the look's local tone map at the internal size the targets draw; at its
+        // identity it draws nothing.
+        self.toning = match look.local.filter(|l| !l.is_identity() && !self.pictured) {
+            Some(l) => {
+                let exposure = scene.exposure.unwrap_or(look.exposure);
+                let (internal, planted) = (self.internal(), self.planted.local_tone);
+                self.toner
+                    .get_or_insert_with(|| Box::new(local_tone::Toner::new(device)))
+                    .prepare(device, &l, exposure, internal, planted);
+                true
+            }
+            None => {
+                if let Some(t) = self.toner.as_mut() {
+                    t.rest();
+                }
+                self.toned_bind = None;
+                false
+            }
+        };
         self.ground = [
             decode(scene.ground[0]),
             decode(scene.ground[1]),
@@ -5614,12 +5641,8 @@ impl Renderer {
         sub.write(&device.queue, across);
     }
 
-    fn prepare_batch(
-        &mut self,
-        device: &Device,
-        layer: &Layer3,
-        cam: &deep_canvas_scene3d::scene::Camera,
-    ) {
+    fn prepare_batch(&mut self, device: &Device, layer: &Layer3, scene: &Scene) {
+        let cam = &scene.camera;
         self.compiled += self.families.ensure(&device.device, layer, &mut self.names);
         let clear = |s: &Solid| {
             s.per_pixel
@@ -6105,6 +6128,50 @@ impl Renderer {
         }
         batch.lines.begin();
         for l in &layer.lines {
+            // #1782: a line with a hidden style draws each edge's spans, the hidden ones in that
+            // style over what hides them.
+            let style = l
+                .edges
+                .as_ref()
+                .and_then(|e| Some((e.width, e.hidden.as_ref()?)));
+            let spans = style.and_then(|s| {
+                Some((
+                    s,
+                    deep_canvas_scene3d::spans::pieces(scene, l, &mut self.spans)?,
+                ))
+            });
+            for (width, hidden, p) in spans
+                .iter()
+                .flat_map(|((w, h), ps)| ps.iter().map(move |p| (w, h, p)))
+            {
+                let (color, dash) = if p.hidden {
+                    (hidden.color, hidden.dash)
+                } else {
+                    (l.color, l.dash)
+                };
+                let record = SegmentRecord {
+                    a: v4(p.a, *width),
+                    b: v4(p.b, *width),
+                    color: faded_pack(color, layer.fades.get(&l.id)),
+                    pick: picks[&l.id],
+                    // An end a split or a dash made is cut square, as a dash's own ends are.
+                    flags: u32::from(l.world)
+                        | (1 << 1)
+                        | (u32::from(l.over || p.hidden) << 2)
+                        | (u32::from(l.dash_world) << 4)
+                        | ((u32::from(p.cut[0]) | (u32::from(p.cut[1]) << 1)) << 6),
+                    dash: if p.dashed {
+                        half_bits(dash[0]) | (half_bits(dash[1]) << 16)
+                    } else {
+                        0
+                    },
+                    fade: OPAQUE_ENDS,
+                };
+                batch.lines.push(&l.id, bytemuck::bytes_of(&record));
+            }
+            if spans.is_some() {
+                continue;
+            }
             for (k, seg) in l.segments.iter().enumerate() {
                 let record = SegmentRecord {
                     a: v4(seg.a, seg.wa),
@@ -7487,6 +7554,22 @@ impl Renderer {
                 jobs.push((FLARE_PASS.into(), job));
             }
         }
+        // #971: the local tone map over the linear image the output would read; the output
+        // reads the image it resolves instead.
+        if let (true, Some(l)) = (self.toning, self.toner.as_mut()) {
+            let source = self
+                .pre_tone
+                .clone()
+                .unwrap_or_else(|| t.linear_view.clone());
+            let (job, resolved) = l.job(device, t.size, &source, &self.profiler);
+            jobs.push((local_tone::LOCAL_TONE_PASS.into(), job));
+            let kept = match &self.toned_bind {
+                Some((r, c, b)) if *r == resolved && *c == self.covered.1 => Some(b.clone()),
+                _ => None,
+            };
+            bind = kept.unwrap_or_else(|| self.output_bind(&device.device, &resolved));
+            self.toned_bind = Some((resolved, self.covered.1.clone(), bind.clone()));
+        }
         // With passes after the finish, the output writes the finished frame, and they write
         // the slot from it (#382). Below scale 1 the output and the guard write the internal
         // frame, which the upscale and sharpen return to the slot's size (#386).
@@ -8251,6 +8334,20 @@ impl Renderer {
         let t = self.targets.as_ref()?;
         let texture = self.pre_tone.as_ref().map_or(&t.linear, |v| v.texture());
         let half = read_texture(device, texture, t.size, 8)?;
+        Some(
+            half.as_chunks::<2>()
+                .0
+                .iter()
+                .flat_map(|h| f16_to_f32(u16::from_le_bytes(*h)).to_le_bytes())
+                .collect(),
+        )
+    }
+
+    /// #971: the image the look's local tone map resolved from that one, which the output pass
+    /// read in its place, laid out the same; `None` in a frame with no local tone map.
+    pub fn read_toned(&self, device: &Device) -> Option<Vec<u8>> {
+        let (texture, size) = self.toner.as_ref().filter(|_| self.toning)?.resolved()?;
+        let half = read_texture(device, texture, size, 8)?;
         Some(
             half.as_chunks::<2>()
                 .0

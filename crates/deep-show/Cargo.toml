@@ -267,6 +267,9 @@ test-mark-binds-author = ["dep:deep-canvas-test-modules"]
 test-mark-schema-changed = ["dep:deep-canvas-test-modules"]
 test-mark-v2 = ["dep:deep-canvas-test-modules"]
 test-mode-closed = ["dep:deep-canvas-test-modules"]
+# Issue #2777: test.tone's kind test.tint@1, its field tone's list of three words unclosed or closed.
+test-tone-unclosed = ["dep:deep-canvas-test-modules"]
+test-tone-closed = ["dep:deep-canvas-test-modules"]
 test-mode-registry = ["dep:deep-canvas-test-modules"]
 test-mode-renumbered = ["dep:deep-canvas-test-modules"]
 test-fill-a = ["dep:deep-canvas-test-modules"]
@@ -332,6 +335,7 @@ deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 deep-canvas-media = { path = "../deep-canvas-media" }
 deep-canvas-export = { path = "../deep-canvas-export" }
 deep-lottie-reader = { path = "../deep-lottie-reader" }
+deep-pptx-reader = { path = "../deep-pptx-reader" }
 deep-logic = { path = "../deep-logic" }
 deep-play = { path = "../deep-play" }
 # Issue #1918: the physics module, physics@1, and the Rapier backend a scene's worlds bake on.
@@ -379,6 +383,9 @@ sha2 = "0.10"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "noop", "metal"] }
+# Issue #1561: a 2D frame under a drawn look, through the compositor and the drawn passes the
+# live window and `film2d` run; on macOS, where this binary has a GPU to draw on.
+deep-groups-render = { path = "../deep-groups-render" }
 deep-replica = { path = "../deep-replica" }
 deep-text-gpui = { path = "../deep-text-gpui" }
 # Issue #854: the GPU ledger the GPUI patch adds to the Metal renderer, for a settled frame's GPU time.

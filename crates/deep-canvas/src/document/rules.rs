@@ -305,7 +305,8 @@ fn template_numbers(doc: &Value, texts: &Texts<'_>, id: &str, t: &str, issues: &
             Part::Words(_) => {}
             Part::Slot(slot)
                 if template::value_in(doc, id, slot).is_none()
-                    && !template::reads_anchor(doc, slot) =>
+                    && !template::reads_anchor(doc, slot)
+                    && !template::reads_output(doc, id, slot) =>
             {
                 issues.push(Issue::error(
                     "ref_unresolved",

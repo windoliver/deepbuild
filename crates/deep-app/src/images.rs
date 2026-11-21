@@ -15,6 +15,7 @@ type Thumbnail = Result<(Arc<RenderImage>, Option<Arc<RenderImage>>), ImageCache
 
 /// #1431: the thumbnails' sprites (`Thumbnails.made`), decoded in the heap: past either bound, the ones asked for
 /// longest ago go, and the window lets go of their atlas slots.
+// copy-exception: a gauge's key, read in the footprint record, never drawn
 pub static THUMBNAILS: Gauge = Gauge::new("Thumbnails::made", Place::Heap, 512, 64_000_000);
 
 /// Thumbnails of `side` px, each picture fitted inside a square of that side.
@@ -62,9 +63,10 @@ impl Thumbnails {
             crop: [0, 0, size[0], size[1]],
             flip: 0,
             level: deep_images::level_for(size, drawn),
+            frame: 0,
         };
         let level = match images.show(&store, key, Queue::Visible, [0.0; 4]) {
-            Shown::Exact(l) | Shown::Nearest(l, _) => l,
+            Shown::Exact(l) | Shown::Nearest(l, _) | Shown::Frame(l, _) => l,
             Shown::Nothing => return images.failed(&key).and_then(|r| fail(r.code)),
         };
         self.made.turn();

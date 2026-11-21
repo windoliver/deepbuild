@@ -1444,7 +1444,16 @@ fn pointer_with(r: &mut Registrar, declared: bool) {
         None,
     );
     r.kind(kind("pointer", vec![boxed(), points_to]), &[], "rect@1")
-        .drawn(ink_box);
+        .drawn(ink_box)
+        // #2777: `null` is the one word the field offers.
+        .closes(
+            "points_to",
+            deep_canvas::registry::fields::Closure::closed(
+                "record",
+                "never: a test module's fixture kind",
+                deep_canvas::registry::fields::NOTHING,
+            ),
+        );
     if declared {
         use deep_canvas::refs::{kind as names, Decl, Holds};
         r.refs(&[Decl::new("params/points_to", Holds::Item, names::TARGET)]);

@@ -170,6 +170,36 @@ function prepare(root, change, directory) {
 const workspaces = (directory) => existsSync(join(directory, 'package.json')) && Boolean(JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8')).workspaces);
 
 /**
+ * The workspace packages a mutant of `paths` reaches through a build (#1120): the packages holding them and every
+ * package that depends on one of those, directly or through others, read from the reverse workspace graph of the
+ * packages/* folders in `directory`. A dependent comes after what it depends on, as its build reads their output.
+ */
+function mutantScope(directory, paths) {
+  const folders = readdirSync(join(directory, 'packages')).filter((folder) => existsSync(join(directory, 'packages', folder, 'package.json')));
+  const manifests = new Map(folders.map((folder) => [folder, JSON.parse(readFileSync(join(directory, 'packages', folder, 'package.json'), 'utf8'))]));
+  const folderOf = new Map([...manifests].map(([folder, { name }]) => [name, folder]));
+  const needs = new Map([...manifests].map(([folder, manifest]) => [folder, new Set(['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'].flatMap((field) => Object.keys(manifest[field] ?? {})).map((name) => folderOf.get(name)).filter((other) => other && other !== folder))]));
+  const scope = new Set(paths.map((path) => path.split('/')[1]).filter((folder) => manifests.has(folder)));
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [folder, wants] of needs) {
+      if (scope.has(folder) || ![...wants].some((other) => scope.has(other))) continue;
+      scope.add(folder);
+      grew = true;
+    }
+  }
+  const ordered = [], seen = new Set();
+  const visit = (folder) => {
+    if (seen.has(folder)) return; // also ends a cycle in the graph
+    seen.add(folder);
+    for (const other of needs.get(folder)) if (scope.has(other)) visit(other);
+    ordered.push(folder);
+  };
+  for (const folder of [...scope].sort()) visit(folder);
+  return ordered;
+}
+
+/**
  * The change in a prepared copy: its directory, where its packages are installed, and why it can't
  * run there, or null. Its packages are what its own lock installs, as the merge base's are, not the
  * worktree's, which an install from inputs the lock doesn't hold may have re-pointed.
@@ -301,9 +331,18 @@ function build(directory) {
 }
 
 /** The paths of a stack's frames outside the runtime and the installed packages, innermost first; a
- * path may hold spaces. */
-function frames(stack, directory) {
-  return [...String(stack).matchAll(/^\s*at (?:.*? \()?((?:file:\/\/)?\/.*?):\d+:\d+\)?\s*$/gm)]
+ * path may hold spaces. Given the failure's message, the frames are the stack's last lines, each `at …`, after that
+ * message, so a line of the message shaped like a frame is none (#1838); without it, every such line counts. */
+function frames(stack, directory, message = null) {
+  let text = String(stack);
+  if (message !== null) {
+    const after = message ? text.indexOf(message) : -1;
+    const lines = (after < 0 ? text : text.slice(after + message.length)).trimEnd().split('\n');
+    let first = lines.length;
+    while (first > 0 && /^\s*at /.test(lines[first - 1])) first -= 1;
+    text = lines.slice(first).join('\n');
+  }
+  return [...text.matchAll(/^\s*at (?:.*? \()?((?:file:\/\/)?\/.*?):\d+:\d+\)?\s*$/gm)]
     .map(([, location]) => relative(directory, location.startsWith('file:') ? fileURLToPath(location) : location))
     .filter((path) => !path.split('/').includes('node_modules'));
 }
@@ -323,13 +362,13 @@ const asserted = (name = '', code = '', message = '', stack = '') => code === 'E
 function atAssertion(directory, { name = 'Error', code, message = '', stack = '', thrown }) {
   const caught = thrown ?? (/ but got '.*'$| but '.*' was thrown$/.test(firstLine(message)) ? { stack: '' } : null);
   if (caught && !frames(caught.stack, directory).some((path) => !path.startsWith('..') && !underTestPaths(path))) return false;
-  return asserted(name, code, message, stack) && underTestPaths(frames(stack, directory)[0] ?? '..');
+  return asserted(name, code, message, stack) && underTestPaths(frames(stack, directory, message)[0] ?? '..');
 }
 
 function failure(directory, error) {
   const { name = 'Error', code, message = '' } = error;
   const cause = `${name}${code && !name.includes(code) ? ` [${code}]` : ''}: ${firstLine(message)}`.split(`${directory}/`).join('');
-  return { atAssertion: atAssertion(directory, error), cause };
+  return { atAssertion: atAssertion(directory, error), bySubtests: error.failureType === 'subtestsFailed', cause };
 }
 
 // A run that outlasts this is stopped, and its files count as not run, never as passed or failed.
@@ -627,7 +666,13 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
 function wrongProgram(runs, test) {
   if (failedAtAssertion(runs.base.results.get(test.key))) return 'failed on the merge base at its assertion';
   const twin = (test.twins ?? []).find(({ key }) => failedAtAssertion(runs.twins.get(key)?.results.get(test.key)));
-  return twin ? `failed on ${twin.twin} at its assertion` : null;
+  if (twin) return `failed on ${twin.twin} at its assertion`;
+  // A parent test fails where its subtests do, as their failure, never at an assertion of its own. It is proven when it
+  // failed only by its subtests on the merge base or a twin, and each of its subtests is proven (#1838).
+  const subtests = runs.tests.filter(({ path, key }) => path === test.path && key.startsWith(`${test.key} › `) && !key.slice(test.key.length + 3).includes(' › '));
+  const bySubtests = (result) => result?.status === 'fail' && result.failure.bySubtests;
+  const failed = bySubtests(runs.base.results.get(test.key)) || (test.twins ?? []).some(({ key }) => bySubtests(runs.twins.get(key)?.results.get(test.key)));
+  return failed && subtests.length && subtests.every((subtest) => subtest.status === 'pass' && wrongProgram(runs, subtest)) ? `each of its ${subtests.length} subtests is proven` : null;
 }
 
 /** The before lane's lines; returns the tests that failed on a wrong program. */
@@ -806,6 +851,7 @@ export function mutation({ root, change }, runs, say, print) {
       say('BLOCKED', 'mutation', `${outside.map(({ path }) => path).join(', ')}: links out of the checkout or to nothing, so the lines added there were not mutated`, MUTATION_FIX);
       return kills;
     }
+    const scope = workspaces(directory) ? mutantScope(directory, typescript.map(({ path }) => path)) : [];
     // A test alone: each runner matches a pattern against its full name, its suites' names and its
     // own joined by a space for node --test and by " > " for vitest.
     // A test alone kills a mutant only by failing at an assertion, judged from its runner's report: a
@@ -819,16 +865,41 @@ export function mutation({ root, change }, runs, say, print) {
         vitest.length && [...test ? ['DEEP_PROOF_VITEST_REPORT="$R"'] : [], quote(process.execPath), 'node_modules/vitest/vitest.mjs', 'run', ...test ? [`--reporter=${quote(VITEST_REPORTER)}`, '-t', pattern(' > ')] : [], ...vitest.map(quote)].join(' ') + (test ? judge : ''),
       ].filter(Boolean).map((run) => (test ? `R=$(mktemp ${quote(reports)}/report.XXXXXX) && { ${run}; }` : run));
       // Mutants reach a package that tests read through its build only once it is rebuilt, and the
-      // rebuild is undone as the first build was, keeping the mutants.
+      // rebuild is undone as the first build was, keeping the mutants. Only the mutated packages and
+      // their dependents are rebuilt: a package's build reads only what it declares it depends on (#1120).
       const undo = `import { undoBuild } from ${JSON.stringify(import.meta.url)}; undoBuild(${JSON.stringify(root)}, process.cwd(), ${JSON.stringify(typescript.map(({ path }) => path))}, ${JSON.stringify(runs.modules ?? root)});`;
-      return [...workspaces(directory) ? ['npm run build --workspaces --if-present >/dev/null', `${quote(process.execPath)} --input-type=module -e ${quote(undo)}`] : [], ...runs].join(' && ');
+      const builds = scope.map((folder) => `npm run build --if-present --workspace=${quote(`packages/${folder}`)} >/dev/null`);
+      return [...workspaces(directory) ? [...builds, `${quote(process.execPath)} --input-type=module -e ${quote(undo)}`] : [], ...runs].join(' && ');
     };
     const reports = temporary('deep-proof-report-');
-    const groups = unproven.map((test) => [test, command([test.path], test)]);
-    if (unproven.length < tests.length) groups.push([null, command([...new Set(tests.filter((test) => !unproven.includes(test)).map(({ path }) => path))])]);
+    const groups = unproven.map((test) => [test, [test.path]]);
+    const proven = [...new Set(tests.filter((test) => !unproven.includes(test)).map(({ path }) => path))];
+    // A test that can start the copy's hub runs it from the copy's own target/, which a fresh copy lacks and a bay
+    // keeps from an earlier use, a twin's, say: each StrykerJS run gets this copy's own hub binaries, or none (#2835).
+    let hub, bin;
+    try {
+      // The proven tests run together, but those that start the hub apart from those that name neither package, so
+      // these never find the hub's binaries.
+      const starts = proven.length ? selectBinaries(directory, proven).hub : [];
+      for (const files of [proven.filter((path) => !starts.includes(path)), proven.filter((path) => starts.includes(path))]) if (files.length) groups.push([null, files]);
+      hub = groups.map(([, files]) => selectBinaries(directory, files).target);
+      bin = buildBinaries(directory, join(temporary('deep-proof-binaries-'), 'bin'), [...new Set(hub.flat())], (command, args, options) => spawnIn(directory, command, args, options), { timeout: 0 });
+    } catch (error) {
+      // buildBinaries and selectBinaries name their verdict first: `BLOCKED test binaries: …`, `INCONCLUSIVE no grant: …`.
+      const [, level, why] = /^(BLOCKED|INCONCLUSIVE) (.*)$/s.exec(error.message) ?? [, 'BLOCKED', error.message];
+      say(level, 'mutation', `cannot build the hub's binaries for the mutants' copy, so the lines added to ${typescript.map(({ path }) => path).join(', ')} were not mutated: ${why}`, MUTATION_FIX);
+      return kills;
+    }
     const killed = new Set(), seen = new Map();
-    for (const [test, line] of groups) {
-      const run = strykerRun(root, directory, mutate, line);
+    for (const [index, [test, files]] of groups.entries()) {
+      try {
+        placeHubBinaries(directory, bin, hub[index]);
+      } catch (error) {
+        blocked = true;
+        say('BLOCKED', 'mutation', `cannot put the hub's binaries in the mutants' copy for ${test ? test.key : 'the tagged tests'}: ${error.message}`, MUTATION_FIX);
+        break;
+      }
+      const run = strykerRun(root, directory, mutate, command(files, test));
       if (run.error) {
         blocked = true;
         say('BLOCKED', 'mutation', `StrykerJS could not run ${test ? test.key : 'the tagged tests'}: ${run.error}`, MUTATION_FIX);

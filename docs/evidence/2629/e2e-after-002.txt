@@ -1,0 +1,28 @@
+== umask 002 checkout, this branch: <tmp>/e2629/c002
+-- build: HEAD aa02a30e4, packages/extension-host/src as committed
+-- dist/digest.js hashes: stat.mode & 0o100 ? '755' : '644'} ${sha256(relative === 'deepbuild.json' ? manifestBytes(path) : readFileSync(path))} ${relative}
+-- dist/host.js chmods copies: 0
+-- checkout HEAD 44efe5f; files with the owner execute bit, then the first plain files:
+-rw-rw-r-- score/./deepbuild.json
+-rw-rw-r-- score/./index.ts
+-rw-rw-r-- score/./tool/flac.mjs
+-rwxrwxr-x import/./tool/lottie.wasm
+-rw-rw-r-- import/./README.md
+-rw-rw-r-- import/./deepbuild.json
+-rw-rw-r-- import/./fixtures/loader-clean.document.json
+-- hub (pid 64275) ready: 1
+$ deep install <tmp>/e2629/c002/packages/jobs/score
+Source: <tmp>/e2629/c002/packages/jobs/score
+  deepbuild/score@1.0.0, digest d1:fd6d8beac98c0b0fb915f2d46f54d62f6917e449d696af32ebf23bd71bd313f8, unsigned
+Permissions:
+  check kinds: score.render.pitch
+Installed deepbuild/score@1.0.0
+exit 0
+$ deep install <tmp>/e2629/c002/packages/jobs/import
+Source: <tmp>/e2629/c002/packages/jobs/import
+  deepbuild/import@1.0.0, digest d1:8fb7886bb7379869e52b92cf43fdc0a33c984675ae074a2b8457bb6eeeff8cc9, unsigned
+Permissions:
+  check kinds: import.document, import.colors_mapped, import.no_expression
+Installed deepbuild/import@1.0.0
+exit 0
+-- hub 64275 stopped

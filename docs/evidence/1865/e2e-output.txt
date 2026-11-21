@@ -1,0 +1,39 @@
+
+[1m== 1. Start the installed hub (temp HOME, stand-in login service); OS confirmation stub: cancelled[0m
+The hub is up.
+hub up: pid 83441, start 01M7XF55CNF88TMMB35C2M0EAG
+
+[1m== 2. A token holder sends hub.stop() straight to the socket, naming no process[0m
+reply: {"v":1,"id":1,"error":{"code":"unconfirmed","retryable":false,"remediation":"deep hub stop changed nothing: the call names no process for the peer check; run the deep command itself.","path":"/method","actual":"deep hub stop","evidence":[]}}
+hub up: pid 83441, start 01M7XF55CNF88TMMB35C2M0EAG
+
+[1m== 3. The same, naming its process: the hub asks the OS, which cancels[0m
+reply: {"v":1,"id":1,"error":{"code":"unconfirmed","retryable":true,"remediation":"deep hub stop changed nothing: the OS didn't confirm you (the prompt was cancelled). It takes effect only once the OS confirms you; run it again and confirm.","path":"/params/command","actual":"deep hub stop","evidence":[]}}
+hub up: pid 83441, start 01M7XF55CNF88TMMB35C2M0EAG
+asks the OS saw: 1 (deep hub stop)
+
+[1m== 4. deep hub stop with the OS confirmation cancelled[0m
+deep hub stop changed nothing: the OS didn't confirm you (the prompt was cancelled). It takes effect only once the OS confirms you; run it again and confirm.
+exit 3
+hub up: pid 83441, start 01M7XF55CNF88TMMB35C2M0EAG
+
+[1m== 5. A restart on the token alone: hub.restart, no prompt; the login service brings it back[0m
+reply: {"v":1,"id":1,"result":{"restarting":true}}
+hub up: pid 88908, start 01M7XF5MQAFD9DZTFJNDVAN5CF (after 7 s)
+{"t":1795211579490,"event":"exit","pid":83441,"code":75,"signal":null}
+{"t":1795211579996,"event":"start","why":"keepalive","pid":88908,"program":["~/.nvm/versions/node/v24.22.0/bin/node","~/private/deepbuild-core/.claude/worktrees/fix-2581-deep-flag-values-4da26a/packages/cli/dist/main.js","hub","run"]}
+asks the OS saw: 2
+
+[1m== 6. deep hub stop, the OS confirming you[0m
+The hub stopped. It starts again at your next login, or with deep hub start.
+exit 0
+asks the OS saw: 3 (deep hub stop)
+hub: The hub isn't answering, since 13:53; start it with deep hub start.
+waiting 35 s (three of launchd's 10 s throttles) for the login service not to start it again...
+hub: The hub isn't answering, since 13:53; start it with deep hub start.
+{"t":1795211579996,"event":"start","why":"keepalive","pid":88908,"program":["~/.nvm/versions/node/v24.22.0/bin/node","~/private/deepbuild-core/.claude/worktrees/fix-2581-deep-flag-values-4da26a/packages/cli/dist/main.js","hub","run"]}
+{"t":1795211580817,"event":"exit","pid":88908,"code":0,"signal":null}
+
+[1m== 7. Cleanup: stop the stand-in supervisor this run started, by its PID; remove the temp folder[0m
+stopped stand-in supervisor pid 83432
+removed <tmp>

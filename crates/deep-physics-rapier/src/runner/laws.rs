@@ -36,7 +36,7 @@ pub fn planted(name: &str, run: &mut Run) -> bool {
     true
 }
 
-/// The world check (contact.rs). Under the planted check, a world holding an `inverse_square`
+/// The world check (links.rs). Under the planted check, a world holding an `inverse_square`
 /// or a `lennard_jones` is checked at the 1 substep those ask for and run at the substeps it
 /// wrote, each step's force held across them.
 pub(super) fn check(v: &Value, run: &Run) -> Result<World, Vec<Refusal>> {
@@ -50,11 +50,11 @@ pub(super) fn check(v: &Value, run: &Run) -> Result<World, Vec<Refusal>> {
         .is_some_and(|m| m.values().any(central));
     let written = v["substeps"].as_u64().filter(|n| *n != 1 && holds);
     let (Twin::SubstepsAdmitted, Some(n)) = (run.twin, written) else {
-        return contact::check(v, run);
+        return links::check(v, run);
     };
     let mut one = v.clone();
     one["substeps"] = json!(1);
-    let mut w = contact::check(&one, run)?;
+    let mut w = links::check(&one, run)?;
     w.substeps = n as u32;
     Ok(w)
 }

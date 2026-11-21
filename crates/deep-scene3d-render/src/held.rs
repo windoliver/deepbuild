@@ -5,9 +5,7 @@
 use deep_canvas_scene3d::label::{PAGE, PAGES};
 use deep_canvas_scene3d::scene::Scene;
 
-use crate::{
-    env, local, mirror, shadow, SolidRecord, CULLED_ITEMS, DEPTH, IDS, IDS_MS, LINEAR, MSAA,
-};
+use crate::{env, local, shadow, SolidRecord, CULLED_ITEMS, DEPTH, IDS, IDS_MS, LINEAR, MSAA};
 
 /// wgpu's two buffers that validate indirect draws, made at a device's first: 1 MiB each.
 const INDIRECT_VALIDATION: u64 = 2 << 20;
@@ -26,11 +24,13 @@ fn texel(f: wgpu::TextureFormat) -> u64 {
 /// What a renderer drawing `scene` holds beside the view's slots and upscale:
 /// - each internal pixel: the linear, ID and depth targets, the geometry pass's stored samples
 ///   of the IDs and depth (its color's are memoryless), and, while a list is culled on the GPU,
-///   the cull's prepass depth at those samples and its pyramid, a third more for its mips;
+///   the cull's prepass depth at those samples and its pyramid, a third more for its mips; and
+///   a quarter of the same for a mirror's own renderer, which draws at half the internal size
+///   (#2691);
 /// - whatever that size: each solid's record, the glyph atlas where a label draws, the key
 ///   sun's cascades or its single map (counted whether or not a post reads it), the local
 ///   lights' maps, the environment's cubes, wgpu's buffers that validate a culled list's
-///   indirect draws, and a mirror's own renderer at half the frame's size.
+///   indirect draws, and what a mirror's own renderer holds whatever its size.
 pub fn of(scene: &Scene) -> Held {
     let own = renderer(scene);
     Held {
@@ -70,9 +70,9 @@ fn renderer(scene: &Scene) -> Held {
     let mut fixed =
         records + atlas + shadows + local::bytes(scene) + scene.sky.as_ref().map_or(0, env::bytes);
     if let Some(m) = &scene.mirror {
-        let size = mirror::half(scene.size);
-        let own = renderer(&deep_canvas_scene3d::mirror::view(scene, m, size));
-        fixed += (own.per_px * f64::from(size[0]) * f64::from(size[1])).round() as u64 + own.fixed;
+        let own = renderer(&deep_canvas_scene3d::mirror::view(scene, m, scene.size));
+        per_px += own.per_px / 4.0;
+        fixed += own.fixed;
     }
     Held { per_px, fixed }
 }

@@ -1,0 +1,93 @@
+# #2098 on the second merge of main (3075f2d75 = 7615b5d50, the merge of origin/main 54f9bdb94, plus evidence files and no code), run once inside one build grant, November 20, 2026 10:00 to 10:18
+
+=== cargo check of the two physics crates 10:00
+check exit 0
+=== release build 10:01
+build exit 0
+=== unit tests of the two physics crates 10:07
+unit exit 0
+=== suite 2098 10:11
+suite 2098 exit 0
+=== suite 2098-redraft-ac2 10:11
+suite 2098-redraft-ac2 exit 0
+=== suite 2240 10:11
+suite 2240 exit 0
+=== clippy on the two physics crates alone 10:15
+clippy exit 0
+=== the three criteria's worlds on wasm32 against native 10:16
+wasm32 exit 0
+=== done 10:18
+exit 0
+
+## tests/acceptance/2098
+ ✓ ac2-wind.test.ts > #2098.7c1127fe a wind force carries a body toward the wind's speed, and the same seed gives the same gusts by hash on every run > #2098.7c1127fe a body under wind {velocity: (2, 0, 0)} with coupling {kind: aero_triangl
+ ✓ ac2-wind.test.ts > #2098.7c1127fe a wind force carries a body toward the wind's speed, and the same seed gives the same gusts by hash on every run > #2098.7c1127fe the same seed gives the same gusts on every run, step hash by step hash; 
+ ✓ ac2-wind.test.ts > #2098.7c1127fe a wind force carries a body toward the wind's speed, and the same seed gives the same gusts by hash on every run > #2098.7c1127fe a planted program whose wind noise comes from platform sin (wind_noise_fr
+ ✓ ac1-2d-world.test.ts > #2098.07d55616 a 2D world of a ball dropped 2 m onto a floor runs on rapier2d 0.36.1; named for rapier3d it is refused at check > #2098.07d55616 the 2D world, both of restitution 0.5, runs on rapier2d 0.36.1 and th
+ ✓ ac1-2d-world.test.ts > #2098.07d55616 a 2D world of a ball dropped 2 m onto a floor runs on rapier2d 0.36.1; named for rapier3d it is refused at check > #2098.07d55616 the same world with backend.name rapier3d and dimensions 2 is refused
+ ✓ ac1-2d-world.test.ts > #2098.07d55616 a 2D world of a ball dropped 2 m onto a floor runs on rapier2d 0.36.1; named for rapier3d it is refused at check > #2098.07d55616 a planted program that builds a 2D world on rapier3d (world_2d_built_
+ ✓ ac3-inertia.test.ts > #2098.f0ef7a3d a box given inertia twice its shape's spins up at half the angular acceleration under the same torque > #2098.f0ef7a3d the box given inertia twice its shape's spins up at half the angular acceleration
+ ✓ ac3-inertia.test.ts > #2098.f0ef7a3d a box given inertia twice its shape's spins up at half the angular acceleration under the same torque > #2098.f0ef7a3d a planted program that ignores a body's inertia (inertia_ignored) is caught: the 
+ Test Files  3 passed (3)
+      Tests  8 passed (8)
+
+## tests/acceptance/2098-redraft-ac2
+ ✓ ac2-wind.test.ts > #2098.7c1127fe a body under the wind reaches the wind's speed within 1% at its closed-form time, and its gusts are the ones the formula gives its seed > #2098.7c1127fe a 1 kg cube of 1 m under wind {velocity: (2, 0, 0)
+ ✓ ac2-wind.test.ts > #2098.7c1127fe a body under the wind reaches the wind's speed within 1% at its closed-form time, and its gusts are the ones the formula gives its seed > #2098.7c1127fe the gusts are the ones the formula gives the seed 
+ ✓ ac2-wind.test.ts > #2098.7c1127fe a body under the wind reaches the wind's speed within 1% at its closed-form time, and its gusts are the ones the formula gives its seed > #2098.7c1127fe a planted program whose wind noise comes from plat
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+
+## tests/acceptance/2240
+ ✓ ac2-bar-period.test.ts > #2240.07b0552b a hinged bar swings slower with its weight lower: 1.641 s with no centre_of_mass, 1.865 s with it 0.75 m from the hinge > #2240.07b0552b the bar swings with a period of 1.641 s within 1%, and with 
+ ✓ ac2-bar-period.test.ts > #2240.07b0552b a hinged bar swings slower with its weight lower: 1.641 s with no centre_of_mass, 1.865 s with it 0.75 m from the hinge > #2240.07b0552b the two bars are in the behavior kit's data once each, and t
+ ✓ ac2-bar-period.test.ts > #2240.07b0552b a hinged bar swings slower with its weight lower: 1.641 s with no centre_of_mass, 1.865 s with it 0.75 m from the hinge > #2240.07b0552b (twin: centre_of_mass_ignored) a wrapper that ignores the fi
+ ✓ ac2-bar-period.test.ts > #2240.07b0552b a hinged bar swings slower with its weight lower: 1.641 s with no centre_of_mass, 1.865 s with it 0.75 m from the hinge > #2240.07b0552b (twin: centre_of_mass_parallel_axis) a wrapper that also add
+ ✓ ac1-box-on-slope.test.ts > #2240.b395689a a tall box tips where its weight is: at 26.57° with no centre_of_mass, at 63.43° with it 0.25 m above its base > #2240.b395689a with no centre_of_mass the box turns less than 1° in 3 s on the 20°
+ ✓ ac1-box-on-slope.test.ts > #2240.b395689a a tall box tips where its weight is: at 26.57° with no centre_of_mass, at 63.43° with it 0.25 m above its base > #2240.b395689a the fixture's four runs are in the behavior kit's data once each, a
+ ✓ ac1-box-on-slope.test.ts > #2240.b395689a a tall box tips where its weight is: at 26.57° with no centre_of_mass, at 63.43° with it 0.25 m above its base > #2240.b395689a (twin: centre_of_mass_ignored) a wrapper that reads the field and l
+ ✓ ac5-seek-and-merge-base.test.ts > #2240.e07f41f3 seeking equals playing with a centre_of_mass written, and worlds without one run as they did on the merge base > #2240.e07f41f3 the 45° world sought to 1.5 s and played on gives the same s
+ ✓ ac5-seek-and-merge-base.test.ts > #2240.e07f41f3 seeking equals playing with a centre_of_mass written, and worlds without one run as they did on the merge base > #2240.e07f41f3 every world with no centre_of_mass gives step hashes byte-id
+ ✓ ac3-refusals.test.ts > #2240.cb44a798 centre_of_mass is a dynamic body's: another kind's is refused at check, and so is a point outside the body's shapes > #2240.cb44a798 centre_of_mass on a static body, on a kinematic body and on a char
+ ✓ ac3-refusals.test.ts > #2240.cb44a798 centre_of_mass is a dynamic body's: another kind's is refused at check, and so is a point outside the body's shapes > #2240.cb44a798 the point (0, 3, 0) on the 2 m box is refused at check, naming the
+ ✓ ac3-refusals.test.ts > #2240.cb44a798 centre_of_mass is a dynamic body's: another kind's is refused at check, and so is a point outside the body's shapes > #2240.cb44a798 (twin: check_accepts_centre_outside) a check that accepts the poin
+ ✓ ac4-pose-origin.test.ts > #2240.c9639f9f a pose output reads the body's own origin, with centre_of_mass written or not > #2240.c9639f9f the box at rest on level ground reads the same pose position with and without centre_of_mass, within 
+ ✓ ac4-pose-origin.test.ts > #2240.c9639f9f a pose output reads the body's own origin, with centre_of_mass written or not > #2240.c9639f9f (twin: pose_reads_centre_of_mass) an output that reads the centre of mass reads a position 0.75 m low
+ Test Files  5 passed (5)
+      Tests  14 passed (14)
+
+## cargo test --lib -p deep-canvas-physics -p deep-physics-rapier
+test ring::tests::doubles_within_budget_and_the_planted_ring_forgets ... ok
+test doc::data::tests::another_controls_field_is_its_last_entry_at_the_flick ... ok
+test doc::dims::tests::a_2d_world_reads_its_shapes_points_and_turns ... ok
+test wind::tests::a_steady_wind_pushes_both_faces_across_it_and_slows_a_spin ... ok
+test doc::dims::tests::an_inertia_is_three_moments_above_zero ... ok
+test wind::tests::a_velocity_reads_t_and_p_and_a_gust_scales_it_by_the_lattice_noise ... ok
+test doc::data::tests::a_throw_reads_each_entrys_own_ray ... ok
+test kit::scan::tests::primitives_meet_where_their_geometry_says ... ok
+test doc::dims::tests::a_2d_world_refuses_what_its_backend_does_not_run_yet ... ok
+test doc::dims::tests::a_world_refuses_the_other_dimensions_shapes_and_points ... ok
+test wind::tests::a_wind_is_refused_where_it_is_not_written_whole_or_cannot_push ... ok
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test tests::a_ray_down_meets_a_heightfield_on_its_shipped_split ... ok
+test tests::a_written_centre_of_mass_keeps_the_mass_the_shapes_give ... ok
+test tests::the_bounds_a_centre_of_mass_is_held_to_are_the_built_shapes ... ok
+test cast::tests::a_result_keeps_the_nearest_8_by_distance_then_id ... ok
+test runner::dims::tests::a_2d_world_caps_a_speed_aloud_and_refuses_what_reads_it_elsewhere ... ok
+test belt::tests::a_kinematic_bodys_belt_carries_as_a_static_bodys_does ... ok
+test runner::dims::tests::a_checkpoint_of_the_other_backend_is_refused_naming_both ... ok
+test runner::dims::tests::a_2d_world_writes_its_contacts_and_its_rest_and_keys_by_rapier2d ... ok
+test belt::tests::the_kit_holds_a_backend_to_each_belts_own_direction ... ok
+test vehicle::tests::a_sleeping_car_wakes_on_the_step_the_body_under_it_wakes_or_moves ... ok
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+## cargo clippy --no-deps -p deep-canvas-physics -p deep-physics-rapier --all-targets -- -D warnings
+warnings: 0
+Finished `dev` profile [unoptimized] target(s) in 56.74s
+
+## node wasm32-same.mjs target/release/deep-physics: the three criteria's worlds on the wasm32 build (node scripts/physics-wasm32.mjs) against the native release build
+SAME 2D drop on rapier2d: 361 step hashes (last 262821c6134df8fa), occurrences hash 2b7e69e1d6cb014d…
+SAME steady wind: 361 step hashes (last 7286ae42089fd7f3), occurrences hash e3b0c44298fc1c14…
+SAME gusty wind, seed 7: 361 step hashes (last 75b264367e91100b), occurrences hash e3b0c44298fc1c14…
+SAME inertia [2, 2, 2] beside none: 361 step hashes (last 85f2cb2384bbaf7c), occurrences hash e3b0c44298fc1c14…
+every one the same on wasm32 as native

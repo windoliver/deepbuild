@@ -1,0 +1,15 @@
+{
+  "base": "16dc5eab0",
+  "about": "pixel_hash of each frame of unchanged.ts, drawn by the base's deep-gpu on Metal (record-base.ts)",
+  "frames": {
+    "canary: the cube with no line": "8502896a0f53dcecdce77cfd7dfd9060616bbdae70a81d90badc6cbf2a89b813",
+    "crease-edges.scene": "6f3509c7392ed7aff68ec4f8395040902aec5e5942f58f8db6bda4875f72f9c3",
+    "cube, solid": "1b7f3cc6cde0bcc0c7536f826dab0eca915b0d05fcaedd074e5d9467feafe09a",
+    "cube, screen dash": "3bd26647ed5e0bb50d323d1c53fabc42e38409bf4eec9595ce970eb9c831caca",
+    "cube, world dash": "f9d68de1efeb4110651646a467cb41490e1ad8e2b1d871b546db0db34e5ee940",
+    "orbit, frame 0": "e5b9c8fad7ef899e2ef142d705eb7c0003f1520c66b9c3b9719eee21dd6213d8",
+    "orbit, frame 150": "ef021f6ac113ad11bd9bf99098d781a2166652d8b74c7f89037f4f568f36dbbb",
+    "orbit, frame 300": "8296fa2317fa7b8572926eb0531d7ade8fdc9b710b6f3169d7a75184002e7921",
+    "orbit, frame 450": "f93ec10795696c431c2ec04e78f5059785614b8cb4d2e45648671ca5627c8ccb"
+  }
+}
