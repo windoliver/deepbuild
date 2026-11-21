@@ -1,15 +1,16 @@
-$ bash docs/evidence/1884/e2e1884.command   (WT set to this branch; mktemp prefix e2ewords)
-== facts: 2.1.299, 2.1.304, 2.1.308   (branch db5c06221 + fix)
-== dev hub: pid 69876, {"v":1,"ready":true,"pid":69876,"socket":"/tmp/e2ewords.2B9831/h/.deepbuild/hub.sock","sta
+$ bash docs/evidence/1884/e2e-hub-words.command   (screenshot of a second run: e2e-hub-words.png)
+[3;0;0t[8;75;230tTERM environment variable not set.
+== facts: 2.1.299, 2.1.304, 2.1.308   (branch c631ecfcb + fix)
+== dev hub: pid 38426, {"v":1,"ready":true,"pid":38426,"socket":"/tmp/e2ewords.10s8oR/h/.deepbuild/hub.sock","sta
 
 ################ stand-in claude 2.1.304 on PATH ################
 $ which claude; claude --version
-/tmp/e2ewords.2B9831/bin-2.1.304/claude
+/tmp/e2ewords.10s8oR/bin-2.1.304/claude
 2.1.304 (Claude Code)
 $ deep doctor --json | grep claude.binary
 claude.binary  ok  healthy
-  /tmp/e2ewords.2B9831/bin-2.1.304/claude is Claude Code 2.1.304, which its facts cover
-$ deep-hook claude-code PreToolUse  (session 2086cfcd, Bash 'rm -rf build', guarded in block mode)
+  /tmp/e2ewords.10s8oR/bin-2.1.304/claude is Claude Code 2.1.304, which its facts cover
+$ deep-hook claude-code PreToolUse  (session d23367fc, Bash 'rm -rf build', guarded in block mode)
   exit 2  (blocked: the session is gated)  stderr: DeepBuild blocked this: Guarded in this e2e. Leave it. (guard e2e-rm-build)
 $ deep status   (the hub's own report)
     Working:
@@ -17,27 +18,35 @@ $ deep status   (the hub's own report)
       agent  agent  working · at work, 2s
     1 session
     0 asks need you
-  => hub: session 2086cfcd not watch-only
+  => hub: session d23367fc not watch-only
 
 ################ stand-in claude 2.1.300 on PATH ################
 $ which claude; claude --version
-/tmp/e2ewords.2B9831/bin-2.1.300/claude
+/tmp/e2ewords.10s8oR/bin-2.1.300/claude
 2.1.300 (Claude Code)
 $ deep doctor --json | grep claude.binary
 claude.binary  fail  version_uncovered
-  /tmp/e2ewords.2B9831/bin-2.1.300/claude is Claude Code 2.1.300, not a version its facts cover (2.1.299, 2.1.304, 2.1.308): its hooks are recorded unverified, and its holds and every block but the floor are watch-only; its fail_closed guard entries still deny
-$ deep-hook claude-code PreToolUse  (session 401d4974, Bash 'rm -rf build', guarded in block mode)
+  /tmp/e2ewords.10s8oR/bin-2.1.300/claude is Claude Code 2.1.300, not a version its facts cover (2.1.299, 2.1.304, 2.1.308): its hooks are recorded unverified, and its holds and every block but the floor are watch-only; its fail_closed guard entries still deny
+$ deep-hook claude-code PreToolUse  (session 807cfa0a, Bash 'rm -rf build', guarded in block mode)
   exit 0  (let through: the session is watch-only)  stderr: 
 $ deep status   (the hub's own report)
     Working:
     no repo
-      agent · 2086cfcd  agent  working · at work, 5s
-      agent · 401d4974  agent  working · watch-only: it runs its agent 2.1.300, not a version its facts cover. Install a version the facts cover, or update DeepBuild. · at work, 2s
+      agent · d23367fc  agent  working · at work, 4s
+      agent · 807cfa0a  agent  working · watch-only: it runs its agent 2.1.300, not a version its facts cover. Install a version the facts cover, or update DeepBuild. · at work, 2s
           This session runs claude-code 2.1.300, not a version its facts cover (2.1.299, 2.1.304, 2.1.308): it is recorded unverified, and its holds and every block but the floor are watch-only until the live smoke test adds 2.1.300 to its facts. The floor still holds: its fail_closed guard entries deny as they do with the hub stopped.
     2 sessions
     0 asks need you
-  => hub: session 401d4974 watch-only
+  => hub: session 807cfa0a watch-only
 
-== stopped the hub I started (pid 69876)
-== removed /tmp/e2ewords.2B9831
+################ deep start under an approved run ################
+$ deep start approve ... ; deep inbox answer ask:01M7XW6BJ94MXW92480N2WW06N allow
+    ask:01M7XW6BJ94MXW92480N2WW06N answered allow; no decision saved
+$ deep start --repo ~/shop --issue 1 --agent claude-code --prompt go   (claude 2.1.300 on the login PATH)
+    Refused (version): claude-code 2.1.300 is not a version its facts cover (2.1.299, 2.1.304, 2.1.308), so its hooks would be watch-only; it doesn't start.
+$ deep start --repo ~/shop --issue 1 --agent claude-code --prompt go   (claude 2.1.400 on the login PATH)
+    Refused (version): claude-code 2.1.400 is not a version its facts cover (2.1.299, 2.1.304, 2.1.308), so its hooks would be watch-only; it doesn't start.
+
+== stopped the hub I started (pid 38426)
+== removed /tmp/e2ewords.10s8oR
 
