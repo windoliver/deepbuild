@@ -30,7 +30,7 @@ pub(crate) struct Viewer {
 impl Viewer {
     /// The tool in a scope's state, for a document that offers it: `measure`, and the focused
     /// anchor as the Tab stop with focus.
-    pub(crate) fn into_state(&self, doc: &Value, planted: Option<&str>, state: &mut Value) {
+    pub(crate) fn shown_in(&self, doc: &Value, planted: Option<&str>, state: &mut Value) {
         if !Tool::offered(doc) {
             return;
         }

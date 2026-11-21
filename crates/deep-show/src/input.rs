@@ -700,7 +700,7 @@ impl Hub<'_> {
                     state["focus"] = json!(row);
                 }
                 s.measure
-                    .into_state(&doc, self.scenario.module_planted.as_deref(), &mut state);
+                    .shown_in(&doc, self.scenario.module_planted.as_deref(), &mut state);
                 state
             }
             _ => Value::Null,

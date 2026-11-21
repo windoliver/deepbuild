@@ -289,7 +289,9 @@ pub fn label(readout: &Value) -> String {
 /// returns, for the items of `doc` whose role is part, in reading order (the item's `order`,
 /// then its ID), each part's by name.
 pub fn anchors(scene: &Scene, doc: &Value) -> Vec<(String, V3)> {
-    let mut parts: Vec<(&str, &str, Vec<(String, V3)>)> = Vec::new();
+    // Each part's order, its ID and its anchors.
+    type Part<'a> = (&'a str, &'a str, Vec<(String, V3)>);
+    let mut parts: Vec<Part> = Vec::new();
     let solids = scene.layers.iter().flat_map(|l| &l.solids);
     for s in solids.filter(|s| !s.cast_only) {
         let item = doc.pointer(&format!("/items/{}", s.id));
