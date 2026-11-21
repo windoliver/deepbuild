@@ -417,6 +417,15 @@ pub enum Planted {
     OneMirrorPerFrame,
     OneLightCutPerFrame,
     InsetPremultipliedAsStraight,
+    /// #298's wrong programs (tests/acceptance/298/README.md: Planted programs): a clamp of each
+    /// axis on its own, of an unmirrored behind-camera projection, and to the frame instead of the
+    /// safe frame; a driver that reads the frame before's `edge` and `edge_angle`; a leader that
+    /// draws while its overlay is clamped.
+    ClampEachAxis,
+    ClampUnmirroredBehind,
+    ClampToFrame,
+    EdgeFromPreviousFrame,
+    LeaderDrawsWhileClamped,
     BandFadeByWallClock,
     LevelByEarlierFrame,
     BandMasksIndependent,
@@ -831,6 +840,11 @@ impl Planted {
             "one_mirror_per_frame" => Planted::OneMirrorPerFrame,
             "one_light_cut_per_frame" => Planted::OneLightCutPerFrame,
             "inset_premultiplied_as_straight" => Planted::InsetPremultipliedAsStraight,
+            "clamp_each_axis" => Planted::ClampEachAxis,
+            "clamp_unmirrored_behind" => Planted::ClampUnmirroredBehind,
+            "clamp_to_frame" => Planted::ClampToFrame,
+            "edge_from_previous_frame" => Planted::EdgeFromPreviousFrame,
+            "leader_draws_while_clamped" => Planted::LeaderDrawsWhileClamped,
             "band_fade_by_wall_clock" => Planted::BandFadeByWallClock,
             "level_by_earlier_frame" => Planted::LevelByEarlierFrame,
             "band_masks_independent" => Planted::BandMasksIndependent,

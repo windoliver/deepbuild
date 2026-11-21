@@ -118,6 +118,9 @@ pub(crate) struct Viewer {
     pub(crate) said: Vec<Value>,
     /// Each pick control's hovered cell.
     hover: BTreeMap<String, [i64; 2]>,
+    /// #298: the pointer's place over each item a driver's `hover_at` names, 0 to 1 on each axis
+    /// of its bounds, while the pointer is over it.
+    hover_at: BTreeMap<String, [f64; 2]>,
     /// The press: the control and value its row picks, its time, and the camera then.
     pressed: Option<(String, Value, i64, Value)>,
     down: bool,
@@ -492,6 +495,9 @@ impl Hub<'_> {
         event: &Event,
         serial: u64,
     ) -> Result<Vec<Value>, Value> {
+        if let Event::Down { pos, .. } | Event::Move(pos) | Event::Up(pos) = event {
+            self.hover_at(panel, doc, *pos);
+        }
         let pickers = pickers(doc);
         let pos = match event {
             Event::Down { pos, .. } | Event::Move(pos) | Event::Up(pos) if !pickers.is_empty() => {
@@ -689,6 +695,8 @@ impl Hub<'_> {
     pub(crate) fn viewer_into(&self, panel: &str, form: &mut Value) {
         // #542: its text fields.
         self.fields_into(panel, form);
+        // #298: the pointer's place over each item a driver's `hover_at` names.
+        self.hover_at_into(panel, form);
         let Some(v) = self.scopes.get(panel).map(|s| &s.picks) else {
             return;
         };
@@ -738,6 +746,52 @@ impl Hub<'_> {
             {
                 control["hover"] = json!(cell);
             }
+        }
+    }
+
+    /// #298: where the pointer at panel point `pos` lies over each item a driver's `hover_at`
+    /// names in a flat view: 0 to 1 on each axis of the item's bounds, its box at its place on the
+    /// page as the scope's hit test reads it, kept only while the pointer is over it.
+    fn hover_at(&mut self, panel: &str, doc: &Value, pos: [f64; 2]) {
+        let flat = self.scopes.get(panel).is_some_and(|s| s.scope.pose().flat);
+        let Some([x, y]) = self.page_point(panel, pos).filter(|_| flat) else {
+            return;
+        };
+        let over = |id: &String| {
+            let n = |path: &str| doc["items"][id].pointer(path).and_then(Value::as_f64);
+            let at = |k: usize| n(&format!("/at/pos/{k}")).unwrap_or(0.0);
+            let side = |k: usize| n(&format!("/params/box/{k}"));
+            let (u, v) = (
+                (x - at(0) - side(0)?) / side(2)?,
+                (y - at(1) - side(1)?) / side(3)?,
+            );
+            ((0.0..=1.0).contains(&u) && (0.0..=1.0).contains(&v)).then_some([u, v])
+        };
+        let places = deep_canvas_motion::view::hovered(doc)
+            .into_iter()
+            .filter_map(|id| over(&id).map(|place| (id, place)))
+            .collect();
+        if let Some(s) = self.scopes.get_mut(panel) {
+            s.picks.hover_at = places;
+        }
+    }
+
+    /// #298: the panel's `hover_at` places written on their items in `form`, a live view's.
+    fn hover_at_into(&self, panel: &str, form: &mut Value) {
+        let places = self.scopes.get(panel).map(|s| &s.picks.hover_at);
+        for (id, place) in places.into_iter().flatten() {
+            let item = form.get_mut("items").and_then(|items| items.get_mut(id));
+            if let Some(item) = item.and_then(Value::as_object_mut) {
+                item.insert("hover_at".into(), json!(place));
+            }
+        }
+    }
+
+    /// The planted `export_keeps_live_hover_at` (#298): document `doc`'s panel's live `hover_at`
+    /// places in `form`.
+    pub(crate) fn hover_at_kept(&self, doc: &str, form: &mut Value) {
+        if let Some(panel) = self.scenario.docs.get(doc) {
+            self.hover_at_into(panel, form);
         }
     }
 

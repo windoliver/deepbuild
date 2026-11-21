@@ -360,6 +360,7 @@ fn run_view(
     // The scene the session drew last, which #431's planted velocity target reads.
     let mut last_drawn: Option<Arc<Scene>> = None;
     let mut hover: Option<String> = None;
+    let mut edges = None;
     let mut viewer_selection: Vec<String> = Vec::new();
     // #462: at most two looks in one frame outside a transition window, checked before any
     // frame draws; status draws in the document's look whatever look a shot or region takes.
@@ -477,6 +478,8 @@ fn run_view(
                 *memo.borrow_mut() = Default::default();
             }
             let plant = crate::axes::plant_name(app.planted);
+            // #298: the view values its drivers read, bound on the frame's document.
+            let composed = edged(composed, t, app.planted, &mut edges)?;
             let outlines = deep_canvas_scene3d::contributed::Fills {
                 memo: Some(&memo),
                 ..deep_canvas_scene3d::contributed::Fills::of(pack_sealed()?, plant)
@@ -1632,19 +1635,7 @@ fn run_view(
             }
             frame.insert("samples".into(), samples_report);
             if args.overlays {
-                let rows: Vec<Value> = anchored
-                    .iter()
-                    .map(|o| {
-                        let mut row = json!({"id": o.id, "at": o.origin});
-                        // #468: where its leader ends, or null while it hides.
-                        if let Some(l) = &o.leader {
-                            let to = l.points.as_ref().and_then(|p| p.last());
-                            row["leader"] = to.map_or(Value::Null, |to| json!({"to": to}));
-                        }
-                        row
-                    })
-                    .collect();
-                frame.insert("overlays".into(), Value::Array(rows));
+                frame.insert("overlays".into(), overlay_rows(&anchored));
             }
             frame.insert(
                 "history".into(),

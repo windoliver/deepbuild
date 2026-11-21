@@ -261,6 +261,10 @@ impl Hub<'_> {
             // Planted (#539): the frames evaluate hover as the panel's live hover, not none.
             self.hover_into(&job.doc, &mut doc);
         }
+        if self.scenario.module_planted.as_deref() == Some("export_keeps_live_hover_at") {
+            // Planted (#298): the frames evaluate `hover_at` as the panel's live hover.
+            self.hover_at_kept(&job.doc, &mut doc);
+        }
         // #507: a film whose markers wait or branch exports one path, each hold as long as the
         // film audit's hold rule asks for what it shows.
         let path = match (&job.range, doc_span(&doc)) {
