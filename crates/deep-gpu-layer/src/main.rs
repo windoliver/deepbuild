@@ -39,7 +39,7 @@ mod golden;
 mod guard;
 mod hdr;
 mod host;
-mod indexed;
+use deep_groups_render::indexed;
 mod insets;
 mod interp_suite;
 mod levels;
