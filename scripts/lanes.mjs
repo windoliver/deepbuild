@@ -1313,6 +1313,9 @@ alone.push('tests/acceptance/953/', 'tests/acceptance/953-oracle/');
 alone.push('tests/acceptance/2738/');
 slow.push('tests/acceptance/2738/ac1-linux-build.test.ts');
 
+// #161's suite times its measured costs and its two budgets on the reference Mac.
+timed.push('tests/acceptance/161/ac4-measured.test.ts', 'tests/acceptance/161/ac6-timed.test.ts');
+
 // #265's files (blind) build deep-gpu (ac4 deep-show), draw on the GPU and play a match; ac6 times eight movers' frame CPU.
 alone.push('tests/acceptance/265/');
 timed.push('tests/acceptance/265/ac6-budgets.test.ts');
@@ -1329,8 +1332,11 @@ alone.push('tests/acceptance/1576/');
 // Metal suites (465, 506, 462, 166) one after another for hours; query.test.ts builds deep-show. No timing.
 alone.push('tests/acceptance/3016/');
 
-// #161's suite times its measured costs and its two budgets on the reference Mac.
-timed.push('tests/acceptance/161/ac4-measured.test.ts', 'tests/acceptance/161/ac6-timed.test.ts');
+// #2661's files (blind) build the app's test binary, the shipping app and deep-live, start windows and run benchmarks;
+// AC4 samples a real window's UI thread on this Mac's display, and AC7 reads two budgets over hours.
+alone.push('tests/acceptance/2661/');
+byHand.push('tests/acceptance/2661/ac4-tick.live.test.mjs', 'tests/acceptance/2661/ac7-budgets.test.mjs');
+timed.push('tests/acceptance/2661/ac4-tick.live.test.mjs', 'tests/acceptance/2661/ac7-budgets.test.mjs');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
