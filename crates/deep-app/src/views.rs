@@ -2391,13 +2391,10 @@ impl RowDrawn {
         // The state word the hub wrote, in the language shown (#2403).
         let word = states::shown(&row.word);
         let name = if ask {
-            // Its state word follows the question, the word deep and the hub's row give every ask, needs you (#1463,
-            // #2690); its state-word slot, `row.word`, still draws its kind (#1461 AC27).
-            let named = format!("{title} · {}", states::shown(states::State::NeedsYou.word()));
             if reach.not_notified(&row.id) {
-                copy::fill("views.not_notified", &[&named])
+                copy::fill("views.not_notified", &[&title])
             } else {
-                named
+                title.clone()
             }
         } else if cfg!(feature = "plant-row-title-only") {
             title.clone()
@@ -2587,15 +2584,25 @@ fn row_element(drawn: &RowDrawn, chrome: &chrome::Chrome) -> ObservedElement<Sta
         // The mark: its state's drawn glyph tinted in its core, in a slot of 16 with 8 after it (#1592). A working
         // session's turns a quarter for each event its hooks send (#2021).
         .child(
-            row_slot(id, "mark", states::glyph(drawn.entry).to_owned())
-                .aria_value(drawn.entry.to_owned())
-                .flex_none()
-                .w(s.mark)
-                .h_full()
-                .mr(s.space(1))
-                .flex()
-                .items_center()
-                .child(crate::icons::mark(drawn.entry, drawn.step)),
+            // An ask's mark is named by its state word, the word deep and the hub's row give every open ask (#1463,
+            // #2690): its state-word slot draws its kind (#1461 AC27), and its row's name stays its question.
+            row_slot(
+                id,
+                "mark",
+                if ask {
+                    states::shown(states::State::NeedsYou.word()).to_owned()
+                } else {
+                    states::glyph(drawn.entry).to_owned()
+                },
+            )
+            .aria_value(drawn.entry.to_owned())
+            .flex_none()
+            .w(s.mark)
+            .h_full()
+            .mr(s.space(1))
+            .flex()
+            .items_center()
+            .child(crate::icons::mark(drawn.entry, drawn.step)),
         )
         .child(
             // Each slot the row's full height, so the slots read in the row's order, left to right.
