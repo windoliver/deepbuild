@@ -164,7 +164,18 @@ function locked(act) {
   // lock, which a run given its number must not rewrite.
   const mine = `${mark}.${process.pid}`;
   rmSync(mine, { force: true });
-  writeFileSync(mine, JSON.stringify({ pid: process.pid, start: processes().get(process.pid).start }));
+  // A write that fails, as on a full disk, takes its own file with it (#2869).
+  const write = (path, data) => {
+    try {
+      writeFileSync(path, data);
+    } catch (error) {
+      try {
+        rmSync(path, { force: true });
+      } catch {}
+      throw error;
+    }
+  };
+  write(mine, JSON.stringify({ pid: process.pid, start: processes().get(process.pid).start }));
   const { ino } = statSync(mine);
   for (;;) {
     try {
@@ -217,7 +228,7 @@ function locked(act) {
     table.grants = table.grants.filter((grant) => !gave.includes(grant));
     table.requests = table.requests.filter((request) => !ended(request));
     const result = act(table, processes());
-    writeFileSync(`${file}.${process.pid}`, JSON.stringify(table));
+    write(`${file}.${process.pid}`, JSON.stringify(table));
     renameSync(`${file}.${process.pid}`, file);
     return result;
   } finally {
@@ -290,7 +301,8 @@ function grantable(table, procs, request, seen) {
 let blocked = [];
 
 /**
- * Takes a grant of `cls`, waiting at most `wait` minutes; null when none came. A build or test request from a chain
+ * Takes a grant of `cls`, waiting at most `wait` minutes; null when none came, or an ENOSPC marked `waited` thrown when
+ * the wait ran out on a full disk (#2869). A build or test request from a chain
  * that holds a grant, and a timed request from one that holds timed, passes through: it holds its ancestor's grant
  * and is released with it. The grant's `token` is what DEEP_THROTTLE carries to the holder's descendants. A wait doesn't
  * run down while a window is open: a window outlasts a wait, and only its end decides when the next build starts.
@@ -312,8 +324,21 @@ export function acquire(cls, { wait = 30, window = false } = {}) {
     return entry;
   });
   if (request.pass) return { class: cls, token: process.env.DEEP_THROTTLE, pass: true };
+  // A full disk leaves the table as it was (#2869): a waiting request's look whose write fails with ENOSPC is one more
+  // look with no grant, and the request keeps its place. Once the wait has run out the ENOSPC is thrown, marked
+  // `waited`, rather than no grant returned: the request it couldn't take out of the table stays there until this
+  // process ends, as after any error. The CLI reads it as the timeout it is.
+  const look = (act) => {
+    try {
+      return locked(act);
+    } catch (error) {
+      if (error.code !== 'ENOSPC') throw error;
+      if (Date.now() > deadline) throw Object.assign(error, { waited: true });
+      return null;
+    }
+  };
   for (;;) {
-    const grant = locked((table, procs) => {
+    const grant = look((table, procs) => {
       const pending = table.requests.find((other) => other.id === request.id);
       if (!pending) return 'timeout';
       const now = Date.now();
@@ -342,7 +367,12 @@ export function acquire(cls, { wait = 30, window = false } = {}) {
       return entry;
     });
     if (grant === 'timeout') {
-      log({ event: 'timeout', class: cls, id: request.id, pid, wait, ...blocked.length ? { blockers: blocked } : {} });
+      // The request is out of the table, so a log line a full disk refuses changes nothing.
+      try {
+        log({ event: 'timeout', class: cls, id: request.id, pid, wait, ...blocked.length ? { blockers: blocked } : {} });
+      } catch (error) {
+        if (error.code !== 'ENOSPC') throw error;
+      }
       return null;
     }
     if (grant) return { class: cls, id: grant.id, index: grant.index, token: `${cls}:${grant.id}`, pass: false };
@@ -399,9 +429,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     grant = acquire(cls, { wait, window });
   } catch (error) {
-    // The table couldn't be read or written, so nothing ran: BLOCKED, never a failure of the command.
-    console.log(`BLOCKED throttle: ${error.message}\n  Fix: Repair what the line names: ~/.deepbuild/throttle/ this user's to write, its table readable, ps runnable.`);
-    process.exit(2);
+    // A wait that ran out on a full disk is no grant (#2869).
+    if (error.waited) grant = null;
+    // The table couldn't be read or written otherwise, so nothing ran: BLOCKED, never a failure of the command.
+    else {
+      console.log(`BLOCKED throttle: ${error.message}\n  Fix: Repair what the line names: ~/.deepbuild/throttle/ this user's to write, its table readable, ps runnable.`);
+      process.exit(2);
+    }
   }
   if (!grant) {
     // The marker a job's report reads by: its output is the test run's too, so a line there proves nothing.
