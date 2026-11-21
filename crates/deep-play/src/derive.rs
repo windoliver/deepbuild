@@ -212,9 +212,10 @@ mod tests {
             step,
             kind: "set".into(),
             data: json!({"value": value}),
+            input: None,
         };
         let fired = [fire(40, 9.0), fire(40, 2.0), fire(41, 5.0)];
-        let kept = kept(&json!({}), &w, &[], &fired, false).unwrap();
+        let kept = kept(&json!({}), "lab", &w, &[], &fired, false).unwrap();
         let values: Vec<_> = kept
             .iter()
             .map(|k| (k["step"].clone(), k["data"]["value"].clone()))
