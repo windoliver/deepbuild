@@ -22,6 +22,7 @@ mod chains;
 mod fixtures;
 pub mod scan;
 mod sensors;
+mod small;
 mod vehicles;
 pub mod walks;
 
@@ -162,6 +163,17 @@ pub enum Measure {
     /// #2243: how far apart the axes of two character bodies that meet stand after the last
     /// step, m; it fails wherever one breaks the rule of their meeting.
     Meet(walks::Meet),
+    /// #2308: how far past x = `edge` `body`'s centre is, m, after the first step that ends with
+    /// it `drop` below where it started.
+    Past {
+        body: &'static str,
+        edge: f64,
+        drop: f64,
+    },
+    /// #2308: how deep the deepest two neighbours of the row of dominoes are inside each other
+    /// after the last step, m; it fails wherever they don't pass `tilt` degrees in order, or the
+    /// last passes it outside `last` seconds.
+    Topple { last: [f64; 2], tilt: f64 },
     /// #2307: how far `body` moves from the end of step `from` to the end of step `to`, m.
     Parked {
         body: &'static str,
@@ -791,6 +803,8 @@ fn read(m: &Measure, t: &Trace, b: &dyn Backend, w: &World, f: &Fixture) -> Read
             )
         }
         Measure::Meet(m) => met(t, m),
+        Measure::Past { body, edge, drop } => small::past(&path(t, body), body, *edge, *drop),
+        Measure::Topple { last, tilt } => small::toppled(t, *last, *tilt),
         Measure::Parked { body, from, to } => {
             let p = path(t, body);
             let moved = p.get(*from).zip(p.get(*to)).map(|(a, z)| dist(*a, *z));
@@ -882,6 +896,12 @@ fn named_measure(m: &Measure) -> String {
             "distance between the axes of {} and {} after the last step, m",
             m.walker, m.other
         ),
+        Measure::Past { body, drop, .. } => {
+            format!("how far past the edge {body}'s centre is once it has dropped {drop} m, m")
+        }
+        Measure::Topple { .. } => {
+            "how deep the deepest two neighbouring dominoes are inside each other after the last step, m".into()
+        }
         Measure::Parked { body, from, to } => {
             format!("distance {body} moves from step {from} to step {to}, m")
         }
