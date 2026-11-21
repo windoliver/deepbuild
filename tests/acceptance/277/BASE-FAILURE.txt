@@ -1,0 +1,352 @@
+#277's acceptance files, each run once at the base e575a47af (main, which holds #550's and #551's net module and
+#172's web player) on 2026-11-20, on a reference Mac (Mac17,10, Apple M5 Max, 64 GiB) at a 1-minute load near 220 on
+18 cores, Node 24, the pinned Rust 1.99.1, the dev build of deep-show (`full`) and deep-relay, one file at a time:
+
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 sh scripts/lease \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/277 <file>.test.ts --testTimeout=600000 --hookTimeout=180000
+
+The lease printed that no hub answered, so each file ran unleased. Every test fails, each for the reason the README
+gives, and none passes:
+
+- `net.seats` isn't a read at the base: the logic module refuses every piece of this suite that names it ("net.seats
+  names no control or logic item of this piece", logic_refused), so each honest test stops at its first call, the
+  piece's `deep show` (in ac1 and ac5 the web bundle's export, after the shipped relay and the door started).
+- The four planted names are refused: every planted run answers {"ok": false, "code": "bad_input"}.
+- ac4 also names that benchmarks/budgets.json has no task naming #277.2c9337c4; the manifest is valid against the
+  merge base's, which the same test doesn't credit alone.
+
+Scratch runs at the base, not saved as tests:
+- Criterion 4's merge-base reference, the eight-seat piece without its `net.seats` read (arenaPiece({seats: false})),
+  is presented with no issue and plays 1,800 steps on its four copies under {seed: 277, back: {up_to: 8}, log: true},
+  each copy running 1,800 steps with end null and 252, 256, 236 and 227 rollbacks. Its counts, the same on two runs,
+  are fixtures.ts's BASE_WORK: {"frames":21612,"bytes":1339872,"messages":176544,"rollbacks":971,"rerun":1886,"ran":7200}.
+- The rules program validates in Node's own WebAssembly and does what fixtures.ts says (README: Fixtures).
+- Headless Chrome 157 on this Mac: a page's window minimized through its session's Browser.setWindowBounds turns
+  document.visibilityState hidden, and restored, visible; activating a second tab hides the first one's page even in a
+  window of its own; Page.crash ends the page.
+
+=== tests/acceptance/277/ac1-kill.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/277 ac1-kill.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/277
+
+ ❯ ac1-kill.test.ts (2 tests | 2 failed) 51620ms
+   ❯ AC1 #277.bbe9c183 a killed copy's seat passes to the piece's bot at one step every copy agrees on (2)
+     × AC1 #277.bbe9c183 two copies in the app and two in headless Chrome's web player: killing copy 3 at step 900 stamps one seat {3, left} at the same step on the other three, which play on for 3,600 steps with equal full-state hashes and the same track 8338ms
+     × AC1 #277.bbe9c183 a planted module that stamps the leave at the step each copy noticed the close makes the copies part, and the match stops with net.desync naming that step 2280ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-kill.test.ts > AC1 #277.bbe9c183 a killed copy's seat passes to the piece's bot at one step every copy agrees on > AC1 #277.bbe9c183 two copies in the app and two in headless Chrome's web player: killing copy 3 at step 900 stamps one seat {3, left} at the same step on the other three, which play on for 3,600 steps with equal full-state hashes and the same track
+AssertionError: AC1: the web bundle: the piece is presented: [{"check":"document.validate","code":"logic_refused","severity":"error","ids":["rules"],"path":"items/rules/params","actual":{"ok":false,"code":"logic_refused","item":"rules","refusals":[{"rule":"read","what":"net.seats names no control or logic item of this piece","read":"net.seats"}]},"what":"the logic module refuses this logic item","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented ../549/helpers.ts:334:81
+    332|   const r = obj(reply, what);
+    333|   const issues = Array.isArray(r['issues']) ? r['issues'].filter(isObj…
+    334|   expect(r['outcome'], `${what} is presented: ${show(r['issues'] ?? r,…
+       |                                                                                 ^
+    335|   expect(issues.filter((i) => i['severity'] === 'error'), `${what} is …
+    336| }
+ ❯ exportWeb helpers.ts:340:3
+ ❯ liveMatch helpers.ts:360:19
+ ❯ ac1-kill.test.ts:38:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac1-kill.test.ts > AC1 #277.bbe9c183 a killed copy's seat passes to the piece's bot at one step every copy agrees on > AC1 #277.bbe9c183 a planted module that stamps the leave at the step each copy noticed the close makes the copies part, and the match stops with net.desync naming that step
+AssertionError: AC1 in one process: the piece is presented: [{"check":"document.validate","code":"logic_refused","severity":"error","ids":["rules"],"path":"items/rules/params","actual":{"ok":false,"code":"logic_refused","item":"rules","refusals":[{"rule":"read","what":"net.seats names no control or logic item of this piece","read":"net.seats"}]},"what":"the logic module refuses this logic item","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented ../549/helpers.ts:334:81
+    332|   const r = obj(reply, what);
+    333|   const issues = Array.isArray(r['issues']) ? r['issues'].filter(isObj…
+    334|   expect(r['outcome'], `${what} is presented: ${show(r['issues'] ?? r,…
+       |                                                                                 ^
+    335|   expect(issues.filter((i) => i['severity'] === 'error'), `${what} is …
+    336| }
+ ❯ play helpers.ts:85:3
+ ❯ ac1-kill.test.ts:84:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  18:45:55
+   Duration  54.79s (tests 95%, transform 3%, import 1%)
+
+=== tests/acceptance/277/ac2-held-back.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/277 ac2-held-back.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/277
+
+ ❯ ac2-held-back.test.ts (2 tests | 2 failed) 37866ms
+   ❯ AC2 #277.4413887e a leaver's last messages reach every copy before the leave (2)
+     × AC2 #277.4413887e with copy 3's last 4 messages held back from copy 2, copy 2 gets them from the others and every copy stamps the leave after the last of them 5617ms
+     × AC2 #277.4413887e a planted module that skips the exchange stamps the leave 4 steps earlier on copy 2 and fails net.desync, naming the step 2126ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac2-held-back.test.ts > AC2 #277.4413887e a leaver's last messages reach every copy before the leave > AC2 #277.4413887e with copy 3's last 4 messages held back from copy 2, copy 2 gets them from the others and every copy stamps the leave after the last of them
+AssertionError: AC2: the piece is presented: [{"check":"document.validate","code":"logic_refused","severity":"error","ids":["rules"],"path":"items/rules/params","actual":{"ok":false,"code":"logic_refused","item":"rules","refusals":[{"rule":"read","what":"net.seats names no control or logic item of this piece","read":"net.seats"}]},"what":"the logic module refuses this logic item","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented ../549/helpers.ts:334:81
+    332|   const r = obj(reply, what);
+    333|   const issues = Array.isArray(r['issues']) ? r['issues'].filter(isObj…
+    334|   expect(r['outcome'], `${what} is presented: ${show(r['issues'] ?? r,…
+       |                                                                                 ^
+    335|   expect(issues.filter((i) => i['severity'] === 'error'), `${what} is …
+    336| }
+ ❯ play helpers.ts:85:3
+ ❯ ac2-held-back.test.ts:30:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac2-held-back.test.ts > AC2 #277.4413887e a leaver's last messages reach every copy before the leave > AC2 #277.4413887e a planted module that skips the exchange stamps the leave 4 steps earlier on copy 2 and fails net.desync, naming the step
+AssertionError: AC2 (planted net_skips_last_exchange): deep-show run answers the scenario ok (it takes the planted net_skips_last_exchange); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ play helpers.ts:84:13
+ ❯ ac2-held-back.test.ts:55:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  18:41:16
+   Duration  42.32s (tests 93%, transform 7%)
+
+=== tests/acceptance/277/ac3-absent.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/277 ac3-absent.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/277
+
+ ❯ ac3-absent.test.ts (3 tests | 3 failed) 35365ms
+   ❯ AC3 #277.a4a81099 a hidden copy says it is absent, nobody waits on it, and it catches up on its return (3)
+     × AC3 #277.a4a81099 a copy hidden for 20 s at step 1,200 sends absent first; the others wait no longer than the window and play on; on return it catches up headless, sends back, and every copy's hashes agree at the next hash interval 4704ms
+     × AC3 #277.a4a81099 a planted catch-up that applies the missed messages in arrival order parts from the others and fails net.desync, naming the first step that differs 1361ms
+     × AC3 #277.a4a81099 a copy frozen without absent is left after the timeout, as the killed copy is 1180ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac3-absent.test.ts > AC3 #277.a4a81099 a hidden copy says it is absent, nobody waits on it, and it catches up on its return > AC3 #277.a4a81099 a copy hidden for 20 s at step 1,200 sends absent first; the others wait no longer than the window and play on; on return it catches up headless, sends back, and every copy's hashes agree at the next hash interval
+AssertionError: AC3 hidden: the piece is presented: [{"check":"document.validate","code":"logic_refused","severity":"error","ids":["rules"],"path":"items/rules/params","actual":{"ok":false,"code":"logic_refused","item":"rules","refusals":[{"rule":"read","what":"net.seats names no control or logic item of this piece","read":"net.seats"}]},"what":"the logic module refuses this logic item","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented ../549/helpers.ts:334:81
+    332|   const r = obj(reply, what);
+    333|   const issues = Array.isArray(r['issues']) ? r['issues'].filter(isObj…
+    334|   expect(r['outcome'], `${what} is presented: ${show(r['issues'] ?? r,…
+       |                                                                                 ^
+    335|   expect(issues.filter((i) => i['severity'] === 'error'), `${what} is …
+    336| }
+ ❯ play helpers.ts:85:3
+ ❯ ac3-absent.test.ts:30:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  ac3-absent.test.ts > AC3 #277.a4a81099 a hidden copy says it is absent, nobody waits on it, and it catches up on its return > AC3 #277.a4a81099 a planted catch-up that applies the missed messages in arrival order parts from the others and fails net.desync, naming the first step that differs
+AssertionError: AC3 hidden (planted net_catch_up_in_arrival_order): deep-show run answers the scenario ok (it takes the planted net_catch_up_in_arrival_order); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ play helpers.ts:84:13
+ ❯ ac3-absent.test.ts:68:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  ac3-absent.test.ts > AC3 #277.a4a81099 a hidden copy says it is absent, nobody waits on it, and it catches up on its return > AC3 #277.a4a81099 a copy frozen without absent is left after the timeout, as the killed copy is
+AssertionError: AC3 frozen: the piece is presented: [{"check":"document.validate","code":"logic_refused","severity":"error","ids":["rules"],"path":"items/rules/params","actual":{"ok":false,"code":"logic_refused","item":"rules","refusals":[{"rule":"read","what":"net.seats names no control or logic item of this piece","read":"net.seats"}]},"what":"the logic module refuses this logic item","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented ../549/helpers.ts:334:81
+    332|   const r = obj(reply, what);
+    333|   const issues = Array.isArray(r['issues']) ? r['issues'].filter(isObj…
+    334|   expect(r['outcome'], `${what} is presented: ${show(r['issues'] ?? r,…
+       |                                                                                 ^
+    335|   expect(issues.filter((i) => i['severity'] === 'error'), `${what} is …
+    336| }
+ ❯ play helpers.ts:85:3
+ ❯ ac3-absent.test.ts:82:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  18:42:19
+   Duration  36.95s (tests 98%, transform 2%, import 1%)
+
+=== tests/acceptance/277/ac4-budgets.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/277 ac4-budgets.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/277
+
+ ❯ ac4-budgets.test.ts (1 test | 1 failed) 57508ms
+   ❯ AC4 #277.2c9337c4 budgets: catch-up as a reading, and no new work for seats that never change (1)
+     × AC4 #277.2c9337c4 the window's task names the criterion against the merge base; a match whose seats never change does the merge base's work per step; catch-up is recorded in steps a second 11714ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac4-budgets.test.ts > AC4 #277.2c9337c4 budgets: catch-up as a reading, and no new work for seats that never change > AC4 #277.2c9337c4 the window's task names the criterion against the merge base; a match whose seats never change does the merge base's work per step; catch-up is recorded in steps a second
+AssertionError: AC4 #277.2c9337c4 the budgets:
+  benchmarks/budgets.json has no task naming #277.2c9337c4, so no budget window measures catch-up or the unchanged match against the merge base
+  a match whose seats never change: AC4 seats that never change: the piece is presented: [{"check":"document.validate","code":"logic_refused","severity":"error","ids":["rules"],"path":"items/rules/params","actual":{"ok":false,"code":"logic_refused","item":"rules","refusals":[{"rule":"read","what":"net.seats names no control or logic item of this piece","read":"net.seats"}]},"what":"the logic module refuses this logic item","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+  the catch-up reading: AC4 catch-up: the piece is presented: [{"check":"document.validate","code":"logic_refused","severity":"error","ids":["rules"],"path":"items/rules/params","actual":{"ok":false,"code":"logic_refused","item":"rules","refusals":[{"rule":"read","what":"net.seats names no control or logic item of this piece","read":"net.seats"}]},"what":"the logic module refuses this logic item","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "benchmarks/budgets.json has no task naming #277.2c9337c4, so no budget window measures catch-up or the unchanged match against the merge base",
++   "a match whose seats never change: AC4 seats that never change: the piece is presented: [{\"check\":\"document.validate\",\"code\":\"logic_refused\",\"severity\":\"error\",\"ids\":[\"rules\"],\"path\":\"items/rules/params\",\"actual\":{\"ok\":false,\"code\":\"logic_refused\",\"item\":\"rules\",\"refusals\":[{\"rule\":\"read\",\"what\":\"net.seats names no control or logic item of this piece\",\"read\":\"net.seats\"}]},\"what\":\"the logic module refuses this logic item\",\"fix\":\"See the issue.\"}]: expected 'refused' to be 'presented' // Object.is equality",
++   "the catch-up reading: AC4 catch-up: the piece is presented: [{\"check\":\"document.validate\",\"code\":\"logic_refused\",\"severity\":\"error\",\"ids\":[\"rules\"],\"path\":\"items/rules/params\",\"actual\":{\"ok\":false,\"code\":\"logic_refused\",\"item\":\"rules\",\"refusals\":[{\"rule\":\"read\",\"what\":\"net.seats names no control or logic item of this piece\",\"read\":\"net.seats\"}]},\"what\":\"the logic module refuses this logic item\",\"fix\":\"See the issue.\"}]: expected 'refused' to be 'presented' // Object.is equality",
++ ]
+
+ ❯ none ../549/helpers.ts:93:73
+     91| /** No failures; the message lists them. */
+     92| export function none(failures: readonly string[], what: string): void {
+     93|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     94| }
+     95| /** A planted program's run: this suite's own judgement must fail it, …
+ ❯ ac4-budgets.test.ts:60:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  18:43:13
+   Duration  64.23s (tests 94%, transform 6%, import 1%)
+
+=== tests/acceptance/277/ac5-hidden-tab.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/277 ac5-hidden-tab.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/277
+
+ ❯ ac5-hidden-tab.test.ts (2 tests | 2 failed) 34560ms
+   ❯ AC5 #277.cda3f5b9 a hidden web player's seat passes to the bot, and its copy catches up off the live frame (2)
+     × AC5 #277.cda3f5b9 hiding the web player's tab at step 1,200 for 20 s stamps one seat {2, absent} on both copies, the bot plays the seat, and back in view the web copy runs every step it owes within the frame budget and agrees at the next hash interval 8580ms
+     × AC5 #277.cda3f5b9 a planted copy that jumps to the confirmed step without running the steps fails logic.determinism, naming the step 3274ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac5-hidden-tab.test.ts > AC5 #277.cda3f5b9 a hidden web player's seat passes to the bot, and its copy catches up off the live frame > AC5 #277.cda3f5b9 hiding the web player's tab at step 1,200 for 20 s stamps one seat {2, absent} on both copies, the bot plays the seat, and back in view the web copy runs every step it owes within the frame budget and agrees at the next hash interval
+AssertionError: AC5: the web bundle: the piece is presented: [{"check":"document.validate","code":"logic_refused","severity":"error","ids":["rules"],"path":"items/rules/params","actual":{"ok":false,"code":"logic_refused","item":"rules","refusals":[{"rule":"read","what":"net.seats names no control or logic item of this piece","read":"net.seats"}]},"what":"the logic module refuses this logic item","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented ../549/helpers.ts:334:81
+    332|   const r = obj(reply, what);
+    333|   const issues = Array.isArray(r['issues']) ? r['issues'].filter(isObj…
+    334|   expect(r['outcome'], `${what} is presented: ${show(r['issues'] ?? r,…
+       |                                                                                 ^
+    335|   expect(issues.filter((i) => i['severity'] === 'error'), `${what} is …
+    336| }
+ ❯ exportWeb helpers.ts:340:3
+ ❯ liveMatch helpers.ts:360:19
+ ❯ ac5-hidden-tab.test.ts:48:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac5-hidden-tab.test.ts > AC5 #277.cda3f5b9 a hidden web player's seat passes to the bot, and its copy catches up off the live frame > AC5 #277.cda3f5b9 a planted copy that jumps to the confirmed step without running the steps fails logic.determinism, naming the step
+AssertionError: AC5 planted: the web bundle (planted web_catch_up_jumps): deep-show run answers the scenario ok (it takes the planted web_catch_up_jumps); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ exportWeb helpers.ts:339:13
+ ❯ liveMatch helpers.ts:360:19
+ ❯ ac5-hidden-tab.test.ts:130:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  18:47:18
+   Duration  36.05s (tests 98%, import 2%, transform 1%)
+
+=== tests/acceptance/277/ac6-strategy.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/277 ac6-strategy.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/277
+
+ ❯ ac6-strategy.test.ts (1 test | 1 failed) 44179ms
+   ❯ AC6 #277.402a14da a dropped seat in a long strategy match passes to the bot, or to an ally by a take entry (1)
+     × AC6 #277.402a14da killing copy 3 at step 27,000 stamps one seat {3, left}; its units pass to the bot, then to player 4 by a take entry; the other copies play 9,000 more steps with equal full-state hashes 7497ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac6-strategy.test.ts > AC6 #277.402a14da a dropped seat in a long strategy match passes to the bot, or to an ally by a take entry > AC6 #277.402a14da killing copy 3 at step 27,000 stamps one seat {3, left}; its units pass to the bot, then to player 4 by a take entry; the other copies play 9,000 more steps with equal full-state hashes
+AssertionError: AC6: the piece is presented: [{"check":"document.validate","code":"logic_refused","severity":"error","ids":["rules"],"path":"items/rules/params","actual":{"ok":false,"code":"logic_refused","item":"rules","refusals":[{"rule":"read","what":"net.seats names no control or logic item of this piece","read":"net.seats"}]},"what":"the logic module refuses this logic item","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented ../549/helpers.ts:334:81
+    332|   const r = obj(reply, what);
+    333|   const issues = Array.isArray(r['issues']) ? r['issues'].filter(isObj…
+    334|   expect(r['outcome'], `${what} is presented: ${show(r['issues'] ?? r,…
+       |                                                                                 ^
+    335|   expect(issues.filter((i) => i['severity'] === 'error'), `${what} is …
+    336| }
+ ❯ play helpers.ts:85:3
+ ❯ ac6-strategy.test.ts:24:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  18:44:45
+   Duration  49.47s (tests 95%, transform 5%)
