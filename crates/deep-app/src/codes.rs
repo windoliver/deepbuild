@@ -138,14 +138,29 @@ pub fn receipt(events: &[Value], handle: &str) -> Option<String> {
         .iter()
         .map(|(member, at)| step(events, member, *at))
         .collect();
+    // A step the hub held before it started can't be taken back once it ran, and its receipt offers no Undo (#1101);
+    // #1101's planted receipt still offers it.
+    let held = steps
+        .iter()
+        .any(|(member, _)| crate::kinds::hold(events, member) == Some(crate::kinds::Hold::Ran));
+    let for_good = |says: String| -> String {
+        let mut parts = vec![says];
+        if held {
+            parts.push(copy::text("codes.cant_undo").to_owned());
+            if crate::plain::planted("receipt-keeps-undo") {
+                parts.push(copy::text("question.undo").to_owned());
+            }
+        }
+        parts.join(" · ")
+    };
     if let [one] = ran.as_slice() {
-        return Some(match one {
+        return Some(for_good(match one {
             Ran::Ok => copy::text("codes.allowed_ran").to_owned(),
             Ran::Failed(Some(error)) => copy::fill("codes.allowed_failed_error", &[error]),
             Ran::Failed(None) => copy::text("codes.allowed_failed").to_owned(),
             Ran::NotYet => copy::text("codes.allowed_not_yet").to_owned(),
             Ran::Unknown => copy::text("codes.allowed_unknown").to_owned(),
-        });
+        }));
     }
     // A plan of several steps: how many ran and how many failed, with the first failure's error line.
     let count = |of: fn(&Ran) -> bool| ran.iter().filter(|r| of(r)).count() as u64;
@@ -170,7 +185,7 @@ pub fn receipt(events: &[Value], handle: &str) -> Option<String> {
     let unknown = count(|r| matches!(r, Ran::Unknown));
     parts.extend((not_yet > 0).then(|| copy::count("codes.steps_not_yet", not_yet, &[])));
     parts.extend((unknown > 0).then(|| copy::count("codes.steps_unknown", unknown, &[])));
-    Some(parts.join(" · "))
+    Some(for_good(parts.join(" · ")))
 }
 
 /// What the step of `handle` did, as its call's records say, its yes at `answered`: the first call of its session

@@ -1,0 +1,16 @@
+{
+  "v": 1,
+  "id": "01K74FM3QW8Q2X5R7M3N9P4T6W",
+  "kind": "approval.withdrawn",
+  "subject": "ask:01K74G4B6D8F0H2K4M6P8R0T2V",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013457123,
+  "data": {
+    "steps": [
+      "Run `git push origin main`, which pushes"
+    ],
+    "restarted": false
+  }
+}
