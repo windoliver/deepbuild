@@ -670,7 +670,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "terrain_rays" => return terrain::parse(c).map(|r| Call::TerrainRays(Box::new(r))),
         "physics_bake" => return physics::parse(c).map(|b| Call::PhysicsBake(Box::new(b))),
         "world" => return points::parse_world(c).map(|(doc, world)| Call::World { doc, world }),
-        "match" | "play_match" | "sockets" | "replay" => return net::parse(name, c),
+        "match" | "play_match" | "lobby" | "sockets" | "replay" => return net::parse(name, c),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
             return Some(Call::InstallPack {

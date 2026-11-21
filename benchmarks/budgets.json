@@ -2148,6 +2148,16 @@
       "criteria": [
         "#277.2c9337c4"
       ]
+    },
+    {
+      "id": "net-rooms",
+      "command": ["node", "benchmarks/net-rooms.mjs"],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #278 first measurement (#278.fe1a5277): the merge base has no rooms. node benchmarks/net-rooms.mjs runs the criterion's blind acceptance test (tests/acceptance/278/ac5-budgets.test.ts), which plays the eight-seat piece over the test relay twice: once with one player count and no open or finish array, four copies, counting the frames, bytes, messages, rollbacks and steps run against the merge base's counts for the same match, and once as a room of three that a fourth copy joins at step 600, recording that copy's replay from step 0 in steps a second (a reading, counted only on a reference Mac). The window times the run against its merge base; once main has this task, p50 and peak memory get a 50% merge-base margin.",
+      "criteria": [
+        "#278.fe1a5277"
+      ]
     }
   ]
 }

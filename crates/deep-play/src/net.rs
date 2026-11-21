@@ -251,6 +251,20 @@ impl Stepper for Logic {
         self.spent
     }
 
+    fn value(&mut self, item: &str, array: &str) -> Option<f64> {
+        let n = self.piece.items.iter().position(|i| i.id == item)?;
+        let first = self.world.array(n, array)?.into_iter().next()?;
+        first.as_f64().or(first.as_bool().map(f64::from))
+    }
+
+    fn state(&mut self) -> Vec<u8> {
+        let states = self.world.states();
+        states
+            .into_iter()
+            .flat_map(|(_, _, arrays, _)| arrays)
+            .collect()
+    }
+
     fn jump(&mut self, _step: i64, t: i64) {
         self.world.skip(t);
     }

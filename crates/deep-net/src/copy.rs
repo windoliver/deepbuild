@@ -23,6 +23,7 @@ pub use crate::message::Hashed;
 use crate::message::{hex, Message};
 
 mod rollback;
+mod room;
 mod seats;
 pub use seats::{Seat, NET_SEATS, SEAT};
 
@@ -83,6 +84,15 @@ pub trait Stepper {
     /// #551: every occurrence row its canvas modules hold, each `{step, item, …}` with the match
     /// step that made it.
     fn occurrences(&self) -> Vec<Value> {
+        Vec::new()
+    }
+    /// #278: the first value of logic item `item`'s array `array` as its last step left it, a
+    /// bool as 0 or 1: what a match reads of the arrays a piece names as `open` and `finish`.
+    fn value(&mut self, _item: &str, _array: &str) -> Option<f64> {
+        None
+    }
+    /// #278: bytes of its carried state, which only a planted relay hands a copy that joins.
+    fn state(&mut self) -> Vec<u8> {
         Vec::new()
     }
     /// #551: a seek after the match to match step `step` (of `len` flicks): each module restores
@@ -147,6 +157,10 @@ pub enum Planted {
     CatchesUpInArrivalOrder,
     /// #277: back from an absence, it jumps to the confirmed step without running the steps.
     JumpsToConfirmed,
+    /// #278: the first player's copy starts the match on the third join, with no click on Start.
+    StartsOnThirdJoin,
+    /// #278: it ends the match as finished on a step it ran on a prediction.
+    FinishesOnPredicted,
 }
 
 impl Planted {
@@ -167,6 +181,8 @@ impl Planted {
             "net_skips_last_exchange" => Planted::SkipsLeaveExchange,
             "net_catch_up_in_arrival_order" => Planted::CatchesUpInArrivalOrder,
             "web_catch_up_jumps" => Planted::JumpsToConfirmed,
+            "net_starts_on_third_join" => Planted::StartsOnThirdJoin,
+            "net_finishes_on_predicted_step" => Planted::FinishesOnPredicted,
             _ => return None,
         })
     }
@@ -179,6 +195,8 @@ pub enum End {
     Timeout,
     Desync,
     Faulted,
+    /// #278: the piece's `finish` array held a nonzero value at a confirmed step.
+    Finished,
 }
 
 impl End {
@@ -188,6 +206,7 @@ impl End {
             End::Timeout => "timeout",
             End::Desync => "desync",
             End::Faulted => "faulted",
+            End::Finished => "finished",
         }
     }
 
@@ -196,6 +215,7 @@ impl End {
             "timeout" => End::Timeout,
             "desync" => End::Desync,
             "faulted" => End::Faulted,
+            "finished" => End::Finished,
             _ => End::Left,
         }
     }
@@ -315,6 +335,8 @@ pub struct Copy<S> {
     roll: rollback::Roll,
     /// #277: its seats, leaves being agreed, and its own absence (crate::copy::seats).
     seats: seats::Seats,
+    /// #278: its room's lobby and finish (crate::copy::room).
+    room: room::Room,
 }
 
 impl<S: Stepper> Copy<S> {
@@ -374,6 +396,7 @@ impl<S: Stepper> Copy<S> {
             end: None,
             roll: rollback::Roll::new(players),
             seats: seats::Seats::new(players),
+            room: room::Room::default(),
             cfg,
         };
         // No entry can be stamped before step `delay`: those steps' messages are empty.
@@ -513,8 +536,9 @@ impl<S: Stepper> Copy<S> {
             return;
         }
         self.end = Some((end, detail.clone()));
-        // The others end it too: its next frames say how.
-        if end != End::Left {
+        // The others end it too: its next frames say how. A finished match ends on each copy by
+        // its own confirmed step (#278).
+        if !matches!(end, End::Left | End::Finished) {
             self.send(Message {
                 end: Some((end.name().to_string(), detail)),
                 ..Message::default()
@@ -573,6 +597,11 @@ impl<S: Stepper> Copy<S> {
             while self.reached <= self.next {
                 let made = self.script.remove(&self.reached).unwrap_or_default();
                 self.made.extend(made);
+                // #278: a copy that joined makes no message before its `joined` entry's step.
+                if self.enters() {
+                    self.reached += 1;
+                    continue;
+                }
                 let made = std::mem::take(&mut self.made);
                 let m = Message {
                     entries: seen_by(&made, self.me),
@@ -599,6 +628,11 @@ impl<S: Stepper> Copy<S> {
                 continue;
             }
             self.run(now);
+            // #278: a step that finishes the match ends it as soon as it is confirmed, so a copy
+            // behind its clock runs no further.
+            if self.cfg.finish.is_some() {
+                self.settle();
+            }
             self.due = if waited { now + step } else { self.due + step };
         }
     }
@@ -755,6 +789,9 @@ impl<S: Stepper> Copy<S> {
                 self.compare(k);
             }
         }
+        if self.cfg.room() {
+            self.flag(k);
+        }
     }
 
     /// A full-state hash, or a track hash, a peer doesn't share stops the match.
@@ -786,6 +823,8 @@ impl<S: Stepper> Copy<S> {
         if let Some((end, detail)) = &m.end {
             match End::named(end) {
                 End::Desync => self.stop(detail["at"].as_i64().unwrap_or(step)),
+                // #278: a match finishes on each copy by its own confirmed step.
+                End::Finished => {}
                 end if self.end.is_none() => {
                     let detail = match end {
                         End::Faulted => detail.clone(),
@@ -1003,18 +1042,28 @@ impl<S: Stepper> Copy<S> {
             return;
         };
         let p = frame.player as usize;
-        if frame.game != self.game || frame.player >= self.players || p + 1 == self.me as usize {
+        // #278: a copy that joins takes its own seat's messages too, those of whoever held it.
+        let own = p + 1 == self.me as usize;
+        if frame.game != self.game || frame.player >= self.players || (own && !self.joining()) {
             return;
         }
-        self.confirmed_by[p] = self.confirmed_by[p].max(frame.confirmed as i64);
+        if !own {
+            self.confirmed_by[p] = self.confirmed_by[p].max(frame.confirmed as i64);
+        }
         for (i, bytes) in frame.steps.iter().enumerate() {
             let step = frame.first as i64 + i as i64;
-            if step < self.through[p] || self.early[p].contains_key(&step) || self.gone(p) {
+            if step < self.through[p] || self.early[p].contains_key(&step) {
                 continue;
             }
-            if let Some(m) = Message::decode(bytes) {
-                self.early[p].insert(step, m);
+            let Some(m) = Message::decode(bytes) else {
+                continue;
+            };
+            // Nothing a left seat sends counts, until somebody joins it (#278).
+            let joined = Seat::of(&m) == Some(Seat::Joined);
+            if self.gone(p) && !own && !self.rejoins(p, step, joined) {
+                continue;
             }
+            self.early[p].insert(step, m);
         }
         self.now = self.now.max(now);
         self.heard(p, &frame);
@@ -1186,6 +1235,7 @@ impl<S: Stepper> Copy<S> {
         out.insert("match".into(), json!(wire::hex(&self.game)));
         out.insert("refused".into(), json!(self.refused));
         self.seat_report(&mut out);
+        self.room_report(&mut out);
         out.insert("end".into(), json!(self.end().map(End::name)));
         if let Some((_, detail)) = &self.end {
             out.insert("ended".into(), detail.clone());

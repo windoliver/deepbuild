@@ -13,7 +13,13 @@ pub(crate) struct Word {
     /// time the step runs.
     pub plant: Option<(i64, bool)>,
     /// #551: its rollback checkpoints, by match step.
-    pub ring: BTreeMap<i64, (u64, u64)>,
+    pub ring: BTreeMap<i64, (u64, u64, bool, bool)>,
+    /// #278: its lobby is open while the step is below this, and it writes its finish at this
+    /// step unless an entry of value 8 asked it to stay.
+    pub open_until: Option<i64>,
+    pub finish_at: Option<i64>,
+    pub stay: bool,
+    pub done: bool,
 }
 
 impl Stepper for Word {
@@ -31,6 +37,7 @@ impl Stepper for Word {
             entry["player"].as_u64().unwrap(),
             entry["value"].as_f64().unwrap(),
         );
+        self.stay |= value == 8.0;
         self.word = self
             .word
             .wrapping_mul(31)
@@ -41,6 +48,10 @@ impl Stepper for Word {
         assert_eq!(step, self.steps, "steps run once each, in order");
         self.steps += 1;
         self.word = self.word.wrapping_mul(7).wrapping_add(1);
+        if self.finish_at == Some(step) && !self.stay {
+            self.done = true;
+            self.word = self.word.wrapping_add(5);
+        }
         match self.plant {
             Some((at, true)) if at == step => self.word += 1,
             Some((at, false)) if at == step => self.hidden += 1,
@@ -63,6 +74,8 @@ impl Stepper for Word {
     fn again(&self) -> Result<Self, Value> {
         Ok(Word {
             plant: self.plant,
+            open_until: self.open_until,
+            finish_at: self.finish_at,
             ..Word::default()
         })
     }
@@ -75,14 +88,26 @@ impl Stepper for Word {
     }
     fn hold(&mut self, _: usize) {}
     fn keep(&mut self, step: i64) {
-        self.ring.insert(step, (self.word, self.hidden));
+        self.ring
+            .insert(step, (self.word, self.hidden, self.stay, self.done));
         self.ring = self.ring.split_off(&(step - 16));
     }
     fn back(&mut self, step: i64, _: i64) -> Result<(), Value> {
-        let (word, hidden) = *self.ring.get(&step).ok_or_else(|| json!({"step": step}))?;
+        let (word, hidden, stay, done) =
+            *self.ring.get(&step).ok_or_else(|| json!({"step": step}))?;
         (self.word, self.hidden, self.steps) = (word, hidden, step);
+        (self.stay, self.done) = (stay, done);
         self.ring.split_off(&step);
         Ok(())
+    }
+    fn value(&mut self, _: &str, array: &str) -> Option<f64> {
+        Some(f64::from(match array {
+            "lobby" => self.open_until.is_none_or(|until| self.steps <= until),
+            _ => self.done,
+        }))
+    }
+    fn state(&mut self) -> Vec<u8> {
+        self.word.to_le_bytes().to_vec()
     }
 }
 
@@ -92,6 +117,10 @@ pub(crate) fn cfg(delay: i64, hash_every: i64) -> Config {
         relay: "https://relay.test".into(),
         host: "relay.test".into(),
         players: 2,
+        min: 2,
+        ranged: false,
+        open: None,
+        finish: None,
         step_rate: 20,
         delay,
         window: 0,

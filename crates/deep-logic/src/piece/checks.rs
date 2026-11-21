@@ -14,6 +14,8 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             "step_rate",
             "clock",
             "due",
+            "open",
+            "finish",
             "reads",
             "writes",
             "budget",
@@ -170,6 +172,21 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             Some(name.to_string())
         }
     };
+    // #278: `open` names one of the item's own bool arrays of count 1 (joins after the start only
+    // while it's true), and `finish` one of its i32 arrays of count 1 (nonzero ends the match).
+    for (field, ty, word) in [("open", Ty::Bool, "bool"), ("finish", Ty::I32, "i32")] {
+        let Some(v) = params.get(field) else { continue };
+        let name = v.as_str().unwrap_or_default();
+        if !writes
+            .iter()
+            .any(|w| w.name == name && w.ty == ty && w.count == 1)
+        {
+            return Err(bad(
+                field,
+                format!("{field} names one of the item's own {word} arrays of count 1; {v} isn't"),
+            ));
+        }
+    }
     fn get<'a>(o: Option<&'a Value>, k: &str) -> Option<&'a Value> {
         o.and_then(|b| b.get(k))
     }

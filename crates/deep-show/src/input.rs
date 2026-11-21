@@ -781,8 +781,14 @@ impl Hub<'_> {
                 self.settle_focus(panel);
                 let mut state = self.state(panel);
                 // #549: the app's own Join prompt, null where the piece declares no relay.
+                // #278: the app's own Start, for a piece whose match is a room's: null but for
+                // the first player once enough copies have joined.
+                let start = self.start_prompt(panel);
                 if let Some(s) = state.as_object_mut() {
                     s.insert("join".into(), self.join_prompt(panel));
+                    if let Some(start) = start {
+                        s.insert("start".into(), start);
+                    }
                 }
                 json!({"state": state})
             }
