@@ -3,7 +3,7 @@
 // file copied from another machine leaves the entries in place with nothing to run, and no hook ever arrives to say so.
 // `deep doctor` and the hub both read this.
 import { accessSync, constants, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { ADAPTERS } from '@deepbuild/adapters';
 import { claudeSettings, installed } from './claude-settings.js';
 import { recordedEntries, recordedHome } from './codex-settings.js';
@@ -19,10 +19,20 @@ export function programOf(command: string): string {
   return run.split(/\s+/)[0] ?? '';
 }
 
+/** Setup's recorded entries for each agent, with the settings file that holds them. */
+function recordedRuns(root: string): { agent: Unrunnable['agent']; file: string; entries: { event: string; command: string }[] }[] {
+  const claude = installed(root);
+  const codex = recordedEntries(root);
+  return [
+    ...(claude ? [{ agent: 'claude-code' as const, file: claudeSettings(), entries: Object.entries(claude.hooks).flatMap(([event, groups]) => groups.flatMap((g) => (g.hooks as Record<string, unknown>[]).map((h) => ({ event, command: String(h.command) })))) }] : []),
+    ...(codex.length ? [{ agent: 'codex' as const, file: join(recordedHome(root), 'hooks.json'), entries: codex }] : []),
+  ];
+}
+
 /** Each program setup's recorded entries run that can't run, grouped per agent and program, with the events naming it. */
 export function unrunnable(root: string): Unrunnable[] {
   const out: Unrunnable[] = [];
-  const check = (agent: Unrunnable['agent'], file: string, entries: { event: string; command: string }[]) => {
+  for (const { agent, file, entries } of recordedRuns(root)) {
     const byPath = new Map<string, string[]>();
     for (const { event, command } of entries) {
       const path = programOf(command);
@@ -33,13 +43,13 @@ export function unrunnable(root: string): Unrunnable[] {
       if (!existsSync(path)) { out.push({ agent, file, events, path, why: 'gone' }); continue; }
       try { accessSync(path, constants.X_OK); } catch { out.push({ agent, file, events, path, why: 'not executable' }); }
     }
-  };
-  const claude = installed(root);
-  if (claude) check('claude-code', claudeSettings(), Object.entries(claude.hooks).flatMap(([event, groups]) => groups.flatMap((g) => (g.hooks as Record<string, unknown>[]).map((h) => ({ event, command: String(h.command) })))));
-  const codex = recordedEntries(root);
-  if (codex.length) check('codex', join(recordedHome(root), 'hooks.json'), codex);
+  }
   return out;
 }
+
+/** The programs setup's recorded entries run, by absolute path: whether each can run is part of an agent's reach (#2648). */
+export const entryPrograms = (root: string): string[] =>
+  [...new Set(recordedRuns(root).flatMap((r) => r.entries.map((e) => programOf(e.command))))].filter((path) => isAbsolute(path));
 
 /** One line naming the entries, the file and the program. */
 export const describe = (u: Unrunnable): string =>

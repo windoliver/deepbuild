@@ -1,0 +1,329 @@
+#550 at the base, 531da1ef000e30224ae5a2f90a501986967a0be6 ("Merge pull request #2910"), each file run once on
+2026-11-20 from 07:55Z to 08:05Z, in the blind job's worktree: a checkout of the base with only these two folders added
+(untracked). The machine: a Mac17,10 with 18 cores, Node v24.22.2, vitest 5.0.5, the 1-minute load about 150 to 180
+when the run began (the machine was shared; no test reads a time or the load, but for #549's INCONCLUSIVE gate on a live
+phase, and none ran out of time). The hub wasn't running, so `scripts/lease` ran each command with no lease and said so
+once a file; those lines are left out below.
+
+Every test fails at the base: 13 of 13 in the 10 files here, and both tests of the Oracle lane. None passes, so none is a
+guard. Every failure is an assertion these files name (an AssertionError with the file's own message); none is a
+TypeError, a timeout, a BLOCKED or an INCONCLUSIVE.
+
+The commands are the README's (Run them), one file at a time, in this order (the build hooks found the base's `full`
+build made beforehand by `cargo build --locked --bin deep-show --no-default-features --features full`, 48m49s on the
+loaded machine; ac10's built `deep-relay`, ac6's the `core` set):
+
+  export PATH="$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH"
+  node node_modules/typescript/bin/tsc -p tests/acceptance/550/tsconfig.json          # exit 0
+  node node_modules/typescript/bin/tsc -p tests/acceptance/550-oracle/tsconfig.json   # exit 0
+  node node_modules/vitest/vitest.mjs list --root tests/acceptance/550                # 13 tests in 10 files
+  node node_modules/vitest/vitest.mjs list --root tests/acceptance/550-oracle         # 2 tests in 1 file
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 sh scripts/lease \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/550 <file>.test.ts --testTimeout=600000
+  (the same) ... run --root tests/acceptance/550-oracle desync.test.ts --testTimeout=600000
+
+ac1, ac2, ac3, ac4, ac5, ac7, ac8, ac9, the Oracle lane, ac10, ac6. The Oracle lane's first test was then changed to
+play its stub match on to step 400 (from 210), so that a copy that missed the hash for 200 would hash again at 300, and
+the lane was run once more at 08:05Z; that run is the one below. No other file changed after its run.
+
+Why they fail, by file (the base's behaviour is the README's "What the base already does"):
+
+- ac1, ac5, ac7, ac9 and the Oracle lane: `match` ignores `plant`, so no change lands: both copies share every hash, at
+  360 too (27e9650d75149827 on both, and 4e279c2fbdf54c21 at the stub game's 200), play on to the end and end with no
+  desync; no copy's report holds `desync`, `match` or a hash row's `track`; the relay log's 1,200 rows give no `bytes`
+  (ac1). ac5's step hashes all agree at the base, so that part of its judge already holds there. The Oracle lane's
+  run with no plant (600 steps, every hash shared) holds too.
+- ac2: no copy's report lists `refused`. The match itself plays on 600 steps with every hash shared.
+- ac3: its first half holds at the base (below); its second asks for the planted copy `net_stamps_own_player`, and the
+  base refuses the scenario: `{"ok":false,"code":"bad_input"}`. ac4, ac5, ac7 and ac8's planted runs would meet the
+  same refusal; ac4's and ac5's planted tests do.
+- ac4: both copies already end `faulted` at step 400, their records too, every hash shared; their reports hold no
+  `fault`.
+- ac6: net@1 in `full` is available with its seven fields and the defaults the design gives (no failure names them),
+  and lists no check kinds; the `core` build doesn't list net@1 at all; the gallery holds no two-player piece.
+- ac8: `match` ignores `relay.direct` and `plays[].to`, so copies 1 and 2 both hold both of copy 3's entries, share the
+  hash at 360 (09f9c5ac91f85f19) and play on; no `desync`, no track hash.
+- ac10: no hash row carries `track`, no copy reports `match`, and the relay log's 7,200 rows give no `bytes`, so the
+  in-process half fails before the live half starts.
+
+Checked at the base outside these files, in scratch code under the session's scratch folder (not committed):
+
+- `courtProgram` in Node's own WebAssembly, the read region filled as Logic logic@1 lays it out (each slider a u32
+  count, 4 zero bytes, then 16 B an entry; 264 B a slider, in the order of `reads`), on criterion 3's script: the rules
+  refuse (2, 1) at step 100, (2, 2) at 160 and (2, 3) at 220 and nothing else; with player 2's entries stamped player 1
+  nothing is refused at 100; the ball is in play from step 14; `courtProgram({trapAt: 400})` traps with `unreachable`
+  at step 400; and with bit 0 of `ball_vx` flipped after step 310, the ball's four values at step 360 differ from the
+  plain run's exactly and agree with them rounded to 1e-6.
+- The base's own `deep-show run` (the `full` build) on the paddle piece through `match`: criterion 3's script gives
+  the same refusals on both copies, 600 steps and every hash shared, so ac3's first half holds at the base; the trapping
+  piece ends both copies `faulted` at step 400 with `ended: {step: 400, trap: {item: "court", step: 400, kind:
+  "unreachable", …}}`; a scenario naming any of the five planted names is refused `bad_input`.
+- The base's `verdict` on the agent's claim with the requirement `{kind: "net.desync", seed: 550}` on the paddle piece,
+  through this suite's scenario shape: `result: "BLOCKED"`, `blocked: [{code: "module_missing", kind: "net.desync",
+  module: "net"}]`. deep_kinds' `list` of `kind@1` pages (its first page holds 19 entries and a cursor), and its
+  `gallery` lists four examples.
+- Criterion 10's live half, with the base's `full` build and `deep-relay` as both builds, through a scratch vitest
+  file run once and deleted: two app copies played 600 steps through the shipped relay behind #549's door; the door
+  saw 1,208 step messages; each copy's full-state hash for step k was found, as its hex text, in its message for step
+  k + 5, 28 to 30 B (`{"h":[180,"c259947c934e0524"]}`), for all ten hash steps of each copy. So the reference's hash
+  messages are found as criterion 10 reads them.
+
+The runs, as the log gives them (each file's heading, the failures vitest printed, its summary; the diff vitest
+prints after each message and the stack frames past the test file are left out, and the checkout's path is
+<checkout>):
+
+=== tests/acceptance/550/ac1-unit-shift.test.ts 2026-11-20T07:55:21Z
+ RUN  v5.0.5 <checkout>/tests/acceptance/550
+ ❯ ac1-unit-shift.test.ts (1 test | 1 failed) 9355ms
+   ❯ AC1 #550.92355c66 a one-unit shift in the ball's x velocity, located (1)
+     × AC1 #550.92355c66 caught at the hash for step 360 on both copies, net.desync names step 310 and the ball's x velocity, and the relay carries only entries, the match ID and hashes 4388ms
+ FAIL  ac1-unit-shift.test.ts > AC1 #550.92355c66 a one-unit shift in the ball's x velocity, located > AC1 #550.92355c66 caught at the hash for step 360 on both copies, net.desync names step 310 and the ball's x velocity, and the relay carries only entries, the match ID and hashes
+AssertionError: the shifted ball is caught at 360 and named at 310, and the relay carries nothing but entries, the match ID and hashes:
+  AC1: copies 1 and 2 agree at the hash for step 360 (27e9650d75149827): the change at step 310 isn't caught there
+  AC1: copy 1 played on past the hash for step 360, hashing steps 420, 480, 540
+  AC1: copy 1 ran 600 match steps, past step 420
+  AC1: copy 1's match ended null, not desync
+  AC1: copy 1's record ends null, not desync
+  AC1: copy 2 played on past the hash for step 360, hashing steps 420, 480, 540
+  AC1: copy 2 ran 600 match steps, past step 420
+  AC1: copy 2's match ended null, not desync
+  AC1: copy 2's record ends null, not desync
+  AC1: copy 1's report has no desync (README: A copy's report): it holds player, ran, rollbacks, hashes, waits, notices, end, record, ran_at, steps, track
+  AC1: copy 2's report has no desync (README: A copy's report): it holds player, ran, rollbacks, hashes, waits, notices, end, record, ran_at, steps, track
+  AC1 the relay's log: the copies report one match ID of 32 hex digits (match), got [null]
+  AC1 the relay's log: 1200 of the relay log's 1200 rows give no bytes (bytes: the frame as the relay carried it, as hex; README: The relay's log): expected [ …(13) ] to deeply equal []
+ ❯ none ../549/helpers.ts:93:73
+ ❯ ac1-unit-shift.test.ts:24:5
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  23:55:23
+   Duration  11.26s (tests 87%, transform 11%, import 2%)
+=== exit 1 2026-11-20T07:55:34Z
+
+=== tests/acceptance/550/ac2-peer-entries.test.ts 2026-11-20T07:55:34Z
+ RUN  v5.0.5 <checkout>/tests/acceptance/550
+ ❯ ac2-peer-entries.test.ts (1 test | 1 failed) 9532ms
+   ❯ AC2 #550.ba2d6c1f a peer's undeclared and out-of-range entries, refused alike (1)
+     × AC2 #550.ba2d6c1f both copies refuse player 2's entry on an undeclared control at step 100 and its out-of-range slider at step 200, naming player 2, and play on with equal full-state hashes 3890ms
+ FAIL  ac2-peer-entries.test.ts > AC2 #550.ba2d6c1f a peer's undeclared and out-of-range entries, refused alike > AC2 #550.ba2d6c1f both copies refuse player 2's entry on an undeclared control at step 100 and its out-of-range slider at step 200, naming player 2, and play on with equal full-state hashes
+AssertionError: a peer's undeclared and out-of-range entries are refused alike, and the match plays on:
+  AC2: copy 1's report lists no refused entries (refused; README: A copy's report): it holds player, ran, rollbacks, hashes, waits, notices, end, record, ran_at, steps, track
+  AC2: copy 2's report lists no refused entries (refused; README: A copy's report): it holds player, ran, rollbacks, hashes, waits, notices, end, record, ran_at, steps, track: expected [ …(2) ] to deeply equal []
+ ❯ none ../549/helpers.ts:93:73
+ ❯ ac2-peer-entries.test.ts:41:5
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  23:55:36
+   Duration  11.21s (tests 89%, transform 9%, import 2%)
+=== exit 1 2026-11-20T07:55:47Z
+
+=== tests/acceptance/550/ac3-rules.test.ts 2026-11-20T07:55:47Z
+ RUN  v5.0.5 <checkout>/tests/acceptance/550
+ ❯ ac3-rules.test.ts (1 test | 1 failed) 12826ms
+   ❯ AC3 #550.b639481c the piece's rules judge every player's entries on every copy (1)
+     × AC3 #550.b639481c player 2's move of player 1's paddle, its serve out of turn and its paddle past the wall are each refused on both copies at the same step and the match plays on, and a planted copy that stamps a peer's entries with its own player lets the first through there alone, stopping the match with net.desync at step 100 4220ms
+ FAIL  ac3-rules.test.ts > AC3 #550.b639481c the piece's rules judge every player's entries on every copy > AC3 #550.b639481c player 2's move of player 1's paddle, its serve out of turn and its paddle past the wall are each refused on both copies at the same step and the match plays on, and a planted copy that stamps a peer's entries with its own player lets the first through there alone, stopping the match with net.desync at step 100
+AssertionError: AC3 the planted copy 1 (planted net_stamps_own_player): deep-show run answers the scenario ok (it takes the planted net_stamps_own_player); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ ❯ runShow ../549/helpers.ts:281:174
+ ❯ play helpers.ts:327:13
+ ❯ ac3-rules.test.ts:58:21
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  23:55:48
+   Duration  13.99s (tests 95%, transform 4%, import 1%)
+=== exit 1 2026-11-20T07:56:02Z
+
+=== tests/acceptance/550/ac4-trap.test.ts 2026-11-20T07:56:02Z
+ RUN  v5.0.5 <checkout>/tests/acceptance/550
+ ❯ ac4-trap.test.ts (2 tests | 2 failed) 14934ms
+   ❯ AC4 #550.64a33e1a a trap every copy makes alike ends the match as faulted (2)
+     × AC4 #550.64a33e1a both copies end at step 400 with net.fault naming court, step 400 and unreachable, and both records end faulted 6609ms
+     × AC4 #550.64a33e1a a planted copy that plays on past the trap because the hashes agree fails, naming step 400 821ms
+ FAIL  ac4-trap.test.ts > AC4 #550.64a33e1a a trap every copy makes alike ends the match as faulted > AC4 #550.64a33e1a both copies end at step 400 with net.fault naming court, step 400 and unreachable, and both records end faulted
+AssertionError: a trap ends the match as faulted on every copy:
+  AC4: copy 1's report has no fault (README: A copy's report): it holds player, ran, rollbacks, hashes, waits, notices, end, ended, record, ran_at, steps, track
+  AC4: copy 2's report has no fault (README: A copy's report): it holds player, ran, rollbacks, hashes, waits, notices, end, ended, record, ran_at, steps, track: expected [ …(2) ] to deeply equal []
+ ❯ none ../549/helpers.ts:93:73
+ ❯ ac4-trap.test.ts:42:5
+ FAIL  ac4-trap.test.ts > AC4 #550.64a33e1a a trap every copy makes alike ends the match as faulted > AC4 #550.64a33e1a a planted copy that plays on past the trap because the hashes agree fails, naming step 400
+AssertionError: AC4 the copy that plays on (planted net_plays_on_past_trap): deep-show run answers the scenario ok (it takes the planted net_plays_on_past_trap); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ ❯ runShow ../549/helpers.ts:281:174
+ ❯ play helpers.ts:327:13
+ ❯ ac4-trap.test.ts:46:24
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  23:56:03
+   Duration  15.88s (tests 95%, transform 4%, import 1%)
+=== exit 1 2026-11-20T07:56:19Z
+
+=== tests/acceptance/550/ac5-memory-byte.test.ts 2026-11-20T07:56:19Z
+ RUN  v5.0.5 <checkout>/tests/acceptance/550
+ ❯ ac5-memory-byte.test.ts (2 tests | 2 failed) 11230ms
+   ❯ AC5 #550.608848dc a change to logic memory no step reads, located by full-state hashes (2)
+     × AC5 #550.608848dc caught at the hash for step 360, net.desync names step 310, logic and its memory, while every step hash agrees 5334ms
+     × AC5 #550.608848dc a planted locator that compares step hashes alone names no step and fails 1086ms
+ FAIL  ac5-memory-byte.test.ts > AC5 #550.608848dc a change to logic memory no step reads, located by full-state hashes > AC5 #550.608848dc caught at the hash for step 360, net.desync names step 310, logic and its memory, while every step hash agrees
+AssertionError: a change to unread memory is caught and named, though the step hashes agree:
+  AC5: copies 1 and 2 agree at the hash for step 360 (27e9650d75149827): the change at step 310 isn't caught there
+  AC5: copy 1 played on past the hash for step 360, hashing steps 420, 480, 540
+  AC5: copy 1 ran 600 match steps, past step 420
+  AC5: copy 1's match ended null, not desync
+  AC5: copy 1's record ends null, not desync
+  AC5: copy 2 played on past the hash for step 360, hashing steps 420, 480, 540
+  AC5: copy 2 ran 600 match steps, past step 420
+  AC5: copy 2's match ended null, not desync
+  AC5: copy 2's record ends null, not desync
+  AC5: copy 1's report has no desync (README: A copy's report): it holds player, ran, rollbacks, hashes, waits, notices, end, record, ran_at, steps, track
+  AC5: copy 2's report has no desync (README: A copy's report): it holds player, ran, rollbacks, hashes, waits, notices, end, record, ran_at, steps, track: expected [ …(11) ] to deeply equal []
+ ❯ none ../549/helpers.ts:93:73
+ ❯ ac5-memory-byte.test.ts:46:5
+ FAIL  ac5-memory-byte.test.ts > AC5 #550.608848dc a change to logic memory no step reads, located by full-state hashes > AC5 #550.608848dc a planted locator that compares step hashes alone names no step and fails
+AssertionError: AC5 the step-hash locator (planted net_locates_by_step_hashes): deep-show run answers the scenario ok (it takes the planted net_locates_by_step_hashes); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ ❯ runShow ../549/helpers.ts:281:174
+ ❯ play helpers.ts:327:13
+ ❯ ac5-memory-byte.test.ts:50:24
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  23:56:22
+   Duration  12.54s (tests 92%, transform 4%, import 3%, worker 1%)
+=== exit 1 2026-11-20T07:56:35Z
+
+=== tests/acceptance/550/ac6-tools.test.ts 2026-11-20T07:59:02Z
+ RUN  v5.0.5 <checkout>/tests/acceptance/550
+ ❯ ac6-tools.test.ts (2 tests | 2 failed) 332303ms
+   ❯ AC6 #550.8e0f54ea net in the tools (2)
+     × AC6 #550.8e0f54ea deep_kinds lists net@1 with its fields, defaults and check kinds in the full build, and marks it unavailable with module_missing in the core build 17941ms
+     × AC6 #550.8e0f54ea deep_run runs net.desync on the gallery's two-player piece and returns the planted step and field, and no tool on the tool list opens a connection or joins a match 4273ms
+ FAIL  ac6-tools.test.ts > AC6 #550.8e0f54ea net in the tools > AC6 #550.8e0f54ea deep_kinds lists net@1 with its fields, defaults and check kinds in the full build, and marks it unavailable with module_missing in the core build
+AssertionError: deep_kinds lists net@1 where the net module is and marks it missing where it isn't:
+  AC6: net@1 lists the check kinds null, without net.rollback
+  AC6: net@1 lists the check kinds null, without net.desync
+  AC6: net@1 lists the check kinds null, without net.budget
+  AC6: the core build, which holds no net module, doesn't list net@1 at all: expected [ …(4) ] to deeply equal []
+ ❯ none ../549/helpers.ts:93:73
+ ❯ ac6-tools.test.ts:49:5
+ FAIL  ac6-tools.test.ts > AC6 #550.8e0f54ea net in the tools > AC6 #550.8e0f54ea deep_run runs net.desync on the gallery's two-player piece and returns the planted step and field, and no tool on the tool list opens a connection or joins a match
+AssertionError: the gallery holds a two-player piece: an example whose document has a net@1 item for 2 players: expected [] to not deeply equal []
+ ❯ ac6-tools.test.ts:58:142
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  23:59:05
+   Duration  333.83s (tests 100%)
+=== exit 1 2026-11-20T08:04:39Z
+
+=== tests/acceptance/550/ac7-one-ulp.test.ts 2026-11-20T07:56:35Z
+ RUN  v5.0.5 <checkout>/tests/acceptance/550
+ ❯ ac7-one-ulp.test.ts (1 test | 1 failed) 18101ms
+   ❯ AC7 #550.31a59430 a one-ulp change to the ball's x velocity (1)
+     × AC7 #550.31a59430 caught at the hash for step 360 and named as step 310 and the ball's x velocity, and a full-state hash that rounds floats to 1e-6 misses it and fails 7280ms
+ FAIL  ac7-one-ulp.test.ts > AC7 #550.31a59430 a one-ulp change to the ball's x velocity > AC7 #550.31a59430 caught at the hash for step 360 and named as step 310 and the ball's x velocity, and a full-state hash that rounds floats to 1e-6 misses it and fails
+AssertionError: a one-ulp change is caught at 360 and named at 310:
+  AC7: copies 1 and 2 agree at the hash for step 360 (27e9650d75149827): the change at step 310 isn't caught there
+  AC7: copy 1 played on past the hash for step 360, hashing steps 420, 480, 540
+  AC7: copy 1 ran 600 match steps, past step 420
+  AC7: copy 1's match ended null, not desync
+  AC7: copy 1's record ends null, not desync
+  AC7: copy 2 played on past the hash for step 360, hashing steps 420, 480, 540
+  AC7: copy 2 ran 600 match steps, past step 420
+  AC7: copy 2's match ended null, not desync
+  AC7: copy 2's record ends null, not desync
+  AC7: copy 1's report has no desync (README: A copy's report): it holds player, ran, rollbacks, hashes, waits, notices, end, record, ran_at, steps, track
+  AC7: copy 2's report has no desync (README: A copy's report): it holds player, ran, rollbacks, hashes, waits, notices, end, record, ran_at, steps, track: expected [ …(11) ] to deeply equal []
+ ❯ none ../549/helpers.ts:93:73
+ ❯ ac7-one-ulp.test.ts:28:5
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  23:56:37
+   Duration  19.91s (tests 94%, transform 3%, import 2%)
+=== exit 1 2026-11-20T07:56:57Z
+
+=== tests/acceptance/550/ac8-entries-first.test.ts 2026-11-20T07:56:57Z
+ RUN  v5.0.5 <checkout>/tests/acceptance/550
+ ❯ ac8-entries-first.test.ts (1 test | 1 failed) 17189ms
+   ❯ AC8 #550.acebf9a7 entries first: a copy that sends two peers different entries (1)
+     × AC8 #550.acebf9a7 copies 1 and 2 stop at the hash for step 360 with net.desync naming cause entries, player 3 and step 310 and no field, and a locator that compares state alone names the ball and fails 9030ms
+ FAIL  ac8-entries-first.test.ts > AC8 #550.acebf9a7 entries first: a copy that sends two peers different entries > AC8 #550.acebf9a7 copies 1 and 2 stop at the hash for step 360 with net.desync naming cause entries, player 3 and step 310 and no field, and a locator that compares state alone names the ball and fails
+AssertionError: copies 1 and 2 name player 3's entries at step 310:
+  AC8: copies 1 and 2 agree at the hash for step 360 (09f9c5ac91f85f19, track undefined): the change at step 310 isn't caught there
+  AC8: copy 1 played on past the hash for step 360, hashing steps 420, 480, 540
+  AC8: copy 1 ran 600 match steps, past step 420
+  AC8: copy 1's match ended null, not desync
+  AC8: copy 1's record ends null, not desync
+  AC8: copy 2 played on past the hash for step 360, hashing steps 420, 480, 540
+  AC8: copy 2 ran 600 match steps, past step 420
+  AC8: copy 2's match ended null, not desync
+  AC8: copy 2's record ends null, not desync
+  AC8: copy 1's report has no desync (README: A copy's report)
+  AC8: copy 2's report has no desync (README: A copy's report): expected [ …(11) ] to deeply equal []
+ ❯ none ../549/helpers.ts:93:73
+ ❯ ac8-entries-first.test.ts:47:5
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  23:56:59
+   Duration  18.73s (tests 94%, transform 4%, import 2%)
+=== exit 1 2026-11-20T07:57:19Z
+
+=== tests/acceptance/550/ac9-cause-state.test.ts 2026-11-20T07:57:19Z
+ RUN  v5.0.5 <checkout>/tests/acceptance/550
+ ❯ ac9-cause-state.test.ts (1 test | 1 failed) 22044ms
+   ❯ AC9 #550.b37be976 a change of state, with honest entries, keeps cause state (1)
+     × AC9 #550.b37be976 net.desync reports cause state, step 310 and the ball's x velocity, and the copies' track hashes agree at step 360 8834ms
+ FAIL  ac9-cause-state.test.ts > AC9 #550.b37be976 a change of state, with honest entries, keeps cause state > AC9 #550.b37be976 net.desync reports cause state, step 310 and the ball's x velocity, and the copies' track hashes agree at step 360
+AssertionError: a change of state with honest entries reports cause state, and the track hashes agree:
+  AC9: copy 1's report has no desync (README: A copy's report): it holds player, ran, rollbacks, hashes, waits, notices, end, record, ran_at, steps, track
+  AC9: copy 2's report has no desync (README: A copy's report): it holds player, ran, rollbacks, hashes, waits, notices, end, record, ran_at, steps, track
+  AC9: a copy's hash row for step 360 carries no track hash (track): undefined and undefined: expected [ …(3) ] to deeply equal []
+ ❯ none ../549/helpers.ts:93:73
+ ❯ ac9-cause-state.test.ts:28:5
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  23:57:22
+   Duration  23.91s (tests 94%, transform 3%, import 3%)
+=== exit 1 2026-11-20T07:57:46Z
+
+=== tests/acceptance/550/ac10-track-bytes.test.ts 2026-11-20T07:58:19Z
+ RUN  v5.0.5 <checkout>/tests/acceptance/550
+ ❯ ac10-track-bytes.test.ts (1 test | 1 failed) 39975ms
+   ❯ AC10 #550.e9bf3c06 the track hash's bytes over a long match (1)
+     × AC10 #550.e9bf3c06 over 3,600 match steps with no fault every hash message carries a track hash both copies share, at most 8 B more than the reference's message, and the relay's log holds nothing but entries, the match ID and hashes 18840ms
+ FAIL  ac10-track-bytes.test.ts > AC10 #550.e9bf3c06 the track hash's bytes over a long match > AC10 #550.e9bf3c06 over 3,600 match steps with no fault every hash message carries a track hash both copies share, at most 8 B more than the reference's message, and the relay's log holds nothing but entries, the match ID and hashes
+AssertionError: over 3,600 steps the copies share every track hash and the relay carries nothing but entries, the match ID and hashes:
+  AC10: a copy's hash row for step 0 carries no track hash: undefined and undefined
+  AC10: the copies share track hashes at 0 hash steps, fewer than 59
+  AC10 the relay's log: the copies report one match ID of 32 hex digits (match), got [null]
+  AC10 the relay's log: 7200 of the relay log's 7200 rows give no bytes (bytes: the frame as the relay carried it, as hex; README: The relay's log): expected [ …(4) ] to deeply equal []
+ ❯ none ../549/helpers.ts:93:73
+ ❯ ac10-track-bytes.test.ts:71:5
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  23:58:20
+   Duration  41.93s (tests 97%, transform 2%, import 1%)
+=== exit 1 2026-11-20T07:59:02Z
+
+=== tests/acceptance/550-oracle/desync.test.ts 2026-11-20T08:05:11Z
+ RUN  v5.0.5 <checkout>/tests/acceptance/550-oracle
+ ❯ desync.test.ts (2 tests | 2 failed) 14912ms
+   ❯ AC1 #550.92355c66 the upstream desync tests, on our copies (2)
+     × AC1 #550.92355c66 a state messed up after step 110 is caught by both copies at the hash for step 200, every 100 steps, each with its own hash and the other's differing 4034ms
+     × AC1 #550.92355c66 with the same inputs every hash stays in sync, and a push to the ball at step 310 desyncs the copies from that step on, naming the one field that differs 5123ms
+ FAIL  desync.test.ts > AC1 #550.92355c66 the upstream desync tests, on our copies > AC1 #550.92355c66 a state messed up after step 110 is caught by both copies at the hash for step 200, every 100 steps, each with its own hash and the other's differing
+AssertionError: a desync is caught at the next hash interval, on both copies:
+  both copies must report differing hashes at step 200: 4e279c2fbdf54c21 and 4e279c2fbdf54c21
+  copy 1 doesn't report the desync: its match ended null
+  copy 1 hashed past step 200, so the desync wasn't caught at its first interval after the change
+  copy 2 doesn't report the desync: its match ended null
+  copy 2 hashed past step 200, so the desync wasn't caught at its first interval after the change: expected [ …(5) ] to deeply equal []
+ ❯ none ../549/helpers.ts:93:73
+ ❯ desync.test.ts:50:5
+ FAIL  desync.test.ts > AC1 #550.92355c66 the upstream desync tests, on our copies > AC1 #550.92355c66 with the same inputs every hash stays in sync, and a push to the ball at step 310 desyncs the copies from that step on, naming the one field that differs
+AssertionError: the same inputs stay in sync, and a change desyncs from its step, naming its one field:
+  a push at step 310: copy 1's report has no desync (README: A copy's report): it holds player, ran, rollbacks, hashes, waits, notices, end, record, ran_at, steps, track
+  a push at step 310: copy 2's report has no desync (README: A copy's report): it holds player, ran, rollbacks, hashes, waits, notices, end, record, ran_at, steps, track
+  after the push the copies stay apart from step 310 on, but their hashes at step 360 are 27e9650d75149827 and 27e9650d75149827: expected [ …(3) ] to deeply equal []
+ ❯ none ../549/helpers.ts:93:73
+ ❯ desync.test.ts:63:5
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  00:05:12
+   Duration  15.66s (tests 97%, transform 3%, import 1%)
+=== exit 1 2026-11-20T08:05:27Z

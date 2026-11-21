@@ -69,12 +69,6 @@ const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
 const sha256 = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
-const compare = (a: string, b: string): number => {
-  const x = a.split('.').map(Number);
-  const y = b.split('.').map(Number);
-  for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0);
-  return 0;
-};
 
 interface Facts { agent: string; versions: string[]; launch: { readOnlyJob: { args: string[] } }; billing: { apiKeyVariables: string[] }; errorTexts: { causes?: Record<string, string> }; stop: { cause: { errors: { field: string; values: Record<string, string> } } } }
 /** A binary as it was verified: where the PATH named it, the file it is, its bytes' digest, its version and its file's identity. */
@@ -145,7 +139,7 @@ class LocalRunner implements Runner {
   /** The starts each account took without a reading, by the clock, for its daily limit. */
   private readonly unread = new Map<string, number[]>();
   private readonly verified = new Map<Agent, Verified>();
-  /** Versions a planted runner widened the range to; tests only. */
+  /** Versions a planted runner added to what its facts cover; tests only. */
   private readonly widened = new Set<string>();
   private chain: Promise<unknown> = Promise.resolve();
   private cursor = 0;
@@ -662,9 +656,9 @@ class LocalRunner implements Runner {
     const facts = this.facts(job.spec.agent);
     const binary = await this.binary(job, facts);
     if ('refused' in binary) return binary;
-    const covered = AGENTS[job.spec.agent]!.exactVersions ? facts.versions.includes(binary.version) : this.covers(facts, binary.version);
+    const covered = this.covers(facts, binary.version);
     if (!covered && job.spec.kind !== 'smoke') {
-      return { refused: `${facts.agent} ${binary.version} at ${binary.path} is outside what its facts cover, ${facts.versions[0]} to ${facts.versions[facts.versions.length - 1]}` };
+      return { refused: `${facts.agent} ${binary.version} at ${binary.path} is outside what its facts cover: ${facts.versions.join(', ')}` };
     }
     if (!covered) {
       // A smoke test of a version its facts don't cover runs under the one standing approval you gave for that agent.
@@ -698,10 +692,9 @@ class LocalRunner implements Runner {
     if (!facts) this.factsCache.set(agent, (facts = readFacts<Facts>(AGENTS[agent]!.facts)));
     return facts;
   }
+  /** The versions the facts list, and no other: the hub holds any other version's session watch-only. */
   private covers(facts: Facts, version: string): boolean {
-    if (this.widened.has(version)) return true;
-    const range = facts.versions;
-    return range.length > 0 && compare(version, range[0]!) >= 0 && compare(version, range[range.length - 1]!) <= 0;
+    return this.widened.has(version) || facts.versions.includes(version);
   }
 
   /** The agent's binary on the login shell's PATH, resolved once, its bytes and version verified again whenever its file changes. */
@@ -731,7 +724,7 @@ class LocalRunner implements Runner {
       const shown = await this.step([path, '--version'], job.rec.folder, { read: [...this.programs(real, AGENTS[agent]), ...(AGENTS[agent]?.packaged ? job.spec.grant?.read ?? [] : [])] }, { PATH: this.o.loginPath, HOME: this.o.env.HOME ?? '' });
       const after = existsSync(real) ? identity(statSync(real)) : '';
       if (realpathSync(path) !== real || after !== before || (await fileDigest(real)) !== digest) continue;
-      const version = shownVersion(shown.stdout.toString('utf8'), AGENTS[agent]!.exactVersions === true);
+      const version = shownVersion(shown.stdout.toString('utf8'));
       if (shown.code !== 0 || !version) return { refused: `${path} --version exited ${String(shown.code)} and printed no version: ${shown.stderr.trim().slice(0, 500)}` };
       const verified: Verified = { path, real, digest, version, id: before };
       this.verified.set(agent, verified);

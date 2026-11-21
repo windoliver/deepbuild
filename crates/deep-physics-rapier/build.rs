@@ -7,6 +7,10 @@ use std::process::Command;
 
 const BACKEND: &str = "rapier3d";
 const PINNED: [&str; 6] = ["parry3d", "wide", "glam", "glamx", "simba", "libm"];
+// Issue #2098: a 2D world's backend and the crates under it, parry2d in parry3d's place. They
+// are a build of their own, so a 3D world's key and digest stay what they were.
+const BACKEND_2D: &str = "rapier2d";
+const PINNED_2D: [&str; 6] = ["parry2d", "wide", "glam", "glamx", "simba", "libm"];
 
 fn var(k: &str) -> String {
     std::env::var(k).unwrap_or_else(|_| panic!("cargo sets {k} for a build script"))
@@ -62,25 +66,37 @@ fn main() {
             features.sort_unstable();
             Some((name, version, features.join(",")))
         })
-        .filter(|(n, _, _)| n == BACKEND || PINNED.contains(&n.as_str()))
         .collect();
     pins.sort();
     pins.dedup();
     let line = |(n, v, f): &(String, String, String)| format!("{n} {v} {f}");
-    let backend: Vec<String> = pins.iter().filter(|p| p.0 == BACKEND).map(line).collect();
-    assert!(
-        backend.len() == 1,
-        "this build resolves one {BACKEND}: {backend:?}"
-    );
-    let others: Vec<String> = pins.iter().filter(|p| p.0 != BACKEND).map(line).collect();
+    let of = |names: &[&str]| -> Vec<String> {
+        let named = pins.iter().filter(|p| names.contains(&p.0.as_str()));
+        named.map(line).collect()
+    };
+    let one = |name: &str| {
+        let backend = of(&[name]);
+        assert!(
+            backend.len() == 1,
+            "this build resolves one {name}: {backend:?}"
+        );
+        backend[0].clone()
+    };
+    let (backend, others) = (one(BACKEND), of(&PINNED));
+    let (backend_2d, others_2d) = (one(BACKEND_2D), of(&PINNED_2D));
     let rustc = Command::new(var("RUSTC"))
         .arg("-V")
         .output()
         .ok()
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
         .unwrap_or_default();
-    println!("cargo:rustc-env=DEEP_PHYSICS_BACKEND={}", backend[0]);
+    println!("cargo:rustc-env=DEEP_PHYSICS_BACKEND={backend}");
     println!("cargo:rustc-env=DEEP_PHYSICS_PINS={}", others.join(";"));
+    println!("cargo:rustc-env=DEEP_PHYSICS_BACKEND_2D={backend_2d}");
+    println!(
+        "cargo:rustc-env=DEEP_PHYSICS_PINS_2D={}",
+        others_2d.join(";")
+    );
     println!("cargo:rustc-env=DEEP_PHYSICS_TARGET={target}");
     println!("cargo:rustc-env=DEEP_PHYSICS_RUSTC={rustc}");
 }
