@@ -7,6 +7,8 @@ base's `scripts/throttle.mjs` and `tests/acceptance/2833/`. The helpers are this
 under test: `scripts/throttle.mjs` is run as a process. Per AGENTS.md the implementing agent doesn't edit these
 tests; a dispute goes to a blind redraft.
 
+Redrafted blind for #2980 (amends AC2 by platform): AC2's memory cases in `test-grants.test.mjs` use 48 GiB − 1 byte / 48 GiB on Linux and 16 GiB − 1 byte / 16 GiB on darwin; nothing else changed.
+
 ## Run
 
 ```sh

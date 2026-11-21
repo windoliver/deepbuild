@@ -816,7 +816,7 @@ impl Run {
                 {
                     Ok((w, b)) => {
                         let (soft, backend) = held::held(&w, &b.held());
-                        json!({"ok": true, "issues": self.mass_ratios(&w, &b), "built": b.built(),
+                        json!({"ok": true, "issues": contact::warned(self, &w, self.mass_ratios(&w, &b)), "built": b.built(),
                                "soft": soft, "backend": backend})
                     }
                     Err(e) => json!({"ok": true, "issues": e["issues"]}),

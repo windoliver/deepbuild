@@ -6,7 +6,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { appendFileSync, existsSync, linkSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { constants, cpus, freemem, homedir, loadavg, userInfo } from 'node:os';
+import { constants, cpus, freemem, homedir, loadavg, totalmem, userInfo } from 'node:os';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -19,9 +19,10 @@ const POLL_MS = 200;
 const HOLD = 720;
 const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
-// A run on the Spark is a unit capped at 24 GiB (MemoryMax), so one more run needs that much memory available. A test
-// grant younger than 5 minutes doesn't show in the readings yet, so it is counted as a run's memory still to come.
-const RUN_MEMORY = 24 * 2 ** 30;
+// A run on the Spark is a unit capped at 24 GiB (MemoryMax), so one more run needs that much memory available; a run
+// on the Mac, whose whole process tree measured 2.6 GiB, is budgeted 8 GiB (#2980). A test grant younger than 5
+// minutes doesn't show in the readings yet, so it is counted as a run's memory still to come.
+const RUN_MEMORY = (process.platform === 'darwin' ? 8 : 24) * 2 ** 30;
 const SETTLING_MS = 5 * 60_000;
 
 /**
@@ -110,8 +111,23 @@ function folder() {
 }
 
 /**
- * The readings a test grant is decided on. The machine's table reads the machine: os.freemem() (MemAvailable on Linux),
- * the 1-minute load and the cores. A test's own table, whose holders are a test's stubs, reads the file
+ * The machine's readings: the memory available, the 1-minute load and the cores. On Linux the memory is os.freemem(),
+ * MemAvailable. On darwin os.freemem() counts only free pages, a fraction of a GiB on a busy Mac, so it is the kernel's
+ * own measure, kern.memorystatus_level, the percentage of memory free (#2980).
+ */
+export function machineReadings() {
+  let memory = freemem();
+  if (process.platform === 'darwin') {
+    const read = spawnSync('/usr/sbin/sysctl', ['-n', 'kern.memorystatus_level'], { encoding: 'utf8' });
+    const level = Number(read.stdout?.trim());
+    if (read.status !== 0 || !read.stdout?.trim() || !(level >= 0 && level <= 100)) throw Error(`sysctl kern.memorystatus_level read ${JSON.stringify(read.stdout ?? '')} (${read.error?.message ?? read.stderr?.trim() ?? ''})`);
+    memory = Math.floor((level * totalmem()) / 100);
+  }
+  return { memory, load: loadavg()[0], cores: cpus().length };
+}
+
+/**
+ * The readings a test grant is decided on. The machine's table reads the machine (machineReadings). A test's own table, whose holders are a test's stubs, reads the file
  * DEEP_THROTTLE_READINGS names, again at each look, or none without it; the machine's table refuses the variable.
  */
 function readings() {
@@ -121,7 +137,7 @@ function readings() {
   mkdirSync(folder(), { recursive: true, mode: 0o700 });
   if (realpathSync(folder()) === (existsSync(machine) ? realpathSync(machine) : machine)) {
     if (file !== undefined) throw Error('DEEP_THROTTLE_READINGS is read only for a test\'s own table, inside a test run (node --test or vitest); unset it to use the machine\'s readings');
-    return { memory: freemem(), load: loadavg()[0], cores: cpus().length };
+    return machineReadings();
   }
   if (file === undefined) return null;
   let given;
