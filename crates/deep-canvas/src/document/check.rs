@@ -210,13 +210,12 @@ fn check_by(
                 }
             }
             super::pack_kinds::migrate::at_load(items, &resolved, packs.planted, &mut notices);
+            issues.extend(packs::removals(items, &resolved));
             // Expansion at check, never per frame (Recipe): the derived items join the lowered
             // items before any item is checked, so they meet the item contract, the module
             // checks and the budget as any item does.
             issues.extend(packs::driven_counts(doc, items, &resolved));
             expansions = packs::expand(items, &resolved, packs.planted, &mut issues);
-            // A canvas module's own kinds expanded at check, after recipes (#222).
-            let planted = packs.planted.expander;
             // A film recipe's markers and shots are there for the module's expansions (#142).
             let with_sections;
             let seen = if expansions.iter().any(|e| !e.sections.is_empty()) {
@@ -227,7 +226,8 @@ fn check_by(
             } else {
                 doc
             };
-            let module = super::expands::run(seen, items, sealed, &resolved, planted, &mut issues);
+            // A canvas module's own kinds expanded at check, after recipes (#222).
+            let module = super::expands::run(seen, items, sealed, &resolved, packs, &mut issues);
             expansions.extend(module);
             // A film recipe's shots and transitions timed on its cue list's markers (#142).
             super::expands::resolve_times(doc, &mut expansions, &mut issues);
@@ -1461,8 +1461,8 @@ struct KindFacts<'a> {
     deprecation: Option<&'a (String, String)>,
     /// The close names an unknown kind's notice names (#412).
     close: Vec<Value>,
-    /// Of a pack the document names and this build lacks: kept as written, skipped (#1958).
-    pack_missing: bool,
+    /// Of a pack this build lacks (#1958) or a kind its version removed (#1962): kept, skipped.
+    skipped: bool,
 }
 
 impl<'a> KindFacts<'a> {
@@ -1492,7 +1492,7 @@ impl<'a> KindFacts<'a> {
                 }
                 _ => Vec::new(),
             },
-            pack_missing: packs::retired::skipped(text, resolved),
+            skipped: packs::retired::skipped(text, resolved) || packs::removed(text, resolved),
         }
     }
 }
@@ -1540,9 +1540,9 @@ fn check_item(
     let Some(facts) = ctx.facts.get(text) else {
         return false;
     };
-    // An instance of a pack this build lacks: its pack's notice names it, and nothing of it is
-    // read past its kind (#1958).
-    if facts.pack_missing {
+    // An instance of a pack this build lacks, or of a kind its version removed: its pack's notice
+    // or the removal's error names it, and nothing of it is read past its kind (#1958, #1962).
+    if facts.skipped {
         return false;
     }
     let instance = facts.instance;

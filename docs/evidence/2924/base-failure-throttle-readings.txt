@@ -1,0 +1,19 @@
+# tests/throttle-readings.test.mjs at the merge base 58d3e19ee's scripts/throttle.mjs (scratch copy), 2026-11-20. The base has no rule to test: the readings-based behaviour's base failures are tests/acceptance/2924/BASE-FAILURE.txt.
+✖ the rule: the first test grant always starts; past it, the readings and the ceiling decide (38.033943ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 363.141432
+
+✖ failing tests:
+
+test at tests/throttle-readings.test.mjs:14:1
+✖ the rule: the first test grant always starts; past it, the readings and the ceiling decide (38.033943ms)
+  TypeError [Error]: roomForTest is not a function
+      at TestContext.<anonymous> (file://<base-copy>/tests/throttle-readings.test.mjs:16:16)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)

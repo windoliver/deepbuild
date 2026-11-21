@@ -5,6 +5,7 @@
 // hub's process: it signs a JWT there, and only the tokens it mints leave it, a session's own to that session alone.
 import { createSign } from 'node:crypto';
 import { ForgeRefused } from './pushes.js';
+import { forgeFetch } from './rest.js';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -35,11 +36,7 @@ function jwtOf(appId: number, pem: string, now = Date.now()): string {
 }
 
 async function call(api: string, method: string, path: string, auth: string, body?: Obj): Promise<unknown> {
-  const res = await fetch(`${api}${path}`, {
-    method, signal: AbortSignal.timeout(10_000),
-    headers: { accept: 'application/vnd.github+json', authorization: `Bearer ${auth}`, ...(body ? { 'content-type': 'application/json' } : {}) },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  });
+  const res = await forgeFetch(api, path, { method, token: auth, body, signal: AbortSignal.timeout(10_000) });
   if (!res.ok) throw new ForgeRefused(res.status, undefined, path);
   return res.status === 204 ? undefined : res.json();
 }

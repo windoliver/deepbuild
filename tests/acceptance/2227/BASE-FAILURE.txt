@@ -1,0 +1,459 @@
+# #2227 acceptance tests, run once on the base commit bf5e3decc4f3a7e41f881d1ca35691e364a56480: main as of 2026-11-19
+# with the issue's bug, RecordedRun.exit.cause in packages/gate/src/claim.ts without 'limit'.
+# Node v24.22.2, npm 11.19.1, Vitest 5.0.5, macOS (Darwin 27.2.0, arm64). Before it: npm ci, then npm run build --workspaces
+# once, which exited 2 after 653 s, the CLI's and the hub's builds failing with the issue's three errors each, at
+# packages/hub/src/core.ts(564,133), (564,157) and (564,221); no other workspace failed, and deep-confirm was not built.
+# Command: npx vitest run tests/acceptance/2227 --testTimeout=600000 --no-file-parallelism --reporter=verbose, under
+# nice -n 10: the Mac's build and test throttle queues were hours deep, at a load of 150 to 290 on 18 cores.
+# Machine paths redacted: <repo> is the worktree, <tmp> the OS temp folder (the tests' own dh2227-* folders), <home>.
+# Expected on the base: AC1 and AC2 fail at their assertion; AC3 passes, as the criterion that keeps what works.
+# Each test's time ends its line below: AC1 41447 ms, failing on { hub: 2, cli: 2 }; AC2 484629 ms (the copy of 19418
+# files in 24 s, its npm run build --workspaces exiting 2 after 453 s), failing as the probe never ran; AC3 19448 ms, passing.
+
+started 2026-11-20T07:49:11Z
+23:49  up 6 days,  9:58, 19 users, load averages: 212.49 265.44 264.41
+
+ RUN  v5.0.5 <repo>
+
+ × tests/acceptance/2227/ac2-native-build.test.ts > #2227 the workspace build reaches the hub's native step > AC2 #2227.5d05bdca npm run build --workspaces reaches packages/hub/native/build.mjs 484629ms
+   → the folders packages/hub/native/build.mjs ran from in the copy's build (none: never reached). npm run build --workspaces in a copy of 19418 files (copied in 24 s) exited 2 after 453 s; its errors:
+../hub/src/core.ts(564,133): error TS2739: Type 'RecordedRun' is missing the following properties from type 'CommandRun': env, retries, timing, clock
+../hub/src/core.ts(564,157): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+../hub/src/core.ts(564,221): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+npm error Lifecycle script `build` failed with error:
+npm error code 2
+npm error path <tmp>/dh2227-UhFwTb/packages/cli
+npm error workspace @deepbuild/cli@0.0.0
+npm error location <tmp>/dh2227-UhFwTb/packages/cli
+npm error command failed
+npm error command sh -c tsc -p tsconfig.json
+src/core.ts(564,133): error TS2739: Type 'RecordedRun' is missing the following properties from type 'CommandRun': env, retries, timing, clock
+src/core.ts(564,157): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+src/core.ts(564,221): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+npm error Lifecycle script `build` failed with error:
+npm error code 2
+npm error path <tmp>/dh2227-UhFwTb/packages/hub
+npm error workspace @deepbuild/hub@0.0.0
+npm error location <tmp>/dh2227-UhFwTb/packages/hub
+npm error command failed
+npm error command sh -c tsc -p tsconfig.json && node native/build.mjs: expected [] to include 'packages/hub'
+ ✓ tests/acceptance/2227/ac3-unchanged.test.ts > #2227 a run stopped at a limit still reads INCONCLUSIVE > AC3 #2227.de8c9b23 tests/acceptance/1409/check.test.ts and packages/gate/test/claim.test.ts pass unchanged 19448ms
+stderr | tests/acceptance/2227/ac3-unchanged.test.ts
+vitest-setup: stopping 2 process(es) this file left running:
+  74868 (node)
+  74884 (node)
+
+stderr | tests/acceptance/2227/ac1-typecheck.test.ts
+vitest-setup: stopping 1 process(es) this file left running:
+  80793 (node)
+
+ × tests/acceptance/2227/ac1-typecheck.test.ts > #2227 the hub and the CLI type-check > AC1 #2227.0f03b34b tsc -p tsconfig.json --noEmit exits 0 in packages/hub and in packages/cli 41447ms
+   → tsc -p tsconfig.json --noEmit's exit code in each package
+--- packages/hub, exit 2, 40672 ms:
+src/core.ts(564,133): error TS2739: Type 'RecordedRun' is missing the following properties from type 'CommandRun': env, retries, timing, clock
+src/core.ts(564,157): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+src/core.ts(564,221): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+--- packages/cli, exit 2, 41429 ms:
+../hub/src/core.ts(564,133): error TS2739: Type 'RecordedRun' is missing the following properties from type 'CommandRun': env, retries, timing, clock
+../hub/src/core.ts(564,157): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+../hub/src/core.ts(564,221): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.: expected { hub: 2, cli: 2 } to deeply equal { hub: +0, cli: +0 }
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2227/ac1-typecheck.test.ts > #2227 the hub and the CLI type-check > AC1 #2227.0f03b34b tsc -p tsconfig.json --noEmit exits 0 in packages/hub and in packages/cli
+AssertionError: tsc -p tsconfig.json --noEmit's exit code in each package
+--- packages/hub, exit 2, 40672 ms:
+src/core.ts(564,133): error TS2739: Type 'RecordedRun' is missing the following properties from type 'CommandRun': env, retries, timing, clock
+src/core.ts(564,157): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+src/core.ts(564,221): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+--- packages/cli, exit 2, 41429 ms:
+../hub/src/core.ts(564,133): error TS2739: Type 'RecordedRun' is missing the following properties from type 'CommandRun': env, retries, timing, clock
+../hub/src/core.ts(564,157): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+../hub/src/core.ts(564,221): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.: expected { hub: 2, cli: 2 } to deeply equal { hub: +0, cli: +0 }
+
+- Expected
++ Received
+
+  {
+-   "cli": 0,
+-   "hub": 0,
++   "cli": 2,
++   "hub": 2,
+  }
+
+ ❯ tests/acceptance/2227/ac1-typecheck.test.ts:22:89
+     20|     const codes = Object.fromEntries(PACKAGES.map((name, i) => [name, …
+     21|     const said = PACKAGES.map((name, i) => `--- packages/${name}, exit…
+     22|     expect(codes, `tsc -p tsconfig.json --noEmit's exit code in each p…
+       |                                                                                         ^
+     23|   }, 30 * MINUTES);
+     24| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/2227/ac2-native-build.test.ts > #2227 the workspace build reaches the hub's native step > AC2 #2227.5d05bdca npm run build --workspaces reaches packages/hub/native/build.mjs
+AssertionError: the folders packages/hub/native/build.mjs ran from in the copy's build (none: never reached). npm run build --workspaces in a copy of 19418 files (copied in 24 s) exited 2 after 453 s; its errors:
+../hub/src/core.ts(564,133): error TS2739: Type 'RecordedRun' is missing the following properties from type 'CommandRun': env, retries, timing, clock
+../hub/src/core.ts(564,157): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+../hub/src/core.ts(564,221): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+npm error Lifecycle script `build` failed with error:
+npm error code 2
+npm error path <tmp>/dh2227-UhFwTb/packages/cli
+npm error workspace @deepbuild/cli@0.0.0
+npm error location <tmp>/dh2227-UhFwTb/packages/cli
+npm error command failed
+npm error command sh -c tsc -p tsconfig.json
+src/core.ts(564,133): error TS2739: Type 'RecordedRun' is missing the following properties from type 'CommandRun': env, retries, timing, clock
+src/core.ts(564,157): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+src/core.ts(564,221): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+npm error Lifecycle script `build` failed with error:
+npm error code 2
+npm error path <tmp>/dh2227-UhFwTb/packages/hub
+npm error workspace @deepbuild/hub@0.0.0
+npm error location <tmp>/dh2227-UhFwTb/packages/hub
+npm error command failed
+npm error command sh -c tsc -p tsconfig.json && node native/build.mjs: expected [] to include 'packages/hub'
+ ❯ tests/acceptance/2227/ac2-native-build.test.ts:77:105
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  2 failed | 1 passed (3)
+   Start at  23:49:17
+   Duration  548.55s (tests 100%)
+
+exit 1 after 554 s
+ended 2026-11-20T07:58:25Z
+23:58  up 6 days, 10:07, 19 users, load averages: 156.87 171.58 212.15
+
+# ----------------------------------------------------------------------------------------------------------------------
+# The planted wrong programs (twins.json), for the record: each twin laid over the same base's files, the test files
+# mapped to it run once with the same command, then the base's files put back (the proof lane lays a twin over the
+# change instead). Expected: AC3 fails on limit-stop-fails at its assertion, naming #1409's check.test.ts, whose run
+# ends failed where it must end stopped; AC1 and AC2 fail on cause-without-limit at their assertion, the copy's
+# npm run build --workspaces exiting 0 under the twin's masked build scripts while the probe never runs.
+# AC3 on limit-stop-fails: 21645 ms. On cause-without-limit: AC2 334700 ms (the copy 35 s, its build exiting 0 after
+# 293 s), AC1 37871 ms.
+
+started 2026-11-20T08:00:43Z
+ 0:00  up 6 days, 10:09, 19 users, load averages: 215.99 184.74 211.08
+
+ RUN  v5.0.5 <repo>
+
+ × tests/acceptance/2227/ac3-unchanged.test.ts > #2227 a run stopped at a limit still reads INCONCLUSIVE > AC3 #2227.de8c9b23 tests/acceptance/1409/check.test.ts and packages/gate/test/claim.test.ts pass unchanged 21645ms
+   → the two files, run unchanged:
+  tests/acceptance/1409/check.test.ts: "AC3 #1409 a check whose run stopped at a limit reads INCONCLUSIVE AC3 a command check whose run passes memory_mb 128 ends stopped, which reads INCONCLUSIVE" failed: AssertionError: the run stopped at its limit ends stopped, not failed or passed (outcome failed, exit {"code":null,"signal":"SIGKILL","cause":"limit"}, failures []): expected 'failed' to be 'stopped' // Object.is equality: expected [ Array(1) ] to deeply equal []
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2227/ac3-unchanged.test.ts > #2227 a run stopped at a limit still reads INCONCLUSIVE > AC3 #2227.de8c9b23 tests/acceptance/1409/check.test.ts and packages/gate/test/claim.test.ts pass unchanged
+AssertionError: the two files, run unchanged:
+  tests/acceptance/1409/check.test.ts: "AC3 #1409 a check whose run stopped at a limit reads INCONCLUSIVE AC3 a command check whose run passes memory_mb 128 ends stopped, which reads INCONCLUSIVE" failed: AssertionError: the run stopped at its limit ends stopped, not failed or passed (outcome failed, exit {"code":null,"signal":"SIGKILL","cause":"limit"}, failures []): expected 'failed' to be 'stopped' // Object.is equality: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "tests/acceptance/1409/check.test.ts: \"AC3 #1409 a check whose run stopped at a limit reads INCONCLUSIVE AC3 a command check whose run passes memory_mb 128 ends stopped, which reads INCONCLUSIVE\" failed: AssertionError: the run stopped at its limit ends stopped, not failed or passed (outcome failed, exit {\"code\":null,\"signal\":\"SIGKILL\",\"cause\":\"limit\"}, failures []): expected 'failed' to be 'stopped' // Object.is equality",
++ ]
+
+ ❯ tests/acceptance/2227/ac3-unchanged.test.ts:51:85
+     49|       }
+     50|       for (const r of results) if (!NAMED.some((path) => r.name.endsWi…
+     51|       expect(failures, `the two files, run unchanged:\n  ${failures.jo…
+       |                                                                                     ^
+     52|       expect(child.code, `the child Vitest exits 0; it said:\n${last(c…
+     53|     } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  00:00:48
+   Duration  22.72s (tests 99%, transform 1%)
+
+exit 1 after 28 s
+ended 2026-11-20T08:01:11Z
+ 0:01  up 6 days, 10:10, 19 users, load averages: 233.02 191.36 212.54
+
+started 2026-11-20T08:01:24Z
+ 0:01  up 6 days, 10:10, 19 users, load averages: 224.48 190.89 212.12
+
+ RUN  v5.0.5 <repo>
+
+ × tests/acceptance/2227/ac2-native-build.test.ts > #2227 the workspace build reaches the hub's native step > AC2 #2227.5d05bdca npm run build --workspaces reaches packages/hub/native/build.mjs 334700ms
+   → the folders packages/hub/native/build.mjs ran from in the copy's build (none: never reached). npm run build --workspaces in a copy of 19418 files (copied in 35 s) exited 0 after 293 s; its errors:
+../hub/src/core.ts(564,133): error TS2739: Type 'RecordedRun' is missing the following properties from type 'CommandRun': env, retries, timing, clock
+../hub/src/core.ts(564,157): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+../hub/src/core.ts(564,221): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+src/core.ts(564,133): error TS2739: Type 'RecordedRun' is missing the following properties from type 'CommandRun': env, retries, timing, clock
+src/core.ts(564,157): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+src/core.ts(564,221): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.: expected [] to include 'packages/hub'
+stderr | tests/acceptance/2227/ac1-typecheck.test.ts
+vitest-setup: stopping 3 process(es) this file left running:
+  53611 (node)
+  53621 (node)
+  53675 (node)
+
+ × tests/acceptance/2227/ac1-typecheck.test.ts > #2227 the hub and the CLI type-check > AC1 #2227.0f03b34b tsc -p tsconfig.json --noEmit exits 0 in packages/hub and in packages/cli 37871ms
+   → tsc -p tsconfig.json --noEmit's exit code in each package
+--- packages/hub, exit 2, 37808 ms:
+src/core.ts(564,133): error TS2739: Type 'RecordedRun' is missing the following properties from type 'CommandRun': env, retries, timing, clock
+src/core.ts(564,157): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+src/core.ts(564,221): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+--- packages/cli, exit 2, 37860 ms:
+../hub/src/core.ts(564,133): error TS2739: Type 'RecordedRun' is missing the following properties from type 'CommandRun': env, retries, timing, clock
+../hub/src/core.ts(564,157): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+../hub/src/core.ts(564,221): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.: expected { hub: 2, cli: 2 } to deeply equal { hub: +0, cli: +0 }
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2227/ac1-typecheck.test.ts > #2227 the hub and the CLI type-check > AC1 #2227.0f03b34b tsc -p tsconfig.json --noEmit exits 0 in packages/hub and in packages/cli
+AssertionError: tsc -p tsconfig.json --noEmit's exit code in each package
+--- packages/hub, exit 2, 37808 ms:
+src/core.ts(564,133): error TS2739: Type 'RecordedRun' is missing the following properties from type 'CommandRun': env, retries, timing, clock
+src/core.ts(564,157): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+src/core.ts(564,221): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+--- packages/cli, exit 2, 37860 ms:
+../hub/src/core.ts(564,133): error TS2739: Type 'RecordedRun' is missing the following properties from type 'CommandRun': env, retries, timing, clock
+../hub/src/core.ts(564,157): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+../hub/src/core.ts(564,221): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.: expected { hub: 2, cli: 2 } to deeply equal { hub: +0, cli: +0 }
+
+- Expected
++ Received
+
+  {
+-   "cli": 0,
+-   "hub": 0,
++   "cli": 2,
++   "hub": 2,
+  }
+
+ ❯ tests/acceptance/2227/ac1-typecheck.test.ts:22:89
+     20|     const codes = Object.fromEntries(PACKAGES.map((name, i) => [name, …
+     21|     const said = PACKAGES.map((name, i) => `--- packages/${name}, exit…
+     22|     expect(codes, `tsc -p tsconfig.json --noEmit's exit code in each p…
+       |                                                                                         ^
+     23|   }, 30 * MINUTES);
+     24| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/2227/ac2-native-build.test.ts > #2227 the workspace build reaches the hub's native step > AC2 #2227.5d05bdca npm run build --workspaces reaches packages/hub/native/build.mjs
+AssertionError: the folders packages/hub/native/build.mjs ran from in the copy's build (none: never reached). npm run build --workspaces in a copy of 19418 files (copied in 35 s) exited 0 after 293 s; its errors:
+../hub/src/core.ts(564,133): error TS2739: Type 'RecordedRun' is missing the following properties from type 'CommandRun': env, retries, timing, clock
+../hub/src/core.ts(564,157): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+../hub/src/core.ts(564,221): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+src/core.ts(564,133): error TS2739: Type 'RecordedRun' is missing the following properties from type 'CommandRun': env, retries, timing, clock
+src/core.ts(564,157): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.
+src/core.ts(564,221): error TS2345: Argument of type 'CommandRun' is not assignable to parameter of type 'RecordedRun'.
+  Types of property 'exit' are incompatible.
+    Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; } | null' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; } | null'.
+      Type '{ code: number | null; signal: Signals | null; cause: "limit" | "exit" | "deadline" | "stop"; }' is not assignable to type '{ code: number | null; signal: Signals | null; cause: "exit" | "deadline" | "stop"; }'.
+        Types of property 'cause' are incompatible.
+          Type '"limit" | "exit" | "deadline" | "stop"' is not assignable to type '"exit" | "deadline" | "stop"'.
+            Type '"limit"' is not assignable to type '"exit" | "deadline" | "stop"'.: expected [] to include 'packages/hub'
+ ❯ tests/acceptance/2227/ac2-native-build.test.ts:77:105
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed (2)
+   Start at  00:01:29
+   Duration  374.31s (tests 100%)
+
+exit 1 after 379 s
+ended 2026-11-20T08:07:44Z
+ 0:07  up 6 days, 10:16, 19 users, load averages: 151.93 164.77 192.22
