@@ -137,8 +137,12 @@ export async function drive(o: DriveOptions): Promise<DriverRun> {
     while (polling) { if (existsSync(join(out, 'done'))) return { code: 0, cause: 'exit', failed: null, output: '' }; await new Promise((r) => setTimeout(r, 5)); }
     return null;
   })();
-  const exit = (await Promise.race([p.running, finished])) ?? (await p.running);
-  polling = false;
+  let exit: DriverRun['exit'];
+  try {
+    exit = (await Promise.race([p.running, finished])) ?? (await p.running);
+  } finally {
+    polling = false;
+  }
   await between;
   const report = read();
   const artifacts: Artifact[] = readdirSync(out).filter((f) => f.endsWith('.png') || f.endsWith('.webm')).map((name) => ({ name, path: join(out, name) }));
