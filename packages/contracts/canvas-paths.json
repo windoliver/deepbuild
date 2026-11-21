@@ -58,6 +58,7 @@
     "logic/counter",
     "logic/logic-budget",
     "logic/logic-determinism",
+    "logic/logic-tuning",
     "logic/readers",
     "look/finish",
     "look/roles",
