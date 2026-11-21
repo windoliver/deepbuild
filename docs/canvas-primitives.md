@@ -2893,7 +2893,7 @@ For: a long scroll where a walker crosses from one world into the next; a speedr
 
 **Semantics:** A region's look draws everything inside its mask. An item that crosses the edge draws in both looks, each clipped to its side, so coverage sums to one at every pixel. The edge is drawn in the incoming look's own language, seeded from the region's ID. The status map and legend are the document's in every look and region, so a status color reads the same everywhere. At most two looks draw in one frame, outside a transition window.
 
-**Cost:** About 2× the frame while an edge is in view: each look renders its side offscreen, then one composite pass. Budget class: showpiece, export.
+**Cost:** About 2× the frame while an edge is in view: each look renders its side offscreen, then one composite pass. Each look holds its own targets, culled lists, light cut, cascades and environment cubes; the scene's meshes, material maps and pipelines are the view's, held once on the device (#3016). Budget class: showpiece, export.
 
 **It can never:** Draw three looks in one frame outside a transition window (the check refuses it, naming the shot and time); let a look change the status map or legend; move an edge by playback history
 
@@ -4395,7 +4395,7 @@ For: a black gloss floor under a product, a lake under a castle, a shop window
 
 **Semantics:** One extra pass renders the scene from the camera mirrored in the plane at t, clipped at the plane, and the part samples it, blurred by its roughness or by blur. It keeps no history, so seeking equals playing.
 
-**Cost:** One extra scene pass at half the internal size plus a blur, roughly a quarter of the scene's frame time (estimate); counted in the class. Budget class: work product, showpiece, export.
+**Cost:** One extra scene pass at half the internal size plus a blur, roughly a quarter of the scene's frame time (estimate); counted in the class. It holds its own targets and stored samples at half the internal size, its culled lists, levels of detail, light cut and sun cascades; the scene's meshes, material maps, environment cubes and pipelines are the view's, held once on the device, and the check's estimate counts them once (#3016). Budget class: work product, showpiece, export.
 
 **It can never:** Recurse (a mirror inside a mirror draws its fallback); read an earlier frame; mirror status colors or overlays.
 
@@ -5195,7 +5195,7 @@ For: a surface, a space curve or a vector field read in its own coordinates; a s
 
 **Semantics:** 2D content (real fonts, paths, a cell grid, images, vectors) rendered into a texture at the declared density and drawn on the face, masked to the window cut into the part. A view inset shows the same document from a second camera, at most one level deep. With `map: eye` it follows the viewer's eye instead: its eye is the viewing camera's, moved by the transform that takes the inset's face to `through` (or left where it is), and its frustum is the off-axis one from that eye through the inset's four corners, its near plane on them, so its image lies exactly on the face and what it shows keeps true parallax while the camera moves, as a portal to another place or a window cut into a wall does. Under an orthographic camera its rays run parallel to the camera's axis. It renders again whenever the eye moves, and an `eye` inset that also names a `camera` is refused at check, naming the inset. See-through insets sort back to front.
 
-**Cost:** One offscreen render per changed inset, O(content); texture w × h × 4 B; a view inset costs a second camera pass
+**Cost:** One offscreen render per changed inset, O(content); texture w × h × 4 B; a view inset costs a second camera pass, and holds its own targets and stored samples at its size, its culled lists, light cut and cascades, and its mirror's view where the scene has one; the scene's meshes, material maps, environment cubes and pipelines are the view's, held once on the device, and the check's estimate counts a view inset as it counts a mirror (#3016)
 
 **It can never:** Draw outside its window; nest views deeper than one; shrink text below the look's minimum
 
