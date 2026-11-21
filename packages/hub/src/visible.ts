@@ -20,3 +20,21 @@ export function visible(text: string): string {
     return SHORT[c] ?? (n < 0x100 ? `\\x${n.toString(16).padStart(2, '0')}` : `\\u{${n.toString(16)}}`);
   });
 }
+
+/** An option ID a shell passes as itself and a list joined with `, ` can't misread: no blank, comma, parenthesis or quote. */
+const BARE = /^[A-Za-z0-9_./+:@%-][A-Za-z0-9_./+:@%=-]*$/;
+
+/**
+ * #2563: an option ID written as `deep inbox answer <ask> <option>` takes it back, typed into a POSIX shell. A bare ID
+ * is itself; any other is in single quotes, or, holding a marked character, in `$'…'` with that character's UTF-8
+ * bytes, and a `'`'s, as three-digit octal escapes (a shell may read `\x` past two hex digits, never `\` past three
+ * octal ones, and interactive bash's history expansion takes `\'` for a closing quote), so the line shows no raw
+ * control and the shell gives back the bytes. One that starts with `-` follows `--`, so it's never read as a flag.
+ */
+export function typed(id: string): string {
+  const ends = id.startsWith('-') ? '-- ' : '';
+  if (BARE.test(id)) return `${ends}${id}`;
+  if (id.replace(MARKED, '') === id) return `${ends}'${id.replaceAll("'", "'\\''")}'`;
+  const octal = (c: string): string => [...new TextEncoder().encode(c)].map((b) => `\\${b.toString(8).padStart(3, '0')}`).join('');
+  return `${ends}$'${id.replaceAll('\\', '\\\\').replace(new RegExp(`'|${MARKED.source}`, 'gu'), octal)}'`;
+}

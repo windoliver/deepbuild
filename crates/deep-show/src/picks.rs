@@ -149,6 +149,12 @@ pub struct LogicCall {
     pub at_times: Option<Vec<f64>>,
     /// #548: the input track the replay reads in place of the hub's.
     pub track: Option<Vec<Value>>,
+    /// #189: the folder the app keeps the piece's saves in, and with `open_save` the slot the
+    /// viewer opens (physics/saves.rs).
+    pub saves_dir: Option<std::path::PathBuf>,
+    pub open: Option<i64>,
+    /// #277: logic.determinism's `compare: "web"`, with the web player's run's golden (`web`).
+    pub web: Option<Option<Value>>,
 }
 
 pub fn parse(c: &Map<String, Value>) -> Option<LogicCall> {
@@ -185,6 +191,11 @@ pub fn parse(c: &Map<String, Value>) -> Option<LogicCall> {
         None => None,
         Some(t) => Some(t.as_array()?.clone()),
     };
+    let web = match c.get("compare") {
+        None => None,
+        Some(v) if v.as_str() == Some("web") => Some(c.get("web").cloned()),
+        Some(_) => return None,
+    };
     Some(LogicCall {
         doc: c.get("doc")?.as_str()?.to_string(),
         steps,
@@ -193,7 +204,55 @@ pub fn parse(c: &Map<String, Value>) -> Option<LogicCall> {
         regions: c.get("regions").and_then(Value::as_bool).unwrap_or(false),
         at_times,
         track,
+        saves_dir: c.get("saves_dir").and_then(Value::as_str).map(Into::into),
+        open: match c.get("call").and_then(Value::as_str) {
+            Some("open_save") => Some(c.get("slot")?.as_i64()?),
+            _ => None,
+        },
+        web,
     })
+}
+
+/// #277: logic.determinism's `compare: "web"`: the web player's run's step hashes (its golden,
+/// `{step_hashes: {<item>: [hash | null]}}`) against the app's bake, step by step: PASS only when
+/// every step of the bake has the web run's same hash; a failure names each item's first step that
+/// differs or that the web run lacks. With no web run it stays BLOCKED.
+fn against_web(steps: &[Value], web: Option<&Value>, piece: &Piece) -> Value {
+    let Some(golden) = web.and_then(|w| w.get("step_hashes")) else {
+        let why = json!({"kind": "logic.determinism", "compare": "web",
+                         "what": "no web run: the web player's golden of the piece's steps is needed"});
+        return json!({"kind": "logic.determinism", "verdict": "BLOCKED", "failures": [why]});
+    };
+    let failures: Vec<Value> = piece
+        .items
+        .iter()
+        .filter_map(|i| {
+            let theirs = golden.get(&i.id).and_then(Value::as_array);
+            let k = steps.iter().position(|s| {
+                let mine = &s["hash"][&i.id];
+                let k = s["step"].as_u64().unwrap_or(0) as usize;
+                theirs.and_then(|t| t.get(k)).filter(|h| !h.is_null()) != Some(mine)
+            })?;
+            let step = steps[k]["step"].clone();
+            let theirs = theirs
+                .and_then(|t| t.get(k))
+                .cloned()
+                .unwrap_or(Value::Null);
+            let what = match theirs.is_null() {
+                true => format!("the web run lacks step {step} of {}", i.id),
+                false => format!(
+                    "the web run's step hash at step {step} of {} differs from the app's",
+                    i.id
+                ),
+            };
+            Some(
+                json!({"kind": "logic.determinism", "compare": "web", "item": i.id, "step": step,
+                        "app": steps[k]["hash"][&i.id], "web": theirs, "what": what}),
+            )
+        })
+        .collect();
+    let verdict = if failures.is_empty() { "PASS" } else { "FAIL" };
+    json!({"kind": "logic.determinism", "verdict": verdict, "failures": failures})
 }
 
 /// #213: a seek to step `to` of `world`'s run: the nearest checkpoint at or before it restored
@@ -753,6 +812,9 @@ impl Hub<'_> {
     /// `check`, logic.determinism runs, and a run whose step hash differs from the record's
     /// fails, naming the step and the entry it read.
     pub fn logic_call(&mut self, l: &LogicCall) -> Value {
+        if let Some(slot) = l.open {
+            return crate::physics::saves::open(self, l, slot);
+        }
         let Some(form) = self.forms.get(&l.doc).cloned() else {
             return json!({"code": "no_revision"});
         };
@@ -764,10 +826,12 @@ impl Hub<'_> {
             Err(i) => return json!({"code": i.code, "issues": [i.to_json()]}),
         };
         let mut entries: Vec<Entry> = read.iter().filter_map(Entry::parse).collect();
-        match self.world_reads(&form, &read, &piece) {
-            Ok(w) => entries.extend(w.iter().filter_map(Entry::parse)),
+        // #189: each world's bake beside its readings, which saves and checkpoints keep.
+        let (readings, baked) = match self.world_bakes(&form, &read, &piece) {
+            Ok(x) => x,
             Err(i) => return json!({"code": i.code, "issues": [i.to_json()]}),
-        }
+        };
+        entries.extend(readings.iter().filter_map(Entry::parse));
         let planted = deep_logic::Planted {
             services_after_checkpoint: self.planted(crate::hub::Planted::Physics(
                 crate::physics::Planted::ResultsAfterCheckpoint,
@@ -788,12 +852,21 @@ impl Hub<'_> {
             Ok(w) => w,
             Err(e) => return e,
         };
+        if l.saves_dir.is_some() {
+            world.held = Some(Vec::new());
+        }
         let (steps, trap) = step_rows(&mut world, &mut rec, &piece, l.steps, true);
         let len = piece.items.first().map_or(1, |i| i.step);
         let hashes: Vec<Value> = steps.iter().map(|s| s["hash"].clone()).collect();
         let replay = self.against_record(&l.doc, &held, &hashes, &piece, len);
-        let mut out = json!({"steps": steps, "track": held, "trap": trap, "traps": rec.traps, "checkpoints": rec.checkpoints,
+        let mut checkpoints = rec.checkpoints.clone();
+        checkpoints.extend(crate::physics::saves::world_checkpoints(&baked, l.steps));
+        let mut out = json!({"steps": steps, "track": held, "trap": trap, "traps": rec.traps, "checkpoints": checkpoints,
                              "handles": deep_physics_rapier::cast::handles(&form)});
+        if let Some(dir) = &l.saves_dir {
+            let kept = world.held.take().unwrap_or_default();
+            out["saves"] = self.write_saves(dir, &l.doc, &piece, kept, &baked, &readings, &read);
+        }
         if !l.seeks.is_empty() {
             let mut seeks = Vec::new();
             for &to in &l.seeks {
@@ -813,6 +886,10 @@ impl Hub<'_> {
         }
         if l.check == Some("logic.tuning") {
             out["check"] = self.tuning_check(&form, &read, &piece, &entries, l.steps);
+        }
+        if let (Some("logic.determinism"), Some(web)) = (l.check, &l.web) {
+            out["check"] = against_web(&steps, web.as_ref(), &piece);
+            return out;
         }
         if l.check == Some("logic.determinism") {
             let at: Vec<i64> = match &l.at_times {

@@ -1,0 +1,39 @@
+diff --git a/src/window.ts b/src/window.ts
+index 3f2c1a0..9b7e4d2 100644
+--- a/src/window.ts
++++ b/src/window.ts
+@@ -1,11 +1,30 @@
+ import { readFileSync } from 'node:fs';
+ 
+ export interface Reading { at: number; used: number }
+ 
+-export function latest(readings: Reading[]): Reading | undefined {
+-  return readings[readings.length - 1];
++/** The readings saved in `path`, oldest first. */
++export function load(path: string): Reading[] {
++  try {
++    return JSON.parse(readFileSync(path, 'utf8')) as Reading[];
++  } catch {
++    return [];
++  }
++}
++
++/** The last `n` readings, oldest first. */
++export function lastN(readings: Reading[], n: number): Reading[] {
++  const out: Reading[] = [];
++  for (let i = readings.length - n; i <= readings.length; i++) out.push(readings[i]);
++  return out;
++}
++
++/** How far the window moved between the first and the last reading. */
++export function moved(readings: Reading[]): number {
++  const first = readings[0];
++  const last = readings[readings.length - 1];
++  return last.used - first.used;
+ }
+ 
+-export function used(readings: Reading[]): number {
+-  return latest(readings)?.used ?? 0;
++export function isFull(r: Reading): boolean {
++  return r.used = 100;
+ }

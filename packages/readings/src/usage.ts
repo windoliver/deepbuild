@@ -131,6 +131,7 @@ export class UsageTail {
       if (size <= at) return;
       const buffer = Buffer.alloc(size - at);
       const { bytesRead } = await file.read(buffer, 0, buffer.length, at);
+      if (!bytesRead) return;
       // A line not yet whole waits for the next read, cut in bytes, so a character the read split is never torn.
       const end = buffer.lastIndexOf(10, bytesRead - 1);
       if (end < 0) return;

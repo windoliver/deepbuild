@@ -1,0 +1,5 @@
+{
+  "#1865.c16bc3be": ["confirms-only-with-peer"],
+  "#1865.2e5dc4d0": ["confirmed-stop-exits-nonzero", "refuses-every-stop"],
+  "#1865.bd65df36": ["promote-stops-confirmed", "restart-exits-zero"]
+}

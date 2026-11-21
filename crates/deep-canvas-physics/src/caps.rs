@@ -26,6 +26,8 @@ pub struct Caps {
     /// #2239: what its swept collision holds, which the check and the lint `physics.fast_body`
     /// read.
     pub sweep: Sweep,
+    /// #2308: whether it scales its own lengths by `solver.length_unit`; else that must be 1.
+    pub scales_lengths: bool,
 }
 
 /// #2239: what a backend's swept collision holds, as data, by body kind as a document writes it.
@@ -109,6 +111,7 @@ pub const RAPIER3D: Caps = Caps {
         holds_fast: false,
         predicts: true,
     },
+    scales_lengths: true,
 };
 
 /// #2098: Rapier 0.36.1 in 2D, which a `dimensions: 2` world runs on, beside `RAPIER3D`.
@@ -132,6 +135,7 @@ pub const RAPIER2D: Caps = Caps {
         holds_fast: false,
         predicts: false,
     },
+    scales_lengths: false,
     ..RAPIER3D
 };
 

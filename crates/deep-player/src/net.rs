@@ -31,7 +31,14 @@ pub struct Match {
     copy: Option<Copy<Logic>>,
     /// When the copy's next frame may go: one a match step.
     next_frame: i64,
+    /// #277: the frame CPU of the piece's class, which a catch-up's slices keep within, in ms, and
+    /// the planted copy the page asked for.
+    frame_ms: f64,
+    planted: Planted,
 }
+
+/// #277: the share of the class's frame CPU a catch-up's slice takes, leaving the frame its draw.
+const SLICE_SHARE: f64 = 0.6;
 
 /// #552: 64 bits from the browser's secure random source, `crypto.getRandomValues`.
 fn secure_u64() -> u64 {
@@ -80,7 +87,20 @@ impl Match {
             me: None,
             copy: None,
             next_frame: 0,
+            frame_ms: deep_canvas::budget::of(source)
+                .and_then(|(_, limits)| limits.cpu_ms)
+                .unwrap_or(4.0),
+            planted: Planted::None,
         })
+    }
+
+    /// #277: the relay protocol this copy asks for: relay@2 when the piece's rules play a seat
+    /// that changes.
+    fn protocol(&self) -> &'static str {
+        match self.cfg.seats {
+            true => wire::PROTOCOL2,
+            false => wire::PROTOCOL,
+        }
     }
 
     /// The prompt as the page draws it.
@@ -89,6 +109,7 @@ impl Match {
             &self.cfg.host,
             self.cfg.players,
             self.cfg.courtesy,
+            self.cfg.controls.get(deep_net::kind::PROFILE).is_some(),
             &self.state,
         )
     }
@@ -123,7 +144,15 @@ impl Match {
             }
         }
         self.state = State::Joined;
-        json!({"url": format!("wss://{}/", self.cfg.host), "step_ms": 1000.0 / self.cfg.step_rate as f64})
+        // #277: a piece whose rules play a changed seat asks for relay@2 by the subprotocol.
+        let protocols: Vec<&str> = self
+            .cfg
+            .seats
+            .then_some(wire::SUBPROTOCOL2)
+            .into_iter()
+            .collect();
+        json!({"url": format!("wss://{}/", self.cfg.host), "step_ms": 1000.0 / self.cfg.step_rate as f64,
+               "protocols": protocols})
     }
 
     /// A control message from the relay, at the page's time `now_ms`: what to send back, or
@@ -135,7 +164,7 @@ impl Match {
         let host = self.cfg.host.clone();
         if let Some(hello) = m.get("hello") {
             // A relay that answers another protocol or digest is refused before anything is sent.
-            let limits = match wire::check_hello(&host, hello) {
+            let limits = match wire::check_hello_as(&host, hello, self.protocol()) {
                 Ok(l) => l,
                 Err(why) => {
                     self.refuse(json!("relay"), why);
@@ -163,11 +192,15 @@ impl Match {
             return json!({"close": true});
         } else if m.get("start").is_some() {
             self.start(flicks(now_ms));
-        } else if let Some(c) = m.get("closed") {
-            let player = c["player"].as_u64().unwrap_or(0) as u8 + 1;
+        } else if ["closed", "holds", "seat", "catch_up"]
+            .iter()
+            .any(|k| m.get(*k).is_some())
+        {
+            // #277: relay@1's `closed` and relay@2's messages go to the copy.
             match self.copy.as_mut() {
-                Some(copy) => copy.closed(player, c["reason"].as_str().unwrap_or("left")),
-                None => self.state = State::Ended("left".into()),
+                Some(copy) => copy.relay(&m, flicks(now_ms)),
+                None if m.get("closed").is_some() => self.state = State::Ended("left".into()),
+                None => {}
             }
         }
         json!({})
@@ -191,7 +224,7 @@ impl Match {
                     self.cfg.players,
                     game,
                     sim,
-                    Planted::None,
+                    self.planted,
                     now,
                 );
                 // #552: a draw's bits come from the browser's secure random source.
@@ -211,7 +244,15 @@ impl Match {
     /// A frame another copy sent arrived.
     pub fn receive(&mut self, frame: &[u8], now_ms: f64) {
         if let Some(copy) = self.copy.as_mut() {
+            // #277: catching up, it runs steps only in the tick's slices, never on an arrival.
+            let catching = copy.catching();
+            if catching {
+                copy.slice(Some(0));
+            }
             copy.receive(frame, flicks(now_ms));
+            if catching {
+                copy.slice(None);
+            }
         }
     }
 
@@ -245,12 +286,68 @@ impl Match {
         }
         let step = self.cfg.step();
         self.next_frame = (self.next_frame + step).max(now - step);
+        // #277: back from an absence, it runs the steps it owes headless, a slice a frame within
+        // the class's frame CPU, and counts each frame's steps and CPU ms.
+        if copy.catching() {
+            let (from, started) = (copy.ran(), deep_logic::budget::cpu_ns());
+            let budget = self.frame_ms * SLICE_SHARE;
+            let mut frame = Vec::new();
+            let ms = loop {
+                let at = copy.ran();
+                copy.slice(Some(1));
+                if let Some(f) = copy.tick(now) {
+                    frame = f;
+                }
+                let ms = (deep_logic::budget::cpu_ns() - started) as f64 / 1e6;
+                if !copy.catching() || copy.ran() == at || ms >= budget {
+                    break ms;
+                }
+            };
+            copy.slice(None);
+            copy.catch_frame(copy.ran() - from, ms);
+            return frame;
+        }
         let frame = copy.tick(now).unwrap_or_default();
         // #550: a desync keeps the connection until the copies have located it.
         if let (Some(end), true) = (copy.end(), copy.done()) {
             self.state = State::Ended(end.name().to_string());
         }
         frame
+    }
+
+    /// #277: what the copy has to send beside its frames, `{controls: [text], frames: [hex]}`:
+    /// relay@2's messages and other players' messages it forwards.
+    pub fn sends(&mut self) -> Value {
+        let Some(copy) = self.copy.as_mut() else {
+            return json!({"controls": [], "frames": []});
+        };
+        let (controls, frames) = copy.sends();
+        let controls: Vec<String> = controls.iter().map(Value::to_string).collect();
+        let frames: Vec<String> = frames.iter().map(|f| wire::hex(f)).collect();
+        json!({"controls": controls, "frames": frames})
+    }
+
+    /// #277: the page is about to be hidden (`hidden`), or shows again: hidden, the copy says it is
+    /// absent as its next unsent step's message, the frame to send now; shown, it asks for every
+    /// message since its last step and catches up.
+    pub fn visible(&mut self, hidden: bool, now_ms: f64) -> Vec<u8> {
+        let now = flicks(now_ms);
+        let Some(copy) = self.copy.as_mut().filter(|c| c.end().is_none()) else {
+            return Vec::new();
+        };
+        if !hidden {
+            copy.returned(now);
+            return Vec::new();
+        }
+        copy.absent(now);
+        copy.tick(now).unwrap_or_default()
+    }
+
+    /// #277: a planted web copy the page names (`web_catch_up_jumps`), before its match starts.
+    pub fn plant(&mut self, name: &str) {
+        if let (Some(p), true) = (Planted::named(name), name.starts_with("web_")) {
+            self.planted = p;
+        }
     }
 
     /// The connection ended: a match still going ends as left.
@@ -282,7 +379,13 @@ impl Match {
     /// link; the page writes the link around it.
     pub fn probe(&self) -> Value {
         let mut out = match &self.copy {
-            Some(copy) => Value::Object(copy.report()),
+            Some(copy) => {
+                let mut r = copy.report();
+                // #277: the copy's own golden of the steps it ran, which logic.determinism's
+                // `compare: "web"` reads.
+                r.insert("golden".into(), copy.sim().golden(copy.ran()));
+                Value::Object(r)
+            }
             None => json!({}),
         };
         out["state"] = json!(self.state.name());

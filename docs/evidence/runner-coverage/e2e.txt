@@ -1,0 +1,26 @@
+$ bash docs/evidence/runner-coverage/e2e.command
+== branch ba8be6194: Runner reads every agent's version with its pre-release suffix, as the hub does
+== Claude Code facts list: 2.1.299, 2.1.304, 2.1.308
+
+################ stand-in claude 2.1.304 on the login PATH ################
+  dev hub pid 63914 (started by this script)
+  runner: read job -> finished  (ran claude 2.1.304)
+  hub:    session dbdcf4d8 -> verified, no watch-only flag
+  stopped the hub this script started (pid 63914)
+
+################ stand-in claude 2.1.300 on the login PATH ################
+  dev hub pid 66076 (started by this script)
+  runner: read job -> refused
+    refused: claude 2.1.300 at /private/tmp/dh159-jCTgF9/bin/claude is outside what its facts cover: 2.1.299, 2.1.304, 2.1.308
+  hub:    session fba698db -> watch-only: it runs claude-code 2.1.300, past the versions its facts cover
+  stopped the hub this script started (pid 66076)
+
+################ stand-in claude 2.1.304-beta on the login PATH ################
+  dev hub pid 71783 (started by this script)
+  runner: read job -> refused
+    refused: claude 2.1.304-beta at /private/tmp/dh159-VRC8v5/bin/claude is outside what its facts cover: 2.1.299, 2.1.304, 2.1.308
+  hub:    session ada5b901 -> watch-only: it runs claude-code 2.1.304-beta, past the versions its facts cover
+  stopped the hub this script started (pid 71783)
+
+== done; temp folders removed
+exit 0

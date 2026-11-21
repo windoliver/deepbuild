@@ -200,6 +200,7 @@ pub enum Twin {
     LinksWithoutLimits,
     LinksAtZero,
     TreeCountsOnly,
+    Small(runner::contact::Small),
 }
 
 /// A Rapier world behind the backend interface.
@@ -208,7 +209,10 @@ pub struct Rapier {
     world: PhysicsWorld,
     /// Each body's handle, in canonical (ID) order.
     bodies: Vec<(String, RigidBodyHandle)>,
-    forces: Vec<Force>,
+    /// Each force by ID, its strength what the last `set` gave it (#2371).
+    forces: Vec<(String, Force)>,
+    /// #2371: each body's anchors by address, `<body>#<anchor>`: the body and its local point.
+    anchors: BTreeMap<String, (RigidBodyHandle, [f64; 3])>,
     /// The fixed body a joint end of `world` holds to.
     world_body: Option<RigidBodyHandle>,
     /// Each collider's shape use.
@@ -271,6 +275,16 @@ pub struct Rapier {
     /// #2098: the triangles a wind pushes, by body, in the body's frame.
     aero: BTreeMap<String, Vec<deep_canvas_physics::wind::Triangle>>,
 }
+
+/// #189's test builds of the physics implementation: a document's every world built as if it
+/// declared its gravity this many times over; none in every shipped build.
+pub const GRAVITY_TIMES: Option<f64> = if cfg!(feature = "test-gravity-heavy") {
+    Some(2.0)
+} else if cfg!(feature = "test-gravity-drift") {
+    Some(1.000_001)
+} else {
+    None
+};
 
 fn v3(a: [f64; 3]) -> Vector {
     Vector::new(a[0] as f32, a[1] as f32, a[2] as f32)
@@ -941,15 +955,14 @@ impl Backend for Rapier {
         p.dt = (1.0 / w.step_rate) as f32;
         // The world's substeps are the solver's iterations, not repeated steps (World and backend).
         p.num_solver_iterations = w.substeps as usize;
-        p.contact_softness =
-            SpringCoefficients::new(w.solver.contact_hz as f32, w.solver.contact_damping as f32);
+        let (hz, unit, cap, sleep) = runner::contact::lengths(self.twin, w);
+        p.contact_softness = SpringCoefficients::new(hz, w.solver.contact_damping as f32);
         // Rapier holds a contact with a fixed body at twice the frequency; the world keeps that.
         let fixed = if self.twin == Twin::StaticContactSame { 1.0 } else { 2.0 };
-        p.static_contact_softness = SpringCoefficients::new(
-            fixed * w.solver.contact_hz as f32,
-            w.solver.contact_damping as f32,
-        );
-        p.normalized_max_linear_velocity = w.solver.max_speed as f32;
+        p.static_contact_softness =
+            SpringCoefficients::new(fixed * hz, w.solver.contact_damping as f32);
+        p.length_unit = unit as f32;
+        p.normalized_max_linear_velocity = (w.solver.max_speed / cap) as f32;
         p.max_ccd_substeps = usize::from(w.solver.ccd && self.twin != Twin::NoSweep);
         let mut handles = BTreeMap::new();
         for id in deep_canvas_physics::occurrence::built_order(w) {
@@ -1000,7 +1013,7 @@ impl Backend for Rapier {
                 .locked_axes(locks)
                 .build();
             let a = rb.activation_mut();
-            a.normalized_linear_threshold = w.solver.sleep.speed as f32;
+            a.normalized_linear_threshold = (w.solver.sleep.speed / sleep) as f32;
             a.time_until_sleep = w.solver.sleep.time as f32;
             let colliders: Vec<(usize, ColliderBuilder)> = (0..b.shapes.len())
                 .filter_map(|i| Some((i, self.collider(w, id, b, i, &mut out)?)))
@@ -1073,7 +1086,13 @@ impl Backend for Rapier {
         self.soft.build(w, &mut self.world, &handles);
         self.particle_capacity = w.capacity.get("particles").copied().unwrap_or(u64::MAX);
         self.checkpoint_every = w.checkpoint_every;
-        self.forces = w.forces.values().cloned().collect();
+        self.forces = w.forces.clone().into_iter().collect();
+        let anchors = w.bodies.iter().flat_map(|(id, b)| {
+            let h = handles[id];
+            let named = b.anchors.iter();
+            named.map(move |(name, p)| (format!("{id}#{name}"), (h, *p)))
+        });
+        self.anchors = anchors.collect();
         if out.is_empty() {
             Ok(())
         } else {
@@ -1095,7 +1114,7 @@ impl Backend for Rapier {
         let start = self.start();
         let watched = self.readings();
         self.aim(targets);
-        self.push();
+        self.push(targets);
         let vehicles = self.vehicles.ids();
         let belts = belt::Belts {
             twin: self.twin,
@@ -1273,6 +1292,7 @@ impl Backend for Rapier {
                 self.vehicles.bytes(),
                 self.soft.bytes(),
                 self.character_bytes(),
+                self.strength_bytes(),
                 self.grab_bytes(),
             ]
             .concat(),
@@ -1315,6 +1335,7 @@ impl Backend for Rapier {
         let rest = self.vehicles.restore(rest);
         let rest = self.soft.restore(rest);
         let rest = self.characters_of(rest);
+        let rest = self.strengths_of(rest);
         self.grabs = Rapier::grabs_of(rest);
         self.step = cp.step;
         self.last.clear();

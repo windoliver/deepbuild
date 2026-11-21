@@ -16,9 +16,6 @@ const TARGET = 'wasm32-unknown-unknown';
 const target = process.env.CARGO_TARGET_DIR ? resolve(root, process.env.CARGO_TARGET_DIR) : join(root, 'target');
 const env = { ...process.env, CARGO_INCREMENTAL: '0' };
 for (const k of Object.keys(env)) if (/^(RUSTFLAGS|CARGO_ENCODED_RUSTFLAGS|CARGO_BUILD_RUSTFLAGS|CARGO_TARGET_\w+_RUSTFLAGS)$/.test(k)) delete env[k];
-// The media module reaches the 3D module, whose meshopt C++ calls float functions that wasm32's bare headers don't
-// declare; the compiler's builtins stand in, and nothing the synth calls reaches that code.
-env.CFLAGS_wasm32_unknown_unknown = ['floorf', 'ceilf', 'roundf', 'truncf', 'sqrtf', 'log2f', 'logf', 'expf', 'exp2f', 'powf', 'ldexpf', 'frexpf', 'fmodf', 'sinf', 'cosf', 'tanf', 'asinf', 'acosf', 'atanf', 'atan2f'].map((f) => `-D${f}=__builtin_${f}`).join(' ');
 
 const build = spawnSync('cargo', ['rustc', '--locked', '--release', '-p', 'deep-synth-job', '--lib', '--crate-type', 'cdylib', '--target', TARGET, '--', '-C', 'strip=symbols'], {
   cwd: root, env, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024,

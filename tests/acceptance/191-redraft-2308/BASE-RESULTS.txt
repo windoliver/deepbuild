@@ -1,0 +1,130 @@
+The #191 criterion 1 redraft under #2308 (#191.8c7c5edf), run at the base commit
+85203f458b85c999ac03a884c837398e56aeac8d (no implementation of #2308; this folder and `tests/acceptance/2308/`'s
+README.md and helpers.ts untracked beside it), on 2026-11-19, macOS 27.2 arm64, Node 24.22.0, vitest 5.0.5,
+cargo 1.99.1 (rustc 1.99.1), with rustup's cargo and that Node first on PATH and
+`NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/191-redraft-2308 --no-file-parallelism --testTimeout=3600000 --reporter=verbose ac1-reference-kit.test.ts`
+(the checkout's path redacted to `<checkout>`). The machine was loaded (1-minute load about 120 on 18 cores); no test
+here times anything.
+
+The builds. `target/` was empty. Before the run each build the file asks for was made once, with the file's own cargo
+arguments and environment plus `-j 6` under `nice`, so the run's own cargo calls found both fresh:
+  cargo build --locked -p deep-physics-rapier --bin deep-physics                                              (16m 14s)
+  cargo rustc --locked -p deep-physics-rapier --lib --crate-type cdylib --target wasm32-unknown-unknown       (6m 44s)
+
+The type-check, `node node_modules/typescript/bin/tsc -p tests/acceptance/191-redraft-2308/tsconfig.json`
+(typescript 5.9.3), exits 0.
+
+2 of 2 tests pass and vitest exits 0. No test fails, so there is no failing line to give. The output below is the one
+run of the file as delivered. One earlier run, of a draft that differed by one redundant assertion on the last planted
+mismatch (since removed), also passed 2 of 2.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/191-redraft-2308
+
+stdout | ac1-reference-kit.test.ts > #191.8c7c5edf Rapier 0.36.1 passes every fixture on macOS arm64 and on wasm32, measured beside each answer (redraft 2308) > #191.8c7c5edf macOS arm64: the reference backend passes every fixture within its issue's tolerance, #2308's five in #2308's world where the kit holds them, listing each measured value beside its answer (redraft 2308)
+free_fall: measured 4.9152326583862305 against 4.905 {"relative":0.01} → pass
+projectile_range: measured 10.178851027949332 against 10.19367991845056 {"relative":0.01} → pass
+pendulum_period: measured 2.0108913014509375 against 2.009885948561886 {"relative":0.01} → pass
+bounce_max: measured 0.800326669216156 against 0.81 {"relative":0.03} → pass
+bounce_min: measured 0.246009761095047 against 0.25 {"relative":0.03} → pass
+bounce_average: measured 0.48344268798828127 against 0.48999999999999994 {"relative":0.03} → pass
+bounce_geometric: measured 0.443878972530365 against 0.45 {"relative":0.03} → pass
+bounce_multiply: measured 0.19905450344085693 against 0.2025 {"relative":0.03} → pass
+slide_geometric: measured 3.180325508871358 against 3.1855249745158 {"relative":0.03} → pass
+slide_average: measured 2.5431947717557923 against 2.54841997961264 {"relative":0.03} → pass
+slide_min: measured 6.365904808422588 against 6.3710499490316 {"relative":0.03} → pass
+slide_max: measured 1.587459565718661 against 1.5927624872579 {"relative":0.03} → pass
+slide_multiply: measured 7.958585739437792 against 7.9638124362894995 {"relative":0.03} → pass
+slope_hold: measured 0.00021561394227089943 against 0 {"m":0.001} → pass
+slope_slide: measured 1.3263602616751629 against 1.3142907888746553 {"relative":0.03} → pass
+hinge_limit: measured 30.00000024011171 against 30 {"deg":0.5} → pass
+slider_limit: measured 0.5000000596046448 against 0.5 {"m":0.005} → pass
+hinge_motor: measured 89.99468231201172 against 90 {"relative":0.01} → pass
+first_contact_time: measured 0.4583333333333333 against 0.4515236409857309 {"steps":1} → pass
+first_contact_speed: measured 4.414501190185547 against 4.4294469180700204 {"relative":0.02} → pass
+sensor_entry: measured 0.325 against 0.3192754284070505 {"steps":1} → pass
+sleep: measured 62 against 60 {"steps":2} → pass
+sleep_off: measured 0 against 0 {"relative":0} → pass
+queries: measured 0 against 0 {"relative":0} → pass
+ccd_wall: measured 0.05 against 0.049749999999999996 {"steps":1} → pass
+resting_stack: measured 0.005844593048095703 against 0.005867129790289124 {"m":0.0003} → pass
+belt_level: measured 1.8991221189498901 against 1.8980632008154945 {"relative":0.01} → pass
+belt_turned: measured 1.8991217613220215 against 1.8980632008154945 {"relative":0.01} → pass
+belt_reversed: measured -1.8991185426712036 against -1.8980632008154945 {"relative":0.01} → pass
+belt_tilted: measured 1.0003742439569825 against 1 {"relative":0.01} → pass
+sensor/static/dynamic: measured 75 against 75 {"steps":1} → pass
+sensor/static/kinematic: measured 75 against 75 {"steps":1} → pass
+sensor/static/character: measured 75 against 75 {"steps":1} → pass
+sensor/static/placed: measured 300 against 300 {"steps":0} → pass
+sensor/static/inside: measured 1 against 1 {"steps":0} → pass
+sensor/kinematic/dynamic: measured 75 against 75 {"steps":1} → pass
+sensor/kinematic/kinematic: measured 75 against 75 {"steps":1} → pass
+sensor/kinematic/character: measured 75 against 75 {"steps":1} → pass
+sensor/kinematic/placed: measured 300 against 300 {"steps":0} → pass
+sensor/kinematic/inside: measured 1 against 1 {"steps":0} → pass
+sensor/dynamic/dynamic: measured 75 against 75 {"steps":1} → pass
+sensor/dynamic/kinematic: measured 75 against 75 {"steps":1} → pass
+sensor/dynamic/character: measured 75 against 75 {"steps":1} → pass
+sensor/dynamic/placed: measured 300 against 300 {"steps":0} → pass
+sensor/dynamic/inside: measured 1 against 1 {"steps":0} → pass
+character/slope: measured 0 against 0 {"relative":0} → pass
+character/step: measured 0 against 0 {"relative":0} → pass
+character/snap: measured 0 against 0 {"relative":0} → pass
+character/jump: measured 0 against 0 {"relative":0} → pass
+character/grounded_0.04: measured 0 against 0 {"relative":0} → pass
+character/grounded_0.07: measured 0 against 0 {"relative":0} → pass
+character/sliding_30: measured 0 against 0 {"relative":0} → pass
+character/sliding_50: measured 0 against 0 {"relative":0} → pass
+character/head_on: measured 0.6101000308990479 against 0.61 {"m":0.001} → pass
+character/into_standing: measured 0.6101009855115247 against 0.61 {"m":0.001} → pass
+vehicle_sag: measured 0.062121975421905506 against 0.06212255072070835 {"relative":0.02} → pass
+vehicle_brake: measured 12.458488464438041 against 12.5 {"relative":0.03} → pass
+vehicle_drive: measured 3.999981880203879 against 4 {"relative":0.02} → pass
+vehicle_turn: measured 9.336458772691012 against 9.330127018922193 {"relative":0.03} → pass
+vehicle_contacts: measured 0.4583333333333333 against 0.4515236409857309 {"steps":1} → pass
+vehicle_weight: measured 10790.883178710938 against 10791 {"relative":0.01} → pass
+vehicle_beam: measured 15.000000512405201 against 15 {"deg":0.1} → pass
+vehicle_slab: measured 4.0000281716673385 against 4 {"relative":0.02} → pass
+vehicle_platform: measured 9.53676680681774e-7 against 0 {"m":0.02} → pass
+#2308's fixtures in the kit's data: none (each held to #2308's words where the kit holds it)
+
+ ✓ ac1-reference-kit.test.ts > #191.8c7c5edf Rapier 0.36.1 passes every fixture on macOS arm64 and on wasm32, measured beside each answer (redraft 2308) > #191.8c7c5edf macOS arm64: the reference backend passes every fixture within its issue's tolerance, #2308's five in #2308's world where the kit holds them, listing each measured value beside its answer (redraft 2308) 3279ms
+stdout | ac1-reference-kit.test.ts > #191.8c7c5edf Rapier 0.36.1 passes every fixture on macOS arm64 and on wasm32, measured beside each answer (redraft 2308) > #191.8c7c5edf wasm32: the physics crate built for wasm32-unknown-unknown passes every fixture within its issue's tolerance, #2308's five in #2308's world where the kit holds them (redraft 2308)
+#2308's fixtures in the kit's data: none (each held to #2308's words where the kit holds it)
+
+ ✓ ac1-reference-kit.test.ts > #191.8c7c5edf Rapier 0.36.1 passes every fixture on macOS arm64 and on wasm32, measured beside each answer (redraft 2308) > #191.8c7c5edf wasm32: the physics crate built for wasm32-unknown-unknown passes every fixture within its issue's tolerance, #2308's five in #2308's world where the kit holds them (redraft 2308) 8749ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  18:18:34
+   Duration  13.11s (tests 99%)
+
+Per test:
+1. macOS arm64: PASS. The base's `deep-physics` (debug, as shipped) answers `behavior_fixtures`, `backend` and
+   `behavior_kit`; `rapier3d` is the reference, admitted, verdict pass. Each of the 64 results above passes within its
+   tolerance beside its answer, every fixture #191 lists among them, and every fixture's world is at g = 9.81 m/s²,
+   120 Hz and 4 substeps. The kit's data holds none of #2308's five (the line "#2308's fixtures in the kit's data:
+   none"), so the redrafted world rule and `smallFailures` meet no fixture of the kit there and the judge does what
+   the frozen one does. Free fall's measure equals the drop of its own world's bake, and the frozen planted mismatch
+   (2% off a 1% answer) is caught. The redraft's planted mismatches then run on this report with #2308's five beside
+   it: as #2308's suite holds them and at the readings #2308's opening gives, nothing is wrong; each of the 40 wrong
+   kits (for each of the five: its wrong reading passed, no measured value, `excluded_by_caps`, a tolerance of its
+   own, and its world left at 120 Hz, at 8 substeps, with no `contact_hz`, with no `length_unit`) is caught in a
+   failure naming its fixture; and `free_fall` moved to 480 Hz is caught, naming it and 120 Hz.
+2. wasm32: PASS. `node scripts/physics-wasm32.mjs` answers the same three calls from the crate's wasm32 build, and the
+   same judge finds nothing wrong: target `wasm32-unknown-unknown`, every fixture passes, none of #2308's five in the
+   data.
+
+Why they pass there: the redraft changes only what the frozen test asks of #2308's five fixtures, and the base's kit
+holds none. It reads what the base and a program that meets #2308 have in common, so it is not the test that fails
+first for #2308; `tests/acceptance/2308/` is. It differs from the frozen test on a kit that holds the five: the frozen
+judge fails each of their worlds for not being at 120 Hz, and this one holds them to #2308's world instead.
+
+Beside the run, not a test run: the frozen file's judge `reportFailures`, lifted from that file's text with Node and
+given an empty report with the same planted five, returns five failures more than it does without them, "fixture
+small_edge's world isn't at g = 9.81 m/s², 120 Hz and 4 substeps" and the same for small_stack, small_bounce,
+small_slide and small_dominoes; this folder's judge returns none more.
+
+Not run: the redraft on a program that meets #2308 (this job never sees one); the frozen
+`tests/acceptance/191/ac1-reference-kit.test.ts` and the rest of `tests/acceptance/191/`; `tests/acceptance/2308/`;
+`scripts/affected.mjs` and the preflight.

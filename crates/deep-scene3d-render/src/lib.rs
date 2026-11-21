@@ -36,6 +36,7 @@ mod op;
 mod origin;
 mod planted;
 pub mod print;
+pub mod proxy;
 mod readouts;
 mod set;
 pub mod shadow;
@@ -2826,6 +2827,7 @@ impl Renderer {
             mask: (mask_layout, sampler),
             picks: BTreeMap::new(),
             next_generation: 0,
+            spans: Default::default(),
             targets: None,
             order: Vec::new(),
             ground: [0.0, 0.0, 0.0, 1.0],
@@ -4068,7 +4070,7 @@ impl Renderer {
                 &mut choices,
                 shadow_texels(&chosen, side),
             );
-            deep_canvas_scene3d::lod::resolve(&mut chosen, &choices);
+            proxy::resolve(&mut chosen, &choices);
             return self.prepare_placed(device, &chosen, look);
         }
         // #166: the water's parts draw in a pass of their own, after the mirror's view.
@@ -4204,7 +4206,7 @@ impl Renderer {
         }
         self.counts.upload_ms.extend(self.tints.upload_ms.clone());
         for layer in &scene.layers {
-            self.prepare_batch(device, layer, &scene.camera);
+            self.prepare_batch(device, layer, scene);
         }
         self.sways.move_all(device, scene);
         self.counts.overlay_rows = self.tints.table(device, &scene.tints, &self.picks);
@@ -4253,7 +4255,7 @@ impl Renderer {
         // #465: the mirror's view at t, drawn whole each frame.
         self.mirroring = match &scene.mirror {
             Some(m) => {
-                let planted = self.planted;
+                let (planted, internal) = (self.planted, self.internal());
                 let mirrorer = self
                     .mirrorer
                     .get_or_insert_with(|| Box::new(mirror::Mirrorer::new(device, planted)));
@@ -4263,7 +4265,7 @@ impl Renderer {
                     .as_ref()
                     .is_none_or(|w| w.material != m.material);
                 if !self.planted.keeps_mirror {
-                    mirrorer.prepare(device, scene, m, look, &self.picks, overlay);
+                    mirrorer.prepare(device, scene, internal, m, look, &self.picks, overlay);
                 }
                 true
             }
@@ -4836,7 +4838,7 @@ impl Renderer {
         if self.ao.generation != generation {
             // The solids' ao bind group changed: every batch with solids encodes again.
             for layer in &scene.layers {
-                self.prepare_batch(device, layer, &scene.camera);
+                self.prepare_batch(device, layer, scene);
             }
             self.sways.move_all(device, scene);
             self.count_draws(scene);
@@ -5654,12 +5656,8 @@ impl Renderer {
         sub.write(&device.queue, across);
     }
 
-    fn prepare_batch(
-        &mut self,
-        device: &Device,
-        layer: &Layer3,
-        cam: &deep_canvas_scene3d::scene::Camera,
-    ) {
+    fn prepare_batch(&mut self, device: &Device, layer: &Layer3, scene: &Scene) {
+        let cam = &scene.camera;
         self.compiled += self.families.ensure(&device.device, layer, &mut self.names);
         if !layer.hidden.is_empty() {
             self.ensure_hidden(device, layer.hidden.keys().cloned());
@@ -6158,6 +6156,50 @@ impl Renderer {
         }
         batch.lines.begin();
         for l in &layer.lines {
+            // #1782: a line with a hidden style draws each edge's spans, the hidden ones in that
+            // style over what hides them.
+            let style = l
+                .edges
+                .as_ref()
+                .and_then(|e| Some((e.width, e.hidden.as_ref()?)));
+            let spans = style.and_then(|s| {
+                Some((
+                    s,
+                    deep_canvas_scene3d::spans::pieces(scene, l, &mut self.spans)?,
+                ))
+            });
+            for (width, hidden, p) in spans
+                .iter()
+                .flat_map(|((w, h), ps)| ps.iter().map(move |p| (w, h, p)))
+            {
+                let (color, dash) = if p.hidden {
+                    (hidden.color, hidden.dash)
+                } else {
+                    (l.color, l.dash)
+                };
+                let record = SegmentRecord {
+                    a: v4(p.a, *width),
+                    b: v4(p.b, *width),
+                    color: faded_pack(color, layer.fades.get(&l.id)),
+                    pick: picks[&l.id],
+                    // An end a split or a dash made is cut square, as a dash's own ends are.
+                    flags: u32::from(l.world)
+                        | (1 << 1)
+                        | (u32::from(l.over || p.hidden) << 2)
+                        | (u32::from(l.dash_world) << 4)
+                        | ((u32::from(p.cut[0]) | (u32::from(p.cut[1]) << 1)) << 6),
+                    dash: if p.dashed {
+                        half_bits(dash[0]) | (half_bits(dash[1]) << 16)
+                    } else {
+                        0
+                    },
+                    fade: OPAQUE_ENDS,
+                };
+                batch.lines.push(&l.id, bytemuck::bytes_of(&record));
+            }
+            if spans.is_some() {
+                continue;
+            }
             for (k, seg) in l.segments.iter().enumerate() {
                 let record = SegmentRecord {
                     a: v4(seg.a, seg.wa),

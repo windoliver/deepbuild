@@ -56,14 +56,18 @@ pub fn reads_me(doc: &Value) -> bool {
 }
 
 /// The prompt as its host shows it: `{state, relay, players, courtesy, refused, text}`, where
-/// `courtesy` is the fog line for a piece that reads `match.me`, else null.
-pub fn prompt(host: &str, players: u8, courtesy: bool, state: &State) -> Value {
+/// `courtesy` is the fog line for a piece that reads `match.me`, else null. A piece that keeps a
+/// profile record says its numbers go to the other players (#276).
+pub fn prompt(host: &str, players: u8, courtesy: bool, profile: bool, state: &State) -> Value {
     let mut about = format!(
         "This piece is played by {players} players through the relay {host}. \
          The relay, and on a direct path the other players, see this copy's network address."
     );
     if courtesy {
         about = format!("{about} {COURTESY}");
+    }
+    if profile {
+        about.push_str(" Your profile's numbers go to the other players.");
     }
     let (refused, text) = match state {
         State::Open => (json!("none"), format!("{about} Click Join to play.")),
@@ -95,7 +99,7 @@ mod tests {
 
     #[test]
     fn the_prompt_names_the_relay_host_and_who_sees_the_address() {
-        let p = prompt("relay.test:4433", 2, false, &State::Open);
+        let p = prompt("relay.test:4433", 2, false, false, &State::Open);
         let text = p["text"].as_str().unwrap();
         assert!(
             text.contains("relay.test:4433") && text.contains("network address"),
@@ -108,6 +112,7 @@ mod tests {
         let r = prompt(
             "relay.test",
             2,
+            false,
             false,
             &refused_by_relay("relay.test", "started"),
         );
@@ -129,7 +134,7 @@ mod tests {
         let driven = json!({"items": {}, "drivers": {"d": {"target": "items/a/hidden_view/opacity",
             "expr": "me", "vars": {"me": "match.me"}}}});
         assert!(reads_me(&driven));
-        let p = prompt("relay.test", 2, reads_me(&fog), &State::Open);
+        let p = prompt("relay.test", 2, reads_me(&fog), false, &State::Open);
         assert_eq!(p["courtesy"], json!(COURTESY));
         assert!(p["text"]
             .as_str()
