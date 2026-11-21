@@ -159,6 +159,36 @@ pub(super) fn check_card(doc: &Value, issues: &mut Vec<Issue>) {
 /// The deepest chain of assemblies (Assembly: it can never nest more than 4 deep).
 pub(super) const ASSEMBLY_DEPTH: usize = 4;
 
+/// #1217: `viewer_tools: {measure: bool}`, the tools a document offers its viewer (Selection).
+pub(super) fn check_viewer_tools(doc: &Value, issues: &mut Vec<Issue>) {
+    let Some(tools) = member(doc, "viewer_tools") else {
+        return;
+    };
+    let Some(fields) = tools.as_object() else {
+        let what = "not an object of viewer tools";
+        issues.push(Issue::envelope(
+            "out_of_range",
+            "viewer_tools".into(),
+            tools.clone(),
+            what,
+        ));
+        return;
+    };
+    for (key, value) in fields {
+        let (code, what) = match (key.as_str(), value.is_boolean()) {
+            ("measure", true) => continue,
+            ("measure", false) => ("out_of_range", "not true or false"),
+            _ => ("unknown_field", "not a viewer tool (measure)"),
+        };
+        issues.push(Issue::envelope(
+            code,
+            format!("viewer_tools/{key}"),
+            value.clone(),
+            what,
+        ));
+    }
+}
+
 /// Each assembly (Assembly, #504): its fields, its one parent another assembly with no cycle and
 /// no chain deeper than four, a slide or a turn with an axis, a pivot and an ordered range, its
 /// apart offset and its place in the take-apart. A `repeat` or a motion along a path isn't in
