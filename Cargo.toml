@@ -136,6 +136,10 @@ opt-level = 3
 opt-level = 3
 [profile.dev.package.quickjs-jit-core]
 opt-level = 3
+# Issue #280: net.feel plays eight copies of a match for 3,600 steps, each tick decoding its peers'
+# frames and rolling back, read off the dev binary.
+[profile.dev.package.deep-net]
+opt-level = 3
 # Issue #184: a playtest's runs (40 two-minute runs of 7,200 steps and their replays) play on the
 # dev `deep-drive` the acceptance tests run, which spends its time stepping logic: the world's
 # step and its sandboxed calls.

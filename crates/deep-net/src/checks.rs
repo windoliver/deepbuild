@@ -234,8 +234,9 @@ pub fn budget<S: Stepper>(
     make: &mut dyn FnMut(u8) -> Result<S, Value>,
     frame_ms: f64,
     on: &[String],
+    web: Option<crate::window::Web<'_>>,
 ) -> Result<(Played<S>, Value), Value> {
-    crate::window::budget(cfg, card, ask, make, frame_ms, on)
+    crate::window::budget(cfg, card, ask, make, frame_ms, on, web)
 }
 
 #[cfg(test)]

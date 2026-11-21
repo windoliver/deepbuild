@@ -58,6 +58,7 @@ mod modes;
 mod momentum;
 mod narration;
 mod net;
+mod net_web;
 mod over3d;
 mod packs;
 mod physics;

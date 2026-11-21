@@ -33,6 +33,43 @@ pub struct Match {
     next_frame: i64,
 }
 
+/// #280: net.budget's web part (canvas primitives: Check input: net kinds): the match's stepping
+/// on `ask`'s track, measured in this player on the page's clock as `deep_net::window::part`
+/// measures it in the app, each copy the document's logic items and worlds at their start on
+/// `track`, the input track recorded before the match.
+pub fn budget(
+    sealed: &Sealed,
+    doc: &Value,
+    track: &[Value],
+    read: &dyn Fn(&str) -> Option<Vec<u8>>,
+    ask: &Value,
+) -> Value {
+    let piece = match deep_play::logic::logic_piece(sealed, doc, track, read, false) {
+        Ok(Some(p)) => Rc::new(p),
+        Ok(None) => return json!({"error": "the piece has no logic item"}),
+        Err(i) => return json!({"error": i.to_json()}),
+    };
+    let entries = ask["track"].as_array().cloned().unwrap_or_default();
+    let n = |k: &str| ask[k].as_i64().unwrap_or(0);
+    let make = &mut || {
+        let mut l = Logic::new(piece.clone(), track, false)?;
+        l.worlds(doc)?;
+        Ok(l)
+    };
+    let frame_ms = ask["frame_ms"].as_f64().unwrap_or(4.0);
+    let from_step = ask["from_step"].as_bool().unwrap_or(false);
+    deep_net::window::part(
+        &entries,
+        n("steps"),
+        n("len"),
+        n("window"),
+        frame_ms,
+        from_step,
+        make,
+    )
+    .unwrap_or_else(|e| json!({"error": e}))
+}
+
 /// The page's clock, in ms, as flicks.
 fn flicks(ms: f64) -> i64 {
     (ms * (FLICKS / 1000) as f64).round() as i64

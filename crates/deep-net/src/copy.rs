@@ -22,7 +22,10 @@ use crate::locate::{self, entries_hash, track_after, Found, FNV_START};
 pub use crate::message::Hashed;
 use crate::message::{hex, Message};
 
+mod feel;
 mod rollback;
+
+pub use feel::{percentile, Positions};
 
 /// What a copy steps: the piece's canvas modules with carried state.
 pub trait Stepper {
@@ -81,6 +84,10 @@ pub trait Stepper {
     fn seek(&mut self, step: i64, _len: i64) -> Result<(i64, u64), Value> {
         Err(json!({"code": "no_ring", "step": step}))
     }
+    /// #280: each item net.feel names, at its evaluated position at time `t` as the copy holds it.
+    fn positions(&mut self, _t: i64) -> Positions {
+        Vec::new()
+    }
 }
 
 /// How a planted defect changes its field's value: `n` added to it, or bit `b` of its bits
@@ -129,6 +136,17 @@ pub enum Planted {
     RewindsToLastRead,
     /// #551: it never holds its clock, whatever its lead.
     IgnoresLeadRule,
+    /// #280: its frames resend from its newest step instead of the lowest one unconfirmed.
+    ResendsFromNewest,
+    /// #280's planted meters: a stall counted as the held message's whole delay, a rollback's
+    /// depth counted from the step the late message arrived on, and an item's move from the frame
+    /// before instead of its jump across the rollback.
+    MetersWholeDelay,
+    MetersDepthFromArrival,
+    MetersFrameToFrame,
+    MetersWallClock,
+    /// #280: net.budget's report from one match step's cost without its checkpoints.
+    ReportsFromStep,
 }
 
 impl Planted {
@@ -145,6 +163,12 @@ impl Planted {
             "net_records_predicted" => Planted::RecordsPredicted,
             "net_rewinds_to_last_read" => Planted::RewindsToLastRead,
             "net_ignores_lead_rule" => Planted::IgnoresLeadRule,
+            "net_resends_from_newest" => Planted::ResendsFromNewest,
+            "net_feel_stall_whole_delay" => Planted::MetersWholeDelay,
+            "net_feel_depth_from_arrival" => Planted::MetersDepthFromArrival,
+            "net_feel_correction_frame_to_frame" => Planted::MetersFrameToFrame,
+            "net_feel_wall_clock" => Planted::MetersWallClock,
+            "net_budget_window_without_checkpoints" => Planted::ReportsFromStep,
             _ => return None,
         })
     }
@@ -191,6 +215,9 @@ pub struct Wait {
     pub player: u8,
     pub from: i64,
     pub to: Option<i64>,
+    /// #280: the step whose message it waits for, and when the frame that let it run came.
+    pub awaited: i64,
+    pub freed: Option<i64>,
 }
 
 /// The waiting notice the app or the web player shows, never the piece.
@@ -291,6 +318,8 @@ pub struct Copy<S> {
     end: Option<(End, Value)>,
     /// #551: where it stands in rolling back (crate::copy::rollback).
     roll: rollback::Roll,
+    /// #280: what net.feel reads (crate::copy::feel).
+    feel: feel::Meter,
 }
 
 impl<S: Stepper> Copy<S> {
@@ -349,6 +378,7 @@ impl<S: Stepper> Copy<S> {
             ran_early: Vec::new(),
             end: None,
             roll: rollback::Roll::new(players),
+            feel: feel::Meter::default(),
             cfg,
         };
         // No entry can be stamped before step `delay`: those steps' messages are empty.
@@ -566,24 +596,26 @@ impl<S: Stepper> Copy<S> {
 
     /// The copy waits at its last step for `player`'s message.
     fn wait(&mut self, player: u8, now: i64) {
-        match self.waits.last_mut().filter(|w| w.to.is_none()) {
+        let awaited = self.through[player as usize - 1];
+        let open = |from| Wait {
+            step: self.next,
+            player,
+            from,
+            to: None,
+            awaited,
+            freed: None,
+        };
+        match self.waits.last().filter(|w| w.to.is_none()) {
             Some(w) if w.player == player => {}
-            Some(w) => {
-                w.to = Some(now);
+            Some(_) => {
+                let next = open(now);
+                if let Some(w) = self.waits.last_mut() {
+                    w.to = Some(now);
+                }
                 self.unnotice(now);
-                self.waits.push(Wait {
-                    step: self.next,
-                    player,
-                    from: now,
-                    to: None,
-                });
+                self.waits.push(next);
             }
-            None => self.waits.push(Wait {
-                step: self.next,
-                player,
-                from: self.due,
-                to: None,
-            }),
+            None => self.waits.push(open(self.due)),
         }
     }
 
@@ -975,6 +1007,7 @@ impl<S: Stepper> Copy<S> {
             self.take(p, step, m);
         }
         self.heard(p, &frame);
+        self.freed(now);
         // With a window, the late entries one frame of the host brings roll the copy back once,
         // at its tick (#551).
         if self.cfg.window == 0 {
@@ -991,6 +1024,7 @@ impl<S: Stepper> Copy<S> {
         self.now = self.now.max(now);
         self.rewind();
         self.advance(now);
+        self.drew();
         self.settle();
         self.watch(now);
         // A copy that ran every step it was given still sends the hashes it owes.
@@ -1013,6 +1047,7 @@ impl<S: Stepper> Copy<S> {
         self.scoped = self.scoped.split_off(&lowest);
         let from = match self.planted {
             Planted::ResendsNothing => self.sent.max(lowest),
+            Planted::ResendsFromNewest => (self.through[me] - 1).max(lowest),
             _ => lowest,
         };
         let mut steps: Vec<Vec<u8>> = Vec::new();

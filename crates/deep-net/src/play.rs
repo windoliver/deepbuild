@@ -42,6 +42,15 @@ pub struct Deliver {
     pub at: i64,
 }
 
+/// #280: each of `player`'s messages, for match step k, reaches copy `to` once that copy has run
+/// step k + `steps`, and not before: a frame reaches it carrying only its messages due by then.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Late {
+    pub player: u8,
+    pub to: u8,
+    pub steps: i64,
+}
+
 /// Every frame `player` sends from `at` for `len` waits at the relay until `at + len`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Hold {
@@ -67,6 +76,78 @@ pub struct Faults {
     pub latency: Vec<i64>,
     /// #550: frames go straight between copies, as on a direct path, each copy's to each other.
     pub direct: bool,
+    /// #280: net.feel's network, in place of `latency`: every copy starts at the relay's start.
+    pub profile: Option<Profile>,
+    /// #280: players' messages that reach one copy a whole number of its steps late.
+    pub late: Vec<Late>,
+}
+
+/// The part of `frame` whose messages are for steps before `due`, if any.
+fn due_part(frame: &[u8], due: i64) -> Option<Vec<u8>> {
+    let mut f = Frame::decode(frame).ok()?;
+    let n = (due - f.first as i64).clamp(0, f.steps.len() as i64) as usize;
+    if n == 0 {
+        return None;
+    }
+    f.steps.truncate(n);
+    Some(f.encode())
+}
+
+/// #280: net.feel's network (Check input: net kinds): each player's messages take its one-way
+/// latency plus a seeded jitter to every other copy, spikes hold one player's messages for a
+/// while, and a loss drops each delivery with its chance, from its own seed. In flicks.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Profile {
+    pub latency: Vec<i64>,
+    /// A delivery takes up to this much more, seeded.
+    pub jitter: i64,
+    pub spikes: Option<Spikes>,
+    /// Each delivery's chance of being lost, and the loss's own seed.
+    pub loss: Option<(f64, u64)>,
+}
+
+/// Spikes that hold one player's messages for `hold` about every `every`; with `player` and
+/// `first`, that player's exactly every `every` from `first`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Spikes {
+    pub every: i64,
+    pub hold: i64,
+    pub player: Option<u8>,
+    pub first: Option<i64>,
+}
+
+impl Profile {
+    /// The holds its spikes make over a match of `span` flicks among `players`.
+    fn holds(&self, players: u8, span: i64, seed: u64) -> Vec<Hold> {
+        let Some(s) = self.spikes.filter(|s| s.every > 0) else {
+            return Vec::new();
+        };
+        let hold = |player, at| Hold {
+            player,
+            at,
+            len: s.hold,
+        };
+        if let (Some(player), Some(first)) = (s.player, s.first) {
+            let times = (0..).map(|n| first + n * s.every);
+            return times
+                .take_while(|t| *t < span)
+                .map(|at| hold(player, at))
+                .collect();
+        }
+        // About every `every`: each gap a seeded half to one and a half of it.
+        let mut rng = Rng(seed ^ 0x7370_696b_6573_3238);
+        let (mut at, mut out) = (0, Vec::new());
+        loop {
+            at += s.every / 2 + (rng.next() % (s.every as u64 + 1)) as i64;
+            if at >= span {
+                return out;
+            }
+            let player = s
+                .player
+                .unwrap_or_else(|| 1 + (rng.next() % players.max(1) as u64) as u8);
+            out.push(hold(player, at));
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -83,6 +164,8 @@ pub struct Ask {
     pub log: bool,
     /// #550: a planted defect one copy makes.
     pub defect: Option<(u8, Defect)>,
+    /// #280: the host's clock, in ns, which only net.feel's planted wall-clock meter reads.
+    pub clock: Option<fn() -> i64>,
 }
 
 /// One frame the relay carried to one copy.
@@ -164,7 +247,21 @@ pub fn play<S: Stepper>(
     make: &mut dyn FnMut(u8) -> Result<S, Value>,
 ) -> Result<Played<S>, Value> {
     let step = cfg.step();
-    let lat = |p: usize| ask.faults.latency.get(p).copied().unwrap_or(0);
+    let profile = ask.faults.profile.as_ref();
+    // #280: with net.feel's profile, a frame takes its sender's latency alone and every copy
+    // starts at the relay's start.
+    let lat = |p: usize| match profile {
+        Some(_) => 0,
+        None => ask.faults.latency.get(p).copied().unwrap_or(0),
+    };
+    let own = |p: usize| profile.and_then(|f| f.latency.get(p)).copied().unwrap_or(0);
+    let mut holds = ask.faults.holds.clone();
+    if let Some(p) = profile {
+        holds.extend(p.holds(cfg.players, ask.steps * step, ask.faults.seed));
+    }
+    let mut loss = profile
+        .and_then(|p| p.loss)
+        .map(|(rate, seed)| (rate, Rng(seed ^ 0x006c_6f73_7332_3830)));
     let mut copies = Vec::new();
     for me in 1..=cfg.players {
         let planted = match ask.planted_on {
@@ -184,6 +281,9 @@ pub fn play<S: Stepper>(
         copy.limit(ask.steps);
         if let Some((_, d)) = ask.defect.as_ref().filter(|(on, _)| *on == me) {
             copy.plant(d.clone());
+        }
+        if let Some(clock) = ask.clock {
+            copy.clock(clock);
         }
         let plays = ask.plays.get(&me).into_iter().flatten();
         copy.script(plays.map(|p| (p.step, p.control.clone(), p.value.clone(), p.to.clone())));
@@ -220,16 +320,12 @@ pub fn play<S: Stepper>(
         }
     };
     // Past any match's own end: every hold, the timeout and each step at a tenth of its rate.
-    let longest = ask
-        .faults
-        .holds
-        .iter()
-        .map(|h| h.at + h.len)
-        .max()
-        .unwrap_or(0);
+    let longest = holds.iter().map(|h| h.at + h.len).max().unwrap_or(0);
     let stop = longest + 2 * cfg.timeout + ask.steps * step * 10 + 60 * FLICKS;
     // #551: frames `deliver` holds, each with its copy and the step it waits for that copy to run.
     let mut pending: Vec<(usize, i64, Vec<u8>)> = Vec::new();
+    // #280: frames `late` holds, each with its copy and how many steps late its messages are.
+    let mut held_late: Vec<(usize, i64, Vec<u8>)> = Vec::new();
     while let Some(((now, _), event)) = queue.pop_first() {
         if now > stop {
             break;
@@ -250,6 +346,15 @@ pub fn play<S: Stepper>(
                 for f in ready {
                     played.copies[i].receive(&f, now);
                 }
+                // Each late-held frame reaches it with its messages due by now; the rest come in
+                // later frames, as the repeat rule sends them.
+                let ran = played.copies[i].ran();
+                for (to, steps, f) in std::mem::take(&mut held_late) {
+                    match (to == i).then(|| due_part(&f, ran - steps)).flatten() {
+                        Some(part) => played.copies[i].receive(&part, now),
+                        None => held_late.push((to, steps, f)),
+                    }
+                }
                 push(&mut queue, now + step, Event::Tick(i));
                 let Some(frame) = played.copies[i].tick(now) else {
                     continue;
@@ -258,7 +363,7 @@ pub fn play<S: Stepper>(
                 let dropped = (rng.next() % 1_000_000) as f64 / 1_000_000.0 < ask.faults.drop;
                 let player = i as u8 + 1;
                 let mut at = now;
-                for h in ask.faults.holds.iter().filter(|h| h.player == player) {
+                for h in holds.iter().filter(|h| h.player == player) {
                     if h.at <= now && now < h.at + h.len {
                         at = at.max(h.at + h.len);
                     }
@@ -273,7 +378,17 @@ pub fn play<S: Stepper>(
                 }
                 let from = at;
                 for to in (0..played.copies.len()).filter(|to| *to != i) {
-                    let at = from + lat(i) + lat(to);
+                    let mut at = from + lat(i) + lat(to);
+                    if let Some(p) = profile {
+                        at += own(i);
+                        if p.jitter > 0 {
+                            at += (rng.next() % (p.jitter as u64 + 1)) as i64;
+                        }
+                    }
+                    let lost = loss.as_mut().is_some_and(|(rate, r)| {
+                        ((r.next() % 1_000_000) as f64 / 1_000_000.0) < *rate
+                    });
+                    let dropped = dropped || lost;
                     // Through the relay every copy gets the one frame; on a direct path each
                     // gets its own.
                     let sent = match ask.faults.direct {
@@ -301,10 +416,16 @@ pub fn play<S: Stepper>(
                         to: to as u8 + 1,
                         bytes: ask.log.then(|| deep_relay::wire::hex(&sent)),
                     });
-                    match waits {
+                    let late = ask
+                        .faults
+                        .late
+                        .iter()
+                        .find(|l| l.player == player && l.to as usize == to + 1);
+                    match (waits, late) {
                         _ if dropped => {}
-                        Some(d) => pending.push((to, d.at, sent)),
-                        None => push(&mut queue, at, Event::Deliver(to, sent)),
+                        (Some(d), _) => pending.push((to, d.at, sent)),
+                        (None, Some(l)) => held_late.push((to, l.steps, sent)),
+                        (None, None) => push(&mut queue, at, Event::Deliver(to, sent)),
                     }
                 }
             }
