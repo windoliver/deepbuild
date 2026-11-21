@@ -1,0 +1,23 @@
+// What ordinary canvas calls pay once the store holds the shipped packs: a world with them and one without.
+import { mkdtempSync } from 'node:fs';
+import { join } from 'node:path';
+const repo = process.argv[2], tmp = process.argv[3];
+const { Canvas } = await import(join(repo, 'packages/hub/dist/canvas.js'));
+const { Packs } = await import(join(repo, 'packages/hub/dist/packs.js'));
+const timed = async (label, f) => { const t = process.hrtime.bigint(); let r; try { r = await f(); } catch (e) { r = `error ${e.message}`.slice(0, 300); } console.log(`${label}\t${(Number(process.hrtime.bigint() - t) / 1e6).toFixed(0)} ms\t${typeof r === 'string' ? r : ''}`); return r; };
+const store = new Packs(mkdtempSync(join(tmp, 'tc-')));
+let canvas = new Canvas(mkdtempSync(join(tmp, 'tc-')));
+await timed('shipped(canvas)', () => store.shipped(canvas));
+canvas.close();
+const world = (packs) => ({ sessions: [], record: {}, file: { packs }, docs: [] });
+const call = async (c, packs) => JSON.stringify((await c.call(world(packs), { call: 'time', doc: 'none', text: '0f' })).reply).slice(0, 80);
+canvas = new Canvas(mkdtempSync(join(tmp, 'tc-')));
+await timed('new process, no packs: call 1', () => call(canvas, []));
+await timed('no packs: call 2', () => call(canvas, []));
+canvas.close();
+canvas = new Canvas(mkdtempSync(join(tmp, 'tc-')));
+await timed('new process, all packs: call 1', () => call(canvas, store.all()));
+await timed('all packs: call 2', () => call(canvas, store.all()));
+await timed('all packs: call 3', () => call(canvas, store.all()));
+for (const skip of ['deepbuild/lanes', 'deepbuild/foley', 'deepbuild/modslib']) await timed(`all but ${skip}`, () => call(canvas, store.all().filter((p) => p.id !== skip)));
+canvas.close();
