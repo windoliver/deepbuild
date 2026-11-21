@@ -1,0 +1,82 @@
+Base commit 72fe11a11 (this checkout, unmodified but for this folder), November 14, 2026, on Linux (aarch64) with
+Node 24.22, workspaces built and target/debug/deep-hook built, at a 1-minute load of 56 at the start and 19 at the end:
+
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/19/doctor/redraft-ac16 --no-file-parallelism
+  Test Files  1 failed (1)
+       Tests  1 failed | 2 passed (3)
+    Duration  286.43s
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/19/doctor/redraft-ac16/tsconfig.json   -> no errors
+
+  x  every command ... exits through exit.code@1 ...; deep lease exits with the status of the command it ran
+     25 broken lines, below. None names `deep lease`.
+  v  (wrong program) status-exit-unmapped: the plant is merged at this base, and the contract names `deep status`, exit 4.
+  v  (wrong program) a deep lease that folds its command's status into the table: the built `deep lease` breaks no
+     line of the lease rule at this base (the control), and the folding stand-in is named for 7 and for 42.
+
+Why the first test fails at the base, as #2200 names it:
+  - 16 lines "ran something although it was a usage error": the first-run setup ran before the usage error, in
+    `deep status`, `inbox`, `inbox answer|undo|save`, `off`, `on`, `install`, `memory`, `memory keep|remove|overrule`,
+    `secret add`, `guard add`, `env up|down`. With these stand-ins (a launcher that exits 0) the simple forms still
+    exit 2, so each has one line; #2200 counted two a form with a launcher that refuses.
+  - 3 more lines for `deep memory keep|remove|overrule`: exit 3 after setup waited 15 s for a hub, not 2.
+  - 5 lines for a flag read as an argument, exit code in brackets: `deep open` (1), `deep session rules` (3), `deep backup` (1),
+    `deep run follow` (1), and `deep host run` (1), which #2200 does not list.
+  - 1 line: `deep kinds` crashed with a stack trace and exited 1.
+
+The run's output follows, with the checkout's path as <repo>, each temp folder as <tmp>, and each line cut at 420
+characters (the cut marked "…"); the reporter's "- Expected / + Received" copy of the same 25 lines is left out.
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/19/doctor/redraft-ac16
+
+ ❯ contract.test.ts (3 tests | 1 failed) 286288ms
+   ❯ AC16 #19.26a372c6 a contract test that every `deep` command's outcomes map through the one exit-code enum, naming a command that doesn't (3)
+     × AC16 #19.26a372c6 every command deep --help lists, and every command the issue names, exits through exit.code@1: 2 for an unknown flag with nothing run, and a listed code for its outcome; deep lease exits with the status of the command it ran 144977ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  contract.test.ts > AC16 #19.26a372c6 a contract test that every `deep` command's outcomes map through the one exit-code enum, naming a command that doesn't > AC16 #19.26a372c6 every command deep --help lists, and every command the issue names, exits through exit.code@1: 2 for an unknown flag with nothing run, and a listed code for its outcome; deep lease exits with the status of the command it ran
+AssertionError: AC16 each of these commands has an outcome the one exit-code enum doesn't map:
+deep status --dh19-no-such-flag ran something although it was a usage error: wrote ["<tmp>/bin/calls.log","<tmp>/h/.claude/settings.json","<tmp>/h/.claude/skills/deepbuild/SKILL.md","<tmp>/h/.claude.json","<tmp>/h/.codex/config.toml","<tmp>/h/.codex/hooks.json","<tmp>/h/.config/systemd/user/deepbuild-hub.service","<tmp>/h/.deepbuild/bin/deep-hook","<tmp>/h/.deepbuild/claude-hooks.json","<tmp>/h/.deepbuild/codex-hooks…
+deep inbox answer --dh19-no-such-flag ran something although it was a usage error: wrote ["<tmp>/bin/calls.log","<tmp>/h/.claude/settings.json","<tmp>/h/.claude/skills/deepbuild/SKILL.md","<tmp>/h/.claude.json","<tmp>/h/.codex/config.toml","<tmp>/h/.codex/hooks.json","<tmp>/h/.config/systemd/user/deepbuild-hub.service","<tmp>/h/.deepbuild/bin/deep-hook","<tmp>/h/.deepbuild/claude-hooks.json","<tmp>/h/.deepbuild/codex…
+deep inbox --dh19-no-such-flag ran something although it was a usage error: wrote ["<tmp>/bin/calls.log","<tmp>/h/.claude/settings.json","<tmp>/h/.claude/skills/deepbuild/SKILL.md","<tmp>/h/.claude.json","<tmp>/h/.codex/config.toml","<tmp>/h/.codex/hooks.json","<tmp>/h/.config/systemd/user/deepbuild-hub.service","<tmp>/h/.deepbuild/bin/deep-hook","<tmp>/h/.deepbuild/claude-hooks.json","<tmp>/h/.deepbuild/codex-hooks.…
+deep inbox undo --dh19-no-such-flag ran something although it was a usage error: wrote ["<tmp>/bin/calls.log","<tmp>/h/.claude/settings.json","<tmp>/h/.claude/skills/deepbuild/SKILL.md","<tmp>/h/.claude.json","<tmp>/h/.codex/config.toml","<tmp>/h/.codex/hooks.json","<tmp>/h/.config/systemd/user/deepbuild-hub.service","<tmp>/h/.deepbuild/bin/deep-hook","<tmp>/h/.deepbuild/claude-hooks.json","<tmp>/h/.deepbuild/codex-h…
+deep inbox save --dh19-no-such-flag ran something although it was a usage error: wrote ["<tmp>/bin/calls.log","<tmp>/h/.claude/settings.json","<tmp>/h/.claude/skills/deepbuild/SKILL.md","<tmp>/h/.claude.json","<tmp>/h/.codex/config.toml","<tmp>/h/.codex/hooks.json","<tmp>/h/.config/systemd/user/deepbuild-hub.service","<tmp>/h/.deepbuild/bin/deep-hook","<tmp>/h/.deepbuild/claude-hooks.json","<tmp>/h/.deepbuild/codex-h…
+deep off --dh19-no-such-flag ran something although it was a usage error: wrote ["<tmp>/bin/calls.log","<tmp>/h/.claude/settings.json","<tmp>/h/.claude/skills/deepbuild/SKILL.md","<tmp>/h/.claude.json","<tmp>/h/.codex/config.toml","<tmp>/h/.codex/hooks.json","<tmp>/h/.config/systemd/user/deepbuild-hub.service","<tmp>/h/.deepbuild/bin/deep-hook","<tmp>/h/.deepbuild/claude-hooks.json","<tmp>/h/.deepbuild/codex-hooks.js…
+deep on --dh19-no-such-flag ran something although it was a usage error: wrote ["<tmp>/bin/calls.log","<tmp>/h/.claude/settings.json","<tmp>/h/.claude/skills/deepbuild/SKILL.md","<tmp>/h/.claude.json","<tmp>/h/.codex/config.toml","<tmp>/h/.codex/hooks.json","<tmp>/h/.config/systemd/user/deepbuild-hub.service","<tmp>/h/.deepbuild/bin/deep-hook","<tmp>/h/.deepbuild/claude-hooks.json","<tmp>/h/.deepbuild/codex-hooks.jso…
+deep install --dh19-no-such-flag ran something although it was a usage error: wrote ["<tmp>/bin/calls.log","<tmp>/h/.claude/settings.json","<tmp>/h/.claude/skills/deepbuild/SKILL.md","<tmp>/h/.claude.json","<tmp>/h/.codex/config.toml","<tmp>/h/.codex/hooks.json","<tmp>/h/.config/systemd/user/deepbuild-hub.service","<tmp>/h/.deepbuild/bin/deep-hook","<tmp>/h/.deepbuild/claude-hooks.json","<tmp>/h/.deepbuild/codex-hook…
+deep memory --dh19-no-such-flag ran something although it was a usage error: wrote ["<tmp>/bin/calls.log","<tmp>/h/.claude/settings.json","<tmp>/h/.claude/skills/deepbuild/SKILL.md","<tmp>/h/.claude.json","<tmp>/h/.codex/config.toml","<tmp>/h/.codex/hooks.json","<tmp>/h/.config/systemd/user/deepbuild-hub.service","<tmp>/h/.deepbuild/bin/deep-hook","<tmp>/h/.deepbuild/claude-hooks.json","<tmp>/h/.deepbuild/codex-hooks…
+deep memory keep --dh19-no-such-flag must be a usage error, exit 2, not exit 3, stdout "", stderr "deep hub start: no hub answered at unix:<tmp>/h/.deepbuild/hub.sock within 15 s; see <tmp>/h/.deepbuild/logs/hub.log\nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each sa…
+deep memory keep --dh19-no-such-flag ran something although it was a usage error: wrote ["<tmp>/bin/calls.log","<tmp>/h/.claude/settings.json","<tmp>/h/.claude/skills/deepbuild/SKILL.md","<tmp>/h/.claude.json","<tmp>/h/.codex/config.toml","<tmp>/h/.codex/hooks.json","<tmp>/h/.config/systemd/user/deepbuild-hub.service","<tmp>/h/.deepbuild/bin/deep-hook","<tmp>/h/.deepbuild/claude-hooks.json","<tmp>/h/.deepbuild/codex-…
+deep memory remove --dh19-no-such-flag must be a usage error, exit 2, not exit 3, stdout "", stderr "deep hub start: no hub answered at unix:<tmp>/h/.deepbuild/hub.sock within 15 s; see <tmp>/h/.deepbuild/logs/hub.log\nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each …
+deep memory remove --dh19-no-such-flag ran something although it was a usage error: wrote ["<tmp>/bin/calls.log","<tmp>/h/.claude/settings.json","<tmp>/h/.claude/skills/deepbuild/SKILL.md","<tmp>/h/.claude.json","<tmp>/h/.codex/config.toml","<tmp>/h/.codex/hooks.json","<tmp>/h/.config/systemd/user/deepbuild-hub.service","<tmp>/h/.deepbuild/bin/deep-hook","<tmp>/h/.deepbuild/claude-hooks.json","<tmp>/h/.deepbuild/code…
+deep memory overrule --dh19-no-such-flag must be a usage error, exit 2, not exit 3, stdout "", stderr "deep hub start: no hub answered at unix:<tmp>/h/.deepbuild/hub.sock within 15 s; see <tmp>/h/.deepbuild/logs/hub.log\nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, eac…
+deep memory overrule --dh19-no-such-flag ran something although it was a usage error: wrote ["<tmp>/bin/calls.log","<tmp>/h/.claude/settings.json","<tmp>/h/.claude/skills/deepbuild/SKILL.md","<tmp>/h/.claude.json","<tmp>/h/.codex/config.toml","<tmp>/h/.codex/hooks.json","<tmp>/h/.config/systemd/user/deepbuild-hub.service","<tmp>/h/.deepbuild/bin/deep-hook","<tmp>/h/.deepbuild/claude-hooks.json","<tmp>/h/.deepbuild/co…
+deep open --dh19-no-such-flag must be a usage error, exit 2, not exit 1, stdout "", stderr "deep open: the app is not running\n"
+deep session rules --dh19-no-such-flag must be a usage error, exit 2, not exit 3, stdout "", stderr "BLOCKED: ENOENT: no such file or directory, open '<tmp>/h/.deepbuild/control.token'; nothing was read\n"
+deep backup --dh19-no-such-flag must be a usage error, exit 2, not exit 1, stdout "", stderr "deep backup: no hub answered (ENOENT: no such file or directory, open '<tmp>/h/.deepbuild/control.token'); the record is backed up through the hub. Start it with deep hub start, then run deep backup again.\n"
+deep host run --dh19-no-such-flag must be a usage error, exit 2, not exit 1, stdout "", stderr "BLOCKED: the hub can't be reached: ENOENT: no such file or directory, open '<tmp>/h/.deepbuild/control.token'\n"
+deep run follow --dh19-no-such-flag must be a usage error, exit 2, not exit 1, stdout "", stderr "BLOCKED: ENOENT: no such file or directory, open '<tmp>/h/.deepbuild/control.token'\n"
+deep secret add --dh19-no-such-flag ran something although it was a usage error: wrote ["<tmp>/bin/calls.log","<tmp>/h/.claude/settings.json","<tmp>/h/.claude/skills/deepbuild/SKILL.md","<tmp>/h/.claude.json","<tmp>/h/.codex/config.toml","<tmp>/h/.codex/hooks.json","<tmp>/h/.config/systemd/user/deepbuild-hub.service","<tmp>/h/.deepbuild/bin/deep-hook","<tmp>/h/.deepbuild/claude-hooks.json","<tmp>/h/.deepbuild/codex-h…
+deep guard add --dh19-no-such-flag ran something although it was a usage error: wrote ["<tmp>/bin/calls.log","<tmp>/h/.claude/settings.json","<tmp>/h/.claude/skills/deepbuild/SKILL.md","<tmp>/h/.claude.json","<tmp>/h/.codex/config.toml","<tmp>/h/.codex/hooks.json","<tmp>/h/.config/systemd/user/deepbuild-hub.service","<tmp>/h/.deepbuild/bin/deep-hook","<tmp>/h/.deepbuild/claude-hooks.json","<tmp>/h/.deepbuild/codex-ho…
+deep kinds crashed, an outcome exit.code@1 doesn't map, and exited 1: exit 1, stdout "", stderr "file://<repo>/packages/hub/dist/wire.js:33\nexport const refuse = (code, path, remediation, actual = '', retryable = false) => new Refused(refusal(code, path, remediation, actual, retryable), actualText(actual));\n                                                                                   ^\n\nRefused [Error]: No c…
+deep env up --dh19-no-such-flag ran something although it was a usage error: wrote ["<tmp>/bin/calls.log","<tmp>/h/.claude/settings.json","<tmp>/h/.claude/skills/deepbuild/SKILL.md","<tmp>/h/.claude.json","<tmp>/h/.codex/config.toml","<tmp>/h/.codex/hooks.json","<tmp>/h/.config/systemd/user/deepbuild-hub.service","<tmp>/h/.deepbuild/bin/deep-hook","<tmp>/h/.deepbuild/claude-hooks.json","<tmp>/h/.deepbuild/codex-hooks…
+deep env down --dh19-no-such-flag ran something although it was a usage error: wrote ["<tmp>/bin/calls.log","<tmp>/h/.claude/settings.json","<tmp>/h/.claude/skills/deepbuild/SKILL.md","<tmp>/h/.claude.json","<tmp>/h/.codex/config.toml","<tmp>/h/.codex/hooks.json","<tmp>/h/.config/systemd/user/deepbuild-hub.service","<tmp>/h/.deepbuild/bin/deep-hook","<tmp>/h/.deepbuild/claude-hooks.json","<tmp>/h/.deepbuild/codex-hoo…
+
+ ❯ contract.test.ts:174:124
+    172|     expect(listed, `deep --help lists deep lease, the one command that…
+    173|     const broken = await contract();
+    174|     expect(broken, `AC16 each of these commands has an outcome the one…
+       |                                                                                                                            ^
+    175|   }, 900_000);
+    176|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  17:37:56
+   Duration  286.43s (tests 100%)
+

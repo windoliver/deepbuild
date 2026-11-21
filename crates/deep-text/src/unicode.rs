@@ -262,6 +262,26 @@ pub fn reading(g: &str) -> Reading {
     }
 }
 
+/// #297: the combining marks (general category Mn or Me) grapheme `g` holds.
+pub fn marks(g: &str) -> usize {
+    use icu_properties::props::GeneralCategory as Gc;
+    g.chars()
+        .filter(|&c| {
+            matches!(
+                Properties::get(c).general_category(),
+                Gc::NonspacingMark | Gc::EnclosingMark
+            )
+        })
+        .count()
+}
+
+/// #297: the UTS #39 skeleton of `s` (its NFD form, default-ignorable code points left out, each
+/// character mapped to its prototype in confusables.txt, then NFD again), at the Unicode release
+/// the locked `unicode-security` pins: two strings that share one look alike.
+pub fn skeleton(s: &str) -> String {
+    unicode_security::skeleton(s).collect()
+}
+
 /// `text`'s grapheme clusters, by the layout's own segmenter.
 pub fn grapheme_clusters(text: &str) -> Vec<&str> {
     let starts = grapheme_starts(text);

@@ -1,0 +1,82 @@
+
+== 1. A monthly report from an attached file: its card says what a run and a month cost
+$ deep every month, write the sales report from the attached file --file /private/tmp/dh1342-GPKz9t/mine/sales.csv
+Working on it: every month, write the sales report from the attached file. It shows in your list while the research runs.
+Its card is ready: deep inbox shows it (ask:01M7XWC3S84D61JMP5YRVQ1TBR).
+$ deep inbox
+# every month, write the sales report from the attached file\n\nIt makes a report, in a folder of its own.\n\n**What it makes:**\n- A monthly sales report\n\n**Who it's for:**\n- You, the person who asked. (picked for you)\n\n**What the first finished version holds:**\n- What your words ask for, and nothing more. (picked for you)\n\n**What it leaves out:**\n- Anything your words don't ask for. (picked for you)\n\n**What would prove it:**\n- The report's total is the sum of the file's amounts — a data check\n\n**Where it goes when finished:**\n- Kept in its own folder on this computer, where you open it. (picked for you)\n\n**Tasks:**\n1. Write the sales report\n\n**It repeats:** every month, under this same approval.\n\n**What it costs:** a line of $0.84 a run, so about $0.84 a month, from a dry run that cost $0.42. A run that has spent past $0.84 starts no next model turn; the turn that crossed it is already spent.\n\n**Held for you, asked when it is due:**\n- Nothing to buy, book, post or send.\n\n**What it may spend:** up to your plan window, and no money: anything that costs money is held above.\n\n**What your links and files say, as their own text (it adds nothing to the brief):**\n- sales.csv: “month,region,amount 2026-10,north,120 2026-10,south,80 2026-10,west,50 ”\n  authority  no repo    0s  If you don't answer: Don't, on Fri 27 Nov at 17:43  ask:01M7XWC3S84D61JMP5YRVQ1TBR
+    answer with allow (Make it and start), deny (Don't)
+    plan aa7c1c9b67b0: 3 steps, 1 can't be undone
+    1. Make a folder of its own, /private/tmp/dh1342-GPKz9t/h/.deepbuild/workspaces/every-month-write-the-sales-report-from--…, and save the brief in it  changes /private/tmp/dh1342-GPKz9t/h/.deepbuild/workspaces/every-month-write-the-sales-report-from--…  undo: Remove it  cost $0.00
+    2. Add the task "Write the sales report"  changes the project you pick  undo: Remove the task  cost $0.00
+    3. Start the agent on 1 task, one at a time, each finishing only when its checks pass  changes copies of the project, plan usage, up to the whole window  undo: can't undo  cost $0.00
+1 ask needs you
+$ (the card's cost line, from deep inbox --json)
+**It repeats:** every month, under this same approval.
+**What it costs:** a line of $0.84 a run, so about $0.84 a month, from a dry run that cost $0.42. A run that has spent past $0.84 starts no next model turn; the turn that crossed it is already spent.
+
+== 2. A report whose dry run reports no cost: no card, saying so
+$ deep every month, write the tickets report from the attached file --file /private/tmp/dh1342-GPKz9t/mine/tickets.csv
+Working on it: every month, write the tickets report from the attached file. It shows in your list while the research runs.
+No card: The card of "every month, write the tickets report from the attached file" can't say what a run or a month costs: its dry run run:01M7XWC4TEQD3HZF2JW1N6MGWM reported no cost, and a job that repeats needs its cost per run and per month on its card.
+
+== 3. Your yes: the first run wakes the model, which leaves its script and data check
+$ deep inbox answer ask:01M7XWC3S84D61JMP5YRVQ1TBR allow
+ask:01M7XWC3S84D61JMP5YRVQ1TBR answered allow; no decision saved
+$ sh -c ls "$HOME"/.deepbuild/workspaces/*sales*/.deepbuild "$HOME"/.deepbuild/workspaces/*sales*/.deepbuild/checks; cat "$HOME"/.deepbuild/workspaces/*sales*/report.md
+/private/tmp/dh1342-GPKz9t/h/.deepbuild/workspaces/everymonthwritethesalesreportfro-01e20bd8/.deepbuild:
+checks
+job.sh
+workspace.json
+
+/private/tmp/dh1342-GPKz9t/h/.deepbuild/workspaces/everymonthwritethesalesreportfro-01e20bd8/.deepbuild/checks:
+brief-ae7242bcf45b.json
+data.sh
+# Monthly report
+
+Total: 250
+$ (the jobs runs, from the record)
+every month, write the sales report from | 2026-11-21 | verdict PASS | model turns: 1 | spend.charged: $0.3 | A model turn per task (it has no script of its own yet), spending $0.30; its checks passed: .deepbuild/checks/data.sh.
+
+== 4. A month on, the same columns with new numbers: the script runs with no model and passes
+$ (a month passes on the hub clock)
+$ sh -c cat "$HOME"/.deepbuild/workspaces/*sales*/report.md
+# Monthly report
+
+Total: 285
+$ (the jobs runs, from the record)
+every month, write the sales report from | 2026-11-21 | verdict PASS | model turns: 1 | spend.charged: $0.3 | A model turn per task (it has no script of its own yet), spending $0.30; its checks passed: .deepbuild/checks/data.sh.
+every month, write the sales report from | 2026-12-22 | verdict PASS | model turns: 0 | spend.charged: $0 | .deepbuild/job.sh ran with no model; its checks passed: .deepbuild/checks/data.sh.
+
+== 5. A month after, a column renamed: the script says the shape changed and the model wakes once
+$ (a month passes on the hub clock)
+$ sh -c cat "$HOME"/.deepbuild/workspaces/*sales*/report.md
+# Monthly report
+
+Total: 310
+$ (the jobs runs, from the record)
+every month, write the sales report from | 2026-11-21 | verdict PASS | model turns: 1 | spend.charged: $0.3 | A model turn per task (it has no script of its own yet), spending $0.30; its checks passed: .deepbuild/checks/data.sh.
+every month, write the sales report from | 2026-12-22 | verdict PASS | model turns: 0 | spend.charged: $0 | .deepbuild/job.sh ran with no model; its checks passed: .deepbuild/checks/data.sh.
+every month, write the sales report from | 2027-01-22 | verdict PASS | model turns: 1 | spend.charged: $0.3 | A model turn per task (its script .deepbuild/job.sh said its input's shape changed: the columns changed: month,area,amount), spending $0.30; its checks passed: .deepbuild/checks/data.sh.
+
+== 6. A two-task costs report whose first turn spends $5, past its line: no second turn
+$ deep every month, write the costs report from the attached file --file /private/tmp/dh1342-GPKz9t/mine/costs.csv
+Working on it: every month, write the costs report from the attached file. It shows in your list while the research runs.
+Its card is ready: deep inbox shows it (ask:01MCXH30Z37JGRZCYQ3FSQHT1H).
+$ (the card's cost line, from deep inbox --json)
+**It repeats:** every month, under this same approval.
+**What it costs:** a line of $0.60 a run, so about $0.60 a month, from a dry run that cost $0.30. A run that has spent past $0.60 starts no next model turn; the turn that crossed it is already spent.
+$ deep inbox answer ask:01MCXH30Z37JGRZCYQ3FSQHT1H allow
+ask:01MCXH30Z37JGRZCYQ3FSQHT1H answered allow; no decision saved
+$ (the jobs runs, from the record)
+every month, write the sales report from | 2026-11-21 | verdict PASS | model turns: 1 | spend.charged: $0.3 | A model turn per task (it has no script of its own yet), spending $0.30; its checks passed: .deepbuild/checks/data.sh.
+every month, write the sales report from | 2026-12-22 | verdict PASS | model turns: 0 | spend.charged: $0 | .deepbuild/job.sh ran with no model; its checks passed: .deepbuild/checks/data.sh.
+every month, write the sales report from | 2027-01-22 | verdict PASS | model turns: 1 | spend.charged: $0.3 | A model turn per task (its script .deepbuild/job.sh said its input's shape changed: the columns changed: month,area,amount), spending $0.30; its checks passed: .deepbuild/checks/data.sh.
+every month, write the costs report from | 2027-01-22 | verdict FAIL | model turns: 1 | spend.charged: $5 | It spent $5 on its model turns, past the $0.60 a run may spend, so it stopped before its next model turn.
+$ deep status
+every month, write the tickets report from the attached file
+  New project  INVALID · The card of "every month, write the tickets report from the attached file" can't say what a run or a month costs: its dry run run:01M7XWC4TEQD3HZF2JW1N6MGWM reported no cost, and a job that repeats needs its cost per run and per month on its card., 1m
+Start a Claude Code or Codex session in a repo and it shows here; deep doctor checks the setup.
+0 asks need you
+
+== Done.

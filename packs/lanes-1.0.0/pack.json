@@ -1,0 +1,184 @@
+{
+  "name": "lanes",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "description": "lanes@1 (#981): vehicles on a lane graph built at check from a piece's floor paths, with zones, reservations, quickest routes, a loop broken where it forms, closed-form motion and a lift. Its fixtures' expected values come from the rest-to-rest profile and the reservation rule; its planted library takes a junction whether or not it is held, and fails the merge. Written by scripts/lanes-pack.mjs; the library is src/lanes.rs, its layouts are LAYOUT.md, and each program's text is in src/.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "logic": ">=0.0.0",
+      "sandbox": ">=0.0.0"
+    }
+  },
+  "interfaces": {
+    "lanes@1": {
+      "exports": [
+        {
+          "name": "graph",
+          "params": [
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "vehicle",
+          "params": [
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "route",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "f64"
+          ]
+        },
+        {
+          "name": "go",
+          "params": [
+            "i32",
+            "f64",
+            "i32"
+          ],
+          "results": []
+        },
+        {
+          "name": "lift",
+          "params": [
+            "i32",
+            "i32",
+            "f64"
+          ],
+          "results": []
+        },
+        {
+          "name": "carry",
+          "params": [
+            "i32",
+            "i32"
+          ],
+          "results": []
+        },
+        {
+          "name": "set_down",
+          "params": [
+            "i32",
+            "i32"
+          ],
+          "results": []
+        },
+        {
+          "name": "park",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "f64"
+          ]
+        }
+      ],
+      "layout": "lanes.state@1",
+      "fixtures": [
+        "4620dcd8c64d748f9d6ca4d2f9e0dc7918288ccfe5f226bdc2b0a099a59baed2",
+        "9da89329feea4fbcb874463eace564c7828dda9d49059fcfb6521cac15c6ac67",
+        "b0a658ee084ebeee95126843b75e3dbb8e4c758befd5767da77343ab028abc48"
+      ],
+      "planted": [
+        "8f2e8e958df0ff6d833943a337fff7eaef32b9a1f74bc9e4c940898d0bfd9e87"
+      ],
+      "digest": "177ce8a48bec4e4972bce847e663ef18437d3100527b7de4920ce8daa47fc231",
+      "rules": {
+        "lanes.clear": {},
+        "lanes.stuck": {
+          "max_wait": 60
+        }
+      }
+    }
+  },
+  "libs": {
+    "lanes_ref@1.0.0": {
+      "asset": "30472e40720d0dfbec009ad9b9949d8e6ef54cdd9bcb749266d3263f9b99b482",
+      "exports": [
+        "graph",
+        "vehicle",
+        "route",
+        "go",
+        "lift",
+        "carry",
+        "set_down",
+        "park"
+      ],
+      "fixtures": [
+        "b4913a780317635333055a880a060f268ebcb5578a6e38fbc619c6e683e314c5"
+      ],
+      "implements": [
+        "lanes@1"
+      ]
+    }
+  },
+  "assets": [
+    {
+      "path": "objects/lanes_ref.wasm",
+      "sha256": "30472e40720d0dfbec009ad9b9949d8e6ef54cdd9bcb749266d3263f9b99b482",
+      "size": 15636
+    },
+    {
+      "path": "objects/lanes_planted.wasm",
+      "sha256": "8f2e8e958df0ff6d833943a337fff7eaef32b9a1f74bc9e4c940898d0bfd9e87",
+      "size": 15652
+    },
+    {
+      "path": "objects/straight.wasm",
+      "sha256": "9e7a28b07a4e251a575dc6425746c1b072c20a16372275487b33c6e427e8d5ee",
+      "size": 501
+    },
+    {
+      "path": "fixtures/straight.json",
+      "sha256": "4620dcd8c64d748f9d6ca4d2f9e0dc7918288ccfe5f226bdc2b0a099a59baed2",
+      "size": 3118
+    },
+    {
+      "path": "objects/merge.wasm",
+      "sha256": "9352f4c8368b9734c8e1c479a3b55d384d5901d189bbdd72bfde713d43da95a0",
+      "size": 545
+    },
+    {
+      "path": "fixtures/merge.json",
+      "sha256": "9da89329feea4fbcb874463eace564c7828dda9d49059fcfb6521cac15c6ac67",
+      "size": 6157
+    },
+    {
+      "path": "objects/lift.wasm",
+      "sha256": "064de74223cd9f491d15579dadd90afa970e495b23cd857806e1703592b705fa",
+      "size": 730
+    },
+    {
+      "path": "fixtures/lift.json",
+      "sha256": "b0a658ee084ebeee95126843b75e3dbb8e4c758befd5767da77343ab028abc48",
+      "size": 5479
+    },
+    {
+      "path": "objects/straight_own.wasm",
+      "sha256": "85e0eba46035106bda95989f5bacdaef65fa44a2dc3fdcfc0da41e550c45b36e",
+      "size": 517
+    },
+    {
+      "path": "fixtures/straight_own.json",
+      "sha256": "b4913a780317635333055a880a060f268ebcb5578a6e38fbc619c6e683e314c5",
+      "size": 2062
+    }
+  ]
+}

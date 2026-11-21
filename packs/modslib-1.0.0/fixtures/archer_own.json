@@ -1,0 +1,53 @@
+{
+  "name": "archer_own",
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "a2b07571c3df68a805e0c42e281b34f6c2d05bf1a5283a4d2b378d5fcbf8bc30",
+      "writes": {
+        "totals": {
+          "type": "f64",
+          "count": 2
+        },
+        "last": {
+          "type": "i32"
+        }
+      },
+      "assets": [
+        "2c52aca747338b988787184295ac1d28056f1412dea3b2d39efed922f1206822",
+        "524c387b456d4911a8c5484e432ea2ca2244cf9a7ce854d698eb5f8ca623779b"
+      ],
+      "links": [
+        {
+          "name": "mods.tree@1.0.0",
+          "asset": "5f3b8f4420a9235d947d177a74fd6ec45f981bfec9d4f6876b99dee710d94381"
+        }
+      ]
+    }
+  },
+  "track": [],
+  "steps": 2,
+  "expect": {
+    "arrays": {
+      "0": {
+        "totals": [
+          0,
+          10
+        ],
+        "last": [
+          -1
+        ]
+      },
+      "1": {
+        "totals": [
+          0,
+          15
+        ],
+        "last": [
+          0
+        ]
+      }
+    }
+  },
+  "answer": "Side 0 with archer 1 under it, importing mods.tree by its own name: the archer reads its base 10, then 15 after a +5 attack from the side, reach down."
+}

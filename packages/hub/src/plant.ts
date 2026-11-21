@@ -116,6 +116,8 @@ export type Plant =
   // counting the open asks a second time itself; deep inbox leaving out each ask's default; and the hub leaking every
   // session's asks into an agent's deep_status.
   | 'status-second-order' | 'status-own-word' | 'status-unread-flipped' | 'deep-second-count' | 'inbox-no-default' | 'inbox-adds-unread' | 'status-row-leak'
+  // #1810's: a status answer that counts an ask that took its default, which can still be undone, as open.
+  | 'needs-you-counts-defaulted'
   // #2018's: a `--why` built from a reading of its own, a BLOCKED row that names no one and no evidence, and a
   // reading that tries the stale row before needs you.
   | 'why-second-reading' | 'blocked-bare' | 'stale-before-ask'
@@ -169,6 +171,8 @@ export type Plant =
   | 'churn-keeps-every-answer' | 'churn-keeps-every-result' | 'churn-keeps-every-output' | 'churn-keeps-every-name-set'
   // #2402's: a host that counts a hook handler's failures and never clears them.
   | 'failures-never-cleared'
+  // #2648's: a hub that reads gates.json, notices.json and the agents' settings once, at its start.
+  | 'reads-files-at-start-only'
   // #824's per-session reading: deep mcp loading the whole hub package, a waiter keeping its session's transcript, and
   // a platform that reads no process's memory.
   | 'mcp-loads-hub' | 'waiter-keeps-transcript' | 'sessions-no-memory-read'
@@ -348,7 +352,7 @@ const PLANTS: readonly string[] = [
   'permission-always-allow', 'typed-saves-decision', 'decision-over-mode', 'decision-before-guard',
   'rule-without-reason', 'copies-no-standing-rules',
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
-  'status-second-order', 'status-own-word', 'status-unread-flipped', 'deep-second-count', 'inbox-no-default', 'inbox-adds-unread', 'status-row-leak', 'inbox-labels-only',
+  'status-second-order', 'status-own-word', 'status-unread-flipped', 'deep-second-count', 'inbox-no-default', 'inbox-adds-unread', 'status-row-leak', 'inbox-labels-only', 'needs-you-counts-defaulted',
   'why-second-reading', 'blocked-bare', 'stale-before-ask',
   'retry-reads-working', 'sent-back-without-hold', 'repeat-by-command', 'repeat-notifies-each', 'repeat-raises-ask',
   'doctor-healthy-fix',
@@ -369,6 +373,7 @@ const PLANTS: readonly string[] = [
   'churn-no-full-collection', 'churn-no-resident-read',
   'churn-keeps-every-answer', 'churn-keeps-every-result', 'churn-keeps-every-output', 'churn-keeps-every-name-set',
   'failures-never-cleared',
+  'reads-files-at-start-only',
   'mcp-loads-hub', 'waiter-keeps-transcript', 'sessions-no-memory-read',
   'repeat-reaches-you',
   'deep-wait-polls', 'stop-answers-waiting',
