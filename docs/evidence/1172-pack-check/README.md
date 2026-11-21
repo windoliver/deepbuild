@@ -20,6 +20,24 @@ main b6b99ad8c's build. Load was 22 to 26, so the absolute times are INCONCLUSIV
 | later calls, all but lanes | 5,017 ms | 626 ms |
 | a call with no packs | 5 ms | 4 ms |
 
+## The Mac round at 35471fdf1 (`mac-35471fdf1/`)
+
+The compiler change alone was not enough. Both suites fail at the base and at 35471fdf1 with `no reply to
+canvas.user within 10000 ms` (rows 2 of 2, pop-out 1 of 1). The Mac's load was 37 to 107, so its times are
+INCONCLUSIVE too: the shipped check took 13,790 ms at the base and 10,368 ms at 35471fdf1; later calls 9,919 to
+12,841 ms and 1,826 ms.
+
+## The preset sweep
+
+Checked alone on the head's build, every pack takes under 1.3 s but `foley`, at 4.8 s: its 90 presets are each swept
+(27 or more 2 s renders apiece) one after another. The sweep now runs a chunk of presets per core, up to 8, and reads
+the refusals back in the presets' order. Stack samples of the canvas core during the check show eight threads in
+`Voice::render_part` under `presets_field_with`.
+
+Its gain is **not measured**: `spark-foley-parallel.txt` (`foley-alone.mjs`) was taken at load 130 to 146 on 20
+cores, where it reads 4.8 s with every core and 11 to 28 s pinned to one. `cargo test -p deep-canvas-media synth`:
+9 passed.
+
 Not shown here: that the two #1172 suites pass. They need the Mac's app window, and on the Spark the first check
 plus one call is still about 9 s of their 10 s.
 
