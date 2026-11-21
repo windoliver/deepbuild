@@ -9,7 +9,7 @@
 import type { Asks, PlanStep } from '@deepbuild/asks';
 import type { Ledger } from '@deepbuild/budget';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
-import { asCore, ulid, type Connection, type Event, type RecordStore } from '@deepbuild/record';
+import { asCore, readSince, ulid, type Connection, type RecordStore } from '@deepbuild/record';
 
 export interface PurchaseInput {
   /** `run:<ULID>`: a purchase is named as a paid run is. */
@@ -55,7 +55,6 @@ const TRUSTED: Readonly<Record<string, 'card' | 'inbox'>> = { app: 'card', cli: 
 /** A processor's reference to a card it holds: a short prefix and an ID, never digits alone. */
 const CARD_REF = /^[A-Za-z]{2,8}_[A-Za-z0-9_]{6,}$/;
 const PURCHASE = /^run:[0-9A-Za-z]+$/;
-const PAGE = 1000;
 
 /**
  * Every card number in text: 13 to 19 digits, in groups a single space or dash joins, that pass the Luhn check, as
@@ -176,17 +175,12 @@ class Buyer implements Buying {
 
   /** Reads the card rules the log gained. */
   private async sync(): Promise<void> {
-    for (;;) {
-      const page: Event[] = await this.o.record.read({ after: this.cursor, limit: PAGE });
-      for (const e of page) {
-        if (e.kind === 'card_rule.set' && e.writer === 'core' && isObj(e.data)) {
-          const d = e.data;
-          this.rules.set(e.id, { seller: String(d.seller), max_usd: Number(d.max_usd), card: String(d.card) });
-        }
+    this.cursor = await readSince(this.o.record, this.cursor, ['card_rule.set'], (e) => {
+      if (e.writer === 'core' && isObj(e.data)) {
+        const d = e.data;
+        this.rules.set(e.id, { seller: String(d.seller), max_usd: Number(d.max_usd), card: String(d.card) });
       }
-      if (page.length) this.cursor = page[page.length - 1]!.log_pos;
-      if (page.length < PAGE) return;
-    }
+    });
   }
 }
 

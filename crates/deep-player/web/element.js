@@ -19,6 +19,13 @@
 // one imports a file, held to the SHA-256 its name gives and to the shape and layouts the piece takes, and is then
 // made again with the record's entry at step 0, held from its start. A record it refuses is named, and nothing changes.
 //
+// A profile record (issue #276; canvas primitives: Logic: saves) keeps to the same storage, whole or not at all, by its
+// SHA-256, with the newest and the one before it kept. It is the one record the player reopens by itself: when the piece
+// starts, its newest record that reads back whole enters the track at step 0, held to the shape the piece's profile
+// declares; a newer one that fails its hash is named, and one of another shape is named with its first array that
+// differs, the piece then starting with zeros and the record kept. The piece's menu names the profile, with start
+// fresh (this run only, the record kept), delete, export to a file and import from one.
+//
 // Beside its canvas it keeps the document's accessibility tree as DOM (issue #1045): the tree the app gives its
 // accessibility seam, read through the core (`tree()`), never written by the piece or a host page. The document's node
 // carries the title and the description; each part, label and readout is one element marked data-deep-id with its
@@ -35,14 +42,16 @@ const hex = (buf) => Array.from(new Uint8Array(buf), (b) => b.toString(16).padSt
 const sha256 = async (bytes) => hex(await crypto.subtle.digest('SHA-256', bytes));
 
 /** The origin's store of saves in the browser's storage: one row a save, `{piece, slot, seq, hash, step, ended,
- * deep_hash, bytes}`, keyed by the piece, its slot and the save's number in it; and of carry records, one row a record,
- * `{hash, piece, step, layout, at, bytes}`, keyed by its SHA-256. */
+ * deep_hash, bytes}`, keyed by the piece, its slot and the save's number in it; of carry records, one row a record,
+ * `{hash, piece, step, layout, at, bytes}`, keyed by its SHA-256; and of profile records, one row a record, `{piece,
+ * seq, hash, step, bytes}`, keyed by the piece and the record's number in it (#276). */
 const openStore = () => new Promise((done, fail) => {
-  const open = indexedDB.open('deep-player', 2);
+  const open = indexedDB.open('deep-player', 3);
   open.onupgradeneeded = () => {
     const names = open.result.objectStoreNames;
     if (!names.contains('saves')) open.result.createObjectStore('saves', { keyPath: ['piece', 'slot', 'seq'] });
     if (!names.contains('records')) open.result.createObjectStore('records', { keyPath: 'hash' });
+    if (!names.contains('profiles')) open.result.createObjectStore('profiles', { keyPath: ['piece', 'seq'] });
   };
   open.onsuccess = () => done(open.result);
   open.onerror = () => fail(open.error);
@@ -76,6 +85,13 @@ function recordRefusal(e, hash) {
     : d.what === 'layout' ? `its layout ${d.record} isn't one this piece takes (${(d.accepts ?? []).join(', ')})`
     : `it doesn't fit this piece's ${d.what}`));
   return `The record ${hash} isn't taken: ${said.join('; ') || String(e)}.`;
+}
+/** Why the player didn't reopen the profile record `hash`, in words naming it and the first array that differs. */
+function profileRefusal(e, hash) {
+  let r;
+  try { r = JSON.parse(String(e)); } catch { r = {}; }
+  return r?.notice ?? (r?.code === 'profile_damaged' ? `The profile record ${hash} fails the SHA-256 that names it, so it isn't opened.`
+    : `The profile record ${hash} isn't opened: ${r?.what ?? String(e)}.`);
 }
 
 // Issue #1040: whether this browser can run the bundle, asked before anything loads. It needs WebGPU, an adapter,
@@ -128,6 +144,9 @@ class DeepPlayer extends HTMLElement {
   #slot = 1;
   #seq = new Map();
   #writes = Promise.resolve();
+  /** #276: the profile record the run reads, by hash, and the menu's line naming it. */
+  #profile = null;
+  #named = null;
   #asked = false;
   #live = null;
   #said = new Map();
@@ -203,6 +222,9 @@ class DeepPlayer extends HTMLElement {
     p.decoded = { ...this.#decoded };
     p.saves = (await this.#kept()).map(({ slot, step, deep_hash }) => ({ slot, step, deep_hash }));
     p.records = (await this.#records()).map(({ hash, step, layout }) => ({ hash, step, layout }));
+    // #276: the profile record the store holds, its newest that reads back whole, and the one this run read.
+    const stored = await this.#stored();
+    p.profile = stored ? { hash: stored.hash, step: stored.step, read: this.#profile } : null;
     // The first player's link carries the match in its fragment, which the host serving the piece never sees.
     p.match ??= null;
     if (p.match?.fragment) p.match.link = `${location.href.split('#')[0]}#${p.match.fragment}`;
@@ -220,7 +242,7 @@ class DeepPlayer extends HTMLElement {
 
   /** The piece's saves and carry records: the origin's store, each slot's last save number there, and the player's
    * own controls. */
-  async #saves({ piece, slots, gives, takes }) {
+  async #saves({ piece, slots, gives, takes, profile }) {
     this.#piece = piece;
     try {
       this.#db = await openStore();
@@ -255,14 +277,33 @@ class DeepPlayer extends HTMLElement {
     if (slots) controls.push(['Open save', () => this.#open()], ['Export save', () => this.#export()], ['Import save', chooser((f) => this.#import(f))]);
     if (gives) controls.push(['Export record', () => this.#exportRecord()]);
     if (takes) controls.push(['Import record', chooser((f) => this.#importRecord(f))]);
-    for (const [name, act] of controls) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.textContent = name;
-      b.addEventListener('click', act);
-      bar.append(b);
-    }
-    this.append(bar);
+    const buttons = (group, list) => {
+      for (const [name, act] of list) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = name;
+        b.addEventListener('click', act);
+        group.append(b);
+      }
+    };
+    buttons(bar, controls);
+    if (slots || gives || takes) this.append(bar);
+    if (!profile) return;
+    // #276: the piece's menu for its profile record: the record it names, start fresh, delete, export and import.
+    const menu = document.createElement('div');
+    menu.setAttribute('data-deep-profile', '');
+    menu.setAttribute('role', 'group');
+    menu.setAttribute('aria-label', 'Profile');
+    this.#named = document.createElement('span');
+    menu.append(this.#named);
+    const file = document.createElement('input');
+    file.type = 'file';
+    file.hidden = true;
+    file.addEventListener('change', () => { const f = file.files[0]; file.value = ''; if (f) this.#importProfile(f); });
+    menu.append(file);
+    buttons(menu, [['Start fresh', () => this.#fresh()], ['Delete profile', () => this.#deleteProfile()],
+      ['Export profile', () => this.#exportProfile()], ['Import profile', () => file.click()]]);
+    this.append(menu);
   }
 
   /** The piece's saves in the browser's storage, of `slot` or of every slot, newest first in each. */
@@ -286,6 +327,129 @@ class DeepPlayer extends HTMLElement {
       const bytes = this.#player.record_bytes(r.at);
       this.#writes = this.#writes.then(() => this.#keepRecord(r, bytes));
     }
+    for (const r of JSON.parse(this.#player.profiles_due())) {
+      const bytes = this.#player.profile_bytes(r.at);
+      this.#writes = this.#writes.then(() => this.#keepProfile(r, bytes));
+    }
+  }
+
+  /** The piece's profile records in the origin's storage, newest first, whole or not. */
+  async #profiles() {
+    if (!this.#db) return [];
+    const from = [this.#piece];
+    return (await inStore(this.#db, 'readonly', (rows) => rows.getAll(IDBKeyRange.bound(from, [...from, Infinity])), 'profiles')).reverse();
+  }
+
+  /** The piece's newest profile record in the store that reads back whole, or null. */
+  async #stored() {
+    for (const row of await this.#profiles()) if (await whole(row)) return row;
+    return null;
+  }
+
+  /** The menu's line naming the profile record the store holds, and whether this run reads it. */
+  async #name() {
+    if (!this.#named) return;
+    const row = await this.#stored();
+    this.#named.textContent = !row ? 'No profile in this browser.'
+      : `Profile ${row.hash} (step ${row.step})${this.#profile === row.hash ? '' : ', not read by this run'}.`;
+  }
+
+  /** When the piece starts: its newest profile record that reads back whole enters at step 0, held to the shape the piece
+   * declares. A newer one that fails its hash is named; one of another shape is named with its first array that differs,
+   * and the piece starts with zeros, the record kept. */
+  async #reopen() {
+    this.#profile = null;
+    for (const row of await this.#profiles()) {
+      if (!(await whole(row))) {
+        this.#notice(`The profile record ${row.hash} fails the SHA-256 that names it, so it isn't opened.`, 'profile_damaged');
+        continue;
+      }
+      try {
+        JSON.parse(this.#player.open_profile(row.hash, row.bytes));
+        this.#profile = row.hash;
+      } catch (e) {
+        this.#notice(profileRefusal(e, row.hash), 'profile_refused');
+      }
+      break;
+    }
+    await this.#name();
+  }
+
+  /** One profile record into the store as the piece's newest, whole or not at all: written, read back against its
+   * SHA-256, and only then the piece's older records but its last good one let go. A write the browser refuses leaves
+   * the store as it was. */
+  async #keepProfile({ hash, step }, bytes) {
+    try {
+      if (!this.#asked) await this.#persist();
+      if ((await sha256(bytes)) !== hash) throw Error(`its bytes don't hash to ${hash}`);
+      const before = await this.#profiles();
+      const seq = (before[0]?.seq ?? 0) + 1;
+      const key = [this.#piece, seq];
+      await inStore(this.#db, 'readwrite', (rows) => rows.put({ piece: this.#piece, seq, hash, step, bytes }), 'profiles');
+      const back = await inStore(this.#db, 'readonly', (rows) => rows.get(key), 'profiles');
+      if (!back || !(await whole(back))) {
+        await inStore(this.#db, 'readwrite', (rows) => rows.delete(key), 'profiles');
+        throw Error("it didn't read back whole");
+      }
+      let good = null;
+      for (const row of before) if (!good && await whole(row)) good = row;
+      await inStore(this.#db, 'readwrite', (rows) => { for (const row of before) if (row !== good) rows.delete([row.piece, row.seq]); }, 'profiles');
+      await this.#name();
+    } catch (e) {
+      this.#notice(`The profile record of step ${step} wasn't kept: the browser refused it (${[e?.name, e?.message].filter(Boolean).join(': ') || e}). The last good one stays.`, 'profile_failed');
+    }
+  }
+
+  /** Start fresh, this run only: the piece from its start reading zeros; the stored record stays. */
+  async #fresh() {
+    this.#player.start_fresh();
+    this.#profile = null;
+    this.#paused = true;
+    this.#seek(0);
+    await this.#name();
+  }
+
+  /** The viewer deletes the piece's profile records from this browser. */
+  async #deleteProfile() {
+    await this.#writes;
+    const rows = await this.#profiles();
+    await inStore(this.#db, 'readwrite', (store) => { for (const row of rows) store.delete([row.piece, row.seq]); }, 'profiles');
+    await this.#name();
+    this.#notice('This piece\'s profile is deleted from this browser.', 'profile_deleted');
+  }
+
+  /** The piece's newest whole profile record handed to the browser as a file, named by its SHA-256. */
+  async #exportProfile() {
+    await this.#writes;
+    for (const row of await this.#profiles()) {
+      if (!(await whole(row))) continue;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([row.bytes]));
+      a.download = `${row.hash}.profile`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
+      return;
+    }
+    this.#notice('This piece keeps no profile record in this browser.', 'no_profile');
+  }
+
+  /** A profile record from a file, held to the SHA-256 its name gives and to the piece's shape; taken, it is kept as the
+   * piece's newest and the piece is made again with its entry at step 0, held from its start. Refused, nothing changes. */
+  async #importProfile(file) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const hash = /^([0-9a-f]{64})\.profile$/.exec(file.name)?.[1] ?? await sha256(bytes);
+    try {
+      JSON.parse(this.#player.open_profile(hash, bytes));
+    } catch (e) {
+      this.#notice(profileRefusal(e, hash), 'profile_refused');
+      return;
+    }
+    const r = JSON.parse(new TextDecoder().decode(bytes));
+    await (this.#writes = this.#writes.then(() => this.#keepProfile({ hash, step: r.step }, bytes)));
+    this.#profile = hash;
+    this.#paused = true;
+    this.#seek(0);
+    await this.#name();
   }
 
   /** The carry records the origin's storage holds that read back whole, in the order they were kept. */
@@ -504,7 +668,8 @@ class DeepPlayer extends HTMLElement {
     this.#stages = JSON.parse(player.stages());
     this.#markers = JSON.parse(player.markers());
     const saves = JSON.parse(player.saves());
-    if (saves.slots || saves.gives || saves.takes) await this.#saves(saves);
+    if (saves.slots || saves.gives || saves.takes || saves.profile) await this.#saves(saves);
+    if (saves.profile && this.#db) await this.#reopen();
     this.#seek(0);
     this.#decoded = JSON.parse(player.decoded());
     this.#ready = true;

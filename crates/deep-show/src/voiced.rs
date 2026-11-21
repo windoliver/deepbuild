@@ -400,6 +400,10 @@ impl<S: Stepper> Stepper for Voiced<S> {
         self.inner.spent()
     }
 
+    fn brings(&self) -> Vec<(String, Value)> {
+        self.inner.brings()
+    }
+
     fn jump(&mut self, step: i64, t: i64) {
         self.inner.jump(step, t);
     }

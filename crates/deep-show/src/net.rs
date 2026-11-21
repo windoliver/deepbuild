@@ -135,6 +135,8 @@ pub struct MatchCall {
     on_panel: Option<u8>,
     /// #553: where each copy keeps its saves, `<saves_dir>/<player>/`.
     saves_dir: Option<PathBuf>,
+    /// #276: each copy's own saves folder, its viewer's store (`saves_dirs: {"<player>": path}`).
+    saves_dirs: BTreeMap<u8, PathBuf>,
 }
 
 fn plays_of(v: &Value) -> Option<Vec<Play>> {
@@ -347,6 +349,19 @@ fn parse_match(c: &Map<String, Value>) -> Option<MatchCall> {
                 })
                 .collect::<Option<_>>()?,
         },
+        saves_dirs: match c.get("saves_dirs") {
+            None => BTreeMap::new(),
+            Some(d) => d
+                .as_object()?
+                .iter()
+                .map(|(p, dir)| {
+                    Some((
+                        player(&json!(p.parse::<u64>().ok()?))?,
+                        dir.as_str()?.into(),
+                    ))
+                })
+                .collect::<Option<_>>()?,
+        },
         full: match c.get("ring") {
             None => false,
             Some(r) => r
@@ -548,10 +563,11 @@ impl Hub<'_> {
             plays: m.plays.clone(),
             faults: m.faults.clone(),
             planted,
-            // #550: the planted copy that stamps a peer's entries with its own player is copy 1;
-            // #552's guesser, and its copy whose bits are wrong or never come, copy 2.
+            // #550: the planted copy that stamps a peer's entries with its own player is copy 1, as is
+            // #276's that brings a profile from its own store; #552's guesser, and its copy whose
+            // bits are wrong or never come, copy 2.
             planted_on: match planted {
-                Planted::StampsOwnPlayer => Some(1),
+                Planted::StampsOwnPlayer | Planted::ProfileFromOwnStore => Some(1),
                 Planted::GuessesFromSeed | Planted::RevealsOtherBits | Planted::WithholdsBits => {
                     Some(2)
                 }
@@ -585,8 +601,13 @@ impl Hub<'_> {
         // #553: each copy's media module plays the drawn form's spawns.
         let media = self.match_media(&m.doc);
         let saves = m.saves_dir.clone();
-        let make = &mut |me: u8| {
+        let dirs = m.saves_dirs.clone();
+        let make = &mut |p: u8| {
             let mut l = Logic::planted(piece.clone(), &track, true, logic)?;
+            // #276: the newest whole profile record in the copy's own folder, brought to step 0.
+            l.brings = dirs
+                .get(&p)
+                .and_then(|d| deep_logic::profile::brought(&piece, d));
             l.rounds = rounds;
             if first_bits {
                 l.draws_wrong(deep_logic::draws::Wrong::FirstBits);
@@ -595,7 +616,7 @@ impl Hub<'_> {
             l.worlds(&doc)?;
             l.range = deep_play::net::Range::of(&form, ty.clone(), lax);
             if let Some(dir) = &saves {
-                l.saves_in(dir.join(me.to_string()), planted == Planted::SavesPredicted);
+                l.saves_in(dir.join(p.to_string()), planted == Planted::SavesPredicted);
             }
             if planted == Planted::KeepsReplacedRows {
                 l.keeps_replaced_rows();
@@ -648,6 +669,17 @@ impl Hub<'_> {
         let mut copies = Vec::new();
         for c in &played.copies {
             let mut report = c.report();
+            // #276: the profile records its confirmed steps wrote, into its own folder.
+            if let Some(dir) = m.saves_dirs.get(&c.me) {
+                let upto = c.record()["confirmed"].as_i64().unwrap_or(-1);
+                let written: Vec<Value> = c.sim().inner.profiles(upto).into_iter().map(|r| {
+                    match deep_logic::profile::write(dir, &r["record"]) {
+                        Ok((hash, file)) => json!({"item": r["item"], "step": r["step"], "hash": hash, "file": file}),
+                        Err(e) => json!({"ok": false, "code": "profile_failed", "step": r["step"], "what": e}),
+                    }
+                }).collect();
+                report.insert("profiles".into(), json!(written));
+            }
             report.insert("steps".into(), json!(c.sim().inner.rows));
             report.insert("track".into(), json!(s.track));
             // #553: the voices its media module started, its audio thread, and its saves.
@@ -841,6 +873,7 @@ impl Hub<'_> {
             &cfg.host,
             cfg.players,
             cfg.courtesy,
+            cfg.controls.get(deep_net::kind::PROFILE).is_some(),
             &state.unwrap_or(State::Open),
         );
         p["button"] = json!(self.join_button(panel));

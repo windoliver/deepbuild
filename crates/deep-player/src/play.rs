@@ -57,8 +57,10 @@ struct Logic {
     rewritten: BTreeMap<String, String>,
     saves: Vec<Held>,
     from: i64,
-    /// #189: the carry records its steps write, each `{item, step, hash, record}`.
+    /// #189: the carry records its steps write, each `{item, step, hash, record}`; #276: the
+    /// profile records, each `{item, step, record}`.
     records: Vec<Value>,
+    profiles: Vec<Value>,
 }
 
 /// A played piece.
@@ -105,6 +107,12 @@ pub struct Played {
     records: Vec<Value>,
     #[cfg(feature = "game2d")]
     records_taken: i64,
+    /// #276: the profile records its steps write (Logic: saves), in step order, and the step
+    /// through which the page's store has taken them.
+    #[cfg(feature = "game2d")]
+    profiles: Vec<Value>,
+    #[cfg(feature = "game2d")]
+    profiles_taken: i64,
 }
 
 fn refusal(what: impl Into<String>) -> String {
@@ -136,6 +144,7 @@ impl Played {
             rewritten,
             saves,
             records,
+            profiles,
             ..
         } = logic(sealed, &form, track, read, span, &mut steps, None)?;
         #[cfg(not(feature = "game2d"))]
@@ -184,6 +193,10 @@ impl Played {
             records,
             #[cfg(feature = "game2d")]
             records_taken: 0,
+            #[cfg(feature = "game2d")]
+            profiles,
+            #[cfg(feature = "game2d")]
+            profiles_taken: 0,
         })
     }
 
@@ -246,6 +259,7 @@ impl Played {
         {
             again.taken = again.step_at();
             again.records_taken = again.step_at();
+            again.profiles_taken = again.step_at();
         }
         *self = again;
         Ok(())
@@ -541,7 +555,8 @@ impl Played {
     pub fn declares(&self, field: &str) -> bool {
         let items = self.doc.get("items").and_then(Value::as_object);
         items.into_iter().flatten().any(|(_, i)| {
-            i["kind"] == deep_logic::module::INTERFACE && i.pointer(&format!("/params/{field}")).is_some()
+            i["kind"] == deep_logic::module::INTERFACE
+                && i.pointer(&format!("/params/{field}")).is_some()
         })
     }
 
@@ -579,11 +594,13 @@ impl Played {
         bytes: &[u8],
         read: &dyn Fn(&str) -> Option<Vec<u8>>,
     ) -> Result<Value, Value> {
-        let refused = |differs: Value| json!({"code": "carry_refused", "record": name, "differs": differs});
+        let refused =
+            |differs: Value| json!({"code": "carry_refused", "record": name, "differs": differs});
         if sha256_hex(bytes) != name {
             return Err(refused(json!([{"what": "hash"}])));
         }
-        let record: Value = serde_json::from_slice(bytes).map_err(|_| refused(json!([{"what": "record"}])))?;
+        let record: Value =
+            serde_json::from_slice(bytes).map_err(|_| refused(json!([{"what": "record"}])))?;
         let piece = deep_play::logic::logic_piece(sealed, &self.doc, &self.track, read, false)
             .map_err(|i| refused(json!([{"what": "piece", "issue": i.to_json()}])))?
             .ok_or_else(|| refused(json!([{"what": "carry_in"}])))?;
@@ -593,9 +610,86 @@ impl Played {
         }
         self.track.retain(|e| e.get("carry").is_none());
         let entry = json!({"t": 0, "seq": 0, "carry": name, "arrays": record["arrays"], "writer": "you", "player": 1});
-        self.again(sealed, entry, read).map_err(|e| refused(json!([{"what": "piece", "issue": e}])))?;
+        self.again(sealed, entry, read)
+            .map_err(|e| refused(json!([{"what": "piece", "issue": e}])))?;
         self.frame(0);
         Ok(json!({"record": name}))
+    }
+
+    /// #276: the profile records the steps the shown time has reached since the last call wrote,
+    /// in step order: each `{at, item, step, hash}`, `at` its place for [`Self::profile`]. A
+    /// record of step k is written once step k ends.
+    pub fn profiles_due(&mut self) -> Vec<Value> {
+        let (k, taken) = (self.step_at(), self.profiles_taken);
+        let out = self
+            .profiles
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| r["step"].as_i64().is_some_and(|s| s + 1 > taken && s < k))
+            .map(|(at, r)| json!({"at": at, "item": r["item"], "step": r["step"], "hash": sha256_hex(r["record"].to_string().as_bytes())}))
+            .collect();
+        self.profiles_taken = taken.max(k);
+        out
+    }
+
+    /// The profile record at `at` of [`Self::profiles_due`]: its bytes, which their SHA-256 names.
+    pub fn profile(&self, at: usize) -> Option<Vec<u8>> {
+        Some(self.profiles.get(at)?["record"].to_string().into_bytes())
+    }
+
+    /// The piece's profile record reopened at its start (Logic: saves): `bytes`, held to `name`,
+    /// their SHA-256, and to the shape of the piece's profile; taken, its entry enters the track at
+    /// step 0 by hash with its arrays beside it, and the piece is made again on that track, held
+    /// from its start. One it refuses is named with the first array that differs.
+    pub fn take_profile(
+        &mut self,
+        sealed: &'static Sealed,
+        name: &str,
+        bytes: &[u8],
+        read: &dyn Fn(&str) -> Option<Vec<u8>>,
+    ) -> Result<Value, Value> {
+        let damaged = || json!({"code": "profile_damaged", "record": name});
+        if sha256_hex(bytes) != name {
+            return Err(damaged());
+        }
+        let record: Value = serde_json::from_slice(bytes).map_err(|_| damaged())?;
+        let piece = deep_play::logic::logic_piece(sealed, &self.doc, &self.track, read, false)
+            .map_err(
+                |i| json!({"code": "profile_refused", "record": name, "issue": i.to_json()}),
+            )?;
+        let Some(p) = piece.as_ref().and_then(deep_logic::profile::of) else {
+            return Err(
+                json!({"code": "profile_refused", "record": name, "what": "this piece declares no profile"}),
+            );
+        };
+        if let Some(d) = deep_logic::profile::differs(p, &record) {
+            return Err(deep_logic::profile::refused(name, &d));
+        }
+        self.track.retain(|e| e.get("profile").is_none());
+        let entry = deep_logic::profile::entry(name, &record, 1).to_json();
+        self.again(sealed, entry, read)
+            .map_err(|e| json!({"code": "profile_refused", "record": name, "what": e}))?;
+        self.frame(0);
+        Ok(json!({"profile": name}))
+    }
+
+    /// #276: start fresh, this run only: the piece made again from its start with no profile
+    /// entry, so it reads zeros; the stored record stays.
+    pub fn fresh(
+        &mut self,
+        sealed: &'static Sealed,
+        read: &dyn Fn(&str) -> Option<Vec<u8>>,
+    ) -> Result<(), String> {
+        let track: Vec<Value> = self
+            .track
+            .iter()
+            .filter(|e| e.get("profile").is_none())
+            .cloned()
+            .collect();
+        let mut again = Played::new(sealed, &self.source, &track, read, self.look.clone())?;
+        again.frame(0);
+        *self = again;
+        Ok(())
     }
 }
 
@@ -619,6 +713,28 @@ impl Played {
         _read: &dyn Fn(&str) -> Option<Vec<u8>>,
     ) -> Result<Value, Value> {
         Err(json!({"code": "carry_refused", "record": name}))
+    }
+    pub fn profiles_due(&mut self) -> Vec<Value> {
+        Vec::new()
+    }
+    pub fn profile(&self, _at: usize) -> Option<Vec<u8>> {
+        None
+    }
+    pub fn take_profile(
+        &mut self,
+        _sealed: &'static Sealed,
+        name: &str,
+        _bytes: &[u8],
+        _read: &dyn Fn(&str) -> Option<Vec<u8>>,
+    ) -> Result<Value, Value> {
+        Err(json!({"code": "profile_refused", "record": name}))
+    }
+    pub fn fresh(
+        &mut self,
+        _sealed: &'static Sealed,
+        _read: &dyn Fn(&str) -> Option<Vec<u8>>,
+    ) -> Result<(), String> {
+        Ok(())
     }
     pub fn slots(&self) -> i64 {
         0
@@ -735,6 +851,7 @@ fn logic(
         saves: Vec::new(),
         from: 0,
         records: Vec::new(),
+        profiles: Vec::new(),
     };
     let piece = match deep_play::logic::logic_piece(sealed, form, track, read, false) {
         Ok(Some(p)) => Rc::new(p),
@@ -801,6 +918,7 @@ fn logic(
         runs: out,
         rewritten,
         records: deep_logic::carry::written(&mut world),
+        profiles: deep_logic::profile::written(&mut world),
         saves: world.held.take().unwrap_or_default(),
         from,
     })

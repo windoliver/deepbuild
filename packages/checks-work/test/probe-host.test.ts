@@ -62,3 +62,17 @@ it('a supervised service reaches its declared loopback endpoint', async () => {
     expect(events.some(e => e.kind === 'process.tracked' && (e.data as { cwd: string }).cwd === dir)).toBe(true);
   } finally { await scope.close(); server.closeAllConnections(); await new Promise<void>(done => server.close(() => done())); }
 }, 30_000);
+
+it('document probe rejects Object.prototype pointers such as #/toString', async () => {
+  writeFileSync(join(dir, 'proto-source.json'), '{"value": 42}');
+  writeFileSync(join(dir, 'proto-doc.md'), 'The claim cites [source](proto-source.json#/toString).\n');
+  const scope = checkHost(supervisor);
+  try {
+    const result = await workFill('document').run(
+      { kind: 'document', runner: 'markdown', inputs: [], depth: 'unit', oracle: 'code', contract: null, document: 'proto-doc.md' },
+      { checkout: dir, deadline: 10_000, now: Date.now, host: scope.host },
+    );
+    expect(result.outcome).toBe('failed');
+    expect(result.failures[0]?.message).toMatch(/names nothing/);
+  } finally { await scope.close(); }
+}, 30_000);

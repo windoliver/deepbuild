@@ -54,14 +54,18 @@ pub fn reads_me(doc: &Value) -> bool {
 }
 
 /// The prompt as its host shows it: `{state, relay, players, courtesy, refused, text}`, where
-/// `courtesy` is the fog line for a piece that reads `match.me`, else null.
-pub fn prompt(host: &str, players: u8, courtesy: bool, state: &State) -> Value {
+/// `courtesy` is the fog line for a piece that reads `match.me`, else null. A piece that keeps a
+/// profile record says its numbers go to the other players (#276).
+pub fn prompt(host: &str, players: u8, courtesy: bool, profile: bool, state: &State) -> Value {
     let mut about = format!(
         "This piece is played by {players} players through the relay {host}. \
          The relay, and on a direct path the other players, see this copy's network address."
     );
     if courtesy {
         about = format!("{about} {COURTESY}");
+    }
+    if profile {
+        about.push_str(" Your profile's numbers go to the other players.");
     }
     let (refused, text) = match state {
         State::Open => (json!("none"), format!("{about} Click Join to play.")),
