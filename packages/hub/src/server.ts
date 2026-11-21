@@ -32,7 +32,7 @@ import { identityAt, idOf, type Identity } from './identity.js';
 import { plantedStart } from './plant.js';
 import { toolList } from './tools.js';
 import { gatesOff } from './watch.js';
-import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refuse, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type Scope, type Scoped, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
+import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, HELD_WAIT_MS, line, plantOf, refuse, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type Scope, type Scoped, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
 import { isRecord as isObj } from '@deepbuild/contracts/json';
 import { writeSynced } from './vfs.js';
 import { budgetFile, readBudget, spend, spentWhy } from './restart-budget.js';
@@ -129,7 +129,10 @@ const HOLD_MARGIN = 100;
 const CONTEXT_HOLD_MS = 2000;
 /** A Claude Code stop's hold; DEEP_HUB_TEST_STOP_HOLD_MS, which only tests set, shortens it so an unanswered hold ends in seconds. */
 const STOP_HOLD = Math.min(STOP_HOLD_MS, Number(process.env.DEEP_HUB_TEST_STOP_HOLD_MS) || STOP_HOLD_MS);
-/** How long a call that may need your authority is held for the core's gate (#321); one not decided by then is denied. */
+/**
+ * How long a call that may need your authority is held for the core's gate (#321); one not decided by then is denied.
+ * A push, merge or other authority call is held HELD_WAIT_MS longer, so one your yes holds can wait that hold out (#1101).
+ */
 const GATE_HOLD_MS = 10_000;
 /** A permission request paseo's plugin gates waits for your answer, up to a day (#55). */
 const PASEO_PERMISSION_HOLD_MS = 24 * 3600_000;
@@ -788,7 +791,7 @@ class Hub {
     if (meta.event === 'Stop' || meta.event === 'SessionEnd') this.sawWork.delete(meta.session);
     // A resumed session's calls go to the gate until the core says whether its cut-off turn left a send to match (#85, #1033).
     if (meta.event === 'SessionStart' && meta.fields?.source === 'resume') this.resend.add(meta.session);
-    const hold = prompted ? Date.now() + this.permissionHold(meta) : gated ? Date.now() + (gated.stage !== undefined ? STAGE_HOLD_MS : GATE_HOLD_MS) + (before ? EXTENSION_HOLD_MS : 0) : before ? Date.now() + EXTENSION_HOLD_MS : held;
+    const hold = prompted ? Date.now() + this.permissionHold(meta) : gated ? Date.now() + (gated.stage !== undefined ? STAGE_HOLD_MS : GATE_HOLD_MS + (gated.named?.length || gated.classes.some((c) => AUTHORITY.has(c)) ? HELD_WAIT_MS : 0)) + (before ? EXTENSION_HOLD_MS : 0) : before ? Date.now() + EXTENSION_HOLD_MS : held;
     if (hold === null) conn.sock.end(line({ ack: meta.id, hold_until_ms: null }) + ruled);
     else conn.sock.write(line({ ack: meta.id, hold_until_ms: hold }));
     // The writer is the connection's, whatever the payload says. Posted in the same step as the reply, before any

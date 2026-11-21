@@ -1,0 +1,33 @@
+
+ RUN  v5.0.5 <worktree>
+
+ ❯ tests/acceptance/321/proceed.test.ts (2 tests | 1 failed) 11529ms
+   ❯ AC1 #321.69952336 a proceed never covers a push: held at PreToolUse with an authority ask, whatever sorter answered (2)
+     × AC1 a planted sorter's proceed is recorded with its rule; in the turn it starts, git push origin main is held with an authority ask naming it until your answer; after a proceed for the tests, npm test runs with no ask 9480ms
+     ✓ AC1 (wrong program) a core that lets a proceed cover the turn's calls (DEEP_HUB_PLANT=proceed-covers-turn) lets the push through and fails this test, naming the call 1990ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/321/proceed.test.ts > AC1 #321.69952336 a proceed never covers a push: held at PreToolUse with an authority ask, whatever sorter answered > AC1 a planted sorter's proceed is recorded with its rule; in the turn it starts, git push origin main is held with an authority ask naming it until your answer; after a proceed for the tests, npm test runs with no ask
+Error: AC1 #321.69952336 [effect.push] after your yes to ask:01M807H3FBPMM21BTZSG67BQED, `git push origin main` must run: the held call was denied, and the same call sent again was not allowed (exit 2 after 14 ms, stdout "", stderr "DeepBuild denied this (guard push-needs-ask): no request you typed in this thread names it. DeepBuild is holding this: you said yes to `git push origin main` (ask:01M807H3FBPMM21BTZSG67BQED), and since it can't be undone it starts only once its 10 s hold is over, with Undo on its card until then. Run the same call again after that.\n")
+ ❯ must tests/acceptance/321/helpers.ts:85:18
+     83| }
+     84| export function must(ok: boolean, message: string): asserts ok {
+     85|   if (!ok) throw Error(message);
+       |                  ^
+     86| }
+     87|
+ ❯ expectRuns tests/acceptance/321/helpers.ts:638:5
+ ❯ scenario tests/acceptance/321/proceed.test.ts:32:5
+ ❯ verdict tests/acceptance/321/helpers.ts:63:5
+ ❯ tests/acceptance/321/proceed.test.ts:45:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  15:37:06
+   Duration  11.77s (tests 99%, transform 1%)
+
+[test 1]

@@ -217,6 +217,11 @@ export interface Gated {
  */
 export const STAGE_HOLD_MS = 45_000;
 /**
+ * How long a call your yes holds waits for that hold to end (#1101), on the wall clock: the asks' 10 s HOLD_MS, and
+ * their tick, once a second, that starts its step. The server holds such a call this much longer for the gate.
+ */
+export const HELD_WAIT_MS = 10_000 + 2000;
+/**
  * What a PreToolUse's paths meet of your rules (#344), read on the parser's thread: the scoped rules that cover them,
  * and an edited rule file's rules before the call runs.
  */

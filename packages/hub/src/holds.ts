@@ -10,7 +10,8 @@
 //   that can change or destroy and isn't on the server's first list, or whose schema changed since, is held by one
 //   authority ask per server update until you say yes; your yes covers that tool at that digest only.
 //
-// A hold denies the call, naming its ask; once you say yes the same call runs. #84's sort lives in questions.ts; its
+// A hold denies the call, naming its ask; once you say yes the same call runs, after the hub's hold on a step that
+// can't be undone (#1101), which a call sent during it waits out. #84's sort lives in questions.ts; its
 // proceeds are recorded here, and DEEP_HUB_TEST_SORTER, which only tests set, can still plant one.
 import { readFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -22,7 +23,7 @@ import { countMcp, toolLists, type Listed } from './mcp-servers.js';
 import { namedIn, pushBranches, type Named } from './named.js';
 import { offerPlan, type Effect } from './questions.js';
 import type { About } from './standing.js';
-import { AUTHORITY, type Gated, type HookMeta, type Plant } from './wire.js';
+import { AUTHORITY, HELD_WAIT_MS, type Gated, type HookMeta, type Plant } from './wire.js';
 
 type Obj = Record<string, unknown>;
 const key = (v: unknown) => sha256Hex(canonicalize(v as JsonValue));
@@ -166,6 +167,20 @@ export class Holds {
     if (row?.decision === 'allow' && await this.o.asks().stepHeld(`ask:${row.id}`)) return { ...row, status: 'held', decision: null };
     return row;
   }
+  /**
+   * The ask raised under `k` once a hold on your yes to it is over (#1101; design: Plans before acting): a call your yes
+   * holds waits in the hub and runs when its step starts, or meets the ask again after Undo. One still held past
+   * HELD_WAIT_MS is told so.
+   */
+  private async settledAsk(k: string): Promise<{ id: string; status: string; decision: string | null } | undefined> {
+    const until = Date.now() + HELD_WAIT_MS;
+    let row = await this.askOf(k);
+    while (row?.status === 'held' && Date.now() < until) {
+      await sleep(100);
+      row = await this.askOf(k);
+    }
+    return row;
+  }
   /** Raises one authority ask from `source` (a choice that approves, for the hold-as-choice plant); its handle. */
   private async raise(session: string, agent: string, cwd: string, source: string, k: string, question: string, [yes, no]: [string, string], plan: PlanInput): Promise<string> {
     const pinned_to = await this.o.pin(cwd, question);
@@ -183,7 +198,7 @@ export class Holds {
   }
   /** The ask raised under `k`: 'allow' once you said yes, its handle while it waits or after a no; undefined when none was. */
   async prior(k: string): Promise<string | undefined> {
-    const asked = await this.askOf(k);
+    const asked = await this.settledAsk(k);
     return asked && (asked.decision === 'allow' ? 'allow' : `ask:${asked.id}`);
   }
   /** A delete whose reach is unknown, or reaches past its worktree (`reach`, #1507), and couldn't be staged (#347): held by one authority ask that says so, raised under `k`. */
@@ -262,7 +277,7 @@ export class Holds {
     const open: { rule: string; effect: Named }[] = [];
     for (const { rule, effect } of call.named!) {
       if (rule === 'merge-names-head' || every || named.has(effect)) continue;
-      const offer = await this.askOf(this.offerKey(effect, sessions[0]!));
+      const offer = await this.settledAsk(this.offerKey(effect, sessions[0]!));
       if (offer?.decision === 'allow') continue;
       if (offer) return `DeepBuild denied this (guard ${rule}): ${await this.waiting(`ask:${offer.id}`, call.label)}`;
       open.push({ rule, effect });
@@ -272,7 +287,7 @@ export class Holds {
       const does = [...new Set(open.map((o) => DOES[o.effect]!))].join(' and ');
       const source = `effect.${effect}`;
       const k = key({ source, sessions: sessions[0], call: call.label });
-      const asked = await this.askOf(k);
+      const asked = await this.settledAsk(k);
       if (asked?.decision !== 'allow') {
         const handle = asked ? `ask:${asked.id}` : await this.raise(meta.session, meta.agent, meta.cwd, source, k,
           `Run \`${call.label}\`? It ${does}, and no request in this thread names that.`, ANSWERS[effect]!, planFor(source, `Run \`${call.label}\`, which ${does}`, [call.label], open.some((o) => o.effect === 'push') ? pushTargets(call.label) : []));
@@ -335,7 +350,7 @@ export class Holds {
     if (!turn && !reply) return undefined;
     const source = `effect.${classes[0]!}`;
     const k = key({ source, session: meta.session, turn: turn?.id ?? null, call: call.label });
-    const asked = await this.askOf(k);
+    const asked = await this.settledAsk(k);
     if (asked) return asked.decision === 'allow' ? undefined : `ask:${asked.id}`;
     const question = turn
       ? `Run \`${call.label}\`? It ${classes.map((c) => DOES[c]).join(' and ')}, in the turn a "proceed" started for "${turn.question}" (rule ${turn.rule}); no proceed covers a call that needs your authority.`
