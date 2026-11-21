@@ -1,5 +1,5 @@
 // Hand e2e: a real dev hub (`deep hub run --root`) with Claude Code's shipped facts and a stand-in `claude` on the
-// login PATH, once at a listed version and once at one between two listed ones. For each: a read job submitted on the
+// login PATH: at a listed version, at one between two listed ones, and at a listed version's pre-release build. For each: a read job submitted on the
 // hub's socket (the runner), and a session's SessionStart hook whose transcript names that version (the hub).
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -16,7 +16,7 @@ const facts = JSON.parse(readFileSync(join(WT, 'adapters/claude-code.facts.json'
 const tmp = (s: string) => s.replace(/\/(private\/)?var\/folders\/[^ ]*?\/T\/[^/ ]+/g, '<tmp>');
 console.log(`== Claude Code facts list: ${facts.versions.join(', ')}`);
 
-for (const version of ['2.1.304', '2.1.300']) {
+for (const version of ['2.1.304', '2.1.300', '2.1.304-beta']) {
   console.log(`\n################ stand-in claude ${version} on the login PATH ################`);
   const bin = install(sub(tempDir(), 'bin'), { version });
   const root = sub(tempDir(), 'root');
