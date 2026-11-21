@@ -4,7 +4,7 @@
 import { closeSync, openSync, readSync, fstatSync } from 'node:fs';
 import { ADAPTERS, readFacts, type HookRequestLine, type JsonObject } from '@deepbuild/adapters';
 import { scrubText } from '@deepbuild/evidence';
-import { adapterOf, registry } from './adapter-facts.js';
+import { adapterOf, coveredBy, registry } from './adapter-facts.js';
 export { adapterOf, hubAdapters, registry } from './adapter-facts.js';
 import { isObject as isObj, canonicalize, getSchema, sha256Hex, validate, type JsonValue } from '@deepbuild/contracts/runtime';
 import { isPrCreate, prUrlIn } from './forge.js';
@@ -171,8 +171,6 @@ export function modelCallOf(agent: string | undefined, entry: Record<string, unk
   }
   return holds(r.reply) ? { outcome: 'reply', at: when, record } : undefined;
 }
-/** Whether the facts of the adapter an agent's hooks map through cover a version. */
-export const coveredBy =(agent: string, version: string): boolean => ((registry().get(ADAPTERS[agent] ?? agent).facts as JsonObject).versions as string[]).includes(version);
 
 /** Loads the adapters' facts ahead of the first request. */
 export function warm(): void {

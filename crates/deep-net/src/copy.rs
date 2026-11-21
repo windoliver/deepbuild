@@ -23,6 +23,7 @@ use crate::locate::{self, entries_hash, track_after, Found, FNV_START};
 pub use crate::message::Hashed;
 use crate::message::{hex, Message};
 
+mod draws;
 mod rollback;
 
 /// What a copy steps: the piece's canvas modules with carried state.
@@ -85,7 +86,7 @@ pub trait Stepper {
     /// #552: the match whose draws its logic derives, by its ID.
     fn matched(&mut self, _game: &[u8; 16]) {}
     /// #552: this copy's own draw entry, made now, before it reaches the track at its step.
-    fn drew(&mut self, _entry: &Value) {}
+    fn early(&mut self, _entry: &Value) {}
     /// #552's planted guesser: the six-sided roll it guesses for an action at `step` from the
     /// document's seed and the step alone.
     fn guess(&mut self, _step: i64) -> Option<i64> {
@@ -728,8 +729,6 @@ impl<S: Stepper> Copy<S> {
             self.sim.keep(k);
             self.roll.trail.insert(k, self.track_hash);
         }
-        let mut drawn = false;
-        let mut fault = None;
         for p in 0..self.players as usize {
             if let Some(m) = self.held[p].remove(&k) {
                 self.logged(k, p as u8 + 1, m.entries);
@@ -743,25 +742,12 @@ impl<S: Stepper> Copy<S> {
                 let entered = kind::admit(&self.cfg.controls, control, value)
                     .and_then(|()| self.sim.enter(&entry));
                 match entered {
-                    Ok(()) => {
-                        self.track.push(entry);
-                        drawn |= self.cfg.draw_after.iter().any(|c| c == control);
-
-                        if control == draw::COMMIT || control == draw::REVEAL {
-                            let f = self.draws.entered(k, player, control, value, &self.game);
-                            fault = fault.or(f);
-                        }
-                    }
+                    Ok(()) => self.track.push(entry),
                     Err(why) => self.refused.push(json!({"step": k, "player": player,
                         "control": control, "value": value, "code": why.get("code").cloned().unwrap_or(json!("refused")),
                         "why": why})),
                 }
             }
-        }
-        // #552: bits that differ from their commitment end the match as faulted.
-        if let Some((end, detail)) = fault {
-            self.finish(end, detail);
-            return;
         }
         let ran = self.sim.run(k, (k + 1) * len);
         if let Some(d) = self.defect.as_ref().filter(|d| d.step == k && ran.is_ok()) {
@@ -783,20 +769,12 @@ impl<S: Stepper> Copy<S> {
             self.ran_at.push(now);
         }
         self.next += 1;
-        // #552: step k is confirmed: it commits to a draw for it, and reveals the bits of each
-        // draw whose commitments it holds.
-        let timeout = (self.cfg.timeout / len).max(1);
-        let due = self
-            .draws
-            .ran(k, drawn, (self.players, self.me), &self.game, timeout);
-        for (control, value) in due.send {
-            let entry = self.stamped(k + 1, self.me, 0, &control, &value);
-            self.sim.drew(&entry);
-            self.made.push((control, value, None));
-        }
-        if let Some((end, detail)) = due.end {
-            self.finish(end, detail);
-            return;
+        // #552: in lockstep a step runs confirmed: its draws now (with a window, `settle`).
+        if self.cfg.window == 0 {
+            self.drawn(k);
+            if self.end.is_some() {
+                return;
+            }
         }
         if k % self.cfg.hash_every == 0 {
             let h = Hashed {

@@ -192,12 +192,12 @@ impl Logic {
             keep: rows,
             rows: Vec::new(),
             rounds: false,
+            early: Vec::new(),
             ring: None,
             plant: Default::default(),
             ns: 0,
             worlds: None,
             len: 1,
-            early: Vec::new(),
             saves: None,
             kept: None,
         })
@@ -522,7 +522,7 @@ impl Stepper for Logic {
 
     /// The planted module that delivers a draw from the bits that reached it first takes this
     /// copy's own bits the moment it makes them, before they reach the track at their step.
-    fn drew(&mut self, entry: &Value) {
+    fn early(&mut self, entry: &Value) {
         if self.world.draw.wrong == deep_logic::draws::Wrong::FirstBits
             && entry["control"] == deep_logic::draws::REVEAL
         {

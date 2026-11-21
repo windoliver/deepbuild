@@ -1,0 +1,211 @@
+#2648's acceptance suite, run once at the base 1a4b7d065b1ed115a54d6b506f9bdd516ca4a8c0 (origin/main, "Merge pull
+request #2886"; this job's own worktree, no implementation, only tests/acceptance/2648/ untracked).
+
+Machine: Apple M5 Max, 18 cores, 64 GiB, macOS 27.2 (Darwin 27.2.0); Node v24.22.2; vitest 5.0.5; tsc 5.9.3; cargo 1.99.1.
+Load averages (1, 5, 15 min): 222.7 208.7 150.2 at the start, 225.2 217.9 212.6 at the end (other sessions' work).
+Prerequisites: npm ci (exit 0); npm run build --workspaces (exit 0); cargo build -p deep-hook --locked (exit 0). This
+Mac's hourly cleanup emptied target/ twice while this job worked, so deep-hook was built again right before the run
+(5 m 08 s, done 15:26Z) and two earlier attempts at this run stopped before vitest started.
+Type check: npx tsc --noEmit -p tests/acceptance/2648, exit 0, the files as delivered.
+
+Command, 2026-11-20T15:26:48Z to 16:00:53Z (2,034 s):
+  NO_COLOR=1 npx vitest run --root tests/acceptance/2648 --no-file-parallelism --testTimeout=600000 --silent=false --reporter=verbose
+Result: Test Files 5 failed (5); Tests 5 failed | 2 passed (7); exit 1.
+
+Each test, and where it stops:
+- AC1 #2648.db254030, files.test.ts (161 s): fails at its first assertion, no open in the window: 1,286 opens of the
+  four timers' files in 60 s; read most, config.json (the login PATH), 295 opens, 4.9 a second, by readFileSync; then
+  codex-hooks.json 236, extensions/notices.json 224, Claude Code's settings.json 118, claude-hooks.json 118, Codex's
+  config.toml 59. 64.4 calls a second on the files in all.
+- AC2 #2648.d3c34df7, instructions.test.ts (1,593 s): fails at its assertion: the change's median 12.46 M instructions
+  a second over 7 rounds of 30 s, 88.2% of the merge base's 14.13 M, over 65%. The merge base is the base itself, so the
+  two sides are one program; single rounds read 11.0 M to 21.1 M at this load.
+- AC3 #2648.c3b6fe41, seen.test.ts, the criterion (112 s): passes, as the base reads its files on every beat: deep off
+  recorded 300 ms after gates.json was written; Claude Code's reach unreachable (hooks_missing) 858 ms after its
+  settings.json lost the entry; no read of the source after the notice, 5 s past its due read.
+- AC3 #2648.c3b6fe41, seen.test.ts, the planted hub (30 s): BLOCKED at the hub's start, which refuses the name:
+  "DEEP_HUB_PLANT=reads-files-at-start-only names no planted program". The plant is the implementation's to add.
+- AC4 #2648.26092d61, pipe.test.ts, the criterion (67 s): fails at its last reading: with no leased command for 60 s,
+  the pipe's modification time moved 119 times (the base refills it every 500 ms). The readings before it held: the
+  pool full before the lease, no sample over 2 while the build ran, 4 tokens once it ended.
+- AC4 #2648.26092d61, pipe.test.ts, refills-while-running (4 s): passes: the plant fails at sample 2 (+0.26 s), 4
+  tokens in the pipe where the build left 2, as it fails today.
+- AC5 #2648.ccff16b0, budget.test.ts (36 s): fails at its first missing number: hub-idle reports no wakeupsPerSecond
+  beside idleCpuPercent (its report: idleCpuPercent 0.2, hub.wakeups 610 over 20.2 s, hub.instructionsPerSecond
+  7.40 M). Its limits hold no report.* ceiling either.
+
+Before this record, development runs of earlier states of these files, at the base: AC1, AC4, AC5 and AC3's
+criterion stopped at the same places; AC2's first run, with the change side run from the checkout itself, read 104.1%
+(README, Readings 9), and the change side now runs from a copy of the checkout. A throwaway twin of the checkout in
+/tmp (the four timers reading their files once at start, the pipe filled at start and then only when a lease ends)
+passed AC1 (0 opens, 0 calls) and AC4, and failed each of AC3's three judges, naming gates.json, settings.json and
+notices.json (README, Wrong programs). The twin was deleted and never committed.
+
+---- The run's output, verbatim ----
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2648
+
+stdout | seen.test.ts > AC3 #2648.c3b6fe41 deep off, a saved notice and a removed hook entry are each seen as soon as today > AC3 #2648.c3b6fe41 deep off is recorded within 1 s, a saved notice changes the next while-shown cadence, and a removed hook entry turns Claude Code's reach unreachable within 2 s
+AC3 reading: deep off recorded 300 ms after gates.json was written
+
+stdout | seen.test.ts > AC3 #2648.c3b6fe41 deep off, a saved notice and a removed hook entry are each seen as soon as today > AC3 #2648.c3b6fe41 deep off is recorded within 1 s, a saved notice changes the next while-shown cadence, and a removed hook entry turns Claude Code's reach unreachable within 2 s
+AC3 reading: Claude Code's reach read unreachable (hooks_missing) 858 ms after its settings.json lost the entry
+
+stdout | seen.test.ts > AC3 #2648.c3b6fe41 deep off, a saved notice and a removed hook entry are each seen as soon as today > AC3 #2648.c3b6fe41 deep off is recorded within 1 s, a saved notice changes the next while-shown cadence, and a removed hook entry turns Claude Code's reach unreachable within 2 s
+AC3 reading: reads at 15:28:30.513, 15:28:40.313; the notice saved at 15:28:40.396; no read by 15:28:55.347, the next was due at 15:28:50.313
+
+ ✓ seen.test.ts > AC3 #2648.c3b6fe41 deep off, a saved notice and a removed hook entry are each seen as soon as today > AC3 #2648.c3b6fe41 deep off is recorded within 1 s, a saved notice changes the next while-shown cadence, and a removed hook entry turns Claude Code's reach unreachable within 2 s 111849ms
+ × seen.test.ts > AC3 #2648.c3b6fe41 deep off, a saved notice and a removed hook entry are each seen as soon as today > AC3 #2648.c3b6fe41 the planted hub that reads each file once at start fails all three, naming gates.json, notices.json and the settings 29906ms
+   → BLOCKED: the hub with DEEP_HUB_PLANT=reads-files-at-start-only from <checkout>/ did not start: file://<checkout>/packages/hub/dist/plant.js:135
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=reads-files-at-start-only names no planted program
+    at plantOf (file://<checkout>/packages/hub/dist/plant.js:135:15)
+    at Module.runHub (file://<checkout>/packages/hub/dist/server.js:1590:19)
+    at hubCommand (file://<checkout>/packages/hub/dist/hub-command.js:29:58)
+    at async file://<checkout>/packages/cli/dist/main.js:352:24
+
+Node.js v24.22.2
+
+stdout | files.test.ts > AC1 #2648.db254030 an idle hub with 30 days of history opens none of the four timers' files over 60 s and makes at most two calls a second on them > AC1 #2648.db254030 after 15 s to settle, 60 s with no open of gates.json, notices.json, the pipe or the agents' settings and at most 2 calls a second on them
+AC1 reading over 60.0 s after 15 s to settle: 1286 opens and 3867 calls on the four timers' files (64.4 a second)
+  config.json (the login PATH): 295 opens (4.9 a second) and 295 calls (4.9 a second), by readFileSync×295
+  codex-hooks.json: 236 opens (3.9 a second) and 236 calls (3.9 a second), by readFileSync×236
+  extensions/notices.json: 224 opens (3.7 a second) and 448 calls (7.5 a second), by existsSync×224, readFileSync×224
+  Claude Code's settings.json: 118 opens (2.0 a second) and 118 calls (2.0 a second), by readFileSync×118
+  claude-hooks.json: 118 opens (2.0 a second) and 118 calls (2.0 a second), by readFileSync×118
+  Codex's config.toml: 59 opens (1.0 a second) and 177 calls (2.9 a second), by existsSync×59, lstatSync×59, readFileSync×59
+  gates.json: 59 opens (1.0 a second) and 59 calls (1.0 a second), by readFileSync×59
+  Claude Code's settings.local.json: 59 opens (1.0 a second) and 59 calls (1.0 a second), by readFileSync×59
+  Claude Code's managed settings: 59 opens (1.0 a second) and 59 calls (1.0 a second), by readFileSync×59
+  codex-trust.json: 59 opens (1.0 a second) and 59 calls (1.0 a second), by readFileSync×59
+  codex along the login PATH: 0 opens (0.0 a second) and 354 calls (5.9 a second), by existsSync×354
+  pi along the login PATH: 0 opens (0.0 a second) and 354 calls (5.9 a second), by existsSync×354
+  opencode along the login PATH: 0 opens (0.0 a second) and 354 calls (5.9 a second), by existsSync×354
+  cursor-agent along the login PATH: 0 opens (0.0 a second) and 354 calls (5.9 a second), by existsSync×354
+  the job pool's pipe (jobserver): 0 opens (0.0 a second) and 351 calls (5.8 a second), by readSync×234, writeSync×117
+  deep-hook, as setup recorded it: 0 opens (0.0 a second) and 118 calls (2.0 a second), by existsSync×59, accessSync×59
+  /private/tmp/dh2648-tooa40/h/.git (the repo above the home): 0 opens (0.0 a second) and 59 calls (1.0 a second), by existsSync×59
+  /private/tmp/dh2648-tooa40/.git (the repo above the home): 0 opens (0.0 a second) and 59 calls (1.0 a second), by existsSync×59
+  /private/tmp/.git (the repo above the home): 0 opens (0.0 a second) and 59 calls (1.0 a second), by existsSync×59
+  /private/.git (the repo above the home): 0 opens (0.0 a second) and 59 calls (1.0 a second), by existsSync×59
+  /.git (the repo above the home): 0 opens (0.0 a second) and 59 calls (1.0 a second), by existsSync×59
+  claude along the login PATH: 0 opens (0.0 a second) and 59 calls (1.0 a second), by existsSync×59
+
+ × files.test.ts > AC1 #2648.db254030 an idle hub with 30 days of history opens none of the four timers' files over 60 s and makes at most two calls a second on them > AC1 #2648.db254030 after 15 s to settle, 60 s with no open of gates.json, notices.json, the pipe or the agents' settings and at most 2 calls a second on them 161081ms
+   → AC1 #2648.db254030: over 60 s after 15 s to settle, the idle hub opened the files the four timers read 1286 times; read most, config.json (the login PATH): 295 opens (4.9 a second) and 295 calls (4.9 a second), by readFileSync×295. Then codex-hooks.json 236, extensions/notices.json 224, Claude Code's settings.json 118, claude-hooks.json 118, Codex's config.toml 59: expected 1286 to be +0 // Object.is equality
+stdout | instructions.test.ts > AC2 #2648.d3c34df7 the idle hub retires at most 65% of the merge base's instructions a second > AC2 #2648.d3c34df7 over 7 alternated rounds of 30 s, the median instructions a second is at most 65% of the merge base's
+AC2 reading against the merge base 1a4b7d065b1ed115a54d6b506f9bdd516ca4a8c0:
+  round 1 (change first): change 14.92 M, merge base 14.93 M instructions a second; wakeups 33.3 and 27.7 a second; CPU 6.11 and 6.41 ms a second
+  round 2 (merge base first): change 12.46 M, merge base 14.13 M instructions a second; wakeups 31.2 and 25.7 a second; CPU 4.69 and 6.12 ms a second
+  round 3 (change first): change 12.18 M, merge base 16.01 M instructions a second; wakeups 28.8 and 24.3 a second; CPU 4.46 and 4.83 ms a second
+  round 4 (merge base first): change 11.03 M, merge base 11.89 M instructions a second; wakeups 27.8 and 30.7 a second; CPU 3.61 and 4.06 ms a second
+  round 5 (change first): change 12.26 M, merge base 11.98 M instructions a second; wakeups 34.9 and 29.9 a second; CPU 4.21 and 4.21 ms a second
+  round 6 (merge base first): change 15.68 M, merge base 12.02 M instructions a second; wakeups 28.2 and 33.1 a second; CPU 6.61 and 4.35 ms a second
+  round 7 (change first): change 18.84 M, merge base 21.07 M instructions a second; wakeups 35.1 and 33.8 a second; CPU 6.43 and 5.46 ms a second
+
+ × instructions.test.ts > AC2 #2648.d3c34df7 the idle hub retires at most 65% of the merge base's instructions a second > AC2 #2648.d3c34df7 over 7 alternated rounds of 30 s, the median instructions a second is at most 65% of the merge base's 1593021ms
+   → AC2 #2648.d3c34df7: the idle hub retired a median of 12.46 M instructions a second over 7 rounds of 30 s, 88.2% of the merge base's 14.13 M (1a4b7d065b1e); at most 65% passes
+  round 1 (change first): change 14.92 M, merge base 14.93 M instructions a second; wakeups 33.3 and 27.7 a second; CPU 6.11 and 6.41 ms a second
+  round 2 (merge base first): change 12.46 M, merge base 14.13 M instructions a second; wakeups 31.2 and 25.7 a second; CPU 4.69 and 6.12 ms a second
+  round 3 (change first): change 12.18 M, merge base 16.01 M instructions a second; wakeups 28.8 and 24.3 a second; CPU 4.46 and 4.83 ms a second
+  round 4 (merge base first): change 11.03 M, merge base 11.89 M instructions a second; wakeups 27.8 and 30.7 a second; CPU 3.61 and 4.06 ms a second
+  round 5 (change first): change 12.26 M, merge base 11.98 M instructions a second; wakeups 34.9 and 29.9 a second; CPU 4.21 and 4.21 ms a second
+  round 6 (merge base first): change 15.68 M, merge base 12.02 M instructions a second; wakeups 28.2 and 33.1 a second; CPU 6.61 and 4.35 ms a second
+  round 7 (change first): change 18.84 M, merge base 21.07 M instructions a second; wakeups 35.1 and 33.8 a second; CPU 6.43 and 5.46 ms a second: expected 0.8815548703476195 to be less than or equal to 0.65
+ × pipe.test.ts > AC4 #2648.26092d61 the job pool's pipe is refilled when the last leased command ends, and not on a beat with nothing held > AC4 #2648.26092d61 the pipe holds its full count at once after the one leased command ends, and nothing writes to it for the next 60 s 67343ms
+   → AC4 #2648.26092d61: with no leased command running for 60 s, something wrote to the job pool's pipe: its modification time moved 119 times, first 0.50 s after the command ended, last 59.90 s after
+stdout | pipe.test.ts > AC4 #2648.26092d61 the job pool's pipe is refilled when the last leased command ends, and not on a beat with nothing held > AC4 #2648.26092d61 the planted refills-while-running still fails, naming the sample read while the leased command ran
+AC4 on the planted refills-while-running: AC4 #2648.26092d61: while the leased build ran, holding 2 of the pool's 4 tokens, sample 2 (+0.26 s) read 4 tokens in the pipe, more than the 2 it left: the hub added tokens while a leased command ran
+
+ ✓ pipe.test.ts > AC4 #2648.26092d61 the job pool's pipe is refilled when the last leased command ends, and not on a beat with nothing held > AC4 #2648.26092d61 the planted refills-while-running still fails, naming the sample read while the leased command ran 3788ms
+stdout | budget.test.ts > AC5 #2648.ccff16b0 hub-idle reports wakeups and instructions a second beside its CPU, and its record keeps both > AC5 #2648.ccff16b0 hub-idle's report holds wakeupsPerSecond and instructionsPerSecond beside idleCpuPercent, and its limits hold report.wakeupsPerSecond and report.instructionsPerSecond
+AC5 reading: hub-idle's report {"bench":"hub","mode":"idle","idleCpuPercent":0.20000000000000018,"rssBytes":68091904,"spanMs":20163.093541000002,"hub":{"pid":65341,"wakeups":610,"instructionsPerSecond":7398408.865021889,"cpuMsPerSecond":3.060397645555911,"footprintBytes":74656880},"children":[{"pid":68578,"wakeups":0,"instructionsPerSecond":66668930.55207891,"cpuMsPerSecond":11.579028859101397,"footprintBytes":2965792}]}
+
+ × budget.test.ts > AC5 #2648.ccff16b0 hub-idle reports wakeups and instructions a second beside its CPU, and its record keeps both > AC5 #2648.ccff16b0 hub-idle's report holds wakeupsPerSecond and instructionsPerSecond beside idleCpuPercent, and its limits hold report.wakeupsPerSecond and report.instructionsPerSecond 35929ms
+   → AC5 #2648.ccff16b0: hub-idle reports no wakeupsPerSecond beside idleCpuPercent, a number of its report's own: {"bench":"hub","mode":"idle","idleCpuPercent":0.20000000000000018,"rssBytes":68091904,"spanMs":20163.093541000002,"hub":{"pid":65341,"wakeups":610,"instructionsPerSecond":7398408.865021889,"cpuMsPerSecond":3.060397645555911,"footprintBytes":74656880},"children":[{"pid":68578,"wakeups":0,"instructionsPerSecond":66668930.55207891,"cpuMsPerSecond":11.579028859101397,"footprintBytes":2965792}]}: expected null not to be null
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budget.test.ts > AC5 #2648.ccff16b0 hub-idle reports wakeups and instructions a second beside its CPU, and its record keeps both > AC5 #2648.ccff16b0 hub-idle's report holds wakeupsPerSecond and instructionsPerSecond beside idleCpuPercent, and its limits hold report.wakeupsPerSecond and report.instructionsPerSecond
+AssertionError: AC5 #2648.ccff16b0: hub-idle reports no wakeupsPerSecond beside idleCpuPercent, a number of its report's own: {"bench":"hub","mode":"idle","idleCpuPercent":0.20000000000000018,"rssBytes":68091904,"spanMs":20163.093541000002,"hub":{"pid":65341,"wakeups":610,"instructionsPerSecond":7398408.865021889,"cpuMsPerSecond":3.060397645555911,"footprintBytes":74656880},"children":[{"pid":68578,"wakeups":0,"instructionsPerSecond":66668930.55207891,"cpuMsPerSecond":11.579028859101397,"footprintBytes":2965792}]}: expected null not to be null
+ ❯ budget.test.ts:54:158
+     52|     expect(reported(ran.stdout, CPU), `AC5 ${AC5}: hub-idle's report k…
+     53|     for (const name of [WAKEUPS, INSTRUCTIONS]) {
+     54|       expect(reported(ran.stdout, name), `AC5 ${AC5}: hub-idle reports…
+       |                                                                                                                                                              ^
+     55|       expect(reported(ran.stdout, name)!, `AC5 ${AC5}: hub-idle's ${na…
+     56|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  files.test.ts > AC1 #2648.db254030 an idle hub with 30 days of history opens none of the four timers' files over 60 s and makes at most two calls a second on them > AC1 #2648.db254030 after 15 s to settle, 60 s with no open of gates.json, notices.json, the pipe or the agents' settings and at most 2 calls a second on them
+AssertionError: AC1 #2648.db254030: over 60 s after 15 s to settle, the idle hub opened the files the four timers read 1286 times; read most, config.json (the login PATH): 295 opens (4.9 a second) and 295 calls (4.9 a second), by readFileSync×295. Then codex-hooks.json 236, extensions/notices.json 224, Claude Code's settings.json 118, claude-hooks.json 118, Codex's config.toml 59: expected 1286 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1286
+
+ ❯ files.test.ts:121:352
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  instructions.test.ts > AC2 #2648.d3c34df7 the idle hub retires at most 65% of the merge base's instructions a second > AC2 #2648.d3c34df7 over 7 alternated rounds of 30 s, the median instructions a second is at most 65% of the merge base's
+AssertionError: AC2 #2648.d3c34df7: the idle hub retired a median of 12.46 M instructions a second over 7 rounds of 30 s, 88.2% of the merge base's 14.13 M (1a4b7d065b1e); at most 65% passes
+  round 1 (change first): change 14.92 M, merge base 14.93 M instructions a second; wakeups 33.3 and 27.7 a second; CPU 6.11 and 6.41 ms a second
+  round 2 (merge base first): change 12.46 M, merge base 14.13 M instructions a second; wakeups 31.2 and 25.7 a second; CPU 4.69 and 6.12 ms a second
+  round 3 (change first): change 12.18 M, merge base 16.01 M instructions a second; wakeups 28.8 and 24.3 a second; CPU 4.46 and 4.83 ms a second
+  round 4 (merge base first): change 11.03 M, merge base 11.89 M instructions a second; wakeups 27.8 and 30.7 a second; CPU 3.61 and 4.06 ms a second
+  round 5 (change first): change 12.26 M, merge base 11.98 M instructions a second; wakeups 34.9 and 29.9 a second; CPU 4.21 and 4.21 ms a second
+  round 6 (merge base first): change 15.68 M, merge base 12.02 M instructions a second; wakeups 28.2 and 33.1 a second; CPU 6.61 and 4.35 ms a second
+  round 7 (change first): change 18.84 M, merge base 21.07 M instructions a second; wakeups 35.1 and 33.8 a second; CPU 6.43 and 5.46 ms a second: expected 0.8815548703476195 to be less than or equal to 0.65
+ ❯ instructions.test.ts:117:314
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  pipe.test.ts > AC4 #2648.26092d61 the job pool's pipe is refilled when the last leased command ends, and not on a beat with nothing held > AC4 #2648.26092d61 the pipe holds its full count at once after the one leased command ends, and nothing writes to it for the next 60 s
+Error: AC4 #2648.26092d61: with no leased command running for 60 s, something wrote to the job pool's pipe: its modification time moved 119 times, first 0.50 s after the command ended, last 59.90 s after
+ ❯ judgePipe pipe.test.ts:103:30
+
+ ❯ pipe.test.ts:114:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  seen.test.ts > AC3 #2648.c3b6fe41 deep off, a saved notice and a removed hook entry are each seen as soon as today > AC3 #2648.c3b6fe41 the planted hub that reads each file once at start fails all three, naming gates.json, notices.json and the settings
+Error: BLOCKED: the hub with DEEP_HUB_PLANT=reads-files-at-start-only from <checkout>/ did not start: file://<checkout>/packages/hub/dist/plant.js:135
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=reads-files-at-start-only names no planted program
+    at plantOf (file://<checkout>/packages/hub/dist/plant.js:135:15)
+    at Module.runHub (file://<checkout>/packages/hub/dist/server.js:1590:19)
+    at hubCommand (file://<checkout>/packages/hub/dist/hub-command.js:29:58)
+    at async file://<checkout>/packages/cli/dist/main.js:352:24
+
+Node.js v24.22.2
+
+ ❯ startHub helpers.ts:182:11
+    180|   if (ready?.ready !== true) {
+    181|     await stop(child, 5000);
+    182|     throw Error(`BLOCKED: the hub${o.plant ? ` with DEEP_HUB_PLANT=${o…
+       |           ^
+    183|   }
+    184|   if (Number(ready.pid) !== child.pid) throw Error(`BLOCKED: the hub's…
+ ❯ scenario seen.test.ts:223:15
+ ❯ seen.test.ts:251:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  5 failed | 2 passed (7)
+   Start at  07:26:58
+   Duration  2033.90s (tests 100%)
+
+exit 1

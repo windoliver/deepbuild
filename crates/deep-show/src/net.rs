@@ -541,12 +541,12 @@ impl Hub<'_> {
         let make = &mut |me: u8| {
             let mut l = Logic::new(piece.clone(), &track, true)?;
             l.rounds = rounds;
-            l.plant_ring(ring);
-            l.worlds(&doc)?;
-            l.range = deep_play::net::Range::of(&form, ty.clone(), lax);
             if first_bits {
                 l.draws_wrong(deep_logic::draws::Wrong::FirstBits);
             }
+            l.plant_ring(ring);
+            l.worlds(&doc)?;
+            l.range = deep_play::net::Range::of(&form, ty.clone(), lax);
             if let Some(dir) = &saves {
                 l.saves_in(dir.join(me.to_string()), planted == Planted::SavesPredicted);
             }
@@ -577,15 +577,6 @@ impl Hub<'_> {
             Ok(r) => r,
             Err(e) => return e,
         };
-        // #552: each copy's merged track, which its views and its readers draw from.
-        let tracks: BTreeMap<u8, Vec<Value>> = (played.copies.iter())
-            .map(|c| {
-                (
-                    c.me,
-                    c.record()["track"].as_array().cloned().unwrap_or_default(),
-                )
-            })
-            .collect();
         // #551: each seek after the match, in its copy as the match left it.
         let seeks: Vec<Value> = m
             .seeks
@@ -595,6 +586,15 @@ impl Hub<'_> {
                 let mut s = c.seek(*step);
                 s["player"] = json!(p);
                 Some(s)
+            })
+            .collect();
+        // #552: each copy's merged track, which its views and its readers draw from.
+        let tracks: BTreeMap<u8, Vec<Value>> = (played.copies.iter())
+            .map(|c| {
+                (
+                    c.me,
+                    c.record()["track"].as_array().cloned().unwrap_or_default(),
+                )
             })
             .collect();
         let reads = (s.piece.items.iter()).any(|i| !i.emits.is_empty());
@@ -638,9 +638,6 @@ impl Hub<'_> {
             copies.push(Value::Object(report));
         }
         let mut reply = json!({"copies": copies, "relay": played.relay(m.log)});
-        if !m.seeks.is_empty() {
-            reply["seeks"] = json!(seeks);
-        }
         let len = s.cfg.step();
         if !m.views.is_empty() {
             match self.copy_views(&m.doc, &m.views, &tracks, len) {
@@ -668,6 +665,9 @@ impl Hub<'_> {
                 join.shown = Some((form, last.max(0) * len));
                 join.state = Some(State::Joined);
             }
+        }
+        if !m.seeks.is_empty() {
+            reply["seeks"] = json!(seeks);
         }
         if let Some(check) = check {
             reply["check"] = check;

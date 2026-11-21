@@ -416,8 +416,8 @@ impl<S: Stepper> Stepper for Voiced<S> {
         self.inner.matched(game);
     }
 
-    fn drew(&mut self, entry: &Value) {
-        self.inner.drew(entry);
+    fn early(&mut self, entry: &Value) {
+        self.inner.early(entry);
     }
 
     fn guess(&mut self, step: i64) -> Option<i64> {

@@ -29,6 +29,7 @@ import type { Starts } from './starts.js';
 import type { WorkspaceService } from './workspaces-port.js';
 import { refusal, Refused } from './wire.js';
 import { authored, byMilestone, meets, ruleOf, whyOut, type Listed, type Rule } from './work-rule.js';
+import { forgeFetch } from '@deepbuild/github';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -327,7 +328,7 @@ export class Work {
 
   private async get(path: string): Promise<{ status: number; body: unknown }> {
     const token = await this.o.token();
-    const res = await fetch(`${this.o.api}${path}`, { signal: AbortSignal.timeout(30_000), headers: { accept: 'application/vnd.github+json', ...(token ? { authorization: `Bearer ${token}` } : {}) } });
+    const res = await forgeFetch(this.o.api, path, { token, signal: AbortSignal.timeout(30_000) });
     const text = await res.text();
     let body: unknown;
     try { body = text ? JSON.parse(text) : undefined; } catch { body = text; }

@@ -21,6 +21,7 @@ import type { AppKey } from './forge-port.js';
 import type { Plant } from './plant.js';
 import { globMatches } from './rules.js';
 import { isRecord as isObj } from '@deepbuild/contracts';
+import { forgeFetch } from '@deepbuild/github';
 
 type Obj = Record<string, unknown>;
 const letters = (s: string): string => s.replace(/[^0-9A-Za-z]/g, '');
@@ -115,11 +116,7 @@ export class Landing {
   /** A call to the forge with your login, or with `as`, the gate's landing token, where the gate acts. */
   private async call(method: string, path: string, body?: Obj, as?: string): Promise<{ status: number; body: unknown }> {
     const token = as ?? await this.o.token();
-    const res = await fetch(`${this.o.api}${path}`, {
-      method, signal: AbortSignal.timeout(30_000),
-      headers: { accept: 'application/vnd.github+json', ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body ? { 'content-type': 'application/json' } : {}) },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    });
+    const res = await forgeFetch(this.o.api, path, { method, token, body, signal: AbortSignal.timeout(30_000) });
     const text = await res.text();
     let parsed: unknown;
     try { parsed = text ? JSON.parse(text) : undefined; } catch { parsed = text; }
@@ -298,10 +295,9 @@ export class Landing {
     await must(checkout, ['push', '-q', '--no-verify', 'origin', `+${commit}:refs/deep/land/${commit}`], authEnv(token));
     const gate = this.o.gateApp() ? await this.o.gateToken(repo) : undefined;
     const by = gate ?? token;
-    const res = await fetch(`${this.o.api}/repos/${repo}/statuses/${commit}`, {
-      method: 'POST', signal: AbortSignal.timeout(30_000),
-      headers: { accept: 'application/vnd.github+json', 'content-type': 'application/json', ...(by ? { authorization: `Bearer ${by}` } : {}) },
-      body: JSON.stringify({ context: CONTEXT, state: 'success', description: `${judged.outcome}${onlyWindow(judged) ? '; the budget window settles the rest' : onlyCalls(judged) ? '; your calls settle the rest' : ''}`.slice(0, 140) }),
+    const res = await forgeFetch(this.o.api, `/repos/${repo}/statuses/${commit}`, {
+      method: 'POST', token: by, signal: AbortSignal.timeout(30_000),
+      body: { context: CONTEXT, state: 'success', description: `${judged.outcome}${onlyWindow(judged) ? '; the budget window settles the rest' : onlyCalls(judged) ? '; your calls settle the rest' : ''}`.slice(0, 140) },
     });
     if (!res.ok) throw Error(`the forge refused the verdict's status on ${commit}: ${res.status}`);
   }
