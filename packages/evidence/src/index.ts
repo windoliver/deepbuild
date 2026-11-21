@@ -203,10 +203,13 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
   let journaled: Promise<void> = Promise.resolve();
   const note = (entry: object): Promise<void> => (journaled = journaled.catch(() => undefined).then(async () => {
     clearTimeout(idle);
+    let handle: FileHandle | undefined;
     try {
-      await (await (held ??= open(journal, 'a'))).appendFile(`${JSON.stringify(entry)}\n`);
+      handle = await (held ??= open(journal, 'a'));
+      await handle.appendFile(`${JSON.stringify(entry)}\n`);
     } catch (error) {
       held = undefined;
+      await handle?.close().catch(() => undefined);
       throw error;
     }
     idle = setTimeout(() => { void held?.then((h) => h.close()).catch(() => undefined); held = undefined; }, JOURNAL_IDLE_MS).unref();
@@ -343,7 +346,10 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
           if (request.parts.some((p) => !HASH.test(p) || !index.has(p))) return refuse('every part must be stored evidence');
           const size = request.parts.reduce((sum, p) => sum + index.get(p)!.size, 0);
           // One leaf already has the desired bytes and ordinary SHA; do not invent a self-referencing manifest.
-          if (request.parts.length === 1) return save(peer, request, await read(request.parts[0]!), 'text', index.get(request.parts[0]!)!.redaction);
+          if (request.parts.length === 1) {
+            const leafRedaction = index.get(request.parts[0]!)!.redaction;
+            return save(peer, request, await read(request.parts[0]!), 'text', leafRedaction !== 'complete' ? leafRedaction : request.redaction);
+          }
           let prefix: Stored | undefined;
           for (let n = request.parts.length - 1; n >= 0 && !prefix; n--) {
             for (const sha of prefixes.get(request.parts[n]!) ?? []) {

@@ -1,0 +1,293 @@
+Run once at the base (16dc5eab0) on an Apple Silicon Mac with Metal, Nov 19, one file per command, with
+`CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1782
+--no-file-parallelism --testTimeout=600000 --no-color <file>` (unleased: scripts/lease found no `deep` CLI), the
+binaries built from the base. 22 of 24 tests fail, each on an assertion at the surface the base lacks:
+
+- 9 read `spans` from a frame that has none. `deep-gpu` accepts a line with `hidden` and doesn't read it: the frame
+  reports the base's 26 fields, the last two `segments` and `edge_sets_derived`, and no `spans`, `dashes` or
+  `edge_spans_computed` (cube 1, blocker 3, dash 1, ids 1, orbit 3).
+- 10 name a planted program, and the base answers each of the eight new names `bad_input` (material 1, cube 1,
+  blocker 3, dash 2, ids 1, orbit 2). The run is refused whole, so these tests' guards aren't reached; the same
+  guards hold in each file's other tests.
+- material.test.ts's first test: `material` isn't read, so the plane draws 0, 8 and 0 segments where the issue says
+  2, 10 and 4. Its fourth count, 0 with one material, holds.
+- geometry.test.ts: `deep-show` refuses `hidden` on a `mark.line@1` as an `unknown_field`.
+- dash.test.ts's drawn frame: the base draws nothing where the blocker hides the edge. The seven visible dashes are
+  inked where the reference puts them and no gap is; the five hidden dashes are missing, the ID target holding
+  `blocker` at each.
+
+No test fails at a fixture guard. Every guard a test reaches holds at the base: the twin lines' `segments` (the
+cube's 12 edges, the ridge alone, the sheet's 800 fold edges), the plane's 16 and 8 edges with its `materials` maps
+admitted, the swatch frame, the seeked calls' frame numbers and `deep-show`'s guard document. orbit.test.ts's drawn
+test fails at the planted name alone: its first half, each of the 100 frames' pixel hash forward against reverse,
+holds at the base, which draws no hidden span and draws a frame the same in any order.
+
+The 2 that pass are unchanged.test.ts's. #1640's eight fixture frames, drawn with `hidden` unset and `material`
+false, have the hashes recorded at the base (fixtures/base-frames.json, Nov 17), as an unchanged frame must. Under
+#1640's `crease_below_angle`, a name the base has, the canary still matches and all eight differ, so the comparison
+can fail. They are what fails when the change alters one of those frames. The canary matched here, two days after
+the recording and with the binary built again in another target folder, so nothing was recorded again.
+
+Trimmed: `<worktree>` is the checkout; code excerpts under stack frames and the Expected/Received blocks that repeat
+the message are dropped (geometry.test.ts's is kept: it holds the refusal); a helper's stack frame is shown the first
+time it appears; the frame's field list is shown once. The seven failing commands exited 1.
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/1782
+ ✓ unchanged.test.ts (2 tests) 11275ms
+   ✓ AC8 #1782.c6ee5604 #1640's fixtures with hidden unset and material false (2)
+     ✓ AC8 #1782.c6ee5604 each draws the same frame by pixel hash as before this change (reference Mac) 5741ms
+     ✓ AC8 #1782.c6ee5604 the comparison's planted-mismatch twin: under crease_below_angle, another edge set, every frame differs from the base's (reference Mac) 3226ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  11:35:12
+   Duration  11.46s (tests 99%)
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/1782
+ ❯ material.test.ts (2 tests | 2 failed) 6944ms
+   ❯ AC1 #1782.99240d77 material edges of a 2 × 2 plane whose columns are named parts (2)
+     × AC1 #1782.99240d77 draws 2 end to end between the columns, 10 with border, 0 with one material and 4 with a material per quad (noop lane) 3821ms
+     × AC1 #1782.99240d77 a planted picker that keeps every edge two faces share draws 8 and fails, naming the item and the count (noop lane) 25ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  material.test.ts > AC1 #1782.99240d77 material edges of a 2 × 2 plane whose columns are named parts > AC1 #1782.99240d77 draws 2 end to end between the columns, 10 with border, 0 with one material and 4 with a material per quad (noop lane)
+AssertionError: the planes on deep-gpu run --backend noop: material edges:
+  material edges of plane draw 0 segments, not 2 (line columns)
+  material edges of plane leave out 2 of 2 segments, e.g. [[0,0,-0.5],[0,0,0]]: not end to end (line columns)
+  material edges of plane draw 8 segments, not 10 (line columns_border)
+  material edges of plane leave out 2 of 10 segments, e.g. [[0,0,-0.5],[0,0,0]]: not end to end (line columns_border)
+  material edges of plane_quads draw 0 segments, not 4 (line quads)
+  material edges of plane_quads leave out 4 of 4 segments, e.g. [[0,0,-0.5],[0,0,0]]: not end to end (line quads): expected [ …(6) ] to deeply equal []
+ ❯ none ../1640/helpers.ts:72:60
+ ❯ material.test.ts:125:5
+
+ FAIL  material.test.ts > AC1 #1782.99240d77 material edges of a 2 × 2 plane whose columns are named parts > AC1 #1782.99240d77 a planted picker that keeps every edge two faces share draws 8 and fails, naming the item and the count (noop lane)
+AssertionError: deep-gpu run --backend noop --planted edges_material_every_shared exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+ ❯ runGpu ../1640/helpers.ts:162:151
+ ❯ run helpers.ts:50:3
+ ❯ drawn material.test.ts:115:27
+ ❯ material.test.ts:129:29
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  12:36:27
+   Duration  7.23s (tests 98%, transform 1%)
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/1782
+ ❯ cube.test.ts (2 tests | 2 failed) 7462ms
+   ❯ AC2 #1782.977b8e45 a 1 m cube with crease edges and hidden set, in a three-quarter view (2)
+     × AC2 #1782.977b8e45 gives 12 spans, each a whole edge: 9 visible and the 3 that meet the far corner hidden (noop lane) 4704ms
+     × AC2 #1782.977b8e45 a planted classifier that casts against nothing reports 12 visible and fails, naming the first hidden edge (noop lane) 42ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  cube.test.ts > AC2 #1782.977b8e45 a 1 m cube with crease edges and hidden set, in a three-quarter view > AC2 #1782.977b8e45 gives 12 spans, each a whole edge: 9 visible and the 3 that meet the far corner hidden (noop lane)
+AssertionError: Hidden cube on deep-gpu run --backend noop: frame 0 reports spans (counts: true); it reports ["frame","settled","samples","history","resident","selection","hdr","frame_seq","pixel_hash","encoded","replayed","instances_written","element_uploads","row_uploads","cpu_culled","counts_read_back","indirect_draws","draws","meshes_built","horizons_baked","compute_passes","axes_mapped","terrain_tiles_selected","compiled","segments","edge_sets_derived"]: expected false to be true // Object.is equality
+ ❯ entry helpers.ts:128:136
+ ❯ spansOf helpers.ts:163:85
+ ❯ cube cube.test.ts:27:19
+ ❯ cube.test.ts:32:32
+
+ FAIL  cube.test.ts > AC2 #1782.977b8e45 a 1 m cube with crease edges and hidden set, in a three-quarter view > AC2 #1782.977b8e45 a planted classifier that casts against nothing reports 12 visible and fails, naming the first hidden edge (noop lane)
+AssertionError: deep-gpu run --backend noop --planted edges_spans_cast_nothing exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+ ❯ drawHidden helpers.ts:254:27
+ ❯ cube cube.test.ts:25:35
+ ❯ cube.test.ts:37:32
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  12:36:35
+   Duration  7.71s (tests 98%, transform 1%)
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/1782
+ ❯ geometry.test.ts (1 test | 1 failed) 6637ms
+   ❯ AC2 #1782.977b8e45 the geometry call's reply for a cube's line with hidden set (1)
+     × AC2 #1782.977b8e45 gives each span as {edge, from, to, hidden}: 12 spans, each a whole edge, 9 visible and the 3 that meet the far corner hidden (deep-show) 3616ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  geometry.test.ts > AC2 #1782.977b8e45 the geometry call's reply for a cube's line with hidden set > AC2 #1782.977b8e45 gives each span as {edge, from, to, hidden}: 12 spans, each a whole edge, 9 visible and the 3 that meet the far corner hidden (deep-show)
+AssertionError: the cube document, with hidden set: no error issue: expected [ Array(1) ] to deeply equal []
+- Expected
++ Received
+- []
++ [
++   "{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"edges\"],\"path\":\"items/edges/params/hidden\",\"actual\":{\"paint\":{\"fill\":{\"role\":\"muted\"}}},\"what\":\"mark.line@1.0 does not define `hidden`\",\"fix\":\"`hidden` is a field of instance@1: give the item that kind, or remove the field.\",\"close\":[{\"name\":\"instance@1\",\"defines\":\"hidden\"}]}",
++ ]
+ ❯ admitted ../440/helpers.ts:205:100
+ ❯ geometry.test.ts:41:5
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  12:37:30
+   Duration  6.86s (tests 99%, transform 1%)
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/1782
+ ❯ blocker.test.ts (6 tests | 6 failed) 12406ms
+   ❯ AC3 #1782.53389245 a 1 m edge behind an opaque blocker over its middle 0.4 m, seen by an orthographic camera (2)
+     × AC3 #1782.53389245 gives spans 0 to 0.3 m visible, 0.3 to 0.7 m hidden and 0.7 to 1 m visible, each end within 1e-5 m (noop lane) 4874ms
+     × AC3 #1782.53389245 a planted test of the edge's two ends only reports one visible span and fails, naming the edge (noop lane) 30ms
+   ❯ AC4 #1782.183712ab its perspective twin: the camera 4 m away on the edge's perpendicular, a blocker 0.2 m wide halfway (2)
+     × AC4 #1782.183712ab gives the same three spans within 1e-5 m (noop lane) 1042ms
+     × AC4 #1782.183712ab a planted classifier that projects the blocker without perspective hides 0.4 to 0.6 m and fails, naming the edge (noop lane) 28ms
+   ❯ AC6 #1782.078d7c3c in the orthographic fixture, what hides nothing and what a cutaway removes (2)
+     × AC6 #1782.078d7c3c a pane at transmission 1 or an item at alpha_mode blend in the blocker's place leaves the edge one visible span; a cutaway that removes the blocker past the midpoint leaves only 0.3 to 0.5 m hidden (noop lane) 2615ms
+     × AC6 #1782.078d7c3c a planted classifier that counts the pane reports a hidden span and fails, naming the pane (noop lane) 38ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  blocker.test.ts > AC3 #1782.53389245 a 1 m edge behind an opaque blocker over its middle 0.4 m, seen by an orthographic camera > AC3 #1782.53389245 gives spans 0 to 0.3 m visible, 0.3 to 0.7 m hidden and 0.7 to 1 m visible, each end within 1e-5 m (noop lane)
+AssertionError: Orthographic blocker on deep-gpu run --backend noop: frame 0 reports spans (counts: true); it reports the same 26 fields: expected false to be true // Object.is equality
+ ❯ read blocker.test.ts:48:24
+ ❯ hold blocker.test.ts:63:75
+ ❯ blocker.test.ts:68:5
+
+ FAIL  blocker.test.ts > AC3 #1782.53389245 a 1 m edge behind an opaque blocker over its middle 0.4 m, seen by an orthographic camera > AC3 #1782.53389245 a planted test of the edge's two ends only reports one visible span and fails, naming the edge (noop lane)
+AssertionError: deep-gpu run --backend noop --planted edges_spans_ends_only exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+ ❯ guarded blocker.test.ts:46:35
+ ❯ drawn blocker.test.ts:52:32
+ ❯ blocker.test.ts:72:35
+
+ FAIL  blocker.test.ts > AC4 #1782.183712ab its perspective twin: the camera 4 m away on the edge's perpendicular, a blocker 0.2 m wide halfway > AC4 #1782.183712ab gives the same three spans within 1e-5 m (noop lane)
+AssertionError: Perspective blocker on deep-gpu run --backend noop: frame 0 reports spans (counts: true); it reports the same 26 fields: expected false to be true // Object.is equality
+ ❯ read blocker.test.ts:48:24
+ ❯ hold blocker.test.ts:63:75
+ ❯ blocker.test.ts:80:5
+
+ FAIL  blocker.test.ts > AC4 #1782.183712ab its perspective twin: the camera 4 m away on the edge's perpendicular, a blocker 0.2 m wide halfway > AC4 #1782.183712ab a planted classifier that projects the blocker without perspective hides 0.4 to 0.6 m and fails, naming the edge (noop lane)
+AssertionError: deep-gpu run --backend noop --planted edges_spans_no_perspective exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+ ❯ guarded blocker.test.ts:46:35
+ ❯ drawn blocker.test.ts:52:32
+ ❯ blocker.test.ts:84:35
+
+ FAIL  blocker.test.ts > AC6 #1782.078d7c3c in the orthographic fixture, what hides nothing and what a cutaway removes > AC6 #1782.078d7c3c a pane at transmission 1 or an item at alpha_mode blend in the blocker's place leaves the edge one visible span; a cutaway that removes the blocker past the midpoint leaves only 0.3 to 0.5 m hidden (noop lane)
+AssertionError: A pane in the place of the blocker on deep-gpu run --backend noop: frame 0 reports spans (counts: true); it reports the same 26 fields: expected false to be true // Object.is equality
+ ❯ read blocker.test.ts:48:24
+ ❯ hold blocker.test.ts:63:75
+ ❯ blocker.test.ts:92:5
+
+ FAIL  blocker.test.ts > AC6 #1782.078d7c3c in the orthographic fixture, what hides nothing and what a cutaway removes > AC6 #1782.078d7c3c a planted classifier that counts the pane reports a hidden span and fails, naming the pane (noop lane)
+AssertionError: deep-gpu run --backend noop --planted edges_spans_count_glass exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+ ❯ guarded blocker.test.ts:46:35
+ ❯ drawn blocker.test.ts:52:32
+ ❯ blocker.test.ts:96:35
+
+ Test Files  1 failed (1)
+      Tests  6 failed (6)
+   Start at  12:36:45
+   Duration  12.83s (tests 98%, transform 2%)
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/1782
+ ❯ dash.test.ts (4 tests | 4 failed) 9645ms
+   ❯ AC5 #1782.91964396 dashes of 0.05 m on and off across a blocker that hides 0.33 to 0.73 m (4)
+     × AC5 #1782.91964396 the first hidden dash ends at 0.35 m, the next starts at 0.40 m and the visible dash after the blocker runs 0.73 to 0.75 m, within 1e-5 m (noop lane) 3497ms
+     × AC5 #1782.91964396 a planted dash that restarts at each split ends its first hidden dash at 0.38 m and fails, naming the edge (noop lane) 31ms
+     × AC5 #1782.91964396 the drawn frame inks the middle of each dash, hidden ones over the blocker in hidden.paint, and no gap (reference Mac) 2545ms
+     × AC5 #1782.91964396 the planted dash that restarts at each split fails the drawn frame, naming the edge (reference Mac) 32ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  dash.test.ts > AC5 #1782.91964396 dashes of 0.05 m on and off across a blocker that hides 0.33 to 0.73 m > AC5 #1782.91964396 the first hidden dash ends at 0.35 m, the next starts at 0.40 m and the visible dash after the blocker runs 0.73 to 0.75 m, within 1e-5 m (noop lane)
+AssertionError: Dashes across a split on deep-gpu run --backend noop: frame 0 reports spans (counts: true); it reports the same 26 fields: expected false to be true // Object.is equality
+ ❯ data dash.test.ts:60:19
+ ❯ dash.test.ts:125:43
+
+ FAIL  dash.test.ts > AC5 #1782.91964396 dashes of 0.05 m on and off across a blocker that hides 0.33 to 0.73 m > AC5 #1782.91964396 a planted dash that restarts at each split ends its first hidden dash at 0.38 m and fails, naming the edge (noop lane)
+AssertionError: deep-gpu run --backend noop --planted edges_dash_restarts_at_split exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+ ❯ data dash.test.ts:58:35
+ ❯ dash.test.ts:130:43
+
+ FAIL  dash.test.ts > AC5 #1782.91964396 dashes of 0.05 m on and off across a blocker that hides 0.33 to 0.73 m > AC5 #1782.91964396 the drawn frame inks the middle of each dash, hidden ones over the blocker in hidden.paint, and no gap (reference Mac)
+AssertionError: the dashed ridge on deep-gpu run: the drawn dashes:
+  edge 0 (−0.5, 0, 0)–(0.5, 0, 0): no ink at the middle of the hidden dash 0.33 to 0.35 m (the ID target has blocker there)
+  edge 0 (−0.5, 0, 0)–(0.5, 0, 0): no ink at the middle of the hidden dash 0.4 to 0.45 m (the ID target has blocker there)
+  edge 0 (−0.5, 0, 0)–(0.5, 0, 0): no ink at the middle of the hidden dash 0.5 to 0.55 m (the ID target has blocker there)
+  edge 0 (−0.5, 0, 0)–(0.5, 0, 0): no ink at the middle of the hidden dash 0.6 to 0.65 m (the ID target has blocker there)
+  edge 0 (−0.5, 0, 0)–(0.5, 0, 0): no ink at the middle of the hidden dash 0.7 to 0.73 m (the ID target has blocker there): expected [ …(5) ] to deeply equal []
+ ❯ dash.test.ts:139:5
+
+ FAIL  dash.test.ts > AC5 #1782.91964396 dashes of 0.05 m on and off across a blocker that hides 0.33 to 0.73 m > AC5 #1782.91964396 the planted dash that restarts at each split fails the drawn frame, naming the edge (reference Mac)
+AssertionError: deep-gpu run --planted edges_dash_restarts_at_split exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+ ❯ shots dash.test.ts:92:19
+ ❯ dash.test.ts:144:35
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  12:36:58
+   Duration  9.98s (tests 99%, transform 1%)
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/1782
+ ❯ ids.test.ts (2 tests | 2 failed) 18315ms
+   ❯ AC8 #1782.c6ee5604 an edge's ID under a moved camera and an added item (2)
+     × AC8 #1782.c6ee5604 moving the camera or adding an unrelated item changes no edge's ID (noop lane) 4861ms
+     × AC8 #1782.c6ee5604 a planted ID taken from the order spans draw in changes with the camera and fails, naming the edge (noop lane) 28ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ids.test.ts > AC8 #1782.c6ee5604 an edge's ID under a moved camera and an added item > AC8 #1782.c6ee5604 moving the camera or adding an unrelated item changes no edge's ID (noop lane)
+AssertionError: Cube from the front right on deep-gpu run --backend noop: frame 0 reports spans (counts: true); it reports the same 26 fields: expected false to be true // Object.is equality
+ ❯ Object.read ids.test.ts:34:30
+ ❯ ids.test.ts:45:65
+ ❯ ids ids.test.ts:45:35
+ ❯ ids.test.ts:50:10
+
+ FAIL  ids.test.ts > AC8 #1782.c6ee5604 an edge's ID under a moved camera and an added item > AC8 #1782.c6ee5604 a planted ID taken from the order spans draw in changes with the camera and fails, naming the edge (noop lane)
+AssertionError: deep-gpu run --backend noop --planted edges_id_from_draw_order exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+ ❯ view ids.test.ts:33:35
+ ❯ ids ids.test.ts:39:5
+ ❯ ids.test.ts:54:33
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  12:37:10
+   Duration  19.17s (tests 99%, transform 1%, import 1%)
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/1782
+ ❯ orbit.test.ts (5 tests | 5 failed) 269965ms
+   ❯ AC7 #1782.b25597d6 a 10 s orbit of a 100,000-triangle asset, sampled at 100 fixed times (5)
+     × AC7 #1782.b25597d6 forward: edge IDs are the ranks, every edge is tiled and hidden where the sheet hides it; the pick set is derived once and each frame computes its spans once (noop lane) 37734ms
+     × AC7 #1782.b25597d6 gives the same edge IDs, spans and dashes in reverse, in a seeded shuffle and one per fresh process as forward (noop lane) 132038ms
+     × AC7 #1782.b25597d6 a still view recomputes no span and derives no pick set again (noop lane) 3280ms
+     × AC7 #1782.b25597d6 a planted cache keyed without the camera returns the first time's spans at the second and fails, naming the first span that differs (noop lane) 34ms
+     × AC7 #1782.b25597d6 the drawn frames have the same pixel hash forward and in reverse; under the planted cache the first two don't (reference Mac) 94151ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  orbit.test.ts > AC7 #1782.b25597d6 a 10 s orbit of a 100,000-triangle asset, sampled at 100 fixed times > AC7 #1782.b25597d6 forward: edge IDs are the ranks, every edge is tiled and hidden where the sheet hides it; the pick set is derived once and each frame computes its spans once (noop lane)
+AssertionError: the orbit forward on noop: frame 0 reports spans (counts: true); it reports the same 26 fields: expected false to be true // Object.is equality
+ ❯ at orbit.test.ts:63:66
+ ❯ orbit.test.ts:118:35
+ ❯ orbit.test.ts:118:24
+
+ FAIL  orbit.test.ts > AC7 #1782.b25597d6 a 10 s orbit of a 100,000-triangle asset, sampled at 100 fixed times > AC7 #1782.b25597d6 gives the same edge IDs, spans and dashes in reverse, in a seeded shuffle and one per fresh process as forward (noop lane)
+AssertionError: the orbit forward on noop: frame 0 reports spans (counts: true); it reports the same 26 fields: expected false to be true // Object.is equality
+ ❯ at orbit.test.ts:63:66
+ ❯ orbit.test.ts:130:42
+ ❯ orbit.test.ts:130:31
+
+ FAIL  orbit.test.ts > AC7 #1782.b25597d6 a 10 s orbit of a 100,000-triangle asset, sampled at 100 fixed times > AC7 #1782.b25597d6 a still view recomputes no span and derives no pick set again (noop lane)
+AssertionError: the still sheet on noop: frame 0 reports spans (counts: true); it reports the same 26 fields: expected false to be true // Object.is equality
+ ❯ at orbit.test.ts:63:66
+ ❯ orbit.test.ts:141:35
+ ❯ orbit.test.ts:141:24
+
+ FAIL  orbit.test.ts > AC7 #1782.b25597d6 a 10 s orbit of a 100,000-triangle asset, sampled at 100 fixed times > AC7 #1782.b25597d6 a planted cache keyed without the camera returns the first time's spans at the second and fails, naming the first span that differs (noop lane)
+AssertionError: deep-gpu run --backend noop --planted edges_spans_cache_no_camera exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+ ❯ draw helpers.ts:121:19
+ ❯ forward orbit.test.ts:67:20
+ ❯ orbit.test.ts:152:20
+
+ FAIL  orbit.test.ts > AC7 #1782.b25597d6 a 10 s orbit of a 100,000-triangle asset, sampled at 100 fixed times > AC7 #1782.b25597d6 the drawn frames have the same pixel hash forward and in reverse; under the planted cache the first two don't (reference Mac)
+AssertionError: deep-gpu run --planted edges_spans_cache_no_camera exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+ ❯ forward orbit.test.ts:67:20
+ ❯ hashProblems orbit.test.ts:162:19
+ ❯ orbit.test.ts:170:17
+
+ Test Files  1 failed (1)
+      Tests  5 failed (5)
+   Start at  12:37:37
+   Duration  270.89s (tests 100%)

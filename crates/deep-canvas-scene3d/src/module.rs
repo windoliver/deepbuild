@@ -307,6 +307,8 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
                 json_param("edges", crate::spec::EDGES),
                 // Marks in 3D: trail (#450), which a piece's check takes too (#265).
                 json_param("trail", crate::spec::TRAIL),
+                // The style a mesh-edge line's spans behind opaque geometry draw in (#1782).
+                json_param("hidden", crate::spec::HIDDEN),
                 // Marks in 3D: whether the sky's fog applies to it (#537's live lines set false).
                 fog(true),
             ]),

@@ -1,0 +1,49 @@
+#2977 acceptance suite at the base, ee05e7257 (origin/main), before any implementation.
+Mac: macOS 27.2.1 (26B7131), arm64, Node 24.22.0, Vitest 5.0.5. Load averages 45-130 during the runs (other
+sessions' suites); no load gate, nothing retried for load.
+
+Run: node node_modules/vitest/vitest.mjs run tests/acceptance/2977 --reporter=json  (exit 1, 842 s)
+5 tests: 3 fail, 2 pass.
+
+AC1 #2977.04fdc1bc  first-start.test.ts
+  FAIL  under reports-other-subsystem, a new supervisor's first sandboxed start() resolves within 5 s of openSupervisor resolving
+        AssertionError: ms from openSupervisor resolving to the first sandboxed start() resolving (reports-other-subsystem): expected 10312.97625 to be less than 5000
+  FAIL  under reports-other-process, a new supervisor's first sandboxed start() resolves within 5 s of openSupervisor resolving
+        AssertionError: ms from openSupervisor resolving to the first sandboxed start() resolving (reports-other-process): expected 20505.610999999997 to be less than 5000
+  The issue's reason: one full 10 s warm per filter that shows nothing (one under reports-other-subsystem, two under
+  reports-other-process) before the first start goes ahead.
+
+AC2 #2977.0d3f7721  kept-stream.test.ts
+  PASS  under reports-other-subsystem, the one log stream kept is the kernel's, and a refused write is one sandbox.denied for its run   (12.4 s)
+  PASS  under reports-other-process, the one log stream kept is the sender alone, and a refused write is one sandbox.denied for its run (22.6 s)
+  Expected to pass at the base: it pins behavior the base already has (one stream at a time, tried in FILTERS order,
+  the first that shows a report kept, one denial recorded). It guards the fix: warming every filter at once must end
+  with the same one stream and the same one event. No planted twin was written for it (not asked of this job); it was
+  not shown to fail on a wrong program.
+
+AC3 #2977.cd253437  extension-host.test.ts
+  FAIL  vitest run packages/extension-host/test passes the 11 tests the issue lists   (839 s)
+        AssertionError: each of the 11 listed tests, in the child run: expected [ …(11) ] to deeply equal [ …(11) ]
+  Vitest cut the array diff. The assertion was then changed to report only the listed tests that didn't pass (no
+  change to what passes): run alone with it, the test failed again with "expected [ …(11) ] to deeply equal []",
+  i.e. all 11 listed tests not passing (767 s). The form now in the file, which prints that list in full, was started
+  twice more alone, and both background runs were killed from outside before writing a report, so its own failure
+  text at the base was not captured.
+
+  What the 11 do at the base, from a direct run of the same five files (vitest run packages/extension-host/test/
+  {update-default,fetch-fold,host,sources,update-close}.test.ts, 877 s, 69 passed, 11 failed, 1 skipped: the Linux
+  Secret Service test). Exactly these 11 failed, matching the issue's table:
+    update-default.test.ts  an update with no answer defaults to keeping the installed provider and its users          Error: Test timed out in 30000ms.
+    fetch-fold.test.ts      keeps redirect responses and rejects CONNECT without an HTTP request                       Error: Test timed out in 5000ms.
+    host.test.ts            #348 review regressions a request body that stops arriving is cut off within the call deadline…  AssertionError: expected 20518 to be less than 20000
+    sources.test.ts         #364 back-off, cost and readings a call the provider fails backs off…                      Error: Test timed out in 5000ms.
+    sources.test.ts         #364 back-off, cost and readings each live call records its cost as source.called…         Error: Test timed out in 5000ms.
+    sources.test.ts         #364 back-off, cost and readings each reading the hub makes is recorded once by the core…  Error: Test timed out in 5000ms.
+    sources.test.ts         #364 secrets on the trusted path removing a secret lists the sources that go BLOCKED…     Error: Test timed out in 5000ms.
+    sources.test.ts         #364 secrets on the trusted path sign-in through an OAuth loopback…                        Error: Test timed out in 5000ms.
+    sources.test.ts         #364 stream sources at run time reads on from the cursor the hub keeps…                    Error: Test timed out in 5000ms.
+    sources.test.ts         #364 stream sources at run time keeps each stream's cursor when two streams are read at once  Error: Test timed out in 5000ms.
+    update-close.test.ts    a declined update reports the kept provider even if the host closes before the waiter resumes  Error: Test timed out in 5000ms.
+  The Keychain store test of "#364 secrets on the trusted path" passed, which is why it is not one of the 7.
+
+tsc -p tests/acceptance/2977/tsconfig.json: no errors.
