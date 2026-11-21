@@ -643,7 +643,7 @@ fn opened(
                 .to_json()
             }
         };
-        let kept = match derive::kept(scene, &w, viewer) {
+        let kept = match derive::kept(scene, &id, &w, viewer) {
             Ok(x) => x,
             Err(r) => return refused(&id, json!([{"code": r.code, "what": r.what}])).to_json(),
         };

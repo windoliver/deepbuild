@@ -77,6 +77,7 @@ impl World {
                 asked: None,
                 dirty: BTreeSet::new(),
                 kdirty: BTreeSet::new(),
+                rdirty: BTreeSet::new(),
                 stored: Vec::new(),
                 checked: None,
                 spacing: item.every,
@@ -199,7 +200,7 @@ impl World {
             return;
         }
         l.checked = Some(at);
-        let deep = l.deep_hash();
+        let deep = if rec.deferred { 0 } else { l.deep_hash() };
         // The CPU time storing it; the full-state hash beside it is the record's evidence.
         let t = cpu_ns();
         rec.checkpoint(&id, at, deep, &l.arrays);
@@ -379,9 +380,7 @@ impl World {
         let memory = l.runner.memory_mut("memory").expect("a memory");
         match services::serve(item, k, memory) {
             Ok((pages, n)) => {
-                let pages = pages.into_iter().map(|p| p as u32);
-                l.dirty.extend(pages.clone());
-                l.kdirty.extend(pages);
+                l.mark(pages.into_iter().map(|p| p as u32));
                 // The time answering what step k asked: 0 when it asked nothing.
                 let ns = if n == 0 {
                     0
@@ -507,7 +506,8 @@ impl World {
                 let q = l.pending.entry(r.name.clone()).or_default();
                 let mut fresh: Vec<Entry> = Vec::new();
                 while *c < list.len() && list[*c].t <= t {
-                    fresh.push(list[*c].clone());
+                    // Entries stamped since the last step that ran, never before it (#551).
+                    fresh.extend((list[*c].t > l.last * item.step).then(|| list[*c].clone()));
                     *c += 1;
                 }
                 if r.read == Read::Control {
@@ -781,8 +781,7 @@ impl World {
                 }
             }
         }
-        l.dirty.extend(&pages);
-        l.kdirty.extend(&pages);
+        l.mark(pages.iter().copied());
         rec.fuel.entry(i).or_default().push((k, fuel));
         let trap = match out {
             Ok(o) => o.trap.map(|t| (t.kind, Some(t.function), Some(t.offset))),
@@ -1431,6 +1430,7 @@ impl World {
             // The restore wrote every page.
             dirty: (0..pages).collect(),
             kdirty: (0..pages).collect(),
+            rdirty: (0..pages).collect(),
             stored: Vec::new(),
             checked: None,
             spacing: item.every,

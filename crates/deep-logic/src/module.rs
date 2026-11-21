@@ -650,8 +650,18 @@ fn issues(report: Report) -> Vec<(String, Raised)> {
 }
 
 /// The lowered document's logic items as one checked piece, its input track, and the steps its
-/// transport's span covers; or why it can't be read, as a blocked row.
-fn baked(doc: &Value, input: &Value) -> Result<(Rc<Piece>, Vec<Entry>, i64), Value> {
+/// transport's span covers; or why it can't be read, as a blocked row. #550's net check kinds
+/// read a document's match from it too.
+pub fn baked(doc: &Value, input: &Value) -> Result<(Rc<Piece>, Vec<Entry>, i64), Value> {
+    baked_with(doc, input, &Default::default())
+}
+
+/// As `baked`, its piece checked with `planted`'s twins (#551: a planted page tracker).
+pub fn baked_with(
+    doc: &Value,
+    input: &Value,
+    planted: &crate::Planted,
+) -> Result<(Rc<Piece>, Vec<Entry>, i64), Value> {
     let items: serde_json::Map<String, Value> = doc
         .get("items")
         .and_then(Value::as_object)
@@ -668,7 +678,7 @@ fn baked(doc: &Value, input: &Value) -> Result<(Rc<Piece>, Vec<Entry>, i64), Val
     let line = json!({"seed": doc.get("seed").and_then(Value::as_i64).unwrap_or(0),
         "controls": doc.get("controls").cloned().unwrap_or(json!({})), "items": items,
         "assets": input.get("assets").cloned().unwrap_or(json!({}))});
-    let piece = piece::check(&line, &Default::default(), &mut History::new()).map_err(|r| r.0)?;
+    let piece = piece::check(&line, planted, &mut History::new()).map_err(|r| r.0)?;
     let entries: Vec<Entry> = doc
         .get("track")
         .and_then(Value::as_array)

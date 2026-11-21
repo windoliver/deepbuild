@@ -1,0 +1,16 @@
+$ node scripts/guide.mjs --check
+PASS guide: docs/extension-guide.md has one entry per published method (46) and slot (17), each as the contract has it
+exit 0
+
+$ grep -n -A4 "^### \`deep.registerPort\`" docs/extension-guide.md
+217:### `deep.registerPort`
+218-
+219-In R1 · preview · `d1:c1a0515e41f2a3869341f5cb779d2ce7e1098964f8aa4a1f1645968f95b4538c`
+220-
+221-A plug-in's side of a piece's port: `entries` and `rows`, the entries and occurrence rows it takes, and `sources`, the sources it gives for readings in, each one the plug-in registers. The piece must list each of them, and the port carries what the piece lists, which may be more. `sound` says whether its gear makes sound, which makes the plug-in a device gate owner whatever the document says. Registering opens nothing: a port opens only after a person clicks Connect on the app's prompt, and sends only while the piece plays live and forward, never on a seek, a replay or an export.
+
+$ grep -n "| \`deep.registerPort\`" docs/extension-guide.md
+564:| `deep.registerPort` | - | `port@1` | many, at most 8 on a document | `port@1` | `sends-on-seek` | R6 |
+
+$ node -p 'require("./packages/contracts/extension-api.json").find(e=>e.method==="deep.registerPort").digest'
+d1:c1a0515e41f2a3869341f5cb779d2ce7e1098964f8aa4a1f1645968f95b4538c

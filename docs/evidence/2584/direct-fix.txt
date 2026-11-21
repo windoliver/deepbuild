@@ -1,0 +1,9 @@
+== FIX, real mount at /private/tmp/claude-501/d2584-pIbu/locked/mnt (parent mode 000)
+lsof: WARNING: can't stat() hfs file system /private/tmp/claude-501/d2584-pIbu/locked/mnt
+      Output information may be incomplete.
+      assuming "dev=1000016" from mount table
+   (plain lsof exit 1)
+free port 57788 -> {"pids":[],"empty":true}
+used port 57787 (this pid 64736) -> {"pids":[64736],"empty":false}
+port NaN (real lsof error: unknown service) -> REJECTS: lsof can't list port NaN's listeners: lsof: unknown service NaN for tcp in: -i TCP:NaN
+port 1.5 (real lsof error: unacceptable port) -> REJECTS: lsof can't list port 1.5's listeners: lsof: unacceptable port specification in: -i TCP:1.5

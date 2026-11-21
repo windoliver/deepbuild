@@ -28,7 +28,7 @@
 // batch file named by one reading.batch event, its windows' rollups as files named by reading.rollup events
 // (./series.ts), so a bound value resolves at a frame's pinned log position.
 import { createHash, createPublicKey, randomUUID, verify as verifySignature } from 'node:crypto';
-import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createServer, type AddressInfo, type Socket } from 'node:net';
 import { homedir } from 'node:os';
@@ -852,7 +852,7 @@ class Host implements ExtensionHost {
     const before = this.entries[id];
     let entry: Entry;
     try {
-      copyPackage(from.from, folder);
+      cpSync(from.from, folder, { recursive: true });
       const hosts = from.grant?.hosts?.map((h) => ({ host: h.host, quota: { calls: h.quota.calls, per_ms: h.quota.per_ms } }));
       const digest = this.options.plant === 'trusts-envelope-digest' ? manifest.digest! : packageDigest(folder);
       entry = {
@@ -1656,7 +1656,7 @@ class Host implements ExtensionHost {
   private snapshot(entry: Entry): { folder: string; digest: string } {
     const folder = mkdtempSync(join(this.options.home, 'run-'));
     try {
-      copyPackage(entry.folder, folder);
+      cpSync(entry.folder, folder, { recursive: true });
       return { folder, digest: packageDigest(folder) };
     } catch (e) {
       rmSync(folder, { recursive: true, force: true });
@@ -3427,22 +3427,6 @@ class Host implements ExtensionHost {
     await Promise.all(stopping.map((t) => this.terminals.stop(t).catch(() => undefined)));
     this.terminals.close();
   }
-}
-
-/**
- * Copies a package's folder with each file's mode as it is: the digest counts modes, and a copy made under a tighter
- * umask (the hub's is 077) would otherwise digest differently from the folder it was checked as.
- */
-function copyPackage(from: string, to: string): void {
-  cpSync(from, to, { recursive: true });
-  const modes = (src: string, dst: string): void => {
-    for (const name of readdirSync(src)) {
-      const stat = lstatSync(join(src, name));
-      if (stat.isDirectory()) modes(join(src, name), join(dst, name));
-      else if (stat.isFile()) chmodSync(join(dst, name), stat.mode & 0o7777);
-    }
-  };
-  modes(from, to);
 }
 
 export async function openExtensionHost(options: ExtensionHostOptions): Promise<ExtensionHost> {
