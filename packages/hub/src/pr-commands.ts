@@ -185,8 +185,8 @@ export async function gatePrBodies(command: string, cwd: string, closing: (issue
 // Values are consumed once: a title or body whose entire text is "--body-file" is not another flag.
 function flags(pr: PrCommand): Map<string, string> {
   const out = new Map<string, string>();
-  const aliases: Record<string, string> = { b: 'body', F: 'body-file', B: 'base', H: 'head', t: 'title', R: 'repo', f: 'fill', e: 'editor', w: 'web', T: 'template', a: 'assignee', l: 'label', r: 'reviewer', p: 'project', m: 'milestone', d: 'draft' };
-  const booleans = new Set(['fill', 'fill-first', 'fill-verbose', 'editor', 'web', 'draft', 'dry-run', 'help', 'no-maintainer-edit']);
+  const aliases: Record<string, string> = { b: 'body', F: 'body-file', B: 'base', H: 'head', t: 'title', R: 'repo', f: 'fill', e: 'editor', w: 'web', T: 'template', a: 'assignee', l: 'label', r: 'reviewer', p: 'project', m: 'milestone', d: 'draft', h: 'help' };
+  const booleans = new Set(['fill', 'fill-first', 'fill-verbose', 'editor', 'web', 'draft', 'dry-run', 'help', 'no-maintainer-edit', 'remove-milestone']);
   for (let i = 3; i < pr.words.length; i++) {
     const w = pr.words[i]!;
     if (!w.literal) throw Error('cannot read the pull request arguments: shell expansion');

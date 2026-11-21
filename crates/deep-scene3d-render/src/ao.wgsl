@@ -233,6 +233,7 @@ fn blur_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     let p = world_at(px, d);
     let dims = vec2<i32>(textureDimensions(raw_t));
     let tol = 0.1 * ao.size.z;
+    const TAPS: array<f32, 5> = array<f32, 5>(1.0, 4.0, 6.0, 4.0, 1.0);
     var sum = 0.0;
     var weight = 0.0;
     for (var y = -2; y <= 2; y++) {
@@ -250,8 +251,7 @@ fn blur_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
             if abs(dot(q - p, n)) > tol || dot(nq, n) < 0.9 {
                 continue;
             }
-            let taps = array<f32, 5>(1.0, 4.0, 6.0, 4.0, 1.0);
-            let w = taps[u32(x + 2)] * taps[u32(y + 2)];
+            let w = TAPS[u32(x + 2)] * TAPS[u32(y + 2)];
             sum += textureLoad(raw_t, q_px, 0).r * w;
             weight += w;
         }

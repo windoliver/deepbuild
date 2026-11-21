@@ -28,12 +28,16 @@ impl State {
     }
 }
 
-/// The prompt as its host shows it: `{state, relay, players, refused, text}`.
-pub fn prompt(host: &str, players: u8, state: &State) -> Value {
-    let about = format!(
+/// The prompt as its host shows it: `{state, relay, players, refused, text}`. A piece that keeps a
+/// profile record says its numbers go to the other players (#276).
+pub fn prompt(host: &str, players: u8, profile: bool, state: &State) -> Value {
+    let mut about = format!(
         "This piece is played by {players} players through the relay {host}. \
          The relay, and on a direct path the other players, see this copy's network address."
     );
+    if profile {
+        about.push_str(" Your profile's numbers go to the other players.");
+    }
     let (refused, text) = match state {
         State::Open => (json!("none"), format!("{about} Click Join to play.")),
         State::Joined => (json!("none"), format!("{about} Joined.")),
@@ -62,7 +66,7 @@ mod tests {
 
     #[test]
     fn the_prompt_names_the_relay_host_and_who_sees_the_address() {
-        let p = prompt("relay.test:4433", 2, &State::Open);
+        let p = prompt("relay.test:4433", 2, false, &State::Open);
         let text = p["text"].as_str().unwrap();
         assert!(
             text.contains("relay.test:4433") && text.contains("network address"),
@@ -72,7 +76,12 @@ mod tests {
             (&p["state"], &p["refused"]),
             (&json!("open"), &json!("none"))
         );
-        let r = prompt("relay.test", 2, &refused_by_relay("relay.test", "started"));
+        let r = prompt(
+            "relay.test",
+            2,
+            false,
+            &refused_by_relay("relay.test", "started"),
+        );
         assert_eq!(
             (&r["state"], &r["refused"]),
             (&json!("refused"), &json!("started"))

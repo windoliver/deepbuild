@@ -125,7 +125,12 @@ impl Match {
 
     /// The prompt as the page draws it.
     pub fn prompt(&self) -> Value {
-        prompt::prompt(&self.cfg.host, self.cfg.players, &self.state)
+        prompt::prompt(
+            &self.cfg.host,
+            self.cfg.players,
+            self.cfg.controls.get(deep_net::kind::PROFILE).is_some(),
+            &self.state,
+        )
     }
 
     fn refuse(&mut self, refused: Value, why: String) -> Value {

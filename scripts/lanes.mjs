@@ -1028,6 +1028,9 @@ alone.push('tests/acceptance/2310/');
 alone.push('tests/acceptance/2308/', 'tests/acceptance/191-redraft-2308/');
 // #2371's files build deep-physics.
 alone.push('tests/acceptance/2371/');
+// #1931's files build deep-physics (release and test-backends) and the wasm32 library; the blind redraft of #191's
+// first criterion's test under it builds deep-physics (shipped) and the wasm32 library, as #191's file does.
+alone.push('tests/acceptance/1931/', 'tests/acceptance/191-redraft-1931/');
 
 // #2742's files build deep-gpu; ac1 compares two films' GPU time on any Mac, and ac2 runs #417's suite.
 alone.push('tests/acceptance/2742/');
@@ -1252,6 +1255,25 @@ timed.push('tests/acceptance/981/ac8-budget.test.ts');
 
 // #2898's files (blind) each start real hubs, plug-ins and jobs and hold 40 s deep_wait calls; no timing.
 alone.push('tests/acceptance/2898/');
+// #189's saves and Oracle files build #189's assembler and deep-logic and write 32 MiB and 64 MiB memories' saves,
+// and ac11-budgets times opening, logic.layout and a migration; its carry files build deep-logic, and ac09 deep-show,
+// and play the pieces in headless Chrome.
+alone.push('tests/acceptance/189/saves/', 'tests/acceptance/189-oracle/', 'tests/acceptance/189/carry/');
+timed.push('tests/acceptance/189/saves/ac11-budgets.test.ts');
+// #189's lab files each build deep-show three times (full and two test physics builds); ac11's times a re-derivation.
+// The first draft's lab declares no grounded output, so the base refuses its logic item's read before any assertion
+// (tests/acceptance/189/lab-redraft/DISPUTE.md); its blind redraft runs in its place, and the first draft is kept by
+// hand until the owner swaps it.
+alone.push('tests/acceptance/189/lab-redraft/');
+timed.push('tests/acceptance/189/lab-redraft/ac11-rederive-budget.test.ts');
+byHand.push('tests/acceptance/189/lab/');
+// #851's files start replicas and a hub and play the fixture shell's journeys, levels of 3,700 steps, for minutes.
+alone.push('tests/acceptance/851/');
+// #851's criterion 8 ends INCONCLUSIVE until your taste call on its frames; it runs by hand.
+byHand.push('tests/acceptance/851/ac08-shown.test.ts');
+// #276's files build their assembler and deep-logic; record's run processes under a file-size limit, match's build
+// deep-show (full) and play two-seat matches in process, and web's play the piece in headless Chrome.
+alone.push('tests/acceptance/276/record/', 'tests/acceptance/276/match/', 'tests/acceptance/276/web/');
 
 // #2227's files type-check the hub and the CLI (AC1), run the whole workspace build in a copy of the checkout (AC2,
 // 485 s on the base) and a child Vitest of #1409's limit stop (AC3).
@@ -1278,6 +1300,10 @@ alone.push('tests/acceptance/953/', 'tests/acceptance/953-oracle/');
 // tree, and build deep-gpu to draw two frames on the GPU; no timing.
 alone.push('tests/acceptance/2738/');
 slow.push('tests/acceptance/2738/ac1-linux-build.test.ts');
+
+// #265's files (blind) build deep-gpu (ac4 deep-show), draw on the GPU and play a match; ac6 times eight movers' frame CPU.
+alone.push('tests/acceptance/265/');
+timed.push('tests/acceptance/265/ac6-budgets.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

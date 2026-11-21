@@ -98,6 +98,10 @@ pub struct Logic {
     len: i64,
     /// #280: the items net.feel names that no world output places, at their own `at.pos`.
     fixed: Vec<(String, [f64; 3])>,
+    /// #276: the profile record entry this copy's player brings to step 0, from its own store,
+    /// and the records its steps wrote, by logic step, as the steps that stand left them.
+    pub brings: Option<Value>,
+    profiles: BTreeMap<i64, Value>,
 }
 
 impl Logic {
@@ -143,6 +147,8 @@ impl Logic {
             worlds: None,
             len: 1,
             fixed: Vec::new(),
+            brings: None,
+            profiles: BTreeMap::new(),
         })
     }
 
@@ -163,6 +169,17 @@ impl Logic {
                 Some((p.clone(), [x(0), x(1), x(2)]))
             })
             .collect();
+    }
+
+    /// #276: the profile records the logic steps through match step `confirmed` wrote, in step
+    /// order, each `{item, step, record}`: what a copy writes once those steps are confirmed.
+    pub fn profiles(&self, confirmed: i64) -> Vec<Value> {
+        let len = self.piece.items.first().map_or(1, |i| i.step).max(1);
+        let upto = ((confirmed + 1) * self.len + len - 1) / len;
+        self.profiles
+            .range(..upto)
+            .map(|(_, r)| r.clone())
+            .collect()
     }
 
     /// #277: the copy's own golden of the steps it ran (Logic: checkpoints and bake): each logic
@@ -238,6 +255,9 @@ impl Stepper for Logic {
         let before = cpu_ns();
         self.world.run_through(until - 1, &mut self.rec);
         self.ns += cpu_ns() - before;
+        for r in deep_logic::profile::written(&mut self.world) {
+            self.profiles.insert(r["step"].as_i64().unwrap_or(0), r);
+        }
         if let Some(trap) = self.rec.traps.first() {
             self.spent += cpu_ns() - before;
             return Err(trap.clone());
@@ -300,10 +320,18 @@ impl Stepper for Logic {
             .collect()
     }
 
+    fn brings(&self) -> Vec<(String, Value)> {
+        self.brings
+            .iter()
+            .map(|v| (deep_net::kind::PROFILE.to_string(), v.clone()))
+            .collect()
+    }
+
     fn again(&self) -> Result<Self, Value> {
         let mut again =
             Logic::planted(self.piece.clone(), &self.start, false, self.world.planted())?;
         again.rounds = self.rounds;
+        again.brings = self.brings.clone();
         again.range = self.range.as_ref().map(|r| Range {
             form: r.form.clone(),
             ty: r.ty.clone(),
@@ -348,10 +376,17 @@ impl Stepper for Logic {
         self.ns += cpu_ns() - before;
         self.rows
             .retain(|r| r["step"].as_i64().is_some_and(|k| k < step));
+        // #276: a record of a step rolled back is written again only if that step asks again.
+        let first = t / self.piece.items.first().map_or(1, |i| i.step).max(1);
+        self.profiles.retain(|k, _| *k < first);
         if let Some(w) = self.worlds.as_mut() {
             w.back(step, t)?;
         }
         Ok(())
+    }
+
+    fn drawn(&self) -> Option<Value> {
+        Some(Value::Object(self.rec.arrays(&self.piece)))
     }
 
     fn occurrences(&self) -> Vec<Value> {
