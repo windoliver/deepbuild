@@ -33,7 +33,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   'tests/acceptance/453/',
   'tests/acceptance/1633/', 'packages/hub/test/reopened-items.test.ts',
   'tests/acceptance/46/', 'packages/github/test/',
-  'tests/acceptance/1172/', 'tests/acceptance/2078/', 'tests/acceptance/2218/', 'tests/acceptance/2698/',
+  'tests/acceptance/1172/', 'tests/acceptance/2078/', 'tests/acceptance/2218/', 'tests/acceptance/2698/', 'tests/acceptance/2648/',
   'tests/acceptance/1454/',
   'tests/acceptance/1459/',
   'tests/acceptance/1463/',
@@ -51,7 +51,8 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   ...['wake', 'repeat', 'waits', 'budgets'].map((f) => `tests/acceptance/27/${f}.test.ts`), 'tests/acceptance/27/outcomes-redraft/', 'tests/acceptance/27/desktop-redraft-2/', 'tests/acceptance/124/', 'tests/acceptance/906/', 'packages/hub/test/drive.test.ts',
   'tests/acceptance/990/',
   'tests/acceptance/140/gpu/', 'tests/acceptance/140/view/', 'tests/acceptance/140/platform/', 'tests/acceptance/309/', 'tests/acceptance/385/', 'tests/acceptance/874/redraft/',
-  ...['cycles', 'planted', 'leftovers', 'sessions/readings', 'sessions/planted'].map((f) => `tests/acceptance/824/${f}.test.ts`), 'tests/acceptance/1285/', 'tests/acceptance/1294/', 'tests/acceptance/1507/', 'tests/acceptance/1998/', 'tests/acceptance/1999/', 'tests/acceptance/1848/', 'tests/acceptance/2653/', 'tests/acceptance/1868/', 'tests/acceptance/1868-redraft-ac2/'];
+  ...['cycles', 'planted', 'leftovers', 'sessions/readings', 'sessions/planted'].map((f) => `tests/acceptance/824/${f}.test.ts`), 'tests/acceptance/1285/', 'tests/acceptance/1294/', 'tests/acceptance/1507/', 'tests/acceptance/1998/', 'tests/acceptance/1999/', 'tests/acceptance/1848/', 'tests/acceptance/2653/', 'tests/acceptance/1868/', 'tests/acceptance/1868-redraft-ac2/',
+  'tests/acceptance/1334-redraft-2565/'];
 /**
  * Files whose recorded run takes over two minutes on this machine, by the fastest run each that vitest's results caches
  * in the worktrees and affected.mjs's node --test reports held on 2026-11-07. affected.mjs runs them with --slow and for
@@ -96,7 +97,7 @@ export const slow = [
   'tests/acceptance/910/ac1-issue-link.test.mjs', 'tests/acceptance/910/ac2-renamed-heading.test.mjs',
   'tests/acceptance/910/ac3-offline.test.mjs', 'tests/acceptance/965/background.test.ts',
   'tests/acceptance/965/grace.test.ts', 'tests/acceptance/965/starts.test.ts', 'tests/acceptance/992/agree.test.ts',
-  'tests/live-instancers.test.ts', 'tests/scene3d-interface.test.ts',
+  'tests/live-instancers.test.ts', 'tests/scene3d-interface.test.ts', 'tests/acceptance/2648/instructions.test.ts', 'tests/acceptance/2648/seen.test.ts',
   ...['held', 'judged', 'restart', 'plants', 'heap'].map((f) => `tests/acceptance/2653/${f}.test.ts`),
 ];
 /**
@@ -135,6 +136,9 @@ export const exclusive = ['tests/acceptance/16/', 'tests/acceptance/315/', 'test
  * redraft/own-repo.test.ts, runs in its place.
  * #1632's first AC2 draft, answers.test.ts, is kept as written, by hand only: it also counts the answer's delivery along
  * the thread joined across /clear, which the design keeps (the owner's call); its blind redraft, redraft-ac2/, runs in its place.
+ * #1334's first crash, misjudge and hold drafts are kept as written, by hand only: their fixture copies scripts/ into a
+ * repository with no typescript, so its lanes never load, and their rollback worker can miss a planted build (#2565);
+ * their blind redraft, tests/acceptance/1334-redraft-2565/, runs in their place.
  * #19's first AC16 contract draft, doctor/contract.test.ts, is kept as written, by hand only: it reads the 127 `deep lease`
  * passes on from a command that isn't there as unmapped, and lease keeps passing its command's status on (the owner's call
  * on #2200); its blind redraft, doctor/redraft-ac16/, runs in its place.
@@ -147,7 +151,8 @@ export const byHand = ['tests/acceptance/46/live.test.ts', 'tests/acceptance/685
   'tests/acceptance/824/sessions/redraft-readings/', 'tests/acceptance/14/ac6-redraft.test.ts', 'tests/acceptance/37/assertions.test.ts',
   'tests/acceptance/37/budgets.test.ts', 'tests/acceptance/37/receipt-first-draft.test.ts', 'tests/acceptance/1015/own-repo.test.ts', 'tests/acceptance/1016/',
   // #994: real windows that take focus, a real hub, and 100 s of the retry schedule by the clock.
-  'tests/acceptance/994/app.test.ts', 'tests/acceptance/994/taste.test.ts', 'tests/acceptance/1632/answers.test.ts', 'tests/acceptance/19/doctor/contract.test.ts'];
+  'tests/acceptance/994/app.test.ts', 'tests/acceptance/994/taste.test.ts', 'tests/acceptance/1632/answers.test.ts', 'tests/acceptance/19/doctor/contract.test.ts',
+  ...['crash', 'misjudge', 'hold'].map((f) => `tests/acceptance/1334/${f}.test.mjs`)];
 
 /**
  * Test files whose verdict reads the machine's load or timing (docs/parallel-proof.md, section 7), which run only under
@@ -223,7 +228,7 @@ export const timed = [
   'tests/acceptance/896/dirty.test.ts', 'tests/acceptance/896/settled.test.ts',
   'tests/acceptance/906/prompt.test.ts', 'tests/acceptance/906/stop.test.ts', 'tests/acceptance/96/budgets.test.ts',
   'tests/benchmark.test.mjs', 'tests/acceptance/1432/budgets.test.mjs',
-  'tests/acceptance/1868/canvas-cells.test.mjs', 'tests/acceptance/1868/status-runs.test.mjs'
+  'tests/acceptance/1868/canvas-cells.test.mjs', 'tests/acceptance/1868/status-runs.test.mjs', 'tests/acceptance/2648/seen.test.ts'
 ];
 
 // #33's suite runs one file at a time, its live files by hand, and its budget as a timed file.
@@ -482,6 +487,8 @@ alone.push('tests/acceptance/1972/');
 alone.push('tests/acceptance/1973/');
 // #1974's files each build deep-show and run its defaults run over the full build's dump.
 alone.push('tests/acceptance/1974/');
+// #2717's files (blind) each build the full deep-show and start it, as #1974's do; CPU only, no GPU and no timing.
+alone.push('tests/acceptance/2717/');
 // #1957's file builds deep-show and offers it pack graphs.
 alone.push('tests/acceptance/1957/');
 // #1961's files build deep-show and patch an open document to another version of its pack.
@@ -869,6 +876,13 @@ timed.push('tests/acceptance/823-redraft-2073/run.test.ts');
 slow.push('tests/acceptance/326-redraft-2073/click.test.ts', 'tests/acceptance/27-redraft-2073/waits.test.ts');
 byHand.push('tests/acceptance/26/contradiction.test.ts', 'tests/acceptance/822/hub.test.ts', 'tests/acceptance/19/setup/watchonly.test.ts', 'tests/acceptance/326/setup/click.test.ts', 'tests/acceptance/326/setup/first-command.test.ts',
   'tests/acceptance/823/run.test.ts', 'tests/acceptance/823/stop.test.ts', 'tests/acceptance/27/waits.test.ts', 'tests/acceptance/1942/survives.test.ts');
+// #1865 has the installed hub stop only once the OS confirms you inside the hub, so the older tests that stop it with a
+// raw hub.stop on the control token alone are their blind redrafts' since (each folder's REDRAFT.md); the first drafts
+// are kept as written, by hand only. #16's redraft starts its hubs as #16's suite does, alone and exclusive.
+alone.push('tests/acceptance/16-redraft-1865/');
+exclusive.push('tests/acceptance/16-redraft-1865/');
+byHand.push('tests/acceptance/16/service.test.ts', 'tests/acceptance/16/roles.test.ts', 'tests/acceptance/1334/contract.test.mjs', 'tests/acceptance/1334/crash.test.mjs',
+  'tests/acceptance/1334/misjudge.test.mjs');
 // #468's files each build deep-gpu (AC7 deep-show too) and draw on the Metal GPU; ac5-budgets judges the lens and
 // focus task's budgets on the reference Mac.
 // AC3 runs as its blind redraft, on the owner's ruling: the first draft reads view3d's `overlays` as an object keyed
@@ -982,6 +996,9 @@ alone.push('tests/acceptance/2307/');
 // #2310's files build deep-physics (release and test-backends), its wasm32 library, the lane's linux/amd64 build
 // and the merge base's release build.
 alone.push('tests/acceptance/2310/');
+// #2308's files build deep-physics (release and test-backends) and the merge base's release build; the blind redraft of
+// #191's first criterion under it builds deep-physics and its wasm32 library, as #191's file does.
+alone.push('tests/acceptance/2308/', 'tests/acceptance/191-redraft-2308/');
 
 // #2742's files build deep-gpu; ac1 compares two films' GPU time on any Mac, and ac2 runs #417's suite.
 alone.push('tests/acceptance/2742/');
@@ -1164,6 +1181,12 @@ alone.push('tests/write-reveal-frames.test.ts');
 // whole rules.json with the hub stopped, which #2219 retires; its blind redraft, 2204-redraft-ac3/, runs in its place, and
 // the file's AC1, AC2, AC4 and AC5 run by hand with it (tests/acceptance/2204-redraft-ac3/DISPUTE.md).
 byHand.push('tests/acceptance/2204/rules-unreadable.test.ts');
+
+// #1097's first draft of computed.test.ts and depth.test.ts is kept as written, by hand only: each file's wrong-program
+// test seeds the checkout's default-rules.json into the pinned merge base's deep-hook, which can't read the entries added
+// since the pin (from #1294 on), so it fails closed on every call; the blind redraft, 1097-redraft-defaults/, seeds the
+// defaults that commit shipped and runs both tests of each file in its place (its REDRAFT.md).
+byHand.push('tests/acceptance/1097/computed.test.ts', 'tests/acceptance/1097/depth.test.ts');
 
 // #2776's files build deep-show (full with the test module test.paths) and export 3D scenes to the web.
 alone.push('tests/acceptance/2776/seal.test.ts', 'tests/acceptance/2776/export.test.ts', 'tests/acceptance/2776/listing.test.ts');

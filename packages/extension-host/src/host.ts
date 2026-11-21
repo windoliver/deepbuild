@@ -101,7 +101,9 @@ export type Plant = 'hub-unless-agent-built' | 'grants-only-in-record-query' | '
   // that keeps every set of names, and a host that forgets a request ID and runs its call again.
   | 'churn-keeps-every-answer' | 'churn-keeps-every-result' | 'churn-keeps-every-name-set' | 'forgets-request-runs-again'
   // #2402's: a host that counts a handler's failures and never clears them.
-  | 'failures-never-cleared';
+  | 'failures-never-cleared'
+  // #2648's: a host that reads notices.json once, at its start.
+  | 'reads-files-at-start-only';
 
 /** One hook request to every loaded handler of its kind (#350). */
 export interface HookRequest {
@@ -688,7 +690,7 @@ class Host implements ExtensionHost {
       saved: (name, settings) => this.save('schedules.json', { ...this.read('schedules.json'), [name]: settings }),
     });
     this.work = new WorkSources(this.workHost());
-    this.sourceHost = new HostSources({ record: options.record, now: options.now, files: this.files, exts: this.exts, ask: (ext, ms, what, method, params) => this.ask(ext, ms, what, method, params) }, this.sources, series);
+    this.sourceHost = new HostSources({ record: options.record, now: options.now, files: this.files, exts: this.exts, ask: (ext, ms, what, method, params) => this.ask(ext, ms, what, method, params), ...(options.plant === 'reads-files-at-start-only' ? { plant: options.plant } : {}) }, this.sources, series);
     this.scheduleHost = new HostSchedules({ record: options.record, exts: this.exts, sources: { holds: (id, name) => this.sources.holds(id, name), workExt: (source) => this.sourceHost.workExt(source) }, sending: this.sending }, this.scheduler);
     this.routing = new AdapterRouting({ usable: async (ext) => !(await this.revoked(ext)), ask: (ext, ms, what, method, params) => this.ask(ext, ms, what, method, params), plant: options.plant });
     this.modelJobs = new Jobs({ record: options.record, now: options.now, runner: options.runner, access: { reaches: (ext, kind) => this.reaches(ext, kind), visible: (ext, event) => this.visible(ext, event), refuse: (ext, scope, clause, given) => this.refused(this.connection(ext, scope), 'deep.runner.run', 'grant', clause, [given]) } });
