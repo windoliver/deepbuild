@@ -36,12 +36,30 @@ still passes), and reads the refusals back in the presets' order; `sweep-checks.
 wrong-order run and the wasm lane. Stack samples of the canvas core during the check show eight threads in
 `Voice::render_part` under `presets_field_with`.
 
-Its gain is **not measured**: `spark-foley-parallel.txt` (`foley-alone.mjs`) was taken at load 130 to 146 on 20
-cores, where it reads 4.8 s with every core and 11 to 28 s pinned to one. `cargo test -p deep-canvas-media synth`:
-10 passed.
+On the Spark its gain could not be read: `spark-foley-parallel.txt` (`foley-alone.mjs`) was taken at load 130 to
+146 on 20 cores, where it reads 4.8 s with every core and 11 to 28 s pinned to one. `cargo test -p deep-canvas-media
+synth`: 10 passed.
 
-Not shown here: that the two #1172 suites pass. They need the Mac's app window, and on the Spark the first check
-plus one call is still about 9 s of their 10 s.
+## The Mac round at 2541c2b71 (`mac-2541c2b71/`)
+
+Base is main 89df55943, the merge base; both clones were built and run one after the other on the same Mac
+(`exits.txt` has each step's load, power and exit code). Load was 73 to 77 at the base's suites and 18 to 27 at the
+head's suites and at every timing, so the suites' two sides did not run under the same load, and the times stay
+INCONCLUSIVE as absolute numbers. A chat app was in front during the head's steps, not a bare desktop Space.
+
+| | base 89df55943 | head 2541c2b71 |
+|---|---|---|
+| `rows.test.ts` | 2 failed of 2, `no reply to canvas.user within 10000 ms` | **2 passed of 2** |
+| `popout.test.ts` | 1 failed of 1, the same setup wait | 1 failed of 1, on its first assertion (below) |
+| shipped packs checked, fresh store | 13,025 ms | 2,256 ms |
+| new process, all packs, first call | 12,534 ms | 2,133 ms |
+| later calls, all packs | 7,492 to 7,542 ms | 1,008 to 1,020 ms |
+| foley checked alone, three times | 4,816 to 5,106 ms | 947 to 1,014 ms |
+
+The pop-out test now gets past its setup and fails at `popout.test.ts:25`: before the press it wants every ask's
+question on the main window's pixels, and two of the three rows draw cut short (`Which font for th... How it looks`).
+The row's cut is not part of this change; this round does not show whether main's app draws the same, since main
+never got that far.
 
 Left open: the canvas core still checks every installed pack at every call (1.6 s a call here); the design says once
 per version.
