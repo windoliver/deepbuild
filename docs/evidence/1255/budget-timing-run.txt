@@ -18,3 +18,9 @@ The same test on the later merge with main 0fe5994eb (6d59e488d), under a timed 
 == granted 14:46:22 head 6d59e488d load 8.19 8.97 18.59
 == ended 14:46:25 load 8.19 8.97 18.59
 #1255.a22f4ff6 conflicts over two hours of forty movers: 0.020, 0.019, 0.020, 0.020, 0.021 ms against 20 ms, one-minute load at each run's start and end 8.2/8.2, 8.2/8.2, 8.2/8.2, 8.2/8.2, 8.2/8.2, on Mac17,10: INCONCLUSIVE (a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): power (mains) is "battery", not "ac")
+
+Once more on that merge (504e94974, evidence only since 6d59e488d), back on mains, under a timed grant: INCONCLUSIVE again, the thermal state fair, not nominal. Its readings:
+
+== granted 14:59:05 head 504e94974 load 17.45 16.76 17.67
+== ended 14:59:09 load 17.57 16.80 17.68
+#1255.a22f4ff6 conflicts over two hours of forty movers: 0.021, 0.021, 0.021, 0.019, 0.027 ms against 20 ms, one-minute load at each run's start and end 17.6/17.6, 17.6/17.6, 17.6/17.6, 17.6/17.6, 17.6/17.6, on Mac17,10: INCONCLUSIVE (a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): thermal state is "fair", not "nominal")
