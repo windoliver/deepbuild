@@ -130,6 +130,22 @@ it('covers only the versions its facts list: one between two listed ones is refu
   expect(smoke.blocked?.cause).toBe('standing approval');
 }, 60_000);
 
+// The hub reads a version with its pre-release suffix, so a listed version's beta is not that version.
+it('reads a pre-release build as itself: a listed version\'s beta is refused, and its smoke test waits for your approval', async () => {
+  const listed = facts.versions[1] ?? facts.versions[0]!;
+  const beta = `${listed}-beta`;
+  expect(facts.versions, `the facts already list ${beta}`).not.toContain(beta);
+  await open(claude(0, beta));
+  await runner.report({ agent: 'claude-code', account: ACCOUNT, rate_limits: limits(5) });
+  const read = await runner.run({ kind: 'read', agent: 'claude-code', prompt: 'Read.' });
+  expect(read.state, JSON.stringify(read)).toBe('refused');
+  expect(read.pid, 'a refused job has no process').toBeUndefined();
+  expect(String(read.refused), 'the refusal names the version it read').toContain(`${beta} at`);
+  const smoke = await runner.submit({ kind: 'smoke', agent: 'claude-code', prompt: 'Smoke.' });
+  expect(smoke.state, JSON.stringify(smoke)).toBe('waiting');
+  expect(smoke.blocked?.cause).toBe('standing approval');
+}, 60_000);
+
 it('keeps the higher reading of a window until it resets: a lower one before then is not believed', async () => {
   await open(claude());
   const at = resets();

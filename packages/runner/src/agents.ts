@@ -35,8 +35,6 @@ export interface AgentParts {
   reach(o: { temp: string; proxy: string; token?: string; home: string; env: Record<string, string | undefined> }): Record<string, string>;
   /** Whether what it left in its job's temp folder shows its read-only mode refusing, where its output doesn't say. */
   refusedIn?(temp: string): boolean;
-  /** Its version reads with its pre-release suffix, since its facts list builds by it (0.163.0-alpha.10.2). */
-  exactVersions?: true;
   /** Whether an account has no plan window for a job to wait on: with no plan account signed in, a budget is its only gate. */
   planless?(account: string | null): boolean;
   /** It installs by npm, so it reads its dependencies around its own folder, and its version check reads what its job's grant names. */
@@ -57,8 +55,8 @@ export function programRoot(real: string): string {
   const named = typeof bin === 'string' ? [bin] : isObj(bin) ? Object.values(bin) : [];
   return named.some((b) => typeof b === 'string' && resolve(up, b) === real) ? up : own;
 }
-/** The version a binary shows: its suffix kept where the facts list exact builds, so a stable build is never its alpha. */
-export const shownVersion = (text: string, exact: boolean): string | undefined => (exact ? /(\d+\.\d+\.\d+(?:-[\w.]+)?)/ : /(\d+\.\d+\.\d+)/).exec(text)?.[1];
+/** The version a binary shows, its pre-release suffix kept as the hub keeps it: a beta or alpha is never its stable build. */
+export const shownVersion = (text: string): string | undefined => /(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)/.exec(text)?.[1];
 /** Codex's plan windows, each named by its length as the hub's row reads it, or by its slot where a snapshot gives none. Only the plan's own snapshot: another limit's, such as image_gen's, is no reading of its windows. */
 export function codexWindows(limits: unknown): Map<string, { used: number; resets: number | null }> {
   const out = new Map<string, { used: number; resets: number | null }>();
@@ -139,7 +137,6 @@ export const AGENTS: Partial<Record<Agent, AgentParts>> = {
     refusedIn: (temp) => codexLogs(temp).some(codexLogRefused),
     token: async () => undefined,
     expires: async () => undefined,
-    exactVersions: true,
     planless: (account) => account === null,
   },
 };

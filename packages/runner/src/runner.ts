@@ -724,7 +724,7 @@ class LocalRunner implements Runner {
       const shown = await this.step([path, '--version'], job.rec.folder, { read: [...this.programs(real, AGENTS[agent]), ...(AGENTS[agent]?.packaged ? job.spec.grant?.read ?? [] : [])] }, { PATH: this.o.loginPath, HOME: this.o.env.HOME ?? '' });
       const after = existsSync(real) ? identity(statSync(real)) : '';
       if (realpathSync(path) !== real || after !== before || (await fileDigest(real)) !== digest) continue;
-      const version = shownVersion(shown.stdout.toString('utf8'), AGENTS[agent]!.exactVersions === true);
+      const version = shownVersion(shown.stdout.toString('utf8'));
       if (shown.code !== 0 || !version) return { refused: `${path} --version exited ${String(shown.code)} and printed no version: ${shown.stderr.trim().slice(0, 500)}` };
       const verified: Verified = { path, real, digest, version, id: before };
       this.verified.set(agent, verified);
