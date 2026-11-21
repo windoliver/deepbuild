@@ -168,7 +168,7 @@ fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
     };
     let planted = match app.planted {
         Some(Planted::SectorsSourceOver) => scene::Planted::SectorsSourceOver,
-        p => crate::lightfx::scene_plant(p).unwrap_or(scene::Planted::None),
+        _ => crate::lightfx::scene_plant(app.composed()).unwrap_or(scene::Planted::None),
     };
     let frame = scene::frame_planted(&flat_doc, &flat, (&palette, &ty), &record, 1.0, planted)
         .map_err(|r| refused(r.code, r.path))?;
@@ -352,7 +352,7 @@ fn vello_picture(
             canonical: true,
             base: base.as_ref(),
             keep,
-            planted,
+            planted: planted.and_then(Planted::composed),
             guard: guard.as_ref(),
             other: other.as_ref(),
             page: page.as_deref(),
@@ -863,7 +863,7 @@ impl Painter {
                 canonical: false,
                 base: None,
                 keep: false,
-                planted,
+                planted: planted.and_then(Planted::composed),
                 guard: frame.guard.as_ref(),
                 other: None,
                 page: frame.page.as_deref(),

@@ -91,14 +91,31 @@ pub struct Logic {
     plant: deep_logic::world::rollback::Plant,
     /// The CPU time logic took since the timing was last read, in ns.
     ns: u64,
+    /// #277: the CPU time every module has taken so far, in ns.
+    spent: u64,
     /// #551: the document's worlds, stepped beside the logic items, and the match step's length.
     worlds: Option<crate::net_worlds::Worlds>,
     len: i64,
+    /// #276: the profile record entry this copy's player brings to step 0, from its own store,
+    /// and the records its steps wrote, by logic step, as the steps that stand left them.
+    pub brings: Option<Value>,
+    profiles: BTreeMap<i64, Value>,
 }
 
 impl Logic {
     /// `piece` at its start on `track`, the input track recorded before the match.
     pub fn new(piece: Rc<Piece>, track: &[Value], rows: bool) -> Result<Logic, Value> {
+        Logic::planted(piece, track, rows, Default::default())
+    }
+
+    /// The same, its logic module the planted one `logic` names (#277's catch-up in arrival
+    /// order takes a step's entries in the order they reached it).
+    pub fn planted(
+        piece: Rc<Piece>,
+        track: &[Value],
+        rows: bool,
+        logic: deep_logic::Planted,
+    ) -> Result<Logic, Value> {
         let entries: Vec<Entry> = track.iter().filter_map(Entry::parse).collect();
         // A copy's frames are timed: its checkpoints' deep hashes are read by restoring them.
         let mut rec = Record::default();
@@ -108,7 +125,7 @@ impl Logic {
             piece.clone(),
             track_of(&entries),
             true,
-            Default::default(),
+            logic,
             &mut rec,
             None,
         )?;
@@ -124,9 +141,44 @@ impl Logic {
             ring: None,
             plant: Default::default(),
             ns: 0,
+            spent: 0,
             worlds: None,
             len: 1,
+            brings: None,
+            profiles: BTreeMap::new(),
         })
+    }
+
+    /// #276: the profile records the logic steps through match step `confirmed` wrote, in step
+    /// order, each `{item, step, record}`: what a copy writes once those steps are confirmed.
+    pub fn profiles(&self, confirmed: i64) -> Vec<Value> {
+        let len = self.piece.items.first().map_or(1, |i| i.step).max(1);
+        let upto = ((confirmed + 1) * self.len + len - 1) / len;
+        self.profiles
+            .range(..upto)
+            .map(|(_, r)| r.clone())
+            .collect()
+    }
+
+    /// #277: the copy's own golden of the steps it ran (Logic: checkpoints and bake): each logic
+    /// item's step hash after each step from 0 to `ran` − 1, null at a step it never ran.
+    pub fn golden(&self, ran: i64) -> Value {
+        let rows = self.rec.rows();
+        let hashes: Map<String, Value> = self
+            .piece
+            .items
+            .iter()
+            .map(|i| {
+                let hash = |k: i64| {
+                    let row = rows.get(&k).and_then(|(items, _)| items.get(&i.id));
+                    row.and_then(|r| r.get("hash"))
+                        .cloned()
+                        .unwrap_or(Value::Null)
+                };
+                (i.id.clone(), Value::Array((0..ran).map(hash).collect()))
+            })
+            .collect();
+        json!({"step_hashes": hashes})
     }
 
     /// #551: steps `doc`'s worlds beside the logic items, each its own canvas module.
@@ -181,13 +233,18 @@ impl Stepper for Logic {
         let before = cpu_ns();
         self.world.run_through(until - 1, &mut self.rec);
         self.ns += cpu_ns() - before;
+        for r in deep_logic::profile::written(&mut self.world) {
+            self.profiles.insert(r["step"].as_i64().unwrap_or(0), r);
+        }
         if let Some(trap) = self.rec.traps.first() {
+            self.spent += cpu_ns() - before;
             return Err(trap.clone());
         }
         self.len = until / (step + 1).max(1);
         if let Some(w) = self.worlds.as_mut() {
             w.run(until)?;
         }
+        self.spent += cpu_ns() - before;
         if self.keep {
             let len = self.piece.items.first().map_or(1, |i| i.step);
             self.rows.push(self.row(step, step * len));
@@ -208,6 +265,14 @@ impl Stepper for Logic {
                 .map(|(id, h)| (id.as_str(), h.as_str().unwrap_or("")))
                 .chain(worlds.iter().map(|(id, h)| (id.as_str(), h.as_str()))),
         )
+    }
+
+    fn spent(&self) -> u64 {
+        self.spent
+    }
+
+    fn jump(&mut self, _step: i64, t: i64) {
+        self.world.skip(t);
     }
 
     fn step_hash(&mut self) -> u64 {
@@ -233,9 +298,18 @@ impl Stepper for Logic {
             .collect()
     }
 
+    fn brings(&self) -> Vec<(String, Value)> {
+        self.brings
+            .iter()
+            .map(|v| (deep_net::kind::PROFILE.to_string(), v.clone()))
+            .collect()
+    }
+
     fn again(&self) -> Result<Self, Value> {
-        let mut again = Logic::new(self.piece.clone(), &self.start, false)?;
+        let mut again =
+            Logic::planted(self.piece.clone(), &self.start, false, self.world.planted())?;
         again.rounds = self.rounds;
+        again.brings = self.brings.clone();
         again.range = self.range.as_ref().map(|r| Range {
             form: r.form.clone(),
             ty: r.ty.clone(),
@@ -280,6 +354,9 @@ impl Stepper for Logic {
         self.ns += cpu_ns() - before;
         self.rows
             .retain(|r| r["step"].as_i64().is_some_and(|k| k < step));
+        // #276: a record of a step rolled back is written again only if that step asks again.
+        let first = t / self.piece.items.first().map_or(1, |i| i.step).max(1);
+        self.profiles.retain(|k, _| *k < first);
         if let Some(w) = self.worlds.as_mut() {
             w.back(step, t)?;
         }

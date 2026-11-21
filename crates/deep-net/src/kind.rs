@@ -359,6 +359,9 @@ pub struct Config {
     pub timeout: i64,
     /// The document's `controls`: what a player's entry must name, within its range (#550).
     pub controls: Value,
+    /// #277: a logic item reads `net.seats`, so a leave, a drop or an absence hands the seat to
+    /// the piece's bot at one agreed step; else the match ends as before, nothing playing it.
+    pub seats: bool,
 }
 
 impl Config {
@@ -382,7 +385,8 @@ impl Config {
             window: whole("window", 8, [0, 16]),
             hash_every: whole("hash_every", 60, [1, 100_000]),
             timeout: (timeout.max(0.05) * FLICKS as f64).round() as i64,
-            controls: form.get("controls").cloned().unwrap_or(json!({})),
+            controls: controls(form),
+            seats: reads_seats(form),
         })
     }
 
@@ -392,11 +396,81 @@ impl Config {
     }
 }
 
+/// The document's `controls`, and under [`PROFILE`] the shape of the profile record a logic item
+/// keeps (#276), which each player's step-0 entry is held to.
+fn controls(form: &Value) -> Value {
+    let mut c = form.get("controls").cloned().unwrap_or(json!({}));
+    let items = form
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten();
+    if let Some(arrays) = items
+        .filter_map(|(_, i)| i.pointer("/params/profile/arrays"))
+        .next()
+    {
+        c[PROFILE] = json!({"profile": arrays});
+    }
+    c
+}
+
+/// #276: the control key a player's profile record entry travels under, at step 0 only.
+pub const PROFILE: &str = ":profile";
+
+/// #276: a profile record's entry, `{profile: sha256, arrays}`, holds an array of each name the
+/// piece's profile declares, of its count, and nothing else.
+fn admit_profile(shape: &Value, value: &Value) -> Result<(), Value> {
+    let fits = |name: &str, want: &Value| {
+        let n = want.get("count").and_then(Value::as_u64).unwrap_or(1) as usize;
+        value["arrays"][name]
+            .as_array()
+            .is_some_and(|a| a.len() == n && a.iter().all(|x| x.is_number() || x.is_boolean()))
+    };
+    let shape = shape.as_object().cloned().unwrap_or_default();
+    let ok = value["profile"].as_str().is_some_and(|h| h.len() == 64)
+        && value["arrays"]
+            .as_object()
+            .is_some_and(|a| a.len() == shape.len())
+        && shape.iter().all(|(n, w)| fits(n, w));
+    if ok {
+        Ok(())
+    } else {
+        Err(
+            json!({"code": "out_of_range", "control": PROFILE, "value": value,
+            "what": "a profile record's entry holds the arrays the piece's profile declares"}),
+        )
+    }
+}
+
 /// #550: the checks every player's entry passes on every copy, a peer's as the viewer's own: it
 /// names a control the piece declares, and its value is one that control can take (a number
 /// within a slider's range, one of a choice's options, a text within its cap). The refusal names
 /// the code and the control; the copy adds the player.
+/// #277: whether a logic item of `form` reads `net.seats`.
+pub fn reads_seats(form: &Value) -> bool {
+    let items = form.get("items").and_then(Value::as_object);
+    items.into_iter().flatten().any(|(_, i)| {
+        i["kind"].as_str().is_some_and(|k| k.starts_with("logic@"))
+            && i["params"]["reads"]
+                .as_array()
+                .is_some_and(|r| r.iter().any(|r| r == crate::copy::NET_SEATS))
+    })
+}
+
 pub fn admit(controls: &Value, control: &str, value: &Value) -> Result<(), Value> {
+    if let Some(shape) = controls.get(PROFILE).filter(|_| control == PROFILE) {
+        return admit_profile(&shape["profile"], value);
+    }
+    // #277: a seat entry the net module writes, never a player's control.
+    if control == crate::copy::SEAT {
+        return match crate::copy::Seat::named(value.as_str().unwrap_or_default()) {
+            Some(_) => Ok(()),
+            None => Err(
+                json!({"code": "out_of_range", "control": control, "value": value,
+                               "what": "a seat is left, absent or back"}),
+            ),
+        };
+    }
     let Some(c) = controls.get(control) else {
         return Err(json!({"code": "unknown_control", "control": control,
             "what": format!("the piece declares no control {control}")}));

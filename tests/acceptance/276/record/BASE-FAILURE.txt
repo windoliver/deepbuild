@@ -1,0 +1,303 @@
+# #276 profile record acceptance suite (criteria 1, 2, 3, 5 and 6) at the base: this worktree at fcbfca05f (main
+# e575a47af with #189's branch, PR #2936 at a4a247731, merged; clean but for tests/acceptance/276/record added), on an
+# Apple-silicon Mac (macOS 27.2, shared, load average about 120 to 245 from other sessions), Node 24.22.2, rustup's
+# cargo 1.99.1, vitest 5.0.5.
+# Command, once per file:
+#   NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 PATH=/opt/homebrew/opt/rustup/bin:$PATH sh scripts/lease \
+#     node node_modules/vitest/vitest.mjs run --root tests/acceptance/276/record <file>.test.ts \
+#     --testTimeout=600000 --hookTimeout=180000
+# (scripts/lease: no deep on PATH and no built CLI here, so each ran unleased, as it says.)
+# Also: node node_modules/typescript/bin/tsc -p tests/acceptance/276/record/tsconfig.json exits 0, and the assembler
+# (wat/, crate acceptance-276-record-wat) builds with --locked.
+# Result: 8 of 8 tests fail (5 of 5 files), each at its first call, a layout probe's `check` in deep-logic, which the
+# base refuses: {"rule":"field","what":"logic@1 has no field profile","field":"profile"}. So no test reached a session,
+# a record file, the file-size limit, `golden`, the cap's check or a planted name (profile_replay_reads_store,
+# profile_bound_to_content, check_reads_viewer_profile, which the base would answer with bad_input and exit 2).
+#
+# The harness was checked first against the base's deep-logic in a scratch test (in this folder, deleted, not
+# committed), with the `profile` field taken out and the profile entry stood in at an offset the base never fills:
+# - every program assembles and runs with no trap; the session's first `open` is s1; the `rest` entry at step 900
+#   (t 10,584,000,000) makes request 1 at step 900 and no other; xp at step 900 is the stand-in's value + 1,200;
+# - with the entry unfilled, step 0 reads 0xa5a5a5a5 in got_flag, got_xp and got_look (what a module that leaves the
+#   region as it was gives), so "a u32 0 and zeros" can't pass on garbage;
+# - `golden` over 61 steps gives 61 step hashes equal to the bake's steps' items.hero.hash, and an extra asset in the
+#   piece's assets leaves the step hash unchanged (criterion 5's comparison);
+# - the big hero's stash holds 1,024 distinct values (11,205 bytes as JSON); a base save of it asked at step 300 under
+#   `ulimit -f 1` stops deep-logic with SIGXFSZ after its open and step-to-299 replies, leaving one 1,024-byte .tmp in
+#   the saves folder: this shell's block is 1,024 bytes, and the cut works.
+
+
+==> ac01-reopen-replay.test.ts
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/276/record ac01-reopen-replay.test.ts --testTimeout=600000 --hookTimeout=180000` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/276/record
+
+ ❯ ac01-reopen-replay.test.ts (2 tests | 2 failed) 24890ms
+   ❯ AC1 #276.ead11f27 the profile record reopens at the next session's step 0, and a replay reads it from its track (2)
+     × AC1 #276.ead11f27 xp 1200 written at step 900 and the app closed: the next session reads 1200 at step 0; its replay reads 1200 from its track after the stored record has moved on to 2000 926ms
+     × AC1 #276.ead11f27 a planted reopen that reads the store at replay time (profile_replay_reads_store) reads 2000 and fails, naming the step and the array 156ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac01-reopen-replay.test.ts > AC1 #276.ead11f27 the profile record reopens at the next session's step 0, and a replay reads it from its track > AC1 #276.ead11f27 xp 1200 written at step 900 and the app closed: the next session reads 1200 at step 0; its replay reads 1200 from its track after the stored record has moved on to 2000
+AssertionError: check of a layout probe with profile {"xp":{"type":"i32","count":1},"look":{"type":"i32","count":4}} admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"probe","refusals":[{"rule":"field","what":"logic@1 has no field profile","field":"profile"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ check helpers.ts:179:70
+    177| export function check(p: JsonObject, what: string): Record<string, Che…
+    178|   const r = one({ call: 'check', piece: p }, what);
+    179|   expect(r['ok'], `${what} admits the piece (ok: true): ${show(r)}`).t…
+       |                                                                      ^
+    180|   return Object.fromEntries(Object.entries(obj(r['items'], `${what}.it…
+    181|     const o = obj(v, `${what}.items.${id}`);
+ ❯ regions hero.ts:76:10
+ ❯ sessionsAndReplay ac01-reopen-replay.test.ts:38:13
+ ❯ ac01-reopen-replay.test.ts:50:44
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac01-reopen-replay.test.ts > AC1 #276.ead11f27 the profile record reopens at the next session's step 0, and a replay reads it from its track > AC1 #276.ead11f27 a planted reopen that reads the store at replay time (profile_replay_reads_store) reads 2000 and fails, naming the step and the array
+AssertionError: check of a layout probe with profile {"xp":{"type":"i32","count":1},"look":{"type":"i32","count":4}} admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"probe","refusals":[{"rule":"field","what":"logic@1 has no field profile","field":"profile"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ check helpers.ts:179:70
+    177| export function check(p: JsonObject, what: string): Record<string, Che…
+    178|   const r = one({ call: 'check', piece: p }, what);
+    179|   expect(r['ok'], `${what} admits the piece (ok: true): ${show(r)}`).t…
+       |                                                                      ^
+    180|   return Object.fromEntries(Object.entries(obj(r['items'], `${what}.it…
+    181|     const o = obj(v, `${what}.items.${id}`);
+ ❯ regions hero.ts:76:10
+ ❯ sessionsAndReplay ac01-reopen-replay.test.ts:38:13
+ ❯ ac01-reopen-replay.test.ts:82:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  18:53:29
+   Duration  28.22s (tests 95%, transform 5%)
+
+
+
+==> ac02-shape-binding.test.ts
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/276/record ac02-shape-binding.test.ts --testTimeout=600000 --hookTimeout=180000` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/276/record
+
+ ❯ ac02-shape-binding.test.ts (2 tests | 2 failed) 11398ms
+   ❯ AC2 #276.298725e9 the record is bound by its arrays' shape alone (2)
+     × AC2 #276.298725e9 a new stage asset keeps the record; a changed count on look refuses it with one notice naming look, the piece starts with zeros and the old record stays 968ms
+     × AC2 #276.298725e9 a planted record bound to the piece's content (profile_bound_to_content) is refused after the stage change and fails, naming the asset 171ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac02-shape-binding.test.ts > AC2 #276.298725e9 the record is bound by its arrays' shape alone > AC2 #276.298725e9 a new stage asset keeps the record; a changed count on look refuses it with one notice naming look, the piece starts with zeros and the old record stays
+AssertionError: check of a layout probe with profile {"xp":{"type":"i32","count":1},"look":{"type":"i32","count":4}} admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"probe","refusals":[{"rule":"field","what":"logic@1 has no field profile","field":"profile"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ check helpers.ts:179:70
+    177| export function check(p: JsonObject, what: string): Record<string, Che…
+    178|   const r = one({ call: 'check', piece: p }, what);
+    179|   expect(r['ok'], `${what} admits the piece (ok: true): ${show(r)}`).t…
+       |                                                                      ^
+    180|   return Object.fromEntries(Object.entries(obj(r['items'], `${what}.it…
+    181|     const o = obj(v, `${what}.items.${id}`);
+ ❯ regions hero.ts:76:10
+ ❯ piece hero.ts:152:93
+ ❯ recordThenStage ac02-shape-binding.test.ts:25:25
+ ❯ ac02-shape-binding.test.ts:45:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac02-shape-binding.test.ts > AC2 #276.298725e9 the record is bound by its arrays' shape alone > AC2 #276.298725e9 a planted record bound to the piece's content (profile_bound_to_content) is refused after the stage change and fails, naming the asset
+AssertionError: check of a layout probe with profile {"xp":{"type":"i32","count":1},"look":{"type":"i32","count":4}} admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"probe","refusals":[{"rule":"field","what":"logic@1 has no field profile","field":"profile"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ check helpers.ts:179:70
+    177| export function check(p: JsonObject, what: string): Record<string, Che…
+    178|   const r = one({ call: 'check', piece: p }, what);
+    179|   expect(r['ok'], `${what} admits the piece (ok: true): ${show(r)}`).t…
+       |                                                                      ^
+    180|   return Object.fromEntries(Object.entries(obj(r['items'], `${what}.it…
+    181|     const o = obj(v, `${what}.items.${id}`);
+ ❯ regions hero.ts:76:10
+ ❯ piece hero.ts:152:93
+ ❯ recordThenStage ac02-shape-binding.test.ts:25:25
+ ❯ ac02-shape-binding.test.ts:62:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  18:54:01
+   Duration  14.45s (tests 95%, transform 5%)
+
+
+
+==> ac03-written-whole.test.ts
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/276/record ac03-written-whole.test.ts --testTimeout=600000 --hookTimeout=180000` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/276/record
+
+ ❯ ac03-written-whole.test.ts (1 test | 1 failed) 12633ms
+   ❯ AC3 #276.87ed7e10 a profile record is written whole or not at all, and a damaged one is named (1)
+     × AC3 #276.87ed7e10 a write cut short leaves the previous record, which still opens; a record whose hash fails is named, and the one before it opens 1045ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac03-written-whole.test.ts > AC3 #276.87ed7e10 a profile record is written whole or not at all, and a damaged one is named > AC3 #276.87ed7e10 a write cut short leaves the previous record, which still opens; a record whose hash fails is named, and the one before it opens
+AssertionError: check of a layout probe with profile {"xp":{"type":"i32","count":1},"look":{"type":"i32","count":4},"stash":{"type":"i32","count":1024}} admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"probe","refusals":[{"rule":"field","what":"logic@1 has no field profile","field":"profile"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ check helpers.ts:179:70
+    177| export function check(p: JsonObject, what: string): Record<string, Che…
+    178|   const r = one({ call: 'check', piece: p }, what);
+    179|   expect(r['ok'], `${what} admits the piece (ok: true): ${show(r)}`).t…
+       |                                                                      ^
+    180|   return Object.fromEntries(Object.entries(obj(r['items'], `${what}.it…
+    181|     const o = obj(v, `${what}.items.${id}`);
+ ❯ regions hero.ts:76:10
+ ❯ piece hero.ts:152:93
+ ❯ ac03-written-whole.test.ts:25:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  18:54:20
+   Duration  14.78s (tests 93%, transform 5%, import 2%)
+
+
+
+==> ac05-check-replicas.test.ts
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/276/record ac05-check-replicas.test.ts --testTimeout=600000 --hookTimeout=180000` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/276/record
+
+ ❯ ac05-check-replicas.test.ts (2 tests | 2 failed) 7551ms
+   ❯ AC5 #276.0d49208e a check's replica starts with zeros unless the brief names a fixture record (2)
+     × AC5 #276.0d49208e a replica a check runs starts with zeros beside the viewer's stored record, and with the fixture record the brief names 1032ms
+     × AC5 #276.0d49208e a planted check that reads the viewer's stored record (check_reads_viewer_profile) fails, naming the source 245ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac05-check-replicas.test.ts > AC5 #276.0d49208e a check's replica starts with zeros unless the brief names a fixture record > AC5 #276.0d49208e a replica a check runs starts with zeros beside the viewer's stored record, and with the fixture record the brief names
+AssertionError: check of a layout probe with profile {"xp":{"type":"i32","count":1},"look":{"type":"i32","count":4}} admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"probe","refusals":[{"rule":"field","what":"logic@1 has no field profile","field":"profile"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ check helpers.ts:179:70
+    177| export function check(p: JsonObject, what: string): Record<string, Che…
+    178|   const r = one({ call: 'check', piece: p }, what);
+    179|   expect(r['ok'], `${what} admits the piece (ok: true): ${show(r)}`).t…
+       |                                                                      ^
+    180|   return Object.fromEntries(Object.entries(obj(r['items'], `${what}.it…
+    181|     const o = obj(v, `${what}.items.${id}`);
+ ❯ regions hero.ts:76:10
+ ❯ setUp ac05-check-replicas.test.ts:41:24
+ ❯ ac05-check-replicas.test.ts:73:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac05-check-replicas.test.ts > AC5 #276.0d49208e a check's replica starts with zeros unless the brief names a fixture record > AC5 #276.0d49208e a planted check that reads the viewer's stored record (check_reads_viewer_profile) fails, naming the source
+AssertionError: check of a layout probe with profile {"xp":{"type":"i32","count":1},"look":{"type":"i32","count":4}} admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"probe","refusals":[{"rule":"field","what":"logic@1 has no field profile","field":"profile"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ check helpers.ts:179:70
+    177| export function check(p: JsonObject, what: string): Record<string, Che…
+    178|   const r = one({ call: 'check', piece: p }, what);
+    179|   expect(r['ok'], `${what} admits the piece (ok: true): ${show(r)}`).t…
+       |                                                                      ^
+    180|   return Object.fromEntries(Object.entries(obj(r['items'], `${what}.it…
+    181|     const o = obj(v, `${what}.items.${id}`);
+ ❯ regions hero.ts:76:10
+ ❯ setUp ac05-check-replicas.test.ts:41:24
+ ❯ ac05-check-replicas.test.ts:79:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  18:54:38
+   Duration  8.87s (tests 99%)
+
+
+
+==> ac06-start-fresh.test.ts
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/276/record ac06-start-fresh.test.ts --testTimeout=600000 --hookTimeout=180000` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/276/record
+
+ ❯ ac06-start-fresh.test.ts (1 test | 1 failed) 10933ms
+   ❯ AC6 #276.e0857b1c start fresh, the next request, and the cap (1)
+     × AC6 #276.e0857b1c start fresh runs with zeros and keeps the stored record; the next request replaces it only once the new one reads back whole; a profile past 64 KiB is refused at check, naming its size 954ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac06-start-fresh.test.ts > AC6 #276.e0857b1c start fresh, the next request, and the cap > AC6 #276.e0857b1c start fresh runs with zeros and keeps the stored record; the next request replaces it only once the new one reads back whole; a profile past 64 KiB is refused at check, naming its size
+AssertionError: check of a layout probe with profile {"xp":{"type":"i32","count":1},"look":{"type":"i32","count":4},"stash":{"type":"i32","count":1024}} admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"probe","refusals":[{"rule":"field","what":"logic@1 has no field profile","field":"profile"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ check helpers.ts:179:70
+    177| export function check(p: JsonObject, what: string): Record<string, Che…
+    178|   const r = one({ call: 'check', piece: p }, what);
+    179|   expect(r['ok'], `${what} admits the piece (ok: true): ${show(r)}`).t…
+       |                                                                      ^
+    180|   return Object.fromEntries(Object.entries(obj(r['items'], `${what}.it…
+    181|     const o = obj(v, `${what}.items.${id}`);
+ ❯ regions hero.ts:76:10
+ ❯ piece hero.ts:152:93
+ ❯ ac06-start-fresh.test.ts:26:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  18:54:50
+   Duration  13.16s (tests 93%, transform 6%, import 1%)
+

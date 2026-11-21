@@ -232,10 +232,10 @@ describe('the catalog kinds', () => {
     expect(runRefs({ catalog: c.catalog }, {}).outcome).toBe('missing');
   });
 
-  it('registers the six kinds, answers ran_nothing for a spec without its input, and binds an agent\'s input only to its own checks', async () => {
+  it('registers the seven kinds, answers ran_nothing for a spec without its input, and binds an agent\'s input only to its own checks', async () => {
     const kinds = new Map<string, (spec: object) => Promise<{ outcome: string }>>();
     register({ registerCheck: (type, runner) => void kinds.set(type, runner as never) });
-    expect([...kinds.keys()]).toEqual(['catalog.refs', 'catalog.reach', 'catalog.economy', 'catalog.bounds', 'catalog.copy', 'scenario.reach']);
+    expect([...kinds.keys()]).toEqual(['catalog.refs', 'catalog.reach', 'catalog.economy', 'catalog.bounds', 'catalog.copy', 'scenario.reach', 'catalog.dominance']);
     expect((await kinds.get('catalog.reach')!({})).outcome).toBe('ran_nothing');
     const c = catalog({ items: 'id\nplank\n' }, { items: ITEMS });
     expect((await kinds.get('catalog.bounds')!({ bounds: { catalog: c.catalog, ranges: {} }, catalogs: c.carried })).outcome).toBe('passed');

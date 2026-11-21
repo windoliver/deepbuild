@@ -46,7 +46,7 @@ const STEP: i64 = 11_760_000;
 /// `fires`, each with the form its reader takes (#1973); `wasm` is the program's bytes, which
 /// whoever holds the evidence store inlines by the program's hash before a frame, as a vector's
 /// outline is.
-const PARAMS: [(&str, &str); 18] = [
+const PARAMS: [(&str, &str); 21] = [
     ("program", "asset ID"),
     ("debug", "asset ID"),
     ("step_rate", "Hz"),
@@ -70,6 +70,17 @@ const PARAMS: [(&str, &str); 18] = [
     (
         "saves",
         "{slots?: integer, request?: name, ends?: name, migrate?}",
+    ),
+    // #189: the record a giving item writes and the one a taking item reads (Logic: carry records).
+    ("carry", "{request: name, out: [name]}"),
+    (
+        "carry_in",
+        "{arrays: {name → {type, count?: u32}}, accepts: [sha256]}",
+    ),
+    // #276: the profile record the app or the player reopens when the piece starts (Logic: saves).
+    (
+        "profile",
+        "{arrays: {name → {type, count?: u32}}, request: name}",
     ),
     (
         "preview",
@@ -254,9 +265,21 @@ fn register(r: &mut Registrar) {
         false,
     );
     // Each code's planted fixture (#138's kit): a program that traps at step 0, which fails the
-    // determinism check that ran it, and one whose every step spends most of its fuel.
-    planted(r, "logic.determinism", "(unreachable)");
-    planted(r, "logic.budget", "(local $i i32) (loop $l (local.set $i (i32.add (local.get $i) (i32.const 1))) (br_if $l (i32.lt_u (local.get $i) (i32.const 200000))))");
+    // determinism check that ran it, one whose every step spends most of its fuel, and one that
+    // names a tuning catalog and never reads it, so moving its row changes no step.
+    planted(r, "logic.determinism", "(unreachable)", None);
+    planted(r, "logic.budget", "(local $i i32) (loop $l (local.set $i (i32.add (local.get $i) (i32.const 1))) (br_if $l (i32.lt_u (local.get $i) (i32.const 200000))))", None);
+    let tuning = deep_catalog::pack(
+        &[deep_catalog::Source {
+            name: "tuning".into(),
+            format: deep_catalog::Format::Csv,
+            bytes: b"id,value,min,max\njump_height,1.0,0.5,2.0\n".to_vec(),
+        }],
+        &json!({"tuning": {"id": "id", "columns": {"value": {"type": "f64"}, "min": {"type": "f64"}, "max": {"type": "f64"}}}}),
+        deep_catalog::Planted::None,
+    )
+    .expect("the planted tuning table packs");
+    planted(r, "logic.tuning", "", Some(tuning));
     // #535: each logic item's arrays, by `<logic>.<name>`. Its fixture's changed ranges are the
     // ones the module hands over, so the kit's clean-rebuild rule runs [`handed`] itself.
     let frames = json!([[0, 0, 0], [0, 5, 0], [0, 5, 7]]);
@@ -488,8 +511,11 @@ fn step(v: &mut View<'_>) -> Result<(), OpError> {
     let doc = v.document()?;
     let t = v.t()?;
     let piece = piece_of(doc)?;
-    // The played form's input track (Input track): the entries of the controls its items read.
+    // The played form's input track (Input track): the entries of the controls its items read,
+    // and a carry record's entry where an item takes one (#189).
     let read = |c: &str| piece.items.iter().any(|i| i.reads.iter().any(|r| r == c));
+    let takes = piece.items.iter().any(|i| i.carry_in.is_some());
+    let keeps = piece.items.iter().any(|i| i.profile.is_some());
     let mut entries = Vec::new();
     for e in doc
         .get("track")
@@ -497,7 +523,8 @@ fn step(v: &mut View<'_>) -> Result<(), OpError> {
         .into_iter()
         .flatten()
     {
-        if e.get("control").and_then(Value::as_str).is_some_and(read) {
+        let carried = takes && e.get("carry").is_some() || keeps && e.get("profile").is_some();
+        if carried || e.get("control").and_then(Value::as_str).is_some_and(read) {
             entries.push(Entry::parse(e).ok_or_else(|| OpError::new("bad_input", e.to_string()))?);
         }
     }
@@ -607,19 +634,32 @@ fn fixture_step(state: &mut Value, input: &StepInput<'_>) {
 
 /// The fixture that raises exactly `code`: a figure of one logic item whose step is `body`, its
 /// program a fixture asset, since a kit fixture has no evidence store. It names no other module's
-/// kind, which the kit's seal of this module alone would refuse as unknown.
-fn planted(r: &mut Registrar, code: &str, body: &str) {
+/// kind, which the kit's seal of this module alone would refuse as unknown. A `catalog` is the
+/// item's one data asset, copied at `assets_at`, its record in the check input's `catalogs`.
+fn planted(r: &mut Registrar, code: &str, body: &str, catalog: Option<deep_catalog::Packed>) {
+    let at = match catalog {
+        Some(_) => r#"(global (export "assets_at") i32 (i32.const 4096))"#,
+        None => "",
+    };
     let text = format!(
         r#"(module (memory (export "memory") 1 1) (global (export "reads_at") i32 (i32.const 0))
-        (global (export "writes_at") i32 (i32.const 1024)) (func (export "init") (param i64)) (func (export "step") (param i64) {body}))"#
+        (global (export "writes_at") i32 (i32.const 1024)) {at} (func (export "init") (param i64)) (func (export "step") (param i64) {body}))"#
     );
     let program = wat::parse_str(text).expect("a planted program");
     let sha = deep_canvas::canon::sha256_hex(&program);
+    let mut params = json!({"program": sha, "writes": {"n": {"type": "i32"}}});
+    let mut check = json!({"kind": code});
+    let mut assets = vec![program];
+    if let Some(c) = catalog {
+        params["assets"] = json!([c.sha256]);
+        check["catalogs"] = json!({ c.sha256: c.record });
+        assets.push(c.bytes);
+    }
     let doc = json!({
         "format": 1, "profile": "figure", "title": code, "description": format!("The logic module's planted {code}."), "size": [320, 180],
         "seed": 1, "transport": {"span": "1s", "frame_rate": [60, 1]}, "requires": {"modules": {"logic": "^1"}},
         "items": {
-            "rules": {"id": "rules", "kind": "logic@1", "name": "Rules", "order": "a1", "params": {"program": sha, "writes": {"n": {"type": "i32"}}}},
+            "rules": {"id": "rules", "kind": "logic@1", "name": "Rules", "order": "a1", "params": params},
         },
     });
     r.fixture(&format!("logic-{}", &code[6..]), doc, None)
@@ -627,8 +667,8 @@ fn planted(r: &mut Registrar, code: &str, body: &str) {
         .planted()
         // The module registers its own kind (#533), so the kit's seal of this module alone knows
         // logic@1 and the fixture raises its code and no other.
-        .sidecar(json!({"codes": [code], "checks": [{"kind": code}]}))
-        .fixture_assets(vec![program]);
+        .sidecar(json!({"codes": [code], "checks": [check]}))
+        .fixture_assets(assets);
 }
 
 /// What a report raises, as a check over items gives it.
