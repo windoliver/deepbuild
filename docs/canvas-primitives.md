@@ -4357,7 +4357,7 @@ For: a black gloss floor under a product, a lake under a castle, a shop window
 
 **Semantics:** One extra pass renders the scene from the camera mirrored in the plane at t, clipped at the plane, and the part samples it, blurred by its roughness or by blur. It keeps no history, so seeking equals playing.
 
-**Cost:** One extra scene pass at half resolution plus a blur, roughly a quarter of the scene's frame time (estimate); counted in the class. Budget class: work product, showpiece, export.
+**Cost:** One extra scene pass at half the internal size plus a blur, roughly a quarter of the scene's frame time (estimate); counted in the class. Budget class: work product, showpiece, export.
 
 **It can never:** Recurse (a mirror inside a mirror draws its fallback); read an earlier frame; mirror status colors or overlays.
 

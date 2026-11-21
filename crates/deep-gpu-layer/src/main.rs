@@ -229,6 +229,11 @@ pub enum Planted {
     FlareFixedGhosts,
     /// #465: the flare built as if nothing covered its light.
     FlareIgnoresOcclusion,
+    /// #2691's wrong programs (tests/acceptance/2691/README.md: Planted programs): the mirror's
+    /// pass at half of half the internal size; a plain mirror's lookup by the pixel's place over
+    /// the frame's full size.
+    MirrorHalvesTwice,
+    MirrorSamplesFullFrame,
     /// #468: a circle of confusion linear in |d − s|, matched to the physical one at 10 m.
     CocLinearInDistance,
     /// #166: the water's foam carried from frame to frame as simulation state.
@@ -309,6 +314,9 @@ pub enum Planted {
     CreaseBelowAngle,
     EdgesDeriveEveryFrame,
     EdgesDashOtherSpace,
+    /// #1782's, by name (tests/acceptance/1782/README.md: Planted programs): a crease line's
+    /// wrong picker, and a hidden style's wrong span classifiers, cache, edge IDs and dash.
+    HiddenLines(&'static str),
     ReleasesAtRevision,
     /// #417's: the look switch's clock stops at the request, before the new look is on screen.
     StopsAtRequest,
@@ -683,6 +691,8 @@ impl Planted {
             "loads_everything" => Planted::LoadsEverything,
             "slow_gpu_frame" => Planted::SlowGpuFrame,
             "flare_fixed_ghosts" => Planted::FlareFixedGhosts,
+            "mirror_halves_twice" => Planted::MirrorHalvesTwice,
+            "mirror_samples_full_frame" => Planted::MirrorSamplesFullFrame,
             "coc_linear_in_distance" => Planted::CocLinearInDistance,
             "flare_ignores_occlusion" => Planted::FlareIgnoresOcclusion,
             "water_foam_keeps_state" => Planted::WaterFoamKeepsState,
@@ -908,7 +918,10 @@ impl Planted {
             "part_pose_in_world_space" => Planted::PartPoseInWorldSpace,
             "terrain_no_horizon_bake" => Planted::TerrainNoHorizonBake,
             "terrain_occlusion_from_slope" => Planted::TerrainOcclusionFromSlope,
-            _ => return None,
+            _ => {
+                let planted = deep_canvas_scene3d::spans::PLANTED;
+                Planted::HiddenLines(planted.iter().find(|p| p.0 == name)?.0)
+            }
         })
     }
 }
