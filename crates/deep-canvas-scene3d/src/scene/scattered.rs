@@ -505,7 +505,7 @@ pub(super) fn lod_of(
     item: &Value,
     path: &str,
     bounds: [Vec3; 2],
-    mesh: Option<(&crate::geom::Mesh, u64)>,
+    mesh: Option<(&Arc<crate::geom::Mesh>, u64)>,
     doc: &Map<String, Value>,
 ) -> Result<Option<Arc<crate::lod::Lod>>, Refused> {
     let bands = crate::lod::bands_of(item, path.trim_end_matches("/params"))?;
@@ -523,12 +523,12 @@ pub(super) fn lod_of(
         proxy: None,
     });
     let (levels, extent) = match leveled {
-        Some((m, h)) => (crate::lod::levels(&Arc::new(m.clone()), h), m.lod_extent),
+        Some((m, h)) => (crate::lod::levels(m, h), m.lod_extent),
         None => (Vec::new(), 0.0),
     };
-    // A mesh without levels takes its proxy from the simplify step, once per content key.
-    let proxy_mesh = match (proxy, mesh) {
-        (Some(p), Some((m, h))) if levels.is_empty() => crate::lod::proxy_of(m, h, p),
+    // A mesh without levels draws a proxy band as the proxy the renderer makes of it (#2738).
+    let proxy_source = match (proxy, mesh) {
+        (Some(_), Some((m, h))) if levels.is_empty() => Some((m.clone(), h)),
         _ => None,
     };
     Ok(Some(Arc::new(crate::lod::Lod {
@@ -539,7 +539,8 @@ pub(super) fn lod_of(
         extent,
         lod_px: crate::lod::lod_px(doc),
         proxy,
-        proxy_mesh,
+        proxy_source,
+        proxy_mesh: None,
         tile: None,
     })))
 }

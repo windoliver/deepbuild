@@ -35,6 +35,7 @@ mod op;
 mod origin;
 mod planted;
 pub mod print;
+pub mod proxy;
 mod readouts;
 mod set;
 pub mod shadow;
@@ -3737,7 +3738,7 @@ impl Renderer {
             *slot = self.light_rows(scene, &scene.lights[i], weight, local);
         }
         // The fill lights at this view (#1634), by the policy's order, for their clusters' pass.
-        let ordering = std::time::Instant::now();
+        let ordering = web_time::Instant::now();
         let mut order = light::fill_order(&scene.lights, scores);
         // The planted wrong programs: the lights in the document's order, and the key lights' cut
         // at 32 with its margin.
@@ -4054,7 +4055,7 @@ impl Renderer {
                 &mut choices,
                 shadow_texels(&chosen, side),
             );
-            deep_canvas_scene3d::lod::resolve(&mut chosen, &choices);
+            proxy::resolve(&mut chosen, &choices);
             return self.prepare_placed(device, &chosen, look);
         }
         // #166: the water's parts draw in a pass of their own, after the mirror's view.
@@ -4239,7 +4240,7 @@ impl Renderer {
         // #465: the mirror's view at t, drawn whole each frame.
         self.mirroring = match &scene.mirror {
             Some(m) => {
-                let planted = self.planted;
+                let (planted, internal) = (self.planted, self.internal());
                 let mirrorer = self
                     .mirrorer
                     .get_or_insert_with(|| Box::new(mirror::Mirrorer::new(device, planted)));
@@ -4249,7 +4250,7 @@ impl Renderer {
                     .as_ref()
                     .is_none_or(|w| w.material != m.material);
                 if !self.planted.keeps_mirror {
-                    mirrorer.prepare(device, scene, m, look, &self.picks, overlay);
+                    mirrorer.prepare(device, scene, internal, m, look, &self.picks, overlay);
                 }
                 true
             }
@@ -5453,7 +5454,7 @@ impl Renderer {
             .filter(|s| s.shadow && !cascaded)
             .and_then(|s| shadow::light_clip(scene, s.toward, 0.0));
         self.prepare_cascades(device, scene, &frame);
-        let scoring = std::time::Instant::now();
+        let scoring = web_time::Instant::now();
         let policy = scene
             .light_cut
             .clone()

@@ -18,13 +18,16 @@ use crate::roles::TABLE;
 use crate::track;
 
 mod centres;
+mod chains;
 mod fixtures;
 pub mod scan;
 mod sensors;
+mod small;
 mod vehicles;
 pub mod walks;
 
 pub use fixtures::{all, test_capped};
+pub use vehicles::car_world;
 
 /// The physics interface's reference implementation, which the claim rule doesn't hold.
 pub const REFERENCE: &str = "rapier3d";
@@ -160,6 +163,33 @@ pub enum Measure {
     /// #2243: how far apart the axes of two character bodies that meet stand after the last
     /// step, m; it fails wherever one breaks the rule of their meeting.
     Meet(walks::Meet),
+    /// #2308: how far past x = `edge` `body`'s centre is, m, after the first step that ends with
+    /// it `drop` below where it started.
+    Past {
+        body: &'static str,
+        edge: f64,
+        drop: f64,
+    },
+    /// #2308: how deep the deepest two neighbours of the row of dominoes are inside each other
+    /// after the last step, m; it fails wherever they don't pass `tilt` degrees in order, or the
+    /// last passes it outside `last` seconds.
+    Topple { last: [f64; 2], tilt: f64 },
+    /// #2307: how far `body` moves from the end of step `from` to the end of step `to`, m.
+    Parked {
+        body: &'static str,
+        from: usize,
+        to: usize,
+    },
+    /// #2310: `body`'s distance from the point `from` after each step, m: the one farthest from
+    /// the answer; it fails wherever a joint of the world opens.
+    Reach { body: &'static str, from: [f64; 3] },
+    /// #2310: `body`'s speed where it passes its lowest point, m/s: let go along `along` from
+    /// `from`, square to gravity; it fails wherever a joint of the world opens.
+    Lowest {
+        body: &'static str,
+        from: [f64; 3],
+        along: [f64; 3],
+    },
 }
 
 /// One fixture of the behavior part.
@@ -268,7 +298,7 @@ fn dist(a: [f64; 3], b: [f64; 3]) -> f64 {
 
 /// Steps `b` through `f` from its built world `w`.
 fn trace(b: &mut dyn Backend, w: &World, f: &Fixture) -> Result<Trace, String> {
-    let entries = track::read(w, &f.track).map_err(|r| r.what)?;
+    let entries = track::read(w, &f.track, false).map_err(|r| r.what)?;
     let by_step = track::by_step(&entries);
     let rank = occurrence::ranks(w);
     let rate = w.step_rate;
@@ -773,6 +803,15 @@ fn read(m: &Measure, t: &Trace, b: &dyn Backend, w: &World, f: &Fixture) -> Read
             )
         }
         Measure::Meet(m) => met(t, m),
+        Measure::Past { body, edge, drop } => small::past(&path(t, body), body, *edge, *drop),
+        Measure::Topple { last, tilt } => small::toppled(t, *last, *tilt),
+        Measure::Parked { body, from, to } => {
+            let p = path(t, body);
+            let moved = p.get(*from).zip(p.get(*to)).map(|(a, z)| dist(*a, *z));
+            reading(moved, json!({"body": body}))
+        }
+        Measure::Reach { body, from } => chains::reach(w, t, body, *from, f.answer),
+        Measure::Lowest { body, from, along } => chains::lowest(w, t, body, (*from, *along)),
     }
 }
 
@@ -857,6 +896,19 @@ fn named_measure(m: &Measure) -> String {
             "distance between the axes of {} and {} after the last step, m",
             m.walker, m.other
         ),
+        Measure::Past { body, drop, .. } => {
+            format!("how far past the edge {body}'s centre is once it has dropped {drop} m, m")
+        }
+        Measure::Topple { .. } => {
+            "how deep the deepest two neighbouring dominoes are inside each other after the last step, m".into()
+        }
+        Measure::Parked { body, from, to } => {
+            format!("distance {body} moves from step {from} to step {to}, m")
+        }
+        Measure::Reach { body, .. } => {
+            format!("distance of {body}'s centre from the fixed point at every step, m")
+        }
+        Measure::Lowest { body, .. } => format!("speed of {body} at its lowest point, m/s"),
     }
 }
 

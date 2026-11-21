@@ -6,9 +6,9 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { cpus, homedir, loadavg } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { approvedItems, judgeTargets, judgeTask, prepareCopy, validateBudgets } from './benchmark.mjs';
+import { approvedItems, fingerprint, judgeTargets, judgeTask, prepareCopy, validateBudgets } from './benchmark.mjs';
 import { worst, writeRecord } from './lanes.mjs';
 import { holds } from './throttle.mjs';
 
@@ -27,7 +27,26 @@ function gh(...args) {
 }
 function blocked(message, fix) {
   console.log(`BLOCKED budget-window: ${message}\n  Fix: ${fix}`);
+  if (opened) closeWindow('BLOCKED', message);
   process.exit(2);
+}
+// The window's own record (#2674), beside its commits' records once it runs: its grant, start and end, the machine and
+// its load, the commits it measured, the tasks it ran and those it reached on no commit, and the task that took longest.
+// A window over one day's merges should end within two hours; its note names the longest task when it doesn't.
+const LONG_MS = 2 * 60 * 60 * 1000;
+let opened = null;
+function closeWindow(state, note) {
+  const end = new Date(), took = end - Date.parse(opened.start);
+  const ran = [...new Set(opened.rows.map(({ task }) => task))];
+  const longest = opened.rows.reduce((most, row) => (row.ms > (most?.ms ?? -1) ? row : most), null);
+  const over = took > LONG_MS && `the window took ${Math.round(took / 60_000)} min, past ${LONG_MS / 60_000} min; its longest task was ${longest ? `${longest.task} on ${longest.commit}, ${Math.round(longest.ms / 60_000)} min` : 'none'}`;
+  const notes = [note, over].filter(Boolean);
+  const { rows, unreached, ...kept } = opened;
+  const folder = join(homedir(), '.deepbuild', 'lanes');
+  mkdirSync(folder, { recursive: true, mode: 0o700 });
+  writeFileSync(join(folder, `budget-window-${opened.start.replace(/[:.]/g, '-')}.json`), `${JSON.stringify({
+    ...kept, state, end: end.toISOString(), loadEnd: loadavg()[0], ran, notReached: [...new Set(unreached)].filter((id) => !ran.includes(id)), longest, ...notes.length && { note: notes.join('; ') },
+  }, null, 2)}\n`);
 }
 const outside = 'Only a scheduled `throttle.mjs window` runs this; agents never do.';
 const inWindow = () => holds('timed', { window: true });
@@ -79,30 +98,38 @@ function reachable(tree, { change, base }, tasks) {
   }
 }
 
+/** A side's numbers, so two commits compare and a climb can be drawn: p50, p95, peak bytes and each round's instructions retired. */
+const numbersOf = (side) => side && { p50Ms: side.p50Ms, p95Ms: side.p95Ms, peakBytes: side.peakBytes, instructions: side.instructions };
+
 /**
- * A task's row in the record: as perf reads it, with a load at or above the cores never a PASS (invariant 2), and each
- * limit's verdict, against the merge base's value, with its readings (#2665). A count's limit holds on any machine, so
- * its FAIL stands under any load.
+ * A task's row in the record: as perf reads it, with a load at or above the cores at any run's start or end, or at the
+ * task's end, never a PASS (invariant 2), and each limit's verdict, against the merge base's value, with its readings
+ * (#2665). A count's limit holds on any machine, so its FAIL stands under any load. The row keeps each side's numbers,
+ * the load at each run's start and end (both sides' rounds, then the limit runs), and how long the task took (#2674).
  */
 function judged(task, established, cwd, baseCwd) {
-  let misses, limits;
+  const started = Date.now();
+  let misses, limits, sides, loads;
   try {
     const result = judgeTask(task, established, cwd, baseCwd);
     limits = result.limits;
+    sides = { change: numbersOf(result.now), base: numbersOf(result.then) };
+    loads = [...result.now.loads, ...result.then?.loads ?? [], ...result.loads];
     const targets = task.targets ? judgeTargets(task, cwd) : null;
-    const load = loadavg()[0], cores = cpus().length;
+    const cores = cpus().length, read = [...loads.flatMap(({ start, end }) => [start, end]), loadavg()[0]];
+    const high = read.every(Number.isFinite) ? Math.max(...read) : null;
     misses = [
       ...result.regression ? [{ status: 'FAIL', reason: result.regression }] : [],
       ...Object.entries(limits).map(([metric, limit]) => ({ ...limit, reason: `${metric}: ${limit.reason}` })),
       ...result.instructions ? [{ ...result.instructions, reason: `instructions: ${result.instructions.reason}` }] : [],
       ...targets ? [{ ...targets, reason: `targets: ${targets.reason}` }] : [],
-      ...load < cores ? [] : [{ status: 'INCONCLUSIVE', reason: `the load was ${load.toFixed(1)} on ${cores} cores` }],
+      ...high !== null && high < cores ? [] : [{ status: 'INCONCLUSIVE', reason: high === null ? "a run's load couldn't be read" : `the load was ${high.toFixed(1)} on ${cores} cores` }],
     ].filter(({ status }) => status !== 'PASS');
   } catch (error) {
     misses = [{ status: 'BLOCKED', reason: error.message }];
   }
   const state = worst(misses.map(({ status }) => status)) ?? 'PASS';
-  return { id: task.id, state, ...misses.length && { note: misses.map(({ reason }) => reason).join('; ') }, ...limits && { limits } };
+  return { id: task.id, state, ...misses.length && { note: misses.map(({ reason }) => reason).join('; ') }, ...limits && { limits }, ...sides && { sides, loads }, ms: Date.now() - started };
 }
 
 /** A row's limits whose highest reading is more than 20% under them, with both numbers, so slack is seen (#2665). */
@@ -197,14 +224,17 @@ try {
 }
 // Read once: a commit merged from here on is the next window's.
 const tip = git('rev-parse', 'origin/main');
-if (!existsSync(mark)) {
+const from = existsSync(mark) ? readFileSync(mark, 'utf8').trim() : null;
+opened = { lane: 'budget-window', grant: process.env.DEEP_WINDOW ?? null, start: new Date().toISOString(), machine: fingerprint(), cores: cpus().length, loadStart: loadavg()[0], from, tip, commits: [], records: {}, rows: [], unreached: [] };
+if (!from) {
   writeFileSync(mark, tip);
+  closeWindow('PASS', `the first window on this machine marks ${tip}`);
   console.log(`PASS budget-window: the first window on this machine marks ${tip}; the commits after it are measured`);
   process.exit(0);
 }
-const commits = git('rev-list', '--first-parent', '--reverse', `${readFileSync(mark, 'utf8').trim()}..${tip}`).split('\n').filter(Boolean);
+const commits = git('rev-list', '--first-parent', '--reverse', `${from}..${tip}`).split('\n').filter(Boolean);
 const issues = new Map(commits.map((commit) => [commit, issuesOf(commit)]));
-const held = new Set();
+const held = new Set(), states = [];
 for (const [at, commit] of commits.entries()) {
   const record = measured(commit);
   // A holder that died took the window with it, so what ran after is no measurement. The mark stays.
@@ -218,7 +248,12 @@ for (const [at, commit] of commits.entries()) {
     blocked(`${commit}'s issues weren't read: ${error.message}`, 'Sign in to gh; the next window measures this commit again.');
   }
   const unmeasured = read.flatMap((issue) => (unticked(issue) ?? []).filter((id) => !record.named.has(id)));
-  writeRecord(`budget-window ${commit}`, record.state, tree, record.tests, { commit, base: record.base, unmeasured, notReached: record.notReached, lowered: record.lowered, noCeiling: record.noCeiling, slack: record.slack });
+  const file = writeRecord(`budget-window ${commit}`, record.state, tree, record.tests, { commit, base: record.base, unmeasured, notReached: record.notReached, lowered: record.lowered, noCeiling: record.noCeiling, slack: record.slack });
+  opened.commits.push(commit);
+  opened.records[commit] = basename(file);
+  opened.rows.push(...record.tests.filter(({ id }) => id !== manifest).map(({ id, ms }) => ({ task: id, commit, ms })));
+  opened.unreached.push(...record.notReached);
+  states.push(record.state);
   console.log(`${record.state} budget-window: ${commit} against ${record.base}, ${record.tests.length} tasks run, ${record.notReached.length} not reached`);
   try {
     if (record.state === 'FAIL') miss(record, issues.get(commit));
@@ -230,4 +265,5 @@ for (const [at, commit] of commits.entries()) {
   }
   writeFileSync(mark, commit);
 }
+closeWindow(worst(states) ?? 'PASS');
 console.log(`PASS budget-window: ${commits.length} commits measured up to ${tip}`);

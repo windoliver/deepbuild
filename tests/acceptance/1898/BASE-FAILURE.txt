@@ -1,0 +1,78 @@
+# Base run of tests/acceptance/1898 at ee05e7257 (ee05e7257cc7c7b90b1ca6ba965d21ec36da4e05; merge base with origin/main is the same commit), Node v24.22.0, macOS 27.2.0 (arm64, Apple M6, 12 cores, not a reference Mac), shared Mac under heavy load (1-min load 113 at start, 189 at end)
+# The base already holds 3c5b4754 (#1951): AC1 and AC2 pass here. AC3's first test failed in this run on one test of products-restart-reclaim-2122.test.ts;
+# that file passed in this job's first full run (17:44, load 140-146) and alone right after this one (17:54, load 183), so the failure is read as load, not the base (see the end).
+# Command: ./node_modules/.bin/vitest run --reporter=verbose tests/acceptance/1898, then tsc -p tests/acceptance/1898/tsconfig.json
+
+2026-11-21T01:50:40Z
+17:50  up 22:17, 3 users, load averages: 112.70 124.50 86.66
+
+ RUN  v5.0.5 <repo>
+
+ ✓ tests/acceptance/1898/lease-closure.test.ts > #1898.ff1558c5 the static import closure of the deep lease path, from the CLI's entry through its lease branch's module, reaches no yaml and no SQLite addon 44ms
+ ✓ tests/acceptance/1898/hub-start.test.ts > #1898.83fded9a the hub's start time and loaded-module count are read with and without the kits on this machine, and the hub as built loads no kit at its start 58243ms
+
+   ❯ tests/acceptance/1898/hub-start.test.ts:105:13 notice
+     ↳ reading (target/acceptance-1898/hub-start.json): {"issue":1898,"what":"deep hub run on a fresh home: ms from spawn to the ready line, and modules loaded (all threads) by ready + settle","settle_ms":5000,"date":"2026-11-21T01:51:43.488Z","node":"v24.22.0","machine":{"platform":"darwin","release":"27.2.0","arch":"arm64","cpu":"Apple M6","cores":12,"memory":34359738368},"load":[127.7529296875,126.11767578125,90.01220703125],"kits":["packages/checks-command/dist/index.js","packages/checks-numbers/dist/index.js","packages/checks-review/dist/index.js","packages/checks-work/dist/index.js","packages/conformance/dist/index.js"],"without":{"ms":[4301,3795,4289],"median_ms":4289,"modules":[665,665,665],"threads":{"0":147,"1":388,"2":130}},"with":{"ms":[5279,5324,3216],"median_ms":5279,"modules":[858,858,858],"threads":{"0":215,"1":446,"2":197}}}
+
+ × tests/acceptance/1898/no-visible-change.test.ts > #1898.6f3b1f79 the suites that cover the lease path, the hub's start and the kits, unchanged from the merge base, pass, and so does every suite naming a module the change touched 30968ms
+   → packages/hub/test/products-restart-reclaim-2122.test.ts's tests that didn't pass: expected [ Array(1) ] to deeply equal []
+ ✓ tests/acceptance/1898/no-visible-change.test.ts > #1898.6f3b1f79 each package the issue names, and each the change touches, type-checks with its own tsconfig 170421ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1898/no-visible-change.test.ts > #1898.6f3b1f79 the suites that cover the lease path, the hub's start and the kits, unchanged from the merge base, pass, and so does every suite naming a module the change touched
+AssertionError: packages/hub/test/products-restart-reclaim-2122.test.ts's tests that didn't pass: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "failed: after a hub restart an active PreToolUse protects its old product while low-disk reclaim removes an idle worktree product
++ AssertionError: expected true to be false // Object.is equality
++     at <repo>/packages/hub/test/products-restart-reclaim-2122.test.ts:106:62
++     at withHub (<repo>/packages/hub/test/hub.ts:95:5)
++     at <repo>/packages/hub/test/products-restart-reclaim-2122.test.ts:19:5
++     at async file://<repo>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:20",
++ ]
+
+ ❯ tests/acceptance/1898/no-visible-change.test.ts:96:79
+     94|   for (const suite of suites) {
+     95|     expect(tests.get(suite)!.length, `${suite} ran a test`).toBeGreate…
+     96|     expect(notPassed(tests.get(suite)!), `${suite}'s tests that didn't…
+       |                                                                               ^
+     97|   }
+     98| }, 1_600_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 3 passed (4)
+   Start at  17:50:44
+   Duration  202.63s (tests 99%)
+
+exit 1
+17:54  up 22:20, 3 users, load averages: 188.63 146.84 103.59
+tsc exit 0
+DONE
+
+# --- products-restart-reclaim-2122.test.ts alone, right after (17:54, load 182.75): node node_modules/vitest/vitest.mjs run packages/hub/test/products-restart-reclaim-2122.test.ts
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+
+# --- The first full run (2026-11-21T01:44Z, load 140 at start, 146 at end), with packages/hub/test/startup-memory.test.ts still among AC3's covering suites; AC3 test 1's failure there:
+ ✓ tests/acceptance/1898/lease-closure.test.ts > #1898.ff1558c5 the static import closure of the deep lease path, from the CLI's entry through its lease branch's module, reaches no yaml and no SQLite addon 13ms
+ ✓ tests/acceptance/1898/hub-start.test.ts > #1898.83fded9a the hub's start time and loaded-module count are read with and without the kits on this machine, and the hub as built loads no kit at its start 50923ms
+ × tests/acceptance/1898/no-visible-change.test.ts > #1898.6f3b1f79 the suites that cover the lease path, the hub's start and the kits, unchanged from the merge base, pass, and so does every suite naming a module the change touched 27515ms
+   → packages/hub/test/startup-memory.test.ts's tests that didn't pass: expected [ Array(1) ] to deeply equal []
+ ✓ tests/acceptance/1898/no-visible-change.test.ts > #1898.6f3b1f79 each package the issue names, and each the change touches, type-checks with its own tsconfig 298794ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: packages/hub/test/startup-memory.test.ts's tests that didn't pass: expected [ Array(1) ] to deeply equal []
++     at NODE_OPTIONS (<repo>/packages/hub/test/startup-memory.test.ts:42:185)
++     at <repo>/packages/hub/test/startup-memory.test.ts:32:3
+      Tests  1 failed | 3 passed (4)
+exit 1
+tsc exit 0
+# Run alone right after (17:49, load 147.69), startup-memory.test.ts failed the same test, receiving packages/record/dist/index.js, learned.js and projections.js on the main thread:
+# a base failure outside #1898, so the suite left AC3's covering list (README, Readings).

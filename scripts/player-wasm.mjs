@@ -10,7 +10,7 @@
 // set's compressed size (Brotli at quality 11 of its WebAssembly and page glue, as the player's budget measures them)
 // in dist/sets.json: the export takes the smallest set that holds a document's modules.
 //
-// The full set reaches the 3D module, whose meshopt C++ the build compiles for wasm32, and #1040's KTX2 transcoder,
+// The full set reaches the 3D renderer, whose meshopt C++ the build compiles for wasm32, and #1040's KTX2 transcoder,
 // Basis Universal's C and C++ with the musl libc and libc++ basisu_wasm_libcxx vendors. In meshopt's compiles alone, a
 // wrapper of the compiler makes the compiler's builtins stand in for the float functions its bare wasm32 headers don't
 // declare (musl defines those functions itself, so they can't be macros there); every C and C++ compile writes its
