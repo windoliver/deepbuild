@@ -1068,6 +1068,8 @@ impl Host {
                 .flat_map(|p| p.values_mut());
             let values = params.flat_map(|v| match v {
                 Value::Array(a) => a.iter_mut().collect::<Vec<_>>(),
+                // #211: a logic item's world pages from a provider's `out: pages`.
+                v if v.pointer("/init/gen").is_some() => vec![&mut v["init"]],
                 v => vec![v],
             });
             for value in values {
@@ -1369,7 +1371,25 @@ impl Host {
                     .unwrap_or(0)
                     .min(layouts::PAGES_CAP);
                 match out_bytes(&ran, 12 + count * (4 + layouts::PAGE)) {
-                    Ok(b) => ("pages@1".to_string(), b),
+                    Ok(b) => {
+                        // #211: its pages lie in its range, `first` to `first + count`.
+                        let first = p.get("first").and_then(Value::as_u64).unwrap_or(0);
+                        let n = b.get(8..12).map_or(0, |h| {
+                            u32::from_le_bytes(h.try_into().expect("4 bytes")) as u64
+                        });
+                        let outside = (0..n.min(count)).find_map(|i| {
+                            let at = (12 + i * (4 + layouts::PAGE)) as usize;
+                            let page = u64::from(u32::from_le_bytes(b.get(at..at + 4)?.try_into().ok()?));
+                            (!(first..first + count).contains(&page)).then_some(page)
+                        });
+                        if let Some(page) = outside {
+                            return failed(
+                                "out",
+                                format!("page {page} is outside its range, {first} to {}", first + count),
+                            );
+                        }
+                        ("pages@1".to_string(), b)
+                    }
                     Err(e) => return failed("over_cap", e),
                 }
             }

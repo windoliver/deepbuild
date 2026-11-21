@@ -678,6 +678,25 @@ impl Hub<'_> {
                 refused.push(r);
             }
         }
+        // #211: a logic item whose world could outgrow the web player's store, which keeps it in
+        // memory up to web_max, is refused, naming the field.
+        let init_only = self.planted(Planted::WebExportChecksInitOnly);
+        let root = &self.scenario.evidence;
+        for (id, item) in doc["items"].as_object().into_iter().flatten() {
+            let Some(pages) = item.pointer("/params/pages") else {
+                continue;
+            };
+            let init = pages["init"]
+                .as_str()
+                .or_else(|| pages.pointer("/init/asset").and_then(Value::as_str))
+                .and_then(|sha| crate::evidence::read(root, sha))
+                .map(|b| b.len() as u64);
+            if let Some(mut r) = deep_logic::pages::web_refused(pages, init, init_only) {
+                r["item"] = json!(id);
+                r["code"] = json!("web.pages");
+                refused.push(r);
+            }
+        }
         if !refused.is_empty() {
             let names: Vec<&str> = refused.iter().filter_map(|r| r["item"].as_str()).collect();
             return Err(

@@ -1842,6 +1842,26 @@
       ]
     },
     {
+      "id": "logic-world-pages",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "world-pages"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "moves_8_ms": 0.3,
+        "checkpoint_50_ms": 0.1,
+        "checkpoint_50_bytes": 2048,
+        "idle_work": 0
+      },
+      "initialReason": "Issue #211 first measurement: the merge base has no world pages and no such task. Release deep-logic's bake of a world of 2,048 pages whose step asks for 8 fresh pages and writes 5 of every 8 as they land reads each step's pages_ns, the CPU time the logic module took running the 8 moves before it, 5 of them writing a page back (moves_8_ms, the median of steps 11 to 199), and each checkpoint's map_ns and map_bytes, the time and the bytes its 50 changed page map entries add (checkpoint_50_ms, the median of checkpoints 30 to 200, and checkpoint_50_bytes, their largest); and an item without pages counts its steps that read a move's time and its checkpoints that carry a page part (idle_work). Five runs after a warm-up one; canvas.mjs judge holds the times on a reference Mac and the bytes and the count anywhere. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#211.c0b6687b"
+      ]
+    },
+    {
       "id": "playtest-maze",
       "command": [
         "node",

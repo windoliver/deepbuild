@@ -26,6 +26,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             "services",
             "mirrors",
             "preview",
+            "pages",
             "lanes",
         ]
         .contains(&k.as_str())
@@ -237,6 +238,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
         ring,
         assets,
         saves: params.get("saves").cloned(),
+        pages: params.get("pages").cloned(),
         emits,
         fires,
         services,
@@ -920,6 +922,17 @@ pub fn check_in(
                 None
             }
         };
+        // #211: the page region, after every other region, and init's pages.
+        let pages = match &d.pages {
+            None => None,
+            Some(v) => match crate::pages::of(v, &given, memory, &regions, &segments, &asset) {
+                Ok(p) => Some(p),
+                Err(r) => {
+                    refused.push(r);
+                    None
+                }
+            },
+        };
         if !refused.is_empty() {
             return Err(logic_refused(id, refused));
         }
@@ -977,6 +990,7 @@ pub fn check_in(
             services_at: services_at.unwrap_or(0),
             mirrors,
             preview,
+            pages,
             lanes,
         });
     }

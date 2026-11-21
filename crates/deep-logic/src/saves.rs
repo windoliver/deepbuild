@@ -38,6 +38,8 @@ struct State {
     /// A linear write's values before the last step that ran; empty when it only holds.
     prev: Vec<u8>,
     pending: BTreeMap<String, VecDeque<Entry>>,
+    /// #211: its world pages, as `pages::State::encode` laid them out.
+    pages: Option<Vec<u8>>,
 }
 
 /// The piece's state layout, content and module set: what a save is bound to.
@@ -156,6 +158,11 @@ fn encode(w: &mut World) -> Vec<u8> {
                 .collect()
         };
         put(&mut out, json!(pending).to_string().as_bytes());
+        // #211: an item with pages adds its map's entries that differ from init, their bytes
+        // once each, its slots and its move queue.
+        if let (Some(p), Some(st)) = (&item.pages, &l.paged) {
+            put(&mut out, &st.encode(p, planted.save_drops_page_map).0);
+        }
     }
     for id in &w.piece.machine {
         put(&mut out, id.as_bytes());
@@ -169,7 +176,7 @@ type Decoded = (Vec<(String, State)>, Vec<(String, u64)>);
 
 /// The state's items by ID, or None when it doesn't decode or holds more than `items` logic
 /// items.
-fn decode(mut b: &[u8], items: usize) -> Option<Decoded> {
+fn decode(mut b: &[u8], items: usize, paged: &dyn Fn(usize) -> bool) -> Option<Decoded> {
     fn take<'a>(b: &mut &'a [u8], n: usize) -> Option<&'a [u8]> {
         let (head, rest) = (b.get(..n)?, b.get(n..)?);
         *b = rest;
@@ -183,7 +190,7 @@ fn decode(mut b: &[u8], items: usize) -> Option<Decoded> {
         take(b, n)
     }
     let mut out = Vec::new();
-    for _ in 0..Some(u32_of(&mut b)?).filter(|n| *n <= items)? {
+    for i in 0..Some(u32_of(&mut b)?).filter(|n| *n <= items)? {
         let id = String::from_utf8(sized(&mut b)?.to_vec()).ok()?;
         let failed = match take(&mut b, 1)? {
             [0] => false,
@@ -208,6 +215,10 @@ fn decode(mut b: &[u8], items: usize) -> Option<Decoded> {
             .into_iter()
             .map(|(c, q)| Some((c, q.iter().map(Entry::parse).collect::<Option<_>>()?)))
             .collect::<Option<_>>()?;
+        let pages = match paged(i) {
+            true => Some(sized(&mut b)?.to_vec()),
+            false => None,
+        };
         out.push((
             id,
             State {
@@ -218,6 +229,7 @@ fn decode(mut b: &[u8], items: usize) -> Option<Decoded> {
                 arrays,
                 prev,
                 pending,
+                pages,
             },
         ));
     }
@@ -382,7 +394,23 @@ fn made(w: &mut World, k: i64, slot: i32, ended: bool) -> (Value, Vec<u8>) {
     if let Some(r) = &piece.rewind {
         header["branch"] = w.branch_saved(k, r);
     }
+    // #211: each item's page map entries and page bytes the save holds beside its memory.
+    if let Some(pages) = pages_held(w) {
+        header["pages"] = pages;
+    }
     (header, encode(w))
+}
+
+/// #211: each item with pages' map entries and page bytes a save of the world now holds.
+fn pages_held(w: &World) -> Option<Value> {
+    let mut out = serde_json::Map::new();
+    for (item, l) in w.piece.items.iter().zip(&w.lives) {
+        if let (Some(p), Some(st)) = (&item.pages, &l.paged) {
+            let (entries, bytes) = st.save_counts(p, w.planted.save_drops_page_map);
+            out.insert(item.id.clone(), json!({"entries": entries, "bytes": bytes}));
+        }
+    }
+    (!out.is_empty()).then_some(Value::Object(out))
 }
 
 /// Writes the world's state now, at step `k`, as a save of `slot`: under a temporary name, renamed
@@ -474,10 +502,14 @@ pub(crate) fn due(w: &mut World, k: i64, ended_at: Instant) {
         let out = match write(w, k, slot, ended) {
             Ok((hash, file, on_main)) => {
                 let write_ns = ended_at.elapsed().as_nanos() as u64;
-                json!({
+                let mut out = json!({
                     "item": w.piece.items[i].id, "slot": slot, "step": k, "hash": hash, "file": file, "ended": ended,
                     "deep_hash": w.deep_hashes(), "write_ns": write_ns, "on_ui_thread": on_main,
-                })
+                });
+                if let Some(pages) = pages_held(w) {
+                    out["pages"] = pages;
+                }
+                out
             }
             Err(e) => {
                 json!({"ok": false, "code": "save_failed", "item": w.piece.items[i].id, "slot": slot, "step": k, "what": e})
@@ -551,6 +583,17 @@ fn opened(
         live.arrays = s.arrays;
         live.prev = s.prev;
         live.pending = s.pending;
+        // #211: the world pages: init's map under the save's entries, its slots and queue.
+        if let Some(p) = &item.pages {
+            let store = crate::pages::new_store(p, planted.page_store);
+            let st = s
+                .pages
+                .as_deref()
+                .and_then(|b| crate::pages::State::decode(p, store, b));
+            live.paged = Some(st.ok_or_else(
+                || json!({"code": "save_refused", "differs": [{"what": "pages", "item": item.id}]}),
+            )?);
+        }
         live.cursor = track
             .iter()
             .map(|(c, list)| {
@@ -719,10 +762,10 @@ fn whole(
             e
         }
     };
-    let state = bytes
-        .iter()
-        .position(|b| *b == b'\n')
-        .and_then(|n| decode(&bytes[n + 1..], piece.items.len()));
+    let state = bytes.iter().position(|b| *b == b'\n').and_then(|n| {
+        let paged = |i: usize| piece.items.get(i).is_some_and(|it| it.pages.is_some());
+        decode(&bytes[n + 1..], piece.items.len(), &paged)
+    });
     let mut via = match dir {
         Some((_, file)) => json!({"hash": hash, "file": file, "step": k, "via": "straight"}),
         None => json!({"hash": hash, "step": k, "via": "straight"}),
@@ -897,5 +940,7 @@ fn migrate(
         arrays: old.arrays.clone(),
         prev: old.prev.clone(),
         pending: old.pending.clone(),
+        // #211: a migration moves memory; the world pages carry as they were.
+        pages: old.pages.clone(),
     })
 }
