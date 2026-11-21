@@ -761,7 +761,7 @@ fn run_view(
             if args.look.drawn.is_some() {
                 let assets = Map::new();
                 *lock(&opened.drawn) =
-                    crate::drawn::frame3(&args.doc, &args.look, &assets, &scene, app.planted)?;
+                    crate::drawn::frame3(&args.doc, &args.look, &assets, &scene, app.composed())?;
             }
             let label_report = if args.labels {
                 Some(labels_json(&scene, out)?)
@@ -1417,7 +1417,7 @@ fn run_view(
                     }
                     let kept_fx = std::mem::replace(&mut lock(&fx).settings, settings);
                     let drawn_k =
-                        crate::drawn::frame3(&args.doc, &look_k, &Map::new(), &sc, app.planted)?;
+                        crate::drawn::frame3(&args.doc, &look_k, &Map::new(), &sc, app.composed())?;
                     let kept_drawn = std::mem::replace(&mut *lock(&opened.drawn), drawn_k);
                     let mut kept_layer = None;
                     if let (Some(own), Some(stage), Some(status)) = (
@@ -2227,7 +2227,7 @@ fn run_view(
             p.overlays.clear();
         }
     }
-    let (msaa, render_targets) = session3::render_targets(app);
+    let (msaa, render_targets, mirror_px) = session3::render_targets(app);
     session3::close(app);
     // An over-cap document is refused, its imports still reported: the import comes before the
     // count it makes (#423).
@@ -2299,7 +2299,7 @@ fn run_view(
         "internal_scale": scale,
         "upscale": upscale,
         "sharpen": args.surface.sharpen,
-        "size_px": size, "internal_px": internal, "msaa": msaa,
+        "size_px": size, "internal_px": internal, "mirror_px": mirror_px, "msaa": msaa,
     });
     let mut reply = json!({
         "frames": frames, "passes": passes, "status": status_report, "surface": drew,

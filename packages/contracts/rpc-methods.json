@@ -663,6 +663,15 @@
     "called_by": "deep hub promote"
   },
   {
+    "method": "hub.restart",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1865",
+    "preview_since": "R1",
+    "decide_by": "R4",
+    "called_by": "deep hub promote"
+  },
+  {
     "method": "hub.check",
     "since": "R1",
     "stability": "preview",

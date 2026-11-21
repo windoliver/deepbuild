@@ -126,6 +126,8 @@ impl Selection {
             &mut choices,
             deep_scene3d_render::shadow_texels(scene, side),
         );
+        deep_scene3d_render::proxy::made(scene);
+        drawn_triangles(scene, &mut choices);
         lod::resolve(scene, &choices);
         (choices, policy)
     }
@@ -170,6 +172,37 @@ impl Selection {
             .collect();
         scene.light_cut = Some(policy.clone());
         policy
+    }
+}
+
+/// #2738: a choice of an item drawn from a mesh without levels counts the triangles its bands
+/// draw in the color pass, as a leveled one does: the full mesh, the proxy the renderer made (the
+/// full mesh where it made none), a box's 12. Choices are in `select`'s order.
+fn drawn_triangles(scene: &Scene, choices: &mut [Choice]) {
+    let leveled = scene
+        .layers
+        .iter()
+        .flat_map(|l| &l.solids)
+        .filter(|s| s.lod.is_some());
+    for (c, s) in choices.iter_mut().zip(leveled) {
+        let (None, Some(lod), Some(mesh)) = (c.triangles, &s.lod, &s.mesh) else {
+            continue;
+        };
+        let full = mesh.triangles() as u64;
+        c.triangles = Some(
+            c.bands
+                .iter()
+                .map(|b| match b {
+                    Show::Full => full,
+                    Show::Proxy => lod
+                        .proxy_mesh
+                        .as_ref()
+                        .map_or(full, |l| l.mesh.triangles() as u64),
+                    Show::Box => 12,
+                    _ => 0,
+                })
+                .sum(),
+        );
     }
 }
 

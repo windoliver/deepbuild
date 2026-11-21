@@ -1,0 +1,13 @@
+# 57290657c (the merged head, main 8e7b6ca88 merged), 2026-11-20T21:52:48.801Z, load 183
+$ node --test tests/acceptance/2470/deep-contracts.test.mjs
+✔ AC1 #2470.16c0da75 `cargo check --locked -p deep-contracts` passes in the checkout: it exits 0 (105508.689625ms)
+✔ AC2 #2470.296a591a a second `npm run generate -w @deepbuild/contracts` leaves no diff: run on a copy of the checkout, it changes, adds and removes no file (38047.343875ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 144092.977
+# exit 0 in 144.5 s

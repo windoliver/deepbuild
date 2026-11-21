@@ -22,6 +22,14 @@ export const CODES = {
     meaning: 'A key a shown copy column holds has no entry in that column\'s copy table in one of the locales named.',
     fix: 'Write the copy for the key named in the locale named, in the copy table named.',
   },
+  'catalog.dominant': {
+    meaning: 'Over paired runs on one seed, the row named raises the goal\'s share past the limit, its 95% interval clear above it: it wins on its own.',
+    fix: 'Weaken the row named, or give it a cost, until its with-run and without-run shares differ by less than the limit.',
+  },
+  'catalog.unpaired': {
+    meaning: 'A pair of catalog.dominance\'s runs differs in more than the row\'s offers, played another catalog than the copy with its offers off, or doesn\'t replay from its track.',
+    fix: 'Make the piece offer rows slot by slot from the catalog\'s offers column, so turning one row\'s offers off changes only that row\'s slots, and make its runs replay from their tracks.',
+  },
   'scenario.unreachable': {
     meaning: 'From its start, no chain of trigger rows fires the goal named, or a reachable row shows a key with no copy.',
     fix: 'Make the trigger or condition named able to hold: a row that sets the flag, a path to the cells, a kind allowed to be built, or copy for the key.',

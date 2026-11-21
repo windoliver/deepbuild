@@ -1,0 +1,150 @@
+# #2874 acceptance tests, run once on the base commit 843f9a67799e108e4da5cd93716fbfdbb6936bf4, where the issue's bug
+# is present: scripts/contract-diff.mjs copies R1's fixture at the modes the checkout's umask wrote, and
+# packageDigest (packages/extension-host/src/digest.ts) counts each file's mode as it is on disk.
+# Node v24.22.2, Vitest 5.0.5, git 2.56.0, macOS 27.2 (arm64). Before it: npm ci, then npm run build --workspaces
+# (exit 0), both through scripts/throttle.mjs build.
+# Command: NO_COLOR=1 nice -n 10 node node_modules/vitest/vitest.mjs run tests/acceptance/2874 --testTimeout=600000
+# --reporter=verbose, from the worktree's root, at a load of 288 to 336 on this Mac.
+# Machine paths redacted: <repo> is the worktree. The tests' own folders are /private/tmp/dh2874-*, removed after each
+# file (none was left after the run).
+# Expected on the base: every test fails at its assertion. Each did, at its first assertion on the umask 002 side:
+#   AC1 (29363 ms): the umask 022 record passed and pinned the committed d1:68bb6bf2…; the umask 002 record printed the
+#     issue's line, R1's envelope digest d1:68bb6bf2… isn't its files' digest d1:b8fd5ae6…, and exited 1.
+#   AC2, recorded under 022 (28425 ms): the record passed; old-load on the umask 002 clone failed on the digest
+#     (d1:b8fd5ae6…, not the pinned d1:68bb6bf2…) and on the install.
+#   AC3 (33588 ms): with index.ts executable, the umask 022 record pinned the stamp at 755, d1:acf19524…; the umask 002
+#     record digested its files at 664 and 775, d1:57103365…, and refused them.
+#   AC2, recorded under 002 (16302 ms): the umask 002 record failed with the issue's line, before any old-load.
+
+started 2026-11-21T02:12:06Z
+18:12  up 7 days,  4:21, 19 users, load averages: 288.18 272.32 244.08
+
+ RUN  v5.0.5 <repo>
+
+ × tests/acceptance/2874/ac1-record.test.ts > #2874 the contract step records R1 on a umask 002 checkout > #2874.177fc2d6 AC1 on a umask 002 checkout, where git writes R1's fixture as 664, record --release R1 installs and loads R1's fixture package and pins the committed digest its deepbuild.json carries, as it does on a umask 022 checkout (644) 29363ms
+   → on the umask 002 checkout: record --release R1 installs and loads R1's fixture package, with no FAIL line
+exit 1, output:
+FAIL contracts: R1's fixture package didn't load: deepbuild/r1fixture's envelope digest d1:68bb6bf21e482001d93a9b43b93f30849445a60647e494ef9169b238558ac35d isn't its files' digest d1:b8fd5ae6145db0a20d5de19cde5b9a1231119731dd1d4c53020c4244ad65e440: it changed since it was built, so it isn't installed: expected [ Array(1) ] to deeply equal []
+ × tests/acceptance/2874/ac2-old-load.test.ts > #2874 a release pinned on a checkout of one umask loads on a checkout of the other > #2874.1637d9b1 AC2 a release recorded on a umask 022 checkout passes old-load on a umask 002 checkout of the same files 28425ms
+   → old-load on a umask 002 checkout of R1 recorded under umask 022: no FAIL contracts line
+exit 1, output:
+FAIL contracts: R1's fixture package: its envelope digest is d1:b8fd5ae6145db0a20d5de19cde5b9a1231119731dd1d4c53020c4244ad65e440, not d1:68bb6bf21e482001d93a9b43b93f30849445a60647e494ef9169b238558ac35d that R1 pinned; it was rebuilt or changed (arrived in R1)
+FAIL contracts: R1's fixture package didn't load in next: deepbuild/r1fixture's envelope digest d1:68bb6bf21e482001d93a9b43b93f30849445a60647e494ef9169b238558ac35d isn't its files' digest d1:b8fd5ae6145db0a20d5de19cde5b9a1231119731dd1d4c53020c4244ad65e440: it changed since it was built, so it isn't installed (arrived in R1): expected [ …(2) ] to deeply equal []
+ × tests/acceptance/2874/ac3-executable.test.ts > #2874 a fixture file git records as executable is pinned as 755 > #2874.a254fb4c AC3 a fixture file git records as executable (755, written 775 under umask 002) is pinned as 755: the same digest under either umask, and a different one than the same bytes not executable 33588ms
+   → on the umask 002 checkout, index.ts written 775: record --release R1 installs and loads R1's fixture package, with no FAIL line
+exit 1, output:
+FAIL contracts: R1's fixture package didn't load: deepbuild/r1fixture's envelope digest d1:acf195243ef11f47b7de2068b7ecc1c5834cdf360633030df77ecddc02465f49 isn't its files' digest d1:571033651f03f59a329a505496133de9ff73a37fb02613e7e60a7322944f82aa: it changed since it was built, so it isn't installed: expected [ Array(1) ] to deeply equal []
+ × tests/acceptance/2874/ac2-old-load.test.ts > #2874 a release pinned on a checkout of one umask loads on a checkout of the other > #2874.1637d9b1 AC2 a release recorded on a umask 002 checkout passes old-load on a umask 022 checkout of the same files 16302ms
+   → on the umask 002 checkout: record --release R1 installs and loads R1's fixture package, with no FAIL line
+exit 1, output:
+FAIL contracts: R1's fixture package didn't load: deepbuild/r1fixture's envelope digest d1:68bb6bf21e482001d93a9b43b93f30849445a60647e494ef9169b238558ac35d isn't its files' digest d1:b8fd5ae6145db0a20d5de19cde5b9a1231119731dd1d4c53020c4244ad65e440: it changed since it was built, so it isn't installed: expected [ Array(1) ] to deeply equal []
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2874/ac1-record.test.ts > #2874 the contract step records R1 on a umask 002 checkout > #2874.177fc2d6 AC1 on a umask 002 checkout, where git writes R1's fixture as 664, record --release R1 installs and loads R1's fixture package and pins the committed digest its deepbuild.json carries, as it does on a umask 022 checkout (644)
+AssertionError: on the umask 002 checkout: record --release R1 installs and loads R1's fixture package, with no FAIL line
+exit 1, output:
+FAIL contracts: R1's fixture package didn't load: deepbuild/r1fixture's envelope digest d1:68bb6bf21e482001d93a9b43b93f30849445a60647e494ef9169b238558ac35d isn't its files' digest d1:b8fd5ae6145db0a20d5de19cde5b9a1231119731dd1d4c53020c4244ad65e440: it changed since it was built, so it isn't installed: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "FAIL contracts: R1's fixture package didn't load: deepbuild/r1fixture's envelope digest d1:68bb6bf21e482001d93a9b43b93f30849445a60647e494ef9169b238558ac35d isn't its files' digest d1:b8fd5ae6145db0a20d5de19cde5b9a1231119731dd1d4c53020c4244ad65e440: it changed since it was built, so it isn't installed",
++ ]
+
+ ❯ expectRecorded tests/acceptance/2874/helpers.ts:174:128
+    172| /** Asserts the record step installed, checked and loaded R1's fixture…
+    173| export function expectRecorded(r: Ran, what: string): void {
+    174|   expect(failLines(r), `${what}: record --release R1 installs and load…
+       |                                                                                                                                ^
+    175|   expect(r.code, `${what}: record --release R1 exits 0\n${shown(r)}`).…
+    176| }
+ ❯ tests/acceptance/2874/ac1-record.test.ts:27:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/acceptance/2874/ac2-old-load.test.ts > #2874 a release pinned on a checkout of one umask loads on a checkout of the other > #2874.1637d9b1 AC2 a release recorded on a umask 022 checkout passes old-load on a umask 002 checkout of the same files
+AssertionError: old-load on a umask 002 checkout of R1 recorded under umask 022: no FAIL contracts line
+exit 1, output:
+FAIL contracts: R1's fixture package: its envelope digest is d1:b8fd5ae6145db0a20d5de19cde5b9a1231119731dd1d4c53020c4244ad65e440, not d1:68bb6bf21e482001d93a9b43b93f30849445a60647e494ef9169b238558ac35d that R1 pinned; it was rebuilt or changed (arrived in R1)
+FAIL contracts: R1's fixture package didn't load in next: deepbuild/r1fixture's envelope digest d1:68bb6bf21e482001d93a9b43b93f30849445a60647e494ef9169b238558ac35d isn't its files' digest d1:b8fd5ae6145db0a20d5de19cde5b9a1231119731dd1d4c53020c4244ad65e440: it changed since it was built, so it isn't installed (arrived in R1): expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "FAIL contracts: R1's fixture package: its envelope digest is d1:b8fd5ae6145db0a20d5de19cde5b9a1231119731dd1d4c53020c4244ad65e440, not d1:68bb6bf21e482001d93a9b43b93f30849445a60647e494ef9169b238558ac35d that R1 pinned; it was rebuilt or changed (arrived in R1)",
++   "FAIL contracts: R1's fixture package didn't load in next: deepbuild/r1fixture's envelope digest d1:68bb6bf21e482001d93a9b43b93f30849445a60647e494ef9169b238558ac35d isn't its files' digest d1:b8fd5ae6145db0a20d5de19cde5b9a1231119731dd1d4c53020c4244ad65e440: it changed since it was built, so it isn't installed (arrived in R1)",
++ ]
+
+ ❯ expectOldLoadPasses tests/acceptance/2874/ac2-old-load.test.ts:20:72
+     18|   if (!existsSync(release) || !existsSync(join(root, FIXTURE, 'recorde…
+     19|   const calls: string[] = readJson(release).fixture?.calls ?? [];
+     20|   expect(failLines(r), `${what}: no FAIL contracts line\n${shown(r)}`)…
+       |                                                                        ^
+     21|   expect(r.code, `${what}: exits 0\n${shown(r)}`).toBe(0);
+     22|   expect(r.out, `${what}: prints a PASS contracts line\n${shown(r)}`).…
+ ❯ tests/acceptance/2874/ac2-old-load.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/acceptance/2874/ac2-old-load.test.ts > #2874 a release pinned on a checkout of one umask loads on a checkout of the other > #2874.1637d9b1 AC2 a release recorded on a umask 002 checkout passes old-load on a umask 022 checkout of the same files
+AssertionError: on the umask 002 checkout: record --release R1 installs and loads R1's fixture package, with no FAIL line
+exit 1, output:
+FAIL contracts: R1's fixture package didn't load: deepbuild/r1fixture's envelope digest d1:68bb6bf21e482001d93a9b43b93f30849445a60647e494ef9169b238558ac35d isn't its files' digest d1:b8fd5ae6145db0a20d5de19cde5b9a1231119731dd1d4c53020c4244ad65e440: it changed since it was built, so it isn't installed: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "FAIL contracts: R1's fixture package didn't load: deepbuild/r1fixture's envelope digest d1:68bb6bf21e482001d93a9b43b93f30849445a60647e494ef9169b238558ac35d isn't its files' digest d1:b8fd5ae6145db0a20d5de19cde5b9a1231119731dd1d4c53020c4244ad65e440: it changed since it was built, so it isn't installed",
++ ]
+
+ ❯ expectRecorded tests/acceptance/2874/helpers.ts:174:128
+    172| /** Asserts the record step installed, checked and loaded R1's fixture…
+    173| export function expectRecorded(r: Ran, what: string): void {
+    174|   expect(failLines(r), `${what}: record --release R1 installs and load…
+       |                                                                                                                                ^
+    175|   expect(r.code, `${what}: record --release R1 exits 0\n${shown(r)}`).…
+    176| }
+ ❯ tests/acceptance/2874/ac2-old-load.test.ts:39:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/acceptance/2874/ac3-executable.test.ts > #2874 a fixture file git records as executable is pinned as 755 > #2874.a254fb4c AC3 a fixture file git records as executable (755, written 775 under umask 002) is pinned as 755: the same digest under either umask, and a different one than the same bytes not executable
+AssertionError: on the umask 002 checkout, index.ts written 775: record --release R1 installs and loads R1's fixture package, with no FAIL line
+exit 1, output:
+FAIL contracts: R1's fixture package didn't load: deepbuild/r1fixture's envelope digest d1:acf195243ef11f47b7de2068b7ecc1c5834cdf360633030df77ecddc02465f49 isn't its files' digest d1:571033651f03f59a329a505496133de9ff73a37fb02613e7e60a7322944f82aa: it changed since it was built, so it isn't installed: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "FAIL contracts: R1's fixture package didn't load: deepbuild/r1fixture's envelope digest d1:acf195243ef11f47b7de2068b7ecc1c5834cdf360633030df77ecddc02465f49 isn't its files' digest d1:571033651f03f59a329a505496133de9ff73a37fb02613e7e60a7322944f82aa: it changed since it was built, so it isn't installed",
++ ]
+
+ ❯ expectRecorded tests/acceptance/2874/helpers.ts:174:128
+    172| /** Asserts the record step installed, checked and loaded R1's fixture…
+    173| export function expectRecorded(r: Ran, what: string): void {
+    174|   expect(failLines(r), `${what}: record --release R1 installs and load…
+       |                                                                                                                                ^
+    175|   expect(r.code, `${what}: record --release R1 exits 0\n${shown(r)}`).…
+    176| }
+ ❯ tests/acceptance/2874/ac3-executable.test.ts:50:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  4 failed (4)
+   Start at  18:12:09
+   Duration  48.22s (tests 97%, transform 2%)
+
+vitest exit 1
+ended 2026-11-21T02:12:58Z
+18:12  up 7 days,  4:22, 19 users, load averages: 335.85 289.10 251.97

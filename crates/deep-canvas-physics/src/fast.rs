@@ -117,6 +117,12 @@ fn part(w: &World, b: &Body, i: usize) -> Option<Part> {
     })
 }
 
+/// #2308: `b`'s thinnest extent over its plain shapes, m; over the first `shapes` of them.
+pub(crate) fn thinnest(w: &World, b: &Body, shapes: usize) -> Option<f64> {
+    let parts = (0..b.shapes.len().min(shapes)).filter_map(|i| part(w, b, i));
+    parts.map(|p| 2.0 * p.thin).reduce(f64::min)
+}
+
 /// A body as a step left it: its pose, its velocity and its fastest point's speed.
 struct Seen {
     pos: V3,
