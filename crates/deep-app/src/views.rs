@@ -4896,8 +4896,10 @@ mod tests {
     fn an_ask_row_keeps_when_its_default_applies_where_a_session_row_gives_its_time_to_its_title() {
         // A 260-wide list leaves a row about 243 of room; beside a taste ask's word (about 75) and its slots (48) and a
         // time such as "tomorrow 10:00" (about 70), 12 characters of title (about 85) don't fit (#1808).
-        let room = px(243.) - px(123.) - px(70.);
-        let least = px(85.);
+        // Any room narrower than the least title stands for it here.
+        let s = sizes();
+        let (room, least) = (s.space(3), s.space(5));
+        assert!(room < least);
         assert!(
             !keeps_time(false, room, least),
             "a session row gives its time to 12 characters of title (#1808)"
