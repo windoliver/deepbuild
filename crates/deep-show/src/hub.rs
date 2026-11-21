@@ -840,8 +840,8 @@ pub struct Hub<'a> {
 /// A document's item count, and its mode visible table as first seen at that count.
 pub type ModeIds = (usize, Vec<(String, [f64; 4])>);
 
-/// A snapshot's straight RGBA, its size and each item's box in its pixels.
-pub type Raster = (Vec<u8>, [u16; 2], Vec<(String, [f64; 4])>);
+/// A 3D snapshot's straight RGBA, its size and its visible table (#3017).
+pub type Raster = (Vec<u8>, [u16; 2], crate::scene3d::Shown);
 
 /// Which half of a press, or a key repeat (#327).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1193,9 +1193,10 @@ impl<'a> Hub<'a> {
             snapshot::px([0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(1.0)))
         });
         // #493: a shot writes the camera's pose the 3D frame is drawn through; #1729: its assets
-        // and maps from the evidence store; #506: its insets' pictures drawn in (over3d.rs).
-        self.painted3d(doc, t, size)
-            .map(|(rgba, scene)| (rgba, size, scene.boxes()))
+        // and maps from the evidence store; #506: its insets' pictures drawn in (over3d.rs);
+        // #3017: its visible table from the object-ID pass it drew.
+        self.shown3d(doc, t, size)
+            .map(|(rgba, shown)| (rgba, size, shown))
     }
 
     /// Whether a panel is on screen: as the scenario set it, or as a `panel` call left it.
@@ -2448,22 +2449,16 @@ impl<'a> Hub<'a> {
                         }
                     }
                     let pixels = match drawn3d {
-                        Some(drawn3d) => drawn3d.ok().map(|(mut rgba, size, boxes)| {
+                        Some(drawn3d) => drawn3d.ok().map(|(mut rgba, size, mut shown)| {
                             // The 2D items over the 3D frame, with no ground of their own.
-                            let mut boxes = boxes;
                             if let Some(d) = drawn {
                                 let (over, drew) =
                                     self.renderer.raster_batched(d, size, None, &instanced);
                                 batches = drew;
                                 snapshot::over(&mut rgba, &over);
-                                let scale = d.scale(size);
-                                boxes.extend(
-                                    d.boxes()
-                                        .into_iter()
-                                        .map(|(id, b)| (id, b.map(|v| v * scale))),
-                                );
+                                shown.over(d.boxes(), d.scale(size), size);
                             }
-                            (rgba, size, boxes)
+                            (rgba, size, shown)
                         }),
                         None => {
                             let drawn = drawn.expect("a revision with no error was drawn");
@@ -2473,10 +2468,10 @@ impl<'a> Hub<'a> {
                                 self.renderer
                                     .raster_batched(drawn, size, Some(ground), &instanced);
                             batches = drew;
-                            Some((rgba, size, Vec::new()))
+                            Some((rgba, size, Default::default()))
                         }
                     };
-                    let Some((mut rgba, size, boxes3d)) = pixels else {
+                    let Some((mut rgba, size, shown)) = pixels else {
                         reply.insert("outcome".into(), json!("not_presented"));
                         reply.insert("reason".into(), json!("timeout"));
                         if show.check {
@@ -2502,10 +2497,13 @@ impl<'a> Hub<'a> {
                                     e
                                 }
                             };
-                            let rows = match drawn.filter(|_| !three) {
-                                Some(d) => snapshot::visible(d.boxes(), d.scale(size), size),
-                                None => snapshot::visible(boxes3d, 1.0, size),
-                            };
+                            match drawn.filter(|_| !three) {
+                                Some(d) => {
+                                    let rows = snapshot::visible(d.boxes(), d.scale(size), size);
+                                    reply.insert("visible".into(), rows);
+                                }
+                                None => shown.put(&mut reply),
+                            }
                             // #464: a 2D print look adds this machine's GPU snapshot, display
                             // only, beside the Vello CPU one.
                             let gpu = match drawn.filter(|_| !three) {
@@ -2516,7 +2514,6 @@ impl<'a> Hub<'a> {
                                 "snapshots".into(),
                                 json!([entry].into_iter().chain(gpu).collect::<Vec<_>>()),
                             );
-                            reply.insert("visible".into(), rows);
                             // The instanced batches the 2D draw made: none for a 3D frame, which
                             // scene3d draws and reports on its own (#378).
                             reply.insert("batches".into(), crate::packs::batches(&batches));

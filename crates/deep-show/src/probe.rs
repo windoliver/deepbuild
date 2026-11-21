@@ -141,6 +141,11 @@ impl Hub<'_> {
             "snapshots": [snapshot],
             "backends": crate::seams::backends(true),
         });
+        // #3017: the frame's visible table, from the object-ID pass its probes read.
+        if let Some(r) = reply.as_object_mut() {
+            let plant = self.scenario.module_planted.as_deref();
+            targets.shown(scene.boxes(), size, plant).put(r);
+        }
         if probes.at.is_empty() {
             return reply;
         }
@@ -252,17 +257,20 @@ impl Hub<'_> {
             let Some(gpu) = self.gpu3() else {
                 return refused("unsupported_platform");
             };
-            let Some((rgba, _)) = gpu.draw_scene(&scene, &look, false) else {
+            let Some((rgba, targets)) = gpu.draw_scene(&scene, &look, false) else {
                 return refused("unsupported_platform");
             };
             let png = crate::snapshot::png(rgba, size);
             let Ok(sha) = crate::evidence::put(&self.scenario.evidence, &png) else {
                 return refused("not_written");
             };
-            snapshots.push(
-                json!({"view": view, "sha256": sha, "w": size[0], "h": size[1],
-                                  "visible": crate::snapshot::visible(scene.boxes(), 1.0, size)}),
-            );
+            // #3017: each view's table from its own frame's object-ID pass.
+            let mut entry = json!({"view": view, "sha256": sha, "w": size[0], "h": size[1]});
+            if let Some(e) = entry.as_object_mut() {
+                let plant = self.scenario.module_planted.as_deref();
+                targets.shown(scene.boxes(), size, plant).put(e);
+            }
+            snapshots.push(entry);
         }
         json!({"rev": rev, "t": t, "outcome": "presented", "snapshots": snapshots,
                "backends": crate::seams::backends(true)})
