@@ -134,8 +134,8 @@ class LocalSupervisor implements Supervisor {
   private warmAt = 0;
   /** The first warm-up of the denial stream; a sandboxed launch waits for it, opening doesn't. */
   private warming: Promise<unknown> = Promise.resolve();
-  /** The warm-up's canary probe while it runs, and its end: reaped, so nothing this process started outlives it (#2998). */
-  private probe: { child: ChildProcess; ended: Promise<unknown> } | undefined;
+  /** Each warm-up's canary probe while it runs, and its end: reaped, so nothing this process started outlives it (#2998). */
+  private readonly probes = new Map<ChildProcess, Promise<unknown>>();
   private ticking: Promise<void> | undefined;
   private readonly cleaning = new Set<Promise<unknown>>();
   /** Each run between leaving the queue and its launch settling. */
@@ -477,9 +477,10 @@ class LocalSupervisor implements Supervisor {
       // Planted: each probe runs a second first, so one is still running when a stopped hub exits.
       const child = spawn('/usr/bin/sandbox-exec', ['-p', profile, '/usr/bin/perl', '-e', 'select(undef, undef, undef, 1); exec @ARGV', HELPER, 'probe', '/dev/null', 'write', target], { stdio: 'ignore' });
       const ended = new Promise((done) => child.on('close', done).on('error', done));
-      this.probe = { child, ended };
+      // Launches that start together re-warm side by side, each loop with a probe of its own.
+      this.probes.set(child, ended);
       await ended;
-      this.probe = undefined;
+      this.probes.delete(child);
       for (let i = 0; i < 10 && this.warmAt < since; i++) await sleep(25);
     }
     return this.warmAt >= since;
@@ -1154,7 +1155,7 @@ class LocalSupervisor implements Supervisor {
     this.closed = true;
     if (this.timer) clearInterval(this.timer);
     // The planted wrong program (#2998): the warm-up's probe in flight is left running, for whoever outlives us.
-    void this.probe;
+    void this.probes;
     await Promise.allSettled([this.scanning, this.pumping, this.ticking, ...this.cleaning]);
     await Promise.allSettled([...this.runs.values()].map((r) => r.egress?.close()));
     if (this.log?.pid) try { process.kill(this.log.pid, 'SIGTERM'); } catch { /* gone */ }
