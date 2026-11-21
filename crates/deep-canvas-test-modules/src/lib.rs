@@ -7,6 +7,7 @@
 use std::collections::BTreeMap;
 
 use deep_canvas::kinds::{Entry, Param, ParamType, Version};
+use deep_canvas::registry::fields::{Closure, NOTHING};
 use deep_canvas::registry::{Dependency, Manifest, Module, Raised, Range, Registrar, Semver};
 use deep_canvas::schedule::core_ops::{Datum, Edit, Edits};
 use deep_canvas::schedule::{OpError, Val, View};
@@ -662,6 +663,11 @@ fn register_test_gpu(r: &mut Registrar) {
         ),
         &[],
         "",
+    )
+    // #3023: `all` is the one word `mips` offers.
+    .closes(
+        "mips",
+        Closure::closed("record", "never: a test module's fixture kind", NOTHING),
     );
     r.kind(
         kind(
