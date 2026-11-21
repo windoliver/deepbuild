@@ -133,6 +133,10 @@ pub enum Guard {
     WebAnnouncesEveryFrame,
     /// #2776: the web export reads no refused web answer, so it carries an entry its answer refuses.
     WebCarriesRefused,
+    /// #2856: the web player catches a throw from the core while a piece plays and plays on.
+    WebPlaysOnFailure,
+    /// #2856: the web player leaves the index page's line that it hasn't started in place.
+    WebElementLeavesLine,
     /// A wrong encoder, muxer or reader in the helper processes, by its name there.
     Codec(&'static str),
 }
@@ -232,6 +236,8 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "web_no_tree" => Planted::Export(G::WebNoTree),
         "web_announces_every_frame" => Planted::Export(G::WebAnnouncesEveryFrame),
         "web_export_carries_refused" => Planted::Export(G::WebCarriesRefused),
+        "web_plays_on_failure" => Planted::Export(G::WebPlaysOnFailure),
+        "web_element_leaves_line" => Planted::Export(G::WebElementLeavesLine),
         other => Planted::Export(G::Codec(CODEC_PLANTS.iter().find(|p| **p == other)?)),
     })
 }

@@ -1,0 +1,19 @@
+[package]
+name = "deep-catalog"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #194: the data module's catalog probe (canvas primitives: Asset: tables: catalogs
+# `table.layout@1`). A catalog's tables, CSV or JSON lines, and its schema pack into the one
+# documented columnar layout that logic, keyed copy and the catalog checks read. The decode worker
+# runs it as its `catalog` job; `deep-catalog pack` runs the same code alone, its proof surface.
+# Pure: no clock, no network; the bin reads the files a line names.
+[[bin]]
+name = "deep-catalog"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+sha2 = "0.10"

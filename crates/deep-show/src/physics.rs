@@ -270,7 +270,7 @@ impl Hub<'_> {
                             .collect::<Vec<_>>()),
                     )
                 })?;
-            let kept = derive::kept(form, &w, core).map_err(|r| {
+            let kept = derive::kept(form, id, &w, core).map_err(|r| {
                 refused(
                     id,
                     json!([{"code": r.code, "path": r.path, "what": r.what}]),
@@ -341,7 +341,7 @@ impl Hub<'_> {
         } else {
             &b.track[..]
         };
-        let kept = match derive::kept(&doc, &w, core) {
+        let kept = match derive::kept(&doc, &b.world, &w, core) {
             Ok(k) => k,
             Err(r) => return json!({"ok": false, "code": r.code, "path": r.path, "what": r.what}),
         };
@@ -438,7 +438,7 @@ impl Hub<'_> {
                 .and_then(|d| check(&d, &RAPIER3D, &deep_canvas_physics::roles::TABLE));
             let Some(kept) = w
                 .ok()
-                .and_then(|w| Some((derive::kept(form, &w, &track).ok()?, w)))
+                .and_then(|w| Some((derive::kept(form, id, &w, &track).ok()?, w)))
             else {
                 continue;
             };

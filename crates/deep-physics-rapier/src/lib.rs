@@ -1070,6 +1070,7 @@ impl Backend for Rapier {
     fn step(&mut self, inputs: &[Input], targets: &Targets) -> Result<(), Box<Refusal>> {
         tally("step");
         self.wheel_rows.clear();
+        let resting = self.vehicles.resting(&self.world);
         self.apply(inputs)?;
         self.walk();
         let before = self.before();
@@ -1117,6 +1118,7 @@ impl Backend for Rapier {
         let torn = self.soft.step(&mut self.world, &belts);
         self.world.integration_parameters.warmstart_coefficient = warm;
         self.step += 1;
+        self.vehicles.rouse(&mut self.world, &resting);
         self.last = self.gather(&before);
         self.last.append(&mut self.walked);
         let turned = self.turned(&start);
