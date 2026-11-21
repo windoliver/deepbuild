@@ -24,17 +24,16 @@ On macOS, with the repo's Node (24.22.0) first on `PATH`:
 npm ci                                            # once, if node_modules is missing
 npm run build --workspaces                        # the tests use the built packages and packages/cli/dist/main.js
 cargo build -p deep-hook --locked                 # once: the hub doesn't start without target/debug/deep-hook
-node node_modules/vitest/vitest.mjs run --root tests/acceptance/2998 --no-file-parallelism --testTimeout=600000 --reporter=verbose
+node --test --test-concurrency=1 tests/acceptance/2998/probe.test.mjs tests/acceptance/2998/round-trip.test.mjs
 ```
 
-- Off macOS every test is skipped, with the reason in its name: the issue runs on macOS only (Linux's sandbox reports
+- Off macOS every test is skipped, with the reason as its skip message: the issue runs on macOS only (Linux's sandbox reports
   come through the run's parent, with no canary).
 - The perf lane's counter (`scripts/count-children.c`) needs a C compiler; `measureOnce` builds it. A run with no
   reading from it (no count and nothing uncounted) fails `BLOCKED`, never passes.
 - AC3 runs the hub-round-trip task 30 times (about 3 minutes here); AC2 up to 30 hubs (1 to 2 minutes).
 - Folders: `/tmp/dh2998-*` (a supervisor's record, a hub's temp HOME), removed by the tests. `measureOnce` and
   `benchmarks/hub.mjs` use and remove their own. The suite stops only the hubs it started, by PID.
-- With `--root` here, Vitest may write a cache under `tests/acceptance/2998/node_modules/.vite/`; delete it.
 
 ## The surface under test, and the choices made
 
@@ -80,3 +79,19 @@ to 300 from other sessions), with the checkout's path written `<repo>`.
   wrong program by this job; its proof of the fix rests on AC1 and AC3 failing at the base. A test that would fail
   there needs the hub's stop to outlast no probe, which the criterion's own scenario doesn't arrange; that is for the
   issue's author or a redraft to decide.
+
+## Redraft (November 21, 2026)
+
+Redrafted blind, from the same sources as above (the supervisor's public surface read from origin/main), with no
+implementation of #2998 seen, for one dispute: the proof lanes (`scripts/proof-runs.mjs`) run `.mjs` and `.js` test
+files with `node --test` and only `.ts` files with Vitest, so the first draft's `.mjs` files, written with Vitest's
+`describe`/`test`/`expect`, couldn't load in the before lane ("Vitest failed to find the current suite").
+
+- **What changed: the runner only.** Both files are now `node:test` with `node:assert/strict`, as
+  `tests/acceptance/1405/` is. Each criterion is one top-level `test()` (no `describe`, no subtests), whose name is a
+  plain string starting `AC<n> #2998.<id>`, so the lanes read its tag from the name; off macOS each is skipped by its
+  `skip` option, with the reason as the message. Every check is an `assert` call in the test file, and "nothing seen"
+  fails with `INCONCLUSIVE` or `BLOCKED` in its message, as before.
+- **Unchanged:** the three criteria and their IDs, the file names, each scenario, observable, count and expected value,
+  `helpers.mjs`, `fixtures/stop-mid-probe.mjs` and `BASE-FAILURE.txt` (recorded under the first draft's Vitest run; the
+  failures it shows are at the same checks). The AC1 test's name now holds what was its suite's and its own.
