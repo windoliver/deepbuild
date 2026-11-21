@@ -844,6 +844,9 @@ alone.push('tests/acceptance/551/', 'tests/acceptance/551-oracle/');
 // #277's files each build deep-show (ac1 and ac5 also the shipped relay) and play matches in process; ac1 and ac5 also
 // play live matches between app copies and headless Chrome's web player through the shipped relay.
 alone.push('tests/acceptance/277/');
+// #278's files each build deep-show (ac1 and ac4 also the shipped relay) and play matches in process; ac1 and ac4 also
+// play live rooms of app copies, ac1 one with headless Chrome's web player, through the shipped relay.
+alone.push('tests/acceptance/278/');
 byHand.push('tests/acceptance/549/ac2-join-only.test.ts');
 // #297's files each build deep-show and run its scenarios; the Oracle lane runs thousands of frames through it.
 alone.push('tests/acceptance/297/', 'tests/acceptance/297-oracle/');
