@@ -34,6 +34,11 @@ Paths are redacted (`~`, `<scratch>`).
   - Peak memory footprint, median: 94.57 MB against 93.50 MB. Max: 94.81 MB against 94.94 MB.
   - This Mac is not the reference Mac, so this is an indication only (AC7 below).
 
+- `draw-ab.tsv`: the walk's 10,000-item draw through `deep mcp`, whose answer wait is 55 s, at the merge base `768bb6051`
+  and on the change, alternating, 4 rounds each, at load 74 to 137. Every draw was presented. The medians are 45.0 s on the
+  base and 41.9 s on the change. At that load the draw comes within seconds of the wait on both sides. That explains the
+  first lanes run's `unavailable` (did not answer in time) at load 106, and it is not a slowdown from this change.
+
 ## Earlier runs, on earlier code (kept for what they show)
 
 - `pages-run.txt`, `walk-run.txt`: the same suite's AC2 and AC3/AC4 files at cfb1a94b9, before the review fixes.
