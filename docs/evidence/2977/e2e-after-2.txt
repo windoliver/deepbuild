@@ -1,0 +1,21 @@
+== this branch (cf770e2af), second run
+-- macOS 27.2.1 (26B7131), load 12.11 17.77 20.55
+-- build: HEAD cf770e2af, packages/supervisor/src as committed
+-- dist/supervisor.js warms filters at once: 1
+-- hub (pid 64617) ready: 1
+-- its log stream children at ready:
+   subsystem == "com.apple.sandbox.reporting" AND sender == "Sandbox" AND eventMessage CONTAINS "dev.deepbuild.run:"
+   process == "kernel" AND sender == "Sandbox" AND eventMessage CONTAINS "dev.deepbuild.run:"
+   sender == "Sandbox" AND eventMessage CONTAINS "dev.deepbuild.run:"
+$ deep install packages/jobs/score
+Installed deepbuild/score@1.0.0
+   took 682 ms
+$ deep install packages/jobs/import
+REFUSED: deepbuild/import's tool lottie-import@1.0.0 fails import's qualification at the fixture loader: lottie-import@1.0.0 wrote no {outputs}, each output's bytes in base64, so deepbuild/import@1.0.0 isn't installed
+   took 286 ms
+-- its log stream children after:
+   process == "kernel" AND sender == "Sandbox" AND eventMessage CONTAINS "dev.deepbuild.run:"
+-- hub stderr:
+   (node:64617) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+   (Use `node --trace-warnings ...` to show where the warning was created)
+-- hub 64617 stopped

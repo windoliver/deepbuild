@@ -1,0 +1,19 @@
+== base supervisor.ts (ee05e7257) on cf770e2af
+-- macOS 27.2.1 (26B7131), load 14.42 18.55 20.88
+-- build: HEAD cf770e2af, packages/supervisor/src changed:  M packages/supervisor/src/supervisor.ts
+-- dist/supervisor.js warms filters at once: 0
+-- hub (pid 13486) ready: 1
+-- its log stream children at ready:
+   subsystem == "com.apple.sandbox.reporting" AND sender == "Sandbox" AND eventMessage CONTAINS "dev.deepbuild.run:"
+$ deep install packages/jobs/score
+Installed deepbuild/score@1.0.0
+   took 9627 ms
+$ deep install packages/jobs/import
+REFUSED: deepbuild/import's tool lottie-import@1.0.0 fails import's qualification at the fixture loader: lottie-import@1.0.0 wrote no {outputs}, each output's bytes in base64, so deepbuild/import@1.0.0 isn't installed
+   took 288 ms
+-- its log stream children after:
+   process == "kernel" AND sender == "Sandbox" AND eventMessage CONTAINS "dev.deepbuild.run:"
+-- hub stderr:
+   (node:13486) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+   (Use `node --trace-warnings ...` to show where the warning was created)
+-- hub 13486 stopped
