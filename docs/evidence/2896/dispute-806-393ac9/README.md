@@ -13,6 +13,10 @@ sends it. So the hub cut it to 34 issues, against the stand-in's 38 (`original-f
 
 The test passes at load 4 on main `2f05ccb3e`, alone, and fails on #2896 merged with that main (b3870b835).
 
+The rest of #806's replay files fail on main on this Mac too (`806-ab.txt`): `replay393`, `closed` and `replay384`
+fail 12 of 15 tests on main and on b3870b835 alike. The tests that differ between the two sides are timeouts (no reply in
+30 or 120 s), at load 26 to 80.
+
 ## The redraft
 
 The test went to a fresh blind job (design: Dogfooding). Its inputs were issue #806, the sections #806 links, AGENTS.md

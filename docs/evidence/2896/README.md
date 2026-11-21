@@ -39,6 +39,23 @@ Paths are redacted (`~`, `<scratch>`).
   base and 41.9 s on the change. At that load the draw comes within seconds of the wait on both sides. That explains the
   first lanes run's `unavailable` (did not answer in time) at load 106, and it is not a slowdown from this change.
 
+- `dispute-806-393ac9/`: #806's replay of #393 AC9 sends `deep_show`'s refusal of 5,000 unnamed marks through
+  `deep mcp` as a client the facts don't know. It passed on main `2f05ccb3e` and failed on this branch (34 issues
+  shown against the stand-in's 38).
+  - A blind redraft from #806 and main alone failed the same way, so the test stands (design: Dogfooding).
+  - The fix, `0a5cab54f`: an error's cap holds its bytes at the facts' figure instead of a fifth under. Both drafts
+    pass on it. The README there has the runs.
+  - The rest of #806's replay files fail on main on this Mac too: 12 of 15 tests on each side, at load 26 to 80.
+    The tests that differ between the sides are timeouts (`806-ab.txt` there).
+- `e2e-terminal.png`: a hand e2e in Terminal.app. It used a real hub and three `deep mcp` processes over stdio (Claude Code
+  2.1.308, Codex 0.166.0-alpha.5.1 and an unknown client), and ran on `0a5cab54f` in 517 s. An earlier run on b3870b835, the merge with main before the fix, gave the same numbers.
+  - Each client paged all 10,000 rows whole: 46, 115 and 233 pages, the largest 35,131 characters, 5,422 tokens and
+    2,748 tokens.
+  - Each client received `deep_drive`'s `missing_field` whole, at 7,907 characters.
+  - A separate agent read the screenshot and found no error and no personal data.
+- On `0a5cab54f`, `pages.test.ts` and `walk.test.ts` were rerun alone and passed 5 of 5, at load about 100. A run beside
+  other files at load 72 to 138 had BLOCKED 3 of them, when the opening draw answered `unavailable`.
+
 ## Earlier runs, on earlier code (kept for what they show)
 
 - `pages-run.txt`, `walk-run.txt`: the same suite's AC2 and AC3/AC4 files at cfb1a94b9, before the review fixes.
