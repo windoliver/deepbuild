@@ -694,12 +694,15 @@ impl View {
         let mut looks = BTreeMap::new();
         for (name, n) in named.iter().filter(|(name, _)| timeline.names(name)) {
             let frames = Frames::new(doc, &n.look, labels).map_err(refused)?;
+            // #3016: a look draws the view's scene from what the view's renderer lends it.
+            let mut renderer = Renderer::new(device, planted);
+            renderer.lent = true;
             looks.insert(
                 name.clone(),
                 Looked {
                     look: n.look.clone(),
                     frames: Content::Scene(Box::new(frames)),
-                    renderer: Renderer::new(device, planted),
+                    renderer,
                     prepared: false,
                     target: None,
                 },
@@ -1099,9 +1102,12 @@ impl View {
                         Content::Flat(_) => Ok(()),
                     };
                     if evaluated.is_ok() {
+                        // #3016: the look draws from what the view's own renderer lends it.
+                        l.renderer.lend_look(&mut self.renderer);
                         self.record_into(
                             device, kit, &l.look, t, drawing, internal, encoder, timer, session, &v,
                         );
+                        l.renderer.lend_look(&mut self.renderer);
                         if depth.is_none() {
                             depth = self.renderer.depth_target().map(|(d, s)| (d.clone(), s));
                         }

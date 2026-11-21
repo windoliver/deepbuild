@@ -1,0 +1,74 @@
+#1217 acceptance tests at the base commit 7a256fd4b9651f5ed1f5255d3520603320803eb4
+
+What was run
+------------
+Machine: macOS arm64, Metal, Google Chrome at /Applications/Google Chrome.app, load average about 150 on 18 cores.
+Binary: the base's deep-show, `cargo build --locked --bin deep-show --no-default-features --features full`
+(CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0), already built in target/debug; each file's beforeAll ran that build
+again as a no-op and copied the binary out.
+
+Each file once, one at a time:
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node scripts/throttle.mjs test --wait 120 -- node node_modules/vitest/vitest.mjs run --root tests/acceptance/1217 \
+    --no-file-parallelism --testTimeout=3600000 <file>
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/1217/tsconfig.json, exit 0.
+
+Result: 7 files, 9 tests, 9 failed, 0 passed. Every failure is a vitest AssertionError at an `expect` in the test's
+own file. No import error, no helper error, no timeout. No test passes at the base, so none needs a reason to.
+No leg was left unrun: every file ran, and no BLOCKED or INCONCLUSIVE gate was met.
+After the run, AC1's title and one comment line in ac6-web.test.ts were reworded ("5 px" to "4.5 px", the clicks'
+true distance); no assertion changed and no line moved, and neither file was run again.
+Not shown by any run: that a right program passes. Every test stops at its first assertion on the new behaviour, so
+the assertions after it have met no implementation; the fixtures and the harness under them were checked as below.
+
+Each test's failing line
+------------------------
+The seven tests that show a document fail where the base refuses the issue's document field:
+  + outcome "refused", errors: unknown_field at viewer_tools
+The two planted tests fail where the base doesn't know the planted name:
+  the answer is {"ok":false,"code":"bad_input"}
+
+ac1-column.test.ts:49   AC1 #1217.727f50dc  "the column, a document that offers the measure tool (viewer_tools:
+                        {measure: true}), is presented": expected 'outcome "refused", errors: unknown_field at
+                        viewer_tools' to be ''
+ac2-scale.test.ts:71    AC2 #1217.a1a883c2  "the figure, which offers the measure tool (viewer_tools: {measure: true}),
+                        is presented": the same refusal
+ac2-scale.test.ts:107   AC2 #1217.a1a883c2  planted: "deep-show run takes the planted measure_ignores_shown_at:
+                        {"ok":false,"code":"bad_input"}": expected false to be true
+ac3-cap.test.ts:48      AC3 #1217.21c1b4f7  "the cut cube, a document that offers the measure tool …, is presented":
+                        the same refusal
+ac4-session.test.ts:110 AC4 #1217.582db303  "the piece, a document that offers the measure tool …, is presented": the
+                        same refusal
+ac4-session.test.ts:169 AC4 #1217.582db303  planted: "deep-show run takes the planted measure_writes_entry:
+                        {"ok":false,"code":"bad_input"}": expected false to be true
+ac5-keyboard.test.ts:47 AC5 #1217.bf9688c3  "the two parts, a document that offers the measure tool …, are presented":
+                        the same refusal
+ac6-web.test.ts:50      AC6 #1217.628255fc  "the column, a document that offers the measure tool …, is presented": the
+                        same refusal
+ac7-taste.test.ts:61    AC7 #1217.a0c92377  "the column, a document that offers the measure tool …, is presented at the
+                        reference window": the same refusal. It wrote no picture and read no TASTE.json.
+
+What each test meets next, once the field is read
+-------------------------------------------------
+Seen on the base with `viewer_tools` taken out of each fixture (scratch probes, not kept): every fixture is presented
+with no issue; the scope's camera is the fixture's; `geometry` gives each part's mesh and its anchors (`bottom`,
+`centre`, `top` for a lathe and a slab); and every fixture check of this suite passes (each snap target is a vertex or
+an edge midpoint of the built mesh, within 6 px of its click, nothing else within 16 px). Then:
+
+- AC1, AC3, AC6, AC7: `{type: "control", control: "measure", value: true}` is answered with a scope state that holds
+  no `measure`, so "the viewer's setting turns the tool on" fails (state.measure is undefined). A click leaves
+  `selection: []`, `details: null` and no point.
+- AC1's wrong point, as the base's hit path gives it at the two clicks (render-back probes at the clicked pixels):
+  (0.013, 0, −0.033) and (0.013, 5, 0.043), each 3.6 to 4.4 cm from its cap's centre: no snap.
+- AC2: the base's hits at the three clicks are 1.3 to 4.6 cm from the end-edge midpoints; nothing reads a length.
+- AC3: the base's hit on the cap's pixel is (−1, 1.551, 0.366), on the cube's far wall, 1.25 m behind the cap plane.
+- AC4: with no tool, the session still records: the track holds the slider's two entries and a hash; the evaluated
+  data hash is one value at 0 s and 0.5 s, another at 1.5 s, another at 3 s and 3.9 s; the export gives 24 frame
+  hashes of three kinds. So the comparison's two sides are real, and the first failure after the field is the setting.
+- AC5: Tab walks the document's controls only (focus `null` in a document with none), so no stop is `<part>#<anchor>`.
+- AC6, AC7: the base's web export of the column writes a bundle (module set `full`, no GPU feature asked) that
+  headless Chrome loads to `ready` with `probe().backend` "webgpu (wgpu 30.0.1)"; the canvas fills the page 1 : 1
+  (800 × 800, and 1512 × 982 at device scale 2); the element has no member `measure`, a click on the canvas does
+  nothing, and `probe()` holds no `measure`. `deep-show screen` writes the app's window at 3024 × 1964, and the
+  browser's capture of the page is 3024 × 1964.
+- The planted names: both are `bad_input` until the implementer adds them.
