@@ -4,6 +4,7 @@
 
 use std::collections::BTreeMap;
 
+use deep_canvas_physics::backend::Targets;
 use deep_canvas_physics::doc::{ForceKind, Region, Shape, World};
 use deep_canvas_physics::wind::{self, Triangle};
 use rapier3d::prelude::*;
@@ -35,7 +36,9 @@ pub(crate) fn aero(w: &World) -> BTreeMap<String, Vec<Triangle>> {
 
 impl Rapier {
     /// Each force's push on each body it applies to, from the state at t(k), held over the step.
-    pub(crate) fn push(&mut self) {
+    /// A drag's medium or a spring's point that reads a channel is what `targets` holds for the
+    /// force at this step's time (#2371), and with nothing read the force pushes nothing.
+    pub(crate) fn push(&mut self, targets: &Targets) {
         for (id, h) in &self.bodies {
             self.world.bodies[*h].reset_forces(false);
             // #2098: a wind's torque is this step's alone.
@@ -53,7 +56,11 @@ impl Rapier {
             .iter()
             .map(|(id, h)| (id.as_str(), *h))
             .collect();
-        for f in &self.forces {
+        for (name, f) in &self.forces {
+            let read = targets.forces.get(name);
+            if f.channel.is_some() && read.is_none() {
+                continue;
+            }
             for id in &f.applies_to {
                 let rb = &mut self.world.bodies[ids[id.as_str()]];
                 let p = rb.translation();
@@ -68,7 +75,9 @@ impl Rapier {
                         (p - v3(*center)).length() <= *radius as f32
                     }
                 };
-                if !rb.is_dynamic() || !inside {
+                // #2371: a deactivated body sleeps, and no force wakes it.
+                let deactivated = rb.is_sleeping() && !rb.is_enabled();
+                if !rb.is_dynamic() || deactivated || !inside {
                     continue;
                 }
                 let (m, v) = (rb.mass(), rb.linvel());
@@ -94,7 +103,7 @@ impl Rapier {
                         quadratic,
                         medium,
                     } => {
-                        let rel = v - v3(*medium);
+                        let rel = v - v3(*read.unwrap_or(medium));
                         -rel * (m * *linear as f32) - rel * (rel.length() * *quadratic as f32)
                     }
                     ForceKind::SpringToPoint {
@@ -104,7 +113,7 @@ impl Rapier {
                         max_force,
                     } => {
                         let (k, c) = spring(*hz, *damping_ratio);
-                        let f = ((v3(*point) - p) * k - v * c) * m;
+                        let f = ((v3(*read.unwrap_or(point)) - p) * k - v * c) * m;
                         match max_force {
                             Some(max) if f.length() > *max as f32 => f * (*max as f32 / f.length()),
                             _ => f,
