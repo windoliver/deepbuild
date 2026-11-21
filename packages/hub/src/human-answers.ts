@@ -195,7 +195,9 @@ export class HumanAnswers {
     const answer = chosen?.id ?? String(input.words ?? input.image);
     await this.options.memory().syncStanding().catch(() => undefined);
     await syncRejected(this.options.services.raw, this.options.services.root.dir).catch(() => undefined);
-    return { ask: handle, answer, scope: saved ? String((JSON.parse(saved.data) as Obj).scope) : null };
+    // A yes to a step that can't be undone waits out the hub's hold first, with Undo (#1101).
+    const held = chosen?.decision === 'allow' && await this.options.services.asks.holding(handle);
+    return { ask: handle, answer, scope: saved ? String((JSON.parse(saved.data) as Obj).scope) : null, ...(held ? { held: true } : {}) };
   }
 
   private toolsFound(reach: Reach): string {
@@ -280,7 +282,10 @@ export class HumanAnswers {
     await this.options.services.asks.raise(this.options.events.connection('core', { session, agent }), 'deep_ask.unblock', ask);
   }
 
-  /** asks/:id/undo, from the app or `deep inbox undo`: a defaulted ask opens again, once the trusted path allows it. */
+  /**
+   * asks/:id/undo, from the app or `deep inbox undo`: a defaulted ask opens again, once the trusted path allows it; so
+   * does one whose yes is held before a step that can't be undone starts (#1101), and that step never runs.
+   */
   async undo(params: Obj, context: CallContext): Promise<Obj> {
     const handle = params.ask;
     if (typeof handle !== 'string' || !/^ask:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/ask', 'Name the ask by its handle, ask:<id>.', handle));
@@ -288,14 +293,15 @@ export class HumanAnswers {
     if (!row) throw new Refused(refusal('not_found', '/params/ask', `No ask ${handle}; undo the default of an ask the inbox holds.`, handle));
     // Undone from a view (#1577): what reached the ask after it stands, an answer from another device above all.
     if (this.options.settings.plant !== 'applies-stale-undo') await sinceView(this.options.services.record.raw, params, handle, about(handle, ASK_MOVES), async (c) => (c.kind === 'ask.answered' ? `it was answered ${String(c.data.answer)} ${(await this.firstAnswer(handle))?.where ?? ''}`.trimEnd() : `${c.kind} reached it`));
-    if (row.status !== 'defaulted') throw new Refused(refusal('not_found', '/params/ask', `${handle} didn't take its default (it's ${row.status}), so there's nothing to undo.`, handle));
+    const held = await this.options.services.asks.holding(handle);
+    if (!held && row.status !== 'defaulted') throw new Refused(refusal('not_found', '/params/ask', `${handle} didn't take its default (it's ${row.status}), so there's nothing to undo.`, handle));
     // A definition that locked on the default stands: a different answer now would change nothing but the record of it.
-    const locked = await this.options.services.tasks.lockedOn(handle);
+    const locked = held ? undefined : await this.options.services.tasks.lockedOn(handle);
     if (locked) throw new Refused(refusal('locked', '/params/ask', `${handle} took its default and the definition of ${locked} locked on it; a change to that definition goes through a dispute, not an undo.`, handle));
-    await this.options.control().trusted('ask.undo', params, context, `undo the default “${row.question.slice(0, 120)}” took`, handle, await this.revisionOf(handle, { pinned_to: row.pinned_to ? JSON.parse(row.pinned_to) as { ref?: string } : undefined }));
+    await this.options.control().trusted('ask.undo', params, context, held ? `undo your yes to “${row.question.slice(0, 120)}” before its step starts` : `undo the default “${row.question.slice(0, 120)}” took`, handle, await this.revisionOf(handle, { pinned_to: row.pinned_to ? JSON.parse(row.pinned_to) as { ref?: string } : undefined }));
     await this.options.services.asks.undo(this.options.events.connection(context.role === 'app' ? 'app' : 'cli'), handle).catch((error: unknown) => { throw asRefused(error); });
     const [open] = (await this.options.services.record.raw(`SELECT deadline FROM asks WHERE id = ?`, [handle.slice(4)])) as { deadline: number }[];
-    return { ask: handle, deadline: open?.deadline ?? null };
+    return { ask: handle, deadline: open?.deadline ?? null, ...(held ? { withdrawn: true } : {}) };
   }
 
   /** decisions/:id/overrule: a saved decision taken out of force, on the trusted path alone. */

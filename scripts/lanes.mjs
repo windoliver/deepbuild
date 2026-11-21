@@ -560,6 +560,9 @@ alone.push('tests/acceptance/2028/');
 alone.push('tests/acceptance/2021/');
 // #2029's files build the replica and deep-drive plain and planted, start real hubs and draw the answered asks' pages.
 alone.push('tests/acceptance/2029/');
+// #1101's files build deep-drive with test-confirm, plain and planted, start real hubs on a stepped clock, run real git
+// pushes and draw the held and answered asks' pages.
+alone.push('tests/acceptance/1101/');
 // #1056's files build deep-gpu and draw #464's pixel fixtures; records.test.ts runs #464's two-GPU tests.
 alone.push('tests/acceptance/1056/');
 // #404's parts: #1897's files each build deep-show in their own feature set and hold the GPU for the pixel hash;

@@ -70,11 +70,17 @@ export async function inboxCommand(args: readonly string[], setUp: () => Promise
   }
   if (answering) {
     // A block's task (#85), a fold and an ask with no repo or session save no decision; the sentence says only what the record holds.
+    if (reply.result.held === true) {
+      say(`${String(reply.result.ask)}: your yes is held, and its step that can't be undone starts in 10 s; deep inbox undo ${String(reply.result.ask)} withdraws it until then`);
+      return 0;
+    }
     say(`${String(reply.result.ask)} answered ${String(reply.result.answer)}${reply.result.scope === null ? '; no decision saved' : `, saved as a decision for ${String(reply.result.scope)}`}`);
     return 0;
   }
   if (undoing) {
-    say(`${String(reply.result.ask)} is open again, its default undone; it now takes its default ${when(Number(reply.result.deadline))}`);
+    say(reply.result.withdrawn === true
+      ? `${String(reply.result.ask)} is open again: your yes is withdrawn, and its step never started`
+      : `${String(reply.result.ask)} is open again, its default undone; it now takes its default ${when(Number(reply.result.deadline))}`);
     return 0;
   }
   if (saving) {

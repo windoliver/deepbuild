@@ -321,8 +321,20 @@ pub fn tick(now: u64, cx: &mut App) {
     let Some((ask, shown)) = SHOWN.with(|cell| cell.borrow().clone()) else {
         return;
     };
+    // A yes the hub holds (#1101): the record says when its steps start, that they did, or that it was withdrawn.
+    let holding = shown.read(cx).controller.as_ref().is_some_and(Controller::counting_down);
+    if holding {
+        let events = crate::record::history();
+        shown.update(cx, |card, _| {
+            if let Some(controller) = card.controller.as_mut() {
+                controller.hold_changed(&events, now);
+            }
+        });
+    }
     let open = crate::record::with_view(|view| view.table().is_open(&ask)).unwrap_or(true);
-    if !open {
+    // Its receipt counts the hold down with Undo while the hub holds its steps, though the ask is answered (#1101).
+    let counting = shown.read(cx).controller.as_ref().is_some_and(Controller::counting_down);
+    if !open && !counting {
         // Answered here or anywhere: while its page shows, the next ask's page opens, and no row moves (#1461).
         leave(cx);
         let showing = crate::open::current(cx).is_some_and(|a| {
@@ -676,7 +688,9 @@ impl Card {
             return;
         };
         let answers = controller.take_answers();
-        if answers.is_empty() {
+        // Undo inside the hub's hold reaches the hub's undo (#1101).
+        let undos = controller.take_undos();
+        if answers.is_empty() && undos.is_empty() {
             return;
         }
         self.failed = None;
@@ -685,7 +699,10 @@ impl Card {
                 .background_spawn(async move {
                     answers
                         .iter()
-                        .try_for_each(|params| crate::answer::send(params).map(|_| ()))
+                        .try_for_each(|params| crate::answer::send(params).map(|_| ()))?;
+                    undos
+                        .iter()
+                        .try_for_each(|params| crate::answer::undo(params).map(|_| ()))
                 })
                 .await;
             if let Err(error) = sent {
