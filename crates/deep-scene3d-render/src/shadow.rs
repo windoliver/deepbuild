@@ -4,6 +4,8 @@
 //! shadow falls on the ground plane. Depth runs 0 nearest the light. The effects module's shadow
 //! filter reads it.
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use deep_canvas_scene3d::light::{Light, LightKind};
 use deep_canvas_scene3d::scene::{Scene, Solid};
 
@@ -155,24 +157,28 @@ fn light_frame(toward: [f64; 3]) -> [[f64; 3]; 3] {
     [x, y, z]
 }
 
-/// Every solid's world corners, from its mesh's bounds or the unit cube.
-pub fn caster_corners(scene: &Scene) -> Vec<(String, [[f64; 3]; 8])> {
-    // A culled element is the GPU's to test (#484).
-    corners_of(scene, |s| s.cast_shadow && s.batch == 0)
+/// A caster and its world corners, from its mesh's bounds or the unit cube.
+pub type Caster<'a> = (&'a Solid, [[f64; 3]; 8]);
+
+/// #2657: the built meshes [`caster_corners`] scanned, process-wide.
+static CASTER_SCANS: AtomicU64 = AtomicU64::new(0);
+
+/// How many times this process's renderers scanned a casting solid's built mesh for its caster
+/// corners (#2657).
+pub fn caster_scans() -> u64 {
+    CASTER_SCANS.load(Ordering::Relaxed)
 }
 
-/// Every caster's corners, culled elements too: a local map has no cull of its own (#446).
-pub fn local_caster_corners(scene: &Scene) -> Vec<(String, [[f64; 3]; 8])> {
-    corners_of(scene, |s| s.cast_shadow)
-}
-
-fn corners_of(scene: &Scene, casts: impl Fn(&Solid) -> bool) -> Vec<(String, [[f64; 3]; 8])> {
+/// Every caster's corners, the frame's one pass over them (#2657): with `elements`, culled
+/// elements too, which a local map draws, having no cull of its own (#446); in scene order.
+pub fn caster_corners(scene: &Scene, elements: bool) -> Vec<Caster<'_>> {
     let mut out = Vec::new();
     for s in scene.layers.iter().flat_map(|l| &l.solids) {
-        if !casts(s) {
+        if !s.cast_shadow || !elements && s.batch != 0 {
             continue;
         }
         let [lo, hi] = s.mesh.as_ref().map_or([[-0.5; 3], [0.5; 3]], |m| {
+            CASTER_SCANS.fetch_add(1, Ordering::Relaxed);
             let b = m.reach();
             [b[0].map(f64::from), b[1].map(f64::from)]
         });
@@ -188,9 +194,14 @@ fn corners_of(scene: &Scene, casts: impl Fn(&Solid) -> bool) -> Vec<(String, [[f
                 c[r] = m[r][0] * p[0] + m[r][1] * p[1] + m[r][2] * p[2] + m[r][3];
             }
         }
-        out.push((s.id.clone(), corners));
+        out.push((s, corners));
     }
     out
+}
+
+/// The casters a sun's cascades draw: a culled element is the GPU's to test (#484).
+pub fn sun_casters<'a, 'b>(casters: &'b [Caster<'a>]) -> impl Iterator<Item = &'b Caster<'a>> {
+    casters.iter().filter(|(s, _)| s.batch == 0)
 }
 
 /// The tangents of the camera's half angles across and down, squared and summed: the frustum's
@@ -205,10 +216,10 @@ fn spread(camera: &deep_canvas_scene3d::scene::Camera) -> f64 {
 
 /// The auto far end: the farthest any caster's corner lies ahead of the eye, at least a meter
 /// past the near plane.
-pub fn auto_far(scene: &Scene, casters: &[(String, [[f64; 3]; 8])]) -> f64 {
+pub fn auto_far(scene: &Scene, casters: &[Caster<'_>]) -> f64 {
     let c = &scene.camera;
     let mut far = c.near + 1.0;
-    for (_, corners) in casters {
+    for (_, corners) in sun_casters(casters) {
         for p in corners {
             let d = dot(
                 [p[0] - c.eye[0], p[1] - c.eye[1], p[2] - c.eye[2]],
@@ -247,22 +258,22 @@ pub struct Reach {
 /// The cascades of a perspective view for a sun shining from `toward`, each fitted with a
 /// bounding sphere around its slice of the view, grown by a soft shadow's reach, its center
 /// snapped to whole texels of a `size` map in the light's frame, and its depth range spanning
-/// every caster.
+/// every caster ([`sun_casters`] of `casters`).
 pub fn cascades(
     scene: &Scene,
+    casters: &[Caster<'_>],
     toward: [f64; 3],
     settings: &CascadeSettings,
     size: u32,
     soft: Option<Reach>,
     snap: bool,
 ) -> Vec<Cascade> {
-    let casters = caster_corners(scene);
     let cam = &scene.camera;
     // Soft shadows hold still under a small move: an auto far end on its grid, and depth snapped.
     // Without a policy a cascade is fitted as it was, so no such document's picture moves.
     let held = soft.is_some();
     let far = settings.far.unwrap_or_else(|| {
-        let far = auto_far(scene, &casters);
+        let far = auto_far(scene, casters);
         if held {
             stepped(far)
         } else {
@@ -281,7 +292,9 @@ pub fn cascades(
     let [x, y, z] = light_frame(toward);
     // Every caster's depth range along the light.
     let (mut zlo, mut zhi) = (f64::MAX, f64::MIN);
-    for (_, corners) in &casters {
+    let mut none = true;
+    for (_, corners) in sun_casters(casters) {
+        none = false;
         for p in corners {
             let q = dot(*p, z);
             zlo = zlo.min(q);
@@ -295,7 +308,7 @@ pub fn cascades(
             // centered on the far rim when that already holds the near one.
             let zc = (0.5 * (f + n) * (1.0 + k2)).min(f);
             let r = ((f - zc) * (f - zc) + f * f * k2).sqrt();
-            let span = if casters.is_empty() {
+            let span = if none {
                 2.0 * r
             } else {
                 zhi - zlo
@@ -313,7 +326,7 @@ pub fn cascades(
             // Along the light too, so a move inside a texel leaves its depth range as it was.
             let c = dot(center, z);
             let (c, edge) = if held { (grid(c), texel) } else { (c, 0.0) };
-            let (lo_z, hi_z) = if casters.is_empty() {
+            let (lo_z, hi_z) = if none {
                 (c - r - edge, c + r + edge)
             } else {
                 (zlo.min(c - r - edge), zhi.max(c + r + edge))

@@ -33,3 +33,28 @@ meshopt = "0.7"
 [dev-dependencies]
 serde_json = "1"
 naga = { version = "30", default-features = false, features = ["wgsl-in"] }
+
+# Issue #2657: the acceptance tests, written blind in tests/acceptance/2657.
+[[test]]
+name = "acceptance_2657_side_meshes"
+path = "../../tests/acceptance/2657/side_meshes.rs"
+
+[[test]]
+name = "acceptance_2657_casters"
+path = "../../tests/acceptance/2657/casters.rs"
+
+[[test]]
+name = "acceptance_2657_maps_lookup"
+path = "../../tests/acceptance/2657/maps_lookup.rs"
+
+[[test]]
+name = "acceptance_2657_copies"
+path = "../../tests/acceptance/2657/copies.rs"
+
+[[test]]
+name = "acceptance_2657_ensure_casters"
+path = "../../tests/acceptance/2657/ensure_casters.rs"
+
+[[test]]
+name = "acceptance_2657_sway"
+path = "../../tests/acceptance/2657/sway.rs"
