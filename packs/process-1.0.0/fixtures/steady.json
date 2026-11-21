@@ -1,0 +1,433 @@
+{
+  "name": "steady",
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "ee6101151ed778448de496e816a3656548e95ed6b7e3ac052f8f6631f808490d",
+      "step_rate": 1,
+      "writes": {
+        "kind": {
+          "type": "i32",
+          "count": 8
+        },
+        "gen": {
+          "type": "i32",
+          "count": 8
+        },
+        "at": {
+          "type": "i32",
+          "count": 8
+        },
+        "batch": {
+          "type": "i32",
+          "count": 8
+        },
+        "holds": {
+          "type": "i32",
+          "count": 8
+        },
+        "rank": {
+          "type": "i32",
+          "count": 8
+        },
+        "made": {
+          "type": "f64",
+          "count": 8
+        },
+        "d": {
+          "type": "f64",
+          "count": 8
+        },
+        "made_n": {
+          "type": "i32",
+          "count": 1
+        },
+        "out_n": {
+          "type": "i32",
+          "count": 1
+        },
+        "count": {
+          "type": "i32",
+          "count": 5
+        },
+        "left": {
+          "type": "i32",
+          "count": 5
+        },
+        "area": {
+          "type": "f64",
+          "count": 5
+        },
+        "dwell": {
+          "type": "f64",
+          "count": 5
+        },
+        "busy": {
+          "type": "i32",
+          "count": 1
+        },
+        "cap": {
+          "type": "i32",
+          "count": 1
+        },
+        "busy_area": {
+          "type": "f64",
+          "count": 1
+        },
+        "thru": {
+          "type": "f64",
+          "count": 5
+        },
+        "mean": {
+          "type": "f64",
+          "count": 5
+        },
+        "p90": {
+          "type": "f64",
+          "count": 5
+        },
+        "wip": {
+          "type": "f64",
+          "count": 5
+        },
+        "clock": {
+          "type": "f64",
+          "count": 3
+        },
+        "rec_n": {
+          "type": "i32",
+          "count": 1
+        },
+        "rec_t": {
+          "type": "f64",
+          "count": 64
+        },
+        "rec_w": {
+          "type": "f64",
+          "count": 64
+        }
+      },
+      "process": {
+        "kinds": [
+          "order"
+        ]
+      },
+      "budget": {
+        "fuel": 10000000
+      }
+    }
+  },
+  "track": [],
+  "steps": 60,
+  "expect": {
+    "arrays": {
+      "0": {
+        "clock": [
+          60,
+          3600,
+          0
+        ],
+        "made_n": [
+          1
+        ],
+        "out_n": [
+          1
+        ],
+        "rec_n": [
+          1
+        ],
+        "count": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "left": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "area": [
+          0,
+          45,
+          0,
+          0,
+          45
+        ],
+        "dwell": [
+          0,
+          45,
+          0,
+          0,
+          45
+        ],
+        "busy": [
+          0
+        ],
+        "cap": [
+          1
+        ],
+        "busy_area": [
+          45
+        ],
+        "thru": [
+          60,
+          60,
+          60,
+          60,
+          60
+        ],
+        "mean": [
+          0,
+          45,
+          0,
+          0,
+          45
+        ],
+        "p90": [
+          0,
+          45,
+          0,
+          0,
+          45
+        ],
+        "wip": [
+          0,
+          0.75,
+          0,
+          0,
+          0.75
+        ],
+        "kind": [
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1
+        ],
+        "gen": [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "1": {
+        "clock": [
+          120,
+          3600,
+          0
+        ],
+        "made_n": [
+          2
+        ],
+        "out_n": [
+          2
+        ],
+        "rec_n": [
+          2
+        ],
+        "count": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "left": [
+          2,
+          2,
+          2,
+          2,
+          2
+        ],
+        "area": [
+          0,
+          90,
+          0,
+          0,
+          90
+        ],
+        "dwell": [
+          0,
+          90,
+          0,
+          0,
+          90
+        ],
+        "busy": [
+          0
+        ],
+        "cap": [
+          1
+        ],
+        "busy_area": [
+          90
+        ],
+        "thru": [
+          60,
+          60,
+          60,
+          60,
+          60
+        ],
+        "mean": [
+          0,
+          45,
+          0,
+          0,
+          45
+        ],
+        "p90": [
+          0,
+          45,
+          0,
+          0,
+          45
+        ],
+        "wip": [
+          0,
+          0.75,
+          0,
+          0,
+          0.75
+        ],
+        "kind": [
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1
+        ],
+        "gen": [
+          2,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "59": {
+        "clock": [
+          3600,
+          3600,
+          0
+        ],
+        "made_n": [
+          60
+        ],
+        "out_n": [
+          60
+        ],
+        "rec_n": [
+          60
+        ],
+        "count": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "left": [
+          60,
+          60,
+          60,
+          60,
+          60
+        ],
+        "area": [
+          0,
+          2700,
+          0,
+          0,
+          2700
+        ],
+        "dwell": [
+          0,
+          2700,
+          0,
+          0,
+          2700
+        ],
+        "busy": [
+          0
+        ],
+        "cap": [
+          1
+        ],
+        "busy_area": [
+          2700
+        ],
+        "thru": [
+          60,
+          60,
+          60,
+          60,
+          60
+        ],
+        "mean": [
+          0,
+          45,
+          0,
+          0,
+          45
+        ],
+        "p90": [
+          0,
+          45,
+          0,
+          0,
+          45
+        ],
+        "wip": [
+          0,
+          0.75,
+          0,
+          0,
+          0.75
+        ],
+        "kind": [
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1
+        ],
+        "gen": [
+          60,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "tolerance": {
+      "abs": 1e-9
+    }
+  },
+  "answer": "One source every 60 s (0, 60, 120 … s) into a fifo queue feeding one resource of capacity 1 held 45 s, then a sink, at a 1/60 s tick, 3,600 ticks (a minute) a step. Each order arrives at the first tick of its minute, passes the empty queue in that tick, holds 45 ÷ (1/60) = 2,700 ticks and leaves, so at each step's end nothing is held and after step k, k + 1 orders were made, taken out and recorded, every station left k + 1 times, the resource was busy 45(k + 1) s, and row 0, reused each minute, is at generation k + 1. Over the hour's window: 60 departures an hour everywhere, 45 s at the resource and in the system, mean work in progress 45/60 = 0.75 there."
+}

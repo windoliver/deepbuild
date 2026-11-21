@@ -27,6 +27,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             "mirrors",
             "preview",
             "lanes",
+            "process",
         ]
         .contains(&k.as_str())
         {
@@ -221,6 +222,23 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
     let services =
         crate::services::declared(params.get("services")).map_err(|e| bad("services", e))?;
     let mirrors = crate::mirrors::declared(params.get("mirrors")).map_err(|e| bad("mirrors", e))?;
+    // #980: process@1's kinds, by name; a kind is its index here.
+    let process = match params.get("process") {
+        None => None,
+        Some(p) => {
+            let what = || bad("process", "process is {kinds: [name]}, 1 to 16 unique kind names".into());
+            let kinds: Vec<String> = p
+                .get("kinds")
+                .and_then(Value::as_array)
+                .and_then(|a| a.iter().map(|k| k.as_str().map(str::to_string)).collect())
+                .ok_or_else(what)?;
+            let unique = kinds.iter().collect::<std::collections::BTreeSet<_>>().len() == kinds.len();
+            if kinds.is_empty() || kinds.len() > 16 || !unique || p.as_object().is_some_and(|o| o.len() != 1) {
+                return Err(what());
+            }
+            Some(kinds)
+        }
+    };
     Ok(Declared {
         links,
         program,
@@ -243,6 +261,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
         mirrors,
         preview,
         lanes: params.get("lanes").cloned(),
+        process,
         given: Value::Object(params.clone()).to_string(),
     })
 }
@@ -980,6 +999,7 @@ pub fn check_in(
             mirrors,
             preview,
             lanes,
+            process: d.process.clone(),
         });
     }
     // A save holds every item at one instant, so a piece with saves steps at one rate.

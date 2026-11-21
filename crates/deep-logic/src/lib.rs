@@ -32,6 +32,7 @@ pub mod piece;
 pub mod play;
 pub mod point;
 pub mod probe;
+pub mod process;
 pub mod saves;
 pub mod services;
 pub mod track;

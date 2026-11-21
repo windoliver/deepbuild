@@ -1,17 +1,19 @@
-//! `judge` (#981): a piece's run read by lanes@1's kind rules for each logic item with `lanes`.
+//! `judge` (#981, #980): a piece's run read by lanes@1's kind rules for each logic item with
+//! `lanes`, and by process@1's for each with `process`.
 
 use std::rc::Rc;
 
 use serde_json::{json, Map, Value};
 
 use crate::world::{track_of, Record, World};
-use crate::{bad, bake, first_party, lanes, track, world, Logic};
+use crate::{bad, bake, first_party, lanes, process, track, world, Logic};
 
 impl Logic {
-    /// `judge` (#981): the piece's run, steps 0 to n − 1 as a bake runs them, read by lanes@1's
-    /// kind rules for each logic item with `lanes` (lanes.clear, and lanes.stuck at its pack's
-    /// `max_wait`), with the geometry audit's measure of a centre off its graph and the item's
-    /// arrays at the last step.
+    /// `judge` (#981, #980): the piece's run, steps 0 to n − 1 as a bake runs them, read by
+    /// lanes@1's kind rules for each logic item with `lanes` (lanes.clear, and lanes.stuck at its
+    /// pack's `max_wait`), with the geometry audit's measure of a centre off its graph, and by
+    /// process@1's for each with `process` (process.conserve, process.busy, and process.little at
+    /// its pack's tolerance); each with the item's arrays at the last step.
     pub(crate) fn judge(&mut self, line: &Value) -> Result<Value, Value> {
         let piece = Rc::new(self.check(line)?);
         let steps = line
@@ -36,8 +38,37 @@ impl Logic {
             .find_map(|p| p.pointer("/interfaces/lanes@1/rules/lanes.stuck/max_wait"))
             .and_then(Value::as_f64)
             .unwrap_or(60.0);
+        let tolerance = first_party::packs()
+            .iter()
+            .find_map(|p| p.pointer("/interfaces/process@1/rules/process.little/tolerance"))
+            .and_then(Value::as_f64)
+            .unwrap_or(0.02);
         let mut out = Map::new();
+        let strip = |item: &crate::piece::Item, last: Map<String, Value>| -> Value {
+            let prefix = format!("{}.", item.id);
+            last.into_iter()
+                .map(|(k, v)| (k.strip_prefix(&prefix).unwrap_or(&k).to_string(), v))
+                .collect::<Map<_, _>>()
+                .into()
+        };
         for item in &piece.items {
+            // #980: process@1's rules read the arrays its library writes, step by step.
+            if let Some(kinds) = &item.process {
+                let mut judge = process::Judge::new(item, kinds, tolerance).map_err(|e| bad(&e))?;
+                let mut player = bake::Player::new(&rec, item);
+                let mut last = Map::new();
+                for k in 0..steps {
+                    let Some(b) = player.at(k) else { continue };
+                    judge.step(k, b);
+                    if k == steps - 1 {
+                        last = world::arrays_json(item, b);
+                    }
+                }
+                let mut judged = judge.result();
+                judged["last"] = strip(item, last);
+                out.insert(item.id.clone(), judged);
+                continue;
+            }
             let Some(g) = &item.lanes else { continue };
             let at = |name: &str, ty: &str| {
                 item.write(name)
@@ -71,12 +102,7 @@ impl Logic {
                 }
             }
             let mut judged = judge.result();
-            let prefix = format!("{}.", item.id);
-            judged["last"] = last
-                .into_iter()
-                .map(|(k, v)| (k.strip_prefix(&prefix).unwrap_or(&k).to_string(), v))
-                .collect::<Map<_, _>>()
-                .into();
+            judged["last"] = strip(item, last);
             out.insert(item.id.clone(), judged);
         }
         Ok(json!({"ok": true, "items": out}))
