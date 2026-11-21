@@ -399,8 +399,9 @@ impl<E: IntoElement + 'static> Element for AnimationElement<E> {
         cx: &mut App,
     ) -> (crate::LayoutId, Self::RequestLayoutState) {
         window.with_element_state(global_id.unwrap(), |state, window| {
+            let now = cx.background_executor().now(); // DeepBuild patch (windoliver/deepbuild#1427): the executor's clock, the virtual one in a replica
             let mut state = state.unwrap_or_else(|| AnimationState {
-                start: Instant::now(),
+                start: now, // DeepBuild patch (windoliver/deepbuild#1427)
                 animation_ix: 0,
                 delayed_frame_pending: Rc::new(Cell::new(false)),
             });
@@ -421,7 +422,7 @@ impl<E: IntoElement + 'static> Element for AnimationElement<E> {
                     // Reduce modulo the duration before f32 conversion, which loses sub-second precision at scale.
                     Duration::from_nanos((elapsed.as_nanos() % duration.as_nanos()) as u64)
                 } else {
-                    state.start.elapsed()
+                    now.saturating_duration_since(state.start) // DeepBuild patch (windoliver/deepbuild#1427)
                 };
                 let mut delta = elapsed.as_secs_f32() / duration.as_secs_f32();
 
@@ -431,7 +432,7 @@ impl<E: IntoElement + 'static> Element for AnimationElement<E> {
                         if animation_ix >= self.animations.len() - 1 {
                             done = true;
                         } else {
-                            state.start = Instant::now();
+                            state.start = now; // DeepBuild patch (windoliver/deepbuild#1427)
                             state.animation_ix += 1;
                         }
                         delta = 1.0;
