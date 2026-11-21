@@ -1,0 +1,6 @@
+start; screen-lock flag 1; 'AC Power' 02:35:07 load { 31.09 19.08 20.71 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 335010280
+origin/claude/1345-ask-row-time f26c9f847236b3d2287c1fa019a09fd9fe45cc24; head f26c9f847236b3d2287c1fa019a09fd9fe45cc24; before 703ea8e49fcb84502acab9f3cef01851db8b0834; origin/main b6b99ad8ccdd5155bed00b7d4b4647c7e066a9ea 02:35:35 load { 29.18 19.77 20.90 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 331247240
+clone checked out at 703ea8e49fcb84502acab9f3cef01851db8b0834 (main only: the head's batch result is in rerun2) 02:35:35 load { 29.18 19.77 20.90 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 331201692
+setup at 703ea8e49 (npm ci, workspace build, deep-hook) exit=0 02:37:23 load { 26.35 21.62 21.50 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 323492396
+703ea8e49 1345-batch: vitest exit=1;  Tests 1 failed | 2 passed (3) 04:03:13 load { 17.56 16.83 18.08 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 5793244
+STOPPED: free space dropped under 12 GB (rerun floor) 04:03:13 load { 17.56 16.83 18.08 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 5792316

@@ -1,0 +1,12 @@
+
+ RUN  v5.0.5 /private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-angry-chatelet-916a48/55578c1d-bd8a-4548-b218-4762505ace60/scratchpad/1345c/head/tests/acceptance/1345
+
+ ✓ batch.test.ts (3 tests) 3610760ms
+   ✓ AC3 #1345.9c5710a8 Five calls from five issues reach one person as one card, and that day raises one notification 3604682ms
+   ✓ AC7 #1345.aaa324a9 Five calls from five issues draw as #328's card with five rows, and the tree holds no second batch card. A row whose Send back would revert says so before it's pressed. A planted row that reverts unannounced fails, naming the issue 5505ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  00:46:16
+   Duration  3611.62s (tests 100%)
+

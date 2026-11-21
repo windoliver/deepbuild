@@ -1,0 +1,263 @@
+== commit 8005f72fb7e36cdb1b275f9abe43a53a48ef8da9
+== command: NO_COLOR=1 npx vitest run --root tests/acceptance/1458 --no-file-parallelism --reporter=verbose
+== start 2026-11-19 21:21:24 load { 77.20 134.40 117.62 } thermal 1 front app [Claude]
+
+ RUN  v5.0.5 ~/private/d1345b/tests/acceptance/1458
+
+ × redraft-ac13/shown.test.ts > #1458 shown to you > AC13 the check run takes each shipped page from the real app at 960 × 640 and 1512 × 982, in light and dark, and reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right 530952ms
+   → each page is on the real window's tree before its picture is taken: expected [ …(10) ] to deeply equal []
+ ✓ replica.test.ts > #1458 what the shipped pages draw > AC1 #1458.dd02bb24: every string the shipped pages draw is 11, 13 or 15 pt; a planted view with a fourth size fails, naming the view and the size 141741ms
+ ✓ replica.test.ts > #1458 what the shipped pages draw > AC4 #1458.a98be9c0: every shipped page at 960×640 has no clipped text and nothing wider than its pane; a planted 600 pt wide element fails, naming the element and the window 1042ms
+ × replica.test.ts > #1458 what the shipped pages draw > AC7 #1458.0c2959d0: every chrome string draws in the chrome face, named in the clean look; a planted label in the canvas face on a row fails, naming the view 71811ms
+   → the planted row label in Inter wasn't caught: []: expected false to be true // Object.is equality
+ × replica.test.ts > #1458 what the shipped pages draw > AC8 #1458.52c35293: a time ticking from 9 s to 10 s moves no other glyph in its row 507ms
+   → "Checkout page"'s row as its time ticks: expected [ …(2) ] to deeply equal []
+   → the planted row whose time pushes its neighbours wasn't caught: ["at 9 s the row draws its time as 0 strings reading \"9 s\", not one of its own; it draws [\"Checkout…\",\"quiet · last seen 9 s\"]","at 10 s the row draws its time as 0 strings reading \"10 s\", not one of its own; it draws [\"Checkout…\",\"quiet · last seen 10 s\"]"]: expected false to be true // Object.is equality
+ ✓ replica.test.ts > #1458 what the shipped pages draw > AC9 #1458.a3834e1a: a kit tooltip on a shipped page draws in one of the three sizes 3909ms
+ ✓ replica.test.ts > #1458 what the shipped pages draw > AC10 #1458.889098b6: a planted 250 ms transition on a page change fails, naming the view 678ms
+ × replica.test.ts > #1458 what the shipped pages draw > AC11 #1458.5350b8ad: no row reads "… ago" or "in …", a planted one fails naming the string, and an ask's row, card and notification show one moment in one form 1509ms
+   → the ask's row, card and notification show one moment in one form: expected [ Array(1) ] to deeply equal []
+   → the planted row reading "in 4 h" wasn't caught: []: expected false to be true // Object.is equality
+ ✓ replica.test.ts > #1458 what the shipped pages draw > AC12 #1458.be1a2dad: a step's switch on a card has the switch role with its state as a value; a planted switch whose state is a word in its label fails, naming it 449ms
+stdout | contrast.test.ts > #1458 every ink clears 4.5:1 > AC3 #1458.50054406: every ink role but ink_disabled clears 4.5:1 on every fill in light and dark, and a planted ink_tertiary at 3.5:1 fails, naming the pair
+AC3: the contrast table
+light  ink             ground                16.86:1
+light  ink             raised                15.48:1
+light  ink             hover over ground     15.06:1
+light  ink             hover over raised     13.78:1
+light  ink             selected over ground  13.76:1
+light  ink             selected over raised  12.66:1
+light  ink_primary     ground                16.86:1
+light  ink_primary     raised                15.48:1
+light  ink_primary     hover over ground     15.06:1
+light  ink_primary     hover over raised     13.78:1
+light  ink_primary     selected over ground  13.76:1
+light  ink_primary     selected over raised  12.66:1
+light  ink_secondary   ground                10.18:1
+light  ink_secondary   raised                9.53:1
+light  ink_secondary   hover over ground     9.39:1
+light  ink_secondary   hover over raised     8.76:1
+light  ink_secondary   selected over ground  8.75:1
+light  ink_secondary   selected over raised  8.26:1
+dark   ink             ground                18.46:1
+dark   ink             raised                17.39:1
+dark   ink             hover over ground     18.03:1
+dark   ink             hover over raised     16.88:1
+dark   ink             selected over ground  17.71:1
+dark   ink             selected over raised  16.46:1
+dark   ink_primary     ground                18.46:1
+dark   ink_primary     raised                17.39:1
+dark   ink_primary     hover over ground     18.03:1
+dark   ink_primary     hover over raised     16.88:1
+dark   ink_primary     selected over ground  17.71:1
+dark   ink_primary     selected over raised  16.46:1
+dark   ink_secondary   ground                12.87:1
+dark   ink_secondary   raised                12.26:1
+dark   ink_secondary   hover over ground     12.58:1
+dark   ink_secondary   hover over raised     12.02:1
+dark   ink_secondary   selected over ground  12.49:1
+dark   ink_secondary   selected over raised  11.72:1
+
+ ✓ contrast.test.ts > #1458 every ink clears 4.5:1 > AC3 #1458.50054406: every ink role but ink_disabled clears 4.5:1 on every fill in light and dark, and a planted ink_tertiary at 3.5:1 fails, naming the pair 1821ms
+ × guard.test.ts > #1458 the guard on bare sizes and distances > AC2 #1458.6aab01b3: a planted px(37.) in a view fails the guard, naming the file and line; the same number in the look passes 1495ms
+   → the guard passes the unplanted copy of the checkout: expected [ …(2) ] to deeply equal []
+   → the guard passes 37 in the look: exit 1, stdout "PASS color literal: crates/deep-app/src and crates/deep-app/panels read every color from the look's roles\nFAIL size literal: crates/deep-app/src/connect.rs:119: `px(560.)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>\nFAIL size literal: crates/deep-app/src/connect.rs:137: `px(120.)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>\n", stderr "": expected false to be true // Object.is equality
+ ✓ guard.test.ts > #1458 the guard on bare sizes and distances > AC6 #1458.3326ddd5: a planted .gap_6() and a planted .text_sm() in a view each fail the guard, naming the file and line 599ms
+ × guard.test.ts > #1458 the guard on bare sizes and distances > AC5 #1458.c735b2b1: the guard passes on main's three lines, and the merge base's failure is there to name in the PR 50ms
+   → the guard passes this checkout, panel_check.rs and panel_tree.rs included: exit 1, stdout "PASS color literal: crates/deep-app/src and crates/deep-app/panels read every color from the look's roles\nFAIL size literal: crates/deep-app/src/connect.rs:119: `px(560.)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>\nFAIL size literal: crates/deep-app/src/connect.rs:137: `px(120.)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>\n", stderr "": expected false to be true // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  guard.test.ts > #1458 the guard on bare sizes and distances > AC2 #1458.6aab01b3: a planted px(37.) in a view fails the guard, naming the file and line; the same number in the look passes
+AssertionError: the guard passes the unplanted copy of the checkout: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "FAIL size literal: crates/deep-app/src/connect.rs:119: `px(560.)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>",
++   "FAIL size literal: crates/deep-app/src/connect.rs:137: `px(120.)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>",
++ ]
+
+ ❯ guard.test.ts:24:91
+     22|   it(`${AC.px}: a planted px(37.) in a view fails the guard, naming th…
+     23|     const control = await guard(sourceCopy());
+     24|     expect.soft(findings(control), 'the guard passes the unplanted cop…
+       |                                                                                           ^
+     25|     const { ran, line } = await planted(['fn planted_1458() -> Pixels …
+     26|     expect.soft(ran.code, `the guard exits 1 on the planted px(37.): $…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  guard.test.ts > #1458 the guard on bare sizes and distances > AC2 #1458.6aab01b3: a planted px(37.) in a view fails the guard, naming the file and line; the same number in the look passes
+AssertionError: the guard passes 37 in the look: exit 1, stdout "PASS color literal: crates/deep-app/src and crates/deep-app/panels read every color from the look's roles\nFAIL size literal: crates/deep-app/src/connect.rs:119: `px(560.)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>\nFAIL size literal: crates/deep-app/src/connect.rs:137: `px(120.)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>\n", stderr "": expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ guard.test.ts:33:117
+     31|     writeFileSync(join(root, LOOK), `${JSON.stringify({ ...look, plant…
+     32|     const inLook = await guard(root);
+     33|     expect(inLook.code === 0 && findings(inLook).length === 0, `the gu…
+       |                                                                                                                     ^
+     34|   }, T);
+     35|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  guard.test.ts > #1458 the guard on bare sizes and distances > AC5 #1458.c735b2b1: the guard passes on main's three lines, and the merge base's failure is there to name in the PR
+AssertionError: the guard passes this checkout, panel_check.rs and panel_tree.rs included: exit 1, stdout "PASS color literal: crates/deep-app/src and crates/deep-app/panels read every color from the look's roles\nFAIL size literal: crates/deep-app/src/connect.rs:119: `px(560.)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>\nFAIL size literal: crates/deep-app/src/connect.rs:137: `px(120.)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>\n", stderr "": expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ guard.test.ts:46:153
+     44|   it(`${AC.main}: the guard passes on main's three lines, and the merg…
+     45|     const here = await guard();
+     46|     expect(here.code === 0 && findings(here).length === 0, `the guard …
+       |                                                                                                                                                         ^
+     47|     const sha = mergeBase();
+     48|     const base = await guard(baseTree(sha));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  replica.test.ts > #1458 what the shipped pages draw > AC7 #1458.0c2959d0: every chrome string draws in the chrome face, named in the clean look; a planted label in the canvas face on a row fails, naming the view
+AssertionError: the planted row label in Inter wasn't caught: []: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ replica.test.ts:44:136
+     42|     expect.soft(faceFailures(await pages(), faces), 'every string draw…
+     43|     const planted = faceFailures(await renderPages({ plant: 'row-label…
+     44|     expect(caught(planted, SIDEBAR, CANVAS_FACE), `the planted row lab…
+       |                                                                                                                                        ^
+     45|   }, T);
+     46|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  replica.test.ts > #1458 what the shipped pages draw > AC8 #1458.52c35293: a time ticking from 9 s to 10 s moves no other glyph in its row
+AssertionError: "Checkout page"'s row as its time ticks: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "at 9 s the row draws its time as 0 strings reading \"9 s\", not one of its own; it draws [\"Checkout…\",\"quiet · last seen 9 s\"]",
++   "at 10 s the row draws its time as 0 strings reading \"10 s\", not one of its own; it draws [\"Checkout…\",\"quiet · last seen 10 s\"]",
++ ]
+
+ ❯ replica.test.ts:58:75
+     56|       }
+     57|     };
+     58|     expect.soft(await tick(), '"Checkout page"\'s row as its time tick…
+       |                                                                           ^
+     59|     const planted = await tick('time-flows-inline');
+     60|     expect(caught(planted, 'moved'), `the planted row whose time pushe…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  replica.test.ts > #1458 what the shipped pages draw > AC8 #1458.52c35293: a time ticking from 9 s to 10 s moves no other glyph in its row
+AssertionError: the planted row whose time pushes its neighbours wasn't caught: ["at 9 s the row draws its time as 0 strings reading \"9 s\", not one of its own; it draws [\"Checkout…\",\"quiet · last seen 9 s\"]","at 10 s the row draws its time as 0 strings reading \"10 s\", not one of its own; it draws [\"Checkout…\",\"quiet · last seen 10 s\"]"]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ replica.test.ts:60:132
+     58|     expect.soft(await tick(), '"Checkout page"\'s row as its time tick…
+     59|     const planted = await tick('time-flows-inline');
+     60|     expect(caught(planted, 'moved'), `the planted row whose time pushe…
+       |                                                                                                                                    ^
+     61|   }, T);
+     62|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  replica.test.ts > #1458 what the shipped pages draw > AC11 #1458.5350b8ad: no row reads "… ago" or "in …", a planted one fails naming the string, and an ask's row, card and notification show one moment in one form
+AssertionError: the ask's row, card and notification show one moment in one form: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the ask's notification names no moment, not 12:00 alone, in \"\"",
++ ]
+
+ ❯ replica.test.ts:147:102
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+ FAIL  replica.test.ts > #1458 what the shipped pages draw > AC11 #1458.5350b8ad: no row reads "… ago" or "in …", a planted one fails naming the string, and an ask's row, card and notification show one moment in one form
+AssertionError: the planted row reading "in 4 h" wasn't caught: []: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ replica.test.ts:150:123
+    148|     for (const [plant, words] of [['row-says-ago', '2 min ago'], ['row…
+    149|       const planted = (await shownAll(plant)).failures;
+    150|       expect.soft(caught(planted, words), `the planted row reading "${…
+       |                                                                                                                           ^
+    151|     }
+    152|   }, T);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/9]⎯
+
+ FAIL  redraft-ac13/shown.test.ts > #1458 shown to you > AC13 the check run takes each shipped page from the real app at 960 × 640 and 1512 × 982, in light and dark, and reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right
+AssertionError: each page is on the real window's tree before its picture is taken: expected [ …(10) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "welcome at 960 × 640, light: no \"Set up\" button; the window's names are [\"Tasks\",\"Needs you\",\"The hub isn't answering since 21:25\",\"Pop out Needs you\",\"The hub isn't answering since 21:25\",\"DeepBuild\",\"The hub isn't answering since 21:25\",\"Say a change in words\",\"Say a change in words\",\"Send\"]",
++   "needs-you, light: the window couldn't be set to 1512 × 982: it stayed [0,40,1512,866]",
++   "session, light: the window couldn't be set to 1512 × 982: it stayed [0,40,1512,864]",
++   "light: nothing named \"Agents\" (AXButton) takes a press; the window's names are [\"Tasks\",\"Needs you\",\"1 ask needs you\",\"Pop out Needs you\",\"Store the drafts in SQLite or plain files?\",\"!\",\"Store the drafts in SQLite or plain files?\",\"Pick one\",\"tomorrow 03:25\",\"tomorrow 03:25\",\"shop\",\"shop\",\"! Header layout · needs you\",\"!\",\"Header layout\",\"needs you\",\"1 min\",\"○ Checkout page · queued\",\"○\",\"Checkout page\",\"queued\",\"1 min\",\"Session Header layout\",\"needs you: an ask open\",\"! Header layout · needs you\",\"! Header layout · needs you\",\"Terminal\",\"Asks with a deadline 1\",\"Hours to each deadline: 6 h\",\"Say a change in words\",\"Say a change in words\",\"Send\"]",
++   "home at 960 × 640, light: no \"Home\" heading with ⌘K closed; the window's names are [\"Tasks\",\"Needs you\",\"1 ask needs you\",\"Pop out Needs you\",\"Store the drafts in SQLite or plain files?\",\"!\",\"Store the drafts in SQLite or plain files?\",\"Pick one\",\"tomorrow 03:25\",\"tomorrow 03:25\",\"shop\",\"shop\",\"! Header layout · needs you\",\"!\",\"Header layout\",\"needs you\",\"1 min\",\"○ Checkout page · queued\",\"○\",\"Checkout page\",\"queued\",\"1 min\",\"armed\",\"Pick one\",\"Store the drafts in SQLite or plain files?\",\"SQLite\",\"Plain files\",\"Default: SQLite · at tomorrow 03:25\",\"Answering saves it for this project (shop)\",\"Say a change in words\",\"Your words\",\"Answer\"]",
++   "welcome at 960 × 640, dark: no \"Set up\" button; the window's names are [\"Tasks\",\"Needs you\",\"The hub isn't answering since 21:27\",\"Pop out Needs you\",\"The hub isn't answering since 21:27\",\"DeepBuild\",\"The hub isn't answering since 21:27\",\"Say a change in words\",\"Say a change in words\",\"Send\"]",
++   "needs-you, dark: the window couldn't be set to 1512 × 982: it stayed [0,40,1512,864]",
++   "session, dark: the window couldn't be set to 1512 × 982: it stayed [0,40,1512,864]",
++   "dark: nothing named \"Agents\" (AXButton) takes a press; the window's names are [\"Tasks\",\"Needs you\",\"1 ask needs you\",\"Pop out Needs you\",\"Store the drafts in SQLite or plain files?\",\"!\",\"Store the drafts in SQLite or plain files?\",\"Pick one\",\"tomorrow 03:28\",\"tomorrow 03:28\",\"shop\",\"shop\",\"! Header layout · needs you\",\"!\",\"Header layout\",\"needs you\",\"1 min\",\"○ Checkout page · queued\",\"○\",\"Checkout page\",\"queued\",\"1 min\",\"Session Header layout\",\"needs you: an ask open\",\"! Header layout · needs you\",\"! Header layout · needs you\",\"Terminal\",\"Asks with a deadline 1\",\"Hours to each deadline: 6 h\",\"Say a change in words\",\"Say a change in words\",\"Send\"]",
++   "home at 960 × 640, dark: no \"Home\" heading with ⌘K closed; the window's names are [\"Tasks\",\"Needs you\",\"1 ask needs you\",\"Pop out Needs you\",\"Store the drafts in SQLite or plain files?\",\"!\",\"Store the drafts in SQLite or plain files?\",\"Pick one\",\"tomorrow 03:28\",\"tomorrow 03:28\",\"shop\",\"shop\",\"! Header layout · needs you\",\"!\",\"Header layout\",\"needs you\",\"1 min\",\"○ Checkout page · queued\",\"○\",\"Checkout page\",\"queued\",\"1 min\",\"armed\",\"Pick one\",\"Store the drafts in SQLite or plain files?\",\"SQLite\",\"Plain files\",\"Default: SQLite · at tomorrow 03:28\",\"Answering saves it for this project (shop)\",\"Say a change in words\",\"Your words\",\"Answer\"]",
++ ]
+
+ ❯ redraft-ac13/shown.test.ts:181:94
+    179|       const missing: string[] = [];
+    180|       for (const look of LOOKS) missing.push(...await shots(binary, lo…
+    181|       expect(missing, 'each page is on the real window\'s tree before …
+       |                                                                                              ^
+    182|       writeFileSync(runFile, `${JSON.stringify({ issue: 1458, criterio…
+    183|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
+
+
+ Test Files  3 failed | 1 passed (4)
+      Tests  6 failed | 7 passed (13)
+   Start at  21:21:25
+   Duration  758.15s (tests 100%)
+
+== end 2026-11-19 21:34:03 load { 48.88 64.36 85.69 } thermal 0 front app [Claude]
+vitest exit=1

@@ -1,0 +1,202 @@
+
+ RUN  v5.0.5 /private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-angry-chatelet-916a48/55578c1d-bd8a-4548-b218-4762505ace60/scratchpad/1345c/head/tests/acceptance/1458
+
+ × redraft-ac13/shown.test.ts > #1458 shown to you > AC13 the check run takes each shipped page from the real app at 960 × 640 and 1512 × 982, in light and dark, and reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right 7111ms
+   → BLOCKED: the screen is locked, so no window's pixels can be captured
+ ✓ replica.test.ts > #1458 what the shipped pages draw > AC1 #1458.dd02bb24: every string the shipped pages draw is 11, 13 or 15 pt; a planted view with a fourth size fails, naming the view and the size 50498ms
+ ✓ replica.test.ts > #1458 what the shipped pages draw > AC4 #1458.a98be9c0: every shipped page at 960×640 has no clipped text and nothing wider than its pane; a planted 600 pt wide element fails, naming the element and the window 1517ms
+ × replica.test.ts > #1458 what the shipped pages draw > AC7 #1458.0c2959d0: every chrome string draws in the chrome face, named in the clean look; a planted label in the canvas face on a row fails, naming the view 122265ms
+   → the planted row label in Inter wasn't caught: []: expected false to be true // Object.is equality
+ × replica.test.ts > #1458 what the shipped pages draw > AC8 #1458.52c35293: a time ticking from 9 s to 10 s moves no other glyph in its row 729ms
+   → "Checkout page"'s row as its time ticks: expected [ …(2) ] to deeply equal []
+   → the planted row whose time pushes its neighbours wasn't caught: ["at 9 s the row draws its time as 0 strings reading \"9 s\", not one of its own; it draws [\"Checkout…\",\"quiet · last seen 9 s\"]","at 10 s the row draws its time as 0 strings reading \"10 s\", not one of its own; it draws [\"Checkout…\",\"quiet · last seen 10 s\"]"]: expected false to be true // Object.is equality
+ ✓ replica.test.ts > #1458 what the shipped pages draw > AC9 #1458.a3834e1a: a kit tooltip on a shipped page draws in one of the three sizes 4838ms
+ ✓ replica.test.ts > #1458 what the shipped pages draw > AC10 #1458.889098b6: a planted 250 ms transition on a page change fails, naming the view 1235ms
+ × replica.test.ts > #1458 what the shipped pages draw > AC11 #1458.5350b8ad: no row reads "… ago" or "in …", a planted one fails naming the string, and an ask's row, card and notification show one moment in one form 1884ms
+   → the ask's row, card and notification show one moment in one form: expected [ Array(1) ] to deeply equal []
+   → the planted row reading "in 4 h" wasn't caught: []: expected false to be true // Object.is equality
+ ✓ replica.test.ts > #1458 what the shipped pages draw > AC12 #1458.be1a2dad: a step's switch on a card has the switch role with its state as a value; a planted switch whose state is a word in its label fails, naming it 545ms
+stdout | contrast.test.ts > #1458 every ink clears 4.5:1 > AC3 #1458.50054406: every ink role but ink_disabled clears 4.5:1 on every fill in light and dark, and a planted ink_tertiary at 3.5:1 fails, naming the pair
+AC3: the contrast table
+light  ink             ground                16.86:1
+light  ink             raised                15.48:1
+light  ink             hover over ground     15.06:1
+light  ink             hover over raised     13.78:1
+light  ink             selected over ground  13.76:1
+light  ink             selected over raised  12.66:1
+light  ink_primary     ground                16.86:1
+light  ink_primary     raised                15.48:1
+light  ink_primary     hover over ground     15.06:1
+light  ink_primary     hover over raised     13.78:1
+light  ink_primary     selected over ground  13.76:1
+light  ink_primary     selected over raised  12.66:1
+light  ink_secondary   ground                10.18:1
+light  ink_secondary   raised                9.53:1
+light  ink_secondary   hover over ground     9.39:1
+light  ink_secondary   hover over raised     8.76:1
+light  ink_secondary   selected over ground  8.75:1
+light  ink_secondary   selected over raised  8.26:1
+dark   ink             ground                18.46:1
+dark   ink             raised                17.39:1
+dark   ink             hover over ground     18.03:1
+dark   ink             hover over raised     16.88:1
+dark   ink             selected over ground  17.71:1
+dark   ink             selected over raised  16.46:1
+dark   ink_primary     ground                18.46:1
+dark   ink_primary     raised                17.39:1
+dark   ink_primary     hover over ground     18.03:1
+dark   ink_primary     hover over raised     16.88:1
+dark   ink_primary     selected over ground  17.71:1
+dark   ink_primary     selected over raised  16.46:1
+dark   ink_secondary   ground                12.87:1
+dark   ink_secondary   raised                12.26:1
+dark   ink_secondary   hover over ground     12.58:1
+dark   ink_secondary   hover over raised     12.02:1
+dark   ink_secondary   selected over ground  12.49:1
+dark   ink_secondary   selected over raised  11.72:1
+
+ ✓ contrast.test.ts > #1458 every ink clears 4.5:1 > AC3 #1458.50054406: every ink role but ink_disabled clears 4.5:1 on every fill in light and dark, and a planted ink_tertiary at 3.5:1 fails, naming the pair 2186ms
+ ✓ guard.test.ts > #1458 the guard on bare sizes and distances > AC2 #1458.6aab01b3: a planted px(37.) in a view fails the guard, naming the file and line; the same number in the look passes 2123ms
+ ✓ guard.test.ts > #1458 the guard on bare sizes and distances > AC6 #1458.3326ddd5: a planted .gap_6() and a planted .text_sm() in a view each fail the guard, naming the file and line 1161ms
+stdout | guard.test.ts > #1458 the guard on bare sizes and distances > AC5 #1458.c735b2b1: the guard passes on main's three lines, and the merge base's failure is there to name in the PR
+AC5: this checkout's guard over the merge base 703ea8e49fcb: exit 0
+
+
+ × guard.test.ts > #1458 the guard on bare sizes and distances > AC5 #1458.c735b2b1: the guard passes on main's three lines, and the merge base's failure is there to name in the PR 968ms
+   → the merge base 703ea8e49fcb fails the guard, a failure the PR names: exit 0, stdout "PASS color literal: crates/deep-app/src and crates/deep-app/panels read every color from the look's roles\nPASS size literal: crates/deep-app/src reads every size from the look's roles\n", stderr "": expected +0 to be 1 // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  guard.test.ts > #1458 the guard on bare sizes and distances > AC5 #1458.c735b2b1: the guard passes on main's three lines, and the merge base's failure is there to name in the PR
+AssertionError: the merge base 703ea8e49fcb fails the guard, a failure the PR names: exit 0, stdout "PASS color literal: crates/deep-app/src and crates/deep-app/panels read every color from the look's roles\nPASS size literal: crates/deep-app/src reads every size from the look's roles\n", stderr "": expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ guard.test.ts:51:117
+     49|     // What the PR names: the merge base's failure, as this checkout's…
+     50|     console.log(`AC5: this checkout's guard over the merge base ${sha.…
+     51|     expect(base.code, `the merge base ${sha.slice(0, 12)} fails the gu…
+       |                                                                                                                     ^
+     52|   }, T);
+     53| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  replica.test.ts > #1458 what the shipped pages draw > AC7 #1458.0c2959d0: every chrome string draws in the chrome face, named in the clean look; a planted label in the canvas face on a row fails, naming the view
+AssertionError: the planted row label in Inter wasn't caught: []: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ replica.test.ts:44:136
+     42|     expect.soft(faceFailures(await pages(), faces), 'every string draw…
+     43|     const planted = faceFailures(await renderPages({ plant: 'row-label…
+     44|     expect(caught(planted, SIDEBAR, CANVAS_FACE), `the planted row lab…
+       |                                                                                                                                        ^
+     45|   }, T);
+     46|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  replica.test.ts > #1458 what the shipped pages draw > AC8 #1458.52c35293: a time ticking from 9 s to 10 s moves no other glyph in its row
+AssertionError: "Checkout page"'s row as its time ticks: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "at 9 s the row draws its time as 0 strings reading \"9 s\", not one of its own; it draws [\"Checkout…\",\"quiet · last seen 9 s\"]",
++   "at 10 s the row draws its time as 0 strings reading \"10 s\", not one of its own; it draws [\"Checkout…\",\"quiet · last seen 10 s\"]",
++ ]
+
+ ❯ replica.test.ts:58:75
+     56|       }
+     57|     };
+     58|     expect.soft(await tick(), '"Checkout page"\'s row as its time tick…
+       |                                                                           ^
+     59|     const planted = await tick('time-flows-inline');
+     60|     expect(caught(planted, 'moved'), `the planted row whose time pushe…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  replica.test.ts > #1458 what the shipped pages draw > AC8 #1458.52c35293: a time ticking from 9 s to 10 s moves no other glyph in its row
+AssertionError: the planted row whose time pushes its neighbours wasn't caught: ["at 9 s the row draws its time as 0 strings reading \"9 s\", not one of its own; it draws [\"Checkout…\",\"quiet · last seen 9 s\"]","at 10 s the row draws its time as 0 strings reading \"10 s\", not one of its own; it draws [\"Checkout…\",\"quiet · last seen 10 s\"]"]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ replica.test.ts:60:132
+     58|     expect.soft(await tick(), '"Checkout page"\'s row as its time tick…
+     59|     const planted = await tick('time-flows-inline');
+     60|     expect(caught(planted, 'moved'), `the planted row whose time pushe…
+       |                                                                                                                                    ^
+     61|   }, T);
+     62|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  replica.test.ts > #1458 what the shipped pages draw > AC11 #1458.5350b8ad: no row reads "… ago" or "in …", a planted one fails naming the string, and an ask's row, card and notification show one moment in one form
+AssertionError: the ask's row, card and notification show one moment in one form: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the ask's notification names no moment, not 12:00 alone, in \"\"",
++ ]
+
+ ❯ replica.test.ts:147:102
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  replica.test.ts > #1458 what the shipped pages draw > AC11 #1458.5350b8ad: no row reads "… ago" or "in …", a planted one fails naming the string, and an ask's row, card and notification show one moment in one form
+AssertionError: the planted row reading "in 4 h" wasn't caught: []: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ replica.test.ts:150:123
+    148|     for (const [plant, words] of [['row-says-ago', '2 min ago'], ['row…
+    149|       const planted = (await shownAll(plant)).failures;
+    150|       expect.soft(caught(planted, words), `the planted row reading "${…
+       |                                                                                                                           ^
+    151|     }
+    152|   }, T);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  redraft-ac13/shown.test.ts > #1458 shown to you > AC13 the check run takes each shipped page from the real app at 960 × 640 and 1512 × 982, in light and dark, and reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right
+Error: BLOCKED: the screen is locked, so no window's pixels can be captured
+ ❯ blocked ../1454/helpers.ts:38:56
+     36| });
+     37|
+     38| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     39| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     40| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ redraft-ac13/shown.test.ts:169:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  3 failed | 1 passed (4)
+      Tests  5 failed | 8 passed (13)
+   Start at  04:21:56
+   Duration  199.93s (tests 99%, transform 1%)
+

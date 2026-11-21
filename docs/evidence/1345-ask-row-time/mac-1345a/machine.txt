@@ -1,0 +1,5 @@
+Mac15,12
+ProductName:		macOS ProductVersion:		27.2.1 BuildVersion:		26B131 
+node v24.22.0
+start 2026-11-19 15:29:39 15:29  up 6 days,  8:31, 2 users, load averages: 8.91 24.82 39.44 thermalState 1
+end 2026-11-19 16:20:11 16:20  up 6 days,  9:22, 3 users, load averages: 476.18 187.49 121.63

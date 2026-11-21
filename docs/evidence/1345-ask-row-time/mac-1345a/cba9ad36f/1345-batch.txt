@@ -1,0 +1,14 @@
+== commit cba9ad36f12520985550fbbd9150ad41c9dc9d5a
+== command: NO_COLOR=1 npx vitest run --root tests/acceptance/1345 batch.test.ts --no-file-parallelism
+== start 2026-11-19 15:31:51 load { 8.68 18.88 34.88 } thermal 1 front app [Windows App]
+
+ RUN  v5.0.5 ~/private/d1345a/tests/acceptance/1345
+
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  15:31:53
+   Duration  515.42s (tests 100%)
+
+== end 2026-11-19 15:40:28 load { 21.35 47.34 46.24 } thermal 1 front app [Windows App]
+vitest exit=0

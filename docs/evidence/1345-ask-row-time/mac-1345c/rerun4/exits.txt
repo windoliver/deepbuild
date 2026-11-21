@@ -1,0 +1,15 @@
+start; screen-lock flag 1; 'AC Power' 04:04:52 load { 11.91 15.62 17.51 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 190548656
+origin/claude/1345-ask-row-time f26c9f847236b3d2287c1fa019a09fd9fe45cc24; head f26c9f847236b3d2287c1fa019a09fd9fe45cc24; before 703ea8e49fcb84502acab9f3cef01851db8b0834; origin/main b6b99ad8ccdd5155bed00b7d4b4647c7e066a9ea 04:05:17 load { 10.85 15.11 17.27 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 189132384
+setup at f26c9f847 (npm ci, workspace build, deep-hook) exit=0 04:06:05 load { 8.55 13.83 16.67 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 187863432
+f26c9f847 1808: vitest exit=1;  Tests 4 failed | 13 passed (17) 04:15:35 load { 31.96 37.23 29.83 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 160094248
+setup at 703ea8e49 (npm ci, workspace build, deep-hook) exit=0 04:17:15 load { 30.92 35.45 30.00 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 155662652
+703ea8e49 1808: vitest exit=1;  Tests 4 failed | 13 passed (17) 04:20:13 load { 51.44 37.69 31.60 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 142208492
+setup at f26c9f847-2 (npm ci, workspace build, deep-hook) exit=0 04:21:56 load { 32.94 34.82 31.16 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 135420940
+f26c9f847 1458: vitest exit=1;  Tests 5 failed | 8 passed (13) 04:25:16 load { 39.15 38.28 33.40 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 125400064
+setup at 703ea8e49-2 (npm ci, workspace build, deep-hook) exit=0 04:27:16 load { 31.74 36.23 33.25 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 121407276
+703ea8e49 1458: vitest exit=1;  Tests 5 failed | 8 passed (13) 04:29:15 load { 36.66 36.78 33.86 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 116033808
+f26c9f847 cargo test -p deep-app --lib exit=0; test result: ok. 112 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.84s 04:35:51 load { 43.43 46.38 40.15 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 97838924
+clones removed 04:35:58 load { 40.47 45.65 39.96 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 117781684
+login-name hits after redaction: 0 04:35:58 load { 40.47 45.65 39.96 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 117810412
+secret scan hits=0 04:35:58 load { 40.47 45.65 39.96 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 117810404
+FINISHED

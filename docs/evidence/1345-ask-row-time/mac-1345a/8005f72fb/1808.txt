@@ -1,0 +1,98 @@
+== commit 8005f72fb7e36cdb1b275f9abe43a53a48ef8da9
+== command: NO_COLOR=1 npx vitest run --root tests/acceptance/1808 --no-file-parallelism
+== start 2026-11-19 16:09:49 load { 58.69 107.42 96.47 } thermal 1 front app [Windows App]
+
+ RUN  v5.0.5 ~/private/d1345a/tests/acceptance/1808
+
+ ❯ shown.test.ts (1 test | 1 failed) 175637ms
+   ❯ AC9 #1808.d5e52086 shown to you (1)
+     × AC9 #1808.d5e52086: the check run takes the list scrolled to its last row, the window at 700 wide on the list and on a page, a long card scrolled and rows with a long, a Han and an Arabic title from the real app, and reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right 175316ms
+ ❯ window.test.ts (8 tests | 1 failed) 165930ms
+   ❯ AC2 #1808.86c051bf every page scrolls (2)
+     × AC2 #1808.86c051bf: a session page whose failure runs 400 lines shows its last line after scrolling 146672ms
+ ❯ kept.test.ts (2 tests | 2 failed) 41763ms
+   ❯ AC3 #1808.f340f4c7 it comes back as you left it (2)
+     × AC3 #1808.f340f4c7: after a resize to 1200×800 and the list dragged to 300, a quit and a launch show that frame and width with the first open ask selected 20236ms
+     × AC3 #1808.f340f4c7 wrong program: a planted app that opens at the opening size fails, naming the frame 15265ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  kept.test.ts > AC3 #1808.f340f4c7 it comes back as you left it > AC3 #1808.f340f4c7: after a resize to 1200×800 and the list dragged to 300, a quit and a launch show that frame and width with the first open ask selected
+Error: BLOCKED: a drag posted to the app's PID didn't move the list's edge: the list is still 259 wide, so this Mac's window server didn't deliver it
+ ❯ blocked helpers.ts:31:56
+     29| export type { Row, Run, SNode, Snapshot };
+     30| export const SUITE = fileURLToPath(new URL('./', import.meta.url));
+     31| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     32| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     33| const said = (v: unknown, n = 300): string => (JSON.stringify(v) ?? St…
+ ❯ keptFailures kept.test.ts:70:57
+ ❯ kept.test.ts:105:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  kept.test.ts > AC3 #1808.f340f4c7 it comes back as you left it > AC3 #1808.f340f4c7 wrong program: a planted app that opens at the opening size fails, naming the frame
+Error: BLOCKED: a drag posted to the app's PID didn't move the list's edge: the list is still 259 wide, so this Mac's window server didn't deliver it
+ ❯ blocked helpers.ts:31:56
+     29| export type { Row, Run, SNode, Snapshot };
+     30| export const SUITE = fileURLToPath(new URL('./', import.meta.url));
+     31| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     32| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     33| const said = (v: unknown, n = 300): string => (JSON.stringify(v) ?? St…
+ ❯ keptFailures kept.test.ts:70:57
+ ❯ kept.test.ts:109:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  shown.test.ts > AC9 #1808.d5e52086 shown to you > AC9 #1808.d5e52086: the check run takes the list scrolled to its last row, the window at 700 wide on the list and on a page, a long card scrolled and rows with a long, a Han and an Arabic title from the real app, and reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right
+AssertionError: each state is on the real window's tree before its picture is taken: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "long-card-960x640.png: the card's last row (card-step:29) isn't in the window",
++ ]
+
+ ❯ shown.test.ts:104:122
+    102|     if (!kept) {
+    103|       const world = await makeWorld(SPECS);
+    104|       expect(await pictures(world, binary, out), 'each state is on the…
+       |                                                                                                                          ^
+    105|       writeFileSync(runFile, `${JSON.stringify({ issue: 1808, criterio…
+    106|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  window.test.ts > AC2 #1808.86c051bf every page scrolls > AC2 #1808.86c051bf: a session page whose failure runs 400 lines shows its last line after scrolling
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the session page session/460c105e-28a6-4953-a2e7-c0f76b220364 doesn't show its last line \"line 400 of 400\" after scrolling: the wheel over it moves nothing further, with \"line 024 of 400\" the last line shown",
++ ]
+
+ ❯ window.test.ts:78:34
+     76| describe(`AC2 ${ID.page} every page scrolls`, () => {
+     77|   it(`AC2 ${ID.page}: a session page whose failure runs 400 lines show…
+     78|     expect(await pageFailures()).toEqual([]);
+       |                                  ^
+     79|   }, 30 * MIN);
+     80|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  3 failed | 2 passed (5)
+      Tests  4 failed | 13 passed (17)
+   Start at  16:09:51
+   Duration  604.31s (tests 100%)
+
+/private/tmp/claude-501/-Users-USER-private-deepbuild-core--claude-worktrees-remote-control-2b0a8c/dc89e869-b8ba-4805-9a02-020457b8e6b1/scratchpad/run-1345a.sh: line 11: 19086 Terminated: 15          caffeinate -d -i -s -w $$  (wd: ~)
+== end 2026-11-19 16:19:56 load { 362.58 152.00 108.20 } thermal 1 front app [Windows App]
+vitest exit=1

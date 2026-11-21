@@ -2228,6 +2228,13 @@ pub(crate) struct Shape {
     width: Option<Pixels>,
 }
 
+/// Whether a row draws its time, given the room its title would have beside it and the width of its least title
+/// (#1808): beside a long state word at the list's narrowest the time leaves what's drawn. An ask's time is when its
+/// recommended answer applies (#1458, #1345), so an ask row keeps it, and its title takes what's left.
+fn keeps_time(ask: bool, room: Pixels, least: Pixels) -> bool {
+    ask || room >= least
+}
+
 /// The characters of its title a row keeps beside its state word at the list's narrowest (#1808). The 12 is drafted.
 const TITLE_LEAST: usize = 12;
 
@@ -2342,7 +2349,8 @@ pub(crate) struct RowDrawn {
     cut: Option<String>,
     /// The title reads right to left from its first strong character, so from the slot's right (#1808).
     rtl: bool,
-    /// The time is drawn: beside a long state word at the list's narrowest it leaves what's drawn (#1808).
+    /// The time is drawn: beside a long state word at the list's narrowest it leaves what's drawn (#1808), except an
+    /// ask's, which stays (#1345).
     timed: bool,
     /// #1808's planted row draws its title whole, over the slots to its right.
     under: bool,
@@ -2459,7 +2467,7 @@ impl RowDrawn {
         let rtl = unicode_bidi::get_base_direction(title.as_str()) == unicode_bidi::Direction::Rtl;
         // Once the list's width is known, the title's room is what the row's other slots leave it (#1808). Beside a long
         // state word at the list's narrowest the time leaves what's drawn, its slot kept in the tree with no width, so
-        // the title keeps at least 12 characters.
+        // the title keeps at least 12 characters. An ask row keeps its time, and its title takes what's left (#1345).
         let wide = |text: &str, weight| drawn_width(window, text, weight);
         let roomy = shape.width.map(|width| {
             let flag = row.flag.as_ref().map_or(px(0.), |flag| {
@@ -2471,7 +2479,7 @@ impl RowDrawn {
             if title.chars().count() > TITLE_LEAST {
                 least.push('…');
             }
-            let timed = width - fixed - time >= wide(&least, weight);
+            let timed = keeps_time(ask, width - fixed - time, wide(&least, weight));
             (timed, width - fixed - if timed { time } else { px(0.) })
         });
         let timed = roomy.is_none_or(|(timed, _)| timed);
@@ -4884,6 +4892,22 @@ impl Render for Shell {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[std::prelude::v1::test]
+    fn an_ask_row_keeps_when_its_default_applies_where_a_session_row_gives_its_time_to_its_title() {
+        // At a 260-wide list, 12 characters of title don't fit beside a taste ask's word and a time such as
+        // "tomorrow 10:00" (#1808); any room narrower than the least title stands for that here.
+        let s = sizes();
+        let (room, least) = (s.space(3), s.space(5));
+        assert!(
+            !keeps_time(false, room, least),
+            "a session row gives its time to 12 characters of title (#1808)"
+        );
+        assert!(
+            keeps_time(true, room, least),
+            "an ask row shows when its recommended answer applies (#1345, #1458), whatever its title keeps"
+        );
+    }
 
     #[std::prelude::v1::test]
     fn the_sidebars_keys_move_the_ring_and_open_the_focused_session_which_keeps_its_row_as_rows_move(

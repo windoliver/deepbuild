@@ -1,0 +1,13 @@
+start; screen-lock flag 0; 'AC Power' 00:40:28 load { 30.46 46.40 52.69 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 156090432
+origin/claude/1345-ask-row-time f26c9f847236b3d2287c1fa019a09fd9fe45cc24; head f26c9f847236b3d2287c1fa019a09fd9fe45cc24; before 703ea8e49fcb84502acab9f3cef01851db8b0834; origin/main 88dcecc8b509d1a7b11f6193731e336e8b0a2ed7 00:41:16 load { 37.11 45.67 52.07 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 152757020
+setup at f26c9f847 (npm ci, workspace build, deep-hook) exit=0 00:46:15 load { 60.90 54.50 54.24 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 130432768
+f26c9f847 1345-batch: vitest exit=0;  Tests 3 passed (3) 01:46:28 load { 38.91 46.16 48.71 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 54944324
+f26c9f847 AC8:  01:46:28 load { 38.91 46.16 48.71 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 54941740
+same clone checked out at 703ea8e49fcb84502acab9f3cef01851db8b0834 01:46:28 load { 38.91 46.16 48.71 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 54931752
+setup at 703ea8e49 (npm ci, workspace build, deep-hook) exit=0 01:48:53 load { 47.03 44.10 47.30 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 53390340
+703ea8e49 1345-batch: vitest exit=1;  Tests 3 failed (3) 02:07:26 load { 25.08 26.57 33.21 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 122620
+STOPPED: free space dropped under 12 GB (rerun floor) 02:07:26 load { 25.08 26.57 33.21 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 119256
+clones removed 02:07:31 load { 25.87 26.71 33.22 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 6234192
+login-name hits after redaction: 0 02:07:31 load { 25.87 26.71 33.22 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 6233888
+secret scan hits=0 02:07:31 load { 25.87 26.71 33.22 } thermal Note: No thermal warning level has been recorded Note: No pe free KB 6233884
+FINISHED
