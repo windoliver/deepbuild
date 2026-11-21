@@ -1,0 +1,101 @@
+# #1865's acceptance suite: the run on the base, the throwaway implementation's run, and the twins
+
+All runs on this Mac (18 cores), Node 24.22, `node --test --test-concurrency=3 'tests/acceptance/1865/*.test.mjs'`,
+at the 1-minute loads each run's first line names (other sessions' work). Stack frames and assertion fields are cut;
+home paths and sandbox paths are redacted, and no token appears.
+
+## 1. The base, dcb63a0a0 (origin/main), built with `npm run build --workspaces`
+
+Expected: AC1 fails naming `hub.stop` (the hub answers `{"stopping":true}` and stops); AC3's restart test fails (no
+restart: `hub.stop {"restart":true}` exits 0 and the login service leaves the hub down); AC2's test and AC3's
+promotion test pass, since a confirmed `deep hub stop` and `deep hub promote` already work there; the dev-hub Scope test
+passes.
+
+load { 212.90 152.74 114.98 }
+✔ #1865.2e5dc4d0 a confirmed deep hub stop still stops the installed hub, and the login service doesn't start it again before your next login (39609.495584ms)
+✔ #1865.bd65df36 deep hub promote of a good build still moves the installed hub to it, with no prompt (28591.365583ms)
+✖ #1865.bd65df36 a restart asked for with the control token alone brings the installed hub back within 60 s (93248.544458ms)
+✖ #1865.c16bc3be a token holder's raw hub.stop(), with the OS confirmation cancelled, leaves the installed hub running and gets a refusal naming the confirmation (9513.861042ms)
+✔ Scope: a dev hub started with --root stays exempt: a raw hub.stop() with its token stops it, with no confirmation asked (3965.58875ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 3
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 121919.750208
+
+✖ failing tests:
+
+test at tests/acceptance/1865/promote.test.mjs:45:1
+✖ #1865.bd65df36 a restart asked for with the control token alone brings the installed hub back within 60 s (93248.544458ms)
+  AssertionError [ERR_ASSERTION]: a restart asked for with the token alone (hub.stop {"restart":true}) must bring the installed hub back within 60 s; none came back within 90 s (the old hub's exit: [{"t":1795207372819,"event":"exit","pid":70501,"code":0,"signal":null}]; the login service's starts since: 0)
+
+test at tests/acceptance/1865/stop.test.mjs:22:1
+✖ #1865.c16bc3be a token holder's raw hub.stop(), with the OS confirmation cancelled, leaves the installed hub running and gets a refusal naming the confirmation (9513.861042ms)
+  AssertionError [ERR_ASSERTION]: hub.stop sent straight to the installed hub's socket with the control token, the OS confirmation cancelled, stopped the hub: hub.stop answered {"v":1,"id":1,"result":{"stopping":true}}, and the hub no longer answers. The installed hub must stop only once the OS confirms you inside the hub, as gates.off does, never on the control token alone
+
+real	2m1.994s
+user	0m4.856s
+sys	0m2.045s
+
+## 2. The blind job's throwaway implementation (twins/README.md), in a scratch tree, never kept
+
+load { 157.27 154.06 120.64 }
+✔ #1865.2e5dc4d0 a confirmed deep hub stop still stops the installed hub, and the login service doesn't start it again before your next login (39630.983417ms)
+✔ #1865.bd65df36 deep hub promote of a good build still moves the installed hub to it, with no prompt (26741.331542ms)
+✔ #1865.bd65df36 a restart asked for with the control token alone brings the installed hub back within 60 s (12572.684375ms)
+✔ #1865.c16bc3be a token holder's raw hub.stop(), with the OS confirmation cancelled, leaves the installed hub running and gets a refusal naming the confirmation (13998.387584ms)
+✔ Scope: a dev hub started with --root stays exempt: a raw hub.stop() with its token stops it, with no confirmation asked (3494.22525ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 39685.138125
+
+real	0m39.754s
+user	0m4.742s
+sys	0m1.942s
+
+## 3. Each twin over the throwaway, one at a time, the throwaway's own file put back after each
+
+=== twin confirms-only-with-peer (packages/hub/src/server.ts) -> stop.test.mjs; load { 91.19 78.04 82.63 }
+✖ #1865.c16bc3be a token holder's raw hub.stop(), with the OS confirmation cancelled, leaves the installed hub running and gets a refusal naming the confirmation (13939.151834ms)
+✔ Scope: a dev hub started with --root stays exempt: a raw hub.stop() with its token stops it, with no confirmation asked (3404.611375ms)
+ℹ pass 1
+ℹ fail 1
+✖ failing tests:
+✖ #1865.c16bc3be a token holder's raw hub.stop(), with the OS confirmation cancelled, leaves the installed hub running and gets a refusal naming the confirmation (13939.151834ms)
+  AssertionError [ERR_ASSERTION]: hub.stop with the control token alone, naming no process, stopped the installed hub: hub.stop answered {"v":1,"id":1,"result":{"stopping":true}}
+=== twin confirmed-stop-exits-nonzero (packages/hub/src/server.ts) -> confirmed.test.mjs; load { 96.75 80.89 83.45 }
+✖ #1865.2e5dc4d0 a confirmed deep hub stop still stops the installed hub, and the login service doesn't start it again before your next login (12568.48525ms)
+ℹ pass 0
+ℹ fail 1
+✖ failing tests:
+✖ #1865.2e5dc4d0 a confirmed deep hub stop still stops the installed hub, and the login service doesn't start it again before your next login (12568.48525ms)
+  AssertionError [ERR_ASSERTION]: after a confirmed deep hub stop the login service started the installed hub again before any login (1 start(s) within 35 s; the stopped hub's exit: [{"t":1795207009721,"event":"exit","pid":8516,"code":1,"signal":null}]; a hub answers: true). A confirmed stop must leave it down until your next login
+=== twin restart-exits-zero (packages/hub/src/server.ts) -> promote.test.mjs; load { 118.61 88.77 86.14 }
+✔ #1865.bd65df36 deep hub promote of a good build still moves the installed hub to it, with no prompt (26844.683625ms)
+✖ #1865.bd65df36 a restart asked for with the control token alone brings the installed hub back within 60 s (93821.620416ms)
+ℹ pass 1
+ℹ fail 1
+✖ failing tests:
+✖ #1865.bd65df36 a restart asked for with the control token alone brings the installed hub back within 60 s (93821.620416ms)
+  AssertionError [ERR_ASSERTION]: a restart asked for with the token alone (hub.restart) must bring the installed hub back within 60 s; none came back within 90 s (the old hub's exit: [{"t":1795207089465,"event":"exit","pid":15825,"code":0,"signal":null}]; the login service's starts since: 0)
+=== twin promote-stops-confirmed (packages/hub/src/promote.ts) -> promote.test.mjs; load { 158.72 113.41 96.21 }
+✖ #1865.bd65df36 deep hub promote of a good build still moves the installed hub to it, with no prompt (50674.911666ms)
+✔ #1865.bd65df36 a restart asked for with the control token alone brings the installed hub back within 60 s (12674.139ms)
+ℹ pass 1
+ℹ fail 1
+✖ failing tests:
+✖ #1865.bd65df36 deep hub promote of a good build still moves the installed hub to it, with no prompt (50674.911666ms)
+  AssertionError [ERR_ASSERTION]: deep hub promote must ask the OS nothing: the promotion runs with no prompt
+ALLDONE
+=== twin refuses-every-stop (packages/hub/src/server.ts) -> confirmed.test.mjs (rerun alone: the first draft of this
+twin didn't type-check, so it was rewritten and run again; it now builds)
+✖ #1865.2e5dc4d0 a confirmed deep hub stop still stops the installed hub, and the login service doesn't start it again before your next login (3624.712625ms)
+  AssertionError [ERR_ASSERTION]: deep hub stop, the OS confirming you, must stop the installed hub and exit 0: exit 3

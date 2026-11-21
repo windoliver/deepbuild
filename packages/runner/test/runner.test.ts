@@ -26,12 +26,12 @@ let sup: Supervisor;
 let runner: Runner;
 let asks: Asks;
 
-/** A stand-in claude: its version after `slow` seconds, and a final result at once, saying whether `zz-last` is in its folder. */
-function claude(slow = 0): string {
-  const bin = join(dir, `bin${slow}`);
+/** A stand-in claude: `version` after `slow` seconds, and a final result at once, saying whether `zz-last` is in its folder. */
+function claude(slow = 0, version = facts.versions.at(-1)!): string {
+  const bin = join(dir, `bin${slow}-${version}`);
   mkdirSync(bin);
   writeFileSync(join(bin, 'claude'), `#!/bin/sh
-for a in "$@"; do [ "$a" = --version ] && { sleep ${slow}; echo "${facts.versions.at(-1)} (Claude Code)"; exit 0; }; done
+for a in "$@"; do [ "$a" = --version ] && { sleep ${slow}; echo "${version} (Claude Code)"; exit 0; }; done
 cat >/dev/null
 echo '{"type":"system","subtype":"init","session_id":"00000000-0000-4000-8000-0000000000aa"}'
 [ -f zz-last ] && last=whole || last=partial
@@ -109,6 +109,41 @@ it('never starts a job cancelled while its binary is checked, and ends it once',
   await new Promise((r) => setTimeout(r, 1000));
   expect((await events('process.starting')).filter((e) => (e.data as { run: string }).run === id), 'a process of the cancelled job').toEqual([]);
   expect((await events('job.ended')).filter((e) => (e.data as { job: string }).job === id)).toHaveLength(1);
+}, 60_000);
+
+// The hub covers exactly the versions the facts list and holds any other's session watch-only; the runner must agree.
+it('covers only the versions its facts list: one between two listed ones is refused, and its smoke test waits for your approval', async () => {
+  const [first, ...rest] = facts.versions;
+  const [major, minor, patch] = first!.split('.').map(Number);
+  const between = `${major}.${minor}.${patch! + 1}`;
+  expect(rest.length, 'the facts list at least two versions').toBeGreaterThan(0);
+  expect(facts.versions, `the facts already list ${between}`).not.toContain(between);
+  await open(claude(0, between));
+  await runner.report({ agent: 'claude-code', account: ACCOUNT, rate_limits: limits(5) });
+  const read = await runner.run({ kind: 'read', agent: 'claude-code', prompt: 'Read.' });
+  expect(read.state, JSON.stringify(read)).toBe('refused');
+  expect(read.pid, 'a refused job has no process').toBeUndefined();
+  expect(String(read.refused), 'the refusal names the version it read').toContain(`${between} at`);
+  for (const v of facts.versions) expect(String(read.refused), `the refusal names ${v}`).toContain(v);
+  const smoke = await runner.submit({ kind: 'smoke', agent: 'claude-code', prompt: 'Smoke.' });
+  expect(smoke.state, JSON.stringify(smoke)).toBe('waiting');
+  expect(smoke.blocked?.cause).toBe('standing approval');
+}, 60_000);
+
+// The hub reads a version with its pre-release suffix, so a listed version's beta is not that version.
+it('reads a pre-release build as itself: a listed version\'s beta is refused, and its smoke test waits for your approval', async () => {
+  const listed = facts.versions[1] ?? facts.versions[0]!;
+  const beta = `${listed}-beta`;
+  expect(facts.versions, `the facts already list ${beta}`).not.toContain(beta);
+  await open(claude(0, beta));
+  await runner.report({ agent: 'claude-code', account: ACCOUNT, rate_limits: limits(5) });
+  const read = await runner.run({ kind: 'read', agent: 'claude-code', prompt: 'Read.' });
+  expect(read.state, JSON.stringify(read)).toBe('refused');
+  expect(read.pid, 'a refused job has no process').toBeUndefined();
+  expect(String(read.refused), 'the refusal names the version it read').toContain(`${beta} at`);
+  const smoke = await runner.submit({ kind: 'smoke', agent: 'claude-code', prompt: 'Smoke.' });
+  expect(smoke.state, JSON.stringify(smoke)).toBe('waiting');
+  expect(smoke.blocked?.cause).toBe('standing approval');
 }, 60_000);
 
 it('keeps the higher reading of a window until it resets: a lower one before then is not believed', async () => {

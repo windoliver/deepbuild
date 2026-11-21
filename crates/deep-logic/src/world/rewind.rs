@@ -162,8 +162,7 @@ impl World {
             m[from..from + n as usize].copy_from_slice(bytes);
         }
         let pages = (from as u64 / PAGE) as u32..=((from + n as usize - 1) as u64 / PAGE) as u32;
-        l.dirty.extend(pages.clone());
-        l.kdirty.extend(pages);
+        l.mark(pages);
         self.published[i].clone_from(&l.arrays);
     }
 
@@ -291,8 +290,7 @@ impl World {
                 let _ = l.runner.set(name, v);
             }
             let pages = (memory.len() as u64).div_ceil(PAGE) as u32;
-            l.dirty.extend(0..pages);
-            l.kdirty.extend(0..pages);
+            l.mark(0..pages);
         }
     }
 

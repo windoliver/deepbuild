@@ -133,6 +133,10 @@ pub fn column_view(sealed: &Sealed, form: &mut Value, t: i64) -> Vec<Issue> {
         issues.extend(grid_glyphs(form));
     }
     issues.extend(readers(form, entries));
+    // #297: entry texts' controls and players, and their fit.
+    if let Some(map) = form.as_object() {
+        issues.extend(deep_canvas_marks::entries::check_issues(map));
+    }
     if issues.iter().all(|i| i.code != "module_missing") {
         let locale = form
             .get("locale")
@@ -306,6 +310,19 @@ pub fn logic_piece(
     read: &dyn Fn(&str) -> Option<Vec<u8>>,
     cast_late: bool,
 ) -> Result<Option<Piece>, Box<Issue>> {
+    logic_piece_with(sealed, form, track, read, cast_late, &Default::default())
+}
+
+/// As `logic_piece`, checked with `planted`'s twins (#551: a page tracker a match's ring plants).
+#[cfg(feature = "logic")]
+pub fn logic_piece_with(
+    sealed: &Sealed,
+    form: &Value,
+    track: &[Value],
+    read: &dyn Fn(&str) -> Option<Vec<u8>>,
+    cast_late: bool,
+    planted: &deep_logic::Planted,
+) -> Result<Option<Piece>, Box<Issue>> {
     let Some(mut piece) = piece_json(form) else {
         return Ok(None);
     };
@@ -313,7 +330,7 @@ pub fn logic_piece(
     crate::fires::expand(form, &mut piece)?;
     let piece = check_in(
         &piece,
-        &Default::default(),
+        planted,
         &mut History::new(),
         read,
         &crate::cast::services(sealed, form, track, cast_late),
@@ -349,6 +366,16 @@ fn readers(form: &Value, entries: &[deep_canvas::registry::lists::SealedEntry]) 
         let mut paths: Vec<(String, String)> = Vec::new();
         if let Some(a) = item.pointer("/params/flip/array").and_then(Value::as_str) {
             paths.push(("flip/array".into(), a.into()));
+        }
+        // #297: an entry text's player read from a logic array.
+        if let Some(Ok(e)) = item
+            .pointer("/params/text")
+            .filter(|t| deep_canvas_marks::entries::is_entry(t))
+            .map(deep_canvas_marks::entries::spec)
+        {
+            if let deep_canvas_marks::entries::Player::Path(p) = e.player {
+                paths.push(("text/player".into(), p.into()));
+            }
         }
         for (field, v) in deep_canvas_marks::copy::lookups_of(item) {
             let Ok(l) = deep_canvas_marks::copy::lookup(&v) else {
@@ -431,5 +458,6 @@ pub fn raised_at(form: &Value, t: Option<i64>, locale: &str) -> Vec<Issue> {
     out.extend(deep_canvas_motion::held::unmapped(form, t));
     out.extend(deep_canvas_marks::copy::raised_at(map, t, locale));
     out.extend(deep_canvas_marks::copy::column_missing(map, t, locale));
+    out.extend(deep_canvas_marks::entries::raised_at(map, t));
     out
 }

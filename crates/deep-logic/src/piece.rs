@@ -571,6 +571,9 @@ pub struct Item {
     /// Its mirrors of other items' arrays, in declaration order (Logic: mirror reads).
     pub mirrors: Vec<crate::mirrors::Mirror>,
     pub preview: Option<Preview>,
+    /// The lane graph its `lanes` names, built at check from the piece's floor paths, whose bytes
+    /// are its asset 0 (#981).
+    pub lanes: Option<std::sync::Arc<crate::lanes::Graph>>,
     /// What the item's bake key covers of it: its rewritten program, its fields as given and
     /// its assets' hashes (Logic: checkpoints and bake).
     pub content: String,
@@ -1029,6 +1032,8 @@ struct Declared {
     services: Vec<(String, u32)>,
     mirrors: Vec<(String, String)>,
     preview: Option<(Vec<String>, Vec<Write>)>,
+    /// `lanes`: its lane graph and vehicle kind, built at check (#981).
+    lanes: Option<Value>,
     /// The item's fields as given, for its bake key.
     given: String,
 }
