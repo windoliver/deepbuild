@@ -1041,7 +1041,7 @@ export function openRecordReader(options: { path: string; evidence?: EvidenceSto
     sessions: async () => db.prepare('SELECT id, agent, worktree, branch, transcript FROM sessions WHERE transcript IS NOT NULL ORDER BY id').all() as Awaited<ReturnType<RecordReader['sessions']>>,
     findable: async () => [
       ...(db.prepare("SELECT id FROM decisions WHERE state = 'active' ORDER BY created, id").all() as { id: string }[]).map((r) => `decision:${r.id}`),
-      ...(db.prepare("SELECT hash FROM evidence WHERE type NOT IN ('png', 'jpeg', 'mp4') AND kind != 'transcript' ORDER BY hash").all() as { hash: string }[]).map((r) => `ev:${r.hash}`),
+      ...(db.prepare("SELECT hash FROM evidence WHERE type NOT IN ('png', 'jpeg', 'mp4', 'webm') AND kind NOT IN ('transcript', 'transcript-copy') ORDER BY hash").all() as { hash: string }[]).map((r) => `ev:${r.hash}`),
     ],
     findMessages: (terms, sessions) => findMessages(db, terms, sessions, (session) => sessionTranscript(db, options.evidence, transcripts, session)),
     touched: async (file, cwd) => touched(db, file, cwd),
