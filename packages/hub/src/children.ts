@@ -21,7 +21,7 @@ import type { ChildProcess, SpawnSyncReturns } from 'node:child_process';
 import { createRequire, syncBuiltinESMExports } from 'node:module';
 import { subscribe } from 'node:diagnostics_channel';
 import { Worker } from 'node:worker_threads';
-import { YOUNG } from './settle.js';
+import { YOUNG } from './settle.ts';
 
 /** What execFile's callback gets, as plain data: its error's code and message, and the output as text. */
 interface Ran { error: { code?: number | string; message: string } | null; stdout: string; stderr: string; threw?: true }
@@ -125,7 +125,7 @@ let n = 0;
 const waiting = new Map<number, { resolve(v: unknown): void; reject(e: Error): void }>();
 function ask(job: ChildJob): Promise<unknown> {
   if (!worker) {
-    const started = worker = new Worker(new URL('./children-worker.js', import.meta.url), { resourceLimits: YOUNG });
+    const started = worker = new Worker(new URL(import.meta.url.endsWith('.ts') ? './children-worker.ts' : './children-worker.js', import.meta.url), { execArgv: [], resourceLimits: YOUNG });
     started.on('message', (m: { n: number; result: unknown }) => {
       const w = waiting.get(m.n);
       waiting.delete(m.n);

@@ -95,6 +95,10 @@ fn refusal(e: Value) -> Fail {
 
 pub fn run(call: &Value, plant: Option<Plant>, out: &Path) -> Result<Value, Fail> {
     background();
+    // #851: a play of a game shell document plays one of its journeys (Check input: shell journeys).
+    if call.get("shell").is_some_and(|s| !s.is_null()) {
+        return super::game_shell::run(call, plant, out).map_err(refusal);
+    }
     let s = Stored::of(call)?;
     let (piece, stored) = (&s.piece, |sha: &str| s.get(sha));
     // #1048: a play with `probe` plays the run's track once and tests entries in throwaway copies

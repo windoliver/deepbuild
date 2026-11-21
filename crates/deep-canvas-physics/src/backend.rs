@@ -14,8 +14,9 @@ use crate::doc::{Pose, Refusal, Shape, World};
 use crate::occurrence::Raw;
 
 /// What a step reads of its scene at its own time, evaluated before the solve: each kinematic
-/// body's position from its `follow` path, each motor target a path sets, and each coordinate a
-/// kinematic solve drives (deg for a hinge, m for a slider, as written).
+/// body's position from its `follow` path, each motor target a path sets, each coordinate a
+/// kinematic solve drives (deg for a hinge, m for a slider, as written), and each force's channel
+/// (#2371).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Targets {
     /// body → position, m; its rotation stays its pose's.
@@ -23,6 +24,8 @@ pub struct Targets {
     pub motors: BTreeMap<String, f64>,
     /// joint → coordinate, in the solve's order.
     pub coords: Vec<(String, f64)>,
+    /// force → what its channel holds: a drag's medium, m/s, or a spring's point, m.
+    pub forces: BTreeMap<String, [f64; 3]>,
 }
 
 /// One entry of the world's input track (Input track entries).

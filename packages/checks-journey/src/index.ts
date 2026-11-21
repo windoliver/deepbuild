@@ -334,7 +334,7 @@ async function runBrowser(o: JourneyRunOptions, journey: Journey, text: string, 
     if (started.status === 'started') { records.processes.push({ name: 'sh', pid: started.pid, cwd: cwdOf(started.pid, to), reads: [] }); await healthy(stack.url, 10_000); }
     for (let i = 1; i < journey.steps.length; i++) writeFileSync(join(out, `go-${i}`), '');
   } : undefined;
-  const driven = await drive({ host: o.host, run: o.run, job, deadline, pre, ...(o.secrets ? { secrets: o.secrets } : {}), ...(o.stop ? { stop: o.stop } : {}), ...(between ? { between } : {}) });
+  const driven = await drive({ job, deadline, pre, ...(between ? { between } : {}) });
   // The tree the stack served, from the records of every process it ran, placed by the core: a run whose stack
   // served another tree is uncounted, naming the process and the tree; the planted runner takes the checkout it asked for.
   run.served = o.plant === 'checkout-as-asked' ? { served: 'checkout' } : attributeStack(records, o.trees);

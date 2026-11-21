@@ -8,7 +8,7 @@ use rapier3d::prelude::*;
 use crate::Rapier;
 
 /// The planted wrong programs, by name.
-pub const PLANTED: [&str; 27] = [
+pub const PLANTED: [&str; 28] = [
     "caps_allow_restitution_threshold",
     "caps_allow_rolling_resistance",
     "caps_allow_dynamic_gear",
@@ -36,6 +36,7 @@ pub const PLANTED: [&str; 27] = [
     "world_2d_built_on_rapier3d",
     "wind_noise_from_platform_sin",
     "inertia_ignored",
+    "set_applies_both",
 ];
 
 /// #2098's planted wind noise: the platform's sin of the place and the seed, where the shipped
