@@ -18,6 +18,10 @@
 //! a click selects, a double press flies in and ⌥-drag selects text, and a view the core presents again takes the
 //! panel's place at once. Each drawn item is a canvas item where it was drawn, and the core's text selection is
 //! outlined over the pictures, never filled and never in them.
+//!
+//! Issue #2494: a layer that holds 3D items comes with no picture: it names its revision's canonical document, and
+//! the panel draws it through a GPU-layer view ([`crate::scene_view`]), its slot painted in place under the layer's
+//! outline and name.
 
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeSet;
@@ -45,6 +49,8 @@ pub struct Layer {
     pub name: Option<String>,
     pub items: Vec<String>,
     pub picture: Option<String>,
+    /// #2494: the canonical document of a layer that holds 3D items, by its hash in the evidence store.
+    pub scene: Option<String>,
 }
 
 /// #1498: an item a presented revision draws: its ID, its value and its box in the panel's px.
@@ -99,6 +105,7 @@ impl Presented {
                         })
                         .unwrap_or_default(),
                     picture: l["picture"].as_str().map(str::to_string),
+                    scene: l["scene"].as_str().map(str::to_string),
                 })
             })
             .collect::<Option<_>>()?;
@@ -174,6 +181,16 @@ struct Picture {
     painted: bool,
 }
 
+/// #2494: a 3D layer's GPU-layer view, kept across the layer's revisions: its panel's rect, its layer and the
+/// canonical document it draws, by hash.
+#[cfg(target_os = "macos")]
+struct View3 {
+    rect: [f32; 4],
+    layer: String,
+    scene: String,
+    view: Rc<RefCell<crate::scene_view::SceneView>>,
+}
+
 /// #1431: the panel's pictures (`CanvasPanel.pictures`), decoded in the heap: only those a shown or waiting revision
 /// uses, one a panel's layer, so the bounds hold while the panels and their layers do.
 // copy-exception: a gauge's key, read in the footprint record, never drawn
@@ -204,6 +221,9 @@ pub struct CanvasPanel {
     /// Revisions whose pictures are being decoded, the newest of each panel, and the pictures in decoding.
     waiting: Vec<Presented>,
     decoding: BTreeSet<String>,
+    /// #2494: the view of each shown layer that holds 3D items.
+    #[cfg(target_os = "macos")]
+    views: Vec<View3>,
     /// #1485's fixture: the pictures the last frame painted, in paint order.
     #[cfg(feature = "canvas-fixture")]
     pub(crate) painted: Vec<String>,
@@ -246,6 +266,8 @@ impl CanvasPanel {
             unused: Vec::new(),
             waiting: Vec::new(),
             decoding: BTreeSet::new(),
+            #[cfg(target_os = "macos")]
+            views: Vec::new(),
             #[cfg(feature = "canvas-fixture")]
             painted: Vec::new(),
             area: Rc::new(Cell::new(None)),
@@ -420,6 +442,67 @@ impl CanvasPanel {
             }
             keep
         });
+        #[cfg(target_os = "macos")]
+        self.keep_views();
+    }
+
+    /// #2494: each shown layer that holds 3D items has a view on its newest revision's document, and a view no shown
+    /// layer uses is let go, its render thread with it.
+    #[cfg(target_os = "macos")]
+    fn keep_views(&mut self) {
+        let mut wanted: Vec<([f32; 4], &Layer, &str)> = Vec::new();
+        for p in self.shown.iter().rev() {
+            for l in &p.layers {
+                let seen = wanted
+                    .iter()
+                    .any(|(rect, w, _)| *rect == p.rect && w.layer == l.layer);
+                if let (Some(scene), false) = (&l.scene, seen) {
+                    wanted.push((p.rect, l, scene));
+                }
+            }
+        }
+        (self.views).retain(|v| {
+            wanted
+                .iter()
+                .any(|(rect, l, _)| *rect == v.rect && l.layer == v.layer)
+        });
+        for (rect, l, scene) in wanted {
+            let held = (self.views.iter()).position(|v| v.rect == rect && v.layer == l.layer);
+            let at = held.unwrap_or_else(|| {
+                let view = crate::scene_view::SceneView::new(self.evidence.clone());
+                self.views.push(View3 {
+                    rect,
+                    layer: l.layer.clone(),
+                    scene: String::new(),
+                    view: Rc::new(RefCell::new(view)),
+                });
+                self.views.len() - 1
+            });
+            let view = &mut self.views[at];
+            if view.scene != scene {
+                view.scene = scene.to_owned();
+                view.view.borrow_mut().show(scene);
+            }
+        }
+    }
+
+    /// #2494: the view `l` draws through on the panel at `rect`, when it holds 3D items.
+    #[cfg(target_os = "macos")]
+    fn view_of(&self, rect: [f32; 4], l: &Layer) -> Option<&View3> {
+        let held = |v: &&View3| v.rect == rect && v.layer == l.layer;
+        self.views.iter().find(held).filter(|_| l.scene.is_some())
+    }
+
+    /// #2494's fixture: the GPU-layer slots the last frame painted, in paint order: each one's layer, the frame it
+    /// holds and its view.
+    #[cfg(all(feature = "canvas-fixture", target_os = "macos"))]
+    pub(crate) fn slots(&self) -> Vec<(String, u64, Rc<RefCell<crate::scene_view::SceneView>>)> {
+        let drawn =
+            (self.shown.iter()).filter(|p| self.session.as_deref().is_none_or(|s| of(p, s)));
+        drawn
+            .flat_map(|p| p.layers.iter().filter_map(|l| self.view_of(p.rect, l)))
+            .filter_map(|v| Some((v.layer.clone(), v.view.borrow().latched?, v.view.clone())))
+            .collect()
     }
 
     fn image(&self, sha: &str) -> Option<Arc<RenderImage>> {
@@ -507,6 +590,9 @@ impl Render for CanvasPanel {
             let _ = window.drop_image(image);
         }
         let mut layers: Vec<Composed> = Vec::new();
+        // #2494: each composed layer's view, and why it draws nothing when it can't.
+        #[cfg(target_os = "macos")]
+        let mut views = Vec::new();
         let drawn = self
             .shown
             .iter()
@@ -521,6 +607,11 @@ impl Render for CanvasPanel {
                     l.picture.as_deref().and_then(|s| self.image(s)),
                     name,
                 ));
+                #[cfg(target_os = "macos")]
+                views.push(
+                    self.view_of(p.rect, l)
+                        .map(|v| (v.view.clone(), v.view.borrow().reason())),
+                );
             }
         }
         #[cfg(feature = "canvas-fixture")]
@@ -538,12 +629,14 @@ impl Render for CanvasPanel {
         for held in &mut self.pictures {
             held.painted = true;
         }
-        let names: Vec<Label> = layers
-            .iter()
-            .filter_map(|(_, _, n)| n.clone().map(Label::new))
-            .collect();
+        let names = layers.iter().filter_map(|(_, _, n)| n.clone());
+        #[cfg(target_os = "macos")]
+        let names = names.chain(views.iter().flatten().filter_map(|(_, why)| why.clone()));
+        let names: Vec<Label> = names.map(Label::new).collect();
         let chrome = crate::chrome::of(window);
         let (muted, ground) = (chrome.ink_secondary, chrome.ground);
+        #[cfg(target_os = "macos")]
+        let hover = chrome.hover;
         let s = crate::chrome::sizes();
         // #1498: the session's page, its items where they are drawn and its text selection's outline.
         let page = self.page().map(|p| {
@@ -587,9 +680,26 @@ impl Render for CanvasPanel {
                     move |at, _, window, _| {
                         area.set(Some(at));
                         let area = at;
-                        for (rect, picture, name) in &layers {
+                        for (i, (rect, picture, name)) in layers.iter().enumerate() {
                             let panel = &bounds(*rect, area);
                             window.with_content_mask(Some(ContentMask { bounds: *panel }), |w| {
+                                // #2494: a 3D layer's slot, painted in place, or why its view draws nothing.
+                                #[cfg(target_os = "macos")]
+                                if let Some((view, why)) = &views[i] {
+                                    view.borrow_mut().paint(*panel, w);
+                                    if let Some(why) = why {
+                                        w.paint_quad(gpui_kit::fill(*panel, hover));
+                                        let at = point(s.space(0), s.body.line + s.hairline);
+                                        paint_label(
+                                            panel.origin + at,
+                                            &Label::new(why.clone()),
+                                            muted,
+                                            w,
+                                        );
+                                    }
+                                }
+                                #[cfg(not(target_os = "macos"))]
+                                let _ = i;
                                 if let Some(picture) = picture {
                                     let _ = w.paint_image(
                                         *panel,

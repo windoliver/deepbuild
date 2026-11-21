@@ -1,0 +1,54 @@
+The hub isn't answering; start it with deep hub start. `npx vitest run --root tests/acceptance/2494 --no-file-parallelism` runs with no lease.
+
+ RUN  v5.0.5 <base>/tests/acceptance/2494
+
+ ❯ ac2-slot-on-screen.test.ts (1 test | 1 failed) 30989ms
+   ❯ AC2 #2494.99fbfc41 in the real app, a document with a 3D writer layer is painted from a GPU-layer slot: a test reads the slot's frame on screen (1)
+     × AC2 #2494.99fbfc41 the hub's presentation of a 3D document, handed to the app's panel in the app's window: the layer is painted from a GPU-layer slot, the slot's frame shows the document, and the window shows the slot's frame in the layer's place 16000ms
+ ❯ ac3-no-readback.test.ts (2 tests | 2 failed) 41355ms
+   ❯ AC3 #2494.b45bba38 a played 3D frame in the app makes no read-back buffer: counted on the app's device (2)
+     × AC3 #2494.b45bba38 while the app's panel plays a 3D document, the app's device makes no read-back buffer and the slot is handed off zero copy 13518ms
+     × AC3 #2494.b45bba38 planted reads_every_frame_back: a view that reads every frame back makes a read-back buffer for each frame played, and the check fails, naming the count 12862ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac2-slot-on-screen.test.ts > AC2 #2494.99fbfc41 in the real app, a document with a 3D writer layer is painted from a GPU-layer slot: a test reads the slot's frame on screen > AC2 #2494.99fbfc41 the hub's presentation of a 3D document, handed to the app's panel in the app's window: the layer is painted from a GPU-layer slot, the slot's frame shows the document, and the window shows the slot's frame in the layer's place
+AssertionError: of the window's 365 frames, those that painted a GPU-layer slot for the 3D layer "you-231b11069cb5" (frames[k].slots); the pictures decoded from the evidence store that the panel painted instead: []: expected 0 to be greater than 0
+ ❯ ac2-slot-on-screen.test.ts:53:7
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  ac3-no-readback.test.ts > AC3 #2494.b45bba38 a played 3D frame in the app makes no read-back buffer: counted on the app's device > AC3 #2494.b45bba38 while the app's panel plays a 3D document, the app's device makes no read-back buffer and the slot is handed off zero copy
+AssertionError: the app: a 3D frame played in the app: the first of the window's 312 frames that painted a GPU-layer slot for the 3D layer "you-231b11069cb5" (frames[k].slots): expected null not to be null
+ ❯ playedIn ac3-no-readback.test.ts:44:9
+     42|     p.first,
+     43|     `${what}: a 3D frame played in the app: the first of the window's …
+     44|   ).not.toBeNull();
+       |         ^
+     45|   if (report.frames.length < MIN_FRAMES) ctx.skip(`INCONCLUSIVE: ${wha…
+     46|   if (p.seqs.length < MIN_PLAYED) {
+ ❯ ac3-no-readback.test.ts:60:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  ac3-no-readback.test.ts > AC3 #2494.b45bba38 a played 3D frame in the app makes no read-back buffer: counted on the app's device > AC3 #2494.b45bba38 planted reads_every_frame_back: a view that reads every frame back makes a read-back buffer for each frame played, and the check fails, naming the count
+AssertionError: planted reads_every_frame_back: a 3D frame played in the app: the first of the window's 315 frames that painted a GPU-layer slot for the 3D layer "you-231b11069cb5" (frames[k].slots): expected null not to be null
+ ❯ playedIn ac3-no-readback.test.ts:44:9
+     42|     p.first,
+     43|     `${what}: a 3D frame played in the app: the first of the window's …
+     44|   ).not.toBeNull();
+       |         ^
+     45|   if (report.frames.length < MIN_FRAMES) ctx.skip(`INCONCLUSIVE: ${wha…
+     46|   if (p.seqs.length < MIN_PLAYED) {
+ ❯ ac3-no-readback.test.ts:76:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 failed (3)
+   Start at  23:47:16
+   Duration  72.61s (tests 100%)
+
+vitest exit 1

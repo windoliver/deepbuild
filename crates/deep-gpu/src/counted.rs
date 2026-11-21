@@ -20,6 +20,7 @@ pub struct Counts {
     pipelines: AtomicU64,
     uploaded: AtomicU64,
     writes: AtomicU64,
+    readbacks: AtomicU64,
 }
 
 /// A reading of [`Counts`]; two readings' difference is what happened between them.
@@ -32,6 +33,8 @@ pub struct Reading {
     pub uploaded: u64,
     /// The queue's writes to buffers and textures: wgpu stages each in a buffer of its own.
     pub writes: u64,
+    /// #2494: the buffers made with `MAP_READ`, the only kind the CPU reads the GPU's bytes through.
+    pub readbacks: u64,
 }
 
 impl Reading {
@@ -42,6 +45,7 @@ impl Reading {
             pipelines: self.pipelines - earlier.pipelines,
             uploaded: self.uploaded - earlier.uploaded,
             writes: self.writes - earlier.writes,
+            readbacks: self.readbacks - earlier.readbacks,
         }
     }
 }
@@ -54,6 +58,7 @@ impl Counts {
             pipelines: self.pipelines.load(Ordering::Relaxed),
             uploaded: self.uploaded.load(Ordering::Relaxed),
             writes: self.writes.load(Ordering::Relaxed),
+            readbacks: self.readbacks.load(Ordering::Relaxed),
         }
     }
 }
@@ -237,6 +242,9 @@ impl Wgpu {
 
     pub fn create_buffer(&self, desc: &wgpu::BufferDescriptor<'_>) -> wgpu::Buffer {
         add(&self.counts.buffers, 1);
+        if desc.usage.contains(wgpu::BufferUsages::MAP_READ) {
+            add(&self.counts.readbacks, 1);
+        }
         self.raw.create_buffer(desc)
     }
 
