@@ -1,0 +1,40 @@
+#1898 hand e2e at 315eeb185, 2026-11-20 19:05, load averages: 150.28 133.89 122.79
+== deep hub run started: pid 95153, ready in 1195 ms, socket <tmp>/h/.deepbuild/hub.sock
+   modules loaded by ready + 5 s, all threads: 665
+OK   no check kit or conformance module loaded at the hub's start (0 loaded)
+== task session:35e6f9bf4ef24ebeb286ed9d6011be1c#0 opened by a Claude Code session through deep-hook; its definition locked with R1-R5
+OK   still no kit loaded after the session started and its definition locked (0)
+OK   the session's Write of report.md was allowed
+== the session stopped with its claim (states 398 tests, opens PR 21)
+== claim:01M7Y10H1CD7CXXN9J8R1YCHQE: PASS
+OK   checks-command loaded only once a check needed it: first module at ready + 6.9 s, claim + 1.1 s, thread 1, 6 modules
+OK   checks-review loaded only once a check needed it: first module at ready + 6.0 s, claim + 0.1 s, thread 1, 8 modules
+OK   checks-numbers loaded only once a check needed it: first module at ready + 6.0 s, claim + 0.1 s, thread 1, 4 modules
+OK   checks-work loaded only once a check needed it: first module at ready + 6.0 s, claim + 0.1 s, thread 1, 4 modules
+OK   conformance loaded only once a check needed it: first module at ready + 6.0 s, claim + 0.1 s, thread 1, 4 modules
+OK   every run on the claim passed (8 of 8)
+OK   command check, the spec's unit check: unit passed
+OK   command check, R1's drafted check: .deepbuild/checks/expired-token.sh passed
+OK   review check: review passed
+OK   numbers check on the stated 398: numbers: 398 passed
+OK   document check: .deepbuild/checks/q3-report.json passed
+OK   data check: .deepbuild/checks/orders.json passed
+OK   message check: .deepbuild/checks/shipped-mail.json passed
+OK   service check: .deepbuild/checks/order-endpoint.json passed
+OK   the review ran as a runner job: run:01M7Y10J5F5E1333QYH4R60BS2 finished
+OK   the claim's verdict is PASS, its reasons:
+     .deepbuild/checks/expired-token.sh: PASS on 1 clean run
+     .deepbuild/checks/q3-report.json: PASS on 1 clean run
+     .deepbuild/checks/orders.json: PASS on 1 clean run
+     .deepbuild/checks/shipped-mail.json: PASS on 1 clean run
+     .deepbuild/checks/order-endpoint.json: PASS on 1 clean run
+     unit: PASS on 1 clean run
+     review: PASS on 1 clean run
+     numbers: 398: PASS on 1 clean run
+OK   checks.kinds holds command, review, numbers, service, data, document, message
+== deep lease -- /bin/echo 'leased run': exit 0, stdout "leased run", 18 modules
+OK   the leased command ran and printed its line
+OK   deep lease loaded neither yaml nor the SQLite addon (0: )
+OK   deep lease ran through @deepbuild/hub/lease (dist/heavy.js)
+== RESULT: every check above OK
+vitest exit 0

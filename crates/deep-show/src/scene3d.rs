@@ -48,6 +48,9 @@ pub struct Gpu3 {
     outlines: Vec<deep_canvas::registry::SealedOutline>,
     fills: Vec<deep_canvas::contributed::Sealed>,
     planted: Option<String>,
+    /// #1561: Vello GPU and the compositor a drawn look's 2D frames draw through, on this GPU.
+    #[cfg(target_os = "macos")]
+    pub(crate) frames2: Option<deep_groups_render::frame2::Frames2>,
 }
 
 impl Gpu3 {
@@ -78,6 +81,8 @@ impl Gpu3 {
             outlines: sealed.outlines.clone(),
             fills: sealed.fills.clone(),
             planted,
+            #[cfg(target_os = "macos")]
+            frames2: None,
         })
     }
 
