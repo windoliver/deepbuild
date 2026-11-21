@@ -1,0 +1,27 @@
+# #2975 criterion 7, Linux half: a real systemd --user (systemd 255, Ubuntu 24.04 aarch64), 2026-11-20
+# Script: spark-systemd-2975.sh beside this file. Base = d481286e5 (the tests commit, main's hub), fix = f8e7b9310.
+# The 'Failed to open deepbuild-hub.service' lines are systemd-analyze verify reporting that host's own, unrelated unit.
+
+dir <sandbox> load: 171.27 161.02 157.65 170/6711 186150
+== base at d481286e5: Restart=on-failure 
+deepbuild-hub.service: Failed to open ~/.config/systemd/user/deepbuild-hub.service: No such file or directory
+started: pid 255368
+after kill -TERM: back as none; ActiveState=inactive Result=success NRestarts=0
+== fix at f8e7b9310: Restart=on-failure RestartSec=3 SuccessExitStatus=75 RestartForceExitStatus=75 SIGTERM SIGINT 
+deepbuild-hub.service: Failed to open ~/.config/systemd/user/deepbuild-hub.service: No such file or directory
+started: pid 303908
+after kill -TERM: back as 305590; ActiveState=active Result=success NRestarts=1
+kill 1 of 5 in a row: back as 306826
+kill 2 of 5 in a row: back as 308829
+kill 3 of 5 in a row: back as 310424
+kill 4 of 5 in a row: back as 312049
+kill 5 of 5 in a row: back as 313714
+after five: ActiveState=active Result=success NRestarts=6
+early kill sent to 315348
+after an early kill: back as 316159; ActiveState=active Result=success NRestarts=8
+early kill -INT sent to 317610
+after an early kill -INT: back as 318226; ActiveState=active Result=success NRestarts=10
+after kill -INT: back as 319931
+after systemctl --user stop and 15 s: ActiveState=inactive Result=success NRestarts=0; answers: no
+no deep2975 units left
+removed <sandbox>
