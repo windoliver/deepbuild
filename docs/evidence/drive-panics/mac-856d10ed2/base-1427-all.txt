@@ -1,0 +1,630 @@
+
+ RUN  v5.0.5 /private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad/base
+
+ ❯ tests/acceptance/1427/scope-recording.test.ts (8 tests | 8 failed) 4170ms
+   ❯ #1427 scope: a journey records every element's bounds, opacity and text at each 1/120 s step, keyed by stable identity (8)
+     × the recording is 1/120 s apart, from the start of the recording to its stop, and lists each element in full 3271ms
+     × Jump: the jumper keeps one id throughout and its bounds change once, between two adjacent frames, by 180 pt (360 px) 121ms
+     × Pop in: pop-row is not in the frames before the press and is there, at opacity 1 and with its text, after 128ms
+     × Fade in: fade-row's opacity rises a tick at a time, never more than 10% between frames 123ms
+     × Insert above: line-b keeps its id and its text while its y moves 40 px down; the new line streams in under its own id 121ms
+     × the transitions and springs a panel declares are listed, by element and kind: flyer a flight, springer a spring, jumper nothing 124ms
+     × a replica launched with reduced_motion says so in the recording 128ms
+     × the same calls in two processes record the same bytes 127ms
+ ✓ tests/acceptance/1427/ac4-allowances.test.ts (14 tests) 2737ms
+ ❯ tests/acceptance/1427/ac7-shipped.test.ts (4 tests | 4 failed) 128364ms
+   ❯ #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each (3)
+     × a report for each of the three, from a real recording of the journey: its steps, its inputs and the ids the record gave its rows 40705ms
+     × the same shipped journeys in another process give the same recordings and findings, byte for byte 26069ms
+     × a replica planted with a jump on every action fails all three, naming the jump, and the report says which journey 21763ms
+   ❯ #1427 AC7 the lane (1)
+     × scripts/lanes.mjs has a motion lane, and running its commands reports each shipped journey with its recording's hash 39787ms
+ ✓ tests/acceptance/1427/ac1-planted.test.ts (25 tests) 3461ms
+ ❯ tests/acceptance/1427/ac1-journeys.test.ts (10 tests | 10 failed) 3819ms
+   ❯ #1427 AC1 on a real replica: each planted motion gives exactly one finding, named by its element's stable id (5)
+     × pop_in: "Pop in" shows pop-row at full opacity in one step 172ms
+     × jump: "Jump" moves jumper 180 pt of a 640 pt window, 28%, in one step, with no transition 22ms
+     × overshoot: "Overshoot" walks overshooter 10 to 100 pt, on to 190 and back, with no spring declared 22ms
+     × flicker: "Flicker 3" swings badge's opacity up, down, up, down, three reversals in about 100 ms 49ms
+     × no_settle: "Drift long" keeps drifter moving 3.6 s after the press, past the 2 s 66ms
+   ❯ #1427 AC1 on a real replica: the twins that move the same way but pass give nothing (5)
+     × Fade in: fade-row appears at 10% and gains 10% a tick: no pop_in 21ms
+     × Fly: flyer moves as far as jumper does, under a declared transition("left"): no jump 40ms
+     × Spring: springer goes past its target under a declared under-damped spring: no overshoot 37ms
+     × Flicker 2: badge swings up, down, up: two reversals, no flicker 29ms
+     × Drift short: drifter moves for 0.7 s, then settles: no no_settle 31ms
+ ❯ tests/acceptance/1427/ac5-repeat.test.ts (3 tests | 2 failed) 3691ms
+   ❯ #1427 AC5 the same journey recorded twice gives byte-equal findings (3)
+     ✓ data: one recording, twice, in two processes, once with the elements in another order 3268ms
+     × a real replica: the "Flicker 3" journey recorded twice, in two processes, gives the same recording and the same findings 204ms
+     × a real replica: a different journey records differently, so the hash above is of the frames, not of a constant 185ms
+ ❯ tests/acceptance/1427/ac3-reduced.test.ts (9 tests | 3 failed) 3364ms
+   ❯ #1427 AC3 an element that changes place over more than one step under reduced motion gives moved_under_reduced_motion (9)
+     ✓ data: a card moves 10 a step for 20 steps under reduced motion: one finding, 20 steps 7ms
+     ✓ data: it moves over exactly two steps: more than one, so a finding, 2 steps 4ms
+     ✓ data twin: it moves in one step, 10 at once: nothing 4ms
+     ✓ data twin: it moves 20% of the window in one step: nothing, since reduced motion allows a move that takes one step 4ms
+     ✓ data twin: the 20-step move with reduced motion off: nothing (it is motion, which is allowed) 4ms
+     ✓ data: only a change of place counts: a card that fades over 20 steps under reduced motion gives nothing 5ms
+     × a real replica launched with reduced_motion: "Drift short" still moves drifter over 30 ticks: moved_under_reduced_motion 207ms
+     × a real replica launched with reduced_motion: "Fly" goes where it goes under the declared transition, which reduced motion makes one step: nothing 17ms
+     × the same "Drift short" with reduced motion off: nothing 47ms
+ ❯ tests/acceptance/1427/ac2-reader.test.ts (5 tests | 2 failed) 3589ms
+   ❯ #1427 AC2 a streaming insert above the reader's line gives reader_moved; below it gives nothing (5)
+     ✓ data: text streamed in above line-b moves line-b 40 down in one step: reader_moved 9ms
+     ✓ data: the same text streamed in directly below line-b, which moves only line-c: nothing 5ms
+     ✓ data: the same text streamed in at the end of the transcript, which moves nothing: nothing 4ms
+     × a real replica: "Insert above" streams a line in above Line B and moves it 170ms
+     × a real replica: "Insert below" streams a line in directly below Line B and moves only Line C: nothing 23ms
+ ❯ tests/acceptance/1427/ac6-pacing.test.ts (6 tests | 1 failed) 3323ms
+   ❯ #1427 AC6 a result never reads PASS for pacing: it says "pacing not measured" (6)
+     ✓ a recording with no finding says pacing not measured 7ms
+     ✓ a recording with a finding says it too 5ms
+     ✓ an INVALID result says it too 4ms
+     ✓ a result whose finding a valid allowance cleared says it too 4ms
+     × a real replica's journey that passes says it too 163ms
+     ✓ and a clean recording is not given a pacing verdict by a field the check made up: pacing is words, not a verdict 4ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 30 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1427/ac1-journeys.test.ts > #1427 AC1 on a real replica: each planted motion gives exactly one finding, named by its element's stable id > pop_in: "Pop in" shows pop-row at full opacity in one step
+AssertionError: motion_check answers: {"ok":false,"t":0,"error":{"code":"blocked","message":"the journey's launch: {\"code\":\"refused\",\"message\":\"the panel didn't load: main.js:23 imports \\\"gpui-kit\\\", the toolkit under DeepBuild's module; a panel imports only \\\"@deepbuild/panel\\\"\"}"}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ checked tests/acceptance/1427/helpers.ts:179:84
+    177| export async function checked(drive: Drive, args: Obj): Promise<Obj> {
+    178|   const reply = await motionCheck(drive, args);
+    179|   expect(reply.ok, `motion_check answers: ${JSON.stringify(reply).slic…
+       |                                                                                    ^
+    180|   contract(reply);
+    181|   return reply;
+ ❯ ran tests/acceptance/1427/ac1-journeys.test.ts:19:17
+ ❯ tests/acceptance/1427/ac1-journeys.test.ts:30:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/30]⎯
+
+ FAIL  tests/acceptance/1427/ac1-journeys.test.ts > #1427 AC1 on a real replica: each planted motion gives exactly one finding, named by its element's stable id > jump: "Jump" moves jumper 180 pt of a 640 pt window, 28%, in one step, with no transition
+AssertionError: motion_check answers: {"ok":false,"t":0,"error":{"code":"blocked","message":"the journey's launch: {\"code\":\"refused\",\"message\":\"the panel didn't load: main.js:23 imports \\\"gpui-kit\\\", the toolkit under DeepBuild's module; a panel imports only \\\"@deepbuild/panel\\\"\"}"}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ checked tests/acceptance/1427/helpers.ts:179:84
+    177| export async function checked(drive: Drive, args: Obj): Promise<Obj> {
+    178|   const reply = await motionCheck(drive, args);
+    179|   expect(reply.ok, `motion_check answers: ${JSON.stringify(reply).slic…
+       |                                                                                    ^
+    180|   contract(reply);
+    181|   return reply;
+ ❯ ran tests/acceptance/1427/ac1-journeys.test.ts:19:17
+ ❯ tests/acceptance/1427/ac1-journeys.test.ts:35:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/30]⎯
+
+ FAIL  tests/acceptance/1427/ac1-journeys.test.ts > #1427 AC1 on a real replica: each planted motion gives exactly one finding, named by its element's stable id > overshoot: "Overshoot" walks overshooter 10 to 100 pt, on to 190 and back, with no spring declared
+AssertionError: motion_check answers: {"ok":false,"t":0,"error":{"code":"blocked","message":"the journey's launch: {\"code\":\"refused\",\"message\":\"the panel didn't load: main.js:23 imports \\\"gpui-kit\\\", the toolkit under DeepBuild's module; a panel imports only \\\"@deepbuild/panel\\\"\"}"}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ checked tests/acceptance/1427/helpers.ts:179:84
+    177| export async function checked(drive: Drive, args: Obj): Promise<Obj> {
+    178|   const reply = await motionCheck(drive, args);
+    179|   expect(reply.ok, `motion_check answers: ${JSON.stringify(reply).slic…
+       |                                                                                    ^
+    180|   contract(reply);
+    181|   return reply;
+ ❯ ran tests/acceptance/1427/ac1-journeys.test.ts:19:17
+ ❯ tests/acceptance/1427/ac1-journeys.test.ts:39:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/30]⎯
+
+ FAIL  tests/acceptance/1427/ac1-journeys.test.ts > #1427 AC1 on a real replica: each planted motion gives exactly one finding, named by its element's stable id > flicker: "Flicker 3" swings badge's opacity up, down, up, down, three reversals in about 100 ms
+AssertionError: motion_check answers: {"ok":false,"t":0,"error":{"code":"blocked","message":"the journey's launch: {\"code\":\"refused\",\"message\":\"the panel didn't load: main.js:23 imports \\\"gpui-kit\\\", the toolkit under DeepBuild's module; a panel imports only \\\"@deepbuild/panel\\\"\"}"}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ checked tests/acceptance/1427/helpers.ts:179:84
+    177| export async function checked(drive: Drive, args: Obj): Promise<Obj> {
+    178|   const reply = await motionCheck(drive, args);
+    179|   expect(reply.ok, `motion_check answers: ${JSON.stringify(reply).slic…
+       |                                                                                    ^
+    180|   contract(reply);
+    181|   return reply;
+ ❯ ran tests/acceptance/1427/ac1-journeys.test.ts:19:17
+ ❯ tests/acceptance/1427/ac1-journeys.test.ts:44:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/30]⎯
+
+ FAIL  tests/acceptance/1427/ac1-journeys.test.ts > #1427 AC1 on a real replica: each planted motion gives exactly one finding, named by its element's stable id > no_settle: "Drift long" keeps drifter moving 3.6 s after the press, past the 2 s
+AssertionError: motion_check answers: {"ok":false,"t":0,"error":{"code":"blocked","message":"the journey's launch: {\"code\":\"refused\",\"message\":\"the panel didn't load: main.js:23 imports \\\"gpui-kit\\\", the toolkit under DeepBuild's module; a panel imports only \\\"@deepbuild/panel\\\"\"}"}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ checked tests/acceptance/1427/helpers.ts:179:84
+    177| export async function checked(drive: Drive, args: Obj): Promise<Obj> {
+    178|   const reply = await motionCheck(drive, args);
+    179|   expect(reply.ok, `motion_check answers: ${JSON.stringify(reply).slic…
+       |                                                                                    ^
+    180|   contract(reply);
+    181|   return reply;
+ ❯ ran tests/acceptance/1427/ac1-journeys.test.ts:19:17
+ ❯ tests/acceptance/1427/ac1-journeys.test.ts:48:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/30]⎯
+
+ FAIL  tests/acceptance/1427/ac1-journeys.test.ts > #1427 AC1 on a real replica: the twins that move the same way but pass give nothing > Fade in: fade-row appears at 10% and gains 10% a tick: no pop_in
+ FAIL  tests/acceptance/1427/ac1-journeys.test.ts > #1427 AC1 on a real replica: the twins that move the same way but pass give nothing > Fly: flyer moves as far as jumper does, under a declared transition("left"): no jump
+ FAIL  tests/acceptance/1427/ac1-journeys.test.ts > #1427 AC1 on a real replica: the twins that move the same way but pass give nothing > Spring: springer goes past its target under a declared under-damped spring: no overshoot
+ FAIL  tests/acceptance/1427/ac1-journeys.test.ts > #1427 AC1 on a real replica: the twins that move the same way but pass give nothing > Flicker 2: badge swings up, down, up: two reversals, no flicker
+ FAIL  tests/acceptance/1427/ac1-journeys.test.ts > #1427 AC1 on a real replica: the twins that move the same way but pass give nothing > Drift short: drifter moves for 0.7 s, then settles: no no_settle
+AssertionError: motion_check answers: {"ok":false,"t":0,"error":{"code":"blocked","message":"the journey's launch: {\"code\":\"refused\",\"message\":\"the panel didn't load: main.js:23 imports \\\"gpui-kit\\\", the toolkit under DeepBuild's module; a panel imports only \\\"@deepbuild/panel\\\"\"}"}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ checked tests/acceptance/1427/helpers.ts:179:84
+    177| export async function checked(drive: Drive, args: Obj): Promise<Obj> {
+    178|   const reply = await motionCheck(drive, args);
+    179|   expect(reply.ok, `motion_check answers: ${JSON.stringify(reply).slic…
+       |                                                                                    ^
+    180|   contract(reply);
+    181|   return reply;
+ ❯ ran tests/acceptance/1427/ac1-journeys.test.ts:19:17
+ ❯ tests/acceptance/1427/ac1-journeys.test.ts:63:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/30]⎯
+
+ FAIL  tests/acceptance/1427/ac2-reader.test.ts > #1427 AC2 a streaming insert above the reader's line gives reader_moved; below it gives nothing > a real replica: "Insert above" streams a line in above Line B and moves it
+AssertionError: motion_check answers: {"ok":false,"t":0,"error":{"code":"blocked","message":"the journey's launch: {\"code\":\"refused\",\"message\":\"the panel didn't load: main.js:23 imports \\\"gpui-kit\\\", the toolkit under DeepBuild's module; a panel imports only \\\"@deepbuild/panel\\\"\"}"}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ checked tests/acceptance/1427/helpers.ts:179:84
+    177| export async function checked(drive: Drive, args: Obj): Promise<Obj> {
+    178|   const reply = await motionCheck(drive, args);
+    179|   expect(reply.ok, `motion_check answers: ${JSON.stringify(reply).slic…
+       |                                                                                    ^
+    180|   contract(reply);
+    181|   return reply;
+ ❯ tests/acceptance/1427/ac2-reader.test.ts:40:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/30]⎯
+
+ FAIL  tests/acceptance/1427/ac2-reader.test.ts > #1427 AC2 a streaming insert above the reader's line gives reader_moved; below it gives nothing > a real replica: "Insert below" streams a line in directly below Line B and moves only Line C: nothing
+AssertionError: motion_check answers: {"ok":false,"t":0,"error":{"code":"blocked","message":"the journey's launch: {\"code\":\"refused\",\"message\":\"the panel didn't load: main.js:23 imports \\\"gpui-kit\\\", the toolkit under DeepBuild's module; a panel imports only \\\"@deepbuild/panel\\\"\"}"}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ checked tests/acceptance/1427/helpers.ts:179:84
+    177| export async function checked(drive: Drive, args: Obj): Promise<Obj> {
+    178|   const reply = await motionCheck(drive, args);
+    179|   expect(reply.ok, `motion_check answers: ${JSON.stringify(reply).slic…
+       |                                                                                    ^
+    180|   contract(reply);
+    181|   return reply;
+ ❯ tests/acceptance/1427/ac2-reader.test.ts:51:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/30]⎯
+
+ FAIL  tests/acceptance/1427/ac3-reduced.test.ts > #1427 AC3 an element that changes place over more than one step under reduced motion gives moved_under_reduced_motion > a real replica launched with reduced_motion: "Drift short" still moves drifter over 30 ticks: moved_under_reduced_motion
+AssertionError: motion_check answers: {"ok":false,"t":0,"error":{"code":"blocked","message":"the journey's launch: {\"code\":\"refused\",\"message\":\"the panel didn't load: main.js:23 imports \\\"gpui-kit\\\", the toolkit under DeepBuild's module; a panel imports only \\\"@deepbuild/panel\\\"\"}"}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ checked tests/acceptance/1427/helpers.ts:179:84
+    177| export async function checked(drive: Drive, args: Obj): Promise<Obj> {
+    178|   const reply = await motionCheck(drive, args);
+    179|   expect(reply.ok, `motion_check answers: ${JSON.stringify(reply).slic…
+       |                                                                                    ^
+    180|   contract(reply);
+    181|   return reply;
+ ❯ tests/acceptance/1427/ac3-reduced.test.ts:44:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/30]⎯
+
+ FAIL  tests/acceptance/1427/ac3-reduced.test.ts > #1427 AC3 an element that changes place over more than one step under reduced motion gives moved_under_reduced_motion > a real replica launched with reduced_motion: "Fly" goes where it goes under the declared transition, which reduced motion makes one step: nothing
+AssertionError: motion_check answers: {"ok":false,"t":0,"error":{"code":"blocked","message":"the journey's launch: {\"code\":\"refused\",\"message\":\"the panel didn't load: main.js:23 imports \\\"gpui-kit\\\", the toolkit under DeepBuild's module; a panel imports only \\\"@deepbuild/panel\\\"\"}"}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ checked tests/acceptance/1427/helpers.ts:179:84
+    177| export async function checked(drive: Drive, args: Obj): Promise<Obj> {
+    178|   const reply = await motionCheck(drive, args);
+    179|   expect(reply.ok, `motion_check answers: ${JSON.stringify(reply).slic…
+       |                                                                                    ^
+    180|   contract(reply);
+    181|   return reply;
+ ❯ tests/acceptance/1427/ac3-reduced.test.ts:52:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/30]⎯
+
+ FAIL  tests/acceptance/1427/ac3-reduced.test.ts > #1427 AC3 an element that changes place over more than one step under reduced motion gives moved_under_reduced_motion > the same "Drift short" with reduced motion off: nothing
+AssertionError: motion_check answers: {"ok":false,"t":0,"error":{"code":"blocked","message":"the journey's launch: {\"code\":\"refused\",\"message\":\"the panel didn't load: main.js:23 imports \\\"gpui-kit\\\", the toolkit under DeepBuild's module; a panel imports only \\\"@deepbuild/panel\\\"\"}"}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ checked tests/acceptance/1427/helpers.ts:179:84
+    177| export async function checked(drive: Drive, args: Obj): Promise<Obj> {
+    178|   const reply = await motionCheck(drive, args);
+    179|   expect(reply.ok, `motion_check answers: ${JSON.stringify(reply).slic…
+       |                                                                                    ^
+    180|   contract(reply);
+    181|   return reply;
+ ❯ tests/acceptance/1427/ac3-reduced.test.ts:56:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/30]⎯
+
+ FAIL  tests/acceptance/1427/ac5-repeat.test.ts > #1427 AC5 the same journey recorded twice gives byte-equal findings > a real replica: the "Flicker 3" journey recorded twice, in two processes, gives the same recording and the same findings
+AssertionError: motion_check answers: {"ok":false,"t":0,"error":{"code":"blocked","message":"the journey's launch: {\"code\":\"refused\",\"message\":\"the panel didn't load: main.js:23 imports \\\"gpui-kit\\\", the toolkit under DeepBuild's module; a panel imports only \\\"@deepbuild/panel\\\"\"}"}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ checked tests/acceptance/1427/helpers.ts:179:84
+    177| export async function checked(drive: Drive, args: Obj): Promise<Obj> {
+    178|   const reply = await motionCheck(drive, args);
+    179|   expect(reply.ok, `motion_check answers: ${JSON.stringify(reply).slic…
+       |                                                                                    ^
+    180|   contract(reply);
+    181|   return reply;
+ ❯ once tests/acceptance/1427/ac5-repeat.test.ts:36:12
+ ❯ tests/acceptance/1427/ac5-repeat.test.ts:59:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/30]⎯
+
+ FAIL  tests/acceptance/1427/ac5-repeat.test.ts > #1427 AC5 the same journey recorded twice gives byte-equal findings > a real replica: a different journey records differently, so the hash above is of the frames, not of a constant
+AssertionError: motion_check answers: {"ok":false,"t":0,"error":{"code":"blocked","message":"the journey's launch: {\"code\":\"refused\",\"message\":\"the panel didn't load: main.js:23 imports \\\"gpui-kit\\\", the toolkit under DeepBuild's module; a panel imports only \\\"@deepbuild/panel\\\"\"}"}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ checked tests/acceptance/1427/helpers.ts:179:84
+    177| export async function checked(drive: Drive, args: Obj): Promise<Obj> {
+    178|   const reply = await motionCheck(drive, args);
+    179|   expect(reply.ok, `motion_check answers: ${JSON.stringify(reply).slic…
+       |                                                                                    ^
+    180|   contract(reply);
+    181|   return reply;
+ ❯ once tests/acceptance/1427/ac5-repeat.test.ts:36:12
+ ❯ tests/acceptance/1427/ac5-repeat.test.ts:69:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/30]⎯
+
+ FAIL  tests/acceptance/1427/ac6-pacing.test.ts > #1427 AC6 a result never reads PASS for pacing: it says "pacing not measured" > a real replica's journey that passes says it too
+AssertionError: motion_check answers: {"ok":false,"t":0,"error":{"code":"blocked","message":"the journey's launch: {\"code\":\"refused\",\"message\":\"the panel didn't load: main.js:23 imports \\\"gpui-kit\\\", the toolkit under DeepBuild's module; a panel imports only \\\"@deepbuild/panel\\\"\"}"}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ checked tests/acceptance/1427/helpers.ts:179:84
+    177| export async function checked(drive: Drive, args: Obj): Promise<Obj> {
+    178|   const reply = await motionCheck(drive, args);
+    179|   expect(reply.ok, `motion_check answers: ${JSON.stringify(reply).slic…
+       |                                                                                    ^
+    180|   contract(reply);
+    181|   return reply;
+ ❯ tests/acceptance/1427/ac6-pacing.test.ts:40:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/30]⎯
+
+ FAIL  tests/acceptance/1427/ac7-shipped.test.ts > #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each > a report for each of the three, from a real recording of the journey: its steps, its inputs and the ids the record gave its rows
+AssertionError: needs-you's recording keys a session row by the session's ID, not its place: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/1427/ac7-shipped.test.ts:54:152
+     52|       const ids = j.recording.elements as string[];
+     53|       expect(Array.isArray(ids) && ids.length > 0, `${name} lists the …
+     54|       expect(ids.some((id) => [...SESSIONS].some((s) => id.includes(s)…
+       |                                                                                                                                                        ^
+     55|       expect(ids.filter((id) => /(^|[-_:/])(row|item|child|node|cell)[…
+     56|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/30]⎯
+
+ FAIL  tests/acceptance/1427/ac7-shipped.test.ts > #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each > the same shipped journeys in another process give the same recordings and findings, byte for byte
+AssertionError: expected '[["needs-you",[],"PASS","773f7f9f0936…' to be '[["needs-you",[],"PASS","50824c70cc20…' // Object.is equality
+
+Expected: "[["needs-you",[],"PASS","50824c70cc20bc882b10e7f25e132ce2cd357de03f9621f2f5a1c1c8ae57a25c",361],["session",[],"INCONCLUSIVE","17291dad9184150e7fd8f5f70b705dda9d8401a4b42b85fe0367dd1e820017e0",601],["project",[],"INCONCLUSIVE","b62e2a9570fc9c542db2ae919b76746109ab1aaca03016d6f3c179d319df652b",601]]"
+Received: "[["needs-you",[],"PASS","773f7f9f09363396ce0e08db91f5713d61710f129bf966ae78fa74600bd61a45",361],["session",[],"INCONCLUSIVE","17291dad9184150e7fd8f5f70b705dda9d8401a4b42b85fe0367dd1e820017e0",601],["project",[],"INCONCLUSIVE","b62e2a9570fc9c542db2ae919b76746109ab1aaca03016d6f3c179d319df652b",601]]"
+
+ ❯ tests/acceptance/1427/ac7-shipped.test.ts:66:25
+     64|     const again = await shipped();
+     65|     const view = (r: Obj) => JSON.stringify(journeys(r).map((j) => [j.…
+     66|     expect(view(again)).toBe(view(plain ?? await shipped()));
+       |                         ^
+     67|   }, 1_800_000);
+     68|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/30]⎯
+
+ FAIL  tests/acceptance/1427/ac7-shipped.test.ts > #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each > a replica planted with a jump on every action fails all three, naming the jump, and the report says which journey
+AssertionError: project fails: expected 'INCONCLUSIVE' to be 'FAIL' // Object.is equality
+
+Expected: "FAIL"
+Received: "INCONCLUSIVE"
+
+ ❯ tests/acceptance/1427/ac7-shipped.test.ts:74:40
+     72|     for (const name of NAMES) {
+     73|       const j = named(planted, name);
+     74|       expect(j.claim, `${name} fails`).toBe('FAIL');
+       |                                        ^
+     75|       const jumps = (j.findings as Obj[]).filter((f) => f.finding === …
+     76|       expect(jumps.length, `${name} has a jump, naming its element and…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/30]⎯
+
+ FAIL  tests/acceptance/1427/ac7-shipped.test.ts > #1427 AC7 the lane > scripts/lanes.mjs has a motion lane, and running its commands reports each shipped journey with its recording's hash
+AssertionError: /Users/<user>/.nvm/versions/node/v24.22.0/bin/node scripts/motion.mjs on the shipped journeys, which have no finding: go fix --lib -p quickjs-jit-runtime` to apply 1 suggestion)
+warning: unused import: `Fail`
+  --> crates/deep-replica/src/drive/memory.rs:11:13
+   |
+11 | use super::{Fail, Plant};
+   |             ^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `deep-replica` (lib) generated 1 warning (run `cargo fix --lib -p deep-replica` to apply 1 suggestion)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `deep-replica` (bin "deep-drive") generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.29s
+warning: the following packages contain code that will be rejected by a future version of Rust: block v0.1.6
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+
+motion needs-you: PASS, 0 finding(s), recording 204064f089bef6ae32a26240c5126fec082fba5ce5d0b2f08519fbac95cae958 (361 steps)
+motion session: INCONCLUSIVE, 0 finding(s), recording 17291dad9184150e7fd8f5f70b705dda9d8401a4b42b85fe0367dd1e820017e0 (601 steps)
+motion project: INCONCLUSIVE, 0 finding(s), recording b62e2a9570fc9c542db2ae919b76746109ab1aaca03016d6f3c179d319df652b (601 steps)
+motion: INCONCLUSIVE; pacing not measured: virtual time proves the shape of motion, not native pacing
+
+
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/acceptance/1427/ac7-shipped.test.ts:95:127
+     93|       const r = spawnSync(command!, args, { cwd: REPO, encoding: 'utf8…
+     94|       out += `${r.stdout}\n${r.stderr}\n`;
+     95|       expect(r.status, `${[command, ...args].join(' ')} on the shipped…
+       |                                                                                                                               ^
+     96|     }
+     97|     for (const name of NAMES) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/30]⎯
+
+ FAIL  tests/acceptance/1427/scope-recording.test.ts > #1427 scope: a journey records every element's bounds, opacity and text at each 1/120 s step, keyed by stable identity > the recording is 1/120 s apart, from the start of the recording to its stop, and lists each element in full
+AssertionError: launch: {"ok":false,"t":0,"error":{"code":"refused","message":"the panel didn't load: main.js:23 imports \"gpui-kit\", the toolkit under DeepBuild's module; a panel imports only \"@deepbuild/panel\""}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ must tests/acceptance/124/helpers.ts:177:71
+    175| export async function must(drive: Drive, args: Obj, what = String(args…
+    176|   const { reply } = await drive.call(args);
+    177|   expect(reply.ok, `${what}: ${JSON.stringify(reply).slice(0, 800)}`).…
+       |                                                                       ^
+    178|   return reply;
+    179| }
+ ❯ recorded tests/acceptance/1427/scope-recording.test.ts:19:22
+ ❯ tests/acceptance/1427/scope-recording.test.ts:36:40
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/30]⎯
+
+ FAIL  tests/acceptance/1427/scope-recording.test.ts > #1427 scope: a journey records every element's bounds, opacity and text at each 1/120 s step, keyed by stable identity > Jump: the jumper keeps one id throughout and its bounds change once, between two adjacent frames, by 180 pt (360 px)
+AssertionError: launch: {"ok":false,"t":0,"error":{"code":"refused","message":"the panel didn't load: main.js:23 imports \"gpui-kit\", the toolkit under DeepBuild's module; a panel imports only \"@deepbuild/panel\""}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ must tests/acceptance/124/helpers.ts:177:71
+    175| export async function must(drive: Drive, args: Obj, what = String(args…
+    176|   const { reply } = await drive.call(args);
+    177|   expect(reply.ok, `${what}: ${JSON.stringify(reply).slice(0, 800)}`).…
+       |                                                                       ^
+    178|   return reply;
+    179| }
+ ❯ recorded tests/acceptance/1427/scope-recording.test.ts:19:22
+ ❯ tests/acceptance/1427/scope-recording.test.ts:64:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/30]⎯
+
+ FAIL  tests/acceptance/1427/scope-recording.test.ts > #1427 scope: a journey records every element's bounds, opacity and text at each 1/120 s step, keyed by stable identity > Pop in: pop-row is not in the frames before the press and is there, at opacity 1 and with its text, after
+AssertionError: launch: {"ok":false,"t":0,"error":{"code":"refused","message":"the panel didn't load: main.js:23 imports \"gpui-kit\", the toolkit under DeepBuild's module; a panel imports only \"@deepbuild/panel\""}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ must tests/acceptance/124/helpers.ts:177:71
+    175| export async function must(drive: Drive, args: Obj, what = String(args…
+    176|   const { reply } = await drive.call(args);
+    177|   expect(reply.ok, `${what}: ${JSON.stringify(reply).slice(0, 800)}`).…
+       |                                                                       ^
+    178|   return reply;
+    179| }
+ ❯ recorded tests/acceptance/1427/scope-recording.test.ts:19:22
+ ❯ tests/acceptance/1427/scope-recording.test.ts:75:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/30]⎯
+
+ FAIL  tests/acceptance/1427/scope-recording.test.ts > #1427 scope: a journey records every element's bounds, opacity and text at each 1/120 s step, keyed by stable identity > Fade in: fade-row's opacity rises a tick at a time, never more than 10% between frames
+AssertionError: launch: {"ok":false,"t":0,"error":{"code":"refused","message":"the panel didn't load: main.js:23 imports \"gpui-kit\", the toolkit under DeepBuild's module; a panel imports only \"@deepbuild/panel\""}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ must tests/acceptance/124/helpers.ts:177:71
+    175| export async function must(drive: Drive, args: Obj, what = String(args…
+    176|   const { reply } = await drive.call(args);
+    177|   expect(reply.ok, `${what}: ${JSON.stringify(reply).slice(0, 800)}`).…
+       |                                                                       ^
+    178|   return reply;
+    179| }
+ ❯ recorded tests/acceptance/1427/scope-recording.test.ts:19:22
+ ❯ tests/acceptance/1427/scope-recording.test.ts:86:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/30]⎯
+
+ FAIL  tests/acceptance/1427/scope-recording.test.ts > #1427 scope: a journey records every element's bounds, opacity and text at each 1/120 s step, keyed by stable identity > Insert above: line-b keeps its id and its text while its y moves 40 px down; the new line streams in under its own id
+AssertionError: launch: {"ok":false,"t":0,"error":{"code":"refused","message":"the panel didn't load: main.js:23 imports \"gpui-kit\", the toolkit under DeepBuild's module; a panel imports only \"@deepbuild/panel\""}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ must tests/acceptance/124/helpers.ts:177:71
+    175| export async function must(drive: Drive, args: Obj, what = String(args…
+    176|   const { reply } = await drive.call(args);
+    177|   expect(reply.ok, `${what}: ${JSON.stringify(reply).slice(0, 800)}`).…
+       |                                                                       ^
+    178|   return reply;
+    179| }
+ ❯ recorded tests/acceptance/1427/scope-recording.test.ts:19:22
+ ❯ tests/acceptance/1427/scope-recording.test.ts:95:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/30]⎯
+
+ FAIL  tests/acceptance/1427/scope-recording.test.ts > #1427 scope: a journey records every element's bounds, opacity and text at each 1/120 s step, keyed by stable identity > the transitions and springs a panel declares are listed, by element and kind: flyer a flight, springer a spring, jumper nothing
+AssertionError: launch: {"ok":false,"t":0,"error":{"code":"refused","message":"the panel didn't load: main.js:23 imports \"gpui-kit\", the toolkit under DeepBuild's module; a panel imports only \"@deepbuild/panel\""}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ must tests/acceptance/124/helpers.ts:177:71
+    175| export async function must(drive: Drive, args: Obj, what = String(args…
+    176|   const { reply } = await drive.call(args);
+    177|   expect(reply.ok, `${what}: ${JSON.stringify(reply).slice(0, 800)}`).…
+       |                                                                       ^
+    178|   return reply;
+    179| }
+ ❯ recorded tests/acceptance/1427/scope-recording.test.ts:19:22
+ ❯ tests/acceptance/1427/scope-recording.test.ts:112:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/30]⎯
+
+ FAIL  tests/acceptance/1427/scope-recording.test.ts > #1427 scope: a journey records every element's bounds, opacity and text at each 1/120 s step, keyed by stable identity > a replica launched with reduced_motion says so in the recording
+AssertionError: launch: {"ok":false,"t":0,"error":{"code":"refused","message":"the panel didn't load: main.js:23 imports \"gpui-kit\", the toolkit under DeepBuild's module; a panel imports only \"@deepbuild/panel\""}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ must tests/acceptance/124/helpers.ts:177:71
+    175| export async function must(drive: Drive, args: Obj, what = String(args…
+    176|   const { reply } = await drive.call(args);
+    177|   expect(reply.ok, `${what}: ${JSON.stringify(reply).slice(0, 800)}`).…
+       |                                                                       ^
+    178|   return reply;
+    179| }
+ ❯ recorded tests/acceptance/1427/scope-recording.test.ts:19:22
+ ❯ tests/acceptance/1427/scope-recording.test.ts:126:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/30]⎯
+
+ FAIL  tests/acceptance/1427/scope-recording.test.ts > #1427 scope: a journey records every element's bounds, opacity and text at each 1/120 s step, keyed by stable identity > the same calls in two processes record the same bytes
+AssertionError: launch: {"ok":false,"t":0,"error":{"code":"refused","message":"the panel didn't load: main.js:23 imports \"gpui-kit\", the toolkit under DeepBuild's module; a panel imports only \"@deepbuild/panel\""}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ must tests/acceptance/124/helpers.ts:177:71
+    175| export async function must(drive: Drive, args: Obj, what = String(args…
+    176|   const { reply } = await drive.call(args);
+    177|   expect(reply.ok, `${what}: ${JSON.stringify(reply).slice(0, 800)}`).…
+       |                                                                       ^
+    178|   return reply;
+    179| }
+ ❯ recorded tests/acceptance/1427/scope-recording.test.ts:19:22
+ ❯ tests/acceptance/1427/scope-recording.test.ts:131:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/30]⎯
+
+
+ Test Files  7 failed | 2 passed (9)
+      Tests  30 failed | 54 passed (84)
+   Start at  12:36:49
+   Duration  157.85s (tests 100%)
+

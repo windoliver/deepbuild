@@ -1,0 +1,32 @@
+
+ RUN  v5.0.5 /private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad/fix
+
+ ❯ tests/acceptance/1427/ac7-shipped.test.ts (4 tests | 1 failed) 3758587ms
+   ❯ #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each (3)
+     × a report for each of the three, from a real recording of the journey: its steps, its inputs and the ids the record gave its rows 3685850ms
+     ✓ the same shipped journeys in another process give the same recordings and findings, byte for byte 23147ms
+     ✓ a replica planted with a jump on every action fails all three, naming the jump, and the report says which journey 7791ms
+   ✓ #1427 AC7 the lane (1)
+     ✓ scripts/lanes.mjs has a motion lane, and running its commands reports each shipped journey with its recording's hash 41579ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1427/ac7-shipped.test.ts > #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each > a report for each of the three, from a real recording of the journey: its steps, its inputs and the ids the record gave its rows
+Error: Test timed out in 1800000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/acceptance/1427/ac7-shipped.test.ts:40:3
+     38| describe('#1427 AC7 the check runs on the shipped journeys for Needs y…
+     39|   let plain: Obj;
+     40|   it('a report for each of the three, from a real recording of the jou…
+       |   ^
+     41|     plain = await shipped();
+     42|     expect(journeys(plain).map((j) => j.name).sort(), 'exactly the thr…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+   Start at  11:24:15
+   Duration  3759.50s (tests 100%)
+

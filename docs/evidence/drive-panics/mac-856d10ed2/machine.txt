@@ -1,0 +1,17 @@
+ProductName:		macOS
+ProductVersion:		27.2.1
+BuildVersion:		26B7131
+model=Mac18,1
+cpu=Apple M6
+ncpu=12
+mem_bytes=34359738368
+Darwin 27.2.0 arm64
+node=v24.22.0
+npm=11.19.1
+cargo 1.99.1 (5f94df478 2026-08-27)
+rustc 1.99.1 (58cf8f9c3 2026-10-13)
+git version 2.54.0 (Apple Git-157)
+      Chipset Model: Apple M6
+      Metal Support: Metal 4
+          Resolution: 3024 x 1964 Retina
+          Resolution: 3840 x 2160 (2160p/4K UHD 1 - Ultra High Definition)

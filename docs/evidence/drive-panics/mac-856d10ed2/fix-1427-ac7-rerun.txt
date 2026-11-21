@@ -1,0 +1,16 @@
+
+ RUN  v5.0.5 /private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-admiring-murdock-db036d/b1b75f9e-129e-48ed-8060-0c5db00e6a52/scratchpad/fix
+
+ ✓ tests/acceptance/1427/ac7-shipped.test.ts (4 tests) 90892ms
+   ✓ #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each (3)
+     ✓ a report for each of the three, from a real recording of the journey: its steps, its inputs and the ids the record gave its rows 14139ms
+     ✓ the same shipped journeys in another process give the same recordings and findings, byte for byte 20111ms
+     ✓ a replica planted with a jump on every action fails all three, naming the jump, and the report says which journey 21394ms
+   ✓ #1427 AC7 the lane (1)
+     ✓ scripts/lanes.mjs has a motion lane, and running its commands reports each shipped journey with its recording's hash 35197ms
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  12:53:46
+   Duration  91.27s (tests 100%)
+
