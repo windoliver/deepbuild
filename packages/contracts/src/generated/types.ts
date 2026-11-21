@@ -5355,6 +5355,153 @@ export interface BriefDrafted {
   evidence?: Array<string>;
 }
 
+/** brief.drafted@2 */
+export interface BriefDraftedV2 {
+  v: 2;
+  id: string;
+  kind: "brief.drafted";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    key: string;
+    ask: string;
+    heading: string;
+    brief: {
+      makes: "document" | "deck" | "film" | "plan" | "budget" | "report" | "site" | "game" | "app";
+      software: boolean;
+      lines: Array<{
+        id: string;
+        field: "makes" | "for" | "holds" | "leaves_out" | "proves" | "goes" | "fact";
+        text: string;
+        cites: Array<{
+          at: string;
+          quote: string;
+        }>;
+        default?: boolean;
+      }>;
+      promises: Array<{
+        line: string;
+        kind: "document" | "data" | "message" | "money" | "code" | "taste";
+        recommended?: string;
+      }>;
+      tasks: Array<{
+        title: string;
+        serves: Array<string>;
+        criteria: Array<string>;
+        blocked_by: Array<string>;
+      }>;
+      left_out: Array<{
+        title: string;
+        why: string;
+      }>;
+      held: Array<{
+        does: string;
+        usd: number;
+        due: string | null;
+        at: string;
+      }>;
+      fits: string | null;
+      every: string | null;
+      watch?: string;
+      wake?: {
+        test: string;
+        planted: {
+          name: string;
+          before: string;
+          after: string;
+        };
+        twin: {
+          name: string;
+          before: string;
+          after: string;
+        };
+      };
+    };
+  };
+  evidence?: Array<string>;
+}
+
+/** brief.drafted@3 */
+export interface BriefDraftedV3 {
+  v: 3;
+  id: string;
+  kind: "brief.drafted";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    key: string;
+    ask: string;
+    heading: string;
+    brief: {
+      makes: "document" | "deck" | "film" | "plan" | "budget" | "report" | "site" | "game" | "app";
+      software: boolean;
+      lines: Array<{
+        id: string;
+        field: "makes" | "for" | "holds" | "leaves_out" | "proves" | "goes" | "fact";
+        text: string;
+        cites: Array<{
+          at: string;
+          quote: string;
+        }>;
+        default?: boolean;
+      }>;
+      promises: Array<{
+        line: string;
+        kind: "document" | "data" | "message" | "money" | "code" | "taste";
+        recommended?: string;
+      }>;
+      tasks: Array<{
+        title: string;
+        serves: Array<string>;
+        criteria: Array<string>;
+        blocked_by: Array<string>;
+      }>;
+      left_out: Array<{
+        title: string;
+        why: string;
+      }>;
+      held: Array<{
+        does: string;
+        usd: number;
+        due: string | null;
+        at: string;
+      }>;
+      fits: string | null;
+      every: string | null;
+      watch?: string;
+      wake?: {
+        test: string;
+        planted: {
+          name: string;
+          before: string;
+          after: string;
+        };
+        twin: {
+          name: string;
+          before: string;
+          after: string;
+        };
+      };
+      cost?: {
+        dry_usd: number;
+        run_usd: number;
+        month_usd: number;
+      };
+    };
+  };
+  evidence?: Array<string>;
+}
+
 /** brief.made@1 */
 export interface BriefMade {
   v: 1;

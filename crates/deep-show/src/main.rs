@@ -18,6 +18,7 @@ mod data_hash;
 mod defaults;
 mod determinism;
 mod efficiency;
+mod entries;
 mod evidence;
 mod export;
 mod extended;
@@ -665,7 +666,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "geometry" => return geometry::parse(c).map(|g| Call::Geometry(Box::new(g))),
         "kinds" => return Some(Call::KindSchemas),
         "spatial" => return spatial::parse(c).map(|s| Call::Spatial(Box::new(s))),
-        "logic" => return picks::parse(c).map(|l| Call::Logic(Box::new(l))),
+        "logic" | "open_save" => return picks::parse(c).map(|l| Call::Logic(Box::new(l))),
         "terrain_rays" => return terrain::parse(c).map(|r| Call::TerrainRays(Box::new(r))),
         "physics_bake" => return physics::parse(c).map(|b| Call::PhysicsBake(Box::new(b))),
         "world" => return points::parse_world(c).map(|(doc, world)| Call::World { doc, world }),
@@ -798,6 +799,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 track: optional(c.get("track"), |t| t.as_array().cloned())?,
                 data_hash: flag("data_hash")?,
                 texts: flag("texts")?,
+                shown: flag("shown")?,
                 carried: flag("carried")?,
                 tour_pointer: flag("tour_pointer")?,
             })));
@@ -1368,7 +1370,13 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 // #223's in the marks2d module's warp.
                 || deep_canvas_marks::warp::PLANTED.contains(p)
                 || deep_net::Planted::named(p).is_some()
+                // #297's in the text module's entry texts and the text control's range.
+                || deep_canvas_marks::entries::planted(Some(p)) != Default::default()
+                || *p == deep_canvas_marks::entries::FIT_SKIPS_ENTRIES
+                || entries::PLANTED.contains(p)
                 || deep_net::PLANTED.contains(p)
+                // #265's trail that keeps the points a copy read from predicted steps.
+                || *p == net::TRAIL_KEEPS_PREDICTED
                 // #225's in the data module's integrator; #2450's in its reading of axis titles.
                 || *p == deep_canvas_marks::vector_field::PLANTED_EULER
                 || *p == deep_canvas_marks::axes3d::TAKES_ANY_KIND
@@ -1857,160 +1865,7 @@ fn read_line(line: &str) -> Option<(Map<String, Value>, Scenario)> {
 
 mod answer;
 use answer::*;
-
-/// The virtual display clock `canvas` plays its calls on (#806): 120 Hz, the latch 2 ms before vsync,
-/// half a millisecond a check, and each call ten frames after the one before, so a patch is current
-/// at a latch before the next call arrives, as on the stand-in's clock (#384, #96).
-const CANVAS_CLOCK: (i64, i64, i64) = (120, 1_411_200, 352_800);
-const CANVAS_SPACING: i64 = 10 * (shared::FLICKS / 120);
-
-/// `deep-show canvas` (#806): the hub's canvas side, long-lived. Its world (a scenario's fields but
-/// `calls`, `clock` and `at`) is the hub's: the sessions it bound, the documents it minted, the
-/// record's objects, the claims, the window and card. Each call is played after every call before
-/// it, on the clock `canvas` keeps, and answered with its reply, so the replies are the stand-in's for
-/// the same calls in the same order. A fault holds only the call that sends it, not the earlier ones
-/// played again before it.
-struct CanvasSide {
-    /// The world but its record's objects, which `record` holds.
-    world: Map<String, Value>,
-    /// The world's record objects (#1868): read once when the hub sends its world, then shared by
-    /// every call's scenario, so a call that draws nothing from the record pays nothing for it.
-    record: std::sync::Arc<BTreeMap<String, RecordObject>>,
-    calls: Vec<Value>,
-}
-
-impl CanvasSide {
-    fn scenario(&self, fault: bool) -> Option<Scenario> {
-        let mut scenario = self.scenario_of_world(fault)?;
-        scenario.record = self.record.clone();
-        Some(scenario)
-    }
-
-    fn scenario_of_world(&self, fault: bool) -> Option<Scenario> {
-        let mut input = self.world.clone();
-        if !fault {
-            input.remove("fault");
-        }
-        let (refresh_hz, lead, check) = CANVAS_CLOCK;
-        input.insert(
-            "clock".into(),
-            json!({"refresh_hz": refresh_hz, "lead": lead, "check": check}),
-        );
-        let calls: Vec<Value> = self
-            .calls
-            .iter()
-            .enumerate()
-            .map(|(i, c)| {
-                let mut c = c.clone();
-                let arrives = if ["deep_query", "geometry", "fn", "deep_kinds"]
-                    .iter()
-                    .any(|k| c["call"] == *k)
-                {
-                    "arrives"
-                } else {
-                    "at"
-                };
-                c[arrives] = json!((i as i64 + 1) * CANVAS_SPACING);
-                c
-            })
-            .collect();
-        input.insert("calls".into(), Value::Array(calls));
-        scenario(&input)
-    }
-
-    fn line(&mut self, startup: &Startup, line: &str) -> Value {
-        let Ok(Value::Object(input)) = serde_json::from_str::<Value>(line) else {
-            return bad_input();
-        };
-        if let Some(Value::Object(world)) = input.get("world") {
-            // The record's objects are read here, once; a replay's run entries (a list) stay in the world.
-            let mut world = world.clone();
-            let record = match world.get("record") {
-                Some(Value::Object(_)) => {
-                    let Some(record) = record_objects(&world) else {
-                        return bad_input();
-                    };
-                    world.remove("record");
-                    record
-                }
-                _ => BTreeMap::new(),
-            };
-            let before = std::mem::replace(&mut self.world, world);
-            if self.scenario(false).is_none() {
-                self.world = before;
-                return bad_input();
-            }
-            self.record = std::sync::Arc::new(record);
-            return json!({"ok": true});
-        }
-        let Some(Value::Object(call)) = input.get("call") else {
-            return bad_input();
-        };
-        let mut call = call.clone();
-        let out = call.remove("out");
-        // #2896: the bytes this call's reply may take, a fifth under what its client keeps; it is
-        // the hub's, never one of the call's fields, so the call kept for replay doesn't hold it.
-        let room = call
-            .remove("room")
-            .and_then(|r| r.as_u64())
-            .map(|r| r as usize);
-        let doc = call.get("doc").and_then(Value::as_str).map(str::to_string);
-        self.calls.push(Value::Object(call));
-        let Some(scenario) = self.scenario(true) else {
-            self.calls.pop();
-            return bad_input();
-        };
-        match out.as_ref().and_then(Value::as_str) {
-            // The window as the calls leave it, drawn and written to `out`; the reply is the
-            // `screen` call's own, with the picture's size and each item's box beside it.
-            Some(out) if scenario.window.is_some() => {
-                let mut drawn = screen(&scenario, startup, out, 0, 1.0);
-                let Some(Value::Array(mut replies)) = drawn.get_mut("replies").map(Value::take)
-                else {
-                    return drawn;
-                };
-                let mut reply = replies.pop().unwrap_or(Value::Null);
-                for k in ["width", "height", "items"] {
-                    reply[k] = drawn[k].take();
-                }
-                json!({"ok": true, "reply": reply})
-            }
-            _ => {
-                let mut hub = hub::Hub::new(&scenario, startup);
-                query::set_room(room);
-                let mut replies = hub.run_calls();
-                query::set_room(None);
-                let reply = replies.pop().unwrap_or(Value::Null);
-                // #412: deep_kinds reads and changes nothing, so it leaves no call to replay. Nor does
-                // deep_query (#2896): it writes no state a later call reads (its cursor is a row index on
-                // the revision it names), and a walk paged to fit its client would otherwise evaluate
-                // every earlier page again on each new one.
-                if matches!(
-                    self.calls
-                        .last()
-                        .and_then(|c| c.get("call"))
-                        .and_then(Value::as_str),
-                    Some("deep_kinds" | "deep_query")
-                ) {
-                    self.calls.pop();
-                }
-                let presented = match doc.as_deref() {
-                    // #1415: a patch that changed nothing made no revision to present.
-                    Some(doc)
-                        if reply.get("rev").is_some()
-                            && reply["outcome"] != "refused"
-                            && reply["outcome"] != "applied"
-                            && reply["outcome"] != "no_change" =>
-                    {
-                        hub.presented_revision(doc)
-                    }
-                    _ => None,
-                };
-                json!({"ok": true, "reply": reply, "presented": presented})
-            }
-        }
-    }
-}
+mod canvas_side;
 
 #[cfg(target_os = "macos")]
 fn screen(scenario: &Scenario, startup: &Startup, out: &str, t: i64, scale: f64) -> Value {
@@ -3059,16 +2914,23 @@ fn main() {
         }
     };
     let stdin = io::stdin();
-    let mut canvas = CanvasSide {
-        world: Map::new(),
-        record: Default::default(),
-        calls: Vec::new(),
-    };
-    canvas.world.insert("evidence".into(), json!(""));
-    for line in stdin.lock().lines() {
+    let mut lines = stdin.lock().lines();
+    if command == "canvas" {
+        // A line that is not UTF-8 was read to its end: it is one that can't be read.
+        let next = || match lines.next()? {
+            Ok(line) => Some(Some(line)),
+            Err(e) if e.kind() == io::ErrorKind::InvalidData => Some(None),
+            Err(_) => None,
+        };
+        canvas_side::serve(startup, next, |reply| {
+            let _ = writeln!(out, "{reply}");
+            let _ = out.flush();
+        });
+        return;
+    }
+    for line in lines {
         let reply = match line {
             Ok(line) => match command.as_str() {
-                "canvas" => canvas.line(startup, &line),
                 "live" => live(startup, &line),
                 _ => answer(&command, startup, &line),
             },

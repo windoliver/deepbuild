@@ -476,6 +476,8 @@ pub struct World {
     pub saves_dir: Option<std::path::PathBuf>,
     /// With no folder, the saves its steps asked for, held for the host's store (Export: web player).
     pub held: Option<Vec<crate::saves::Held>>,
+    /// #189: the time the saves machinery took since it was last read (a live frame's `saves_ns`).
+    pub saves_ns: u64,
     pub saved: Vec<Value>,
     /// The steps the piece's same-machine counters have seen, and the adapter this run is on.
     pub(crate) seen: u64,
@@ -491,7 +493,25 @@ pub type Failed = Value;
 mod net;
 mod rewind;
 pub mod rollback;
+pub mod seats;
 mod world_impl;
+
+impl World {
+    /// The planted logic module this world runs as.
+    pub fn planted(&self) -> Planted {
+        self.planted
+    }
+
+    /// #277's planted catch-up: every item's clock moves on to the first step at or after `t`,
+    /// running none of the steps before it.
+    pub fn skip(&mut self, t: i64) {
+        for (i, item) in self.piece.items.iter().enumerate() {
+            let k = t.div_euclid(item.step) + i64::from(t.rem_euclid(item.step) != 0);
+            let l = &mut self.lives[i];
+            l.next = l.next.max(k);
+        }
+    }
+}
 
 /// The planted replay's change: the first value of the item's first array, an i32 plus one, an
 /// f64 (or a vector's first component) to the next f64 above it, a bool flipped.

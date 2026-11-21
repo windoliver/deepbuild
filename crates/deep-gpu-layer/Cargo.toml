@@ -66,6 +66,8 @@ deep-physics-rapier = { path = "../deep-physics-rapier" }
 # Issue #537: a scene's logic items, run so their arrays feed its instancers, plates and lines.
 deep-logic = { path = "../deep-logic" }
 deep-effects-render = { path = "../deep-effects-render" }
+# Issue #1561: the 2D compositor and the drawn passes, a render crate deep-show draws through too.
+deep-groups-render = { path = "../deep-groups-render" }
 wgpu-profiler = "0.28"
 # Issue #464: the indexed operator's class, computed from its module.
 naga = { version = "30", default-features = false, features = ["wgsl-in"] }

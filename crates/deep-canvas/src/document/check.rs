@@ -216,8 +216,6 @@ fn check_by(
             // checks and the budget as any item does.
             issues.extend(packs::driven_counts(doc, items, &resolved));
             expansions = packs::expand(items, &resolved, packs.planted, &mut issues);
-            // A canvas module's own kinds expanded at check, after recipes (#222).
-            let planted = packs.planted.expander;
             // A film recipe's markers and shots are there for the module's expansions (#142).
             let with_sections;
             let seen = if expansions.iter().any(|e| !e.sections.is_empty()) {
@@ -228,7 +226,8 @@ fn check_by(
             } else {
                 doc
             };
-            let module = super::expands::run(seen, items, sealed, &resolved, planted, &mut issues);
+            // A canvas module's own kinds expanded at check, after recipes (#222).
+            let module = super::expands::run(seen, items, sealed, &resolved, packs, &mut issues);
             expansions.extend(module);
             // A film recipe's shots and transitions timed on its cue list's markers (#142).
             super::expands::resolve_times(doc, &mut expansions, &mut issues);
@@ -372,6 +371,7 @@ fn check_by(
                     check_controls(&lowered, sealed, &mut issues);
                     check_constraints(&lowered, sealed, &mut issues);
                     check_assemblies(&lowered, &mut issues);
+                    check_viewer_tools(&lowered, &mut issues);
                     check_card(&lowered, &mut issues);
                     super::variants::check(&lowered, &mut issues);
                     check_time_remaps(&lowered, &expansions, &mut issues);

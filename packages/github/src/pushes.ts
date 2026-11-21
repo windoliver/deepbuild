@@ -2,6 +2,7 @@
 // each change brought. The pusher is that record's actor, an empty one kept empty; a commit's author and committer are
 // kept beside it, and never read as its pusher. A commit two pushes carried reads as the first's: that's who brought it.
 import type { ProviderPush, PushRecordReader } from '@deepbuild/gate';
+import { forgeFetch } from './rest.js';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -23,11 +24,7 @@ function limitLifts(res: Response, now: number): number | undefined {
 export type Rest = (method: 'GET' | 'POST', path: string, body?: Obj) => Promise<{ body: unknown; next: string | undefined }>;
 /** One call to the REST API at `api`: a refused one throws ForgeRefused, naming when a limit lifts. */
 export const restOf = (api: string, token: string | undefined): Rest => async (method, path, body) => {
-  const res = await fetch(path.startsWith('http') ? path : `${api}${path}`, {
-    method, signal: AbortSignal.timeout(4000),
-    headers: { accept: 'application/vnd.github+json', ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body ? { 'content-type': 'application/json' } : {}) },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  });
+  const res = await forgeFetch(api, path, { method, token, body, signal: AbortSignal.timeout(4000) });
   if (!res.ok) throw new ForgeRefused(res.status, limitLifts(res, Date.now()), path);
   return { body: await res.json(), next: /<([^>]+)>;\s*rel="next"/.exec(res.headers.get('link') ?? '')?.[1] };
 };

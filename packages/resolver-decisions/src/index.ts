@@ -96,6 +96,8 @@ export function resolverDecisions(options: { record: RecordStore; ledger?: Ledge
   };
 
   const sync = async (): Promise<void> => {
+    const [row] = (await options.record.raw('SELECT max(log_pos) AS head FROM events')) as { head: number | bigint | null }[];
+    const head = Number(row?.head ?? 0);
     for (;;) {
       const page = await options.record.read({ after: cursor, limit: PAGE, kinds: KINDS });
       for (const e of page) {
@@ -130,7 +132,10 @@ export function resolverDecisions(options: { record: RecordStore; ledger?: Ledge
           else if (e.kind !== 'decision.judged' || d.state === 'revoked') saved.revoked = true;
         }
       }
-      if (page.length < PAGE) return;
+      if (page.length < PAGE) {
+        cursor = Math.max(cursor, head);
+        return;
+      }
     }
   };
 

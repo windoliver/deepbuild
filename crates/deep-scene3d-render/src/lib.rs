@@ -23,6 +23,7 @@ pub mod hdr;
 pub mod held;
 pub mod history;
 pub mod inset;
+mod kept;
 pub mod local;
 pub mod local_tone;
 pub mod maps;
@@ -35,6 +36,7 @@ mod op;
 mod origin;
 mod planted;
 pub mod print;
+pub mod proxy;
 mod readouts;
 mod set;
 pub mod shadow;
@@ -74,6 +76,7 @@ pub use crate::module::{
     draw_offscreen, timed, AfterFrame, Counts, HdrFrame, Module3, PostFrame, Profiler, Shared,
     LIGHT, PYRAMID_NS_PER_PX,
 };
+pub use crate::mesh::tangents_derived;
 pub use crate::planted::Planted;
 pub use crate::readouts::{lay_over, readouts_as_labels};
 use crate::set::Set;
@@ -792,7 +795,10 @@ pub fn shadow_texels(scene: &Scene, size: u32) -> impl Fn([f64; 3]) -> Option<f6
         .sun
         .as_ref()
         .filter(|_| scene.cascaded() && scene.camera.perspective)
-        .map(|sun| shadow::cascades(scene, sun.toward, &sun.cascades, size, None, true))
+        .map(|sun| {
+            let casters = shadow::caster_corners(scene, false);
+            shadow::cascades(scene, &casters, sun.toward, &sun.cascades, size, None, true)
+        })
         .unwrap_or_default();
     let camera = scene.camera.clone();
     move |p| {
@@ -2778,6 +2784,8 @@ impl Renderer {
             pictured: false,
             waterer: None,
             watering: false,
+            leveled: None,
+            dry: None,
             reflection: None,
             foam: None,
             normal: None,
@@ -2812,6 +2820,7 @@ impl Renderer {
             mask: (mask_layout, sampler),
             picks: BTreeMap::new(),
             next_generation: 0,
+            spans: Default::default(),
             targets: None,
             order: Vec::new(),
             ground: [0.0, 0.0, 0.0, 1.0],
@@ -3080,7 +3089,13 @@ impl Renderer {
 
     /// The key sun's cascades at this frame's view (#422): each fitted in closed form, keyed by
     /// everything it reads, and marked to draw when its key changed since its layer was drawn.
-    fn prepare_cascades(&mut self, device: &Device, scene: &Scene, frame: &FrameUniform) {
+    fn prepare_cascades(
+        &mut self,
+        device: &Device,
+        scene: &Scene,
+        frame: &FrameUniform,
+        casters: &[shadow::Caster<'_>],
+    ) {
         self.counts.cascades_drawn.clear();
         self.counts.cascade_splits.clear();
         let size = shadow::SIZE * self.shadow_scale.max(1);
@@ -3131,7 +3146,15 @@ impl Renderer {
                     max_penumbra: s.max_penumbra,
                 });
             let snap = !self.planted.local.unsnapped;
-            c.list = shadow::cascades(scene, sun.toward, &sun.cascades, size, reach, snap);
+            c.list = shadow::cascades(
+                scene,
+                casters,
+                sun.toward,
+                &sun.cascades,
+                size,
+                reach,
+                snap,
+            );
         }
         c.fade = sun.cascades.fade;
         if let Some(first) = c.list.first() {
@@ -3149,18 +3172,11 @@ impl Renderer {
             .flat_map(|l| &l.solids)
             .filter(|s| s.batch != 0 && s.cast_shadow)
             .collect();
-        let casters = shadow::caster_corners(scene);
         let sun_caster = scene
             .lights
             .iter()
             .find(|l| l.id == sun.id)
             .map_or(0, |l| l.caster_bit);
-        let solids: BTreeMap<&str, &Solid> = scene
-            .layers
-            .iter()
-            .flat_map(|l| &l.solids)
-            .map(|s| (s.id.as_str(), s))
-            .collect();
         for (i, cascade) in c.list.iter().enumerate() {
             use std::hash::{Hash, Hasher};
             let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -3176,13 +3192,13 @@ impl Renderer {
                 local::hash_caster(s, &mut h);
                 local::hash_time(s, self.planted.local, &mut h);
             }
-            for (id, corners) in &casters {
-                let drawn = sun_caster == 0 || solids[id.as_str()].caster_sets & sun_caster != 0;
+            for (s, corners) in shadow::sun_casters(casters) {
+                let drawn = sun_caster == 0 || s.caster_sets & sun_caster != 0;
                 if !drawn || !shadow::inside(&cascade.clip, corners) {
                     continue;
                 }
-                local::hash_caster(solids[id.as_str()], &mut h);
-                local::hash_time(solids[id.as_str()], self.planted.local, &mut h);
+                local::hash_caster(s, &mut h);
+                local::hash_time(s, self.planted.local, &mut h);
             }
             // A level only the shadow passes draw is part of what the cascade reads (#425).
             for s in scene
@@ -3293,19 +3309,15 @@ impl Renderer {
         scene: &Scene,
         frame: &FrameUniform,
         kept: &[(usize, f64)],
+        casters: &[shadow::Caster<'_>],
     ) {
         let wanted: Vec<(usize, f64)> = kept
             .iter()
             .copied()
             .filter(|&(i, _)| scene.lights[i].kind != LightKind::Sun)
             .collect();
-        let casters = if wanted.is_empty() {
-            Vec::new()
-        } else {
-            shadow::local_caster_corners(scene)
-        };
         let planted = self.planted.local;
-        let fresh = self.locals.prepare(scene, &wanted, &casters, planted);
+        let fresh = self.locals.prepare(scene, &wanted, casters, planted);
         if fresh {
             let device_size = (self.locals.size, self.locals.layers);
             self.locals.ensure(device, device_size, &self.frame_layout);
@@ -4022,7 +4034,7 @@ impl Renderer {
     pub fn prepare(&mut self, device: &Device, scene: &Scene, look: &Look3) {
         self.turn();
         let placed = self.placed(scene);
-        self.prepare_placed(device, placed.as_ref().unwrap_or(scene), look);
+        self.prepare_placed(device, placed.as_ref().unwrap_or(scene), look, false);
         self.free_unused();
     }
 
@@ -4039,37 +4051,62 @@ impl Renderer {
         moved
     }
 
-    /// [`Renderer::prepare`] for a scene already placed about its origin.
-    fn prepare_placed(&mut self, device: &Device, scene: &Scene, look: &Look3) {
+    /// [`Renderer::prepare`] for a scene already placed about its origin; `held` when it is a
+    /// kept scene the frame before prepared too, unchanged (#3024).
+    fn prepare_placed(&mut self, device: &Device, scene: &Scene, look: &Look3, held: bool) {
         self.crop = scene.crop;
         self.probe_ids = scene.probes.iter().map(|p| p.id.clone()).collect();
         // Level of detail at this view (#425): a scene whose solids still carry bands or mesh
-        // levels draws what scene3d's pure choice resolves them to.
+        // levels draws what scene3d's pure choice resolves them to, kept while the scene and
+        // the shadow maps' side hold (#2657).
         if leveled(scene) {
-            let mut chosen = scene.clone();
-            let mut choices = deep_canvas_scene3d::lod::select(&chosen);
             let side = shadow::SIZE * self.shadow_scale.max(1);
-            deep_canvas_scene3d::lod::shadow_levels(
-                &chosen,
-                &mut choices,
-                shadow_texels(&chosen, side),
-            );
-            deep_canvas_scene3d::lod::resolve(&mut chosen, &choices);
-            return self.prepare_placed(device, &chosen, look);
+            let leveled = self.leveled.take();
+            let (kept, held) = match leveled.filter(|k| k.side == side && k.holds(scene)) {
+                Some(kept) => (kept, true),
+                None => {
+                    let mut chosen = scene.clone();
+                    let mut choices = deep_canvas_scene3d::lod::select(scene);
+                    let texels = shadow_texels(scene, side);
+                    deep_canvas_scene3d::lod::shadow_levels(scene, &mut choices, texels);
+                    proxy::resolve(&mut chosen, &choices);
+                    let Some(edits) = kept::edits(scene, &chosen, |s| s.lod.is_some(), false)
+                    else {
+                        return self.prepare_placed(device, &chosen, look, false);
+                    };
+                    (Box::new(kept::Kept::new(scene, chosen, side, edits)), false)
+                }
+            };
+            self.prepare_placed(device, &kept.scene, look, held);
+            self.leveled = Some(kept);
+            return;
         }
+        self.leveled = None;
         // #166: the water's parts draw in a pass of their own, after the mirror's view.
         if let Some(w) = scene.water.clone() {
             let wet = |s: &Solid| w.parts.contains(&s.id);
             if scene.layers.iter().flat_map(|l| &l.solids).any(wet) {
-                let mut dry = scene.clone();
-                for layer in &mut dry.layers {
-                    layer.solids.retain(|s| !wet(s));
-                }
-                self.prepare_placed(device, &dry, look);
+                let (kept, held) = match self.dry.take().filter(|k| k.holds(scene)) {
+                    Some(kept) => (kept, true),
+                    None => {
+                        let mut dry = scene.clone();
+                        for layer in &mut dry.layers {
+                            layer.solids.retain(|s| !wet(s));
+                        }
+                        let Some(edits) = kept::edits(scene, &dry, wet, true) else {
+                            self.prepare_placed(device, &dry, look, false);
+                            return self.prepare_water(device, scene, &w);
+                        };
+                        (Box::new(kept::Kept::new(scene, dry, 0, edits)), false)
+                    }
+                };
+                self.prepare_placed(device, &kept.scene, look, held);
                 self.prepare_water(device, scene, &w);
+                self.dry = Some(kept);
                 return;
             }
         }
+        self.dry = None;
         self.watering = false;
         self.planted_per_item(device, scene);
         // The warm-up compiles the culled path whatever the item count, so the pipelines a
@@ -4190,9 +4227,10 @@ impl Renderer {
         }
         self.counts.upload_ms.extend(self.tints.upload_ms.clone());
         for layer in &scene.layers {
-            self.prepare_batch(device, layer, &scene.camera);
+            self.prepare_batch(device, layer, scene);
         }
-        self.sways.move_all(device, scene);
+        self.sways
+            .move_all(device, scene, self.planted.sway_first_frame_only);
         self.counts.overlay_rows = self.tints.table(device, &scene.tints, &self.picks);
         self.insets
             .write(device, &scene.projected, &scene.texels, &self.picks);
@@ -4239,7 +4277,7 @@ impl Renderer {
         // #465: the mirror's view at t, drawn whole each frame.
         self.mirroring = match &scene.mirror {
             Some(m) => {
-                let planted = self.planted;
+                let (planted, internal) = (self.planted, self.internal());
                 let mirrorer = self
                     .mirrorer
                     .get_or_insert_with(|| Box::new(mirror::Mirrorer::new(device, planted)));
@@ -4248,8 +4286,12 @@ impl Renderer {
                     .water
                     .as_ref()
                     .is_none_or(|w| w.material != m.material);
-                if !self.planted.keeps_mirror {
-                    mirrorer.prepare(device, scene, m, look, &self.picks, overlay);
+                // #506's planted core skips the mirror's prepare, so no later frame holds its view.
+                if self.planted.keeps_mirror {
+                    mirrorer.mirrored = None;
+                } else {
+                    let picks = &self.picks;
+                    mirrorer.prepare(device, scene, internal, m, look, picks, overlay, held);
                 }
                 true
             }
@@ -4328,7 +4370,8 @@ impl Renderer {
     /// opaque casters' and the mask-alpha casters', each made the first time a frame casts that
     /// kind, named by its casters and the maps it draws into. The planted warms_view_only's
     /// warm-up leaves them to the first frame.
-    fn ensure_casters(&mut self, device: &Device, scene: &Scene) {
+    #[doc(hidden)]
+    pub fn ensure_casters(&mut self, device: &Device, scene: &Scene) {
         let mask = |s: &Solid| {
             s.material
                 .as_ref()
@@ -4342,6 +4385,16 @@ impl Renderer {
                 .filter(|s| s.cast_shadow)
         };
         self.mask_casts = casting().any(mask);
+        let made = (self.shadow.pipeline.is_some(), self.shadow.mask.is_some());
+        if self.planted.casters_once_any && (made.0 || made.1) {
+            return;
+        }
+        // #2657: nothing is built before a kind is found that casts and has no pipeline yet, so a
+        // frame whose kinds all have theirs allocates nothing here.
+        let wants = |kind_mask: bool, made: bool| !made && casting().any(|s| mask(s) == kind_mask);
+        if !wants(false, made.0) && !wants(true, made.1) {
+            return;
+        }
         let mut maps: Vec<String> = Vec::new();
         if let Some(sun) = scene.sun.as_ref().filter(|s| s.shadow) {
             if !self.cascaded.list.is_empty() {
@@ -4767,7 +4820,7 @@ impl Renderer {
         let scene = placed.as_ref().unwrap_or(scene);
         if self.origin != was {
             self.turn();
-            self.prepare_placed(device, scene, look);
+            self.prepare_placed(device, scene, look, false);
             return self.free_unused();
         }
         self.prepare_moved_placed(device, scene, look, moved);
@@ -4794,7 +4847,7 @@ impl Renderer {
             || scene.mirror.is_some()
             || scene.water.is_some()
         {
-            return self.prepare_placed(device, scene, look);
+            return self.prepare_placed(device, scene, look, false);
         }
         // A tie rank is a function of the frame, so a part whose rank the move changed rewrites
         // too, and a frame draws the same however it was reached (#149, #450).
@@ -4813,7 +4866,7 @@ impl Renderer {
             };
             match index {
                 Some(k) => lobes.push(k),
-                None => return self.prepare_placed(device, scene, look),
+                None => return self.prepare_placed(device, scene, look, false),
             }
         }
         let generation = self.ao.generation;
@@ -4821,9 +4874,10 @@ impl Renderer {
         if self.ao.generation != generation {
             // The solids' ao bind group changed: every batch with solids encodes again.
             for layer in &scene.layers {
-                self.prepare_batch(device, layer, &scene.camera);
+                self.prepare_batch(device, layer, scene);
             }
-            self.sways.move_all(device, scene);
+            self.sways
+                .move_all(device, scene, self.planted.sway_first_frame_only);
             self.count_draws(scene);
             self.update_culls(device);
             return;
@@ -4866,7 +4920,8 @@ impl Renderer {
         }
         self.counts.instances_written += written;
         self.counts.replayed += scene.layers.len() as u32;
-        self.sways.move_all(device, scene);
+        self.sways
+            .move_all(device, scene, self.planted.sway_first_frame_only);
         self.count_draws(scene);
         self.update_culls(device);
     }
@@ -5452,7 +5507,6 @@ impl Renderer {
             .as_ref()
             .filter(|s| s.shadow && !cascaded)
             .and_then(|s| shadow::light_clip(scene, s.toward, 0.0));
-        self.prepare_cascades(device, scene, &frame);
         let scoring = web_time::Instant::now();
         let policy = scene
             .light_cut
@@ -5461,7 +5515,16 @@ impl Renderer {
         let scores = light::scores(&scene.lights, &scene.camera);
         self.counts.scoring_ms = scoring.elapsed().as_secs_f64() * 1e3;
         let shadowed = light::shadowed(&scene.lights, &policy, &scene.shadowing, &scores);
-        self.prepare_locals(device, scene, &frame, &shadowed.kept);
+        // The frame's one pass over its casters (#2657), for the key sun's cascades and, with
+        // their culled elements, the shadowed local lights' maps.
+        let locals = (shadowed.kept.iter()).any(|&(i, _)| scene.lights[i].kind != LightKind::Sun);
+        let casters = if locals || scene.sun.is_some() && cascaded {
+            shadow::caster_corners(scene, locals)
+        } else {
+            Vec::new()
+        };
+        self.prepare_cascades(device, scene, &frame, &casters);
+        self.prepare_locals(device, scene, &frame, &shadowed.kept, &casters);
         // A warm-up's prepare (#432) records no pass, so its maps stay undrawn: keyed as drawn,
         // the frame after it would sample empty maps (#2186). The next frame draws them.
         if self.log.warming {
@@ -5639,12 +5702,8 @@ impl Renderer {
         sub.write(&device.queue, across);
     }
 
-    fn prepare_batch(
-        &mut self,
-        device: &Device,
-        layer: &Layer3,
-        cam: &deep_canvas_scene3d::scene::Camera,
-    ) {
+    fn prepare_batch(&mut self, device: &Device, layer: &Layer3, scene: &Scene) {
+        let cam = &scene.camera;
         self.compiled += self.families.ensure(&device.device, layer, &mut self.names);
         let clear = |s: &Solid| {
             s.per_pixel
@@ -6130,6 +6189,50 @@ impl Renderer {
         }
         batch.lines.begin();
         for l in &layer.lines {
+            // #1782: a line with a hidden style draws each edge's spans, the hidden ones in that
+            // style over what hides them.
+            let style = l
+                .edges
+                .as_ref()
+                .and_then(|e| Some((e.width, e.hidden.as_ref()?)));
+            let spans = style.and_then(|s| {
+                Some((
+                    s,
+                    deep_canvas_scene3d::spans::pieces(scene, l, &mut self.spans)?,
+                ))
+            });
+            for (width, hidden, p) in spans
+                .iter()
+                .flat_map(|((w, h), ps)| ps.iter().map(move |p| (w, h, p)))
+            {
+                let (color, dash) = if p.hidden {
+                    (hidden.color, hidden.dash)
+                } else {
+                    (l.color, l.dash)
+                };
+                let record = SegmentRecord {
+                    a: v4(p.a, *width),
+                    b: v4(p.b, *width),
+                    color: faded_pack(color, layer.fades.get(&l.id)),
+                    pick: picks[&l.id],
+                    // An end a split or a dash made is cut square, as a dash's own ends are.
+                    flags: u32::from(l.world)
+                        | (1 << 1)
+                        | (u32::from(l.over || p.hidden) << 2)
+                        | (u32::from(l.dash_world) << 4)
+                        | ((u32::from(p.cut[0]) | (u32::from(p.cut[1]) << 1)) << 6),
+                    dash: if p.dashed {
+                        half_bits(dash[0]) | (half_bits(dash[1]) << 16)
+                    } else {
+                        0
+                    },
+                    fade: OPAQUE_ENDS,
+                };
+                batch.lines.push(&l.id, bytemuck::bytes_of(&record));
+            }
+            if spans.is_some() {
+                continue;
+            }
             for (k, seg) in l.segments.iter().enumerate() {
                 let record = SegmentRecord {
                     a: v4(seg.a, seg.wa),

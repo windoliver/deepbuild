@@ -524,7 +524,7 @@ fn resolved(scene: &Scene) -> (Scene, BTreeMap<String, u32>) {
         };
         levels.insert(c.item.clone(), c.level.map_or(rank, |l| l as u32));
     }
-    deep_canvas_scene3d::lod::resolve(&mut chosen, &choices);
+    crate::proxy::resolve(&mut chosen, &choices);
     (chosen, levels)
 }
 
@@ -666,8 +666,10 @@ fn draw(
             .as_ref()
             .filter(|s| s.shadow && scene.camera.perspective)
         {
+            let casters = crate::shadow::caster_corners(scene, false);
             let fitted = crate::shadow::cascades(
                 scene,
+                &casters,
                 sun.toward,
                 &sun.cascades,
                 crate::shadow::SIZE,

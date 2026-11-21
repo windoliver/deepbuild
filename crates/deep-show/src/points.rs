@@ -494,7 +494,7 @@ impl Hub<'_> {
     }
 
     /// Panel point `pos` in the frame's px.
-    fn frame_px(&self, panel: &str, scene: &Scene, pos: [f64; 2]) -> [f64; 2] {
+    pub(crate) fn frame_px(&self, panel: &str, scene: &Scene, pos: [f64; 2]) -> [f64; 2] {
         let r = self
             .scopes
             .get(panel)
@@ -509,7 +509,7 @@ impl Hub<'_> {
     /// The panel's 3D scene at `t` as its viewer sees it: the revision as the hub draws its 3D
     /// frame at `t` (played on the track, its worlds' outputs and its logic's arrays), through
     /// the viewer's camera; none before any revision.
-    fn scene_at(
+    pub(crate) fn scene_at(
         &mut self,
         panel: &str,
         doc: &str,

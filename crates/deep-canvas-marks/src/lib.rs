@@ -26,6 +26,7 @@ pub mod diff;
 pub mod dirty;
 pub mod drawn;
 pub mod ends;
+pub mod entries;
 pub mod fields;
 pub mod finish;
 pub mod follow;

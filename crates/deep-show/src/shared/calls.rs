@@ -1269,8 +1269,8 @@ impl Hub<'_> {
     /// their `at`; each writer's patches wait in its own queue, and one checker takes them in
     /// turn across writers, one at a time, so one writer's flood never delays another's patch.
     pub fn run_calls(&mut self) -> Vec<Value> {
-        // #499: the media module's own check reads its planted wrong program from here.
-        deep_canvas_media::plant(self.scenario.module_planted.as_deref());
+        // #499: the media module's own check reads its plant from here, and #1518's cuts a reader.
+        crate::mixdown::cut::begin(self);
         self.open_shared();
         let calls = &self.scenario.calls;
         let Some(clock) = self.scenario.clock else {
@@ -1292,12 +1292,7 @@ impl Hub<'_> {
                 Some(at) if !queued || at <= free_at => {
                     let i = order[next];
                     next += 1;
-                    // A plug-in's panel scripts run up to the call (#401), terminals take the
-                    // output that arrived by then (#402), and captures the frames (#105).
-                    self.advance_ring(at);
-                    self.advance_terms(at);
-                    self.advance_capture(at);
-                    self.now = at;
+                    self.arrive(at);
                     let Call::Patch(p) = &calls[i] else {
                         replies[i] = self.call(&calls[i]);
                         continue;

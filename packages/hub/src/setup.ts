@@ -17,7 +17,7 @@ import { promisify } from 'node:util';
 import { readFacts } from '@deepbuild/adapters';
 import { draftAskSettings } from '@deepbuild/asks';
 import { keepOriginal, noteWritten, putBack, saveRecord, setupRecord, strictObject, target, writeThrough } from './agent-files.js';
-import { confirmed } from './authority.js';
+import { stopAsYou } from './authority.js';
 import { Confirmer } from './confirm.js';
 import { claudeCommand, claudeSettings, installedRecord, longestDeadline, ourGroups, relations, withHooks, withoutOurs, writeJson } from './claude-settings.js';
 import { codexConfig, codexHooks, codexRelations, fixedHook, forgetEntries, recordedHome, recordedServer, recordEntries, withEntries, withoutEntries, withoutServer, withServer } from './codex-settings.js';
@@ -25,7 +25,7 @@ import { call } from './client.js';
 import { installShipped } from './installer.js';
 import { deepHook, hubAddress, installedPrograms, installedRoot, lastingNode, rootOf } from './paths.js';
 import { activePlant as plant } from './plant.js';
-import { removeService, startHub, stopIfRunning } from './service.js';
+import { removeService, startHub } from './service.js';
 import { changes, doing, installers, key, lands, onPath, planned as plannedRows, saying, setUpLine, type Row } from './setup-steps.js';
 import { Devices } from './trusted.js';
 import { shellQuote as q } from './shell.js';
@@ -376,12 +376,13 @@ function installRules(root: string): number {
 }
 
 /**
- * `deep setup --undo`, once the OS confirms you: the login service and the hub stop first, so no watch puts an entry
+ * `deep setup --undo`, once the OS confirms you: the hub and the login service stop first, so no watch puts an entry
  * back; then each file setup wrote gets its original bytes back where you haven't edited it since, and only our parts
  * taken out where you have; the skill goes. ~/.deepbuild stays, with the record, evidence and wiki.
  */
 async function undo(): Promise<number> {
-  const why = await confirmed('deep setup --undo');
+  // The hub's stop is the confirmation (#1865): it asks the OS inside the hub, once, and stops only then.
+  const why = await stopAsYou('deep setup --undo');
   if (why) {
     process.stderr.write(`${why}\n`);
     return 3;
@@ -389,8 +390,6 @@ async function undo(): Promise<number> {
   const root = installedRoot();
   const record = setupRecord(root);
   if (plant() !== 'undo-keeps-login-service') removeService();
-  const stopped = await stopIfRunning(root);
-  if (stopped !== 0) return stopped;
   const settingsFile = claudeSettings();
   const userFile = claudeJson();
   let yours: string | undefined;

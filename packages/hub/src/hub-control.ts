@@ -73,7 +73,7 @@ import type { CallContext } from './session-types.js';
 import { HubCanvas } from './hub-canvas.js';
 import { Writes } from './receipts.js';
 
-import { ghToken, type Obj, isObj } from "./hub-shared.js";
+import { ghToken, type Obj, isObj, counting } from "./hub-shared.js";
 import type { Delivery } from '@deepbuild/asks';
 import type { IntakeService } from './intake-port.js';
 
@@ -172,9 +172,12 @@ export class HubControl {
       case 'test.verdict': return this.options.judging().testVerdict(params);
       case 'test.clock': return this.options.schedule.testClock(params);
       case 'events.read': return this.options.services.log.read(params, this.options.state().seenBy(context.role));
+      // A session's page reads a window of it, older ones by page (#1576).
+      case 'session.page': return this.options.services.log.reflecting(() => this.options.services.log.window(params, this.options.state().seenBy(context.role)));
       // Behind the state pass under way, so the rows it holds are the asks as they stand (#1463).
-      case 'inbox.read': return this.options.state().statesSettled().then(() => this.options.services.log.reflecting(() => this.human.inbox()));
-      case 'sessions.read': return this.options.services.log.reflecting(async () => ({ sessions: await this.options.state().sessionRows(this.options.state().seenBy(context.role)) }));
+      // Each list read pages what settled and counts the queries it ran (#1576).
+      case 'inbox.read': return counting(() => this.options.state().statesSettled().then(() => this.options.services.log.reflecting(() => this.human.inbox(params))));
+      case 'sessions.read': return counting(() => this.options.services.log.reflecting(() => this.options.state().sessionRows(this.options.state().seenBy(context.role), params)));
       case 'person.add': return this.authority.addPerson(params, context);
       case 'library.on': case 'library.off': case 'library.rule': return this.authority.library(method, params, context);
       case 'pack.rule': return this.authority.packRule(params, context);
@@ -331,7 +334,11 @@ export class HubControl {
       case 'work.show': return this.options.services.work.show(params);
       case 'work.pause': return this.options.services.work.pause(params);
       case 'work.once': return this.work.workspaceCall(() => this.options.services.landing.workOnce(String(params.repo ?? ''), Array.isArray(params.issues) ? params.issues.map(Number).filter((n) => Number.isSafeInteger(n) && n > 0) : []));
-      case 'job.submit': return this.options.services.runner.submit(params.spec as JobSpec);
+      case 'job.submit': {
+        // A work job writes a job's workspace, so it runs only under that job's approval (#1527), never over RPC.
+        if ((params.spec as { kind?: unknown } | undefined)?.kind === 'work') throw Error('a work job runs only under an approved job that repeats, never on request');
+        return this.options.services.runner.submit(params.spec as JobSpec);
+      }
       case 'job.status': return this.options.services.runner.status(String(params.job));
       case 'job.list': return { jobs: await this.options.services.runner.list() };
       case 'checks.kinds': return { kinds: (await this.options.services.checkKinds()).list() };

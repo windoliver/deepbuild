@@ -1,0 +1,49 @@
+== #1904 e2e @ b2e414db4; node v24.22.0
+   forge = stand-in GitHub on 127.0.0.1; cross-host = redirect to http://localhost:<other port>; loop = redirect to itself
+   columns: requests to the forge / with the token there / requests to the other host / with the token there
+caller                 case       forge tok@f else tok@e ms    outcome
+github pushes (restOf) ok         6     6     0    0     23    returned []
+github pushes (restOf) cross-host 1     1     0    0     3     refused, threw: the forge redirected outside its declared origin
+github pushes (restOf) loop       6     6     0    0     5     refused, threw: the forge exceeded five redirects
+github apps revoke     ok         2     2     0    0     2     returned undefined
+github apps revoke     cross-host 1     1     0    0     1     refused, threw: the forge redirected outside its declared origin
+github apps revoke     loop       6     6     0    0     2     refused, threw: the forge exceeded five redirects
+hub Forge.pullFor      ok         2     2     0    0     2     returned null
+hub Forge.pullFor      cross-host 1     1     0    0     1     returned undefined
+hub Forge.pullFor      loop       6     6     0    0     2     returned undefined
+hub liveFetch          ok         2     2     0    0     2     returned 200
+hub liveFetch          cross-host 1     1     0    0     1     returned 599
+hub liveFetch          loop       6     6     0    0     2     returned 599
+hub liveGraphql        ok         2     2     0    0     3     returned 200
+hub liveGraphql        cross-host 1     1     0    0     1     returned 599
+hub liveGraphql        loop       6     6     0    0     4     returned 599
+archive forge runs     ok         2     2     0    0     57    returned "pass done"
+archive forge runs     cross-host 1     1     0    0     28    refused, threw: the archive pass left 1 copy undone: Error: the forge redirected outsi
+archive forge runs     loop       6     6     0    0     32    refused, threw: the archive pass left 1 copy undone: Error: the forge exceeded five re
+hub Work.get           ok         2     2     0    0     2     returned 200
+hub Work.get           cross-host 1     1     0    0     1     refused, threw: the forge redirected outside its declared origin
+hub Work.get           loop       6     6     0    0     2     refused, threw: the forge exceeded five redirects
+hub Landing.call       ok         2     2     0    0     1     returned 200
+hub Landing.call       cross-host 1     1     0    0     1     refused, threw: the forge redirected outside its declared origin
+hub Landing.call       loop       6     6     0    0     2     refused, threw: the forge exceeded five redirects
+hub Landing.post       ok         2     2     0    0     317   returned "status posted"
+hub Landing.post       cross-host 1     1     0    0     304   refused, threw: the forge redirected outside its declared origin
+hub Landing.post       loop       6     6     0    0     338   refused, threw: the forge exceeded five redirects
+hub Intake.repo        ok         2     2     0    0     3     returned "o/new"
+hub Intake.repo        cross-host 1     1     0    0     1     refused, threw: the forge redirected outside its declared origin
+hub Intake.repo        loop       6     6     0    0     3     refused, threw: the forge exceeded five redirects
+hub Intake.issue       ok         2     2     0    0     2     returned 7
+hub Intake.issue       cross-host 1     1     0    0     1     refused, threw: the forge redirected outside its declared origin
+hub Intake.issue       loop       6     6     0    0     2     refused, threw: the forge exceeded five redirects
+hub Workspaces.file    ok         2     2     0    0     90    returned [{"task":1,"issue":7}]
+hub Workspaces.file    cross-host 1     1     0    0     103   refused, threw: the forge redirected outside its declared origin
+hub Workspaces.file    loop       6     6     0    0     89    refused, threw: the forge exceeded five redirects
+
+cross-host and loop: 24/24 bounded (other host asked 0 times, at most 6 requests to the forge)
+ok (same-origin redirect followed with the token): 12/12
+
+== real read-only call
+GET https://api.github.com/repos/nodejs/node (token sent: no)
+status 200; full_name nodejs/node; default_branch main; rate limit left 49/60
+
+e2e exit: stand-in 0, real 0

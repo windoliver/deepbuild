@@ -171,6 +171,8 @@ export type Plant =
   | 'churn-keeps-every-answer' | 'churn-keeps-every-result' | 'churn-keeps-every-output' | 'churn-keeps-every-name-set'
   // #2402's: a host that counts a hook handler's failures and never clears them.
   | 'failures-never-cleared'
+  // #2648's: a hub that reads gates.json, notices.json and the agents' settings once, at its start.
+  | 'reads-files-at-start-only'
   // #824's per-session reading: deep mcp loading the whole hub package, a waiter keeping its session's transcript, and
   // a platform that reads no process's memory.
   | 'mcp-loads-hub' | 'waiter-keeps-transcript' | 'sessions-no-memory-read'
@@ -320,7 +322,10 @@ export type Plant =
   | 'canvas-world-built-once'
   // #2896's: every client's reply cap left at 64 KB, a pager that drops the row at a page's edge, a refusal that
   // carries a 12,000-character schema, and an unknown client given 64 KB.
-  | 'reply-cap-64kb' | 'pager-drops-edge-row' | 'refusal-schema-12000' | 'unknown-client-64kb';
+  | 'reply-cap-64kb' | 'pager-drops-edge-row' | 'refusal-schema-12000' | 'unknown-client-64kb'
+  // #1576's: a sessions.read that returns every row, a page sent a frame more for each event, and an inbox.read that
+  // reads each ask with a query of its own.
+  | 'reads-every-row' | 'page-hook-frame-per-event' | 'query-per-row';
 const PLANTS: readonly string[] = [
   'asks-every-registry-run',
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
@@ -374,6 +379,7 @@ const PLANTS: readonly string[] = [
   'churn-no-full-collection', 'churn-no-resident-read',
   'churn-keeps-every-answer', 'churn-keeps-every-result', 'churn-keeps-every-output', 'churn-keeps-every-name-set',
   'failures-never-cleared',
+  'reads-files-at-start-only',
   'mcp-loads-hub', 'waiter-keeps-transcript', 'sessions-no-memory-read',
   'repeat-reaches-you',
   'deep-wait-polls', 'stop-answers-waiting',
@@ -443,6 +449,7 @@ const PLANTS: readonly string[] = [
   'rubric-holds-every-rule', 'review-without-caller',
   'canvas-world-built-once',
   'reply-cap-64kb', 'pager-drops-edge-row', 'refusal-schema-12000', 'unknown-client-64kb',
+  'reads-every-row', 'page-hook-frame-per-event', 'query-per-row',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

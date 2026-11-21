@@ -9,10 +9,10 @@ import { asksNeedYou, databaseRead, hubDown, when } from './list.js';
 import { elapsed } from './promises.js';
 import { activePlant } from './plant.js';
 import type { Row as ListRow } from './rows.js';
-import { visible } from './visible.js';
+import { typed, visible } from './visible.js';
 import { startOf } from './wire.js';
 
-const USAGE = 'Usage: deep inbox [--json]\n       deep inbox answer <ask> <option>\n       deep inbox undo <ask>\n       deep inbox save <offer>';
+const USAGE = 'Usage: deep inbox [--json]\n       deep inbox answer <ask> [--] <option>\n       deep inbox undo <ask>\n       deep inbox save <offer>';
 /** One line of output: an ask's, a plan's or a call's text comes from the record, so it prints through `visible` (#1510). */
 const say = (line: string): void => void process.stdout.write(`${visible(line)}\n`);
 /** Refusals of what you typed: nothing ran. */
@@ -21,7 +21,7 @@ const USAGE_CODES = new Set(['handle_syntax', 'not_found', 'enum']);
 /** How far back `deep inbox` lists what was decided for you. */
 const DAY_MS = 86_400_000;
 
-interface Row { opens?: { kind: string; name?: string; command?: string }; ask: string; kind: string; session: string; status: string; outcome: string; age: number; question: string; options: string[]; plan?: { hash: string; steps: Step[] } | null; decision: string | null; answer?: string | null; folded?: string | null }
+interface Row { opens?: { kind: string; name?: string; command?: string }; ask: string; kind: string; session: string; status: string; outcome: string; closed_at?: number | null; age: number; question: string; options: string[]; plan?: { hash: string; steps: Step[] } | null; decision: string | null; answer?: string | null; folded?: string | null }
 /** A plan's step, as an authority ask shows it (#69). */
 interface Step { does: string; changes: string[]; undo: string; cost: number }
 /** A permission you said yes to in the terminal, offered back as a decision to save (#23). */
@@ -34,8 +34,11 @@ export async function inboxCommand(args: readonly string[], setUp: () => Promise
   const answering = args[0] === 'answer';
   const undoing = args[0] === 'undo';
   const saving = args[0] === 'save';
+  // `--` before the option ends the flags, so an option that starts with `-` is read as typed (#2563).
+  const ended = answering && args.length === 4 && args[2] === '--';
+  if (ended) args = [args[0]!, args[1]!, args[3]!];
   // A flag where an ask or option goes is a usage error, never read as one (#19's exit table).
-  if ((answering ? args.length !== 3 : undoing || saving ? args.length !== 2 : args.length !== 0) || args.slice(1).some((a) => a.startsWith('-'))) {
+  if ((answering ? args.length !== 3 : undoing || saving ? args.length !== 2 : args.length !== 0) || args.slice(1, ended ? 2 : undefined).some((a) => a.startsWith('-'))) {
     process.stderr.write(`${USAGE}\n`);
     return 2;
   }
@@ -54,6 +57,12 @@ export async function inboxCommand(args: readonly string[], setUp: () => Promise
       : undoing ? await withPrompt(() => call(hubAddress().path, token, 'ask.undo', { ask: args[1] }, peer))
       : saving ? await withPrompt(() => call(hubAddress().path, token, 'offer.save', { offer: args[1] }, peer))
       : await call(hubAddress().path, token, 'inbox.read', {});
+    // The settled asks come a page at a time, newest first (#1576): what was decided for you in the last day is read on
+    // while a page's oldest closed within it.
+    for (let page = reply; !answering && !undoing && !saving && 'result' in page && typeof page.result.next === 'string' && Number((page.result.asks as Row[]).at(-1)?.closed_at) > Date.now() - DAY_MS;) {
+      page = await call(hubAddress().path, token, 'inbox.read', { page: page.result.next });
+      if ('result' in page && 'result' in reply) (reply.result.asks as Row[]).push(...(page.result.asks as Row[]));
+    }
   } catch (error) {
     // With the hub down the list reads its database, as deep does, and says so and since when (#2026).
     const read = answering || undoing || saving ? undefined : await databaseRead(hubAddress().path, false).catch(() => undefined);
@@ -110,7 +119,8 @@ export async function inboxCommand(args: readonly string[], setUp: () => Promise
     // Under it, the option IDs `deep inbox answer` takes (#2199), each with its label where that reads differently.
     // The planted wrong program prints the labels alone.
     const labels = activePlant() === 'inbox-labels-only';
-    if (a.actions.length) say(`    answer with ${a.actions.map((o) => (labels ? o.label : o.label.toLowerCase() === o.answer.toLowerCase() ? o.answer : `${o.answer} (${o.label})`)).join(', ')}`);
+    // Each ID as you type it back into a shell (#2563): quoted where it needs it, after `--` where it starts with `-`.
+    if (a.actions.length) say(`    answer with ${a.actions.map((o) => (labels ? o.label : o.label.toLowerCase() === o.answer.toLowerCase() ? typed(o.answer) : `${typed(o.answer)} (${o.label})`)).join(', ')}`);
     for (const f of inside.get(a.id) ?? []) say(`    folded here: ${line(f)}`);
     const r = extra.get(a.id);
     if (!r) continue;

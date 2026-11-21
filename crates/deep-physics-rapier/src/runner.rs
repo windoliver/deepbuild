@@ -33,9 +33,12 @@ use serde_json::{json, Map, Value};
 mod audit;
 pub mod centre;
 pub mod contact;
+mod dims;
 pub mod fast;
 mod held;
 pub mod kit;
+pub mod laws;
+pub mod links;
 #[cfg(not(target_arch = "wasm32"))]
 mod live;
 pub mod net;
@@ -93,6 +96,8 @@ pub struct Run {
     vehicle: crate::VehiclePlant,
     /// #2240's planted check or output.
     centre: centre::Plant,
+    /// #2371's twin: a track keeps both of two `set`s of one target and path on one step.
+    set_applies_both: bool,
     /// The views this runner holds open, by session (#522).
     #[cfg(not(target_arch = "wasm32"))]
     views: std::cell::RefCell<BTreeMap<String, live::View>>,
@@ -313,15 +318,6 @@ impl Track {
     fn json(&self) -> Value {
         Value::Array(self.entries.iter().map(Entry::json).collect())
     }
-
-    /// The call's `track` (absent: none), resolved against `w`, or the reply refusing an entry.
-    fn read(w: &World, call: &Value) -> Result<Track, Value> {
-        let t = call.get("track").unwrap_or(&Value::Null);
-        if t.is_null() {
-            return Ok(Track::default());
-        }
-        track::read(w, t).map(Track::of).map_err(|r| refused(&[*r]))
-    }
 }
 
 /// What one run steps and takes besides its hashes.
@@ -357,6 +353,8 @@ struct Trace {
     /// #523: each joint output's reading after each step: whether it is joint_force's
     /// `{force, torque}`, and the values.
     readings: BTreeMap<String, (bool, Vec<[f64; 2]>)>,
+    /// #2248: each valued output's value after each step (reading.rs).
+    values: BTreeMap<String, Vec<Vec<f64>>>,
     /// The occurrence list, each step's rows sorted (#1918).
     occurrences: Vec<occurrence::Row>,
     /// The list as #2011's shape uses, for `bake` with `occurrences: true`.
@@ -468,6 +466,7 @@ impl Run {
             ccd_on_kinematic: false,
             vehicle: crate::VehiclePlant::None,
             centre: centre::Plant::None,
+            set_applies_both: false,
             #[cfg(not(target_arch = "wasm32"))]
             views: std::cell::RefCell::default(),
         };
@@ -497,13 +496,17 @@ impl Run {
             Some("solve_cap_reports_success") => run.twin = Twin::SolveCapSuccess,
             Some("mass_ratio_declared_only") => run.declared_masses_only = true,
             Some("volume_without_constraint") => run.no_volume = true,
+            Some("set_applies_both") => run.set_applies_both = true,
             Some(name)
                 if !kit::planted(name, &mut run)
                     && !vehicle::planted(name, &mut run)
                     && !walk::planted(name, &mut run)
                     && !contact::planted(name, &mut run)
                     && !centre::planted(name, &mut run)
-                    && !fast::planted(name, &mut run) =>
+                    && !fast::planted(name, &mut run)
+                    && !dims::planted(name, &mut run)
+                    && !links::planted(name, &mut run)
+                    && !laws::planted(name, &mut run) =>
             {
                 return None
             }
@@ -580,13 +583,13 @@ impl Run {
             frame_rate: if self.key_without_rate { "" } else { rate },
             steps,
         };
-        bake::key(&parts, &self.build, target)
+        bake::key(&parts, &self.build_of(world), target)
     }
 
     /// The world `v` holds, built, or the issues that refuse it.
     fn build(&self, v: &Value) -> Result<(World, Rapier), Value> {
         let refused = |e: Vec<Refusal>| refused(&e);
-        let w = centre::check(v, self).map_err(refused)?;
+        let w = laws::check(v, self).map_err(refused)?;
         let mut b = Rapier {
             restore_any_version: self.restore_any_version,
             reverse_pairs: cfg!(feature = "test-reverse-pairs"),
@@ -616,7 +619,7 @@ impl Run {
         let scene = kept.as_deref().unwrap_or(scene);
         let doc = scene.get("worlds")?.get(id)?;
         let read = crate::bound::expand(Some(scene), doc).and_then(|doc| {
-            let w = check(&doc, &self.caps, self.table)?;
+            let w = check(&doc, &self.caps_of(&doc), self.table)?;
             let skins = deep_canvas_physics::skin::check(&w, scene);
             if !skins.is_empty() {
                 return Err(skins);
@@ -634,16 +637,16 @@ impl Run {
         let bodies = c.iter().filter(|x| x.values.len() == FIELDS.len());
         t.fast
             .step(k, bodies.map(|x| (x.id.as_str(), x.values.as_slice())));
-        for (id, o) in &w.outputs {
+        for (id, o) in w.outputs.iter().filter(|(_, o)| !o.valued()) {
             let (Some(at), Some(x)) = (o.read.vec3_at(), c.iter().find(|x| x.id == o.from)) else {
                 continue;
             };
             let p = [x.values[at], x.values[at + 1], x.values[at + 2]];
             t.positions.entry(id.clone()).or_default().push(p);
         }
-        let walkers = walk::readings(b, w, &mut t.readings);
+        let walkers = walk::readings(b, w, &joints, t);
         for (id, o) in w.outputs.iter().filter(|(_, o)| o.read.of_joint()) {
-            if let Some(j) = joints.iter().find(|j| j.id == o.from) {
+            if let Some(j) = joints.iter().find(|j| j.id == o.from && !o.valued()) {
                 let (pair, v) = match o.read {
                     Read::JointCoordinate => (false, [j.coordinate.unwrap_or(0.0), 0.0]),
                     _ => (true, [j.force, j.torque]),
@@ -796,7 +799,7 @@ impl Run {
         t.shaped = shape_uses(&t.occurrences, w);
         let record = json!({"key": key, "step_hashes": t.step_hashes, "ring": ring(t),
                             "checkpoints": t.ring.kept.iter().map(|k| checkpoint(&k.checkpoint)).collect::<Vec<_>>(),
-                            "outputs": outputs, "positions": t.positions, "track": track,
+                            "outputs": outputs, "positions": t.positions, "values": t.values, "track": track,
                             "occurrences": occurrence::listed(&t.occurrences),
                             "occurrences_hash": occurrence::hash(&t.occurrences, &rank)});
         (key, record)
@@ -811,11 +814,11 @@ impl Run {
                 match self
                     .subject(call)?
                     .and_then(|(world, _)| self.build(&world))
-                    .and_then(|(w, b)| Track::read(&w, call).map(|_| (w, b)))
+                    .and_then(|(w, b)| self.track(&w, call).map(|_| (w, b)))
                 {
                     Ok((w, b)) => {
                         let (soft, backend) = held::held(&w, &b.held());
-                        json!({"ok": true, "issues": self.mass_ratios(&w, &b), "built": b.built(),
+                        json!({"ok": true, "issues": contact::warned(self, &w, self.mass_ratios(&w, &b)), "built": b.built(),
                                "soft": soft, "backend": backend})
                     }
                     Err(e) => json!({"ok": true, "issues": e["issues"]}),
@@ -835,7 +838,7 @@ impl Run {
                     Ok(x) => x,
                     Err(e) => return Some(e),
                 };
-                let track = match self.build(&world).and_then(|(w, _)| Track::read(&w, call)) {
+                let track = match self.build(&world).and_then(|(w, _)| self.track(&w, call)) {
                     Ok(t) => t,
                     Err(e) => return Some(e),
                 };
@@ -911,7 +914,7 @@ impl Run {
                     Ok(x) => x,
                     Err(e) => return Some(e),
                 };
-                let track = match Track::read(&w, call) {
+                let track = match self.track(&w, call) {
                     Ok(t) => t,
                     Err(e) => return Some(e),
                 };
@@ -995,7 +998,7 @@ impl Run {
                     .iter()
                     .map(Value::as_str)
                     .collect::<Option<_>>()?;
-                let track = match self.build(world).and_then(|(w, _)| Track::read(&w, call)) {
+                let track = match self.build(world).and_then(|(w, _)| self.track(&w, call)) {
                     Ok(t) => t,
                     Err(e) => return Some(e),
                 };
@@ -1022,7 +1025,7 @@ impl Run {
                         .collect();
                     json!({"ok": true, "golden": {
                         "bake_key": self.key(world, &reads, &track.json(), &rate, plan.steps, None),
-                        "runtime_digest": self.build.runtime_digest(), "machine": replay::machine(&self.build.target),
+                        "runtime_digest": self.build_of(world).runtime_digest(), "machine": replay::machine(&self.build.target),
                         "step_hashes": t.step_hashes, "checkpoint_hashes": hashes,
                         "occurrences_hash": record["occurrences_hash"],
                         "record_on": self.build.target, "verify_on": verify_on}})
@@ -1063,7 +1066,7 @@ impl Run {
                     Ok(x) => x,
                     Err(e) => return Some(e),
                 };
-                let track = match Track::read(&w, call) {
+                let track = match self.track(&w, call) {
                     Ok(t) => t,
                     Err(e) => return Some(e),
                 };
@@ -1150,7 +1153,7 @@ impl Run {
             Ok(r) => r,
             Err(e) => return Some(e),
         };
-        let (w, mut b) = match self.build(world) {
+        let (w, mut b) = match self.build(world).and_then(dims::solid("physics.query")) {
             Ok(x) => x,
             Err(e) => return Some(e),
         };

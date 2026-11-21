@@ -75,6 +75,7 @@ pub enum Planted {
     DefaultsSkipJson,
     /// #548: the bindings generator orders each region's fields by name before laying them out.
     BindingsByName,
+    VehicleReaderOtherDefaults, // #2717: the world reader takes other defaults for a vehicle body.
 }
 
 impl Planted {
@@ -100,7 +101,7 @@ impl Planted {
             "defaults_compared_with_dump_only" => Planted::DefaultsComparedWithDumpOnly,
             "defaults_skip_json" => Planted::DefaultsSkipJson,
             "bindings_fields_by_name" => Planted::BindingsByName,
-            _ => return None,
+            _ => return crate::physics::defaults::planted(name),
         })
     }
 }
