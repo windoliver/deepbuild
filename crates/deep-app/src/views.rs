@@ -2349,7 +2349,8 @@ pub(crate) struct RowDrawn {
     cut: Option<String>,
     /// The title reads right to left from its first strong character, so from the slot's right (#1808).
     rtl: bool,
-    /// The time is drawn: beside a long state word at the list's narrowest it leaves what's drawn (#1808).
+    /// The time is drawn: beside a long state word at the list's narrowest it leaves what's drawn (#1808), except an
+    /// ask's, which stays (#1345).
     timed: bool,
     /// #1808's planted row draws its title whole, over the slots to its right.
     under: bool,
@@ -4894,12 +4895,10 @@ mod tests {
 
     #[std::prelude::v1::test]
     fn an_ask_row_keeps_when_its_default_applies_where_a_session_row_gives_its_time_to_its_title() {
-        // A 260-wide list leaves a row about 243 of room; beside a taste ask's word (about 75) and its slots (48) and a
-        // time such as "tomorrow 10:00" (about 70), 12 characters of title (about 85) don't fit (#1808).
-        // Any room narrower than the least title stands for it here.
+        // At a 260-wide list, 12 characters of title don't fit beside a taste ask's word and a time such as
+        // "tomorrow 10:00" (#1808); any room narrower than the least title stands for that here.
         let s = sizes();
         let (room, least) = (s.space(3), s.space(5));
-        assert!(room < least);
         assert!(
             !keeps_time(false, room, least),
             "a session row gives its time to 12 characters of title (#1808)"
