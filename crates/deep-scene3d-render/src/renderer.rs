@@ -182,6 +182,10 @@ pub struct Renderer {
     /// #166: the water's pass, made when a frame first has water, and whether this frame has.
     pub(super) waterer: Option<Box<water::Waterer>>,
     pub(super) watering: bool,
+    /// #2657: the last whole prepare's scene with its levels of detail resolved, and the one
+    /// without the water's parts, each kept while the scene it was made from holds.
+    pub(super) leveled: Option<Box<kept::Kept>>,
+    pub(super) dry: Option<Box<kept::Kept>>,
     /// #166: view3d's `reflection` target while a frame asks for it: each mirror part's lookup.
     pub(super) reflection: Option<(wgpu::Texture, wgpu::TextureView, [u32; 2])>,
     /// #268: view3d's `foam` target while a frame asks for it: the water's foam share.
@@ -221,6 +225,9 @@ pub struct Renderer {
     pub(super) mask: (wgpu::BindGroupLayout, wgpu::Sampler),
     pub(super) picks: BTreeMap<String, u32>,
     pub(super) next_generation: u64,
+    /// The hidden-style lines' spans it holds from frame to frame (#1782), so a still view
+    /// works none out again.
+    pub(super) spans: deep_canvas_scene3d::spans::Kept,
     pub(super) targets: Option<Targets>,
     /// The batches this frame draws, in layer order.
     pub(super) order: Vec<String>,

@@ -1,7 +1,8 @@
 //! Material: mirror (#465): one extra pass, the scene from the camera mirrored in the mirror's
-//! plane at half resolution (deep_canvas_scene3d::mirror::view), drawn by a renderer of its own
-//! with no mirror, and laid over the mirror's parts in the linear target after the geometry.
-//! It keeps no history, so seeking equals playing; a mirror seen in it draws its fallback.
+//! plane at half the frame's internal size (deep_canvas_scene3d::mirror::view; #2691), drawn by
+//! a renderer of its own with no mirror, and laid over the mirror's parts in the linear target
+//! after the geometry. It keeps no history, so seeking equals playing; a mirror seen in it draws
+//! its fallback.
 
 use std::collections::BTreeMap;
 
@@ -11,13 +12,32 @@ use deep_canvas_scene3d::scene::Scene;
 use deep_gpu::device::Device;
 use deep_gpu::encode::Job;
 
-use crate::{Planted, Renderer, LINEAR, MIRROR_PASS, OUTPUT_PASS};
+use crate::{Renderer, LINEAR, MIRROR_PASS, OUTPUT_PASS};
 
 const SOURCE: &str = include_str!("mirror.wgsl");
+/// What the planted overlay changes in [`SOURCE`]: its uniform gains the frame's full size, and
+/// the lookup divides the pixel's place by it.
+const PARAMS: &str = "    flip: vec4<f32>,\n}";
+const PARAMS_FULL: &str = "    flip: vec4<f32>,\n    full: vec4<f32>,\n}";
+const SIZE: &str = "let size = vec2<f32>(textureDimensions(ids));";
+const SIZE_FULL: &str = "let size = params.full.xy;";
+
+/// The mirror's wrong programs, each reachable only through `deep-gpu --planted` (#2691).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Planted {
+    /// The pass draws at half of half the internal size.
+    pub halves_twice: bool,
+    /// The overlay looks its picture up by the pixel's place in the internal target over the
+    /// frame's full size.
+    pub samples_full_frame: bool,
+}
 
 /// The mirror's pass: its own renderer and the pass that lays its picture over the parts.
 pub struct Mirrorer {
+    planted: Planted,
     view: Box<Renderer>,
+    /// The mirrored view of the scene and the size it was made at, kept while the scene holds.
+    pub(crate) mirrored: Option<(Scene, [u32; 2])>,
     layout: wgpu::BindGroupLayout,
     /// The overlay without and with #166's `reflection` target.
     pipeline: [wgpu::RenderPipeline; 2],
@@ -31,13 +51,21 @@ pub struct Mirrorer {
     parts: usize,
 }
 
-/// The mirrored pass's size: half the frame's, rounded up.
+/// The mirrored pass's size: half the frame's internal size, rounded up.
 pub fn half(size: [u32; 2]) -> [u32; 2] {
     size.map(|s| s.div_ceil(2).max(1))
 }
 
+impl Renderer {
+    /// The size the mirror's pass drew this frame's picture at (#2691); `None` with no mirror.
+    pub fn mirror_px(&self) -> Option<[u32; 2]> {
+        let picture = self.mirrorer.as_ref().filter(|_| self.mirroring)?;
+        picture.view.linear().map(|(t, _)| [t.width(), t.height()])
+    }
+}
+
 impl Mirrorer {
-    pub fn new(device: &Device, planted: Planted) -> Self {
+    pub fn new(device: &Device, planted: crate::Planted) -> Self {
         let d = &device.device;
         let entry = |binding, ty| wgpu::BindGroupLayoutEntry {
             binding,
@@ -71,9 +99,14 @@ impl Mirrorer {
                 ),
             ],
         });
+        let source = if planted.mirror.samples_full_frame {
+            SOURCE.replace(PARAMS, PARAMS_FULL).replace(SIZE, SIZE_FULL)
+        } else {
+            SOURCE.to_string()
+        };
         let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(MIRROR_PASS),
-            source: wgpu::ShaderSource::Wgsl(SOURCE.into()),
+            source: wgpu::ShaderSource::Wgsl(source.into()),
         });
         let pipeline_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some(MIRROR_PASS),
@@ -126,7 +159,9 @@ impl Mirrorer {
             ..Default::default()
         });
         Mirrorer {
+            planted: planted.mirror,
             view: Box::new(Renderer::new(device, planted)),
+            mirrored: None,
             layout,
             pipeline,
             sampler,
@@ -137,20 +172,33 @@ impl Mirrorer {
         }
     }
 
-    /// Prepares the mirrored view of `scene` and this frame's parameters.
+    /// Prepares the mirrored view of `scene`, whose frame draws at `internal`, and this frame's
+    /// parameters. `held`: `scene` is the one the frame before prepared, unchanged, so the view
+    /// made then is drawn again if it is the size this frame wants (#3024).
+    #[allow(clippy::too_many_arguments)]
     pub fn prepare(
         &mut self,
         device: &Device,
         scene: &Scene,
+        internal: [u32; 2],
         mirror: &Mirror,
         look: &Look3,
         picks: &BTreeMap<String, u32>,
         overlay: bool,
+        held: bool,
     ) {
-        let size = half(scene.size);
-        let view = deep_canvas_scene3d::mirror::view(scene, mirror, size);
+        let size = if self.planted.halves_twice {
+            half(half(internal))
+        } else {
+            half(internal)
+        };
+        let view = match self.mirrored.take() {
+            Some((view, s)) if held && s == size => view,
+            _ => deep_canvas_scene3d::mirror::view(scene, mirror, size),
+        };
         self.view.pictured = true;
         self.view.prepare(device, &view, look);
+        self.mirrored = Some((view, size));
         let mut ids: Vec<u32> = mirror
             .parts
             .iter()
@@ -167,13 +215,16 @@ impl Mirrorer {
             count as f32,
         ];
         // A frame whose values hold binds the buffers the last one made.
-        if self.frame.is_some() && self.held.0 == flip && self.held.1 == ids {
+        let full = self.planted.samples_full_frame;
+        if !full && self.frame.is_some() && self.held.0 == flip && self.held.1 == ids {
             return;
         }
+        // The planted overlay's uniform holds the frame's full size after the shipped values.
+        let params = [flip, [scene.size[0] as f32, scene.size[1] as f32, 0.0, 0.0]];
         let d = &device.device;
         let uniform = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(MIRROR_PASS),
-            contents: bytemuck::cast_slice(&flip),
+            contents: bytemuck::cast_slice(&params[..1 + usize::from(full)]),
             usage: wgpu::BufferUsages::UNIFORM,
         });
         let parts = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -186,7 +237,7 @@ impl Mirrorer {
         self.bind = None;
     }
 
-    /// The mirrored picture, linear, at half the frame's size (#166's water reads it).
+    /// The mirrored picture, linear, at half the frame's internal size (#166's water reads it).
     pub fn picture(&self) -> Option<wgpu::TextureView> {
         self.view.linear().map(|(_, v)| v.clone())
     }

@@ -312,13 +312,41 @@ export function withAppend(record: RecordStore, append: RecordStore['append']): 
   });
 }
 
+/** The record's methods that read it, each counted as one query. */
+const RECORD_READS = ['raw', 'read', 'table', 'session', 'resolve', 'startSlice', 'loadLearned'];
+
+/** The queries one call runs (#1576): each read of the record made inside `counting`, its work's own and no other's. */
+const queries = new AsyncLocalStorage<{ n: number }>();
+export async function counting(call: () => Promise<Record<string, unknown>>): Promise<Record<string, unknown>> {
+  const count = { n: 0 };
+  const result = await queries.run(count, call);
+  return { ...result, queries: count.n };
+}
+/** The record, each read counted against the call it runs for, if one counts (#1576). */
+export function counted(record: RecordStore): RecordStore {
+  const reads = new Set([...RECORD_READS, 'rows']);
+  return new Proxy(record, {
+    get: (target, key) => {
+      const value = Reflect.get(target, key, target) as unknown;
+      if (typeof value !== 'function') return value;
+      const bound = (value as (...a: unknown[]) => unknown).bind(target);
+      if (typeof key !== 'string' || !reads.has(key)) return bound;
+      return (...args: unknown[]) => {
+        const count = queries.getStore();
+        if (count) count.n++;
+        return bound(...args);
+      };
+    },
+  });
+}
+
 /**
  * The record, each read it serves first logged to `file` as a JSON line: when it began, the method, and its SQL with
  * its bound values, or its arguments (DEEP_HUB_TEST_READS, #823). Only tests set it.
  */
 export function readsLogged(record: RecordStore, file: string): RecordStore {
   writeFileSync(file, '');
-  const reads = new Set(['raw', 'read', 'table', 'session', 'resolve', 'startSlice', 'loadLearned']);
+  const reads = new Set(RECORD_READS);
   return new Proxy(record, {
     get: (target, key) => {
       const value = Reflect.get(target, key, target) as unknown;

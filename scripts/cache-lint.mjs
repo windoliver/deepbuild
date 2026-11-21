@@ -31,7 +31,7 @@ const NAMED = [
   ['crates/deep-gpu-layer/src/textures.rs', 'Made', ['ready']],
   ['crates/deep-scene3d-render/src/renderer.rs', 'Renderer', ['meshes']],
   ['crates/deep-scene3d-render/src/maps.rs', 'Store', ['textures', 'groups']],
-  ['crates/deep-canvas-scene3d/src/lod.rs', null, ['PROXIES']],
+  ['crates/deep-scene3d-render/src/proxy.rs', null, ['PROXIES']],
   ['vendor/gpui-pre-apple/src/metal_atlas.rs', 'MetalAtlasTextures', ['monochrome_textures', 'polychrome_textures']],
 ];
 

@@ -334,6 +334,8 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
                     hub.pointer_over(&form, t, &mut drawn, drawn_size);
                 }
             }
+            // #1217: the panel's measure, the viewer's own, over its frame.
+            hub.measure_over(&panel_id, &scene, &mut drawn, drawn_size);
             let (pw, dw) = (usize::from(size[0]) * 4, usize::from(drawn_size[0]) * 4);
             let mut rgba = vec![0u8; pw * usize::from(size[1])];
             for (y, line) in drawn.chunks_exact(dw).enumerate() {

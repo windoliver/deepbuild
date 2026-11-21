@@ -1669,10 +1669,6 @@
           "spec": "* path=../deep-canvas-drawn",
           "why": "Issue #149: a drawn look's spec and line profiles, read for the 3D module's marks."
         },
-        "meshopt": {
-          "spec": "^0.7",
-          "why": "Issue #425: a proxy band's mesh, simplified once per content key (Level of detail: proxies)."
-        },
         "sha2": {
           "spec": "^0.10",
           "why": "Issue #419: a fixture world's step hashes; already in the tree."
@@ -1736,6 +1732,10 @@
         "web-time": {
           "spec": "=1.1.0",
           "why": "Issue #172: a time read on the page's clock in the web player, the system's elsewhere."
+        },
+        "meshopt": {
+          "spec": "^0.7",
+          "why": "Issue #2738 (from #425): a proxy band's mesh, simplified once per content key where a scene is drawn, so scene3d links no C++; already in the tree."
         }
       },
       "dev-dependencies": {

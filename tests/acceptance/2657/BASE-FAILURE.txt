@@ -1,0 +1,162 @@
+#2657's acceptance tests at the base, 3f02bf52b, on this Mac (Apple M5 Max), 2026-11-21.
+Each run: the six [[test]] entries of README.md (Run them) added to crates/deep-scene3d-render/Cargo.toml for the run
+and removed after; built with CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 through scripts/lease nice -n 10, each file
+built alone (cargo test --locked -p deep-scene3d-render --no-run --test acceptance_2657_<file>) and each built binary
+run once with --nocapture. Build lines are trimmed to the errors; test output is as printed.
+
+=== Run 1: the base as it stands ===
+
+--- side_meshes.rs: build fails
+error[E0425]: cannot find function `tangents_derived` in crate `deep_scene3d_render`
+error[E0609]: no field `index_buffers` on type `deep_gpu::counted::Reading`
+error: could not compile `deep-scene3d-render` (test "acceptance_2657_side_meshes") due to 8 previous errors
+
+--- casters.rs: build fails
+error[E0425]: cannot find function `caster_scans` in module `deep_scene3d_render::shadow`
+error: could not compile `deep-scene3d-render` (test "acceptance_2657_casters") due to 2 previous errors
+
+--- maps_lookup.rs: build succeeds
+$ target/debug/deps/acceptance_2657_maps_lookup-4ceec4af364f7360
+running 1 test
+test ac3_a_frame_of_2000_textured_materials_costs_at_most_1_1_times_the_instructions_per_material_of_200 ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 21.18s
+thread 'ac3_a_frame_of_2000_textured_materials_costs_at_most_1_1_times_the_instructions_per_material_of_200' panicked at crates/deep-scene3d-render/../../tests/acceptance/2657/maps_lookup.rs:157:5:
+#2657.4baeffe3: a frame of 2000 textured materials retires 1.607 times the instructions per material of a frame of 200 (the median of 15 alternated rounds), over 1.1:
+round 1: 12314024 instructions for 200, 198126416 for 2000, ratio 1.609
+round 2: 12415701 instructions for 200, 197647758 for 2000, ratio 1.592
+round 3: 12311879 instructions for 200, 198040850 for 2000, ratio 1.609
+round 4: 12595021 instructions for 200, 201105651 for 2000, ratio 1.597
+round 5: 12320763 instructions for 200, 197667998 for 2000, ratio 1.604
+round 6: 12409579 instructions for 200, 198431761 for 2000, ratio 1.599
+round 7: 12312451 instructions for 200, 199122152 for 2000, ratio 1.617
+round 8: 12381989 instructions for 200, 202900221 for 2000, ratio 1.639
+round 9: 12310620 instructions for 200, 198131461 for 2000, ratio 1.609
+round 10: 12740577 instructions for 200, 199329239 for 2000, ratio 1.565
+round 11: 12458668 instructions for 200, 198943838 for 2000, ratio 1.597
+round 12: 12315014 instructions for 200, 198466975 for 2000, ratio 1.612
+round 13: 12314656 instructions for 200, 198276428 for 2000, ratio 1.610
+round 14: 12389870 instructions for 200, 197641434 for 2000, ratio 1.595
+round 15: 12321146 instructions for 200, 197996764 for 2000, ratio 1.607
+exit 101  (23 s)
+
+--- copies.rs: build succeeds
+$ target/debug/deps/acceptance_2657_copies-323319be1c9378e1
+running 1 test
+test ac4_a_level_of_detail_band_and_a_water_part_cost_a_prepare_no_copy_of_the_scene ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.73s
+thread 'ac4_a_level_of_detail_band_and_a_water_part_cost_a_prepare_no_copy_of_the_scene' panicked at crates/deep-scene3d-render/../../tests/acceptance/2657/copies.rs:132:5:
+#2657.2d901bbb: a whole prepare of 10000 solids with a level-of-detail band and a water part asks the heap for 59606115 bytes, 59442799 more than with neither (163316): 4.21 copies of the scene at 14124594 bytes a copy, over 1 MiB (1048576 bytes)
+exit 101  (15 s)
+
+--- ensure_casters.rs: build fails
+error[E0624]: method `ensure_casters` is private
+error[E0560]: struct `deep_scene3d_render::Planted` has no field named `casters_once_any`
+error: could not compile `deep-scene3d-render` (test "acceptance_2657_ensure_casters") due to 2 previous errors
+
+--- sway.rs: build fails
+error[E0609]: no field `command_buffers` on type `deep_gpu::counted::Reading`
+error[E0560]: struct `deep_scene3d_render::Planted` has no field named `sway_first_frame_only`
+error: could not compile `deep-scene3d-render` (test "acceptance_2657_sway") due to 2 previous errors
+
+=== Run 2: the base with README's surfaces added, its behavior unchanged, and the two plants wired (a probe, reverted) ===
+The probe: Reading::index_buffers and Reading::command_buffers counted in deep-gpu's counted device;
+tangents_derived() counted in mesh::vertices where it derives tangents; shadow::caster_scans() counted in corners_of
+per meshed caster; Renderer::ensure_casters made pub; Planted::casters_once_any (ensure_casters returns at its top once
+either shadow pipeline exists) and Planted::sway_first_frame_only (the sway pass runs in the first frame that has it,
+never after). Every build succeeds.
+
+--- side_meshes.rs
+$ target/debug/deps/acceptance_2657_side_meshes-5cae116f1e496940
+running 1 test
+test ac1_a_deforming_solid_s_side_meshes_make_no_index_buffer_and_derive_no_tangent ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.16s
+thread 'ac1_a_deforming_solid_s_side_meshes_make_no_index_buffer_and_derive_no_tangent' panicked at crates/deep-scene3d-render/../../tests/acceptance/2657/side_meshes.rs:125:5:
+#2657.88046eaf: a deforming pot of 202 vertices under motion blur with the core velocity target on:
+frame 2 makes 4 index buffers, 4 more than its rigid twin's 0: the side meshes' (expected none)
+frame 2 derives 808 tangents, 808 more than its rigid twin's 0: the side meshes' (expected none)
+frame 3 makes 4 index buffers, 4 more than its rigid twin's 0: the side meshes' (expected none)
+frame 3 derives 808 tangents, 808 more than its rigid twin's 0: the side meshes' (expected none)
+exit 101  (2 s)
+
+--- casters.rs
+$ target/debug/deps/acceptance_2657_casters-da87d4b8d1c08b6e
+running 1 test
+test ac2_a_whole_prepare_scans_each_caster_once_and_its_cascades_equal_the_base ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.75s
+thread 'ac2_a_whole_prepare_scans_each_caster_once_and_its_cascades_equal_the_base' panicked at crates/deep-scene3d-render/../../tests/acceptance/2657/casters.rs:73:5:
+#2657.6e8cb3fb: 1,000 casters under a four-cascade sun:
+whole prepare 1 scans the casters' vertices 2000 times for 1000 casters (expected 1000, once each)
+whole prepare 2 scans the casters' vertices 2000 times for 1000 casters (expected 1000, once each)
+exit 101  (3 s)
+
+--- maps_lookup.rs
+$ target/debug/deps/acceptance_2657_maps_lookup-4ceec4af364f7360
+running 1 test
+test ac3_a_frame_of_2000_textured_materials_costs_at_most_1_1_times_the_instructions_per_material_of_200 ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.09s
+thread 'ac3_a_frame_of_2000_textured_materials_costs_at_most_1_1_times_the_instructions_per_material_of_200' panicked at crates/deep-scene3d-render/../../tests/acceptance/2657/maps_lookup.rs:157:5:
+#2657.4baeffe3: a frame of 2000 textured materials retires 1.606 times the instructions per material of a frame of 200 (the median of 15 alternated rounds), over 1.1:
+round 1: 12309557 instructions for 200, 198400048 for 2000, ratio 1.612
+round 2: 12307566 instructions for 200, 197621610 for 2000, ratio 1.606
+round 3: 12309819 instructions for 200, 197629362 for 2000, ratio 1.605
+round 4: 12389629 instructions for 200, 197700727 for 2000, ratio 1.596
+round 5: 12364074 instructions for 200, 197631926 for 2000, ratio 1.598
+round 6: 12309378 instructions for 200, 197632534 for 2000, ratio 1.606
+round 7: 12309548 instructions for 200, 197720791 for 2000, ratio 1.606
+round 8: 12831395 instructions for 200, 198500388 for 2000, ratio 1.547
+round 9: 12311483 instructions for 200, 197633699 for 2000, ratio 1.605
+round 10: 12313273 instructions for 200, 197769071 for 2000, ratio 1.606
+round 11: 12309301 instructions for 200, 198100770 for 2000, ratio 1.609
+round 12: 12309060 instructions for 200, 197626489 for 2000, ratio 1.606
+round 13: 12311090 instructions for 200, 198998061 for 2000, ratio 1.616
+round 14: 12309118 instructions for 200, 199575428 for 2000, ratio 1.621
+round 15: 12314660 instructions for 200, 198201024 for 2000, ratio 1.609
+exit 101  (7 s)
+
+--- copies.rs
+$ target/debug/deps/acceptance_2657_copies-323319be1c9378e1
+running 1 test
+test ac4_a_level_of_detail_band_and_a_water_part_cost_a_prepare_no_copy_of_the_scene ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.34s
+thread 'ac4_a_level_of_detail_band_and_a_water_part_cost_a_prepare_no_copy_of_the_scene' panicked at crates/deep-scene3d-render/../../tests/acceptance/2657/copies.rs:132:5:
+#2657.2d901bbb: a whole prepare of 10000 solids with a level-of-detail band and a water part asks the heap for 59606115 bytes, 59442799 more than with neither (163316): 4.21 copies of the scene at 14124594 bytes a copy, over 1 MiB (1048576 bytes)
+exit 101  (6 s)
+
+--- ensure_casters.rs
+$ target/debug/deps/acceptance_2657_ensure_casters-157678ed6cdb1f5f
+running 3 tests
+test ac5_planted_casters_once_any_misses_the_second_kind_and_fails_naming_it ... ok
+test ac5_a_scene_that_gains_its_first_caster_of_each_kind_gets_its_pipeline_in_that_frame ... ok
+test ac5_after_warm_up_ensure_casters_allocates_nothing_under_a_shadowed_sun_and_a_casting_lamp ... FAILED
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.08s
+#2657.1e3f898a: planted casters_once_any fails with: ["frame 4 gains its first mask-alpha caster and gets no scene3d.shadow_mask pipeline in that frame (it compiled [])"]
+thread 'ac5_after_warm_up_ensure_casters_allocates_nothing_under_a_shadowed_sun_and_a_casting_lamp' panicked at crates/deep-scene3d-render/../../tests/acceptance/2657/ensure_casters.rs:140:5:
+assertion `left == right` failed: #2657.1e3f898a: after warm-up, ensure_casters under a shadowed sun and a casting lamp makes 6 allocations of 196 bytes (expected none)
+  left: (6, 196)
+ right: (0, 0)
+exit 101  (2 s)
+
+--- sway.rs
+$ target/debug/deps/acceptance_2657_sway-975e84c749903218
+running 3 tests
+test ac6_frames_whose_sway_parameters_hold_submit_no_command_buffer_for_sway ... FAILED
+test ac6_on_metal_frames_where_the_tree_moves_differ_and_equal_the_base_by_hash ... ok
+test ac6_on_metal_planted_sway_first_frame_only_fails_naming_the_frame ... ok
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.36s
+thread 'ac6_frames_whose_sway_parameters_hold_submit_no_command_buffer_for_sway' panicked at crates/deep-scene3d-render/../../tests/acceptance/2657/sway.rs:104:5:
+#2657.92acfd65: a swaying tree on the noop lane:
+frame 2, the sway's parameters held, submits 2 command buffers against the still tree's 1: 1 for sway (expected none)
+frame 2, the sway's parameters held, begins 1 compute passes against the still tree's 0: 1 for sway (expected none)
+frame 3, the sway's parameters held, submits 2 command buffers against the still tree's 1: 1 for sway (expected none)
+frame 3, the sway's parameters held, begins 1 compute passes against the still tree's 0: 1 for sway (expected none)
+#2657.92acfd65: planted sway_first_frame_only fails with: ["frame 3 (t = 1.25 s) hashes 4e3bbe457d45cf48, the merge base's 4bda017f02b00599", "frame 3 (t = 1.25 s) differs from frame 1 (t = 0) in 0 pixels: the tree doesn't visibly move", "this run's hashes: {\"adapter\":\"Apple M5 Max\",\"hashes\":[\"4e3bbe457d45cf48\",\"4e3bbe457d45cf48\",\"4e3bbe457d45cf48\"]}"]
+exit 101  (6 s)
+
+=== Run 3: run 2's probe with Store::by_index reading a map from index to group (a passability check, reverted) ===
+
+$ target/debug/deps/acceptance_2657_maps_lookup-4ceec4af364f7360
+running 1 test
+test ac3_a_frame_of_2000_textured_materials_costs_at_most_1_1_times_the_instructions_per_material_of_200 ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.56s
+exit 0  (11 s)
+

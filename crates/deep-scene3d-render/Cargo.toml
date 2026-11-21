@@ -26,7 +26,44 @@ wgpu = { version = "30", default-features = false, features = ["std", "wgsl"] }
 wgpu-profiler = "0.28"
 # #172: a time read on the page's clock in the web player, the system's elsewhere.
 web-time = "=1.1.0"
+# Issue #2738 (from #425): a proxy band's mesh, simplified once per content key where a scene is
+# drawn, so scene3d, and deep-physics through it, links no C++.
+meshopt = "0.7"
 
 [dev-dependencies]
 serde_json = "1"
 naga = { version = "30", default-features = false, features = ["wgsl-in"] }
+
+# Issue #2657: the acceptance tests, written blind in tests/acceptance/2657.
+[[test]]
+name = "acceptance_2657_side_meshes"
+path = "../../tests/acceptance/2657/side_meshes.rs"
+
+[[test]]
+name = "acceptance_2657_casters"
+path = "../../tests/acceptance/2657/casters.rs"
+
+[[test]]
+name = "acceptance_2657_maps_lookup"
+path = "../../tests/acceptance/2657/maps_lookup.rs"
+
+[[test]]
+name = "acceptance_2657_copies"
+path = "../../tests/acceptance/2657/copies.rs"
+
+[[test]]
+name = "acceptance_2657_ensure_casters"
+path = "../../tests/acceptance/2657/ensure_casters.rs"
+
+[[test]]
+name = "acceptance_2657_sway"
+path = "../../tests/acceptance/2657/sway.rs"
+
+# Issue #3024: the acceptance tests, written blind in tests/acceptance/3024.
+[[test]]
+name = "acceptance_3024_heap"
+path = "../../tests/acceptance/3024/heap.rs"
+
+[[test]]
+name = "acceptance_3024_pixels"
+path = "../../tests/acceptance/3024/pixels.rs"
