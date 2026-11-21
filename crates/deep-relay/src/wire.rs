@@ -3,6 +3,11 @@
 
 /// The protocol a relay's hello must name.
 pub const PROTOCOL: &str = "relay@1";
+/// #277: relay@2 (packages/contracts/slots/relay@2.json), beside relay@1: a copy asks for it by the
+/// WebSocket subprotocol `relay.2` (a subprotocol is an HTTP token, which holds no `@`), and a
+/// relay that speaks it says so in its hello.
+pub const PROTOCOL2: &str = "relay@2";
+pub const SUBPROTOCOL2: &str = "relay.2";
 /// A frame's header: match 16 B, player u8, confirmed u32, first u32, count u16.
 pub const HEADER: usize = 27;
 /// The shipped relay's limits per connection (canvas primitives: Net: relay protocol relay@1).
@@ -13,10 +18,15 @@ pub type MatchId = [u8; 16];
 
 /// relay@1's digest as committed in packages/contracts/digests.json.
 pub fn digest() -> String {
+    digest_of(PROTOCOL)
+}
+
+/// A relay protocol's digest as committed in packages/contracts/digests.json.
+pub fn digest_of(protocol: &str) -> String {
     let digests: serde_json::Value =
         serde_json::from_str(include_str!("../../../packages/contracts/digests.json"))
             .unwrap_or_default();
-    digests[PROTOCOL].as_str().unwrap_or_default().to_string()
+    digests[protocol].as_str().unwrap_or_default().to_string()
 }
 
 /// Bytes as lowercase hex.
@@ -52,17 +62,21 @@ pub fn host(relay: &str) -> String {
 /// The hello check: a relay that names another protocol or digest, or no limits, is refused
 /// before anything is sent, naming its host and what it answered.
 pub fn check_hello(host: &str, hello: &serde_json::Value) -> Result<Limits, String> {
+    check_hello_as(host, hello, PROTOCOL)
+}
+
+/// The hello check for the protocol `want` the copy asked for (#277: relay@2).
+pub fn check_hello_as(host: &str, hello: &serde_json::Value, want: &str) -> Result<Limits, String> {
     let protocol = hello["protocol"].as_str().unwrap_or("nothing");
-    if protocol != PROTOCOL {
+    if protocol != want {
         return Err(format!(
-            "refused the relay {host}: its hello answered {protocol}, not {}",
-            PROTOCOL
+            "refused the relay {host}: its hello answered {protocol}, not {want}"
         ));
     }
-    let (digest, committed) = (hello["digest"].as_str().unwrap_or("none"), digest());
+    let (digest, committed) = (hello["digest"].as_str().unwrap_or("none"), digest_of(want));
     if digest != committed {
         return Err(format!(
-            "refused the relay {host}: its hello answered relay@1 with the digest {digest}, not the committed {committed}"
+            "refused the relay {host}: its hello answered {want} with the digest {digest}, not the committed {committed}"
         ));
     }
     let limit = |name: &str| hello["limits"][name].as_u64().filter(|n| *n > 0);

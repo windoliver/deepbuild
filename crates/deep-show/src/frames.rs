@@ -21,6 +21,9 @@ use crate::evidence;
 use crate::hub::{Call, Eval, EvalTime, Frames, Hub, Show, INTERFACE_RUNS, SEAL_RUNS};
 use crate::snapshot::{self, Drawn, Unfit};
 
+#[cfg(target_os = "macos")]
+mod drawn2d;
+
 /// An operator's error as a revision's issue.
 pub fn op_issue(i: &OpIssue) -> Issue {
     let what = format!("{} can't evaluate this", i.operator);
@@ -869,12 +872,21 @@ impl<'a> Hub<'a> {
                         d.status.as_ref().map(Arc::as_ptr),
                     )
                 });
-                let hash = match (&last, &drawing) {
-                    (Some((a, b, hash)), Some(d)) if (*a, *b) == ptrs && d.boxes.is_empty() => {
+                // #1561: a drawn look's frame is the GPU's, drawn again whatever the drawing,
+                // since its camera moves the page under marks that hold still.
+                #[cfg(target_os = "macos")]
+                let drawn = drawing.as_ref().and_then(|d| self.drawn_png(&f.doc, t, d));
+                #[cfg(not(target_os = "macos"))]
+                let drawn: Option<Option<String>> = None;
+                let hash = match (drawn, &last, &drawing) {
+                    (Some(sha), ..) => sha,
+                    (None, Some((a, b, hash)), Some(d))
+                        if (*a, *b) == ptrs && d.boxes.is_empty() =>
+                    {
                         Some(hash.clone())
                     }
-                    (_, Some(d)) => self.canonical_png(d, None).ok().map(|(sha, _, _)| sha),
-                    (_, None) => None,
+                    (None, _, Some(d)) => self.canonical_png(d, None).ok().map(|(sha, _, _)| sha),
+                    (None, _, None) => None,
                 };
                 if let Some(hash) = &hash {
                     last = Some((ptrs.0, ptrs.1, hash.clone()));

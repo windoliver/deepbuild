@@ -376,6 +376,9 @@ pub struct Config {
     pub timeout: i64,
     /// The document's `controls`: what a player's entry must name, within its range (#550).
     pub controls: Value,
+    /// #277: a logic item reads `net.seats`, so a leave, a drop or an absence hands the seat to
+    /// the piece's bot at one agreed step; else the match ends as before, nothing playing it.
+    pub seats: bool,
 }
 
 impl Config {
@@ -400,6 +403,7 @@ impl Config {
             hash_every: whole("hash_every", 60, [1, 100_000]),
             timeout: (timeout.max(0.05) * FLICKS as f64).round() as i64,
             controls: form.get("controls").cloned().unwrap_or(json!({})),
+            seats: reads_seats(form),
         })
     }
 
@@ -413,7 +417,28 @@ impl Config {
 /// names a control the piece declares, and its value is one that control can take (a number
 /// within a slider's range, one of a choice's options, a text within its cap). The refusal names
 /// the code and the control; the copy adds the player.
+/// #277: whether a logic item of `form` reads `net.seats`.
+pub fn reads_seats(form: &Value) -> bool {
+    let items = form.get("items").and_then(Value::as_object);
+    items.into_iter().flatten().any(|(_, i)| {
+        i["kind"].as_str().is_some_and(|k| k.starts_with("logic@"))
+            && i["params"]["reads"]
+                .as_array()
+                .is_some_and(|r| r.iter().any(|r| r == crate::copy::NET_SEATS))
+    })
+}
+
 pub fn admit(controls: &Value, control: &str, value: &Value) -> Result<(), Value> {
+    // #277: a seat entry the net module writes, never a player's control.
+    if control == crate::copy::SEAT {
+        return match crate::copy::Seat::named(value.as_str().unwrap_or_default()) {
+            Some(_) => Ok(()),
+            None => Err(
+                json!({"code": "out_of_range", "control": control, "value": value,
+                               "what": "a seat is left, absent or back"}),
+            ),
+        };
+    }
     let Some(c) = controls.get(control) else {
         return Err(json!({"code": "unknown_control", "control": control,
             "what": format!("the piece declares no control {control}")}));

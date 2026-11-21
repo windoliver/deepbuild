@@ -77,7 +77,7 @@ struct Stub {
 }
 
 struct Args {
-    look: Look3,
+    look: crate::flat::CallLook,
     /// #462: the looks the fixtures' shots and regions name.
     looks: BTreeMap<String, crate::regions::Named>,
     writer: String,
@@ -213,6 +213,7 @@ fn parse(call: &Value) -> Result<Args, Value> {
         ));
     };
     let look = Look3::read(&call["look"]).map_err(|e| bad(&format!("look: {e}")))?;
+    let look = crate::flat::CallLook::of(look, call);
     let looks = crate::regions::looks_of(call, None)?;
     let separate = match call.get("separate_items") {
         None => None,
@@ -346,7 +347,7 @@ struct Played {
 /// The check of `path` as the writer's revision, with its warm-up.
 fn checked(
     path: &PathBuf,
-    args_look: &Look3,
+    args_look: &crate::flat::CallLook,
     writer: &str,
     size: Option<[u32; 2]>,
     labels: &mut Labels,
@@ -1328,7 +1329,7 @@ pub fn counts(app: &mut App, call: &Value) -> Value {
         return bad("envelope_counts is {look, writer, doc, render: {seconds, pixels}}");
     };
     let look = match Look3::read(&call["look"]) {
-        Ok(l) => l,
+        Ok(l) => crate::flat::CallLook::of(l, call),
         Err(e) => return bad(&format!("look: {e}")),
     };
     let looks = match crate::regions::looks_of(call, None) {

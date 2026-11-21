@@ -1,0 +1,28 @@
+# #832's Oracle lane on the base, cfc1e6a71, on macOS arm64. The checkout's path is <checkout>.
+#
+#   NO_COLOR=1 npx vitest run --root tests/acceptance/832-oracle --testTimeout=600000 --reporter=verbose
+# Each test fails at its first named assertion, for the issue's reason: the base's catalog plug-in has no
+# packages/checks/catalog/dominance.ts, so there is no binomialInterval to run the upstream rows against.
+# npx tsc -p tests/acceptance/832-oracle/tsconfig.json passes at the base.
+#
+# This suite's own exact interval (tests/acceptance/832/helpers.ts) met all four rows before that, within 4e-15
+# relative on the 1e-12 row and within 5e-8 on the others.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/832-oracle
+
+ × binomial.test.ts > … > #832.d6fbcd45 #832.c07dc2c3 binomialInterval(20, 100, 0.95) is [0.1266555521019559, 0.2918426890886281] 4ms
+   → the catalog plug-in holds packages/checks/catalog/dominance.ts, which exports binomialInterval: expected false to be true // Object.is equality
+ × binomial.test.ts > … > #832.d6fbcd45 #832.c07dc2c3 binomialInterval(3, 50, 0.99) is [0.006872485, 0.202706269] 0ms
+   → (the same assertion)
+ × binomial.test.ts > … > #832.d6fbcd45 #832.c07dc2c3 binomialInterval(0, 10, 0.95) is [0, 0.3084971] 0ms
+   → (the same assertion)
+ × binomial.test.ts > … > #832.d6fbcd45 #832.c07dc2c3 binomialInterval(10, 10, 0.95) is [0.6915029, 1] 0ms
+   → (the same assertion)
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Duration  359ms
+
+AssertionError: the catalog plug-in holds packages/checks/catalog/dominance.ts, which exports binomialInterval: expected false to be true // Object.is equality
+ ❯ binomialInterval binomial.test.ts:24:131
+ ❯ binomial.test.ts:50:23

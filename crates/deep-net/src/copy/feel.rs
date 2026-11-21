@@ -59,7 +59,7 @@ pub fn percentile(values: &[f64], p: f64) -> f64 {
 
 impl<S: Stepper> Copy<S> {
     /// A late entry came while the copy was about to run its next step.
-    pub(super) fn arrived(&mut self) {
+    pub(super) fn late_came(&mut self) {
         self.feel.arrived.get_or_insert(self.next);
     }
 

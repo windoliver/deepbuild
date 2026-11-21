@@ -35,6 +35,7 @@ mod op;
 mod origin;
 mod planted;
 pub mod print;
+pub mod proxy;
 mod readouts;
 mod set;
 pub mod shadow;
@@ -4054,7 +4055,7 @@ impl Renderer {
                 &mut choices,
                 shadow_texels(&chosen, side),
             );
-            deep_canvas_scene3d::lod::resolve(&mut chosen, &choices);
+            proxy::resolve(&mut chosen, &choices);
             return self.prepare_placed(device, &chosen, look);
         }
         // #166: the water's parts draw in a pass of their own, after the mirror's view.

@@ -2162,6 +2162,16 @@
       "limits": {},
       "initialReason": "Issue #280 first measurement (#280.60cc3f22): the merge base has no net.feel and no window report, and no such task. One release deep-show shows the eight-seat fixture without its net item or the net module at 60 s: a piece without the net module, which gains no work from it, held against the merge base by the 50% margin on p50 and peak memory once main has this task.",
       "criteria": ["#280.60cc3f22"]
+    },
+    {
+      "id": "net-seats",
+      "command": ["node", "benchmarks/net-seats.mjs"],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #277 first measurement (#277.2c9337c4): the merge base has no seats that change. node benchmarks/net-seats.mjs runs the criterion's blind acceptance test (tests/acceptance/277/ac4-budgets.test.ts), which plays the eight-seat piece's four copies over the test relay twice: once with seats that never change, counting the frames, bytes, messages, rollbacks and steps run against the merge base's counts for the same match, and once with copy 4 hidden for 20 s, recording its catch-up in steps a second (a reading, counted only on a reference Mac). The window times the run against its merge base; once main has this task, p50 and peak memory get a 50% merge-base margin.",
+      "criteria": [
+        "#277.2c9337c4"
+      ]
     }
   ]
 }

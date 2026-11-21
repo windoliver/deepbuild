@@ -98,8 +98,6 @@
   "wasm-encoder": { "version": "0.258.3", "class": "no float math", "why": "Writes the sandbox module's rewritten program (#238): encodes instructions and sections, a float constant as its bits; integer code only." },
   "leb128fmt": { "version": "0.1.0", "class": "no float math", "why": "LEB128 integers in wasm-encoder's output; integer code only." },
   "semver": { "version": "1.0.28", "class": "no float math", "why": "Version strings in wasmparser's component names: the sandbox turns that feature off, but the workspace build unifies it on for the engine's wasmparser. Parses and compares integers only." },
-  "meshopt": { "version": "0.7.0", "class": "display only", "why": "The proxy band's simplified mesh (#425): meshoptimizer's C++ simplifier, compiled per platform with f32 math, picks the triangles a distant item draws, once per content key, and those triangles may differ between machines. Drawn geometry only: a band's rank and the level's hash come from the document, never from its output." },
-  "float-cmp": { "version": "0.10.0", "class": "display only", "why": "meshopt's ULP comparison of packed vertices; scene3d never calls it, and it feeds drawn geometry only." },
   "rayon": { "version": "1.12.0", "class": "no float math", "why": "indexmap's parallel iterators, on only in a whole-workspace build, whose resolve takes deep-typeset's typst features (#220); no crate in scope calls one, so its pool never starts." },
   "rayon-core": { "version": "1.13.0", "class": "no float math", "why": "rayon's thread pool, under rayon's entry; never started by a crate in scope." },
   "either": { "version": "1.19.0", "class": "no float math", "why": "rayon's two-variant enum; moves values, computes nothing from them." },
