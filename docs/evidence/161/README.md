@@ -1,0 +1,55 @@
+# #161 evidence
+
+Runs of `tests/acceptance/161` (written blind, commit 58cc83969) on a Mac17,10, macOS 27.2, debug builds. Paths in the
+logs are shortened to `<repo>`, `<base checkout>` and `<tmp>`.
+
+## The base fails every test
+
+`base-run.txt`: the whole suite at the merge base 7a256fd4b, on the base's own `deep-gpu` and `deep-show`.
+15 files failed of 15, 26 tests failed of 26, each for the reason the suite's `BASE-FAILURE.txt` gives: the pack
+lacks 53 of the 70, the seven `--planted` names are unknown, `fx.invert@1` leaves (0.7993, 1, 1, 0.251), a 2D view
+draws at scale 1 whatever its surface says, a pack operator named `blur@1` is admitted, and there is no task.
+
+## This branch
+
+`acceptance.txt`: each file once at d85bd5262 (the branch merged with main b6b99ad8c), clean tree.
+
+| Criterion | File | Result |
+|---|---|---|
+| 1 `#161.66726728` | `ac1-reference` | 2 passed |
+| 2 `#161.2bd9eeb2` | `ac2-spline-homography` | 1 passed |
+| 3 `#161.3c68daec` | `ac3-pack-check` | 2 passed |
+| 4 `#161.f2821130` | `ac4-cost` | 2 passed |
+| 4, measured | `ac4-measured` | INCONCLUSIVE, with readings that would fail (below) |
+| 5 `#161.8352d648` | `ac5-status-guard` | 1 passed |
+| 6 `#161.729a03cd` | `ac6-budgets` | 3 passed |
+| 6, timed | `ac6-timed` | INCONCLUSIVE: nothing was timed |
+| 7 `#161.01550f9e` | `ac7-slice-shift` | 2 passed |
+| 8 `#161.6de2bd55` | `ac8-invert-premultiplied` | 2 passed |
+| 9 `#161.99d85364` | `ac9-alpha-guard` | 2 passed |
+| 10 `#161.1392976e` | `ac10-moved-group` | 2 passed |
+| 11 `#161.8ed2354e` | `ac11-internal-scale` | 2 passed |
+| 12 `#161.6c7f6fc1` | `ac12-linear-color-key` | 2 passed |
+| 13 `#161.2dcc0047` | `ac13-taste` | INCONCLUSIVE: no taste call is recorded |
+
+## The timed files
+
+`timed.txt`: the two timed files once more inside a timed grant of the throttle, started at a one-minute load of 13.05.
+The load was 25.9 by the end of the calibration run, above the 18 cores, so both read INCONCLUSIVE.
+
+`ac4-measured` printed its readings, and they are far from the declarations, which are the operator check's
+estimates: most operators measure 0.04 to 0.08 ns a pixel whatever they declare (0.008 to 0.03 for the cheap ones),
+`fx.cell_pattern@1` 2.35 against 0.0477, `fx.compound_blur@1` 0.96 against 0.1895, `fx.minimax@1` 0.97 against 0.1744,
+`fx.directional_blur@1` 0.085 against 0.165. They are readings under load, not a result, but two earlier readings of
+`calibrate` showed the same picture. The check refuses a declaration under its estimate ÷ 1.25, so an operator whose
+estimate is more than 1.67 times its measured cost can't declare a cost that the check accepts and the criterion holds.
+Criterion 4's measured half is open.
+
+`ac6-timed` stopped before timing anything.
+
+## Shown
+
+`shown/`: the fifteen files `ac13-taste` kept from the run in `acceptance.txt`, each named with its SHA-256: a sheet
+per effect category, `levels`, `curves`, `corner_pin`, the slice_shift title (frame 7) and its recording (frames 0
+to 41 at 50 frames a second, an animated PNG). The taste call is a person's: a file named by `DEEPBUILD_TASTE_161`,
+`{"criterion": "#161.2dcc0047", "by": "you", "screenshots": [the fifteen SHA-256s], "call": "looks_right" | "looks_wrong"}`.
