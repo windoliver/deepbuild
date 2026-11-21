@@ -135,6 +135,32 @@ pub struct Gpu {
     features: wgpu::Features,
 }
 
+/// #1217: a read back of a frame's object-ID target under way.
+#[cfg(feature = "full")]
+pub struct IdsRead {
+    staging: wgpu::Buffer,
+    mapped: std::sync::mpsc::Receiver<bool>,
+    row: usize,
+    padded: usize,
+}
+
+#[cfg(feature = "full")]
+impl IdsRead {
+    /// The target's bytes, each pixel's pick as a u32 in little-endian, rows top-down, once the
+    /// device has mapped them: `None` until then, empty when it couldn't.
+    pub fn take(&self) -> Option<Vec<u8>> {
+        let ok = self.mapped.try_recv().ok()?;
+        let mut out = Vec::new();
+        if let (true, Ok(view)) = (ok, self.staging.slice(..).get_mapped_range()) {
+            for line in view.chunks_exact(self.padded) {
+                out.extend_from_slice(&line[..self.row]);
+            }
+        }
+        self.staging.unmap();
+        Some(out)
+    }
+}
+
 /// A WebGPU device for `canvas` asking exactly `needs` (the bundle's `gpu_needs`, as JSON).
 #[wasm_bindgen]
 pub async fn open_gpu(canvas: web_sys::HtmlCanvasElement, needs: String) -> Result<Gpu, JsValue> {
@@ -388,6 +414,59 @@ impl Gpu {
         self.queue.submit([encoder.finish()]);
         self.queue.present(frame);
         true
+    }
+
+    /// #1217: the last 3D frame's object-ID target, read back for a measure's click. The device
+    /// maps it only once the page's thread yields, so the read is taken later ([`IdsRead::take`]).
+    #[cfg(feature = "full")]
+    pub fn read_ids(&self) -> Option<IdsRead> {
+        let (_, ids, size) = self.scene.as_ref()?.light_source()?;
+        let row = size[0] * 4;
+        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let padded = row.div_ceil(align) * align;
+        let staging = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("measure ids"),
+            size: u64::from(padded) * u64::from(size[1]),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        encoder.copy_texture_to_buffer(
+            ids.texture().as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &staging,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded),
+                    rows_per_image: Some(size[1]),
+                },
+            },
+            wgpu::Extent3d {
+                width: size[0],
+                height: size[1],
+                depth_or_array_layers: 1,
+            },
+        );
+        self.queue.submit([encoder.finish()]);
+        let (tx, mapped) = std::sync::mpsc::channel();
+        staging.slice(..).map_async(wgpu::MapMode::Read, move |r| {
+            let _ = tx.send(r.is_ok());
+        });
+        Some(IdsRead {
+            staging,
+            mapped,
+            row: row as usize,
+            padded: padded as usize,
+        })
+    }
+
+    /// #1217: that target's size, and the item each pick in it stands for.
+    #[cfg(feature = "full")]
+    pub fn picks(&self) -> Option<([u32; 2], std::collections::BTreeMap<u32, String>)> {
+        let renderer = self.scene.as_ref()?;
+        let (_, _, size) = renderer.light_source()?;
+        let picks = renderer.picks().iter().map(|(id, p)| (*p, id.clone()));
+        Some((size, picks.collect()))
     }
 
     fn frame(&self) -> Option<wgpu::SurfaceTexture> {

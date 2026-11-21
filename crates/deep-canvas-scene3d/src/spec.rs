@@ -103,7 +103,7 @@ pub(crate) const HIDDEN: &str = "{dash: [px] ≤ 2, paint}";
 /// A line's ends, as Path `path@1` takes them; scene3d doesn't draw them yet.
 pub(crate) const ENDS: &str = "{start | end: none | arrow | open | stealth | dot | ring | square | diamond | bar, size: f32, width: f32}";
 /// A line's trail (`deep_canvas_motion::trail::read`).
-const TRAIL: &str = "{of: ID, span: s, segments: 1 to 64, width: px, taper: f32, fade: f32, space: world | local, window: span | since {on, until, keep: 1 to 8} | whole {from}, rate: Hz, max_points: u32}";
+pub(crate) const TRAIL: &str = "{of: ID, span: s, segments: 1 to 64, width: px, taper: f32, fade: f32, space: world | local, window: span | since {on, until, keep: 1 to 8} | whole {from}, rate: Hz, max_points: u32}";
 
 fn paint() -> P {
     p(
