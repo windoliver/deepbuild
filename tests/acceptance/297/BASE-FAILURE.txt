@@ -1,0 +1,641 @@
+#297 acceptance suite at the base, 4bf2fc7ad (Merge pull request #2899, one merge past 531da1ef0), before any
+implementation. Run once on 2026-11-19 on an arm64 Mac (one-minute load about 160 to 250 throughout), with deep-show
+built by the files (`cargo build --locked --bin deep-show`, the default `full` set), NO_COLOR=1 CARGO_INCREMENTAL=0
+CARGO_PROFILE_DEV_DEBUG=0, toolchain 1.99.1 from rustup:
+
+  PATH=$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    npx vitest run --root tests/acceptance/297 --no-file-parallelism --testTimeout=600000
+
+28 tests, 28 failed; none passed. Every test fails at an assertion in this folder that names the missing behavior: no
+crash, no timeout, no missing fixture, no build failure. `npx tsc --noEmit -p tests/acceptance/297` exits 0. The run was
+not repeated.
+
+Before the run, the fixtures were checked against the base with a probe (not committed) that wrote every entry form as a
+literal string: each piece is then presented with no issue (the two-seat net item, `seats`, `name` with its default, the
+look `latin-297` by asset, the mark set whose `seat` column reads `seats.spot` as f64, `max_bytes` 64); Tab focuses
+`name`; "Kai" typed and Enter append one entry of `name`; `track` answers its entries and hash; `eval` with `pixels`
+answers a snapshot; `match` takes string `plays`, its records carry `player` and `writer: "peer"`, and its `render_back`
+rows are PNGs in the evidence store; `logic` answers `echo.head`; `track`'s `load` refuses an entry with `writer: "peer"`
+(`bad_input`); an unknown `planted` makes the scenario `bad_input`.
+
+Where each test fails:
+
+- The honest tests (ac01 to ac11, one or more each, 19 in all) fail in `presented` (helpers.ts:274), called from the test
+  for the criterion's piece: the base refuses an entry text with `bad_doc` at items/<item>/params/text ("text.shape can't
+  evaluate this"; `plate1`, `plate2`, `long`, `ghost`, `bound`), and the mark set's entry text column with `bad_column`
+  at items/plates/params/columns/text/len. In ac07 the first test fails on the piece whose `player` reads `seats.who[0]`
+  (i32), which must be presented.
+- The nine planted tests fail in `runShow` (helpers.ts:198): "deep-show run answers the scenario ok (it takes the planted
+  <name>); got {"ok":false,"code":"bad_input"}" for `entry_any_player`, `entry_own_viewer_only`, `fit_skips_entries`,
+  `entry_takes_missing_glyph`, `entry_falls_back_to_player_1`, `entry_normalizes_track`, `control_takes_hidden`,
+  `control_no_mark_limit` and `entry_compare_code_points`.
+
+The run's output follows, the checkout's path written <checkout>.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/297
+
+ ❯ ac11-taste.test.ts (1 test | 1 failed) 14353ms
+   ❯ AC11 #297.5d8a3e72 the check run's pictures of the name fixtures and of the two copies side by side, and the one taste call on them (1)
+     × AC11 #297.5d8a3e72 the check run takes the screenshots from the canvas's own frames, and the recorded call on exactly those pictures says they look right; with none the run is INCONCLUSIVE, never PASS 5535ms
+ ❯ ac10-look-alike.test.ts (4 tests | 4 failed) 22856ms
+   ❯ AC10 #297.597888a6 two seats whose names share a skeleton are each shown with their number (4)
+     × AC10 #297.597888a6 both copies show 'Coco (1)' and the Cyrillic look-alike with ' (2)', before and after a seek 4136ms
+     × AC10 #297.597888a6 'Coco' beside 'Cocoa' gains no number 1583ms
+     × AC10 #297.597888a6 the planted compare by code points leaves the pair unnumbered and fails, naming both seats 1850ms
+     × AC10 #297.597888a6 a box that fits widest alone and not widest with ' (2)' fails the fit check, naming the item 2627ms
+ ❯ ac04-missing-glyph.test.ts (3 tests | 3 failed) 16121ms
+   ❯ AC4 #297.ee30ab4e a control an entry text shows takes only graphemes the text's fonts can draw, on every copy (3)
+     × AC4 #297.ee30ab4e with Latin fonts and no fallback for Han, typing 字 into the control is refused with a notice naming it 5286ms
+     × AC4 #297.ee30ab4e in a two-copy match, a modified copy that commits 字 anyway has the entry refused alike on both copies, naming the player 3005ms
+     × AC4 #297.ee30ab4e the planted check that takes 字 lets a copy draw a missing glyph and fails, naming the grapheme 1800ms
+ ❯ ac08-hidden-character.test.ts (3 tests | 3 failed) 26143ms
+   ❯ AC8 #297.8d736efc a direction control is a hidden character, refused as typed and on every copy (3)
+     × AC8 #297.8d736efc typing Ana, U+202E, xyz is refused at U+202E with hidden_character, naming the code point, and the text keeps the seat's last committed name 5152ms
+     × AC8 #297.8d736efc in a two-copy match, a modified copy that commits it anyway has the entry refused alike on both copies, naming the player 3122ms
+     × AC8 #297.8d736efc the planted control that takes U+202E shows the entry and fails 2396ms
+ ❯ ac09-blank-marks-joins.test.ts (4 tests | 4 failed) 24550ms
+   ❯ AC9 #297.a18ed59e blank entries and stacks past 4 marks are refused, and a joiner inside a drawn grapheme is accepted (4)
+     × AC9 #297.a18ed59e three U+200B alone are refused as blank 5657ms
+     × AC9 #297.a18ed59e 'a' with 5 combining acute accents is refused as mark_stack, and with 4 it is accepted 1287ms
+     × AC9 #297.a18ed59e a family emoji joined by U+200D that the fixture font draws is accepted as one grapheme 1131ms
+     × AC9 #297.a18ed59e the planted control with no mark limit takes the 5-mark stack and fails, naming the grapheme 2081ms
+ ❯ ac02-two-copies.test.ts (2 tests | 2 failed) 21701ms
+   ❯ AC2 #297.3618602e in a two-copy match every copy shows every player's name from its own track, alike (2)
+     × AC2 #297.3618602e the nameplate mark set whose player column seats.who writes shows the same pixels on both copies at 20 sampled times 6139ms
+     × AC2 #297.3618602e the planted copy that shows only its own viewer's entries differs and fails, naming the row 1998ms
+ ❯ ac07-binding.test.ts (2 tests | 2 failed) 15319ms
+   ❯ AC7 #297.855382ad an entry text's player is an integer, and the control's bytes reach logic as typed (2)
+     × AC7 #297.855382ad a player bound to an f64 array, or to a column whose source can't narrow to an integer, is refused at check, naming it 6926ms
+     × AC7 #297.855382ad a logic item that declares the control as a read gets its bytes as #187 gives them, unchanged 1955ms
+ ❯ ac06-nfc-shown.test.ts (2 tests | 2 failed) 17525ms
+   ❯ AC6 #297.cd44d20a an entry text shows the NFC form while the entry keeps its bytes as typed (2)
+     × AC6 #297.cd44d20a an entry typed as "e" followed by U+0301 shows as "é" while the input track keeps the typed bytes by hash 5235ms
+     × AC6 #297.cd44d20a the planted text that normalizes the entry changes the track's hash and fails, naming the entry 979ms
+ ❯ ac03-fit.test.ts (3 tests | 3 failed) 23974ms
+   ❯ AC3 #297.d2e288d8 an entry text ellipsizes at a grapheme boundary and needs its widest, which the fit check reads (3)
+     × AC3 #297.d2e288d8 a box sized for 10 of the widest glyph ellipsizes the 16-letter name at a grapheme boundary 5566ms
+     × AC3 #297.d2e288d8 an entry text with no widest is refused at check, naming it 3419ms
+     × AC3 #297.d2e288d8 the planted fit check that skips entry texts passes the piece with no widest and fails, naming the item 2643ms
+ ❯ ac01-latest-entry.test.ts (2 tests | 2 failed) 16696ms
+   ❯ AC1 #297.688a1e6a an entry text shows its player's latest committed entry to the control at or before t (2)
+     × AC1 #297.688a1e6a player 1's entry text shows the default at step 10, "Kai" from step 30 and "Kai Ng" from step 90, also after a seek to step 100, and player 2's shows "Ana" from step 95 4980ms
+     × AC1 #297.688a1e6a the planted text that shows the control's latest entry by any player shows "Ana" at step 95 and fails, naming the item 2057ms
+ ❯ ac05-no-seat.test.ts (2 tests | 2 failed) 13210ms
+   ❯ AC5 #297.50f2c738 a player number with no seat shows nothing and raises entry.missing (2)
+     × AC5 #297.50f2c738 in a two-seat match, the entry text bound to player 5 shows nothing and raises entry.missing, naming the control, player 5 and the step 4856ms
+     × AC5 #297.50f2c738 the planted text that falls back to player 1's entry shows it and fails, naming the item 1653ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 28 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac01-latest-entry.test.ts > AC1 #297.688a1e6a an entry text shows its player's latest committed entry to the control at or before t > AC1 #297.688a1e6a player 1's entry text shows the default at step 10, "Kai" from step 30 and "Kai Ng" from step 90, also after a seek to step 100, and player 2's shows "Ana" from step 95
+AssertionError: the nameplates piece is presented: [{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate1"],"path":"items/plate1/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."},{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate2"],"path":"items/plate2/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:274:93
+    272| /** A `deep_show` reply that presented its document with no error. */
+    273| export function presented(reply: JsonObject, what: string): void {
+    274|   expect(reply['outcome'], `${what} is presented: ${show(reply['issues…
+       |                                                                                             ^
+    275|   expect(errorsOf(reply).map(namedIn), `${what} is presented with no e…
+    276| }
+ ❯ judge ac01-latest-entry.test.ts:38:3
+ ❯ ac01-latest-entry.test.ts:49:27
+ ❯ helpers.ts:93:31
+ ❯ ac01-latest-entry.test.ts:53:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/28]⎯
+
+ FAIL  ac01-latest-entry.test.ts > AC1 #297.688a1e6a an entry text shows its player's latest committed entry to the control at or before t > AC1 #297.688a1e6a the planted text that shows the control's latest entry by any player shows "Ana" at step 95 and fails, naming the item
+AssertionError: AC1 the three commits on the track, and the frames (planted entry_any_player): deep-show run answers the scenario ok (it takes the planted entry_any_player); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:198:174
+    196|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    197|   const out = obj(parsed, `${tag}: the answer`);
+    198|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    199|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    200|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ judge ac01-latest-entry.test.ts:37:13
+ ❯ ac01-latest-entry.test.ts:56:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/28]⎯
+
+ FAIL  ac02-two-copies.test.ts > AC2 #297.3618602e in a two-copy match every copy shows every player's name from its own track, alike > AC2 #297.3618602e the nameplate mark set whose player column seats.who writes shows the same pixels on both copies at 20 sampled times
+AssertionError: the plates piece is presented: [{"check":"document.validate","code":"bad_column","severity":"error","ids":[],"path":"items/plates/params/columns/text/len","actual":null,"what":"marks2d.frame can't evaluate this","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:274:93
+    272| /** A `deep_show` reply that presented its document with no error. */
+    273| export function presented(reply: JsonObject, what: string): void {
+    274|   expect(reply['outcome'], `${what} is presented: ${show(reply['issues…
+       |                                                                                             ^
+    275|   expect(errorsOf(reply).map(namedIn), `${what} is presented with no e…
+    276| }
+ ❯ judge ac02-two-copies.test.ts:44:3
+ ❯ ac02-two-copies.test.ts:73:27
+ ❯ helpers.ts:93:31
+ ❯ ac02-two-copies.test.ts:77:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/28]⎯
+
+ FAIL  ac02-two-copies.test.ts > AC2 #297.3618602e in a two-copy match every copy shows every player's name from its own track, alike > AC2 #297.3618602e the planted copy that shows only its own viewer's entries differs and fails, naming the row
+AssertionError: AC2 the two-copy match with 40 render-backs (planted entry_own_viewer_only): deep-show run answers the scenario ok (it takes the planted entry_own_viewer_only); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:198:174
+    196|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    197|   const out = obj(parsed, `${tag}: the answer`);
+    198|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    199|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    200|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ judge ac02-two-copies.test.ts:43:13
+ ❯ ac02-two-copies.test.ts:80:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/28]⎯
+
+ FAIL  ac03-fit.test.ts > AC3 #297.d2e288d8 an entry text ellipsizes at a grapheme boundary and needs its widest, which the fit check reads > AC3 #297.d2e288d8 a box sized for 10 of the widest glyph ellipsizes the 16-letter name at a grapheme boundary
+AssertionError: the fit piece with its widest is presented: [{"check":"document.validate","code":"bad_doc","severity":"error","ids":["long"],"path":"items/long/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:274:93
+    272| /** A `deep_show` reply that presented its document with no error. */
+    273| export function presented(reply: JsonObject, what: string): void {
+    274|   expect(reply['outcome'], `${what} is presented: ${show(reply['issues…
+       |                                                                                             ^
+    275|   expect(errorsOf(reply).map(namedIn), `${what} is presented with no e…
+    276| }
+ ❯ judge ac03-fit.test.ts:35:3
+ ❯ ac03-fit.test.ts:55:27
+ ❯ helpers.ts:93:31
+ ❯ ac03-fit.test.ts:59:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/28]⎯
+
+ FAIL  ac03-fit.test.ts > AC3 #297.d2e288d8 an entry text ellipsizes at a grapheme boundary and needs its widest, which the fit check reads > AC3 #297.d2e288d8 an entry text with no widest is refused at check, naming it
+AssertionError: the fit piece with its widest is presented: [{"check":"document.validate","code":"bad_doc","severity":"error","ids":["long"],"path":"items/long/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:274:93
+    272| /** A `deep_show` reply that presented its document with no error. */
+    273| export function presented(reply: JsonObject, what: string): void {
+    274|   expect(reply['outcome'], `${what} is presented: ${show(reply['issues…
+       |                                                                                             ^
+    275|   expect(errorsOf(reply).map(namedIn), `${what} is presented with no e…
+    276| }
+ ❯ judge ac03-fit.test.ts:35:3
+ ❯ ac03-fit.test.ts:55:27
+ ❯ helpers.ts:93:31
+ ❯ ac03-fit.test.ts:62:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/28]⎯
+
+ FAIL  ac03-fit.test.ts > AC3 #297.d2e288d8 an entry text ellipsizes at a grapheme boundary and needs its widest, which the fit check reads > AC3 #297.d2e288d8 the planted fit check that skips entry texts passes the piece with no widest and fails, naming the item
+AssertionError: AC3 the 16-letter name, and the piece with no widest (planted fit_skips_entries): deep-show run answers the scenario ok (it takes the planted fit_skips_entries); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:198:174
+    196|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    197|   const out = obj(parsed, `${tag}: the answer`);
+    198|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    199|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    200|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ judge ac03-fit.test.ts:34:13
+ ❯ ac03-fit.test.ts:65:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/28]⎯
+
+ FAIL  ac04-missing-glyph.test.ts > AC4 #297.ee30ab4e a control an entry text shows takes only graphemes the text's fonts can draw, on every copy > AC4 #297.ee30ab4e with Latin fonts and no fallback for Han, typing 字 into the control is refused with a notice naming it
+AssertionError: the nameplates piece in the Latin look is presented: [{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate1"],"path":"items/plate1/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."},{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate2"],"path":"items/plate2/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:274:93
+    272| /** A `deep_show` reply that presented its document with no error. */
+    273| export function presented(reply: JsonObject, what: string): void {
+    274|   expect(reply['outcome'], `${what} is presented: ${show(reply['issues…
+       |                                                                                             ^
+    275|   expect(errorsOf(reply).map(namedIn), `${what} is presented with no e…
+    276| }
+ ❯ typing ac04-missing-glyph.test.ts:40:3
+ ❯ ac04-missing-glyph.test.ts:82:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/28]⎯
+
+ FAIL  ac04-missing-glyph.test.ts > AC4 #297.ee30ab4e a control an entry text shows takes only graphemes the text's fonts can draw, on every copy > AC4 #297.ee30ab4e in a two-copy match, a modified copy that commits 字 anyway has the entry refused alike on both copies, naming the player
+AssertionError: the nameplates piece in the Latin look is presented: [{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate1"],"path":"items/plate1/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."},{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate2"],"path":"items/plate2/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:274:93
+    272| /** A `deep_show` reply that presented its document with no error. */
+    273| export function presented(reply: JsonObject, what: string): void {
+    274|   expect(reply['outcome'], `${what} is presented: ${show(reply['issues…
+       |                                                                                             ^
+    275|   expect(errorsOf(reply).map(namedIn), `${what} is presented with no e…
+    276| }
+ ❯ match ac04-missing-glyph.test.ts:60:3
+ ❯ ac04-missing-glyph.test.ts:78:32
+ ❯ helpers.ts:93:31
+ ❯ ac04-missing-glyph.test.ts:85:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/28]⎯
+
+ FAIL  ac04-missing-glyph.test.ts > AC4 #297.ee30ab4e a control an entry text shows takes only graphemes the text's fonts can draw, on every copy > AC4 #297.ee30ab4e the planted check that takes 字 lets a copy draw a missing glyph and fails, naming the grapheme
+AssertionError: AC4 the match where player 2's copy commits 字 (planted entry_takes_missing_glyph): deep-show run answers the scenario ok (it takes the planted entry_takes_missing_glyph); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:198:174
+    196|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    197|   const out = obj(parsed, `${tag}: the answer`);
+    198|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    199|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    200|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ match ac04-missing-glyph.test.ts:59:13
+ ❯ ac04-missing-glyph.test.ts:88:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/28]⎯
+
+ FAIL  ac05-no-seat.test.ts > AC5 #297.50f2c738 a player number with no seat shows nothing and raises entry.missing > AC5 #297.50f2c738 in a two-seat match, the entry text bound to player 5 shows nothing and raises entry.missing, naming the control, player 5 and the step
+AssertionError: the piece with an entry text bound to player 5 is presented: [{"check":"document.validate","code":"bad_doc","severity":"error","ids":["ghost"],"path":"items/ghost/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."},{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate1"],"path":"items/plate1/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."},{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate2"],"path":"items/plate2/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:274:93
+    272| /** A `deep_show` reply that presented its document with no error. */
+    273| export function presented(reply: JsonObject, what: string): void {
+    274|   expect(reply['outcome'], `${what} is presented: ${show(reply['issues…
+       |                                                                                             ^
+    275|   expect(errorsOf(reply).map(namedIn), `${what} is presented with no e…
+    276| }
+ ❯ judge ac05-no-seat.test.ts:31:3
+ ❯ ac05-no-seat.test.ts:46:27
+ ❯ helpers.ts:93:31
+ ❯ ac05-no-seat.test.ts:50:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/28]⎯
+
+ FAIL  ac05-no-seat.test.ts > AC5 #297.50f2c738 a player number with no seat shows nothing and raises entry.missing > AC5 #297.50f2c738 the planted text that falls back to player 1's entry shows it and fails, naming the item
+AssertionError: AC5 player 5 in a two-seat match (planted entry_falls_back_to_player_1): deep-show run answers the scenario ok (it takes the planted entry_falls_back_to_player_1); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:198:174
+    196|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    197|   const out = obj(parsed, `${tag}: the answer`);
+    198|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    199|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    200|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ judge ac05-no-seat.test.ts:30:13
+ ❯ ac05-no-seat.test.ts:53:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/28]⎯
+
+ FAIL  ac06-nfc-shown.test.ts > AC6 #297.cd44d20a an entry text shows the NFC form while the entry keeps its bytes as typed > AC6 #297.cd44d20a an entry typed as "e" followed by U+0301 shows as "é" while the input track keeps the typed bytes by hash
+AssertionError: the nameplates piece is presented: [{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate1"],"path":"items/plate1/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."},{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate2"],"path":"items/plate2/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:274:93
+    272| /** A `deep_show` reply that presented its document with no error. */
+    273| export function presented(reply: JsonObject, what: string): void {
+    274|   expect(reply['outcome'], `${what} is presented: ${show(reply['issues…
+       |                                                                                             ^
+    275|   expect(errorsOf(reply).map(namedIn), `${what} is presented with no e…
+    276| }
+ ❯ judge ac06-nfc-shown.test.ts:40:3
+ ❯ ac06-nfc-shown.test.ts:56:27
+ ❯ helpers.ts:93:31
+ ❯ ac06-nfc-shown.test.ts:60:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/28]⎯
+
+ FAIL  ac06-nfc-shown.test.ts > AC6 #297.cd44d20a an entry text shows the NFC form while the entry keeps its bytes as typed > AC6 #297.cd44d20a the planted text that normalizes the entry changes the track's hash and fails, naming the entry
+AssertionError: AC6 e then U+0301 typed, committed and shown (planted entry_normalizes_track): deep-show run answers the scenario ok (it takes the planted entry_normalizes_track); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:198:174
+    196|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    197|   const out = obj(parsed, `${tag}: the answer`);
+    198|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    199|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    200|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ judge ac06-nfc-shown.test.ts:39:13
+ ❯ ac06-nfc-shown.test.ts:63:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/28]⎯
+
+ FAIL  ac07-binding.test.ts > AC7 #297.855382ad an entry text's player is an integer, and the control's bytes reach logic as typed > AC7 #297.855382ad a player bound to an f64 array, or to a column whose source can't narrow to an integer, is refused at check, naming it
+AssertionError: the entry text whose player reads seats.who[0] (i32) is presented: [{"check":"document.validate","code":"bad_doc","severity":"error","ids":["bound"],"path":"items/bound/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:274:93
+    272| /** A `deep_show` reply that presented its document with no error. */
+    273| export function presented(reply: JsonObject, what: string): void {
+    274|   expect(reply['outcome'], `${what} is presented: ${show(reply['issues…
+       |                                                                                             ^
+    275|   expect(errorsOf(reply).map(namedIn), `${what} is presented with no e…
+    276| }
+ ❯ ac07-binding.test.ts:34:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/28]⎯
+
+ FAIL  ac07-binding.test.ts > AC7 #297.855382ad an entry text's player is an integer, and the control's bytes reach logic as typed > AC7 #297.855382ad a logic item that declares the control as a read gets its bytes as #187 gives them, unchanged
+AssertionError: the nameplates piece with echo is presented: [{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate1"],"path":"items/plate1/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."},{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate2"],"path":"items/plate2/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:274:93
+    272| /** A `deep_show` reply that presented its document with no error. */
+    273| export function presented(reply: JsonObject, what: string): void {
+    274|   expect(reply['outcome'], `${what} is presented: ${show(reply['issues…
+       |                                                                                             ^
+    275|   expect(errorsOf(reply).map(namedIn), `${what} is presented with no e…
+    276| }
+ ❯ ac07-binding.test.ts:62:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/28]⎯
+
+ FAIL  ac08-hidden-character.test.ts > AC8 #297.8d736efc a direction control is a hidden character, refused as typed and on every copy > AC8 #297.8d736efc typing Ana, U+202E, xyz is refused at U+202E with hidden_character, naming the code point, and the text keeps the seat's last committed name
+AssertionError: the nameplates piece is presented: [{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate1"],"path":"items/plate1/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."},{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate2"],"path":"items/plate2/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:274:93
+    272| /** A `deep_show` reply that presented its document with no error. */
+    273| export function presented(reply: JsonObject, what: string): void {
+    274|   expect(reply['outcome'], `${what} is presented: ${show(reply['issues…
+       |                                                                                             ^
+    275|   expect(errorsOf(reply).map(namedIn), `${what} is presented with no e…
+    276| }
+ ❯ typing ac08-hidden-character.test.ts:42:3
+ ❯ ac08-hidden-character.test.ts:81:27
+ ❯ helpers.ts:93:31
+ ❯ ac08-hidden-character.test.ts:84:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/28]⎯
+
+ FAIL  ac08-hidden-character.test.ts > AC8 #297.8d736efc a direction control is a hidden character, refused as typed and on every copy > AC8 #297.8d736efc in a two-copy match, a modified copy that commits it anyway has the entry refused alike on both copies, naming the player
+AssertionError: the nameplates piece is presented: [{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate1"],"path":"items/plate1/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."},{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate2"],"path":"items/plate2/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:274:93
+    272| /** A `deep_show` reply that presented its document with no error. */
+    273| export function presented(reply: JsonObject, what: string): void {
+    274|   expect(reply['outcome'], `${what} is presented: ${show(reply['issues…
+       |                                                                                             ^
+    275|   expect(errorsOf(reply).map(namedIn), `${what} is presented with no e…
+    276| }
+ ❯ match ac08-hidden-character.test.ts:65:3
+ ❯ ac08-hidden-character.test.ts:87:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/28]⎯
+
+ FAIL  ac08-hidden-character.test.ts > AC8 #297.8d736efc a direction control is a hidden character, refused as typed and on every copy > AC8 #297.8d736efc the planted control that takes U+202E shows the entry and fails
+AssertionError: AC8 Ana, U+202E and xyz typed into name (planted control_takes_hidden): deep-show run answers the scenario ok (it takes the planted control_takes_hidden); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:198:174
+    196|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    197|   const out = obj(parsed, `${tag}: the answer`);
+    198|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    199|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    200|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ typing ac08-hidden-character.test.ts:41:13
+ ❯ ac08-hidden-character.test.ts:90:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/28]⎯
+
+ FAIL  ac09-blank-marks-joins.test.ts > AC9 #297.a18ed59e blank entries and stacks past 4 marks are refused, and a joiner inside a drawn grapheme is accepted > AC9 #297.a18ed59e three U+200B alone are refused as blank
+AssertionError: the nameplates piece is presented: [{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate1"],"path":"items/plate1/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."},{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate2"],"path":"items/plate2/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:274:93
+    272| /** A `deep_show` reply that presented its document with no error. */
+    273| export function presented(reply: JsonObject, what: string): void {
+    274|   expect(reply['outcome'], `${what} is presented: ${show(reply['issues…
+       |                                                                                             ^
+    275|   expect(errorsOf(reply).map(namedIn), `${what} is presented with no e…
+    276| }
+ ❯ typed ac09-blank-marks-joins.test.ts:40:3
+ ❯ ac09-blank-marks-joins.test.ts:74:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/28]⎯
+
+ FAIL  ac09-blank-marks-joins.test.ts > AC9 #297.a18ed59e blank entries and stacks past 4 marks are refused, and a joiner inside a drawn grapheme is accepted > AC9 #297.a18ed59e 'a' with 5 combining acute accents is refused as mark_stack, and with 4 it is accepted
+AssertionError: the nameplates piece is presented: [{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate1"],"path":"items/plate1/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."},{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate2"],"path":"items/plate2/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:274:93
+    272| /** A `deep_show` reply that presented its document with no error. */
+    273| export function presented(reply: JsonObject, what: string): void {
+    274|   expect(reply['outcome'], `${what} is presented: ${show(reply['issues…
+       |                                                                                             ^
+    275|   expect(errorsOf(reply).map(namedIn), `${what} is presented with no e…
+    276| }
+ ❯ typed ac09-blank-marks-joins.test.ts:40:3
+ ❯ ac09-blank-marks-joins.test.ts:77:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/28]⎯
+
+ FAIL  ac09-blank-marks-joins.test.ts > AC9 #297.a18ed59e blank entries and stacks past 4 marks are refused, and a joiner inside a drawn grapheme is accepted > AC9 #297.a18ed59e a family emoji joined by U+200D that the fixture font draws is accepted as one grapheme
+AssertionError: the nameplates piece is presented: [{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate1"],"path":"items/plate1/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."},{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate2"],"path":"items/plate2/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:274:93
+    272| /** A `deep_show` reply that presented its document with no error. */
+    273| export function presented(reply: JsonObject, what: string): void {
+    274|   expect(reply['outcome'], `${what} is presented: ${show(reply['issues…
+       |                                                                                             ^
+    275|   expect(errorsOf(reply).map(namedIn), `${what} is presented with no e…
+    276| }
+ ❯ typed ac09-blank-marks-joins.test.ts:40:3
+ ❯ ac09-blank-marks-joins.test.ts:80:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/28]⎯
+
+ FAIL  ac09-blank-marks-joins.test.ts > AC9 #297.a18ed59e blank entries and stacks past 4 marks are refused, and a joiner inside a drawn grapheme is accepted > AC9 #297.a18ed59e the planted control with no mark limit takes the 5-mark stack and fails, naming the grapheme
+AssertionError: AC9 a with 5 U+0301 typed into name (planted control_no_mark_limit): deep-show run answers the scenario ok (it takes the planted control_no_mark_limit); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:198:174
+    196|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    197|   const out = obj(parsed, `${tag}: the answer`);
+    198|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    199|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    200|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ typed ac09-blank-marks-joins.test.ts:39:13
+ ❯ ac09-blank-marks-joins.test.ts:85:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/28]⎯
+
+ FAIL  ac10-look-alike.test.ts > AC10 #297.597888a6 two seats whose names share a skeleton are each shown with their number > AC10 #297.597888a6 both copies show 'Coco (1)' and the Cyrillic look-alike with ' (2)', before and after a seek
+AssertionError: the nameplates piece is presented: [{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate1"],"path":"items/plate1/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."},{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate2"],"path":"items/plate2/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:274:93
+    272| /** A `deep_show` reply that presented its document with no error. */
+    273| export function presented(reply: JsonObject, what: string): void {
+    274|   expect(reply['outcome'], `${what} is presented: ${show(reply['issues…
+       |                                                                                             ^
+    275|   expect(errorsOf(reply).map(namedIn), `${what} is presented with no e…
+    276| }
+ ❯ judge ac10-look-alike.test.ts:46:3
+ ❯ ac10-look-alike.test.ts:62:27
+ ❯ helpers.ts:93:31
+ ❯ ac10-look-alike.test.ts:66:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/28]⎯
+
+ FAIL  ac10-look-alike.test.ts > AC10 #297.597888a6 two seats whose names share a skeleton are each shown with their number > AC10 #297.597888a6 'Coco' beside 'Cocoa' gains no number
+AssertionError: the nameplates piece is presented: [{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate1"],"path":"items/plate1/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."},{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate2"],"path":"items/plate2/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:274:93
+    272| /** A `deep_show` reply that presented its document with no error. */
+    273| export function presented(reply: JsonObject, what: string): void {
+    274|   expect(reply['outcome'], `${what} is presented: ${show(reply['issues…
+       |                                                                                             ^
+    275|   expect(errorsOf(reply).map(namedIn), `${what} is presented with no e…
+    276| }
+ ❯ ac10-look-alike.test.ts:77:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/28]⎯
+
+ FAIL  ac10-look-alike.test.ts > AC10 #297.597888a6 two seats whose names share a skeleton are each shown with their number > AC10 #297.597888a6 the planted compare by code points leaves the pair unnumbered and fails, naming both seats
+AssertionError: AC10 the match: Coco in Latin and in Cyrillic (planted entry_compare_code_points): deep-show run answers the scenario ok (it takes the planted entry_compare_code_points); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:198:174
+    196|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    197|   const out = obj(parsed, `${tag}: the answer`);
+    198|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    199|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    200|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ judge ac10-look-alike.test.ts:45:13
+ ❯ ac10-look-alike.test.ts:84:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/28]⎯
+
+ FAIL  ac10-look-alike.test.ts > AC10 #297.597888a6 two seats whose names share a skeleton are each shown with their number > AC10 #297.597888a6 a box that fits widest alone and not widest with ' (2)' fails the fit check, naming the item
+AssertionError: the nameplates piece, each box 158 u is presented: [{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate1"],"path":"items/plate1/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."},{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate2"],"path":"items/plate2/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:274:93
+    272| /** A `deep_show` reply that presented its document with no error. */
+    273| export function presented(reply: JsonObject, what: string): void {
+    274|   expect(reply['outcome'], `${what} is presented: ${show(reply['issues…
+       |                                                                                             ^
+    275|   expect(errorsOf(reply).map(namedIn), `${what} is presented with no e…
+    276| }
+ ❯ ac10-look-alike.test.ts:94:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/28]⎯
+
+ FAIL  ac11-taste.test.ts > AC11 #297.5d8a3e72 the check run's pictures of the name fixtures and of the two copies side by side, and the one taste call on them > AC11 #297.5d8a3e72 the check run takes the screenshots from the canvas's own frames, and the recorded call on exactly those pictures says they look right; with none the run is INCONCLUSIVE, never PASS
+AssertionError: the nameplates piece is presented: [{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate1"],"path":"items/plate1/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."},{"check":"document.validate","code":"bad_doc","severity":"error","ids":["plate2"],"path":"items/plate2/params/text","actual":null,"what":"text.shape can't evaluate this","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:274:93
+    272| /** A `deep_show` reply that presented its document with no error. */
+    273| export function presented(reply: JsonObject, what: string): void {
+    274|   expect(reply['outcome'], `${what} is presented: ${show(reply['issues…
+       |                                                                                             ^
+    275|   expect(errorsOf(reply).map(namedIn), `${what} is presented with no e…
+    276| }
+ ❯ ac11-taste.test.ts:46:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/28]⎯
+
+
+ Test Files  11 failed (11)
+      Tests  28 failed (28)
+   Start at  23:58:52
+   Duration  226.56s (tests 97%, transform 1%, import 1%)
+
+exit 1

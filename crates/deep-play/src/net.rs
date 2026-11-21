@@ -17,7 +17,63 @@ use deep_net::{Change, Defect, Stepper};
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
 
+/// #297 (Text `text@1`: entries): what each entry to a text control an entry text shows may
+/// hold, checked alike on every copy: a value out of its range is refused before it joins the
+/// track, naming the player, and the copy lists it in its `refused`.
+pub struct Range {
+    form: Map<String, Value>,
+    ty: deep_canvas_marks::scene::Type,
+    lax: deep_canvas_marks::entries::Lax,
+    shaper: Option<deep_text::Shaper>,
+}
+
+impl Range {
+    /// The range of `form`'s text controls entry texts show, in the type `ty` draws them in, with
+    /// a planted laxness; `None` where no entry text shows one.
+    pub fn of(
+        form: &Value,
+        ty: deep_canvas_marks::scene::Type,
+        lax: deep_canvas_marks::entries::Lax,
+    ) -> Option<Range> {
+        let form = form.as_object()?;
+        let items = form.get("items").and_then(Value::as_object)?;
+        let shows = items.values().any(|i| {
+            deep_canvas_marks::entries::is_entry_text(i)
+                || deep_canvas_marks::entries::has_entry_column(i)
+        });
+        shows.then(|| Range {
+            form: form.clone(),
+            ty,
+            lax,
+            shaper: None,
+        })
+    }
+
+    /// The refusal of `entry`, a value out of its control's range, naming the control, the
+    /// player, the step and why; `None` where it is in range.
+    pub fn check(&mut self, entry: &Value) -> Option<Value> {
+        use deep_canvas_marks::entries;
+        let control = entry["control"].as_str()?;
+        let value = entry["value"].as_str()?;
+        if !entries::shown_control(&self.form, control) {
+            return None;
+        }
+        let shaper = self.shaper.get_or_insert_with(deep_text::Shaper::new);
+        let r = entries::refused(&self.form, control, value, &self.ty, shaper, self.lax)?;
+        let t = entry["t"].as_i64().unwrap_or(0);
+        let mut out = json!({"code": "out_of_range", "control": control, "reason": r.reason(),
+                             "player": entry.get("player").cloned().unwrap_or(json!(1)),
+                             "t": t, "step": t.div_euclid(entries::step_len(&self.form))});
+        for (k, v) in r.named().as_object().into_iter().flatten() {
+            out[k] = v.clone();
+        }
+        Some(out)
+    }
+}
+
 pub struct Logic {
+    /// #297: the range entry texts give their controls, checked before an entry joins the track.
+    pub range: Option<Range>,
     piece: Rc<Piece>,
     /// The input track recorded before the match, which a run again starts from.
     start: Vec<Value>,
@@ -35,6 +91,8 @@ pub struct Logic {
     plant: deep_logic::world::rollback::Plant,
     /// The CPU time logic took since the timing was last read, in ns.
     ns: u64,
+    /// #277: the CPU time every module has taken so far, in ns.
+    spent: u64,
     /// #551: the document's worlds, stepped beside the logic items, and the match step's length.
     worlds: Option<crate::net_worlds::Worlds>,
     len: i64,
@@ -43,6 +101,17 @@ pub struct Logic {
 impl Logic {
     /// `piece` at its start on `track`, the input track recorded before the match.
     pub fn new(piece: Rc<Piece>, track: &[Value], rows: bool) -> Result<Logic, Value> {
+        Logic::planted(piece, track, rows, Default::default())
+    }
+
+    /// The same, its logic module the planted one `logic` names (#277's catch-up in arrival
+    /// order takes a step's entries in the order they reached it).
+    pub fn planted(
+        piece: Rc<Piece>,
+        track: &[Value],
+        rows: bool,
+        logic: deep_logic::Planted,
+    ) -> Result<Logic, Value> {
         let entries: Vec<Entry> = track.iter().filter_map(Entry::parse).collect();
         // A copy's frames are timed: its checkpoints' deep hashes are read by restoring them.
         let mut rec = Record::default();
@@ -52,11 +121,12 @@ impl Logic {
             piece.clone(),
             track_of(&entries),
             true,
-            Default::default(),
+            logic,
             &mut rec,
             None,
         )?;
         Ok(Logic {
+            range: None,
             piece,
             start: track.to_vec(),
             world,
@@ -67,9 +137,31 @@ impl Logic {
             ring: None,
             plant: Default::default(),
             ns: 0,
+            spent: 0,
             worlds: None,
             len: 1,
         })
+    }
+
+    /// #277: the copy's own golden of the steps it ran (Logic: checkpoints and bake): each logic
+    /// item's step hash after each step from 0 to `ran` − 1, null at a step it never ran.
+    pub fn golden(&self, ran: i64) -> Value {
+        let rows = self.rec.rows();
+        let hashes: Map<String, Value> = self
+            .piece
+            .items
+            .iter()
+            .map(|i| {
+                let hash = |k: i64| {
+                    let row = rows.get(&k).and_then(|(items, _)| items.get(&i.id));
+                    row.and_then(|r| r.get("hash"))
+                        .cloned()
+                        .unwrap_or(Value::Null)
+                };
+                (i.id.clone(), Value::Array((0..ran).map(hash).collect()))
+            })
+            .collect();
+        json!({"step_hashes": hashes})
     }
 
     /// #551: steps `doc`'s worlds beside the logic items, each its own canvas module.
@@ -106,6 +198,9 @@ impl Logic {
 
 impl Stepper for Logic {
     fn enter(&mut self, entry: &Value) -> Result<(), Value> {
+        if let Some(refused) = self.range.as_mut().and_then(|r| r.check(entry)) {
+            return Err(refused);
+        }
         let entry_json = entry;
         let entry = Entry::parse(entry).ok_or_else(
             || json!({"code": "bad_input", "what": "an entry is {t, control, value}"}),
@@ -122,12 +217,14 @@ impl Stepper for Logic {
         self.world.run_through(until - 1, &mut self.rec);
         self.ns += cpu_ns() - before;
         if let Some(trap) = self.rec.traps.first() {
+            self.spent += cpu_ns() - before;
             return Err(trap.clone());
         }
         self.len = until / (step + 1).max(1);
         if let Some(w) = self.worlds.as_mut() {
             w.run(until)?;
         }
+        self.spent += cpu_ns() - before;
         if self.keep {
             let len = self.piece.items.first().map_or(1, |i| i.step);
             self.rows.push(self.row(step, step * len));
@@ -148,6 +245,14 @@ impl Stepper for Logic {
                 .map(|(id, h)| (id.as_str(), h.as_str().unwrap_or("")))
                 .chain(worlds.iter().map(|(id, h)| (id.as_str(), h.as_str()))),
         )
+    }
+
+    fn spent(&self) -> u64 {
+        self.spent
+    }
+
+    fn jump(&mut self, _step: i64, t: i64) {
+        self.world.skip(t);
     }
 
     fn step_hash(&mut self) -> u64 {
@@ -174,8 +279,15 @@ impl Stepper for Logic {
     }
 
     fn again(&self) -> Result<Self, Value> {
-        let mut again = Logic::new(self.piece.clone(), &self.start, false)?;
+        let mut again =
+            Logic::planted(self.piece.clone(), &self.start, false, self.world.planted())?;
         again.rounds = self.rounds;
+        again.range = self.range.as_ref().map(|r| Range {
+            form: r.form.clone(),
+            ty: r.ty.clone(),
+            lax: r.lax,
+            shaper: None,
+        });
         again.plant = self.plant;
         if let Some(w) = self.worlds.as_ref() {
             again.worlds = w.again(&self.start)?;

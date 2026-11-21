@@ -8,11 +8,13 @@ import type { Code } from './codes.ts';
 import { NONE, open, type Catalog, type Column, type Packed, type Table, type Ty } from './layout.ts';
 
 export type Kind = 'catalog.refs' | 'catalog.reach' | 'catalog.economy' | 'catalog.bounds' | 'catalog.copy' | 'scenario.reach';
+/** #832: the kind that plays runs, beside the six that read the catalog alone. */
+export type AnyKind = Kind | 'catalog.dominance';
 /** The catalogs a check's spec carries, by asset ID. */
 export type Carried = Record<string, Packed> | undefined;
 /** A finding as `catalog.found` lists it. */
 export interface Found { code: Code; [field: string]: unknown }
-export interface CatalogResult extends CheckResult { catalog: { kind: Kind; ms: number; found: Found[] } }
+export interface CatalogResult extends CheckResult { catalog: { kind: AnyKind; ms: number; found: Found[] } }
 /** A finding and the failure that reports it. */
 export interface Finding { found: Found; test: string; message: string }
 
@@ -25,7 +27,7 @@ export function judged(kind: Kind, asset: string, t0: number, rows: number, find
 }
 
 /** A check that judged nothing, with one failure saying why. */
-export function refused(kind: Kind, asset: string, t0: number, message: string, outcome: CheckResult['outcome'] = 'failed'): CatalogResult {
+export function refused(kind: AnyKind, asset: string, t0: number, message: string, outcome: CheckResult['outcome'] = 'failed'): CatalogResult {
   return { outcome, testsRun: 0, failures: [failure(kind, message, false)], evidence: [asset], read: [], mask: null, catalog: { kind, ms: performance.now() - t0, found: [] } };
 }
 
@@ -33,7 +35,7 @@ export function refused(kind: Kind, asset: string, t0: number, message: string, 
  * The catalog an input names, opened from the spec's `catalogs`, or the result refusing it: BLOCKED when the spec
  * doesn't carry it, so nothing unread passes, and `catalog.layout:` when it isn't table.layout@1 as its record names it.
  */
-export function opened(kind: Kind, asset: string, carried: Carried, t0: number): Catalog | CatalogResult {
+export function opened(kind: AnyKind, asset: string, carried: Carried, t0: number): Catalog | CatalogResult {
   if (!carried?.[asset]) return refused(kind, asset, t0, `BLOCKED: the catalog ${asset} isn't carried in the spec's catalogs`, 'missing');
   const cat = open(asset, carried);
   return typeof cat === 'string' ? refused(kind, asset, t0, `catalog.layout: ${cat}`) : cat;

@@ -1,0 +1,270 @@
+change processes-fail | load 164.8 193.4 231.1 | exit 1 after 102.3 s, 50.8 s after the first ✖ | tests 2 pass 0 fail 2 cancelled 0 | forced holds running at the failure: 2 | marked or recorded processes left: 0 at +3 s, 0 at +10 s | any new ds56m. at +3 s: 0
+
+$ node --test --test-concurrency=1 --test-reporter=spec --test-name-pattern=a check that passes or fails <scratch>/change-v2/copies/change/zz-forced-processes-fail.test.mjs
+
+FORCED run marker ds56m.d743dd6e.
+FORCED pids 94847,95007,95010 of run marker ds56m.d743dd6e.
+✖ #56.d29f38cc [plain] a check that passes or fails leaves none of its grandchildren behind, and a failing one is retried three times (49064.779542ms)
+FORCED run marker ds56m.80e6ed91.
+FORCED pids 99841,99927,99933 of run marker ds56m.80e6ed91.
+✖ #56.d29f38cc [effect] a check that passes or fails leaves none of its grandchildren behind, and a failing one is retried three times (50219.737333ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 100727.696042
+
+✖ failing tests:
+
+test at <scratch>/change-v2/copies/change/zz-forced-processes-fail.test.mjs:56:3
+✖ #56.d29f38cc [plain] a check that passes or fails leaves none of its grandchildren behind, and a failing one is retried three times (49064.779542ms)
+  AssertionError [ERR_ASSERTION]: FORCED failure with holds in flight, run marker ds56m.d743dd6e.
+      at TestContext.<anonymous> (file://<scratch>/change-v2/copies/change/zz-forced-processes-fail.test.mjs:71:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+
+test at <scratch>/change-v2/copies/change/zz-forced-processes-fail.test.mjs:56:3
+✖ #56.d29f38cc [effect] a check that passes or fails leaves none of its grandchildren behind, and a failing one is retried three times (50219.737333ms)
+  AssertionError [ERR_ASSERTION]: FORCED failure with holds in flight, run marker ds56m.80e6ed91.
+      at TestContext.<anonymous> (file://<scratch>/change-v2/copies/change/zz-forced-processes-fail.test.mjs:71:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+
+markers: ds56m.d743dd6e. ds56m.80e6ed91.
+forced pids: 94847 95007 95010 99841 99927 99933
+left at +3 s:
+
+left at +10 s:
+
+any new ds56m. at +3 s:
+
+----------------------------------------------------------------------------------------------------
+
+change timeouts-fail | load 206.2 187.3 220.5 | exit 1 after 100.4 s, 58.9 s after the first ✖ | tests 2 pass 0 fail 2 cancelled 0 | forced holds running at the failure: 2 | marked or recorded processes left: 0 at +3 s, 0 at +10 s | any new ds56m. at +3 s: 0
+
+$ node --test --test-concurrency=1 --test-reporter=spec --test-name-pattern=on the real clock <scratch>/change-v2/copies/change/zz-forced-timeouts-fail.test.mjs
+
+FORCED run marker ds56m.b5b25c91.
+FORCED pids 11262,11387,11405 of run marker ds56m.b5b25c91.
+✖ #56.57268f7d [plain] on the real clock a hold times out 2 s after it arrives, whatever its check is still doing (38999.502583ms)
+FORCED run marker ds56m.311af7c8.
+FORCED pids 15573,15754,15770 of run marker ds56m.311af7c8.
+✖ #56.57268f7d [effect] on the real clock a hold times out 2 s after it arrives, whatever its check is still doing (58702.13525ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 99439.563166
+
+✖ failing tests:
+
+test at <scratch>/change-v2/copies/change/zz-forced-timeouts-fail.test.mjs:98:3
+✖ #56.57268f7d [plain] on the real clock a hold times out 2 s after it arrives, whatever its check is still doing (38999.502583ms)
+  AssertionError [ERR_ASSERTION]: FORCED failure with holds in flight, run marker ds56m.b5b25c91.
+      at TestContext.<anonymous> (file://<scratch>/change-v2/copies/change/zz-forced-timeouts-fail.test.mjs:113:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+
+test at <scratch>/change-v2/copies/change/zz-forced-timeouts-fail.test.mjs:98:3
+✖ #56.57268f7d [effect] on the real clock a hold times out 2 s after it arrives, whatever its check is still doing (58702.13525ms)
+  AssertionError [ERR_ASSERTION]: FORCED failure with holds in flight, run marker ds56m.311af7c8.
+      at TestContext.<anonymous> (file://<scratch>/change-v2/copies/change/zz-forced-timeouts-fail.test.mjs:113:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+
+markers: ds56m.b5b25c91. ds56m.311af7c8.
+forced pids: 11262 11387 11405 15573 15754 15770
+left at +3 s:
+
+left at +10 s:
+
+any new ds56m. at +3 s:
+
+----------------------------------------------------------------------------------------------------
+
+change typecheck-fail | load 203.9 192.1 216.9 | exit 1 after 74.2 s, 33.0 s after the first ✖ | tests 2 pass 0 fail 2 cancelled 0 | forced holds running at the failure: 2 | marked or recorded processes left: 0 at +3 s, 0 at +10 s | any new ds56m. at +3 s: 0
+
+$ node --test --test-concurrency=1 --test-reporter=spec --test-name-pattern=a failure inside the slice <scratch>/change-v2/copies/change/zz-forced-typecheck-fail.test.mjs
+
+FORCED run marker ds56m.a5ec8630.
+FORCED pids 24871,24968,24984 of run marker ds56m.a5ec8630.
+✖ #56.6526364c [plain] a failure inside the slice comes back naming the slice's own source file and line (37882.743ms)
+FORCED run marker ds56m.5d98bed6.
+FORCED pids 28891,28977,28980 of run marker ds56m.5d98bed6.
+✖ #56.6526364c [effect] a failure inside the slice comes back naming the slice's own source file and line (32624.870833ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 72758.091459
+
+✖ failing tests:
+
+test at <scratch>/change-v2/copies/change/zz-forced-typecheck-fail.test.mjs:57:3
+✖ #56.6526364c [plain] a failure inside the slice comes back naming the slice's own source file and line (37882.743ms)
+  AssertionError [ERR_ASSERTION]: FORCED failure with holds in flight, run marker ds56m.a5ec8630.
+      at TestContext.<anonymous> (file://<scratch>/change-v2/copies/change/zz-forced-typecheck-fail.test.mjs:72:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+
+test at <scratch>/change-v2/copies/change/zz-forced-typecheck-fail.test.mjs:57:3
+✖ #56.6526364c [effect] a failure inside the slice comes back naming the slice's own source file and line (32624.870833ms)
+  AssertionError [ERR_ASSERTION]: FORCED failure with holds in flight, run marker ds56m.5d98bed6.
+      at TestContext.<anonymous> (file://<scratch>/change-v2/copies/change/zz-forced-typecheck-fail.test.mjs:72:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+
+markers: ds56m.a5ec8630. ds56m.5d98bed6.
+forced pids: 24871 24968 24984 28891 28977 28980
+left at +3 s:
+
+left at +10 s:
+
+any new ds56m. at +3 s:
+
+----------------------------------------------------------------------------------------------------
+
+change leases-fail | load 248.8 210.3 220.8 | exit 1 after 26.0 s, 9.4 s after the first ✖ | tests 2 pass 0 fail 2 cancelled 0 | forced holds running at the failure: 0 | marked or recorded processes left: 0 at +3 s, 0 at +10 s | any new ds56m. at +3 s: 0
+
+$ node --test --test-concurrency=1 --test-reporter=spec --test-name-pattern=50 sessions holding hooks <scratch>/change-v2/copies/change/zz-forced-leases-fail.test.mjs
+
+FORCED run marker ds56m.669331a3.
+✖ #56.80ab2a58 [plain] 50 sessions holding hooks share a pool of 10 ports, never more than 10 leased at once, and every lease comes back (15107.351208ms)
+FORCED run marker ds56m.b18349af.
+✖ #56.80ab2a58 [effect] 50 sessions holding hooks share a pool of 10 ports, never more than 10 leased at once, and every lease comes back (9291.959708ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 25340.668458
+
+✖ failing tests:
+
+test at <scratch>/change-v2/copies/change/zz-forced-leases-fail.test.mjs:75:3
+✖ #56.80ab2a58 [plain] 50 sessions holding hooks share a pool of 10 ports, never more than 10 leased at once, and every lease comes back (15107.351208ms)
+  AssertionError [ERR_ASSERTION]: a hold is due 2 s after it arrives: hold_until_ms is 2050 ms after the request
+      at TestContext.<anonymous> (file://<scratch>/change-v2/copies/change/zz-forced-leases-fail.test.mjs:82:58)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at <scratch>/change-v2/copies/change/zz-forced-leases-fail.test.mjs:75:3
+✖ #56.80ab2a58 [effect] 50 sessions holding hooks share a pool of 10 ports, never more than 10 leased at once, and every lease comes back (9291.959708ms)
+  AssertionError [ERR_ASSERTION]: a hold is due 2 s after it arrives: hold_until_ms is 2007 ms after the request
+      at TestContext.<anonymous> (file://<scratch>/change-v2/copies/change/zz-forced-leases-fail.test.mjs:82:58)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+markers: ds56m.669331a3. ds56m.b18349af.
+forced pids: 
+left at +3 s:
+
+left at +10 s:
+
+any new ds56m. at +3 s:
+
+----------------------------------------------------------------------------------------------------
+
+change processes-timeout | load 232.2 211.4 220.6 | exit 1 after 158.2 s, 0.6 s after the first ✖ | tests 1 pass 0 fail 0 cancelled 1 | forced holds running at the failure: 1 | marked or recorded processes left: 0 at +3 s, 0 at +10 s | any new ds56m. at +3 s: 0
+
+$ node --test --test-concurrency=1 --test-reporter=spec --test-name-pattern=\[plain\] a check that passes or fails <scratch>/change-v2/copies/change/zz-forced-processes-timeout.test.mjs
+
+FORCED run marker ds56m.10e06ae2.
+FORCED pids 43409,43495,43496 of run marker ds56m.10e06ae2.
+FORCED hang until the test times out, run marker ds56m.10e06ae2.
+✖ #56.d29f38cc [plain] a check that passes or fails leaves none of its grandchildren behind, and a failing one is retried three times (156626.792667ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 0
+ℹ cancelled 1
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 157769.373709
+
+✖ failing tests:
+
+test at <scratch>/change-v2/copies/change/zz-forced-processes-timeout.test.mjs:56:3
+✖ #56.d29f38cc [plain] a check that passes or fails leaves none of its grandchildren behind, and a failing one is retried three times (156626.792667ms)
+  'test timed out after 150000ms'
+
+markers: ds56m.10e06ae2.
+forced pids: 43409 43495 43496
+left at +3 s:
+
+left at +10 s:
+
+any new ds56m. at +3 s:
+
+----------------------------------------------------------------------------------------------------
+
+2026-11-21T01:43:45.206Z processes carrying ds56m.: 0

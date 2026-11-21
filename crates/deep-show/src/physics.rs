@@ -20,6 +20,7 @@ use serde_json::{json, Value};
 use crate::hub::Hub;
 
 pub(crate) mod cast;
+pub(crate) mod defaults;
 mod derive;
 pub(crate) mod kit;
 mod lap;
