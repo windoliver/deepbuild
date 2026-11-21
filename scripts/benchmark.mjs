@@ -459,7 +459,9 @@ function reported(stdout, name) {
 // counted), instructions retired where both sides ran, and the merge-base regression, whose message is `regression`.
 // Each limit's verdict holds its value and readings. The limits and margin judged are the merge base's, since a change
 // never moves its own budget (#2665), except an estimate moved once with its reason (#12). A command that won't run throws.
-export function judgeTask(budget, established, cwd, baseCwd) {
+// The machine is read after the runs through `machineOf`, the caller's own fingerprint(), so a lane whose benchmark.mjs
+// answers for the machine is judged on that answer (#1838).
+export function judgeTask(budget, established, cwd, baseCwd, machineOf = fingerprint) {
   const held = established && !movedOnce(definition(budget), definition(established)) ? established : budget;
   const [now, then = null] = measure(budget.command, cwd, established && { command: established.command, cwd: baseCwd });
   const once = () => {
@@ -468,7 +470,7 @@ export function judgeTask(budget, established, cwd, baseCwd) {
     return result;
   };
   const runs = Object.keys(held.limits).some((metric) => metric !== 'instructions') ? (once(), Array.from({ length: 5 }, once)) : [];
-  const machine = fingerprint();
+  const machine = machineOf();
   const loads = runs.map(({ loadStart, loadEnd }) => ({ start: loadStart, end: loadEnd }));
   const limits = Object.fromEntries(Object.entries(held.limits).map(([metric, limit]) => [metric, metric === 'instructions' ? judgeCount({ limit, runs: now.instructions })
     : isCount(metric) ? judgeCount({ limit, runs: runs.map(({ stdout }) => reported(stdout, metric.slice('report.'.length))) })

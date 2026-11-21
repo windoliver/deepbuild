@@ -11,6 +11,7 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, readlinkSync,
 import { join, resolve } from 'node:path';
 import { installedPrograms, installedRoot, type Root, rootOf, rootToken } from './paths.js';
 import { control, helloAt, startService } from './service.js';
+import { PROMOTE_RESTARTS, readBudget, RESTARTS, spentWhy } from './restart-budget.js';
 
 const USAGE = 'Usage: deep hub promote <build folder>';
 /** How long a build's hub has to answer once started, with a last good build to come back to: short enough that it answers again within 60 s. */
@@ -49,6 +50,10 @@ export async function promoteCommand(args: readonly string[]): Promise<number> {
   const versions = join(root.dir, 'versions');
   const previous = inNow(versions);
   if (previous === commit) { process.stdout.write(`deep hub promote: ${commit} is already the build in\n`); return 0; }
+  // The restart budget (#2973): a promotion may need two restarts, to the new build and back, so it starts only with
+  // room for both, before anything changes. A hub from before #2973 reports none, and keeps no budget.
+  const short = await shortOfRestarts(root);
+  if (short) return refused(`${commit} isn't promoted: ${short}`);
   mkdirSync(versions, { recursive: true, mode: 0o700 });
   rmSync(join(versions, commit), { recursive: true, force: true });
   cpSync(from, join(versions, commit), { recursive: true });
@@ -66,6 +71,12 @@ export async function promoteCommand(args: readonly string[]): Promise<number> {
     }
   } catch (error) {
     return refused(`the hub couldn't be drained, so ${commit} isn't promoted: ${message(error)}`, 3);
+  }
+  // Read again once drained: a token holder may have spent restarts while the turns finished.
+  const late = await shortOfRestarts(root);
+  if (late) {
+    try { await control(root.socket, root.token, 'hub.drain', { on: false }, 10_000); } catch { /* the refusal says why */ }
+    return refused(`${commit} isn't promoted: ${late}`);
   }
   // `current` first, then a restart on the token alone (#1865), which the login service brings back on the build it names.
   switchTo(versions, commit);
@@ -103,6 +114,18 @@ export async function promoteCommand(args: readonly string[]): Promise<number> {
   return refused(`${commit} was rolled back: ${why}; the last good build, ${previous}, is back`);
 }
 
+/** Why the running hub's restart budget has no room for a promotion's restarts; undefined with room, or no hub. */
+async function shortOfRestarts(root: Root): Promise<string | undefined> {
+  // With no hub up, the new build starts with no restart, and only a rollback would spend one: read from the file.
+  if (!(await helloAt(root.socket))) return spentWhy(readBudget(root.dir, Date.now()));
+  let restarts: { left?: unknown; frees?: unknown; unreadable?: unknown } | undefined;
+  try { restarts = (await control(root.socket, root.token, 'hub.health', {}, 30_000)).restarts as typeof restarts; } catch (error) { return `the hub's restart budget couldn't be read: ${message(error)}`; }
+  if (!restarts || typeof restarts.left !== 'number') return undefined;
+  if (typeof restarts.unreadable === 'string') return `the hub's restart budget, ${restarts.unreadable}, can't be read, so it counts as spent; stop and start the hub yourself with deep hub stop and deep hub start`;
+  if (restarts.left >= PROMOTE_RESTARTS) return undefined;
+  const when = typeof restarts.frees === 'string' ? `; the next frees up at ${restarts.frees}` : '';
+  return `the hub's restart budget (${String(RESTARTS)} restarts in any 60 minutes) has ${String(restarts.left)} left, and a promotion needs ${String(PROMOTE_RESTARTS)}${when}; stop and start the hub yourself with deep hub stop and deep hub start`;
+}
 /** The build `current` names now, by its folder's name; undefined before the first promotion. */
 function inNow(versions: string): string | undefined {
   try { return readlinkSync(join(versions, 'current')).split('/').filter(Boolean).at(-1); } catch { return undefined; }

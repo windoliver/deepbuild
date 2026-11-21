@@ -6,7 +6,7 @@ import { isMap, isSeq, LineCounter, parseDocument, type Node } from 'yaml';
 
 export interface Locator { role?: string; name?: string; label?: string; testId?: string; within?: { role: string; name: string } }
 /** The driver's locator: `within` as the container it looks inside. */
-export interface DriverLocator { role?: string; name?: string; label?: string; testId?: string; exact?: boolean; container?: DriverLocator }
+export interface DriverLocator { role?: string; name?: string; label?: string; testId?: string; container?: DriverLocator }
 interface MotionReq { target: Locator; property: string; from: string; to: string; duration: number; delay: number; easing: string }
 export interface Action { line: number | null; goto?: string; click?: DriverLocator; fill?: DriverLocator; text?: string; secret?: string; scrollIntoView?: DriverLocator; hover?: DriverLocator; press?: string; wait?: number }
 export interface Expect { line: number | null; locator?: DriverLocator; text?: string; visible?: boolean; until?: { evaluate: string; equals: string } }

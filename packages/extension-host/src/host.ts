@@ -70,6 +70,7 @@ export type { NoticeRow } from './sends.js';
 import { WorkSources, type Added, type DeliveryRow, type WorkEvent, type WorkKitFixture, type WorkPage, type WorkResult, type WorkTask } from './work.js';
 import { AnswerTooLarge, declareSource, handleOf, nodeFetch, nodeHttp, osSecrets, Sources, HostSources, type HttpClient, type KeyTest, type Polled, type Reading, type Recording, type SecretStore, type SourceRead, type StreamRead } from './sources.js';
 import { TERMINAL_PLANTS, TERMINAL_PROTOCOL, Terminals, type OpenSpec, type TerminalPlant, type TerminalTab } from './terminals.js';
+import { shellRefusal, type ShellInput } from './shell-plays.js';
 import type { ProjectTrust } from './trust.js';
 
 /** A package inside DeepBuild's signed release, as the release's signed manifest lists it. */
@@ -595,7 +596,7 @@ class Host implements ExtensionHost {
   /** The content keys each running check's `deep.canvas.read` calls returned, by the package running it (#411). */
   private readonly canvasKeys = new Map<Ext, string[]>();
   /** Each running check's input and the plays its `deep.canvas.play` calls made, by the package running it (#184). */
-  private readonly plays = new Map<Ext, { input: PlayInput | undefined; played: Played[]; tracks: Set<string> }>();
+  private readonly plays = new Map<Ext, { input: PlayInput | undefined; played: Played[]; tracks: Set<string>; shell?: boolean }>();
   /** The packages you approved run-as-you for, by ID. */
   private runAsYou: Record<string, boolean>;
   private readonly terminals: Terminals;
@@ -2075,6 +2076,11 @@ class Host implements ExtensionHost {
         if (r.bot !== undefined && !bots.includes(canonical(botOf(r.bot)))) throw Error(`deep.canvas.play: the bot ${canonical(r.bot).slice(0, 200)} isn't one ${id}'s check input gives`);
         // #555: the play interface a run reads is the one the input's brief locked, never one the runner passes.
         if (r.play !== undefined && canonical(r.play) !== canonical(input.play)) throw Error(`deep.canvas.play: the play interface isn't the one ${id}'s check input gives`);
+        // #851: a shell's journey, device, size, level policy, pause and budget are the shell.journeys input's.
+        if (r.shell !== undefined) {
+          const why = running.shell ? shellRefusal(input as ShellInput, r.shell) : 'the check input gives no shell journeys';
+          if (why) throw Error(`deep.canvas.play: ${id}'s shell run: ${why}`);
+        }
         if (r.track !== undefined) {
           const tracks = Array.isArray(input.tracks) ? input.tracks.map(canonical) : [];
           const track = canonical(r.track);
@@ -2670,6 +2676,8 @@ class Host implements ExtensionHost {
     const running = this.plays.get(ext);
     const input = running?.input;
     if (!running || typeof input?.seed !== 'number') return [];
+    // #851: a shell.journeys input's plays are its journeys, which its own check counts; it gives no runs of bots.
+    if (running.shell) return [];
     const runs = typeof input.runs === 'number' ? input.runs : 20;
     if (input.off) return unpaired(running.played, input as PlayInput & { seed: number; off: { rows: number } }, runs, result);
     const bots: (string | undefined)[] = Array.isArray(input.bots) && input.bots.length ? input.bots.map((b) => canonical(botOf(b))) : [undefined];
@@ -3205,7 +3213,10 @@ class Host implements ExtensionHost {
     if (ctx.environment !== undefined) await this.usedFirstParty(ext.entry.id, ctx.environment);
     try {
       this.canvasKeys.set(ext, []);
-      this.plays.set(ext, { input: playInput(spec as CheckSpec & { play?: unknown }), played: [], tracks: new Set() });
+      const input = playInput(spec as CheckSpec & { play?: unknown });
+      // #851: a shell.journeys input names its devices, sizes or journeys, which a playtest's never does.
+      const shellInput = isPlain(input) && ['journeys', 'devices', 'sizes'].some((k) => k in input);
+      this.plays.set(ext, { input, played: [], tracks: new Set(), shell: shellInput });
       const result = await this.checkRun(ext, ctx, (context) => this.ask(ext, ctx.deadline, kind, 'run', { type: kind, spec, ctx: context }));
       const read = this.canvasKeys.get(ext) ?? [];
       const { isCheckResult } = await import('@deepbuild/conformance');

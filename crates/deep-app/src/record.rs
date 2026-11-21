@@ -31,6 +31,12 @@ pub const CALLS: [&str; 3] = ["inbox.read", "stream.subscribe", "events.read"];
 
 /// The events one refetch asks for at a time.
 const PAGE: usize = 1000;
+
+/// Whether the log goes on past an `events.read` page of `read` events: a full page may, and one the hub's byte cap
+/// ended says so with `more` (#1576), however few events it holds.
+fn more(page: &Value, read: usize) -> bool {
+    read == PAGE || page["more"] == true
+}
 /// The newest events a view keeps.
 const TAIL: usize = 256;
 /// While the hub doesn't answer the app tries it this often, and after [`SLOW_AFTER`] [`SLOWLY`].
@@ -166,7 +172,7 @@ impl View {
                 }
                 self.table.apply(event);
             }
-            if events.len() < PAGE {
+            if !more(&page, events.len()) {
                 break;
             }
         }
@@ -477,7 +483,7 @@ impl RecordReader {
                 return self.connect();
             }
             let events = page["events"].as_array().cloned().unwrap_or_default();
-            let full = events.len() == PAGE;
+            let full = more(&page, events.len());
             for event in events {
                 if event["log_pos"].as_u64().unwrap_or(0) > self.view.log_pos {
                     self.view.apply(event);
@@ -500,7 +506,7 @@ impl RecordReader {
         loop {
             let page = client.call("events.read", json!({ "after": after, "limit": PAGE }))?;
             let read = page["events"].as_array().cloned().unwrap_or_default();
-            let full = read.len() == PAGE;
+            let full = more(&page, read.len());
             for event in read {
                 after = event["log_pos"].as_u64().unwrap_or(after);
                 if after > self.view.log_pos {

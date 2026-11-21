@@ -1,9 +1,9 @@
 // The children's thread (children.ts): starts each child process the core asks for, so the exec holds this thread,
 // never the core's.
-import './children.js';
+import './children.ts';
 import { execFile, spawn } from 'node:child_process';
 import { parentPort } from 'node:worker_threads';
-import type { ChildJob } from './children.js';
+import type { ChildJob } from './children.ts';
 
 const port = parentPort!;
 port.on('message', (job: ChildJob & { n: number }) => {

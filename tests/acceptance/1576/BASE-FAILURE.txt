@@ -1,0 +1,80 @@
+Base commit: 3f02bf52b (main, no implementation of #1576)
+Command: npm ci; npm run build --workspaces; scripts/lease cargo build --locked -q -p deep-hook; then
+         node node_modules/vitest/vitest.mjs run --root tests/acceptance/1576 --no-file-parallelism --testTimeout=600000 --reporter=verbose
+Date: 2026-11-21, started 00:27:20  Node v24.22.2  vitest 5.0.5  darwin-arm64 (Mac17,10), a shared machine at load
+      120 to 210 on 18 cores throughout (other sessions' suites)
+Exit code: 1
+Result: 3 files, 9 tests: 9 failed, each at its criterion's assertion (vitest expect), none at its own setup.
+Duration: 1118.65 s, most of it seeding the 100,000-session record and its hub's first start; nothing here is timed.
+Checked beside it: the suite type-checks (node node_modules/typescript/bin/tsc -p tests/acceptance/1576/tsconfig.json,
+no errors), and each twin, laid over packages/hub/src/plant.ts in a copy of the base hub, type-checks with the hub's
+tsconfig (tsc --noEmit, exit 0 for all three).
+
+== Each failure, trimmed to its reason
+
+budgets.test.ts
+  × AC1 #1576.bd04ffbe a cold open (the app's hello, inbox.read, sessions.read) costs the same bytes, within 10%, on
+    1,000 sessions and on 100,000                                                       (budgets.test.ts:60)
+      cold-open bytes on a record of 100000 sessions (35298336) and on one of 1000 (367499) differ by 9505.0%, not
+      under 10%: sessions.read grew most, from 345080 to 34938665 bytes
+      The base's sessions.read returns every session's row, and its inbox.read every ask.
+  × AC1 #1576.bd04ffbe (wrong program) the planted reads-every-row fails it, naming sessions.read   (budgets.test.ts:65)
+      the planted wrong program reads-every-row runs: the hub names no planted program reads-every-row: Error:
+      DEEP_HUB_PLANT=reads-every-row names no planted program
+      The base names none of this suite's plants (README, Wrong programs).
+  × AC2 #1576.cfed4450 every byte the hub sends a cold open on 100,000 sessions comes to under 1 MiB   (budgets.test.ts:72)
+      a cold open on the 100000-session record is 35298336 bytes, not under 1 MiB (1048576): sessions.read's reply
+      alone is 34938665 bytes
+  × AC4 #1576.61b3806a each read of a reconnect on 1,000 sessions counts its queries, and their sum is at or under the
+    ceiling in benchmarks/budgets.json                                                  (budgets.test.ts:78)
+      the hub doesn't count its queries: inbox.read's reply on a reconnect carries no queries (undefined)
+      (benchmarks/budgets.json has no task phone-reads either; the judge names the first thing missing.)
+  × AC4 #1576.61b3806a (wrong program) the planted query-per-row fails it, naming inbox.read        (budgets.test.ts:83)
+      the planted wrong program query-per-row runs: the hub names no planted program query-per-row: Error:
+      DEEP_HUB_PLANT=query-per-row names no planted program
+  × AC5 #1576.f767c108 with a busy process per core beside both, two runs read the same cold-open bytes on both
+    records, the same turn's frames and bytes, and the same queries per reconnect       (budgets.test.ts:93)
+      queries per reconnect can't be read in the first run under load (inbox.read's reply carries no queries), and a
+      number that can't be read is missing, never the same
+      The judge reads the budgets in order and reports the first that differs or is missing, so at the base the
+      other four read the same in both runs under load: cold-open bytes 367499 on 1,000 sessions and 35298336 on
+      100,000, and the turn's 8 frames and 4147 bytes.
+
+inbox.test.ts
+  × AC6 #1576.84557f89 with 30 open asks and 60 settled, deep inbox lists the 30, and inbox.read's pages, followed
+    from the first, hold each of the 60 once                                            (inbox.test.ts:16)
+      inbox.read gives no page of the settled asks: its first read holds 60 of the 60, past the 25 newest, with no
+      count of the rest
+      Its first assertion, deep inbox listing every open ask (inbox.test.ts:14), passes at the base, as "still"
+      says it should.
+
+turn.test.ts
+  × AC3 #1576.054c1375 the recorded turn of fixtures/turn.jsonl sends the session's page no more frames and bytes
+    than the ceiling in benchmarks/budgets.json                                         (turn.test.ts:13)
+      no ceiling for a turn's frames and bytes is recorded (this turn of fixtures/turn.jsonl sent the page 8 frames,
+      4147 bytes): benchmarks/budgets.json › phone-reads › limits › report.turnFrames and benchmarks/budgets.json ›
+      phone-reads › limits › report.turnBytes must hold them
+      The 8 frames: task.created, user.ask, tool.before, tool.after, agent.stop, turn.usage, claim.made, session.state.
+  × AC3 #1576.054c1375 (wrong program) the planted page-hook-frame-per-event fails it, naming the kind page.hook
+                                                                                        (turn.test.ts:18)
+      the planted wrong program page-hook-frame-per-event runs: the hub names no planted program
+      page-hook-frame-per-event: Error: DEEP_HUB_PLANT=page-hook-frame-per-event names no planted program
+
+== What could not be shown here
+
+- No test was run against an implementation, since none exists, nor against the twins, which were only type-checked
+  over the base hub: that each plant makes its criterion's test fail, naming the method or the kind, is owed to the
+  implementation's run.
+- The three (wrong program) tests fail at the base only because the base names no such plant; that is their first
+  assertion, and it fails for that reason alone.
+
+== Seen while writing the suite, not part of it
+
+- An earlier record gave every settled session a session.end too. At the base the hub's start then grows with the
+  square of the ended sessions: a CPU profile of a 32 s start on 10,000 of them spent about 20 s in the asks core's
+  forgetEnded and the threadOf and openIn it calls for each; on 100,000 it hadn't come up after 15 minutes. Without the ends it starts on 30,000 in 32 s, and its second start in
+  10 s. The records now send no session.end (README, Criteria to tests, AC1); the scaling is a follow-up, not #1576's.
+- An earlier cold-open client read each line through #16's Conn, which joins a line's text chunk by chunk; on the
+  base's 35 MB reply that took most of a CPU-starved minute per read, so helpers.ts reads a cold open as bytes.
+- AC5's busy processes ran at normal priority in an earlier, abandoned run; they now run at the lowest priority, so
+  other sessions on a shared machine lose only its idle time to them.

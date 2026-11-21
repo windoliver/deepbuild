@@ -15,6 +15,7 @@ It ships as a few fixed module sets (#1490), each a Cargo feature of its name an
 - `src/play.rs`: the piece played on its recorded track, the saves its steps ask for and a save opened (issue #1041).
 - `web/element.js`: the page's element, and the piece's saves in the browser's storage with the player's own controls for them.
 - `src/net.rs`: a piece's match (#549): the Join prompt's state, the relay's hello checked before anything is sent, the join, and the copy of the lockstep match. `web/element.js` draws the prompt, takes only a person's click and owns the one WebSocket, to the declared relay.
+- `src/page.rs`'s measure members and `src/gpu.rs`'s read of the object-ID target: the viewer's measure tool (#1217), scene3d's own, as the page's session state. `web/element.js` takes its clicks and keys and draws its line, points and readout over the canvas.
 - `src/cxx.rs`: C++'s allocation operators for the 3D module's mesh simplifier on wasm32.
 
 ## What it may import

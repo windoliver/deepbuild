@@ -1,6 +1,6 @@
 //! Wrong-program switches used only by the proof binary. Public entry remains the crate root.
 
-use crate::{ao, cull, dof, fill, flare, local, local_tone, surface, water};
+use crate::{ao, cull, dof, fill, flare, local, local_tone, mirror, surface, water};
 
 /// The wrong programs, each reachable only through the binary's `--planted`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -18,6 +18,10 @@ pub struct Planted {
     pub emission_thresholds_color: bool,
     /// #458: the core velocity target leaves out an instancer's elements.
     pub instanced_skips_velocity: bool,
+    /// #2657: `ensure_casters` makes nothing once either caster kind's pipeline exists.
+    pub casters_once_any: bool,
+    /// #2657: once the sway pass has run, no later frame records or submits it.
+    pub sway_first_frame_only: bool,
     /// #458: the normal target leaves out an instancer's elements.
     pub instances_skip_normal: bool,
     /// #458: the output pass applies exposure after the tone map.
@@ -55,6 +59,8 @@ pub struct Planted {
     pub winding_ignores_determinant: bool,
     /// #465: the flare's wrong programs.
     pub flare: flare::Planted,
+    /// #2691: the mirror's wrong programs.
+    pub mirror: mirror::Planted,
     /// #468: the depth of field's wrong programs.
     pub dof: dof::Planted,
     /// #971: the local tone map's wrong programs.
