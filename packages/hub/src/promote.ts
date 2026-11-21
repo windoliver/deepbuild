@@ -11,6 +11,7 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, readlinkSync,
 import { join, resolve } from 'node:path';
 import { installedPrograms, installedRoot, type Root, rootOf, rootToken } from './paths.js';
 import { control, helloAt, startService } from './service.js';
+import { startOf } from './wire.js';
 import { PROMOTE_RESTARTS, readBudget, RESTARTS, spentWhy } from './restart-budget.js';
 
 const USAGE = 'Usage: deep hub promote <build folder>';
@@ -58,11 +59,31 @@ export async function promoteCommand(args: readonly string[]): Promise<number> {
   rmSync(join(versions, commit), { recursive: true, force: true });
   cpSync(from, join(versions, commit), { recursive: true });
 
+  // The drain: no session starts, and the running turns finish while the hub keeps serving them. It is a lease the
+  // hub lets lapse 30 s after the last renewal (#2974), held as this process so it shows whose it is; renewed each
+  // second here, and lifted when the promotion is stopped or fails before the hub restarts.
+  const started = await startOf(process.pid);
+  const me = started ? { pid: process.pid, start: started } : undefined;
+  const lift = () => control(root.socket, rootToken(root), 'hub.drain', { on: false }, 10_000, 10_000, me).catch(() => undefined);
+  let renewal: Promise<unknown> = Promise.resolve();
+  const renew = () => (renewal = control(root.socket, rootToken(root), 'hub.drain', {}, 10_000, 10_000, me));
+  // The build that was in names `current` again, when this stops or the hub doesn't restart.
+  let switched = false;
+  const putBack = () => { if (previous) switchTo(versions, previous); else rmSync(join(versions, 'current'), { force: true }); };
+  // Once stopped, the lift waits for a renewal under way, and none follows it: the loop parks until the exit. Up to
+  // the restart, a stop also puts back the build that was in.
+  let stopping = false;
+  const park = () => new Promise<never>(() => undefined);
+  const interrupted = () => { stopping = true; void renewal.catch(() => undefined).then(() => { if (switched) putBack(); }).then(lift).finally(() => process.exit(130)); };
+  const unhook = () => { process.removeListener('SIGINT', interrupted); process.removeListener('SIGTERM', interrupted); };
+  process.once('SIGINT', interrupted);
+  process.once('SIGTERM', interrupted);
   try {
-    // The drain: no session starts, and the running turns finish while the hub keeps serving them.
     if (await helloAt(root.socket)) {
       for (let told = false; ;) {
-        const { turns } = await control(root.socket, rootToken(root), 'hub.drain', {}, 10_000);
+        if (stopping) await park();
+        const { turns } = await renew();
+        if (stopping) await park();
         if (!turns) break;
         if (!told) process.stdout.write(`deep hub promote: waiting for ${String(turns)} running turn(s) to finish before the hub restarts on ${commit}\n`);
         told = true;
@@ -70,22 +91,32 @@ export async function promoteCommand(args: readonly string[]): Promise<number> {
       }
     }
   } catch (error) {
+    unhook();
+    await lift();
     return refused(`the hub couldn't be drained, so ${commit} isn't promoted: ${message(error)}`, 3);
   }
   // Read again once drained: a token holder may have spent restarts while the turns finished.
   const late = await shortOfRestarts(root);
   if (late) {
-    try { await control(root.socket, root.token, 'hub.drain', { on: false }, 10_000); } catch { /* the refusal says why */ }
+    unhook();
+    await lift();
     return refused(`${commit} isn't promoted: ${late}`);
   }
   // `current` first, then a restart on the token alone (#1865), which the login service brings back on the build it names.
   switchTo(versions, commit);
-  const stuck = await restart(root);
+  switched = true;
+  // Renewed once more just before the restart, so the drain outlasts the old hub's last moments; once stopped, it parks
+  // as the loop does, so no take follows the lift and no restart is asked for.
+  const stuck = await restart(root, async () => {
+    if (stopping) await park();
+    await renew().catch(() => undefined);
+    if (stopping) await park();
+  });
+  unhook();
   if (stuck) {
-    if (previous) switchTo(versions, previous);
-    else rmSync(join(versions, 'current'), { force: true });
+    putBack();
     // The hub that stays in serves session starts again.
-    try { await control(root.socket, rootToken(root), 'hub.drain', { on: false }, 10_000); } catch { /* it says why below */ }
+    await lift();
     return refused(`${commit} isn't promoted: ${stuck}`, 3);
   }
   const why = await up(root, previous ? UP_MS : SLOW_UP_MS, true);
@@ -119,7 +150,7 @@ async function shortOfRestarts(root: Root): Promise<string | undefined> {
   // With no hub up, the new build starts with no restart, and only a rollback would spend one: read from the file.
   if (!(await helloAt(root.socket))) return spentWhy(readBudget(root.dir, Date.now()));
   let restarts: { left?: unknown; frees?: unknown; unreadable?: unknown } | undefined;
-  try { restarts = (await control(root.socket, root.token, 'hub.health', {}, 30_000)).restarts as typeof restarts; } catch (error) { return `the hub's restart budget couldn't be read: ${message(error)}`; }
+  try { restarts = (await control(root.socket, rootToken(root), 'hub.health', {}, 30_000)).restarts as typeof restarts; } catch (error) { return `the hub's restart budget couldn't be read: ${message(error)}`; }
   if (!restarts || typeof restarts.left !== 'number') return undefined;
   if (typeof restarts.unreadable === 'string') return `the hub's restart budget, ${restarts.unreadable}, can't be read, so it counts as spent; stop and start the hub yourself with deep hub stop and deep hub start`;
   if (restarts.left >= PROMOTE_RESTARTS) return undefined;
@@ -143,11 +174,12 @@ function switchTo(versions: string, name: string): void {
  * start nothing. A hub from before #1865 knows no restart, and still stops on the token. Why the old hub still runs, or
  * undefined once it's gone.
  */
-async function restart(root: Root): Promise<string | undefined> {
+async function restart(root: Root, renew?: () => Promise<unknown>): Promise<string | undefined> {
   const before = await helloAt(root.socket);
   if (!before) return undefined;
   let pid: unknown;
   try { pid = (await control(root.socket, rootToken(root), 'hub.health', {}, 10_000)).pid; } catch { /* read below by its start */ }
+  await renew?.();
   try {
     await control(root.socket, rootToken(root), 'hub.restart', {}, 10_000);
   } catch (error) {

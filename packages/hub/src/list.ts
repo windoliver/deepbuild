@@ -16,7 +16,7 @@ import { visible } from './visible.js';
 /** What deep status shows under a session's row (status.ts: StatusRow, less what the row holds). */
 export interface Detail { note?: string; verdict?: string; readings?: string[]; calls?: string[]; commits?: string[]; turn?: { calls: number; failed: number } }
 /** A read of the list: its rows at a log_pos, each session's detail when asked, and when the hub stopped answering if it did. */
-interface Read { log_pos: number; rows: Row[]; detail?: Record<string, Detail>; down?: number; explained?: Why }
+interface Read { log_pos: number; rows: Row[]; detail?: Record<string, Detail>; down?: number; explained?: Why; /** A drain holding session starts (#2974), in the hub's words. */ paused?: string }
 
 /** The one count sentence, as the app says it (crates/deep-app/src/views.rs: asks_need_you). */
 export const asksNeedYou = (n: number): string => (n === 1 ? '1 ask needs you' : `${n} asks need you`);
@@ -53,9 +53,9 @@ function planted(rows: Row[]): Row[] {
  * then how many sessions and the count sentence. With `detail`, each session's detail under its row; a finished
  * session's is one line, how many calls, how many failed, its commits, and the handle `deep read` takes for the rest.
  */
-export function listText(rows: readonly Row[], o: { detail?: Record<string, Detail>; down?: string; now?: number } = {}): string {
+export function listText(rows: readonly Row[], o: { detail?: Record<string, Detail>; down?: string; paused?: string; now?: number } = {}): string {
   const now = o.now ?? Date.now();
-  const out: string[] = o.down ? [o.down] : [];
+  const out: string[] = [o.down, o.paused].filter((line): line is string => !!line);
   const sessions = rows.filter((r) => r.id.startsWith('session:'));
   const asks = rows.filter((r) => r.id.startsWith('ask:'));
   const age = (r: Row) => (r.since === null ? '' : `, ${elapsed(Math.max(0, now - r.since))}`);
@@ -221,8 +221,8 @@ export async function listCommand(args: readonly string[], detail: boolean, setU
       return;
     }
     const rows = planted(read.rows);
-    if (json) process.stdout.write(`${JSON.stringify({ log_pos: read.log_pos, rows })}\n`);
-    else process.stdout.write(listText(rows, { ...(read.detail ? { detail: read.detail } : {}), ...(read.down !== undefined ? { down: hubDown(read.down) } : {}) }));
+    if (json) process.stdout.write(`${JSON.stringify({ log_pos: read.log_pos, rows, ...(read.paused ? { paused: read.paused } : {}) })}\n`);
+    else process.stdout.write(listText(rows, { ...(read.detail ? { detail: read.detail } : {}), ...(read.paused ? { paused: read.paused } : {}), ...(read.down !== undefined ? { down: hubDown(read.down) } : {}) }));
   };
   // A clone of a project this machine joined reads that project's hub over the network (#1338), as its person.
   const { joinedFor, remoteCall } = await import('./remote.js');
