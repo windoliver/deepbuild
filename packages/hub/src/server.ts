@@ -23,7 +23,7 @@ import { agentReply, allowReply, contextParts, coreReplyLine, EMPTY_REPLY, heavy
 import { takeLock, type Lock } from './lock.js';
 import { reaches } from './memory.js';
 import { handleOf as ruleHandle, noticeText, scopedAt } from './rules.js';
-import { dropTestSettings, installedRoot, repoOf, rootOf, type Root } from './paths.js';
+import { dropTestSettings, installedRoot, real, repoOf, rootOf, type Root } from './paths.js';
 import { shedStartup, YOUNG } from './settle.js';
 import { processHealth } from './process-health.js';
 import { Waits, type HookSeen, type OpenCall, type Restored } from './waits.js';
@@ -48,6 +48,10 @@ const MAX_LINE = 64 << 20;
  */
 const BEHIND = 10_000;
 const BEHIND_BYTES = 8 << 20;
+/** A restart's exit (#1865): not 0, so the login service (KeepAlive's SuccessfulExit false, Restart=on-failure) starts the hub again. */
+const RESTART_EXIT = 75;
+/** How long a hub stays up before a restart (#1865): past launchd's 10 s throttle and systemd's 10 s start-limit window. */
+const RESTART_AFTER_MS = 15_000;
 const STALL_MS = 100;
 
 /** Which roles may call each method. A hook connection may only send its one request. */
@@ -65,7 +69,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // The Agents page (#148): a server or a skill proposed for the agents you choose, the page's model, Codex's daemon
   // restarted through an ask, a sync undone; and `deep mcp-exec`, a synced server's command with its secrets by handle.
   ['agents.propose', ['app', 'cli']], ['agents.read', ['app', 'cli']], ['agents.restart', ['app', 'cli']], ['agents.undo', ['app', 'cli']], ['box.say', ['app', 'cli']], ['mcp.exec', ['cli']],
-  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['rows.read', ['app', 'cli', 'person']], ['row.read', ['app']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['run.output', ['app', 'cli']], ['host.list', ['app', 'cli']], ['host.facts', ['app', 'cli']], ['host.plan', ['cli']], ['host.ran', ['cli']], ['host.changes', ['app', 'cli']], ['host.remove', ['cli']], ['test.load', ['app', 'cli']],
+  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['rows.read', ['app', 'cli', 'person']], ['row.read', ['app']], ['hub.stop', ['app', 'cli']], ['hub.restart', ['cli']], ['run.start', ['app', 'cli']], ['run.output', ['app', 'cli']], ['host.list', ['app', 'cli']], ['host.facts', ['app', 'cli']], ['host.plan', ['cli']], ['host.ran', ['cli']], ['host.changes', ['app', 'cli']], ['host.remove', ['cli']], ['test.load', ['app', 'cli']],
   // A new secret, on the trusted path, and which are held; values never come back (#70).
   ['secret.enter', ['cli']], ['secret.list', ['app', 'cli']],
   // A hosted terminal the hub reattaches after a restart (#70).
@@ -345,6 +349,10 @@ class Hub {
   private parsers!: Parsers;
   private ids = 0;
   private ino = 0;
+  /** When the socket started listening: a restart waits until the hub has been up RESTART_AFTER_MS (#1865). */
+  private listening = 0;
+  /** The installed hub's stops waiting on the OS to confirm you (#1865): a restart then would throw your answer away. */
+  private confirming = 0;
   private stopping = false;
   /** The lock file was removed or replaced under this hub (#909): another start can take it, so no hook is acknowledged. */
   private lost = false;
@@ -460,6 +468,7 @@ class Hub {
     });
     chmodSync(this.root.socket, 0o600);
     this.ino = statSync(this.root.socket).ino;
+    this.listening = Date.now();
     await this.syncNetwork();
     // Hooks are acknowledged from the moment the socket exists; the hub reports ready once its core has started.
     this.hooks = new Set((await this.core.started).hooks);
@@ -1286,9 +1295,28 @@ class Hub {
     switch (method) {
       // The tools as this hub publishes them and holds calls to: deep mcp lists these while it reaches the hub (#1415).
       case 'mcp.tools': return conn.write({ id, result: { tools: toolList() } });
-      case 'hub.stop':
-        conn.write({ id, result: { stopping: true } });
-        return void this.stop('requested', conn.sock);
+      case 'hub.stop': {
+        const stopping = () => { conn.write({ id, result: { stopping: true } }); void this.stop('requested', conn.sock); };
+        // A dev hub stops on its token; the installed hub only once the OS confirms you inside the hub, as gates.off
+        // does (#1865), since a command's child holds the token too, and a stop exits 0, which no login service undoes.
+        if (real(this.root.dir) !== real(rootOf(installedRoot()).dir)) return stopping();
+        const command = params.command ?? 'deep hub stop';
+        if (command !== 'deep hub stop' && command !== 'deep setup --undo') return conn.write({ id, error: refusal('enum', '/params/command', 'Name deep hub stop or deep setup --undo.', command) });
+        this.confirming++;
+        return void this.core.request({ op: 'call', method: 'you.confirm', params: { command }, context: { role: conn.name, ...(conn.peer ? { peer: conn.peer } : {}) } }).finally(() => this.confirming--).then(
+          stopping,
+          (error: unknown) => conn.write({ id, error: error instanceof Refused ? error.refusal : refusal('unavailable', '', error instanceof Error ? error.message : String(error), method, true) }),
+        );
+      }
+      case 'hub.restart': {
+        // The token alone only restarts (#1865): a failed exit, which the login service starts again at once. A hub up
+        // under RESTART_AFTER_MS waits that out first, so restarts asked back to back can't keep it down between the
+        // login service's throttled starts, nor spend systemd's start limit.
+        if (this.confirming) return conn.write({ id, error: refusal('unavailable', '/method', 'A deep hub stop is waiting for you to answer the OS; restart once it is answered.', method, true) });
+        const wait = Math.max(0, this.listening + RESTART_AFTER_MS - Date.now());
+        conn.write({ id, result: { restarting: true } });
+        return void setTimeout(() => void this.stop('requested', conn.sock, RESTART_EXIT), wait);
+      }
       case 'gates.off':
       case 'gates.on': {
         const off = method === 'gates.off';
@@ -1368,7 +1396,7 @@ class Hub {
   }
 
   /** A stop with its reason recorded: no new connections, the core's clean stop, then only our own socket removed. */
-  async stop(reason: string, requester?: net.Socket): Promise<void> {
+  async stop(reason: string, requester?: net.Socket, code = 0): Promise<void> {
     if (this.stopping) return;
     this.stopping = true;
     // Its close is the CLI's completion signal: keep only this socket until cleanup and process exit.
@@ -1385,7 +1413,7 @@ class Hub {
       process.stderr.write(`deep hub: ${error instanceof Error ? error.message : String(error)}\n`);
     }
     if (answers) for (const conn of this.conns) conn.sock.destroy();
-    this.exit(0);
+    this.exit(code);
   }
   private exit(code: number): void {
     try {

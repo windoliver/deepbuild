@@ -401,7 +401,7 @@ export class Starts {
     const found = await this.versionOf(agent).catch((error: Error) => error);
     if (found instanceof Error) return refuse('version', `${agent} can't start: ${found.message}`);
     if (!coveredBy(agent, found.version)) {
-      return refuse('version', `${agent} ${found.version} is past the versions its facts cover (${coverage(agent).join(', ')}), so its hooks would be watch-only; it doesn't start.`);
+      return refuse('version', `${agent} ${found.version} is not a version its facts cover (${coverage(agent).join(', ')}), so its hooks would be watch-only; it doesn't start.`);
     }
     const tree = r.worktree ?? await this.worktree(repo, issue, run);
     const { sandbox, entry } = this.o.plant === 'starts-without-sandbox' ? { sandbox: NONE, entry: undefined } : this.sandboxOf(agent, found.version);

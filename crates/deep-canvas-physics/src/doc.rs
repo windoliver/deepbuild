@@ -32,29 +32,6 @@ pub enum Rule {
     Multiply,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Sleep {
-    pub on: bool,
-    pub speed: f64,
-    pub time: f64,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Solver {
-    pub contact_hz: f64,
-    pub contact_damping: f64,
-    pub max_speed: f64,
-    pub restitution_threshold: f64,
-    pub hit_threshold: f64,
-    pub sleep: Sleep,
-    pub ccd: bool,
-}
-
-/// #2309: the stiffest contact a step settles, Hz: (step rate × substeps) ÷ 6.
-pub fn most_contact_hz(step_rate: f64, substeps: f64) -> f64 {
-    step_rate * substeps / 6.0
-}
-
 mod shape;
 pub use shape::*;
 
@@ -253,6 +230,7 @@ mod heightfield;
 mod inputs;
 mod reads;
 mod soft;
+mod solver;
 mod vehicle;
 mod wind;
 pub use centre::bounds;
@@ -263,6 +241,7 @@ pub use inputs::{number_fields, resolved, Input, On, INPUTS_LATER};
 pub use reads::{probe_pose, probe_shape, Output, Read, Skin, Solve, READS};
 pub use reads::{Formula, Reduce, Sampled};
 pub use soft::{sides, Pin, Soft, SoftShape, Stiffness, Tear, OPEN_MESH};
+pub use solver::{most_contact_hz, Sleep, Solver};
 pub use vehicle::{flat, Taken, Vehicle, Wheel, FIELDS as VEHICLE_FIELDS, MOST_WHEELS};
 pub use wind::{Gust, Velocity, Wind};
 
@@ -695,43 +674,6 @@ impl Reader {
                 );
                 Vec::new()
             }
-        }
-    }
-
-    /// The solver; unwritten, `contact_hz` is the lower of 30 Hz and `most` (#2309).
-    fn solver(&mut self, v: &Value, most: f64) -> Solver {
-        let p = "solver";
-        let s = &self.obj(
-            v,
-            p,
-            &[
-                "contact_hz",
-                "contact_damping",
-                "max_speed",
-                "restitution_threshold",
-                "hit_threshold",
-                "sleep",
-                "ccd",
-            ],
-        );
-        let sl = &self.obj(
-            s.get("sleep").unwrap_or(&Value::Null),
-            "solver/sleep",
-            &["on", "speed", "time"],
-        );
-        let hz = most.min(30.0);
-        Solver {
-            contact_hz: self.num(s, "contact_hz", p, hz, f64::MIN_POSITIVE, f64::MAX),
-            contact_damping: self.num(s, "contact_damping", p, 10.0, 0.0, f64::MAX),
-            max_speed: self.num(s, "max_speed", p, 400.0, f64::MIN_POSITIVE, f64::MAX),
-            restitution_threshold: self.num(s, "restitution_threshold", p, 0.0, 0.0, f64::MAX),
-            hit_threshold: self.num(s, "hit_threshold", p, 1.0, 0.0, f64::MAX),
-            sleep: Sleep {
-                on: self.flag(sl, "on", "solver/sleep", true),
-                speed: self.num(sl, "speed", "solver/sleep", 0.05, 0.0, f64::MAX),
-                time: self.num(sl, "time", "solver/sleep", 0.5, 0.0, f64::MAX),
-            },
-            ccd: self.flag(s, "ccd", p, true),
         }
     }
 

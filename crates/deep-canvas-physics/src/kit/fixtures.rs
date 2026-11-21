@@ -577,6 +577,7 @@ pub fn all() -> Vec<Fixture> {
         belt_carries("belt_reversed", -1.0, [0.0; 3], [1.0, 0.0, 0.0]),
         belt_tilted(),
     ]);
+    out.extend(super::small::all());
     out.extend(super::sensors::all());
     out.extend(super::walks::all());
     out.extend(super::vehicles::all());

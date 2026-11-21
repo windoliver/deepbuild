@@ -47,7 +47,7 @@ import { Questions } from './questions.js';
 
 import { Staging } from './staging.js';
 import { CAN_RUN, CANT_RUN, describe, RUN_BY, unrunnable } from './hook-programs.js';
-import { coveredBy } from './adapter-facts.js';
+import { coverage, coveredBy } from './adapter-facts.js';
 import { SLASH_COMMAND, adapterOf, loopFact, registry, toolClasses, versionOf } from './hookmap.js';
 import { continueLine, fit, type Part } from './context-fit.js';
 
@@ -1423,7 +1423,7 @@ export class Core {
     const unread = Boolean(meta.watchOnly && meta.session && !this.state.versioned.has(meta.session));
     if (unread) {
       this.state.versioned.add(meta.session);
-      await this.appendReading(meta.session, meta.agent, meta.paseo?.lacks ?? `This session runs ${meta.agent} ${meta.version}, past the versions its facts cover: it is recorded unverified, and its holds and every block but the floor are watch-only until the live smoke test widens the range to ${meta.version}. The floor still holds: its fail_closed guard entries deny as they do with the hub stopped.`).catch(() => undefined);
+      await this.appendReading(meta.session, meta.agent, meta.paseo?.lacks ?? `This session runs ${meta.agent} ${meta.version}, not a version its facts cover (${coverage(meta.agent).join(', ')}): it is recorded unverified, and its holds and every block but the floor are watch-only until the live smoke test adds ${meta.version} to its facts. The floor still holds: its fail_closed guard entries deny as they do with the hub stopped.`).catch(() => undefined);
     }
     await this.flags.versionRead(meta, unread);
     const session = this.state.sessions.get(meta.session);
