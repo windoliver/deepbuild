@@ -379,6 +379,8 @@ pub(crate) type Held = Arc<(Baked, Tables)>;
 static BAKED: Mutex<BTreeMap<String, Held>> = Mutex::new(BTreeMap::new());
 /// At most this many bakes are kept.
 const KEPT: usize = 16;
+/// #265: each world-space emitter's anchors, by item, anchor, span and document hash.
+static ANCHORS: Mutex<BTreeMap<String, eval::Anchors>> = Mutex::new(BTreeMap::new());
 
 /// A refusal as the call's reply: its code, the path it names and the sentence naming why.
 pub(crate) fn refusal(r: &Refusal) -> Value {
@@ -508,7 +510,26 @@ pub(crate) fn baked(
     let mut b = bake::bake(&inputs)?;
     b.flows = flows;
     if let Some(anchor) = world {
-        b.anchors = Some(anchors(doc, id, anchor, spec.span)?);
+        // #265: the anchors are the document's, whatever frame asks: kept by its hash, so a
+        // moving anchor that rekeys the bake each frame never reads its buckets again.
+        let kept = format!("{id}#{anchor}#{}#{moved}", spec.span);
+        let held = ANCHORS
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&kept)
+            .cloned();
+        b.anchors = Some(match held {
+            Some(a) => a,
+            None => {
+                let a = anchors(doc, id, anchor, spec.span)?;
+                let mut all = ANCHORS.lock().unwrap_or_else(|e| e.into_inner());
+                if all.len() >= KEPT {
+                    all.clear();
+                }
+                all.insert(kept, a.clone());
+                a
+            }
+        });
     }
     let tables = pack::tables(&b);
     let held: Held = Arc::new((b, tables));
@@ -520,9 +541,10 @@ pub(crate) fn baked(
     Ok(held)
 }
 
-/// A world-space emitter's anchor at each birth bucket of the document's span: the scene
-/// evaluated at each whole multiple of its frame interval, through the chain a trail reads
-/// (channels, drivers, constraints, a physics bake's outputs), never a pose kept from a frame.
+/// A world-space emitter's anchor at each birth bucket of the document's span: its place at
+/// each whole multiple of its frame interval, through the chain a trail reads (channels, drivers
+/// reading a logic bake, constraints, a physics bake's outputs), never a pose kept from a frame
+/// and never a whole scene evaluated for it (#265).
 fn anchors(doc: &Value, id: &str, anchor: &str, emits: f64) -> Result<eval::Anchors, Refusal> {
     let (p, q) = doc
         .get("transport")
@@ -543,21 +565,16 @@ fn anchors(doc: &Value, id: &str, anchor: &str, emits: f64) -> Result<eval::Anch
             what,
         )
     };
-    let look = Look3::read(&closed::neutral_look(doc)).map_err(|e| bad(format!("{id}: {e}")))?;
-    let mut at = Vec::with_capacity(n);
-    for k in 0..n {
-        let scene = evaluate(doc, k as i64 * per, &look, &mut Labels::new()).map_err(|r| {
-            bad(format!(
-                "{id}: its anchor's scene at bucket {k}: {}",
-                r.path
-            ))
-        })?;
-        at.push(item_pos(&scene, anchor).ok_or_else(|| {
-            bad(format!(
-                "{id}: emit.anchor names {anchor}, which isn't placed"
-            ))
-        })?);
-    }
+    let map = doc
+        .as_object()
+        .ok_or_else(|| bad(format!("{id}: the document isn't an object")))?;
+    let times: Vec<i64> = (0..n as i64).map(|k| k * per).collect();
+    let at = deep_canvas_scene3d::trail::places(map, anchor, &times).map_err(|r| {
+        bad(format!(
+            "{id}: emit.anchor names {anchor}, which isn't placed ({}: {})",
+            r.code, r.path
+        ))
+    })?;
     Ok(eval::Anchors { step, at })
 }
 

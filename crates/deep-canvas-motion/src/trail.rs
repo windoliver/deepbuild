@@ -525,8 +525,8 @@ fn before_bake(
 }
 
 /// Whether a driver that reads a `logic` item's array moves an item of the trail's source
-/// chain (the source and its parents).
-fn logic_moved(doc: &Map<String, Value>, of: &str) -> bool {
+/// chain (the source and its parents): its earlier places are the logic bake's (#265).
+pub fn logic_moved(doc: &Map<String, Value>, of: &str) -> bool {
     let Some(items) = doc.get("items").and_then(Value::as_object) else {
         return false;
     };
