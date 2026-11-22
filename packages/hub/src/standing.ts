@@ -48,26 +48,32 @@ function accountOf(home: string, profile: string): string | undefined {
   if (/[^\t\n -~]/.test(text.replace(/\r\n/g, '\n')) || /^[ \t]/m.test(text) || /['"\\]/.test(text)) return undefined;
   // The CLI's profile is its last section to name it, read whole: one header's words are `profile <name>`, after any
   // word that starts with profile, or `default` (#2134).
+  // A `[DEFAULT]` key is every profile's that doesn't set it.
   let section: string | undefined;
-  let account: string | undefined;
+  let shared = false;
+  let found = false;
+  let own: string | undefined;
+  let fallback: string | undefined;
   for (const raw of text.split('\n')) {
     const line = raw.trim();
     // A header is read as the CLI's parser reads it: up to its last `]`, whatever follows.
     const header = /^\[(.+)\]/.exec(line)?.[1];
     if (header !== undefined) {
       const words = header.split(/\s+/).filter((w) => w !== '');
+      shared = header === 'DEFAULT';
       section = header === 'default' ? 'default' : words.length === 2 && header.startsWith('profile') ? words[1] : undefined;
-      if (section === profile) account = undefined;
-    } else if (section === profile) {
+      if (section === profile) [own, found] = [undefined, true];
+    } else if (shared || section === profile) {
       // A key ends at its first `=` or `:`, in any case.
       const kv = /^([^=:]*)[=:](.*)$/.exec(line);
       if (kv && kv[1]!.trim().toLowerCase() === 'sso_account_id') {
-        const value = kv[2]!.trim();
-        account = value !== '' && !/\s/.test(value) ? value : undefined;
+        if (shared) fallback = kv[2]!.trim();
+        else own = kv[2]!.trim();
       }
     }
   }
-  return account;
+  const value = own ?? fallback;
+  return found && value !== undefined && value !== '' && !/\s/.test(value) ? value : undefined;
 }
 
 /**

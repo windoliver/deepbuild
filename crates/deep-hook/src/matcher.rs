@@ -947,7 +947,9 @@ pub fn aws_account<'a>(config: &'a str, profile: &str) -> Option<&'a str> {
     }
     // The CLI's profile is its last section to name it, read whole: one header's words are `profile <name>`, after
     // any word that starts with profile, or `default`.
-    let (mut section, mut account) = (None, None);
+    // A `[DEFAULT]` key is every profile's that doesn't set it.
+    let (mut section, mut shared, mut found) = (None, false, false);
+    let (mut own, mut fallback) = (None, None);
     for line in config.lines().map(str::trim) {
         // A header is read as the CLI's parser reads it: up to its last `]`, whatever follows.
         if let Some(head) = line
@@ -956,26 +958,31 @@ pub fn aws_account<'a>(config: &'a str, profile: &str) -> Option<&'a str> {
             .filter(|h| !h.is_empty())
         {
             let words: Vec<&str> = head.split_whitespace().collect();
+            shared = head == "DEFAULT";
             section = match words[..] {
                 _ if head == "default" => Some("default"),
                 [_, name] if head.starts_with("profile") => Some(name),
                 _ => None,
             };
             if section == Some(profile) {
-                account = None;
+                (own, found) = (None, true);
             }
-        } else if section == Some(profile) {
+        } else if shared || section == Some(profile) {
             // A key ends at its first `=` or `:`, in any case.
             if let Some(k) = line.find(['=', ':']) {
-                let value = line[k + 1..].trim();
                 if line[..k].trim().eq_ignore_ascii_case("sso_account_id") {
-                    account =
-                        Some(value).filter(|v| !v.is_empty() && !v.contains(char::is_whitespace));
+                    let value = Some(line[k + 1..].trim());
+                    if shared {
+                        fallback = value;
+                    } else {
+                        own = value;
+                    }
                 }
             }
         }
     }
-    account
+    own.or(fallback)
+        .filter(|v| found && !v.is_empty() && !v.contains(char::is_whitespace))
 }
 
 /// Whether a run beside the one a standing rule covers only reads: one of READ_ONLY, or an aws run that lists,

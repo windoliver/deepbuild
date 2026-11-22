@@ -67,6 +67,8 @@ describe("a cloud create's owner (#2134)", () => {
         ['[profile prod]\nsso_account_id = 111111111111\n[profile  prod]\nsso_account_id = 222222222222\n', 'aws:222222222222'],
         ['[profile prod]\nsso_account_id = 111111111111\n[profilex prod]\nregion = x\n', 'aws-profile:prod'],
         ['[profile prod]\nSSO_Account_ID: 222222222222\n', 'aws:222222222222'],
+        ['[DEFAULT]\nsso_account_id = 999999999999\n[profile prod]\nregion = x\n', 'aws:999999999999'],
+        ['[DEFAULT]\nsso_account_id = 999999999999\n[profile prod]\nsso_account_id =\n', 'aws-profile:prod'],
         ['[profile prod]\nsso_account_id = 111111111111\n[ profile prod ]\nsso_account_id = 222222222222\n', 'aws:111111111111'],
       ] as const) {
         writeFileSync(join(other, '.aws', 'config'), config);

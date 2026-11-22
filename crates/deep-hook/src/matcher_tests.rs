@@ -1064,6 +1064,18 @@ fn a_profiles_account_is_read_only_from_a_config_every_reader_splits_alike() {
             Some("111"),
         ),
         ("[profile prod ]\nsso_account_id = 222\n", Some("222")),
+        (
+            "[DEFAULT]\nsso_account_id = 999\n[profile prod]\nregion = x\n",
+            Some("999"),
+        ),
+        (
+            "[DEFAULT]\nsso_account_id = 999\n[profile prod]\nsso_account_id = 222\n",
+            Some("222"),
+        ),
+        (
+            "[DEFAULT]\nsso_account_id = 999\n[profile prod]\nsso_account_id =\n",
+            None,
+        ),
     ] {
         assert_eq!(
             aws_account(config, "prod").or(aws_account(config, "default")),
