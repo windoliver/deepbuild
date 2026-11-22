@@ -37,6 +37,12 @@
 // line that the player hasn't started, with its link to the fallback page, is for a page whose script never ran:
 // removing it is the element's first act.
 //
+// A bundle weighs the same on any host (issue #2892): a file whose format doesn't compress its own data is stored as
+// gzip under the SHA-256 of its stored bytes, and the index gives what it inflates to. The player checks every file's
+// stored bytes against its name first, and only then inflates each with the browser's own stream inflater, into
+// exactly the size the index gives, stopping past it, and checks the result against the SHA-256 the document names it
+// by. So a changed file stops the player before it inflates anything, and no file can grow past its listed size.
+//
 // A piece that offers it has the viewer's measure tool (issue #1217; canvas primitives: Selection, viewer_tools.measure):
 // `measure` turns it on, a click on the canvas places a point where its ray meets the surface under it (A, then B, a
 // third A again), Esc clears both, and Tab and Enter place points at the parts' anchors. The core holds the points and
@@ -46,6 +52,30 @@
 const bundle = JSON.parse(document.getElementById('deep-bundle').textContent);
 const hex = (buf) => Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
 const sha256 = async (bytes) => hex(await crypto.subtle.digest('SHA-256', bytes));
+
+/** #2892: a stored file's bytes inflated by the browser's gzip stream inflater into the size the index gives (`f.inflated`),
+ * stopping as soon as they would pass it, and checked against the SHA-256 the document names the file by. */
+async function inflate(f, stored) {
+  const { bytes: size, sha256: want } = f.inflated;
+  const stop = (why) => Error(`the file ${f.path} ${why}; the player doesn't start`);
+  const out = new Uint8Array(size);
+  let at = 0;
+  const reader = new Blob([stored]).stream().pipeThrough(new DecompressionStream('gzip')).getReader();
+  for (;;) {
+    const { done, value } = await reader.read().catch((e) => { throw stop(`doesn't inflate (${e?.message ?? e})`); });
+    if (done) break;
+    if (value.length > size - at) {
+      reader.cancel().catch(() => {});
+      throw stop(`inflates past the ${size} bytes the index gives it`);
+    }
+    out.set(value, at);
+    at += value.length;
+  }
+  if (at !== size) throw stop(`inflates to ${at} bytes, not the ${size} the index gives it`);
+  const got = await sha256(out);
+  if (got !== want) throw stop(`inflates to bytes that don't match its SHA-256 ${want} (they hash to ${got})`);
+  return out;
+}
 
 /** The origin's store of saves in the browser's storage: one row a save, `{piece, slot, seq, hash, step, ended,
  * deep_hash, bytes}`, keyed by the piece, its slot and the save's number in it; of carry records, one row a record,
@@ -138,6 +168,8 @@ class DeepPlayer extends HTMLElement {
   #stage = null;
   #frames = 0;
   #firstFrameMs = null;
+  // #2892: the time the load spent inflating the bundle's stored files, in ms.
+  #inflateMs = null;
   #decoded = {};
   #last = 0;
   #canvas = null;
@@ -306,6 +338,7 @@ class DeepPlayer extends HTMLElement {
     p.adapter = this.#adapter;
     p.frames = this.#frames;
     p.first_frame_ms = this.#firstFrameMs;
+    p.load = { inflate_ms: this.#inflateMs };
     p.decoded = { ...this.#decoded };
     p.saves = (await this.#kept()).map(({ slot, step, deep_hash }) => ({ slot, step, deep_hash }));
     p.records = (await this.#records()).map(({ hash, step, layout }) => ({ hash, step, layout }));
@@ -735,8 +768,17 @@ class DeepPlayer extends HTMLElement {
       location.replace(`./${bundle.fallback.index}`);
       return;
     }
+    // Every file's stored bytes are checked against its name before any is inflated (#2892).
+    const stored = [];
+    for (const f of bundle.files) stored.push([f, await this.#fetch(f.path, f.sha256)]);
     const files = new Map();
-    for (const f of bundle.files) files.set(f.sha256, await this.#fetch(f.path, f.sha256));
+    const inflating = performance.now();
+    for (let i = 0; i < stored.length; i++) {
+      const [f, bytes] = stored[i];
+      stored[i] = null;
+      files.set(f.inflated ? f.inflated.sha256 : f.sha256, f.inflated ? await inflate(f, bytes) : bytes);
+    }
+    this.#inflateMs = performance.now() - inflating;
     const glue = await import('deep-player-glue');
     await glue.default({ module_or_path: files.get(bundle.player.wasm) });
     for (const f of bundle.fonts) glue.provide_font(f.file, files.get(f.sha256));

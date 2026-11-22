@@ -491,6 +491,10 @@ timed.push('tests/acceptance/1939/ac2-budget.test.ts');
 // deep-show for release there).
 alone.push('tests/acceptance/2513/');
 timed.push('tests/acceptance/2513/ac2-budget.test.ts');
+// #2513's blind redraft for #2513.296f5cfc runs #1939's suite and #1938's machines.test.ts, which build deep-show and
+// draw on the GPU, and #1939's ac2-budget judges a timing on the reference Mac.
+alone.push('tests/acceptance/2513-redraft-2047/');
+timed.push('tests/acceptance/2513-redraft-2047/unchanged.test.ts');
 // #3017's files each build deep-show and draw on the GPU; budget.test.ts times the table on a reference Mac (building
 // deep-show for release there); suites.test.ts runs other suites' files that build and draw.
 alone.push('tests/acceptance/3017/');
@@ -880,6 +884,17 @@ timed.push('tests/acceptance/172/budgets.test.ts', 'tests/acceptance/172/images.
 // place.
 alone.push('tests/acceptance/172-redraft-ac2/');
 byHand.push('tests/acceptance/172/refusals.test.ts');
+// #2892's files each build deep-show (full) and export #172's lab; wire, stops, first-frame and same serve it to headless
+// Chrome with WebGPU on, and same also builds the merge base's deep-show. first-frame times the lab's first frame on the
+// reference Mac. The size half of #172's criterion 4 is redrafted beside it, counting the player as the bundle stores it.
+alone.push('tests/acceptance/2892/', 'tests/acceptance/172-redraft-ac4/');
+timed.push('tests/acceptance/2892/first-frame.test.ts');
+// #2892 stores a bundle's files gzip, so first-draft tests that read bundle files' raw bytes fail on it or stop seeing
+// what they search for (each first draft's DISPUTE-2892.md); their blind redrafts run in their place.
+alone.push('tests/acceptance/172-redraft-2892/', 'tests/acceptance/1490-redraft-2892/', 'tests/acceptance/210-redraft-2892/');
+alone.push('tests/acceptance/192/packs-redraft-2892/');
+byHand.push('tests/acceptance/172/hashes.test.ts', 'tests/acceptance/1490/picks.test.ts');
+byHand.push('tests/acceptance/192/packs/outside.test.ts', 'tests/acceptance/210/ac6-web-export.test.ts');
 // #1041's files each build deep-show (full) and play the dungeon's saves in headless Chrome with WebGPU on.
 alone.push('tests/acceptance/1041/');
 // #1045's files each build deep-show (full) and drive headless Chrome with WebGPU on.
@@ -1020,6 +1035,10 @@ alone.push('tests/acceptance/1561/');
 // and ac8 judges the shadows' GPU budget on the reference Mac.
 alone.push('tests/acceptance/2032/', 'tests/acceptance/2032-redraft-ac8/');
 timed.push('tests/acceptance/2032/ac8-budget.test.ts', 'tests/acceptance/2032-redraft-ac8/ac8-budget.test.ts');
+// #2053's files each build deep-gpu or deep-canvas-render and draw on Metal; ac6 also builds both at the merge base,
+// and ac7 judges the paged lights' GPU budget on the reference Mac.
+alone.push('tests/acceptance/2053/');
+timed.push('tests/acceptance/2053/ac7-budget.test.ts');
 // #182's files build deep-physics (shipped, test-backends and release) and deep-show; ac5-course also builds deep-physics
 // for Linux x86_64 in a linux/amd64 container, and ac11-budgets judges its timings on the reference Mac. The oracle's
 // climb port went to a blind redraft (182-oracle/DISPUTE.md): on the owner's word, the redraft runs and the first
@@ -1201,6 +1220,10 @@ timed.push('tests/acceptance/2760/budgets.test.ts');
 alone.push('tests/acceptance/2760-redraft-ac8/');
 timed.push('tests/acceptance/2760-redraft-ac8/budget-timing.test.ts');
 byHand.push('tests/acceptance/2760/budgets.test.ts');
+// #2386's folder runs alone by its own lane file; ac6-budget.test.ts times 10,000 atlas rows on a release deep-show.
+timed.push('tests/acceptance/2386/ac6-budget.test.ts');
+// Its blind redraft of the pixel-hash test (tests/acceptance/2386-redraft-ac6-hashes/DISPUTE.md) builds deep-canvas-render.
+alone.push('tests/acceptance/2386-redraft-ac6-hashes/');
 // #2897's files (blind) start a hub and DeepBuild's MCP servers as Claude Code, as #26's do. Its AC6 runs as its blind
 // redraft: the first draft reads deep_status's argument-free schema, which AC7 keeps, as empty on any program, so it is
 // kept by hand (tests/acceptance/2897-redraft-ac6/DISPUTE.md).
@@ -1251,6 +1274,13 @@ byHand.push('tests/acceptance/2204/rules-unreadable.test.ts');
 // defaults that commit shipped and runs both tests of each file in its place (its REDRAFT.md).
 byHand.push('tests/acceptance/1097/computed.test.ts', 'tests/acceptance/1097/depth.test.ts');
 
+// #323's first draft of review.test.ts is kept as written, by hand only: its prompts name no pull request, so since #84
+// (d6aacc01b) the pr-needs-ask default holds the session's `gh pr create`, no PR is opened and no review thread is read
+// (#2171); the blind redraft, 323-redraft-2171/, types a request that names the PR and runs the file's five tests in its place
+// (its REDRAFT.md and RUNS.txt).
+byHand.push('tests/acceptance/323/review.test.ts');
+alone.push('tests/acceptance/323-redraft-2171/');
+
 // #2776's files build deep-show (full with the test module test.paths) and export 3D scenes to the web.
 alone.push('tests/acceptance/2776/seal.test.ts', 'tests/acceptance/2776/export.test.ts', 'tests/acceptance/2776/listing.test.ts');
 
@@ -1280,6 +1310,9 @@ alone.push('tests/acceptance/2777/');
 // ac8-budgets times release builds.
 alone.push('tests/acceptance/211/');
 timed.push('tests/acceptance/211/ac8-budgets.test.ts');
+
+// #2896's files (blind) start real hubs with deep mcp stand-ins and walk 10,000 rows through the debug canvas core.
+alone.push('tests/acceptance/2896/');
 
 // #981's files (blind) each build deep-logic and #416's assembler; ac7 starts headless Chrome, ac5 runs eight simulated
 // hours, and ac8 judges a step's and a route search's time on the reference Mac.

@@ -465,7 +465,7 @@ fn gpui_layers(
 ) -> Result<Vec<Value>, Value> {
     let cx = &mut app.cx;
     layer_records(out, &ev.layers, &mut |marks| {
-        layer::gpui(cx, marks, size, layer::Planted::default())
+        layer::gpui(cx, marks, size, layer::Planted::default(), None)
     })
 }
 
