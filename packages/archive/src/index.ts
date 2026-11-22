@@ -111,12 +111,8 @@ function places(options: ArchiveOptions, archived: boolean): { agent: string; ho
   return out;
 }
 
-/**
- * Every transcript the adapters' facts name, walked one path segment at a time; with `archived`, only those in an
- * agent's archived folder. With `wanted`, a segment that names a session other than that one is passed over, so one
- * session's transcript is found without listing what lies under the others.
- */
-async function sources(options: ArchiveOptions, archived = false, wanted?: string): Promise<Source[]> {
+/** Every transcript the adapters' facts name, walked one path segment at a time; with `archived`, only those in an agent's archived folder. */
+async function sources(options: ArchiveOptions, archived = false): Promise<Source[]> {
   const found: Source[] = [];
   for (const { agent, home, path, folderNames } of places(options, archived)) {
     const segments = path.split('/').map(segmentPattern);
@@ -126,7 +122,6 @@ async function sources(options: ArchiveOptions, archived = false, wanted?: strin
       for (const entry of entries) {
         const m = segments[depth]!.exec(entry.name);
         if (!m || (last ? !entry.isFile() : !entry.isDirectory())) continue;
-        if (wanted !== undefined && m[1] !== undefined && letters(m[1]) !== wanted) continue;
         const id = m[1] ?? session;
         if (last) { if (id) found.push({ agent, session: id, path: join(dir, entry.name), ...(folderNames === undefined ? {} : { folderNames }) }); }
         else await walk(join(dir, entry.name), depth + 1, id);
@@ -384,7 +379,7 @@ export async function openArchive(options: ArchiveOptions): Promise<Archive> {
       const wanted = letters(id);
       const known = transcript === undefined ? undefined : await sourceAt(options, transcript, wanted);
       if (known) return copy(known);
-      for (const source of await sources(options, false, wanted)) await copy(source);
+      for (const source of await sources(options)) if (letters(source.session) === wanted) await copy(source);
     },
     async archived() {
       return new Set((await sources(options, true)).map((source) => letters(source.session)));

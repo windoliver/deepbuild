@@ -15,9 +15,9 @@ const copied = async (w: Awaited<ReturnType<typeof openWorld>>): Promise<unknown
 describe('Archive.session with the path its agent named', () => {
   it('copies from that path without listing the folders: one it can pass through but not read still yields the copy', async () => {
     const w = await openWorld();
-    const projects = dirname(dirname(claudeTranscript(w.env, []).path));
+    const wanted = claudeTranscript(w.env, [{ uuid: 'm1', role: 'user', text: 'the one asked about' }]);
+    const projects = dirname(dirname(wanted.path));
     try {
-      const wanted = claudeTranscript(w.env, [{ uuid: 'm1', role: 'user', text: 'the one asked about' }]);
       const archive = await openArchiveOn(w);
       chmodSync(projects, 0o311);
       // Control: with no path the walk must list projects/, which it now can't, so nothing is copied.
