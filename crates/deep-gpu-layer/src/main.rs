@@ -175,6 +175,9 @@ pub enum Planted {
     /// plate whose horizon table is never read, and its sky occlusion from its slope alone.
     TerrainNoHorizonBake,
     TerrainOcclusionFromSlope,
+    /// #2215's wrong program (tests/acceptance/2215/README.md: Assumed surfaces 3): the frame's
+    /// receipt lists no part that refracts through the round lobe.
+    RasterListsNothing,
     /// #378's wrong programs (tests/acceptance/378/README.md: Planted programs).
     ForwardZ,
     EncodesTwice,
@@ -941,6 +944,7 @@ impl Planted {
             "part_pose_in_world_space" => Planted::PartPoseInWorldSpace,
             "terrain_no_horizon_bake" => Planted::TerrainNoHorizonBake,
             "terrain_occlusion_from_slope" => Planted::TerrainOcclusionFromSlope,
+            "raster_lists_nothing" => Planted::RasterListsNothing,
             _ => {
                 let planted = deep_canvas_scene3d::spans::PLANTED;
                 Planted::HiddenLines(planted.iter().find(|p| p.0 == name)?.0)
