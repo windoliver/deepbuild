@@ -1,0 +1,28 @@
+✖ AC1 #2958.9c0089ca with hub.address pointing at a hub run with --root in another folder, deep-app --hub-check is answered by that hub as the app, with no refusal (6850.28146ms)
+✔ AC2 #2958.db948145 with no hub.address configured, deep-app --hub-check reaches the installed hub as before (4043.28032ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 10959.298695
+
+✖ failing tests:
+
+test at tests/acceptance/2958/hub-check.test.mjs:21:1
+✖ AC1 #2958.9c0089ca with hub.address pointing at a hub run with --root in another folder, deep-app --hub-check is answered by that hub as the app, with no refusal (6850.28146ms)
+  AssertionError [ERR_ASSERTION]: installed root with a different control.token, hub.address unix:/tmp/dh2958-i43OKQ/r/hub.sock: the hub refused the app (its hello or a call): exit 0, stdout "hub ok: contract 1.0\n", stderr "deep-app: the hub refused a call: Refused(Object {\"code\": String(\"credential\"), \"retryable\": Bool(false), \"remediation\": String(\"Present the control token this hub wrote to control.token at its launch; an earlier launch's token no longer counts.\"), \"path\": String(\"/token\"), \"actual\": String(\"\"), \"evidence\": Array []})\n"
+      at answeredAsApp (file://~/deepbuild/.claude/worktrees/issue-2958-hub-token-e85595/tests/acceptance/2958/hub-check.test.mjs:18:10)
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/issue-2958-hub-token-e85595/tests/acceptance/2958/hub-check.test.mjs:40:7)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: `deep-app: the hub refused a call: Refused(Object {"code": String("credential"), "retryable": Bool(false), "remediation": String("Present the control token this hub wrote to control.token at its launch; an earlier launch's token no longer counts."), "path": String("/token"), "actual": String(""), "evidence": Array []})\n`,
+    expected: /refus|credential/i,
+    operator: 'doesNotMatch',
+    diff: 'simple'
+  }

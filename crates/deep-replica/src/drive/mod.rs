@@ -486,7 +486,7 @@ impl Replica {
             "empty" => (Vec::new(), crate::NOW, None),
             _ => {
                 let socket = deep_app::hub::address();
-                let token = deep_app::hub::root().join("control.token");
+                let token = deep_app::hub::token(&socket);
                 let unread = |e: String| {
                     fail(
                         "blocked",

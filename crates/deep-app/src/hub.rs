@@ -39,6 +39,18 @@ pub fn address() -> PathBuf {
     configured_address().unwrap_or_else(|| root().join("hub.sock"))
 }
 
+/// The control token file of the hub at `socket` (#2958): the one beside the socket, as a hub run with `--root`
+/// writes it, else the installed root's, as a forwarded socket has none beside it (#16 AC2). Every hello the app and
+/// the replica say takes its token from here.
+pub fn token(socket: &Path) -> PathBuf {
+    let file = "control.token";
+    socket
+        .parent()
+        .map(|dir| dir.join(file))
+        .filter(|beside| beside.exists())
+        .unwrap_or_else(|| root().join(file))
+}
+
 /// The hub contract the app speaks, "major.minor" (#41): the hub's `CONTRACT` in packages/hub/src/wire.ts.
 pub const CONTRACT: &str = "1.0";
 /// Every hub method the app calls (#41), which the hub's hello must list (`FEATURES` in packages/hub/src/wire.ts).
@@ -257,8 +269,9 @@ impl HubClient {
 
     /// A connection of its own to the hub at its address, as the app.
     pub fn app() -> Result<Self, HubError> {
-        let token = std::fs::read_to_string(root().join("control.token"))?;
-        let mut client = HubClient::connect(&address())?;
+        let socket = address();
+        let token = std::fs::read_to_string(token(&socket))?;
+        let mut client = HubClient::connect(&socket)?;
         client.hello_app(token.trim())?;
         Ok(client)
     }
@@ -297,5 +310,24 @@ impl HubClient {
                 .remove("result")
                 .ok_or_else(|| HubError::Protocol(Value::Object(reply).to_string()));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{root, token};
+
+    /// A socket with no token beside it, as a forwarded one, takes the installed root's; once a hub run with
+    /// `--root` writes one beside its socket, that one (#2958).
+    #[test]
+    fn the_token_beside_the_socket_else_the_installed_roots() {
+        let installed = token(&root().join("hub.sock"));
+        let dir = std::env::temp_dir().join(format!("dh2958-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let socket = dir.join("hub.sock");
+        assert_eq!(token(&socket), installed);
+        std::fs::write(dir.join(installed.file_name().unwrap()), "t").unwrap();
+        assert_eq!(token(&socket), dir.join(installed.file_name().unwrap()));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

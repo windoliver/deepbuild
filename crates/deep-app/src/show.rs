@@ -531,10 +531,9 @@ pub fn follow(panel: Entity<CanvasPanel>, cx: &mut App) {
                 .await;
             let (kept, took) = cx
                 .background_spawn(async move {
-                    let root = crate::hub::root();
-                    let token = root.join("control.token");
-                    let mut hub =
-                        hub.or_else(|| Presentations::open(&crate::hub::address(), &token).ok());
+                    let socket = crate::hub::address();
+                    let mut hub = hub
+                        .or_else(|| Presentations::open(&socket, &crate::hub::token(&socket)).ok());
                     let took = hub.as_mut().map(Presentations::take);
                     (hub, took)
                 })
