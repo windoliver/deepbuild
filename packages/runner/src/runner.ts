@@ -363,6 +363,15 @@ class LocalRunner implements Runner {
   async recent(): Promise<JobRecord[]> {
     return [...this.jobs.values()].map((j) => ({ ...j.rec }));
   }
+  async near(session: string | undefined, cwd: string | undefined): Promise<JobRecord[]> {
+    // A job's folder is a real path with no trailing slash, so a folder under it, resolved, starts with it and a slash.
+    const at = cwd ? resolve(cwd) : undefined;
+    const near: JobRecord[] = [];
+    for (const { rec } of this.jobs.values()) {
+      if ((session && rec.session === session) || (cwd && (cwd === rec.folder || at!.startsWith(`${rec.folder}/`)))) near.push({ ...rec });
+    }
+    return near;
+  }
   async output(id: string): Promise<string> {
     const job = this.jobs.get(id);
     if (job) return this.o.plant === 'empty-output-inside-bound' && job.finished ? '' : job.stdout;

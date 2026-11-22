@@ -1,0 +1,13 @@
+# deep-mcp-30d A/B: /usr/bin/time -l node benchmarks/mcp.mjs, base = fresh GitHub clone at merge base 4bf2fc7ad, change = this worktree. Interleaved rounds.
+# round side rc instructions_retired peak_memory_footprint_bytes loadavg
+1	base	0	4229607643	87681608	{ 37.10 46.63 47.64 }
+1	change	0	4210282220	94617224	{ 35.93 45.77 47.31 }
+2	base	0	4243444822	93765088	{ 30.81 43.97 46.63 }
+2	change	0	4233598775	94813952	{ 28.60 42.40 45.99 }
+3	base	0	4266563768	94944616	{ 26.21 40.74 45.29 }
+3	change	0	4244291756	94567976	{ 25.24 39.57 44.76 }
+4	base	0	4238891398	93503040	{ 25.42 38.49 44.22 }
+4	change	0	4260810005	94011136	{ 25.20 37.57 43.76 }
+5	base	0	4260253817	93339272	{ 24.27 36.33 43.13 }
+5	change	0	4206391687	93470560	{ 23.86 35.27 42.55 }
+

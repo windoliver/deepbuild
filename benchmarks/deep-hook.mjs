@@ -70,17 +70,13 @@ async function stop(hub) {
   hub.kill('SIGTERM');
   await exited;
 }
-/** The floor, a native no-op: a build output like deep-hook, kept under target/ after the run. */
-function buildFloor() {
-  const floor = join(REPO, 'target', 'release', 'noop');
-  writeFileSync(`${floor}.rs`, 'fn main() {}\n');
-  execFileSync('rustc', ['-C', 'opt-level=3', '-o', floor, `${floor}.rs`]);
-  return floor;
-}
+// The floor, a native no-op: crates/deep-hook's deep-hook-floor binary, built with deep-hook by the release build below, so a
+// measured run compiles nothing once that build is current: the linker's children are in no count (#2960).
+const FLOOR = join(REPO, 'target/release/deep-hook-floor');
 
 const modes = {
   async overhead(home) {
-    const floor = buildFloor();
+    const floor = FLOOR;
     const { hub, cwd, call } = await setUp(home);
     try {
       const input = join(home, 'call.json');
@@ -234,7 +230,7 @@ const modes = {
   },
 
   async 'day-overhead'(home) {
-    const floor = buildFloor();
+    const floor = FLOOR;
     const up = await daySetUp(home);
     try {
       const calls = day(await unheld(up), up.s);
