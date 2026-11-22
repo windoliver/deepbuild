@@ -264,7 +264,8 @@ function ceiling() {
 function report(name, args, cwd) {
   const result = spawnSync(name, args, { cwd, encoding: 'utf8', timeout: 120_000, env: process.env });
   if (result.status === 0) return result.stdout.trim();
-  if (result.signal || result.error?.code === 'ETIMEDOUT' || (result.status === null && !result.error)) return `stopped: ${randomUUID()}`;
+  // A tool that couldn't start for a passing reason, such as EAGAIN under load, says nothing about what it is.
+  if (result.signal || (result.error && result.error.code !== 'ENOENT') || (result.status === null && !result.error)) return `stopped: ${randomUUID()}`;
   return `fails: ${result.error?.code ?? result.status}: ${`${result.stdout ?? ''}${result.stderr ?? ''}`.trim()}`;
 }
 
@@ -328,16 +329,18 @@ function buildInputs(bay) {
   // A variable that names a file stands for that file's bytes too, as DEEP_KIT_LEDGER does for deep-show's ledger.
   const env = Object.entries(process.env).filter(([name]) => (BUILD_ENV.test(name) || declared.has(name)) && !PER_RUN.test(name))
     .sort(([a], [b]) => (a < b ? -1 : 1)).map(([name, value]) => [name, value, isAbsolute(value) ? hashOf(value) : null]);
-  return { lanes: LANE_CODE, tools, locks, installed, configs, above, env };
+  return { lanes: laneCode(), tools, locks, installed, configs, above, env };
 }
 
 // The lane code that runs a bay's builds: a change that edits how a build runs never gets a build the old code made.
-const LANE_CODE = (() => {
+let laneHash = null;
+function laneCode() {
+  if (laneHash) return laneHash;
   const here = dirname(fileURLToPath(import.meta.url));
   const hash = createHash('sha256');
   for (const name of readdirSync(here).filter((file) => /^(?:(?:bays|proof[^/]*)\.mjs|lease)$/.test(file)).sort()) hash.update(`${name}\0`).update(readFileSync(join(here, name))).update('\0');
-  return hash.digest('hex');
-})();
+  return (laneHash = hash.digest('hex'));
+}
 
 /** The files under the bay outside what it keeps, each with its stamp. */
 function stamps(bay, at = '', found = new Map()) {
@@ -430,7 +433,7 @@ function take(key, into) {
     if (error.code === 'ENOENT') return { why: 'no kept build has this key' };
     return { why: `the kept build ${key} can't be read (${error.code ?? error.message})`, broken: true };
   }
-  const staged = [];
+  const staged = [], laid = [];
   let laying = false;
   try {
     if (entry?.key !== key || !Array.isArray(entry.files)) throw broken('it is not one this key stored');
@@ -462,13 +465,23 @@ function take(key, into) {
       const { fresh, target } = staged[0];
       rmSync(target, { recursive: true, force: true });
       renameSync(fresh, target);
+      laid.push(target);
       staged.shift();
     }
     return { laid: entry.files.length };
   } catch (error) {
     for (const { fresh } of staged) rmSync(fresh, { force: true });
-    // A lay stopped halfway leaves some of the entry in the bay: the entry goes, and the build that follows isn't kept.
-    return { why: `the kept build ${key} was not used: ${error.message}`, broken: Boolean(error.broken) || laying, dirty: laying };
+    // A lay stopped halfway takes back what it laid, as a laid .tsbuildinfo would leave tsc nothing to emit; the entry
+    // goes, and the build that follows isn't kept. What can't be taken back leaves the bay dirty, and it doesn't build.
+    let dirty = false;
+    for (const target of laid) {
+      try {
+        rmSync(target, { force: true });
+      } catch {
+        dirty = true;
+      }
+    }
+    return { why: `the kept build ${key} was not used: ${error.message}`, broken: Boolean(error.broken) || laying, unkept: laying, dirty };
   }
 }
 
@@ -819,7 +832,7 @@ class Pair {
       taken = reach(key, state.bay);
       // A tool stopped before it answered makes a key no later use has; a lay stopped halfway left part of an entry here.
       if (Object.values(inputs.tools).some((text) => text.startsWith('stopped: '))) unkept = 'a tool was stopped before it said what it is';
-      if (taken.dirty) unkept = 'a kept build was laid in part before it failed';
+      if (taken.unkept) unkept = 'a kept build was laid in part before it failed';
     } catch (error) {
       key = null;
       before = null;
@@ -829,7 +842,8 @@ class Pair {
       this.print(`BUILD ${JSON.stringify({ ...line, key, reused: true, files: taken.laid })}`);
       return null;
     }
-    const failed = run();
+    // A bay that still holds part of an entry would build over it, and tsc may then emit nothing: it can't build.
+    const failed = taken.dirty ? `a kept build was laid in part and could not be taken back: ${taken.why}` : run();
     const kept = failed ? { failed: true } : unkept ? { kept: false, notKept: unkept } : before ? this.keep(key, () => {
       const after = stamps(state.bay);
       const paths = [...after].filter(([path, text]) => before.get(path) !== text).map(([path]) => path);
