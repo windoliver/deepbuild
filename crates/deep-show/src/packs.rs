@@ -338,7 +338,10 @@ pub fn timings(
     for (id, item) in items.iter().filter(|(_, i)| i["kind"] == "cut.words@1") {
         let _ = deep_canvas_media::cut::lower(doc, id, item, reads);
     }
-    out.insert("cut_ms".into(), json!(started.elapsed().as_secs_f64() * 1000.0));
+    out.insert(
+        "cut_ms".into(),
+        json!(started.elapsed().as_secs_f64() * 1000.0),
+    );
     // #222: each cue list's expansion at check, the expander's own time.
     let entries = deep_canvas::document::expands::Entries::new(sealed, &resolved);
     let verbs = |n: &str| {

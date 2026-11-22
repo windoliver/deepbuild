@@ -343,7 +343,8 @@ impl Live {
             // A dropped checkpoint's map changes go to the next one the ring stores; later
             // changes win.
             if let (Some(c), Some(st)) = (carry_map, self.paged.as_mut()) {
-                let (crate::pages::MapPart::Whole(mut all) | crate::pages::MapPart::Changes(mut all)) = c.map;
+                let (crate::pages::MapPart::Whole(mut all)
+                | crate::pages::MapPart::Changes(mut all)) = c.map;
                 all.extend(std::mem::take(&mut st.changed));
                 st.changed = all;
             }

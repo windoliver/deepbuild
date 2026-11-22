@@ -288,14 +288,27 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
     let process = match params.get("process") {
         None => None,
         Some(p) => {
-            let what = || bad("process", "process is {kinds: [name]}, 1 to 16 unique kind names".into());
+            let what = || {
+                bad(
+                    "process",
+                    "process is {kinds: [name]}, 1 to 16 unique kind names".into(),
+                )
+            };
             let kinds: Vec<String> = p
                 .get("kinds")
                 .and_then(Value::as_array)
                 .and_then(|a| a.iter().map(|k| k.as_str().map(str::to_string)).collect())
                 .ok_or_else(what)?;
-            let unique = kinds.iter().collect::<std::collections::BTreeSet<_>>().len() == kinds.len();
-            if kinds.is_empty() || kinds.len() > 16 || !unique || p.as_object().is_some_and(|o| o.len() != 1) {
+            let unique = kinds
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                == kinds.len();
+            if kinds.is_empty()
+                || kinds.len() > 16
+                || !unique
+                || p.as_object().is_some_and(|o| o.len() != 1)
+            {
                 return Err(what());
             }
             Some(kinds)
