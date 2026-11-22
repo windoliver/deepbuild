@@ -6,7 +6,7 @@
 // The pages of the codes those errors carry read at deep://codes/<code>, with no tool call and no hub.
 // `deep mcp actions` serves the second server entry, deep-actions (#363): the plug-in actions' two tools in place of
 // the deep_* tools. `deep setup` writes deep-hook's `mcp actions` for it, which answers the same (#824).
-import { readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import net from 'node:net';
 import { createInterface } from 'node:readline';
 import { CODES, codePage } from './codes.js';
@@ -23,6 +23,15 @@ const ANSWER_MS = 55_000;
 const isCodex = (client: unknown): boolean => typeof client === 'string' && /codex/i.test(client);
 /** How long a call waits for the hub: Codex gives its MCP server's tool calls `tool_timeout_sec`, which is Codex's setting alone; any other client keeps ANSWER_MS. */
 export const answerWaitMs = (client: unknown, toolS: () => number): number => (isCodex(client) ? Math.max(ANSWER_MS, toolS() * 1000) : ANSWER_MS);
+/**
+ * The handshake revisions this server holds, oldest first (#2854): mcp.handshake@1's list, read from the contract file
+ * itself so deep mcp loads no contract code. The client's revision is answered when held, the newest otherwise.
+ */
+let held: string[] | undefined;
+const handshake = (asked: unknown): string => {
+  held ??= (JSON.parse(readFileSync(new URL('../schemas/mcp.handshake@1.json', import.meta.resolve('@deepbuild/contracts/json')), 'utf8')) as { properties: { protocolVersion: { enum: string[] } } }).properties.protocolVersion.enum;
+  return typeof asked === 'string' && held.includes(asked) ? asked : held[held.length - 1]!;
+};
 const unreachable = (why: string): Refusal => refusal('unavailable', '', `The DeepBuild hub is unreachable (${why}); nothing was recorded. Call again once it is back.`, '', true);
 
 /** One connection to the hub as this process's deep mcp; undefined when the hub can't be reached in time. */
@@ -174,7 +183,7 @@ export async function runMcp(server: 'deep' | 'deep-actions' = 'deep'): Promise<
     switch (method) {
       case 'initialize':
         await hub.named(params.clientInfo as Obj | undefined);
-        send({ id, result: { protocolVersion: typeof params.protocolVersion === 'string' ? params.protocolVersion : '2025-06-18', capabilities: { tools: {}, resources: {} }, serverInfo: { name: server, version: '0.0.0' }, instructions: instructionsFor(server) } });
+        send({ id, result: { protocolVersion: handshake(params.protocolVersion), capabilities: { tools: {}, resources: {} }, serverInfo: { name: server, version: '0.0.0' }, instructions: instructionsFor(server) } });
         break;
       case 'ping':
         send({ id, result: {} });
