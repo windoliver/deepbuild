@@ -489,6 +489,32 @@ fn an_options_value_is_not_read_as_the_subcommand() {
         ("cat f.txt | xargs aws kms create-key --profile dev", None),
         ("aws kms create-key --profile dev *", None),
         ("a?s kms create-key --profile dev", None),
+        (
+            "aws() { command aws \"$@\" --profile prod; }; aws kms create-key --profile dev",
+            None,
+        ),
+        (
+            "aws () ( command aws \"$@\" --profile prod ); aws kms create-key --profile dev",
+            None,
+        ),
+        ("aws kms create-key --profile dev {--profile=prod,}", None),
+        (
+            "aws s3 cp s3://bucket/cfg ~/.aws/config && aws kms create-key --profile dev",
+            None,
+        ),
+        (
+            "cd ~/.a?s && printf x > config; cd ~/w; aws kms create-key --profile dev",
+            None,
+        ),
+        (
+            "printf -v HO''ME /tmp/x; aws kms create-key --profile dev",
+            None,
+        ),
+        ("aws kms create-key --profile prod -- --profile dev", None),
+        (
+            "aws s3 cp s3://bucket/cfg ~/.AWS/config && aws kms create-key --profile dev",
+            None,
+        ),
         ("aws kms create-key --profile 'my prod'", None),
     ] {
         assert_eq!(profile(line), wanted, "{line}");

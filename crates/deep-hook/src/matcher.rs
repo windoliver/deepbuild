@@ -647,28 +647,54 @@ impl Call {
                 same_name(w.rsplit('/').next().unwrap_or_default())
             })
             .collect();
+        // The line with its quotes taken out, so a name split by quotes reads whole, and what it holds outside quotes,
+        // where the shell expands braces and defines functions.
+        let bare: String = line.chars().filter(|c| !"'\"\\".contains(*c)).collect();
+        let mut unquoted = String::new();
+        let mut quote: Option<char> = None;
+        let mut escaped = false;
+        for c in line.chars() {
+            match (quote, c) {
+                _ if escaped => escaped = false,
+                (Some('\''), '\'') => quote = None,
+                (Some('\''), _) => {}
+                (_, '\\') => escaped = true,
+                (Some('"'), '"') => quote = None,
+                (Some(_), _) => {}
+                (None, '\'' | '"') => quote = Some(c),
+                (None, _) => unquoted.push(c),
+            }
+        }
+        let pattern = |p: &Path| p.to_string_lossy().contains(['*', '?', '[']);
         let own_profile = run.env.iter().any(|(n, _)| n == "AWS_PROFILE");
-        let aws_words = line.matches("AWS_").count();
+        let aws_words = bare.matches("AWS_").count();
         if !run.is("aws")
             || run.glob
             || run.args.iter().any(|a| a.text.is_none() || a.glob)
             || words.iter().any(shortened)
+            || words.contains(&"--")
             || run
                 .env
                 .iter()
                 .any(|(n, _)| n == "HOME" || (n.starts_with("AWS_") && n != "AWS_PROFILE"))
             // The only AWS_ setting it reads is the creating run's own AWS_PROFILE.
             || aws_words > usize::from(own_profile)
-            || (aws_words == 1 && line.matches("AWS_PROFILE=").count() != 1)
-            || line.contains("HOME")
-            || line.contains("BASH_ENV")
+            || (aws_words == 1 && bare.matches("AWS_PROFILE=").count() != 1)
+            || ["HOME", "BASH_ENV"].iter().any(|w| bare.contains(w))
+            || bare.to_lowercase().contains(".aws")
+            // Brace expansion, and a function that may stand in for aws.
+            || unquoted.contains(['{', '}'])
+            || unquoted.replace(char::is_whitespace, "").contains("()")
             || tokens
                 .iter()
                 .any(|t| AS_ANOTHER.contains(&t.as_str()) || t.starts_with("ENV="))
-            || self.runs.iter().any(|r| {
-                (!std::ptr::eq(r, *run) && !READ_ONLY.iter().any(|p| r.is(p)))
-                    || r.writes.iter().any(|w| w.to_string_lossy().contains(".aws"))
-            })
+            || self
+                .runs
+                .iter()
+                .any(|r| !std::ptr::eq(r, *run) && !READ_ONLY.iter().any(|p| r.is(p)))
+            // What the line writes is named whole, in folders it knows, so none of it can be the account's files.
+            || self.writes.iter().any(|w| !w.is_absolute() || pattern(w))
+            || self.runs.iter().any(|r| r.cwd.as_deref().is_none_or(pattern))
         {
             return None;
         }
