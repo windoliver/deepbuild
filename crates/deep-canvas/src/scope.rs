@@ -62,8 +62,9 @@ pub struct Planted {
     pub esc_to_root: bool,
     /// #504: a click on a control's target also selects the item and opens its panel.
     pub pick_selects: bool,
-    /// #2660: a hover keeps the targets it first built, whatever the document becomes.
-    pub keeps_targets: bool,
+    /// #2660 AC4's twin: the scope keeps the hit targets it built across a new revision of the
+    /// document, so after a patch that moves an item a pointer move hits by the targets before it.
+    pub keeps_targets_across_patch: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1116,7 +1117,7 @@ impl Scope {
                 && k.layers.as_ref() == layers
         };
         let kept = match self.kept.take() {
-            Some(k) if self.planted.keeps_targets || holds(&k) => k,
+            Some(k) if self.planted.keeps_targets_across_patch || holds(&k) => k,
             _ => Kept {
                 flat: self.rig.flat,
                 filter: (v.kinds.clone(), v.writers.clone(), v.isolate.clone()),
