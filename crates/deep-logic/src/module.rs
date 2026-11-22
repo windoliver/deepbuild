@@ -47,12 +47,16 @@ const STEP: i64 = 11_760_000;
 /// `fires`, each with the form its reader takes (#1973); `wasm` is the program's bytes, which
 /// whoever holds the evidence store inlines by the program's hash before a frame, as a vector's
 /// outline is.
-const PARAMS: [(&str, &str); 24] = [
+const PARAMS: [(&str, &str); 26] = [
     ("program", "asset ID"),
     ("debug", "asset ID"),
     ("step_rate", "Hz"),
     ("clock", "fixed | on_input"),
     ("due", "name"),
+    // #278: the item's own arrays a match reads: joins after the start while `open` is true, and
+    // the match finished once `finish` is nonzero at a confirmed step.
+    ("open", "name"),
+    ("finish", "name"),
     ("reads", "[control ID | reading ID | path]"),
     (
         "writes",
