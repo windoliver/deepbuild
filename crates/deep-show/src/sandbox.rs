@@ -220,11 +220,11 @@ impl Host {
             self.evidence.clone(),
             others.join(" "),
         );
-        // Checked afresh when this host checked it already (#1958's reinstall), or when bytes the
-        // check kept are gone from the evidence store.
+        // A host that checked this version already (#1958's reinstall) checks it again as it did,
+        // and its partial check is not kept; so is one whose evidence lost bytes the check kept.
+        let again = self.vetted.contains(&key.1);
         let cached = VETTED.with(|c| c.borrow().get(&key).cloned()).filter(|v| {
-            v.vetted.iter().all(|h| !self.vetted.contains(h))
-                && v.kept.iter().all(|sha| crate::evidence::read(&self.evidence, sha).is_some())
+            !again && v.kept.iter().all(|sha| crate::evidence::has(&self.evidence, sha))
         });
         if let Some(v) = cached {
             self.packs.insert(pack.id.text(), manifest.clone());
@@ -241,7 +241,7 @@ impl Host {
         let (entries, vetted) = (self.layout_entries.len(), self.vetted.clone());
         let kept = self.kept.borrow().len();
         let (rows, issues) = self.vet_fresh(manifest, pack, sealed);
-        if issues.is_empty() {
+        if issues.is_empty() && !again {
             let v = Vetted {
                 rows: rows.clone(),
                 // A program entry's key names no version, so another version's is overwritten.
