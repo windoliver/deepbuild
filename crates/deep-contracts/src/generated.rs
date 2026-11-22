@@ -94526,7 +94526,7 @@ impl Contract for TranscriptArchivedV3Data {
         let members = deep_contracts::members(value, at, &["session", "evidence", "source", "parts"])?;
         deep_contracts::check_member(members, at, "session", &RULE_111)?;
         deep_contracts::check_member(members, at, "evidence", &RULE_86)?;
-        deep_contracts::check_member(members, at, "parts", &RULE_9)?;
+        deep_contracts::check_member(members, at, "parts", &RULE_187)?;
         Ok(Self {
             session: deep_contracts::required(members, at, "session")?,
             evidence: deep_contracts::required(members, at, "evidence")?,
@@ -94683,7 +94683,7 @@ impl Contract for TranscriptArchivedV4Data {
         let members = deep_contracts::members(value, at, &["session", "evidence", "source", "parts"])?;
         deep_contracts::check_member(members, at, "session", &RULE_111)?;
         deep_contracts::check_member(members, at, "evidence", &RULE_86)?;
-        deep_contracts::check_member(members, at, "parts", &RULE_9)?;
+        deep_contracts::check_member(members, at, "parts", &RULE_187)?;
         Ok(Self {
             session: deep_contracts::required(members, at, "session")?,
             evidence: deep_contracts::required(members, at, "evidence")?,
