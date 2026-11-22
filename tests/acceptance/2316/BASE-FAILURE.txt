@@ -1,0 +1,193 @@
+#2316 acceptance suite at base 2eaaeb0e6 (origin/main), written blind. All 3 tests pass on the base; every
+criterion's tests fail at their assertion on its twin (twins.json, twins/README.md).
+
+== 1. The suite at the base: npx vitest run tests/acceptance/2316 --reporter=verbose
+# 2026-11-22T10:22:28Z in <checkout>,  2:22  up 2 days,  6:49, 4 users, load averages: 63.79 80.33 78.08
+ RUN  v5.0.5 <checkout>
+ ✓ tests/acceptance/2316/archive-session.test.ts > #2316.e3f1d78c Copying a single active session via `archive.session(id)` with 2,000 unrelated transcript files in sibling project/date folders completes well within `ARCHIVE_WAIT_MS` and archives only the target session (a Claude Code session) 1957ms
+ ✓ tests/acceptance/2316/archive-session.test.ts > #2316.e3f1d78c Copying a single active session via `archive.session(id)` with 2,000 unrelated transcript files in sibling project/date folders completes well within `ARCHIVE_WAIT_MS` and archives only the target session (a Codex session) 1986ms
+ ✓ tests/acceptance/2316/buying.test.ts > #2316.b2850c01 On a record holding 10,000 non-`card_rule.set` events after the last purchase, `buy()` reads only `card_rule.set` rows (`record.read` is called with `kinds: ['card_rule.set']`) and advances its cursor to the log head 14480ms
+ Test Files  2 passed (2)
+      Tests  3 passed (3)
+   Start at  02:22:30
+   Duration  15.68s (tests 94%, transform 4%, import 2%, setup 1%)
+exit=0
+
+== 1b. The base's archive.session(id) times, read by a run of archive-session.test.ts with BOUND_MS set to 0 for
+   that run only, so the assertion prints each call's time (the committed bound is 200 ms). Five calls each, ms:
+   took 186.7, 84.2, 21.5, 40.8, 22.2 ms
+   took 50.1, 17.1, 23.8, 214.0, 105.2 ms
+   (one line per test, Claude Code and Codex targets; load average 95.79 at that run's start)
+
+== twin sync-reads-every-event
+## twin sync-reads-every-event, laid over a copy of the base (cp -cR), 2026-11-22T10:19:29Z,  2:19  up 2 days,  6:46, 4 users, load averages: 127.04 93.15 81.04
+$ diff -u packages/buying/src/index.ts (base) twins/sync-reads-every-event/packages/buying/src/index.ts
+@@ -9,7 +9,7 @@
+ import type { Asks, PlanStep } from '@deepbuild/asks';
+ import type { Ledger } from '@deepbuild/budget';
+ import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
+-import { asCore, readSince, ulid, type Connection, type RecordStore } from '@deepbuild/record';
++import { asCore, ulid, type Connection, type RecordStore } from '@deepbuild/record';
+ export interface PurchaseInput {
+   /** `run:<ULID>`: a purchase is named as a paid run is. */
+@@ -175,12 +175,17 @@
+   /** Reads the card rules the log gained. */
+   private async sync(): Promise<void> {
+-    this.cursor = await readSince(this.o.record, this.cursor, ['card_rule.set'], (e) => {
+-      if (e.writer === 'core' && isObj(e.data)) {
+-        const d = e.data;
+-        this.rules.set(e.id, { seller: String(d.seller), max_usd: Number(d.max_usd), card: String(d.card) });
++    for (;;) {
++      const page = await this.o.record.read({ after: this.cursor, limit: 1000 });
++      for (const e of page) {
++        if (e.kind === 'card_rule.set' && e.writer === 'core' && isObj(e.data)) {
++          const d = e.data;
++          this.rules.set(e.id, { seller: String(d.seller), max_usd: Number(d.max_usd), card: String(d.card) });
++        }
+       }
+-    });
++      if (page.length) this.cursor = page[page.length - 1]!.log_pos;
++      if (page.length < 1000) return;
++    }
+   }
+ }
+$ tsc -p packages/buying/tsconfig.json --noEmit
+tsc exit=0
+$ vitest run tests/acceptance/2316 -t '#2316.b2850c01'
+ RUN  v5.0.5 <scratch>/twin-sync-reads-every-event
+ ↓ tests/acceptance/2316/archive-session.test.ts > #2316.e3f1d78c Copying a single active session via `archive.session(id)` with 2,000 unrelated transcript files in sibling project/date folders completes well within `ARCHIVE_WAIT_MS` and archives only the target session (a Claude Code session)
+ ↓ tests/acceptance/2316/archive-session.test.ts > #2316.e3f1d78c Copying a single active session via `archive.session(id)` with 2,000 unrelated transcript files in sibling project/date folders completes well within `ARCHIVE_WAIT_MS` and archives only the target session (a Codex session)
+ × tests/acceptance/2316/buying.test.ts > #2316.b2850c01 On a record holding 10,000 non-`card_rule.set` events after the last purchase, `buy()` reads only `card_rule.set` rows (`record.read` is called with `kinds: ['card_rule.set']`) and advances its cursor to the log head 4290ms
+   → rows of the 10,000 tool events handed back by the reads made while buy() ran: [{"after":5,"limit":1000,"kinds":["spend.approved","spend.reserved","spend.charged","spend.asked","run.finished","ask.created","decision.applied","ask.answered","ask.defaulted","ask.escalated","ask.cancelled","ask.superseded","ask.moot"],"rows":0},{"after":10005,"limit":1000,"kinds":["spend.approved","spend.reserved","spend.charged","spend.asked","run.finished","ask.created","decision.applied","ask.answered","ask.defaulted","ask.escalated","ask.cancelled","ask.superseded","ask.moot"],"rows":1},{"after":3,"limit":1000,"rows":1000},{"after":1003,"limit":1000,"rows":1000},{"after":2003,"limit":1000,"rows":1000},{"after":3003,"limit":1000,"rows":1000},{"after":4003,"limit":1000,"rows":1000},{"after":5003,"limit":1000,"rows":1000},{"after":6003,"limit":1000,"rows":1000},{"after":7003,"limit":1000,"rows":1000},{"after":8003,"limit":1000,"rows":1000},{"after":9003,"limit":1000,"rows":1000},{"after":10003,"limit":1000,"rows":3},{"after":10006,"limit":1000,"kinds":["spend.approved","spend.reserved","spend.charged","spend.asked","run.finished","ask.created","decision.applied","ask.answered","ask.defaulted","ask.escalated","ask.cancelled","ask.superseded","ask.moot"],"rows":0},{"after":10007,"limit":1000,"kinds":["spend.approved","spend.reserved","spend.charged","spend.asked","run.finished","ask.created","decision.applied","ask.answered","ask.defaulted","ask.escalated","ask.cancelled","ask.superseded","ask.moot"],"rows":1}]: expected 10000 to be +0 // Object.is equality
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/2316/buying.test.ts > #2316.b2850c01 On a record holding 10,000 non-`card_rule.set` events after the last purchase, `buy()` reads only `card_rule.set` rows (`record.read` is called with `kinds: ['card_rule.set']`) and advances its cursor to the log head
+AssertionError: rows of the 10,000 tool events handed back by the reads made while buy() ran: [{"after":5,"limit":1000,"kinds":["spend.approved","spend.reserved","spend.charged","spend.asked","run.finished","ask.created","decision.applied","ask.answered","ask.defaulted","ask.escalated","ask.cancelled","ask.superseded","ask.moot"],"rows":0},{"after":10005,"limit":1000,"kinds":["spend.approved","spend.reserved","spend.charged","spend.asked","run.finished","ask.created","decision.applied","ask.answered","ask.defaulted","ask.escalated","ask.cancelled","ask.superseded","ask.moot"],"rows":1},{"after":3,"limit":1000,"rows":1000},{"after":1003,"limit":1000,"rows":1000},{"after":2003,"limit":1000,"rows":1000},{"after":3003,"limit":1000,"rows":1000},{"after":4003,"limit":1000,"rows":1000},{"after":5003,"limit":1000,"rows":1000},{"after":6003,"limit":1000,"rows":1000},{"after":7003,"limit":1000,"rows":1000},{"after":8003,"limit":1000,"rows":1000},{"after":9003,"limit":1000,"rows":1000},{"after":10003,"limit":1000,"rows":3},{"after":10006,"limit":1000,"kinds":["spend.approved","spend.reserved","spend.charged","spend.asked","run.finished","ask.created","decision.applied","ask.answered","ask.defaulted","ask.escalated","ask.cancelled","ask.superseded","ask.moot"],"rows":0},{"after":10007,"limit":1000,"kinds":["spend.approved","spend.reserved","spend.charged","spend.asked","run.finished","ask.created","decision.applied","ask.answered","ask.defaulted","ask.escalated","ask.cancelled","ask.superseded","ask.moot"],"rows":1}]: expected 10000 to be +0 // Object.is equality
+- Expected
++ Received
+- 0
++ 10000
+ ❯ tests/acceptance/2316/buying.test.ts:36:140
+     34|   const second = await w.during(() => buy('shop.example', 15));
+     35|   expect(second.value.status, 'a $15 purchase from shop.example after …
+     36|   expect(fillerRows(second.reads), `rows of the 10,000 tool events han…
+       |                                                                                                                                            ^
+     37|   expect(unfiltered(second.reads).length, `reads made while buy() ran …
+     38|   expect(cardRows(second.reads).length, `buy() calls record.read with …
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+ Test Files  1 failed | 1 skipped (2)
+      Tests  1 failed | 2 skipped (3)
+   Start at  02:19:35
+   Duration  5.30s (tests 72%, transform 24%, import 3%)
+exit=1
+
+== twin sync-cursor-at-last-rule
+## twin sync-cursor-at-last-rule, laid over a copy of the base (cp -cR), 2026-11-22T10:20:06Z,  2:20  up 2 days,  6:46, 4 users, load averages: 103.63 90.99 80.77
+$ diff -u packages/buying/src/index.ts (base) twins/sync-cursor-at-last-rule/packages/buying/src/index.ts
+@@ -9,7 +9,7 @@
+ import type { Asks, PlanStep } from '@deepbuild/asks';
+ import type { Ledger } from '@deepbuild/budget';
+ import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
+-import { asCore, readSince, ulid, type Connection, type RecordStore } from '@deepbuild/record';
++import { asCore, ulid, type Connection, type RecordStore } from '@deepbuild/record';
+ export interface PurchaseInput {
+   /** `run:<ULID>`: a purchase is named as a paid run is. */
+@@ -175,12 +175,17 @@
+   /** Reads the card rules the log gained. */
+   private async sync(): Promise<void> {
+-    this.cursor = await readSince(this.o.record, this.cursor, ['card_rule.set'], (e) => {
+-      if (e.writer === 'core' && isObj(e.data)) {
+-        const d = e.data;
+-        this.rules.set(e.id, { seller: String(d.seller), max_usd: Number(d.max_usd), card: String(d.card) });
++    for (;;) {
++      const page = await this.o.record.read({ after: this.cursor, limit: 1000, kinds: ['card_rule.set'] });
++      for (const e of page) {
++        if (e.writer === 'core' && isObj(e.data)) {
++          const d = e.data;
++          this.rules.set(e.id, { seller: String(d.seller), max_usd: Number(d.max_usd), card: String(d.card) });
++        }
+       }
+-    });
++      if (page.length) this.cursor = page[page.length - 1]!.log_pos;
++      if (page.length < 1000) return;
++    }
+   }
+ }
+$ tsc -p packages/buying/tsconfig.json --noEmit
+tsc exit=0
+$ vitest run tests/acceptance/2316 -t '#2316.b2850c01'
+ RUN  v5.0.5 <scratch>/twin-sync-cursor-at-last-rule
+ ↓ tests/acceptance/2316/archive-session.test.ts > #2316.e3f1d78c Copying a single active session via `archive.session(id)` with 2,000 unrelated transcript files in sibling project/date folders completes well within `ARCHIVE_WAIT_MS` and archives only the target session (a Claude Code session)
+ ↓ tests/acceptance/2316/archive-session.test.ts > #2316.e3f1d78c Copying a single active session via `archive.session(id)` with 2,000 unrelated transcript files in sibling project/date folders completes well within `ARCHIVE_WAIT_MS` and archives only the target session (a Codex session)
+ × tests/acceptance/2316/buying.test.ts > #2316.b2850c01 On a record holding 10,000 non-`card_rule.set` events after the last purchase, `buy()` reads only `card_rule.set` rows (`record.read` is called with `kinds: ['card_rule.set']`) and advances its cursor to the log head 6261ms
+   → the next purchase reads card_rule.set from the head the last one reached (at or past the 10,000th event, log position 10005): [{"after":2,"limit":1000,"kinds":["card_rule.set"],"rows":0}]: expected 2 to be greater than or equal to 10005
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/2316/buying.test.ts > #2316.b2850c01 On a record holding 10,000 non-`card_rule.set` events after the last purchase, `buy()` reads only `card_rule.set` rows (`record.read` is called with `kinds: ['card_rule.set']`) and advances its cursor to the log head
+AssertionError: the next purchase reads card_rule.set from the head the last one reached (at or past the 10,000th event, log position 10005): [{"after":2,"limit":1000,"kinds":["card_rule.set"],"rows":0}]: expected 2 to be greater than or equal to 10005
+ ❯ tests/acceptance/2316/buying.test.ts:48:211
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+ Test Files  1 failed | 1 skipped (2)
+      Tests  1 failed | 2 skipped (3)
+   Start at  02:20:12
+   Duration  7.24s (tests 80%, transform 18%, import 2%)
+exit=1
+
+== twin session-copies-every-transcript
+## twin session-copies-every-transcript, laid over a copy of the base (cp -cR), 2026-11-22T10:20:55Z,  2:20  up 2 days,  6:47, 4 users, load averages: 87.39 88.23 80.27
+$ diff -u packages/archive/src/index.ts (base) twins/session-copies-every-transcript/packages/archive/src/index.ts
+@@ -330,9 +330,8 @@
+       await quiet();
+       if (failed.length) throw new AggregateError(failed, `the archive pass left ${failed.length} cop${failed.length === 1 ? 'y' : 'ies'} undone: ${failed.map(String).join('; ')}`);
+     },
+-    async session(id) {
+-      const wanted = letters(id);
+-      for (const source of await sources(options)) if (letters(source.session) === wanted) await copy(source);
++    async session() {
++      for (const source of await sources(options)) await copy(source);
+     },
+     async archived() {
+       return new Set((await sources(options, true)).map((source) => letters(source.session)));
+$ tsc -p packages/archive/tsconfig.json --noEmit
+tsc exit=0
+$ vitest run tests/acceptance/2316 -t '#2316.e3f1d78c'
+ RUN  v5.0.5 <scratch>/twin-session-copies-every-transcript
+ ↓ tests/acceptance/2316/buying.test.ts > #2316.b2850c01 On a record holding 10,000 non-`card_rule.set` events after the last purchase, `buy()` reads only `card_rule.set` rows (`record.read` is called with `kinds: ['card_rule.set']`) and advances its cursor to the log head
+ × tests/acceptance/2316/archive-session.test.ts > #2316.e3f1d78c Copying a single active session via `archive.session(id)` with 2,000 unrelated transcript files in sibling project/date folders completes well within `ARCHIVE_WAIT_MS` and archives only the target session (a Claude Code session) 16594ms
+   → a transcript.archived event for each of the five copies of the target: expected 2005 to be 5 // Object.is equality
+ × tests/acceptance/2316/archive-session.test.ts > #2316.e3f1d78c Copying a single active session via `archive.session(id)` with 2,000 unrelated transcript files in sibling project/date folders completes well within `ARCHIVE_WAIT_MS` and archives only the target session (a Codex session) 10331ms
+   → a transcript.archived event for each of the five copies of the target: expected 2005 to be 5 // Object.is equality
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/2316/archive-session.test.ts > #2316.e3f1d78c Copying a single active session via `archive.session(id)` with 2,000 unrelated transcript files in sibling project/date folders completes well within `ARCHIVE_WAIT_MS` and archives only the target session (a Claude Code session)
+AssertionError: a transcript.archived event for each of the five copies of the target: expected 2005 to be 5 // Object.is equality
+- Expected
++ Received
+- 5
++ 2005
+ ❯ onlyTarget tests/acceptance/2316/archive-session.test.ts:43:97
+     41| async function onlyTarget(w: World, target: Transcript): Promise<void>…
+     42|   const named = (await allEvents(w.record, ['transcript.archived'])).m…
+     43|   expect(named.length, 'a transcript.archived event for each of the fi…
+       |                                                                                                 ^
+     44|   expect([...new Set(named)], 'the sessions archive.session(id) archiv…
+     45| }
+ ❯ tests/acceptance/2316/archive-session.test.ts:66:5
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+ FAIL  tests/acceptance/2316/archive-session.test.ts > #2316.e3f1d78c Copying a single active session via `archive.session(id)` with 2,000 unrelated transcript files in sibling project/date folders completes well within `ARCHIVE_WAIT_MS` and archives only the target session (a Codex session)
+AssertionError: a transcript.archived event for each of the five copies of the target: expected 2005 to be 5 // Object.is equality
+- Expected
++ Received
+- 5
++ 2005
+ ❯ onlyTarget tests/acceptance/2316/archive-session.test.ts:43:97
+     41| async function onlyTarget(w: World, target: Transcript): Promise<void>…
+     42|   const named = (await allEvents(w.record, ['transcript.archived'])).m…
+     43|   expect(named.length, 'a transcript.archived event for each of the fi…
+       |                                                                                                 ^
+     44|   expect([...new Set(named)], 'the sessions archive.session(id) archiv…
+     45| }
+ ❯ tests/acceptance/2316/archive-session.test.ts:80:5
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+ Test Files  1 failed | 1 skipped (2)
+      Tests  2 failed | 1 skipped (3)
+   Start at  02:21:03
+   Duration  28.93s (tests 95%, transform 4%, import 1%)
+exit=1
