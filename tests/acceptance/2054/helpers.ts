@@ -84,7 +84,7 @@ export function packProblems(): string[] {
 /** Each document in `docs` (title → instances) shown in a revision of its own, through one `deep-show run` with the
  * pack's next minor installed and `planted` when given; the replies in order. */
 export function showDocs(bin: string, evidence: string, docs: [string, Word[]][], planted?: ShowPlanted): JsonObject[] {
-  const ids = docs.map((_, i) => `01JB2054D0000000000000000${i + 1}`);
+  const ids = docs.map((_, i) => `01JB2054D${String(i + 1).padStart(17, '0')}`);
   const calls = docs.map(([title, words], i) => {
     const items: Record<string, JsonObject> = {};
     for (const w of words) items[w.id] = { kind: w.recipe, params: w.params };
@@ -259,8 +259,10 @@ export function refusedProblems(reply: JsonObject, c: JsonObject): string[] {
   return out;
 }
 
-/** What `instance` expanded to, as text that two instances' expansions compare by: every derived item with its ID, the
- * instance's own ID written `<instance>` wherever a string is it or starts with it and a dot, keys in sorted order. */
+/** What `instance` expanded to, as text that two instances' expansions compare by: every derived item whole, with its
+ * ID, the instance's own ID written `<instance>` wherever a string is it or starts with it and a dot, keys in sorted
+ * order. A derived item also carries its instance's own `order` (and layer), so two instances compare only when each
+ * stands alone in a revision of its own, where both hold the same position; everything else is compared as is. */
 export function expansionText(reply: JsonObject, instance: string): string {
   const swap = (v: JsonValue): JsonValue => {
     if (typeof v === 'string') return v === instance || v.startsWith(`${instance}.`) ? `<instance>${v.slice(instance.length)}` : v;
@@ -271,18 +273,22 @@ export function expansionText(reply: JsonObject, instance: string): string {
   return JSON.stringify(derivedOf(reply, instance).map((d) => swap({ ...d.item, id: d.id })));
 }
 
-/** A pair of AC3: the falloff exponent word written as 2 (`written`) and unwritten (`unwritten`), in one revision, each
- * expanding to one light of `kind`, and to the same items. Each failure names the pair's word. */
-export function sameProblems(reply: JsonObject, pair: JsonObject): string[] {
-  const word = String(pair['word']);
+/** A pair of AC3 as its two words: the falloff exponent written as 2 (`written`) and unwritten (`unwritten`). */
+export const pairOf = (pair: JsonObject): [Word, Word] =>
+  (['written', 'unwritten'] as const).map((k) => wordOf({ ...obj(pair[k], `ac3 pair ${k}`), word: pair['word']! }, `ac3 pair ${k}`)) as [Word, Word];
+
+/** A pair of AC3 against its two revisions, each holding its word alone (so both instances stand at the same position):
+ * each presented, expanding to one light of `kind`, and to the same items. Each failure names the pair's word. */
+export function sameProblems(written: JsonObject, unwritten: JsonObject, pair: JsonObject): string[] {
   const kind = String(pair['kind']);
-  const [a, b] = (['written', 'unwritten'] as const).map((k) => wordOf({ ...obj(pair[k], `ac3 pair ${k}`), word }, `ac3 pair ${k}`)) as [Word, Word];
+  const [a, b] = pairOf(pair);
   const out: string[] = [];
-  for (const w of [a, b]) {
+  for (const [w, reply] of [[a, written], [b, unwritten]] as const) {
+    out.push(...presentedProblems(reply, `${w.id}'s revision (${writes(w)})`));
     const { problem } = oneOfKind(reply, w.id, kind);
     if (problem) out.push(`${problem} (${writes(w)})`);
   }
   if (out.length > 0) return out;
-  const [ta, tb] = [expansionText(reply, a.id), expansionText(reply, b.id)];
-  return ta === tb ? [] : [`${a.id}: ${writes(a)} expands to ${ta.slice(0, 700)}, not the same item as ${b.id} with ${word} unwritten: ${tb.slice(0, 700)}`];
+  const [ta, tb] = [expansionText(written, a.id), expansionText(unwritten, b.id)];
+  return ta === tb ? [] : [`${a.id}: ${writes(a)} expands to ${ta.slice(0, 700)}, not the same item as ${b.id} with ${b.word} unwritten: ${tb.slice(0, 700)}`];
 }

@@ -1,5 +1,6 @@
-#2054's suite, run once on the base (5f5791e2d) on a reference Mac (Mac17,10, Apple M5 Max, 64 GB; load about 120),
-with deep-show (full) and deep-gpu built in debug:
+#2054's suite, run on the base (5f5791e2d) on a reference Mac (Mac17,10, Apple M5 Max, 64 GB; load about 120), with
+deep-show (full) and deep-gpu built in debug. The run below is the last one, made after AC3's comparison was
+corrected so that the instances it compares each stand alone in a revision of their own:
 
   CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/2054 --no-file-parallelism --testTimeout=600000
 
@@ -18,9 +19,9 @@ with deep-show (full) and deep-gpu built in debug:
 Why each fails there: the surface each criterion needs is absent at the base. The next minor of the pack doesn't
 exist, and neither do the planted names. None fails for any other reason.
 
-What the base itself does, checked once outside the suite with a probe (not committed) that calls this suite's
-helpers. The probe pointed the judges at packs/godot-1.0.0, the version the base ships, and drew AC2's squares with a
-light written by hand:
+What the base itself does, checked outside the suite with two probes (not committed) that call this suite's helpers.
+The probes pointed the judges at packs/godot-1.0.0, the version the base ships, and drew AC2's squares with a light
+written by hand:
 
 - AC1's judge on 1.0.0 fails, naming the words. The revision is refused with unknown_field at
   items/point_r8/params/omni_range and items/spot_r8/params/spot_range ("not an input of godot.omni_light_3d"), and
@@ -28,6 +29,12 @@ light written by hand:
 - AC3's judge on 1.0.0 fails for omni_attenuation 1 and 0.5 and spot_attenuation 1. Each is refused as an unknown
   field whose fix ("Remove the field, or require the kind's minor that defines it.") doesn't name 2. The range of 0 is
   refused there as an unknown word.
+- AC3's comparison on 1.0.0 (`expansionText`, `sameProblems`):
+  - Two godot.omni_light_3d@1 instances of 800 lm in one revision expand to items that differ only by `order` (a001,
+    a002), since a derived item carries its instance's order. So the suite never compares two instances of one
+    revision.
+  - The same two words, each alone in its own revision, compare equal: `sameProblems` gives [].
+  - One of 801 lm against one of 800 lm, each alone, fails naming omni_attenuation (power 801 against 800).
 - AC2's drawing and reading, with a hand-written light.point@1 of 800 lm at (0, 1.5, 0), on the base's renderer:
   - range 5: sq_2m 4.80859, sq_4m 0.44138, sq_6m 0. The share is 9.179% (the criterion's 9.18%) and there are no
     failures, so the view, the slabs' turn, the object-ID check and the reading hold on the base's renderer.
@@ -39,19 +46,19 @@ The run's output:
 
  RUN  v5.0.5 <checkout>/tests/acceptance/2054
 
- ❯ squares.test.ts (3 tests | 3 failed) 10161ms
+ ❯ squares.test.ts (3 tests | 3 failed) 14497ms
    ❯ AC2 #2054.e44715ba three squares under the lamp's range (3)
-     × AC2 #2054.e44715ba the square at 4 m reads 9.18% of the linear radiance of the square at 2 m within 0.2 points, and the square at 6 m reads 0 from the light 3563ms
-     × AC2 #2054.e44715ba the planted range_word_dropped reads 25.0% and a lit third square, and fails, naming the squares 1197ms
-     × AC2 #2054.e44715ba the planted window (1 − (d ÷ range)²)² (light_window_squared) reads 4.6% and fails, naming the square 995ms
- ❯ range.test.ts (2 tests | 2 failed) 5668ms
+     × AC2 #2054.e44715ba the square at 4 m reads 9.18% of the linear radiance of the square at 2 m within 0.2 points, and the square at 6 m reads 0 from the light 4263ms
+     × AC2 #2054.e44715ba the planted range_word_dropped reads 25.0% and a lit third square, and fails, naming the squares 905ms
+     × AC2 #2054.e44715ba the planted window (1 − (d ÷ range)²)² (light_window_squared) reads 4.6% and fails, naming the square 1168ms
+ ❯ range.test.ts (2 tests | 2 failed) 6673ms
    ❯ AC1 #2054.46de3b6b the range word reaches our range in metres (2)
-     × AC1 #2054.46de3b6b a point light word of 800 lm expands to one light.point@1 of range 8 with the range word at 8 and of range 5 without it, and a spot light word gives the same on light.spot@1, each within 1e-9 2995ms
-     × AC1 #2054.46de3b6b the planted range_word_dropped accepts the range word, doesn't pass it on, leaves our automatic range (35.68 m at 800 lm) and fails, naming the word 390ms
- ❯ falloff.test.ts (2 tests | 2 failed) 5259ms
+     × AC1 #2054.46de3b6b a point light word of 800 lm expands to one light.point@1 of range 8 with the range word at 8 and of range 5 without it, and a spot light word gives the same on light.spot@1, each within 1e-9 3814ms
+     × AC1 #2054.46de3b6b the planted range_word_dropped accepts the range word, doesn't pass it on, leaves our automatic range (35.68 m at 800 lm) and fails, naming the word 374ms
+ ❯ falloff.test.ts (2 tests | 2 failed) 6539ms
    ❯ AC3 #2054.b0129c45 the falloff exponent: 2 accepted, anything else refused with a fix that names 2 (2)
-     × AC3 #2054.b0129c45 the exponent written as 2 expands to the same item as unwritten; written as 1 and as 0.5 the revision holds an issue at items/<id>/params/<word> whose fix names 2 and no light is drawn, and a range of 0 is refused the same way 3111ms
-     × AC3 #2054.b0129c45 the planted falloff_one_drawn accepts 1, draws the inverse square, presents a light and fails, naming the word 197ms
+     × AC3 #2054.b0129c45 the exponent written as 2 expands to the same item as unwritten; written as 1 and as 0.5 the revision holds an issue at items/<id>/params/<word> whose fix names 2 and no light is drawn, and a range of 0 is refused the same way 3968ms
+     × AC3 #2054.b0129c45 the planted falloff_one_drawn accepts 1, draws the inverse square, presents a light and fails, naming the word 346ms
 
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
 
@@ -90,7 +97,7 @@ AssertionError: the falloff exponent and the range of 0:
        |                                                            ^
      62| }
      63| /** At least one failure, and one that names each of `names`: what a p…
- ❯ falloff.test.ts:46:5
+ ❯ falloff.test.ts:43:5
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
 
@@ -111,8 +118,8 @@ AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_inpu
     162|   const replies = arr(answer['replies'], 'deep-show run: replies').map…
     163|   expect(replies.length, 'deep-show run: one reply per call').toBe(arr…
  ❯ showDocs helpers.ts:95:10
- ❯ read falloff.test.ts:33:30
- ❯ falloff.test.ts:50:15
+ ❯ read falloff.test.ts:31:19
+ ❯ falloff.test.ts:47:15
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
 
@@ -241,6 +248,6 @@ AssertionError: the planted light_window_squared: a failure names sq_4m; the fai
 
  Test Files  3 failed (3)
       Tests  7 failed (7)
-   Start at  22:18:31
-   Duration  21.93s (tests 99%, import 1%)
+   Start at  22:31:57
+   Duration  28.88s (tests 99%, transform 1%)
 
