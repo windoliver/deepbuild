@@ -239,9 +239,10 @@ const TOOLS = [['node', ['--version']], ['npm', ['--version']], ['rustc', ['-vV'
 // The environment a build reads besides its files: cargo's and rustc's, the C toolchain's as the cc, bindgen and
 // pkg-config crates read it (per target too), node's and npm's, and the project's own, which a package's build script
 // or what it imports may read, as pi's tools.mjs reads DEEP_HUB_PLANT through the hub's dist. Left out are what differs
-// on every run and no build reads: the lane's own lease, paths and settings, and where cargo writes.
+// on every run and no build reads: the lane's own lease, paths and settings, a hub job's tokens and lease, cargo's
+// jobserver and where cargo writes. One that differs and isn't listed only costs reuse, never a verdict.
 const BUILD_ENV = /^(?:DEEP_.+|CARGO_.*|RUSTC.*|RUSTFLAGS|RUSTDOCFLAGS|RUSTUP_TOOLCHAIN|(?:CC|CXX|AR|CFLAGS|CXXFLAGS|CPPFLAGS|LDFLAGS)(?:_.+)?|(?:TARGET|HOST)_.+|CRATE_CC_NO_DEFAULTS|PKG_CONFIG.*|LIBCLANG_PATH|CLANG_PATH|LLVM_CONFIG_PATH|BINDGEN_.+|.+_SYS_.+|CPATH|C_INCLUDE_PATH|CPLUS_INCLUDE_PATH|OBJC_INCLUDE_PATH|LIBRARY_PATH|TOOLCHAINS|SDKROOT|MACOSX_DEPLOYMENT_TARGET|DEVELOPER_DIR|NODE_OPTIONS|NODE_ENV|NODE_PATH|[Nn][Pp][Mm]_[Cc][Oo][Nn][Ff][Ii][Gg]_.+)$/;
-const PER_RUN = /^(?:CARGO_TARGET_DIR|CARGO_BUILD_TARGET_DIR|npm_config_local_prefix|DEEP_(?:THROTTLE.*|BIN_DIR|PROOF_.+|BUILD_CACHE_BYTES|OPEN_ISSUES|WINDOW|PERF_LOCK|APPROVERS))$/;
+const PER_RUN = /^(?:CARGO_TARGET_DIR|CARGO_BUILD_TARGET_DIR|CARGO_MAKEFLAGS|npm_config_local_prefix|DEEP_(?:THROTTLE.*|BIN_DIR|PROOF_.+|BUILD_CACHE_BYTES|OPEN_ISSUES|WINDOW|PERF_LOCK|APPROVERS|RUN_TOKEN|GATE_TOKEN|LEASED|RESOURCE_KEY))$/;
 const LOCKS = ['package-lock.json', 'npm-shrinkwrap.json', 'Cargo.lock'];
 const DAY = 24 * 60 * 60_000;
 
