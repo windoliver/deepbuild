@@ -665,7 +665,8 @@ fn scan(source: &str) -> Scan {
                     Before::Operator => true,
                     Before::Either => {
                         // Either reading may be the script's: they agree only when the would-be regex holds no
-                        // literal, bracket, import or comment, and no slash follows it.
+                        // literal, bracket, `*`, import or slash of its own (`[/*]` opens a comment as division), and
+                        // no slash follows it.
                         let Some(end) = regex else {
                             before = Before::Operator;
                             at += 1;
@@ -673,7 +674,10 @@ fn scan(source: &str) -> Scan {
                         };
                         let body = &source[at..end];
                         let close = body.rfind('/').map_or(end, |slash| at + slash + 1);
-                        if body.contains(['"', '\'', '`', '{', '}', '(', ')'])
+                        if body.contains(['"', '\'', '`', '{', '}', '(', ')', '[', ']', '*'])
+                            || body
+                                .get(1..close - at - 1)
+                                .is_some_and(|inner| inner.contains('/'))
                             || body.contains("import")
                             || body.contains("require")
                             || matches!(bytes.get(close), Some(b'*' | b'/'))
@@ -1112,6 +1116,10 @@ mod tests {
             "const r = 1. in /'/; import { Chart } from \"gpui-kit\"; //'",
             "const r = 1. instanceof /'/; import { Chart } from \"gpui-kit\"; //'",
             "let x = 1.\ntypeof /'/; import { Chart } from \"gpui-kit\"; //'",
+            // Round 9: as division, `[/*]` opens an array and a comment that hides the regex's end.
+            "let a = 1\nlet x = a\n/ [/*] / \"*/ + import('gpui-kit') + /\"/ ]",
+            "let x = {} / [/*] / \"*/ + import('gpui-kit') + /\"/ ];",
+            "for (const x of [/*] / \"*/ + import('gpui-kit') + /\"/ ]) {}",
         ];
         for case in cases {
             let source = format!("const n = \"gpui-\" + \"kit\";\n{case}\n");
