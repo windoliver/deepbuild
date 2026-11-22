@@ -10,7 +10,11 @@
 // (known-failures.json) read apart from new ones, and a timing budget missed at a load above the core count reads INCONCLUSIVE. So does a
 // skip, or BLOCKED by its note, unless the same file's `skips` list covers it, which is printed.
 //
-//   node scripts/affected.mjs [--list] [--wide] [--timed] [--slow] [path ...]
+//   node scripts/affected.mjs [--list] [--wide] [--settled] [--timed] [--slow] [path ...]
+//
+// A suite of a closed issue on the main watch's settled list that the change reaches only through a process the suite
+// starts is left to the watch, named on one SETTLED line, and the run reads INCONCLUSIVE; --settled runs it (settled,
+// below; #3064).
 //
 // The alone block's folders run side by side, each in a shard of its own (scripts/shards.mjs), so no sibling's cargo
 // build rewrites a binary under it; those lanes.mjs names exclusive run after, one at a time, with nothing beside them.
@@ -24,7 +28,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { closeSync, constants as modes, existsSync, mkdtempSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { availableParallelism, constants, loadavg, tmpdir } from 'node:os';
+import { availableParallelism, constants, homedir, loadavg, tmpdir } from 'node:os';
 import { dirname, join, posix, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
@@ -198,6 +202,9 @@ export function graph(cwd, files, workspace, tasks = []) {
  * watch and the release preflight run it.
  * Of the budget `tasks` given, `tasks` names those a budget window runs: each the change reaches or marks wide, each
  * the graph can't place, and all of them when it changes a file every suite reads (#1981).
+ * `through` names the tests, selected or wide, that the change reaches only through a process they start, a Rust binary
+ * or a package's build: none of its paths reaches them, or any test of their suite's folder, by import or by a file
+ * they or their helpers read by path, and none is in a package one of those imports from (#3064).
  */
 export function select(cwd, changed, { files = listFiles(cwd), workspace = crates(cwd), tasks = [] } = {}) {
   const all = [...new Set([...files, ...changed])];
@@ -222,6 +229,13 @@ export function select(cwd, changed, { files = listFiles(cwd), workspace = crate
   const packageOf = (path) => path.match(/^packages\/[^/]+/)?.[0];
   const ends = (nodes) => [...nodes].filter((node) => isTestFile(node) || /^(?:crate|task):/.test(node));
   const task = (node) => node.startsWith('task:');
+  const onward = (nodes) => [...nodes, ...up(nodes.filter((node) => !node.startsWith('crate:')))];
+  // The tests a package is their own to (#3064): those that import one of its files, near or far, with no process between.
+  const owned = new Map();
+  const ownTests = (folder) => {
+    if (!owned.has(folder)) owned.set(folder, new Set(ends(up(all.filter((file) => within(folder, file))))));
+    return owned.get(folder);
+  };
   const reach = (path) => {
     const owners = ownersOf(path);
     const code = up([path, ...owners]);
@@ -233,26 +247,30 @@ export function select(cwd, changed, { files = listFiles(cwd), workspace = crate
     const ran = [...runs].filter(([, targets]) => [...targets].some(hit)).map(([node]) => node);
     const started = [...spawns].filter(([, targets]) => [...targets].some((target) => hit(target) && own(target))).map(([node]) => node);
     const deeper = [...spawns].filter(([, targets]) => [...targets].some(hit)).map(([node]) => node);
-    const onward = (nodes) => [...nodes, ...up(nodes.filter((node) => !node.startsWith('crate:')))];
     // A task runs a binary as cargo builds it, from its crate and every crate that one depends on.
     const built = [...runs].filter(([, targets]) => [...targets].some((target) => target.startsWith('crate:') && code.has(target))).map(([node]) => node);
     const found = new Set(ends([...code, ...onward([...ran, ...started]), ...onward(deeper).filter(own), ...onward(built).filter(task)]));
-    return { found: [...found], wide: ends(onward(deeper)).filter((node) => !found.has(node)) };
+    // Reached with no process between (#3064): by import, or by a file a test or its helper reads by path.
+    const read = [...runs].filter(([, targets]) => [...targets].some((target) => !target.startsWith('crate:') && hit(target))).map(([node]) => node);
+    return { found: [...found], wide: ends(onward(deeper)).filter((node) => !found.has(node)), near: new Set(ends([...code, ...onward(read)])) };
   };
-  const tests = new Set(), reached = new Set(), wide = new Set(), every = [], none = [], touched = new Set();
+  const tests = new Set(), reached = new Set(), wide = new Set(), every = [], none = [], touched = new Set(), direct = new Set();
   // The files a runner config names, as the guard reads them: its setup files and the config modules it imports.
   const setup = namedByConfig(cwd, null, all);
   const feedsEvery = (path) => EVERY.includes(path) || setup.has(path);
   for (const path of changed) {
     if (feedsEvery(path)) every.push(path);
-    let { found, wide: far } = reach(path);
+    let { found, wide: far, near } = reach(path);
     for (const node of [...found, ...far].filter(task)) touched.add(node.slice(5));
     [found, far] = [found, far].map((nodes) => nodes.filter((node) => !task(node)));
     // A fixture no test names by path is read by the tests of its own folder.
     if (!found.length && underTestPaths(path)) {
       const folder = path.match(/^(?:tests\/acceptance\/[^/]+|packages\/[^/]+\/test|tests)\//)?.[0];
       found = folder ? all.filter((file) => file.startsWith(folder) && isTestFile(file)) : [];
+      near = new Set(found);
     }
+    const home = packageOf(path);
+    for (const node of [...near, ...(home ? ownTests(home) : [])]) direct.add(node);
     // A test the change deletes has nothing to run.
     for (const node of found) if (node.startsWith('crate:') || existsSync(join(cwd, node))) (node.startsWith('crate:') ? reached : tests).add(node.replace(/^crate:/, ''));
     for (const node of far) wide.add(node.replace(/^crate:/, 'cargo test -p '));
@@ -260,7 +278,47 @@ export function select(cwd, changed, { files = listFiles(cwd), workspace = crate
   }
   const owners = [...new Set(changed.filter((path) => path.endsWith('.rs')).flatMap(ownersOf))].map((node) => node.slice(6));
   const runsTask = ({ id }) => every.length || touched.has(id) || !imports.has(`task:${id}`);
-  return { tests: [...tests].sort(), crates: [...reached].sort(), wide: [...wide].filter((node) => !tests.has(node) && !reached.has(node.replace('cargo test -p ', ''))).sort(), every, none, owners, tasks: tasks.filter(runsTask).map(({ id }) => id) };
+  // A suite is reached with no process between when any test of its folder is, selected or not.
+  const directly = new Set([...direct].map(suiteOf));
+  const through = [...new Set([...tests, ...wide])].filter((file) => isTestFile(file) && !direct.has(file) && !(suiteOf(file) && directly.has(suiteOf(file)))).sort();
+  return { tests: [...tests].sort(), crates: [...reached].sort(), wide: [...wide].filter((node) => !tests.has(node) && !reached.has(node.replace('cargo test -p ', ''))).sort(), every, none, owners, tasks: tasks.filter(runsTask).map(({ id }) => id), through };
+}
+
+// The main watch's settled list (docs/parallel-proof.md, sections 7a and 12b; #3064), in the HOME the run was given.
+const LIST = join(homedir(), '.deepbuild', 'main-watch', 'settled.json');
+const suiteOf = (file) => file.match(/^tests\/acceptance\/\d+\//)?.[0];
+
+/**
+ * The selected suites left to the main watch, as their folders: each on the watch's list with the files the worktree
+ * holds for it, whose selected files the change reaches only through a process (select's `through`), and which the
+ * change neither names by its issue nor touches. `problem` says why no list could be read: nothing is settled then.
+ */
+function settled(cwd, { tests, through }, changed) {
+  let suites;
+  try {
+    const list = JSON.parse(readFileSync(LIST, 'utf8'));
+    ({ suites } = list);
+    if (typeof list.tree !== 'string' || !suites || typeof suites !== 'object' || Array.isArray(suites) || Object.values(suites).some((id) => typeof id !== 'string')) throw Error('it names no tree, or no suites by folder and ID');
+  } catch (error) {
+    return { folders: [], problem: error.code === 'ENOENT' ? `${LIST} is missing` : `${LIST} can't be read (${error.message})` };
+  }
+  const far = new Set(through);
+  const candidates = [...new Set(tests.map(suiteOf))].filter((folder) => folder && Object.hasOwn(suites, folder)
+    && tests.filter((file) => file.startsWith(folder)).every((file) => far.has(file)) && !changed.some((path) => path.startsWith(folder)));
+  if (!candidates.length) return { folders: [] };
+  const git = (...args) => spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 2 ** 28 });
+  // The issues the change's commits name, by the pattern the trace lane reads them with (readIssue, proof-change.mjs),
+  // in any repository's spelling. Commits that can't be read might name any suite's, so nothing is left then.
+  const base = git('merge-base', 'HEAD', 'origin/main');
+  const messages = base.status === 0 ? git('log', '--format=%B', `${base.stdout.trim()}..HEAD`) : base;
+  if (messages.status !== 0) return { folders: [] };
+  const named = new Set([...messages.stdout.matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|part of):?\s+(?:[\w.-]+\/[\w.-]+#|https?:\/\/github\.com\/[\w.-]+\/[\w.-]+\/issues\/|#)(\d+)\b/gi)].map(([, number]) => number));
+  // Each suite's folder as the worktree holds it now, uncommitted and untracked files too.
+  const held = new Map((git('ls-tree', exactTree(cwd) ?? '', 'tests/acceptance/').stdout ?? '').split('\n').flatMap((line) => {
+    const [, id, path] = line.match(/^\d+ tree (\w+)\t(.+)$/) ?? [];
+    return id ? [[`${path}/`, id]] : [];
+  }));
+  return { folders: candidates.filter((folder) => held.get(folder) === suites[folder] && !named.has(folder.split('/')[2])).sort() };
 }
 
 /** Which runner a test file is written for, by what it imports at its top level, else by its extension. */
@@ -615,6 +673,10 @@ async function main(args) {
     selection.crates = [...new Set([...selection.crates, ...selection.wide.filter((node) => node.startsWith('cargo ')).map((node) => node.slice(14))])].sort();
     selection.wide = [];
   }
+  // The settled suites are left to the main watch, and --settled runs them, as --wide the wide ones (#3064). The list
+  // is read once, before the wait for the test grant, so a tick of the watch meanwhile changes nothing in the run.
+  const watched = held ? held.prep.watched : args.includes('--settled') ? { folders: [] } : settled(root, selection, changed);
+  selection.tests = selection.tests.filter((file) => !watched.folders.includes(suiteOf(file)));
   const { blocks, skipped, timed: timedFiles, slow: slowFiles } = plan(root, selection.tests, changed);
   const runTimed = args.includes('--timed'), runSlow = args.includes('--slow');
   const unrunTimed = runTimed ? [] : [...timedFiles.vitest, ...timedFiles.node].sort();
@@ -628,6 +690,8 @@ async function main(args) {
     for (const path of selection.none) console.log(`NOTE ${path} reaches no test`);
   }
   if (!held && selection.wide.length) console.log(`WIDE ${selection.wide.length} more see the change only through a process that starts another package (--wide runs them): ${selection.wide.join(' ')}`);
+  if (!held && watched.problem) console.log(`SETTLED no list: ${watched.problem}, so every suite the change reaches runs`);
+  if (!held && watched.folders.length) console.log(`SETTLED ${watched.folders.length} ${watched.folders.length === 1 ? 'suite of a closed issue is' : 'suites of closed issues are'} left to the main watch (--settled runs them): ${watched.folders.join(' ')}`);
   if (args.includes('--list')) return 0;
   const files = [...Object.values(blocks).flatMap((block) => [...block.vitest, ...block.node]), ...runTimed ? [...timedFiles.vitest, ...timedFiles.node] : []];
   if (!held) {
@@ -635,6 +699,7 @@ async function main(args) {
     const timedRun = runTimed ? [...timedFiles.vitest, ...timedFiles.node] : [];
     const prep = await prepare(files.filter((file) => !timedRun.includes(file)), timedRun, [...blocks.alone.vitest, ...blocks.alone.node], listedFiles, started);
     if (typeof prep === 'number') return prep;
+    prep.watched = watched;
     try {
       return await queued(args, listedFiles, started, prep);
     } finally {
@@ -770,11 +835,12 @@ async function main(args) {
     for (const { id, message } of fresh) console.log(`NEW FAIL ${id}${message && message !== 'lint' ? `: ${message}` : ''}`);
     for (const path of selection.every) console.log(`INCONCLUSIVE ${path} feeds every suite; run npm run preflight`);
     if (selection.wide.length) console.log(`INCONCLUSIVE ${selection.wide.length} suites that see the change through another package's process were not run; the release preflight or --wide runs them`);
+    if (watched.folders.length) console.log(`INCONCLUSIVE ${watched.folders.length} settled ${watched.folders.length === 1 ? 'suite was' : 'suites were'} not run; the main watch or --settled runs them`);
     if (unrunTimed.length) console.log(`INCONCLUSIVE ${unrunTimed.length} timed ${unrunTimed.length === 1 ? 'file was' : 'files were'} not run; --timed runs them under a timed grant: ${unrunTimed.join(' ')}`);
     if (skipped.length) console.log(`INCONCLUSIVE ${skipped.length} selected ${skipped.length === 1 ? 'file was' : 'files were'} not run, left to a person or to a lane of its own; run each by hand or in its lane: ${skipped.join(' ')}`);
     if (unrunSlow.length) console.log(`INCONCLUSIVE ${unrunSlow.length} slow ${unrunSlow.length === 1 ? 'file was' : 'files were'} not run; --slow runs them: ${unrunSlow.join(' ')}`);
     console.log(`TIMED the timed list, from scripts/lanes.mjs (${timed.length}): ${timed.join(' ')}`);
-    const state = fresh.length ? 'FAIL' : worst(unsure.map(({ state }) => state)) ?? (selection.every.length || selection.wide.length || skipped.length || unrunTimed.length || unrunSlow.length ? 'INCONCLUSIVE' : known.length ? 'NO NEW FAILURES' : 'PASS');
+    const state = fresh.length ? 'FAIL' : worst(unsure.map(({ state }) => state)) ?? (selection.every.length || selection.wide.length || watched.folders.length || skipped.length || unrunTimed.length || unrunSlow.length ? 'INCONCLUSIVE' : known.length ? 'NO NEW FAILURES' : 'PASS');
     console.log(`${state} affected: ${fresh.length} new, ${known.length} already failing on main, ${unsure.length} inconclusive or blocked, ${covered.length} listed skips, ${passed.length} passed, in ${((performance.now() - started) / 1000).toFixed(0)} s at load ${loadavg()[0].toFixed(0)}; logs in ${logs}`);
     return { FAIL: 1, INCONCLUSIVE: 2, BLOCKED: 3, INVALID: 3 }[state] ?? 0;
   } catch (error) {
