@@ -51,6 +51,7 @@ mod kit;
 mod lengths;
 mod logic;
 mod maps;
+mod matched;
 mod math_twins;
 mod media;
 mod mixdown;
@@ -118,6 +119,8 @@ mod track_call;
 mod twins;
 mod verdict;
 mod video;
+// #553: a match copy's media module, its voices and its audio thread.
+mod voiced;
 mod warps;
 mod workers;
 
@@ -1391,6 +1394,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || *p == deep_canvas_marks::entries::FIT_SKIPS_ENTRIES
                 || entries::PLANTED.contains(p)
                 || deep_net::PLANTED.contains(p)
+                || *p == deep_canvas_effects::particles::bursts::IGNORES_FOG
                 // #265's trail that keeps the points a copy read from predicted steps.
                 || *p == net::TRAIL_KEEPS_PREDICTED
                 // #225's in the data module's integrator; #2450's in its reading of axis titles.

@@ -285,6 +285,7 @@ impl Hub<'_> {
                 color,
             }],
             leader: None,
+            edge: None,
         });
         let pictures = (line.as_ref().and_then(overlay::leader_picture).into_iter())
             .chain(dots.filter_map(|d| overlay::picture(&d)));
