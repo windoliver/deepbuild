@@ -88,14 +88,14 @@ pub fn budget(
 const SLICE_SHARE: f64 = 0.6;
 
 /// #552: 64 bits from the browser's secure random source, `crypto.getRandomValues`.
+#[cfg(target_arch = "wasm32")]
 fn secure_u64() -> u64 {
-    use wasm_bindgen::JsCast as _;
     let buf = js_sys::Uint8Array::new_with_length(8);
     let crypto = js_sys::Reflect::get(&js_sys::global(), &"crypto".into()).ok();
     let fill = crypto
         .as_ref()
         .and_then(|c| js_sys::Reflect::get(c, &"getRandomValues".into()).ok())
-        .and_then(|f| f.dyn_into::<js_sys::Function>().ok());
+        .and_then(|f| wasm_bindgen::JsCast::dyn_into::<js_sys::Function>(f).ok());
     if let (Some(c), Some(f)) = (crypto, fill) {
         let _ = f.call1(&c, &buf);
     }
@@ -537,4 +537,13 @@ impl Match {
         }
         out
     }
+}
+
+/// #3100: built natively (the crate's own tests), 64 bits from the platform's secure random source,
+/// as deep-show's copy draws them.
+#[cfg(not(target_arch = "wasm32"))]
+fn secure_u64() -> u64 {
+    deep_relay::direct::random16().map_or(0, |b| {
+        u64::from_le_bytes(b[..8].try_into().unwrap_or_default())
+    })
 }
