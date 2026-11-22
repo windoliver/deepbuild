@@ -104,12 +104,74 @@ pub struct Logic {
     profiles: BTreeMap<i64, Value>,
     /// #552: the entries the planted draw module took before their step.
     early: Vec<Value>,
+    /// #553: the saves this copy keeps, once it keeps any.
+    saves: Option<Saves>,
+    /// #553's planted rollback: the occurrence rows of the steps it replaced, by step and list.
+    kept: Option<BTreeMap<i64, Map<String, Value>>>,
+}
+
+/// #553: a copy's saves (canvas primitives: Net: rollback). A save, an ended slot or a carry
+/// record a step asks for waits until that step is confirmed and is then written from that step's
+/// state; a rollback drops those of the steps it replaces.
+struct Saves {
+    dir: std::path::PathBuf,
+    waiting: Vec<deep_logic::saves::Held>,
+    wrote: Vec<Value>,
+    /// Each save written, by item, slot and step: a step run again asks for it again.
+    written: std::collections::BTreeSet<(String, i32, i64)>,
+    /// The planted module, which writes each save when its step runs, confirmed or not.
+    at_once: bool,
+}
+
+impl Saves {
+    /// Writes each waiting save whose asking step is before `upto`.
+    fn write(&mut self, upto: i64) {
+        let (due, wait): (Vec<_>, Vec<_>) = std::mem::take(&mut self.waiting)
+            .into_iter()
+            .partition(|h| h.step <= upto);
+        self.waiting = wait;
+        for h in due {
+            if !self.written.insert((h.item.clone(), h.slot, h.step)) {
+                continue;
+            }
+            match deep_logic::saves::store_held(&self.dir, &h) {
+                Ok(Value::Null) => {}
+                Ok(v) | Err(v) => self.wrote.push(v),
+            }
+        }
+    }
 }
 
 impl Logic {
     /// #552: the planted derivation of its draws (`deep_logic::draws::Wrong`).
     pub fn draws_wrong(&mut self, wrong: deep_logic::draws::Wrong) {
         self.world.draw.wrong = wrong;
+    }
+
+    /// #553: this copy keeps its saves in `dir`, each once its step is confirmed, or at once
+    /// (`at_once`, the planted module).
+    pub fn saves_in(&mut self, dir: std::path::PathBuf, at_once: bool) {
+        self.world.held = Some(Vec::new());
+        self.saves = Some(Saves {
+            dir,
+            waiting: Vec::new(),
+            wrote: Vec::new(),
+            written: Default::default(),
+            at_once,
+        });
+    }
+
+    /// #553: each save this copy wrote, as the `logic` call gives one.
+    pub fn saved(&self) -> Vec<Value> {
+        self.saves
+            .as_ref()
+            .map(|s| s.wrote.clone())
+            .unwrap_or_default()
+    }
+
+    /// #553's planted rollback, which keeps the occurrence rows of the steps it replaces.
+    pub fn keeps_replaced_rows(&mut self) {
+        self.kept = Some(BTreeMap::new());
     }
 }
 
@@ -159,6 +221,8 @@ impl Logic {
             fixed: Vec::new(),
             brings: None,
             profiles: BTreeMap::new(),
+            saves: None,
+            kept: None,
         })
     }
 
@@ -264,6 +328,13 @@ impl Stepper for Logic {
     fn run(&mut self, step: i64, until: i64) -> Result<(), Value> {
         let before = cpu_ns();
         self.world.run_through(until - 1, &mut self.rec);
+        // #553: the saves its steps asked for wait for their step to be confirmed.
+        if let (Some(saves), Some(held)) = (self.saves.as_mut(), self.world.held.as_mut()) {
+            saves.waiting.append(held);
+            if saves.at_once {
+                saves.write(i64::MAX);
+            }
+        }
         self.ns += cpu_ns() - before;
         for r in deep_logic::profile::written(&mut self.world) {
             self.profiles.insert(r["step"].as_i64().unwrap_or(0), r);
@@ -381,6 +452,23 @@ impl Stepper for Logic {
 
     fn back(&mut self, step: i64, t: i64) -> Result<(), Value> {
         let before = cpu_ns();
+        // #553's planted rollback keeps the rows of the steps it replaces.
+        if let Some(kept) = self.kept.as_mut() {
+            for (k, (_, arrays)) in self.rec.rows().range(step..) {
+                let lists = arrays.iter().filter(|(n, _)| n.ends_with(".occurrences"));
+                for (name, rows) in lists {
+                    let at = kept.entry(*k).or_default().entry(name.clone());
+                    let list = at.or_insert_with(|| json!([]));
+                    if let (Some(list), Some(rows)) = (list.as_array_mut(), rows.as_array()) {
+                        list.extend(rows.iter().cloned());
+                    }
+                }
+            }
+        }
+        // The saves the replaced steps asked for go with them; a step run again asks again.
+        if let Some(saves) = self.saves.as_mut() {
+            saves.waiting.retain(|h| h.step < step);
+        }
         let (_, ring) = self
             .ring
             .as_mut()
@@ -417,7 +505,26 @@ impl Stepper for Logic {
         if let Some(w) = self.worlds.as_ref() {
             out.extend(w.occurrences(len));
         }
+        // #553's planted rollback: the replaced steps' rows stay beside the corrected run's.
+        for (k, lists) in self.kept.iter().flatten() {
+            for (name, rows) in lists {
+                let id = name.trim_end_matches(".occurrences");
+                for r in rows.as_array().into_iter().flatten() {
+                    let mut r = r.clone();
+                    r["item"] = json!(id);
+                    r["step"] = json!(k);
+                    r["t"] = json!(k * len);
+                    out.push(r);
+                }
+            }
+        }
         out
+    }
+
+    fn confirmed(&mut self, upto: i64) {
+        if let Some(saves) = self.saves.as_mut() {
+            saves.write(upto);
+        }
     }
 
     fn seek(&mut self, step: i64, len: i64) -> Result<(i64, u64), Value> {
@@ -478,6 +585,16 @@ impl Stepper for Logic {
                 *k,
                 json!({"step_hashes": hashes, "occurrences": occurrences}),
             );
+        }
+        // #553's planted rollback: the replaced steps' rows stay beside the corrected run's.
+        for (k, lists) in self.kept.iter().flatten() {
+            let at = out.entry(*k).or_insert_with(|| json!({"occurrences": {}}));
+            for (name, rows) in lists {
+                let list = &mut at["occurrences"][name];
+                let mut all = list.as_array().cloned().unwrap_or_default();
+                all.extend(rows.as_array().into_iter().flatten().cloned());
+                *list = Value::Array(all);
+            }
         }
         if let Some(w) = self.worlds.as_ref() {
             for (k, v) in w.made(self.len) {

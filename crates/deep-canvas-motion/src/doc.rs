@@ -1417,7 +1417,7 @@ fn driver_of(id: &str, d: &Map<String, Value>) -> Result<Driver, Refused> {
     };
     // The R1 subset compiles to motion's own ops; the rest of the closed function list, through
     // the core's expressions, at compile (an empty postfix).
-    let expr = deep_canvas::document::packs::postfix(text).unwrap_or_default();
+    let expr = crate::view::steps(text);
     let mut vars = Vec::new();
     let mut inputs = Vec::new();
     for (name, v) in d

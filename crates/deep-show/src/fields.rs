@@ -108,7 +108,7 @@ impl Hub<'_> {
     }
 
     /// A page point (u) of panel point `pos` (px), through the scope's flat camera.
-    fn page_point(&self, panel: &str, pos: [f64; 2]) -> Option<[f64; 2]> {
+    pub(crate) fn page_point(&self, panel: &str, pos: [f64; 2]) -> Option<[f64; 2]> {
         let s = &self.scopes.get(panel)?.scope;
         let (pose, rect) = (s.pose(), s.rect());
         let k = pose.view_width / rect[2];

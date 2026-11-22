@@ -455,10 +455,26 @@ impl Program {
             }
             inputs_of.push((f.name.as_str(), CoreInput::Occurrence(Arc::new(read))));
         }
+        // #298: `hover_at(<item>)`, the pointer's place over an item's bounds, as two vars.
+        let (text, hovers) = crate::view::rewrite(&text).map_err(|why| refused("bad_doc", why))?;
+        for h in &hovers {
+            if doc.get("items").and_then(|i| i.get(&h.item)).is_none() {
+                let why = format!("hover_at({}) names no item", h.item);
+                return Err(refused("ref_unresolved", why));
+            }
+            let read = crate::view::hover(&self.motion.control_defaults, h);
+            inputs_of.push((h.name.as_str(), read));
+        }
         for (name, input) in &driver.inputs {
             let input = match input {
                 doc::DriverInput::List(_) => continue,
                 doc::DriverInput::Array(array) => {
+                    // #298: an overlay's `edge` or `edge_angle`, bound by its frame.
+                    let bound = &self.motion.control_defaults;
+                    if let Some(read) = crate::view::edge(doc, bound, array) {
+                        inputs_of.push((name.as_str(), read));
+                        continue;
+                    }
                     // #497: a stepping module's array has no steps after t yet, as the input
                     // track has no entries after t, so a lag or smooth that looks ahead through it
                     // is refused; motion reads a logic output its host baked (#1183) and, of the
