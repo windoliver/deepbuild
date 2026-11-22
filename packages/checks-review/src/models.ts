@@ -7,7 +7,8 @@ import type { KindBudget } from '@deepbuild/conformance';
 import type { JobRecord } from '@deepbuild/runner';
 import type { ClaimCheck, Run } from '@deepbuild/verdicts';
 
-export interface ChangeSession { agent: string; transcript: string; route: SessionRoute }
+/** The session that made the change: its route as its adapter recorded it at its start, or null where no start recorded one (#1886). */
+export interface ChangeSession { agent: string; transcript: string; route: SessionRoute | null }
 export interface ReviewAt { claim: string; commit: string; check: ClaimCheck }
 export interface Independence { answered: string; change: string; counted: boolean; reason: string | null; note: string | null }
 export interface ReviewJobRun { run: Run; independence: Independence | null }
@@ -58,12 +59,15 @@ function transcriptModel(transcript: string): string | undefined {
 export function independence(answeredRaw: string, change: ChangeSession, plant?: ModelPlant): Independence {
   const canon = plant === 'raw-names' ? (m: string) => m : canonicalModel;
   const family = (m: string): string | undefined => familyOf(plant === 'raw-family' ? m : canonicalModel(m));
-  const proxied = plant !== 'trusts-proxied-transcript' && PROXIED.some((k) => change.route[k]);
-  const named = proxied ? undefined : transcriptModel(change.transcript);
+  const proxied = plant !== 'trusts-proxied-transcript' && PROXIED.some((k) => change.route?.[k]);
+  // A route no start recorded may be a proxy's: the transcript's model is then nobody's word (#1886).
+  const unrecorded = change.route === null;
+  const named = proxied || unrecorded ? undefined : transcriptModel(change.transcript);
   const changeModel = named === undefined ? 'unknown' : canon(named);
   const answered = answeredRaw || 'unknown';
   const uncounted = (reason: string): Independence => ({ answered, change: changeModel, counted: false, reason, note: null });
   if (proxied) return uncounted('model unknown: proxied route');
+  if (unrecorded) return uncounted('model unknown: no route recorded at its start');
   if (answered === 'unknown' || named === undefined) return uncounted('model unknown');
   if (canon(answered) === changeModel) return uncounted('review not independent: same model');
   const [a, c] = [family(answered), family(named)];

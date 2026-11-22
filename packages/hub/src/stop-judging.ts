@@ -981,15 +981,25 @@ export class StopJudging {
     for (const reading of readings) if (!stands(standing, reading)) await this.options.events.appendReading(meta.session, meta.agent, reading);
   }
 
-  /** The pull request a session opened, as its readings record it: the newest. */
-  /** The route the session's adapter read at its latest start (#1886), as its session.start keeps it; none recorded reads as the agent's own. */
-  private async routeOf(session: string | null): Promise<SessionRoute> {
-    if (!session) return {};
-    const [row] = (await this.options.services.record.raw(`SELECT json_extract(data, '$.route') AS route FROM events WHERE session_id = ? AND kind = 'session.start' ORDER BY log_pos DESC LIMIT 1`, [session])) as { route: string | null }[];
-    const route: unknown = row?.route ? JSON.parse(row.route) : {};
-    return typeof route === 'object' && route !== null ? Object.fromEntries(Object.entries(route).filter(([, set]) => typeof set === 'boolean')) : {};
+  /**
+   * The route the session's adapter read at its starts (#1886), as each session.start keeps it: any start's proxied
+   * key holds for the session, since its transcript may name a model from that start; undefined where it has no start
+   * or one recorded no route, so its model reads as unknown.
+   */
+  async routeOf(session: string | null): Promise<SessionRoute | undefined> {
+    if (!session) return undefined;
+    const rows = (await this.options.services.record.raw(`SELECT json_extract(data, '$.route') AS route FROM events WHERE session_id = ? AND kind = 'session.start' ORDER BY log_pos`, [session])) as { route: string | null }[];
+    if (!rows.length) return undefined;
+    const route: SessionRoute = {};
+    for (const row of rows) {
+      const read: unknown = row.route ? JSON.parse(row.route) : undefined;
+      if (typeof read !== 'object' || read === null) return undefined;
+      for (const [key, set] of Object.entries(read)) if (typeof set === 'boolean') route[key] = route[key] === true || set;
+    }
+    return route;
   }
 
+  /** The pull request a session opened, as its readings record it: the newest. */
   async prOf(session: string | null): Promise<string | undefined> {
     if (!session) return undefined;
     const [row] = (await this.options.services.record.raw(`SELECT json_extract(data, '$.reading') AS reading FROM events WHERE session_id = ? AND kind = 'session.reading' AND json_extract(data, '$.reading') LIKE 'Opened pull request %' ORDER BY log_pos DESC LIMIT 1`, [session])) as { reading: string }[];

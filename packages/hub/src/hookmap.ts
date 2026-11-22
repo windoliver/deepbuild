@@ -490,7 +490,6 @@ function errorLine(error: string): string {
   return own.find((l) => /^(!|error\b|fatal\b|\w*(Error|Exception)\b)/i.test(l)) ?? own[0] ?? '';
 }
 
-/** The loop fact a tool hook carries, by the agent's loop facts: wake-ups and crons once they ran, background subagents and commands, and monitors' watches. */
 /**
  * A session's route as its adapter reads it at its start (#1886): from the route and billing keys its SessionStart
  * reported set, true or false and never a value, and, for Codex's model provider, the config in its home, the folder
@@ -506,6 +505,7 @@ function routeAt(name: string, route: Record<string, boolean>, billing: Record<s
   return read(env);
 }
 
+/** The loop fact a tool hook carries, by the agent's loop facts: wake-ups and crons once they ran, background subagents and commands, and monitors' watches. */
 export function loopFact(name: string, tool: string, event: string, payload: JsonObject, what: string): HookMeta['loop'] {
   if (event !== 'PostToolUse') return undefined;
   const facts = loopsOf(name);

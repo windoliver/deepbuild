@@ -39,8 +39,8 @@ export interface CommandRun extends CheckResult {
   timing: { repeat: number; flushed: boolean }[] | null;
   clock: number;
 }
-/** The session a review reads the change's model of: its transcript, and the route its adapter read at its latest start (#1886). */
-export interface ReviewOf { claim: string; task: string; agent: string; transcript: string | undefined; pr?: string | undefined; route?: SessionRoute }
+/** The session a review reads the change's model of: its transcript, and the route its adapter read at its starts, none where a start recorded none (#1886). */
+export interface ReviewOf { claim: string; task: string; agent: string; transcript: string | undefined; pr?: string | undefined; route?: SessionRoute | undefined }
 export interface ReviewItem { rule: string; sites: { file: string; line: number; quote: string }[] }
 /** A counted round keeps its sent items separate from earlier ones still open. */
 export interface ReviewRound { sent: ReviewItem[]; open: ReviewItem[] }
