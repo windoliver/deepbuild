@@ -596,6 +596,75 @@ fn a_hub_that_never_says_hello_holds_a_call_for_a_removed_rules_json_no_longer_t
     );
 }
 
+/// What `deep-hook match` answers `home`'s one call of `pkill -f node`, with only `home` in its environment.
+fn match_pkill(home: &std::path::Path) -> String {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_deep-hook"))
+        .arg("match")
+        .env_clear()
+        .env("HOME", home)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let mut line = PKILL.to_vec();
+    line.push(b'\n');
+    feed(&mut child, &line);
+    let out = child.wait_with_output().unwrap();
+    String::from_utf8(out.stdout).unwrap()
+}
+
+/// `deep-hook match` says which of its denials is for rules it couldn't read (#2568), so pi holds that call with the
+/// hub answering too, and tells it from a fail_closed entry's denial, which is the hub's to decide when it answers.
+#[test]
+fn match_says_its_denial_is_for_rules_it_could_not_read() {
+    let unread = r#""rules_unread":true"#;
+    // Cut to 40 bytes: denied, naming the file and why, and said to be unread rules.
+    let home = short_home("m-cut");
+    std::fs::write(home.join(".deepbuild/rules.json"), &RULES[..40]).unwrap();
+    let out = match_pkill(&home);
+    assert!(
+        out.contains(unread) && out.contains("rules.json isn't JSON"),
+        "cut to 40 bytes: {out}"
+    );
+
+    // Removed after setup with no hub there: the same.
+    std::fs::remove_file(home.join(".deepbuild/rules.json")).unwrap();
+    std::fs::write(home.join(".deepbuild/setup-finished.json"), "{}\n").unwrap();
+    let out = match_pkill(&home);
+    assert!(
+        out.contains(unread) && out.contains("rules.json was removed after setup"),
+        "removed after setup, no hub: {out}"
+    );
+
+    // A hub that puts the file back before its hello: the call is matched against it, as `forward` does (#1856).
+    use std::io::Write;
+    let listener =
+        std::os::unix::net::UnixListener::bind(home.join(".deepbuild/hub.sock")).unwrap();
+    let rules = home.join(".deepbuild/rules.json");
+    let hub = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        std::fs::write(rules, RULES).unwrap();
+        let _ = stream.write_all(HELLO);
+    });
+    let out = match_pkill(&home);
+    hub.join().unwrap();
+    std::fs::remove_dir_all(&home).unwrap();
+    assert!(
+        out.contains(r#""matched":["no-kill-by-name"]"#) && !out.contains(unread),
+        "rules.json put back by the hub: {out}"
+    );
+
+    // Readable rules: the fail_closed entry's denial is there for the hub away, and isn't said to be unread rules.
+    let home = short_home("m-ok");
+    let out = match_pkill(&home);
+    std::fs::remove_dir_all(&home).unwrap();
+    assert!(
+        out.contains("guard no-kill-by-name") && !out.contains(unread),
+        "readable rules: {out}"
+    );
+}
+
 /// Runs deep-hook's PreToolUse for `command` against `home`, and returns its exit code, how long it took, and the spool.
 fn pre_tool_use(
     home: &std::path::Path,

@@ -652,7 +652,8 @@ fn read_fields(called: Option<&matcher::Call>, matched: &[(&Guard, matcher::Hit)
 
 /// `deep-hook match`: for an agent that runs its hooks in its own process, where a process per call would cost too
 /// much. Each line on stdin is a tool hook's JSON; each line out is what `forward` would have sent the hub of it,
-/// `{"matched":[...],"notes"?,"stage"?}`, and its `"denials"` for the hub away. rules.json is read for every call, so
+/// `{"matched":[...],"notes"?,"stage"?}`, and its `"denials"` for the hub away, with `"rules_unread":true` when the one
+/// denial is for a rules.json it couldn't read, which holds whatever the hub says. rules.json is read for every call, so
 /// an entry added mid-session holds the next one. A line it can't read is `{"unread":true}`: that call was checked
 /// against nothing. It ends when stdin closes.
 fn matching() -> ExitCode {
@@ -663,10 +664,17 @@ fn matching() -> ExitCode {
         if let Some(Value::String(cwd)) = parsed.as_ref().and_then(|p| member(p, "cwd")) {
             set_cwd(PathBuf::from(cwd));
         }
-        let reply = match rules() {
+        // A running hub puts a removed rules.json back before it says hello (#1856), as `forward` reads it.
+        let rules = match rules() {
+            Err(why) if why == REMOVED && hub_said_hello(Instant::now() + PUT_BACK) => self::rules(),
+            read => read,
+        };
+        let reply = match rules {
             _ if parsed.is_none() => "{\"unread\":true,\"matched\":[],\"denials\":[]}".to_string(),
+            // Rules it couldn't read hold the call with the hub answering too (#2568): `rules_unread` tells this
+            // denial from a fail_closed entry's, which is the hub's to decide when it answers.
             Err(why) => format!(
-                "{{\"matched\":[],\"denials\":[{}]}}",
+                "{{\"matched\":[],\"rules_unread\":true,\"denials\":[{}]}}",
                 quoted(&format!(
                     "DeepBuild blocked this: ~/.deepbuild/rules.json {why}, so its guards can't be checked while the hub doesn't answer. Fix that file, then retry."
                 ))

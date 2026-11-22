@@ -1,0 +1,23 @@
+# Failing first, at base 2eaaeb0e6 with only the new tests applied (2026-11-22)
+
+## cargo test -p deep-hook --test cli match_says_its_denial
+running 1 test
+match_says_its_denial_is_for_rules_it_could_not_read --- FAILED
+failures:
+---- match_says_its_denial_is_for_rules_it_could_not_read stdout ----
+thread 'match_says_its_denial_is_for_rules_it_could_not_read' (458874) panicked at crates/deep-hook/tests/cli.rs:626:5:
+cut to 40 bytes: {"matched":[],"denials":["DeepBuild blocked this: ~/.deepbuild/rules.json isn't JSON, so its guards can't be checked while the hub doesn't answer. Fix that file, then retry."]}
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+failures:
+    match_says_its_denial_is_for_rules_it_could_not_read
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 30 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p deep-hook --test cli`
+EXIT 101
+
+## vitest packages/pi/test/guards.test.ts -t "rules.json (cut short|removed after setup that)", base main.rs and index.ts, new tests
+     × with the hub up, a rules.json cut short holds the call, naming the file and why 2073ms
+     × with the hub up, a rules.json removed after setup that the hub never read holds the call 2094ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: {"content":[{"type":"text","text":"(no output)"}],"structuredContent":{"output":"","truncated":false,"exit_code":0,"wall_time_seconds":0}}: expected false to be true // Object.is equality
+AssertionError: {"content":[{"type":"text","text":"(no output)"}],"structuredContent":{"output":"","truncated":false,"exit_code":0,"wall_time_seconds":0}}: expected false to be true // Object.is equality
+      Tests  2 failed | 20 skipped (22)
