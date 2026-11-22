@@ -1,0 +1,178 @@
+# #1880 acceptance tests on the merge base 2eaaeb0e6693410db653a43377ec32dde1cc63ab, Linux arm64, 2026-11-22
+# Command (both runs): systemd-run --user --scope -p MemoryMax=24G -p MemorySwapMax=2G env CARGO_BUILD_JOBS=2 \
+#   /var/tmp/deep40/node/bin/node node_modules/vitest/vitest.mjs run --root tests/acceptance/1880 --no-file-parallelism
+#
+# RUN A: the base exactly as it is. Both tests fail before any job is submitted: on Linux every reading fails in
+# @deepbuild/reading's nodeReads() (realpathSync of the relative name 'linux-vdso.so.1' that process.report lists among
+# its shared objects), a main-side Linux break unrelated to #1880 (README, Main-side breaks). The Codex refusal is not
+# reached in this run.
+#
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/agent-afe6781f71d07a47c/tests/acceptance/1880
+
+ ❯ codex-reading.test.ts (2 tests | 2 failed) 3310ms
+   ❯ AC1: with Codex the only signed-in agent, a wiki build's reading (1)
+     × ends with a recorded result, or reads BLOCKED naming the reason before any process of the job starts; never a launch that throws 1932ms
+   ❯ AC2: with Claude Code signed in, a wiki build's reading (1)
+     × still runs with its reader sub-agent: the job's launch carries the reader, and the reading ends with its result 1373ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  codex-reading.test.ts > AC1: with Codex the only signed-in agent, a wiki build's reading > ends with a recorded result, or reads BLOCKED naming the reason before any process of the job starts; never a launch that throws
+AssertionError: {
+ "buildError": "",
+ "jobs": [],
+ "finished": [
+  {
+   "reading": "reading:01M81DRM7BPN8KXGKX0MWQFGQ7",
+   "kind": "install",
+   "runs": [],
+   "state": "failed",
+   "findings": 0,
+   "dropped": 0,
+   "undelivered": 0,
+   "plan": null,
+   "models": {
+    "final": "unknown",
+    "subreads": []
+   },
+   "written": 0,
+   "invalid": "the reading failed: ENOENT: no such file or directory, lstat '/tmp/dh1880-C0NpcQ/h/linux-vdso.so.1'"
+  }
+ ],
+ "codexCalls": []
+}: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "reading reading:01M81DRM7BPN8KXGKX0MWQFGQ7 failed: the reading failed: ENOENT: no such file or directory, lstat '/tmp/dh1880-C0NpcQ/h/linux-vdso.so.1'",
++ ]
+
+ ❯ codex-reading.test.ts:71:34
+     69|       const blockedFirst = !launched && reasons.length > 0;
+     70|
+     71|       expect(failures, evidence).toEqual([]);
+       |                                  ^
+     72|       expect(result || blockedFirst, `neither a recorded result nor BL…
+     73|     } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  codex-reading.test.ts > AC2: with Claude Code signed in, a wiki build's reading > still runs with its reader sub-agent: the job's launch carries the reader, and the reading ends with its result
+AssertionError: {
+ "jobs": [],
+ "finished": [
+  {
+   "reading": "reading:01M81DRNP2FDH4G4YJS9M2C5H9",
+   "kind": "install",
+   "runs": [],
+   "state": "failed",
+   "findings": 0,
+   "dropped": 0,
+   "undelivered": 0,
+   "plan": null,
+   "models": {
+    "final": "unknown",
+    "subreads": []
+   },
+   "written": 0,
+   "invalid": "the reading failed: ENOENT: no such file or directory, lstat '/tmp/dh1880-PCBU2f/h/linux-vdso.so.1'"
+  }
+ ]
+}: expected 0 to be greater than 0
+ ❯ codex-reading.test.ts:98:37
+     96|       const finished = events(hub.root).filter((e) => e.kind === 'read…
+     97|       const evidence = JSON.stringify({ jobs: jobs.map(({ stdout, ...j…
+     98|       expect(jobs.length, evidence).toBeGreaterThan(0);
+       |                                     ^
+     99|       for (const j of jobs) {
+    100|         expect(j.agent, evidence).toBe('claude-code');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  02:45:21
+   Duration  3.52s (tests 97%, transform 2%, import 1%)
+
+
+# RUN B: the base plus one change outside this folder, made only in a scratch copy of the tree (/var/tmp/dh1880-base-vdso,
+# never in this worktree): nodeReads() keeps only absolute paths, filter((p) => p.startsWith("/") && ...), in
+# packages/reading/src/index.ts and its dist. AC1 fails as the issue says the merge base does: the read job is refused
+# with "it couldn't start: a Codex job takes no sub-agents". AC2 (Claude Code, its reader sub-agent) passes.
+#
+
+ RUN  v5.0.5 /var/tmp/dh1880-base-vdso/tests/acceptance/1880
+
+ ❯ codex-reading.test.ts (2 tests | 1 failed) 4922ms
+   ❯ AC1: with Codex the only signed-in agent, a wiki build's reading (1)
+     × ends with a recorded result, or reads BLOCKED naming the reason before any process of the job starts; never a launch that throws 767ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  codex-reading.test.ts > AC1: with Codex the only signed-in agent, a wiki build's reading > ends with a recorded result, or reads BLOCKED naming the reason before any process of the job starts; never a launch that throws
+AssertionError: {
+ "buildError": "",
+ "jobs": [
+  {
+   "job": "run:01M81DS02JF6NVVZCVSEY0V45R",
+   "kind": "read",
+   "agent": "codex",
+   "account": null,
+   "state": "refused",
+   "folder": "/tmp/dh1880-paesXC/h/.deepbuild/jobs/01M81DS02JF6NVVZCVSEY0V45R",
+   "refused": "it couldn't start: a Codex job takes no sub-agents",
+   "printed": []
+  }
+ ],
+ "finished": [
+  {
+   "reading": "reading:01M81DS01TS78ZGSEJ13BPM9FG",
+   "kind": "install",
+   "runs": [
+    "run:01M81DS02JF6NVVZCVSEY0V45R"
+   ],
+   "state": "refused",
+   "findings": 0,
+   "dropped": 0,
+   "undelivered": 0,
+   "plan": null,
+   "models": {
+    "final": "unknown",
+    "subreads": []
+   },
+   "written": 0,
+   "invalid": "the job gave no final answer"
+  }
+ ],
+ "codexCalls": []
+}: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "job run:01M81DS02JF6NVVZCVSEY0V45R refused: it couldn't start: a Codex job takes no sub-agents",
++ ]
+
+ ❯ codex-reading.test.ts:56:69
+     54|         ...finished.filter((f) => f.state !== 'BLOCKED' && typeof f.in…
+     55|       ].filter(Boolean);
+     56|       expect(failures.filter((f) => f.includes(REFUSAL)), evidence).to…
+       |                                                                     ^
+     57|
+     58|       // Outcome 1, a recorded result: the job's process (the fake Cod…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  02:45:34
+   Duration  5.02s (tests 100%)
+
