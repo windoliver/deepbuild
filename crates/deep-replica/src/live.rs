@@ -217,8 +217,7 @@ mod live {
                     return 1;
                 }
             };
-            let socket = hub::address();
-            record::install(RecordReader::unopened_folded(&socket, &hub::token(&socket)));
+            record::install(RecordReader::unopened_folded(&hub::address()));
             let (layout, view) = (Layout::shipped(view), view.to_owned());
             gpui_kit::application().run(move |cx| {
                 gpui_kit::init(cx);

@@ -158,11 +158,7 @@ fn main() {
         return;
     }
     if mode == Mode::HubCheck {
-        let socket = deep_app::hub::address();
-        let mut reader = deep_app::record::RecordReader::unopened_folded(
-            &socket,
-            &deep_app::hub::token(&socket),
-        );
+        let mut reader = deep_app::record::RecordReader::unopened_folded(&deep_app::hub::address());
         match reader.check() {
             Err(deep_app::hub::HubError::Older(screen)) => println!("{screen}"),
             Err(
@@ -315,14 +311,7 @@ fn main() {
             });
             if let Some(view) = view {
                 let handle = window.window_handle();
-                let socket = deep_app::hub::address();
-                deep_app::shown::start(
-                    vec![view],
-                    handle,
-                    &socket,
-                    &deep_app::hub::token(&socket),
-                    cx,
-                );
+                deep_app::shown::start(vec![view], handle, &deep_app::hub::address(), cx);
             }
             window.on_next_frame(move |_, cx| {
                 let ms = started.elapsed().as_secs_f64() * 1000.0;
@@ -565,8 +554,7 @@ mod notifications {
     }
 
     pub fn start(held: Option<Held>, linked: std::sync::mpsc::Receiver<String>, cx: &mut App) {
-        let socket = hub::address();
-        record::install(RecordReader::unopened_folded(&socket, &hub::token(&socket)));
+        record::install(RecordReader::unopened_folded(&hub::address()));
         cx.spawn(async move |cx| {
             let mut notifier = Notifier::new(NOTIFY_AFTER);
             let mut watch = HubWatch::default();

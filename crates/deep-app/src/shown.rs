@@ -87,14 +87,8 @@ impl Reporter {
 }
 
 /// Reports the views `window` draws to the hub every 5 s while the app runs, reconnecting once the hub is back.
-pub fn start(
-    views: Vec<String>,
-    window: AnyWindowHandle,
-    socket: &Path,
-    token_file: &Path,
-    cx: &mut App,
-) {
-    let (socket, token_file) = (socket.to_owned(), token_file.to_owned());
+pub fn start(views: Vec<String>, window: AnyWindowHandle, socket: &Path, cx: &mut App) {
+    let socket = socket.to_owned();
     let mut reporter = Reporter::new(&format!("{}", window.window_id().as_u64()), views);
     let mut client: Option<HubClient> = None;
     cx.spawn(async move |cx| loop {
@@ -102,7 +96,7 @@ pub fn start(
         let calls = reporter.report(seen);
         if !calls.is_empty() {
             if client.is_none() {
-                client = connect(&socket, &token_file).ok();
+                client = connect(&socket).ok();
             }
             if let Some(c) = client.as_mut() {
                 if let Err(error) = calls
@@ -122,8 +116,9 @@ pub fn start(
     .detach();
 }
 
-fn connect(socket: &Path, token_file: &Path) -> Result<HubClient, HubError> {
-    let token = std::fs::read_to_string(token_file)?;
+/// A connection as the app, presenting the token of the hub at `socket`, picked at each connect (#2958).
+fn connect(socket: &Path) -> Result<HubClient, HubError> {
+    let token = std::fs::read_to_string(crate::hub::token(socket))?;
     let mut client = HubClient::connect(socket)?;
     client.covers_app()?;
     client.hello_app(token.trim())?;
