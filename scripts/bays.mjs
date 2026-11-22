@@ -5,9 +5,9 @@
 // from, runs the command there, seals the bay, releases the pair and exits with the command's status. A proof claims
 // one pair for its base and change bays with `claimPair` (#1118), and every copy it makes is a use of one of them.
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync, writeSync } from 'node:fs';
-import { constants, homedir, tmpdir } from 'node:os';
+import { createHash, randomUUID } from 'node:crypto';
+import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync, writeSync } from 'node:fs';
+import { constants, homedir, release as osRelease, tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { acquire, holds, release } from './throttle.mjs';
@@ -219,6 +219,256 @@ function install(bay, run) {
   mkdirSync(dirname(marker), { recursive: true });
   writeFileSync(marker, key);
   return { installed: true };
+}
+
+// Kept builds (#3019): what a bay's workspace build wrote, and the test binaries built from a bay, kept per machine
+// under ~/deepbuild-bays/cache/<key>/ and laid back when a later use of a bay at the same path builds what the key
+// names: the exact tree and overlay, the toolchain, the locks, the build's environment and the lane code. An entry holds
+// blobs/<sha>, each a file's bytes as built, and entry.json, which lists each file's path, mode and SHA-256; a blob whose
+// bytes no longer hash to it, or an entry that can't be read whole, is never laid back. The cache's disk use, the bytes
+// of every file under it, is held to DEEP_BUILD_CACHE_BYTES before each read and after each write, oldest entries first.
+const kept = () => join(bays(), 'cache');
+const CEILING = 10 * 2 ** 30;
+// The tools a build runs, read where it runs, so a bay's own rust-toolchain file counts.
+const TOOLS = [['node', ['--version']], ['npm', ['--version']], ['rustc', ['-vV']], ['cargo', ['-V']], ['cc', ['--version']], ...(process.platform === 'darwin' ? [['swiftc', ['--version']]] : [])];
+// The environment a build reads besides its files: cargo's and rustc's settings, the C compiler's, and node's.
+const BUILD_ENV = /^(?:CARGO_.*|RUSTC.*|RUSTFLAGS|RUSTDOCFLAGS|RUSTUP_TOOLCHAIN|CC|CXX|CFLAGS|CXXFLAGS|LDFLAGS|SDKROOT|MACOSX_DEPLOYMENT_TARGET|DEVELOPER_DIR|NODE_OPTIONS|NODE_ENV)$/;
+const LOCKS = ['package-lock.json', 'npm-shrinkwrap.json', 'Cargo.lock'];
+
+/** The cache's ceiling in bytes: DEEP_BUILD_CACHE_BYTES when it is a whole number, else 10 GiB. 0 is no cache. */
+function ceiling() {
+  const text = process.env.DEEP_BUILD_CACHE_BYTES;
+  if (text === undefined || text === '') return CEILING;
+  return /^\d+$/.test(text) ? Number(text) : CEILING;
+}
+
+/**
+ * What a tool says it is, run where the build runs: its output, or how it failed, which is the same each time it fails
+ * the same way. A tool stopped before it answered, by the timeout or a signal, says nothing of which tool it is, so it
+ * makes a key no build has and nothing is laid back.
+ */
+function report(name, args, cwd) {
+  const result = spawnSync(name, args, { cwd, encoding: 'utf8', timeout: 120_000, env: process.env });
+  if (result.status === 0) return result.stdout.trim();
+  if (result.signal || result.error?.code === 'ETIMEDOUT' || (result.status === null && !result.error)) return `stopped: ${randomUUID()}`;
+  return `fails: ${result.error?.code ?? result.status}: ${`${result.stdout ?? ''}${result.stderr ?? ''}`.trim()}`;
+}
+
+/** What a build of the bay follows besides its tree: the tools, as each reports itself, the locks' bytes and the build's environment. */
+function buildInputs(bay) {
+  const tools = { platform: process.platform, arch: process.arch, os: osRelease() };
+  for (const [name, args] of TOOLS) {
+    tools[name] = report(name, args, bay);
+  }
+  if (process.platform === 'darwin') tools.sdk = report('xcrun', ['--show-sdk-version'], bay);
+  const hashOf = (path) => (existsSync(path) ? sha(readFileSync(path)) : null);
+  const locks = Object.fromEntries(LOCKS.map((lock) => [lock, hashOf(join(bay, lock))]));
+  // The machine's settings a build reads from outside the bay: cargo's config, as rustflags there change every crate, and npm's.
+  const cargoHome = process.env.CARGO_HOME || join(homedir(), '.cargo');
+  const configs = Object.fromEntries([join(cargoHome, 'config.toml'), join(cargoHome, 'config'), join(homedir(), '.npmrc')].map((path) => [path, hashOf(path)]));
+  // And the variables a crate's build script says it reads.
+  const declared = new Set();
+  for (const folder of ['crates', 'vendor']) {
+    let names = [];
+    try {
+      names = readdirSync(join(bay, folder));
+    } catch {}
+    for (const name of names) {
+      const script = join(bay, folder, name, 'build.rs');
+      if (existsSync(script)) for (const [, variable] of readFileSync(script, 'utf8').matchAll(/rerun-if-env-changed=([A-Za-z_][A-Za-z0-9_]*)/g)) declared.add(variable);
+    }
+  }
+  const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => (BUILD_ENV.test(name) || declared.has(name)) && !['CARGO_TARGET_DIR', 'CARGO_BUILD_TARGET_DIR'].includes(name)).sort(([a], [b]) => (a < b ? -1 : 1)));
+  return { lanes: LANE_CODE, tools, locks, configs, env };
+}
+
+// The lane code that runs a bay's builds: a change that edits how a build runs never gets a build the old code made.
+const LANE_CODE = (() => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const hash = createHash('sha256');
+  for (const name of readdirSync(here).filter((file) => /^(?:bays|proof[^/]*)\.mjs$/.test(file)).sort()) hash.update(`${name}\0`).update(readFileSync(join(here, name))).update('\0');
+  return hash.digest('hex');
+})();
+
+/** The files under the bay outside what it keeps, each with its stamp. */
+function stamps(bay, at = '', found = new Map()) {
+  for (const entry of readdirSync(join(bay, at), { withFileTypes: true })) {
+    const path = at ? `${at}/${entry.name}` : entry.name;
+    if (!at && KEPT.includes(entry.name)) continue;
+    if (entry.isDirectory()) stamps(bay, path, found);
+    else found.set(path, stamp(join(bay, path)).text);
+  }
+  return found;
+}
+
+/** Keeps the files `paths` under `from`, and the paths a build deleted, as the entry `key`; returns its bytes, or why it wasn't kept. */
+function keep(key, inputs, from, paths, deleted) {
+  mkdirSync(kept(), { recursive: true });
+  const folder = mkdtempSync(join(kept(), `.new-${process.pid}-`));
+  try {
+    mkdirSync(join(folder, 'blobs'));
+    let bytes = 0;
+    const files = paths.sort().map((path) => {
+      const source = join(from, path), stat = lstatSync(source);
+      if (stat.isSymbolicLink()) return { path, link: readlinkSync(source) };
+      const data = readFileSync(source), hash = sha(data);
+      if (!existsSync(join(folder, 'blobs', hash))) {
+        writeFileSync(join(folder, 'blobs', hash), data);
+        bytes += data.length;
+      }
+      return { path, mode: stat.mode & 0o777, sha: hash };
+    });
+    writeFileSync(join(folder, 'entry.json'), JSON.stringify({ key, inputs, stored: Date.now(), bytes, files, deleted }));
+    try {
+      renameSync(folder, join(kept(), key));
+    } catch (error) {
+      // Another proof kept the same key first: its entry stands.
+      if (!['EEXIST', 'ENOTEMPTY'].includes(error.code)) throw error;
+      return { bytes, why: 'another proof kept this key first' };
+    }
+    return { bytes };
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Lays the entry `key` into `into`: every file is copied beside its place, hashed as copied, and only once each matches
+ * the entry are they renamed into place and the build's deletions made. Returns the paths laid, or why none was.
+ */
+function take(key, into) {
+  const folder = join(kept(), key);
+  let entry;
+  try {
+    entry = JSON.parse(readFileSync(join(folder, 'entry.json'), 'utf8'));
+  } catch (error) {
+    return { why: error.code === 'ENOENT' ? 'no kept build has this key' : `the kept build ${key} can't be read (${error.code ?? error.message})` };
+  }
+  if (entry?.key !== key || !Array.isArray(entry.files) || !Array.isArray(entry.deleted)) return { why: `the kept build ${key} is not one this key stored`, broken: true };
+  const staged = [];
+  const unstage = () => { for (const { fresh } of staged) rmSync(fresh, { force: true }); };
+  try {
+    for (const file of entry.files) {
+      const target = join(into, file.path);
+      if (typeof file.path !== 'string' || file.path.split('/').some((part) => !part || part === '.' || part === '..')) throw Object.assign(Error(`its path ${JSON.stringify(file.path)} leads out of the bay`), { broken: true });
+      mkdirSync(dirname(target), { recursive: true });
+      if (!within(real(into), real(dirname(target)))) throw Object.assign(Error(`${file.path} leads out of ${into}`), { broken: true });
+      const fresh = `${target}.deep-build-${process.pid}`;
+      rmSync(fresh, { force: true });
+      staged.push({ fresh, target });
+      if (typeof file.link === 'string') {
+        symlinkSync(file.link, fresh);
+        continue;
+      }
+      try {
+        copyFileSync(join(folder, 'blobs', file.sha), fresh);
+      } catch (error) {
+        throw Object.assign(Error(`its file ${file.path} is gone (${error.code})`), { broken: true });
+      }
+      if (sha(readFileSync(fresh)) !== file.sha) throw Object.assign(Error(`its file ${file.path} changed after it was stored`), { broken: true });
+      chmodSync(fresh, file.mode);
+    }
+  } catch (error) {
+    unstage();
+    return { why: `the kept build ${key} was not used: ${error.message}`, broken: Boolean(error.broken) };
+  }
+  for (const { fresh, target } of staged) {
+    rmSync(target, { recursive: true, force: true });
+    renameSync(fresh, target);
+  }
+  for (const path of entry.deleted) if (typeof path === 'string' && !path.split('/').includes('..')) rmSync(join(into, path), { force: true });
+  return { laid: entry.files.length };
+}
+
+/**
+ * The entry `key` laid into `into`, after the cache is held to its ceiling: `{ laid }`, or `{ why }` none was. An entry
+ * found broken is removed, so the build that follows keeps a sound one in its place.
+ */
+function reach(key, into) {
+  const evicted = evict();
+  if (ceiling() === 0) return { why: 'no cache: DEEP_BUILD_CACHE_BYTES is 0' };
+  const taken = take(key, into);
+  if (taken.broken) drop(key);
+  return evicted.includes(key) ? { why: `the kept build ${key} was removed to hold the cache to its ceiling` } : taken;
+}
+
+const within = (folder, path) => Boolean(folder && path) && (path === folder || path.startsWith(`${folder}/`));
+
+/** The bytes of the files under `path`, not following links, each inode once in `inodes`. */
+function bytesUnder(path, inodes) {
+  let stat;
+  try {
+    stat = lstatSync(path);
+  } catch {
+    return 0;
+  }
+  if (stat.isDirectory()) {
+    let names = [];
+    try {
+      names = readdirSync(path);
+    } catch {}
+    return names.reduce((sum, name) => sum + bytesUnder(join(path, name), inodes), 0);
+  }
+  if (!stat.isFile() || inodes.has(stat.ino)) return 0;
+  inodes.add(stat.ino);
+  return stat.size;
+}
+
+const alive = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === 'EPERM';
+  }
+};
+
+/**
+ * Holds the cache's disk use to the ceiling: removes what a dead proof left half written or half removed, then entries,
+ * oldest stored first (one that can't be read first of all, as it is never laid back), until the bytes of every file
+ * under the cache are within it. Returns the keys removed.
+ */
+function evict() {
+  let names = [];
+  try {
+    names = readdirSync(kept());
+  } catch {
+    return [];
+  }
+  for (const name of names.filter((entry) => entry.startsWith('.'))) {
+    const pid = Number(name.match(/^\.(?:new|gone)-(\d+)-/)?.[1]);
+    if (!pid || !alive(pid)) rmSync(join(kept(), name), { recursive: true, force: true });
+  }
+  const inodes = new Set();
+  const entries = names.filter((name) => !name.startsWith('.')).map((name) => {
+    const bytes = bytesUnder(join(kept(), name), inodes);
+    try {
+      return { name, stored: Number(JSON.parse(readFileSync(join(kept(), name, 'entry.json'), 'utf8')).stored) || 0, bytes };
+    } catch {
+      return { name, stored: -1, bytes };
+    }
+  }).sort((a, b) => a.stored - b.stored || (a.name < b.name ? -1 : 1));
+  const limit = ceiling(), removed = [];
+  // What a live proof is writing or removing counts too.
+  let total = bytesUnder(kept(), new Set());
+  for (const entry of entries) {
+    if (total <= limit && entry.stored >= 0) break;
+    drop(entry.name);
+    total -= entry.bytes;
+    removed.push(entry.name);
+  }
+  return removed;
+}
+
+/** Removes a kept build at once, by a rename out of the way first, so no proof lays half of it. */
+function drop(name) {
+  const gone = join(kept(), `.gone-${process.pid}-${randomUUID()}`);
+  try {
+    renameSync(join(kept(), name), gone);
+  } catch {
+    return;
+  }
+  rmSync(gone, { recursive: true, force: true });
 }
 
 // A record line goes out whole before the command writes, and before an exit, on a pipe too.
@@ -441,8 +691,72 @@ class Pair {
     const hash = createHash('sha256');
     for (const [path, from] of [...overlay].sort(([a], [b]) => (a < b ? -1 : 1))) hash.update(`${path}\0`).update(lstatSync(from).isSymbolicLink() ? readlinkSync(from) : readFileSync(from)).update('\0');
     const recipe = { ...tree.recipe, overlay: overlay.size ? { files: overlay.size, hash: hash.digest('hex') } : null };
+    Object.assign(state, { use, overlay: recipe.overlay, built: null });
     this.print(`BAY claim ${JSON.stringify({ index: this.index, role, use, bay, ...recipe, sealedTree: state.sealedTree, seal, cold, stopped: this.stopped, installed: Boolean(ran), written: changed.written.length, deleted: changed.deleted, crates: crates(bay, [...changed.written, ...layered]) })}`);
     return { bay, failed: failed ?? null };
+  }
+
+  /**
+   * The workspace build of the role's use (#3019): laid back from a kept build whose key matches exactly, else run by
+   * `run`, which returns why it failed or null, and kept when it succeeds. `early` says the use's overlay lies in the bay
+   * as it builds, as a twin's does, so the overlay joins the key. Returns why the build failed, or null.
+   */
+  build(role, early, run) {
+    const state = this.roles[role];
+    const inputs = { bay: state.bay, tree: state.tree, overlay: early ? state.overlay : null, ...buildInputs(state.bay) };
+    const key = sha(JSON.stringify(inputs));
+    const line = { index: this.index, role, use: state.use, tree: state.tree.tree, key };
+    state.built = inputs;
+    const taken = reach(key, state.bay);
+    if (taken.laid !== undefined) {
+      this.print(`BUILD ${JSON.stringify({ ...line, reused: true, files: taken.laid })}`);
+      return null;
+    }
+    const before = stamps(state.bay);
+    const failed = run();
+    if (failed) {
+      state.built = null;
+      this.print(`BUILD ${JSON.stringify({ ...line, reused: false, why: taken.why, failed: true })}`);
+      return failed;
+    }
+    const after = stamps(state.bay);
+    const written = [...after].filter(([path, text]) => before.get(path) !== text).map(([path]) => path);
+    const deleted = [...before.keys()].filter((path) => !after.has(path));
+    this.print(`BUILD ${JSON.stringify({ ...line, reused: false, why: taken.why, ...this.keep(key, inputs, state.bay, written, deleted) })}`);
+    return null;
+  }
+
+  /**
+   * The test binaries `names` for a run in the role's bay, into the folder `bin`: laid back from a kept build of the
+   * same names from the same use, else built by `run(bin)` and kept. Built while the use's overlay lies in the bay, so
+   * the overlay always joins their key. Returns `bin`.
+   */
+  binaries(directory, bin, names, run) {
+    const [role, state] = Object.entries(this.roles).find(([, { bay }]) => bay === directory) ?? [];
+    if (!state?.built || !names.length) return run(bin);
+    const inputs = { ...state.built, overlay: state.overlay, binaries: [...names].sort() };
+    const key = sha(JSON.stringify(inputs));
+    const line = { index: this.index, role, use: state.use, tree: state.tree.tree, key, binaries: inputs.binaries };
+    mkdirSync(bin, { recursive: true });
+    const taken = reach(key, bin);
+    if (taken.laid !== undefined) {
+      this.print(`BUILD ${JSON.stringify({ ...line, reused: true, files: taken.laid })}`);
+      return bin;
+    }
+    run(bin);
+    this.print(`BUILD ${JSON.stringify({ ...line, reused: false, why: taken.why, ...this.keep(key, inputs, bin, walk(bin), []) })}`);
+    return bin;
+  }
+
+  /** Keeps a build and evicts past the ceiling; never throws, since a build not kept is only one rebuilt later. */
+  keep(key, inputs, from, paths, deleted) {
+    if (ceiling() === 0) return { kept: false, notKept: 'no cache: DEEP_BUILD_CACHE_BYTES is 0', evicted: evict() };
+    try {
+      const { bytes, why } = keep(key, inputs, from, paths, deleted);
+      return { kept: !why, bytes, ...(why ? { notKept: why } : {}), evicted: evict() };
+    } catch (error) {
+      return { kept: false, notKept: error.message };
+    }
   }
 
   /** Ends a role's last use: a source its commands touched gets a new mtime, and packages they changed are installed anew. */

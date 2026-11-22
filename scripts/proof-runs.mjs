@@ -307,7 +307,8 @@ function inBay(root, role, use, overlay, early = false) {
       return { directory: null, modules: null, refused: `cannot be laid over the change: ${firstLine(error.message)}` };
     }
   }
-  const blocked = failed ?? build(bay);
+  // A build of the same key kept from an earlier use is laid back instead (#3019).
+  const blocked = failed ?? pair.build(role, early, () => build(bay));
   if (role === 'change') undoBuild(root, bay, early ? [...overlay.keys()] : [], bay);
   if (early) lay(bay, overlay);
   return { directory: bay, modules: bay, blocked };
@@ -458,7 +459,10 @@ function runTests(directory, files, { env = {}, timed = [] } = {}) {
     // that can start the copy's hub gets this side's hub binaries in the copy's target/, where that hub looks (#2817).
     let names;
     ({ bin: names, target, hub } = selectBinaries(directory, [...files]));
-    bin = buildBinaries(directory, join(temporary('deep-proof-binaries-'), 'bin'), [...new Set([...names, ...target])], (command, args, options) => spawnIn(directory, command, args, options), { timeout: 0 });
+    const wanted = [...new Set([...names, ...target])];
+    const make = (into) => buildBinaries(directory, into, wanted, (command, args, options) => spawnIn(directory, command, args, options), { timeout: 0 });
+    // In a bay, binaries kept from an earlier build of the same use and names are laid back instead (#3019).
+    bin = pair?.binaries ? pair.binaries(directory, join(temporary('deep-proof-binaries-'), 'bin'), wanted, make) : make(join(temporary('deep-proof-binaries-'), 'bin'));
     env = { ...env, DEEP_BIN_DIR: bin };
   } catch (error) {
     return { results: new Map(), fileErrors: new Map(), unrunnable: new Map(files.map((file) => [file, error.message])) };
