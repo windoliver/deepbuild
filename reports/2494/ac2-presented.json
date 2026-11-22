@@ -1,0 +1,32 @@
+{
+ "doc": "01JB2494D00000000000000001",
+ "rev": 1,
+ "rect": [
+  0,
+  0,
+  480,
+  360
+ ],
+ "layers": [
+  {
+   "layer": "you-231b11069cb5",
+   "owner": {
+    "kind": "you",
+    "id": "you"
+   },
+   "band": "work",
+   "outline": false,
+   "name": null,
+   "doc": "01JB2494D00000000000000001",
+   "items": [
+    "cam",
+    "sky",
+    "red",
+    "box"
+   ],
+   "picture": null,
+   "scene": "e15afc58c1dcb001720c06998a793c93f3a76f4b85a237558cdef5d70b879439"
+  }
+ ],
+ "session": null
+}

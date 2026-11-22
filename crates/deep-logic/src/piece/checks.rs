@@ -17,6 +17,7 @@ pub(super) struct Declared {
     assets: Vec<String>,
     links: Vec<(String, String)>,
     saves: Option<Value>,
+    pages: Option<Value>,
     carry: Option<Value>,
     carry_in: Option<crate::carry::CarryIn>,
     profile: Option<Value>,
@@ -31,6 +32,8 @@ pub(super) struct Declared {
     lanes: Option<Value>,
     /// `process`: process@1's kind names (#980).
     process: Option<Vec<String>>,
+    /// `separation`: its movers and minima, built into a table at check (#1255).
+    separation: Option<Value>,
     /// The item's fields as given, for its bake key.
     given: String,
 }
@@ -64,10 +67,12 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             "services",
             "mirrors",
             "preview",
+            "pages",
             "lanes",
             // #552: a fog grid, which gates its occurrences' readers on each copy.
             "fog",
             "process",
+            "separation",
         ]
         .contains(&k.as_str())
         {
@@ -295,6 +300,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
         ring,
         assets,
         saves: params.get("saves").cloned(),
+        pages: params.get("pages").cloned(),
         carry: params.get("carry").cloned(),
         carry_in: match params.get("carry_in") {
             None => None,
@@ -315,6 +321,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
         preview,
         lanes: params.get("lanes").cloned(),
         process,
+        separation: params.get("separation").cloned(),
         given: Value::Object(params.clone()).to_string(),
     })
 }
@@ -991,6 +998,15 @@ pub fn check_in(
                 Some(std::sync::Arc::new(g))
             }
         };
+        // #1255: the table `separation` declares, its movers and minima, is asset 0.
+        let separation = match &d.separation {
+            None => None,
+            Some(v) => {
+                let t = crate::separation::build(v).map_err(|r| logic_refused(id, r))?;
+                assets.push((rewrite::hash(&t.bytes), t.bytes.clone()));
+                Some(std::sync::Arc::new(t))
+            }
+        };
         for sha in &d.assets {
             assets.push((sha.clone(), asset(sha).ok_or_else(|| missing("data", sha))?));
         }
@@ -1039,6 +1055,17 @@ pub fn check_in(
                 refused.push(r);
                 None
             }
+        };
+        // #211: the page region, after every other region, and init's pages.
+        let pages = match &d.pages {
+            None => None,
+            Some(v) => match crate::pages::of(v, &given, memory, &regions, &segments, &asset) {
+                Ok(p) => Some(p),
+                Err(r) => {
+                    refused.push(r);
+                    None
+                }
+            },
         };
         let carry = match d
             .carry
@@ -1124,8 +1151,10 @@ pub fn check_in(
             services_at: services_at.unwrap_or(0),
             mirrors,
             preview,
+            pages,
             lanes,
             process: d.process.clone(),
+            separation,
         });
     }
     // A save holds every item at one instant, so a piece with saves steps at one rate.

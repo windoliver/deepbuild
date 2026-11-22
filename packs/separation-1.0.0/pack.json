@@ -1,0 +1,224 @@
+{
+  "name": "separation",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "description": "separation@1 (#1255): movers that must keep apart. Each flies straight between the fixes of its route at speeds within its band; minima are lateral, vertical and by pair of classes, each row citing its basis or marked invented; closest approach and conflict windows are solved in closed form between fixes; delay gives a speed, a stretch or a hold, or refuses, naming why. Its fixtures' expected values are worked by hand from each scene's straight lines. Its planted libraries, one that looks at each pair once a second and one whose delay gives a speed without reading the band, each fail a fixture and are its kind kit's twins for separation.clear and separation.exact. Written by scripts/separation-pack.mjs; the library is src/separation.rs, its layouts are LAYOUT.md, and each program's text is in src/.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "logic": ">=0.0.0",
+      "sandbox": ">=0.0.0"
+    }
+  },
+  "interfaces": {
+    "separation@1": {
+      "exports": [
+        {
+          "name": "minima",
+          "params": [
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "mover",
+          "params": [
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "closest",
+          "params": [
+            "i32",
+            "i32",
+            "i32",
+            "f64",
+            "f64"
+          ],
+          "results": [
+            "f64"
+          ]
+        },
+        {
+          "name": "conflicts",
+          "params": [
+            "i32",
+            "f64",
+            "f64"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "next_conflict",
+          "params": [
+            "i32",
+            "f64"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "delay",
+          "params": [
+            "i32",
+            "i32",
+            "f64",
+            "f64",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "apply",
+          "params": [
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        }
+      ],
+      "layout": "separation.state@1",
+      "fixtures": [
+        "389c0b5c3be63ac3a0f693413ef4439f721782e2f1f726cc31c8846807697cb3",
+        "95a2f224c81f1877057877b385fb1b49a232e6b31712352d120a9ed2a159431e",
+        "d03f665e2ca4326c26acec6528ad880738d4e228034deb36be1fd4649e70e7fe",
+        "46953fefaee6f855f79de74fed84556b217b343e56565ec19999e428373acc97",
+        "81165afa7af8b1d3237c127eecb100f972a20e43835b568ab9a5020f25d37a8d"
+      ],
+      "planted": [
+        "1009de4fce5c3e278eeb8a47cbf7977217492cd27c62c964ca84fe2b39dbd4a6",
+        "ed7d38358dc7c3d03659de285613c60be21aa9658d170ed9bc3f9a9a880e1ede"
+      ],
+      "digest": "a409d6b75679eb330fa918f3bf1bd77b55aac2b90f4b3cc551b560714778d17c",
+      "rules": {
+        "separation.clear": {},
+        "separation.exact": {
+          "tolerance": 0.5
+        }
+      },
+      "twins": [
+        {
+          "planted": "1009de4fce5c3e278eeb8a47cbf7977217492cd27c62c964ca84fe2b39dbd4a6",
+          "example": "d03f665e2ca4326c26acec6528ad880738d4e228034deb36be1fd4649e70e7fe",
+          "expect": "separation.clear"
+        },
+        {
+          "planted": "ed7d38358dc7c3d03659de285613c60be21aa9658d170ed9bc3f9a9a880e1ede",
+          "example": "81165afa7af8b1d3237c127eecb100f972a20e43835b568ab9a5020f25d37a8d",
+          "expect": "separation.exact"
+        }
+      ]
+    }
+  },
+  "libs": {
+    "separation_ref@1.0.0": {
+      "asset": "637ab484574f218353c9b28ecde7763c9f610976f9df0d30501a79ed48132f14",
+      "exports": [
+        "minima",
+        "mover",
+        "closest",
+        "conflicts",
+        "next_conflict",
+        "delay",
+        "apply"
+      ],
+      "fixtures": [
+        "72d17b936422d8500f15c082a490591a5f8228f8f3066cdbb6b753e4f6106dc0"
+      ],
+      "implements": [
+        "separation@1"
+      ]
+    }
+  },
+  "assets": [
+    {
+      "path": "objects/separation_ref.wasm",
+      "sha256": "637ab484574f218353c9b28ecde7763c9f610976f9df0d30501a79ed48132f14",
+      "size": 12277
+    },
+    {
+      "path": "objects/once_a_second.wasm",
+      "sha256": "1009de4fce5c3e278eeb8a47cbf7977217492cd27c62c964ca84fe2b39dbd4a6",
+      "size": 9376
+    },
+    {
+      "path": "objects/leaves_band.wasm",
+      "sha256": "ed7d38358dc7c3d03659de285613c60be21aa9658d170ed9bc3f9a9a880e1ede",
+      "size": 11786
+    },
+    {
+      "path": "objects/crossing.wasm",
+      "sha256": "cbc1ab7de6945bd7170f8574c8a780f242f2dde75af380502f5e745df024cf8a",
+      "size": 604
+    },
+    {
+      "path": "fixtures/crossing.json",
+      "sha256": "389c0b5c3be63ac3a0f693413ef4439f721782e2f1f726cc31c8846807697cb3",
+      "size": 22933
+    },
+    {
+      "path": "objects/wide.wasm",
+      "sha256": "c719d112b72794aa4930fa3da2d25a3ab06b395f03f8c6a0b9c601846bef4f87",
+      "size": 417
+    },
+    {
+      "path": "fixtures/wide.json",
+      "sha256": "95a2f224c81f1877057877b385fb1b49a232e6b31712352d120a9ed2a159431e",
+      "size": 10410
+    },
+    {
+      "path": "objects/breach.wasm",
+      "sha256": "fcea3ea03ca39bc42965fad86f773c88cd69ffa9b664bb46a2d02fb21bf2fd47",
+      "size": 562
+    },
+    {
+      "path": "fixtures/breach.json",
+      "sha256": "d03f665e2ca4326c26acec6528ad880738d4e228034deb36be1fd4649e70e7fe",
+      "size": 17067
+    },
+    {
+      "path": "objects/delayed.wasm",
+      "sha256": "28fd954ef4aa9a8ffb098d7af2ee741044a1aecc2bdc9c278d35564c1e247edf",
+      "size": 595
+    },
+    {
+      "path": "fixtures/delayed.json",
+      "sha256": "46953fefaee6f855f79de74fed84556b217b343e56565ec19999e428373acc97",
+      "size": 19771
+    },
+    {
+      "path": "objects/narrow.wasm",
+      "sha256": "afd5a3d9f39dc875ecd7202fb175ff5542eaeaec8370d4c4a59b257ffff14dd8",
+      "size": 599
+    },
+    {
+      "path": "fixtures/narrow.json",
+      "sha256": "81165afa7af8b1d3237c127eecb100f972a20e43835b568ab9a5020f25d37a8d",
+      "size": 12291
+    },
+    {
+      "path": "objects/approach_own.wasm",
+      "sha256": "c04d33771293e1fb1d1eea5ee087bf4148f177c56411c2f5baca908a9da286e2",
+      "size": 423
+    },
+    {
+      "path": "fixtures/approach_own.json",
+      "sha256": "72d17b936422d8500f15c082a490591a5f8228f8f3066cdbb6b753e4f6106dc0",
+      "size": 5280
+    }
+  ]
+}
