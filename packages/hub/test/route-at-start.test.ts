@@ -22,7 +22,8 @@ const TYPICAL = '01a15756-1886-7910-90bb-db79d3fddb82';
 const MOVED = ['chatgpt_base_url = "http://127.0.0.1:9"\n', 'oss_provider = "ollama"\n', 'model_provider = "openai"\nmodel_provider = "ollama"\n', '[tui]\nmodel_provider = "ollama"\n', 'profile = "work"\n', '[profiles.work]\nmodel = "o3"\n', 'openai_base_url = "http://127.0.0.1:9/v1"\n', 'model_providers.local.base_url = "http://127.0.0.1:9/v1"\n'].map((config, i) => ({ id: `01a15756-1886-7910-90bb-db79d3fddc${String(i).padStart(2, '0')}`, config }));
 const UNREADABLE = '01a15756-1886-7910-90bb-db79d3fddb83';
 const UNREPORTED = '3b9f1c2e-1886-4222-8333-44445555cccc';
-const GATEWAY = '3b9f1c2e-1886-4222-8333-44445555dddd';
+const GATEWAYS = ['ANTHROPIC_BEDROCK_BASE_URL', 'ANTHROPIC_VERTEX_BASE_URL', 'ANTHROPIC_FOUNDRY_BASE_URL', 'ANTHROPIC_AWS_BASE_URL', 'ANTHROPIC_BEDROCK_MANTLE_BASE_URL', 'ANTHROPIC_GOOGLE_CLOUD_BASE_URL'].map((key, i) => ({ id: `3b9f1c2e-1886-4222-8333-44445555dd${String(i).padStart(2, '0')}`, key }));
+const NAMED_HOME = '01a15756-1886-7910-90bb-db79d3fddb85';
 const NO_ROLLOUT = '01a15756-1886-7910-90bb-db79d3fddb84';
 
 describe('the route a session started on', () => {
@@ -38,11 +39,11 @@ describe('the route a session started on', () => {
       };
       await start(PROXIED, { ANTHROPIC_BASE_URL: true, OPENAI_BASE_URL: false });
       await start(OWN, { ANTHROPIC_BASE_URL: false, OPENAI_BASE_URL: false });
-      // A gateway in front of Bedrock: its base URL is the proxy's word as Anthropic's own is.
-      await start(GATEWAY, { ANTHROPIC_BASE_URL: false, ANTHROPIC_BEDROCK_BASE_URL: true, OPENAI_BASE_URL: false });
+      // A base URL for any of Claude Code's other providers, each alone: its endpoint's word is the proxy's, as Anthropic's is.
+      for (const g of GATEWAYS) await start(g.id, { ANTHROPIC_BASE_URL: false, [g.key]: true, OPENAI_BASE_URL: false });
       // Codex sessions whose home, the folder its rollout sits under, sets a model provider other than OpenAI's, in a
       // basic and in a literal TOML string, and under a quoted key.
-      const codex = async (id: string, folder: string, config: string | null, rolloutAt?: string) => {
+      const codex = async (id: string, folder: string, config: string | null, rolloutAt?: string, route: Record<string, boolean> = {}) => {
         const codexHome = join(home, folder);
         const day = rolloutAt ?? join(codexHome, 'sessions', '2026', '11', '22');
         mkdirSync(day, { recursive: true });
@@ -52,7 +53,7 @@ describe('the route a session started on', () => {
         writeFileSync(rollout, '');
         mkdirSync(join(home, 'work'), { recursive: true });
         const line = hookLine(ulid(Date.now()), 'SessionStart', { session_id: id, transcript_path: rollout, cwd: join(home, 'work'), hook_event_name: 'SessionStart', model: 'gpt-5-codex', permission_mode: 'default', source: 'startup' }, {
-          agent: 'codex', ppid: process.pid, billing: { OPENAI_API_KEY: false }, route: { ANTHROPIC_BASE_URL: false, OPENAI_BASE_URL: false },
+          agent: 'codex', ppid: process.pid, billing: { OPENAI_API_KEY: false }, route: { ANTHROPIC_BASE_URL: false, OPENAI_BASE_URL: false, ...route },
         });
         expect(await send(join(root, 'hub.sock'), line)).toContain('"ack"');
         expect(await recorded(root, id, 'session.start', 1), `the Codex session.start of ${id} is recorded`).toBe(1);
@@ -76,6 +77,8 @@ describe('the route a session started on', () => {
       // A start whose rollout names no Codex home: the hub's own home, on OpenAI's provider here, is no word for the
       // agent's, which may sit elsewhere.
       await codex(NO_ROLLOUT, '.codex', 'model_provider = "openai"\n', join(home, 'elsewhere'));
+      // A reported key never names the home: a line that says CODEX_HOME is set still has no home its rollout names.
+      await codex(NAMED_HOME, '.codex', 'model_provider = "openai"\n', join(home, 'elsewhere'), { CODEX_HOME: true, HOME: true });
       // An ordinary config on OpenAI's provider: its tables move nothing.
       await codex(TYPICAL, '.codex-typical', 'approval_policy = "on-request"\nsandbox_mode = "workspace-write"\n\n[tui]\nnotifications = true\n\n[mcp_servers.docs]\ncommand = "npx"\nargs = ["-y", "docs-mcp"]\n\n[projects."/work"]\ntrust_level = "trusted"\n\n[history]\npersistence = "save-all"\n');
       // A start whose line reports no route, as an older deep-hook sends it: the record keeps none, never "own route".
@@ -98,7 +101,8 @@ describe('the route a session started on', () => {
         expect(routeOf(UNREADABLE), 'Codex\'s route on a config it can\'t read').toEqual({ OPENAI_BASE_URL: false, model_provider: true });
         expect(routeOf(TYPICAL), 'Codex\'s own route under an ordinary config').toEqual({ OPENAI_BASE_URL: false, model_provider: false });
         expect(routeOf(NO_ROLLOUT), 'Codex\'s route with no home its rollout names').toEqual({ OPENAI_BASE_URL: false, model_provider: true });
-        expect(routeOf(GATEWAY), 'Claude Code\'s route behind a Bedrock gateway').toEqual({ ANTHROPIC_BASE_URL: true, ANTHROPIC_AUTH_TOKEN: false, CLAUDE_CODE_USE_BEDROCK: false, CLAUDE_CODE_USE_VERTEX: false });
+        for (const g of GATEWAYS) expect(routeOf(g.id), `Claude Code's route behind ${g.key}`).toEqual({ ANTHROPIC_BASE_URL: true, ANTHROPIC_AUTH_TOKEN: false, CLAUDE_CODE_USE_BEDROCK: false, CLAUDE_CODE_USE_VERTEX: false });
+        expect(routeOf(NAMED_HOME), 'Codex\'s route when a reported key names CODEX_HOME').toEqual({ OPENAI_BASE_URL: false, model_provider: true });
         expect(routeOf(UNREPORTED), 'a start that reported no route').toBeUndefined();
         expect(routeOf(OWN), 'Claude Code\'s own route').toEqual({ ANTHROPIC_BASE_URL: false, ANTHROPIC_AUTH_TOKEN: false, CLAUDE_CODE_USE_BEDROCK: false, CLAUDE_CODE_USE_VERTEX: false });
       } finally {

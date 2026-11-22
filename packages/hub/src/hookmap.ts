@@ -497,11 +497,11 @@ function errorLine(error: string): string {
 function routeAt(name: string, route: Record<string, boolean>, billing: Record<string, boolean>, transcript: string): Record<string, boolean> | undefined {
   const read = registry().get(name).routeAtStart;
   if (!read) return undefined;
-  // No HOME: the hub's own is no word for the agent's, so only the home its rollout sits under is read.
   const env: Record<string, string | undefined> = {};
   for (const [key, set] of Object.entries({ ...billing, ...route })) env[key] = set ? '1' : undefined;
+  // Only the home its rollout sits under, never a reported key's or the hub's own, which is no word for the agent's.
   const at = transcript.lastIndexOf('/sessions/');
-  if (at > 0) env.CODEX_HOME = transcript.slice(0, at);
+  env.CODEX_HOME = at > 0 ? transcript.slice(0, at) : undefined;
   return read(env);
 }
 

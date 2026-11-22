@@ -1512,7 +1512,7 @@ fn a_session_start_reports_whether_each_route_variable_is_set_never_its_value() 
     };
     let behind = start("set", &[("ANTHROPIC_BASE_URL", url)]);
     assert!(
-        behind.contains(r#""route":{"ANTHROPIC_BASE_URL":true,"ANTHROPIC_BEDROCK_BASE_URL":false,"ANTHROPIC_VERTEX_BASE_URL":false,"ANTHROPIC_FOUNDRY_BASE_URL":false,"OPENAI_BASE_URL":false}"#),
+        behind.contains(r#""route":{"ANTHROPIC_BASE_URL":true,"ANTHROPIC_BEDROCK_BASE_URL":false,"ANTHROPIC_VERTEX_BASE_URL":false,"ANTHROPIC_FOUNDRY_BASE_URL":false,"ANTHROPIC_AWS_BASE_URL":false,"ANTHROPIC_BEDROCK_MANTLE_BASE_URL":false,"ANTHROPIC_GOOGLE_CLOUD_BASE_URL":false,"OPENAI_BASE_URL":false}"#),
         "the SessionStart says which route variables are set: {behind:?}"
     );
     // An empty variable moves no route, as Claude Code and Codex read it.
@@ -1521,14 +1521,17 @@ fn a_session_start_reports_whether_each_route_variable_is_set_never_its_value() 
         &[("ANTHROPIC_BASE_URL", ""), ("OPENAI_BASE_URL", url)],
     );
     assert!(
-        empty.contains(r#""route":{"ANTHROPIC_BASE_URL":false,"ANTHROPIC_BEDROCK_BASE_URL":false,"ANTHROPIC_VERTEX_BASE_URL":false,"ANTHROPIC_FOUNDRY_BASE_URL":false,"OPENAI_BASE_URL":true}"#),
+        empty.contains(r#""route":{"ANTHROPIC_BASE_URL":false,"ANTHROPIC_BEDROCK_BASE_URL":false,"ANTHROPIC_VERTEX_BASE_URL":false,"ANTHROPIC_FOUNDRY_BASE_URL":false,"ANTHROPIC_AWS_BASE_URL":false,"ANTHROPIC_BEDROCK_MANTLE_BASE_URL":false,"ANTHROPIC_GOOGLE_CLOUD_BASE_URL":false,"OPENAI_BASE_URL":true}"#),
         "an empty variable reads unset: {empty:?}"
     );
-    // A gateway in front of Bedrock, Vertex or Foundry moves the route as a base URL does, each reported alone.
+    // A base URL for any of Claude Code's other providers moves the route as Anthropic's does, each reported alone.
     for key in [
         "ANTHROPIC_BEDROCK_BASE_URL",
         "ANTHROPIC_VERTEX_BASE_URL",
         "ANTHROPIC_FOUNDRY_BASE_URL",
+        "ANTHROPIC_AWS_BASE_URL",
+        "ANTHROPIC_BEDROCK_MANTLE_BASE_URL",
+        "ANTHROPIC_GOOGLE_CLOUD_BASE_URL",
     ] {
         let gateway = start(key, &[(key, url)]);
         assert!(
