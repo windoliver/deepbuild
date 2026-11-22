@@ -1372,6 +1372,9 @@ alone.push('tests/acceptance/953/', 'tests/acceptance/953-oracle/');
 alone.push('tests/acceptance/2738/');
 slow.push('tests/acceptance/2738/ac1-linux-build.test.ts');
 
+// #161's suite times its measured costs and its two budgets on the reference Mac.
+timed.push('tests/acceptance/161/ac4-measured.test.ts', 'tests/acceptance/161/ac6-timed.test.ts');
+
 // #265's files (blind) build deep-gpu (ac4 deep-show), draw on the GPU and play a match; ac6 times eight movers' frame CPU.
 alone.push('tests/acceptance/265/');
 timed.push('tests/acceptance/265/ac6-budgets.test.ts');

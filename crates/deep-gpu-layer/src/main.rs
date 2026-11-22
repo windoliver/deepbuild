@@ -59,6 +59,7 @@ mod records;
 mod reference;
 mod regions;
 mod relation;
+mod reseed;
 mod scene;
 mod seam;
 mod session3;
@@ -197,6 +198,14 @@ pub enum Planted {
     PassOffByTwo,
     BloomWithoutKaris,
     PassesOneGpu,
+    /// #161's wrong programs (tests/acceptance/161/README.md: Planted programs).
+    FxLevelsGpuOffByTwo,
+    SliceShiftSeededByFrame,
+    InvertOnPremultiplied,
+    InvertWithoutAlphaGuard,
+    TwirlCenterFromFrameOrigin,
+    BlurRadiusInDevicePx,
+    KeyKeepsColorAtAlpha0,
     /// #508's wrong programs (tests/acceptance/508/README.md: Surfaces this job invents, 10): a
     /// plume's haze run before the check readbacks are taken, so they read its bent pixels; and
     /// the film effects taking their time from the wall clock instead of the frame's t.
@@ -610,6 +619,12 @@ impl Planted {
             Planted::NormalDotAlone => P::NormalDotAlone,
             Planted::NormalUnturned => P::NormalUnturned,
             Planted::LightStaleHeight => P::LightStaleHeight,
+            Planted::SliceShiftSeededByFrame => P::SliceShiftSeededByFrame,
+            Planted::InvertOnPremultiplied => P::InvertOnPremultiplied,
+            Planted::InvertWithoutAlphaGuard => P::InvertWithoutAlphaGuard,
+            Planted::TwirlCenterFromFrameOrigin => P::TwirlCenterFromFrameOrigin,
+            Planted::BlurRadiusInDevicePx => P::BlurRadiusInDevicePx,
+            Planted::KeyKeepsColorAtAlpha0 => P::KeyKeepsColorAtAlpha0,
             _ => return None,
         })
     }
@@ -695,6 +710,13 @@ impl Planted {
             "noise_from_frame_counter" => Planted::NoiseFromFrameCounter,
             "noise_from_clock" => Planted::NoiseFromClock,
             "pass_off_by_two" => Planted::PassOffByTwo,
+            "fx_levels_gpu_off_by_two" => Planted::FxLevelsGpuOffByTwo,
+            "slice_shift_seeded_by_frame" => Planted::SliceShiftSeededByFrame,
+            "invert_on_premultiplied" => Planted::InvertOnPremultiplied,
+            "invert_without_alpha_guard" => Planted::InvertWithoutAlphaGuard,
+            "twirl_center_from_frame_origin" => Planted::TwirlCenterFromFrameOrigin,
+            "blur_radius_in_device_px" => Planted::BlurRadiusInDevicePx,
+            "key_keeps_color_at_alpha_0" => Planted::KeyKeepsColorAtAlpha0,
             "bloom_without_karis" => Planted::BloomWithoutKaris,
             "passes_one_gpu" => Planted::PassesOneGpu,
             "haze_feeds_check_readback" => Planted::HazeFeedsCheckReadback,
