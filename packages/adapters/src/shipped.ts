@@ -161,7 +161,9 @@ export const codexParts: AdapterParts = {
   routeAtStart: (env) => {
     let provider: string | undefined;
     try {
-      provider = /^\s*model_provider\s*=\s*"([^"]*)"/m.exec(readFileSync(join(env.CODEX_HOME ?? join(env.HOME ?? '', '.codex'), 'config.toml'), 'utf8'))?.[1];
+      // A basic or a literal TOML string.
+      const named = /^\s*model_provider\s*=\s*(?:"([^"]*)"|'([^']*)')/m.exec(readFileSync(join(env.CODEX_HOME ?? join(env.HOME ?? '', '.codex'), 'config.toml'), 'utf8'));
+      provider = named ? named[1] ?? named[2] : undefined;
     } catch { /* no config: the default provider */ }
     return { OPENAI_BASE_URL: !!env.OPENAI_BASE_URL, model_provider: provider !== undefined && provider !== 'openai' };
   },

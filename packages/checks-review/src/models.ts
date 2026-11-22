@@ -61,7 +61,7 @@ export function independence(answeredRaw: string, change: ChangeSession, plant?:
   const family = (m: string): string | undefined => familyOf(plant === 'raw-family' ? m : canonicalModel(m));
   const proxied = plant !== 'trusts-proxied-transcript' && PROXIED.some((k) => change.route?.[k]);
   // A route no start recorded may be a proxy's: the transcript's model is then nobody's word (#1886).
-  const unrecorded = change.route === null;
+  const unrecorded = change.route == null;
   const named = proxied || unrecorded ? undefined : transcriptModel(change.transcript);
   const changeModel = named === undefined ? 'unknown' : canon(named);
   const answered = answeredRaw || 'unknown';
