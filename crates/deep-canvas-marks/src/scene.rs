@@ -4900,8 +4900,8 @@ pub(crate) fn shaped_text(spec: &TextSpec) -> Option<Arc<deep_text::Shaped>> {
 
 mod placed;
 mod scopes;
-use scopes::{ancestor_scope, is_under, scopes_of};
 use placed::*;
+use scopes::{ancestor_scope, is_under, scopes_of};
 
 /// #467: an item's marks with what its paint builds from their coverage (Paint: drop; Paint:
 /// shade, `kind: inner`; Paint: glow, bevel and satin). A drop without blur is the item's own

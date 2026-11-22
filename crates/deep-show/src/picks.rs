@@ -332,7 +332,6 @@ fn step_rows(
     count: i64,
     full: bool,
 ) -> (Vec<Value>, Option<Value>) {
-    let len = piece.items.first().map_or(1, |i| i.step);
     let mut steps = Vec::new();
     for k in 0..count {
         world.run(k + 1, rec, &mut |_, _| {});
@@ -344,8 +343,7 @@ fn step_rows(
                 .filter_map(|i| Some((i.id.clone(), row?.get(&i.id)?.get(f)?.clone())))
                 .collect()
         };
-        let arrays = arrays_of(world, piece);
-        let mut step = json!({"step": k, "t": k * len, "hash": field("hash"), "arrays": arrays});
+        let mut step = step_row(world, rec, piece, k);
         if full {
             for f in ["fuel", "service_ns", "mirror_ns"] {
                 step[f] = json!(field(f));
@@ -363,8 +361,18 @@ fn step_rows(
     (steps, None)
 }
 
+/// Step `k`'s row once it ran, as the `logic` call lists it: each item's step hash and arrays.
+pub(crate) fn step_row(world: &World, rec: &Record, piece: &Piece, k: i64) -> Value {
+    let len = piece.items.first().map_or(1, |i| i.step);
+    let row = rec.rows().get(&k).map(|r| &r.0);
+    let hash: Map<String, Value> = (piece.items.iter())
+        .filter_map(|i| Some((i.id.clone(), row?.get(&i.id)?.get("hash")?.clone())))
+        .collect();
+    json!({"step": k, "t": k * len, "hash": hash, "arrays": arrays_of(world, piece)})
+}
+
 /// Each item's arrays as its write region holds them now, by `<item>.<name>`.
-fn arrays_of(world: &World, piece: &Piece) -> Map<String, Value> {
+pub(crate) fn arrays_of(world: &World, piece: &Piece) -> Map<String, Value> {
     let mut arrays = Map::new();
     for (n, item) in piece.items.iter().enumerate() {
         let region = world.write_region(n);
@@ -905,7 +913,18 @@ impl Hub<'_> {
         if l.saves_dir.is_some() {
             world.held = Some(Vec::new());
         }
-        let (steps, trap) = step_rows(&mut world, &mut rec, &piece, l.steps, true);
+        let (mut steps, trap) = step_rows(&mut world, &mut rec, &piece, l.steps, true);
+        // Planted (#1500): each step a carried-on run ran, taken from that run.
+        let capture = crate::hub::Planted::Join(crate::joins::Planted::ChecksReadCarriedRun);
+        let ran = self
+            .carried_rows
+            .get(&l.doc)
+            .filter(|_| self.planted(capture));
+        for s in &mut steps {
+            if let Some(r) = s["step"].as_i64().and_then(|k| ran?.get(&k)) {
+                *s = r.clone();
+            }
+        }
         let len = piece.items.first().map_or(1, |i| i.step);
         let hashes: Vec<Value> = steps.iter().map(|s| s["hash"].clone()).collect();
         let replay = self.against_record(&l.doc, &held, &hashes, &piece, len);

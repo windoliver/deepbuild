@@ -1,0 +1,24 @@
+Base run of the #1500 Oracle lane at 5f5791e2d (branch blind-1500-suite), Nov 22 2026, on this Mac (load about 130).
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    npx vitest run --root tests/acceptance/1500-oracle --testTimeout=600000 --hookTimeout=600000
+
+deep-show was already built at the base (the file’s build a no-op). Result: 3 tests, 3 failed, 4.2 s. (The run was
+repeated once with -t "pile" after a fix to the first two tests’ titles, which printed the pile’s sleep flag where its
+step count belongs; the outcome was the same.)
+
+  × AC1 #1500.969af07a sleeping pile: held at step 100 and opened again, every carried state equals the never-held run’s at each of the next 100 steps  2432ms
+  × AC1 #1500.969af07a awake pile: held at step 100 and opened again, every carried state equals the never-held run’s at each of the next 60 steps  134ms
+  × AC1 #1500.969af07a awake pile under a planted join that keeps only poses and velocities (join_poses_only): the comparison fails, naming step 101 and the world  135ms
+
+Each fails at the same assertion, after the region-map probe presented the jumper:
+
+  AssertionError: the run never held: deep-show run takes the scenario: {"ok":false,"code":"bad_input"}: expected false to be true
+   ❯ runShow ../1500/helpers.ts:143:86
+   ❯ play ../1500/helpers.ts:416:13
+
+The base has no play_frames call, so the scenario is refused whole. A scratch probe (not committed) presented both pile
+documents (sleeping and awake, span 4 s, with the blue material) at the base with no issue, in about 0.4 s each.
+
+Note: the test titles above are shown as they read in the commit; the run printed them without the leading "AC1 ",
+which was added to every title afterwards (../1500/helpers.ts: AC). Nothing else changed in the file run.

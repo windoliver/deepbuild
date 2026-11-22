@@ -45,6 +45,10 @@ pub struct Planted {
     pub turn_ignores_due: bool,
     pub linear_blends_forward: bool,
     pub seek_restores_arrays_only: bool,
+    /// #2035: an evaluator that blends a linear write across its cut.
+    pub cut_ignored: bool,
+    /// #2035: a restore that clears the cut writes' elements it restores.
+    pub restore_forgets_cut: bool,
     pub open_span_reads_zero: bool,
     pub judder_checks_shots_only: bool,
     pub budget_holds_steps_to_fuel_budget: bool,
@@ -134,6 +138,8 @@ impl Planted {
             "turn_ignores_due" => p.turn_ignores_due = true,
             "linear_blends_forward" => p.linear_blends_forward = true,
             "seek_restores_arrays_only" => p.seek_restores_arrays_only = true,
+            "cut_ignored" => p.cut_ignored = true,
+            "restore_forgets_cut" => p.restore_forgets_cut = true,
             "open_span_reads_zero" => p.open_span_reads_zero = true,
             "judder_checks_shots_only" => p.judder_checks_shots_only = true,
             "budget_holds_steps_to_fuel_budget" => p.budget_holds_steps_to_fuel_budget = true,

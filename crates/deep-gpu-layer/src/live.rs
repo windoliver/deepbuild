@@ -797,13 +797,11 @@ pub(crate) fn admit(
     });
     // The planted missing_lobe_turned_on (#486): the check admits a lobe output its material lacks.
     let turned_on = planted == Some(Planted::MissingLobeTurnedOn);
-    let errors: Vec<Value> = checked
-        .issues
-        .iter()
-        .filter(|i| i.severity == "error")
-        .filter(|i| !(turned_on && missing_lobe(i.code, &i.path)))
-        .map(|i| i.to_json())
-        .collect();
+    // #161: a group's passes past the class's operator GPU time, named before any other refusal.
+    let over = deep_canvas_effects::module::passes_over_budget(&doc).into_iter();
+    let held = (checked.issues.iter()).filter(|i| i.severity == "error");
+    let held = held.filter(|i| !(turned_on && missing_lobe(i.code, &i.path)));
+    let errors: Vec<Value> = over.chain(held.map(|i| i.to_json())).collect();
     // The check's lowered copy of the document is freed off the admission path: a 10,000-item
     // document's takes milliseconds of the 50 its check before it shows has (#386).
     std::thread::spawn(move || drop(checked));
