@@ -1,0 +1,60 @@
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/fix-2896-reply-fits-client-d66389/packages/hub
+
+ ❯ test/reply-fit.test.ts (8 tests | 2 failed) 160ms
+   ❯ refusalFits (5)
+     × counts each code of the issues it cuts when the canvas core cut none 3ms
+     × never counts fewer tokens than the whole text has 140ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/reply-fit.test.ts > refusalFits > counts each code of the issues it cuts when the canvas core cut none
+AssertionError: expected { shown: 81, total: 150 } to deeply equal { shown: 81, total: 150, …(1) }
+
+- Expected
++ Received
+
+  {
+-   "by_code": {
+-     "bad_item": 100,
+-     "unknown_kind": 50,
+-   },
+    "shown": 81,
+    "total": 150,
+  }
+
+ ❯ test/reply-fit.test.ts:43:27
+     41|     const out = await refusalFits({ outcome: 'refused', code: 'invalid…
+     42|     expect(JSON.stringify(out).length).toBeLessThanOrEqual(8_800);
+     43|     expect(out.truncated).toEqual({ shown: (out.issues as unknown[]).l…
+       |                           ^
+     44|   });
+     45|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  test/reply-fit.test.ts > refusalFits > never counts fewer tokens than the whole text has
+AssertionError: expected 1 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ test/reply-fit.test.ts:54:26
+     52|     const rooms: number[] = [];
+     53|     await fitted({ tokens: whole - 1 }, () => ({ tokens: whole - 1 }),…
+     54|     expect(rooms.length).toBe(2);
+       |                          ^
+     55|   });
+     56| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 6 passed (8)
+   Start at  01:27:40
+   Duration  327ms (tests 69%, transform 19%, import 10%, worker 2%)
+

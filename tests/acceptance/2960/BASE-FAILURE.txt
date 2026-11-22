@@ -1,0 +1,80 @@
+#2960 acceptance tests on the base, dcb63a0a0 (origin/main), a fresh clone built with npm ci, npm run build --workspaces,
+cargo build -p deep-hook and cargo build --release -p deep-hook (native arm64 cargo first on PATH). Mac17,10, macOS, Node 24.
+Run 2026-11-20 by the blind job. Home paths redacted to ~. Each block: the file's node --test result lines and its
+assertion messages, cut to 900 characters a line; the load (uptime) before and after each run.
+
+=== exit-counted.test.mjs (#2960.bb693bcf), run in three invocations by --test-name-pattern to stay under 10 minutes
+12:43  up 7 days,  5:45, 3 users, load averages: 227.20 203.26 165.81
+  ✖ #2960.bb693bcf the supervisor helper's leash watcher, which ends with _exit, is counted (6374.670833ms)
+  ✖ #2960.bb693bcf extension-host at the merge base gives a non-null count with an empty uncounted (40091.18875ms)
+✖ #2960 a child that ends with _exit is counted on macOS (46467.234125ms)
+✖ #2960.bb693bcf the supervisor helper's leash watcher, which ends with _exit, is counted (6374.670833ms)
+  AssertionError [ERR_ASSERTION]: the supervisor helper's leash watcher (packages/supervisor/native/helper.c leash(): forked beside the program, ends with _exit(0), never waited for) has no count: measureOnce of a node process running `~/private/dh2960/packages/supervisor/dist/helper leash /usr/bin/true` reads instructions null, uncounted ["(forked)"], where the same process running /usr/bin/true alone reads 486077674 with none uncounted
+✖ #2960.bb693bcf extension-host at the merge base gives a non-null count with an empty uncounted (40091.18875ms)
+  AssertionError [ERR_ASSERTION]: measureOnce of extension-host (node benchmarks/extension-host.mjs) in this checkout gives instructions null, uncounted ["(forked)","~/private/dh2960/packages/supervisor/dist/helper"]: a non-null count with an empty uncounted is required. "(forked)" is a forked child with no end line, as the supervisor helper's leash watcher (packages/supervisor/native/helper.c leash(): forked beside the program, ends with _exit(0), never waited for) leaves. measureOnce returned {"status":0,"instructions":null,"uncounted":["(forked)","~/private/dh2960/packages/supervisor/dist/helper"]}; the command's output ends: "{\"loadMs\":{\"hub\":2.1222500000003492,\"sandbox\":143.4216669999987},\"eventMs\":{\"hub\":0.020570255249999718,\"sandbox\":0.03573457287499968}}\n(node:18359) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and 
+12:44  up 7 days,  5:46, 3 users, load averages: 229.56 207.91 169.69
+
+12:53  up 7 days,  5:55, 3 users, load averages: 267.49 237.31 202.02
+  ✖ #2960.bb693bcf deep-hook-guards at the merge base gives a non-null count with an empty uncounted (22057.979958ms)
+  ✖ #2960.bb693bcf hub-round-trip at the merge base gives a non-null count with an empty uncounted (5750.342291ms)
+✖ #2960 a child that ends with _exit is counted on macOS (27809.775708ms)
+✖ #2960.bb693bcf deep-hook-guards at the merge base gives a non-null count with an empty uncounted (22057.979958ms)
+  AssertionError [ERR_ASSERTION]: measureOnce of deep-hook-guards (node benchmarks/deep-hook.mjs guards) in this checkout gives instructions null, uncounted ["(forked)"]: a non-null count with an empty uncounted is required. "(forked)" is a forked child with no end line, as the supervisor helper's leash watcher (packages/supervisor/native/helper.c leash(): forked beside the program, ends with _exit(0), never waited for) leaves. measureOnce returned {"status":0,"instructions":null,"uncounted":["(forked)"]}; the command's output ends: "A2AF-3E42-8F77-C42BD658AAB5> ~/.rustup/toolchains/1.99.1-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy\n            Reason: tried: '~/.rustup/toolchains/1.99.1-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '~/.rustup/toolchains/1.99.1-aarch64-
+✖ #2960.bb693bcf hub-round-trip at the merge base gives a non-null count with an empty uncounted (5750.342291ms)
+  AssertionError [ERR_ASSERTION]: measureOnce of hub-round-trip (node benchmarks/hub.mjs round-trip) in this checkout gives instructions null, uncounted ["(forked)","/usr/bin/sandbox-exec"]: a non-null count with an empty uncounted is required. "(forked)" is a forked child with no end line, as the supervisor helper's leash watcher (packages/supervisor/native/helper.c leash(): forked beside the program, ends with _exit(0), never waited for) leaves. measureOnce returned {"status":0,"instructions":null,"uncounted":["(forked)","/usr/bin/sandbox-exec"]}; the command's output ends: "{\"bench\":\"hub\",\"mode\":\"round-trip\",\"p50Ms\":0.4362500000000864,\"p95Ms\":2.952792000000045}\n"
+12:54  up 7 days,  5:56, 3 users, load averages: 305.38 249.00 207.46
+
+12:54  up 7 days,  5:56, 3 users, load averages: 321.05 254.25 209.81
+  ✖ #2960.bb693bcf deep-hook-overhead at the merge base gives a non-null count with an empty uncounted (38309.036375ms)
+✖ #2960 a child that ends with _exit is counted on macOS (38310.24ms)
+✖ #2960.bb693bcf deep-hook-overhead at the merge base gives a non-null count with an empty uncounted (38309.036375ms)
+  AssertionError [ERR_ASSERTION]: measureOnce of deep-hook-overhead (node benchmarks/deep-hook.mjs overhead) in this checkout gives instructions null, uncounted ["(forked)","a child of (forked)"]: a non-null count with an empty uncounted is required. "(forked)" is a forked child with no end line, as the supervisor helper's leash watcher (packages/supervisor/native/helper.c leash(): forked beside the program, ends with _exit(0), never waited for) leaves. measureOnce returned {"status":0,"instructions":null,"uncounted":["(forked)","a child of (forked)"]}; the command's output ends: "A2AF-3E42-8F77-C42BD658AAB5> ~/.rustup/toolchains/1.99.1-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy\n            Reason: tried: '~/.rustup/toolchains/1.99.1-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/U
+12:55  up 7 days,  5:57, 3 users, load averages: 331.66 265.01 215.57
+
+Expected reason: instructions null with "(forked)" uncounted (the leash watcher, which ends with _exit). Also uncounted,
+as the issue reads: extension-host the helper itself, hub-round-trip /usr/bin/sandbox-exec, deep-hook-overhead "a child of (forked)".
+(deep-hook-guards' output tail is a cargo warning from benchmarks/deep-hook.mjs's own cargo build: rust-objcopy can't strip.)
+
+=== killed-child.test.mjs (#2960.3979694e): PASSES on the base, as it must (the condition already holds)
+  ✔ #2960.3979694e a posix_spawn child SIGKILLed before it ends leaves the count null, named by its path (1717.126042ms)
+  ✔ #2960.3979694e a forked child SIGKILLed before it ends leaves the count null, named "(forked)" (907.551625ms)
+✔ #2960 a SIGKILLed child leaves the count null (5120.218292ms)
+ℹ pass 2
+ℹ fail 0
+--- the same file on the twin count-forgets-killed (base benchmark.mjs without the line naming an unended start), laid over this checkout in a temp copy:
+  ✖ #2960.3979694e a posix_spawn child SIGKILLed before it ends leaves the count null, named by its path
+  AssertionError [ERR_ASSERTION]: measureOnce of `killer spawn /private/tmp/dh2960-EMDHVg/victim`: the run's count is 21749979, a count invented for a child that was SIGKILLed and never reported; it must be null. measureOnce returned {"status":0,"instructions":21749979,"uncounted":[]}
+  ✖ #2960.3979694e a forked child SIGKILLed before it ends leaves the count null, named "(forked)"
+  AssertionError [ERR_ASSERTION]: measureOnce of `killer fork`: the run's count is 21643282, a count invented for a child that was SIGKILLed and never reported; it must be null. measureOnce returned {"status":0,"instructions":21643282,"uncounted":[]}
+
+=== x86-blocked.test.mjs (#2960.e48f6fa4)
+  ✖ #2960.e48f6fa4 a count run through an x86_64 cargo reads BLOCKED naming it (900.608375ms)
+  ✖ #2960.e48f6fa4 a count run through this Mac's x86_64 rustup cargo reads BLOCKED naming it (6152.144208ms)
+  ✖ #2960.e48f6fa4 a count run from a translated shell reads BLOCKED naming the binary (2039.8535ms)
+✖ #2960 an x86_64 binary in a count reads BLOCKED (9646.783ms)
+✖ #2960.e48f6fa4 a count run through an x86_64 cargo reads BLOCKED naming it (900.608375ms)
+  AssertionError [ERR_ASSERTION]: measureOnce of an x86_64-only /private/tmp/dh2960-V9sVyj/cargo --version must read BLOCKED naming it, not abort in dyld. measureOnce returned {"status":null,"instructions":23307916,"uncounted":[]}; the command's output ends: "e (have 'arm64', need 'x86_64'))\ndyld[5764]: tried: '~/Library/Caches/deepbuild-perf/counter-bfbf2b68a64a1b96/count.dylib' (mach-o file, but is an incompatible architecture (have 'arm64', need 'x86_64')), '/System/Volumes/Preboot/Cryptexes/Rosetta~/Library/Caches/deepbuild-perf/counter-bfbf2b68a64a1b96/count.dylib' (no such file), '/System/Volumes/Preboot/Cryptexes/OS~/Library/Caches/deepbuild-perf/counter-bfbf2b68a64a1b96/count.dylib' (no such file), '~/Library/Caches/deepbuild-perf/counter-bfbf2b68a64a1b96/count.dylib' (mach-o file, but is an incompatible architecture (have 
+✖ #2960.e48f6fa4 a count run through this Mac's x86_64 rustup cargo reads BLOCKED naming it (6152.144208ms)
+  AssertionError [ERR_ASSERTION]: measureOnce of the x86_64 rustup proxy ~/.cargo/bin/cargo --version must read BLOCKED naming it, not abort in dyld. measureOnce returned {"status":null,"instructions":23156866,"uncounted":[]}; the command's output ends: "e (have 'arm64', need 'x86_64'))\ndyld[5938]: tried: '~/Library/Caches/deepbuild-perf/counter-bfbf2b68a64a1b96/count.dylib' (mach-o file, but is an incompatible architecture (have 'arm64', need 'x86_64')), '/System/Volumes/Preboot/Cryptexes/Rosetta~/Library/Caches/deepbuild-perf/counter-bfbf2b68a64a1b96/count.dylib' (no such file), '/System/Volumes/Preboot/Cryptexes/OS~/Library/Caches/deepbuild-perf/counter-bfbf2b68a64a1b96/count.dylib' (no such file), '~/Library/Caches/deepbuild-perf/counter-bfbf2b68a64a1b96/count.dylib' (mach-o file, but is an incompatible architecture (have 'arm6
+✖ #2960.e48f6fa4 a count run from a translated shell reads BLOCKED naming the binary (2039.8535ms)
+  AssertionError [ERR_ASSERTION]: measureOnce run from a translated /bin/sh, of the universal /private/tmp/dh2960-V9sVyj/universal-tool (which then starts as x86_64), must read BLOCKED naming the binary, not abort in dyld. measureOnce returned {"status":null,"instructions":24082419,"uncounted":[]}; the command's output ends: "e (have 'arm64', need 'x86_64'))\ndyld[7363]: tried: '~/Library/Caches/deepbuild-perf/counter-bfbf2b68a64a1b96/count.dylib' (mach-o file, but is an incompatible architecture (have 'arm64', need 'x86_64')), '/System/Volumes/Preboot/Cryptexes/Rosetta~/Library/Caches/deepbuild-perf/counter-bfbf2b68a64a1b96/count.dylib' (no such file), '/System/Volumes/Preboot/Cryptexes/OS~/Library/Caches/deepbuild-perf/counter-bfbf2b68a64a1b96/count.dylib' (no such file), '~/Library/Caches/deepbuild-perf/counter-bfbf2b68a64a1b96/c
+Expected reason: a dyld abort (status null, "incompatible architecture (have 'arm64', need 'x86_64')", "time: command
+terminated abnormally") read as a count of about 2.3e7 instructions, never BLOCKED.
+
+=== linux-counter.test.mjs (#2960.5567ea2d): not runnable on this Mac
+﹣ #2960 an instruction counter on Linux (0.601834ms) # INCONCLUSIVE: criterion #2960.5567ea2d is Linux's; this host is darwin
+ℹ tests 0
+ℹ skipped 0
+Not run on Linux by this job. Expected on Linux at the base: counterBuild is null and parseInstructions NaN off darwin, so
+measureOnce returns instructions null and throws no BLOCKED: every task test fails (allowed: "a non-null count is required";
+forbidding, as the Spark's perf_event_paranoid 4: "must be BLOCKED naming perf_event_paranoid"), and the children test fails
+at "the child's work counted alone gives no count".
+
+killed-child, x86-blocked and linux-counter ran in one invocation at load averages 224.14 195.69 160.11 (12:42) to
+229.64 199.05 162.34.
+
+=== Not a proof, a check that the tests can pass: a scratch copy of the base's scripts/ (outside the repo, never
+committed) whose count-children.c also interposes _exit and _Exit to write the exit line first. With it:
+the leash test PASSES; killed-child PASSES (both tests); measureOnce of deep-hook-guards reads
+{"status":0,"instructions":41705298308,"uncounted":[]}; extension-host still reads instructions null, uncounted
+["<checkout>/packages/supervisor/dist/helper"] (the issue's item 0: the helper itself, which the change must also cover).
