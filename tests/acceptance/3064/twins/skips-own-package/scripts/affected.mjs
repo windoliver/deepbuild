@@ -430,6 +430,7 @@ function run(logs, label, command, args, env = {}, cwd = root) {
     let idle = null, watch = null;
     if (report) {
       let seen = '', since = performance.now();
+      // deadline: the look only stops a job that wrote nothing for IDLE_MIN minutes, a hang turned into a result.
       watch = setInterval(() => {
         const now = `${size(log)} ${size(report)}`;
         if (now !== seen) [seen, since] = [now, performance.now()];
@@ -440,9 +441,11 @@ function run(logs, label, command, args, env = {}, cwd = root) {
           // What the report holds now stands; what a job writes as it is stopped, a cancelled file's error, is no result.
           idle = { cut: size(report), minutes: IDLE_MIN };
           child.kill('SIGTERM');
+          // deadline: a stopped job's tree is given 10 s to end on SIGTERM before it is killed.
           idle.killed = new Promise((killed) => setTimeout(() => {
             try { killTree([...tree, ...child.exitCode === null && child.signalCode === null ? descendants(child.pid) : []]); } catch {}
             // The throttle ends once its command has; one that doesn't is ended too.
+            // deadline: the throttle is given 5 s to end once its command has, then killed.
             setTimeout(() => { child.kill('SIGKILL'); killed(); }, 5_000);
           }, 10_000));
         }
