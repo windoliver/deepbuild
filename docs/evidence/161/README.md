@@ -38,6 +38,17 @@ draws at scale 1 whatever its surface says, a pack operator named `blur@1` is ad
 from it. The same 12 files and 23 tests pass; `ac13-taste` is INCONCLUSIVE, and the fifteen files it kept have the
 SHA-256s of those in `shown/`.
 
+## The pack as it ships: ten operators reworked, costs from readings
+
+`acceptance-rework.txt`: the thirteen untimed files once more, on binaries built from 26ed84911 with the pack of this
+commit. All thirteen pass, 24 tests, `ac13-taste` among them: `TASTE.json` is the owner's call on the fifteen files
+now in `shown/`. Ten operators take fewer taps or one noise in place of three, so the operator check's estimate of
+each falls toward what it measures; four sheets changed with them (blur, distort, generate, stylize) and the owner
+looked at those four again.
+
+`costs-readings.txt`: where each declared cost comes from. Two readings of `calibrate` at a load of 48 and 38, so
+they are not a result: the measured half of criterion 4 is still unproven, and so is the timed half of criterion 6.
+
 ## The timed files
 
 `timed.txt`: the two timed files once more inside a timed grant of the throttle, started at a one-minute load of 13.05.
@@ -60,7 +71,7 @@ readings (`pixel_hash@1` 0.047 against an estimate of 0.0046, `fixture.fbm8@1` 3
 
 ## Shown
 
-`shown/`: the fifteen files `ac13-taste` kept from the run in `acceptance.txt`, each named with its SHA-256: a sheet
+`shown/`: the fifteen files `ac13-taste` kept from the run in `acceptance-rework.txt`, each named with its SHA-256: a sheet
 per effect category, `levels`, `curves`, `corner_pin`, the slice_shift title (frame 7) and its recording (frames 0
 to 41 at 50 frames a second, an animated PNG). The taste call is a person's: a file named by `DEEPBUILD_TASTE_161`,
 `{"criterion": "#161.2dcc0047", "by": "you", "screenshots": [the fifteen SHA-256s], "call": "looks_right" | "looks_wrong"}`.
