@@ -1,0 +1,22 @@
+{
+  "packages/hub/src/plant.ts": [
+    {
+      "find": [
+        "  if (!value) return undefined;"
+      ],
+      "wrong": [
+        "  if (!value) return 'waiter-outlives-session';"
+      ]
+    }
+  ],
+  "packages/hub/src/setup.ts": [
+    {
+      "find": [
+        "    const waiter = plant() === 'waiter-polls' ? `'${process.execPath}' '${cli}' waiter` : claudeCommand(hook, 'waiter');"
+      ],
+      "wrong": [
+        "    const waiter = plant() === 'waiter-polls' ? `'${process.execPath}' '${cli}' waiter` : `DEEP_HUB_PLANT=waiter-outlives-session ${claudeCommand(hook, 'waiter')}`;"
+      ]
+    }
+  ]
+}
