@@ -1,0 +1,24 @@
+import { it } from 'vitest';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+it('live claude 2896', async () => {
+  const { uuidOf } = await import('../tests/acceptance/806/helpers.ts');
+  const LIVE = { label: 'live', kind: 'claude-code' as const, name: 'claude-code', version: '2.1.326' };
+  const { CLAUDE, DOC, client, cleanup, draw, openWorld, rowsDocument, REPO } = await import('../tests/acceptance/2896/helpers.ts');
+  const w = await openWorld([CLAUDE, LIVE]);
+  try {
+    await draw(w, client(w, CLAUDE), DOC.page, rowsDocument('Live page', 3, 999));
+    const dir = mkdtempSync(join(tmpdir(), 'live-2896-'));
+    const cfg = join(dir, 'mcp.json');
+    writeFileSync(cfg, JSON.stringify({ mcpServers: { deep: { command: process.execPath, args: [join(REPO, 'packages/cli/dist/main.js'), 'mcp'], env: { HOME: w.home, PATH: process.env.PATH } } } }));
+    const hook = (ev: string) => [{ hooks: [{ type: 'command', command: `HOME='${w.home}' '${join(REPO, 'target/debug/deep-hook')}' claude-code ${ev} 2>><scratch> echo "${ev} rc=$?" >> <scratch> }] }];
+    const settings = join(dir, 'settings.json');
+    writeFileSync(settings, JSON.stringify({ hooks: Object.fromEntries(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'Stop', 'SessionEnd'].map((e) => [e, hook(e)])) }));
+    const prompt = 'Call the deep_query tool exactly once with arguments {"doc": "' + DOC.page + '", "what": "rows", "cap": 3000}. Then answer in one line, from the tool result you received: ROWS=<how many entries its rows array has> NEXT=<yes if it has a next field, else no> FILED=<yes if the result you received was replaced by a message about output saved to a file, else no> FIRST=<id of the first row> LAST=<id of the last row>.';
+    const r = spawnSync('~/Library/Application Support/Claude/claude-code/2.1.326/c4434d650cb3/claude.app/Contents/MacOS/claude', ['-p', prompt, '--model', 'haiku', '--mcp-config', cfg, '--strict-mcp-config', '--setting-sources', 'project', '--settings', settings, '--allowedTools', 'mcp__deep__deep_query', '--session-id', uuidOf('2896-live'), '--max-budget-usd', '0.5', '--output-format', 'stream-json', '--verbose'], { cwd: dir, encoding: 'utf8', timeout: 400_000 });
+    writeFileSync('<scratch>', r.stdout ?? '');
+    writeFileSync('<scratch>', String(r.stderr ?? '') + '\nstatus=' + r.status);
+  } finally { await cleanup(); }
+}, 900_000);

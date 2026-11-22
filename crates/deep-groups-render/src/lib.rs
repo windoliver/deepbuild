@@ -41,6 +41,10 @@ pub enum Planted {
     ShadowInsideOutline,
     ShadowRemovesAmbient,
     ShadowEdgeAliased,
+    NormalFlippedGreen,
+    NormalDotAlone,
+    NormalUnturned,
+    LightStaleHeight,
     /// #161's wrong programs (tests/acceptance/161/README.md: Planted programs), each on one
     /// operator a group's pass names.
     InvertOnPremultiplied,

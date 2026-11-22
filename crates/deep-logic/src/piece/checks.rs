@@ -17,6 +17,7 @@ pub(super) struct Declared {
     assets: Vec<String>,
     links: Vec<(String, String)>,
     saves: Option<Value>,
+    pages: Option<Value>,
     carry: Option<Value>,
     carry_in: Option<crate::carry::CarryIn>,
     profile: Option<Value>,
@@ -29,6 +30,10 @@ pub(super) struct Declared {
     preview: Option<(Vec<String>, Vec<Write>)>,
     /// `lanes`: its lane graph and vehicle kind, built at check (#981).
     lanes: Option<Value>,
+    /// `process`: process@1's kind names (#980).
+    process: Option<Vec<String>>,
+    /// `separation`: its movers and minima, built into a table at check (#1255).
+    separation: Option<Value>,
     /// The item's fields as given, for its bake key.
     given: String,
 }
@@ -47,6 +52,8 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             "step_rate",
             "clock",
             "due",
+            "open",
+            "finish",
             "reads",
             "writes",
             "budget",
@@ -62,7 +69,12 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             "services",
             "mirrors",
             "preview",
+            "pages",
             "lanes",
+            // #552: a fog grid, which gates its occurrences' readers on each copy.
+            "fog",
+            "process",
+            "separation",
         ]
         .contains(&k.as_str())
         {
@@ -206,6 +218,21 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             Some(name.to_string())
         }
     };
+    // #278: `open` names one of the item's own bool arrays of count 1 (joins after the start only
+    // while it's true), and `finish` one of its i32 arrays of count 1 (nonzero ends the match).
+    for (field, ty, word) in [("open", Ty::Bool, "bool"), ("finish", Ty::I32, "i32")] {
+        let Some(v) = params.get(field) else { continue };
+        let name = v.as_str().unwrap_or_default();
+        if !writes
+            .iter()
+            .any(|w| w.name == name && w.ty == ty && w.count == 1)
+        {
+            return Err(bad(
+                field,
+                format!("{field} names one of the item's own {word} arrays of count 1; {v} isn't"),
+            ));
+        }
+    }
     fn get<'a>(o: Option<&'a Value>, k: &str) -> Option<&'a Value> {
         o.and_then(|b| b.get(k))
     }
@@ -257,6 +284,23 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
     let services =
         crate::services::declared(params.get("services")).map_err(|e| bad("services", e))?;
     let mirrors = crate::mirrors::declared(params.get("mirrors")).map_err(|e| bad("mirrors", e))?;
+    // #980: process@1's kinds, by name; a kind is its index here.
+    let process = match params.get("process") {
+        None => None,
+        Some(p) => {
+            let what = || bad("process", "process is {kinds: [name]}, 1 to 16 unique kind names".into());
+            let kinds: Vec<String> = p
+                .get("kinds")
+                .and_then(Value::as_array)
+                .and_then(|a| a.iter().map(|k| k.as_str().map(str::to_string)).collect())
+                .ok_or_else(what)?;
+            let unique = kinds.iter().collect::<std::collections::BTreeSet<_>>().len() == kinds.len();
+            if kinds.is_empty() || kinds.len() > 16 || !unique || p.as_object().is_some_and(|o| o.len() != 1) {
+                return Err(what());
+            }
+            Some(kinds)
+        }
+    };
     Ok(Declared {
         links,
         program,
@@ -273,6 +317,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
         ring,
         assets,
         saves: params.get("saves").cloned(),
+        pages: params.get("pages").cloned(),
         carry: params.get("carry").cloned(),
         carry_in: match params.get("carry_in") {
             None => None,
@@ -292,6 +337,8 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
         mirrors,
         preview,
         lanes: params.get("lanes").cloned(),
+        process,
+        separation: params.get("separation").cloned(),
         given: Value::Object(params.clone()).to_string(),
     })
 }
@@ -377,7 +424,19 @@ pub(super) fn region_map(
         reads.sort();
     }
     for r in &reads {
-        let (size, ty, read) = if r == crate::world::seats::READ {
+        // #552: this copy's player is a view value, like the camera: logic never reads it, so
+        // every copy's state and hashes stay the same while each draws its own side.
+        if r == "match.me" {
+            refused.push(refusal(
+                "read",
+                "match.me is this copy's player, a view value no logic step reads: every copy's state must stay the same".into(),
+                json!({"read": r}),
+            ));
+            continue;
+        }
+        let (size, ty, read) = if r == crate::draws::READ {
+            (crate::draws::SIZE, "draws".to_string(), Read::Draws)
+        } else if r == crate::world::seats::READ {
             (crate::world::seats::SIZE, "seats".to_string(), Read::Seats)
         } else if let Some((size, ty)) = controls.get(r) {
             (*size, ty.to_string(), Read::Control)
@@ -956,6 +1015,15 @@ pub fn check_in(
                 Some(std::sync::Arc::new(g))
             }
         };
+        // #1255: the table `separation` declares, its movers and minima, is asset 0.
+        let separation = match &d.separation {
+            None => None,
+            Some(v) => {
+                let t = crate::separation::build(v).map_err(|r| logic_refused(id, r))?;
+                assets.push((rewrite::hash(&t.bytes), t.bytes.clone()));
+                Some(std::sync::Arc::new(t))
+            }
+        };
         for sha in &d.assets {
             assets.push((sha.clone(), asset(sha).ok_or_else(|| missing("data", sha))?));
         }
@@ -1004,6 +1072,17 @@ pub fn check_in(
                 refused.push(r);
                 None
             }
+        };
+        // #211: the page region, after every other region, and init's pages.
+        let pages = match &d.pages {
+            None => None,
+            Some(v) => match crate::pages::of(v, &given, memory, &regions, &segments, &asset) {
+                Ok(p) => Some(p),
+                Err(r) => {
+                    refused.push(r);
+                    None
+                }
+            },
         };
         let carry = match d
             .carry
@@ -1089,7 +1168,10 @@ pub fn check_in(
             services_at: services_at.unwrap_or(0),
             mirrors,
             preview,
+            pages,
             lanes,
+            process: d.process.clone(),
+            separation,
         });
     }
     // A save holds every item at one instant, so a piece with saves steps at one rate.

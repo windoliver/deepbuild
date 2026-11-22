@@ -429,6 +429,15 @@ pub enum Planted {
     OneMirrorPerFrame,
     OneLightCutPerFrame,
     InsetPremultipliedAsStraight,
+    /// #298's wrong programs (tests/acceptance/298/README.md: Planted programs): a clamp of each
+    /// axis on its own, of an unmirrored behind-camera projection, and to the frame instead of the
+    /// safe frame; a driver that reads the frame before's `edge` and `edge_angle`; a leader that
+    /// draws while its overlay is clamped.
+    ClampEachAxis,
+    ClampUnmirroredBehind,
+    ClampToFrame,
+    EdgeFromPreviousFrame,
+    LeaderDrawsWhileClamped,
     BandFadeByWallClock,
     LevelByEarlierFrame,
     BandMasksIndependent,
@@ -573,6 +582,11 @@ pub enum Planted {
     ShadowInsideOutline,
     ShadowRemovesAmbient,
     ShadowEdgeAliased,
+    /// #2053's wrong programs (tests/acceptance/2053/README.md: Planted programs).
+    NormalFlippedGreen,
+    NormalDotAlone,
+    NormalUnturned,
+    LightStaleHeight,
 }
 
 impl Planted {
@@ -601,6 +615,10 @@ impl Planted {
             Planted::ShadowInsideOutline => P::ShadowInsideOutline,
             Planted::ShadowRemovesAmbient => P::ShadowRemovesAmbient,
             Planted::ShadowEdgeAliased => P::ShadowEdgeAliased,
+            Planted::NormalFlippedGreen => P::NormalFlippedGreen,
+            Planted::NormalDotAlone => P::NormalDotAlone,
+            Planted::NormalUnturned => P::NormalUnturned,
+            Planted::LightStaleHeight => P::LightStaleHeight,
             Planted::SliceShiftSeededByFrame => P::SliceShiftSeededByFrame,
             Planted::InvertOnPremultiplied => P::InvertOnPremultiplied,
             Planted::InvertWithoutAlphaGuard => P::InvertWithoutAlphaGuard,
@@ -652,6 +670,10 @@ impl Planted {
             "shadow_inside_outline" => Planted::ShadowInsideOutline,
             "shadow_removes_ambient" => Planted::ShadowRemovesAmbient,
             "shadow_edge_aliased" => Planted::ShadowEdgeAliased,
+            "normal_flipped_green" => Planted::NormalFlippedGreen,
+            "normal_dot_alone" => Planted::NormalDotAlone,
+            "normal_unturned" => Planted::NormalUnturned,
+            "light_stale_height" => Planted::LightStaleHeight,
             "vivid_light_as_linear_light" => Planted::VividLightAsLinearLight,
             "dissolve_reads_playback" => Planted::DissolveReadsPlayback,
             "pass_linear_in_2d" => Planted::PassLinearIn2d,
@@ -865,6 +887,11 @@ impl Planted {
             "one_mirror_per_frame" => Planted::OneMirrorPerFrame,
             "one_light_cut_per_frame" => Planted::OneLightCutPerFrame,
             "inset_premultiplied_as_straight" => Planted::InsetPremultipliedAsStraight,
+            "clamp_each_axis" => Planted::ClampEachAxis,
+            "clamp_unmirrored_behind" => Planted::ClampUnmirroredBehind,
+            "clamp_to_frame" => Planted::ClampToFrame,
+            "edge_from_previous_frame" => Planted::EdgeFromPreviousFrame,
+            "leader_draws_while_clamped" => Planted::LeaderDrawsWhileClamped,
             "band_fade_by_wall_clock" => Planted::BandFadeByWallClock,
             "level_by_earlier_frame" => Planted::LevelByEarlierFrame,
             "band_masks_independent" => Planted::BandMasksIndependent,

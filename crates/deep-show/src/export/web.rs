@@ -12,6 +12,13 @@
 //! #1490: the player ships as a few fixed module sets, each built once per release (figure,
 //! game2d, full), and the export takes the smallest that holds every canvas module the document
 //! uses, read from the check's registry; a set that lacks one is refused, naming the module.
+//!
+//! #2892: a bundle weighs the same on any host. Every file but the index page, the two scripts the
+//! browser loads itself (the element's script and the page glue) and the files whose format
+//! compresses its own data is stored as gzip ([`super::gzip`]), named by the SHA-256 of its stored
+//! bytes; the index gives each one's inflated size and the SHA-256 the document names it by, and
+//! the page inflates a file only after its stored bytes match its name. The read-back inflates
+//! each stored file and matches it, all or nothing.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -22,17 +29,20 @@ use deep_canvas_export::page::write;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
+use super::gzip::{gunzip, gzip};
 use super::{temp_of, Guard, Job};
 use crate::hub::{Hub, Planted};
 
 const ELEMENT: &str = include_str!("../../../deep-player/web/element.js");
 
-/// One of the player's prebuilt module sets: its name, its player's bytes and page glue, and what
-/// its build recorded of it (`player.json`: core version, module set digest, runtime digest and
-/// the canvas modules it carries).
+/// One of the player's prebuilt module sets: its name, its player's bytes and page glue, the player
+/// as the bundle stores it (#2892, deflated once by the build script), and what its build recorded
+/// of it (`player.json`: core version, module set digest, runtime digest and the canvas modules it
+/// carries).
 struct Set {
     name: &'static str,
     wasm: &'static [u8],
+    stored: &'static [u8],
     glue: &'static [u8],
     about: &'static str,
 }
@@ -46,6 +56,7 @@ macro_rules! set {
                 $name,
                 "/player_bg.wasm"
             )),
+            stored: include_bytes!(concat!(env!("OUT_DIR"), "/", $name, ".wasm.gz")),
             glue: include_bytes!(concat!(
                 "../../../deep-player/web/dist/",
                 $name,
@@ -199,6 +210,68 @@ impl Files {
         entry.1.extend(about);
         (path, sha)
     }
+
+    /// #2892: the files as the bundle stores them. Those at `as_is` (the scripts the browser loads
+    /// itself) and those whose format compresses its own data, marked `compresses_itself`, keep
+    /// their bytes and names; every other is stored as gzip under `<SHA-256 of its stored
+    /// bytes>.gz`, marked `inflated` with its size and the SHA-256 the document names it by.
+    /// `prebuilt` gives a file's stored form by that SHA-256 where the build already deflated it
+    /// (the player's set); `stamp` writes a time into each gzip header (a planted export).
+    fn stored(self, as_is: &[&str], prebuilt: Option<(&str, &[u8])>, stamp: Option<u32>) -> Files {
+        let mut out = Files::default();
+        for (path, (bytes, mut marks)) in self.by_path {
+            if as_is.contains(&path.as_str()) {
+                out.by_path.insert(path, (bytes, marks));
+                continue;
+            }
+            if compresses_itself(&bytes) {
+                marks.insert("compresses_itself".into(), json!(true));
+                out.by_path.insert(path, (bytes, marks));
+                continue;
+            }
+            let sha = sha256_hex(&bytes);
+            let held = prebuilt
+                .filter(|(of, _)| *of == sha)
+                .map(|(_, b)| b.to_vec());
+            let mut stored = held.unwrap_or_else(|| gzip(&bytes));
+            if let Some(t) = stamp {
+                // Planted (#2892 AC7): the export's time in the gzip header's MTIME.
+                stored[4..8].copy_from_slice(&t.to_le_bytes());
+            }
+            marks.insert(
+                "inflated".into(),
+                json!({"bytes": bytes.len(), "sha256": sha}),
+            );
+            let name = format!("{}.gz", sha256_hex(&stored));
+            out.by_path.insert(name, (stored, marks));
+        }
+        out
+    }
+
+    /// The path a file named `sha` in the document is stored at: its own, or its stored form's.
+    fn path_of(&self, sha: &str) -> Option<&str> {
+        self.by_path.iter().find_map(|(p, (b, marks))| {
+            let of = marks.get("inflated").and_then(|i| i["sha256"].as_str());
+            (of == Some(sha) || (of.is_none() && sha256_hex(b) == sha)).then_some(p.as_str())
+        })
+    }
+}
+
+/// #2892: whether `bytes` are of a format that compresses its own data, which the bundle stores as
+/// it is: PNG, JPEG, GIF and WebP pictures, a KTX2 map under supercompression, FLAC and Ogg sound.
+fn compresses_itself(bytes: &[u8]) -> bool {
+    let at = |o: usize, magic: &[u8]| bytes.get(o..o + magic.len()) == Some(magic);
+    let ktx2_super = deep_codecs::maps::is_ktx2(bytes)
+        && bytes
+            .get(44..48)
+            .is_some_and(|s| u32::from_le_bytes([s[0], s[1], s[2], s[3]]) != 0);
+    at(0, &[0x89, b'P', b'N', b'G'])
+        || at(0, &[0xff, 0xd8, 0xff])
+        || at(0, b"GIF8")
+        || (at(0, b"RIFF") && at(8, b"WEBP"))
+        || at(0, b"fLaC")
+        || at(0, b"OggS")
+        || ktx2_super
 }
 
 /// The pieces of `doc` the bundle can't carry, each `{item, why}`, given the canvas modules it
@@ -489,6 +562,12 @@ fn element(guard: Option<Guard>) -> String {
         Some(Guard::WebPlaysOnFailure) => {
             ELEMENT.replace("      this.#stop(e);\n      return;\n", "")
         }
+        // Planted (#2892 AC6): each stored file inflated whole as it arrives, then checked against the
+        // SHA-256 it inflates to, with no stop at the index's inflated size.
+        Some(Guard::WebInflatesBeforeCheck) => ELEMENT.replace(
+            "    for (const f of bundle.files) stored.push([f, await this.#fetch(f.path, f.sha256)]);\n",
+            "    for (const f of bundle.files) {\n      const raw = new Uint8Array(await (await fetch(f.path, { credentials: 'omit', cache: 'no-store' })).arrayBuffer());\n      const whole = f.inflated ? new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer()) : raw;\n      const want = f.inflated ? f.inflated.sha256 : f.sha256;\n      if ((await sha256(whole)) !== want) throw Error(`the file ${f.path} doesn't match its SHA-256 ${want}; the player doesn't start`);\n      stored.push([{ path: f.path, sha256: want }, whole]);\n    }\n",
+        ),
         // Planted (#2856 AC3): the index page's line that the player hasn't started stays in place.
         Some(Guard::WebElementLeavesLine) => ELEMENT.replace(
             "    this.querySelector('[data-deep-unstarted]')?.remove();\n",
@@ -509,6 +588,27 @@ fn player(set: &Set, guard: Option<Guard>) -> Vec<u8> {
         body.extend_from_slice(b"probe");
         wasm.push(0);
         wasm.push(body.len() as u8);
+        wasm.extend(body);
+    }
+    if guard == Some(Guard::WebPlayerOver12mb) {
+        // Planted (#2892 AC3): a custom section of 13,000,000 seeded pseudo-random bytes.
+        let name = b"deep.padding";
+        let mut body = vec![name.len() as u8];
+        body.extend_from_slice(name);
+        let mut x: u64 = 2892;
+        body.extend((0..13_000_000).map(|_| {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            (x >> 32) as u8
+        }));
+        wasm.push(0);
+        let mut len = body.len();
+        while len >= 0x80 {
+            wasm.push((len as u8 & 0x7f) | 0x80);
+            len >>= 7;
+        }
+        wasm.push(len as u8);
         wasm.extend(body);
     }
     wasm
@@ -632,6 +732,10 @@ impl Hub<'_> {
             Guard::WebAnnouncesEveryFrame,
             Guard::WebPlaysOnFailure,
             Guard::WebElementLeavesLine,
+            Guard::WebStoresPlayerAsIs,
+            Guard::WebInflatesBeforeCheck,
+            Guard::WebGzipHeaderTime,
+            Guard::WebPlayerOver12mb,
         ]
         .into_iter()
         .find(|g| self.planted(Planted::Export(*g)))
@@ -690,6 +794,25 @@ impl Hub<'_> {
                 refused.push(r);
             }
         }
+        // #211: a logic item whose world could outgrow the web player's store, which keeps it in
+        // memory up to web_max, is refused, naming the field.
+        let init_only = self.planted(Planted::WebExportChecksInitOnly);
+        let root = &self.scenario.evidence;
+        for (id, item) in doc["items"].as_object().into_iter().flatten() {
+            let Some(pages) = item.pointer("/params/pages") else {
+                continue;
+            };
+            let init = pages["init"]
+                .as_str()
+                .or_else(|| pages.pointer("/init/asset").and_then(Value::as_str))
+                .and_then(|sha| crate::evidence::read(root, sha))
+                .map(|b| b.len() as u64);
+            if let Some(mut r) = deep_logic::pages::web_refused(pages, init, init_only) {
+                r["item"] = json!(id);
+                r["code"] = json!("web.pages");
+                refused.push(r);
+            }
+        }
         if !refused.is_empty() {
             let names: Vec<&str> = refused.iter().filter_map(|r| r["item"].as_str()).collect();
             return Err(
@@ -715,7 +838,9 @@ impl Hub<'_> {
         let root = self.scenario.evidence.clone();
         let mut files = Files::default();
         // The player and its page glue.
-        let (_, wasm_sha) = files.put(player(set, guard), Some("wasm"), Map::new());
+        let wasm = player(set, guard);
+        let prebuilt = (wasm == set.wasm).then_some(set.stored);
+        let (wasm_path, wasm_sha) = files.put(wasm, Some("wasm"), Map::new());
         let (glue_path, _) = files.put(set.glue.to_vec(), Some("js"), Map::new());
         // #277's planted web copy: back in view, it jumps to the confirmed step.
         let element = match self.scenario.module_planted.as_deref() {
@@ -729,7 +854,7 @@ impl Hub<'_> {
         // The document as the app's frames draw it, and the recorded input track as the hub holds
         // it (#1164's `track` call), its bytes the ones its hash is of, so it is the app's by hash.
         let doc_bytes = serde_json::to_vec(doc).map_err(|_| json!({"code": "bad_input"}))?;
-        let (doc_path, doc_sha) = files.put(doc_bytes, Some("json"), Map::new());
+        let (_, doc_sha) = files.put(doc_bytes, Some("json"), Map::new());
         let held = crate::track_call::held_bytes(&job.track).ok_or_else(
             || json!({"code": "bad_input", "what": "track: each entry is {t, control, value, writer}"}),
         )?;
@@ -784,13 +909,37 @@ impl Hub<'_> {
         for (_, text) in deep_text::LICENSES {
             files.put(text.as_bytes().to_vec(), Some("txt"), Map::new());
         }
+        // #2892: each file as the bundle stores it; the index lists each by its stored name with what
+        // it inflates to, and the page keys it by the SHA-256 the document names it by.
+        // Planted (#2892 AC4): the player stored as it is.
+        let as_is = guard == Some(Guard::WebStoresPlayerAsIs);
+        let player_kept = if as_is { &wasm_path } else { &glue_path };
+        let kept = [
+            glue_path.as_str(),
+            element_path.as_str(),
+            player_kept.as_str(),
+        ];
+        let header_time = (guard == Some(Guard::WebGzipHeaderTime)).then(|| {
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
+            now.map(|d| d.as_secs() as u32).unwrap_or(1)
+        });
+        let prebuilt = prebuilt.map(|b| (wasm_sha.as_str(), b));
+        let files = files.stored(&kept, prebuilt, header_time);
+        let player_path = files.path_of(&wasm_sha).unwrap_or_default().to_string();
+        let player_sha = sha256_hex(&files.by_path[&player_path].0);
         let needs = gpu_needs(doc, &|sha| crate::evidence::read(&root, sha));
         let size = [0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(640.0).round() as i64);
         let listed: Vec<Value> = files
             .by_path
             .iter()
-            .filter(|(p, _)| **p != element_path)
-            .map(|(p, (b, _))| json!({"path": p, "sha256": sha256_hex(b)}))
+            .filter(|(p, _)| **p != element_path && **p != glue_path)
+            .map(|(p, (b, marks))| {
+                let mut f = json!({"path": p, "sha256": sha256_hex(b)});
+                if let Some(i) = marks.get("inflated") {
+                    f["inflated"] = i.clone();
+                }
+                f
+            })
             .collect();
         // The fallback page, whose files the player never fetches.
         let out = PathBuf::from(&job.out);
@@ -841,11 +990,13 @@ impl Hub<'_> {
             &sha256_hex(element.as_bytes()),
             "the player's element".into(),
         );
+        let glue_sha = sha256_hex(&files.by_path[&glue_path].0);
+        name(&glue_path, &glue_sha, "the player's page glue".into());
         for f in &fonts {
             let (file, sha) = (f["file"].as_str(), f["sha256"].as_str().unwrap_or("-"));
-            let path = files.by_path.keys().find(|p| p.starts_with(sha));
-            if let (Some(file), Some(path)) = (file, path) {
-                name(path, sha, format!("the font {file}"));
+            if let (Some(file), Some(path)) = (file, files.path_of(sha)) {
+                let stored = sha256_hex(&files.by_path[path].0);
+                name(path, &stored, format!("the font {file}"));
             }
         }
         for f in listed
@@ -856,7 +1007,8 @@ impl Hub<'_> {
                 f["path"].as_str().unwrap_or(""),
                 f["sha256"].as_str().unwrap_or(""),
             );
-            let what = if sha == track_sha {
+            let of = f["inflated"]["sha256"].as_str().unwrap_or(sha);
+            let what = if of == track_sha {
                 "the input track".to_string()
             } else if fallback["files"].as_array().is_some_and(|a| a.contains(f)) {
                 format!("the fallback page's {path}")
@@ -878,7 +1030,8 @@ impl Hub<'_> {
         if guard == Some(Guard::WebLeavesOutFont) {
             // Planted (#1040 AC3): an export that leaves out one font it names.
             let font = fonts[0]["sha256"].as_str().unwrap_or_default();
-            all.retain(|p, _| !p.starts_with(font));
+            let path = files.path_of(font).unwrap_or_default().to_string();
+            all.remove(&path);
         }
         let written = all
             .iter()
@@ -887,11 +1040,20 @@ impl Hub<'_> {
             let _ = std::fs::remove_dir_all(&temp);
             return Err(json!({"code": "export_unwritable"}));
         }
-        let read_back = |path: &str| std::fs::read(temp.join(path)).ok().map(|b| sha256_hex(&b));
-        if let Some((path, sha, what)) = named
-            .iter()
-            .find(|(path, sha, _)| read_back(path).as_deref() != Some(sha.as_str()))
-        {
+        // A stored file reads back whole when its bytes match its name and inflate to the size and
+        // SHA-256 it is listed with.
+        let read_back = |path: &str, sha: &str| {
+            let Ok(disk) = std::fs::read(temp.join(path)) else {
+                return false;
+            };
+            let inflated = files.by_path.get(path).and_then(|(_, m)| m.get("inflated"));
+            sha256_hex(&disk) == sha
+                && inflated.is_none_or(|i| {
+                    let size = i["bytes"].as_u64().unwrap_or(0) as usize;
+                    gunzip(&disk, size).is_some_and(|b| i["sha256"] == sha256_hex(&b))
+                })
+        };
+        if let Some((path, sha, what)) = named.iter().find(|(path, sha, _)| !read_back(path, sha)) {
             let _ = std::fs::remove_dir_all(&temp);
             let why = format!("{what} ({path}, SHA-256 {sha}) isn't in the bundle as written");
             return Err(
@@ -900,9 +1062,13 @@ impl Hub<'_> {
             );
         }
         // The bundle's document carries no port: one it keeps fails the read-back, naming it.
+        let doc_path = files.path_of(&doc_sha).unwrap_or_default();
+        let doc_size =
+            (files.by_path.get(doc_path)).and_then(|(_, m)| m.get("inflated")?["bytes"].as_u64());
         let kept: Vec<String> = all
-            .get(&doc_path)
-            .and_then(|b| serde_json::from_slice::<Value>(b).ok())
+            .get(doc_path)
+            .and_then(|b| gunzip(b, doc_size? as usize))
+            .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
             .and_then(|d| Some(d.get("ports")?.as_object()?.keys().cloned().collect()))
             .unwrap_or_default();
         if !kept.is_empty() {
@@ -928,7 +1094,7 @@ impl Hub<'_> {
             .collect();
         Ok(json!({
             "target": "web",
-            "player": {"core_version": about["core_version"], "module_set_digest": about["set_digest"], "hash": wasm_sha,
+            "player": {"core_version": about["core_version"], "module_set_digest": about["set_digest"], "hash": player_sha,
                        "module_set": set.name},
             "fallback": if fallback["tour_only"] == true { "tour_only" } else { "page" },
             "sources": [],

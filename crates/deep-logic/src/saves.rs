@@ -42,6 +42,8 @@ struct State {
     /// A linear write's values before the last step that ran; empty when it only holds.
     prev: Vec<u8>,
     pending: BTreeMap<String, VecDeque<Entry>>,
+    /// #211: its world pages, as `pages::State::encode` laid them out.
+    pages: Option<Vec<u8>>,
 }
 
 /// The piece's state layout, content and module set: what a save is bound to.
@@ -168,6 +170,11 @@ fn encode(w: &mut World) -> Vec<u8> {
                 .collect()
         };
         put(&mut out, json!(pending).to_string().as_bytes());
+        // #211: an item with pages adds its map's entries that differ from init, their bytes
+        // once each, its slots and its move queue.
+        if let (Some(p), Some(st)) = (&item.pages, &l.paged) {
+            put(&mut out, &st.encode(p, planted.save_drops_page_map).0);
+        }
     }
     for id in &w.piece.machine {
         put(&mut out, id.as_bytes());
@@ -181,7 +188,7 @@ type Decoded = (Vec<(String, State)>, Vec<(String, u64)>);
 
 /// The state's items by ID, or None when it doesn't decode or holds more than `items` logic
 /// items.
-fn decode(mut b: &[u8], items: usize) -> Option<Decoded> {
+fn decode(mut b: &[u8], items: usize, paged: &dyn Fn(usize) -> bool) -> Option<Decoded> {
     fn take<'a>(b: &mut &'a [u8], n: usize) -> Option<&'a [u8]> {
         let (head, rest) = (b.get(..n)?, b.get(n..)?);
         *b = rest;
@@ -195,7 +202,7 @@ fn decode(mut b: &[u8], items: usize) -> Option<Decoded> {
         take(b, n)
     }
     let mut out = Vec::new();
-    for _ in 0..Some(u32_of(&mut b)?).filter(|n| *n <= items)? {
+    for i in 0..Some(u32_of(&mut b)?).filter(|n| *n <= items)? {
         let id = String::from_utf8(sized(&mut b)?.to_vec()).ok()?;
         let failed = match take(&mut b, 1)? {
             [0] => false,
@@ -220,6 +227,10 @@ fn decode(mut b: &[u8], items: usize) -> Option<Decoded> {
             .into_iter()
             .map(|(c, q)| Some((c, q.iter().map(Entry::parse).collect::<Option<_>>()?)))
             .collect::<Option<_>>()?;
+        let pages = match paged(i) {
+            true => Some(sized(&mut b)?.to_vec()),
+            false => None,
+        };
         out.push((
             id,
             State {
@@ -230,6 +241,7 @@ fn decode(mut b: &[u8], items: usize) -> Option<Decoded> {
                 arrays,
                 prev,
                 pending,
+                pages,
             },
         ));
     }
@@ -405,7 +417,23 @@ fn made(w: &mut World, k: i64, slot: i32, ended: bool) -> (Value, Vec<u8>) {
     if let Some(r) = &piece.rewind {
         header["branch"] = w.branch_saved(k, r);
     }
+    // #211: each item's page map entries and page bytes the save holds beside its memory.
+    if let Some(pages) = pages_held(w) {
+        header["pages"] = pages;
+    }
     (header, encode(w))
+}
+
+/// #211: each item with pages' map entries and page bytes a save of the world now holds.
+fn pages_held(w: &World) -> Option<Value> {
+    let mut out = serde_json::Map::new();
+    for (item, l) in w.piece.items.iter().zip(&w.lives) {
+        if let (Some(p), Some(st)) = (&item.pages, &l.paged) {
+            let (entries, bytes) = st.save_counts(p, w.planted.save_drops_page_map);
+            out.insert(item.id.clone(), json!({"entries": entries, "bytes": bytes}));
+        }
+    }
+    (!out.is_empty()).then_some(Value::Object(out))
 }
 
 /// Writes the world's state now, at step `k`, as a save of `slot`: under a temporary name, renamed
@@ -414,12 +442,47 @@ fn made(w: &mut World, k: i64, slot: i32, ended: bool) -> (Value, Vec<u8>) {
 fn write(w: &mut World, k: i64, slot: i32, ended: bool) -> Result<(String, PathBuf, bool), String> {
     let dir = w.saves_dir.clone().ok_or("no saves folder")?;
     let (header, state) = made(w, k, slot, ended);
-    let ours = listed(&dir, slot.into());
+    let keeps = w.planted.ended_keeps_earlier_save;
+    store(&dir, slot, ended, &header, &state, keeps)
+}
+
+/// #553: a save a match held until its step was confirmed, written into `dir` as a step writes
+/// one: `{item, slot, step, hash, file, ended, deep_hash}`. A slot whose newest save is ended takes
+/// no later one.
+pub fn store_held(dir: &Path, h: &Held) -> Result<Value, Value> {
+    let failed = |what: String| json!({"ok": false, "code": "save_failed", "item": h.item, "slot": h.slot, "step": h.step, "what": what});
+    fs::create_dir_all(dir).map_err(|e| failed(format!("{}: {e}", dir.display())))?;
+    if listed(dir, h.slot.into())
+        .first()
+        .is_some_and(|s| s.header["ended"] == json!(true))
+    {
+        return Ok(Value::Null);
+    }
+    let (hash, file, _) =
+        store(dir, h.slot, h.ended, &h.header, &h.state, false).map_err(failed)?;
+    Ok(
+        json!({"item": h.item, "slot": h.slot, "step": h.step, "hash": hash, "file": file,
+              "ended": h.ended, "deep_hash": h.deep_hash}),
+    )
+}
+
+/// A save's header and state written into `dir` under a temporary name, renamed once it reads
+/// back whole; then the slot keeps it and its last good save before it (only it, once ended,
+/// unless `keeps`).
+fn store(
+    dir: &Path,
+    slot: i32,
+    ended: bool,
+    header: &Value,
+    state: &[u8],
+    keeps: bool,
+) -> Result<(String, PathBuf, bool), String> {
+    let ours = listed(dir, slot.into());
     let seq = ours
         .first()
         .and_then(|s| s.header["seq"].as_u64())
         .map_or(1, |n| n + 1);
-    let bytes = file_bytes(&header, seq, &state);
+    let bytes = file_bytes(header, seq, state);
     let io = |e: std::io::Error| format!("{}: {e}", dir.display());
     // Hashed, written, synced, read back and renamed on a writer thread, never the caller's.
     let (sha, path, on_main) = std::thread::scope(|s| {
@@ -442,7 +505,7 @@ fn write(w: &mut World, k: i64, slot: i32, ended: bool) -> Result<(String, PathB
         .join()
         .map_err(|_| "the save writer panicked".to_string())?
     })?;
-    let good = if ended && !w.planted.ended_keeps_earlier_save {
+    let good = if ended && !keeps {
         None
     } else {
         ours.iter().position(|s| s.whole().is_some())
@@ -517,10 +580,14 @@ fn asked(w: &mut World, k: i64, ended_at: Instant) {
         let out = match write(w, k, slot, ended) {
             Ok((hash, file, on_main)) => {
                 let write_ns = ended_at.elapsed().as_nanos() as u64;
-                json!({
+                let mut out = json!({
                     "item": w.piece.items[i].id, "slot": slot, "step": k, "hash": hash, "file": file, "ended": ended,
                     "deep_hash": w.deep_hashes(), "write_ns": write_ns, "on_ui_thread": on_main,
-                })
+                });
+                if let Some(pages) = pages_held(w) {
+                    out["pages"] = pages;
+                }
+                out
             }
             Err(e) => {
                 json!({"ok": false, "code": "save_failed", "item": w.piece.items[i].id, "slot": slot, "step": k, "what": e})
@@ -594,6 +661,17 @@ fn opened(
         live.arrays = s.arrays;
         live.prev = s.prev;
         live.pending = s.pending;
+        // #211: the world pages: init's map under the save's entries, its slots and queue.
+        if let Some(p) = &item.pages {
+            let store = crate::pages::new_store(p, planted.page_store);
+            let st = s
+                .pages
+                .as_deref()
+                .and_then(|b| crate::pages::State::decode(p, store, b));
+            live.paged = Some(st.ok_or_else(
+                || json!({"code": "save_refused", "differs": [{"what": "pages", "item": item.id}]}),
+            )?);
+        }
         live.cursor = track
             .iter()
             .map(|(c, list)| {
@@ -769,10 +847,10 @@ fn whole(
             e
         }
     };
-    let state = bytes
-        .iter()
-        .position(|b| *b == b'\n')
-        .and_then(|n| decode(&bytes[n + 1..], piece.items.len()));
+    let state = bytes.iter().position(|b| *b == b'\n').and_then(|n| {
+        let paged = |i: usize| piece.items.get(i).is_some_and(|it| it.pages.is_some());
+        decode(&bytes[n + 1..], piece.items.len(), &paged)
+    });
     let mut via = match dir {
         Some((_, file)) => json!({"hash": hash, "file": file, "step": k, "via": "straight"}),
         None => json!({"hash": hash, "step": k, "via": "straight"}),
@@ -893,10 +971,12 @@ fn whole(
         w.branches = b;
     }
     // A save opened under the program that wrote it opens at the full-state hashes it recorded.
-    // #534's planted saves and opens are wrong programs from before that check, so they skip it.
+    // #534's and #211's planted saves and opens are wrong programs from before that check, so
+    // they skip it.
     let unchecked = planted.save_drops_globals
         || planted.save_drops_input_position
-        || planted.open_reapplies_segments;
+        || planted.open_reapplies_segments
+        || planted.save_drops_page_map;
     // Each item's full-state hash, taken once: checked, then the opened checkpoint's.
     let deep = w.deep_hashes();
     if via["via"] == "straight"
@@ -1028,6 +1108,8 @@ fn migrate(
         arrays: old.arrays.clone(),
         prev: old.prev.clone(),
         pending: old.pending.clone(),
+        // #211: a migration moves memory; the world pages carry as they were.
+        pages: old.pages.clone(),
     };
     let budget = json!({"fuel": fuel, "memory": allowed, "stack": 262_144});
     let run = json!({"by": m.by, "fuel": used, "ns": started.elapsed().as_nanos() as u64, "budget": budget});

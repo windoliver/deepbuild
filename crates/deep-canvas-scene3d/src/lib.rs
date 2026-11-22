@@ -76,7 +76,7 @@ pub mod water;
 
 /// The wrong programs #420's, #441's and #440's criteria plant in scene3d's and the building
 /// module's operators, each reachable only through a proof surface's `planted`.
-pub const PLANTED: [&str; 56] = [
+pub const PLANTED: [&str; 58] = [
     "torus_genus_0",
     "vertex_count_off_by_one",
     "cap_left_open",
@@ -126,6 +126,9 @@ pub const PLANTED: [&str; 56] = [
     "subdivide_drops_edge_attrs",
     "store_ignores_on",
     "store_nonfinite_keeps_earlier",
+    // #552: a `seen` column and a fog overlay that read player 1's bits on every copy.
+    slots::SEEN_PLAYER_ONE,
+    tints::PLAYER_ONE,
     // #1928: the offsets and dissolves its criteria plant.
     faces::PLANTED[0],
     faces::PLANTED[1],

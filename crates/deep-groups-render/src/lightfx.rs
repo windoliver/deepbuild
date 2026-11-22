@@ -2,7 +2,9 @@
 //! group `frame@1`, `group@1`). The group compositor draws the children alone into a target; this
 //! lights each pixel of it as deep-canvas-marks' `light` (the CPU reference) does, in f32, over
 //! the children's bounds, into another target to composite. #2032: a light is left out of a
-//! pixel an occluding outline shadows, by `shadow`'s segment test over its bins.
+//! pixel an occluding outline shadows, by `shadow`'s segment test over its bins. #2053: a run that
+//! holds one image with a `normal` page reads the page, uploaded once by its asset, and turns
+//! each point light's term by max(0, N·L) ÷ L.z.
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -24,6 +26,9 @@ pub fn scene_plant(planted: Option<Planted>) -> Option<scene::Planted> {
         Planted::LightEncodedSum => scene::Planted::LightEncodedSum,
         Planted::LightDefaultAmbientZero => scene::Planted::LightDefaultAmbientZero,
         Planted::LightEveryChild => scene::Planted::LightEveryChild,
+        Planted::NormalFlippedGreen => scene::Planted::NormalFlippedGreen,
+        Planted::NormalDotAlone => scene::Planted::NormalDotAlone,
+        Planted::NormalUnturned => scene::Planted::NormalUnturned,
         _ => return None,
     })
 }
@@ -34,9 +39,11 @@ thread_local! {
 }
 
 /// `--planted light_stale_list`: each lit group of `items` takes the light list the frame drawn
-/// before it in this process took, and leaves its own for the next.
+/// before it in this process took, and leaves its own for the next. `light_stale_height` (#2053)
+/// keeps only each light's height from the frame before.
 pub fn stale(planted: Option<Planted>, items: &mut Map<String, Value>) {
-    if planted != Some(Planted::LightStaleList) {
+    let height = planted == Some(Planted::LightStaleHeight);
+    if planted != Some(Planted::LightStaleList) && !height {
         return;
     }
     BEFORE.with(|before| {
@@ -45,8 +52,18 @@ pub fn stale(planted: Option<Planted>, items: &mut Map<String, Value>) {
             let Some(light) = item.pointer_mut("/params/light").filter(|l| !l.is_null()) else {
                 continue;
             };
-            if let Some(kept) = before.insert(id.clone(), light.clone()) {
+            let Some(kept) = before.insert(id.clone(), light.clone()) else {
+                continue;
+            };
+            if !height {
                 *light = kept;
+                continue;
+            }
+            let lights = light.get_mut("lights").and_then(Value::as_array_mut);
+            for (k, l) in lights.into_iter().flatten().enumerate() {
+                if let Some(h) = kept.pointer(&format!("/lights/{k}/height")) {
+                    l["height"] = h.clone();
+                }
             }
         }
     });
@@ -184,6 +201,33 @@ pub struct LightFx {
     pipelines: [wgpu::RenderPipeline; 4],
     /// What the light drawn last cast, kept while the same lights and occluders draw.
     cast: Option<Cast>,
+    /// #2053: the normal page drawn last, by its asset, and a 1 × 1 page for a run with none.
+    page: Option<(String, wgpu::TextureView)>,
+    flat: wgpu::TextureView,
+}
+
+/// #2053: `texels` (RGBA, as stored) as a texture of `size` px, read as stored: never sRGB.
+fn page_texture(device: &Device, size: [u32; 2], texels: &[u8]) -> wgpu::TextureView {
+    let texture = device.device.create_texture_with_data(
+        &device.queue,
+        &wgpu::TextureDescriptor {
+            label: Some("light fx normal page"),
+            size: wgpu::Extent3d {
+                width: size[0],
+                height: size[1],
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        },
+        wgpu::util::TextureDataOrder::LayerMajor,
+        texels,
+    );
+    texture.create_view(&Default::default())
 }
 
 impl LightFx {
@@ -223,6 +267,7 @@ impl LightFx {
                 buffer(3, storage),
                 buffer(4, storage),
                 texture(5),
+                texture(6),
             ],
         });
         let pipelines = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -261,6 +306,8 @@ impl LightFx {
             pipelines: ["fs", "fs_cast", "fs_over", "fs_cast_over"].map(pipeline),
             layout,
             cast: None,
+            page: None,
+            flat: page_texture(device, [1, 1], &[128, 128, 255, 255]),
         }
     }
 
@@ -294,12 +341,26 @@ impl LightFx {
             Some(cast) => cast,
             None => Cast::new(device, light, planted, zoom, bounds),
         };
+        // #2053: the run's normal page, uploaded once while the same page draws.
+        let normals = light
+            .page
+            .as_ref()
+            .and_then(|p| Some((&p.asset, p.normals.as_ref()?)));
+        if let Some((asset, n)) = normals {
+            if self.page.as_ref().is_none_or(|(a, _)| a != asset) {
+                self.page = Some((asset.clone(), page_texture(device, n.size, &n.texels)));
+            }
+        }
         let flags = u32::from(linear)
             | (u32::from(light.plant == Plant::LinearFalloff) << 1)
             | (u32::from(light.plant == Plant::EncodedSum) << 2)
             | (u32::from(planted == Some(Planted::ShadowInsideOutline)) << 3)
             | (u32::from(planted == Some(Planted::ShadowRemovesAmbient)) << 4)
-            | (u32::from(planted == Some(Planted::ShadowEdgeAliased)) << 5);
+            | (u32::from(planted == Some(Planted::ShadowEdgeAliased)) << 5)
+            | (u32::from(normals.is_some()) << 6)
+            | (u32::from(light.plant == Plant::FlippedGreen) << 7)
+            | (u32::from(light.plant == Plant::DotAlone) << 8)
+            | (u32::from(light.plant == Plant::Unturned) << 9);
         let count = cast.lights.len().min(MAX_LIGHTS);
         let mut words: Vec<u8> = Vec::with_capacity(16 + MAX_LIGHTS * 64);
         words.extend_from_slice(&(light.ambient as f32).to_le_bytes());
@@ -338,6 +399,36 @@ impl LightFx {
         words.resize(16 + MAX_LIGHTS * 32, 0);
         words.extend_from_slice(&casters);
         words.resize(16 + MAX_LIGHTS * 64, 0);
+        // #2053: each light's height in px, 0 for a sun, which reads a page as flat; then the
+        // page's placement from px to its texels, the image's turn, and its size.
+        for l in cast.lights.iter().take(count) {
+            let h = if l.sun.is_some() {
+                0.0
+            } else {
+                l.height * zoom
+            };
+            words.extend_from_slice(&(h as f32).to_le_bytes());
+        }
+        words.resize(16 + MAX_LIGHTS * 68, 0);
+        let ([a, b, c, d, e, f], turn, size) = match normals {
+            Some((_, n)) => (n.back, n.turn, n.size),
+            None => ([0.0; 6], [0.0, 1.0], [1, 1]),
+        };
+        for v in [
+            a / zoom,
+            b / zoom,
+            c / zoom,
+            d / zoom,
+            e,
+            f,
+            turn[0],
+            turn[1],
+        ] {
+            words.extend_from_slice(&(v as f32).to_le_bytes());
+        }
+        for v in [size[0], size[1], 0, 0] {
+            words.extend_from_slice(&v.to_le_bytes());
+        }
         let d = &device.device;
         let uniform = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("light fx"),
@@ -371,6 +462,13 @@ impl LightFx {
                 wgpu::BindGroupEntry {
                     binding: 5,
                     resource: wgpu::BindingResource::TextureView(back.unwrap_or(children)),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 6,
+                    resource: wgpu::BindingResource::TextureView(match normals {
+                        Some(_) => &self.page.as_ref().expect("uploaded above").1,
+                        None => &self.flat,
+                    }),
                 },
             ],
         });

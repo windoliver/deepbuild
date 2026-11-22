@@ -43,7 +43,7 @@ impl Groups {
                     item,
                     effect: Some(e),
                     ..
-                } if e.light.is_some() => item.strip_suffix("#light"),
+                } if e.light.is_some() => deep_canvas_marks::light::group_of(item),
                 _ => None,
             };
             if let Some(group) = group {
