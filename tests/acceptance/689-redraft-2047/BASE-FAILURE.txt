@@ -21,7 +21,7 @@ AC3, 01:46 Nov 22, 4.4 s:
     AssertionError [ERR_ASSERTION]: with RUSTUP_HOME and CARGO_HOME unset by the caller, each check lane gets [lane,
     RUSTUP_HOME, CARGO_HOME] other than the user's /Users/<user>/.rustup and /Users/<user>/.cargo.
     + actual - expected: for each of the 22 check lanes (typecheck, lint, unit, contracts, interfaces, noop, seams,
-    relay, wasm32, catalogue drift, design links and names, public text, plain words, corpus, motion, canvas kit, field
+    relay, wasm32, catalogue drift, design links and names, public text, plain words, corpus, motion, the canvas kit, field
     lists, parity suite quick, parity quick, proof, verdict proofs, config eval):
       +     null,
       +     null
