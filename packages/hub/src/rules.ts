@@ -49,7 +49,11 @@ export interface Rule {
   line?: number;
   index?: true;
 }
-export interface Held { id: string; text: string; file: string; scope: string; repo: string; proposal: string; ask: string }
+/**
+ * A rule line an agent's edit removed, held in force (#2076): `proposal` and `ask` are null while its proposal couldn't
+ * be raised, and `session` is the session whose edit it was, so the next rules sync raises it again.
+ */
+export interface Held { id: string; text: string; file: string; scope: string; repo: string; proposal: string | null; ask: string | null; session?: string }
 
 const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
 /** Text as rules are compared: one space per whitespace run, no trailing period, case folded. */
@@ -236,7 +240,7 @@ export function rulesOf(o: { files: readonly RuleFile[]; typed: readonly { targe
     if (at.has(h.id) || !repos.has(h.repo)) continue;
     at.add(h.id);
     const native = basename(h.file) === 'CLAUDE.md' ? 'claude-code' : basename(h.file) === 'AGENTS.md' ? 'codex' : undefined;
-    out.push({ id: h.id, text: h.text, file: h.file, scope: h.scope, known: 'repo', tokens: tokensOf(h.text), enforcer: enforcer(h.text), ...(h.repo ? { repo: h.repo } : {}), held: h.proposal, ...(native ? { native } : {}) });
+    out.push({ id: h.id, text: h.text, file: h.file, scope: h.scope, known: 'repo', tokens: tokensOf(h.text), enforcer: enforcer(h.text), ...(h.repo ? { repo: h.repo } : {}), held: h.proposal ?? 'not raised', ...(native ? { native } : {}) });
   }
   for (const t of o.typed) {
     const id = ruleId('you', t.text);

@@ -322,6 +322,8 @@ export type Plant =
   // #1512's: a review whose rubric holds every rule the hub knows, whatever its scope, how it was known or what enforces
   // it, with no size bound; and a hub that holds the review kind but adds the review to no claim that opens a PR.
   | 'rubric-holds-every-rule' | 'review-without-caller'
+  // #2076's: a hub whose proposal for a rule line an agent's edit removed can't be raised.
+  | 'hold-raise-fails'
   // #1509's: a gate that asks for every package run straight from a registry, whatever its age.
   | 'asks-every-registry-run'
   // #1868's: a hub that builds the asks and readings of the canvas core's world once and reads them so ever after.
@@ -455,6 +457,7 @@ const PLANTS: readonly string[] = [
   'pass-skips-due-promise', 'state-pass-skips-due-promise', 'asks-without-tool-before',
   'hands-over-socket-chunk',
   'rubric-holds-every-rule', 'review-without-caller',
+  'hold-raise-fails',
   'canvas-world-built-once',
   'reply-cap-64kb', 'pager-drops-edge-row', 'refusal-schema-12000', 'unknown-client-64kb',
   'reads-every-row', 'page-hook-frame-per-event', 'query-per-row',
