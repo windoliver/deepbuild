@@ -1,0 +1,15 @@
+
+ RUN  v5.0.5 ~/mac-runs/rd-fix-1546
+
+ ✓ tests/acceptance/1546/ac1-journey.test.ts > #1546 AC1 a record event reaches the window by itself, and the replica reads the frame it drew > an ask raised on the record is drawn with no input: the frame drawn after it lists the row and the new count, and equals a forced one 143554ms
+ ✓ tests/acceptance/1546/ac1-journey.test.ts > #1546 AC1 a record event reaches the window by itself, and the replica reads the frame it drew > planted record-in-thread-local: the drawn frame keeps the old count and rows, and the check fails naming Needs you, the ask's row and the step 139ms
+ ✓ tests/acceptance/1546/ac1-journey.test.ts > #1546 AC1 seeded journeys of record events, clock steps, hovers and resizes > seed 1546: the window draws only when dirty, every step's forced frame equals the last drawn one, and the claim is PASS 1381ms
+ ✓ tests/acceptance/1546/ac1-journey.test.ts > #1546 AC1 seeded journeys of record events, clock steps, hovers and resizes > seed 7: the window draws only when dirty, every step's forced frame equals the last drawn one, and the claim is PASS 1393ms
+ ✓ tests/acceptance/1546/ac1-journey.test.ts > #1546 AC1 seeded journeys of record events, clock steps, hovers and resizes > seed 2026: the window draws only when dirty, every step's forced frame equals the last drawn one, and the claim is PASS 1005ms
+ ✓ tests/acceptance/1546/ac1-journey.test.ts > #1546 AC1 seeded journeys of record events, clock steps, hovers and resizes > seed 1546 with the planted view: FAIL, its first finding at a record event, naming Needs you and a raised ask's row at that ask's step 1261ms
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  00:26:23
+   Duration  149.04s (tests 100%)
+

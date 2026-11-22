@@ -1,0 +1,84 @@
+
+ RUN  v5.0.5 ~/mac-runs/rd-base
+
+ ❯ tests/acceptance/1546/ac1-journey.test.ts (6 tests | 4 failed) 199359ms
+   ✓ #1546 AC1 a record event reaches the window by itself, and the replica reads the frame it drew (2)
+     ✓ an ask raised on the record is drawn with no input: the frame drawn after it lists the row and the new count, and equals a forced one 196871ms
+     ✓ planted record-in-thread-local: the drawn frame keeps the old count and rows, and the check fails naming Needs you, the ask's row and the step 212ms
+   ❯ #1546 AC1 seeded journeys of record events, clock steps, hovers and resizes (4)
+     × seed 1546: the window draws only when dirty, every step's forced frame equals the last drawn one, and the claim is PASS 669ms
+     × seed 7: the window draws only when dirty, every step's forced frame equals the last drawn one, and the claim is PASS 650ms
+     × seed 2026: the window draws only when dirty, every step's forced frame equals the last drawn one, and the claim is PASS 370ms
+     × seed 1546 with the planted view: FAIL, its first finding at a record event, naming Needs you and a raised ask's row at that ask's step 548ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1546/ac1-journey.test.ts > #1546 AC1 seeded journeys of record events, clock steps, hovers and resizes > seed 1546: the window draws only when dirty, every step's forced frame equals the last drawn one, and the claim is PASS
+AssertionError: BLOCKED: deep-drive gave no JSON reply to resize: {"exited":true,"stderr":"\nthread 'main' (87458093) panicked at vendor/gpui-pre/src/app/entity_map.rs:164:36:\ncannot update deep_app::views::Shell while it is already being updated\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"}
+ ❯ Drive.call tests/acceptance/124/helpers.ts:162:80
+    160|     const reply = await answer;
+    161|     const ms = performance.now() - at;
+    162|     if (reply.exited || reply.timedOut || reply.unparsed !== undefined…
+       |                                                                                ^
+    163|     return { reply, ms };
+    164|   }
+ ❯ Replica.call tests/acceptance/1546/helpers.ts:79:23
+ ❯ Replica.must tests/acceptance/1546/helpers.ts:87:19
+ ❯ run tests/acceptance/1546/helpers.ts:222:28
+ ❯ tests/acceptance/1546/ac1-journey.test.ts:122:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/acceptance/1546/ac1-journey.test.ts > #1546 AC1 seeded journeys of record events, clock steps, hovers and resizes > seed 7: the window draws only when dirty, every step's forced frame equals the last drawn one, and the claim is PASS
+AssertionError: BLOCKED: deep-drive gave no JSON reply to resize: {"exited":true,"stderr":"\nthread 'main' (87458351) panicked at vendor/gpui-pre/src/app/entity_map.rs:164:36:\ncannot update deep_app::views::Shell while it is already being updated\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"}
+ ❯ Drive.call tests/acceptance/124/helpers.ts:162:80
+    160|     const reply = await answer;
+    161|     const ms = performance.now() - at;
+    162|     if (reply.exited || reply.timedOut || reply.unparsed !== undefined…
+       |                                                                                ^
+    163|     return { reply, ms };
+    164|   }
+ ❯ Replica.call tests/acceptance/1546/helpers.ts:79:23
+ ❯ Replica.must tests/acceptance/1546/helpers.ts:87:19
+ ❯ run tests/acceptance/1546/helpers.ts:222:28
+ ❯ tests/acceptance/1546/ac1-journey.test.ts:122:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/acceptance/1546/ac1-journey.test.ts > #1546 AC1 seeded journeys of record events, clock steps, hovers and resizes > seed 2026: the window draws only when dirty, every step's forced frame equals the last drawn one, and the claim is PASS
+AssertionError: BLOCKED: deep-drive gave no JSON reply to resize: {"exited":true,"stderr":"\nthread 'main' (87458592) panicked at vendor/gpui-pre/src/app/entity_map.rs:164:36:\ncannot update deep_app::views::Shell while it is already being updated\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"}
+ ❯ Drive.call tests/acceptance/124/helpers.ts:162:80
+    160|     const reply = await answer;
+    161|     const ms = performance.now() - at;
+    162|     if (reply.exited || reply.timedOut || reply.unparsed !== undefined…
+       |                                                                                ^
+    163|     return { reply, ms };
+    164|   }
+ ❯ Replica.call tests/acceptance/1546/helpers.ts:79:23
+ ❯ Replica.must tests/acceptance/1546/helpers.ts:87:19
+ ❯ run tests/acceptance/1546/helpers.ts:222:28
+ ❯ tests/acceptance/1546/ac1-journey.test.ts:122:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/acceptance/1546/ac1-journey.test.ts > #1546 AC1 seeded journeys of record events, clock steps, hovers and resizes > seed 1546 with the planted view: FAIL, its first finding at a record event, naming Needs you and a raised ask's row at that ask's step
+AssertionError: BLOCKED: deep-drive gave no JSON reply to resize: {"exited":true,"stderr":"\nthread 'main' (87458722) panicked at vendor/gpui-pre/src/app/entity_map.rs:164:36:\ncannot update deep_app::views::Shell while it is already being updated\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"}
+ ❯ Drive.call tests/acceptance/124/helpers.ts:162:80
+    160|     const reply = await answer;
+    161|     const ms = performance.now() - at;
+    162|     if (reply.exited || reply.timedOut || reply.unparsed !== undefined…
+       |                                                                                ^
+    163|     return { reply, ms };
+    164|   }
+ ❯ Replica.call tests/acceptance/1546/helpers.ts:79:23
+ ❯ run tests/acceptance/1546/helpers.ts:222:109
+ ❯ tests/acceptance/1546/ac1-journey.test.ts:142:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 2 passed (6)
+   Start at  00:05:06
+   Duration  199.59s (tests 100%)
+

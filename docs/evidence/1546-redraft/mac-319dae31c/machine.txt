@@ -1,0 +1,14 @@
+Mac18,1
+ProductName:		macOS
+ProductVersion:		27.2.1
+BuildVersion:		26B7131
+Now drawing from 'AC Power'
+rustc 1.99.1 (58cf8f9c3 2026-10-13)
+node v24.22.0
+        Color LCD:
+          Resolution: 3024 x 1964 Retina
+          Main Display: Yes
+          Mirror: Off
+          Online: Yes
+start 2026-11-21 23:37:07 23:37  up 2 days,  4:03, 4 users, load averages: 76.08 91.45 82.60
+end 2026-11-22 00:28:58  0:28  up 2 days,  4:55, 4 users, load averages: 41.39 61.54 71.83
