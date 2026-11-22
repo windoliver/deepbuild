@@ -25,6 +25,18 @@ describe("a cloud create's owner (#2134)", () => {
     expect(owner('pulumi -C infra up', 'It creates a cloud resource: pulumi -C infra up')).toBe('pulumi');
   });
 
+  it('is no account from a config holding a U+FEFF, which readers split differently', () => {
+    const other = mkdtempSync(join(tmpdir(), 'hub2134-'));
+    mkdirSync(join(other, '.aws'));
+    writeFileSync(join(other, '.aws', 'config'), '[profile\uFEFFdev]\nsso_account_id = 111111111111\n[profile dev]\nsso_account_id = 222222222222\n');
+    try {
+      const note = 'It creates a cloud resource under the AWS profile dev: aws kms create-key --profile dev';
+      expect(aboutCall(['cloud-resource'], 'aws kms create-key --profile dev', { 'no-unnamed-cloud-resource': note }, other)?.subject.target.owner).toBe('aws-profile:dev');
+    } finally {
+      rmSync(other, { recursive: true, force: true });
+    }
+  });
+
   it('is the line alone when the note names no owner: several creating runs, AWS settings the line sets, an unread run, or no note', () => {
     for (const [line, note] of [
       ['aws kms create-key --profile dev && aws kms create-key --profile prod', 'It runs 2 commands that create cloud resources: aws kms create-key --profile dev; aws kms create-key --profile prod'],

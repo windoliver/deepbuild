@@ -688,7 +688,8 @@ impl Call {
             // The only AWS_ setting it reads is the creating run's own AWS_PROFILE.
             || aws_words > usize::from(own_profile)
             || (aws_words == 1 && bare.matches("AWS_PROFILE=").count() != 1)
-            || ["HOME", "BASH_ENV"].iter().any(|w| bare.contains(w))
+            // What picks the program aws runs as, or the files it reads its account from.
+            || ["HOME", "BASH_ENV", "PATH", "PYTHON", "DYLD_", "LD_"].iter().any(|w| bare.contains(w))
             || bare.to_lowercase().contains(".aws")
             // Brace expansion, and a function that may stand in for aws.
             || unquoted.contains(['{', '}'])
@@ -939,7 +940,8 @@ fn reads_only(run: &Run) -> bool {
 const READ_ONLY: &[&str] = &["echo", "cd", "pwd", "true", "ls", "sleep", "date"];
 
 /// The words that change what a run is given or who runs it: a wrapper that changes its user, its environment or its
-/// words, and the aws command that rewrites a profile.
+/// words, the aws command that rewrites a profile, and the shell words that assign a variable or guard a statement, so
+/// an assignment in it is no statement's own.
 const AS_ANOTHER: &[&str] = &[
     "sudo",
     "doas",
@@ -950,6 +952,19 @@ const AS_ANOTHER: &[&str] = &[
     "xargs",
     "parallel",
     "configure",
+    "for",
+    "select",
+    "if",
+    "while",
+    "until",
+    "case",
+    "!",
+    "read",
+    "let",
+    "getopts",
+    "mapfile",
+    "readarray",
+    "coproc",
 ];
 
 /// Whether a profile can be said in a note and read back whole: printable ASCII with no space and no colon.

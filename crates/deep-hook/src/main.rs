@@ -288,6 +288,12 @@ fn cloud_owner(profile: &str) -> String {
         PathBuf::from(env::var_os("HOME").unwrap_or_default()).join(".aws/config"),
     )
     .unwrap_or_default();
+    // A U+FEFF is white space to some readers and not to others: a file holding one is read as naming no account.
+    let config = if config.contains('\u{feff}') {
+        String::new()
+    } else {
+        config
+    };
     let mut section = String::new();
     for line in config.lines().map(str::trim) {
         // A header is read as the CLI's parser reads it: up to its last `]`, whatever follows.

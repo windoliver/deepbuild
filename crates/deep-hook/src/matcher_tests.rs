@@ -418,6 +418,21 @@ fn an_options_value_is_not_read_as_the_subcommand() {
         ("PATH=/x:/usr/bin; aws kms create-key --profile dev", None),
         ("x=1 && aws kms create-key --profile dev", None),
         (
+            "for PATH in bin; do aws kms create-key --profile dev; done",
+            None,
+        ),
+        ("! PATH=bin || aws kms create-key --profile dev", None),
+        (
+            "if PATH=/opt/x/bin; then aws kms create-key --profile dev; fi",
+            None,
+        ),
+        ("! X=1; aws kms create-key --profile dev", None),
+        (
+            "for X in a; do aws kms create-key --profile dev; done",
+            None,
+        ),
+        ("read X; aws kms create-key --profile dev", None),
+        (
             "echo x > /h/.awſ/config && aws kms create-key --profile dev",
             None,
         ),
