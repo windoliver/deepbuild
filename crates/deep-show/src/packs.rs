@@ -103,6 +103,8 @@ pub fn install(
     twin: Option<&str>,
     vet: Vet<'_>,
 ) -> Value {
+    // #161: the pack check's wall time, from reading the folder to its verdict.
+    let started = std::time::Instant::now();
     let mut layouts = Vec::new();
     let key = (id.to_string(), dir.to_path_buf());
     let known = twin
@@ -143,6 +145,7 @@ pub fn install(
             }
         }
     };
+    let check_ms = started.elapsed().as_secs_f64() * 1e3;
     let issues: Vec<Value> = issues.iter().map(Issue::to_json).collect();
     // One row per version: a refused republish leaves the row of the version first published,
     // and a version offered again after a refusal takes its row once admitted.
@@ -167,7 +170,7 @@ pub fn install(
             layouts: layouts.clone(),
         }),
     }
-    json!({"outcome": outcome, "pack": id, "version": version, "issues": issues, "layouts": layouts})
+    json!({"outcome": outcome, "pack": id, "version": version, "issues": issues, "layouts": layouts, "check_ms": check_ms})
 }
 
 /// The `packs` reply: one row per version offered, in order, with how often the store has run

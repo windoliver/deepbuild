@@ -105,14 +105,15 @@ pub fn frame_rate(v: &Value) -> Result<(String, i64), String> {
 /// exact from flicks, the position the state after step s lerped toward the next by α, in f32.
 /// `positions[id][s]` is output `id`'s body's position after step s; `readings[id]` (#523) is a
 /// joint output's: whether it reads joint_force, written `{force: N, torque: N·m}`, else
-/// joint_coordinate, written as one number, and its values after each step, lerped alike.
+/// joint_coordinate, written as one number, and its values after each step, lerped alike. #2035:
+/// where `cut(id, s + 1)`, a place's step ended in state s + 1 on output `id`'s body, the frame
+/// shows that state with no blend.
 pub fn outputs(
     positions: &BTreeMap<String, Vec<[f32; 3]>>,
     readings: &BTreeMap<String, (bool, Vec<[f64; 2]>)>,
-    frame_rate: &str,
-    frame: i64,
-    step_rate: f64,
-    steps: u64,
+    (frame_rate, frame): (&str, i64),
+    (step_rate, steps): (f64, u64),
+    cut: impl Fn(&str, u64) -> bool,
 ) -> Value {
     let step = deep_canvas::time::step_length(step_rate)
         .expect("the world reader refuses a step rate with no whole-flick step");
@@ -134,6 +135,8 @@ pub fn outputs(
                 let a = at[s as usize];
                 let p = if rem == 0 {
                     a
+                } else if cut(id, s as u64 + 1) {
+                    at[s as usize + 1]
                 } else {
                     let b = at[s as usize + 1];
                     let alpha = (rem as f64 / step as f64) as f32;
@@ -156,6 +159,7 @@ pub fn outputs(
                 let alpha = rem as f64 / step as f64;
                 let v = [0, 1].map(|i| match rem {
                     0 => at[s][i],
+                    _ if cut(id, s as u64 + 1) => at[s + 1][i],
                     _ => at[s][i] + alpha * (at[s + 1][i] - at[s][i]),
                 });
                 if *pair {
@@ -178,12 +182,13 @@ pub fn outputs(
 /// numbers (position, then rotation `[x, y, z, w]`) or a contact count's one. Frame j at t = j ×
 /// `frame` flicks, step s = ⌊t ÷ `step`⌋ and α = (t − s × `step`) ÷ `step`: a pose lerps its
 /// position and nlerps its rotation, the shorter way round, toward step s + 1 by α, written `{pos,
-/// rot}`; a contact count holds step s's.
+/// rot}`; a contact count holds step s's. #2035: where `cut(id, s + 1)`, a place's step ended in
+/// state s + 1 on the wheel's body, the frame shows that state with no blend.
 pub fn wheel_series(
     outputs: &mut Value,
     wheels: &BTreeMap<String, Vec<Vec<f64>>>,
-    frame: i64,
-    step: i64,
+    (frame, step): (i64, i64),
+    cut: impl Fn(&str, u64) -> bool,
 ) {
     if wheels.is_empty() {
         return;
@@ -204,6 +209,8 @@ pub fn wheel_series(
             let a = &at[s];
             let v: Vec<f64> = if a.len() != 7 || rem == 0 {
                 a.clone()
+            } else if cut(id, s as u64 + 1) {
+                at[s + 1].clone()
             } else {
                 let b = &at[s + 1];
                 let alpha = rem as f64 / step as f64;

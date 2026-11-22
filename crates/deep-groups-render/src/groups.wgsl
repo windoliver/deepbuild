@@ -37,6 +37,17 @@ fn hash1(x: u32) -> u32 {
 
 @fragment
 fn fs(@builtin(position) at: vec4<f32>) -> @location(0) vec4<f32> {
+    return mixed(at);
+}
+
+// The same into a half-float target, which a group's passes read: each channel rounded to the
+// nearest half float, since a GPU that truncates there loses up to half a 10-bit code.
+@fragment
+fn fs_half(@builtin(position) at: vec4<f32>) -> @location(0) vec4<f32> {
+    return bitcast<vec4<f32>>((bitcast<vec4<u32>>(mixed(at)) + vec4<u32>(0x1000u)) & vec4<u32>(0xffffe000u));
+}
+
+fn mixed(at: vec4<f32>) -> vec4<f32> {
     let ix = vec2<i32>(at.xy);
     let b = textureLoad(back, ix, 0);
     var s = textureLoad(src, ix, 0);

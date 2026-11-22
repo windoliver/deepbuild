@@ -36,6 +36,7 @@ pub mod contact;
 mod dims;
 pub mod fast;
 mod held;
+mod join;
 pub mod kit;
 pub mod laws;
 pub mod links;
@@ -368,6 +369,8 @@ struct Trace {
     vehicles: Map<String, Value>,
     wheels: BTreeMap<String, Vec<Vec<f64>>>,
     posed: BTreeMap<String, String>,
+    /// #2035: by body, each state a place's step ended in (cut.rs).
+    cuts: deep_canvas_physics::cut::Cuts,
 }
 
 /// What a run's world reads of its scene over `steps` steps, as its bake key holds it: `[]` when
@@ -634,6 +637,7 @@ impl Run {
         let c = b.canonical();
         let joints = b.joints();
         t.step_hashes.push(self.hash(&c, &joints));
+        deep_canvas_physics::cut::note(&mut t.cuts, &b.placed, k);
         let bodies = c.iter().filter(|x| x.values.len() == FIELDS.len());
         t.fast
             .step(k, bodies.map(|x| (x.id.as_str(), x.values.as_slice())));
@@ -793,13 +797,11 @@ impl Run {
             steps,
             Some(&self.build.target),
         );
-        let mut outputs = bake::outputs(&t.positions, &t.readings, rate, frame, w.step_rate, steps);
-        vehicle::outputs(&mut outputs, t, frame, w);
         let rank = occurrence::ranks(w);
         t.shaped = shape_uses(&t.occurrences, w);
         let record = json!({"key": key, "step_hashes": t.step_hashes, "ring": ring(t),
                             "checkpoints": t.ring.kept.iter().map(|k| checkpoint(&k.checkpoint)).collect::<Vec<_>>(),
-                            "outputs": outputs, "positions": t.positions, "values": t.values, "track": track,
+                            "outputs": vehicle::outputs(self, t, (rate, frame), w, steps), "positions": t.positions, "values": t.values, "track": track,
                             "occurrences": occurrence::listed(&t.occurrences),
                             "occurrences_hash": occurrence::hash(&t.occurrences, &rank)});
         (key, record)
