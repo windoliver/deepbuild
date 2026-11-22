@@ -184,7 +184,7 @@ async function changesOf(cwd: string, base: string, ms: number): Promise<Changes
     const left = Math.max(1, Math.ceil(deadline - Date.now()));
     execFile('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], { cwd, env, maxBuffer: 1 << 28, timeout: left, killSignal: 'SIGKILL' }, (error, out, err) => {
       if (error && !(missing && !error.killed)) {
-        const why = (error as { code?: unknown }).code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' ? 'gave more than 256 MB' : error.killed ? `timed out after ${left} ms` : `failed: ${String(err).trim().split('\n')[0] || error.message}`;
+        const why = (error as { code?: unknown }).code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' ? 'gave more than 256 MB' : error.killed ? `timed out, past the read's ${Math.ceil(ms)} ms deadline` : `failed: ${String(err).trim().split('\n')[0] || error.message}`;
         unread.push(`git ${args.join(' ')} ${why}`);
       }
       done(error ? [] : out.split('\n').filter(Boolean));
