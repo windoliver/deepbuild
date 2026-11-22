@@ -27,6 +27,9 @@ pub enum Given {
     /// A layout-shaped reading's record: its bytes, at most 256.
     Record(Vec<u8>),
     Rewind(To),
+    /// #552: a draw's commitment `{step, hash}` or bits `{step, bits}`, the net module's own
+    /// entries (Net: random draws after commit), which no control's read region holds.
+    Draw(Value),
     /// #189: a carry record's entry, by hash, with the record's arrays once read from where
     /// saves are kept (Logic: carry records).
     Carry {
@@ -47,8 +50,8 @@ pub const REWIND: &str = ":rewind";
 /// #277: the key a track keeps the net module's seat entries under, `seat {player, state}`, each
 /// entry's value the state's number in `SEATS`.
 pub const SEAT: &str = ":seat";
-/// #277: a seat's states as `net.seats` numbers them, from 1.
-pub const SEATS: [&str; 3] = ["left", "absent", "back"];
+/// #277: a seat's states as `net.seats` numbers them, from 1; #278 adds `joined`.
+pub const SEATS: [&str; 4] = ["left", "absent", "back", "joined"];
 
 /// #860: where a rewind returns on the current branch: back n stops (n ≥ 1) from the current
 /// one, or to the stop at step k.
@@ -120,6 +123,7 @@ impl Given {
             }
             Given::Rewind(To::Stop(n)) => json!({"to": {"stop": n}}),
             Given::Rewind(To::Step(k)) => json!({"to": {"step": k}}),
+            Given::Draw(v) => v.clone(),
             Given::Carry { hash, .. } | Given::Profile { hash, .. } => json!(hash),
         }
     }
@@ -144,8 +148,9 @@ impl Given {
             }
             Given::Vector(v) => v.iter().flat_map(|x| x.to_le_bytes()).collect(),
             Given::Record(b) => b.clone(),
-            // No read region holds a rewind; a carry record fills its own entry (`carry::fill`).
-            Given::Rewind(_) | Given::Carry { .. } | Given::Profile { .. } => Vec::new(),
+            // No read region holds a rewind or a draw's entry; a carry record fills its own entry
+            // (`carry::fill`).
+            Given::Rewind(_) | Given::Draw(_) | Given::Carry { .. } | Given::Profile { .. } => Vec::new(),
         }
     }
 }
@@ -252,6 +257,12 @@ impl Entry {
             value: match (rewind, reading) {
                 (Some(to), _) => Given::Rewind(to),
                 (None, Some(_)) => Given::reading(v.get("value")?)?,
+                _ if v["control"]
+                    .as_str()
+                    .is_some_and(|c| c == crate::draws::COMMIT || c == crate::draws::REVEAL) =>
+                {
+                    Given::Draw(v.get("value")?.clone())
+                }
                 (None, None) => Given::parse(v.get("value")?)?,
             },
             writer: v

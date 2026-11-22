@@ -17,7 +17,7 @@ import { claudeSettings, commands, FORWARDER, installed, readJson, shadowedBy, t
 import { call } from './client.js';
 import { deprecatedCalls, rpcTable } from './contracts.js';
 import { keychain } from './keychain.js';
-import { hubAddress, installedRoot, rootOf, underTemp } from './paths.js';
+import { controlToken, hubAddress, installedRoot, underTemp } from './paths.js';
 import { activePlant as plant } from './plant.js';
 import { serviceFile } from './service.js';
 import { relationItems } from './setup.js';
@@ -105,7 +105,7 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
   // The hub's background jobs (#909): one failing at its third run in a row or later, each with when the row began.
   if (answering) {
     try {
-      const reply = await call(socket, readFileSync(rootOf(root).token, 'utf8').trim(), 'hub.health', {});
+      const reply = await call(socket, controlToken(socket), 'hub.health', {});
       if ('error' in reply) throw Error(`${reply.error.code}: ${reply.error.remediation}`);
       const jobs = isObj(reply.result.jobs) ? reply.result.jobs : {};
       const failing = Object.entries(jobs).flatMap(([name, job]) => {
@@ -124,7 +124,7 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
       const refused = packs.filter((p) => p.state === 'refused');
       const unchecked = packs.filter((p) => p.state === 'not_checked');
       for (const p of refused) add('canvas.packs', 'deepbuild', 'pack_refused', 'fail', `the release's pack ${named(p)} failed the pack check, so it isn't installed: ${JSON.stringify(p.issues).slice(0, 600)}`, `Fix packs/${String(p.folder)} so it passes the pack check, or reinstall DeepBuild; then restart the hub.`);
-      if (!refused.length && unchecked.length) add('canvas.packs', 'deepbuild', 'not_checked', 'skip', `the canvas core hasn't checked ${unchecked.map(named).join(', ')} since the hub started`, 'Show a document or run deep_kinds once, then `deep doctor` again.');
+      if (!refused.length && unchecked.length) add('canvas.packs', 'deepbuild', 'not_checked', 'skip', `the canvas core hasn't checked ${unchecked.map(named).join(', ')} since the hub started`, 'Run deep_kinds once, or show a document that names a pack, then `deep doctor` again.');
       if (!refused.length && !unchecked.length) add('canvas.packs', 'deepbuild', 'healthy', 'ok', `the release's ${packs.length} packs passed the pack check and are installed`, 'Nothing to do.');
       // What macOS says of the app's notifications (#994): only the app can read it, so with no reading it isn't checked.
       const setting = reply.result.notifications;

@@ -52,6 +52,8 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             "step_rate",
             "clock",
             "due",
+            "open",
+            "finish",
             "reads",
             "writes",
             "budget",
@@ -69,6 +71,8 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             "preview",
             "pages",
             "lanes",
+            // #552: a fog grid, which gates its occurrences' readers on each copy.
+            "fog",
             "process",
             "separation",
         ]
@@ -214,6 +218,21 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             Some(name.to_string())
         }
     };
+    // #278: `open` names one of the item's own bool arrays of count 1 (joins after the start only
+    // while it's true), and `finish` one of its i32 arrays of count 1 (nonzero ends the match).
+    for (field, ty, word) in [("open", Ty::Bool, "bool"), ("finish", Ty::I32, "i32")] {
+        let Some(v) = params.get(field) else { continue };
+        let name = v.as_str().unwrap_or_default();
+        if !writes
+            .iter()
+            .any(|w| w.name == name && w.ty == ty && w.count == 1)
+        {
+            return Err(bad(
+                field,
+                format!("{field} names one of the item's own {word} arrays of count 1; {v} isn't"),
+            ));
+        }
+    }
     fn get<'a>(o: Option<&'a Value>, k: &str) -> Option<&'a Value> {
         o.and_then(|b| b.get(k))
     }
@@ -405,7 +424,19 @@ pub(super) fn region_map(
         reads.sort();
     }
     for r in &reads {
-        let (size, ty, read) = if r == crate::world::seats::READ {
+        // #552: this copy's player is a view value, like the camera: logic never reads it, so
+        // every copy's state and hashes stay the same while each draws its own side.
+        if r == "match.me" {
+            refused.push(refusal(
+                "read",
+                "match.me is this copy's player, a view value no logic step reads: every copy's state must stay the same".into(),
+                json!({"read": r}),
+            ));
+            continue;
+        }
+        let (size, ty, read) = if r == crate::draws::READ {
+            (crate::draws::SIZE, "draws".to_string(), Read::Draws)
+        } else if r == crate::world::seats::READ {
             (crate::world::seats::SIZE, "seats".to_string(), Read::Seats)
         } else if let Some((size, ty)) = controls.get(r) {
             (*size, ty.to_string(), Read::Control)

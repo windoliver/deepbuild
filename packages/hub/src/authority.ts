@@ -7,7 +7,7 @@ import { readFileSync, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { writeJson } from './claude-settings.js';
 import { call, failure, notAnswered, Unanswered, withPrompt, type Reply } from './client.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { hubAddress, hubControl, installedRoot, rootOf, rootToken } from './paths.js';
 import { stopAsPeer } from './service.js';
 import { startOf } from './wire.js';
 
@@ -15,9 +15,9 @@ type Obj = Record<string, unknown>;
 
 /** One call as this process, so the hub's peer check can tell whether an agent's process tree runs it. */
 async function asYou(method: string, params: Obj): Promise<Reply> {
-  const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
+  const { path: socket, token } = hubControl(null);
   const peer = { pid: process.pid, start: (await startOf(process.pid)) ?? '' };
-  return withPrompt(() => call(hubAddress(null).path, token, method, params, peer));
+  return withPrompt(() => call(socket, token, method, params, peer));
 }
 /** Why `command` doesn't count, or undefined once the OS confirmed you through the hub. */
 export async function confirmed(command: string, detail?: string): Promise<string | undefined> {
@@ -36,7 +36,7 @@ export async function confirmed(command: string, detail?: string): Promise<strin
 export async function stopAsYou(command: 'deep hub stop' | 'deep setup --undo'): Promise<string | undefined> {
   const path = rootOf(installedRoot()).socket;
   try {
-    const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
+    const token = rootToken(rootOf(installedRoot()));
     const peer = { pid: process.pid, start: (await startOf(process.pid)) ?? '' };
     return await withPrompt(() => stopAsPeer(path, token, { command }, peer, () => confirmed(command)));
   } catch (error) {

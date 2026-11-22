@@ -5,7 +5,8 @@
 // goes in the skill, when to use each block and what it never does, and never a tool's parameters, which agents read
 // from its schema. tests/acceptance/26 fails when either drifts from the table. The skill also states each craft@1
 // check in its own words, from crates/deep-canvas/src/craft.json, the table the checks read (#409);
-// tests/acceptance/409 fails when it drifts from what the checks state.
+// tests/acceptance/409 fails when it drifts from what the checks state. It also writes each MCP server's `instructions`
+// and the tools marked to load up front (packages/hub/instructions.json, and the reading server's line), #2897.
 //   node scripts/skill.mjs
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -185,12 +186,52 @@ export function generate(rows = blocks()) {
     ...CRAFT.checks.map((c) => `- ${c.name}. ${c.description} Threshold — ${c.threshold}. Fix — ${c.fix}`),
     '',
   ].join('\n');
-  return { descriptions, skill };
+  return { descriptions, skill, instructions: instructions(used) };
+}
+
+/**
+ * The tools a client that reads a load mark loads at a session's start (#2897): deep_status alone, since its reply
+ * names what a session calls next. Every other tool stays behind the client's search.
+ */
+const UP_FRONT = ['deep_status'];
+/**
+ * Each server's `instructions` on initialize (#2897), which a client that loads tools by search reads at a session's
+ * start in place of the tool list: what the tools are for, when to look for them and which to call first. deep's names
+ * every other tool by the first Building blocks row that names it, so one search loads what a task needs. The same bytes
+ * at every start: nothing here reads the clock, the machine or the session.
+ */
+function instructions(used) {
+  const named = new Set(UP_FRONT);
+  const groups = used.flatMap((r) => {
+    const tools = Object.keys(TOOLS).filter((tool) => r.mcp.includes(`\`${tool}\``) && !named.has(tool));
+    tools.forEach((tool) => named.add(tool));
+    return tools.length ? [`${plain(r.block).replace(/\s*\(.*\)$/, '')}: ${tools.join(', ')}.`] : [];
+  });
+  return {
+    upFront: UP_FRONT,
+    servers: {
+      deep: [
+        'DeepBuild records this session\'s work; only check results decide when it is done, never your word.',
+        `Begin each task with ${UP_FRONT.join(', ')}, which is loaded already: its reply says where your session stands and what to call next.`,
+        'Every other deep_* tool loads when you search for it, so name in one search each tool your task needs. By block:',
+        ...groups,
+      ].join(' '),
+      'deep-actions': 'Actions the plug-ins installed in DeepBuild offer, such as sending a message or changing data outside the repo. Search for find_actions to list them with each one\'s input schema, and for call_action to run one by name, once a task needs a plug-in\'s action.',
+      'deepbuild-reading': 'This reading job\'s only way into the sessions, evidence and wiki pages it was given. Read each handle you were given a slice at a time, continuing with next until the reply has none; call find for the message handles of your sessions that hold a query.',
+    },
+  };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { descriptions, skill } = generate();
+  const { descriptions, skill, instructions: given } = generate();
   writeFileSync(join(ROOT, 'packages/hub/tools.json'), `${JSON.stringify(descriptions, null, 2)}\n`);
+  // The hub serves deep and deep-actions; the reading server's text stands in its own file, below.
+  const { 'deepbuild-reading': _reading, ...hub } = given.servers;
+  writeFileSync(join(ROOT, 'packages/hub/instructions.json'), `${JSON.stringify({ ...given, servers: hub }, null, 2)}\n`);
+  // The reading server is one file a reading job is granted alone, so its text stands in it, on its marked line.
+  const reading = join(ROOT, 'packages/reading/src/tools.mts');
+  const line = `const INSTRUCTIONS = ${JSON.stringify(given.servers['deepbuild-reading'])}; // scripts/skill.mjs writes this line`;
+  writeFileSync(reading, readFileSync(reading, 'utf8').replace(/^const INSTRUCTIONS = .*$/m, () => line));
   writeFileSync(join(ROOT, 'packages/hub/annotations.json'), `${JSON.stringify(annotations(), null, 2)}\n`);
   mkdirSync(join(ROOT, 'skills/deepbuild'), { recursive: true });
   writeFileSync(join(ROOT, 'skills/deepbuild/SKILL.md'), skill);

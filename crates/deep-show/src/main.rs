@@ -51,6 +51,7 @@ mod kit;
 mod lengths;
 mod logic;
 mod maps;
+mod matched;
 mod math_twins;
 mod media;
 mod mixdown;
@@ -118,6 +119,8 @@ mod track_call;
 mod twins;
 mod verdict;
 mod video;
+// #553: a match copy's media module, its voices and its audio thread.
+mod voiced;
 mod warps;
 mod workers;
 
@@ -686,7 +689,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "terrain_rays" => return terrain::parse(c).map(|r| Call::TerrainRays(Box::new(r))),
         "physics_bake" => return physics::parse(c).map(|b| Call::PhysicsBake(Box::new(b))),
         "world" => return points::parse_world(c).map(|(doc, world)| Call::World { doc, world }),
-        "match" | "play_match" | "sockets" | "replay" => return net::parse(name, c),
+        "match" | "play_match" | "lobby" | "sockets" | "replay" => return net::parse(name, c),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
             return Some(Call::InstallPack {
@@ -760,6 +763,12 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "migrate" => return Some(Call::Migrate(hash_named(c.get("to")?.as_str()?)?)),
         // #1901: the fingerprint kept output is keyed by, a kept draw, and the padded key input.
         "fingerprint" => return Some(Call::Fingerprint),
+        "ship" => {
+            return Some(Call::Ship {
+                bundle: c.get("bundle")?.as_str()?.to_string(),
+                chrome: c.get("chrome")?.as_str()?.to_string(),
+            })
+        }
         "footprint" => return Some(Call::Footprint),
         "draw" => {
             let output = c.get("output")?.as_str()?;
@@ -1368,7 +1377,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_motion::module::PLANTED.contains(p)
                 || deep_canvas_motion::cues::planted(p)
                 || *p == deep_canvas_motion::lengths::ONE_VALUE
-                || deep_canvas_marks::arrays::PLANTED.contains(p)
+                || deep_canvas_marks::arrays::PLANTED.contains(p) || deep_canvas_marks::atlas::PLANTED.contains(p) || *p == spatial::HIT_READS_QUADS
                 // #1967's wrong programs live in the cells module's playback and conversion, #194's in the catalog job.
                 || deep_canvas_cells::recording::PLANTED.contains(p) || deep_codecs::catalog::PLANTED.contains(p)
                 || deep_canvas_export::lottie::PLANTED.contains(p)
@@ -1391,6 +1400,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || *p == deep_canvas_marks::entries::FIT_SKIPS_ENTRIES
                 || entries::PLANTED.contains(p)
                 || deep_net::PLANTED.contains(p)
+                || *p == deep_canvas_effects::particles::bursts::IGNORES_FOG
                 // #265's trail that keeps the points a copy read from predicted steps.
                 || *p == net::TRAIL_KEEPS_PREDICTED
                 // #225's in the data module's integrator; #2450's in its reading of axis titles.

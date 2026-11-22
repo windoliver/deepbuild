@@ -1,0 +1,327 @@
+# #3018 acceptance suite at base b8056599c (origin/main 512d194bb plus the docs-only design commit), macOS arm64,
+# 8 cores, node v24.22.0, 1-minute load 181 when the run started and 211 when it ended (not waited for).
+# Run: node --test --test-reporter=spec tests/acceptance/3018/*.test.mjs   (29 s)
+# The checkout's path is shortened to <checkout>, the OS temp folder to <tmp>.
+#
+# Expected failures at the base, each at an assertion of the test's own. The base has no scripts/train.mjs, so
+# `node scripts/train.mjs ...` exits 1 with node's "Cannot find module" on stderr and prints nothing, and its
+# affected.mjs has no --results:
+# - #3018.d8181ce1 (one-run): "the train printed no RECORD line, so it left no record". No train ran, so there is no
+#   record, no affected.mjs command line, no grant in the table's log and no planted test's note.
+# - #3018.3731c052 (conflict): 'the train printed 0 "BLOCKED train:" lines, not the one naming the PR that didn't
+#   merge'. Nothing names #22.
+# - #3018.ccecaf52 (failing-file): "the train printed no RECORD line, so it left no record". No record names a PR for
+#   the failing file.
+# - #3018.e7f2db4e (stale, both tests): "the train printed no RECORD line, so it left no record". There is no green
+#   train to read after main or a head moves.
+# - #3018.b346cfaa (one-pr): "the PR's own affected.mjs --results=<file> run wrote no results file". The base's
+#   affected.mjs takes --results=<file> as a flag it doesn't know, runs the PR's four files (alpha's passes, beta's is
+#   a NEW FAIL, the known one KNOWN, the timed one unrun) and writes nothing; the train is never reached.
+# No test fails in its setup: each fixture repository, its origin and its PRs were built, and in one-pr the real
+# affected.mjs ran in it under the test's own table.
+
+✖ #3018.3731c052 a train whose second PR conflicts with its first stops BLOCKED naming the second, before any test runs, and leaves no record (13914.675292ms)
+✖ #3018.ccecaf52 in a train of two PRs, the file that fails names the PR whose change selected it, in the record and in that PR's line, and not the other PR (13032.069958ms)
+✖ #3018.b346cfaa a train of one PR records the same result for each file as the PR's own affected.mjs --results run at the same main commit: a pass, a new failure, a known failure and an unrun timed file (28344.33725ms)
+✖ #3018.d8181ce1 a train of two PRs that touch different packages runs one affected.mjs under one test grant, and its record lists both PRs with their heads, the main commit and each affected file's result (14607.256667ms)
+✖ #3018.e7f2db4e after main moves, each PR of a green train reads INCONCLUSIVE naming main's move, not PASS (13150.594416ms)
+✖ #3018.e7f2db4e after one PR's head changes, that PR and the other PR of the green train read INCONCLUSIVE naming the moved head, not PASS (9261.989584ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 0
+ℹ fail 6
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 28759.443959
+
+✖ failing tests:
+
+test at tests/acceptance/3018/conflict.test.mjs:7:1
+✖ #3018.3731c052 a train whose second PR conflicts with its first stops BLOCKED naming the second, before any test runs, and leaves no record (13914.675292ms)
+  AssertionError [ERR_ASSERTION]: the train printed 0 "BLOCKED train:" lines, not the one naming the PR that didn't merge
+  exit 1
+  stdout:
+  
+  stderr:
+  …al/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<tmp>/deep-1115-CTTLEb/tree/scripts/train.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.0
+  
+  records under ~/.deepbuild/trains: none
+  throttle log:
+  
+  affected.mjs command lines:
+  
+  planted tests' notes:
+  
+  
+  0 !== 1
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3018/conflict.test.mjs:19:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3018/failing-file.test.mjs:7:1
+✖ #3018.ccecaf52 in a train of two PRs, the file that fails names the PR whose change selected it, in the record and in that PR's line, and not the other PR (13032.069958ms)
+  AssertionError [ERR_ASSERTION]: the train printed no RECORD line, so it left no record
+  exit 1
+  stdout:
+  
+  stderr:
+  …al/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<tmp>/deep-1115-6r6y3R/tree/scripts/train.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.0
+  
+  records under ~/.deepbuild/trains: none
+  throttle log:
+  
+  affected.mjs command lines:
+  
+  planted tests' notes:
+  
+      at recordOf (file://<checkout>/tests/acceptance/3018/helpers.mjs:185:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3018/failing-file.test.mjs:16:28)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3018/one-pr.test.mjs:12:1
+✖ #3018.b346cfaa a train of one PR records the same result for each file as the PR's own affected.mjs --results run at the same main commit: a pass, a new failure, a known failure and an unrun timed file (28344.33725ms)
+  AssertionError [ERR_ASSERTION]: the PR's own affected.mjs --results=<file> run wrote no results file
+  exit 1
+  stdout:
+  parallel node: packages/alpha/test/alpha.test.mjs packages/beta/test/beta.test.mjs tests/fixture-3018/known.test.mjs
+  timed node: tests/acceptance/1113/load.test.mjs (--timed runs them)
+  JOBSERVER fuser can't see the run's pipe, so tokens a killed build held are not given back (#2848)
+  KNOWN tests/fixture-3018/known.test.mjs › a failure main already has: planted for #3018
+  NEW FAIL packages/beta/test/beta.test.mjs › the planted package is sound: Expected values to be strictly equal:
+  INCONCLUSIVE 1 timed file was not run; --timed runs them under a timed grant: tests/acceptance/1113/load.test.mjs
+  FAIL affected: 1 new, 1 already failing on main, 0 inconclusive or blocked, 0 listed skips, 1 passed, in 9 s at load 211; logs in <tmp>/deep-1115-jVovKR/tmp/deep-affected-FmZoQH
+  
+  stderr:
+  
+  records under ~/.deepbuild/trains: none
+  throttle log:
+  {"at":"2026-11-22T00:16:37.370Z","event":"granted","class":"test","grant":"top-level","id":"95b17b9e13b9ebc7","pid":20299,"index":1,"load":209.9052734375,"cores":8,"wait":30,"readings":null}
+  {"at":"2026-11-22T00:16:45.840Z","event":"passed","class":"build","pid":22399,"through":"test:95b17b9e13b9ebc7"}
+  {"at":"2026-11-22T00:16:45.887Z","event":"passed","class":"build","pid":22400,"through":"test:95b17b9e13b9ebc7"}
+  {"at":"2026-11-22T00:16:45.891Z","event":"passed","class":"test","pid":22397,"through":"test:95b17b9e13b9ebc7"}
+  {"at":"2026-11-22T00:16:46.001Z","event":"passed","class":"build","pid":22401,"through":"test:95b17b9e13b9ebc7"}
+  {"at":"2026-11-22T00:16:46.024Z","event":"passed","class":"build","pid":22403,"through":"test:95b17b9e13b9ebc7"}
+  {"at":"2026-11-22T00:16:46.035Z","event":"passed","class":"build","pid":22404,"through":"test:95b17b9e13b9ebc7"}
+  {"at":"2026-11-22T00:16:46.045Z","event":"passed","class":"build","pid":22411,"through":"test:95b17b9e13b9ebc7"}
+  {"at":"2026-11-22T00:16:46.081Z","event":"passed","class":"build","pid":22446,"through":"test:95b17b9e13b9ebc7"}
+  {"at":"2026-11-22T00:16:46.101Z","event":"passed","class":"build","pid":22415,"through":"test:95b17b9e13b9ebc7"}
+  {"at":"2026-11-22T00:16:46.111Z","event":"passed","class":"build","pid":22439,"through":"test:95b17b9e13b9ebc7"}
+  {"at":"2026-11-22T00:16:46.143Z","event":"passed","class":"build","pid":22503,"through":"test:95b17b9e13b9ebc7"}
+  {"at":"2026-11-22T00:16:46.149Z","event":"passed","class":"build","pid":22414,"through":"test:95b17b9e13b9ebc7"}
+  {"at":"2026-11-22T00:16:46.218Z","event":"passed","class":"build","pid":22502,"through":"test:95b17b9e13b9ebc7"}
+  {"at":"2026-11-22T00:16:46.227Z","event":"passed","class":"build","pid":22461,"through":"test:95b17b9e13b9ebc7"}
+  {"at":"2026-11-22T00:16:46.277Z","event":"passed","class":"build","pid":22413,"through":"test:95b17b9e13b9ebc7"}
+  {"at":"2026-11-22T00:16:46.281Z","event":"passed","class":"build","pid":22412,"through":"test:95b17b9e13b9ebc7"}
+  {"at":"2026-11-22T00:16:46.305Z","event":"passed","class":"build","pid":22402,"through":"test:95b17b9e13b9ebc7"}
+  {"at":"2026-11-22T00:16:46.334Z","event":"passed","class":"build","pid":22416,"through":"test:95b17b9e13b9ebc7"}
+  {"at":"2026-11-22T00:16:46.342Z","event":"passed","class":"build","pid":22434,"through":"test:95b17b9e13b9ebc7"}
+  {"at":"2026-11-22T00:16:46.355Z","event":"passed","class":"build","pid":22433,"through":"test:95b17b9e13b9ebc7"}
+  {"at":"2026-11-22T00:16:47.184Z","event":"released","class":"test","id":"95b17b9e13b9ebc7","pid":20395}
+  affected.mjs command lines:
+  {"args":["--results=<tmp>/deep-1115-jVovKR/own-results.json"],"branch":"HEAD","head":"16a26c4c80c4869bc720878c11957bea2b171f82","tree":"108740d60cac40b5c42d6678c9333dd0ea7a1a9c","pid":18680}
+  planted tests' notes:
+  {"file":"packages/alpha/test/alpha.test.mjs","tree":"108740d60cac40b5c42d6678c9333dd0ea7a1a9c","sound":true,"pid":23406}
+  {"file":"packages/beta/test/beta.test.mjs","tree":"108740d60cac40b5c42d6678c9333dd0ea7a1a9c","sound":false,"pid":23429}
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3018/one-pr.test.mjs:35:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3018/one-run.test.mjs:8:1
+✖ #3018.d8181ce1 a train of two PRs that touch different packages runs one affected.mjs under one test grant, and its record lists both PRs with their heads, the main commit and each affected file's result (14607.256667ms)
+  AssertionError [ERR_ASSERTION]: the train printed no RECORD line, so it left no record
+  exit 1
+  stdout:
+  
+  stderr:
+  …al/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<tmp>/deep-1115-jdVLoo/tree/scripts/train.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.0
+  
+  records under ~/.deepbuild/trains: none
+  throttle log:
+  
+  affected.mjs command lines:
+  
+  planted tests' notes:
+  
+      at recordOf (file://<checkout>/tests/acceptance/3018/helpers.mjs:185:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3018/one-run.test.mjs:17:22)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3018/stale.test.mjs:23:1
+✖ #3018.e7f2db4e after main moves, each PR of a green train reads INCONCLUSIVE naming main's move, not PASS (13150.594416ms)
+  AssertionError [ERR_ASSERTION]: the train printed no RECORD line, so it left no record
+  exit 1
+  stdout:
+  
+  stderr:
+  …al/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<tmp>/deep-1115-7tjGpp/tree/scripts/train.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.0
+  
+  records under ~/.deepbuild/trains: none
+  throttle log:
+  
+  affected.mjs command lines:
+  
+  planted tests' notes:
+  
+      at recordOf (file://<checkout>/tests/acceptance/3018/helpers.mjs:185:10)
+      at green (file://<checkout>/tests/acceptance/3018/stale.test.mjs:13:28)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/3018/stale.test.mjs:24:48)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3018/stale.test.mjs:35:1
+✖ #3018.e7f2db4e after one PR's head changes, that PR and the other PR of the green train read INCONCLUSIVE naming the moved head, not PASS (9261.989584ms)
+  AssertionError [ERR_ASSERTION]: the train printed no RECORD line, so it left no record
+  exit 1
+  stdout:
+  
+  stderr:
+  …al/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<tmp>/deep-1115-zz4pgQ/tree/scripts/train.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.0
+  
+  records under ~/.deepbuild/trains: none
+  throttle log:
+  
+  affected.mjs command lines:
+  
+  planted tests' notes:
+  
+      at recordOf (file://<checkout>/tests/acceptance/3018/helpers.mjs:185:10)
+      at green (file://<checkout>/tests/acceptance/3018/stale.test.mjs:13:28)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/3018/stale.test.mjs:36:48)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

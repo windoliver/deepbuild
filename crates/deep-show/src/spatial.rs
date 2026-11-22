@@ -68,11 +68,36 @@ impl Hub<'_> {
     }
 }
 
+/// #2386's planted hit test, reachable only through a proof surface: a press meets every row by
+/// its quad.
+pub(crate) const HIT_READS_QUADS: &str = "grid_hit_reads_quads";
+
+/// #2386: the box `[x, y, w, h]` of an outline, its far sides never short of the outline's, so
+/// a point on the outline's lowest or rightmost edge lies in it.
+fn outline_box(points: &[[f64; 2]]) -> [f64; 4] {
+    let side = |k: usize| {
+        let at = points.iter().map(|p| p[k]);
+        let lo = at.clone().fold(f64::INFINITY, f64::min);
+        let hi = at.fold(f64::NEG_INFINITY, f64::max);
+        let span = hi - lo;
+        (lo, if lo + span < hi { span.next_up() } else { span })
+    };
+    let ((x, w), (y, h)) = (side(0), side(1));
+    [x, y, w, h]
+}
+
+/// #2386: the target a press meets drawn row `id` through, stacked at `order`: a grid row's
+/// cell, its box and outline, wherever the row's quad draws; any other row's quad.
+pub(crate) fn target(id: &str, order: &Value, quad: [f64; 4], hull: Option<&Value>) -> Value {
+    let hit = hull.map_or(json!(quad), |h| h["box"].clone());
+    json!({"id": id, "order": order, "params": {"box": hit, "hull": hull}})
+}
+
 impl Hub<'_> {
     /// #535: each mark set row `doc` draws at `t`, `<set>#<key>` with its box in page u, in draw
     /// order, from a fresh session's frame. The planted set keeps its dead rows: its boxes come
-    /// from the document with every set's `alive` left out. #536: a hex grid row also gives its
-    /// hexagon, `{points, owns}` in page u, its hit area.
+    /// from the document with every set's `alive` left out. #536, #2386: a grid row also gives
+    /// its cell's outline, `{points, owns, box}` in page u, its hit area.
     pub(crate) fn row_boxes(
         &mut self,
         doc: &Value,
@@ -121,10 +146,14 @@ impl Hub<'_> {
                                 hit: Some(area), ..
                             }),
                         ..
-                    } => Some(json!({
-                        "points": area.outline().map(|[u, v]| [x + u * w, y + v * h]),
-                        "owns": area.owns,
-                    })),
+                    } => {
+                        let points: Vec<[f64; 2]> = (area.outline().iter())
+                            .map(|[u, v]| [x + u * w, y + v * h])
+                            .collect();
+                        Some(
+                            json!({"points": points, "owns": area.owns(), "box": outline_box(&points)}),
+                        )
+                    }
                     _ => None,
                 };
                 (d.mark.item().to_string(), d.extent(), hull)
@@ -180,6 +209,18 @@ impl Hub<'_> {
 mod tests {
     use serde_json::{json, Value};
     use sha2::{Digest, Sha256};
+
+    /// #2386: a cell's box holds the cell's lowest and rightmost points, where the span from its
+    /// near side, added back, falls short of them: 0.05 + (0.21 − 0.05) is under 0.21.
+    #[test]
+    fn an_outline_s_box_reaches_its_far_sides() {
+        let diamond = [[0.21, 0.13], [0.13, 0.05], [0.05, 0.13], [0.13, 0.21]];
+        let [x, y, w, h] = super::outline_box(&diamond);
+        assert_eq!([x, y], [0.05, 0.05]);
+        assert!(0.05 + (0.21 - 0.05) < 0.21, "the span alone falls short");
+        assert!(x + w >= 0.21 && y + h >= 0.21, "{w} {h}");
+        assert!(w < 0.17 && h < 0.17, "{w} {h}");
+    }
 
     /// #536: a hex cell's hexagon is its hit area. On the 6 × 6 pointy odd grid with cell
     /// [32, 28], a click at (34, 9), inside the quad of (1, 1) drawn above it, selects (1, 0)
