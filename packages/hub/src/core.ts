@@ -917,6 +917,8 @@ export class Core {
     // No package is in the hub's own release yet; a test may hand it one, which then loads in the hub (#2402).
     const release = this.options.release ? (JSON.parse(readFileSync(this.options.release, 'utf8')) as ReleaseEntry[]) : [];
     const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release, now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite'),
+      // The asks core opened above, so a plug-in that needs your yes asks you (#1828); #1828's planted hub opens it without.
+      ...(this.options.plant === 'host-without-asks' ? {} : { asks: this.asks }),
       // A check runner's reads and plays of a canvas piece (#411, #184): the hub's canvas core, and a replica playing the
       // revision's canonical document, its programs from the evidence store. A job kind's qualification by the core
       // (#518) goes the same way, with the tools it names in the world.
