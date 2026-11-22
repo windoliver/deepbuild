@@ -17,7 +17,7 @@ import { claudeSettings, commands, FORWARDER, installed, readJson, shadowedBy, t
 import { call } from './client.js';
 import { deprecatedCalls, rpcTable } from './contracts.js';
 import { keychain } from './keychain.js';
-import { hubAddress, installedRoot, rootOf, underTemp } from './paths.js';
+import { controlToken, hubAddress, installedRoot, underTemp } from './paths.js';
 import { activePlant as plant } from './plant.js';
 import { serviceFile } from './service.js';
 import { relationItems } from './setup.js';
@@ -106,7 +106,7 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
   // The hub's background jobs (#909): one failing at its third run in a row or later, each with when the row began.
   if (answering) {
     try {
-      const reply = await call(socket, readFileSync(rootOf(root).token, 'utf8').trim(), 'hub.health', {});
+      const reply = await call(socket, controlToken(socket), 'hub.health', {});
       if ('error' in reply) throw Error(`${reply.error.code}: ${reply.error.remediation}`);
       const jobs = isObj(reply.result.jobs) ? reply.result.jobs : {};
       const failing = Object.entries(jobs).flatMap(([name, job]) => {

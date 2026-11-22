@@ -326,6 +326,9 @@ export type Plant =
   | 'asks-every-registry-run'
   // #1868's: a hub that builds the asks and readings of the canvas core's world once and reads them so ever after.
   | 'canvas-world-built-once'
+  // #2896's: every client's reply cap left at 64 KB, a pager that drops the row at a page's edge, a refusal that
+  // carries a 12,000-character schema, and an unknown client given 64 KB.
+  | 'reply-cap-64kb' | 'pager-drops-edge-row' | 'refusal-schema-12000' | 'unknown-client-64kb'
   // #1576's: a sessions.read that returns every row, a page sent a frame more for each event, and an inbox.read that
   // reads each ask with a query of its own.
   | 'reads-every-row' | 'page-hook-frame-per-event' | 'query-per-row';
@@ -453,6 +456,7 @@ const PLANTS: readonly string[] = [
   'hands-over-socket-chunk',
   'rubric-holds-every-rule', 'review-without-caller',
   'canvas-world-built-once',
+  'reply-cap-64kb', 'pager-drops-edge-row', 'refusal-schema-12000', 'unknown-client-64kb',
   'reads-every-row', 'page-hook-frame-per-event', 'query-per-row',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {

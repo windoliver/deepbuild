@@ -7,6 +7,10 @@
 // from the pixel to the light crosses an outline the pixel isn't inside (deep-canvas-marks'
 // shadow.rs, the CPU reference, whose bins these are), at four points of the pixel, so a
 // shadow's edge is antialiased over 1 px.
+// #2053: in a run that holds an image with a `normal` page, each point light's term is multiplied
+// by max(0, N·L) ÷ L.z, which is max(0, N·v) ÷ v.z for v = (at − pixel, height): N the page's
+// nearest texel, red and green as c × 2 − 1 with +y toward the image's top, z rebuilt, turned
+// with the image. A sun's height is 0 and it reads the page as flat.
 
 struct Light {
     // at.x, at.y and range in px, energy.
@@ -30,11 +34,19 @@ struct U {
     count: u32,
     // 1: the layer composites in linear light; 2: a linear falloff; 4: a sum in encoded space;
     // 8: a pixel inside an outline is shadowed by it; 16: a shadow removes ambient too; 32: a
-    // shadow's edge isn't antialiased.
+    // shadow's edge isn't antialiased; 64: the run is a paged image; 128: its green read the
+    // other way up; 256: N·L alone, not ÷ L.z; 512: its normals left unturned.
     flags: u32,
     pad: u32,
     lights: array<Light, 16>,
     casters: array<Caster, 16>,
+    // Each light's height in px, four to a vec4; 0 for a sun.
+    heights: array<vec4<f32>, 4>,
+    // From px to the page's texels: x′ = a x + c y + e, y′ = b x + d y + f, as (a, b, c, d) and
+    // (e, f, sin, cos) of the image's turn.
+    page: array<vec4<f32>, 2>,
+    // The page's size in texels.
+    page_size: vec4<u32>,
 }
 
 @group(0) @binding(0) var<uniform> u: U;
@@ -50,6 +62,8 @@ struct U {
 @group(0) @binding(4) var<storage, read> bounds: array<vec2<f32>>;
 // What the layer drew before the group, where the pass lays the lit children over it.
 @group(0) @binding(5) var back: texture_2d<f32>;
+// #2053: the run's normal page, as stored.
+@group(0) @binding(6) var normals: texture_2d<f32>;
 
 const BINS: f32 = 1024.0;
 const RUN: u32 = 0x80000000u;
@@ -162,6 +176,31 @@ fn share(i: u32, p: vec2<f32>) -> f32 {
     return dot(select(vec4<f32>(0.25), vec4<f32>(0.0), blocked), vec4<f32>(1.0));
 }
 
+// #2053: the page's normal at `p` (px) in the frame's axes, y down; w 0 off the page.
+fn normal_at(p: vec2<f32>) -> vec4<f32> {
+    let m = u.page[0];
+    let o = u.page[1];
+    let t = vec2<f32>(m.x * p.x + m.z * p.y + o.x, m.y * p.x + m.w * p.y + o.y);
+    let size = vec2<f32>(u.page_size.xy);
+    if (!(t.x >= 0.0 && t.y >= 0.0 && t.x < size.x && t.y < size.y)) {
+        return vec4<f32>(0.0);
+    }
+    let c = textureLoad(normals, vec2<i32>(floor(t)), 0);
+    var xy = vec2<f32>(c.r, c.g) * 2.0 - 1.0;
+    if ((u.flags & 128u) != 0u) {
+        xy.y = -xy.y;
+    }
+    let n = normalize(vec3<f32>(xy, sqrt(max(0.0, 1.0 - dot(xy, xy)))));
+    // +y toward the image's top edge is -y in the frame.
+    let v = vec2<f32>(n.x, -n.y);
+    if ((u.flags & 512u) != 0u) {
+        return vec4<f32>(v, n.z, 1.0);
+    }
+    let s = o.z;
+    let k = o.w;
+    return vec4<f32>(k * v.x - s * v.y, s * v.x + k * v.y, n.z, 1.0);
+}
+
 // The pixel at `pos` lit; `casts`: some light of the list casts shadows.
 fn lit(pos: vec4<f32>, casts: bool) -> vec4<f32> {
     let c = textureLoad(src, vec2<i32>(pos.xy), 0);
@@ -181,6 +220,10 @@ fn lit(pos: vec4<f32>, casts: bool) -> vec4<f32> {
     }
     // The share of ambient a planted shadow leaves.
     var ambient_kept = 1.0;
+    var n = vec4<f32>(0.0);
+    if ((u.flags & 64u) != 0u) {
+        n = normal_at(pos.xy);
+    }
     for (var i = 0u; i < u.count; i = i + 1u) {
         let l = u.lights[i];
         let d = pos.xy - l.at.xy;
@@ -195,6 +238,16 @@ fn lit(pos: vec4<f32>, casts: bool) -> vec4<f32> {
             }
         }
         var term = l.at.w * reach * l.color.rgb;
+        let h = u.heights[i / 4u][i % 4u];
+        if (n.w != 0.0 && h > 0.0 && reach > 0.0) {
+            let v = vec3<f32>(l.at.xy - pos.xy, h);
+            let lit_by = max(0.0, dot(n.xyz, v));
+            if ((u.flags & 256u) != 0u) {
+                term = term * (lit_by / length(v));
+            } else {
+                term = term * (lit_by / h);
+            }
+        }
         if (casts && reach > 0.0 && l.color.w != 0.0) {
             let part = share(i, pos.xy);
             term = term * part;

@@ -603,6 +603,10 @@
           "spec": "13.0.3",
           "why": "Issue #16: the lock the OS holds and drops with the process, never a PID file, and the test VFS's in-memory ledger."
         },
+        "gpt-tokenizer": {
+          "spec": "4.0.0",
+          "why": "Issue #2896: a deep_* reply's tokens, counted in the tokenizer the agents' facts pin (o200k_base), so each reply stays a fifth under what its client keeps of one tool result."
+        },
         "yaml": {
           "spec": "2.9.1",
           "why": "Issue #26: deep_run and deep_ask read the checks a repo's .deepbuild/done.yaml names, with the parser env-local already reads that file with."

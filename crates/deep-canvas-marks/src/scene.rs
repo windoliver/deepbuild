@@ -4215,6 +4215,13 @@ pub enum Planted {
     LightDefaultAmbientZero,
     LightEveryChild,
     LightStaleList,
+    /// #2053's twins: a normal page's green read the other way up; a paged pixel's term
+    /// multiplied by max(0, N·L) alone; a page's normals left unturned when its image turns.
+    NormalFlippedGreen,
+    NormalDotAlone,
+    NormalUnturned,
+    /// #2053's `path` twin: each light's height kept from the frame before.
+    LightStaleHeight,
 }
 
 /// The draw list for evaluated `items` of `doc`, in `palette`, at `zoom` (which picks each path's
