@@ -968,6 +968,19 @@
       }
     ]
   },
+  "toolLoading": {
+    "readBy": "what a session holds of DeepBuild's MCP servers at its start is counted the way its client loads them (#2897); a way not read charges neither, and a Codex session's start records no count, since the hub records one only for a Claude Code session whose config loads deepbuild",
+    "conformance": "codex/toolLoading/unread",
+    "entries": [
+      {
+        "versions": ["0.144.0", "0.160.0", "0.163.0-alpha.10.2", "0.166.0-alpha.5.1"],
+        "way": "unread",
+        "instructionsCutChars": null,
+        "mark": null,
+        "source": "not read, Nov 19, 2026: no corpus session of these versions calls a DeepBuild tool, and 0.160.0's desktop-heartbeat calls a tool_search tool for the app's own tools without saying whether it defers an MCP server's (#2897 names Codex 0.170.0's tool search as unread)"
+      }
+    ]
+  },
   "entries": {
     "readBy": "where the hub's sync (#148) writes and reads this agent's MCP servers and skills, at user level only, and the fields it refuses; checked against each entry before a plan shows",
     "name": "Codex",

@@ -1006,8 +1006,9 @@ pub fn base_rows(id: &str, item: &Value, bound: &BoundRows) -> Result<Rows, Refu
     // nothing measured.
     let mut hidden = std::collections::BTreeSet::new();
     // The rows the column view hid: a value its reader can't narrow to (Array and table: column
-    // view) doesn't draw for as long as it lasts, nor does a row whose `alive` is false (#535).
-    for c in columns.values().chain(p.get("alive")) {
+    // view) doesn't draw for as long as it lasts, nor does a row whose `alive` is false (#535),
+    // nor one this copy's player doesn't see (#552).
+    for c in columns.values().chain(p.get("alive")).chain(p.get("seen")) {
         if let Some(Value::Array(rows)) = c.get("hide") {
             hidden.extend(rows.iter().filter_map(Value::as_f64).map(|r| r as usize));
         }
