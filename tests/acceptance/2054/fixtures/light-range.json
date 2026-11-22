@@ -1,0 +1,42 @@
+{
+  "about": "Issue #2054's fixture (README: The fixture): the engine's point light and spot light written in its own words through the next minor of its first-party familiar-names pack, with the range and falloff exponent words, and the values each criterion holds them to. `params` are the engine's words as an instance writes them; `range` (m) is what the expanded light must hold; `word` is the engine's word a case is about, which every failure of that case names.",
+  "source": "The engine's class docs at the release #433's suite pins (tests/acceptance/433/reference.ts: 4.5.1-stable), read through GitHub: doc/classes/OmniLight3D.xml (omni_range, default 5.0, the light's radius, which nothing outside it reaches; omni_attenuation, default 1.0, the distance attenuation exponent, where 2.0 is the inverse square) and doc/classes/SpotLight3D.xml (spot_range, default 5.0; spot_attenuation, default 1.0, the same exponent). Light output is light_intensity_lumens, as packs/godot-1.0.0 maps it.",
+  "ac1": {
+    "cases": [
+      {"id": "point_r8", "recipe": "godot.omni_light_3d@1", "params": {"light_intensity_lumens": 800, "omni_range": 8}, "word": "omni_range", "kind": "light.point@1", "range": 8},
+      {"id": "point_r5", "recipe": "godot.omni_light_3d@1", "params": {"light_intensity_lumens": 800}, "word": "omni_range", "kind": "light.point@1", "range": 5},
+      {"id": "spot_r8", "recipe": "godot.spot_light_3d@1", "params": {"light_intensity_lumens": 800, "spot_range": 8}, "word": "spot_range", "kind": "light.spot@1", "range": 8},
+      {"id": "spot_r5", "recipe": "godot.spot_light_3d@1", "params": {"light_intensity_lumens": 800}, "word": "spot_range", "kind": "light.spot@1", "range": 5}
+    ],
+    "tolerance": 1e-9,
+    "automatic": {"power": 800, "range": "35.68", "about": "our automatic range for 800 lm at the exposure whose cut is 0.05 lx (EV100 5.7635): sqrt(800 / (4 pi 0.05)) m"}
+  },
+  "ac2": {
+    "lamp": {"id": "lamp", "recipe": "godot.omni_light_3d@1", "params": {"position": [0, 1.5, 0], "light_intensity_lumens": 800, "omni_range": 5}, "word": "omni_range"},
+    "squares": [
+      {"id": "sq_2m", "distance": 2, "azimuth": -30, "side": 0.5},
+      {"id": "sq_4m", "distance": 4, "azimuth": 0, "side": 1},
+      {"id": "sq_6m", "distance": 6, "azimuth": 30, "side": 1.5}
+    ],
+    "albedo": 1,
+    "share": {"want": 0.0918, "within": 0.002, "dropped": "25.0", "squared": "4.6"},
+    "dark": 1e-5,
+    "about": "Each square is a white matte slab whose face toward the lamp lies `distance` m from it, square to the line from the lamp, along the horizontal direction `azimuth` degrees from -Z towards +X. `share` is the 4 m square's linear radiance over the 2 m square's: (1/4) (1 - 0.8^4)^2 / (1 - 0.4^4)^2 = 0.091782 with range 5 (want, within 0.2 points); 0.249926 with our automatic 35.68 m (the dropped range: 25.0%); (1/4) (1 - 0.8^2)^2 / (1 - 0.4^2)^2 = 0.045918 under the window (1 - (d / range)^2)^2 (4.6%). `dark`: the most linear radiance the 6 m square may read (0 from the light; 0.534 when it is lit at 35.68 m)."
+  },
+  "ac3": {
+    "same": [
+      {"written": {"id": "point_falloff_2", "recipe": "godot.omni_light_3d@1", "params": {"light_intensity_lumens": 800, "omni_attenuation": 2}},
+       "unwritten": {"id": "point_falloff_unwritten", "recipe": "godot.omni_light_3d@1", "params": {"light_intensity_lumens": 800}},
+       "word": "omni_attenuation", "kind": "light.point@1"},
+      {"written": {"id": "spot_falloff_2", "recipe": "godot.spot_light_3d@1", "params": {"light_intensity_lumens": 800, "spot_attenuation": 2}},
+       "unwritten": {"id": "spot_falloff_unwritten", "recipe": "godot.spot_light_3d@1", "params": {"light_intensity_lumens": 800}},
+       "word": "spot_attenuation", "kind": "light.spot@1"}
+    ],
+    "refused": [
+      {"id": "point_falloff_1", "recipe": "godot.omni_light_3d@1", "params": {"light_intensity_lumens": 800, "omni_attenuation": 1}, "word": "omni_attenuation", "fixNames": "2"},
+      {"id": "point_falloff_half", "recipe": "godot.omni_light_3d@1", "params": {"light_intensity_lumens": 800, "omni_attenuation": 0.5}, "word": "omni_attenuation", "fixNames": "2"},
+      {"id": "spot_falloff_1", "recipe": "godot.spot_light_3d@1", "params": {"light_intensity_lumens": 800, "spot_attenuation": 1}, "word": "spot_attenuation", "fixNames": "2"},
+      {"id": "point_range_0", "recipe": "godot.omni_light_3d@1", "params": {"light_intensity_lumens": 800, "omni_range": 0}, "word": "omni_range", "fixNames": null}
+    ]
+  }
+}
