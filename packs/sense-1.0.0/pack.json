@@ -1,0 +1,138 @@
+{
+  "name": "sense",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "description": "sense.lib@1 (#959): each side's sight over a terrain plate's heights on a coarse grid. An eye sees a sight cell in its range when the line from its eye to the cell's ground point stays above the coarse heights it crosses; a radar holds the fog cells in its range whatever the terrain; a jammer clears the other sides' radar; a cloaked unit shows only to a side with a detect sensor within its decloak radius; a structure seen and lost stays a ghost row until its cell is seen again; a rebuild takes `spread` steps. It writes the fog grid (two bits a player: unseen, radar, seen) and each unit row's seen and blip bits. Its fixtures' expected arrays are worked by brute force from the rule; its planted library reads every height as 0, sees behind the ridge and fails the ridge and spread fixtures. Strong defaults a piece takes unless its brief or catalog says otherwise: sight cells of 8 × 8 height samples, radar cells of 4 × 4, a rebuild over 3 steps, an eye 2 m above its unit's ground, and no sensor kind but eye. Written by scripts/sense-pack.mjs; the library is src/sense.rs and each program's text is in src/.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "logic": ">=0.0.0",
+      "sandbox": ">=0.0.0"
+    }
+  },
+  "interfaces": {
+    "sense.lib@1": {
+      "exports": [
+        {
+          "name": "sight",
+          "params": [
+            "i32",
+            "i64"
+          ],
+          "results": []
+        }
+      ],
+      "fixtures": [
+        "745afae5ffcf701a1088e360ef2a1c8fe48fedd3ed1f74b37c00e27b823e01a2",
+        "35593550c136b912434b5bbffd85240f0d0ebf0f31d589ab0b2fcc54db83ab85",
+        "acb7de1dccb2b22a91d11529d8e975beb28bb44504f39920dc3e7d983460bfb5",
+        "b63f3a510d5085879a65af4c172e4ca23beda9f75dad386e9f607214c1124f4e"
+      ],
+      "planted": [
+        "1bf16542b92c04f33cfc24ac1caadf9279e58f65d0e73656420b1dd158ada5e3"
+      ],
+      "digest": "8fc80f3d2889ea68a36c895f1d122846eff59704a52c9bd4379f0f23a066702b"
+    }
+  },
+  "libs": {
+    "sense.sight@1.0.0": {
+      "asset": "c3d3c48ce89f99bce6ee6e73c7b599529003baba401749492df1348c3586b723",
+      "exports": [
+        "sight"
+      ],
+      "fixtures": [
+        "94993762f616586078233e159cdf4c32c5d2f78331974826fdc1ceb02fe098dd"
+      ],
+      "implements": [
+        "sense.lib@1"
+      ]
+    }
+  },
+  "assets": [
+    {
+      "path": "objects/sense_sight.wasm",
+      "sha256": "c3d3c48ce89f99bce6ee6e73c7b599529003baba401749492df1348c3586b723",
+      "size": 4675
+    },
+    {
+      "path": "objects/sense_flat.wasm",
+      "sha256": "1bf16542b92c04f33cfc24ac1caadf9279e58f65d0e73656420b1dd158ada5e3",
+      "size": 4576
+    },
+    {
+      "path": "objects/driver.wasm",
+      "sha256": "86ef9fcdd8f09cf020d1e230b72d25d2f17cbd27c2ac886492dcc4f58165d6e1",
+      "size": 809
+    },
+    {
+      "path": "data/ridge.bin",
+      "sha256": "fa9c079da9a6538e90e775012ee87e13267340d5c6c00789393fb11bdea0956b",
+      "size": 392
+    },
+    {
+      "path": "data/ridged.f32",
+      "sha256": "9cf3baffcaf2e84e08b9b7ac03d2e33fa170ab763437ea6a751e28648a13fe66",
+      "size": 66564
+    },
+    {
+      "path": "fixtures/ridge.json",
+      "sha256": "745afae5ffcf701a1088e360ef2a1c8fe48fedd3ed1f74b37c00e27b823e01a2",
+      "size": 29170
+    },
+    {
+      "path": "data/radar.bin",
+      "sha256": "aaac87476930338cf51c3ea0e62c6989ef07627dd6c5b346969e420ffc11babb",
+      "size": 504
+    },
+    {
+      "path": "data/flat.f32",
+      "sha256": "766e5a5351551d6c00b8c9cc5e7cec244e9ed8e244b86ec3480b8262899c5c2e",
+      "size": 66564
+    },
+    {
+      "path": "fixtures/radar.json",
+      "sha256": "35593550c136b912434b5bbffd85240f0d0ebf0f31d589ab0b2fcc54db83ab85",
+      "size": 57150
+    },
+    {
+      "path": "data/ghost.bin",
+      "sha256": "3043a8266c044617068a1282d277361b30b7c87387be627388409b721294adce",
+      "size": 888
+    },
+    {
+      "path": "fixtures/ghost.json",
+      "sha256": "acb7de1dccb2b22a91d11529d8e975beb28bb44504f39920dc3e7d983460bfb5",
+      "size": 9298
+    },
+    {
+      "path": "data/spread.bin",
+      "sha256": "7dde836cfee795691d466ea49069c422d5d3c40b5f04685c0b2000560377b1c5",
+      "size": 376
+    },
+    {
+      "path": "fixtures/spread.json",
+      "sha256": "b63f3a510d5085879a65af4c172e4ca23beda9f75dad386e9f607214c1124f4e",
+      "size": 82347
+    },
+    {
+      "path": "objects/driver_own.wasm",
+      "sha256": "1992bdc33fbf806cfca639b13fb6270b7dc3ee9bbbccf6568717e95d8b69ac02",
+      "size": 809
+    },
+    {
+      "path": "data/sight_own.bin",
+      "sha256": "ed157458eb34298525be72dbfa7f70a3b4133981ad8f13a7a7c8c9ff123340a4",
+      "size": 240
+    },
+    {
+      "path": "data/small.f32",
+      "sha256": "6bed6ecd7fb8a2ef5778c39309a072b28fd839f212be56b3537c590866129ce7",
+      "size": 1156
+    },
+    {
+      "path": "fixtures/sight_own.json",
+      "sha256": "94993762f616586078233e159cdf4c32c5d2f78331974826fdc1ceb02fe098dd",
+      "size": 1788
+    }
+  ]
+}
