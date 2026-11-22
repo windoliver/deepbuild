@@ -27,9 +27,10 @@ AssertionError: check of the layout probe admits it: {"ok":false,"code":"logic_r
 ```
 
 No step of the model runs and no time is read. The probe and the rule are the base's own: `layoutProbe` is #416's, and
-the base's `deep-logic` holds the same region rule. The first draft was never run at the base, as its
-`BASE-FAILURE.txt` says ("NOT RUN against deep-logic": the build grant's queue), so the suite did not see this before
-the work began. The suite's other nine files pass.
+the base's `deep-logic` holds the same region rule. A base run can't show it, though: each test asks for process@1's
+pack first, so at the base both stop one line earlier, on "a first-party pack declares process@1". That is how they
+read at `3f02bf52b` with the suite as its job wrote it, run for this dispute; the suite's own `BASE-FAILURE.txt` says
+it was not run there. Only the work reaches the probe. The suite's other nine files pass.
 
 The work can't make this test pass: the refusal is of the probe, a program the suite supplies, with no process@1 in
 it, and the implementing agent doesn't edit the suite.
