@@ -1,0 +1,14 @@
+Run 5 of tests/acceptance/2494 on the final code, 14:33 to 14:36 on 2026-11-19, load average 107 to 109:
+
+  × AC3 #2494.b45bba38 planted reads_every_frame_back: ...
+  AssertionError: deep-app --canvas with DEEP_CANVAS_PLANT=reads_every_frame_back exited 0 without a report:
+
+The system log for that window (`log show`, process deep-app, the AppKit lines that name termination):
+
+2026-11-19 14:35:23.980 Df deep-app[72298] [com.apple.AppKit:AutomaticTermination] void _updateToReflectAutomaticTerminationState(void) Setting _kLSApplicationWouldBeTerminatedByTALKey=1
+2026-11-19 14:35:27.833 Df deep-app[72298] [com.apple.AppKit:Application] Handling Quit AppleEvent
+2026-11-19 14:35:27.833 Df deep-app[72298] [com.apple.AppKit:Application] terminate:
+
+macOS sent the fixture a Quit Apple Event about 4 s into its 12 s run, so it exited 0 before its report. Every other
+deep-app run in the window logs `terminate:` alone, which is the fixture's own quit after its report. The fixture's
+window is #1485's on the merge base; this change does not touch how it opens or quits.

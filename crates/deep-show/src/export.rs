@@ -29,6 +29,7 @@ mod test_guards;
 pub(crate) mod test_tools;
 pub(crate) mod tools;
 mod web;
+pub(crate) use web::full_player;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -419,6 +420,9 @@ pub struct Job {
     pub readback: bool,
     /// #544: the input track the document's logic items read.
     pub track: Vec<Value>,
+    /// #552: the side the export draws, `match.me` (1 to 8, or "none" for every side): a recorded
+    /// match's own player unless the call names another, and a piece played alone's 1.
+    pub me: Value,
     /// #502: `captions: {profile, files, mode}` and `loudness_profile`.
     pub captions: Captions,
     pub loudness_profile: Option<String>,
@@ -447,6 +451,8 @@ pub struct Job {
     /// one for the codec, and `brief: {tools}`, the tools the brief pins.
     pub tool: Option<String>,
     pub pins: Vec<String>,
+    /// #1250: `gif: {scale}` (or `video.gif`), an indexed look's GIF's options.
+    pub gif: Value,
 }
 
 impl Default for Job {
@@ -467,6 +473,7 @@ impl Default for Job {
             software: false,
             readback: false,
             track: Vec::new(),
+            me: Value::Null,
             captions: Captions::default(),
             loudness_profile: None,
             quality: "standard".into(),
@@ -481,6 +488,7 @@ impl Default for Job {
             srgb: false,
             tool: None,
             pins: Vec::new(),
+            gif: Value::Null,
         }
     }
 }
@@ -589,9 +597,19 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
             Some(a) => a.as_str()? == "software",
         },
         readback: c.get("readback").and_then(Value::as_bool).unwrap_or(false),
-        track: c
-            .get("track")
-            .map_or(Some(Vec::new()), |t| t.as_array().cloned())?,
+        // #552: a recorded match's merged track, which the export draws in place of the
+        // document's.
+        track: match (c.get("track"), c.get("record")) {
+            (Some(t), _) => t.as_array().cloned()?,
+            (None, Some(r)) => r.get("track")?.as_array().cloned()?,
+            (None, None) => Vec::new(),
+        },
+        me: match (c.get("me"), c.get("record")) {
+            (Some(Value::String(s)), _) if s == "none" => json!("none"),
+            (Some(m), _) => json!(m.as_u64().filter(|p| (1..=8).contains(p))?),
+            (None, Some(r)) => r.get("player").cloned().unwrap_or(Value::Null),
+            (None, None) => Value::Null,
+        },
         captions: {
             let cap = c.get("captions");
             Captions {
@@ -652,6 +670,11 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
             .flatten()
             .filter_map(|t| t.as_str().map(str::to_string))
             .collect(),
+        gif: c
+            .get("gif")
+            .or_else(|| video.and_then(|v| v.get("gif")))
+            .cloned()
+            .unwrap_or(Value::Null),
     })
 }
 

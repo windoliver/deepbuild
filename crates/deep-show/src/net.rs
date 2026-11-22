@@ -33,6 +33,9 @@ pub struct Join {
     state: Option<State>,
     pressed: bool,
     log: Vec<Value>,
+    /// #552: the copy `match`'s `on_panel` put on the panel: its drawn form, through its own
+    /// `match.me`, and the time it stood at after the match's last step.
+    pub(crate) shown: Option<(Value, i64)>,
 }
 
 /// What a scenario gives a match: the link each document was opened through (`docs.<id>.link`),
@@ -41,6 +44,8 @@ pub struct Join {
 pub struct Given {
     links: BTreeMap<String, String>,
     relay_ca: Option<PathBuf>,
+    /// #280: Google Chrome, where net.budget's web part plays the piece in the web player.
+    pub chrome: Option<PathBuf>,
 }
 
 pub fn given(input: &Map<String, Value>) -> Option<Given> {
@@ -55,7 +60,15 @@ pub fn given(input: &Map<String, Value>) -> Option<Given> {
         None => None,
         Some(c) => Some(PathBuf::from(c.as_str()?)),
     };
-    Some(Given { links, relay_ca })
+    let chrome = match input.get("chrome") {
+        None => None,
+        Some(c) => Some(PathBuf::from(c.as_str()?)),
+    };
+    Some(Given {
+        links,
+        relay_ca,
+        chrome,
+    })
 }
 
 /// The net module, on logic: a build that leaves logic out leaves it out too.
@@ -125,6 +138,15 @@ pub struct MatchCall {
     on: Vec<String>,
     seeks: Vec<(u8, i64)>,
     full: bool,
+    /// #552: the seed of each copy's test source in place of its secure one, the copies' views
+    /// asked for, and the copy the document's panel shows after the match.
+    secure: Option<u64>,
+    views: Vec<crate::matched::ViewAsk>,
+    on_panel: Option<u8>,
+    /// #553: where each copy keeps its saves, `<saves_dir>/<player>/`.
+    saves_dir: Option<PathBuf>,
+    /// #280: net.feel's check input but `steps`, which is the match's own.
+    feel: Option<Box<deep_net::feel::Feel>>,
     /// #276: each copy's own saves folder, its viewer's store (`saves_dirs: {"<player>": path}`).
     saves_dirs: BTreeMap<u8, PathBuf>,
 }
@@ -285,6 +307,22 @@ fn parse_match(c: &Map<String, Value>) -> Option<MatchCall> {
                     .collect::<Option<_>>()?,
             },
             direct: relay.and_then(|r| r.get("direct")).and_then(Value::as_bool) == Some(true),
+            profile: None,
+            // #280: `[{player, to, steps}]`.
+            late: match relay.and_then(|r| r.get("late")) {
+                None => Vec::new(),
+                Some(l) => l
+                    .as_array()?
+                    .iter()
+                    .map(|l| {
+                        Some(deep_net::play::Late {
+                            player: player(l.get("player")?)?,
+                            to: player(l.get("to")?)?,
+                            steps: l.get("steps")?.as_i64().filter(|n| *n >= 0)?,
+                        })
+                    })
+                    .collect::<Option<_>>()?,
+            },
             fates,
             withhold,
         },
@@ -360,6 +398,30 @@ fn parse_match(c: &Map<String, Value>) -> Option<MatchCall> {
                 .is_some()
                 .then_some(true)?,
         },
+        secure: match c.get("secure") {
+            None => None,
+            Some(s) => Some(s.get("seed")?.as_u64()?),
+        },
+        views: match c.get("views") {
+            None => Vec::new(),
+            Some(v) => crate::matched::views_of(v)?,
+        },
+        on_panel: match c.get("on_panel") {
+            None => None,
+            Some(p) => Some(player(p)?),
+        },
+        saves_dir: match c.get("saves_dir") {
+            None => None,
+            Some(d) => Some(PathBuf::from(d.as_str()?)),
+        },
+        feel: match c.get("feel") {
+            None => None,
+            Some(f) => {
+                let mut f = f.clone();
+                f["steps"] = c.get("steps")?.clone();
+                Some(Box::new(deep_net::feel::Feel::of(&f).ok()?))
+            }
+        },
     })
 }
 
@@ -403,6 +465,36 @@ struct Setup {
 const DIRECT: Duration = Duration::from_secs(15);
 /// How long a copy waits for its seat, and for the match's other copies.
 const SEATING: Duration = Duration::from_secs(3600);
+
+/// #280: net.feel's profile, items and bounds are the brief's or the definition's, never the
+/// working agent's: the refusal of a writer's change to one among `stored`'s own checks, naming
+/// the field.
+fn feel_refusal(path: String, value: Value) -> deep_canvas::document::Issue {
+    let what = format!("{path} is net.feel's: its profile, items and bounds come from the brief or the definition, never from the working agent");
+    deep_canvas::document::Issue::envelope("not_your_layer", path, value, &what)
+}
+
+/// #280: a writer's patch whose op reaches a net.feel's profile, items or bounds, refused.
+pub(crate) fn feel_patched(stored: &Value, patch: &Value) -> Option<deep_canvas::document::Issue> {
+    patch.get("ops")?.as_array()?.iter().find_map(|op| {
+        let value = op.get("value").cloned().unwrap_or(Value::Null);
+        let path = deep_net::feel::locked(stored, op.get("path")?.as_str()?, &value)?;
+        Some(feel_refusal(path, value))
+    })
+}
+
+/// #280: a writer's whole document that changes a net.feel's profile, items or bounds, refused.
+pub(crate) fn feel_shown(stored: &Value, shown: &Value) -> Option<deep_canvas::document::Issue> {
+    let path = deep_net::feel::changed(stored, shown)?;
+    let value = shown.pointer(&format!("/{path}")).cloned();
+    Some(feel_refusal(path, value.unwrap_or(Value::Null)))
+}
+
+/// #280: the host's wall clock in ns, which only net.feel's planted wall-clock meter reads.
+fn wall_ns() -> i64 {
+    static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+    START.get_or_init(Instant::now).elapsed().as_nanos() as i64
+}
 
 /// The host's time since `start`, in flicks.
 fn since(start: Instant) -> i64 {
@@ -499,6 +591,18 @@ impl Hub<'_> {
             .or_else(|| self.piece_press(panel, event))
     }
 
+    /// #553: whether `doc`'s current revision holds a net item, read once a revision.
+    pub(crate) fn has_net(&self, doc: &str) -> bool {
+        self.presented_doc(doc)
+            .is_some_and(|rev| deep_net::kind::item(&rev).is_some())
+    }
+
+    /// #553: the net module's work in one frame of `doc`'s panel: the state of its match, which
+    /// the app's notice and overlay draw from.
+    pub(crate) fn net_frame(&mut self, doc: &str) -> bool {
+        self.join_mut(doc).is_some_and(|j| j.state.is_some())
+    }
+
     fn join_mut(&mut self, panel: &str) -> Option<&mut Join> {
         self.panel_scope(panel).ok().map(|s| &mut s.join)
     }
@@ -525,18 +629,26 @@ impl Hub<'_> {
             plays: m.plays.clone(),
             faults: m.faults.clone(),
             planted,
-            // #550: the planted copy that stamps a peer's entries with its own player is copy 1.
-            planted_on: matches!(
-                planted,
-                Planted::StampsOwnPlayer | Planted::ProfileFromOwnStore
-            )
-            .then_some(1),
+            // #550: the planted copy that stamps a peer's entries with its own player is copy 1, as
+            // is #276's that reads its profile from its own store; #552's guesser, and its copy
+            // whose bits are wrong or never come, copy 2.
+            planted_on: match planted {
+                Planted::StampsOwnPlayer | Planted::ProfileFromOwnStore => Some(1),
+                Planted::GuessesFromSeed | Planted::RevealsOtherBits | Planted::WithholdsBits => {
+                    Some(2)
+                }
+                _ => None,
+            },
             shows: m.renders.iter().map(|(p, t)| (*p, flicks(*t))).collect(),
             log: m.log,
             defect: m.plant.clone(),
+            draw_seed: m.secure.unwrap_or(m.faults.seed),
+            // #280: only net.feel's planted wall-clock meter reads the host's clock.
+            clock: Some(wall_ns),
         };
         let (piece, track, doc) = (s.piece.clone(), s.track.clone(), s.doc.clone());
         let rounds = planted == Planted::HashRoundsFloats;
+        let first_bits = planted == Planted::DrawsFromFirstBits;
         let name = self.scenario.module_planted.as_deref();
         let ring = match m.full {
             true => Plant::Full,
@@ -545,6 +657,8 @@ impl Hub<'_> {
         // #297: every copy checks each entry to a text control an entry text shows alike.
         let form = self.forms.get(&m.doc).cloned().unwrap_or_default();
         let (ty, lax) = (self.entry_type(&form), self.entry_lax());
+        // #280: the items net.feel names, whose positions its correction distance reads.
+        let items = m.feel.as_ref().map(|f| f.items.clone()).unwrap_or_default();
         // #277: the catch-up that applies missed messages in arrival order: its logic module takes
         // a step's entries in the order the copy entered them.
         let arrival = name == Some("net_catch_up_in_arrival_order");
@@ -554,6 +668,9 @@ impl Hub<'_> {
                 .unwrap_or_default(),
             false => deep_logic::Planted::default(),
         };
+        // #553: each copy's media module plays the drawn form's spawns.
+        let media = self.match_media(&m.doc);
+        let saves = m.saves_dir.clone();
         let dirs = m.saves_dirs.clone();
         let make = &mut |p: u8| {
             let mut l = Logic::planted(piece.clone(), &track, true, logic)?;
@@ -562,10 +679,20 @@ impl Hub<'_> {
                 .get(&p)
                 .and_then(|d| deep_logic::profile::brought(&piece, d));
             l.rounds = rounds;
+            if first_bits {
+                l.draws_wrong(deep_logic::draws::Wrong::FirstBits);
+            }
             l.plant_ring(ring);
             l.worlds(&doc)?;
+            l.name_items(&doc, &items);
             l.range = deep_play::net::Range::of(&form, ty.clone(), lax);
-            Ok(l)
+            if let Some(dir) = &saves {
+                l.saves_in(dir.join(p.to_string()), planted == Planted::SavesPredicted);
+            }
+            if planted == Planted::KeepsReplacedRows {
+                l.keeps_replaced_rows();
+            }
+            Ok(crate::voiced::Voiced::new(l, media.clone(), planted))
         };
         let run = match m.check.as_deref() {
             None => deep_net::play::play(&s.cfg, &s.card, &ask, make).map(|p| (p, None)),
@@ -577,9 +704,27 @@ impl Hub<'_> {
                 let frame_ms = deep_canvas::budget::of(&rev)
                     .and_then(|(_, limits)| limits.cpu_ms)
                     .unwrap_or(deep_logic::budget::FRAME_NS / 1e6);
-                checks::budget(&s.cfg, &s.card, &ask, make, frame_ms, &m.on)
+                // #280: the web part plays in the web player in headless Chrome, where the
+                // scenario names Chrome; else it stays BLOCKED.
+                let chrome = self.scenario.net.chrome.clone();
+                let files = match chrome.is_some() && m.on.iter().any(|h| h == "web") {
+                    true => self.web_files(&m.doc, &s.track),
+                    false => Err(json!("net.budget measures no web part here")),
+                };
+                let mut web = |ask: &Value| match (&chrome, &files) {
+                    (Some(c), Ok(files)) => crate::net_web::measure(c, files, ask),
+                    (_, Err(e)) => Err(e.clone()),
+                    (None, _) => Err(json!("the scenario names no Chrome")),
+                };
+                let web: Option<deep_net::window::Web<'_>> = chrome.is_some().then_some(&mut web);
+                checks::budget(&s.cfg, &s.card, &ask, make, frame_ms, &m.on, web)
                     .map(|(p, c)| (p, Some(c)))
             }
+            Some("net.feel") => match m.feel.as_deref() {
+                Some(feel) => deep_net::feel::feel(&s.cfg, &s.card, &ask, make, feel)
+                    .map(|(p, c)| (p, Some(c))),
+                None => return json!({"code": "bad_input", "path": "feel"}),
+            },
             Some("net.desync") => {
                 checks::desync(&s.cfg, &s.card, &ask, make, m.seed).map(|(p, c)| (p, Some(c)))
             }
@@ -600,40 +745,95 @@ impl Hub<'_> {
                 Some(s)
             })
             .collect();
-        let copies: Vec<Value> = played
-            .copies
-            .iter()
-            .enumerate()
-            .map(|(i, c)| {
-                let mut report = c.report();
-                // #276: the profile records its confirmed steps wrote, into its own folder.
-                if let Some(dir) = m.saves_dirs.get(&(i as u8 + 1)) {
-                    let upto = c.record()["confirmed"].as_i64().unwrap_or(-1);
-                    let written: Vec<Value> = c.sim().profiles(upto).into_iter().map(|r| {
-                        match deep_logic::profile::write(dir, &r["record"]) {
-                            Ok((hash, file)) => json!({"item": r["item"], "step": r["step"], "hash": hash, "file": file}),
-                            Err(e) => json!({"ok": false, "code": "profile_failed", "step": r["step"], "what": e}),
-                        }
-                    }).collect();
-                    report.insert("profiles".into(), json!(written));
-                }
-                report.insert("steps".into(), json!(c.sim().rows));
-                report.insert("track".into(), json!(s.track));
-                // #297: a refusal of an entry text's range names its reason and grapheme.
-                if let Some(Value::Array(rows)) = report.get_mut("refused") {
-                    for row in rows.iter_mut() {
-                        let why = row["why"].clone();
-                        for k in ["reason", "grapheme", "code_points"] {
-                            if let Some(v) = why.get(k) {
-                                row[k] = v.clone();
-                            }
+        // #552: each copy's merged track, which its views and its readers draw from.
+        let tracks: BTreeMap<u8, Vec<Value>> = (played.copies.iter())
+            .map(|c| {
+                (
+                    c.me,
+                    c.record()["track"].as_array().cloned().unwrap_or_default(),
+                )
+            })
+            .collect();
+        let reads = (s.piece.items.iter()).any(|i| !i.emits.is_empty());
+        let mut copies = Vec::new();
+        for c in &played.copies {
+            let mut report = c.report();
+            // #276: the profile records its confirmed steps wrote, into its own folder.
+            if let Some(dir) = m.saves_dirs.get(&c.me) {
+                let upto = c.record()["confirmed"].as_i64().unwrap_or(-1);
+                let written: Vec<Value> = c.sim().inner.profiles(upto).into_iter().map(|r| {
+                    match deep_logic::profile::write(dir, &r["record"]) {
+                        Ok((hash, file)) => json!({"item": r["item"], "step": r["step"], "hash": hash, "file": file}),
+                        Err(e) => json!({"ok": false, "code": "profile_failed", "step": r["step"], "what": e}),
+                    }
+                }).collect();
+                report.insert("profiles".into(), json!(written));
+            }
+            report.insert("steps".into(), json!(c.sim().inner.rows));
+            report.insert("track".into(), json!(s.track));
+            // #553: the voices its media module started, its audio thread, and its saves.
+            if let Some(v) = c.sim().voices() {
+                report.insert("voices".into(), v);
+            }
+            if let Some((rate, blocks, out)) = c.sim().audio() {
+                let wav = crate::mixdown::float_wav(out, 2, rate);
+                let sha = crate::evidence::put(&self.scenario.evidence, &wav).ok();
+                report.insert(
+                    "audio".into(),
+                    json!({"sample_rate": rate, "blocks": blocks, "wav": sha}),
+                );
+            }
+            if m.saves_dir.is_some() {
+                report.insert("saves".into(), json!(c.sim().inner.saved()));
+            }
+            // #297: a refusal of an entry text's range names its reason and grapheme.
+            if let Some(Value::Array(rows)) = report.get_mut("refused") {
+                for row in rows.iter_mut() {
+                    let why = row["why"].clone();
+                    for k in ["reason", "grapheme", "code_points"] {
+                        if let Some(v) = why.get(k) {
+                            row[k] = v.clone();
                         }
                     }
                 }
-                Value::Object(report)
-            })
-            .collect();
+            }
+            // Every burst and voice this copy's readers made, through its own fog.
+            if reads {
+                let form = self.copy_form(&m.doc, &tracks[&c.me], &json!(c.me));
+                let effects = form.map(|f| self.copy_effects(&m.doc, &f));
+                report.insert("effects".into(), effects.map_or_else(|e| e, |e| json!(e)));
+            }
+            copies.push(Value::Object(report));
+        }
         let mut reply = json!({"copies": copies, "relay": played.relay(m.log)});
+        let len = s.cfg.step();
+        if !m.views.is_empty() {
+            match self.copy_views(&m.doc, &m.views, &tracks, len) {
+                Ok(v) => reply["views"] = json!(v),
+                Err(e) => return e,
+            }
+        }
+        if let Some(me) = m.on_panel {
+            let last = played
+                .copies
+                .iter()
+                .find(|c| c.me == me)
+                .map_or(0, |c| c.ran() - 1);
+            let form = match self.copy_form(
+                &m.doc,
+                &tracks.get(&me).cloned().unwrap_or_default(),
+                &json!(me),
+            ) {
+                Ok(f) => f,
+                Err(e) => return e,
+            };
+            let panel = self.scenario.docs.get(&m.doc).cloned().unwrap_or_default();
+            // That copy joined its match: the panel shows it playing, not the Join prompt.
+            if let Some(join) = self.join_mut(&panel) {
+                join.shown = Some((form, last.max(0) * len));
+                join.state = Some(State::Joined);
+            }
+        }
         if !m.seeks.is_empty() {
             reply["seeks"] = json!(seeks);
         }
@@ -797,6 +997,7 @@ impl Hub<'_> {
         let mut p = prompt::prompt(
             &cfg.host,
             cfg.players,
+            cfg.courtesy,
             cfg.controls.get(deep_net::kind::PROFILE).is_some(),
             &state.unwrap_or(State::Open),
         );
@@ -1051,6 +1252,15 @@ impl Hub<'_> {
             0,
         );
         copy.limit(p.steps);
+        // #552: a draw's bits come from the platform's secure random source.
+        copy.draw_source(
+            Box::new(|| {
+                random16().map_or(0, |b| {
+                    u64::from_le_bytes(b[..8].try_into().unwrap_or_default())
+                })
+            }),
+            Default::default(),
+        );
         copy.script(
             p.plays
                 .iter()

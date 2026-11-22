@@ -1,0 +1,15 @@
+running 1 test
+test scene_view::tests::a_document_the_view_cannot_draw_whole_gives_its_reason ... FAILED
+thread 'scene_view::tests::a_document_the_view_cannot_draw_whole_gives_its_reason' (123253106) panicked at crates/deep-app/src/scene_view.rs:354:13:
+  left: None
+ right: Some("module_missing: marks2d")
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 102 filtered out; finished in 0.00s
+
+running 2 tests
+test scene_view::tests::a_frame_fits_its_room_at_the_documents_own_shape ... FAILED
+test scene_view::tests::a_document_the_view_cannot_draw_whole_gives_its_reason ... ok
+thread 'scene_view::tests::a_frame_fits_its_room_at_the_documents_own_shape' (124061613) panicked at crates/deep-app/src/scene_view.rs:350:9:
+  left: [800, 600]
+ right: [800, 450]
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 102 filtered out; finished in 0.00s
+

@@ -9,7 +9,7 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ADAPTERS } from '@deepbuild/adapters';
-import { openAsks, signInSignature, type Asks } from '@deepbuild/asks';
+import { HOLD_PLANTS, openAsks, signInSignature, type Asks, type AsksPlant } from '@deepbuild/asks';
 import { openLedger, type Ledger } from '@deepbuild/budget';
 import { canonicalize, contextBoundFor, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type EvidenceStore } from '@deepbuild/evidence';
@@ -52,6 +52,7 @@ import { SLASH_COMMAND, adapterOf, loopFact, registry, toolClasses, versionOf } 
 import { continueLine, fit, type Part } from './context-fit.js';
 
 import { briefing, headOf, loadsOf } from './session-facts.js';
+import { toolLoad } from './tool-load.js';
 
 import { GateRunner, type KeptRow } from './gate-runner.js';
 import { Siblings } from './siblings.js';
@@ -209,6 +210,8 @@ export class Core {
   private archiveSession?: (session: string) => Promise<void>;
   /** The sessions whose transcripts their agents moved to an archived folder; unset until the archive opens. */
   private archivedSessions?: () => Promise<Set<string>>;
+  /** The archive pass under way, if one is: a stop waits for it before the record closes (#2573). */
+  private archiving: () => Promise<void> | undefined = () => undefined;
   /** Ask-tasks in the kernel (#303): a task for each prompt you typed that asks for a change, and its definition locked by hash. */
   private tasks!: AskTasks;
   private sizing!: SizeScope;
@@ -682,7 +685,8 @@ export class Core {
       // Each open sign-in task's probe, on the recorded login PATH (#1349).
       signIn: signInCheck(() => this.agents.loginPath(), (agent) => this.runner?.account(agent as Agent) ?? null, this.now),
       // The hub's own adapters answer, so the facts it maps hooks by are the facts that decide a continue.
-      errorTurnHook: (agent) => adapterOf(agent)?.caps.errorTurnHook === true, ...(this.options.plant === 'asks-without-tool-before' ? { plant: this.options.plant } : {}),
+      // The asks core plays its own planted programs: #2646's, and #1101's of the hold.
+      errorTurnHook: (agent) => adapterOf(agent)?.caps.errorTurnHook === true, ...(this.options.plant === 'asks-without-tool-before' || (HOLD_PLANTS as readonly string[]).includes(this.options.plant ?? '') ? { plant: this.options.plant as AsksPlant } : {}),
     });
     await this.delivery.continues();
     this.askingSoon();
@@ -705,6 +709,9 @@ export class Core {
     const due = async (): Promise<boolean> => {
       const pos = await landed();
       if (pos > ticked) { ticked = pos; return true; }
+      // A held yes starts its step once its hold is over (#1101).
+      const held = asks.heldUntil();
+      if (held !== null && held <= this.now()) return true;
       if (this.now() - looked >= 60_000 && (await this.record.raw(`SELECT 1 FROM asks WHERE status = 'open' AND batch_id IS NULL LIMIT 1`)).length) { looked = this.now(); return true; }
       return (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND (deadline <= ? OR kind = 'unblock') LIMIT 1`, [this.now()])).length > 0;
     };
@@ -1006,6 +1013,7 @@ export class Core {
       return archiving;
     };
     archivePass();
+    this.archiving = () => archiving;
     this.archiveSession = (session) => archive.session(session);
     this.archivedSessions = () => archive.archived();
     this.every('archived-threads', ARCHIVED_THREADS_MS, () => this.state.archivedThreads());
@@ -1828,6 +1836,8 @@ export class Core {
       if (draft.kind === 'tool.after') await this.delivery.prAfter(meta, data.command);
       if (draft.kind === 'session.start') {
         data.loads = await loadsOf(meta.cwd, live.agent ?? meta.agent).catch(() => []);
+        const load = toolLoad(live.agent ?? meta.agent, data.loads as { kind: string; name: string }[], meta.version);
+        if (load) data.toolLoad = load;
         if (!foreign) void this.control.enteredProject(meta.session, meta.cwd);
         // Each server's tool list, read off this hook's path: recorded after the start, its changes held for you.
         if (!foreign && session) void this.holds.listed(meta.session, live.agent, meta.cwd).catch((error: unknown) => process.stderr.write(`deep hub: tool lists for ${meta.session} not recorded: ${error instanceof Error ? error.message : String(error)}\n`));
@@ -2655,6 +2665,14 @@ export class Core {
     } catch {
       return;
     }
+    // A stop that came while the core was starting cleared the timers before the start armed its own and opened the
+    // work runs (#2573): those go now, and the archive's pass under way ends before the record closes. Up to 5 s: a
+    // pass can take minutes, and the hub gives its whole stop 20 s. One that runs longer reads a closed record, as before.
+    for (const timer of this.timers) clearInterval(timer);
+    this.work?.close();
+    let bound: NodeJS.Timeout | undefined;
+    await Promise.race([this.archiving(), new Promise<void>((done) => { bound = setTimeout(done, 5000); })]);
+    clearTimeout(bound);
     await this.replaying;
     await Promise.all(this.promptItems.pending);
     for (const session of [...this.unplaced.keys()]) await this.queue(() => this.placeHeld(session)).catch(() => undefined);

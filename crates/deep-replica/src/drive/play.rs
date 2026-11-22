@@ -73,6 +73,14 @@ impl Stored {
     }
 }
 
+/// #552's planted lone piece's bits: 64 from the platform's secure random source.
+fn secure_u64() -> u64 {
+    use std::io::Read as _;
+    let mut b = [0u8; 8];
+    let _ = std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut b));
+    u64::from_le_bytes(b)
+}
+
 /// A refusal from the play mode as the drive's failure, with what it names: an undeclared
 /// control, a play interface's missing name (#555) or an action it doesn't declare.
 fn refusal(e: Value) -> Fail {
@@ -117,6 +125,9 @@ pub fn run(call: &Value, plant: Option<Plant>, out: &Path) -> Result<Value, Fail
         entry_on_change: plant == Some(Plant::EntryOnChange),
         ignores_links: plant == Some(Plant::IgnoresLinks),
         keeps_document_seed: plant == Some(Plant::KeepsDocumentSeed),
+        alone_secure: (plant == Some(Plant::AloneBitsFromSecure))
+            .then_some(secure_u64 as fn() -> u64),
+        draw_hashes_step: plant == Some(Plant::DrawHashesStep),
     };
     let asked: Vec<i64> = call
         .get("frames")

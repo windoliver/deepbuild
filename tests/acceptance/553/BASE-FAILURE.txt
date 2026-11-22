@@ -1,0 +1,92 @@
+#553's acceptance suite at its base, 2459c0ebc (4b7736f3a, main e575a47af with #552's branch, PR #2959, and #189's, PR
+#2936, merged in, plus only the two fixes that let deep-show build there), run once on November 20, 2026, one file at a
+time under `sh scripts/lease`, as README.md's "Run them" gives it (Node 24, the pinned 1.99.1 toolchain first on PATH,
+CARGO_INCREMENTAL=0, CARGO_PROFILE_DEV_DEBUG=0). The machine's 1-minute load was 177 to 259 throughout (no hub was
+answering, so the lease ran each file unleased and said so). 13 of 13 tests fail; none passes, none is skipped.
+
+An earlier run on 4b7736f3a itself stopped every deep-show test at the build: crates/deep-show/src/net.rs's
+`parse_match` lacked the closing `},` of its `full: match c.get("ring")` member ("mismatched closing delimiter" at
+net.rs:208/329). 2459c0ebc fixes that and #189's world saves' call of `derive::kept`; this record is the run on it.
+
+Summary
+-------
+
+- AC1: `scripts/net-interop.mjs` doesn't exist ("Cannot find module …/scripts/net-interop.mjs"), so the interop part
+  gives no `{"interop": Report}` line, honest or planted.
+- AC2, AC3: the duel is presented and its matches play (with net.rollback in AC2), but no copy reports `voices` (a
+  copy's report holds player, ran, rollbacks, depth, rolled_back, occurrences, held, confirmed, hashes, waits, notices,
+  match, refused, end, desync, fault, record, ran_at, steps, track, effects). The planted `net_keeps_replaced_rows`,
+  `media_restores_checkpoint` and `net_hash_covers_media` are refused: `{"ok": false, "code": "bad_input"}`.
+- AC4: net.budget's runs carry no `checkpoint_ms`, with window 8 and in lockstep. The dice piece's draws travel as JSON:
+  each message carrying one draw.commit is 110 B larger than the same message without draw_after, each carrying one
+  draw.reveal 105 B (the limit is under 64). The no-work leg: see its own section below.
+- AC5: the co-op piece is presented and its match plays, but no copy reports `saves` (`match` takes no `saves_dir`);
+  the planted `net_saves_predicted` is refused (`bad_input`).
+
+Per file (the run's own lines)
+------------------------------
+
+=== ac1-interop (02:54:59 UTC, load { 237.43 204.75 178.44 })
+     × AC1 #553.f47ade22 the app's copy and the web player's play the paddle piece for 1,200 match steps through the shipped relay behind the test relay's faults and pass net.rollback together 722ms
+     × AC1 #553.f47ade22 a planted web backend that writes a frame's step big-endian fails the interop part, naming the field and the backend 495ms
+  AssertionError: AC1 the interop part: the interop part's last line is {"interop": Report} (exit 1); stdout: ; stderr: …
+  Error: Cannot find module '<worktree>/scripts/net-interop.mjs'
+      Tests  2 failed (2)
+
+=== ac2-shot-dropped (02:55:20 UTC, load { 253.70 210.40 181.06 })
+     × AC2 #553.369b7549 the late entry drops the shot's row at step 300, its voice fades out over 5 ms, and both copies' occurrence lists and full-state hashes agree 16145ms
+  AssertionError: AC2: copy 1 reports every voice it started (voices: [{spawn, step, kind, a, b, start, faded}]); its report holds player, ran, rollbacks, depth, rolled_back, occurrences, held, confirmed, hashes, waits, notices, match, refused, end, desync, fault, record, ran_at, steps, track, effects: expected false to be true
+     × AC2 #553.369b7549 a planted rollback that keeps the replaced step's row fails net.rollback, naming step 300 and the kind shot 2856ms
+  AssertionError: AC2 the duel, planted (planted net_keeps_replaced_rows): deep-show run answers the scenario ok (it takes the planted net_keeps_replaced_rows); got {"ok":false,"code":"bad_input"}
+      Tests  2 failed (2)
+
+=== ac3-fifty-rollbacks (02:56:00 UTC, load { 259.13 217.73 185.12 })
+     × AC3 #553.265463c7 across 50 rollbacks that each replace a step whose shot spawned a voice, the audio thread renders each output sample once and in order, and both copies' full-state hashes agree at every confirmed step 14351ms
+  AssertionError: AC3: copy 1 reports every voice it started (voices: [{spawn, step, kind, a, b, start, faded}]); its report holds player, ran, rollbacks, depth, rolled_back, occurrences, held, confirmed, hashes, waits, notices, match, refused, end, desync, fault, record, ran_at, steps, track, effects
+     × AC3 #553.265463c7 a planted media module that restores its own checkpoint on a rollback renders samples again and fails, naming the first 1919ms
+  AssertionError: AC3 the duel, planted media (planted media_restores_checkpoint): … got {"ok":false,"code":"bad_input"}
+     × AC3 #553.265463c7 a planted full-state hash that covers media's state stops the match with net.desync and fails 1840ms
+  AssertionError: AC3 the duel, planted hash (planted net_hash_covers_media): … got {"ok":false,"code":"bad_input"}
+      Tests  3 failed (3)
+
+=== ac4-budgets (02:56:54 UTC, load { 249.07 223.38 189.35 })
+     × AC4 #553.b6df6698 with a full window of 8 match steps to roll back, the two-player piece restores and steps again in under 4 ms of CPU and takes one match step's checkpoints in under 0.5 ms 121431ms
+  AssertionError: AC4 window 8: check.runs[0].checkpoint_ms (one match step's rollback checkpoints, README: net.budget's report) is a number, got undefined
+     × AC4 #553.b6df6698 in lockstep, the 300-unit piece's busiest 20 Hz match step runs in under 4 ms of CPU with no rollback checkpoint 9030ms
+  AssertionError: AC4 lockstep: check.runs[0].checkpoint_ms (one match step's rollback checkpoints, README: net.budget's report) is a number, got undefined
+     × AC4 #553.b6df6698 a frame with one step outstanding and two entries is under 128 B, and a draw's commitment and reveal add under 64 B to their messages 46447ms
+  AssertionError: a frame's bytes and a draw's:
+  + "player 1's draw.commit adds 110 B to its message for step 19 (110 B against 0 B without it), not under 64",
+  + "player 2's draw.commit adds 110 B to its message for step 19 (110 B against 0 B without it), not under 64",
+  + "player 1's draw.reveal adds 105 B to its message for step 24 (105 B against 0 B without it), not under 64",
+  + … (12 named; no line about the paddle piece's frames of two entries, which held under 128 B here)
+     × AC4 #553.b6df6698 a piece without the net module gains no work per frame 2167ms
+  AssertionError: AC4 a piece without the net module: deep-show run answers the scenario ok; got {"ok":false,"code":"bad_input"}
+  (this job's harness slip, not the base's: the `frames` call sent `step: "1/60s"`, which the time grammar doesn't take;
+  corrected to `step: "1f"` and that one test run again, below)
+      Tests  4 failed (4)
+
+=== ac5-coop-saves (03:00:21 UTC, load { 177.34 203.23 188.23 })
+     × AC5 #553.7ab062d9 a late shield that undoes a predicted death leaves the slot's earlier save in place and the record ends healthy, and a trap only a predicted step reached leaves both copies playing with equal hashes 6346ms
+  AssertionError: AC5: copy 1 reports the saves it wrote (saves: [{item, slot, step, hash, file, ended}]); its report holds player, ran, rollbacks, depth, rolled_back, occurrences, held, confirmed, hashes, waits, notices, match, refused, end, desync, fault, record, ran_at, steps, track
+     × AC5 #553.7ab062d9 a planted module that saves on predicted steps fails, naming the slot and the step 1707ms
+  AssertionError: AC5 the co-op piece, planted (planted net_saves_predicted): … got {"ok":false,"code":"bad_input"}
+      Tests  2 failed (2)
+
+AC4's no-work leg, run again after the harness fix
+--------------------------------------------------
+
+`-t "gains no work"` on ac4-budgets.test.ts, the frames call sent as `{doc, step: "1f", count: 240}`; load 243 to 310,
+so the 240 frames took 33 minutes of wall time at a few percent of a core:
+
+     × AC4 #553.b6df6698 a piece without the net module gains no work per frame 1975484ms
+  AssertionError: the net module's work per frame for a piece without it:
+  + "frame 0: the net module took undefined ns of a piece with no net item (net_ns, README: frames), not 0",
+  + "frame 1: the net module took undefined ns of a piece with no net item (net_ns, README: frames), not 0",
+  + … (8 named)
+      Tests  1 failed | 3 skipped (4)
+
+The paddle piece without its net item is presented and `frames` gives its 240 frames; none carries `net_ns`.
+
+Also run: `node node_modules/typescript/bin/tsc -p tests/acceptance/553/tsconfig.json`: no diagnostic. The fixtures'
+two programs were run in Node's own WebAssembly by a scratch script, not committed (README: Fixtures, the scratch run).

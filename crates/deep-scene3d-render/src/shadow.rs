@@ -157,8 +157,10 @@ fn light_frame(toward: [f64; 3]) -> [[f64; 3]; 3] {
     [x, y, z]
 }
 
-/// A caster and its world corners, from its mesh's bounds or the unit cube.
-pub type Caster<'a> = (&'a Solid, [[f64; 3]; 8]);
+/// A caster by its place in the scene, layer and solid, and its world corners, from its mesh's
+/// bounds or the unit cube: a renderer keeps its list from frame to frame (#3016), so a frame
+/// allocates none.
+pub type Caster = ([u32; 2], [[f64; 3]; 8]);
 
 /// #2657: the built meshes [`caster_corners`] scanned, process-wide.
 static CASTER_SCANS: AtomicU64 = AtomicU64::new(0);
@@ -169,11 +171,14 @@ pub fn caster_scans() -> u64 {
     CASTER_SCANS.load(Ordering::Relaxed)
 }
 
-/// Every caster's corners, the frame's one pass over them (#2657): with `elements`, culled
-/// elements too, which a local map draws, having no cull of its own (#446); in scene order.
-pub fn caster_corners(scene: &Scene, elements: bool) -> Vec<Caster<'_>> {
-    let mut out = Vec::new();
-    for s in scene.layers.iter().flat_map(|l| &l.solids) {
+/// Every caster's corners, the frame's one pass over them (#2657), written over `out`: with
+/// `elements`, culled elements too, which a local map draws, having no cull of its own (#446);
+/// in scene order.
+pub fn caster_corners(scene: &Scene, elements: bool, out: &mut Vec<Caster>) {
+    out.clear();
+    let solids = (scene.layers.iter().enumerate())
+        .flat_map(|(l, layer)| (layer.solids.iter().enumerate()).map(move |(i, s)| ([l, i], s)));
+    for ([l, i], s) in solids {
         if !s.cast_shadow || !elements && s.batch != 0 {
             continue;
         }
@@ -194,14 +199,24 @@ pub fn caster_corners(scene: &Scene, elements: bool) -> Vec<Caster<'_>> {
                 c[r] = m[r][0] * p[0] + m[r][1] * p[1] + m[r][2] * p[2] + m[r][3];
             }
         }
-        out.push((s, corners));
+        out.push(([l as u32, i as u32], corners));
     }
-    out
+}
+
+/// Each of `casters` with its solid in `scene`, the scene they were found in.
+pub fn casters<'a>(
+    scene: &'a Scene,
+    casters: &'a [Caster],
+) -> impl Iterator<Item = (&'a Solid, &'a [[f64; 3]; 8])> {
+    (casters.iter()).map(|([l, i], c)| (&scene.layers[*l as usize].solids[*i as usize], c))
 }
 
 /// The casters a sun's cascades draw: a culled element is the GPU's to test (#484).
-pub fn sun_casters<'a, 'b>(casters: &'b [Caster<'a>]) -> impl Iterator<Item = &'b Caster<'a>> {
-    casters.iter().filter(|(s, _)| s.batch == 0)
+pub fn sun_casters<'a>(
+    scene: &'a Scene,
+    of: &'a [Caster],
+) -> impl Iterator<Item = (&'a Solid, &'a [[f64; 3]; 8])> {
+    casters(scene, of).filter(|(s, _)| s.batch == 0)
 }
 
 /// The tangents of the camera's half angles across and down, squared and summed: the frustum's
@@ -216,10 +231,10 @@ fn spread(camera: &deep_canvas_scene3d::scene::Camera) -> f64 {
 
 /// The auto far end: the farthest any caster's corner lies ahead of the eye, at least a meter
 /// past the near plane.
-pub fn auto_far(scene: &Scene, casters: &[Caster<'_>]) -> f64 {
+pub fn auto_far(scene: &Scene, casters: &[Caster]) -> f64 {
     let c = &scene.camera;
     let mut far = c.near + 1.0;
-    for (_, corners) in sun_casters(casters) {
+    for (_, corners) in sun_casters(scene, casters) {
         for p in corners {
             let d = dot(
                 [p[0] - c.eye[0], p[1] - c.eye[1], p[2] - c.eye[2]],
@@ -261,7 +276,7 @@ pub struct Reach {
 /// every caster ([`sun_casters`] of `casters`).
 pub fn cascades(
     scene: &Scene,
-    casters: &[Caster<'_>],
+    casters: &[Caster],
     toward: [f64; 3],
     settings: &CascadeSettings,
     size: u32,
@@ -293,7 +308,7 @@ pub fn cascades(
     // Every caster's depth range along the light.
     let (mut zlo, mut zhi) = (f64::MAX, f64::MIN);
     let mut none = true;
-    for (_, corners) in sun_casters(casters) {
+    for (_, corners) in sun_casters(scene, casters) {
         none = false;
         for p in corners {
             let q = dot(*p, z);

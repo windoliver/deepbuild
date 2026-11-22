@@ -432,3 +432,56 @@ fn branches(
     }
     Ok(out)
 }
+
+/// #211: generated pages don't depend on visit order. Each track of `orders` plays from step 0;
+/// every page two of them both generated (it arrived fresh, for the program to fill) must end
+/// holding the same bytes, or a failure names the item, the page and both tracks.
+pub fn orders(
+    piece: &Rc<Piece>,
+    orders: &[Vec<Entry>],
+    steps: i64,
+    planted: Planted,
+) -> Result<Vec<Value>, Value> {
+    let mut walks = Vec::new();
+    for order in orders {
+        let mut rec = Record::default();
+        let mut w = World::new(
+            piece.clone(),
+            track_of(order),
+            false,
+            planted,
+            &mut rec,
+            None,
+        )?;
+        w.run(steps, &mut rec, &mut |_, _| {});
+        let generated: Vec<_> = (0..piece.items.len()).map(|i| w.generated(i)).collect();
+        walks.push((generated, rec.traps));
+    }
+    let mut out = Vec::new();
+    for (n, (_, traps)) in walks.iter().enumerate() {
+        for t in traps {
+            out.push(json!({"item": t.get("item"), "run": "orders", "orders": [n], "from": null, "at": null, "checkpoint": null, "step": t.get("step"),
+                "field": "trap", "array": null, "region": null, "element": null, "control": null}));
+        }
+    }
+    for (i, item) in piece.items.iter().enumerate() {
+        'pairs: for a in 0..walks.len() {
+            for b in a + 1..walks.len() {
+                let (Some(ga), Some(gb)) = (&walks[a].0[i], &walks[b].0[i]) else {
+                    continue;
+                };
+                if let Some(page) = ga
+                    .iter()
+                    .find(|(p, h)| gb.get(*p).is_some_and(|x| x != *h))
+                    .map(|(p, _)| *p)
+                {
+                    out.push(json!({"item": item.id, "run": "orders", "field": "page", "page": page, "orders": [a, b],
+                        "from": null, "at": null, "checkpoint": null, "step": null, "array": null, "region": null, "element": null, "control": null,
+                        "what": format!("page {page} holds different bytes after orders {a} and {b} generated it")}));
+                    break 'pairs;
+                }
+            }
+        }
+    }
+    Ok(out)
+}

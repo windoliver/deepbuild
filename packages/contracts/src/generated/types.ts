@@ -2849,6 +2849,21 @@ export interface AdapterFactsV7 {
     conformance: AdapterFactsV7Text;
     entries: Array<AdapterFactsV7RuleLoadEntry>;
   };
+  toolLoading?: {
+    readBy: AdapterFactsV7Text;
+    conformance: AdapterFactsV7Text;
+    entries: Array<{
+      versions: Array<AdapterFactsV7Version>;
+      way: "whole" | "search" | "unread";
+      instructionsCutChars: number | null;
+      mark: {
+        field: AdapterFactsV7Text;
+        key: AdapterFactsV7Text;
+        value: boolean;
+      } | null;
+      source: AdapterFactsV7Text;
+    }>;
+  };
 }
 
 /** adapter.unsupported@1 */
@@ -3565,6 +3580,62 @@ export interface AnswerRefused {
     closed_at: number;
     via: "card" | "inbox";
     option: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** approval.held@1 */
+export interface ApprovalHeld {
+  v: 1;
+  id: string;
+  kind: "approval.held";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    until: number;
+    steps: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
+/** approval.started@1 */
+export interface ApprovalStarted {
+  v: 1;
+  id: string;
+  kind: "approval.started";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    steps: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
+/** approval.withdrawn@1 */
+export interface ApprovalWithdrawn {
+  v: 1;
+  id: string;
+  kind: "approval.withdrawn";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    steps: Array<string>;
+    restarted: boolean;
   };
   evidence?: Array<string>;
 }
@@ -9791,6 +9862,11 @@ export interface SessionStartV3 {
       digest: string;
       tools?: Array<string>;
     }>;
+    toolLoad?: {
+      way: "whole" | "search" | "unread";
+      startTokens: number;
+      wholeTokens: number;
+    };
   };
   evidence?: Array<string>;
 }
@@ -9821,6 +9897,11 @@ export interface SessionStartV4 {
       tools?: Array<string>;
     }>;
     parent?: string;
+    toolLoad?: {
+      way: "whole" | "search" | "unread";
+      startTokens: number;
+      wholeTokens: number;
+    };
   };
   evidence?: Array<string>;
 }

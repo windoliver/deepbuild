@@ -51,6 +51,8 @@ fn register(r: &mut Registrar) {
         ranged("window", "", 8.0, [0.0, 16.0]),
         ranged("hash_every", "", 60.0, [1.0, 100_000.0]),
         ranged("timeout", "s", 5.0, [0.05, 3600.0]),
+        // #552: the controls whose entries take a random draw (Net: random draws after commit).
+        param("draw_after", ParamType::Json("[control ID]"), "", json!([])),
     ];
     let net = Entry {
         family: "",
@@ -79,6 +81,11 @@ fn register(r: &mut Registrar) {
         issues(budget_report(d, i))
     })
     .check_report(budget_report);
+    // #280: net.feel, what players would feel on a seeded network.
+    r.check("net.feel", "any", &["net.feel"], |d, i| {
+        issues(feel_report(d, i))
+    })
+    .check_report(feel_report);
     r.code(
         "net.rollback",
         "A copy ran a match step before it held every player's entries for it, or a held-back run parted from the on-time run.",
@@ -93,13 +100,19 @@ fn register(r: &mut Registrar) {
     );
     r.code(
         "net.budget",
-        "A match step passes the class's frame time.",
-        "Split the work across steps with its progress in memory.",
+        "A match step passes the class's frame time, or the net item declares a window past the one a host it plays on reports.",
+        "Split the work across steps with its progress in memory, or declare at most the reported window, 0 for lockstep.",
+        false,
+    );
+    r.code(
+        "net.feel",
+        "A copy's stall, rollback depth or correction distance passed its bound on the seeded network, or a copy waited past its deadline.",
+        "Raise the delay to the latency the players need, lighten the step, or play lockstep.",
         false,
     );
     // Each code's planted fixture (#138's kit): a match whose logic traps at its first step, so
     // every copy ends it faulted and no net check kind can pass on it.
-    for code in ["net.rollback", "net.desync", "net.budget"] {
+    for code in ["net.rollback", "net.desync", "net.budget", "net.feel"] {
         planted(r, code);
     }
 }
@@ -135,6 +148,7 @@ pub struct Runs {
     pub rollback: ReportRun,
     pub desync: ReportRun,
     pub budget: ReportRun,
+    pub feel: ReportRun,
 }
 
 static RUNS: OnceLock<Runs> = OnceLock::new();
@@ -165,6 +179,11 @@ fn desync_report(doc: &Value, input: &Value) -> Report {
 fn budget_report(doc: &Value, input: &Value) -> Report {
     RUNS.get()
         .map_or_else(|| unbound("net.budget"), |r| (r.budget)(doc, input))
+}
+
+fn feel_report(doc: &Value, input: &Value) -> Report {
+    RUNS.get()
+        .map_or_else(|| unbound("net.feel"), |r| (r.feel)(doc, input))
 }
 
 fn issues(report: Report) -> Vec<(String, Raised)> {
@@ -359,6 +378,10 @@ pub struct Config {
     pub timeout: i64,
     /// The document's `controls`: what a player's entry must name, within its range (#550).
     pub controls: Value,
+    /// #552: the controls whose entries take a random draw after commit.
+    pub draw_after: Vec<String>,
+    /// #552: the piece reads `match.me`, so its Join prompt says its fog is a courtesy.
+    pub courtesy: bool,
     /// #277: a logic item reads `net.seats`, so a leave, a drop or an absence hands the seat to
     /// the piece's bot at one agreed step; else the match ends as before, nothing playing it.
     pub seats: bool,
@@ -386,6 +409,13 @@ impl Config {
             hash_every: whole("hash_every", 60, [1, 100_000]),
             timeout: (timeout.max(0.05) * FLICKS as f64).round() as i64,
             controls: controls(form),
+            draw_after: p["draw_after"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|c| Some(c.as_str()?.to_string()))
+                .collect(),
+            courtesy: crate::prompt::reads_me(form),
             seats: reads_seats(form),
         })
     }
@@ -458,6 +488,10 @@ pub fn reads_seats(form: &Value) -> bool {
 }
 
 pub fn admit(controls: &Value, control: &str, value: &Value) -> Result<(), Value> {
+    // #552: a draw's commitment and bits are the net module's own entries.
+    if control == crate::draw::COMMIT || control == crate::draw::REVEAL {
+        return crate::draw::admit(control, value);
+    }
     if let Some(shape) = controls.get(PROFILE).filter(|_| control == PROFILE) {
         return admit_profile(&shape["profile"], value);
     }

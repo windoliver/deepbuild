@@ -421,6 +421,12 @@ impl Hub<'_> {
                 shared.owners = owners.clone();
             }
         };
+        // #280: a writer's patch to a net.feel's profile, items or bounds is refused (crate::net).
+        let theirs = writer.kind != WriterKind::You && undoing.is_none();
+        if let Some(issue) = crate::net::feel_patched(&shared.doc, &patch).filter(|_| theirs) {
+            take_back(shared, &Patched::default());
+            return Outcome::Refused(vec![issue]);
+        }
         // Planted (#1415): a create of an ID the document holds replaces the item that holds it.
         let overwritten = match self.scenario.planted == Some(Planted::CreateOverwrites) {
             true if undoing.is_none() => taken_for_creates(&mut shared.doc, &patch),
@@ -877,6 +883,10 @@ impl Hub<'_> {
                 source.clone(),
                 what,
             ));
+        }
+        // #280: and so is a writer's revision that changes one.
+        if writer.kind != WriterKind::You {
+            issues.extend(crate::net::feel_shown(was_doc, &show.document));
         }
         // The writer's quota: the bytes its message carries, the documents it writes and the
         // items its layer would hold.
