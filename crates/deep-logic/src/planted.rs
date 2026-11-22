@@ -49,6 +49,9 @@ pub struct Planted {
     pub cut_ignored: bool,
     /// #2035: a restore that clears the cut writes' elements it restores.
     pub restore_forgets_cut: bool,
+    /// #1834: a logic module that writes each fire as if the step after the one that marked it
+    /// had marked it.
+    pub fire_one_step_late: bool,
     pub open_span_reads_zero: bool,
     pub judder_checks_shots_only: bool,
     pub budget_holds_steps_to_fuel_budget: bool,
@@ -140,6 +143,7 @@ impl Planted {
             "seek_restores_arrays_only" => p.seek_restores_arrays_only = true,
             "cut_ignored" => p.cut_ignored = true,
             "restore_forgets_cut" => p.restore_forgets_cut = true,
+            "fire_one_step_late" => p.fire_one_step_late = true,
             "open_span_reads_zero" => p.open_span_reads_zero = true,
             "judder_checks_shots_only" => p.judder_checks_shots_only = true,
             "budget_holds_steps_to_fuel_budget" => p.budget_holds_steps_to_fuel_budget = true,
