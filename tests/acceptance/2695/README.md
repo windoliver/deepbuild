@@ -178,6 +178,16 @@ merge base wrote". It now asks that each of the 31 is there; the next assertion 
 and other proofs are free. Nothing else changed. On the base it still fails at its first assertion, naming the key
 `proofs` (`BASE-FAILURE.txt`, last section).
 
+## Redraft of AC2's base
+
+A second blind redraft, approved, changes only the base side of AC2's instruction test (`hook.test.ts`, "retires at
+least 0.3 M fewer instructions"). It used the pinned `BASE` (`512d194bb`); main has since merged #2939 and #2995,
+which alone make the hook about 0.28 M cheaper, so the pinned base no longer measured what this issue removes, and the
+before lane found the test failing on neither the merge base nor a twin. Its base side is now the merge base computed
+when the test runs, `git merge-base HEAD origin/main` (`mergeBase`): its deep-hook, built as before, and its
+`default-rules.json` proofs in the base home's rules.json. With no origin/main the test is BLOCKED, naming why. The
+threshold, the measurement and every other test (the pinned `BASE` stays theirs) are unchanged.
+
 ## What this job could not prove
 
 - No test can pass here: no implementation exists, so none of the five failing tests was seen passing, and the

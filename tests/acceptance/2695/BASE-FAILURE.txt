@@ -189,3 +189,33 @@ AssertionError: after deep setup, rules.json must hold no proof: no `proofs` key
       Tests  1 failed (1)
    Start at  17:20:36
    Duration  18.76s (tests 100%)
+
+
+==== Redraft of AC2's base (blind, approved): hook.test.ts -t "retires at least", run 2026-11-22 in a git-archive copy of the merge base 11eb8c6fd232bffa4c7f9a06ec12467e252f70e8 (git merge-base HEAD origin/main) with these test files; base side = that merge base, so the expected difference is near 0 ====
+uptime before: 2:27 load averages: 13.25 20.21 22.60
+uptime after:  2:28 load averages: 13.06 20.06 22.54
+Result: FAILS at its assertion, median 33,837 MORE (-33,837 fewer), 333,837 short of 300,000.
+Earlier runs at load 20-35 gave medians of 170,183 and 183,931 fewer for the same self-comparison; a binary measured against itself drifted 0-0.15 M at that load. On this branch HEAD the same test passed: median 1,114,498 fewer (load 12.45 17.81 21.31).
+
+
+ RUN  v5.0.5 /private/tmp/dh2695-ac2-base/tests/acceptance/2695
+
+AC2 instructions against the merge base 11eb8c6fd232bffa4c7f9a06ec12467e252f70e8, release builds, 15 rounds (0 skipped for unlike paths): 1 (base first): base 23599571, change 25006865; 2 (change first): base 24761768, change 23745939; 3 (base first): base 23932948, change 23654678; 4 (change first): base 23779805, change 23629017; 5 (base first): base 23854633, change 23702990; 6 (change first): base 23698353, change 23732190; 7 (base first): base 23557551, change 23644177; 8 (change first): base 24975085, change 23748919; 9 (base first): base 23950472, change 23735510; 10 (change first): base 23543664, change 24716133; 11 (base first): base 23677328, change 24580076; 12 (change first): base 23826664, change 24288866; 13 (base first): base 23812191, change 24902313; 14 (change first): base 24921225, change 24926069; 15 (base first): base 23945752, change 24955411; median fewer -33837
+ ❯ hook.test.ts (2 tests | 1 failed | 1 skipped) 4333ms
+   × #2695.7026a58e a forwarded PreToolUse for a Read retires at least 0.3 M fewer instructions than on the merge base, over 15 alternated rounds 3520ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  hook.test.ts > #2695.7026a58e a forwarded PreToolUse for a Read retires at least 0.3 M fewer instructions than on the merge base, over 15 alternated rounds
+AssertionError: over 15 alternated rounds a forwarded PreToolUse for a Read must retire at least 300,000 fewer instructions than the merge base's deep-hook (the median of each round's base minus change); it retires -33,837 fewer. Rounds: 1 (base first): base 23599571, change 25006865; 2 (change first): base 24761768, change 23745939; 3 (base first): base 23932948, change 23654678; 4 (change first): base 23779805, change 23629017; 5 (base first): base 23854633, change 23702990; 6 (change first): base 23698353, change 23732190; 7 (base first): base 23557551, change 23644177; 8 (change first): base 24975085, change 23748919; 9 (base first): base 23950472, change 23735510; 10 (change first): base 23543664, change 24716133; 11 (base first): base 23677328, change 24580076; 12 (change first): base 23826664, change 24288866; 13 (base first): base 23812191, change 24902313; 14 (change first): base 24921225, change 24926069; 15 (base first): base 23945752, change 24955411: expected -33837 to be greater than or equal to 300000
+ ❯ hook.test.ts:80:312
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 skipped (2)
+   Start at  02:27:57
+   Duration  4.49s (tests 99%)
+

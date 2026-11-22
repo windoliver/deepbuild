@@ -7,7 +7,7 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, test } from 'vitest';
-import { AC2, PROOFS, baseSideOf, buildBase, buildHook, cleanup, countOpens, countedHook, decision, hook, makeHome, median, proofsPath, recordedCalls, setup, shown, sleep, spooled, type Call, type Home } from './helpers.ts';
+import { AC2, PROOFS, baseSideOf, buildBase, buildHook, mergeBase, cleanup, countOpens, countedHook, decision, hook, makeHome, median, proofsPath, recordedCalls, setup, shown, sleep, spooled, type Call, type Home } from './helpers.ts';
 
 const T = 1_800_000;
 const ROUNDS = 15;
@@ -44,10 +44,12 @@ test(`${AC2} a forwarded PreToolUse opens ${PROOFS} zero times, counted by the t
 test(`${AC2} a forwarded PreToolUse for a Read retires at least 0.3 M fewer instructions than on the merge base, over ${ROUNDS} alternated rounds`, async () => {
   if (process.platform !== 'darwin') throw Error(`INCONCLUSIVE: /usr/bin/time -l reports no instructions retired on ${process.platform}`);
   const change = await buildHook(true);
-  const base = await buildBase();
+  // Redraft (blind, approved): the base side is the merge base computed now, not the pinned BASE (README).
+  const rev = mergeBase();
+  const base = await buildBase(rev);
   const c = makeHome();
   const hub = await setup(c);
-  const b = baseSideOf(hub);
+  const b = baseSideOf(hub, rev);
   const read = readCall(c);
   readCall(b);
   const sides = { base: { binary: base, home: b }, change: { binary: change, home: c } };
@@ -74,6 +76,6 @@ test(`${AC2} a forwarded PreToolUse for a Read retires at least 0.3 M fewer inst
   const fewer = rounds.map((r) => r.base - r.change);
   const m = median(fewer);
   const table = rounds.map((r, i) => `${i + 1}${i % 2 ? ' (change first)' : ' (base first)'}: base ${r.base}, change ${r.change}${r.late ? ', both late' : ''}`).join('; ');
-  console.log(`AC2 instructions, release builds, ${ROUNDS} rounds (${skipped} skipped for unlike paths): ${table}; median fewer ${m}`);
+  console.log(`AC2 instructions against the merge base ${rev}, release builds, ${ROUNDS} rounds (${skipped} skipped for unlike paths): ${table}; median fewer ${m}`);
   expect(m, `over ${ROUNDS} alternated rounds a forwarded PreToolUse for a Read must retire at least ${FEWER.toLocaleString('en-US')} fewer instructions than the merge base's deep-hook (the median of each round's base minus change); it retires ${Math.round(m).toLocaleString('en-US')} fewer. Rounds: ${table}`).toBeGreaterThanOrEqual(FEWER);
 }, T);

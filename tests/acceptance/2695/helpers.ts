@@ -155,13 +155,25 @@ export function buildHook(release = false): Promise<string> {
   });
 }
 /**
- * deep-hook as the pinned merge base `BASE` has it, release: crates/deep-hook and crates/deep-contracts (its one path
- * dependency), the two adapter facts files it compiles in and Cargo.lock taken from that commit with `git archive`, built offline in a workspace of their own under
- * target/base-2695. Built once and kept; nothing in the checkout changes.
+ * The merge base of this checkout's HEAD and origin/main, computed when asked (`git merge-base HEAD origin/main`): the
+ * base side of AC2's instruction count (README, Redraft of AC2's base). BLOCKED when it can't be computed.
  */
-export function buildBase(): Promise<string> {
-  return once('base', async () => {
-    const dir = join(REPO, 'target', 'base-2695', BASE.slice(0, 12));
+export function mergeBase(): string {
+  try {
+    return execFileSync('git', ['-C', REPO, 'merge-base', 'HEAD', 'origin/main'], { encoding: 'utf8' }).trim();
+  } catch (error) {
+    throw Error(`BLOCKED: the merge base can't be computed (git merge-base HEAD origin/main, which needs an origin/main): ${(error as Error).message.slice(0, 600)}`);
+  }
+}
+/**
+ * deep-hook as the commit `rev` has it (the pinned merge base `BASE` unless given), release: crates/deep-hook and
+ * crates/deep-contracts (its one path dependency), the two adapter facts files it compiles in and Cargo.lock taken
+ * from that commit with `git archive`, built offline in a workspace of their own under target/base-2695. Built once
+ * and kept; nothing in the checkout changes.
+ */
+export function buildBase(rev = BASE): Promise<string> {
+  return once(`base:${rev}`, async () => {
+    const dir = join(REPO, 'target', 'base-2695', rev.slice(0, 12));
     const binary = join(dir, 'target', 'release', 'deep-hook');
     if (existsSync(binary)) return binary;
     const src = join(dir, 'src');
@@ -169,16 +181,16 @@ export function buildBase(): Promise<string> {
     mkdirSync(src, { recursive: true });
     let tar: Buffer;
     try {
-      tar = execFileSync('git', ['-C', REPO, 'archive', '--format=tar', BASE, 'crates/deep-hook', 'crates/deep-contracts', 'adapters/claude-code.facts.json', 'adapters/mcp-servers.facts.json', 'Cargo.lock'], { maxBuffer: 256 * 1024 * 1024 });
+      tar = execFileSync('git', ['-C', REPO, 'archive', '--format=tar', rev, 'crates/deep-hook', 'crates/deep-contracts', 'adapters/claude-code.facts.json', 'adapters/mcp-servers.facts.json', 'Cargo.lock'], { maxBuffer: 256 * 1024 * 1024 });
     } catch (error) {
-      throw Error(`BLOCKED: the merge base ${BASE} can't be read with git archive: ${(error as Error).message.slice(0, 600)}`);
+      throw Error(`BLOCKED: the merge base ${rev} can't be read with git archive: ${(error as Error).message.slice(0, 600)}`);
     }
     execFileSync('tar', ['-x', '-C', src], { input: tar });
     writeFileSync(join(src, 'Cargo.toml'), '[workspace]\nmembers = ["crates/deep-contracts", "crates/deep-hook"]\nresolver = "2"\n');
     const args = ['build', '--offline', '-q', '--release', '-p', 'deep-hook', '--manifest-path', join(src, 'Cargo.toml'), '--target-dir', join(dir, 'target')];
     const r = await run('nice', ['-n', '10', 'cargo', ...args], { env: CARGO_ENV, cwd: src, timeoutMs: 1_800_000 });
     if (r.timedOut) throw Error(`INCONCLUSIVE: the merge base's deep-hook build was killed at the timeout`);
-    if (r.code !== 0 || !existsSync(binary)) throw Error(`BLOCKED: deep-hook at the merge base ${BASE} did not build: cargo ${args.join(' ')} exited ${r.code}: ${r.stderr.slice(-2000)}`);
+    if (r.code !== 0 || !existsSync(binary)) throw Error(`BLOCKED: deep-hook at the merge base ${rev} did not build: cargo ${args.join(' ')} exited ${r.code}: ${r.stderr.slice(-2000)}`);
     return binary;
   });
 }
@@ -186,25 +198,28 @@ export function buildBase(): Promise<string> {
 // ---- What the merge base wrote: its shipped entries and their proofs.
 export interface Call { tool_name: string; tool_input: Line; cwd?: string }
 export interface RulesFile { v: number; entries: Record<string, Line>; proofs: Record<string, Line> }
-let baseText: string | undefined;
-/** crates/deep-hook/default-rules.json at `BASE`, verbatim: the file the merge base's setup writes as the first rules.json. */
-export function baseRulesText(): string {
-  if (baseText !== undefined) return baseText;
+const baseTexts = new Map<string, string>();
+/** crates/deep-hook/default-rules.json at `rev` (`BASE` unless given), verbatim: the file the merge base's setup writes as the first rules.json. */
+export function baseRulesText(rev = BASE): string {
+  const known = baseTexts.get(rev);
+  if (known !== undefined) return known;
+  let text: string;
   try {
-    baseText = execFileSync('git', ['-C', REPO, 'show', `${BASE}:crates/deep-hook/default-rules.json`], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    text = execFileSync('git', ['-C', REPO, 'show', `${rev}:crates/deep-hook/default-rules.json`], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   } catch (error) {
-    throw Error(`BLOCKED: the merge base's default-rules.json can't be read with git show ${BASE}: ${(error as Error).message.slice(0, 600)}`);
+    throw Error(`BLOCKED: the merge base's default-rules.json can't be read with git show ${rev}: ${(error as Error).message.slice(0, 600)}`);
   }
-  return baseText;
+  baseTexts.set(rev, text);
+  return text;
 }
 /** That file, parsed. */
-export function baseRules(): RulesFile {
-  const parsed = parseObject(baseRulesText());
+export function baseRules(rev = BASE): RulesFile {
+  const parsed = parseObject(baseRulesText(rev));
   if (!parsed || !isObj(parsed.entries) || !isObj(parsed.proofs)) throw Error(`BLOCKED: the merge base's default-rules.json has no entries and proofs`);
   return parsed as RulesFile;
 }
 /** The merge base's proofs, by entry: 31. */
-export const baseProofs = (): Record<string, Line> => baseRules().proofs;
+export const baseProofs = (rev = BASE): Record<string, Line> => baseRules(rev).proofs;
 
 /** Every planted call and twin of the merge base's proofs, each named for a failure message. */
 export interface Named { label: string; entry: string; call: Call }
@@ -558,7 +573,7 @@ export const median = (xs: readonly number[]): number => {
  * proofs' file, and both homes' config.json naming the set-up home's hub by `hub.address`, so the same hub answers
  * both and only the rules files differ.
  */
-export function baseSideOf(hub: Hub): Home {
+export function baseSideOf(hub: Hub, rev = BASE): Home {
   const c = hub.home;
   const b = makeHome();
   mkdirSync(b.root, { recursive: true, mode: 0o700 });
@@ -569,7 +584,7 @@ export function baseSideOf(hub: Hub): Home {
   }
   const rules = readJson(rulesPath(c));
   if (!rules) throw Error(`BLOCKED: the set-up home's rules.json isn't JSON`);
-  writeFileSync(rulesPath(b), `${JSON.stringify(isObj(rules.proofs) ? rules : { ...rules, proofs: baseProofs() }, null, 2)}\n`, { mode: 0o600 });
+  writeFileSync(rulesPath(b), `${JSON.stringify(isObj(rules.proofs) ? rules : { ...rules, proofs: baseProofs(rev) }, null, 2)}\n`, { mode: 0o600 });
   for (const h of [c, b]) {
     const config = readJson(join(h.root, 'config.json')) ?? {};
     config.hub = { ...(isObj(config.hub) ? config.hub : {}), address: `unix:${hub.socket}` };
