@@ -1153,6 +1153,8 @@ const P_SKY_BY_SLOPE: u32 = 33554432u;
 const P_SUM_CLAMPED: u32 = 67108864u;
 const P_LOCAL_TANGENT: u32 = 134217728u;
 const P_SHADOW_BRIGHTENS: u32 = 268435456u;
+// #2054's: a local light's window (1 − (d ÷ range)²)², in place of (1 − (d ÷ range)⁴)².
+const P_WINDOW_SQUARED: u32 = 536870912u;
 
 fn planted(bit: u32) -> bool {
     return (lights.count.z & bit) != 0u;
@@ -2110,7 +2112,8 @@ fn arriving(li: Light, p: vec3<f32>, table: u32) -> Arriving {
         let d = li.pos.xyz - p;
         let d2 = dot(d, d);
         l = d * inverseSqrt(d2);
-        let fade = clamp(1.0 - pow(d2 / (li.dir.w * li.dir.w), 2.0), 0.0, 1.0);
+        let q = d2 / (li.dir.w * li.dir.w);
+        let fade = clamp(1.0 - select(pow(q, 2.0), q, planted(P_WINDOW_SQUARED)), 0.0, 1.0);
         e = e * fade * fade / max(d2, li.color.w * li.color.w);
         if table > 0u {
             // A spot clips its table at its cone, whose values keep its flux inside it.

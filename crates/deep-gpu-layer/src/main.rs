@@ -134,6 +134,8 @@ pub enum Planted {
     LaneAdapterFromConfiguration,
     AbsoluteF32WorldPositions,
     LightCutAbsoluteIlluminance,
+    /// #2054's: a local light faded by (1 − (d ÷ range)²)², not the design's window.
+    LightWindowSquared,
     /// #430's wrong programs (tests/acceptance/430/README.md: Planted programs).
     GroupPassAtLayerEnd,
     GroupPassReadsEarlier,
@@ -652,6 +654,7 @@ impl Planted {
             "lane_adapter_from_configuration" => Planted::LaneAdapterFromConfiguration,
             "absolute_f32_world_positions" => Planted::AbsoluteF32WorldPositions,
             "light_cut_absolute_illuminance" => Planted::LightCutAbsoluteIlluminance,
+            "light_window_squared" => Planted::LightWindowSquared,
             "group_pass_at_layer_end" => Planted::GroupPassAtLayerEnd,
             "group_pass_reads_earlier" => Planted::GroupPassReadsEarlier,
             "group_pass_past_grow" => Planted::GroupPassPastGrow,

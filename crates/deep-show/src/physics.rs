@@ -171,7 +171,8 @@ pub(crate) fn poses_at(form: &Value, t: i64) -> Result<Vec<Posed>, Value> {
             .keys()
             .filter_map(|b| {
                 let states = reply["bodies"][b].as_array()?;
-                Some((b.clone(), pose_at(states, t.max(0), step, false)?))
+                let cuts = deep_canvas_physics::cut::of(&reply["outputs"], b);
+                Some((b.clone(), pose_at(states, t.max(0), step, false, &cuts)?))
             })
             .collect();
         out.push((id.clone(), w, poses));
