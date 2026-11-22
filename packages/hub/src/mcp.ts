@@ -204,8 +204,10 @@ export async function runMcp(server: 'deep' | 'deep-actions' = 'deep'): Promise<
         // A call that waits, such as deep_wait, holds up no other call.
         calls.push(hub.call(name, params.arguments, id).then(({ ok, value }) => {
           if (cancelled.delete(JSON.stringify(id))) return;
-          // A plug-in action that started and failed is an error the agent sees, with its report (#363).
-          const failed = ok && server === 'deep-actions' && (value as { status?: unknown } | null)?.status === 'failed';
+          // A plug-in action that started and failed is an error the agent sees, with its report (#363), as a stack
+          // deep_env couldn't bring up is (#2198).
+          const status = (value as { status?: unknown } | null)?.status;
+          const failed = ok && ((server === 'deep-actions' && status === 'failed') || (name === 'deep_env' && status === 'BLOCKED'));
           send({ id, result: { content: [{ type: 'text', text: JSON.stringify(value) }], isError: !ok || failed, ...(ok ? { structuredContent: value } : {}) } });
         }));
         break;
