@@ -1695,7 +1695,8 @@ export class Core {
       }
     }
     // A turn ends at its stop, or at the next prompt when it ended with none (an interrupt): its sends go with it.
-    if (drafts.some((d) => (d.kind === 'agent.stop' && !d.data.child) || d.kind === 'user.ask')) this.turnSends.delete(session);
+    // A Codex subagent's prompt carries the root's session ID and starts no turn of the root's (#39), so it keeps them.
+    if (drafts.some((d) => (d.kind === 'agent.stop' && !d.data.child) || (d.kind === 'user.ask' && !childPrompt(meta)))) this.turnSends.delete(session);
     // A session's sends wait past its end for a resume; what it denied and saw run is the record's from then on.
     if (meta.event === 'SessionEnd') { this.denials.delete(session); this.overrides.delete(session); }
     if (meta.event === 'SessionStart') {
