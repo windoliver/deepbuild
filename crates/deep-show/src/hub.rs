@@ -221,6 +221,8 @@ pub enum Planted {
     Audit(crate::geometry_audit::Planted),
     /// #1921's: a world's outputs' wrong programs, which the physics host names.
     Physics(crate::physics::Planted),
+    /// #1500's: a run carried on across a revision.
+    Join(crate::joins::Planted),
     /// #525's live worlds' wrong programs.
     Ahead(crate::stepped::Planted),
     /// #1250's planted clips.
@@ -813,6 +815,8 @@ pub struct Hub<'a> {
     pub expansion_cache: BTreeMap<String, Expansion>,
     /// #544's planted start_on: each session's first evaluated time since its revision loaded.
     pub first_frames: BTreeMap<String, i64>,
+    /// #1500's planted capture: each step a carried-on run ran, by document, as the logic call's row.
+    pub carried_rows: BTreeMap<String, BTreeMap<i64, Value>>,
     /// #538's planted lookup: each copy table's key order in its document's first revision.
     pub first_orders: BTreeMap<String, Vec<String>>,
     /// The displays, the windows on them and the card's placement (#400).
@@ -1011,6 +1015,7 @@ impl<'a> Hub<'a> {
             expansions: BTreeMap::new(),
             expansion_cache: BTreeMap::new(),
             first_frames: BTreeMap::new(),
+            carried_rows: BTreeMap::new(),
             first_orders: BTreeMap::new(),
             placement: Placement::open(
                 scenario.displays.clone(),
@@ -1624,6 +1629,7 @@ impl<'a> Hub<'a> {
             } => self.play(doc, *display_hz, *to, *presented),
             Call::Determinism(d) => self.determinism(d),
             Call::Frames(f) => self.frames(f),
+            Call::PlayFrames(p) => self.play_frames(p),
             Call::ShapedRuns(text) => self.shaped_runs(text),
             Call::Settle(s) => self.settle_patches(s),
             Call::Query(q) => self.query(q),

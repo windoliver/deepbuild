@@ -2233,6 +2233,25 @@
       ]
     },
     {
+      "id": "canvas-fx-pack",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "fx-pack"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "pack_check_ms": 2000,
+        "operator_compile_ms": 20,
+        "still_dispatches": 0
+      },
+      "initialReason": "Issue #161 first measurement (#161.729a03cd): the merge base's fx@1 holds 17 operators, its install_pack answers no check_ms and a 2D session's passes name no operator. A run starts two fresh processes: a release deep-show installs packs/fx-1.0.0 as deepbuild/fx and answers the pack's own check's wall time (pack_check_ms, under 2 s); a release deep-gpu puts each of the pack's 70 graphs through check_operator, whose timing.compile_ms is its compile off the UI thread (operator_compile_ms, the slowest of the 70, under 20 ms), and shows a figure whose group's passes name fx.levels@1, fx.radial_blur@1 and fx.turbulent_displace@1 as a live session for 60 frames, counting the passes from frame 4 on that name one of them (still_dispatches, 0: a count judged on any machine). One warm-up and five runs. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#161.729a03cd"
+      ]
+    },
+    {
       "id": "canvas-logic-trails",
       "command": [
         "node",

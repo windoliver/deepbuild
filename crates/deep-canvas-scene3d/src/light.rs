@@ -308,7 +308,9 @@ pub fn material_maps(doc: &Value) -> std::collections::BTreeMap<String, &'static
             }
         }
     }
-    (uses.into_iter()).map(|(sha, u)| (sha, map_role(&u))).collect()
+    (uses.into_iter())
+        .map(|(sha, u)| (sha, map_role(&u)))
+        .collect()
 }
 
 /// The first field of a `material@1` in `doc` that names map `sha`, as

@@ -59,7 +59,9 @@ fn a_library_packs_check_runs_on_the_first_call_only() {
         "items": {"back": {"id": "back", "kind": "rect@1", "name": "Backdrop", "order": "a0",
                            "params": {"box": [0, 0, 320, 200], "paint": {"fill": {"role": "ground"}}}}}});
     for doc in DOCS {
-        let (shown, took) = ask(json!({"call": {"call": "deep_show", "session": "sess-alpha", "doc": doc, "document": board, "include": ["issues"]}}));
+        let (shown, took) = ask(
+            json!({"call": {"call": "deep_show", "session": "sess-alpha", "doc": doc, "document": board, "include": ["issues"]}}),
+        );
         assert_eq!(shown["reply"]["outcome"], json!("presented"), "{shown}");
         assert!(
             took <= first / 5.0,
