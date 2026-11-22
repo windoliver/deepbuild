@@ -1,0 +1,276 @@
+# #2339 acceptance tests: the run on the base, and the planted fix
+
+## The base (2eaaeb0e6, origin/main, no implementation), in this checkout, run once
+
+$ node --test 'tests/acceptance/2339/*.test.mjs'
+(Node 24.22.0, macOS, load average about 100; the home folder is written ~ and the OS temp folder $TMPDIR)
+
+All eleven fail at an assertion. The four real-doc tests stop at `docs/technical-design.md has no level-2 heading
+"Principles"`. The seven planted tests see the base lane pass the twin (every planted link lands) and then pass the
+planted fault too, so they stop at `the design links lane doesn't FAIL …`: the base lane doesn't read the section.
+
+✖ #2339.2ae5a05d AC1 the design's Principles section sits after the opening and before "What version 0 builds, and what waits", holds 8 to 12 lines, each one sentence of at most 160 characters with a link into the design, and the design links lane passes on the real docs (12.947709ms)
+✖ #2339.2ae5a05d AC1 a planted section whose fifth line has no link into the design fails the design links lane, naming that line; the same section with the link passes (48576.470834ms)
+✖ #2339.2ae5a05d AC1 a planted line of two sentences fails the design links lane, naming it; the same line as one sentence passes (40296.623916ms)
+✖ #2339.a190c5fb AC2 the Principles section opens with AGENTS.md's four invariants, in order, word for word (10.7145ms)
+✖ #2339.a190c5fb AC2 an edit to invariant 3 in AGENTS.md alone fails the design links lane, naming invariant 3; the same edit to both files passes (50107.548584ms)
+✖ #2339.a190c5fb AC2 an edit to invariant 2 in the design's section alone fails the design links lane, naming invariant 2 (39629.780209ms)
+✖ #2339.b90141c9 AC3 each line of the design's Principles section names a check that exists, a file under scripts/ or a lane scripts/lanes.mjs lists in checks, and no script that doesn't (30.141041ms)
+✖ #2339.b90141c9 AC3 a planted line naming scripts/no-such-check.mjs fails the design links lane, one output line naming the line and scripts/no-such-check.mjs; the same line naming scripts/wait-ratchet.mjs passes (43970.388208ms)
+✖ #2339.b90141c9 AC3 a planted line naming no check fails the design links lane, naming the line (43727.689083ms)
+✖ #2339.6eaafe21 AC4 the canvas reference's "Conventions every primitive uses" opens with a link to the design's Principles section, and the design links lane passes on the real docs (52.984917ms)
+✖ #2339.6eaafe21 AC4 a planted canvas reference whose "Conventions every primitive uses" has no link to the section fails the design links lane, naming that heading; with the link it passes (47727.909458ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 0
+ℹ fail 11
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 90033.829416
+
+✖ failing tests:
+
+test at tests/acceptance/2339/ac1-section.test.mjs:13:1
+✖ #2339.2ae5a05d AC1 the design's Principles section sits after the opening and before "What version 0 builds, and what waits", holds 8 to 12 lines, each one sentence of at most 160 characters with a link into the design, and the design links lane passes on the real docs (12.947709ms)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no level-2 heading "Principles"
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-2339-principles-33029e/tests/acceptance/2339/ac1-section.test.mjs:16:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2339/ac1-section.test.mjs:49:1
+✖ #2339.2ae5a05d AC1 a planted section whose fifth line has no link into the design fails the design links lane, naming that line; the same section with the link passes (48576.470834ms)
+  AssertionError [ERR_ASSERTION]: the design links lane doesn't FAIL a planted section whose fifth line (docs/technical-design.md:12) has no link:
+  LANE design links and names
+  $ ~/.nvm/versions/node/v24.22.0/bin/node scripts/design-links.mjs
+  design links and names: 173 links checked from 2 docs and 3 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned)
+  
+  EXIT 0
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-2339-principles-33029e/tests/acceptance/2339/ac1-section.test.mjs:52:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2339/ac1-section.test.mjs:56:1
+✖ #2339.2ae5a05d AC1 a planted line of two sentences fails the design links lane, naming it; the same line as one sentence passes (40296.623916ms)
+  AssertionError [ERR_ASSERTION]: the design links lane doesn't FAIL a planted line of two sentences (docs/technical-design.md:14):
+  LANE design links and names
+  $ ~/.nvm/versions/node/v24.22.0/bin/node scripts/design-links.mjs
+  design links and names: 174 links checked from 2 docs and 3 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned)
+  
+  EXIT 0
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-2339-principles-33029e/tests/acceptance/2339/ac1-section.test.mjs:59:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2339/ac2-invariants.test.mjs:13:1
+✖ #2339.a190c5fb AC2 the Principles section opens with AGENTS.md's four invariants, in order, word for word (10.7145ms)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no level-2 heading "Principles"
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-2339-principles-33029e/tests/acceptance/2339/ac2-invariants.test.mjs:17:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2339/ac2-invariants.test.mjs:36:1
+✖ #2339.a190c5fb AC2 an edit to invariant 3 in AGENTS.md alone fails the design links lane, naming invariant 3; the same edit to both files passes (50107.548584ms)
+  AssertionError [ERR_ASSERTION]: the design links lane doesn't FAIL when AGENTS.md's invariant 3 is edited alone:
+  LANE design links and names
+  $ ~/.nvm/versions/node/v24.22.0/bin/node scripts/design-links.mjs
+  design links and names: 174 links checked from 2 docs and 3 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned)
+  
+  EXIT 0
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-2339-principles-33029e/tests/acceptance/2339/ac2-invariants.test.mjs:46:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2339/ac2-invariants.test.mjs:54:1
+✖ #2339.a190c5fb AC2 an edit to invariant 2 in the design's section alone fails the design links lane, naming invariant 2 (39629.780209ms)
+  AssertionError [ERR_ASSERTION]: the design links lane doesn't FAIL when the section's invariant 2 is edited alone:
+  LANE design links and names
+  $ ~/.nvm/versions/node/v24.22.0/bin/node scripts/design-links.mjs
+  design links and names: 174 links checked from 2 docs and 3 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned)
+  
+  EXIT 0
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-2339-principles-33029e/tests/acceptance/2339/ac2-invariants.test.mjs:65:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2339/ac3-checks.test.mjs:12:1
+✖ #2339.b90141c9 AC3 each line of the design's Principles section names a check that exists, a file under scripts/ or a lane scripts/lanes.mjs lists in checks, and no script that doesn't (30.141041ms)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no level-2 heading "Principles"
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-2339-principles-33029e/tests/acceptance/2339/ac3-checks.test.mjs:14:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2339/ac3-checks.test.mjs:40:1
+✖ #2339.b90141c9 AC3 a planted line naming scripts/no-such-check.mjs fails the design links lane, one output line naming the line and scripts/no-such-check.mjs; the same line naming scripts/wait-ratchet.mjs passes (43970.388208ms)
+  AssertionError [ERR_ASSERTION]: the design links lane doesn't FAIL a planted line naming scripts/no-such-check.mjs (docs/technical-design.md:16):
+  LANE design links and names
+  $ ~/.nvm/versions/node/v24.22.0/bin/node scripts/design-links.mjs
+  design links and names: 174 links checked from 2 docs and 3 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned)
+  
+  EXIT 0
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-2339-principles-33029e/tests/acceptance/2339/ac3-checks.test.mjs:43:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2339/ac3-checks.test.mjs:47:1
+✖ #2339.b90141c9 AC3 a planted line naming no check fails the design links lane, naming the line (43727.689083ms)
+  AssertionError [ERR_ASSERTION]: the design links lane doesn't FAIL a planted line naming no check (docs/technical-design.md:15):
+  LANE design links and names
+  $ ~/.nvm/versions/node/v24.22.0/bin/node scripts/design-links.mjs
+  design links and names: 174 links checked from 2 docs and 3 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned)
+  
+  EXIT 0
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-2339-principles-33029e/tests/acceptance/2339/ac3-checks.test.mjs:50:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2339/ac4-canvas-link.test.mjs:12:1
+✖ #2339.6eaafe21 AC4 the canvas reference's "Conventions every primitive uses" opens with a link to the design's Principles section, and the design links lane passes on the real docs (52.984917ms)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no level-2 heading "Principles" for the canvas reference to link
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-2339-principles-33029e/tests/acceptance/2339/ac4-canvas-link.test.mjs:14:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2339/ac4-canvas-link.test.mjs:31:1
+✖ #2339.6eaafe21 AC4 a planted canvas reference whose "Conventions every primitive uses" has no link to the section fails the design links lane, naming that heading; with the link it passes (47727.909458ms)
+  AssertionError [ERR_ASSERTION]: the design links lane doesn't FAIL a canvas reference without the link to the Principles section:
+  LANE design links and names
+  $ ~/.nvm/versions/node/v24.22.0/bin/node scripts/design-links.mjs
+  design links and names: 173 links checked from 2 docs and 3 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned)
+  
+  EXIT 0
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-2339-principles-33029e/tests/acceptance/2339/ac4-canvas-link.test.mjs:43:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+## The harness against a planted fix (in a scratch copy of the checkout under the OS temp folder, deleted after)
+
+To check the harness can pass, a scratch copy of this checkout (tracked and untracked files, its own `git init` so the
+suite's `git ls-files` works there) got a crude fix: the planted section of `helpers.mjs` (`## Principles`, the four
+invariants and six lines) put before "What version 0 builds, and what waits", the canvas reference's "Conventions every
+primitive uses" opening with `Read the design's [Principles](technical-design.md#principles) first.`, and about forty
+lines added to that copy's `scripts/design-links.mjs`: for each numbered line of the section, FAIL lines of the form
+`docs/technical-design.md:<n> (Principles line <k>) …` for over 160 characters, more than one sentence (after line 4),
+no `](#…)` link, a backticked `scripts/…` that doesn't exist, or no existing script or lane name; `invariant <k>
+differs: AGENTS.md:<n> has …` when a line's text doesn't start with AGENTS.md's invariant; and a FAIL naming
+"Conventions every primitive uses" when its first line lacks the link. The suite run once in that copy:
+
+ℹ tests 11
+ℹ pass 11
+ℹ fail 0
+
+The copy was then deleted; nothing of the fix is in this checkout or part of this suite. The fix's real section is the
+planted one, so it shows the harness can pass and that each plant is caught, not that any particular wording passes.
