@@ -232,9 +232,14 @@ describe('guards on a pi call', () => {
     writeFileSync(config, set);
     // A hub that finds no rules.json writes one of its product-store entry alone (products.ts): that goes too.
     const file = join(w.home, '.deepbuild/rules.json');
-    if (removed) try { await waitFor(() => existsSync(file), 10_000, 'the product-store entry'); rmSync(file); } catch { /* none written */ }
+    if (removed) {
+      await waitFor(() => existsSync(file), 10_000, 'the product-store entry');
+      rmSync(file);
+    }
     const client = await Client.open(hub);
     const end = await run(w.pi);
+    // A hub that read that file before it went writes it back at the call's connection: then nothing here was tested.
+    if (removed && existsSync(file)) throw Error('INCONCLUSIVE: the hub read its product-store rules.json before it was removed and put it back; rerun');
     expect(end.isError, said(end)).toBe(true);
     expect(said(end)).toContain(`rules.json ${why}`);
     expect(existsSync(join(w.cwd, 'ran.txt')), 'the held command ran').toBe(false);

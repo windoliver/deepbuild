@@ -664,9 +664,12 @@ fn matching() -> ExitCode {
         if let Some(Value::String(cwd)) = parsed.as_ref().and_then(|p| member(p, "cwd")) {
             set_cwd(PathBuf::from(cwd));
         }
-        // A running hub puts a removed rules.json back before it says hello (#1856), as `forward` reads it.
+        // A running hub puts a removed rules.json back before it says hello (#1856), as `forward` reads it; a line
+        // it can't read waits for nothing.
         let rules = match rules() {
-            Err(why) if why == REMOVED && hub_said_hello(Instant::now() + PUT_BACK) => self::rules(),
+            Err(why) if why == REMOVED && parsed.is_some() && hub_said_hello(Instant::now() + PUT_BACK) => {
+                self::rules()
+            }
             read => read,
         };
         let reply = match rules {
@@ -676,7 +679,7 @@ fn matching() -> ExitCode {
             Err(why) => format!(
                 "{{\"matched\":[],\"rules_unread\":true,\"denials\":[{}]}}",
                 quoted(&format!(
-                    "DeepBuild blocked this: ~/.deepbuild/rules.json {why}, so its guards can't be checked while the hub doesn't answer. Fix that file, then retry."
+                    "DeepBuild blocked this: ~/.deepbuild/rules.json {why}, so its guards can't be checked. Fix that file, then retry."
                 ))
             ),
             Ok(rules) => {

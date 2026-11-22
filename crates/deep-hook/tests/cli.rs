@@ -642,10 +642,18 @@ fn match_says_its_denial_is_for_rules_it_could_not_read() {
     let listener =
         std::os::unix::net::UnixListener::bind(home.join(".deepbuild/hub.sock")).unwrap();
     let rules = home.join(".deepbuild/rules.json");
+    // A `match` that never connects leaves the hub waiting 2 s, not forever: the assertion below then says so.
+    listener.set_nonblocking(true).unwrap();
     let hub = std::thread::spawn(move || {
-        let (mut stream, _) = listener.accept().unwrap();
-        std::fs::write(rules, RULES).unwrap();
-        let _ = stream.write_all(HELLO);
+        let give_up = std::time::Instant::now() + 2 * SECOND;
+        while std::time::Instant::now() < give_up {
+            if let Ok((mut stream, _)) = listener.accept() {
+                std::fs::write(rules, RULES).unwrap();
+                let _ = stream.write_all(HELLO);
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
     });
     let out = match_pkill(&home);
     hub.join().unwrap();
