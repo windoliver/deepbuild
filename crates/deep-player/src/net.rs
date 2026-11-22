@@ -37,8 +37,62 @@ pub struct Match {
     planted: Planted,
 }
 
+/// #280: net.budget's web part (canvas primitives: Check input: net kinds): the match's stepping
+/// on `ask`'s track, measured in this player on the page's clock as `deep_net::window::part`
+/// measures it in the app, each copy the document's logic items and worlds at their start on
+/// `track`, the input track recorded before the match.
+pub fn budget(
+    sealed: &Sealed,
+    doc: &Value,
+    track: &[Value],
+    read: &dyn Fn(&str) -> Option<Vec<u8>>,
+    ask: &Value,
+) -> Value {
+    let piece = match deep_play::logic::logic_piece(sealed, doc, track, read, false) {
+        Ok(Some(p)) => Rc::new(p),
+        Ok(None) => return json!({"error": "the piece has no logic item"}),
+        Err(i) => return json!({"error": i.to_json()}),
+    };
+    let entries = ask["track"].as_array().cloned().unwrap_or_default();
+    let n = |k: &str| ask[k].as_i64().unwrap_or(0);
+    let make = &mut || {
+        let mut l = Logic::new(piece.clone(), track, false)?;
+        l.worlds(doc)?;
+        Ok(l)
+    };
+    let frame_ms = ask["frame_ms"].as_f64().unwrap_or(4.0);
+    let from_step = ask["from_step"].as_bool().unwrap_or(false);
+    deep_net::window::part(
+        &entries,
+        n("steps"),
+        n("len"),
+        n("window"),
+        frame_ms,
+        from_step,
+        make,
+    )
+    .unwrap_or_else(|e| json!({"error": e}))
+}
+
 /// #277: the share of the class's frame CPU a catch-up's slice takes, leaving the frame its draw.
 const SLICE_SHARE: f64 = 0.6;
+
+/// #552: 64 bits from the browser's secure random source, `crypto.getRandomValues`.
+fn secure_u64() -> u64 {
+    use wasm_bindgen::JsCast as _;
+    let buf = js_sys::Uint8Array::new_with_length(8);
+    let crypto = js_sys::Reflect::get(&js_sys::global(), &"crypto".into()).ok();
+    let fill = crypto
+        .as_ref()
+        .and_then(|c| js_sys::Reflect::get(c, &"getRandomValues".into()).ok())
+        .and_then(|f| f.dyn_into::<js_sys::Function>().ok());
+    if let (Some(c), Some(f)) = (crypto, fill) {
+        let _ = f.call1(&c, &buf);
+    }
+    let mut b = [0u8; 8];
+    buf.copy_to(&mut b);
+    u64::from_le_bytes(b)
+}
 
 /// The page's clock, in ms, as flicks.
 fn flicks(ms: f64) -> i64 {
@@ -91,6 +145,7 @@ impl Match {
         prompt::prompt(
             &self.cfg.host,
             self.cfg.players,
+            self.cfg.courtesy,
             self.cfg.controls.get(deep_net::kind::PROFILE).is_some(),
             &self.state,
         )
@@ -199,7 +254,7 @@ impl Match {
             .and_then(|mut l| l.worlds(&self.source).map(|()| l))
         {
             Ok(sim) => {
-                self.copy = Some(Copy::new(
+                let mut copy = Copy::new(
                     self.cfg.clone(),
                     self.card.clone(),
                     me,
@@ -208,7 +263,10 @@ impl Match {
                     sim,
                     self.planted,
                     now,
-                ));
+                );
+                // #552: a draw's bits come from the browser's secure random source.
+                copy.draw_source(Box::new(secure_u64), Default::default());
+                self.copy = Some(copy);
                 self.next_frame = now;
             }
             Err(e) => {

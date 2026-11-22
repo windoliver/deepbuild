@@ -194,7 +194,7 @@ impl Locals {
         &mut self,
         scene: &Scene,
         kept: &[(usize, f64)],
-        casters: &[shadow::Caster<'_>],
+        casters: &[shadow::Caster],
         planted: Planted,
     ) -> bool {
         self.list.clear();
@@ -218,7 +218,7 @@ impl Locals {
             }
             l.caster_bit.hash(&mut h);
             let mut held = BTreeSet::new();
-            for (s, corners) in casters {
+            for (s, corners) in shadow::casters(scene, casters) {
                 if !shadow::meets(corners, l.pos, l.range)
                     || (l.caster_bit != 0 && s.caster_sets & l.caster_bit == 0)
                 {

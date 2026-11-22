@@ -397,6 +397,15 @@ const CLAUDE_SCENARIOS = [
   { name: 'elicitation-cancelled', mcp: true, args: ['--allowedTools', 'mcp__corpus__ask_name'], steps: [
     { type: 'Call the ask_name tool of the corpus MCP server once, then reply with only what it returns.', until: hook('Elicitation') },
     { wait: 3000 }, { keys: '\x1b', until: hook('ElicitationResult'), ms: 20_000 }, { stops: 1 }] },
+  // DeepBuild's own two servers as `deep setup` names them (#2897), built from this checkout, in a home of their own
+  // where no hub answers: deep_status, marked to load up front, is called with no search before it, and deep_search
+  // only once a search loads it.
+  { name: 'deepbuild-tools', mcp: (dir) => {
+    const env = { HOME: join(dir, 'home') };
+    mkdirSync(env.HOME, { recursive: true });
+    return { deepbuild: { type: 'stdio', command: process.execPath, args: [join(root, 'packages/cli/dist/main.js'), 'mcp'], env }, 'deep-actions': { type: 'stdio', command: join(root, 'target/debug/deep-hook'), args: ['mcp', 'actions'], env } };
+  }, args: ['--allowedTools', 'mcp__deepbuild__deep_status', 'mcp__deepbuild__deep_search'], steps: [
+    { type: 'Call the deep_status tool of the deepbuild MCP server once. Then call its deep_search tool once with the query corpus. Then reply with only the word done.' }] },
 ];
 
 async function recordClaude(out, bin, facts, only) {
@@ -408,7 +417,7 @@ async function recordClaude(out, bin, facts, only) {
     if (scenario.dialog) writeFileSync(join(dir, 'dialog'), '');
     const command = [process.execPath, join(root, 'scripts/corpus.mjs'), 'hook', dir].map(quote).join(' ');
     writeFileSync(join(dir, 'settings.json'), JSON.stringify({ hooks: Object.fromEntries(hooks.map((hook) => [hook, [{ hooks: [{ type: 'command', command }] }]])) }));
-    if (scenario.mcp) writeFileSync(join(dir, 'mcp.json'), JSON.stringify({ mcpServers: { corpus: { type: 'stdio', command: process.execPath, args: [join(root, 'scripts/corpus-elicit.mjs')] } } }));
+    if (scenario.mcp) writeFileSync(join(dir, 'mcp.json'), JSON.stringify({ mcpServers: scenario.mcp === true ? { corpus: { type: 'stdio', command: process.execPath, args: [join(root, 'scripts/corpus-elicit.mjs')] } } : scenario.mcp(dir) }));
     const args = ['--model', scenario.model ?? 'haiku', '--setting-sources', 'project', '--strict-mcp-config', ...(scenario.mcp ? ['--mcp-config', join(dir, 'mcp.json')] : []), '--settings', join(dir, 'settings.json'), ...(scenario.args ?? [])];
     const steps = scenario.steps.map((step) => ({ ...step, binary: bin }));
     results.push({ scenario: scenario.name, dir, ...(await session({ argv: [bin, ...args], cwd: realpathSync(work), dir, terminal: true, steps, startAfter: (_, payloads) => payloads.some(({ hook_event_name: hook }) => hook === 'SessionStart') })) });

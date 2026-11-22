@@ -1,8 +1,10 @@
-//! The build's first-party packs (#416, #981, #953; canvas primitives: Logic: library interfaces):
-//! `packs/interfaces-1.0.0`, which declares physics2d.lib@1, fsm@1 and nn.mlp@1,
-//! `packs/lanes-1.0.0`, which declares lanes@1 with its reference library, and
-//! `packs/modslib-1.0.0`, which declares mods.lib@1 with its reference library mods.tree, held in
-//! the binary so every piece's links resolve against them, as the release's packs are installed for
+//! The build's first-party packs (#416, #981, #953, #980, #1255; canvas primitives: Logic: library
+//! interfaces): `packs/interfaces-1.0.0`, which declares physics2d.lib@1, fsm@1 and nn.mlp@1,
+//! `packs/lanes-1.0.0`, which declares lanes@1 with its reference library,
+//! `packs/modslib-1.0.0`, which declares mods.lib@1 with its reference library mods.tree,
+//! `packs/process-1.0.0`, which declares process@1 with its reference library (#980), and
+//! `packs/separation-1.0.0`, which declares separation@1 with its reference library, held in the
+//! binary so every piece's links resolve against them, as the release's packs are installed for
 //! every document.
 
 use std::sync::OnceLock;
@@ -74,6 +76,42 @@ const PACKS: &[(&str, Files)] = &[
             pack_file!("modslib-1.0.0", "objects/archer_own.wasm"),
             pack_file!("modslib-1.0.0", "data/archer_own.bin"),
             pack_file!("modslib-1.0.0", "fixtures/archer_own.json"),
+        ],
+    ),
+    (
+        include_str!("../../../packs/process-1.0.0/pack.json"),
+        &[
+            pack_file!("process-1.0.0", "objects/process_ref.wasm"),
+            pack_file!("process-1.0.0", "objects/process_drop.wasm"),
+            pack_file!("process-1.0.0", "objects/process_over.wasm"),
+            pack_file!("process-1.0.0", "objects/steady.wasm"),
+            pack_file!("process-1.0.0", "fixtures/steady.json"),
+            pack_file!("process-1.0.0", "objects/blocked.wasm"),
+            pack_file!("process-1.0.0", "fixtures/blocked.json"),
+            pack_file!("process-1.0.0", "objects/grant.wasm"),
+            pack_file!("process-1.0.0", "fixtures/grant.json"),
+            pack_file!("process-1.0.0", "objects/steady_own.wasm"),
+            pack_file!("process-1.0.0", "fixtures/steady_own.json"),
+        ],
+    ),
+    (
+        include_str!("../../../packs/separation-1.0.0/pack.json"),
+        &[
+            pack_file!("separation-1.0.0", "objects/separation_ref.wasm"),
+            pack_file!("separation-1.0.0", "objects/once_a_second.wasm"),
+            pack_file!("separation-1.0.0", "objects/leaves_band.wasm"),
+            pack_file!("separation-1.0.0", "objects/crossing.wasm"),
+            pack_file!("separation-1.0.0", "fixtures/crossing.json"),
+            pack_file!("separation-1.0.0", "objects/wide.wasm"),
+            pack_file!("separation-1.0.0", "fixtures/wide.json"),
+            pack_file!("separation-1.0.0", "objects/breach.wasm"),
+            pack_file!("separation-1.0.0", "fixtures/breach.json"),
+            pack_file!("separation-1.0.0", "objects/delayed.wasm"),
+            pack_file!("separation-1.0.0", "fixtures/delayed.json"),
+            pack_file!("separation-1.0.0", "objects/narrow.wasm"),
+            pack_file!("separation-1.0.0", "fixtures/narrow.json"),
+            pack_file!("separation-1.0.0", "objects/approach_own.wasm"),
+            pack_file!("separation-1.0.0", "fixtures/approach_own.json"),
         ],
     ),
 ];

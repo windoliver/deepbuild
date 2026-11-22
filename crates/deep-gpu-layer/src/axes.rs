@@ -21,6 +21,11 @@ pub(crate) fn plant_name(planted: Option<Planted>) -> Option<&'static str> {
         Planted::EyeInsetCentredFrustum => Some("eye_inset_centred_frustum"),
         // #1634: scene3d cuts an automatic range at a fixed 0.05 lx.
         Planted::AutoRangeFixedCut => Some("auto_range_fixed_cut"),
+        // #298: scene3d places a clamped overlay and its leader wrongly.
+        Planted::ClampEachAxis => Some("clamp_each_axis"),
+        Planted::ClampUnmirroredBehind => Some("clamp_unmirrored_behind"),
+        Planted::ClampToFrame => Some("clamp_to_frame"),
+        Planted::LeaderDrawsWhileClamped => Some("leader_draws_while_clamped"),
         _ => None,
     }
 }

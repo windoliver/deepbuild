@@ -269,16 +269,10 @@ impl Fill {
                 std::mem::size_of::<Params>(),
                 wgpu::BufferUsages::UNIFORM,
             ),
-            reach: buffer(
-                "scene3d fill reach",
-                MOST_FILL * std::mem::size_of::<Reach>(),
-                wgpu::BufferUsages::STORAGE,
-            ),
-            spans: buffer(
-                "scene3d fill spans",
-                spans_size(0),
-                wgpu::BufferUsages::STORAGE,
-            ),
+            // #3016: a word each until a scene holds a fill light, so a view with none, and each
+            // other view of its scene, holds nothing for them.
+            reach: buffer("scene3d fill reach", 4, wgpu::BufferUsages::STORAGE),
+            spans: buffer("scene3d fill spans", 4, wgpu::BufferUsages::STORAGE),
             report: None,
             bind: None,
             cap: 0,
@@ -365,6 +359,21 @@ impl Fill {
                     | wgpu::BufferUsages::COPY_SRC,
                 mapped_at_creation: false,
             });
+            let room = |label, size: usize| {
+                d.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some(label),
+                    size: size as u64,
+                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                })
+            };
+            let reach = MOST_FILL * std::mem::size_of::<Reach>();
+            if (self.reach.size() as usize) < reach {
+                self.reach = room("scene3d fill reach", reach);
+            }
+            if (self.spans.size() as usize) < spans_size(0) {
+                self.spans = room("scene3d fill spans", spans_size(0));
+            }
             self.report.get_or_insert_with(|| {
                 d.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("scene3d fill report"),

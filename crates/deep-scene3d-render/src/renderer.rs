@@ -163,6 +163,19 @@ pub struct Renderer {
     /// #506: each view inset's own renderer, by the inset's ID, drawn whole before this view's
     /// geometry, one level deep.
     pub(super) views: BTreeMap<String, Box<Renderer>>,
+    /// #3016: another view of a scene (a mirror's, a view inset's, a look region's), drawing
+    /// from what the renderer holding the scene's resources lends it: it starts and ends no turn
+    /// of their caches, and sets no inset picture of theirs.
+    pub lent: bool,
+    /// #3016: the scene it draws as a mirror's or a view inset's view, kept from frame to frame.
+    pub(super) seen: Option<Box<deep_canvas_scene3d::scene::Scene>>,
+    /// #3016: the shared resources its lights' group binds, bound again when they change; and,
+    /// under the planted mirror_takes_view_cull or inset_takes_view_cascades, the camera of the
+    /// view that lends it them and that camera's clip.
+    pub(super) bound: lend::Bound,
+    pub(super) planted_view: Option<(deep_canvas_scene3d::scene::Camera, [f64; 16])>,
+    /// #3016: the frame's casters and their corners, kept from frame to frame.
+    pub(super) casters: Vec<shadow::Caster>,
     /// #465: the flare's passes, made when a frame first has a flare, and whether this frame has.
     pub(super) flarer: Option<Box<flare::Flarer>>,
     pub(super) flaring: bool,

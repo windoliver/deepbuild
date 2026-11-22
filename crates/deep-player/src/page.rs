@@ -677,6 +677,24 @@ impl Player {
     pub fn net_ended(&self) -> bool {
         self.net.as_ref().is_some_and(crate::net::Match::ended)
     }
+
+    /// #280: net.budget's web part: the document and the track recorded before the match by
+    /// their files' SHA-256, and `request` (`{track, steps, len, window, frame_ms, from_step}`);
+    /// the match's stepping measured here, five runs after a warm-up, as the app measures its own.
+    pub fn net_budget(&self, doc: &str, track: &str, request: &str) -> Result<String, JsValue> {
+        let text = |sha: &str| {
+            self.files
+                .get(sha)
+                .ok_or_else(|| fail(format!("the page gave no file {sha}")))
+        };
+        let doc: Value = serde_json::from_slice(text(doc)?).map_err(fail)?;
+        let track: Value = serde_json::from_slice(text(track)?).map_err(fail)?;
+        let track = track["entries"].as_array().cloned().unwrap_or_default();
+        let request: Value = serde_json::from_str(request).map_err(fail)?;
+        let files = &self.files;
+        let read = |sha: &str| files.get(sha).cloned();
+        Ok(crate::net::budget(self.sealed, &doc, &track, &read, &request).to_string())
+    }
 }
 
 /// What this player is, as JSON: the core's version, its sealed module set's digest and runtime

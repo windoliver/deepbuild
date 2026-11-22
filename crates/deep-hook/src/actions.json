@@ -245,5 +245,6 @@
    },
    "fix": "Call again once the hub is back; deep mcp reconnects by itself."
   }
- ]
+ ],
+ "instructions": "Actions the plug-ins installed in DeepBuild offer, such as sending a message or changing data outside the repo. Search for find_actions to list them with each one's input schema, and for call_action to run one by name, once a task needs a plug-in's action."
 }

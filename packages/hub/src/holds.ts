@@ -48,11 +48,15 @@ interface HoldOptions {
 
 /**
  * The plan an authority ask shows (#69): the one call it holds, what it changes, and its undo. A call the guards class
- * as a delete or a send, or a tool that can destroy, can't be undone from here; a push or a merge reverts.
+ * as a delete or a send, or a tool that can destroy, can't be undone from here, and neither can a push, which others
+ * may have fetched once it ran; a pull request or a merge reverts. A call of an authority effect class, or a delete
+ * that couldn't be staged, acts outside the session, so its step is public: one that can't be undone starts only after
+ * the hub's hold (#1101). A tool you let run, or a decision your standing rules answer, acts on your machine.
  */
 function planFor(source: string, does: string, changes: string[], targets: Target[] = []): PlanInput {
-  const undo = /^effect\.(push|pr|merge)$/.test(source) ? 'Revert it with a new commit' : null;
-  return { steps: [{ does: does.slice(0, 8192), changes: changes.length ? changes.map((c) => c.slice(0, 8192)) : ['what the call touches'], undo, public: undo !== null, cost: 0, ...(targets.length ? { targets } : {}) }], diff: key({ source, does, changes }) };
+  const undo = /^effect\.(pr|merge)$/.test(source) ? 'Revert it with a new commit' : null;
+  const outside = /^effect\.(push|pr|merge|dispatch|send|delete)$/.test(source) || source === 'command.unstageable';
+  return { steps: [{ does: does.slice(0, 8192), changes: changes.length ? changes.map((c) => c.slice(0, 8192)) : ['what the call touches'], undo, public: outside, cost: 0, ...(targets.length ? { targets } : {}) }], diff: key({ source, does, changes }) };
 }
 /**
  * A push's words up to the end of its command, each tool's own flags before its push skipped: git's, jj's, sl's, and
@@ -158,6 +162,8 @@ export class Holds {
   /** The ask with this key, newest first: its handle, status and decision. */
   private async askOf(k: string): Promise<{ id: string; status: string; decision: string | null } | undefined> {
     const [row] = (await this.o.raw(`SELECT id, status, decision FROM asks WHERE key = ? ORDER BY created DESC LIMIT 1`, [k])) as { id: string; status: string; decision: string | null }[];
+    // Your yes to a step that can't be undone lets it run only once the hub's hold is over (#1101): until then it waits.
+    if (row?.decision === 'allow' && await this.o.asks().stepHeld(`ask:${row.id}`)) return { ...row, status: 'held', decision: null };
     return row;
   }
   /** Raises one authority ask from `source` (a choice that approves, for the hold-as-choice plant); its handle. */
@@ -194,6 +200,7 @@ export class Holds {
   /** Why a call held by `handle` doesn't run: still waiting, or you said no. */
   async waiting(handle: string, label: string): Promise<string> {
     const row = await this.askOf((await this.o.raw(`SELECT key FROM asks WHERE id = ?`, [handle.slice(4)]) as { key: string }[])[0]?.key ?? '');
+    if (row?.status === 'held') return `DeepBuild is holding this: you said yes to \`${label}\` (${handle}), and since it can't be undone it starts only once its 10 s hold is over, with Undo on its card until then. Run the same call again after that.`;
     return row && row.status !== 'open' && row.status !== 'later'
       ? `DeepBuild held this: you said no to \`${label}\` (${handle}, ${row.status}); it doesn't run.`
       : `DeepBuild is holding this: \`${label}\` needs your authority and waits for ${handle}. Once you say yes, run the same call again.`;

@@ -56,10 +56,10 @@ pub struct Drawn {
     /// reads; the level is the one the drawing's scale takes.
     pictures: Arc<Pictures>,
     /// Each text's run as the text module shaped it (#387), drawn as it is when its spec is the
-    /// mark's.
-    runs: BTreeMap<String, Arc<Run>>,
+    /// mark's; shared with the drawing, never copied (#2660).
+    runs: Arc<BTreeMap<String, Arc<Run>>>,
     /// Each animated text's units ([`animated::Unit`]), one per glyph.
-    animated: BTreeMap<String, Vec<animated::Unit>>,
+    animated: Arc<BTreeMap<String, Vec<animated::Unit>>>,
     /// #493: a 2D film's camera, from the document's units to its own pixels, where a shot
     /// moves it; the legend stays where it is.
     pub view: Option<Affine>,
@@ -689,8 +689,8 @@ impl Renderer {
             status,
             images,
             pictures,
-            runs: BTreeMap::new(),
-            animated: BTreeMap::new(),
+            runs: Arc::default(),
+            animated: Arc::default(),
             view: None,
             noise,
         })
@@ -715,8 +715,8 @@ impl Renderer {
                 status,
                 images: BTreeMap::new(),
                 pictures: Arc::default(),
-                runs: BTreeMap::new(),
-                animated: BTreeMap::new(),
+                runs: Arc::default(),
+                animated: Arc::default(),
                 view: None,
                 noise: BTreeMap::new(),
             });

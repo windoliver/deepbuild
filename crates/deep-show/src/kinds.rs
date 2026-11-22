@@ -829,7 +829,7 @@ pub(crate) fn kind_rows(sealed: &Sealed, planted: Option<Planted>) -> Vec<KindRo
     // unavailable, naming why, in a build without the net module.
     let net_text = INSTALLED.iter().find(|(f, _)| *f == "net-rally.json");
     let net_text = net_text.map(|(_, t)| t.to_string());
-    let checks = json!(["net.rollback", "net.desync", "net.budget"]);
+    let checks = deep_net::feel::check_kinds();
     if let Some(row) = out.iter_mut().find(|r| r.entry["name"] == json!("net@1")) {
         row.entry["check_kinds"] = checks;
         row.entry["example"] = json!(net_text.as_deref().map(|t| sha256_hex(t.as_bytes())));
