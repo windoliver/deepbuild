@@ -10,7 +10,7 @@
 // (known-failures.json) read apart from new ones, and a timing budget missed at a load above the core count reads INCONCLUSIVE. So does a
 // skip, or BLOCKED by its note, unless the same file's `skips` list covers it, which is printed.
 //
-//   node scripts/affected.mjs [--list] [--wide] [--timed] [--slow] [path ...]
+//   node scripts/affected.mjs [--list] [--wide] [--timed] [--slow] [--results=<file>] [path ...]
 //
 // The alone block's folders run side by side, each in a shard of its own (scripts/shards.mjs), so no sibling's cargo
 // build rewrites a binary under it; those lanes.mjs names exclusive run after, one at a time, with nothing beside them.
@@ -599,6 +599,29 @@ async function prepare(untimed, timedFiles, alone, listedFiles, started) {
   }
 }
 
+/**
+ * Each selected test file's and crate's result, for --results (a merge train's record, #3018; parallel-proof, section
+ * 6a): FAIL for a new failure, else the worst BLOCKED, INVALID or INCONCLUSIVE among its results, else KNOWN for
+ * failures main already has, else PASS when a test of its passed, or for a crate when cargo test ran clean; anything
+ * else, as a file left unrun, reads INCONCLUSIVE.
+ */
+export function fileResults(selection, { fresh, known, unsure, passed }, cargoRan, partial = new Set()) {
+  const entries = [...selection.tests.map((file) => ({ file, of: (id) => id.startsWith(`${file} › `) })),
+    ...selection.crates.map((name) => ({ file: `cargo test -p ${name}`, crate: true, of: (id) => id.startsWith(`cargo -p ${name} `) }))];
+  // cargo test failing outside any target, as a crate that doesn't compile, names no crate, so it leaves none passing.
+  const cargoFailed = [...fresh, ...unsure].some(({ id }) => id === 'cargo test');
+  const files = entries.map(({ file, crate, of }) => {
+    const mine = (list) => list.filter(({ id }) => of(id));
+    // A file of a job that stopped part way, or whose report was cut, may be part run, whatever it reported.
+    const state = mine(fresh).length ? 'FAIL' : worst([...mine(unsure).map(({ state }) => state), ...partial.has(file) || (crate && cargoFailed) ? ['INCONCLUSIVE'] : []])
+      ?? (mine(known).length ? 'KNOWN' : passed.some(of) || (crate && cargoRan) ? 'PASS' : 'INCONCLUSIVE');
+    return { file, state };
+  });
+  // What no file answers for, as a build, a lint or a job, is the whole run's.
+  const other = [...fresh, ...unsure].filter(({ id }) => !entries.some(({ of }) => of(id))).map(({ id, state }) => ({ id, state }));
+  return { files, other };
+}
+
 async function main(args) {
   const started = performance.now();
   // Read once and dropped, so a test this run starts that runs affected.mjs itself queues on its own.
@@ -728,7 +751,7 @@ async function main(args) {
     if (runTimed && timedFiles.node.length) jobs.push(await node(timedFiles.node, ['--test-concurrency=1'], 'node-timed', root, own));
 
     if (stopped) return console.log(`BLOCKED affected: stopped by ${stopped}; its jobs were stopped and none of their results is read; logs in ${logs}`), 128 + constants.signals[stopped];
-    const failures = [], passed = [], findings = [], skips = [];
+    const failures = [], passed = [], findings = [], skips = [], partial = new Set();
     // A build that ran short of its compile share may have timed out or run slow, so the run can't say it passed (#2848).
     if (lost) failures.push({ id: 'jobserver', state: 'INCONCLUSIVE', message: `${lost} of the run's compile tokens were missing when its builds had ended, so a build may have had less than its share` });
     for (const job of jobs) {
@@ -756,6 +779,7 @@ async function main(args) {
         // A file that reported no test didn't run, and nothing unrun passes. A job stopped for standing still may have
         // stopped part way through a file that reported, so it reads INCONCLUSIVE itself, and the run with it.
         const stuck = job.idle && `its job reported nothing for ${job.idle.minutes} min and was stopped`;
+        if (stuck || results.cut || results.failures.some(({ id }) => id === `${job.label} report`)) for (const file of files) partial.add(file);
         if (stuck) failures.push({ id: `${job.label} job`, state: 'INCONCLUSIVE', message: `${stuck}; a file it reported may be part run (${job.log})` });
         for (const file of files.filter((file) => !report.includes(file))) failures.push({ id: named(file, '(file)'), state: results.noGrant || stuck ? 'INCONCLUSIVE' : 'FAIL', message: results.noGrant ?? stuck ?? 'reported no test' });
       }
@@ -775,6 +799,8 @@ async function main(args) {
     if (unrunSlow.length) console.log(`INCONCLUSIVE ${unrunSlow.length} slow ${unrunSlow.length === 1 ? 'file was' : 'files were'} not run; --slow runs them: ${unrunSlow.join(' ')}`);
     console.log(`TIMED the timed list, from scripts/lanes.mjs (${timed.length}): ${timed.join(' ')}`);
     const state = fresh.length ? 'FAIL' : worst(unsure.map(({ state }) => state)) ?? (selection.every.length || selection.wide.length || skipped.length || unrunTimed.length || unrunSlow.length ? 'INCONCLUSIVE' : known.length ? 'NO NEW FAILURES' : 'PASS');
+    const resultsFile = args.find((arg) => arg.startsWith('--results='))?.slice(10);
+    if (resultsFile) writeFileSync(resultsFile, `${JSON.stringify({ state, ...fileResults(selection, { fresh, known, unsure, passed }, jobs.some(({ label, status }) => label === 'cargo' && status === 0), partial) }, null, 2)}\n`);
     console.log(`${state} affected: ${fresh.length} new, ${known.length} already failing on main, ${unsure.length} inconclusive or blocked, ${covered.length} listed skips, ${passed.length} passed, in ${((performance.now() - started) / 1000).toFixed(0)} s at load ${loadavg()[0].toFixed(0)}; logs in ${logs}`);
     return { FAIL: 1, INCONCLUSIVE: 2, BLOCKED: 3, INVALID: 3 }[state] ?? 0;
   } catch (error) {
