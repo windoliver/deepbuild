@@ -42,8 +42,9 @@ function accountOf(home: string, profile: string): string | undefined {
   } catch {
     return undefined;
   }
-  // A U+FEFF is white space to some readers and not to others: a file holding one is read as naming no account.
-  if (text.includes('\uFEFF')) return undefined;
+  // Readers split anything but printable ASCII, tabs and line ends into lines and words differently, the CLI's and
+  // deep-hook's among them: a file holding any is read as naming no account.
+  if (/[^\t\n -~]/.test(text.replace(/\r\n/g, '\n'))) return undefined;
   let section = '';
   for (const raw of text.split('\n')) {
     const line = raw.trim();

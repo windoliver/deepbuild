@@ -25,15 +25,19 @@ describe("a cloud create's owner (#2134)", () => {
     expect(owner('pulumi -C infra up', 'It creates a cloud resource: pulumi -C infra up')).toBe('pulumi');
   });
 
-  it('is no account from a config holding a U+FEFF, which readers split differently', () => {
-    const other = mkdtempSync(join(tmpdir(), 'hub2134-'));
-    mkdirSync(join(other, '.aws'));
-    writeFileSync(join(other, '.aws', 'config'), '[profile\uFEFFdev]\nsso_account_id = 111111111111\n[profile dev]\nsso_account_id = 222222222222\n');
-    try {
-      const note = 'It creates a cloud resource under the AWS profile dev: aws kms create-key --profile dev';
-      expect(aboutCall(['cloud-resource'], 'aws kms create-key --profile dev', { 'no-unnamed-cloud-resource': note }, other)?.subject.target.owner).toBe('aws-profile:dev');
-    } finally {
-      rmSync(other, { recursive: true, force: true });
+  it('is no account from a config holding anything but printable ASCII, tabs and line ends, which readers split differently', () => {
+    for (const odd of ['\uFEFF', '\u2028', '\u0085', '\r', '\u000B', 'é']) {
+      const other = mkdtempSync(join(tmpdir(), 'hub2134-'));
+      mkdirSync(join(other, '.aws'));
+      writeFileSync(join(other, '.aws', 'config'), `[profile prod]\n[profile other${odd}x]\nsso_account_id = 222222222222\n[profile${odd}dev]\nsso_account_id = 111111111111\n`);
+      try {
+        for (const p of ['prod', 'dev']) {
+          const note = `It creates a cloud resource under the AWS profile ${p}: aws kms create-key --profile ${p}`;
+          expect(aboutCall(['cloud-resource'], `aws kms create-key --profile ${p}`, { 'no-unnamed-cloud-resource': note }, other)?.subject.target.owner, JSON.stringify(odd)).toBe(`aws-profile:${p}`);
+        }
+      } finally {
+        rmSync(other, { recursive: true, force: true });
+      }
     }
   });
 

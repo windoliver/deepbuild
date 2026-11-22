@@ -288,39 +288,10 @@ fn cloud_owner(profile: &str) -> String {
         PathBuf::from(env::var_os("HOME").unwrap_or_default()).join(".aws/config"),
     )
     .unwrap_or_default();
-    // A U+FEFF is white space to some readers and not to others: a file holding one is read as naming no account.
-    let config = if config.contains('\u{feff}') {
-        String::new()
-    } else {
-        config
-    };
-    let mut section = String::new();
-    for line in config.lines().map(str::trim) {
-        // A header is read as the CLI's parser reads it: up to its last `]`, whatever follows.
-        if let Some(head) = line
-            .strip_prefix('[')
-            .and_then(|l| l.rfind(']').map(|k| &l[..k]))
-            .filter(|h| !h.is_empty())
-        {
-            // The CLI reads a named profile from `[profile <name>]` alone, and the default from `[default]` (#2134).
-            section = match head.strip_prefix("profile") {
-                Some(name) if name.starts_with(char::is_whitespace) => name.trim().to_string(),
-                _ if head == "default" => head.to_string(),
-                _ => String::new(),
-            };
-        } else if !section.is_empty() && section == profile {
-            if let Some((key, value)) = line.split_once('=') {
-                let value = value.trim();
-                if key.trim() == "sso_account_id"
-                    && !value.is_empty()
-                    && !value.contains(char::is_whitespace)
-                {
-                    return format!("aws:{value}");
-                }
-            }
-        }
+    match matcher::aws_account(&config, profile) {
+        Some(account) => format!("aws:{account}"),
+        None => format!("aws-profile:{profile}"),
     }
-    format!("aws-profile:{profile}")
 }
 
 /// A `classes` member, `{<tool>: read | change | send | destructive}`; none when it is absent.

@@ -421,6 +421,16 @@ fn an_options_value_is_not_read_as_the_subcommand() {
             "for PATH in bin; do aws kms create-key --profile dev; done",
             None,
         ),
+        ("AWS_PROFILE=dev exec -c aws kms create-key", None),
+        ("AWS_PROFILE=dev arch -c aws kms create-key", None),
+        ("AWS_PROFILE=dev nice aws kms create-key", None),
+        ("./echo hi; aws kms create-key --profile dev", None),
+        ("/tmp/x/ls; aws kms create-key --profile dev", None),
+        ("ECHO hi; aws kms create-key --profile dev", None),
+        (
+            "echo hi; cd infra && AWS_PROFILE=dev aws kms create-key",
+            named("dev"),
+        ),
         ("! PATH=bin || aws kms create-key --profile dev", None),
         (
             "if PATH=/opt/x/bin; then aws kms create-key --profile dev; fi",
@@ -1001,4 +1011,25 @@ fn a_delete_past_its_worktree_is_unrestorable_and_one_inside_it_is_free() {
         Some(vec![repo.clone()])
     );
     let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn a_profiles_account_is_read_only_from_a_config_every_reader_splits_alike() {
+    // #2134: the hub reads the same text the same way (packages/hub/test/cloud-owner.test.ts).
+    let config = "[dev]\nsso_account_id = 999\n[profile dev]\nsso_account_id = 111\n[profile old] # retired\nsso_account_id = 333\n[default]\nsso_account_id = 444\n";
+    assert_eq!(aws_account(config, "dev"), Some("111"));
+    assert_eq!(aws_account(config, "old"), Some("333"));
+    assert_eq!(aws_account(config, "default"), Some("444"));
+    assert_eq!(aws_account(config, "prod"), None);
+    assert_eq!(
+        aws_account(&config.replace('\n', "\r\n"), "dev"),
+        Some("111")
+    );
+    for odd in [
+        "\u{feff}", "\u{2028}", "\u{85}", "\r", "\u{b}", "\u{c}", "é",
+    ] {
+        let config = format!("[profile prod]\n[profile other{odd}x]\nsso_account_id = 222\n[profile{odd}dev]\nsso_account_id = 111\n");
+        assert_eq!(aws_account(&config, "prod"), None, "{odd:?}");
+        assert_eq!(aws_account(&config, "dev"), None, "{odd:?}");
+    }
 }

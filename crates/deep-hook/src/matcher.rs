@@ -709,12 +709,18 @@ impl Call {
             || bare
                 .split(|c: char| c.is_whitespace() || ";&|()<>".contains(c))
                 .any(|w| w != "aws" && w.rsplit('/').next() == Some("aws"))
-            // An assignment of its own changes what every later program gets, an exported one as a prefix doesn't.
+            // An assignment of its own changes what every later program gets, an exported one as a prefix doesn't. Each
+            // statement runs aws or a read-only program, named bare.
             || unquoted.split([';', '&', '|', '\n', '(', ')']).any(|statement| {
                 let words: Vec<&str> = statement.split_whitespace().collect();
                 let assigns = words.iter().take_while(|w| assignment(w)).count();
                 (assigns > 0 && assigns == words.len())
                     || words[..assigns].iter().any(|w| !w.starts_with("AWS_PROFILE="))
+                    // Its program by its bare name, never a wrapper, a shell word or a path, which may be any program
+                    // or run it with another environment.
+                    || words
+                        .get(assigns)
+                        .is_some_and(|w| *w != "aws" && !READ_ONLY.contains(w))
             })
             || self.runs.iter().any(|r| r.cwd.as_deref().is_none_or(pattern))
         {
@@ -920,6 +926,46 @@ fn command_of(run: &Run) -> String {
     let mut line = vec![run.program.clone()];
     line.extend(run.words().iter().map(|w| quote(w)));
     line.join(" ")
+}
+
+/// The account a profile signs into by an ~/.aws/config's text: its section's `sso_account_id`, else none (#2134). A
+/// config holding anything but printable ASCII, tabs and line ends is read as naming no account: readers split such
+/// text into lines and words differently, the hub's and the CLI's among them.
+pub fn aws_account<'a>(config: &'a str, profile: &str) -> Option<&'a str> {
+    if !config
+        .replace("\r\n", "\n")
+        .chars()
+        .all(|c| c == '\t' || c == '\n' || (' '..='~').contains(&c))
+    {
+        return None;
+    }
+    let mut section = "";
+    for line in config.lines().map(str::trim) {
+        // A header is read as the CLI's parser reads it: up to its last `]`, whatever follows.
+        if let Some(head) = line
+            .strip_prefix('[')
+            .and_then(|l| l.rfind(']').map(|k| &l[..k]))
+            .filter(|h| !h.is_empty())
+        {
+            // The CLI reads a named profile from `[profile <name>]` alone, and the default from `[default]`.
+            section = match head.strip_prefix("profile") {
+                Some(name) if name.starts_with(char::is_whitespace) => name.trim(),
+                _ if head == "default" => head,
+                _ => "",
+            };
+        } else if !section.is_empty() && section == profile {
+            if let Some((key, value)) = line.split_once('=') {
+                let value = value.trim();
+                if key.trim() == "sso_account_id"
+                    && !value.is_empty()
+                    && !value.contains(char::is_whitespace)
+                {
+                    return Some(value);
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Whether a run beside the one a standing rule covers only reads: one of READ_ONLY, or an aws run that lists,
