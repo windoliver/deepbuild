@@ -1399,6 +1399,12 @@ timed.push('tests/acceptance/2661/ac4-tick.live.test.mjs', 'tests/acceptance/266
 // reference Mac.
 alone.push('tests/acceptance/980/');
 timed.push('tests/acceptance/980/ac09-budget.test.ts');
+// The first draft of criterion 9 lays its budget scene's 88,624-byte write region out on #416's one-page probe, which
+// the check refuses before process@1 is reached (tests/acceptance/980-redraft-ac9/DISPUTE.md); its blind redraft runs
+// in its place.
+alone.push('tests/acceptance/980-redraft-ac9/');
+timed.push('tests/acceptance/980-redraft-ac9/ac9-budget.test.ts');
+byHand.push('tests/acceptance/980/ac09-budget.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
