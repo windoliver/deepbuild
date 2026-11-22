@@ -1,0 +1,1 @@
+{ "alone": true, "why": "Each test starts a real hub with #1537's review world, as tests/acceptance/1537/ does, which runs alone." }
