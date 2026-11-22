@@ -16,10 +16,10 @@ These are the ideas that decide a new question, each with its rule and its check
 - A person sees only what needs a person, and never the same question twice. ([An ask](#an-ask-and-your-answer-getting-back); the `unit` lane, `scripts/ask-sources-guard.mjs`)
 - Agents and plug-ins write data, not code, and a piece's logic runs only sandboxed. ([Data, not code](#prim-rules); the `canvas kit` lane)
 - A document is checked before it shows, and each failure comes back as data with its check and a fix. ([Checked before it shows](#prim-rules); the `canvas kit` lane)
-- Whatever feeds a check replays the same bits on another machine, every random choice seeded and no clock read. ([Seeded and replayable](#prim-rules); `scripts/canvas-lint.mjs`)
+- What a check reads replays to the same bits on another machine, each random draw seeded or recorded. ([Seeded and replayable](#prim-rules); `scripts/canvas-lint.mjs`)
 - A test counts only if it fails on a wrong program. ([Wrong programs](#tests); the `proof` lane)
-- Every wait ends by its deadline, and a test waits for the event it needs, never for time. ([Waits](#tests), [Repo guards](#built-to-be-hard-to-get-wrong); the `unit` lane, `scripts/wait-ratchet.mjs`)
-- Everything beyond the core fills a registered slot, with its kit and a planted wrong fill the kit refuses. ([Hub slots](#composition); `scripts/slots-check.mjs`)
+- Every wait ends by its deadline, and a test waits for its event, never for time. ([Every wait ends](#tests), [Repo guards](#built-to-be-hard-to-get-wrong); the `unit` lane, `scripts/wait-ratchet.mjs`)
+- Every hub slot names its kit and a planted wrong fill the kit must refuse. ([Hub slots](#composition); `scripts/slots-check.mjs`)
 
 <a id="scope"></a>
 

@@ -15,8 +15,9 @@ const ITEM = /^ {0,3}(?:[-*+]|\d+[.)])\s+/;
 const ANCHOR = /^\s*<a\s[^>]*>(?:\s*<\/a>)?\s*$/i;
 // A line as it reads rendered: links by their label, code spans by their content, emphasis dropped.
 const rendered = (text) => text.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/(`+)(.+?)\1/g, '$2').replace(/\*\*|__/g, '').replace(/\s+/g, ' ').trim();
-// Sentences, each link and code span read as one word: one ends at . ! or ? before anything but the closing parenthesis.
-const sentences = (text) => text.replace(/!?\[[^\]]*\]\([^)]*\)|(`+).+?\1/g, 'X').trim().split(/(?<=[.!?]["')\]]?)\s+(?=[^\s(])/).length;
+// Sentences, each link and code span read as one word: one ends at . ! or ? before anything but a parenthesis that
+// opens with a link, a code span or a lowercase word.
+const sentences = (text) => text.replace(/!?\[[^\]]*\]\([^)]*\)|(`+).+?\1/g, '\u0001').trim().split(/(?<=[.!?]["')\]]?)\s+(?=[^\s(]|\(["“A-Z])/).length;
 
 // A doc's prose lines from the heading slugged `id` to the next heading of its level or higher, the heading first.
 function section(file, id) {
@@ -51,6 +52,9 @@ export function principles() {
   const next = outline(DESIGN).headings.find((h) => h.id === 'what-version-0-builds-and-what-waits');
   if (!body) fail(DESIGN, 'has no heading "Principles"');
   else {
+    // A second Principles heading is slugged principles-1, principles-2, ….
+    const again = new Set(outline(DESIGN).headings.filter((h) => /^principles-\d+$/.test(h.id)).map((h) => h.offset));
+    for (const { number } of [...prose(readFileSync(DESIGN, 'utf8'))].filter(({ offset }) => again.has(offset))) fail(`${DESIGN}:${number}`, 'is a second "Principles" heading; the design states its principles once');
     const head = `${DESIGN}:${body[0].number}`;
     if (!next || next.offset < body[0].offset) fail(head, 'Principles must come before the heading "What version 0 builds, and what waits"');
     const first = body.findIndex(({ line }) => ITEM.test(line));
@@ -74,7 +78,7 @@ export function principles() {
       if (invariant !== null && sentences(text) > allowed) fail(where, `holds ${sentences(text)} sentences; it holds ${allowed}`);
       if (!targets(line).some(rule)) fail(where, 'has no link into the design');
       // A script is a path under scripts/ to a file; a lane is a code span written as `<name>` lane or `<name> lane`.
-      const scripts = [...new Set(line.match(/(?<![\w./-])scripts\/[\w./-]*\w/g) ?? [])];
+      const scripts = [...new Set((line.match(/(?<![\w./-])(?:\.{1,2}\/)*scripts\/[\w./-]*\w/g) ?? []).map((path) => path.replace(/^(?:\.{1,2}\/)+/, '')))];
       const real = (path) => posix.normalize(path).startsWith('scripts/') && existsSync(path) && statSync(path).isFile();
       for (const path of scripts.filter((path) => !real(path))) fail(where, `names ${path}, which isn't a file under scripts/`);
       const named = [...line.matchAll(/(`+)(.+?)\1( lane\b)?/g)].flatMap(([, , code, after]) => (after || / lane$/i.test(code) ? [code.replace(/ lane$/i, '')] : []));
