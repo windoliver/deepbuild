@@ -118,9 +118,9 @@ touched files' fmt are clean on the same tree.
 
 ## Open
 
-- `tests/acceptance/191/ac1-reference-kit.test.ts` and its two redrafts read 0 of 2 here, before the merge. Each names
-  only fixtures the base already holds, #2308's five at 480 Hz and #1931's two at one substep, and never the
-  turntable, which is at 120 Hz and 4 substeps and reads `pass` in all three. They were not run at the base.
+- `tests/acceptance/191/ac1-reference-kit.test.ts` and its two redrafts read 0 of 2 at the base and 0 of 2 here, with
+  the same sentences: each names only fixtures the base already holds, #2308's five at 480 Hz and #1931's two at one
+  substep, and never the turntable, which is at 120 Hz and 4 substeps and reads `pass` in all three.
 - `tests/acceptance/2310/ac7-seek-golden-merge-base.test.ts`, before the merge, passed its seek, its planted
   checkpoint and its merge-base hashes; its Linux x86_64 leg builds in a container, which was stopped after eight
   minutes and not read. `scripts/affected.mjs` was not run: its selection is 315 test files in 80 folders.
