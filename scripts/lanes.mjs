@@ -1323,6 +1323,9 @@ alone.push('tests/acceptance/981/');
 timed.push('tests/acceptance/981/ac8-budget.test.ts');
 // #1255's folder (blind) runs alone by its lane.json; ac5-budget.test.ts times conflicts over forty movers with judgeLimit.
 timed.push('tests/acceptance/1255/ac5-budget.test.ts');
+// #1181's folder (blind) runs alone by its lane.json; ac09-budget.test.ts times a 64-node, 128-part circuit's step with
+// judgeLimit.
+timed.push('tests/acceptance/1181/ac09-budget.test.ts');
 
 // #2898's files (blind) each start real hubs, plug-ins and jobs and hold 40 s deep_wait calls; no timing.
 alone.push('tests/acceptance/2898/');

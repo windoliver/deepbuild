@@ -47,7 +47,7 @@ const STEP: i64 = 11_760_000;
 /// `fires`, each with the form its reader takes (#1973); `wasm` is the program's bytes, which
 /// whoever holds the evidence store inlines by the program's hash before a frame, as a vector's
 /// outline is.
-const PARAMS: [(&str, &str); 26] = [
+const PARAMS: [(&str, &str); 27] = [
     ("program", "asset ID"),
     ("debug", "asset ID"),
     ("step_rate", "Hz"),
@@ -105,6 +105,8 @@ const PARAMS: [(&str, &str); 26] = [
     ),
     // process@1's kind names, which its kind rules read (#980).
     ("process", "{kinds: [name]}"),
+    // circuit@1's nodes and parts, which the check builds into its table and its kind rules read (#1181).
+    ("circuit", "{nodes: [name], parts: [{id, kind, …}]}"),
     ("wasm", "text (the program's bytes, which the hub inlines)"),
 ];
 

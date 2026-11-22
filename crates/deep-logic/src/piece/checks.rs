@@ -34,6 +34,8 @@ pub(super) struct Declared {
     process: Option<Vec<String>>,
     /// `separation`: its movers and minima, built into a table at check (#1255).
     separation: Option<Value>,
+    /// `circuit`: its nodes and parts, built into a table at check (#1181).
+    circuit: Option<Value>,
     /// The item's fields as given, for its bake key.
     given: String,
 }
@@ -75,6 +77,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             "fog",
             "process",
             "separation",
+            "circuit",
         ]
         .contains(&k.as_str())
         {
@@ -339,6 +342,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
         lanes: params.get("lanes").cloned(),
         process,
         separation: params.get("separation").cloned(),
+        circuit: params.get("circuit").cloned(),
         given: Value::Object(params.clone()).to_string(),
     })
 }
@@ -1024,6 +1028,23 @@ pub fn check_in(
                 Some(std::sync::Arc::new(t))
             }
         };
+        // #1181: the table `circuit` declares, its nodes and parts, is asset 0; each input that
+        // closes a part is found by its slot in the item's read region.
+        let circuit = match &d.circuit {
+            None => None,
+            Some(v) => {
+                let slot = |name: &str| {
+                    layout
+                        .entries
+                        .iter()
+                        .find(|e| e.region == "reads" && e.name == name && e.ty == "control")
+                        .map(|e| e.offset)
+                };
+                let c = crate::circuit::build(v, &slot).map_err(|r| logic_refused(id, r))?;
+                assets.push((rewrite::hash(&c.bytes), c.bytes.clone()));
+                Some(std::sync::Arc::new(c))
+            }
+        };
         for sha in &d.assets {
             assets.push((sha.clone(), asset(sha).ok_or_else(|| missing("data", sha))?));
         }
@@ -1172,6 +1193,7 @@ pub fn check_in(
             lanes,
             process: d.process.clone(),
             separation,
+            circuit,
         });
     }
     // A save holds every item at one instant, so a piece with saves steps at one rate.

@@ -586,6 +586,9 @@ pub struct Item {
     /// The table its `separation` declares, its movers and minima checked, whose bytes are its
     /// asset 0 (#1255).
     pub separation: Option<std::sync::Arc<crate::separation::Table>>,
+    /// The circuit its `circuit` declares, its nodes and parts checked, whose bytes are its asset 0
+    /// (#1181).
+    pub circuit: Option<std::sync::Arc<crate::circuit::Circuit>>,
     /// What the item's bake key covers of it: its rewritten program, its fields as given and
     /// its assets' hashes (Logic: checkpoints and bake).
     pub content: String,
