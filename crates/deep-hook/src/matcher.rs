@@ -703,8 +703,9 @@ impl Call {
                 .any(|r| !std::ptr::eq(r, *run) && !reads_only(r))
             // A write can reach what decides the account: the CLI's files, its program, the interpreter it runs on.
             || !self.writes.is_empty()
-            // A disk that ignores case folds letters beyond ASCII onto those names.
-            || !line.is_ascii()
+            // A disk that ignores case folds letters beyond ASCII onto those names, and the reader breaks words at a
+            // carriage return where bash doesn't.
+            || !line.chars().all(|c| c == '\t' || c == '\n' || (' '..='~').contains(&c))
             // An aws named by a path may be any program.
             || bare
                 .split(|c: char| c.is_whitespace() || ";&|()<>".contains(c))
@@ -930,13 +931,15 @@ fn command_of(run: &Run) -> String {
 }
 
 /// The account a profile signs into by an ~/.aws/config's text: its section's `sso_account_id`, else none (#2134). A
-/// config holding anything but printable ASCII, tabs and line ends is read as naming no account: readers split such
-/// text into lines and words differently, the hub's and the CLI's among them.
+/// config holding anything but printable ASCII, tabs and line ends, or an indented line, is read as naming no account:
+/// readers split such text into lines and words differently, the hub's and the CLI's among them.
 pub fn aws_account<'a>(config: &'a str, profile: &str) -> Option<&'a str> {
     if !config
         .replace("\r\n", "\n")
         .chars()
         .all(|c| c == '\t' || c == '\n' || (' '..='~').contains(&c))
+        // The CLI reads an indented line as going on with the value above it.
+        || config.lines().any(|l| l.starts_with([' ', '\t']))
     {
         return None;
     }

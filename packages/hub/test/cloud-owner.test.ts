@@ -41,6 +41,18 @@ describe("a cloud create's owner (#2134)", () => {
     }
   });
 
+  it('is no account from a config with an indented line, which the CLI reads as going on with the value above', () => {
+    const other = mkdtempSync(join(tmpdir(), 'hub2134-'));
+    mkdirSync(join(other, '.aws'));
+    writeFileSync(join(other, '.aws', 'config'), '[profile dev]\nregion = x\n  sso_account_id = 111111111111\nsso_account_id = 222222222222\n');
+    try {
+      const note = 'It creates a cloud resource under the AWS profile dev: aws kms create-key --profile dev';
+      expect(aboutCall(['cloud-resource'], 'aws kms create-key --profile dev', { 'no-unnamed-cloud-resource': note }, other)?.subject.target.owner).toBe('aws-profile:dev');
+    } finally {
+      rmSync(other, { recursive: true, force: true });
+    }
+  });
+
   it('is the line alone when the note names no owner: several creating runs, AWS settings the line sets, an unread run, or no note', () => {
     for (const [line, note] of [
       ['aws kms create-key --profile dev && aws kms create-key --profile prod', 'It runs 2 commands that create cloud resources: aws kms create-key --profile dev; aws kms create-key --profile prod'],
