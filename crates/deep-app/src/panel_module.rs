@@ -38,7 +38,8 @@ pub(crate) const PAGE_ENTRY: &str = ".deepbuild-page.js";
 const MENU_MODULE: &str = "deepbuild-menu";
 const MENU: &str = include_str!("../panel-menu.js");
 
-/// A panel's scripts are read up to this many files, so a package can't make the check walk forever.
+/// The most scripts, and the most folders, the check reads in a panel; a panel holding more is refused, so a package
+/// can't make the check walk forever.
 const MAX_SCRIPTS: usize = 256;
 
 struct Catalog {
@@ -246,8 +247,8 @@ fn refuse_name(at: &str, name: &str, per_frame_checked: bool) -> Result<(), Stri
     }
 }
 
-/// The panel's scripts: every `.js` and `.mjs` file under its root but the ones DeepBuild writes there, each kept out
-/// only while it holds what DeepBuild wrote. `Err`, rather than leave a script unread the runtime could still open, when
+/// The panel's scripts: every `.js` and `.mjs` file under its root but the module DeepBuild serves there, kept out only
+/// while it holds what DeepBuild wrote. `Err`, rather than leave a script unread the runtime could still open, when
 /// there are more than the check reads, a folder or entry it can't list, an entry that is neither a file nor a folder
 /// (a pipe would hang the read), or a name past ASCII (a file system that folds case may match it to a script's).
 fn scripts(dir: &Path) -> Result<Vec<PathBuf>, String> {
@@ -338,7 +339,7 @@ struct Import {
 #[derive(Debug, PartialEq)]
 enum Unread {
     /// `import(…)` or `require(…)` taking anything but one plain string, a template literal naming a module, or a
-    /// module's name holding an escape.
+    /// module's name holding an escape or a control character.
     Spelled,
     /// A `/` that reads as either a division or a regex literal, where the two readings see different code.
     Slash,
@@ -355,7 +356,21 @@ fn imports(source: &str) -> Vec<Import> {
         calls,
         unread,
     } = scan(source);
-    let line = |at: usize| 1 + source[..at].matches('\n').count();
+    // Where each line ends, by the lexer's own line terminators (`\r\n` once), so a refusal names the line it reads.
+    let bytes = source.as_bytes();
+    let mut ends = Vec::new();
+    let mut at = 0;
+    while at < bytes.len() {
+        match terminator(bytes, at) {
+            0 => at += 1,
+            length => {
+                at += length;
+                ends.push(at);
+            }
+        }
+    }
+    let line = |at: usize| 1 + ends.partition_point(|&end| end <= at);
+    let called: std::collections::BTreeSet<usize> = calls.iter().map(|&(at, _)| at).collect();
     let mut found: Vec<(usize, Import)> = Vec::new();
     for &(start, end) in &strings {
         let before = code[..start].trim_end();
@@ -375,9 +390,12 @@ fn imports(source: &str) -> Vec<Import> {
         } else if keyword_end(before, "import").is_some() {
             Some(Vec::new())
         } else if let Some(call) = before.strip_suffix('(') {
-            if keyword_end(call.trim_end(), "import").is_none()
-                && keyword_end(call.trim_end(), "require").is_none()
-            {
+            // The call scan found, not a property's (`this.import("en")` is a method's).
+            let call = call.trim_end();
+            let word = ["import", "require"]
+                .into_iter()
+                .find(|word| keyword_end(call, word).is_some());
+            if !word.is_some_and(|word| called.contains(&(call.len() - word.len()))) {
                 continue;
             }
             None
@@ -1034,8 +1052,13 @@ mod tests {
             );
         }
         // And literals that only look like imports stay unread.
-        let quiet = "const a = `import(\"gpui-kit\")`; const b = /import(\"gpui-kit\")/; obj.import(m); obj.require(m); function require(m) {}\n";
+        let quiet = "const a = `import(\"gpui-kit\")`; const b = /import(\"gpui-kit\")/; obj.import(m); obj.require(m); function require(m) {} this.import(\"en\"); loader.require('lodash');\n";
         assert_eq!(read(quiet), vec![]);
+        // A refusal names the line as the lexer reads lines: a bare `\r` ends one.
+        assert_eq!(
+            read("// a\r// b\rconst m = await import(n);"),
+            vec![("?".to_owned(), 3)]
+        );
     }
 
     #[test]
@@ -1244,7 +1267,7 @@ mod tests {
 
     /// Lines a panel may hold, each importing only `@deepbuild/panel` or its own files by one plain string, among
     /// comments, strings, templates and regex literals that mention the toolkit and imports.
-    const ALLOWED: [&str; 25] = [
+    const ALLOWED: [&str; 26] = [
         "import { View, div } from \"@deepbuild/panel\";",
         "import * as P from '@deepbuild/panel';",
         "import \"./side.js\";",
@@ -1270,6 +1293,7 @@ mod tests {
         "class C { #n = 1; m() { return this.#n / 2; } }",
         "const api = { import(name) { return name; } };",
         "const s = \"caf\u{e9} \\u00e9\";",
+        "const en = this.import(\"en\"); loader.require('lodash');",
     ];
 
     /// Lines no panel may hold: each imports the toolkit, or names its module some other way than one plain string.
@@ -1294,11 +1318,25 @@ mod tests {
 
     #[test]
     fn property_a_panel_of_plain_imports_reads_only_its_plain_imports() {
+        // The first seven lines import one module each, the rest none.
+        let counts: Vec<usize> = ALLOWED.iter().map(|line| read(line).len()).collect();
+        assert_eq!(counts, [vec![1; 7], vec![0; ALLOWED.len() - 7]].concat());
         let mut seed = Seeded(0x1847);
         for _ in 0..2000 {
             let lines = panel(&mut seed);
             let source = lines.join(if seed.below(2) == 0 { "\n" } else { "\r\n" });
-            for (specifier, line) in read(&source) {
+            // Read whole, the panel's imports are each line's own, on its line: what comes before changes none.
+            let alone: Vec<(String, usize)> = lines
+                .iter()
+                .enumerate()
+                .flat_map(|(at, line)| {
+                    read(line)
+                        .into_iter()
+                        .map(move |(specifier, _)| (specifier, at + 1))
+                })
+                .collect();
+            assert_eq!(read(&source), alone, "in:\n{source}");
+            for (specifier, line) in alone {
                 assert!(
                     specifier == MODULE || specifier.starts_with("./"),
                     "line {line} read as {specifier:?} in:\n{source}"
