@@ -21,3 +21,9 @@ EXIT 101
 AssertionError: {"content":[{"type":"text","text":"(no output)"}],"structuredContent":{"output":"","truncated":false,"exit_code":0,"wall_time_seconds":0}}: expected false to be true // Object.is equality
 AssertionError: {"content":[{"type":"text","text":"(no output)"}],"structuredContent":{"output":"","truncated":false,"exit_code":0,"wall_time_seconds":0}}: expected false to be true // Object.is equality
       Tests  2 failed | 20 skipped (22)
+
+## Mutant: matching() without the hello wait for a removed file (`false && hub_said_hello`), at 6c8d93d51
+## cargo test -p deep-hook --test cli match_says_its_denial
+thread 'match_says_its_denial_is_for_rules_it_could_not_read' (862104) panicked at crates/deep-hook/tests/cli.rs:661:5:
+rules.json put back by the hub: {"matched":[],"rules_unread":true,"denials":["DeepBuild blocked this: ~/.deepbuild/rules.json was removed after setup (`deep setup` writes it again), so its guards can't be checked. Fix that file, then retry."]}
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 30 filtered out; finished in 2.01s
