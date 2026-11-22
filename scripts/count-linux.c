@@ -12,7 +12,9 @@
 //   left      a process the command started was still running when it ended, so its count never joined
 //
 // A CPU whose cores are of two kinds has a counter for each kind, and a counter counts only on its own kind of core:
-// the command gets one of each, and the run's count is their sum.
+// the command gets one of each, and the run's count is their sum. A counter of one kind is enabled all the time a
+// process it follows exists, running only while that process is on its own kind of core, so one counter's enabled
+// time isn't the time the command ran: the kernel's clock of the command's own time, followed the same way, is.
 //
 // The runner is the subreaper of what the command starts, so a process that left the command's group or session is
 // still its descendant, and seen when it is still running. The command stays in the runner's process group, so
@@ -121,7 +123,20 @@ int main(int argc, char **argv) {
     if (fd >= 0) counters[opened++] = fd;
     else refused = errno;
   }
+  // The time the command's processes ran while the counters followed them, in ns: the software task clock, opened
+  // as they are, which is never displaced and runs on every core.
+  int clock = -1;
+  if (opened) {
+    attr.type = PERF_TYPE_SOFTWARE;
+    attr.config = PERF_COUNT_SW_TASK_CLOCK;
+    clock = counter(&attr, child);
+  }
   char line[160];
+  if (opened && clock < 0) {
+    refused = errno;
+    for (int at = 0; at < opened; at++) close(counters[at]);
+    opened = 0;
+  }
   if (!opened) {
     int level = paranoid();
     snprintf(line, sizeof line, "blocked %d %d\n", refused, level);
@@ -144,33 +159,45 @@ int main(int argc, char **argv) {
     if (!ended) put("left\n");
     break;
   }
-  uint64_t total = 0, running = 0, enabled = 0, whole = 1;
+  // Each kind's counter runs only while a process is on its own kind of core, so their times running together are
+  // the time some counter was on the command: short of the command's own time when a counter was displaced, or the
+  // command ran on a core none covers.
+  uint64_t total = 0, running = 0, ran = 0, whole = 1, read_out[3];
   for (int at = 0; at < opened; at++) {
-    uint64_t read_out[3];
     if (read(counters[at], read_out, sizeof read_out) != sizeof read_out) whole = 0;
     else {
-      if (at && read_out[1] != enabled) whole = 0;
       total += read_out[0];
-      enabled = read_out[1];
       running += read_out[2];
     }
     close(counters[at]);
   }
-  // The time the counters ran against the CPU time of the command and all it started, every one reaped by now: a
-  // process the kernel stopped counting at its exec ran longer than any counter saw. Both are in ns but on two
-  // clocks: the counters' (perf's local_clock, IRQ and steal time included) and the scheduler's runtime (IRQ and steal
-  // time left out on a kernel that accounts them apart). Besides that, the command's fork to exec and each process's
-  // last steps after its count joined part them; past 1 ms is no count. It is strict on purpose: no count rather than
-  // one that leaves out more than 1 ms and the blind spots below, at the risk of none for a run of many processes,
-  // until a host that allows counting gives the gap a measured bound.
-  // What it can't see: a child the kernel reaps itself, under a parent that ignores SIGCHLD, adds no CPU time here,
-  // and IRQ and steal time can hide that much uncounted work.
+  if (opened) {
+    if (read(clock, read_out, sizeof read_out) != sizeof read_out) whole = 0;
+    else ran = read_out[0];
+    close(clock);
+  }
+  // The time the command ran while counted, against the CPU time of the command and all it started, every one reaped
+  // by now: a process the kernel stopped counting at its exec ran longer than the clock saw. Both are in ns but on two
+  // clocks: perf's local_clock, IRQ and steal time included, and the scheduler's runtime, IRQ and steal time left out
+  // on a kernel that accounts them apart. Besides that, each process's fork before the counters follow it and its
+  // last steps after its count joined part them: about 0.1 to 0.2 ms a process on an aarch64 host whose cores are of
+  // two kinds (#2960), kernel work, which a user-space count leaves out anyway (a program run 50 times counted the same
+  // instructions to 83 while that gap moved by 0.6 ms). The kernel lets no unprivileged counter count the processes
+  // (a ring of fork records can't follow children), so the gap may be the kernel time the processes used and 1 ms
+  // more; past that is no count.
+  // What it can't see: uncounted work within that bound, so a setuid program's run as long as the run's kernel time
+  // (1.8 s in deep-hook-guards there) can hide in it, IRQ and steal time, and a child the kernel reaps itself, under a
+  // parent that ignores SIGCHLD, which adds no CPU time here.
   struct rusage used;
-  uint64_t cpu = getrusage(RUSAGE_CHILDREN, &used) ? UINT64_MAX
-    : ((uint64_t)used.ru_utime.tv_sec + (uint64_t)used.ru_stime.tv_sec) * 1000000000ull + ((uint64_t)used.ru_utime.tv_usec + (uint64_t)used.ru_stime.tv_usec) * 1000ull;
-  if (opened && whole && running == enabled && cpu > enabled + 1000000ull) snprintf(line, sizeof line, "partial %llu %llu\n", (unsigned long long)running, (unsigned long long)cpu);
-  else if (opened && whole && running == enabled) snprintf(line, sizeof line, "total %llu\n", (unsigned long long)total);
-  else if (opened) snprintf(line, sizeof line, "partial %llu %llu\n", (unsigned long long)running, (unsigned long long)enabled);
+  uint64_t cpu = UINT64_MAX, kernel = 0;
+  if (!getrusage(RUSAGE_CHILDREN, &used)) {
+    kernel = (uint64_t)used.ru_stime.tv_sec * 1000000000ull + (uint64_t)used.ru_stime.tv_usec * 1000ull;
+    cpu = (uint64_t)used.ru_utime.tv_sec * 1000000000ull + (uint64_t)used.ru_utime.tv_usec * 1000ull + kernel;
+  }
+  if (opened && whole && running < ran) snprintf(line, sizeof line, "partial %llu %llu\n", (unsigned long long)running, (unsigned long long)ran);
+  else if (opened && whole && cpu > ran + kernel + 1000000ull) snprintf(line, sizeof line, "partial %llu %llu\n", (unsigned long long)ran, (unsigned long long)cpu);
+  else if (opened && whole) snprintf(line, sizeof line, "total %llu\n", (unsigned long long)total);
+  else if (opened) snprintf(line, sizeof line, "partial %llu %llu\n", (unsigned long long)running, (unsigned long long)ran);
   if (opened) put(line);
   if (!WIFSIGNALED(status)) return WEXITSTATUS(status);
   signal(WTERMSIG(status), SIG_DFL);
