@@ -958,7 +958,7 @@ pub fn aws_account<'a>(config: &'a str, profile: &str) -> Option<&'a str> {
             let words: Vec<&str> = head.split_whitespace().collect();
             section = match words[..] {
                 _ if head == "default" => Some("default"),
-                [first, name] if first.starts_with("profile") => Some(name),
+                [_, name] if head.starts_with("profile") => Some(name),
                 _ => None,
             };
             if section == Some(profile) {

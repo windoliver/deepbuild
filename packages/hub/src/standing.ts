@@ -56,7 +56,7 @@ function accountOf(home: string, profile: string): string | undefined {
     const header = /^\[(.+)\]/.exec(line)?.[1];
     if (header !== undefined) {
       const words = header.split(/\s+/).filter((w) => w !== '');
-      section = header === 'default' ? 'default' : words.length === 2 && words[0]!.startsWith('profile') ? words[1] : undefined;
+      section = header === 'default' ? 'default' : words.length === 2 && header.startsWith('profile') ? words[1] : undefined;
       if (section === profile) account = undefined;
     } else if (section === profile) {
       // A key ends at its first `=` or `:`, in any case.

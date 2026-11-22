@@ -67,6 +67,7 @@ describe("a cloud create's owner (#2134)", () => {
         ['[profile prod]\nsso_account_id = 111111111111\n[profile  prod]\nsso_account_id = 222222222222\n', 'aws:222222222222'],
         ['[profile prod]\nsso_account_id = 111111111111\n[profilex prod]\nregion = x\n', 'aws-profile:prod'],
         ['[profile prod]\nSSO_Account_ID: 222222222222\n', 'aws:222222222222'],
+        ['[profile prod]\nsso_account_id = 111111111111\n[ profile prod ]\nsso_account_id = 222222222222\n', 'aws:111111111111'],
       ] as const) {
         writeFileSync(join(other, '.aws', 'config'), config);
         const note = 'It creates a cloud resource under the AWS profile prod: aws kms create-key --profile prod';

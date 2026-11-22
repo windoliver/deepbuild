@@ -1059,6 +1059,11 @@ fn a_profiles_account_is_read_only_from_a_config_every_reader_splits_alike() {
             Some("111"),
         ),
         ("[profile prod x]\nsso_account_id = 111\n", None),
+        (
+            "[profile prod]\nsso_account_id = 111\n[ profile prod ]\nsso_account_id = 222\n",
+            Some("111"),
+        ),
+        ("[profile prod ]\nsso_account_id = 222\n", Some("222")),
     ] {
         assert_eq!(
             aws_account(config, "prod").or(aws_account(config, "default")),
