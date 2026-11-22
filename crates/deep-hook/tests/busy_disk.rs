@@ -5,7 +5,7 @@
 //
 // What the first test writes: up to 60 files of 512 MB in turn under /tmp, each over the last in /tmp/dh315-busy-<pid>,
 // which it removes unless it panics. What the second writes: four files of 1 GB at once in /tmp/dh315-bound-<pid>, up
-// to four times, each time over the last four, which it removes unless it panics.
+// to four times, each time in place of the last four, which it removes unless it panics.
 use std::process::Command;
 
 /// A test's answer when it doesn't panic: it held, or it ran and proved nothing, for the reason given.
@@ -163,6 +163,8 @@ fn hooks_spooling_on_a_stalled_disk_leave_one_sync_and_the_spool_s_makers_runnin
         bursts += 1;
         let writers: Vec<_> = (0..4)
             .map(|w| {
+                // Gone before each burst, so the size read after it is what this burst's dd wrote.
+                let _ = std::fs::remove_file(home.join(format!("busy-{w}.bin")));
                 // 1048576 rather than 1m: GNU dd refuses 1m, and BSD dd reads both.
                 Command::new("dd")
                     .args(["if=/dev/zero", "bs=1048576", "count=1024"])
