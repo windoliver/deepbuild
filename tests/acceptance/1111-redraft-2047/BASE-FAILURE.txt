@@ -1,0 +1,223 @@
+# #1111's blind redraft (#2047's sweep) on its base, 2d1ec171 ("Blind base for #1111: main 654c560c1 with PR 1124's
+# change undone"), then what the drafting job ran in a scratch copy outside the repository to see the tests pass on a
+# stand-in and fail on each twin. <checkout> stands for the checkout's path.
+#
+#   node --test tests/acceptance/1111-redraft-2047/criteria.test.mjs
+#
+# Run on 2026-11-22 with Node v24.22.0 on macOS, on a shared Mac; load averages at the base run: 76.25 87.03 103.36.
+# No timing is judged. On the base every failure is an AssertionError [ERR_ASSERTION] whose first stack frame is
+# tests/acceptance/1111-redraft-2047/criteria.test.mjs, so the before lane reads each as failed at its assertion.
+
+## The base
+
+✖ AC1 #1111.19901108 docs/parallel-proof.md exists, and every link from the T0–T10 issues to it resolves to a heading (2.919417ms)
+✖ AC1 #1111.19901108 the design-links check, reading the T0–T10 issues, finds no link that lands on no heading (471.212458ms)
+✖ AC2 #1111.bded4607 docs/parallel-proof.md states, under Budget windows, that "in the local preflight" in an existing budget criterion is met by the budget window's record for that commit (0.525875ms)
+✖ AC3 #1111.10d60f7c docs/technical-design.md no longer says budgets are measured in the local preflight: they are measured in the scheduled budget window (15.555375ms)
+✖ AC3 #1111.10d60f7c the commit that changes the design's budget line carries a signed approval tag under deep/approved/ naming both files, which the guard's approval reader verifies (31.165292ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 0
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 588.989167
+
+✖ failing tests:
+
+test at tests/acceptance/1111-redraft-2047/criteria.test.mjs:35:1
+✖ AC1 #1111.19901108 docs/parallel-proof.md exists, and every link from the T0–T10 issues to it resolves to a heading (2.919417ms)
+  AssertionError [ERR_ASSERTION]: docs/parallel-proof.md does not exist
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1111-redraft-2047/criteria.test.mjs:38:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1111-redraft-2047/criteria.test.mjs:44:1
+✖ AC1 #1111.19901108 the design-links check, reading the T0–T10 issues, finds no link that lands on no heading (471.212458ms)
+  AssertionError [ERR_ASSERTION]: the design-links check finds links that land on no heading:
+  FAIL 15 links into docs/*.md land on no heading, 0 names are not in the design, 1 planned names are stale
+    docs/technical-design.md:2457 ./parallel-proof.md (docs/parallel-proof.md does not exist)
+    #1112 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#9-hygiene-do-first-no-design-needed (docs/parallel-proof.md does not exist)
+    #1113 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#6-scheduling-a-per-machine-throttle-table (docs/parallel-proof.md does not exist)
+    #1114 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#12-rollout-and-proof-of-each-step (docs/parallel-proof.md does not exist)
+    #1115 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#12-rollout-and-proof-of-each-step (docs/parallel-proof.md does not exist)
+    #1115 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#10a-open-owner-decision-gates-t9 (docs/parallel-proof.md does not exist)
+    #1116 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#12a-budget-windows-owner-decision-2026-11-02 (docs/parallel-proof.md does not exist)
+    #1117 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#4-build-reuse-fixed-path-workspaces-not-relocated-targets (docs/parallel-proof.md does not exist)
+    #1118 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#4-build-reuse-fixed-path-workspaces-not-relocated-targets (docs/parallel-proof.md does not exist)
+    #1119 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#5-proof-run-cost-cuts-inside-one-run (docs/parallel-proof.md does not exist)
+    #1120 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#5-proof-run-cost-cuts-inside-one-run (docs/parallel-proof.md does not exist)
+    #1121 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#3-placement-what-runs-where (docs/parallel-proof.md does not exist)
+    #1122 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#8-remote-lanes (docs/parallel-proof.md does not exist)
+    #1123 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#7-the-alone-block-split-by-reason (docs/parallel-proof.md does not exist)
+    #1123 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#5-proof-run-cost-cuts-inside-one-run (docs/parallel-proof.md does not exist)
+    scripts/planned-names.txt:4 deep waiter (#1814 is not an open issue that names it)
+  
+  15 !== 0
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1111-redraft-2047/criteria.test.mjs:57:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 15,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1111-redraft-2047/criteria.test.mjs:60:1
+✖ AC2 #1111.bded4607 docs/parallel-proof.md states, under Budget windows, that "in the local preflight" in an existing budget criterion is met by the budget window's record for that commit (0.525875ms)
+  AssertionError [ERR_ASSERTION]: docs/parallel-proof.md does not exist
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1111-redraft-2047/criteria.test.mjs:62:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1111-redraft-2047/criteria.test.mjs:78:1
+✖ AC3 #1111.10d60f7c docs/technical-design.md no longer says budgets are measured in the local preflight: they are measured in the scheduled budget window (15.555375ms)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md says budgets are measured on a reference Mac… somewhere other than in the scheduled budget window alone
+  + actual - expected
+  
+  + [
+  +   ' by a benchmark in the local preflight'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1111-redraft-2047/criteria.test.mjs:82:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ ' by a benchmark in the local preflight' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1111-redraft-2047/criteria.test.mjs:92:1
+✖ AC3 #1111.10d60f7c the commit that changes the design's budget line carries a signed approval tag under deep/approved/ naming both files, which the guard's approval reader verifies (31.165292ms)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md at HEAD still says "measured on a reference Mac by a benchmark in the local preflight", so no commit has changed it
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1111-redraft-2047/criteria.test.mjs:95:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+exit=1
+
+## The stand-in and the twins (scratch, not committed)
+
+# The implementation was never seen, so the twins could not be laid over it. In its place: a scratch git repository
+# outside this one, made from the base's files (git archive) with this folder, and
+#   - on its first commit, one more line in .deepbuild/approvers: a throwaway sk-ssh-ed25519 key held in software
+#     (an OpenSSH SSHSIG written by a scratch script, the way tests/acceptance/1326/authenticator.mjs makes one);
+#   - a branch with two commits, the first adding a stand-in docs/parallel-proof.md (the ten headings the issues
+#     link, and one reading rule under Budget windows) and changing the design's line to "…by a benchmark in the
+#     scheduled budget window (see [Parallel proof](./parallel-proof.md#12a-budget-windows-owner-decision-2026-11-02))";
+#   - one commit on main meanwhile, a merge of the branch (--no-ff), and one commit after it;
+#   - an annotated tag deep/approved/issue-1111 on the branch's first commit, signed by that key with its touch flag
+#     set, holding "Approves: docs/technical-design.md" and "Approves: docs/parallel-proof.md".
+# Each twin was laid by copying its files over the stand-in's working tree, and the tree put back after the run.
+# Lines are the spec reporter's, cut to each test's result and its failure's first line and first frame.
+
+=== stand-in, signed tag naming both files
+✔ AC1 #1111.19901108 docs/parallel-proof.md exists, and every link from the T0–T10 issues to it resolves to a heading (3.360041ms)
+✔ AC1 #1111.19901108 the design-links check, reading the T0–T10 issues, finds no link that lands on no heading (586.219ms)
+✔ AC2 #1111.bded4607 docs/parallel-proof.md states, under Budget windows, that "in the local preflight" in an existing budget criterion is met by the budget window's record for that commit (0.751833ms)
+✔ AC3 #1111.10d60f7c docs/technical-design.md no longer says budgets are measured in the local preflight: they are measured in the scheduled budget window (23.332625ms)
+✔ AC3 #1111.10d60f7c the commit that changes the design's budget line carries a signed approval tag under deep/approved/ naming both files, which the guard's approval reader verifies (535.884584ms)
+ℹ pass 5
+ℹ fail 0
+
+=== stand-in with twin heading-renamed laid over it (load averages: 84.69 89.85 105.10)
+✖ AC1 #1111.19901108 docs/parallel-proof.md exists, and every link from the T0–T10 issues to it resolves to a heading (4.330917ms)
+✖ AC1 #1111.19901108 the design-links check, reading the T0–T10 issues, finds no link that lands on no heading (535.38025ms)
+✔ AC2 #1111.bded4607 docs/parallel-proof.md states, under Budget windows, that "in the local preflight" in an existing budget criterion is met by the budget window's record for that commit (1.008917ms)
+✔ AC3 #1111.10d60f7c docs/technical-design.md no longer says budgets are measured in the local preflight: they are measured in the scheduled budget window (44.097625ms)
+✔ AC3 #1111.10d60f7c the commit that changes the design's budget line carries a signed approval tag under deep/approved/ naming both files, which the guard's approval reader verifies (599.058375ms)
+ℹ pass 3
+ℹ fail 2
+✖ failing tests:
+  AssertionError [ERR_ASSERTION]: 1 of the 14 links from the T0–T10 issues to docs/parallel-proof.md land on no heading of it
+      at TestContext.<anonymous> (tests/acceptance/1111-redraft-2047/criteria.test.mjs:41:10)
+  AssertionError [ERR_ASSERTION]: the design-links check finds links that land on no heading:
+    #1116 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#12a-budget-windows-owner-decision-2026-11-02 (no heading or <a id> in docs/parallel-proof.md is #12a-budget-windows-owner-decision-2026-11-02)
+      at TestContext.<anonymous> (tests/acceptance/1111-redraft-2047/criteria.test.mjs:57:10)
+=== stand-in with twin criteria-reworded laid over it (load averages: 84.07 89.64 104.93)
+✔ AC1 #1111.19901108 docs/parallel-proof.md exists, and every link from the T0–T10 issues to it resolves to a heading (5.054041ms)
+✔ AC1 #1111.19901108 the design-links check, reading the T0–T10 issues, finds no link that lands on no heading (316.639083ms)
+✖ AC2 #1111.bded4607 docs/parallel-proof.md states, under Budget windows, that "in the local preflight" in an existing budget criterion is met by the budget window's record for that commit (0.702916ms)
+✔ AC3 #1111.10d60f7c docs/technical-design.md no longer says budgets are measured in the local preflight: they are measured in the scheduled budget window (11.790791ms)
+✔ AC3 #1111.10d60f7c the commit that changes the design's budget line carries a signed approval tag under deep/approved/ naming both files, which the guard's approval reader verifies (524.226417ms)
+ℹ pass 4
+ℹ fail 1
+✖ failing tests:
+  AssertionError [ERR_ASSERTION]: no paragraph or list item under Budget windows in docs/parallel-proof.md says a criterion's "in the local preflight" is met by the budget window's record for the commit. Those that name "in the local preflight" (1):
+      at TestContext.<anonymous> (tests/acceptance/1111-redraft-2047/criteria.test.mjs:74:10)
+=== stand-in with twin half-reworded laid over it (load averages: 84.07 89.64 104.93)
+✔ AC1 #1111.19901108 docs/parallel-proof.md exists, and every link from the T0–T10 issues to it resolves to a heading (3.277834ms)
+✔ AC1 #1111.19901108 the design-links check, reading the T0–T10 issues, finds no link that lands on no heading (290.213083ms)
+✔ AC2 #1111.bded4607 docs/parallel-proof.md states, under Budget windows, that "in the local preflight" in an existing budget criterion is met by the budget window's record for that commit (1.7565ms)
+✖ AC3 #1111.10d60f7c docs/technical-design.md no longer says budgets are measured in the local preflight: they are measured in the scheduled budget window (1.121833ms)
+✔ AC3 #1111.10d60f7c the commit that changes the design's budget line carries a signed approval tag under deep/approved/ naming both files, which the guard's approval reader verifies (521.400916ms)
+ℹ pass 4
+ℹ fail 1
+✖ failing tests:
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md says budgets are measured on a reference Mac… somewhere other than in the scheduled budget window alone
+      at TestContext.<anonymous> (tests/acceptance/1111-redraft-2047/criteria.test.mjs:82:10)
+=== stand-in with twin approves-misread laid over it (load averages: 84.07 89.64 104.93)
+✔ AC1 #1111.19901108 docs/parallel-proof.md exists, and every link from the T0–T10 issues to it resolves to a heading (22.506541ms)
+✔ AC1 #1111.19901108 the design-links check, reading the T0–T10 issues, finds no link that lands on no heading (289.317792ms)
+✔ AC2 #1111.bded4607 docs/parallel-proof.md states, under Budget windows, that "in the local preflight" in an existing budget criterion is met by the budget window's record for that commit (0.540167ms)
+✔ AC3 #1111.10d60f7c docs/technical-design.md no longer says budgets are measured in the local preflight: they are measured in the scheduled budget window (17.108792ms)
+✖ AC3 #1111.10d60f7c the commit that changes the design's budget line carries a signed approval tag under deep/approved/ naming both files, which the guard's approval reader verifies (442.914583ms)
+ℹ pass 4
+ℹ fail 1
+✖ failing tests:
+  AssertionError [ERR_ASSERTION]: the approval reader, reading .deepbuild/approvers at 845839f862f19dad4c3542fbacddd4f35e4e1d82, verifies no approval of commit c238bc9124f5c0a1f8e3e3b9f3f62059a67770b6 naming these files. Its tags: deep/approved/issue-1111; the items the reader gives: (none); refused: (none)
+      at TestContext.<anonymous> (tests/acceptance/1111-redraft-2047/criteria.test.mjs:114:10)
+
+# The second AC3 test on the stand-in with other tags, one at a time (same scratch repository):
+#   no tag under deep/approved/ at all       Error: BLOCKED: this checkout holds no tag under deep/approved/, so whether the commit carries one can't be read here; fetch the tags
+#   a signed tag naming one file             AssertionError: … verifies no approval of commit … naming these files. … the items the reader gives: docs/technical-design.md; refused: (none)
+#   a tag signed with no touch flag          AssertionError: … the items the reader gives: (none); refused: deep/approved/no-touch: signed by standin (sk-ssh-ed25519@openssh.com SHA256:…) with no touch or biometric, so it approves nothing
+#   a signed tag on another commit           AssertionError: commit …, which takes the words out of docs/technical-design.md, carries no annotated tag under deep/approved/ (of 1 there)
+# In every run the reader read .deepbuild/approvers at the stand-in's first commit, the branch's merge base, not at
+# the commit main had moved to.
