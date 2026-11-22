@@ -19,7 +19,7 @@ These are the ideas that decide a new question, each with its rule and its check
 - What a check reads replays the same way on another machine, each random draw seeded or recorded. ([Seeded and replayable](#prim-rules); `scripts/canvas-lint.mjs`)
 - A test counts only if it fails on a wrong program. ([Wrong programs](#tests); the `proof` lane)
 - Every wait ends by its deadline, and a test waits for its event, never for time. ([Every wait ends](#tests), [Repo guards](#built-to-be-hard-to-get-wrong); the `unit` lane, `scripts/wait-ratchet.mjs`)
-- Every hub slot names its kit and a planted wrong fill the kit must refuse. ([Hub slots](#composition); `scripts/slots-check.mjs`)
+- Every hub slot names its interface and the planted wrong fills its kit must fail. ([Hub slots](#composition); `scripts/slots-check.mjs`)
 
 <a id="scope"></a>
 

@@ -17,8 +17,11 @@ const ANCHOR = /^\s*<a\s[^>]*>(?:\s*<\/a>)?\s*$/i;
 const rendered = (text) => text.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/(`+)(.+?)\1/g, '$2').replace(/\*\*|__/g, '').replace(/\s+/g, ' ').trim();
 // A line without the closing parenthesis that links its rule and names its check.
 const closing = (text) => (text.endsWith(')') && text.includes(' ([') ? text.slice(0, text.lastIndexOf(' ([')) : text);
-// Sentences, the closing parenthesis left out and each link and code span read as one word: one ends at . ! or ? before anything that isn't white space.
-const sentences = (text) => closing(text).replace(/!?\[[^\]]*\]\([^)]*\)|(`+).+?\1/g, '\u0001').trim().split(/(?<=[.!?]["')\]]?)\s+(?=\S)/).length;
+// Sentences, each link and code span read as one word: one ends at . ! or ? before anything that isn't white space,
+// and a sentence end inside the closing parenthesis starts another.
+const words = (text) => text.replace(/!?\[[^\]]*\]\([^)]*\)|(`+).+?\1/g, '\u0001');
+const sentences = (text) => words(closing(text)).trim().split(/(?<=[.!?]["')\]]?)\s+(?=\S)/).length
+  + (/[.!?]["')\]]?\s/.test(words(text.slice(closing(text).length, -1))) ? 1 : 0);
 
 // A doc's prose lines from the heading slugged `id` to the next heading of its level or higher, the heading first.
 function section(file, id) {
