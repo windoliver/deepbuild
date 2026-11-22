@@ -1,0 +1,11 @@
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-2764-codex-subagent-hold-2c7675/tests/acceptance/2764
+
+ ↓ proceed-codex-subagent.test.ts > #2764.d93a7447 a Codex subagent's prompt ends no turn a proceed started: the delete after it is held with one authority ask > #2764.d93a7447 in the turn a proceed started, after a Codex subagent's prompt, `gh release delete v1.2.0 --yes` is held at PreToolUse with one authority ask naming the proceed 5005ms [INCONCLUSIVE #2764.d93a7447 `gh release delete v1.2.0 --yes` was let through because the hub's acknowledgement came after deep-hook stopped waiting for it (exit 0 after 45 ms, stdout "", stderr "deep-hook: spooled 01M81464AFBAKQDMKAX6ZD67VX, but its sync didn't finish within the hook's 50 ms\n"), so the hub never decided it; read at 1-minute load 76.5 on 20 cores]
+ ✓ proceed-codex-subagent.test.ts > #2764.d93a7447 a Codex subagent's prompt ends no turn a proceed started: the delete after it is held with one authority ask > #2764.d93a7447 (wrong program) a hub whose proceed-turn query counts a subagent's prompt (DEEP_HUB_PLANT=proceed-ends-at-subagent-prompt) lets the delete run and fails this test, naming the call 3574ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 1 skipped (2)
+   Start at  23:57:56
+   Duration  8.82s (tests 99%)
+

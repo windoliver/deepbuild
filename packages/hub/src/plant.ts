@@ -104,8 +104,8 @@ export type Plant =
   | 'ended-answer-to-worktree' | 'ended-answer-at-next-prompt'
   // #321's: a proceed that covers its turn's calls, holds for synced servers only, and holds filed as approving choices.
   | 'proceed-covers-turn' | 'holds-synced-only' | 'hold-as-choice'
-  // #1836's: a proceed's turn that a subagent's stop ends.
-  | 'proceed-ends-at-child-stop'
+  // #1836's and #2764's: a proceed's turn that a subagent's stop, or a Codex subagent's prompt, ends.
+  | 'proceed-ends-at-child-stop' | 'proceed-ends-at-subagent-prompt'
   // #23's: the agent's "always allow" picked, typed words saved as a decision, a
   // decision over the permission mode or before the guards, a rule's answer without its reason, and no rule copied.
   | 'permission-always-allow' | 'typed-saves-decision' | 'decision-over-mode' | 'decision-before-guard'
@@ -360,7 +360,7 @@ const PLANTS: readonly string[] = [
   'waiter-never-wakes', 'waiter-outlives-session', 'waiter-gives-up-at-600s', 'waiter-per-stop', 'waiter-under-stop-only', 'waiter-polls', 'waiter-checks-every-5s',
   'delivered-on-waiter-exit', 'wake-assumed', 'delivered-to-dead-waiter', 'routes-from-settings', 'routes-kept-across-sessions',
   'ended-answer-to-worktree', 'ended-answer-at-next-prompt',
-  'proceed-covers-turn', 'holds-synced-only', 'hold-as-choice', 'proceed-ends-at-child-stop',
+  'proceed-covers-turn', 'holds-synced-only', 'hold-as-choice', 'proceed-ends-at-child-stop', 'proceed-ends-at-subagent-prompt',
   'permission-always-allow', 'typed-saves-decision', 'decision-over-mode', 'decision-before-guard',
   'rule-without-reason', 'copies-no-standing-rules',
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
