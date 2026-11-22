@@ -62,7 +62,7 @@ export function readProofs(dir: string, rules: Obj): { proofs: Obj } | { why: st
 
 /**
  * What's wrong with `<dir>/proofs.json`: missing while rules.json holds no proofs of an older hub's, can't be read or
- * isn't that shape, or holds no proof for a shipped entry rules.json has, as after a hub's install into a missing file.
+ * isn't that shape, or no proof is held for a shipped entry rules.json has, as after a hub's install into a removed file.
  * None while there is no readable rules.json; `unreadable` when the file is there and the hub can't read it.
  */
 export function proofsProblem(dir: string): { why: string; unreadable: boolean } | undefined {
@@ -75,7 +75,19 @@ export function proofsProblem(dir: string): { why: string; unreadable: boolean }
   if ('why' in read) return { why: read.why, unreadable: true };
   const shipped = shippedRules().proofs ?? {};
   const lacking = Object.keys(rules.entries).filter((name) => name in shipped && !(name in read.proofs));
-  return lacking.length ? { why: `${file} holds no proof for ${lacking.join(', ')}`, unreadable: false } : undefined;
+  return lacking.length ? { why: `no proof is held for ${lacking.join(', ')}, in ${file} or rules.json`, unreadable: false } : undefined;
+}
+
+/**
+ * Writes each shipped entry's proof into `<dir>/proofs.json` where neither it nor `rules` holds one (#2695), as when the
+ * file is new or was removed, with `write`, the writer rules.json gets; a file that can't be read is left for doctor.
+ */
+export function restoreShipped(dir: string, rules: Obj, write: (file: string, value: Obj) => void): void {
+  const kept = readProofs(dir, rules);
+  if (!('proofs' in kept)) return;
+  const shipped = shippedRules().proofs ?? {};
+  const absent = Object.keys(shipped).filter((name) => !(name in kept.proofs));
+  if (absent.length) write(join(dir, PROOFS), { v: 1, proofs: { ...kept.proofs, ...Object.fromEntries(absent.map((n) => [n, shipped[n]])) } });
 }
 
 /** Whether deep-hook's matcher reads `c` under `entry`, through its check mode. */

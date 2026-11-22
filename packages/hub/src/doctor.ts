@@ -178,7 +178,7 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
   // The guard entries' planted calls and twins (#2695): deep-hook never reads them, so its guards hold without them.
   const proofs = proofsProblem(root);
   if (proofs) add('guards.proofs', 'deepbuild', 'proofs_unreadable', 'warn', `${proofs.why}; deep-hook's guards hold without it, but the rules page names a guard as enforcing a rule only by its proof${proofs.unreadable ? ', and every install is refused while it can\'t be read, the product store\'s guard at each hub start included' : ''}`, `${proofs.unreadable ? `Make ${join(root, PROOFS)} readable JSON again, or remove it and run` : 'Run'} \`deep setup\`, which writes the shipped entries' proofs again; add your own entries again with \`deep guard add\`.`);
-  else if (existsSync(join(root, PROOFS))) add('guards.proofs', 'deepbuild', 'healthy', 'ok', `${join(root, PROOFS)} holds the proof of every shipped guard entry rules.json has`, 'Nothing to do.');
+  else if (existsSync(join(root, PROOFS)) && isObj(readJson(join(root, 'rules.json'))?.entries)) add('guards.proofs', 'deepbuild', 'healthy', 'ok', `${join(root, PROOFS)} holds the proof of every shipped guard entry rules.json has`, 'Nothing to do.');
 
   // Each agent's binary, version, sign-in and billing; Claude Code's token lifetime, test prompt and jobs' binary.
   const path = env.PATH ?? '';
