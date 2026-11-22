@@ -471,7 +471,6 @@ function take(key, into) {
     }
     return { laid: entry.files.length };
   } catch (error) {
-    for (const { fresh } of staged) rmSync(fresh, { force: true });
     // A lay stopped halfway takes back what it laid, as a laid .tsbuildinfo would leave tsc nothing to emit; the entry
     // goes, and the build that follows isn't kept. What can't be taken back leaves the bay dirty, and it doesn't build.
     let dirty = false;
@@ -480,6 +479,13 @@ function take(key, into) {
         rmSync(target, { force: true });
       } catch {
         dirty = true;
+      }
+    }
+    for (const { fresh } of staged) {
+      try {
+        rmSync(fresh, { force: true });
+      } catch {
+        dirty ||= laying;
       }
     }
     return { why: `the kept build ${key} was not used: ${error.message}`, broken: Boolean(error.broken) || laying, unkept: laying, dirty };
@@ -861,16 +867,24 @@ class Pair {
 
   /** Keeps what `what()` names and evicts past the ceiling; never throws, since a build not kept is only one rebuilt later. */
   keep(key, what) {
+    const limit = ceiling();
+    if (limit === null) return { kept: false, notKept: 'no cache: DEEP_BUILD_CACHE_BYTES is not a whole number' };
+    let kept;
     try {
-      const limit = ceiling();
-      if (limit === null) return { kept: false, notKept: 'no cache: DEEP_BUILD_CACHE_BYTES is not a whole number' };
-      if (limit === 0) return { kept: false, notKept: 'no cache: DEEP_BUILD_CACHE_BYTES is 0', evicted: evict() };
-      const { from, paths, refused } = what();
-      if (refused) return { kept: false, notKept: refused, evicted: evict() };
-      const { bytes, why } = keep(key, from, paths);
-      return { kept: !why, bytes, ...(why ? { notKept: why } : {}), evicted: evict() };
+      if (limit === 0) kept = { kept: false, notKept: 'no cache: DEEP_BUILD_CACHE_BYTES is 0' };
+      else {
+        const { from, paths, refused } = what();
+        const { bytes, why } = refused ? { why: refused } : keep(key, from, paths);
+        kept = { kept: !why, ...(why ? { notKept: why } : { bytes }) };
+      }
     } catch (error) {
-      return { kept: false, notKept: error.message };
+      kept = { kept: false, notKept: error.message };
+    }
+    // Apart, so an eviction that fails never says a build stored was not.
+    try {
+      return { ...kept, evicted: evict() };
+    } catch (error) {
+      return { ...kept, notEvicted: error.message };
     }
   }
 
