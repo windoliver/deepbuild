@@ -14,7 +14,9 @@ of `68eafeaad`, the commit that last wrote the twins, to find what each copy cha
 
 The plant copies differed from the right `plant.ts` of their time in one line, `plantOf`'s answer when
 `DEEP_HUB_PLANT` is unset; the rest of each copy was the module as it stood. `activePlant` was the right one in every
-copy, and stays so.
+copy, and stays so. Each `plant.ts` edit finds two lines in a row, `plantOf`'s first line and the `if (!value)` line
+below it, and repeats the first in `wrong`, so it can apply only inside `plantOf`. The `setup.ts` edit finds the one
+line that builds the waiter's command, which no other line of `setup.ts` holds.
 
 - `waiter-never-wakes`: `plantOf(undefined)` returns `'waiter-never-wakes'`, so the hub acts as that plant.
 - `waiter-outlives-session`: `plantOf(undefined)` returns `'waiter-outlives-session'`; and setup writes the waiter's
