@@ -6,7 +6,8 @@
 //   total <instructions>      the command's and every child's, user space only: a host whose perf_event_paranoid
 //                             is 2 lets a process count no more, so the kernel's work for it is in no count here
 //   blocked <errno> <perf_event_paranoid>      the kernel refused the counter: the run has no count
-//   partial <time counted> <time run>      the counter wasn't on the command for all of the time it ran, in ns:
+//   partial <time counted> <time it ran>      the counter wasn't on the command for all of the time it ran, in ns
+//                             (the time it ran is its own clock's, or its user CPU time where that is past it):
 //                             another counter took its place, it ran on a core no counter covered, or a process
 //                             exec'd a program it may run but not read (or whose interpreter it can't read), which
 //                             the kernel stops counting: no count
@@ -167,8 +168,9 @@ int main(int argc, char **argv) {
   // Each kind's counter runs only while a process is on its own kind of core, so their times running together are
   // the time some counter was on the command: short of the command's own time when a counter was displaced, or the
   // command ran on a core none covers. They were equal to the ns in every reading on a 7.0 kernel; a kernel before 6.2
-  // keeps hardware and software events in two contexts switched at slightly different instants, so 1 ms either way
-  // is allowed, as below.
+  // keeps hardware and software events in two contexts switched at slightly different instants (not measured), so a
+  // shortfall of 1 ms is allowed, as below. Running time past the clock, as two counters covering one core would give,
+  // was never seen and isn't checked.
   uint64_t total = 0, running = 0, ran = 0, whole = 1, read_out[3];
   for (int at = 0; at < opened; at++) {
     if (read(counters[at], read_out, sizeof read_out) != sizeof read_out) whole = 0;
@@ -192,14 +194,15 @@ int main(int argc, char **argv) {
   // children). So user time more than 1 ms past the time counted is no count.
   // What it can't see: uncounted user work within the kernel time counted, which this lets through. With no new
   // privileges that is only a program a process may run but not read (or whose interpreter it can't read), which the
-  // kernel stops counting, and up to 1 ms of a displaced counter. And IRQ and steal time, and a child the kernel reaps
+  // kernel stops counting, and up to 1 ms of a displaced counter or of a core kind whose counter the kernel refused.
+  // And IRQ and steal time, and a child the kernel reaps
   // itself, under a parent that ignores SIGCHLD, which adds no CPU time here.
   // What it may null: a fully counted run of many short processes on a kernel that splits CPU time by ticks, which
   // gives a process no tick of kernel time saw all its runtime as user time, the part outside the clock included.
   struct rusage used;
   uint64_t user = getrusage(RUSAGE_CHILDREN, &used) ? UINT64_MAX
     : (uint64_t)used.ru_utime.tv_sec * 1000000000ull + (uint64_t)used.ru_utime.tv_usec * 1000ull;
-  if (opened && whole && (running + 1000000ull < ran || running > ran + 1000000ull)) snprintf(line, sizeof line, "partial %llu %llu\n", (unsigned long long)running, (unsigned long long)ran);
+  if (opened && whole && running + 1000000ull < ran) snprintf(line, sizeof line, "partial %llu %llu\n", (unsigned long long)running, (unsigned long long)ran);
   else if (opened && whole && user > ran + 1000000ull) snprintf(line, sizeof line, "partial %llu %llu\n", (unsigned long long)ran, (unsigned long long)user);
   else if (opened && whole) snprintf(line, sizeof line, "total %llu\n", (unsigned long long)total);
   else if (opened) snprintf(line, sizeof line, "partial %llu %llu\n", (unsigned long long)running, (unsigned long long)ran);
