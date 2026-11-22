@@ -37,6 +37,12 @@ function invariants() {
   });
 }
 
+// A link into the design that names an anchor outside the Principles section itself.
+const rule = (target) => {
+  const link = resolve(target, DESIGN);
+  return link?.file === DESIGN && Boolean(link.id) && outline(DESIGN).anchors.get(link.id) !== 'principles';
+};
+
 /** The findings, one line each; none when the section and the canvas link hold. */
 export function principles() {
   const found = [];
@@ -66,7 +72,7 @@ export function principles() {
       if (length > 160) fail(where, `is ${length} characters; a line holds at most 160`);
       const allowed = invariant ? sentences(invariant.text) : 1;
       if (invariant !== null && sentences(text) > allowed) fail(where, `holds ${sentences(text)} sentences; it holds ${allowed}`);
-      if (!targets(line).some((target) => resolve(target, DESIGN)?.file === DESIGN && resolve(target, DESIGN).id)) fail(where, 'has no link into the design');
+      if (!targets(line).some(rule)) fail(where, 'has no link into the design');
       // A script is a path under scripts/ to a file; a lane is a code span written as `<name>` lane or `<name> lane`.
       const scripts = [...new Set(line.match(/(?<![\w./-])scripts\/[\w./-]*\w/g) ?? [])];
       const real = (path) => posix.normalize(path).startsWith('scripts/') && existsSync(path) && statSync(path).isFile();
