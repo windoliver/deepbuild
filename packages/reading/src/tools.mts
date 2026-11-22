@@ -6,16 +6,23 @@ import { request } from 'node:http';
 import { createInterface } from 'node:readline';
 
 const socket = process.argv[2] ?? '';
+/** What a client that loads tools by search reads at the start in place of the list (#2897). */
+const INSTRUCTIONS = "This reading job's only way into the sessions, evidence and wiki pages it was given. Read each handle you were given a slice at a time, continuing with next until the reply has none; call find for the message handles of your sessions that hold a query."; // scripts/skill.mjs writes this line
+// Each tool's title and hints (#2898), as packages/hub/annotations.json states them, which scripts/skill.mjs generates;
+// written out here since the job's sandbox grants this file alone. Both only read the record, so a call changes nothing.
+const READS = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const TOOLS = [
   {
     name: 'read',
     description: 'One slice of what a handle names (session:<id>, session:<id>#<message>, ev:<sha256>, wiki:<page>#<claim>), at most 8,192 characters, as reading.slice@1 JSON. When the reply has `next`, call again with `slice` set to it for the rest.',
     inputSchema: { type: 'object', properties: { handle: { type: 'string' }, slice: { type: 'string' } }, required: ['handle'], additionalProperties: false },
+    annotations: { title: 'Read a slice of a handle', ...READS },
   },
   {
     name: 'find',
     description: 'Message handles of the sessions this job was given whose text holds the query, ignoring case, with a line of context each; `next` continues a cut reply.',
     inputSchema: { type: 'object', properties: { query: { type: 'string' }, slice: { type: 'string' } }, required: ['query'], additionalProperties: false },
+    annotations: { title: 'Find messages in the given sessions', ...READS },
   },
 ];
 
@@ -41,7 +48,7 @@ lines.on('line', (line) => {
   try { m = JSON.parse(line) as typeof m; } catch { return; }
   if (m.id === undefined) return; // a notification
   const reply = (result: unknown) => send({ jsonrpc: '2.0', id: m.id, result });
-  if (m.method === 'initialize') reply({ protocolVersion: m.params?.protocolVersion ?? '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'deepbuild-reading', version: '1' } });
+  if (m.method === 'initialize') reply({ protocolVersion: m.params?.protocolVersion ?? '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'deepbuild-reading', version: '1' }, instructions: INSTRUCTIONS });
   else if (m.method === 'ping') reply({});
   else if (m.method === 'tools/list') reply({ tools: TOOLS });
   else if (m.method === 'tools/call') {

@@ -164,8 +164,9 @@ mod replica {
             }
         }
         let colors = view == deep_replica::TERMINAL_COLORS;
+        let connect = view == deep_replica::CONNECT_BEFORE || view == deep_replica::CONNECT_AFTER;
         // The first screen is the pane a person gets (#1454): the app's own layout for this HOME.
-        let layout = if colors {
+        let layout = if colors || connect {
             Layout {
                 center: vec![deep_app::views::EXTENSION.into()],
                 ..Layout::shipped("home")
@@ -184,6 +185,13 @@ mod replica {
                             dark: dark == Some(true),
                         })
                         .into(),
+                        cx,
+                    );
+                }
+                if connect {
+                    let open = view == deep_replica::CONNECT_AFTER;
+                    deep_app::open::place_extension(
+                        cx.new(|_| deep_replica::kit::ConnectPrompt { open }).into(),
                         cx,
                     );
                 }
@@ -331,10 +339,9 @@ mod replica {
             let ms = clicked.elapsed().as_millis();
             let line = serde_json::json!({ "ms": ms, "tree": snapshot.tree.to_json() });
             writeln!(frames, "{line}").expect("frames.jsonl is written");
-            let working = snapshot
-                .flatten()
-                .iter()
-                .any(|node| node.name.as_deref() == Some(deep_app::welcome::SETTING_UP));
+            let working = snapshot.flatten().iter().any(|node| {
+                node.name.as_deref() == Some(deep_app::copy::text(deep_app::welcome::SETTING_UP))
+            });
             // A setup that stops gives the button back (#1100): what it said is the first frame no longer working.
             seen_working |= working;
             if !working && (seen_working || button(&snapshot).is_none()) {

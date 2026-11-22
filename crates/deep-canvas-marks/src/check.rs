@@ -164,11 +164,10 @@ pub fn numbers(doc: &Map<String, Value>) -> (Vec<Value>, Vec<Issue>) {
         shown.extend(text_numbers(doc, id, item));
         // A story number a template shows is unsourced where a status or a reading is bound.
         if let (true, Some(Value::String(t))) = (binds, item.pointer("/params/template")) {
-            let whole = Value::Object(doc.clone());
             if item.get("kind").and_then(Value::as_str) == Some("text@1")
                 && item.pointer("/params/name") != Some(&Value::Bool(true))
             {
-                deep_canvas::document::story_issues(&whole, id, t, &mut issues);
+                deep_canvas::document::story_issues(doc, id, t, &mut issues);
             }
         }
         issues.extend(changed_cells(id, item));
@@ -198,8 +197,7 @@ fn text_numbers(doc: &Map<String, Value>, id: &str, item: &Value) -> Vec<Value> 
             deep_canvas::template::Part::Words(_) => None,
         });
         let anchors: Vec<Value> = anchors.collect();
-        let doc = Value::Object(doc.clone());
-        return deep_canvas::template::story_numbers(&doc, t)
+        return deep_canvas::template::story_numbers(doc, t)
             .into_iter()
             .map(|(slot, text)| json!({"item": id, "text": text, "source": {"story": slot}}))
             .chain(anchors)
@@ -584,6 +582,16 @@ pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Iss
     issues.extend(numbers(doc).1);
     issues.extend(story_issues(items));
     issues.extend(text_cap_issues(items));
+    // #2031: a lit group's cap, nesting and light colors, each named.
+    let mut lights = crate::light::problems(items);
+    lights.extend(crate::light::ranges(doc));
+    // #2032: an open path that occludes, and a lit group's occluders past their cap.
+    lights.extend(crate::shadow::problems(items));
+    let lit_refused = !lights.is_empty();
+    issues.extend(lights.into_iter().map(|p| Issue {
+        fix: "Keep at most 16 lights on one lit group, light only one group on a path from the root, give each light a look role that isn't a status color, close every path that occludes, and keep a lit group's occluders within 4,096 segments.".into(),
+        ..Issue::error(p.code, &p.id, p.path, p.actual, &p.what)
+    }));
     // Status can show wherever a status binding is.
     let status_shows = doc
         .get("status_bindings")
@@ -621,6 +629,10 @@ pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Iss
             Planted::None,
         );
         if let Err(r) = built {
+            // The frame refuses a lit group's problem as the issues above name it.
+            if lit_refused {
+                break;
+            }
             // `items/<id>/…`, or `items/<id>: …` for a pair.
             let id = r
                 .path

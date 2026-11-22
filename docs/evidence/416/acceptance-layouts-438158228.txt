@@ -1,0 +1,28 @@
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/lazy-conjuring-kite/tests/acceptance/416/layouts
+
+ ❯ budgets.test.ts (1 test | 1 failed) 10470ms
+   ❯ #416.0e66795c budgets against the merge base: a 16 MiB asset validated once per hash in under 0.2 s, and no work for a piece naming no layout (1)
+     × #416.0e66795c a 16 MiB asset validates once per hash in under 200 ms on the reference Mac (five assets after a warm-up), and a piece that names no layout gains no work at check or per frame against the merge base 10456ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > #416.0e66795c budgets against the merge base: a 16 MiB asset validated once per hash in under 0.2 s, and no work for a piece naming no layout > #416.0e66795c a 16 MiB asset validates once per hash in under 200 ms on the reference Mac (five assets after a warm-up), and a piece that names no layout gains no work at check or per frame against the merge base
+Error: INCONCLUSIVE: a 16 MiB asset validated in 12.7, 14.1, 16.8, 21.1, 25.7 ms, read off this machine: not a reference Mac: Mac17,10 / Apple M5 Max / 64 GiB
+ ❯ inconclusive helpers.ts:37:61
+     35| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+     36| /** A reading this machine can't give cleanly: the test fails with thi…
+     37| export const inconclusive = (why: string): never => { throw Error(`INC…
+       |                                                             ^
+     38|
+     39| // -------------------------------------------------------------------…
+ ❯ budgets.test.ts:94:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 2 passed (3)
+   Start at  10:26:15
+   Duration  182.47s (tests 100%)
+

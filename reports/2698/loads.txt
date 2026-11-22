@@ -1,0 +1,12 @@
+00:27:03 load 608: waited 1200 s for a load under 200
+00:27:03 load 608: the four tasks on the change
+00:35:14 load 556: the four tasks on the base
+00:39:56 load 498: start-to-ready on both
+00:40:19 load 469: AC4 and AC6 on the change
+00:45:36 load 374: AC5 and AC6 on the base
+00:58:29 load 409: waited 600 s for a load under 200
+00:58:30 load 409: AC5 on the change not started: the load stayed at or above 200
+02:05:09 load 197: the load is under 200: asking for a test grant
+02:05:10 load 197: AC5 on the change
+02:05:51 load 216: AC5 on the change ended; deep-mcp-30d on the base
+02:06:18 load 198: deep-mcp-30d on the base ended

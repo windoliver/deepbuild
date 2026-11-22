@@ -1,0 +1,53 @@
+# Base run of tests/acceptance/2783 at c1e2710a3 (no fix), 2026-11-17, Linux, Node 24.22.0.
+# packages/*/dist built from the base (npm ci, npm run build --workspaces); target/debug/deep-hook built from the base.
+# Command, detached, in the repo's folder:
+#   systemd-run --user -p AppArmorProfile=claude-desktop -p MemoryMax=24G -p MemorySwapMax=2G -p WorkingDirectory=<repo> -E PATH=... -E HOME=~ -E NO_COLOR=1 \
+#     bash -c "node node_modules/vitest/vitest.mjs run tests/acceptance/2783"
+# Exit status 1. The repo's path is written <repo>; nothing else is cut.
+#
+# AC1: FAIL for the reason the issue names. The failed-start core's process fired its 50 ms timer 0 times in the 2 s after the hook,
+#      never reached stop(), and was killed by PID 30 s after the hook. The test's run went on.
+# AC2: FAIL, only on "after that": the failed-start core never stopped by itself. Its other assertions held at this base, read after
+#      the kill: spool/spool.jsonl held the same bytes, and the core started on the same root recorded the spooled session's start once.
+# AC3: PASS at this base. It is a guard ("still replays"): it fails on a program that no longer replays a late spool, or replays it twice.
+
+
+ RUN  v5.0.5 <repo>
+
+ ❯ tests/acceptance/2783/replay-late.test.ts (3 tests | 2 failed) 40076ms
+   ❯ #2783: a core whose start failed (ledger.db a folder) on a root with spool/spool.jsonl waiting, after one hook reaches it (2)
+     × AC1: a 50 ms timer in its process keeps firing (at least 20 times in 2 s), and stop() settles within 5 s 40ms
+     × AC2: after that, spool/spool.jsonl holds the same bytes, and a core started on the same root once ledger.db can open records the spooled session's start once 2104ms
+   ✓ #2783: no change for a core that started (1)
+     ✓ AC3: a core that started still replays a spool written after its start, on its next hook, once 6481ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2783/replay-late.test.ts > #2783: a core whose start failed (ledger.db a folder) on a root with spool/spool.jsonl waiting, after one hook reaches it > AC1: a 50 ms timer in its process keeps firing (at least 20 times in 2 s), and stop() settles within 5 s
+AssertionError: the 50 ms timer fired 0 times in the 2 s after the hook; the core's process: killed, it was still running 30000 ms after "hook-sent": expected 0 to be greater than or equal to 20
+ ❯ tests/acceptance/2783/replay-late.test.ts:119:186
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/2783/replay-late.test.ts > #2783: a core whose start failed (ledger.db a folder) on a root with spool/spool.jsonl waiting, after one hook reaches it > AC2: after that, spool/spool.jsonl holds the same bytes, and a core started on the same root once ledger.db can open records the spooled session's start once
+AssertionError: "after that": the failed-start core took its hook and stopped (begin > start-rejected > timer-fires-before-the-hook > hook-sent > hook-settled; killed, it was still running 30000 ms after "hook-sent"): expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/2783/replay-late.test.ts:130:209
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  13:08:10
+   Duration  40.60s (tests 100%)
+
+EXIT 1

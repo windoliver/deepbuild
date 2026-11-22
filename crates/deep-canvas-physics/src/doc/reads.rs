@@ -1,15 +1,14 @@
 //! #1918's fields of the world document: a kinematic body's `follow` channel, a joint's
 //! `breaks_at`, a contact material's `tag` and a physics output's reads and target (canvas
-//! primitives: Body, Joint, Contact material, Physics output).
+//! primitives: Body, Joint, Contact material, Physics output); and #2248's: what a series that
+//! takes an output samples of it, a fold of particles, and an `expr` over named reads.
 
 use std::collections::BTreeMap;
 
+use deep_canvas::expr::Expr;
 use serde_json::{Map, Value};
 
 use super::{join, Body, BodyKind, Breaks, Joint, JointKind, Pose, Reader, Refusal, Shape, Soft};
-
-/// The issue that brings an output's post-processing fields.
-pub const OUTPUT_LATER: &str = "#2248";
 
 /// What an output reads (Physics output: `read`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -24,10 +23,19 @@ pub enum Read {
     Energy,
     /// A soft body's particles (#524).
     ParticlePositions,
+    /// #182: a character body's grounded, sliding and crouched, each 0 or 1.
+    Grounded,
+    Sliding,
+    Crouched,
+    /// #2248: a body's speed, m/s, and its mass, kg, each one number an `expr` reads.
+    Speed,
+    Mass,
+    /// #2248: an output's `expr` over its named reads, in place of a read of its own.
+    Expr,
 }
 
 /// Each read's name, and whether it reads a joint rather than a body.
-pub const READS: [(&str, Read, bool); 9] = [
+pub const READS: [(&str, Read, bool); 14] = [
     ("pose", Read::Pose, false),
     ("position", Read::Position, false),
     ("angle", Read::Angle, false),
@@ -37,6 +45,11 @@ pub const READS: [(&str, Read, bool); 9] = [
     ("contact_count", Read::ContactCount, false),
     ("energy", Read::Energy, false),
     ("particle_positions", Read::ParticlePositions, false),
+    ("grounded", Read::Grounded, false),
+    ("sliding", Read::Sliding, false),
+    ("crouched", Read::Crouched, false),
+    ("speed", Read::Speed, false),
+    ("mass", Read::Mass, false),
 ];
 
 impl Read {
@@ -52,6 +65,21 @@ impl Read {
     /// Whether it reads a joint (`joint_coordinate`, `joint_force`) rather than a body.
     pub fn of_joint(self) -> bool {
         READS.iter().any(|r| r.1 == self && r.2)
+    }
+
+    /// #182: whether it reads a character body's own state.
+    pub fn of_character(self) -> bool {
+        matches!(self, Read::Grounded | Read::Sliding | Read::Crouched)
+    }
+
+    /// Where a position or a velocity read starts among a body's canonical values
+    /// (`backend::FIELDS`); none for another read.
+    pub fn vec3_at(self) -> Option<usize> {
+        match self {
+            Read::Position => Some(0),
+            Read::Velocity => Some(7),
+            _ => None,
+        }
     }
 }
 
@@ -71,6 +99,54 @@ pub struct Output {
     /// #523: the levels whose crossings its reading writes (`crossing {t, output, level,
     /// direction}`); a joint's reading only.
     pub crossings: Vec<f64>,
+    /// #2248: the rows a series that takes it reads, when it writes `sample`, `average` or `keep`.
+    pub sampled: Option<Sampled>,
+    /// How the particles its `from` names fold into one value.
+    pub reduce: Option<Reduce>,
+    /// Its `expr` over its named reads; its `read` is then [`Read::Expr`] and its `from` empty.
+    pub expr: Option<Formula>,
+    pub unit: Option<String>,
+}
+
+/// #2248: the rows a series that takes an output reads (Physics output: `sample`, `average`,
+/// `keep`): one every `every` steps, each the mean of the read over the `average` steps that end
+/// at it, and only those of the last `keep` flicks (none: the world's span).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Sampled {
+    pub every: u64,
+    pub average: u64,
+    pub keep: Option<i64>,
+}
+
+/// #2248: how a read of several particles folds into one value (Physics output: `reduce`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Reduce {
+    Sum,
+    Mean,
+    Max,
+}
+
+/// #2248: an output's `expr` (Physics output) and the reads it names, each the body or joint it
+/// reads and what, in the order the expression first names them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Formula {
+    pub expr: Expr,
+    pub reads: Vec<(String, Read)>,
+}
+
+impl Output {
+    /// #2248: whether its value after a step is one number or one vector the bake takes each
+    /// step (reading.rs): an `expr`, a fold of particles, a read with no series of its own before
+    /// #2248, or any read a series samples.
+    pub fn valued(&self) -> bool {
+        self.sampled.is_some()
+            || self.reduce.is_some()
+            || matches!(
+                self.read,
+                Read::Expr | Read::Speed | Read::Mass | Read::Angle | Read::Energy
+            )
+            || (self.read == Read::ContactCount && !self.from.contains('#'))
+    }
 }
 
 /// A skin (Physics output: a skin): the item a soft body's particles draw as the vertices of, or
@@ -124,9 +200,39 @@ const OUTPUT_KEYS: &[&str] = &[
     "sample",
     "keep",
     "expr",
+    "reads",
     "unit",
     "crossings",
 ];
+
+/// Whether `id` is what `read` reads in this world: a joint, a character body or a body.
+fn subject(
+    read: Read,
+    id: &str,
+    bodies: &BTreeMap<String, Body>,
+    joints: &BTreeMap<String, Joint>,
+) -> bool {
+    if read.of_joint() {
+        joints.contains_key(id)
+    } else if read.of_character() {
+        bodies
+            .get(id)
+            .is_some_and(|b| b.kind == BodyKind::Character)
+    } else {
+        bodies.contains_key(id)
+    }
+}
+
+/// What `read` reads, for a refusal.
+fn subject_name(read: Read) -> &'static str {
+    if read.of_joint() {
+        "joint"
+    } else if read.of_character() {
+        "character body"
+    } else {
+        "body"
+    }
+}
 
 impl Reader {
     /// The string at `key`, refused unless one; `None` when absent.
@@ -311,8 +417,132 @@ impl Reader {
         })
     }
 
-    /// An output reading a body, a joint or a soft body's particles; its post-processing fields
-    /// and the reads of character bodies are refused, naming the issue that brings each.
+    /// #2248: an output's `sample` and `average`, whole steps, and its `keep`, a duration; none
+    /// when it writes none of them.
+    fn sampled(&mut self, o: &Map<String, Value>, p: &str) -> Option<Sampled> {
+        let steps = |r: &mut Self, key: &str| {
+            let n = r.num(o, key, p, 1.0, 1.0, f64::from(u32::MAX));
+            if n.fract() != 0.0 {
+                let what = format!("{key} must be a whole number of steps");
+                r.refuse("out_of_range", join(p, key), &o[key], what);
+            }
+            n as u64
+        };
+        let (every, average) = (steps(self, "sample"), steps(self, "average"));
+        let keep = o.get("keep").and_then(|v| {
+            deep_canvas::document::duration(&Value::Null, v)
+                .map_err(|why| {
+                    let what = format!("keep must be a duration, such as 0.5s: {why}");
+                    self.refuse("out_of_range", join(p, "keep"), v, what);
+                })
+                .ok()
+        });
+        let written = ["sample", "average", "keep"]
+            .iter()
+            .any(|k| o.contains_key(*k));
+        written.then_some(Sampled {
+            every,
+            average,
+            keep,
+        })
+    }
+
+    /// #2248: refuses `sample`, `average` and `keep` on an output whose value after a step is no
+    /// one number or vector, which is all a series samples.
+    fn unsampled(&mut self, o: &Map<String, Value>, p: &str, what: &str) {
+        for k in ["sample", "average", "keep"] {
+            if let Some(x) = o.get(k) {
+                let what = format!("a series samples one number or vector a step; {what}");
+                self.refuse("out_of_range", join(p, k), x, what);
+            }
+        }
+    }
+
+    /// #2248: an output's `expr` over its `reads`, each `{from, read}` a number or a vector of a
+    /// body or a joint. The expression names at least one of them and nothing else, and the
+    /// output takes no `from` or `read` of its own.
+    fn formula(
+        &mut self,
+        o: &Map<String, Value>,
+        p: &str,
+        bodies: &BTreeMap<String, Body>,
+        joints: &BTreeMap<String, Joint>,
+        rest: Output,
+    ) -> Option<Output> {
+        for k in ["from", "read", "reduce", "crossings"] {
+            if let Some(x) = o.get(k) {
+                let what = format!("an output with an expr reads its named reads; it takes no {k}");
+                self.refuse("out_of_range", join(p, k), x, what);
+            }
+        }
+        let (ep, rp) = (join(p, "expr"), join(p, "reads"));
+        if !o.contains_key("expr") {
+            let what = "reads name what an expr reads, and this output has none".to_string();
+            self.refuse("physics.missing_field", ep, &o["reads"], what);
+            return None;
+        }
+        let text = self.text(o, "expr", p)?;
+        let mut named = BTreeMap::new();
+        let reads = o.get("reads").unwrap_or(&Value::Null);
+        if !(reads.is_null() || reads.is_object()) {
+            let what = format!("{rp} must be an object of name → {{from, read}}");
+            self.refuse("out_of_range", rp.clone(), reads, what);
+        }
+        for (name, r) in reads.as_object().into_iter().flatten() {
+            let np = join(&rp, name);
+            let r = &self.obj(r, &np, &["from", "read"]);
+            let word = r.get("read").and_then(Value::as_str).unwrap_or_default();
+            let from = r.get("from").and_then(Value::as_str).unwrap_or_default();
+            let read =
+                Read::named(word).filter(|x| !matches!(x, Read::Pose | Read::ParticlePositions));
+            match read {
+                Some(read) if subject(read, from, bodies, joints) => {
+                    named.insert(name.clone(), (from.to_string(), read));
+                }
+                Some(read) => {
+                    let what = format!(
+                        "{from:?} is not a {} of this world, which {word} reads",
+                        subject_name(read)
+                    );
+                    self.refuse("ref_unresolved", join(&np, "from"), &r["from"], what);
+                }
+                None => {
+                    let what = format!("{np} needs a read that is a number or a vector");
+                    self.refuse("physics.missing_field", join(&np, "read"), &r["read"], what);
+                }
+            }
+        }
+        let expr = match super::data::compile(&text) {
+            Ok(e) => e,
+            Err(why) => {
+                self.refuse("out_of_range", ep, &o["expr"], why);
+                return None;
+            }
+        };
+        if expr.vars.is_empty() {
+            let what = "an expr names at least one of its output's reads".to_string();
+            self.refuse("physics.missing_field", ep.clone(), &o["expr"], what);
+        }
+        let mut reads = Vec::new();
+        for var in &expr.vars {
+            match named.get(var) {
+                Some(r) => reads.push(r.clone()),
+                None => {
+                    let what =
+                        format!("{var} is not one of the output's reads, which its expr names");
+                    self.refuse("ref_unresolved", ep.clone(), &o["expr"], what);
+                }
+            }
+        }
+        Some(Output {
+            to: self.text(o, "to", p),
+            expr: Some(Formula { expr, reads }),
+            ..rest
+        })
+    }
+
+    /// An output reading a body, a joint or a soft body's particles, or (#2248) an `expr` over
+    /// its named reads; a character body's reads (#182) are refused from any other body.
     pub(super) fn output(
         &mut self,
         v: &Value,
@@ -322,25 +552,24 @@ impl Reader {
         soft: &BTreeMap<String, Soft>,
     ) -> Option<Output> {
         let o = &self.obj(v, p, OUTPUT_KEYS);
-        for k in ["reduce", "average", "sample", "keep", "expr", "unit"] {
-            if let Some(x) = o.get(k) {
-                self.refuse("physics.unsupported", join(p, k), x, format!("an output's {k} isn't run by this backend interface yet; {OUTPUT_LATER} brings it"));
-            }
+        let rest = Output {
+            from: String::new(),
+            read: Read::Expr,
+            to: None,
+            hold: self.word(o, "interpolate", p, "linear", &["linear", "hold"]) == "hold",
+            skin: None,
+            crossings: Vec::new(),
+            sampled: self.sampled(o, p),
+            reduce: None,
+            expr: None,
+            unit: self.text(o, "unit", p),
+        };
+        if o.contains_key("expr") || o.contains_key("reads") {
+            return self.formula(o, p, bodies, joints, rest);
         }
         let name = o.get("read").and_then(Value::as_str).unwrap_or_default();
         let read = match (Read::named(name), name) {
             (Some(r), _) => r,
-            (None, "grounded" | "sliding") => {
-                self.refuse(
-                    "physics.unsupported",
-                    join(p, "read"),
-                    &o["read"],
-                    format!(
-                        "the read {name} isn't run by this backend interface yet; #182 brings it"
-                    ),
-                );
-                return None;
-            }
             (None, _) => {
                 let names: Vec<&str> = READS.iter().map(|r| r.0).collect();
                 let at = o.get("read").unwrap_or(&Value::Null);
@@ -353,10 +582,13 @@ impl Reader {
                 return None;
             }
         };
-        let hold = self.word(o, "interpolate", p, "linear", &["linear", "hold"]) == "hold";
         let from = o.get("from").unwrap_or(&Value::Null);
         if read == Read::ParticlePositions || o.get("to").is_some_and(Value::is_object) {
-            return self.particles(o, p, read, hold, soft);
+            return self.particles(o, p, read, rest, soft);
+        }
+        if let Some(x) = o.get("reduce") {
+            let what = format!("reduce folds the particles a from names; {name} reads one value");
+            self.refuse("out_of_range", join(p, "reduce"), x, what);
         }
         let to = self.text(o, "to", p);
         // #1921: `<body>#*` reads every element body of an each: body, and writes each one's pose
@@ -384,24 +616,25 @@ impl Reader {
                 self.refuse("ref_unresolved", join(p, key), at, what);
                 return None;
             }
+            self.unsampled(o, p, "an output from <body>#* writes a pose a row");
             return Some(Output {
                 from: format!("{body}#*"),
                 read,
                 to,
-                hold,
-                skin: None,
-                crossings: Vec::new(),
+                ..rest
             });
         }
+        // #251: a vehicle body's wheel, `<body>#<wheel>`, reads its pose and its contact count.
+        let wheel = |id: &str| {
+            let (body, name) = id.split_once('#')?;
+            bodies.get(body)?.vehicle.as_ref()?.wheels.get(name)
+        };
         let found = from.as_str().filter(|id| {
-            if read.of_joint() {
-                joints.contains_key(*id)
-            } else {
-                bodies.contains_key(*id)
-            }
+            subject(read, id, bodies, joints)
+                || (wheel(id).is_some() && matches!(read, Read::Pose | Read::ContactCount))
         });
         let Some(id) = found else {
-            let what = if read.of_joint() { "joint" } else { "body" };
+            let what = subject_name(read);
             self.refuse(
                 "ref_unresolved",
                 join(p, "from"),
@@ -410,6 +643,9 @@ impl Reader {
             );
             return None;
         };
+        if read == Read::Pose || id.contains('#') {
+            self.unsampled(o, p, "a pose or a wheel's reading is neither");
+        }
         let mut crossings = Vec::new();
         if let Some(v) = o.get("crossings") {
             let path = join(p, "crossings");
@@ -432,21 +668,21 @@ impl Reader {
             from: id.into(),
             read,
             to,
-            hold,
-            skin: None,
             crossings,
+            ..rest
         })
     }
 
     /// An output of `particle_positions` (#524): every particle of a soft body, or with
     /// `#<address>` one particle, `#pins` its pinned ones; with `to: {skin: {item, material}}`
-    /// the whole body drawn on an item built on its lattice. A skin reads only particles.
+    /// the whole body drawn on an item built on its lattice. A skin reads only particles. #2248:
+    /// with `reduce`, the particles it names fold into one position, their sum, mean or max.
     fn particles(
         &mut self,
         o: &Map<String, Value>,
         p: &str,
         read: Read,
-        hold: bool,
+        rest: Output,
         soft: &BTreeMap<String, Soft>,
     ) -> Option<Output> {
         let from = o.get("from").unwrap_or(&Value::Null);
@@ -490,6 +726,20 @@ impl Reader {
             }
             _ => None,
         };
+        let reduce = match self.word(o, "reduce", p, "", &["sum", "mean", "max"]) {
+            "sum" => Some(Reduce::Sum),
+            "mean" => Some(Reduce::Mean),
+            "max" => Some(Reduce::Max),
+            _ => None,
+        };
+        if reduce.is_some() && (skin.is_some() || part.is_some_and(|a| a != "pins")) {
+            let what =
+                "reduce folds a soft body's particles or its #pins, not a skin or one particle";
+            self.refuse("out_of_range", join(p, "reduce"), &o["reduce"], what.into());
+        }
+        if reduce.is_none() {
+            self.unsampled(o, p, "particle_positions without reduce is one a particle");
+        }
         Some(Output {
             from: name.into(),
             read,
@@ -498,9 +748,9 @@ impl Reader {
             } else {
                 self.text(o, "to", p)
             },
-            hold,
             skin,
-            crossings: Vec::new(),
+            reduce,
+            ..rest
         })
     }
 }

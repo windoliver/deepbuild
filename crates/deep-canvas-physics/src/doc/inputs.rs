@@ -6,14 +6,14 @@ use std::collections::BTreeMap;
 use deep_canvas::expr::Expr;
 use serde_json::{json, Map, Value};
 
-use super::{data, join, Body, Reader, Refusal};
-
-/// The issue that brings the input kinds and fields this backend interface doesn't run yet.
-pub const INPUTS_LATER: &str = "#2371";
+use super::{data, join, Body, Force, Reader, Refusal};
 
 /// The input kinds this backend interface runs, each with its fields and their defaults; #191
-/// runs `deactivate`, which the behavior kit's sensor fixture needs.
-const KINDS: [(&str, &[(&str, Field)]); 6] = [
+/// runs `deactivate`, which the behavior kit's sensor fixture needs; #182 a character body's
+/// `move {velocity}`, `jump {height}`, `launch {vertical}`, `place {pose}` and `crouch {on}`;
+/// #251 a vehicle body's, `place` too; #2371 `set`, `activate` and `blast`, and a poke's
+/// `address`, `radius` and `falloff`.
+const KINDS: [(&str, &[(&str, Field)]); 15] = [
     (
         "grab",
         &[
@@ -31,34 +31,53 @@ const KINDS: [(&str, &[(&str, Field)]); 6] = [
             ("linear", Field::Vec3([0.0; 3])),
             ("angular", Field::Vec3([0.0; 3])),
             ("from", Field::From),
+            ("vertical", Field::Num(0.0, f64::MIN)),
         ],
     ),
-    ("move", &[("to", Field::Vec3([0.0; 3]))]),
+    (
+        "move",
+        &[
+            ("to", Field::Vec3([0.0; 3])),
+            ("velocity", Field::Vec3([0.0; 3])),
+        ],
+    ),
+    ("jump", &[("height", Field::Num(1.0, 0.0))]),
+    ("place", &[("pose", Field::Pose)]),
+    ("crouch", &[("on", Field::Bool(true))]),
     (
         "poke",
         &[
             ("point", Field::Vec3([0.0; 3])),
+            ("address", Field::Address),
             ("impulse", Field::Vec3([0.0; 3])),
             ("push", Field::Vec3([0.0; 3])),
+            ("radius", Field::Num(0.0, 0.0)),
+            ("falloff", Field::Num(0.0, 0.0)),
         ],
     ),
     ("release", &[("keeps_velocity", Field::Bool(true))]),
+    (
+        "set",
+        &[("path", Field::Path), ("value", Field::Num(1.0, f64::MIN))],
+    ),
+    ("activate", &[]),
     ("deactivate", &[]),
+    (
+        "blast",
+        &[
+            ("at", Field::Vec3([0.0; 3])),
+            ("radius", Field::Num(0.0, 0.0)),
+            ("falloff", Field::Num(0.0, 0.0)),
+            ("impulse_per_length", Field::Num(0.0, f64::MIN)),
+        ],
+    ),
+    ("drive", &[("force", Field::Num(0.0, f64::MIN))]),
+    ("steer", &[("angle", Field::Num(0.0, f64::MIN))]),
+    ("brake", &[("force", Field::Num(0.0, 0.0))]),
 ];
 
-/// The kinds and fields the design gives that wait on `INPUTS_LATER` or the issue named.
-const LATER: [(&str, &str); 10] = [
-    ("set", INPUTS_LATER),
-    ("activate", INPUTS_LATER),
-    ("blast", INPUTS_LATER),
-    ("jump", "#182"),
-    ("drive", "#251"),
-    ("steer", "#251"),
-    ("brake", "#251"),
-    ("poke.address", INPUTS_LATER),
-    ("poke.radius", INPUTS_LATER),
-    ("poke.falloff", INPUTS_LATER),
-];
+/// #251: the kinds only a vehicle body takes; a character body takes `place` too (#182).
+pub const VEHICLE_INPUTS: [&str; 4] = ["drive", "steer", "brake", "place"];
 
 #[derive(Clone, Copy)]
 enum Field {
@@ -71,6 +90,13 @@ enum Field {
     /// Where a launch places its body first (#540): a position `[x, y, z]`, a pose `{pos, rot}`,
     /// or `pose`, the pose its `from.pos` and `from.rot` data fields give; none by default.
     From,
+    /// #182, #251: where a place puts its body, a pose `{pos, rot}`.
+    Pose,
+    /// #2371: what a set sets, the word `strength`: a force's, the one field the design marks
+    /// settable.
+    Path,
+    /// #2371: where a poke lands in place of its point, a body's anchor written `ID#anchor`.
+    Address,
 }
 
 /// The issue that brings a launch from a body's anchor.
@@ -124,6 +150,31 @@ pub fn resolved(
     Ok(out)
 }
 
+/// #2371: the refusal of a poke's `address` in `data`, at `path`, that names no anchor of a
+/// body of the world.
+pub fn addressed(
+    bodies: &BTreeMap<String, Body>,
+    data: &Map<String, Value>,
+    path: &str,
+) -> Result<(), Box<Refusal>> {
+    let Some(address) = data.get("address").and_then(Value::as_str) else {
+        return Ok(());
+    };
+    let (body, anchor) = address.split_once('#').unwrap_or((address, ""));
+    if bodies
+        .get(body)
+        .is_some_and(|b| b.anchors.contains_key(anchor))
+    {
+        return Ok(());
+    }
+    Err(Box::new(Refusal {
+        code: "ref_unresolved",
+        path: join(path, "address"),
+        actual: json!(address),
+        what: format!("{address} names no anchor of a body of this world"),
+    }))
+}
+
 fn bad(path: String, actual: &Value, what: String) -> Box<Refusal> {
     Box::new(Refusal {
         code: "out_of_range",
@@ -134,16 +185,20 @@ fn bad(path: String, actual: &Value, what: String) -> Box<Refusal> {
 }
 
 /// `v` as field `key` of `kind`, or its refusal.
+/// #194: the number fields of an input kind, in the kind's order: what a logic item that fires an
+/// input of this kind writes in its slot, after the count.
+pub fn number_fields(kind: &str) -> Vec<&'static str> {
+    KINDS
+        .iter()
+        .find(|(n, _)| *n == kind)
+        .map_or(&[][..], |k| k.1)
+        .iter()
+        .filter(|(_, f)| matches!(f, Field::Num(..)))
+        .map(|(n, _)| *n)
+        .collect()
+}
+
 fn field(kind: &str, key: &str, v: &Value, path: &str) -> Result<Value, Box<Refusal>> {
-    let later = format!("{kind}.{key}");
-    if let Some((_, issue)) = LATER.iter().find(|(n, _)| *n == later) {
-        return Err(Box::new(Refusal {
-            code: "physics.unsupported",
-            path: path.into(),
-            actual: v.clone(),
-            what: format!("{later} isn't run by this backend interface yet; {issue} brings it"),
-        }));
-    }
     let fields = KINDS
         .iter()
         .find(|(n, _)| *n == kind)
@@ -182,17 +237,15 @@ fn field(kind: &str, key: &str, v: &Value, path: &str) -> Result<Value, Box<Refu
                 }))
             }
             Value::Array(_) => three(v),
-            Value::Object(o) => {
-                o.keys().all(|k| k == "pos" || k == "rot")
-                    && o.get("pos").is_none_or(three)
-                    && o.get("rot").is_none_or(|r| {
-                        r.as_array().is_some_and(|a| {
-                            (3..=4).contains(&a.len()) && a.iter().all(|x| x.as_f64().is_some())
-                        })
-                    })
-            }
+            Value::Object(_) => pose(v),
             _ => false,
         },
+        Field::Pose => pose(v),
+        Field::Path => v == "strength",
+        Field::Address => v
+            .as_str()
+            .and_then(|a| a.split_once('#'))
+            .is_some_and(|(body, anchor)| !body.is_empty() && !anchor.is_empty()),
     };
     if ok {
         Ok(v.clone())
@@ -203,9 +256,25 @@ fn field(kind: &str, key: &str, v: &Value, path: &str) -> Result<Value, Box<Refu
             Field::Bool(_) => "true or false".into(),
             Field::Plane => "view, ground or {normal: vec3}".into(),
             Field::From => "a position [x, y, z], a pose {pos, rot} or pose".into(),
+            Field::Pose => "a pose {pos, rot}".into(),
+            Field::Path => "strength, the field of a force a set sets".into(),
+            Field::Address => "a body's anchor, written ID#anchor".into(),
         };
         Err(bad(path.into(), v, format!("{path} must be {want}")))
     }
+}
+
+/// Whether `v` is a pose `{pos, rot}`: three numbers and a quaternion or degrees, either absent.
+fn pose(v: &Value) -> bool {
+    v.as_object().is_some_and(|o| {
+        o.keys().all(|k| k == "pos" || k == "rot")
+            && o.get("pos").is_none_or(three)
+            && o.get("rot").is_none_or(|r| {
+                r.as_array().is_some_and(|a| {
+                    (3..=4).contains(&a.len()) && a.iter().all(|x| x.as_f64().is_some())
+                })
+            })
+    })
 }
 
 /// Whether `v` is three finite numbers.
@@ -233,15 +302,20 @@ fn own(kind: &str) -> Map<String, Value> {
         .map_or(&[][..], |k| k.1);
     fields
         .iter()
-        .filter(|(n, _)| !matches!(*n, "point" | "impulse" | "push") || kind == "grab")
-        .filter(|(n, _)| *n != "from")
+        // A poke's fields have no default: it takes the point or address, the impulse or push
+        // and the radius it is written with.
+        .filter(|_| kind != "poke")
+        // #182: a launch's vertical, a jump's height and a place's pose have no default (a jump
+        // without a height takes its body's own), nor a move's velocity beside a grab's `to`.
+        .filter(|(n, _)| !matches!(*n, "from" | "vertical" | "height" | "pose" | "velocity"))
         .map(|(n, f)| {
             let v = match f {
                 Field::Num(d, _) => json!(d),
                 Field::Vec3(d) => json!(d),
                 Field::Bool(b) => json!(b),
                 Field::Plane => json!("view"),
-                Field::From => Value::Null,
+                Field::Path => json!("strength"),
+                Field::From | Field::Pose | Field::Address => Value::Null,
             };
             ((*n).to_string(), v)
         })
@@ -269,11 +343,22 @@ impl Reader {
         (every, budget as u64)
     }
 
-    /// `inputs: {ID → {kind, targets, on, ...defaults}}`, each target a body of the world.
+    /// #2371: a force's `strength`: a number, 1 by default, or as a string the `set` input that
+    /// sets it, whose `value` it then starts at (`set_strengths`).
+    pub(super) fn strength(&mut self, f: &Map<String, Value>, p: &str) -> (f64, Option<String>) {
+        match f.get("strength").and_then(Value::as_str) {
+            Some(input) => (1.0, Some(input.into())),
+            None => (self.num(f, "strength", p, 1.0, f64::MIN, f64::MAX), None),
+        }
+    }
+
+    /// `inputs: {ID → {kind, targets, on, ...defaults}}`, each target a body of the world, or
+    /// for a `set` (#2371) a force whose `strength` names the input, which then takes its value.
     pub(super) fn inputs(
         &mut self,
         m: &Map<String, Value>,
         bodies: &BTreeMap<String, Body>,
+        forces: &mut BTreeMap<String, Force>,
     ) -> BTreeMap<String, Input> {
         let mut out = BTreeMap::new();
         for (id, v) in self.map(m, "inputs") {
@@ -288,11 +373,6 @@ impl Reader {
                 continue;
             };
             let kind = o.get("kind").and_then(Value::as_str).unwrap_or("");
-            if let Some((_, issue)) = LATER.iter().find(|(n, _)| *n == kind) {
-                let what = format!("the input kind {kind} isn't run by this backend interface yet; {issue} brings it");
-                self.refuse("physics.unsupported", join(&p, "kind"), &o["kind"], what);
-                continue;
-            }
             if !KINDS.iter().any(|(n, _)| *n == kind) {
                 let names: Vec<&str> = KINDS.iter().map(|(n, _)| *n).collect();
                 let what = format!("{p}/kind must be one of {}", names.join(", "));
@@ -331,6 +411,12 @@ impl Reader {
                 .collect();
             for (k, x, path) in given {
                 if let (Some(text), true) = (x.as_str(), path.contains("/data/")) {
+                    // #552: this copy's player is a view value no world input reads.
+                    if text.contains("match.me") {
+                        let what = format!("{path} names match.me, this copy's player: a view value no world input reads, so every copy's world stays the same");
+                        self.refuse("out_of_range", path, &x, what);
+                        continue;
+                    }
                     if !takes_expr(kind, &k) {
                         let what = format!("{path} is not a field of {kind}");
                         self.refuse("unknown_field", path, &x, what);
@@ -356,6 +442,9 @@ impl Reader {
                     Err(r) => self.out.push(*r),
                 }
             }
+            if let Err(r) = addressed(bodies, &defaults, &p) {
+                self.out.push(*r);
+            }
             if kind == "poke" && defaults.contains_key("impulse") && defaults.contains_key("push") {
                 self.refuse(
                     "out_of_range",
@@ -372,7 +461,37 @@ impl Reader {
                 .flatten()
                 .enumerate()
             {
+                if kind == "set" {
+                    let named = |n: &&str| {
+                        forces
+                            .get(*n)
+                            .is_some_and(|f| f.set_by.as_ref() == Some(id))
+                    };
+                    match t.as_str().filter(named) {
+                        Some(n) => targets.push(n.to_string()),
+                        None => self.refuse(
+                            "ref_unresolved",
+                            format!("{p}/targets/{i}"),
+                            t,
+                            format!("{t} names no force of this world whose strength is {id}"),
+                        ),
+                    }
+                    continue;
+                }
                 match t.as_str().filter(|n| bodies.contains_key(*n)) {
+                    Some(n)
+                        if VEHICLE_INPUTS.contains(&kind)
+                            && bodies[n].vehicle.is_none()
+                            && !(kind == "place" && bodies[n].character.is_some()) =>
+                    {
+                        let what = match kind {
+                            "place" => format!(
+                                "place moves a vehicle or character body, and {n} is neither"
+                            ),
+                            _ => format!("{kind} moves a vehicle body, and {n} isn't one"),
+                        };
+                        self.refuse("out_of_range", format!("{p}/targets/{i}"), t, what);
+                    }
                     Some(n) => targets.push(n.to_string()),
                     None => self.refuse(
                         "ref_unresolved",
@@ -383,7 +502,10 @@ impl Reader {
                 }
             }
             if targets.is_empty() {
-                let what = format!("{p} must target at least one body");
+                let what = match kind {
+                    "set" => format!("{p} must target at least one force"),
+                    _ => format!("{p} must target at least one body"),
+                };
                 self.refuse(
                     "physics.missing_field",
                     join(&p, "targets"),
@@ -404,7 +526,35 @@ impl Reader {
                 },
             );
         }
+        self.set_strengths(forces, &out);
         out
+    }
+
+    /// #2371: each force whose `strength` names an input takes that `set` input's `value` until
+    /// an entry sets it, or is refused when the name isn't a `set` input that targets it.
+    fn set_strengths(
+        &mut self,
+        forces: &mut BTreeMap<String, Force>,
+        inputs: &BTreeMap<String, Input>,
+    ) {
+        for (id, f) in forces.iter_mut() {
+            let Some(name) = &f.set_by else { continue };
+            let by = inputs
+                .get(name)
+                .filter(|i| i.kind == "set" && i.targets.contains(id));
+            match by.and_then(|i| i.defaults.get("value")?.as_f64()) {
+                Some(value) => f.strength = value,
+                None => {
+                    let what = format!("{name} is not a set input of this world that targets {id}");
+                    self.refuse(
+                        "ref_unresolved",
+                        format!("forces/{id}/strength"),
+                        &json!(name),
+                        what,
+                    );
+                }
+            }
+        }
     }
 
     fn on(&mut self, v: &Value, p: &str) -> Option<On> {
@@ -434,5 +584,63 @@ impl Reader {
             }),
             _ => bad(self),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::{json, Value};
+
+    /// A world whose force `push` has `strength` and whose one input is `input`, as read.
+    fn read(
+        strength: Value,
+        input: Value,
+    ) -> Result<crate::doc::World, Vec<(&'static str, String)>> {
+        let doc = json!({
+            "kind": "physics.world@1",
+            "capacity": {"bodies": 1, "shapes": 1, "joints": 0, "contacts": 0, "particles": 0},
+            "contact_materials": {"m": {"density": 1000}},
+            "shapes": {"ball": {"kind": "sphere", "radius": 0.25}},
+            "bodies": {"puck": {"kind": "dynamic", "shapes": [{"shape": "ball", "contact_material": "m"}]}},
+            "forces": {"push": {"kind": {"uniform": {"accel": [2, 0, 0]}}, "applies_to": ["puck"], "strength": strength}},
+            "inputs": {"throttle": input}
+        });
+        crate::doc::read(&doc).map_err(|e| e.into_iter().map(|r| (r.code, r.path)).collect())
+    }
+
+    /// A force's strength and the set input that sets it name each other, and the force starts
+    /// at the input's value; a set of anything else, and a poke's address that isn't an anchor
+    /// of a body, are refused at their field.
+    #[test]
+    fn a_strength_and_its_set_input_name_each_other() {
+        let set =
+            |path: &str| json!({"kind": "set", "targets": ["push"], "path": path, "value": 0.5});
+        let w = read(json!("throttle"), set("strength")).unwrap();
+        assert_eq!(w.forces["push"].strength, 0.5);
+        assert_eq!(w.inputs["throttle"].targets, ["push"]);
+
+        let refused = |strength: Value, input: Value, code: &'static str, path: &str| {
+            let all = read(strength, input).err().unwrap_or_default();
+            assert!(all.contains(&(code, path.to_string())), "{all:?}");
+        };
+        let target = "inputs/throttle/targets/0";
+        refused(json!(2), set("strength"), "ref_unresolved", target);
+        let halt = json!({"kind": "deactivate", "targets": ["puck"]});
+        refused(
+            json!("throttle"),
+            halt,
+            "ref_unresolved",
+            "forces/push/strength",
+        );
+        refused(
+            json!("throttle"),
+            set("accel"),
+            "out_of_range",
+            "inputs/throttle/path",
+        );
+        let poke = json!({"kind": "poke", "targets": ["puck"], "address": "rim"});
+        refused(json!(1), poke, "out_of_range", "inputs/throttle/address");
+        let poke = json!({"kind": "poke", "targets": ["puck"], "address": "puck#rim"});
+        refused(json!(1), poke, "ref_unresolved", "inputs/throttle/address");
     }
 }

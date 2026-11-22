@@ -12,7 +12,7 @@ import { createInterface } from 'node:readline';
 import { CODES, codePage } from './codes.js';
 import { hubAddress } from './paths.js';
 import { shedStartup } from './settle.js';
-import { actionToolList, nearest, toolList } from './tools.js';
+import { actionToolList, instructionsFor, nearest, toolList } from './tools.js';
 import { activePlant, line, refusal, startOf, type Refusal } from './wire.js';
 
 type Obj = Record<string, unknown>;
@@ -83,14 +83,18 @@ class Hub {
 
   /** The client's own name, from its initialize. */
   private client: unknown;
+  /** The client's name and version, from its initialize: the hub holds each reply under what that client keeps (#2896). */
+  private info: { name: unknown; version: unknown } | undefined;
   /** Codex's `tool_timeout_sec`, read at each call; 0, so ANSWER_MS, until a Codex client names itself. */
   private toolS: () => number = () => 0;
   /**
    * Takes the client's name. Codex's settings load for Codex alone, since no other client's session reads them, and
    * what loading them leaves is given back as the start's garbage was.
    */
-  async named(client: unknown): Promise<void> {
+  async named(info: { name?: unknown; version?: unknown } | undefined): Promise<void> {
+    const client = info?.name;
     this.client = client;
+    this.info = { name: client ?? null, version: info?.version ?? null };
     if (!isCodex(client)) return;
     this.toolS = (await import('./codex-settings.js')).toolTimeoutS;
     shedStartup();
@@ -106,9 +110,25 @@ class Hub {
     const reply = await new Promise<Obj>((resolve) => {
       const timer = setTimeout(() => { this.waiting.delete(id); resolve({ error: unreachable('it did not answer in time') }); }, answerWaitMs(this.client, this.toolS));
       this.waiting.set(id, (message) => { clearTimeout(timer); resolve(message); });
-      this.sock!.write(line({ id, method: 'mcp.call', params: { tool, arguments: args ?? {} } }));
+      this.sock!.write(line({ id, method: 'mcp.call', params: { tool, arguments: args ?? {}, ...(this.info ? { client: this.info } : {}) } }));
     }).finally(() => { if (this.inFlight.get(mine) === id) this.inFlight.delete(mine); });
     return 'error' in reply ? { ok: false, value: reply.error } : { ok: true, value: reply.result };
+  }
+  /**
+   * The tools as the hub publishes them and holds calls to (#1415), over this connection, which then closes: the calls'
+   * own connection still says hello at the first call, once the agent's session has started. Undefined when the hub
+   * can't be reached in time.
+   */
+  async tools(): Promise<unknown[] | undefined> {
+    if (!(await this.connect()) || !this.sock) return undefined;
+    const id = `mcp#${++this.ids}`;
+    const reply = await new Promise<Obj>((resolve) => {
+      const timer = setTimeout(() => { this.waiting.delete(id); resolve({}); }, UNREACHABLE_MS);
+      this.waiting.set(id, (message) => { clearTimeout(timer); resolve(message); });
+      this.sock!.write(line({ id, method: 'mcp.tools', params: {} }));
+    }).finally(() => this.sock?.destroy());
+    const tools = (reply.result as Obj | undefined)?.tools;
+    return Array.isArray(tools) ? tools : undefined;
   }
   /** The client cancelled a request (#1923): the hub is told that call's caller is gone, and its reply is never sent. */
   cancel(request: unknown): boolean {
@@ -153,14 +173,15 @@ export async function runMcp(server: 'deep' | 'deep-actions' = 'deep'): Promise<
     if (id === undefined) continue; // a notification
     switch (method) {
       case 'initialize':
-        await hub.named((params.clientInfo as Obj | undefined)?.name);
-        send({ id, result: { protocolVersion: typeof params.protocolVersion === 'string' ? params.protocolVersion : '2025-06-18', capabilities: { tools: {}, resources: {} }, serverInfo: { name: server, version: '0.0.0' } } });
+        await hub.named(params.clientInfo as Obj | undefined);
+        send({ id, result: { protocolVersion: typeof params.protocolVersion === 'string' ? params.protocolVersion : '2025-06-18', capabilities: { tools: {}, resources: {} }, serverInfo: { name: server, version: '0.0.0' }, instructions: instructionsFor(server) } });
         break;
       case 'ping':
         send({ id, result: {} });
         break;
       case 'tools/list':
-        send({ id, result: { tools } });
+        // The hub's list while it can be reached, so what is listed is what its check holds a call to; else this build's.
+        send({ id, result: { tools: (server === 'deep' ? await new Hub().tools() : undefined) ?? tools } });
         break;
       case 'resources/list':
         send({ id, result: { resources: CODES.map((page) => ({ uri: `deep://codes/${page.code}`, name: page.code, description: page.meaning, mimeType: 'application/json' })) } });

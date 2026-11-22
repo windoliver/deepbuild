@@ -1,0 +1,29 @@
+
+ RUN  v5.0.5 <home>/doneright-2365-repair
+
+ ❯ tests/acceptance/2365/rewrite.test.ts (3 tests | 1 failed) 6472ms
+   ❯ #2365 AC4 a transcript whose first megabyte was rewritten after its last copy is copied again from its start (3)
+     ✓ #2365 AC4 rewritten and grown: the archived copy equals the rewritten transcript scrubbed, and the session's handles resolve to the rewritten text 3206ms
+     ✓ #2365 AC4 one letter rewritten in the first megabyte, the size unchanged: copied again, and its handle resolves to the new text 1316ms
+     × #2365 AC4 (wrong program) an archive that appends the rewritten file's tail to the old parts fails, naming line 6, the first line that differs 1426ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2365/rewrite.test.ts > #2365 AC4 a transcript whose first megabyte was rewritten after its last copy is copied again from its start > #2365 AC4 (wrong program) an archive that appends the rewritten file's tail to the old parts fails, naming line 6, the first line that differs
+AssertionError: the check fails on the twin, naming the first line that differs: expected [Function] to throw error including 'first differs at line 6 (message 935f…' but got '#2365 AC4 (twin): no reading of sessi…'
+
+Expected: "first differs at line 6 (message 935f60f9-f5e5-4eaa-a9eb-44b04547b2ad)"
+Received: "#2365 AC4 (twin): no reading of session:b97911e110544660a4007e9544b39c50's 3 copy event(s) joins to the transcript scrubbed. The closest, parts 4d1841fe9309, 22948ca7dab1, 9ae8f4182b3c (3 parts: the evidence of events 1…3 of 3), first differs at line 6, byte 7282: the transcript has «{"parentUuid":"5dc49bd1-53d6-4c3b-a3d6-f617b63d0421","isSidechain":false,"userType":"external","cwd":"<fixture>/src/this-69","sessionId":"b97911e1-1054-4660-a4… (277 chars)» and the parts have «{"parentUuid":"5dc49bd1-53d6-4c3b-a3d6-f617b63d0421","isSidechain":false,"userType":"external","cwd":"<fixture>/src/this-69","sessionId":"b97911e1-1054-4660-a4… (241 chars)»"
+
+ ❯ tests/acceptance/2365/rewrite.test.ts:117:148
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  21:40:11
+   Duration  9.09s (tests 76%, transform 20%, import 3%, setup 1%)
+
+EXIT 1

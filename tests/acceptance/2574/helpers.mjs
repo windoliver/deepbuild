@@ -3,16 +3,12 @@
 // a scratch tree as #1115's tree() does, with one change: every job the run can start (each lint script, the package
 // build, each test file) is a probe that notes when it started and the DEEP_THROTTLE it ran under. Nothing here imports
 // the code under test; this checkout's real scripts/affected.mjs and scripts/throttle.mjs run in the tree.
-import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, symlinkSync, writeFileSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
-import { CHECKOUT, gitIn, hold, lanesLists, started, until, write } from '../1115/helpers.mjs';
+import { CHECKOUT, gitIn, lanesLists, write } from '../1115/helpers.mjs';
 
 export { dump, LONG, sandbox, stop, summary, timedPath, until } from '../1115/helpers.mjs';
-
-// docs/parallel-proof.md, section 6: the test class has 2 slots on the Mac, 4 on the Spark (Linux).
-export const LIMIT = process.platform === 'darwin' ? 2 : 4;
 
 const probe = (job) => `import { appendFileSync } from 'node:fs';
 if (process.env.T2574_PROBE) appendFileSync(process.env.T2574_PROBE, JSON.stringify({ job: ${JSON.stringify(job)}, at: Date.now(), throttle: process.env.DEEP_THROTTLE ?? null }) + '\\n');
@@ -117,11 +113,4 @@ export function start(box, { cwd, env }, args, extra = {}) {
   child.out = () => stdout;
   child.done = new Promise((resolve) => child.on('close', (status, signal) => resolve({ status, signal, stdout, stderr })));
   return child;
-}
-
-/** Fills every test slot of the sandbox's table with other sessions' holders; resolves with them once all hold. */
-export async function fill(box, ms) {
-  const holders = Array.from({ length: LIMIT }, (_, index) => hold(box, 'test', `neighbour-${index}`, ms));
-  assert.ok(await until(() => started(box) === LIMIT, 60_000), `the neighbours did not take all ${LIMIT} test grants`);
-  return holders;
 }

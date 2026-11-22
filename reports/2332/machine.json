@@ -1,0 +1,10 @@
+{
+  "model": "Mac17,10",
+  "chip": "Apple M5 Max",
+  "memoryBytes": 68719476736,
+  "power": "ac",
+  "lowPowerMode": false,
+  "thermalState": "fair",
+  "macosBuild": "26B8119",
+  "node": "24.22.2"
+}

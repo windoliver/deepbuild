@@ -3,13 +3,13 @@
 //! surface is the #394 acceptance README's, with #399's `replaced`, `ms` (on a line that lays new
 //! nodes into the kept picture), the kept `memory` on a refusal and the planted `from_scratch`;
 //! #1417's `timed: true` adds `ms` to a fresh layout's answer, the time its cost is fitted to.
+//! #1826's suite adds `layout.algo` `tree`, `treemap` (with `layout.box` and the answer's `boxes`)
+//! and `grid`, and the planted `rank_by_id` and `even_treemap`.
 
 use std::io::{self, BufRead, Write};
 use std::time::Instant;
 
-use deep_canvas_graph::{
-    keep, layered, read_graph, read_layout, read_memory, write_memory, Refused,
-};
+use deep_canvas_graph::{lay, read_graph, read_layout, read_memory, write_memory, Algo, Refused};
 use serde_json::{json, Value};
 
 fn bad_input() -> Value {
@@ -30,10 +30,17 @@ fn layout_line(input: &Value) -> Result<Value, Refused> {
             names: String::new(),
         });
     };
-    // #399 AC1's wrong program: a from-scratch layout with the same seed, the memory ignored.
-    let from_scratch = match input.get("planted") {
-        None => false,
-        Some(v) if v == "from_scratch" => true,
+    // The wrong programs, reachable only here. #399 AC1's `from_scratch`: a from-scratch layout
+    // with the same seed, the memory ignored. #1826 AC1's `rank_by_id`: the layout's places handed
+    // out in ID order, so a node's rank is its ID's, not its depth's. #1826 AC2's `even_treemap`:
+    // every leaf's `size` read as 1, so the box splits evenly.
+    let planted = match input.get("planted") {
+        None => "",
+        Some(Value::String(p))
+            if ["from_scratch", "rank_by_id", "even_treemap"].contains(&p.as_str()) =>
+        {
+            p.as_str()
+        }
         Some(_) => {
             return Err(Refused {
                 code: "bad_input",
@@ -52,42 +59,61 @@ fn layout_line(input: &Value) -> Result<Value, Refused> {
         }
     };
     let started = Instant::now();
-    let graph = read_graph(graph)?;
+    let elapsed_ms = || started.elapsed().as_secs_f64() * 1e3;
+    let mut graph = read_graph(graph)?;
     let layout = read_layout(layout)?;
-    let fresh = |graph, layout| -> Result<Value, Refused> {
-        let memory = layered(graph, layout)?;
-        let ms = started.elapsed().as_secs_f64() * 1e3;
-        let mut ranks: Vec<u32> = memory.values().map(|p| p.rank).collect();
-        ranks.sort_unstable();
-        ranks.dedup();
-        let mut answer = json!({"ok": true, "memory": write_memory(&memory), "replaced": ranks});
-        if timed {
-            answer["ms"] = json!(ms);
+    if planted == "even_treemap" {
+        for node in &mut graph.nodes {
+            node.size = 1.0;
         }
-        Ok(answer)
-    };
+    }
     let memory = match input.get("memory") {
-        None | Some(Value::Null) => return fresh(&graph, &layout),
-        Some(_) if from_scratch => return fresh(&graph, &layout),
-        Some(memory) => read_memory(memory)?,
+        None | Some(Value::Null) => None,
+        Some(_) if planted == "from_scratch" => None,
+        Some(memory) => Some(read_memory(memory)?),
     };
-    Ok(match keep(&graph, &layout, &memory)? {
-        // A line that lays nodes into the kept picture carries its layout's time; one that
-        // changes nothing stays the same bytes in every process (#394).
-        Ok((kept, replaced)) if replaced.is_empty() => {
-            json!({"ok": true, "memory": write_memory(&kept), "replaced": replaced})
+    let mut laid = match lay(&graph, &layout, memory.as_ref())? {
+        Ok(laid) => laid,
+        Err(relayout) => {
+            return Ok(json!({
+                "ok": false,
+                "code": "layout.relayout_needed",
+                "memory": write_memory(&memory.unwrap_or_default()),
+                "names": relayout.nodes,
+                "relayout": write_memory(&relayout.offered),
+            }))
         }
-        Ok((kept, replaced)) => json!({"ok": true, "memory": write_memory(&kept),
-                                       "replaced": replaced,
-                                       "ms": started.elapsed().as_secs_f64() * 1e3}),
-        Err(relayout) => json!({
-            "ok": false,
-            "code": "layout.relayout_needed",
-            "memory": write_memory(&memory),
-            "names": relayout.nodes,
-            "relayout": write_memory(&relayout.offered),
-        }),
-    })
+    };
+    let ms = elapsed_ms();
+    if planted == "rank_by_id" {
+        let mut places: Vec<_> = laid.memory.values().copied().collect();
+        places.sort_by_key(|p| (p.rank, p.order));
+        laid.memory = laid.memory.into_keys().zip(places).collect();
+    }
+    // A layout afresh places every rank and carries its time when asked; a line that lays nodes
+    // into the kept picture carries it always; one that changes nothing stays the same bytes in
+    // every process (#394).
+    let (replaced, with_ms) = match &memory {
+        None => {
+            let mut ranks: Vec<u32> = laid.memory.values().map(|p| p.rank).collect();
+            ranks.sort_unstable();
+            ranks.dedup();
+            (ranks, timed)
+        }
+        Some(_) => {
+            let with_ms = !laid.replaced.is_empty();
+            (laid.replaced, with_ms)
+        }
+    };
+    let mut answer =
+        json!({"ok": true, "memory": write_memory(&laid.memory), "replaced": replaced});
+    if with_ms {
+        answer["ms"] = json!(ms);
+    }
+    if layout.algo == Algo::Treemap {
+        answer["boxes"] = json!(laid.boxes);
+    }
+    Ok(answer)
 }
 
 fn answer(line: &str) -> Value {

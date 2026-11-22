@@ -6,15 +6,13 @@
 // query on its definition's sample (#87, #1863); a work kind where a definition's drafted check names it (#68).
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { commandCheckKind } from '@deepbuild/checks-command';
-import { numbersFill, type NumbersSpec, type StatedNumber } from '@deepbuild/checks-numbers';
-import { independence, reviewFill, type ChangeSession, type ReviewerAnswer, type ReviewSpec } from '@deepbuild/checks-review';
-import { workFill } from '@deepbuild/checks-work';
+import type { NumbersSpec, StatedNumber } from '@deepbuild/checks-numbers';
+import type { ChangeSession, ReviewerAnswer, ReviewSpec } from '@deepbuild/checks-review';
 import type { CheckContext, CheckResult, CheckRunnerFill, CheckSpec } from '@deepbuild/conformance';
 import { admitKind } from '@deepbuild/gate';
 import type { JobRecord } from '@deepbuild/runner';
+import { checkHost } from '@deepbuild/supervisor';
 import type { TimingReport } from '@deepbuild/verdicts';
-import { claimNumbers, numbersChecks, runClaimNumbers } from './claim-numbers.js';
 import type { ClaimCheck } from './gate-runner.js';
 import { uncitedSpeeds } from './speed.js';
 import type { KindsOptions, RepoOf, ReviewOf, ReviewRound } from './checks-port.js';
@@ -34,7 +32,29 @@ interface Held { fill: CheckRunnerFill; routes: Route[] }
  * The check kinds a first-party plug-in holds, by the plug-in (#184): a definition reaches each through the extension
  * host, and with its plug-in off the check is BLOCKED, naming the plug-in, never run as a command.
  */
-const PLUGIN_KINDS: Record<string, string> = { playtest: 'deepbuild/playtest' };
+const PLUGIN_KINDS: Record<string, string> = {
+  playtest: 'deepbuild/playtest',
+  ...Object.fromEntries(['catalog.refs', 'catalog.reach', 'catalog.economy', 'catalog.bounds', 'catalog.copy', 'scenario.reach', 'catalog.dominance'].map((k) => [k, 'deepbuild/catalog'])),
+};
+/** #194: the spec field each catalog kind's input sits in, which names its catalog by asset ID (#832: dominance too). */
+const CATALOG_FIELDS = ['refs', 'reach', 'economy', 'bounds', 'copy', 'scenario', 'dominance'] as const;
+/**
+ * #194: `spec` with every catalog its kind's input names carried in `catalogs`, the bytes in base64 and the probe's
+ * record kept beside them (`catalogs/<sha256>.json`), from the evidence root `evidence`; one it doesn't hold is left
+ * out, and the plug-in refuses the check, naming it.
+ */
+function withCatalogs(spec: CheckSpec, evidence: string | undefined): CheckSpec {
+  if (!evidence || PLUGIN_KINDS[spec.kind] !== 'deepbuild/catalog') return spec;
+  const named = CATALOG_FIELDS.map((f) => (spec as unknown as Record<string, unknown>)[f] as { catalog?: unknown } | undefined).map((i) => i?.catalog).filter((c): c is string => typeof c === 'string' && /^[0-9a-f]{64}$/.test(c));
+  const catalogs: Record<string, { bytes: string; record: unknown }> = {};
+  for (const sha of named) {
+    try {
+      const bytes = readFileSync(join(evidence, sha.slice(0, 2), sha.slice(2)));
+      catalogs[sha] = { bytes: bytes.toString('base64'), record: JSON.parse(readFileSync(join(evidence, 'catalogs', `${sha}.json`), 'utf8')) };
+    } catch { /* not held: the plug-in names it */ }
+  }
+  return { ...spec, catalogs } as CheckSpec;
+}
 /** A plug-in kind's deadline when its check names none. */
 const PLUGIN_MS = 3_600_000;
 
@@ -64,17 +84,24 @@ const result = (outcome: CheckResult['outcome'], test: string, file: string, mes
 
 /** A number a claim states and the query behind it, cited in its words as (<sql> on <sqlite file>), each part in backticks or not. */
 const STATED = /\b(\d[\d,]*(?:\.\d+)?)\b([^()`]*?)\(\s*`?((?:SELECT|WITH)\b(?:[^`()]|\([^`()]*\))*?)`?\s+on\s+`?([\w./-]+)`?\s*\)/gi;
+/** Load actual fills at first use; the routing table itself remains part of the core's startup graph. */
+export async function openKinds(o: KindsOptions): Promise<Kinds> {
+  const [{ reviewFill }, { numbersFill }, { workFill }] = await Promise.all([
+    import('@deepbuild/checks-review'), import('@deepbuild/checks-numbers'), import('@deepbuild/checks-work'),
+  ]);
+  return new Kinds(o, [
+    // Its runs go through runs.ts's own path (#30), with output, attempts and stand-ins the fill's result has no room for.
+    [{ slot: 'check.kind@1', revision: 1, kind: 'command', budget: { time_ms: 24 * 3_600_000, cost_usd: 0 }, run: async (spec, ctx) => (await import('@deepbuild/checks-command')).commandCheckKind(o.host()).run(spec, ctx) }, ['spec', 'definition']],
+    [reviewFill(() => { throw Error('a review runs only through the hub\'s runner job'); }), ['pr']],
+    [numbersFill(), ['number']],
+    ...(['service', 'data', 'document', 'message'] as const).map((k): [CheckRunnerFill, Route[]] => [workFill(k), o.plant === 'kind-without-route' && k === 'message' ? [] : ['definition']]),
+  ]);
+}
+
 /** The kinds the hub holds, by kind; one without a budget is refused (#68), so no gate run reaches it. */
-export class Kinds {
+class Kinds {
   private readonly held = new Map<string, Held>();
-  constructor(private readonly o: KindsOptions) {
-    const fills: [CheckRunnerFill, Route[]][] = [
-      // Its runs go through runs.ts's own path (#30), with output, attempts and stand-ins the fill's result has no room for.
-      [{ slot: 'check.kind@1', revision: 1, kind: 'command', budget: { time_ms: 24 * 3_600_000, cost_usd: 0 }, run: (spec, ctx) => commandCheckKind(o.host()).run(spec, ctx) }, ['spec', 'definition']],
-      [reviewFill(() => { throw Error('a review runs only through the hub\'s runner job'); }), ['pr']],
-      [numbersFill(), ['number']],
-      ...(['service', 'data', 'document', 'message'] as const).map((k): [CheckRunnerFill, Route[]] => [workFill(k), o.plant === 'kind-without-route' && k === 'message' ? [] : ['definition']]),
-    ];
+  constructor(private readonly o: KindsOptions, fills: [CheckRunnerFill, Route[]][]) {
     for (const [fill, routes] of fills) if (admitKind(fill).admitted) this.held.set(fill.kind, { fill, routes });
   }
   /** `checks.kinds`: each kind held and the routes a gate run names it by. */
@@ -117,6 +144,7 @@ export class Kinds {
       check: `numbers: ${cited.numbers.map((n) => n.stated).join(', ')}`, approved: null, command: cited.numbers.map((n) => `${n.stated}: ${n.query.sql} on ${n.query.database}`).join('; '),
       covers: [], depth: 'unit' as const, on_base: 'passes' as const, asserts: [], source: 'spec' as const,
     } }] : [];
+    const { numbersChecks } = await import('./claim-numbers.js');
     return [...query, ...await numbersChecks(words, cwd, base, sample)];
   }
   /** The review's spec for a claim on a PR: base..head against the rubric your wiki holds (`<root>/wiki/review-rubric.md`), or the shipped one written beside it. */
@@ -130,16 +158,24 @@ export class Kinds {
     return { kind: 'review', runner: 'second-model', inputs: [], depth: 'unit', oracle: 'model', contract: null, base, head, rubric, since: null };
   }
 
+  /** Built-in fills get the same supervised scope as extension-host checks, never the kit's local path. */
+  private async probe(fill: CheckRunnerFill, spec: CheckSpec, ctx: CheckContext): Promise<CheckResult> {
+    const scope = checkHost(this.o.supervisor());
+    try { return await fill.run(spec, { ...ctx, host: scope.host }); }
+    finally { await scope.close(); }
+  }
+
   /** One run of a held kind on `spec` in `ctx`; a review asks its second model through the runner, for `of`'s claim; a speed or added terms read the hub's store for `repo`'s run (#1863). */
   async run(spec: CheckSpec, ctx: CheckContext, of: ReviewOf, repo?: RepoOf): Promise<CheckResult & { round?: ReviewRound; speed?: TimingReport }> {
     const held = this.held.get(spec.kind);
     const plugin = PLUGIN_KINDS[spec.kind];
     if (!held && plugin) {
-      const ran = await this.o.extensions()?.runCheck(spec.kind, spec, ctx);
+      const ran = await this.o.extensions()?.runCheck(spec.kind, withCatalogs(spec, this.o.evidence), ctx);
       if (ran && ran.outcome !== 'missing') return ran;
       return result('missing', `${spec.kind}: run`, '', `BLOCKED: the check kind ${spec.kind} is the ${plugin} plug-in's, which isn't loaded`);
     }
     if (!held) return result('missing', `${spec.kind}: run`, '', `BLOCKED: the hub holds no ${spec.kind} check kind`);
+    const { claimNumbers, runClaimNumbers } = await import('./claim-numbers.js');
     if (claimNumbers(spec)) {
       if (!repo) return result('missing', `${spec.kind}: run`, '', `BLOCKED: the ${spec.runner} check has no worktree to read its claim's commits from`);
       const checkouts = this.o.checkouts();
@@ -148,9 +184,9 @@ export class Kinds {
         const t = await checkouts.checkout({ worktree: repo.worktree, commit, runs: [repo.run] });
         return { dir: t.dir, ended: () => checkouts.ended(t, repo.run) };
       };
-      return runClaimNumbers(spec, ctx, { supervisor: this.o.supervisor(), store: this.o.store, checkoutOf }, async (s, c) => held.fill.run(s, c), repo.stop);
+      return runClaimNumbers(spec, ctx, { supervisor: this.o.supervisor(), store: this.o.store, checkoutOf }, async (s, c) => this.probe(held.fill, s, c), repo.stop);
     }
-    if (spec.kind !== 'review') return held.fill.run(spec, ctx);
+    if (spec.kind !== 'review') return this.probe(held.fill, spec, ctx);
     let job: JobRecord | undefined;
     let waiting: string | undefined;
     const reviewer = async (request: { diff: string; rubric: string[] }): Promise<ReviewerAnswer> => {
@@ -166,6 +202,7 @@ export class Kinds {
       const answer = answerOf(job.result ?? '');
       return (typeof answer === 'object' && answer !== null ? answer : {}) as ReviewerAnswer;
     };
+    const { reviewFill, independence } = await import('@deepbuild/checks-review');
     const ran = await reviewFill(reviewer).run(spec as ReviewSpec, ctx);
     if (waiting) return result('missing', 'review: second model', '', `BLOCKED: no second model is free to review the diff (${waiting})`);
     if (!job || job.state !== 'finished') return { outcome: ran.outcome, testsRun: ran.testsRun, failures: ran.failures, evidence: ran.evidence, read: ran.read, mask: ran.mask };

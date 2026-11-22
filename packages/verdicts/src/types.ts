@@ -53,6 +53,8 @@ export interface ClaimCheck {
   runs?: number;
   /** The failure rate accepted, a decimal with its unit, e.g. '10%'. */
   accept?: string;
+  /** The fewest tests a passing run may count (#2218): a pass that counted fewer can't vouch for the suite. */
+  min_tests?: number;
   deadline?: string;
   /** Why it can't fail, e.g. 'exit status masked by `|| true`'. */
   cant_fail?: string;

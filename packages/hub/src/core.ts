@@ -1,7 +1,7 @@
 
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { parse as parseYaml } from 'yaml';
+import { parseYaml } from './yaml.js';
 
 import { UsageTail } from '@deepbuild/readings';
 import { Numbers } from './numbers.js';
@@ -9,11 +9,11 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ADAPTERS } from '@deepbuild/adapters';
-import { openAsks, signInSignature, type Asks } from '@deepbuild/asks';
+import { HOLD_PLANTS, openAsks, signInSignature, type Asks, type AsksPlant } from '@deepbuild/asks';
 import { openLedger, type Ledger } from '@deepbuild/budget';
 import { canonicalize, contextBoundFor, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type EvidenceStore } from '@deepbuild/evidence';
-import { openExtensionHost, openTrust, type ExtensionHost, type ProjectTrust } from '@deepbuild/extension-host';
+import { openExtensionHost, openTrust, type ExtensionHost, type ProjectTrust, type ReleaseEntry } from '@deepbuild/extension-host';
 import { openRecord, RecordError, type Connection, type EventInput, type Message, type RecordStore } from '@deepbuild/record';
 import type { DecisionsProvider } from './decisions-port.js';
 import type { EnvironmentProvider, ComposeResource } from './environment-port.js';
@@ -27,6 +27,7 @@ import { openSupervisor, openUnder, type Host, type Supervisor } from '@deepbuil
 
 import { ClaudeSettings, readJson, STOP_HOLD_MS, words } from './claude-settings.js';
 import { statKey } from './agent-files.js';
+import { Beats } from './beat.js';
 import { Confirmer } from './confirm.js';
 import { keychain } from './keychain.js';
 import { recordedHome, saveTrust } from './codex-settings.js';
@@ -39,20 +40,22 @@ import { PromptItems } from './prompt-items.js';
 import { SizeScope } from './scope.js';
 
 import { Holds } from './holds.js';
+import { HandlerFailures } from './handler-failures.js';
 import { Spool } from './spool.js';
 
 import { Questions } from './questions.js';
 
 import { Staging } from './staging.js';
 import { CAN_RUN, CANT_RUN, describe, RUN_BY, unrunnable } from './hook-programs.js';
-import { SLASH_COMMAND, adapterOf, coveredBy, loopFact, registry, toolClasses, versionOf } from './hookmap.js';
+import { coverage, coveredBy } from './adapter-facts.js';
+import { SLASH_COMMAND, adapterOf, loopFact, registry, toolClasses, versionOf } from './hookmap.js';
 import { continueLine, fit, type Part } from './context-fit.js';
 
 import { briefing, headOf, loadsOf } from './session-facts.js';
+import { toolLoad } from './tool-load.js';
 
-import { GateRunner } from './gate-runner.js';
+import { GateRunner, type KeptRow } from './gate-runner.js';
 import { Siblings } from './siblings.js';
-import type { KeyFacts } from './shared-runs.js';
 import { groupUnder } from './children.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
 import { OWNER, People, scopeOf } from './people.js';
@@ -62,7 +65,7 @@ import { Teardowns } from './teardowns.js';
 import { Agents, type Sync } from './agents.js';
 import { Box } from './box.js';
 import { NEWER_SET, OLDER_SET } from './status.js';
-import { aboutCall, aboutPermission } from './standing.js';
+import { aboutPermission, decide } from './standing.js';
 import { Channels } from './channels.js';
 import type { WorkspacesProvider, WorkspaceService } from './workspaces-port.js';
 import { Devices } from './trusted.js';
@@ -96,11 +99,12 @@ import { Jobs } from './jobs.js';
 import { Libraries } from './libraries.js';
 
 import { excerpt, historyKey, type Restored } from './waits.js';
-import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, loginPlan, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
+import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
 import { disk, testVfs, writeAtomic, type Durable } from './vfs.js';
-import { CHROME, EXTENSION_HOOK_MS, derivedId, refuse, signature, ulid, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Scope, SCREEN_TOOLS } from './wire.js';
+import { EXTENSION_HOOK_MS, derivedId, refuse, signature, ulid, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Scope, SCREEN_TOOLS } from './wire.js';
 import type { CallContext, Session, Live, Cursor, Counter, Routes } from './session-types.js';
-import { CODEX_BINARY, CLAUDE_BINARY, HOUR, ARCHIVED_THREADS_MS, DRIFT_MS, DAY, sql, letters, ghToken, GITHUB_PASS_MS, HOOK_CHECK_MS, CALL_GRACE, SLEPT, said, TURN_ENTRIES, PROMPT_PLACE_MS, CORES, machineLoad, FOREIGN, HOLDS_NO_PROMPT, signInCommands, type Obj, isObj, watching, waitingOn, READS, AUTOMATIC_QUEUED, effectEntries, callOf, MODS_MS, sendKey, OWN_TURN, holdsTurns, childPrompt, readsLogged, streamed, crashing, receipting, TYPED_RULE } from "./hub-shared.js";
+import { CODEX_BINARY, CLAUDE_BINARY, HOUR, ARCHIVED_THREADS_MS, DRIFT_MS, DAY, sql, letters, ghToken, GITHUB_PASS_MS, HOOK_CHECK_MS, CALL_GRACE, SLEPT, said, TURN_ENTRIES, PROMPT_PLACE_MS, CORES, machineLoad, FOREIGN, HOLDS_NO_PROMPT, signInCommands, type Obj, isObj, watching, waitingOn, READS, AUTOMATIC_QUEUED, effectEntries, callOf, MODS_MS, sendKey, OWN_TURN, holdsTurns, childPrompt, readsLogged, streamed, crashing, receipting, counted, TYPED_RULE, wakeable, planOf, hubConfig } from "./hub-shared.js";
+import { leasesScreen, offScreen } from './screen-gate.js';
 
 import { HubCanvas } from './hub-canvas.js';
 import { TranscriptReader } from './transcript-reader.js';
@@ -153,7 +157,7 @@ export class Core {
     const readstopping = () => this.stopping;
     const readabandoned = () => this.abandoned;
     const readoverrides = () => this.overrides;
-    this.judging = new StopJudging({ settings: this.options, doneSpec: this.doneSpec, services: lazyServices({ tasks: () => this.tasks, openItems: () => this.openItems, now: () => this.now, asks: () => this.asks, agents: () => this.agents, box: () => this.box, ledger: () => this.ledger, record: () => this.record, gate: () => this.gate, raw: () => this.raw, leases: () => this.leases, extensions: () => this.extensions, sizing: () => this.sizing, root: () => this.root, holds: () => this.holds, questions: () => this.questions, runner: () => this.runner, checkKinds: () => this.checkKinds, reviewRounds: () => this.reviewRounds, store: () => this.store, trust: () => this.trust, heavy: () => this.heavy, host: () => this.host, runs: () => this.runs, stacks: () => this.stacks, canvasSide: () => this.canvasSide }), state: () => this.state, mcp: () => this.mcp, delivery: () => this.delivery, transcripts: () => this.transcripts, control: () => this.control, flags: () => this.flags, events: { appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), connection: (writer, extra) => this.connection(writer, extra), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get stopping() { return readstopping(); }, get overrides() { return readoverrides(); }, get blocked() { return readblocked(); } }, schedule: { askingSoon: () => this.askingSoon(), queue: (work, starting) => this.queue(work, starting), get abandoned() { return readabandoned(); }, wakeable: (waits, key, ms) => this.wakeable(waits, key, ms), askingNow: () => this.askingNow() } });
+    this.judging = new StopJudging({ settings: this.options, doneSpec: this.doneSpec, services: lazyServices({ tasks: () => this.tasks, openItems: () => this.openItems, now: () => this.now, asks: () => this.asks, agents: () => this.agents, box: () => this.box, ledger: () => this.ledger, record: () => this.record, gate: () => this.gate, raw: () => this.raw, leases: () => this.leases, extensions: () => this.extensions, sizing: () => this.sizing, root: () => this.root, holds: () => this.holds, questions: () => this.questions, runner: () => this.runner, checkKinds: () => this.checkKinds, reviewRounds: () => this.reviewRounds, store: () => this.store, trust: () => this.trust, heavy: () => this.heavy, host: () => this.host, runs: () => this.runs, stacks: () => this.stacks, canvasSide: () => this.canvasSide }), state: () => this.state, mcp: () => this.mcp, delivery: () => this.delivery, transcripts: () => this.transcripts, control: () => this.control, flags: () => this.flags, events: { appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), connection: (writer, extra) => this.connection(writer, extra), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get stopping() { return readstopping(); }, get overrides() { return readoverrides(); }, get blocked() { return readblocked(); } }, schedule: { askingSoon: () => this.askingSoon(), queue: (work, starting) => this.queue(work, starting), get abandoned() { return readabandoned(); }, wakeable, askingNow: () => this.askingNow() } });
   }
   private wireSessionMemory(): void {
     this.memory = new SessionMemory({ decisions: this.providers.decisions, cwdOf: this.providers.knowledge.cwdOf, removal: this.providers.knowledge.removal, settings: this.options, services: lazyServices({ record: () => this.record, now: () => this.now, asks: () => this.asks, raw: () => this.raw, root: () => this.root, store: () => this.store, wikiBuild: () => this.wikiBuild, confirmer: () => this.confirmer, runner: () => this.runner, durable: () => this.durable }), delivery: () => this.delivery, mcp: () => this.mcp, state: () => this.state, events: { connection: (writer, extra) => this.connection(writer, extra), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { config: () => this.config() } });
@@ -171,7 +175,7 @@ export class Core {
     const readreplaying = () => this.replaying;
     const readblocked = () => this.blocked;
     const readstopping = () => this.stopping;
-    this.mcp = new McpOperations({ settings: this.options, doneSpec: this.doneSpec, services: lazyServices({ sessionStarts: () => this.sessionStarts, hosts: () => this.hosts, canvasSide: () => this.canvasSide, replicas: () => this.replicas, extensions: () => this.extensions, holds: () => this.holds, record: () => this.record, numbers: () => this.numbers, root: () => this.root, asks: () => this.asks, now: () => this.now, raw: () => this.raw, runs: () => this.runs, stacks: () => this.stacks, checkouts: () => this.checkouts }), control: () => this.control, state: () => this.state, judging: () => this.judging, delivery: () => this.delivery, events: { connection: (writer, extra) => this.connection(writer, extra), appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get blocked() { return readblocked(); }, get stopping() { return readstopping(); } }, schedule: { get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting), askingNow: () => this.askingNow(), wakeable: (waits, key, ms) => this.wakeable(waits, key, ms) } });
+    this.mcp = new McpOperations({ settings: this.options, doneSpec: this.doneSpec, services: lazyServices({ sessionStarts: () => this.sessionStarts, hosts: () => this.hosts, canvasSide: () => this.canvasSide, replicas: () => this.replicas, extensions: () => this.extensions, holds: () => this.holds, record: () => this.record, numbers: () => this.numbers, root: () => this.root, asks: () => this.asks, now: () => this.now, raw: () => this.raw, runs: () => this.runs, stacks: () => this.stacks, checkouts: () => this.checkouts }), control: () => this.control, state: () => this.state, judging: () => this.judging, delivery: () => this.delivery, events: { connection: (writer, extra) => this.connection(writer, extra), appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get blocked() { return readblocked(); }, get stopping() { return readstopping(); } }, schedule: { get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting), askingNow: () => this.askingNow(), wakeable } });
   }
   private wireHubControl(): void {
     const readready = () => this.ready;
@@ -191,7 +195,7 @@ export class Core {
   /** The record's raw reads, as the helpers that take them call them: parameters bound. */
   private readonly raw: RecordStore['raw'] = (sql, params) => this.record.raw(sql, params);
   /** The log's pages, read-ahead and stream; a read waits for the appends in flight, and the owner's stream reads what the owner may see (#1337). */
-  private readonly log = new LogReads({ raw: this.raw, settled: () => Promise.allSettled([...this.inflight]), ownerSeen: () => this.state.seenBy(OWNER), emit: (sub, json, caught) => this.emit(sub, json, caught) });
+  private readonly log = new LogReads({ raw: this.raw, settled: () => Promise.allSettled([...this.inflight.keys()]), ownerSeen: () => this.state.seenBy(OWNER), emit: (sub, json, caught) => this.emit(sub, json, caught), plant: () => this.options.plant });
   private asks!: Asks;
   /** Online model libraries (#1731): which are on, your standing rules, searches and fetches. */
   private libraries?: Libraries;
@@ -207,6 +211,8 @@ export class Core {
   private archiveSession?: (session: string) => Promise<void>;
   /** The sessions whose transcripts their agents moved to an archived folder; unset until the archive opens. */
   private archivedSessions?: () => Promise<Set<string>>;
+  /** The archive pass under way, if one is: a stop waits for it before the record closes (#2573). */
+  private archiving: () => Promise<void> | undefined = () => undefined;
   /** Ask-tasks in the kernel (#303): a task for each prompt you typed that asks for a change, and its definition locked by hash. */
   private tasks!: AskTasks;
   private sizing!: SizeScope;
@@ -260,6 +266,8 @@ export class Core {
   private chain: Promise<unknown> = Promise.resolve();
   /** Whether the start has finished: from then on, work waiting for it joins the queue at once. */
   private opened = false;
+  /** Whether the start failed: nothing is replayed then, and the spool waits for the next start (#2783). */
+  private unstarted = false;
   private blocked: string | undefined;
   /** The hub's lock file was removed or replaced under it (#909): appends stop for good, so `blocked` never clears. */
   private lost = false;
@@ -271,7 +279,7 @@ export class Core {
   private spaces!: WorkspaceService;
   /** The supervisor's runs (runs.ts). */
   private runs!: Runs;
-  private checkKinds!: CheckKinds;
+  private checkKinds!: () => Promise<CheckKinds>;
   private reviewRounds!: ReviewRounds;
   /** Each worktree's stack and every stack run a check started (#331, #332). */
   private stacks!: Stacks;
@@ -293,14 +301,21 @@ export class Core {
   }
   /** Each session's deep_drive replicas (#124). */
   private replicas!: Replicas;
-  /** Appends handed to the record and not yet settled: a read waits for them, so it sees every hook acknowledged before it. */
-  private readonly inflight = new Set<Promise<unknown>>();
+  /**
+   * Appends handed to the record and not yet settled, by event ID: a read waits for them, so it sees every hook
+   * acknowledged before it.
+   */
+  private readonly inflight = new Map<Promise<unknown>, string>();
   private readonly timers: NodeJS.Timeout[] = [];
+  /** The background jobs whose beat stops while they have nothing to do, and an event wakes (#2648). */
+  private readonly beats = new Beats((name, job) => this.run(name, job), (name) => this.jobs.set(name, null));
   /**
    * Each background job's failures in a row, when the first of them was and the last one's error, cleared by its
    * next clean run (#909): one blip reads apart from a job that has failed for an hour.
    */
   private readonly jobs = new Map<string, { failures: number; since: number; at: number; error: string } | null>();
+  /** What a hook handler's failures leave on the record (#2402). */
+  private readonly handlerFailures = new HandlerFailures({ appendCore: (kind, data, extra, who) => this.appendCore(kind, data, extra, who), appendReading: (session, agent, reading) => this.appendReading(session, agent, reading) });
   private stopping = false;
   private replaying: Promise<unknown> | undefined;
   /** Only the drops-post-tool-use and replay-appends-twice plants read them. */
@@ -349,10 +364,10 @@ export class Core {
   private wireHookServices(): void {
     const options = this.options;
     this.transcriptReader = new TranscriptReader({ plant: options.plant, now: () => this.now() });
-    this.flags = new SessionFlags({ services: lazyServices({ record: () => this.record, now: () => this.now, asks: () => this.asks, agents: () => this.agents, root: () => this.root, siblings: () => this.siblings, transcriptReader: () => this.transcriptReader }), state: () => this.state, mcp: () => this.mcp, events: { append: (connection, input, backfill) => this.append(connection, input, backfill), connection: (writer, extra) => this.connection(writer, extra) }, schedule: { queue: (work, starting) => this.queue(work, starting) }, readCodexTrust: (cwd) => this.readCodexTrust(cwd) });
+    this.flags = new SessionFlags({ services: lazyServices({ record: () => this.record, now: () => this.now, asks: () => this.asks, agents: () => this.agents, root: () => this.root, siblings: () => this.siblings, transcriptReader: () => this.transcriptReader }), state: () => this.state, mcp: () => this.mcp, events: { append: (connection, input, backfill) => this.append(connection, input, backfill), connection: (writer, extra) => this.connection(writer, extra) }, schedule: { queue: (work, starting) => this.queue(work, starting) }, readCodexTrust: (cwd) => this.readCodexTrust(cwd), wake: (job) => this.beats.wake(job) });
     this.canvasSide = new HubCanvas({
       root: rootOf(options.root), now: () => this.now(), plant: options.plant, doneSpec: this.doneSpec,
-      record: () => this.record, store: () => this.store, libraries: () => this.libraries, sessions: () => this.state.sessions,
+      record: () => this.record, store: () => this.store, libraries: () => this.libraries, sessions: () => this.state.sessions, extensions: () => this.extensions,
       evidence: { stored: (put, what) => this.control.stored(put, what) },
       events: { append: (connection, input) => this.append(connection, input), connection: (writer, extra) => this.connection(writer, extra), agentConnection: (session) => this.mcp.agentConnection(session) },
       agentAbove: (peer) => this.state.agentAbove(peer),
@@ -492,7 +507,7 @@ export class Core {
       over: (session) => { const s = this.sessionStarts.runOf(session); return s !== undefined && !this.sessionStarts.live(s.run); },
     });
     this.delivery.answers = new Answers({
-      raw: this.raw, settled: () => Promise.allSettled([...this.inflight]),
+      raw: this.raw, settled: (except) => Promise.allSettled([...this.inflight].flatMap(([append, id]) => (id === except ? [] : [append]))),
       excluded: (id) => this.delivery.handed.has(id) || this.delivery.prompts.has(`ask:${id}`),
       delivered: options.plant === 'words-only-at-turn-start' ? undefined : (session) => { const live = this.state.live.get(session); if (live) live.words ??= 'answer'; },
       append: (data, v) => this.appendCore('delivery.outcome', data, { subject: data.delivery, ...(v === 2 ? { v } : {}) }),
@@ -567,16 +582,18 @@ export class Core {
         if (spec.kind === 'review') {
           const head = this.gate.snapshotOf(run.claim) ?? run.commit;
           const since = of.pr ? await this.reviewRounds.since(of.pr, run.claim) : null;
-          const { round, ...result } = await this.checkKinds.run({ ...spec, head, since } as CheckSpec, { checkout: join(this.root.dir, 'objects'), deadline, now: this.now }, of);
+          // The rules page's text-only rules in scope of the diff go in the run's request from the hub (#1512).
+          const rules = await this.memory.reviewRules(join(this.root.dir, 'objects'), this.judging.claimFolder(run.claim), spec as unknown as { base: string }, since?.commit, head, (cwd) => this.judging.projectTrusted(cwd));
+          const { round, ...result } = await (await this.checkKinds()).run({ ...spec, head, since, rules } as CheckSpec, { checkout: join(this.root.dir, 'objects'), deadline, now: this.now }, of);
           if (round && of.pr && run.commit === head) await this.reviewRounds.read(of.pr, run.claim, head, round);
           return result;
         }
-        return this.checkKinds.run(spec, { checkout, deadline, now: this.now }, of, { run: run.run, worktree: this.judging.claimFolder(run.claim) ?? checkout, stop });
+        return (await this.checkKinds()).run(spec, { checkout, deadline, now: this.now }, of, { run: run.run, worktree: this.judging.claimFolder(run.claim) ?? checkout, stop });
       },
     });
-    // The check kinds the hub holds (#1537): command, review, numbers and the work kinds, each with its routes.
+    // Check implementations load for a claim or a kinds listing, never for the first session or tool hook.
     this.reviewRounds = new ReviewRounds({ outcomes: this.providers.checks.reviewOutcomes, raw: this.raw, appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), objects: join(this.root.dir, 'objects') });
-    this.checkKinds = this.providers.checks.kinds({ host: () => this.host, supervisor: () => this.supervisor, checkouts: () => this.checkouts, store: join(this.root.dir, 'objects'), submit: (spec) => this.runner.submit(spec), wait: (job) => this.runner.wait(job), cancel: (job) => this.runner.cancel(job), plant: options.plant, extensions: () => this.extensions });
+    this.checkKinds = this.providers.checks.kinds({ host: () => this.host, supervisor: () => this.supervisor, checkouts: () => this.checkouts, store: join(this.root.dir, 'objects'), submit: (spec) => (spec.kind === 'work' ? Promise.reject(Error('a work job runs only under an approved job that repeats (#1527), never for a check')) : this.runner.submit(spec)), wait: (job) => this.runner.wait(job), cancel: (job) => this.runner.cancel(job), plant: options.plant, extensions: () => this.extensions, evidence: this.root.evidence });
     this.replicas = new Replicas({ folder: join(this.root.dir, 'replicas'), now: this.now, leases: () => this.leases, plant: options.plant });
     this.numbers = new Numbers({
       raw: this.raw, now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
@@ -587,7 +604,7 @@ export class Core {
       evidence: (sha) => this.store.read(sha).catch(() => null),
     });
     this.ready = this.init();
-    this.ready.then(() => { this.opened = true; }, () => undefined);
+    this.ready.then(() => { this.opened = true; }, () => { this.unstarted = true; });
     // A start that fails stops nothing else; each call then reports why.
     this.ready.catch(() => undefined);
   }
@@ -612,12 +629,16 @@ export class Core {
     const storage = this.durable.backend();
     // Each event its own commit: the durable write points a run makes depend only on the events it appends,
     // never on how many arrived together, so a cut at any one can be replayed.
-    this.record = receipting(await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}), ...(this.options.plant === 'turn-closes-at-child-stop' ? { plant: this.options.plant } : {}) }));
+    // Each read counted against the call it runs for, where one counts its queries (#1576).
+    this.record = counted(receipting(await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}), ...(this.options.plant === 'turn-closes-at-child-stop' ? { plant: this.options.plant } : {}) })));
     if (process.env.DEEP_HUB_TEST_CRASH) this.record = crashing(this.record, process.env.DEEP_HUB_TEST_CRASH);
     if (process.env.DEEP_HUB_TEST_READS) this.record = readsLogged(this.record, process.env.DEEP_HUB_TEST_READS);
     // Every append reaches the stream, whoever appends it: the hub, the asks core, the supervisor or the leases.
-    this.record = streamed(this.record, ({ kind, subject, data }, connection) => {
+    this.record = streamed(this.record, (input, connection) => {
+      const { kind, subject, data } = input;
+      this.canvasSide.appended(input);
       this.log.stream();
+      this.flags.appended(kind, connection.session);
       if (kind !== 'session.state' && kind !== 'row.set') {
         // The next state pass reads the sessions appended to since the last; an event of no session, every session.
         if (this.state.touched !== 'all') { if (connection.session) this.state.touched.add(connection.session); else this.state.touched = 'all'; }
@@ -665,13 +686,15 @@ export class Core {
       // Each open sign-in task's probe, on the recorded login PATH (#1349).
       signIn: signInCheck(() => this.agents.loginPath(), (agent) => this.runner?.account(agent as Agent) ?? null, this.now),
       // The hub's own adapters answer, so the facts it maps hooks by are the facts that decide a continue.
-      errorTurnHook: (agent) => adapterOf(agent)?.caps.errorTurnHook === true,
+      // The asks core plays its own planted programs: #2646's, and #1101's of the hold.
+      errorTurnHook: (agent) => adapterOf(agent)?.caps.errorTurnHook === true, ...(this.options.plant === 'asks-without-tool-before' || (HOLD_PLANTS as readonly string[]).includes(this.options.plant ?? '') ? { plant: this.options.plant as AsksPlant } : {}),
     });
     await this.delivery.continues();
     this.askingSoon();
-    // The results every session's claims share (#1018): each kept run's key, from its finish, read once at start.
-    const kept = (await this.record.raw(`SELECT data FROM events WHERE kind = 'run.finished' AND json_extract(data, '$.key') IS NOT NULL ORDER BY log_pos`)) as { data: string }[];
-    this.gate.kept(kept.map((row) => JSON.parse(row.data) as { run: string; check: string; outcome: string; tests_run: number; findings: string[]; evidence: string[]; key: KeyFacts }));
+    // The results every session's claims share (#1018): each kept run's key, from its finish, read once at start, a row
+    // at a time and each parsed as the runner takes it, so the start never holds them all (#2652).
+    const kept = this.record.rows(`SELECT data FROM events WHERE kind = 'run.finished' AND json_extract(data, '$.key') IS NOT NULL ORDER BY log_pos`) as Iterable<{ data: string }>;
+    this.gate.kept((function* () { for (const row of kept) yield JSON.parse(row.data) as KeptRow; })());
     // Every second, once an open ask's deadline has passed, the asks core takes its default (showing it first if it
     // hadn't shown), so no ask waits on a read; once a stop or a verdict landed, or while a task waits on its check,
     // it reads them for the task, the continue or the resume they call for (#85). With nothing due it reads nothing,
@@ -687,6 +710,9 @@ export class Core {
     const due = async (): Promise<boolean> => {
       const pos = await landed();
       if (pos > ticked) { ticked = pos; return true; }
+      // A held yes starts its step once its hold is over (#1101).
+      const held = asks.heldUntil();
+      if (held !== null && held <= this.now()) return true;
       if (this.now() - looked >= 60_000 && (await this.record.raw(`SELECT 1 FROM asks WHERE status = 'open' AND batch_id IS NULL LIMIT 1`)).length) { looked = this.now(); return true; }
       return (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND (deadline <= ? OR kind = 'unblock') LIMIT 1`, [this.now()])).length > 0;
     };
@@ -734,7 +760,7 @@ export class Core {
     // One compile job pool per host (#1016): every build deep lease runs joins it.
     this.pool = new JobPool(join(this.root.dir, 'jobserver'), poolTokens(CORES));
     this.heavy = new HeavyQueue({
-      table: leases, slow: SLOW_SLOT, now: this.now, pool: this.pool, ...(this.options.plant ? { plant: this.options.plant } : {}),
+      table: leases, slow: SLOW_SLOT, now: this.now, pool: this.pool, ...(this.options.plant ? { plant: this.options.plant } : {}), wake: () => this.beats.wake('heavy'),
       append: async (kind, v, data, subject, session) => {
         const ts = this.now();
         const id = ulid(ts);
@@ -747,7 +773,7 @@ export class Core {
     });
     await this.heavy.recover(this.raw);
     await this.heavy.tick();
-    this.every('heavy', 500, () => this.heavy.tick());
+    this.beats.start('heavy', 500, () => this.heavy.tick());
     this.every('gone', 1000, () => this.state.goneSessions());
     // Each session's state as last recorded, then any change since; a session goes quiet after a day with no hook.
     for (const row of (await this.record.raw("SELECT session_id, json_extract(data, '$.state') AS state, json_extract(data, '$.cause') AS cause FROM events WHERE kind = 'session.state' AND session_id IS NOT NULL ORDER BY log_pos")) as { session_id: string; state: string; cause: string }[]) this.state.states.set(row.session_id, `${row.state}/${row.cause}`);
@@ -758,12 +784,12 @@ export class Core {
     for (const id of [...this.state.rows.keys()].filter((id) => id.startsWith('job:'))) this.state.jobRowAppend(id, null);
     this.state.statesRead = true;
     this.state.stateSoon();
-    // Each minute every session is read again: a state that changes with time alone (quiet) has no append to say so.
-    this.every('states', 60_000, async () => { this.state.touched = 'all'; this.state.stateSoon(); });
+    // Each minute the sessions whose state the clock has ended are read again: such a change has no append to say so.
+    this.every('states', 60_000, async () => this.state.minutePassed());
     this.every('unpushed', 60_000, () => this.flags.unpushedAgain());
     void this.run('unpushed', () => this.flags.unpushedAgain());
-    this.every('gates', 1000, () => this.flags.gatesWatched());
-    this.every('agents-reach', 1000, () => this.flags.agentsReached());
+    this.beats.start('gates', 1000, () => this.flags.gatesWatched());
+    this.beats.start('agents-reach', 1000, () => this.flags.agentsReached());
     // A live session's transcript is read between its hooks too: an agent retrying a model call fires none (#2019).
     this.every('transcripts', 2000, () => this.flags.transcriptsRead());
     // A background command whose process group has ended no longer holds its session's slow checks (#907); one that
@@ -845,6 +871,8 @@ export class Core {
     this.runner = await openRunner({
       record: this.record, asks, supervisor: this.supervisor, ledger, now: this.now, root: this.root.dir, loginPath: config.loginPath, env: process.env, keychain,
       settings: { plan: { reserve_pct: config.reservePct }, asks: { unblock: { deadline_ms: 2 * DAY } } },
+      // #2650's planted runner, selected with the hub's variable.
+      ...(this.options.plant === 'churn-keeps-every-output' ? { plant: this.options.plant } : {}),
     });
     this.sessionStarts = new Starts({
       credentials: this.providers.forge,
@@ -882,12 +910,19 @@ export class Core {
       sendBack: (r) => this.delivery.landingSendBack(r),
       appendCore: (kind, data, extra) => this.appendCore(kind, data, extra),
     });
-    // #1922's planted hosts build a tool's digest wrongly: the host's plants, selected with the hub's variable.
-    const plant = this.options.plant?.startsWith('job-build-') ? { plant: this.options.plant as 'job-build-entry-only' } : {};
-    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite'),
+    // #1922's planted hosts build a tool's digest wrongly, #2650's keep what they finished, #2402's never clears a
+    // handler's failures and #2648's reads notices once: the host's plants, selected with the hub's variable.
+    const plant = this.options.plant?.startsWith('job-build-') ? { plant: this.options.plant as 'job-build-entry-only' }
+      : this.options.plant === 'churn-keeps-every-answer' || this.options.plant === 'churn-keeps-every-result' || this.options.plant === 'churn-keeps-every-name-set' || this.options.plant === 'failures-never-cleared' || this.options.plant === 'reads-files-at-start-only' ? { plant: this.options.plant } : {};
+    // No package is in the hub's own release yet; a test may hand it one, which then loads in the hub (#2402).
+    const release = this.options.release ? (JSON.parse(readFileSync(this.options.release, 'utf8')) as ReleaseEntry[]) : [];
+    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release, now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite'),
       // A check runner's reads and plays of a canvas piece (#411, #184): the hub's canvas core, and a replica playing the
-      // revision's canonical document, its programs from the evidence store.
-      canvas: (call) => this.canvasSide.canvasCall(call), replica: (call) => this.play(call), ...plant });
+      // revision's canonical document, its programs from the evidence store. A job kind's qualification by the core
+      // (#518) goes the same way, with the tools it names in the world.
+      canvas: (call) => this.canvasSide.qualifyTool(call), replica: (call) => this.play(call), ...plant, ...(this.options.safe ? { safe: true } : {}),
+      // Nothing in the hub records its source calls, so it keeps no answer (#2650).
+      recording: false });
     this.jobKinds = new Jobs({
       root: this.root.dir, now: this.now, host: () => this.extensions, plant: this.options.plant,
       keep: async (bytes, source) => (await this.control.stored(await this.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind: 'file', source, redaction: 'complete', license: { name: 'job output', allows: [] } }), `a job output from ${source}`)).sha256,
@@ -908,8 +943,9 @@ export class Core {
     for (const pkg of await extensions.installed()) {
       // One installed by a hub that ran no conformance at install has no kept result: it runs now, once, so the
       // package loads from its result at this start and each later one, as one installed since #785 does. A check
-      // that can't run (an untrusted project) is left to the load's refusal, which names it.
-      if (!extensions.checked(pkg)) await extensions.check(pkg).catch(() => undefined);
+      // that can't run (an untrusted project) is left to the load's refusal, which names it. In safe mode none runs:
+      // a check runs the package's code, and the load is refused anyway (#1879).
+      if (!this.options.safe && !extensions.checked(pkg)) await extensions.check(pkg).catch(() => undefined);
       const load = await extensions.load(pkg);
       if (load.status === 'refused') process.stderr.write(`deep hub: extension ${pkg.id}@${pkg.version} not loaded: ${load.reason}\n`);
       // One installed before panel@1 ran at install has no kept verdict for its views: they run now, once.
@@ -978,6 +1014,7 @@ export class Core {
       return archiving;
     };
     archivePass();
+    this.archiving = () => archiving;
     this.archiveSession = (session) => archive.session(session);
     this.archivedSessions = () => archive.archived();
     this.every('archived-threads', ARCHIVED_THREADS_MS, () => this.state.archivedThreads());
@@ -1051,22 +1088,7 @@ export class Core {
     try { slot = (JSON.parse(readFileSync(join(this.root.dir, 'config.json'), 'utf8')) as { stack?: { slot?: unknown } }).stack?.slot; } catch { /* none yet */ }
     return typeof slot === 'number' && Number.isInteger(slot) && slot > 0 ? slot : 4;
   }
-  /** What setup wrote to <root>/config.json for the runner: the login shell's PATH and the plan's reserve. */
-  private config(): { loginPath: string; reservePct: number; rules: { margin: number; windowMs: number }; acceptance: { slots: number; gateKey: string | null } } {
-    let c: Obj = {};
-    try { c = JSON.parse(readFileSync(join(this.root.dir, 'config.json'), 'utf8')) as Obj; } catch { /* none yet: no binary resolves, so every job is refused saying so */ }
-    const runner = isObj(c.runner) ? c.runner : {};
-    const plan = isObj(c.plan) ? c.plan : {};
-    // Standing rules are judged at this margin over this window (#23): the design's 1.5 and 30 days unless you set them.
-    const rules = isObj(c.rules) ? c.rules : {};
-    return {
-      loginPath: typeof runner.login_path === 'string' ? runner.login_path : '',
-      reservePct: typeof plan.reserve_pct === 'number' ? plan.reserve_pct : 10,
-      rules: { margin: typeof rules.margin === 'number' ? rules.margin : 1.5, windowMs: (typeof rules.window_days === 'number' ? rules.window_days : 30) * DAY },
-      // The issues that run at once, and the gate identity's key (#1325): with none, a swap goes to you.
-      acceptance: { slots: isObj(c.acceptance) && typeof c.acceptance.slots === 'number' ? c.acceptance.slots : 1, gateKey: isObj(c.gate) && typeof c.gate.key === 'string' ? c.gate.key : null },
-    };
-  }
+  private config(): ReturnType<typeof hubConfig> { return hubConfig(this.root.dir); }
 
   private writeState(state: 'running' | 'stopped'): void {
     writeAtomic(this.root.state, Buffer.from(`${state}\n`));
@@ -1088,7 +1110,7 @@ export class Core {
     if (this.lost) throw Error(this.blocked);
     const appended = this.record.append(connection, input);
     // No read waits for a backfill: nobody was acknowledged for its events.
-    if (!backfill) this.inflight.add(appended);
+    if (!backfill) this.inflight.set(appended, input.id);
     try {
       await appended;
     } catch (error) {
@@ -1144,15 +1166,22 @@ export class Core {
     if (this.now() < this.hookCheckDue) return;
     this.hookCheckDue = this.now() + HOOK_CHECK_MS;
     const found = unrunnable(this.root.dir);
+    const before = this.cantRun.join(' ');
     this.cantRun = [...new Set(found.flatMap((u) => RUN_BY[u.agent]))].sort();
+    if (this.cantRun.join(' ') !== before) this.flags.reachSoon();
     this.askingSoon();
     for (const [owner, agents] of Object.entries(RUN_BY)) {
       const problem = found.filter((u) => u.agent === owner).map(describe).join('; ');
-      const open = (await this.record.raw(`SELECT id, agent, last_seen FROM sessions WHERE agent IN (${agents.map(() => '?').join(', ')}) AND id NOT IN (SELECT session_id FROM events WHERE kind IN ('session.end', 'session.gone', 'session.archived') AND session_id IS NOT NULL)`, [...agents])) as { id: string; agent: string; last_seen: number | null }[];
+      // Quiet sessions can change only if their last hook-program reading said hooks can't run.
+      const open = (await this.record.raw(`SELECT * FROM (SELECT id, agent, last_seen,
+        (SELECT json_extract(data, '$.reading') FROM events WHERE session_id = sessions.id AND kind = 'session.reading'
+          AND (json_extract(data, '$.reading') LIKE ? OR json_extract(data, '$.reading') LIKE ?) ORDER BY log_pos DESC LIMIT 1) AS text
+        FROM sessions WHERE agent IN (${agents.map(() => '?').join(', ')}) AND id NOT IN (SELECT session_id FROM events WHERE kind IN ('session.end', 'session.gone', 'session.archived') AND session_id IS NOT NULL))
+        WHERE coalesce(last_seen, 0) >= ? OR text LIKE ?`, [`${CANT_RUN}%`, `${CAN_RUN}%`, ...agents, this.now() - DAY, `${CANT_RUN}%`])) as { id: string; agent: string; last_seen: number | null; text: string | null }[];
       for (const s of open) {
         // A reading counts as the session seen, so one quiet for a day reads BLOCKED only if it already did.
         const quiet = (s.last_seen ?? 0) < this.now() - DAY;
-        const [last] = (await this.record.raw(`SELECT json_extract(data, '$.reading') AS text FROM events WHERE session_id = ? AND kind = 'session.reading' AND (json_extract(data, '$.reading') LIKE ? OR json_extract(data, '$.reading') LIKE ?) ORDER BY log_pos DESC LIMIT 1`, [s.id, `${CANT_RUN}%`, `${CAN_RUN}%`])) as { text: string }[];
+        const last = s.text === null ? undefined : { text: s.text };
         if (problem && quiet && !last?.text.startsWith(CANT_RUN)) continue;
         const text = problem ? `${CANT_RUN}, so this session's holds and every block but the floor are watch-only: ${problem}. Run \`deep setup\` to point them at a deep-hook that runs.` : last?.text.startsWith(CANT_RUN) ? `${CAN_RUN}: this session's gates hold again.` : undefined;
         if (text && text !== last?.text) await this.queue(async () => { await this.appendReading(s.id, s.agent, text); await this.flags.watchOnly(s.id, s.agent, 'hooks', text.startsWith(CANT_RUN)); });
@@ -1257,7 +1286,8 @@ export class Core {
    * replayed then, beside the hooks that follow, rather than at the next start.
    */
   private replayLate(kept = false): void {
-    if (this.stopping) return;
+    // A start that failed leaves the spool where it is: asking again would find it again, without end (#2783).
+    if (this.stopping || this.unstarted) return;
     if (this.replaying) {
       this.retake ||= kept;
       return;
@@ -1317,7 +1347,7 @@ export class Core {
     // A spooled line whose hook the hub already recorded live changes nothing: no count, no stamp, no append.
     if (replayed && /^[0-9A-HJKMNP-TV-Z]{26}$/.test(meta.id)) {
       // Its live copy may be acknowledged and still on its way to the record.
-      await Promise.allSettled([...this.inflight]);
+      await Promise.allSettled([...this.inflight.keys()]);
       const known = await this.record.raw(`SELECT json_extract(data, '$.late') AS late FROM events WHERE id ${this.options.plant === 'replay-keeps-place-by-id' ? '>=' : '='} ? LIMIT 1`, [meta.id]);
       if (known.length) {
         // Unless deep-hook gave up on an acknowledgement the hub sent just too late: the live copy is in the record
@@ -1388,7 +1418,7 @@ export class Core {
     const unread = Boolean(meta.watchOnly && meta.session && !this.state.versioned.has(meta.session));
     if (unread) {
       this.state.versioned.add(meta.session);
-      await this.appendReading(meta.session, meta.agent, meta.paseo?.lacks ?? `This session runs ${meta.agent} ${meta.version}, past the versions its facts cover: it is recorded unverified, and its holds and every block but the floor are watch-only until the live smoke test widens the range to ${meta.version}. The floor still holds: its fail_closed guard entries deny as they do with the hub stopped.`).catch(() => undefined);
+      await this.appendReading(meta.session, meta.agent, meta.paseo?.lacks ?? `This session runs ${meta.agent} ${meta.version}, not a version its facts cover (${coverage(meta.agent).join(', ')}): it is recorded unverified, and its holds and every block but the floor are watch-only until the live smoke test adds ${meta.version} to its facts. The floor still holds: its fail_closed guard entries deny as they do with the hub stopped.`).catch(() => undefined);
     }
     await this.flags.versionRead(meta, unread);
     const session = this.state.sessions.get(meta.session);
@@ -1403,7 +1433,7 @@ export class Core {
     const call = session && verified && drafts.length ? meta.toolUse : undefined;
     if (session && call) session.pending.set(call, (session.pending.get(call) ?? 0) + 1);
     // A switch to a leased screen counts once it ran: Claude Code sends PostToolUse only for a call that succeeded (#332).
-    if (session && verified && meta.event === 'PostToolUse' && meta.call && /(^|_)switch_display$/.test(meta.call.tool) && SCREEN_TOOLS.some((prefix) => meta.call!.tool.startsWith(prefix))) await this.switched(session.id, String(meta.call.input.display ?? ''));
+    if (session && verified && meta.event === 'PostToolUse' && meta.call && /(^|_)switch_display$/.test(meta.call.tool) && SCREEN_TOOLS.some((prefix) => meta.call!.tool.startsWith(prefix))) { const display = String(meta.call.input.display ?? ''); if (leasesScreen(await this.leases.leases(), session.id, display)) this.state.onScreen.set(session.id, display); }
     if (session && verified) {
       await this.transcriptReader.readTranscript(session, this.flags.modelCalled(session));
       if (meta.event === 'SessionEnd') this.transcriptReader.endTurn(session);
@@ -1699,21 +1729,6 @@ export class Core {
     return read;
   }
   /**
-   * The login plan of a Claude Code home (#1033), read again only after MODS_MS or once a file a sign-in rewrites
-   * changes: each read starts claude, about 175 ms of CPU, on every Claude Code session's start.
-   */
-  private planOf(home: string): Promise<unknown> {
-    const claude = claudeOnPath(process.env);
-    if (!claude) return Promise.resolve(undefined);
-    const files = [join(home, '.credentials.json'), join(home, '..', '.claude.json'), join(home, '.claude.json')];
-    const key = JSON.stringify([claude, ...files.map(statKey)]);
-    const seen = this.plansSeen.get(home);
-    if (seen && seen.key === key && this.now() - seen.at < MODS_MS) return seen.plan;
-    const plan = loginPlan(claude, { ...process.env, ...(home ? { CLAUDE_CONFIG_DIR: home } : {}) });
-    this.plansSeen.set(home, { key, at: this.now(), plan });
-    return plan;
-  }
-  /**
    * A denied call that ran anyway (#1033): guard.overridden with what denied it and the home's mods that could have
    * approved it, one line on the session's row, its claims judged again, and for a send, which may already have left,
    * one ask naming it.
@@ -1745,7 +1760,7 @@ export class Core {
   private async modsReading(meta: HookMeta): Promise<void> {
     const read = await this.sessionMods(meta);
     if (!read.home) return;
-    const held = await denyHolds({ ...process.env, ...(read.home ? { CLAUDE_CONFIG_DIR: read.home } : {}) }, claudeOnPath(process.env), () => this.planOf(read.home));
+    const held = await denyHolds({ ...process.env, ...(read.home ? { CLAUDE_CONFIG_DIR: read.home } : {}) }, claudeOnPath(process.env), () => planOf(this.plansSeen, this.now, read.home));
     const risky = held || !('mods' in read) ? [] : read.mods.filter((m) => m.overrides);
     let reading: string | undefined;
     if ('unread' in read && !held) reading = `${MODS_WATCH} (${read.home}) loads mods DeepBuild couldn't read (${read.unread}), so whether one can approve a call past the guard is not checked: its holds and blocks may be watch-only.`;
@@ -1791,7 +1806,9 @@ export class Core {
       // The lone-command hook retains its #83 reading; joined calls use the branch lookup.
       if (draft.kind === 'tool.after') await this.delivery.prAfter(meta, data.command);
       if (draft.kind === 'session.start') {
-        data.loads = await loadsOf(meta.cwd).catch(() => []);
+        data.loads = await loadsOf(meta.cwd, live.agent ?? meta.agent).catch(() => []);
+        const load = toolLoad(live.agent ?? meta.agent, data.loads as { kind: string; name: string }[], meta.version);
+        if (load) data.toolLoad = load;
         if (!foreign) void this.control.enteredProject(meta.session, meta.cwd);
         // Each server's tool list, read off this hook's path: recorded after the start, its changes held for you.
         if (!foreign && session) void this.holds.listed(meta.session, live.agent, meta.cwd).catch((error: unknown) => process.stderr.write(`deep hub: tool lists for ${meta.session} not recorded: ${error instanceof Error ? error.message : String(error)}\n`));
@@ -2186,7 +2203,7 @@ export class Core {
     }
     // Computer use stays on what the session leases (#332), so your own screen and browser are never touched.
     if (call.screen && meta.call) {
-      const deny = await this.offScreen(meta.session, meta.call.tool, meta.call.input);
+      const deny = offScreen(await this.leases.leases(), meta.session, this.state.onScreen.get(meta.session), meta.call.tool, meta.call.input);
       if (deny) return { deny };
     }
     // A send the cut-off turn started with no recorded end isn't made again (#85): denied with the earlier result. The
@@ -2211,47 +2228,9 @@ export class Core {
       const staged = await this.staging.gate(meta, call, true);
       if (staged.held) return staged;
     }
-    // A dependency or a cloud resource the plan doesn't name: answered by your standing rule, or asked (#23).
-    const about = call.decided?.length && call.command ? aboutCall(call.decided, call.command, homedir()) : undefined;
-    return about ? this.holds.decide(meta, about) : {};
-  }
-  /** The session is on `display` once its switch ran, if that is a screen it leases. */
-  private async switched(session: string, display: string): Promise<void> {
-    const leased = (await this.leases.leases()).some((v) => v.lease.holder === `mcp:${session}` && v.lease.resource.kind === 'screen' && v.lease.resource.key === display);
-    if (leased) this.state.onScreen.set(session, display);
-  }
-  /**
-   * Why a computer-use or Chrome step is denied, or nothing when it acts on what its session leases (#332): a switch
-   * to a screen it leases, an app whose window it leases, and any other step on the leased screen it last switched
-   * to. Claude in Chrome, a session that leases no screen, a step naming another, and one before any switch are
-   * denied, so your own screen, your browser and their windows are never touched.
-   */
-  private async offScreen(session: string, action: string, input: Record<string, unknown>): Promise<string | undefined> {
-    const holder = `mcp:${session}`;
-    const mine = (await this.leases.leases()).filter((v) => v.lease.holder === holder && v.lease.resource.host === 'local');
-    const keys = (kind: string) => mine.filter((v) => v.lease.resource.kind === kind).map((v) => v.lease.resource.key);
-    const screens = keys('screen');
-    const windows = keys('window');
-    const leased = screens.length ? `it leases ${screens.join(', ')}` : 'it leases no screen; deep env up leases one when the environment names a screen pool';
-    const why = (what: string) => `DeepBuild blocked this: computer use acts only on a screen and windows its session leases, so your own are never touched. This step ${what}, and ${leased}${windows.length ? ` and the windows of ${windows.join(', ')}` : ''}.`;
-    // Claude in Chrome acts in your own Chrome profile, with your sign-ins, which no window lease covers.
-    if (action.startsWith(CHROME)) return why('acts in your own Chrome, which no lease covers');
-    if (/(^|_)switch_display$/.test(action)) {
-      const display = String(input.display ?? '');
-      // The screen counts as the session's once the switch has run (`switched`), never on the asking alone.
-      return screens.includes(display) ? undefined : why(`switches to ${display || 'a screen it doesn\'t name'}`);
-    }
-    const current = this.state.onScreen.get(session);
-    if (current === undefined || !screens.includes(current)) return why('acts on the screen the session is on, which it hasn\'t switched to a leased one');
-    // Your clipboard is yours whichever screen a session is on.
-    if (/clipboard/.test(action) || input.clipboardRead || input.clipboardWrite) return why('acts on your clipboard, which no lease covers');
-    if (input.systemKeyCombos) return why('asks for key combos that act on your whole machine');
-    // Any step naming apps, granting, teaching or opening them, names only apps whose windows it leases.
-    const apps = [...(input.app === undefined ? [] : [input.app]), ...(Array.isArray(input.apps) ? input.apps : [])];
-    if (!apps.length && /(^|_)(open_application|request_access|request_teach_access)$/.test(action)) return why('names no app');
-    const off = apps.find((app) => typeof app !== 'string' || !windows.includes(app));
-    if (off !== undefined) return why(`acts on the window of ${typeof off === 'string' ? off : JSON.stringify(off)}, which it doesn't lease`);
-    return undefined;
+    // A dependency or a cloud resource the plan doesn't name: answered by your standing rule, or asked (#23); a dependency
+    // with its registry's reading, and a package run straight from one isn't asked once it's a week old (#1509).
+    return decide({ holds: this.holds, covered: (s, a) => this.delivery.covered(s, a), now: () => this.now(), reading: (s, a, t) => this.appendReading(s, a, t), registry: this.options.registry, plant: this.options.plant }, meta, call);
   }
   /**
    * What the hub says back to a hook it holds: a session's start gets its briefing and the answers of its thread; a
@@ -2348,7 +2327,8 @@ export class Core {
           this.delivery.unread.delete(ask);
           if (woken) await this.delivery.answers.outcome(ask, 'next_prompt', 'delivered');
         }
-        const waiting = await this.delivery.answers.waitingFor(meta.session);
+        // Never behind the prompt's own event, which answers no ask: a resume commits FULL once the evidence it names is synced (#1410).
+        const waiting = await this.delivery.answers.waitingFor(meta.session, undefined, meta.id);
         if (status && !waiting.length && !r.later.length && !this.delivery.promiseDueFor(meta.session)) {
           // The prompt's event read as the session working; it stays as it was, since no model runs on it.
           const live = this.state.live.get(meta.session);
@@ -2484,7 +2464,7 @@ export class Core {
     const from = spliced?.get(meta.id)?.from;
     spliced?.delete(meta.id);
     if (from !== undefined) return from;
-    await Promise.allSettled([...this.inflight]);
+    await Promise.allSettled([...this.inflight.keys()]);
     const [row] = (await this.record.raw(`SELECT json_extract(data, '$.from') AS f FROM events WHERE id = ?`, [meta.id])) as { f: string | null }[];
     return row ? row.f ?? 'unknown' : undefined;
   }
@@ -2501,9 +2481,11 @@ export class Core {
     const claim = unjudged ? undefined : live?.claim ?? (await newestClaim(this.raw, meta.session).then((id) => (id ? `claim:${id}` : undefined)));
     const state = claim ? await this.judging.stateOf(claim) : undefined;
     const [stop] = (await this.record.raw(`SELECT MAX(ts) AS at FROM events WHERE session_id = ? AND kind = 'agent.stop' AND json_extract(data, '$.child') IS NULL`, [meta.session])) as { at: number | null }[];
-    // The list's one count (#1463): its ask rows, as deep and the app count them.
+    // The list's one count (#1463, #1810): its ask rows, as deep and the app count them. #1810's planted reader counts
+    // an ask that took its default, which can still be undone, as open too.
     await this.state.statesSettled();
-    const needsYou = [...this.state.rows.keys()].filter((id) => id.startsWith('ask:')).length;
+    const defaulted = this.options.plant === 'needs-you-counts-defaulted' ? Number(((await this.record.raw(`SELECT COUNT(*) AS n FROM asks WHERE status = 'defaulted'`)) as { n: number }[])[0]?.n ?? 0) : 0;
+    const needsYou = [...this.state.rows.keys()].filter((id) => id.startsWith('ask:')).length + defaulted;
     return statusAnswer(state, { session: meta.session, agent: live?.agent ?? meta.agent, worktree: live?.cwd || meta.cwd, needsYou, now: this.now(), lastStop: stop?.at ?? null, state: claim ? undefined : live?.state });
   }
 
@@ -2520,26 +2502,6 @@ export class Core {
     void this.state.quietDue().catch(() => undefined);
     return { now: this.now() };
   }
-  /**
-   * A wait on `key`, woken by whoever wakes `waits` for it, by the hub stopping or after `ms`. It counts from the
-   * call, so a wake that comes while the caller still reads what it waits on isn't missed; `cancel` ends it.
-   */
-  private wakeable(waits: Map<string, Set<() => void>>, key: string, ms: number): { woken: Promise<void>; cancel: () => void } {
-    const set = waits.get(key) ?? new Set();
-    waits.set(key, set);
-    let wake = (): void => undefined;
-    const woken = new Promise<void>((done) => {
-      wake = () => {
-        clearTimeout(timer);
-        set.delete(wake);
-        if (!set.size && waits.get(key) === set) waits.delete(key);
-        done();
-      };
-    });
-    const timer = setTimeout(wake, Math.max(0, ms));
-    set.add(wake);
-    return { woken, cancel: wake };
-  }
 
   /** The hook kinds some loaded extension handles, read once the extensions have started. */
   hooks(): string[] {
@@ -2548,12 +2510,15 @@ export class Core {
   /**
    * The extensions' joined reply to a tool.before, or null when it takes the hook's fail-open policy: while appends
    * fail every gate is watch-only, and the extensions' denies and context go with them. A handler that failed is
-   * named on stderr; its reply is already out of the join.
+   * named on stderr; its reply is already out of the join. Its failure, a set-aside and the reading of a session it
+   * would have judged go on the record after the reply (#2402).
    */
-  async extensionHook(data: unknown): Promise<ExtensionReply | null> {
+  async extensionHook(data: unknown, meta: { id?: string; session?: string; agent?: string } = {}): Promise<ExtensionReply | null> {
     if (this.blocked || !this.extensions) return null;
     const reply = await this.extensions.hook({ kind: 'tool.before', data, deadline: EXTENSION_HOOK_MS, bound: contextBoundFor(EXTENSION_HOOK_MS) });
     for (const { reason } of reply.failed) process.stderr.write(`deep hub: tool.before handler failed: ${reason}\n`);
+    const call = isObj(data) && typeof data.call === 'string' ? data.call : meta.id ?? 'unknown';
+    if (reply.failed.length || reply.aside) void this.queue(() => this.handlerFailures.note('tool.before', reply, call, meta.session, meta.agent)).catch(() => undefined);
     return { denies: reply.denies, context: reply.context };
   }
 
@@ -2562,7 +2527,9 @@ export class Core {
     const reading = `deep-hook let ${meta.event} ${meta.id} through as late, after the hub's answer missed its deadline; `
       + (matched.length ? `it matched ${matched.join(', ')}` : 'it matched no guard entry');
     // The ID is a ULID (checked before this is called), so it goes into the query as it is.
-    const known = await this.record.raw(`SELECT 1 FROM events WHERE kind = 'session.reading' AND instr(json_extract(data, '$.reading'), ?) > 0 LIMIT 1`, [meta.id]);
+    // The reading is its session's, after the call's own event: found from that event's ID, not among every reading (#1868).
+    const known = await this.record.raw(`SELECT 1 FROM events WHERE session_id = ? AND log_pos > COALESCE((SELECT log_pos FROM events WHERE id = ?), 0)
+      AND kind = 'session.reading' AND instr(json_extract(data, '$.reading'), ?) > 0 LIMIT 1`, [meta.session, meta.id, meta.id]);
     if (known.length) return;
     await this.appendReading(meta.session, meta.agent, reading);
   }
@@ -2596,6 +2563,8 @@ export class Core {
     this.stopping = true;
     plantedStop();
     for (const timer of this.timers) clearInterval(timer);
+    this.beats.stop();
+    this.flags.close();
     this.siblings.stop();
     this.work?.close();
     // The pool's pipe goes with the hub, as its socket does: left in the root with no writer, any read of it blocks.
@@ -2609,6 +2578,14 @@ export class Core {
     } catch {
       return;
     }
+    // A stop that came while the core was starting cleared the timers before the start armed its own and opened the
+    // work runs (#2573): those go now, and the archive's pass under way ends before the record closes. Up to 5 s: a
+    // pass can take minutes, and the hub gives its whole stop 20 s. One that runs longer reads a closed record, as before.
+    for (const timer of this.timers) clearInterval(timer);
+    this.work?.close();
+    let bound: NodeJS.Timeout | undefined;
+    await Promise.race([this.archiving(), new Promise<void>((done) => { bound = setTimeout(done, 5000); })]);
+    clearTimeout(bound);
     await this.replaying;
     await Promise.all(this.promptItems.pending);
     for (const session of [...this.unplaced.keys()]) await this.queue(() => this.placeHeld(session)).catch(() => undefined);
@@ -2626,7 +2603,7 @@ export class Core {
     // Each worktree's stack goes down with the hub, through the supervisor.
     await this.stacks.close();
     // Each running job is stopped through the supervisor; one still stopping is reaped on the next start.
-    const jobs = await this.runner.list().catch(() => [] as JobRecord[]);
+    const jobs = await this.runner.recent().catch(() => [] as JobRecord[]);
     await Promise.race([Promise.allSettled(jobs.filter((j) => j.state === 'running' || j.state === 'waiting').map((j) => this.runner.cancel(j.job))), new Promise((done) => setTimeout(done, 5000))]);
     await this.runner.close();
     await this.runs.settled();

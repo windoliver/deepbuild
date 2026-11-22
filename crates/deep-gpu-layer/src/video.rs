@@ -177,7 +177,7 @@ fn cloud_job(p: &Point, frame: &Arc<Texels>) -> Option<CloudJob> {
         red: c.red,
         model: c.model,
         point_size: p.size,
-        flags: u32::from(p.world) | (shape << 1),
+        flags: u32::from(p.world) | (shape << 1) | (u32::from(p.fog) << 3),
         paint: c.painted,
     })
 }

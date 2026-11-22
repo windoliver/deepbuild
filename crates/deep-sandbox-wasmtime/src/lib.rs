@@ -6,19 +6,33 @@
 
 pub mod layouts;
 pub mod service;
+// #172: in the web player the browser's own WebAssembly engine stands in for wasmtime, behind the
+// same Runner, so the logic module steps the same rewritten bytes there.
+#[cfg(target_arch = "wasm32")]
+mod web;
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::mpsc;
 use std::time::Duration;
 
+#[cfg(not(target_arch = "wasm32"))]
 use deep_canvas_sandbox::rewrite::{locate, offsets, Entry, FUEL, STACK, STACK_CAP, TRAP};
-use deep_canvas_sandbox::trap::{raised, Trap};
-use wasmtime::{Config, Engine, Instance, Module, Store, Val, WasmBacktrace};
+#[cfg(not(target_arch = "wasm32"))]
+use deep_canvas_sandbox::trap::raised;
+use deep_canvas_sandbox::trap::Trap;
+#[cfg(not(target_arch = "wasm32"))]
+pub use wasmtime::Val;
+#[cfg(not(target_arch = "wasm32"))]
+use wasmtime::{Config, Engine, Instance, Module, Store, WasmBacktrace};
+#[cfg(target_arch = "wasm32")]
+pub use web::{Runner, Val};
 
 /// The wasmtime this engine links.
 pub const WASMTIME: &str = "49.0.5";
 
 /// The native stack each call gets, past any cap the rewrite charges against (at most 2 MiB, the
-/// most wasmtime allows), so the rewrite's `stack` trap comes first.
+/// most wasmtime allows), so the rewrite's `stack` trap comes first. A budget's stack keeps under
+/// it on every engine, so a budget means the same in the web player.
 const NATIVE_STACK: usize = 2 << 20;
 
 /// Planted wrong engines, for the kit's proof (#238).
@@ -49,6 +63,7 @@ pub struct Outcome {
 }
 
 /// A program instantiated once; calls run in turn on its memory and globals.
+#[cfg(not(target_arch = "wasm32"))]
 pub struct Runner {
     engine: Engine,
     store: Store<()>,
@@ -61,6 +76,7 @@ pub struct Runner {
     faults: Faults,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Runner {
     /// `written`: a trap names the offset in the program as written; else in the rewritten one.
     pub fn new(bytes: &[u8], faults: Faults, written: bool) -> Result<Runner, String> {
@@ -245,6 +261,7 @@ impl Runner {
 }
 
 /// The kind of an engine's own trap.
+#[cfg(not(target_arch = "wasm32"))]
 fn kind(t: wasmtime::Trap) -> &'static str {
     use wasmtime::Trap::*;
     match t {

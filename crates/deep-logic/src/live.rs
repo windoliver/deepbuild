@@ -45,7 +45,11 @@ fn baked(world: &World, rec: &Record) -> Value {
     let piece = &world.piece;
     // Each checkpoint as the bake keeps it: its step and full-state hash, never the time it took.
     let mut checkpoints = rec.checkpoints.clone();
-    for c in checkpoints.values_mut().filter_map(Value::as_array_mut).flatten() {
+    for c in checkpoints
+        .values_mut()
+        .filter_map(Value::as_array_mut)
+        .flatten()
+    {
         if let Some(o) = c.as_object_mut() {
             o.remove("ns");
         }
@@ -133,7 +137,7 @@ fn checked(line: &Value, planted: Planted) -> Result<Piece, Value> {
 /// The piece's world and the check's reply.
 fn build(line: &Value, planted: Planted) -> Result<(World, Value), Value> {
     let piece = Rc::new(checked(line, planted)?);
-    let entries = track(&piece, line, 0)
+    let entries = track(&piece, line, 0, &planted)
         .ok_or_else(|| json!({"ok": false, "code": "bad_input", "what": "track"}))?;
     let items: Map<String, Value> = piece
         .items
@@ -190,7 +194,13 @@ fn worker(line: Value, planted: Planted, inbox: Receiver<Latched>, outbox: Sende
     let mut rec = Record::default();
     let mut reported = 0;
     let mut view: BTreeMap<String, Vec<u8>> = BTreeMap::new();
-    for Latched { t, set, hover, baked: wants } in inbox {
+    for Latched {
+        t,
+        set,
+        hover,
+        baked: wants,
+    } in inbox
+    {
         if wants {
             if outbox.send(baked(&world, &rec)).is_err() {
                 return;
@@ -202,7 +212,7 @@ fn worker(line: Value, planted: Planted, inbox: Receiver<Latched>, outbox: Sende
         }
         // A piece without logic gains no work per frame: nothing steps, nothing is timed.
         if world.lives.is_empty() {
-            let reply = json!({"want": t / len + 1, "at": t / len + 1, "stale": false, "steps": 0, "eval_ns": 0,
+            let reply = json!({"want": t / len + 1, "at": t / len + 1, "stale": false, "steps": 0, "eval_ns": 0, "saves_ns": 0,
                 "deep_hash": world.deep_hashes(), "stamped": null, "fork_at": null});
             if outbox.send(reply).is_err() {
                 return;
@@ -276,7 +286,7 @@ fn worker(line: Value, planted: Planted, inbox: Receiver<Latched>, outbox: Sende
         draws.extend(world.previews());
         let at = world.at().unwrap_or(0);
         let reply = json!({"want": want, "at": at, "stale": at != want, "steps": steps, "eval_ns": eval_ns,
-            "previews": previews, "blends": world.blends(t), "traps": crate::libraries_in(&world.piece, traps),
+            "saves_ns": std::mem::take(&mut world.saves_ns), "previews": previews, "blends": world.blends(t), "traps": crate::libraries_in(&world.piece, traps),
             "deep_hash": world.deep_hashes(), "stamped": stamped, "fork_at": fork_at,
             "draws": draws, "valid_until": if at == want { world.valid_until(t) } else { Some(t + 1) },
             "drawn": hashes(at - 1, &world.arrays())});
@@ -409,7 +419,13 @@ fn front(
     // Each ended step's full-state hashes and what a frame draws from it, until a reset drops it.
     let mut ended: BTreeMap<i64, (Map<String, Value>, Vec<Shown>)> = BTreeMap::new();
     let mut fork_at: Option<i64> = None;
-    for Latched { t, set, hover, baked } in inbox {
+    for Latched {
+        t,
+        set,
+        hover,
+        baked,
+    } in inbox
+    {
         // A pipelined item has no preview, and its logic thread keeps no session bake.
         if baked {
             let no = json!({"ok": false, "code": "bad_input", "what": "baked: a pipelined view keeps no session bake"});
@@ -419,7 +435,15 @@ fn front(
             continue;
         }
         let mut took = set.is_none().then_some(None);
-        if to.send(Latched { t, set, hover, baked }).is_err() {
+        if to
+            .send(Latched {
+                t,
+                set,
+                hover,
+                baked,
+            })
+            .is_err()
+        {
             return;
         }
         let start = cpu_ns();
@@ -502,7 +526,9 @@ fn front(
         let eval_ns = cpu_ns() - start;
         let reply = json!({"want": due + 1, "at": due + 1, "stale": !ended.contains_key(&due), "steps": steps,
             "eval_ns": eval_ns, "deep_hash": deep, "stamped": stamped, "fork_at": fork_at,
-            // A pipelined item has no preview (budget::pipelined), so it previews nothing.
+            // A pipelined item has no preview (budget::pipelined), so it previews nothing; its logic
+            // thread keeps no saves folder, so the saves machinery never runs there (#189).
+            "saves_ns": 0,
             "previews": 0, "blends": world::blends(&piece, shown.iter().map(|(l, p, _)| (*l, p.is_empty())), t), "traps": [],
             "draws": draws, "valid_until": valid_until, "ended": listed, "drawn": drawn});
         // Steps before the one drawn are done with: a seek back runs them again.

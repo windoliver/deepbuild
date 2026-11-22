@@ -2,7 +2,7 @@
 //! crate's own types only, so no engine type crosses it. `occurrences` reports what a step wrote
 //! (#2011's sensor entries and exits, #1918's other kinds), which the module sorts; `query` and
 //! `move_character` (#1919) keep every spatial query and character move behind it, and
-//! `drive_vehicle` joins it with #251; the hash reads `canonical` (golden.rs).
+//! `drive_vehicle` (#251) every vehicle's; the hash reads `canonical` (golden.rs).
 
 use std::collections::BTreeMap;
 
@@ -14,8 +14,9 @@ use crate::doc::{Pose, Refusal, Shape, World};
 use crate::occurrence::Raw;
 
 /// What a step reads of its scene at its own time, evaluated before the solve: each kinematic
-/// body's position from its `follow` path, each motor target a path sets, and each coordinate a
-/// kinematic solve drives (deg for a hinge, m for a slider, as written).
+/// body's position from its `follow` path, each motor target a path sets, each coordinate a
+/// kinematic solve drives (deg for a hinge, m for a slider, as written), and each force's channel
+/// (#2371).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Targets {
     /// body → position, m; its rotation stays its pose's.
@@ -23,6 +24,8 @@ pub struct Targets {
     pub motors: BTreeMap<String, f64>,
     /// joint → coordinate, in the solve's order.
     pub coords: Vec<(String, f64)>,
+    /// force → what its channel holds: a drag's medium, m/s, or a spring's point, m.
+    pub forces: BTreeMap<String, [f64; 3]>,
 }
 
 /// One entry of the world's input track (Input track entries).
@@ -34,7 +37,7 @@ pub struct Input {
 }
 
 /// One body as a step left it.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct BodyState {
     pub id: String,
     pub pos: [f64; 3],
@@ -47,6 +50,12 @@ pub struct BodyState {
     /// here, every substep's.
     pub contact_impulse: f64,
     pub sleeping: bool,
+    /// #2248: kg, as the backend steps it.
+    pub mass: f64,
+    /// #2248: J: its kinetic energy plus its potential where it stands, −m g·p.
+    pub energy: f64,
+    /// #2248: the pairs of shape uses it is one of that touch after the step.
+    pub contacts: u32,
 }
 
 /// The world as the last step left it, bodies in canonical (ID) order.
@@ -113,29 +122,58 @@ pub const FIELDS: [&str; 13] = [
     "angular.z",
 ];
 
+/// #2098: the fields of a 2D world's body in the canonical state: its position, its rotation as
+/// the backend holds it, the cosine and sine of its turn about +Z, then its velocity, `angular`
+/// rad/s about +Z.
+pub const FLAT_FIELDS: [&str; 7] = [
+    "pos.x", "pos.y", "rot.cos", "rot.sin", "linear.x", "linear.y", "angular",
+];
+
 /// The fields of a soft body's particle in the canonical state, after every body's (#524):
 /// position, then velocity.
 pub const PARTICLE_FIELDS: [&str; 6] = [
     "pos.x", "pos.y", "pos.z", "linear.x", "linear.y", "linear.z",
 ];
 
-/// One body's or one particle's (`<soft>#<address>`) canonical state: the backend's own f32
-/// value of each of `FIELDS` or `PARTICLE_FIELDS`, never converted, so a hash of it reads exactly
-/// what the backend steps.
+/// #182: the fields of a character body's own state in the canonical state, after every
+/// body's (Checkpoint ring: `hash`): the walk it wants, its vertical speed, grounded, sliding and
+/// crouched as 0 or 1, and how many shapes it touches; then each touched shape use as its body's
+/// place in canonical order and its index, both named `touching`.
+pub const CHARACTER_FIELDS: [&str; 8] = [
+    "wants.x", "wants.y", "wants.z", "vertical", "grounded", "sliding", "crouched", "touching",
+];
+
+/// #182: one character body's own state as a step left it (Body `body@1`: character: State).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CharacterState {
+    pub id: String,
+    /// m/s: the walk it wants, its part along up dropped.
+    pub wants: [f32; 3],
+    /// m/s along up.
+    pub vertical: f32,
+    pub grounded: bool,
+    pub sliding: bool,
+    pub crouched: bool,
+    /// The shape uses its controller touched in its last step, sorted.
+    pub touching: Vec<ShapeRef>,
+}
+
+/// One body's, one particle's (`<soft>#<address>`), one vehicle body's own or one wheel's
+/// (`<body>#<wheel>`, #251), or one character body's own (#182) canonical state: the backend's own
+/// f32 value of each of its `names` (`FIELDS`, `PARTICLE_FIELDS`, `HELD_FIELDS`, `WHEEL_FIELDS` or
+/// `CHARACTER_FIELDS`), never converted, so a hash of it reads exactly what the backend steps.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Canonical {
     pub id: String,
     pub values: Vec<f32>,
+    pub names: &'static [&'static str],
 }
 
 impl Canonical {
-    /// The names of its values.
-    pub fn fields(&self) -> &'static [&'static str] {
-        if self.values.len() == PARTICLE_FIELDS.len() {
-            &PARTICLE_FIELDS
-        } else {
-            &FIELDS
-        }
+    /// The name of its value `i`: its names', and past them (#182) `touching`, the two values
+    /// each shape use a character body touches adds.
+    pub fn field(&self, i: usize) -> &'static str {
+        self.names.get(i).copied().unwrap_or("touching")
     }
 }
 
@@ -171,6 +209,21 @@ pub fn about_x(deg: f64) -> [f64; 4] {
     [ops::sin(h), 0.0, 0.0, ops::cos(h)]
 }
 
+/// `v` turned by the quaternion `q` (`[x, y, z, w]`).
+pub fn rotate(q: [f64; 4], v: [f64; 3]) -> [f64; 3] {
+    let (u, w) = ([q[0], q[1], q[2]], q[3]);
+    let cross = |a: [f64; 3], b: [f64; 3]| {
+        [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ]
+    };
+    let t = cross(u, v).map(|x| 2.0 * x);
+    let c = cross(u, t);
+    [0, 1, 2].map(|i| v[i] + w * t[i] + c[i])
+}
+
 /// #523: the whole turns a hinge gains over a step from angle `a0` to `a1` (deg, each in
 /// (−180, 180]): ±1 when the step's shortest signed change carries it across the wrap (Joint).
 pub fn turn(a0: f64, a1: f64) -> i32 {
@@ -185,6 +238,34 @@ pub fn turn(a0: f64, a1: f64) -> i32 {
         _ => 0,
     }
 }
+
+/// #251: one wheel of a vehicle body as a step left it: its spin and the turn it made in that
+/// step (deg), whether its ray met a shape, its suspension's length (m) and its steer (deg).
+#[derive(Clone, Debug, PartialEq)]
+pub struct WheelState {
+    pub name: String,
+    pub spin: f64,
+    pub spin_rate: f64,
+    pub touching: bool,
+    pub length: f64,
+    pub steer: f64,
+}
+
+/// #251: one vehicle body's own state: its wheels by name, and the drive (N), steer (deg) and
+/// brake (N) it holds.
+#[derive(Clone, Debug, PartialEq)]
+pub struct VehicleState {
+    pub id: String,
+    pub wheels: Vec<WheelState>,
+    pub drive: f64,
+    pub steer: f64,
+    pub brake: f64,
+}
+
+/// #251: a vehicle body's own fields in the canonical state, after every body's: the drive, steer
+/// and brake it holds, under the body's ID; then each wheel's, under `<body>#<wheel>`.
+pub const HELD_FIELDS: [&str; 3] = ["drive", "steer", "brake"];
+pub const WHEEL_FIELDS: [&str; 3] = ["spin", "spin_rate", "touching"];
 
 /// A deep checkpoint: the backend's whole-world state as its own bytes, stamped with the backend
 /// and the version that wrote them, which no other version loads (Checkpoint ring).
@@ -256,6 +337,9 @@ pub trait Backend {
     /// Every shape use `q` meets among those in `groups`, sorted by distance, then shape use: the
     /// one way physics.query, physics.cast@1 and nav.reach reach the engine's spatial queries.
     fn query(&self, q: &Query, groups: u32) -> Vec<Hit>;
+    /// #182: each character body's own state as the last step left it, in canonical (priority,
+    /// ID) order.
+    fn characters(&self) -> Vec<CharacterState>;
     /// Moves character body `body` by `translation` m through the backend's character
     /// controller, which sets its kinematic target for the next step, sliding along what it
     /// meets; the translation it took, or the refusal naming a body that can't move so.
@@ -267,4 +351,11 @@ pub trait Backend {
     /// #2014: how far along the unit `dir` the ray from `from` first meets a shape of the world
     /// as built or last stepped, within `max` m; none when it meets nothing.
     fn ray(&self, from: [f64; 3], dir: [f64; 3], max: f64) -> Option<f64>;
+    /// #251: moves vehicle body `body` one step through the backend's vehicle controller: each
+    /// wheel's ray cast down its chassis against the world as the last step left it, and its
+    /// springs, drive, brakes and grip pushing the chassis over the coming step, from the drive,
+    /// steer and brake it holds; or the refusal naming a body that isn't a vehicle.
+    fn drive_vehicle(&mut self, body: &str) -> Result<(), Box<Refusal>>;
+    /// #251: every vehicle body's own state, by ID.
+    fn vehicles(&self) -> Vec<VehicleState>;
 }

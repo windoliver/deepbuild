@@ -247,11 +247,18 @@ impl Render for AskPage {
                 ];
                 PAGE.with(|page| page.set(Some(rect)));
                 if let Some(card) = placed.as_ref() {
-                    card.update(cx, |card, _| {
+                    card.update(cx, |card, cx| {
                         if let Some(controller) = card.controller.as_mut() {
                             // The window as it is now: a window made larger keeps the card armable.
                             let slot = crate::arming::Slot { rect, visible };
+                            let was = controller.state_name();
                             controller.placed(slot, crate::views::now());
+                            // A card this presented again draws as it now is, in the frame after (#1482): a notify
+                            // made while a frame draws is dropped, so it is made when the frame is done.
+                            if controller.state_name() != was {
+                                let card = cx.entity_id();
+                                cx.defer(move |cx| cx.notify(card));
+                            }
                         }
                     })
                     .ok();
@@ -261,8 +268,16 @@ impl Render for AskPage {
         )
         .absolute()
         .size_full();
+        // The card keeps to the lane and scrolls inside itself (#1808); a narrow window's page has a title row for the
+        // count, the way back to the list.
+        let title = crate::views::narrow()
+            .then(|| crate::views::page_title(div(), chrome).into_any_element());
         let lane = crate::views::in_lane(
+            None,
+            title,
             div()
+                .flex_1()
+                .min_h_0()
                 .flex()
                 .flex_col()
                 .pt(sizes().space(4))
@@ -306,8 +321,20 @@ pub fn tick(now: u64, cx: &mut App) {
     let Some((ask, shown)) = SHOWN.with(|cell| cell.borrow().clone()) else {
         return;
     };
+    // A yes the hub holds (#1101): the record says when its steps start, that they did, or that it was withdrawn.
+    let holding = shown.read(cx).controller.as_ref().is_some_and(Controller::counting_down);
+    if holding {
+        let events = crate::record::history();
+        shown.update(cx, |card, _| {
+            if let Some(controller) = card.controller.as_mut() {
+                controller.hold_changed(&events, now);
+            }
+        });
+    }
     let open = crate::record::with_view(|view| view.table().is_open(&ask)).unwrap_or(true);
-    if !open {
+    // Its receipt counts the hold down with Undo while the hub holds its steps, though the ask is answered (#1101).
+    let counting = shown.read(cx).controller.as_ref().is_some_and(Controller::counting_down);
+    if !open && !counting {
         // Answered here or anywhere: while its page shows, the next ask's page opens, and no row moves (#1461).
         leave(cx);
         let showing = crate::open::current(cx).is_some_and(|a| {
@@ -319,8 +346,13 @@ pub fn tick(now: u64, cx: &mut App) {
         return;
     }
     shown.update(cx, |card, cx| {
-        if let Some(controller) = card.controller_mut() {
-            controller.tick(now);
+        // The card draws again when its state differs from the one it drew: arming, or a move that presented it again
+        // after it drew (#1482). A tick that changes neither draws nothing.
+        let moved = card
+            .controller_mut()
+            .is_some_and(|controller| controller.tick(now));
+        let state = card.controller.as_ref().map(Controller::state_name);
+        if card.controller.is_some() && (moved || state != card.drawn) {
             cx.notify();
         }
     });
@@ -340,6 +372,12 @@ pub struct Card {
     page: bool,
     /// The control the keyboard is on (#1462).
     at: Option<Target>,
+    /// On its page, the rows above its last block scroll (#1808), and the last block's bounds say whether it's all in
+    /// view.
+    rows: ScrollHandle,
+    last: std::rc::Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
+    /// The state its controller was in when it last drew (#1482).
+    drawn: Option<&'static str>,
 }
 
 /// What a press edge says: its own time and whether the HID system made it.
@@ -381,6 +419,9 @@ impl Card {
             failed: None,
             page: false,
             at: None,
+            rows: ScrollHandle::new(),
+            last: Default::default(),
+            drawn: None,
         };
         card.focus_on(at);
         card
@@ -405,6 +446,7 @@ impl Card {
             Target::Undo => "card-undo".to_owned(),
             Target::SignIn => "card-sign-in".to_owned(),
             Target::Page => "card-price-page".to_owned(),
+            Target::Fold => "card-fold".to_owned(),
         })
     }
 
@@ -426,6 +468,7 @@ impl Card {
                         Row::Undo => Some(Target::Undo),
                         Row::SignIn => Some(Target::SignIn),
                         Row::Page(_) => Some(Target::Page),
+                        Row::Fold { .. } => Some(Target::Fold),
                         Row::Text(_) | Row::Call { .. } => None,
                     })
                     .collect()
@@ -479,6 +522,9 @@ impl Card {
                 let_go();
                 crate::views::focus_list(window, cx);
             }
+            // The rows above a long card's options scroll from the keyboard too, so its end can be shown (#1808).
+            "pagedown" | "end" => self.rows.scroll_to_bottom(),
+            "pageup" | "home" => self.rows.set_offset(Point::default()),
             "space" | "enter" if !event.is_held => {
                 if let Some(at) = self.at {
                     self.press_key(at, cx);
@@ -527,9 +573,10 @@ impl Card {
 
     /// The box's send control on the card's page and the lines above it (#1461).
     pub fn words_send(&self) -> (&'static str, Vec<&'static str>) {
-        self.controller
-            .as_ref()
-            .map_or(("Answer", Vec::new()), Controller::words_send)
+        self.controller.as_ref().map_or(
+            (crate::copy::text("card.answer"), Vec::new()),
+            Controller::words_send,
+        )
     }
 
     /// The down of a press on `target`.
@@ -641,7 +688,9 @@ impl Card {
             return;
         };
         let answers = controller.take_answers();
-        if answers.is_empty() {
+        // Undo inside the hub's hold reaches the hub's undo (#1101).
+        let undos = controller.take_undos();
+        if answers.is_empty() && undos.is_empty() {
             return;
         }
         self.failed = None;
@@ -650,7 +699,10 @@ impl Card {
                 .background_spawn(async move {
                     answers
                         .iter()
-                        .try_for_each(|params| crate::answer::send(params).map(|_| ()))
+                        .try_for_each(|params| crate::answer::send(params).map(|_| ()))?;
+                    undos
+                        .iter()
+                        .try_for_each(|params| crate::answer::undo(params).map(|_| ()))
                 })
                 .await;
             if let Err(error) = sent {
@@ -704,6 +756,7 @@ impl Card {
             Row::Undo => (Some(Control::Plain), Some(Target::Undo)),
             Row::SignIn => (Some(Control::Main), Some(Target::SignIn)),
             Row::Page(_) => (Some(Control::Plain), Some(Target::Page)),
+            Row::Fold { .. } => (Some(Control::Plain), Some(Target::Fold)),
         };
         // Each control keyed by what it is, never its place (#1462); a line by its place.
         let id: ElementId = match target.and_then(|target| self.id_of(target)) {
@@ -740,7 +793,7 @@ impl Card {
         if let Some(choice) = choice {
             let beside: Vec<String> = choice
                 .recommended
-                .then(|| "recommended".to_owned())
+                .then(|| crate::copy::text("card.recommended").to_owned())
                 .into_iter()
                 .chain(choice.cost.clone())
                 .collect();
@@ -790,6 +843,7 @@ impl Focusable for Card {
 
 impl Render for Card {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.drawn = self.controller.as_ref().map(Controller::state_name);
         // The card keeps the keyboard while it shows: focus anything else took, it takes back at its next frame, until
         // you move the keyboard off it yourself (#1462).
         if !self.focus.is_focused(window) && !LET_GO.with(std::cell::Cell::get) {
@@ -806,6 +860,11 @@ impl Render for Card {
             self.focus_on(at);
         }
         let chrome = crate::chrome::of(window);
+        // #1808's planted card grows past its page and never scrolls, as the merge base's did.
+        let grows = crate::plain::planted("card-grows-past-slot");
+        if self.page && !grows {
+            return self.page_card(chrome, cx);
+        }
         let rows: Vec<AnyElement> = match &self.controller {
             Some(controller) => {
                 let rows = if self.page {
@@ -904,7 +963,7 @@ impl Render for Card {
                             card.child(
                                 crate::views::observed("card-words")
                                     .role(Role::TextInput)
-                                    .aria_label("Your words")
+                                    .aria_label("Your words") // copy-exception: planted wrong program
                                     .h(sizes().space(5))
                                     .w_full(),
                             )
@@ -957,6 +1016,154 @@ impl Render for Card {
                     )
                     .child(measure),
             )
+            .into_any_element()
+    }
+}
+
+impl Card {
+    /// The card on its ask's page (#1808): the rows above its last block scroll inside the lane, and its last block (its
+    /// options and their count, its default, what it's saved as and what a press was told) stays in view under them, so
+    /// every card fits its page and can arm. It arms once its end was shown and every option was.
+    fn page_card(&mut self, chrome: &Chrome, cx: &mut Context<Self>) -> AnyElement {
+        let (above, last) = self
+            .controller
+            .as_ref()
+            .map(Controller::page_parts)
+            .unwrap_or_default();
+        let above: Vec<AnyElement> = above
+            .iter()
+            .enumerate()
+            .map(|(index, row)| self.row(index, row, chrome, cx))
+            .collect();
+        let after = above.len();
+        let mut last: Vec<AnyElement> = last
+            .iter()
+            .enumerate()
+            .map(|(index, row)| self.row(after + index, row, chrome, cx))
+            .collect();
+        last.extend(self.failed.clone().map(|line| {
+            crate::views::observed("card-failed")
+                .role(Role::Label)
+                .aria_label(line.clone())
+                .typed(sizes().small)
+                .child(line)
+                .into_any_element()
+        }));
+        let card = cx.entity().downgrade();
+        let (rows, held) = (self.rows.clone(), self.last.clone());
+        let measure = canvas(
+            move |bounds, _, cx| {
+                // The card and the box share the page (#1461); a last block cut off at the card's foot isn't all in
+                // view, so the card doesn't fit (#1808).
+                let below = BOX_TALL.with(std::cell::Cell::get);
+                let cut = held.get().is_some_and(|last| {
+                    f32::from(last.bottom()) > f32::from(bounds.bottom()) + 0.5
+                });
+                let size = [
+                    f32::from(bounds.size.width).ceil() as i64,
+                    if cut {
+                        i64::MAX / 4
+                    } else {
+                        f32::from(bounds.size.height).ceil() as i64 + below
+                    },
+                ];
+                // Its end is shown when its rows all fit, or are scrolled to their end.
+                let most = f32::from(rows.max_offset().y);
+                let shown = most <= 0.5 || -f32::from(rows.offset().y) >= most - 0.5;
+                let now = crate::views::now();
+                let changed = card
+                    .update(cx, |card, _| {
+                        let Some(controller) = card.controller.as_mut() else {
+                            return false;
+                        };
+                        let was = (controller.state_name(), controller.lines());
+                        controller.measured_on_page(size, now);
+                        controller.end_shown(shown, now);
+                        was != (controller.state_name(), controller.lines())
+                    })
+                    .unwrap_or(false);
+                // A frame can't redraw what it's drawing: the next one shows what changed.
+                if changed {
+                    let card = card.clone();
+                    cx.defer(move |cx| {
+                        card.update(cx, |_, cx| cx.notify()).ok();
+                    });
+                }
+            },
+            |_, _, _, _| {},
+        )
+        .absolute()
+        .size_full();
+        let held = self.last.clone();
+        div()
+            .relative()
+            .w_full()
+            .flex_initial()
+            .min_h_0()
+            .flex()
+            .flex_col()
+            .child(
+                // In the page's lane, as wide as it, drawn on the page with no fill or box of its own (#1453 rule 7).
+                crate::views::observed(CARD_ID)
+                    .role(Role::Group)
+                    .when_some(self.controller.as_ref(), |card, controller| {
+                        card.aria_value(controller.state_name())
+                    })
+                    .track_focus(&self.focus)
+                    .on_key_down(cx.listener(|card, event: &KeyDownEvent, window, cx| {
+                        card.key_down(event, window, cx)
+                    }))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|_, _, _, _| LET_GO.with(|l| l.set(false))),
+                    )
+                    .occlude()
+                    .w_full()
+                    .flex_initial()
+                    .min_h_0()
+                    .flex()
+                    .flex_col()
+                    .gap(sizes().space(0))
+                    .child(
+                        div()
+                            .id("card-rows")
+                            .w_full()
+                            .flex_initial()
+                            .min_h_0()
+                            .flex()
+                            .flex_col()
+                            .gap(sizes().space(0))
+                            .overflow_y_scroll()
+                            .track_scroll(&self.rows)
+                            .children(above),
+                    )
+                    .child(
+                        div()
+                            .relative()
+                            .w_full()
+                            .flex_none()
+                            .flex()
+                            .flex_col()
+                            .gap(sizes().space(0))
+                            .child(
+                                canvas(move |bounds, _, _| held.set(Some(bounds)), |_, _, _, _| {})
+                                    .absolute()
+                                    .size_full(),
+                            )
+                            .children(last),
+                    )
+                    // #1461's planted card draws a text field of its own above the box.
+                    .when(crate::plain::planted("card-field-and-box"), |card| {
+                        card.child(
+                            crate::views::observed("card-words")
+                                .role(Role::TextInput)
+                                .aria_label("Your words") // copy-exception: planted wrong program
+                                .h(sizes().space(5))
+                                .w_full(),
+                        )
+                    }),
+            )
+            .child(measure)
             .into_any_element()
     }
 }

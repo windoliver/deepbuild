@@ -18,7 +18,7 @@ use deep_canvas_marks::look::Status;
 use deep_canvas_scene3d::label::PAGE;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
-use deep_canvas_scene3d::scene::{evaluate_sourced, Labels, Scene};
+use deep_canvas_scene3d::scene::{Labels, Scene};
 use deep_gpu::device::Backend;
 use deep_scene3d_render::status::{Mode, COLORS_PASS, GUARD_PASS};
 use deep_scene3d_render::SHADOW_PASS;
@@ -28,6 +28,7 @@ use serde_json::{json, Map, Value};
 use crate::frames::{hex, Capture};
 use crate::levels::Levels;
 use crate::liveview::surface_of;
+use crate::particles::evaluate_sourced;
 use crate::session3::{self, lock};
 use crate::status;
 use crate::window::OverlayPicture;
@@ -44,953 +45,8 @@ struct Window3 {
     card: Option<crate::window::Card>,
 }
 
-struct Args {
-    doc: Value,
-    look: Look3,
-    /// The look as given: its bloom and ground grid turn effects on (#380).
-    look_json: Value,
-    /// The session's selection, whose items draw their outlines (#380).
-    selection: Vec<String>,
-    /// The first frame latched: the session opens there, a seek (#380).
-    from: u64,
-    /// Each frame's GPU time and each pass's, from wgpu-profiler (#380).
-    timings: bool,
-    size: [u32; 2],
-    frames: u64,
-    fps: u64,
-    /// `(frame, writer, ops)`, in the call's order.
-    patches: Vec<(u64, String, Value)>,
-    targets: BTreeSet<String>,
-    capture: Capture,
-    /// #166: each captured frame lists the rain rings alive on each water part.
-    rings: bool,
-    /// #268: each captured frame reports the water's shore field: its key, bytes and bake time.
-    shore: bool,
-    /// Operator outputs each captured frame reads back (#483).
-    read: Vec<String>,
-    /// `cull: "cpu"`: the document drawn from the CPU's f64 cull, the reference a GPU frame is
-    /// judged against (#484).
-    cull_on_cpu: bool,
-    /// Each captured frame reports what each culled list kept (#484).
-    cull_report: bool,
-    /// `occlusion: "off"`: the camera's lists culled by the frustum alone (#1637).
-    occlusion_off: bool,
-    /// `(after, to)`: right after frame `after` draws, the session jumps to frame `to` (#484).
-    seeks: Vec<(u64, u64)>,
-    window: Option<Window3>,
-    latency: Vec<u64>,
-    counts: bool,
-    /// `ground_points: {item, at: [[x, z]]}`: each frame reports the height a terrain plate draws
-    /// at each point, with its tile and level (#2017).
-    ground_points: Option<(String, Vec<[f64; 2]>)>,
-    /// The glTF files `mesh.asset@1` items name, by sha256 (#420), and the images a material's
-    /// maps or a glTF name (#423).
-    assets: std::collections::BTreeMap<String, std::path::PathBuf>,
-    /// A JSON glTF's external buffers and images: `{glTF sha → {uri → sha}}` (#423).
-    uris: BTreeMap<String, BTreeMap<String, String>>,
-    /// An asset's license, by its hash (#423).
-    licenses: BTreeMap<String, Value>,
-    /// The evidence store an import keeps each texture in, by hash (#423).
-    store: Option<std::path::PathBuf>,
-    /// Report each scene import and the maps' receipt (#423).
-    imports: bool,
-    receipt: bool,
-    /// The documents an item may open by reference, by doc handle.
-    docs: BTreeMap<String, std::path::PathBuf>,
-    /// Report each label's glyphs and the atlas pages they sample (#381).
-    labels: bool,
-    /// `(frame, at)`: a click at `at` view px while frame n is presented (#671).
-    clicks: Vec<(u64, [f64; 2])>,
-    /// The selection's hit margin in px (#424; Selection: `hit.margin`), 3 unless the call says.
-    hit_margin: i64,
-    /// A `cutaway@1`'s params as a view input in session state, applied to every frame (#424).
-    cutaway: Option<Value>,
-    /// The record's state for each status binding's source (#382).
-    states: BTreeMap<String, String>,
-    /// Report the first frame as a cold start: when it settled, from this process's spawn, and
-    /// which pipelines it compiled (#854).
-    cold: bool,
-    /// The theme the look's roles and status map resolve in (#382).
-    theme: String,
-    /// The look's status map, when it has one (#382).
-    status: Option<Status>,
-    /// The GPU surface the view draws through (#386).
-    surface: Surface,
-    /// The pack folders installed before the document's check, by `owner/name` (#429), or
-    /// `deepbuild/<name>` when the call names only the folder (#422).
-    packs: Vec<(Option<String>, std::path::PathBuf)>,
-    /// The paths whose evaluated values each frame reports (#429).
-    evaluate: Vec<String>,
-    /// #468: world points each frame projects through the camera it draws, as `projected`.
-    project: Vec<[f64; 3]>,
-    /// The items whose drawn vertices and sway gust each frame reports, read back from the GPU
-    /// (#2016).
-    sway: Vec<String>,
-    /// #226: each frame reports the 3D axes' ticks, and the drawn vertices of these items.
-    axes: bool,
-    world: Vec<String>,
-    /// Writer layers not visible in this session, which draw, light and cast nothing (#422).
-    hidden: BTreeSet<String>,
-    /// Each frame reports the key sun's cascade splits (#422).
-    cascades: bool,
-    /// Each frame reports its shadow passes and local maps (#446).
-    shadows: bool,
-    /// Each frame reports its level-of-detail rows and its light cut, and each captured frame
-    /// its band masks (#425).
-    lod: bool,
-    light_cut: bool,
-    /// #506: each frame reports where its anchored overlays draw; #468: and where each one's
-    /// leader ends.
-    overlays: bool,
-    masks: bool,
-    /// The view's class (#419): an export draws every frame with all of the look's export
-    /// samples and never settles; the live view draws its live samples while moving.
-    export: bool,
-    /// Viewer-only input in session state, from the frame each names (#419): `{pointer, hover,
-    /// selection, readout}`, never a document revision.
-    viewer: Vec<(u64, Value)>,
-    /// #173: the frame cap, stalls, scrubs, your hand's orbit and the determinism check.
-    history: history::Inputs,
-    /// #177: the view's HDR output, `hdr` and the stub display.
-    hdr: crate::hdr::Hdr,
-}
-
-pub(crate) fn pair(v: &Value) -> Option<[u32; 2]> {
-    let a = v.as_array()?;
-    if a.len() != 2 {
-        return None;
-    }
-    Some([
-        u32::try_from(a[0].as_u64()?).ok()?,
-        u32::try_from(a[1].as_u64()?).ok()?,
-    ])
-}
-
-/// `doc` without the items of the `hidden` writer layers, nor those layers (#422: a layer not
-/// visible draws, lights and casts nothing, as if absent).
-fn without_layers(doc: &Value, hidden: &BTreeSet<String>) -> Value {
-    let mut d = doc.clone();
-    if let Some(items) = d.get_mut("items").and_then(Value::as_object_mut) {
-        items.retain(|_, item| !item["layer"].as_str().is_some_and(|l| hidden.contains(l)));
-    }
-    if let Some(layers) = d.get_mut("layers").and_then(Value::as_object_mut) {
-        layers.retain(|id, _| !hidden.contains(id));
-    }
-    d
-}
-
-/// The document's visible writer layers back to front (#422): by the band their writer's kind
-/// gives (Band; deep-canvas's `Writer::band`), then by their order key and ID.
-fn layers_report(doc: &Value, hidden: &BTreeSet<String>) -> Value {
-    use deep_canvas::show::{Writer, WriterKind};
-    let mut rows: Vec<(deep_canvas::show::Band, String, String, String)> = Vec::new();
-    for (id, layer) in doc["layers"].as_object().into_iter().flatten() {
-        if hidden.contains(id) {
-            continue;
-        }
-        let text = layer["writer"].as_str().unwrap_or_default();
-        let (kind, rest) = text.split_once(':').unwrap_or((text, ""));
-        let kind = match kind {
-            "you" => WriterKind::You,
-            "shell" => WriterKind::Shell,
-            "record" => WriterKind::Record,
-            "plugin" => WriterKind::Plugin,
-            _ => WriterKind::Agent,
-        };
-        let band = Writer {
-            kind,
-            id: rest.to_string(),
-        }
-        .band();
-        let order = layer["order"].as_str().unwrap_or_default().to_string();
-        rows.push((band, order, id.clone(), text.to_string()));
-    }
-    rows.sort();
-    json!(rows
-        .into_iter()
-        .map(|(band, _, layer, writer)| json!({"layer": layer, "writer": writer, "band": band.name()}))
-        .collect::<Vec<_>>())
-}
-
-/// The modules a view3d document and its packs' recipes may name: the shipped ones and the
-/// building module (#422).
-fn pack_sealed() -> Result<&'static deep_canvas::registry::Sealed, Value> {
-    static SEALED: std::sync::OnceLock<Option<deep_canvas::registry::Sealed>> =
-        std::sync::OnceLock::new();
-    SEALED
-        .get_or_init(|| {
-            crate::plugin::shipped_modules()
-                .into_iter()
-                .chain([
-                    deep_canvas_scene3d::building::module(),
-                    // #443: vector, whose outline source an `extrude` of a vector item reads.
-                    deep_canvas_vector::module::module(),
-                ])
-                .fold(
-                    deep_canvas::registry::Registry::new(deep_canvas::registry::BuildSet::Full),
-                    deep_canvas::registry::Registry::with,
-                )
-                .seal()
-                .ok()
-        })
-        .as_ref()
-        .ok_or_else(|| refused("render_failed", "the pack build's modules don't seal"))
-}
-
-fn parse(call: &Value, planted: Option<Planted>) -> Result<Args, Value> {
-    let bad = |what: &str| refused("bad_input", what);
-    let path = call["doc"].as_str().ok_or_else(|| bad("doc is a path"))?;
-    let text = std::fs::read_to_string(path).map_err(|e| bad(&format!("doc: {e}")))?;
-    let mut doc: Value = serde_json::from_str(&text).map_err(|e| bad(&format!("doc: {e}")))?;
-    let theme = status::theme_of(call)?;
-    // #463: a look by ID is one of the call's packs' looks.
-    let look_def = match &call["look"] {
-        Value::String(id) => {
-            let manifests = crate::op_transition::manifests(call)?;
-            crate::look_ops::pack_def(id, &manifests, planted).ok_or_else(|| {
-                refused(
-                    "look_unknown",
-                    format!("look: {id} isn't a look of the call's packs"),
-                )
-            })?
-        }
-        v => v.clone(),
-    };
-    let look_json = status::themed(&look_def, &theme);
-    let look = Look3::read(&look_json).map_err(|e| bad(&format!("look: {e}")))?;
-    let status = status::status_of(&look_json)?;
-    let states = status::states(call).ok_or_else(|| bad("states maps handles to states"))?;
-    let size = pair(&call["size"])
-        .filter(|s| s[0] > 0 && s[1] > 0)
-        .ok_or_else(|| bad("size is [w, h]"))?;
-    if let Some(d) = doc.as_object_mut() {
-        d.insert("size".into(), json!(size));
-    }
-    // #443: each vector item's SVG from the store, inlined as deep_show's hub inlines it
-    // (`params.outline.svg`), which vector's outline source reads.
-    if let (Some(store), Some(items)) = (
-        call["store"].as_str().map(std::path::Path::new),
-        doc.get_mut("items").and_then(Value::as_object_mut),
-    ) {
-        for item in items.values_mut() {
-            let src = match (item["kind"].as_str(), item.pointer("/params/src")) {
-                (Some("vector@1"), Some(Value::String(src))) if src.len() == 64 => src.clone(),
-                _ => continue,
-            };
-            let Ok(bytes) = std::fs::read(store.join(&src[..2]).join(&src[2..])) else {
-                continue;
-            };
-            if let Some(params) = item.get_mut("params").and_then(Value::as_object_mut) {
-                params.insert(
-                    "outline".into(),
-                    json!({"svg": String::from_utf8_lossy(&bytes)}),
-                );
-            }
-        }
-    }
-    let frames = call["frames"].as_u64().unwrap_or(1).max(1);
-    let fps = call["fps"].as_u64().unwrap_or(60).max(1);
-    let mut patches = Vec::new();
-    for p in call["patches"].as_array().into_iter().flatten() {
-        let (Some(frame), Some(writer)) = (p["frame"].as_u64(), p["writer"].as_str()) else {
-            return Err(bad("a patch is {frame, writer, ops}"));
-        };
-        patches.push((frame, writer.to_string(), p["ops"].clone()));
-    }
-    let targets = call["targets"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .map(str::to_string)
-        .collect::<BTreeSet<_>>();
-    if targets.iter().any(|t| {
-        !matches!(
-            t.as_str(),
-            "final"
-                | "linear"
-                | "ids"
-                | "pre_tone"
-                | "dirt"
-                | "scene"
-                | "backdrop"
-                | "depth"
-                | "reflection"
-                | "foam"
-                | "normal"
-                | "coc"
-                | "surface"
-                | "window_linear"
-        )
-    }) {
-        return Err(bad(
-            "targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth, reflection, foam, normal, coc, surface and window_linear",
-        ));
-    }
-    // A render-back draws as an export does, through the view your hand turned (#173).
-    let export = match call["class"].as_str() {
-        None | Some("live") => false,
-        Some("export" | "render_back") => true,
-        Some(_) => return Err(bad("class is live, export or render_back")),
-    };
-    let mut viewer = Vec::new();
-    for v in call["viewer"].as_array().into_iter().flatten() {
-        let Some(frame) = v["frame"].as_u64() else {
-            return Err(bad(
-                "a viewer entry is {frame, pointer?, hover?, selection?, readout?}",
-            ));
-        };
-        viewer.push((frame, v.clone()));
-    }
-    let capture = match &call["capture"] {
-        Value::String(s) if s == "every" => Capture::Every,
-        Value::Array(f) => Capture::Frames(f.iter().filter_map(Value::as_u64).collect()),
-        _ => Capture::None,
-    };
-    let window = match call.get("window") {
-        None | Some(Value::Null) => None,
-        Some(w) => {
-            let page = w["page"].as_array().filter(|p| p.len() == 3).and_then(|p| {
-                Some([
-                    u8::try_from(p[0].as_u64()?).ok()?,
-                    u8::try_from(p[1].as_u64()?).ok()?,
-                    u8::try_from(p[2].as_u64()?).ok()?,
-                ])
-            });
-            match (pair(&w["size"]), pair(&w["view"]), page) {
-                (Some(size), Some(view), Some(page)) => Some(Window3 {
-                    size,
-                    view,
-                    page,
-                    card: crate::frames::card_of(w),
-                }),
-                _ => return Err(bad("window is {size, view, page}")),
-            }
-        }
-    };
-    let latency = call["latency"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_u64)
-        .collect();
-    let docs = match call.get("docs") {
-        None | Some(Value::Null) => BTreeMap::new(),
-        Some(Value::Object(d)) => d
-            .iter()
-            .map(|(h, p)| Some((h.clone(), std::path::PathBuf::from(p.as_str()?))))
-            .collect::<Option<_>>()
-            .ok_or_else(|| bad("docs maps a doc handle to a path"))?,
-        Some(_) => return Err(bad("docs maps a doc handle to a path")),
-    };
-    let mut clicks = Vec::new();
-    for c in call["clicks"].as_array().into_iter().flatten() {
-        let at = c["at"]
-            .as_array()
-            .filter(|a| a.len() == 2)
-            .and_then(|a| Some([a[0].as_f64()?, a[1].as_f64()?]));
-        let (Some(frame), Some(at)) = (c["frame"].as_u64(), at) else {
-            return Err(bad("a click is {frame, at: [x, y]}"));
-        };
-        clicks.push((frame, at));
-    }
-    let mut packs = Vec::new();
-    for p in call["packs"].as_array().into_iter().flatten() {
-        // A folder (its id `deepbuild/<name>`, #422) or `{id, dir}` (#429).
-        let (id, dir) = match (p.as_str(), p["id"].as_str(), p["dir"].as_str()) {
-            (Some(dir), ..) => (None, dir),
-            (None, Some(id), Some(dir)) => (Some(id.to_string()), dir),
-            _ => return Err(bad("a pack is a folder or {id, dir}")),
-        };
-        packs.push((id, std::path::PathBuf::from(dir)));
-    }
-    let mut evaluate = Vec::new();
-    for p in call["evaluate"].as_array().into_iter().flatten() {
-        match p.as_str() {
-            Some(path) if path.starts_with("items/") => evaluate.push(path.to_string()),
-            _ => return Err(bad("evaluate lists paths items/<id>/…")),
-        }
-    }
-    let mut project = Vec::new();
-    for p in call["project"].as_array().into_iter().flatten() {
-        match p
-            .as_array()
-            .map(|a| a.iter().map(Value::as_f64).collect::<Option<Vec<_>>>())
-        {
-            Some(Some(v)) if v.len() == 3 => project.push([v[0], v[1], v[2]]),
-            _ => return Err(bad("project lists world points [x, y, z]")),
-        }
-    }
-    let mut sway = Vec::new();
-    for id in call["sway"].as_array().into_iter().flatten() {
-        match id.as_str() {
-            Some(id) => sway.push(id.to_string()),
-            None => return Err(bad("sway lists item IDs")),
-        }
-    }
-    let world = call["world"].as_array().into_iter().flatten();
-    let world: Option<Vec<String>> = world.map(|v| v.as_str().map(str::to_string)).collect();
-    Ok(Args {
-        axes: call["axes"].as_bool().unwrap_or(false),
-        world: world.ok_or_else(|| bad("world lists item IDs"))?,
-        packs,
-        evaluate,
-        project,
-        sway,
-        docs,
-        doc,
-        look,
-        look_json,
-        selection: call["selection"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .map(str::to_string)
-            .collect(),
-        from: call["from"].as_u64().unwrap_or(0),
-        timings: call["timings"].as_bool().unwrap_or(false),
-        size,
-        frames,
-        fps,
-        patches,
-        targets,
-        capture,
-        rings: call["rings"].as_bool().unwrap_or(false),
-        shore: call["shore"].as_bool().unwrap_or(false),
-        read: call["read"]
-            .as_array()
-            .map(|r| {
-                r.iter()
-                    .filter_map(|x| x.as_str().map(String::from))
-                    .collect()
-            })
-            .unwrap_or_default(),
-        cull_on_cpu: match call["cull"].as_str() {
-            None => false,
-            Some("cpu") => true,
-            Some(_) => return Err(refused("bad_input", "cull is \"cpu\" when it's given")),
-        },
-        cull_report: call["cull_report"].as_bool().unwrap_or(false),
-        occlusion_off: match call["occlusion"].as_str() {
-            None => false,
-            Some("off") => true,
-            Some(_) => return Err(refused("bad_input", "occlusion is \"off\" when it's given")),
-        },
-        seeks: call["seeks"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|s| Some((s["after"].as_u64()?, s["to"].as_u64()?)))
-            .collect(),
-        window,
-        latency,
-        counts: call["counts"].as_bool().unwrap_or(false),
-        ground_points: match &call["ground_points"] {
-            Value::Null => None,
-            g => {
-                let item = g["item"].as_str();
-                let at: Option<Vec<[f64; 2]>> = g["at"].as_array().and_then(|a| {
-                    a.iter()
-                        .map(|p| Some([p.get(0)?.as_f64()?, p.get(1)?.as_f64()?]))
-                        .collect()
-                });
-                match (item, at) {
-                    (Some(item), Some(at)) => Some((item.to_string(), at)),
-                    _ => return Err(bad("ground_points is {item, at: [[x, z]]}")),
-                }
-            }
-        },
-        assets: call["assets"]
-            .as_object()
-            .into_iter()
-            .flatten()
-            .filter_map(|(sha, p)| Some((sha.clone(), std::path::PathBuf::from(p.as_str()?))))
-            .collect(),
-        uris: call["uris"]
-            .as_object()
-            .into_iter()
-            .flatten()
-            .map(|(sha, m)| {
-                let m = m
-                    .as_object()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|(u, s)| Some((u.clone(), s.as_str()?.to_string())))
-                    .collect();
-                (sha.clone(), m)
-            })
-            .collect(),
-        licenses: call["licenses"]
-            .as_object()
-            .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
-            .unwrap_or_default(),
-        store: call["store"].as_str().map(std::path::PathBuf::from),
-        imports: call["imports"].as_bool().unwrap_or(false),
-        receipt: call["receipt"].as_bool().unwrap_or(false),
-        labels: call["labels"].as_bool().unwrap_or(false),
-        clicks,
-        hit_margin: call
-            .pointer("/hit/margin")
-            .and_then(Value::as_u64)
-            .map_or(3, |m| m.min(64) as i64),
-        cutaway: call.get("cutaway").filter(|c| !c.is_null()).cloned(),
-        states,
-        theme,
-        status,
-        cold: call["cold"].as_bool().unwrap_or(false),
-        surface: surface_of(call.get("surface")).map_err(|e| bad(&e))?,
-        hidden: call["hidden"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .map(str::to_string)
-            .collect(),
-        cascades: call["cascades"].as_bool().unwrap_or(false),
-        shadows: call["shadows"].as_bool().unwrap_or(false),
-        lod: call["lod"].as_bool().unwrap_or(false),
-        light_cut: call["light_cut"].as_bool().unwrap_or(false),
-        overlays: call["overlays"].as_bool().unwrap_or(false),
-        masks: call["masks"].as_bool().unwrap_or(false),
-        export,
-        viewer,
-        history: history::inputs(call)?,
-        hdr: crate::hdr::Hdr::parse(call)?,
-    })
-}
-
-/// The packs a call installs (#429): each folder read as deep-show's pack store reads one
-/// (`pack.json`, its `id` set to `owner/name`, each recipe file it names inlined) and admitted
-/// through the pack check once.
-fn install(packs: &[(Option<String>, std::path::PathBuf)]) -> Result<Packs, Value> {
-    let read = |p: &std::path::Path| -> Result<Value, Value> {
-        let at = |e: String| refused("bad_input", format!("{}: {e}", p.display()));
-        let text = std::fs::read_to_string(p).map_err(|e| at(e.to_string()))?;
-        serde_json::from_str(&text).map_err(|e| at(e.to_string()))
-    };
-    let mut out = Packs::default();
-    for (id, dir) in packs {
-        let mut manifest = read(&dir.join("pack.json"))?;
-        let Some(fields) = manifest.as_object_mut() else {
-            return Err(refused(
-                "bad_input",
-                format!("{}: a pack is an object", dir.display()),
-            ));
-        };
-        let id = id.clone().unwrap_or_else(|| {
-            format!(
-                "deepbuild/{}",
-                fields
-                    .get("name")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-            )
-        });
-        fields.insert("id".into(), json!(id));
-        if let Some(Value::Object(recipes)) = fields.get_mut("recipes") {
-            for entry in recipes.values_mut() {
-                if let Some(file) = entry.as_str() {
-                    *entry = read(&dir.join(file))?;
-                }
-            }
-        }
-        out.admit(&manifest, pack_sealed()?)
-            .map_err(|issues| issues_refused(&issues))?;
-    }
-    Ok(out)
-}
-
-fn issues_refused(issues: &[Issue]) -> Value {
-    json!({"code": "refused", "issues": issues.iter().map(Issue::to_json).collect::<Vec<_>>()})
-}
-
-/// A document that names packs, as the check lowers it: its recipe instances expanded into their
-/// derived items and their channels; refused with the check's issues when nothing expanded
-/// (#429). A payload without the stored fields (#422's castle) still draws its expansion.
-fn lowered(doc: &Value, packs: &Packs) -> Result<Value, Value> {
-    let checked = check_packed(doc, pack_sealed()?, packs);
-    if !checked.ok && checked.expansions.is_empty() {
-        let errors: Vec<Issue> = checked
-            .issues
-            .into_iter()
-            .filter(|i| i.severity == "error")
-            .collect();
-        return Err(issues_refused(&errors));
-    }
-    Ok(checked.lowered)
-}
-
-/// A patch's ops applied as `writer`, to the layer its connection stands for.
-pub(crate) fn apply_patch(
-    doc: &mut Value,
-    writer: &str,
-    ops: &Value,
-    seq: usize,
-) -> Result<(), Value> {
-    let layer = writer_layer(doc, writer).map_err(|i| refused(i.code, i.what.clone()))?;
-    let id = doc["id"].as_str().unwrap_or_default().to_string();
-    let patch = json!({
-        "patch": format!("01JB7F0000000000000000{seq:04}"),
-        "doc": id,
-        "base": 0,
-        "reason": "a view3d patch",
-        "ops": ops,
-    });
-    let knows = |_: &str| true;
-    let writing = Writing {
-        layer: &layer,
-        writer,
-        you: false,
-        base: None,
-        knows: &knows,
-        packs: None,
-    };
-    apply_ops(doc, &patch, "patches/0", &id, &writing)
-        .map(|_| ())
-        .map_err(|i| refused(i.code, format!("{}: {}", i.path, i.what)))
-}
-
-/// What a click at `at` view px picks in a frame (canvas primitives: Selection, Spatial index):
-/// the topmost 2D overlay whose shapes cover it, else the item the object-ID target holds there,
-/// else nothing.
-///
-/// In 3D a pick reads the (2 × margin + 1)² window of the object-ID target around the pointer:
-/// the drawn ID nearest the pointer, ties by depth, nearest the camera first (#424; Selection:
-/// `hit.margin`), so a 1 px line or a point is pickable as in 2D.
-fn pick(
-    scene: &deep_canvas_scene3d::scene::Scene,
-    ids: &[u8],
-    depth: Option<&(Vec<u8>, bool)>,
-    picks: &[(String, u32)],
-    size: [u32; 2],
-    at: [f64; 2],
-    margin: i64,
-) -> Option<String> {
-    use deep_canvas_scene3d::scene::Shape2;
-    for o in scene.overlays.iter().rev() {
-        let Some([ox, oy]) = o.origin else { continue };
-        let [x, y] = [at[0] - ox, at[1] - oy];
-        let hit = o.shapes.iter().any(|s| match s {
-            Shape2::Circle { center, r, .. } => (x - center[0]).hypot(y - center[1]) <= *r,
-            Shape2::Rect { rect, .. } => {
-                (rect[0]..=rect[0] + rect[2]).contains(&x)
-                    && (rect[1]..=rect[1] + rect[3]).contains(&y)
-            }
-        });
-        if hit {
-            return Some(o.id.clone());
-        }
-    }
-    let [x, y] = [at[0].floor(), at[1].floor()];
-    if x < 0.0 || y < 0.0 || x >= f64::from(size[0]) || y >= f64::from(size[1]) {
-        return None;
-    }
-    let read = |b: &[u8], i: usize| b.get(i * 4..i * 4 + 4).map(|v| [v[0], v[1], v[2], v[3]]);
-    // (distance², nearness) of the best pixel so far, and its ID.
-    let mut best: Option<((f64, f64), u32)> = None;
-    let (cx, cy) = (x as i64, y as i64);
-    for py in cy - margin..=cy + margin {
-        for px in cx - margin..=cx + margin {
-            if px < 0 || py < 0 || px >= i64::from(size[0]) || py >= i64::from(size[1]) {
-                continue;
-            }
-            let i = py as usize * size[0] as usize + px as usize;
-            let Some(p) = read(ids, i).map(u32::from_le_bytes).filter(|p| *p != 0) else {
-                continue;
-            };
-            let d2 = (px as f64 + 0.5 - at[0]).powi(2) + (py as f64 + 0.5 - at[1]).powi(2);
-            let near = depth.and_then(|(d, grows)| {
-                let z = f64::from(f32::from_le_bytes(read(d, i)?));
-                Some(if *grows { z } else { -z })
-            });
-            let key = (d2, -near.unwrap_or(0.0));
-            if best.is_none_or(|(k, _)| key.0 < k.0 || (key.0 == k.0 && key.1 < k.1)) {
-                best = Some((key, p));
-            }
-        }
-    }
-    let (_, p) = best?;
-    picks
-        .iter()
-        .find(|(_, v)| *v == p)
-        .map(|(id, _)| id.clone())
-}
-
-/// #1976's planted depth reader: each hit's point put back from the depth target, the view-axis
-/// depth at the pointer's pixel unprojected through the pointer, as a hit must never be.
-fn depth_hits(
-    hits: &mut [deep_canvas_scene3d::hit::Hit],
-    cam: &deep_canvas_scene3d::scene::Camera,
-    depth: Option<&[u8]>,
-    size: [u32; 2],
-    at: [f64; 2],
-) {
-    let i = at[1].floor() as usize * size[0] as usize + at[0].floor() as usize;
-    let Some(z) = depth.and_then(|d| d.get(i * 4..i * 4 + 4)) else {
-        return;
-    };
-    let p = cam.unproject(
-        at[0],
-        at[1],
-        f64::from(f32::from_le_bytes([z[0], z[1], z[2], z[3]])),
-    );
-    let o = if cam.perspective {
-        cam.eye
-    } else {
-        cam.unproject(at[0], at[1], 0.0)
-    };
-    for h in hits {
-        h.point = p;
-        h.distance = (0..3).map(|k| (p[k] - o[k]).powi(2)).sum::<f64>().sqrt();
-    }
-}
-
-fn srgb_decode(c: u8) -> f64 {
-    let c = f64::from(c) / 255.0;
-    if c <= 0.04045 {
-        c / 12.92
-    } else {
-        ((c + 0.055) / 1.055).powf(2.4)
-    }
-}
-
-fn srgb_encode(c: f64) -> u8 {
-    let c = if c <= 0.003_130_8 {
-        c * 12.92
-    } else {
-        1.055 * c.powf(1.0 / 2.4) - 0.055
-    };
-    (c * 255.0).round().clamp(0.0, 255.0) as u8
-}
-
-/// A sub-sample's pixels: its final bytes and its linear target.
-struct Part {
-    bytes: Option<Vec<u8>>,
-    linear: Option<Vec<u8>>,
-}
-
-impl Part {
-    fn of(d: &session3::Drawn) -> Part {
-        Part {
-            bytes: d.bytes.clone(),
-            linear: d.targets.as_ref().map(|(l, _)| l.clone()),
-        }
-    }
-}
-
-/// The frame as the weighted mean of its sub-samples, in index order (#419): the linear
-/// target's values, and the final BGRA bytes averaged in linear light. A frame of one sample is
-/// that sample as drawn.
-fn mean(drawn: &mut session3::Drawn, parts: &[(f64, &Part)]) {
-    if parts.len() < 2 {
-        if let Some((_, d)) = parts.first() {
-            drawn.bytes.clone_from(&d.bytes);
-            if let (Some((l, _)), Some(dl)) = (drawn.targets.as_mut(), &d.linear) {
-                l.clone_from(dl);
-            }
-        }
-        return;
-    }
-    let total: f64 = parts.iter().map(|(w, _)| w).sum();
-    if let Some((linear, _)) = drawn.targets.as_mut() {
-        let mut acc = vec![0f64; linear.len() / 4];
-        for (w, s) in parts {
-            if let Some(l) = &s.linear {
-                for (a, b) in acc.iter_mut().zip(l.as_chunks::<4>().0) {
-                    *a += w * f64::from(f32::from_le_bytes(*b));
-                }
-            }
-        }
-        *linear = acc
-            .iter()
-            .flat_map(|v| ((v / total) as f32).to_le_bytes())
-            .collect();
-    }
-    if let Some(bytes) = drawn.bytes.as_mut() {
-        let mut acc = vec![0f64; bytes.len()];
-        for (w, s) in parts {
-            if let Some(b) = &s.bytes {
-                for (i, (a, c)) in acc.iter_mut().zip(b).enumerate() {
-                    // Alpha averages as coverage, the color channels in linear light.
-                    *a += w * if i % 4 == 3 {
-                        f64::from(*c)
-                    } else {
-                        srgb_decode(*c)
-                    };
-                }
-            }
-        }
-        for (i, (out, a)) in bytes.iter_mut().zip(acc).enumerate() {
-            *out = if i % 4 == 3 {
-                (a / total).round().clamp(0.0, 255.0) as u8
-            } else {
-                srgb_encode(a / total)
-            };
-        }
-    }
-}
-
-pub(crate) fn png(rgba: &[u8], size: [u32; 2]) -> Result<Vec<u8>, Value> {
-    let mut out = Vec::new();
-    image::codecs::png::PngEncoder::new_with_quality(
-        &mut out,
-        image::codecs::png::CompressionType::Fast,
-        image::codecs::png::FilterType::Sub,
-    )
-    .write_image(rgba, size[0], size[1], image::ExtendedColorType::Rgba8)
-    .map_err(|e| refused("not_written", e.to_string()))?;
-    Ok(out)
-}
-
-/// Writes a BGRA frame under `out` as an RGBA PNG named by its SHA-256; returns the name.
-pub(crate) fn write_final(out: &str, bgra: &[u8], size: [u32; 2]) -> Result<String, Value> {
-    let mut rgba = bgra.to_vec();
-    for p in rgba.as_chunks_mut::<4>().0 {
-        p.swap(0, 2);
-    }
-    write_named(out, &png(&rgba, size)?, "png")
-}
-
-/// Each pick ID with the item it stands for.
-pub(crate) fn picks_json(picks: &[(String, u32)]) -> Value {
-    Value::Object(
-        picks
-            .iter()
-            .map(|(id, p)| (p.to_string(), json!(id)))
-            .collect(),
-    )
-}
-
-/// Writes `bytes` under `out`, named by their SHA-256 with `ext`; returns the name.
-/// A lens dirt PNG from the call's assets (#418): each pixel's value its red channel ÷ 255.
-fn dirt_png(
-    assets: &BTreeMap<String, std::path::PathBuf>,
-    sha: &str,
-) -> Result<deep_canvas_effects::interp::Image, Value> {
-    let path = "look/bloom/dirt/texture";
-    let file = assets
-        .get(sha)
-        .ok_or_else(|| refused("asset_missing", path))?;
-    let bytes = std::fs::read(file).map_err(|_| refused("asset_missing", path))?;
-    let img = image::load_from_memory(&bytes)
-        .map_err(|_| refused("out_of_range", path))?
-        .to_rgba8();
-    let mut out = deep_canvas_effects::interp::Image::new(img.width(), img.height());
-    for (p, px) in out.px.iter_mut().zip(img.pixels()) {
-        let d = f64::from(px.0[0]) / 255.0;
-        *p = [d, d, d, 1.0];
-    }
-    Ok(out)
-}
-
-/// The dirt image as the bloom's mix reads it at each pixel of a `size` frame, stretched over it:
-/// f32 RGBA with d in red, green and blue.
-fn dirt_target(dirt: &deep_canvas_effects::interp::Image, size: [u32; 2]) -> Vec<u8> {
-    let mut out = Vec::with_capacity((size[0] * size[1] * 16) as usize);
-    for y in 0..size[1] {
-        for x in 0..size[0] {
-            let uv = [
-                (f64::from(x) + 0.5) / f64::from(size[0]),
-                (f64::from(y) + 0.5) / f64::from(size[1]),
-            ];
-            let d = dirt.sample(uv)[0] as f32;
-            for v in [d, d, d, 1.0] {
-                out.extend_from_slice(&v.to_le_bytes());
-            }
-        }
-    }
-    out
-}
-
-pub(crate) fn write_named(out: &str, bytes: &[u8], ext: &str) -> Result<String, Value> {
-    let name = hex(bytes);
-    std::fs::write(
-        std::path::Path::new(out).join(format!("{name}.{ext}")),
-        bytes,
-    )
-    .map_err(|e| refused("not_written", e.to_string()))?;
-    Ok(name)
-}
-
-/// Each label's glyphs, with their places in the core's glyph atlas, and the pages they sample,
-/// each written as an 8-bit grayscale PNG of its alpha named by its SHA-256.
-/// #468: each overlay's leader over the frame `bgra` (`size` px, premultiplied BGRA), its straight
-/// RGBA picture laid on by its coverage.
-fn leaders_over(overlays: &[deep_canvas_scene3d::scene::Overlay], bgra: &mut [u8], size: [u32; 2]) {
-    for l in overlays.iter().filter_map(|o| o.leader.as_ref()) {
-        let Some(p) = deep_canvas_scene3d::overlay::leader_picture(l) else {
-            continue;
-        };
-        let w = i64::from(p.size[0]);
-        for (k, s) in p.rgba.as_chunks::<4>().0.iter().enumerate() {
-            let (dx, dy) = (p.at[0] + k as i64 % w, p.at[1] + k as i64 / w);
-            let a = u32::from(s[3]);
-            if a == 0 || dx < 0 || dy < 0 || dx >= i64::from(size[0]) || dy >= i64::from(size[1]) {
-                continue;
-            }
-            let o = ((dy * i64::from(size[0]) + dx) * 4) as usize;
-            let d = &mut bgra[o..o + 4];
-            let over = |src: u8, dst: u8| {
-                ((u32::from(src) * a + u32::from(dst) * (255 - a) + 127) / 255) as u8
-            };
-            d[0] = over(s[2], d[0]);
-            d[1] = over(s[1], d[1]);
-            d[2] = over(s[0], d[2]);
-            d[3] = over(255, d[3]);
-        }
-    }
-}
-
-fn labels_json(scene: &Scene, out: &str) -> Result<(Value, Value), Value> {
-    let mut labels = Vec::new();
-    let mut sampled = BTreeSet::new();
-    for l in scene.layers.iter().flat_map(|layer| &layer.labels) {
-        let glyphs: Vec<Value> = l
-            .glyphs
-            .iter()
-            .map(|g| {
-                let atlas = g.atlas.map(|a| {
-                    sampled.insert(a.page);
-                    json!({"page": a.page, "x": a.x, "y": a.y, "w": a.w, "h": a.h, "raster": g.raster})
-                });
-                json!({
-                    "font": format!("crates/deep-text/fonts/{}", g.file), "size": g.size, "id": g.id,
-                    "x": g.x, "y": g.y, "grapheme": g.grapheme, "atlas": atlas,
-                })
-            })
-            .collect();
-        labels.push(json!({"item": l.id, "glyphs": glyphs}));
-    }
-    let mut pages = Vec::new();
-    for page in sampled {
-        let bytes = &scene.pages[page as usize].bytes;
-        let mut png = Vec::new();
-        image::codecs::png::PngEncoder::new(&mut png)
-            .write_image(bytes, PAGE, PAGE, image::ExtendedColorType::L8)
-            .map_err(|e| refused("not_written", e.to_string()))?;
-        pages.push(json!({"page": page, "png": write_named(out, &png, "png")?}));
-    }
-    Ok((json!(labels), json!(pages)))
-}
-
-/// How far past the pixels a region's look covers its render still draws, px: what its finish
-/// and effects read around a pixel (#463).
-const CROP_MARGIN: u32 = 48;
-
-/// #463: a look's covered px rectangle (`[x0, y0, x1, y1]`, inclusive) grown by [`CROP_MARGIN`],
-/// as the share of a `size` frame its render draws inside (Scene::crop).
-fn crop_share(b: [u32; 4], size: [u32; 2]) -> [f64; 4] {
-    let lo = |v: u32| f64::from(v.saturating_sub(CROP_MARGIN));
-    let hi = |v: u32| f64::from(v + 1 + CROP_MARGIN);
-    let (w, h) = (f64::from(size[0]), f64::from(size[1]));
-    [
-        (lo(b[0]) / w).min(1.0),
-        (lo(b[1]) / h).min(1.0),
-        (hi(b[2]) / w).min(1.0),
-        (hi(b[3]) / h).min(1.0),
-    ]
-}
+mod parse;
+pub(crate) use parse::*;
 
 /// #462's planted `status_in_look`: the status map of the look a render draws in, where it has
 /// one of its own; `None` for the shipped program, which draws the document's.
@@ -1097,12 +153,20 @@ fn run_view(
         Some(_) => Vec::new(),
     };
     let mut drawn_k = 0usize;
-    crate::physics::bake(&mut args.doc)?;
+    // #508: a film effect's params out of range refuse the call, naming the field; a plume's and
+    // an airflow's particles are written beside them, drawn as any particles item.
+    let broken = deep_canvas_effects::effect::issues(&args.doc);
+    if !broken.is_empty() {
+        return Err(json!({"code": "refused", "issues": broken}));
+    }
+    deep_canvas_effects::effect::lower(&mut args.doc);
+    crate::physics::bake(&mut args.doc, &call["tracks"], &args.assets)?;
     crate::particles::refuse(&args.doc, app.planted)?;
+    crate::trails::refuse(&args.doc)?;
     // The frames the call draws and how each is reached (#173), the ones logic runs at first.
     let reached = history::order(args.from, args.frames, &args.seeks, &args.history, args.fps);
     let order: Vec<u64> = reached.iter().map(|(n, _)| *n).collect();
-    let mut baked = crate::fed::bake(&args.doc, &args.assets, (&order, args.fps), app.planted)?;
+    let mut baked = crate::fed::bake(&mut args.doc, &args.assets, (&order, args.fps), app.planted)?;
     let packed = args.doc["packs"].as_array().is_some_and(|p| !p.is_empty());
     let mut lowered_doc = if packed {
         Some(lowered(&args.doc, &packs)?)
@@ -1159,9 +223,13 @@ fn run_view(
     // The core targets the document's operators read, built only then (#431); the planted core
     // builds both for every frame.
     let builds_all = app.planted == Some(Planted::BuildsUnreadTargets);
+    // #458: naming the velocity target in `targets` is a read of it.
     let want = deep_scene3d_render::targets::Want {
-        velocity: builds_all || deep_canvas_effects::module::reads_core(&args.doc, "velocity"),
+        velocity: builds_all
+            || args.targets.contains("velocity")
+            || deep_canvas_effects::module::reads_core(&args.doc, "velocity"),
         emission: builds_all || deep_canvas_effects::module::reads_core(&args.doc, "emission"),
+        normal: app.relation_reads.contains("geometry_normal"),
     };
     session3::core_targets(app, want)?;
     let opening = opening.elapsed();
@@ -1202,15 +270,19 @@ fn run_view(
         "linear",
         "ids",
         "pre_tone",
+        "pre_curve",
         "backdrop",
         "depth",
         "reflection",
         "foam",
         "normal",
         "coc",
+        "checks",
+        "velocity",
     ]
     .iter()
-    .any(|t| args.targets.contains(*t));
+    .any(|t| args.targets.contains(*t))
+        || !app.relation_reads.is_empty();
     // The bloom's lens dirt (#418): a PNG the assets name, its red channel ÷ 255, or seeded, made
     // once for the whole call; and as the `dirt` target, sampled at each pixel of the frame.
     let dirt = match args.look_json["bloom"]["dirt"]["texture"].as_str() {
@@ -1253,6 +325,10 @@ fn run_view(
     );
     // Level of detail and the light cut, chosen from each frame's view (#425).
     let mut selection = crate::lod::Selection::new(app.planted);
+    // #1381: the compute passes drawing began before this frame, and every horizon table a frame
+    // has drawn, held so a table baked anew is never one seen before.
+    let mut passes_before = deep_gpu::counted::compute_passes();
+    let mut horizons: Vec<Arc<deep_canvas_scene3d::horizon::Horizon>> = Vec::new();
     let drawn_scale = if args.surface.scale < 1.0 && !noop {
         args.surface.scale
     } else {
@@ -1285,6 +361,7 @@ fn run_view(
     // The scene the session drew last, which #431's planted velocity target reads.
     let mut last_drawn: Option<Arc<Scene>> = None;
     let mut hover: Option<String> = None;
+    let mut edges = None;
     let mut viewer_selection: Vec<String> = Vec::new();
     // #462: at most two looks in one frame outside a transition window, checked before any
     // frame draws; status draws in the document's look whatever look a shot or region takes.
@@ -1294,27 +371,38 @@ fn run_view(
             crate::axes::plant_name(app.planted),
         );
         tl.check(|t| {
-            let sc = evaluate_sourced(&args.doc, t, &args.look, &mut labels, &read, outlines)
-                .map_err(|r| refused(r.code, r.path))?;
+            let sc = evaluate_sourced(&args.doc, t, &args.look, &mut labels, &read, outlines)?;
             Ok((crate::regions::Seen::Camera(sc.camera), sc.volumes))
         })?;
     }
     let (doc_look, doc_look_json) = (args.look.clone(), args.look_json.clone());
     // #462's planted strokes: the camera the frame before drew through.
     let mut last_camera: Option<deep_canvas_scene3d::scene::Camera> = None;
+    // #1993: how many times `lose_device_at` forced the device lost.
+    let mut device_losses = 0u64;
     let result = (|| -> Result<(), Value> {
         // The lights the policy last left out: a change is reported once, by ID (#421).
         let mut left_out: Vec<String> = Vec::new();
         let mut dropped: Vec<String> = Vec::new();
+        let mut touched = crate::touches::Started::default();
+        // The clusters last reported past their cap (#1634).
+        let mut clusters_over: Vec<deep_scene3d_render::fill::Over> = Vec::new();
         // #1640's wrong programs for mesh-edge lines, by their planted names.
         let edge_plant = match app.planted {
             Some(Planted::CreaseBelowAngle) => Some("crease_below_angle"),
             Some(Planted::EdgesDeriveEveryFrame) => Some("edges_derive_every_frame"),
             Some(Planted::EdgesDashOtherSpace) => Some("edges_dash_other_space"),
+            Some(Planted::HiddenLines(name)) => Some(name),
             _ => None,
         };
+        // #1782: the spans this run holds from frame to frame, for what it reports of them.
+        let mut kept_spans = deep_canvas_scene3d::spans::Kept::default();
         for &(n, reach) in &reached {
             let frame_started = std::time::Instant::now();
+            if args.lose_at == Some(n) && device_losses == 0 {
+                session3::lose_device(app);
+                device_losses += 1;
+            }
             // A seek applies every patch up to the frame it opens at.
             let mut patched = false;
             for (k, (frame, writer, ops)) in args.patches.iter().enumerate() {
@@ -1354,6 +442,7 @@ fn run_view(
                 }
             }
             if patched {
+                deep_canvas_effects::effect::lower(&mut args.doc);
                 holds = deep_canvas_scene3d::samples::holds(&args.doc);
             }
             // The patched document's bindings are the ones drawn (a slice op can't add or
@@ -1393,19 +482,25 @@ fn run_view(
                 *memo.borrow_mut() = Default::default();
             }
             let plant = crate::axes::plant_name(app.planted);
+            // #298: the view values its drivers read, bound on the frame's document.
+            let composed = edged(composed, t, app.planted, &mut edges)?;
             let outlines = deep_canvas_scene3d::contributed::Fills {
                 memo: Some(&memo),
                 ..deep_canvas_scene3d::contributed::Fills::of(pack_sealed()?, plant)
             };
             let mut scene =
-                evaluate_sourced(&composed, t, &args.look, &mut labels, &read, outlines)
-                    .map_err(|r| refused(r.code, r.path))?;
+                evaluate_sourced(&composed, t, &args.look, &mut labels, &read, outlines)?;
             // #450: mesh particles draw through an instancer's columns, read off the scene.
             if let Some(fed) =
                 crate::particles::meshes(&composed, &scene, t as f64 / 705_600_000.0, app.planted)?
             {
-                scene = evaluate_sourced(&fed, t, &args.look, &mut labels, &read, outlines)
-                    .map_err(|r| refused(r.code, r.path))?;
+                scene = evaluate_sourced(&fed, t, &args.look, &mut labels, &read, outlines)?;
+            }
+            // #265's planted trails through a linear array's stored steps.
+            if app.planted == Some(Planted::TrailReadsStoredSteps) {
+                let stored = crate::trails::stored(&composed);
+                let held = evaluate_sourced(&stored, t, &args.look, &mut labels, &read, outlines)?;
+                crate::trails::take_trails(&mut scene, &held);
             }
             axes_mapped = memo.borrow_mut().take_mapped();
             if args.axes {
@@ -1503,12 +598,35 @@ fn run_view(
                 .ground_points
                 .as_ref()
                 .map(|(item, _)| crate::lod::tiles_of(&scene, item));
-            let (choices, cut) = selection.apply(&mut scene, drawn_scale, noop);
+            let (choices, mut cut) = selection.apply(&mut scene, drawn_scale, noop);
+            // #458's planted policy: a point or spot light is shaded only while its illuminance
+            // at the eye, (power ÷ 4π) ÷ d², is at least 0.05 lx.
+            if app.planted == Some(Planted::LightCutAbsoluteIlluminance) {
+                use deep_canvas_scene3d::light::LightKind;
+                let eye = scene.camera.eye;
+                let lit = |l: &deep_canvas_scene3d::light::Light| {
+                    let d2: f64 = (0..3).map(|k| (l.pos[k] - eye[k]).powi(2)).sum();
+                    !matches!(l.kind, LightKind::Point | LightKind::Spot)
+                        || l.intensity / d2 >= 0.05
+                };
+                let (kept, dark): (Vec<_>, Vec<_>) = cut
+                    .shaded
+                    .iter()
+                    .copied()
+                    .partition(|&(i, _)| lit(&scene.lights[i]));
+                cut.left_out
+                    .extend(dark.iter().map(|&(i, _)| scene.lights[i].id.clone()));
+                cut.shaded = kept;
+                scene.light_cut = Some(cut.clone());
+            }
             // #506's planted core: a view overlay shaded with the main view's light cut.
             if let (Some(s), Some(Planted::OneLightCutPerFrame)) = (sub.as_ref(), app.planted) {
-                let main = evaluate_sourced(&s.main, t, &args.look, &mut Labels::new(), &read, outlines)
-                    .map_err(|r| refused(r.code, r.path))?;
-                scene.light_cut = Some(deep_canvas_scene3d::light::policy(&scene.lights, &main.camera));
+                let main =
+                    evaluate_sourced(&s.main, t, &args.look, &mut Labels::new(), &read, outlines)?;
+                scene.light_cut = Some(deep_canvas_scene3d::light::policy(
+                    &scene.lights,
+                    &main.camera,
+                ));
             }
             // How many times this frame derived each mesh-edge line's edge set (#1640).
             let edge_sets_derived: Map<String, Value> = scene
@@ -1517,6 +635,21 @@ fn run_view(
                 .flat_map(|l| &l.lines)
                 .filter_map(|l| Some((l.id.clone(), json!(u32::from(l.edges.as_ref()?.derived)))))
                 .collect();
+            // #1782: each hidden-style line's spans in this frame's view, the stretches of them
+            // the frame inks, and how many times this frame computed the spans.
+            let mut edge_spans = [Map::new(), Map::new(), Map::new()];
+            for l in scene.layers.iter().flat_map(|l| &l.lines) {
+                let Some(r) = deep_canvas_scene3d::spans::report(&scene, l, &mut kept_spans) else {
+                    continue;
+                };
+                let rows = |list: &[deep_canvas_scene3d::spans::Span]| -> Value {
+                    let row = |s: &deep_canvas_scene3d::spans::Span| json!({"edge": s.edge, "from": s.from, "to": s.to, "hidden": s.hidden});
+                    list.iter().map(row).collect()
+                };
+                edge_spans[0].insert(l.id.clone(), rows(&r.spans));
+                edge_spans[1].insert(l.id.clone(), rows(&r.dashes));
+                edge_spans[2].insert(l.id.clone(), json!(u32::from(r.computed)));
+            }
             // Each mesh-edge line's segments, in world metres, as `counts` reports them.
             let edge_segments: Map<String, Value> = scene
                 .layers
@@ -1548,14 +681,9 @@ fn run_view(
                     Some((w.material.clone(), f))
                 })
                 .flatten();
-            let rings = (args.rings).then(|| {
-                scene.water.as_ref().map_or(Vec::new(), |w| {
-                    w.rings()
-                        .into_iter()
-                        .map(|r| json!({"part": r.part, "drop": r.drop, "at": r.at, "born": r.born, "radius": r.radius}))
-                        .collect::<Vec<_>>()
-                })
-            });
+            // #2760: the planted rings, then the rings the frame draws, as it lists them.
+            crate::touches::plant(&mut scene, app.planted, t, &mut touched);
+            let rings = (args.rings).then(|| crate::touches::rows(&scene));
             strokes |= scene
                 .layers
                 .iter()
@@ -1563,8 +691,22 @@ fn run_view(
                 .any(|s| s.stroke.is_some());
             // #450: the planted trail, then each asked trail as it draws.
             crate::trails::plant(&mut scene, app.planted, t);
+            crate::trails::plant_wake(&mut scene, app.planted, t);
             let trails = crate::trails::report(&scene, &call["trails"]);
             let scene = Arc::new(scene);
+            // #1381: the horizon tables this frame's build baked: those no earlier frame drew.
+            let mut baked = 0u32;
+            for h in scene
+                .layers
+                .iter()
+                .flat_map(|l| &l.solids)
+                .filter_map(|s| s.mesh.as_ref()?.horizon.clone())
+            {
+                if !horizons.iter().any(|seen| Arc::ptr_eq(seen, &h)) {
+                    horizons.push(h);
+                    baked += 1;
+                }
+            }
             let selected = levels.select(&composed, &scene);
             let settled = levels.settle(&selected);
             let seeding = match app.planted {
@@ -1578,6 +720,13 @@ fn run_view(
             // so a seek starts it again at zero; the shipped one reads t itself.
             let fx_t = match app.planted {
                 Some(Planted::ParticlesIntegrate) => (n - args.from) as f64 / args.fps as f64,
+                // #508's wrong program: the film effects' clock is the wall clock, its
+                // milliseconds read as seconds, so an effect that holds still between strikes
+                // (an arc at 12 a second) still moves between any two draws.
+                Some(Planted::EffectReadsWallClock) => {
+                    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
+                    now.map_or(0.0, |d| (d.as_millis() % 1_000_000) as f64)
+                }
                 _ => n as f64 / args.fps as f64,
             };
             let settings = effects::settings(
@@ -1608,6 +757,16 @@ fn run_view(
             last_camera = Some(scene.camera.clone());
             let particles =
                 crate::particles::frame(&mut settings, &args.doc, &scene, fx_t, call, app.planted)?;
+            // #508: each film effect's footprint this frame, and each plume's haze over its own.
+            let footprints = crate::particles::effects(
+                &mut settings,
+                &args.doc,
+                &scene,
+                fx_t,
+                app.planted,
+                seeding,
+            )?;
+            settings.checks = args.capture.wants(n) && args.targets.contains("checks") && !noop;
             if dirt.is_some() {
                 settings.dirt = dirt.clone();
             }
@@ -1623,7 +782,7 @@ fn run_view(
             if args.look.drawn.is_some() {
                 let assets = Map::new();
                 *lock(&opened.drawn) =
-                    crate::drawn::frame3(&args.doc, &args.look, &assets, &scene, app.planted)?;
+                    crate::drawn::frame3(&args.doc, &args.look, &assets, &scene, app.composed())?;
             }
             let label_report = if args.labels {
                 Some(labels_json(&scene, out)?)
@@ -1646,7 +805,10 @@ fn run_view(
                     };
                     shown.push(OverlayPicture {
                         at,
-                        size: [w.min(u32::from(u16::MAX)) as u16, h.min(u32::from(u16::MAX)) as u16],
+                        size: [
+                            w.min(u32::from(u16::MAX)) as u16,
+                            h.min(u32::from(u16::MAX)) as u16,
+                        ],
                         image: Arc::new(gpui_kit::RenderImage::new([image::Frame::new(frame)])),
                     });
                 }
@@ -1760,8 +922,7 @@ fn run_view(
                 edge_plant,
             );
             let at_time = |tk: i64, labels: &mut Labels| -> Result<Scene, Value> {
-                let mut sc = evaluate_sourced(&composed, tk, &args.look, labels, &read, outlines)
-                    .map_err(|r| refused(r.code, r.path))?;
+                let mut sc = evaluate_sourced(&composed, tk, &args.look, labels, &read, outlines)?;
                 if drops_dispersion {
                     sc.plant_drops_dispersion();
                 }
@@ -1884,9 +1045,29 @@ fn run_view(
             let plan = deep_canvas_scene3d::samples::plan(n_all, pixel, looks, blur_n > 0);
             let velocity_on =
                 blur.is_some_and(|b| b.method == deep_canvas_scene3d::samples::Method::Velocity);
+            // #458: a relation's lighting-only side draws the scene on a white albedo.
+            let mut moving = if app.relation_reads.contains("lighting") {
+                Arc::new(deep_scene3d_render::white(&scene))
+            } else {
+                scene.clone()
+            };
+            // #458's planted view: an orthographic camera's place in its own plane snaps to a
+            // 0.1 m grid before the view is built.
+            if app.planted == Some(Planted::OrthoCameraSnapsToGrid) && !moving.camera.perspective {
+                let mut sc = (*moving).clone();
+                let cam = &mut sc.camera;
+                for axis in [cam.right, cam.up] {
+                    let along: f64 = (0..3).map(|k| cam.target[k] * axis[k]).sum();
+                    let by = (along / 0.1).round() * 0.1 - along;
+                    for k in 0..3 {
+                        cam.eye[k] += by * axis[k];
+                        cam.target[k] += by * axis[k];
+                    }
+                }
+                moving = Arc::new(sc);
+            }
             // Motion blur by velocity: the renderer's velocity target reads the evaluations at
             // t ± s/2, never an earlier frame.
-            let mut moving = scene.clone();
             if let (true, Some(b)) = (velocity_on, blur) {
                 let open = at_time(t - (shutter / 2.0).round() as i64, &mut labels)?;
                 let close = at_time(t + (shutter / 2.0).round() as i64, &mut labels)?;
@@ -1962,14 +1143,7 @@ fn run_view(
             let mut drawn_over = None;
             if overlay {
                 let mut sc = (*sub_scene(0)).clone();
-                let readouts = std::mem::take(&mut sc.readouts);
-                match sc.layers.first_mut() {
-                    Some(l) => l.labels.extend(readouts),
-                    None => sc.layers.push(deep_canvas_scene3d::scene::Layer3 {
-                        labels: readouts,
-                        ..Default::default()
-                    }),
-                }
+                deep_scene3d_render::readouts_as_labels(&mut sc);
                 let plain = lock(&fx).settings.clone();
                 let mut with = plain.clone();
                 with.selection = effects::settings(
@@ -2050,10 +1224,19 @@ fn run_view(
             if let (Some(s), true) = (sub.as_ref(), keeping) {
                 let mut main = s.main.clone();
                 main["size"] = json!(size);
-                let mut first = evaluate_sourced(&main, t, &args.look, &mut Labels::new(), &read, outlines)
-                    .map_err(|r| refused(r.code, r.path))?;
+                let mut first =
+                    evaluate_sourced(&main, t, &args.look, &mut Labels::new(), &read, outlines)?;
                 first.texels.clone_from(&scene.texels);
-                session3::draw(app, &opened, Arc::new(first), args.look.clone(), n, 0, false, false)?;
+                session3::draw(
+                    app,
+                    &opened,
+                    Arc::new(first),
+                    args.look.clone(),
+                    n,
+                    0,
+                    false,
+                    false,
+                )?;
                 session3::keep_first(app, keeps[0], keeps[1]);
             }
             let mut drawn = match (hist.as_mut(), &planned) {
@@ -2225,8 +1408,7 @@ fn run_view(
                         None => (doc_look.clone(), doc_look_json.clone()),
                     };
                     let mut sc =
-                        evaluate_sourced(&composed, t, &look_k, &mut labels, &read, outlines)
-                            .map_err(|r| refused(r.code, r.path))?;
+                        evaluate_sourced(&composed, t, &look_k, &mut labels, &read, outlines)?;
                     sc.camera = scene.camera.clone();
                     sc.texels.clone_from(&scene.texels);
                     if args.window.is_some() {
@@ -2256,7 +1438,7 @@ fn run_view(
                     }
                     let kept_fx = std::mem::replace(&mut lock(&fx).settings, settings);
                     let drawn_k =
-                        crate::drawn::frame3(&args.doc, &look_k, &Map::new(), &sc, app.planted)?;
+                        crate::drawn::frame3(&args.doc, &look_k, &Map::new(), &sc, app.composed())?;
                     let kept_drawn = std::mem::replace(&mut *lock(&opened.drawn), drawn_k);
                     let mut kept_layer = None;
                     if let (Some(own), Some(stage), Some(status)) = (
@@ -2396,17 +1578,7 @@ fn run_view(
                 (&drawn_over, &plain0, drawn.bytes.as_mut())
             {
                 if let Some(ob) = &over.bytes {
-                    for ((o, p), b) in ob
-                        .as_chunks::<4>()
-                        .0
-                        .iter()
-                        .zip(plain.as_chunks::<4>().0)
-                        .zip(bytes.as_chunks_mut::<4>().0)
-                    {
-                        if o != p {
-                            *b = *o;
-                        }
-                    }
+                    deep_scene3d_render::lay_over(bytes, ob, plain);
                 }
             }
             // #506: each view overlay's frame over its rect; a view overlay's own run keeps its
@@ -2468,11 +1640,19 @@ fn run_view(
             frame.insert("settled".into(), json!(settled));
             // What each stepped operator's carried output holds as this frame drew (#252).
             let fx2 = fx.clone();
-            let carried = app
-                .worker
-                .call(move |_| lock(&fx2).docops.as_ref().map(|o| o.carried()));
-            if let Some(c) = carried.filter(|c| c.as_object().is_some_and(|m| !m.is_empty())) {
+            let carried = app.worker.call(move |_| {
+                let fx = lock(&fx2);
+                fx.docops.as_ref().map(|o| (o.carried(), o.settling()))
+            });
+            let (carried, behind) = carried.unzip();
+            if let Some(c) =
+                carried.filter(|c: &Value| c.as_object().is_some_and(|m| !m.is_empty()))
+            {
                 frame.insert("carried".into(), c);
+            }
+            // A frame drawn before the carried state is rebuilt after a lost device (#1993).
+            if behind == Some(true) {
+                frame.insert("settling".into(), json!(true));
             }
             if args.timings {
                 frame.insert("wall_ms".into(), json!(wall_ms));
@@ -2481,19 +1661,7 @@ fn run_view(
             }
             frame.insert("samples".into(), samples_report);
             if args.overlays {
-                let rows: Vec<Value> = anchored
-                    .iter()
-                    .map(|o| {
-                        let mut row = json!({"id": o.id, "at": o.origin});
-                        // #468: where its leader ends, or null while it hides.
-                        if let Some(l) = &o.leader {
-                            let to = l.points.as_ref().and_then(|p| p.last());
-                            row["leader"] = to.map_or(Value::Null, |to| json!({"to": to}));
-                        }
-                        row
-                    })
-                    .collect();
-                frame.insert("overlays".into(), Value::Array(rows));
+                frame.insert("overlays".into(), overlay_rows(&anchored));
             }
             frame.insert(
                 "history".into(),
@@ -2528,6 +1696,9 @@ fn run_view(
                 frame.insert("projected".into(), p);
             }
             frame.extend(particles.map(|p| ("particles".to_string(), p)));
+            if call["footprints"] == true {
+                frame.insert("footprints".into(), Value::Object(footprints));
+            }
             frame.extend(trails.map(|p| ("trails".to_string(), p)));
             if call["strokes"] == true {
                 let rows: Vec<Value> = stroke_rows
@@ -2618,6 +1789,29 @@ fn run_view(
                 if let (Some(pre), true) = (&drawn.pre_tone, args.targets.contains("pre_tone")) {
                     frame.insert("pre_tone".into(), json!(write_named(out, pre, "f32")?));
                 }
+                // #971: the linear values the tone curve reads: that image after the look's
+                // local tone map, the exposure and the grade's white balance.
+                if let (Some(pre), true) = (
+                    drawn.toned.as_ref().or(drawn.pre_tone.as_ref()),
+                    args.targets.contains("pre_curve"),
+                ) {
+                    let scale = scene.exposure.unwrap_or(args.look.exposure);
+                    let balance = args.look.grade.white_balance();
+                    let read: Vec<u8> = pre
+                        .as_chunks::<16>()
+                        .0
+                        .iter()
+                        .flat_map(|p| {
+                            let c =
+                                |k: usize| f32::from_le_bytes([p[k], p[k + 1], p[k + 2], p[k + 3]]);
+                            let lit = [0, 4, 8].map(|k| f64::from(c(k)) * scale);
+                            let rgb = deep_canvas_marks::finish::mul(&balance, lit);
+                            let e = |x: f64| (x as f32).to_le_bytes();
+                            [e(rgb[0]), e(rgb[1]), e(rgb[2]), c(12).to_le_bytes()].concat()
+                        })
+                        .collect();
+                    frame.insert("pre_curve".into(), json!(write_named(out, &read, "f32")?));
+                }
                 if let Some(name) = &dirt_file {
                     frame.insert("dirt".into(), json!(name));
                 }
@@ -2636,6 +1830,40 @@ fn run_view(
                 }
                 if let (Some(n), true) = (&drawn.normal, args.targets.contains("normal")) {
                     frame.insert("normal".into(), json!(write_named(out, n, "f32")?));
+                }
+                // #458: the core's velocity target as the frame built it, two f32 a pixel.
+                if let (Some(v), true) = (&drawn.velocity, args.targets.contains("velocity")) {
+                    frame.insert("velocity".into(), json!(write_named(out, v, "f32")?));
+                }
+                // #458: what a relation reads beside these: the solids' normals, and the linear
+                // image the tone map reads, after exposure.
+                if let (Some(n), true) = (
+                    &drawn.geometry_normal,
+                    app.relation_reads.contains("geometry_normal"),
+                ) {
+                    frame.insert("geometry_normal".into(), json!(write_named(out, n, "f32")?));
+                }
+                if let (Some(pre), true) = (&drawn.pre_tone, app.relation_reads.contains("exposed"))
+                {
+                    // The planted output pass exposes after the tone map, so what the tone map
+                    // reads isn't exposed.
+                    let scale = if app.planted == Some(Planted::ExposureAfterToneMap) {
+                        1.0
+                    } else {
+                        scene.exposure.unwrap_or(args.look.exposure)
+                    };
+                    let exposed: Vec<u8> = pre
+                        .as_chunks::<16>()
+                        .0
+                        .iter()
+                        .flat_map(|p| {
+                            let c =
+                                |k: usize| f32::from_le_bytes([p[k], p[k + 1], p[k + 2], p[k + 3]]);
+                            let e = |k: usize| ((f64::from(c(k)) * scale) as f32).to_le_bytes();
+                            [e(0), e(4), e(8), c(12).to_le_bytes()].concat()
+                        })
+                        .collect();
+                    frame.insert("exposed".into(), json!(write_named(out, &exposed, "f32")?));
                 }
                 // #468: each pixel's signed circle of confusion, f32.
                 if let (Some(c), true) = (&drawn.coc, args.targets.contains("coc")) {
@@ -2694,6 +1922,27 @@ fn run_view(
                     })?;
                     frame.insert("read".into(), read);
                 }
+                // #508: what a check reads back from the frame, each as raw rows named by their
+                // SHA-256: the color where the document's operators read the chain (before any
+                // display-only pass), the object IDs and the view-axis depth.
+                if args.targets.contains("checks") && !noop {
+                    let fx2 = fx.clone();
+                    let color = app
+                        .worker
+                        .call(move |state| lock(&fx2).read_checks(&state.gpu.device()));
+                    let mut checks = Map::new();
+                    let parts = [
+                        ("color", color.as_deref()),
+                        ("ids", drawn.targets.as_ref().map(|(_, ids)| ids.as_slice())),
+                        ("depth", drawn.view_depth.as_deref()),
+                    ];
+                    for (name, bytes) in parts {
+                        if let Some(b) = bytes {
+                            checks.insert(name.into(), json!(write_named(out, b, "bin")?));
+                        }
+                    }
+                    frame.insert("checks".into(), Value::Object(checks));
+                }
                 if let Some((linear, ids)) = &drawn.targets {
                     if args.targets.contains("linear") {
                         frame.insert("linear".into(), json!(write_named(out, linear, "f32")?));
@@ -2746,6 +1995,22 @@ fn run_view(
                     .expect("a list")
                     .push(notice);
             }
+            // #1634: the clusters past `per_cluster` and the fill lights dropped from any of them,
+            // reported once per change.
+            if c.clusters_over != clusters_over {
+                clusters_over.clone_from(&c.clusters_over);
+                let dropped: std::collections::BTreeSet<&String> =
+                    clusters_over.iter().flat_map(|o| &o.dropped).collect();
+                if !clusters_over.is_empty() {
+                    let clusters: Vec<[u32; 3]> = clusters_over.iter().map(|o| o.cluster).collect();
+                    frame
+                        .entry("notices")
+                        .or_insert_with(|| json!([]))
+                        .as_array_mut()
+                        .expect("a list")
+                        .push(json!({"code": "cluster_over_budget", "clusters": clusters, "dropped": dropped}));
+                }
+            }
             if args.counts {
                 let c = &drawn.counts;
                 let encoded: Vec<Value> = c
@@ -2766,7 +2031,18 @@ fn run_view(
                     .map(|(item, view, batch)| json!({"item": item, "view": view, "batch": batch}))
                     .collect();
                 frame.insert("indirect_draws".into(), json!(draws));
+                // #1636: each draw of a mesh the main view's color pass issues.
+                let draws: Vec<Value> = (c.draws.iter())
+                    .map(|(of, mesh, material, instances)| {
+                        json!({"pass": "color", "of": of, "mesh": mesh, "material": material,
+                            "instances": instances})
+                    })
+                    .collect();
+                frame.insert("draws".into(), json!(draws));
                 frame.insert("meshes_built".into(), json!(c.meshes_built));
+                frame.insert("horizons_baked".into(), json!(baked));
+                let passes = deep_gpu::counted::compute_passes();
+                frame.insert("compute_passes".into(), json!(passes - passes_before));
                 frame.insert("axes_mapped".into(), json!(axes_mapped));
                 frame.insert(
                     "terrain_tiles_selected".into(),
@@ -2775,14 +2051,25 @@ fn run_view(
                 frame.insert("compiled".into(), json!(compiled));
                 frame.insert("segments".into(), Value::Object(edge_segments));
                 frame.insert("edge_sets_derived".into(), Value::Object(edge_sets_derived));
+                let [spans, dashes, computed] = edge_spans;
+                frame.insert("spans".into(), Value::Object(spans));
+                frame.insert("dashes".into(), Value::Object(dashes));
+                frame.insert("edge_spans_computed".into(), Value::Object(computed));
             }
             if args.lod {
                 frame.insert("lod".into(), crate::lod::rows(&choices));
             }
+            passes_before = deep_gpu::counted::compute_passes();
             if let (Some((item, at)), Some(tiles)) = (&args.ground_points, &tiles) {
+                let light = crate::lod::Light {
+                    scene: &scene,
+                    last_split: drawn.counts.cascade_splits.last().copied(),
+                    unbaked: app.planted == Some(Planted::TerrainNoHorizonBake),
+                    by_slope: app.planted == Some(Planted::TerrainOcclusionFromSlope),
+                };
                 frame.insert(
                     "ground_points".into(),
-                    crate::lod::ground_points(item, at, tiles, &choices),
+                    crate::lod::ground_points(item, at, tiles, &choices, &light),
                 );
             }
             if args.cull_report && capture && !noop {
@@ -2807,6 +2094,19 @@ fn run_view(
             }
             if args.light_cut {
                 frame.insert("light_cut".into(), crate::lod::cut_json(&evaluated, &cut));
+            }
+            if args.clusters && capture {
+                let rows: Vec<Value> = session3::clusters(app)
+                    .into_iter()
+                    .map(|(cluster, lights)| {
+                        let lights: Vec<Value> = lights
+                            .into_iter()
+                            .map(|(light, weight)| json!({"light": light, "weight": weight}))
+                            .collect();
+                        json!({"cluster": cluster, "lights": lights})
+                    })
+                    .collect();
+                frame.insert("clusters".into(), json!(rows));
             }
             if args.masks && capture && !noop {
                 let mut rows = Vec::new();
@@ -2865,13 +2165,34 @@ fn run_view(
                 frame.insert("gpu_ms".into(), json!(gpu_ms));
                 frame.insert("cpu_ms".into(), json!(cpu_ms));
                 frame.insert("passes_ms".into(), json!(passes));
+                // #508: the film effects' passes at the size the effects drew.
+                let fx_size = match args.surface.scale < 1.0 {
+                    true => surface::scaled(size, args.surface.scale),
+                    false => size,
+                };
+                let effects_declared = lock(&fx).declared_ms(fx_size);
                 let declared: serde_json::Map<String, Value> = drawn
                     .declared
                     .iter()
                     .map(|(k, v)| (k.to_string(), json!(v)))
+                    .chain(
+                        effects_declared
+                            .iter()
+                            .map(|(k, v)| (k.to_string(), json!(v))),
+                    )
                     .chain(op_declared.map(|(k, v)| (k, json!(v))))
                     .collect();
                 frame.insert("declared_ms".into(), Value::Object(declared));
+                // #1634: what the light policy's scoring took and what the fill lights hold, with
+                // the cost model's estimate of the frame, in a scene that holds a fill light.
+                let c = &drawn.counts;
+                if c.lists_bytes > 0 {
+                    let lights = json!({"scoring_ms": c.scoring_ms, "lists_bytes": c.lists_bytes});
+                    frame.insert("lights".into(), lights);
+                    let [gpu_ms, scoring_ms, lists_bytes] = c.light_estimate;
+                    let estimate = json!({"gpu_ms": gpu_ms, "scoring_ms": scoring_ms, "lists_bytes": lists_bytes});
+                    frame.insert("estimate".into(), estimate);
+                }
             }
             if !clicks.is_empty() {
                 let ids = drawn.targets.as_ref().map(|(_, ids)| ids.as_slice());
@@ -2919,7 +2240,7 @@ fn run_view(
             p.overlays.clear();
         }
     }
-    let (msaa, render_targets) = session3::render_targets(app);
+    let (msaa, render_targets, mirror_px) = session3::render_targets(app);
     session3::close(app);
     // An over-cap document is refused, its imports still reported: the import comes before the
     // count it makes (#423).
@@ -2991,13 +2312,16 @@ fn run_view(
         "internal_scale": scale,
         "upscale": upscale,
         "sharpen": args.surface.sharpen,
-        "size_px": size, "internal_px": internal, "msaa": msaa,
+        "size_px": size, "internal_px": internal, "mirror_px": mirror_px, "msaa": msaa,
     });
     let mut reply = json!({
         "frames": frames, "passes": passes, "status": status_report, "surface": drew,
         "render_targets": render_targets,
         "layers": layers_report(&args.doc, &args.hidden),
     });
+    if args.lose_at.is_some() {
+        reply["device_losses"] = json!(device_losses);
+    }
     if !worlds.is_empty() {
         reply["worlds"] = Value::Object(
             worlds

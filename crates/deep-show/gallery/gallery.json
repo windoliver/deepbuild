@@ -41,6 +41,38 @@
         "game"
       ],
       "source": "logic-counter.wat"
+    },
+    {
+      "file": "net-rally.json",
+      "hash": "61bd91088e5d84e3a579e4a13df01911cf499b1ce032d1db54ee3cb17579f6c1",
+      "title": "Net: a two-player rally",
+      "steps": 600,
+      "words": [
+        "net",
+        "match",
+        "two-player",
+        "multiplayer",
+        "relay",
+        "rules",
+        "game"
+      ],
+      "source": "net-rally.wat"
+    },
+    {
+      "file": "figure.json",
+      "hash": "8219a22edc6563e8d2510021945c87e8c176563179130ebb50962b553448e608",
+      "title": "Figure: an engine on a stand with a throttle",
+      "steps": 360,
+      "words": [
+        "figure",
+        "rig",
+        "engine",
+        "throttle",
+        "slider",
+        "plume",
+        "assembly",
+        "stage"
+      ]
     }
   ],
   "guides": [

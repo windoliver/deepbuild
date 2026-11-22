@@ -84,6 +84,7 @@ fn fuel_of(item: &Item) -> i64 {
         items: vec![item.clone()],
         machine: Vec::new(),
         document: String::new(),
+        rewind: None,
     });
     World::new(
         p,
@@ -109,6 +110,7 @@ pub fn metered() -> (f64, [i64; 2]) {
 
 /// This thread's CPU time, in ns: what a step costs the logic module, which other processes'
 /// load doesn't stretch.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn cpu_ns() -> u64 {
     let mut t = libc::timespec {
         tv_sec: 0,
@@ -117,6 +119,13 @@ pub fn cpu_ns() -> u64 {
     // SAFETY: clock_gettime writes the timespec it's given and reads nothing else.
     unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut t) };
     t.tv_sec as u64 * 1_000_000_000 + t.tv_nsec as u64
+}
+
+/// In the web player (#172) the page has no thread CPU clock: its own clock in ns stands in.
+#[cfg(target_arch = "wasm32")]
+pub fn cpu_ns() -> u64 {
+    thread_local!(static START: web_time::Instant = web_time::Instant::now());
+    START.with(|s| s.elapsed().as_nanos() as u64)
 }
 
 /// The least CPU time, of `frames` frames, a world of `n` copies of `base` takes to run one step.
@@ -137,6 +146,7 @@ fn frame_ns(base: &Item, n: usize, frames: i64) -> f64 {
         items,
         machine: Vec::new(),
         document: String::new(),
+        rewind: None,
     });
     let mut rec = Record::default();
     let mut w = World::new(

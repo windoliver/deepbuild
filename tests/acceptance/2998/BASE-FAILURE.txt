@@ -1,0 +1,75 @@
+# #2998 acceptance suite at the base c9675effd (origin/main), macOS Darwin 27.2, Node 24.22.0, load average about 260-300
+# node node_modules/vitest/vitest.mjs run --root tests/acceptance/2998 --no-file-parallelism --testTimeout=600000 --reporter=verbose
+# AC1 and AC3 fail at their assertions; AC2 passes at the base on this Mac (see README, At the base).
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/2998
+
+ × probe.test.mjs > AC1 #2998.441bfb4c a supervisor closed mid-warm-up has ended and reaped every probe it started > AC1 close() resolves with no canary probe of this process left running or unreaped, and none starts after 2387ms
+   → the probe seen running (pid 60846) and any other this process started are gone and reaped when close() resolves: expected [ '60846 Z <defunct>' ] to deeply equal []
+ ✓ probe.test.mjs > AC2 #2998.c5579a7f a hub stopped mid-probe under the perf counter leaves /usr/bin/sandbox-exec out of uncounted > AC2 10 hubs, each sent SIGTERM while a canary probe it started is running, never name /usr/bin/sandbox-exec in uncounted 28271ms
+ × round-trip.test.mjs > AC3 #2998.7f39b900 30 measureOnce runs of hub-round-trip never name /usr/bin/sandbox-exec in uncounted > AC3 30 measureOnce runs of the hub-round-trip budget task never name /usr/bin/sandbox-exec in uncounted 153770ms
+   → runs whose uncounted names /usr/bin/sandbox-exec, of [{"run":1,"instructions":null,"uncounted":["(forked)"]},{"run":2,"instructions":null,"uncounted":["(forked)"]},{"run":3,"instructions":null,"uncounted":["(forked)"]},{"run":4,"instructions":null,"uncounted":["(forked)"]},{"run":5,"instructions":null,"uncounted":["(forked)"]},{"run":6,"instructions":null,"uncounted":["(forked)"]},{"run":7,"instructions":null,"uncounted":["(forked)"]},{"run":8,"instructions":null,"uncounted":["(forked)"]},{"run":9,"instructions":null,"uncounted":["(forked)"]},{"run":10,"instructions":null,"uncounted":["(forked)"]},{"run":11,"instructions":null,"uncounted":["(forked)","/usr/bin/sandbox-exec"]},{"run":12,"instructions":null,"uncounted":["(forked)"]},{"run":13,"instructions":null,"uncounted":["(forked)"]},{"run":14,"instructions":null,"uncounted":["(forked)"]},{"run":15,"instructions":null,"uncounted":["(forked)"]},{"run":16,"instructions":null,"uncounted":["(forked)"]},{"run":17,"instructions":null,"uncounted":["(forked)"]},{"run":18,"instructions":null,"uncounted":["(forked)"]},{"run":19,"instructions":null,"uncounted":["(forked)"]},{"run":20,"instructions":null,"uncounted":["(forked)"]},{"run":21,"instructions":null,"uncounted":["(forked)"]},{"run":22,"instructions":null,"uncounted":["(forked)"]},{"run":23,"instructions":null,"uncounted":["(forked)"]},{"run":24,"instructions":null,"uncounted":["<repo>/packages/supervisor/dist/helper","(forked)"]},{"run":25,"instructions":null,"uncounted":["(forked)"]},{"run":26,"instructions":null,"uncounted":["(forked)"]},{"run":27,"instructions":null,"uncounted":["(forked)"]},{"run":28,"instructions":null,"uncounted":["(forked)"]},{"run":29,"instructions":null,"uncounted":["(forked)","/usr/bin/sandbox-exec"]},{"run":30,"instructions":null,"uncounted":["(forked)"]}]: expected [ Array(2) ] to deeply equal []
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  probe.test.mjs > AC1 #2998.441bfb4c a supervisor closed mid-warm-up has ended and reaped every probe it started > AC1 close() resolves with no canary probe of this process left running or unreaped, and none starts after
+AssertionError: the probe seen running (pid 60846) and any other this process started are gone and reaped when close() resolves: expected [ '60846 Z <defunct>' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "60846 Z <defunct>",
++ ]
+
+ ❯ probe.test.mjs:47:201
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  round-trip.test.mjs > AC3 #2998.7f39b900 30 measureOnce runs of hub-round-trip never name /usr/bin/sandbox-exec in uncounted > AC3 30 measureOnce runs of the hub-round-trip budget task never name /usr/bin/sandbox-exec in uncounted
+AssertionError: runs whose uncounted names /usr/bin/sandbox-exec, of [{"run":1,"instructions":null,"uncounted":["(forked)"]},{"run":2,"instructions":null,"uncounted":["(forked)"]},{"run":3,"instructions":null,"uncounted":["(forked)"]},{"run":4,"instructions":null,"uncounted":["(forked)"]},{"run":5,"instructions":null,"uncounted":["(forked)"]},{"run":6,"instructions":null,"uncounted":["(forked)"]},{"run":7,"instructions":null,"uncounted":["(forked)"]},{"run":8,"instructions":null,"uncounted":["(forked)"]},{"run":9,"instructions":null,"uncounted":["(forked)"]},{"run":10,"instructions":null,"uncounted":["(forked)"]},{"run":11,"instructions":null,"uncounted":["(forked)","/usr/bin/sandbox-exec"]},{"run":12,"instructions":null,"uncounted":["(forked)"]},{"run":13,"instructions":null,"uncounted":["(forked)"]},{"run":14,"instructions":null,"uncounted":["(forked)"]},{"run":15,"instructions":null,"uncounted":["(forked)"]},{"run":16,"instructions":null,"uncounted":["(forked)"]},{"run":17,"instructions":null,"uncounted":["(forked)"]},{"run":18,"instructions":null,"uncounted":["(forked)"]},{"run":19,"instructions":null,"uncounted":["(forked)"]},{"run":20,"instructions":null,"uncounted":["(forked)"]},{"run":21,"instructions":null,"uncounted":["(forked)"]},{"run":22,"instructions":null,"uncounted":["(forked)"]},{"run":23,"instructions":null,"uncounted":["(forked)"]},{"run":24,"instructions":null,"uncounted":["<repo>/packages/supervisor/dist/helper","(forked)"]},{"run":25,"instructions":null,"uncounted":["(forked)"]},{"run":26,"instructions":null,"uncounted":["(forked)"]},{"run":27,"instructions":null,"uncounted":["(forked)"]},{"run":28,"instructions":null,"uncounted":["(forked)"]},{"run":29,"instructions":null,"uncounted":["(forked)","/usr/bin/sandbox-exec"]},{"run":30,"instructions":null,"uncounted":["(forked)"]}]: expected [ Array(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "instructions": null,
++     "run": 11,
++     "uncounted": [
++       "(forked)",
++       "/usr/bin/sandbox-exec",
++     ],
++   },
++   {
++     "instructions": null,
++     "run": 29,
++     "uncounted": [
++       "(forked)",
++       "/usr/bin/sandbox-exec",
++     ],
++   },
++ ]
+
+ ❯ round-trip.test.mjs:26:142
+     24|       runs.push({ run: i + 1, instructions: run.instructions, uncounte…
+     25|     }
+     26|     expect(runs.filter((r) => r.uncounted.includes(SANDBOX_EXEC)), `ru…
+       |                                                                                                                                              ^
+     27|   }, 1_800_000);
+     28| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 1 passed (3)
+   Start at  21:38:24
+   Duration  185.35s (tests 100%)
+
+exit 1
+

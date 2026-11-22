@@ -374,69 +374,8 @@ fn fixer_rule_dangles(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
     fixer_rule_with(doc, id, item, true)
 }
 
-fn fixer_with(r: &mut Registrar, rule: deep_canvas::registry::Rule, unproved: bool) {
-    let link = param("link", ParamType::Json("item ID"), Value::Null, None, None);
-    r.kind(
-        kind(
-            "fixer",
-            vec![
-                boxed(),
-                number("x", 0.0, 0.0, 1000.0),
-                number("y", 0.0, 0.0, 1000.0),
-                link,
-            ],
-        ),
-        &[],
-        "rect@1",
-    )
-    .drawn(ink_box);
-    r.rule("test.kit.fixer", rule);
-    r.code(
-        "test.kit.fixer.y_over",
-        "y is past the fixer's limit of 100.",
-        "Set y to 100.",
-        true,
-    );
-    r.code(
-        "test.kit.fixer.x_odd",
-        "x is an odd number.",
-        "Make x even.",
-        false,
-    );
-    if unproved {
-        r.code(
-            "test.kit.fixer.y_under",
-            "y is below 0.",
-            "Set y to 0.",
-            true,
-        );
-    }
-    let one = |id: &str, params: Value| {
-        board(
-            "test.kit.fixer",
-            "Fixer",
-            json!({id: item(id, "test.kit.fixer@1", "a0", params)}),
-        )
-    };
-    r.parity(
-        "framework",
-        "fixer-y-over",
-        one("f1", json!({"box": [20, 20, 40, 40], "x": 0, "y": 150})),
-        json!({"checks": [{"kind": "document.validate"}], "oracles": ["analytic"], "codes": ["test.kit.fixer.y_over"]}),
-    );
-    r.parity(
-        "framework",
-        "fixer-x-odd",
-        one("f2", json!({"box": [20, 20, 40, 40], "x": 3, "y": 10})),
-        json!({"checks": [{"kind": "document.validate"}], "oracles": ["analytic"], "codes": ["test.kit.fixer.x_odd"]}),
-    );
-    r.parity(
-        "framework",
-        "fixer-clean",
-        one("f3", json!({"box": [20, 20, 40, 40], "x": 2, "y": 10})),
-        plain(),
-    );
-}
+mod fixer;
+use fixer::*;
 
 fn register_fixer(r: &mut Registrar) {
     fixer_with(r, fixer_rule, false);
@@ -1492,6 +1431,80 @@ pub fn selfish_analytic() -> Module {
     }
 }
 
+// ------------------------------------------------------------------------------------------------
+// test.kit.pointer (#1801): a box whose `points_to` names another item of the document; `-declared`
+// declares that field a reference of kind target, as the kit's references part and refs_to read it.
+
+fn pointer_with(r: &mut Registrar, declared: bool) {
+    let points_to = param(
+        "points_to",
+        ParamType::Json("ID | null"),
+        Value::Null,
+        None,
+        None,
+    );
+    r.kind(kind("pointer", vec![boxed(), points_to]), &[], "rect@1")
+        .drawn(ink_box)
+        // #2777: `null` is the one word the field offers.
+        .closes(
+            "points_to",
+            deep_canvas::registry::fields::Closure::closed(
+                "record",
+                "never: a test module's fixture kind",
+                deep_canvas::registry::fields::NOTHING,
+            ),
+        );
+    if declared {
+        use deep_canvas::refs::{kind as names, Decl, Holds};
+        r.refs(&[Decl::new("params/points_to", Holds::Item, names::TARGET)]);
+    }
+    // The kit proves the module alone, with the core: its target is a pointer too, to nothing.
+    let target = item(
+        "t1",
+        "test.kit.pointer@1",
+        "a0",
+        json!({"box": [20, 20, 40, 40], "points_to": null}),
+    );
+    let pointer = item(
+        "p1",
+        "test.kit.pointer@1",
+        "a1",
+        json!({"box": [80, 20, 40, 40], "points_to": "t1"}),
+    );
+    r.parity(
+        "kernel",
+        "pointer",
+        board(
+            "test.kit.pointer",
+            "Pointer",
+            json!({"t1": target, "p1": pointer}),
+        ),
+        json!({"checks": [{"kind": "document.validate"}], "oracles": ["analytic"], "codes": []}),
+    );
+}
+
+fn register_pointer(r: &mut Registrar) {
+    pointer_with(r, false);
+}
+
+fn register_pointer_declared(r: &mut Registrar) {
+    pointer_with(r, true);
+}
+
+pub fn pointer() -> Module {
+    Module {
+        manifest: manifest("test.kit.pointer", 1),
+        register: register_pointer,
+    }
+}
+
+pub fn pointer_declared() -> Module {
+    Module {
+        manifest: manifest("test.kit.pointer", 1),
+        register: register_pointer_declared,
+    }
+}
+
 /// The kit's test canvas modules this build holds, each under its own feature.
 pub fn built() -> Vec<Module> {
     #[allow(unused_mut)]
@@ -1538,5 +1551,7 @@ pub fn built() -> Vec<Module> {
     with!("test-kit-loose", loose());
     with!("test-kit-selfish", selfish());
     with!("test-kit-selfish-analytic", selfish_analytic());
+    with!("test-kit-pointer", pointer());
+    with!("test-kit-pointer-declared", pointer_declared());
     out
 }

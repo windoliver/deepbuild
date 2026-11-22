@@ -49,7 +49,11 @@ pub struct Shown {
 impl Shown {
     /// The accessibility name its node carries, which the replica finds it by.
     pub fn name(&self) -> String {
-        format!("{} {}: {}", self.surface.name(), self.id, self.text)
+        let key = match self.surface {
+            Surface::Card => "bound.card_named",
+            Surface::Panel => "bound.panel_named",
+        };
+        crate::copy::fill(key, &[&self.id, &self.text])
     }
 }
 
@@ -68,7 +72,7 @@ impl Run {
 #[cfg(feature = "fixtures")]
 thread_local! {
     static BOUND: RefCell<Vec<Shown>> = const { RefCell::new(Vec::new()) };
-    /// How many times the values were set: the views observe it through the record's entity (#1546).
+    /// How many times the values changed: the views observe it through the record's entity (#1546).
     static REVISION: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
@@ -81,18 +85,21 @@ pub fn set(runs: &[Run], binds: &[(Surface, String, Value)]) -> Option<()> {
         .iter()
         .map(|(surface, id, bind)| resolve(runs, *surface, id, bind))
         .collect::<Option<Vec<_>>>()?;
-    BOUND.with(|cell| *cell.borrow_mut() = shown);
-    REVISION.with(|revision| revision.set(revision.get() + 1));
+    // A reading equal to what's shown moves nothing, so no view draws for it (#1482).
+    if BOUND.with(|cell| *cell.borrow() != shown) {
+        BOUND.with(|cell| *cell.borrow_mut() = shown);
+        REVISION.with(|revision| revision.set(revision.get() + 1));
+    }
     Some(())
 }
 
-/// How many times the values were set: never, in a build without the replica's door.
+/// How many times the values changed: never, in a build without the replica's door.
 #[cfg(not(feature = "fixtures"))]
 pub fn revision() -> u64 {
     0
 }
 
-/// How many times the values were set.
+/// How many times the values changed.
 #[cfg(feature = "fixtures")]
 pub fn revision() -> u64 {
     REVISION.with(std::cell::Cell::get)
@@ -191,10 +198,10 @@ fn resolve(runs: &[Run], surface: Surface, id: &str, bind: &Value) -> Option<Sho
     Some(Shown {
         surface,
         id: id.to_string(),
-        from: format!(
-            "{} · {assertion}",
-            of.map_or("no run", |r| r.check.as_str())
-        ),
+        from: {
+            let check = of.map_or(crate::copy::text("bound.no_run"), |r| r.check.as_str());
+            format!("{check} · {assertion}")
+        },
         text: runs::text(bind, source, value, 0)?,
         missing,
     })

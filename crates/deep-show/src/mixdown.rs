@@ -14,19 +14,23 @@ use deep_canvas_media::mix::{
     Bus, BusSend, Curve, Emit, Gain, Mix, Place, Planted as MixPlanted, Player, Proc, ProcKind,
     Source, Strip,
 };
+use deep_canvas_media::shape::{CrushSpec, ModulateSpec, ShaperSpec};
+use deep_canvas_media::synth::preset::Curve as SynthCurve;
 use deep_canvas_media::{doc, eq, reverb, FLICKS};
 use deep_codecs::DECODE_WORKER;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 /// A decoded audio asset: its rate, channels, samples and loop points in samples.
-type Decoded = (i64, usize, Vec<f32>, Option<(i64, i64)>);
+pub(crate) type Decoded = (i64, usize, Vec<f32>, Option<(i64, i64)>);
 
 use crate::evidence;
 use crate::hub::{Hub, Planted};
 use crate::refused;
 use crate::spawn;
 
+#[path = "cut.rs"]
+pub(crate) mod cut;
 #[path = "score_plan.rs"]
 pub(crate) mod score_plan;
 #[path = "synth.rs"]
@@ -58,6 +62,8 @@ pub enum MixCall {
     },
     /// #154: a score's render plan, `{doc, item}`.
     Score(Value),
+    /// #155: a document's foley jobs, `{doc}`.
+    Foley(Value),
     /// #509: a line's words and a transcript compared after normalizer@1.
     Heard(Map<String, Value>),
     /// #501: a media document played live on the default output for `seconds` of real time.
@@ -99,6 +105,7 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<MixCall> {
             sound: c.get("sound")?.as_str()?.to_string(),
         },
         "score_plan" => MixCall::Score(Value::Object(c.clone())),
+        "foley_plan" => MixCall::Foley(Value::Object(c.clone())),
         "media_heard" => MixCall::Heard(c.clone()),
         "handed" => MixCall::Handed {
             panel: c.get("panel")?.as_str()?.to_string(),
@@ -238,6 +245,55 @@ fn vec3(v: Option<&Value>) -> Option<[f64; 3]> {
     ])
 }
 
+/// The decode worker's job that decodes an asset's sound, every channel, into `out`.
+pub(crate) fn decode_job(path: &std::path::Path, out: &std::path::Path) -> Value {
+    json!({"op": "decode", "path": path, "out": out, "video_frames": 0})
+}
+
+/// A decode reply's sound, read from `out`, which is removed: its rate, channel count, interleaved
+/// f32 frames and loop points; the worker's refusal of the file or its sound, naming the asset.
+pub(crate) fn decoded_from(
+    reply: &Value,
+    out: &std::path::Path,
+    sha: &str,
+) -> Result<Decoded, Value> {
+    let stream = reply["decoded"]["streams"]
+        .as_array()
+        .and_then(|s| s.iter().find(|s| s["type"] == "audio"))
+        .cloned();
+    let result = (|| {
+        // #503: the worker's refusal of the file or of its sound, naming it (its codec).
+        if let Some(r) = reply
+            .get("refused")
+            .or_else(|| stream.as_ref()?.get("refused"))
+        {
+            let mut r = r.clone();
+            r["asset"] = json!(sha);
+            return Err(r);
+        }
+        let s = stream.ok_or_else(|| json!({"code": "not_audio", "asset": sha}))?;
+        let bytes = std::fs::read(out.join(s["file"].as_str().unwrap_or_default()))
+            .map_err(|_| refused("unreadable"))?;
+        let samples = bytes
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| f32::from_le_bytes(*b))
+            .collect();
+        let looped = s["loop"]
+            .as_array()
+            .and_then(|l| Some((l.first()?.as_i64()?, l.get(1)?.as_i64()?)));
+        Ok((
+            s["sample_rate"].as_i64().unwrap_or(48_000).max(1),
+            s["channels"].as_u64().unwrap_or(1).max(1) as usize,
+            samples,
+            looped,
+        ))
+    })();
+    let _ = std::fs::remove_dir_all(out);
+    result
+}
+
 impl Hub<'_> {
     /// An asset from the evidence store, decoded in the decode worker, for the mix: interleaved
     /// f32 frames of its first two channels' worth.
@@ -279,45 +335,8 @@ impl Hub<'_> {
             std::process::id(),
             &sha[..sha.len().min(16)]
         ));
-        let (reply, _) = self.media_job(
-            DECODE_WORKER,
-            json!({"op": "decode", "path": path, "out": out, "video_frames": 0}),
-        );
-        let stream = reply["decoded"]["streams"]
-            .as_array()
-            .and_then(|s| s.iter().find(|s| s["type"] == "audio"))
-            .cloned();
-        let result = (|| {
-            // #503: the worker's refusal of the file or of its sound, naming it (its codec).
-            if let Some(r) = reply
-                .get("refused")
-                .or_else(|| stream.as_ref()?.get("refused"))
-            {
-                let mut r = r.clone();
-                r["asset"] = json!(sha);
-                return Err(r);
-            }
-            let s = stream.ok_or_else(|| json!({"code": "not_audio", "asset": sha}))?;
-            let bytes = std::fs::read(out.join(s["file"].as_str().unwrap_or_default()))
-                .map_err(|_| refused("unreadable"))?;
-            let samples = bytes
-                .as_chunks::<4>()
-                .0
-                .iter()
-                .map(|b| f32::from_le_bytes(*b))
-                .collect();
-            let looped = s["loop"]
-                .as_array()
-                .and_then(|l| Some((l.first()?.as_i64()?, l.get(1)?.as_i64()?)));
-            Ok((
-                s["sample_rate"].as_i64().unwrap_or(48_000).max(1),
-                s["channels"].as_u64().unwrap_or(1).max(1) as usize,
-                samples,
-                looped,
-            ))
-        })();
-        let _ = std::fs::remove_dir_all(&out);
-        result
+        let (reply, _) = self.media_job(DECODE_WORKER, decode_job(path, &out));
+        decoded_from(&reply, &out, sha)
     }
 
     /// A media document's mix: its strips, buses, processors and emitters.
@@ -336,6 +355,14 @@ impl Hub<'_> {
     /// A media document's mix, and what #500 adds to the reply: its spawns' `voices` and its
     /// sound `cues`.
     fn mix_with(&mut self, d: &Value) -> Result<(Mix, Map<String, Value>), Value> {
+        // #155: generator sources play the assets their jobs made, or the mix is BLOCKED.
+        let resolved;
+        let d = if Hub::has_generator(d) {
+            resolved = self.resolve_generators(d)?;
+            &resolved
+        } else {
+            d
+        };
         let bad = |what: String| json!({"code": "bad_media", "what": what});
         let rate = d
             .pointer("/transport/sample_rate")
@@ -519,8 +546,16 @@ impl Hub<'_> {
                 None => source.duration(),
                 v => time(d, v).map_err(bad)?,
             };
-            let rate_v =
-                doc::rate(s.get("rate")).ok_or_else(|| bad(format!("strip {sid}: rate")))?;
+            // #155: a ramp runs from rate 1 at the strip's start.
+            let ramp = doc::ramp(d, s.get("rate"))
+                .transpose()
+                .map_err(|w| bad(format!("strip {sid}: {w}")))?;
+            let rate_v = match ramp {
+                Some(_) => (1, 1),
+                None => {
+                    doc::rate(s.get("rate")).ok_or_else(|| bad(format!("strip {sid}: rate")))?
+                }
+            };
             let looped = s.get("loop").and_then(Value::as_bool).unwrap_or(false);
             // With no transport span a looping strip plays on for as long as the play lasts.
             let end = span.unwrap_or(if looped {
@@ -532,7 +567,10 @@ impl Hub<'_> {
                 (None, Some(_)) => span
                     .map(|e| e - start)
                     .ok_or_else(|| bad(format!("strip {sid}: a synth strip has a span")))?,
-                (None, None) => Strip::auto_span(start, r#in, out, rate_v, looped, end),
+                (None, None) => match ramp {
+                    Some(r) if !looped => r.span(rate_v, out - r#in),
+                    _ => Strip::auto_span(start, r#in, out, rate_v, looped, end),
+                },
                 (v, _) => time(d, v).map_err(bad)?,
             };
             let gain = match s.get("gain") {
@@ -596,6 +634,7 @@ impl Hub<'_> {
                 r#in,
                 out,
                 rate: rate_v,
+                ramp,
                 gain,
                 pan: s.get("pan").and_then(Value::as_f64).unwrap_or(0.0),
                 fade_in: fade("fade_in"),
@@ -759,6 +798,7 @@ impl Hub<'_> {
             MixCall::Bake(b) => self.bake_call(b),
             MixCall::Gen { doc, sound } => self.gen_call(doc, sound),
             MixCall::Score(c) => self.score_plan(c),
+            MixCall::Foley(c) => self.foley_plan(c),
             MixCall::Heard(c) => crate::narration::heard_back::heard_call(c),
             MixCall::Handed { panel, from, to } => {
                 if let Some(reply) = self.audio_handed(panel, *from, *to) {
@@ -937,6 +977,69 @@ fn processor(id: &str, p: &Value, bus: &dyn Fn(&str) -> Option<usize>) -> Result
             semitones: n("semitones").unwrap_or(0.0),
             window: n("window").unwrap_or(0.1),
         }),
+        // #155: shaper, crush and modulate, at their row's defaults.
+        Some("shaper") => {
+            let curve = match p.get("curve").and_then(Value::as_str).unwrap_or("tanh") {
+                "tanh" => SynthCurve::Tanh,
+                "soft_clip" => SynthCurve::SoftClip,
+                "fold" => SynthCurve::Fold,
+                c => {
+                    return Err(format!(
+                        "processor {id}: curve {c} isn't tanh, soft_clip or fold"
+                    ))
+                }
+            };
+            let oversample = match p.get("oversample").and_then(Value::as_u64) {
+                None => 4,
+                Some(o @ (2 | 4)) => o as u32,
+                Some(o) => return Err(format!("processor {id}: oversample {o} isn't 2 or 4")),
+            };
+            ProcKind::Shaper(ShaperSpec {
+                curve,
+                drive: n("drive").unwrap_or(6.0),
+                mix: n("mix").unwrap_or(1.0).clamp(0.0, 1.0),
+                oversample,
+            })
+        }
+        Some("crush") => {
+            let bits = match p.get("bits") {
+                None => 8,
+                Some(b) => b.as_u64().filter(|b| (1..=16).contains(b)).ok_or(format!(
+                    "processor {id}: bits is a whole number from 1 to 16"
+                ))? as u8,
+            };
+            let hold_hz = n("hold_hz").unwrap_or(0.0);
+            if hold_hz < 0.0 {
+                return Err(format!("processor {id}: hold_hz is 0 (off) or more"));
+            }
+            ProcKind::Crush(CrushSpec {
+                bits,
+                hold_hz,
+                mix: n("mix").unwrap_or(1.0).clamp(0.0, 1.0),
+            })
+        }
+        Some("modulate") => {
+            let (wow_hz, flutter_hz, depth) = (
+                n("wow_hz").unwrap_or(0.5),
+                n("flutter_hz").unwrap_or(8.0),
+                n("depth").unwrap_or(10.0),
+            );
+            if wow_hz < 0.0 || flutter_hz < 0.0 || depth < 0.0 {
+                return Err(format!(
+                    "processor {id}: wow_hz, flutter_hz and depth are 0 or more"
+                ));
+            }
+            ProcKind::Modulate(ModulateSpec {
+                wow_hz,
+                flutter_hz,
+                depth,
+                seed: match p.get("seed") {
+                    None => id.to_string(),
+                    Some(Value::String(s)) => s.clone(),
+                    Some(v) => v.to_string(),
+                },
+            })
+        }
         k => return Err(format!("processor {id}: kind {k:?} isn't built")),
     };
     Ok(Proc {

@@ -8,18 +8,27 @@
 
 use serde_json::{json, Map, Value};
 
-use crate::backend::{Backend, BodyState, Input, JointState, Query, State, Targets};
+use crate::backend::{
+    Backend, BodyState, CharacterState, Input, JointState, Query, State, Targets, VehicleState,
+};
 use crate::check::check;
 use crate::doc::World;
 use crate::occurrence::{self, Row, KINDS};
 use crate::roles::TABLE;
 use crate::track;
 
+mod centres;
+mod chains;
 mod fixtures;
+mod laws;
 pub mod scan;
 mod sensors;
+mod small;
+mod vehicles;
+pub mod walks;
 
 pub use fixtures::{all, test_capped};
+pub use vehicles::car_world;
 
 /// The physics interface's reference implementation, which the claim rule doesn't hold.
 pub const REFERENCE: &str = "rapier3d";
@@ -96,6 +105,114 @@ pub enum Measure {
         enter: f64,
         exit: f64,
     },
+    /// #182: how many of a character fixture's characters break their rule, each named.
+    Walks(Vec<walks::Walk>),
+    /// #251: each wheel of vehicle `body`'s compression after step `step`, m: the one farthest
+    /// from the answer.
+    Sag { body: &'static str, step: usize },
+    /// #251: how far `body` travels from step `step` until it stops, m.
+    Stop { body: &'static str, step: usize },
+    /// #251: `body`'s speed after step `step`, m/s.
+    Speed { body: &'static str, step: usize },
+    /// #251: the radius of the circle `point` on `body` traces from step `step`, over one turn.
+    Circle {
+        body: &'static str,
+        point: [f64; 3],
+        step: usize,
+    },
+    /// #251: the time of each wheel of `body`'s first `kind` row with `ground`, s: the one
+    /// farthest from the answer.
+    Wheels {
+        kind: &'static str,
+        body: &'static str,
+        ground: &'static str,
+    },
+    /// #2306: `body`'s contact impulse over each step after `from` to `to`, over the step's
+    /// length, N: the one farthest from the answer.
+    Load {
+        body: &'static str,
+        from: usize,
+        to: usize,
+    },
+    /// #2306: `joint`'s coordinate after each step from `from` on: the one farthest from the
+    /// answer.
+    Angle { joint: &'static str, from: usize },
+    /// #2306: how far `body` is after step `step` from its place on `ground`, along the ground (x
+    /// and z), m.
+    Carried {
+        body: &'static str,
+        ground: &'static str,
+        step: usize,
+    },
+    /// #2309: how far below where it started `body` is after step `step`, along y, m.
+    Sink { body: &'static str, step: usize },
+    /// #2240: the most `body` has turned from the orientation it was built with, at any step, deg.
+    Turn { body: &'static str },
+    /// #2241: how far `body` has moved along `along` by the end of step `step`, m, signed.
+    Along {
+        body: &'static str,
+        along: [f64; 3],
+        step: usize,
+    },
+    /// #2241: `body`'s speed along `along` after each step from `from` on, m/s: the one farthest
+    /// from the answer.
+    Held {
+        body: &'static str,
+        along: [f64; 3],
+        from: usize,
+    },
+    /// #2243: how far apart the axes of two character bodies that meet stand after the last
+    /// step, m; it fails wherever one breaks the rule of their meeting.
+    Meet(walks::Meet),
+    /// #2308: how far past x = `edge` `body`'s centre is, m, after the first step that ends with
+    /// it `drop` below where it started.
+    Past {
+        body: &'static str,
+        edge: f64,
+        drop: f64,
+    },
+    /// #2308: how deep the deepest two neighbours of the row of dominoes are inside each other
+    /// after the last step, m; it fails wherever they don't pass `tilt` degrees in order, or the
+    /// last passes it outside `last` seconds.
+    Topple { last: [f64; 2], tilt: f64 },
+    /// #2307: how far `body` moves from the end of step `from` to the end of step `to`, m.
+    Parked {
+        body: &'static str,
+        from: usize,
+        to: usize,
+    },
+    /// #2310: `body`'s distance from the point `from` after each step, m: the one farthest from
+    /// the answer; it fails wherever a joint of the world opens.
+    Reach { body: &'static str, from: [f64; 3] },
+    /// #2310: `body`'s speed where it passes its lowest point, m/s: let go along `along` from
+    /// `from`, square to gravity; it fails wherever a joint of the world opens.
+    Lowest {
+        body: &'static str,
+        from: [f64; 3],
+        along: [f64; 3],
+    },
+    /// #1931: `body`'s distance from `point` after each step, m: the one farthest from the
+    /// answer; it fails too unless the body first comes back to its start line after `period`
+    /// s, within the answer's tolerance.
+    Orbit {
+        body: &'static str,
+        point: [f64; 3],
+        period: f64,
+    },
+    /// #1931: the radius of the circle `body` turns in, m; it fails wherever its speed leaves
+    /// `speed`, m/s, by more than `band`, a share, or its path leaves y `between`, m.
+    Gyration {
+        body: &'static str,
+        speed: f64,
+        band: f64,
+        between: [f64; 2],
+    },
+    /// #1931: how far apart `a` and `b` are after step `step`, m.
+    Apart {
+        a: &'static str,
+        b: &'static str,
+        step: usize,
+    },
 }
 
 /// One fixture of the behavior part.
@@ -113,6 +230,8 @@ pub struct Fixture {
     pub tolerance: Tolerance,
     /// The answer is a bound the measure may reach but never pass.
     pub never_past: bool,
+    /// #2240: the answer is a bound the measure passes.
+    pub past: bool,
     /// What the backend must claim to run it.
     pub caps: Vec<&'static str>,
 }
@@ -120,19 +239,26 @@ pub struct Fixture {
 impl Fixture {
     /// The fixture as the interface's data: `{name, world, measure, answer, tolerance, caps}`.
     pub fn json(&self) -> Value {
-        json!({"name": self.name, "world": self.world, "measure": named_measure(&self.measure),
-               "answer": self.answer, "tolerance": tolerance_json(self.tolerance), "caps": self.caps})
+        json!({"name": self.name, "world": self.world, "steps": self.steps, "track": self.track,
+               "measure": named_measure(&self.measure), "answer": self.answer,
+               "tolerance": tolerance_json(self.tolerance), "caps": self.caps})
     }
 }
 
 /// A planted kit (criteria 4 and 6): one that runs a fixture its caps exclude, or one that admits
-/// a candidate whatever it claims.
+/// a candidate whatever it claims; #251's, whose report counts a fixture its caps exclude as
+/// passed without running it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Planted {
     #[default]
     None,
     RunsExcluded,
     AdmitsUnfixtured,
+    /// #251's, and #182's `kit_passes_excluded`.
+    CountsExcludedPassed,
+    /// #1931's: the kit with the force laws' fixtures taken out, so a candidate that claims a
+    /// law is refused; its runner leaves them out of the fixtures it hands over.
+    WithoutLaws,
 }
 
 /// The kit's report on one backend.
@@ -142,12 +268,14 @@ pub struct Report {
     /// The claims a candidate was refused for, which no fixture tests; none when admitted.
     pub refused: Vec<String>,
     pub results: Vec<Value>,
+    /// #251: the fixtures its caps exclude that the report counts as passed, which refuse it.
+    pub miscounted: Vec<String>,
 }
 
 impl Report {
     /// `pass` when no result fails, `fail` otherwise, `refused` for a refused candidate.
     pub fn verdict(&self) -> &'static str {
-        if !self.refused.is_empty() {
+        if !self.refused.is_empty() || !self.miscounted.is_empty() {
             "refused"
         } else if self.results.iter().any(|r| r["result"] == "fail") {
             "fail"
@@ -165,6 +293,11 @@ impl Report {
                 "what": format!("{} is a candidate whose caps() claim {}, which no fixture of the behavior part tests, so it is refused before any fixture runs",
                                 self.backend, self.refused.join(", "))});
         }
+        if !self.miscounted.is_empty() {
+            let named = self.miscounted.join(", ");
+            out["refused"] = json!({"fixtures": self.miscounted,
+                "what": format!("the report on {} counts {named} as passed, which its caps() exclude, so it is refused: a fixture its caps exclude is never passed", self.backend)});
+        }
         out
     }
 }
@@ -175,6 +308,10 @@ struct Trace {
     states: Vec<State>,
     joints: Vec<Vec<JointState>>,
     rows: Vec<Row>,
+    /// #182: each character body's own state.
+    characters: Vec<Vec<CharacterState>>,
+    /// #251: each vehicle body's own state after each step.
+    vehicles: Vec<Vec<VehicleState>>,
 }
 
 fn body_of<'a>(s: &'a State, id: &str) -> Option<&'a BodyState> {
@@ -187,7 +324,7 @@ fn dist(a: [f64; 3], b: [f64; 3]) -> f64 {
 
 /// Steps `b` through `f` from its built world `w`.
 fn trace(b: &mut dyn Backend, w: &World, f: &Fixture) -> Result<Trace, String> {
-    let entries = track::read(w, &f.track).map_err(|r| r.what)?;
+    let entries = track::read(w, &f.track, false).map_err(|r| r.what)?;
     let by_step = track::by_step(&entries);
     let rank = occurrence::ranks(w);
     let rate = w.step_rate;
@@ -197,6 +334,8 @@ fn trace(b: &mut dyn Backend, w: &World, f: &Fixture) -> Result<Trace, String> {
         states: vec![start.clone()],
         joints: vec![b.joints()],
         rows: Vec::new(),
+        characters: vec![b.characters()],
+        vehicles: vec![b.vehicles()],
     };
     for k in 1..=f.steps {
         let inputs: Vec<Input> = by_step
@@ -224,8 +363,128 @@ fn trace(b: &mut dyn Backend, w: &World, f: &Fixture) -> Result<Trace, String> {
             .extend(occurrence::sorted(k as u32, b.occurrences(), &rank));
         t.states.push(b.read());
         t.joints.push(b.joints());
+        t.characters.push(b.characters());
+        t.vehicles.push(b.vehicles());
     }
     Ok(t)
+}
+
+/// #182: whether character `id` reads `read` (grounded or sliding) after step `k`.
+fn reads(t: &Trace, id: &str, read: &str, k: usize) -> Option<bool> {
+    let c = t.characters.get(k)?.iter().find(|c| c.id == id)?;
+    Some(if read == "sliding" {
+        c.sliding
+    } else {
+        c.grounded
+    })
+}
+
+/// #182: each failure of a character fixture's characters, named: the body, what it met, the
+/// step and the height its lowest point reached over its start, m.
+fn walked(t: &Trace, cases: &[walks::Walk]) -> Vec<Value> {
+    use walks::Rule;
+    let mut out = Vec::new();
+    for c in cases {
+        let p = path(t, c.body);
+        let y0 = p.first().map_or(0.0, |x| x[1]);
+        let rise = |k: usize| p.get(k).map_or(0.0, |x| x[1] - y0);
+        let (body, meets) = (c.body, c.meets);
+        let fail = |step: usize, height: f64, what: String| json!({"body": body, "obstacle": meets, "step": step, "height": height, "what": what});
+        match &c.rule {
+            Rule::Climbs {
+                rise: want,
+                within,
+                by,
+            } => {
+                let k = (*by).min(p.len().saturating_sub(1));
+                if (rise(k) - want).abs() > *within {
+                    out.push(fail(k, rise(k), format!("body {body} on {meets} stands {:.4} m above its start at step {k}, where {want} m within {within} m is due", rise(k))));
+                }
+            }
+            Rule::Stops { most } => {
+                if let Some(k) = (0..p.len()).find(|&k| rise(k) > *most) {
+                    let top = (0..p.len()).map(rise).fold(f64::MIN, f64::max);
+                    out.push(fail(k, top, format!("body {body} climbed {meets}: its lowest point rose more than the {most} m it may at step {k} and reached {top:.4} m")));
+                }
+            }
+            Rule::Peaks { rise: want, within } => {
+                let (k, top) = (0..p.len())
+                    .map(|k| (k, rise(k)))
+                    .fold((0, f64::MIN), |a, x| if x.1 > a.1 { x } else { a });
+                if (top - want).abs() > *within {
+                    out.push(fail(k, top, format!("body {body}'s lowest point peaks {top:.4} m up at step {k}, where {want:.4} m within {within} m is due")));
+                }
+            }
+            Rule::Reads { read, on } => {
+                let off = (1..t.characters.len()).find(|&k| reads(t, body, read, k) != Some(*on));
+                if let Some(k) = off {
+                    let shown = if *on { "false" } else { "true" };
+                    out.push(fail(k, rise(k), format!("body {body} on {meets} read {read} {shown} at step {k}, where every step reads it {on}")));
+                }
+            }
+            Rule::LeavesGround => {
+                if (1..t.characters.len()).all(|k| reads(t, body, "grounded", k) == Some(true)) {
+                    let k = t.characters.len() - 1;
+                    out.push(fail(k, rise(k), format!("body {body} on {meets} read grounded at every step, where it leaves the ground at least once")));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// #2243: a meeting's reading, and each way the run breaks its rule, named: a step that ends
+/// with the two axes under the least they keep, with what it read; a body that wants no move and
+/// moves; one that leaves where it rests; and one whose controller doesn't first touch the
+/// other, writing `contact_begin`, at the step they meet.
+fn met(t: &Trace, m: &walks::Meet) -> Reading {
+    let (a, b) = (path(t, m.walker), path(t, m.other));
+    let extra = json!({"bodies": [m.walker, m.other]});
+    let Some(last) = a.len().min(b.len()).checked_sub(1).filter(|n| *n > 0) else {
+        return reading(None, extra);
+    };
+    let apart = |k: usize| dist([a[k][0], 0.0, a[k][2]], [b[k][0], 0.0, b[k][2]]);
+    let mut r = reading(Some(apart(last)), extra);
+    let mut broke = Vec::new();
+    if let Some(k) = (1..=last).find(|&k| apart(k) < walks::LEAST) {
+        r.extra.insert("step".into(), json!(k));
+        broke.push(format!("step {k} ends with the axes of {} and {} {:.4} m apart, under the {} m they keep at the end of every step", m.walker, m.other, apart(k), walks::LEAST));
+    }
+    // The first step from `from` on that ends with `p` more than `most` m from where step
+    // `from` left it.
+    let strays = |p: &[[f64; 3]], from: usize, most: f64| {
+        (from..=last).find(|&k| dist(p[k], p[from]) > most)
+    };
+    if m.stands {
+        if let Some(k) = strays(&b, 0, walks::STILL) {
+            broke.push(format!("body {}, which wants no move, is {:e} m from where it was built at step {k}, more than {:e} m", m.other, dist(b[k], b[0]), walks::STILL));
+        }
+    } else {
+        let (rest, due) = ((t.rate as usize).min(last), walks::MEETS * t.rate);
+        for (id, other, p) in [(m.walker, m.other, &a), (m.other, m.walker, &b)] {
+            if let Some(k) = strays(p, rest, walks::RESTS) {
+                broke.push(format!("body {id} is {:.4} m from where it stood at step {rest} by step {k}, more than the {} m it may move at rest", dist(p[k], p[rest]), walks::RESTS));
+            }
+            let touches = |k: &usize| {
+                let own = t.characters[*k].iter().find(|c| c.id == id);
+                own.is_some_and(|c| c.touching.iter().any(|u| u.body == other))
+            };
+            let first = (1..=last).find(touches);
+            let begun = |k: usize| {
+                let at = |r: &&Row| r.step as usize == k && kind_is(r, "contact_begin");
+                t.rows.iter().filter(at).any(|r| between(r, id, other))
+            };
+            let on_time = |k: usize| (k as f64 - due).abs() <= walks::WITHIN_STEPS;
+            if !first.is_some_and(|k| begun(k) && on_time(k)) {
+                let at = first.map_or_else(|| "no step".into(), |k| format!("step {k}"));
+                broke.push(format!("body {id}'s controller first touches {other}, writing contact_begin, at {at}, where step {due:.1} within {} steps is due", walks::WITHIN_STEPS));
+            }
+        }
+    }
+    if !broke.is_empty() {
+        r.broke = Some(broke.join("; "));
+    }
+    r
 }
 
 /// A position of `id` after each step.
@@ -449,6 +708,148 @@ fn read(m: &Measure, t: &Trace, b: &dyn Backend, w: &World, f: &Fixture) -> Read
             }
             r
         }
+        Measure::Walks(cases) => {
+            let failed = walked(t, cases);
+            let mut extra = json!({"failures": failed});
+            if let Some(first) = failed.first() {
+                for k in ["body", "obstacle", "step", "height"] {
+                    extra[k] = first[k].clone();
+                }
+            }
+            let mut r = reading(Some(failed.len() as f64), extra);
+            if !failed.is_empty() {
+                let whats: Vec<&str> = failed.iter().filter_map(|f| f["what"].as_str()).collect();
+                r.broke = Some(whats.join("; "));
+            }
+            r
+        }
+        Measure::Sag { body, step } => {
+            let rest = w.bodies.get(*body).and_then(|b| b.vehicle.as_ref());
+            let rest = rest
+                .and_then(|v| v.wheels.values().next())
+                .map_or(0.0, |x| x.rest);
+            let (v, extra) = vehicles::sag_of(&t.vehicles, body, *step, rest, f.answer);
+            reading(v, extra)
+        }
+        Measure::Stop { body, step } => reading(
+            vehicles::stop_of(&t.states, body, *step),
+            json!({"body": body}),
+        ),
+        Measure::Speed { body, step } => reading(
+            vehicles::speed_of(&t.states, body, *step),
+            json!({"body": body}),
+        ),
+        Measure::Circle { body, point, step } => reading(
+            vehicles::circle_of(&t.states, body, *point, *step),
+            json!({"body": body}),
+        ),
+        Measure::Wheels { kind, body, ground } => {
+            let (v, extra) =
+                vehicles::wheels_of(&t.rows, &t.vehicles, (kind, body, ground), t.rate, f.answer);
+            reading(v, extra)
+        }
+        Measure::Load { body, from, to } => {
+            let steps = t.states.iter().enumerate().take(to + 1).skip(from + 1);
+            let loads =
+                steps.filter_map(|(k, s)| Some((k, body_of(s, body)?.contact_impulse * t.rate)));
+            let worst = loads.reduce(|a, b| {
+                if (b.1 - f.answer).abs() > (a.1 - f.answer).abs() {
+                    b
+                } else {
+                    a
+                }
+            });
+            reading(
+                worst.map(|w| w.1),
+                json!({"body": body, "step": worst.map(|w| w.0)}),
+            )
+        }
+        Measure::Angle { joint, from } => {
+            let at = t.joints.iter().enumerate().skip(*from);
+            let angles =
+                at.filter_map(|(k, js)| Some((k, js.iter().find(|j| j.id == *joint)?.coordinate?)));
+            let worst = angles.reduce(|a, b| {
+                if (b.1 - f.answer).abs() > (a.1 - f.answer).abs() {
+                    b
+                } else {
+                    a
+                }
+            });
+            reading(
+                worst.map(|w| w.1),
+                json!({"joint": joint, "step": worst.map(|w| w.0)}),
+            )
+        }
+        Measure::Carried { body, ground, step } => {
+            let (p, q) = (path(t, body), path(t, ground));
+            let off = p.get(*step).zip(q.get(*step)).zip(p.first().zip(q.first()));
+            let off = off.map(|((a, b), (a0, b0))| {
+                let off = |i: usize| a[i] - a0[i] - b[i] + b0[i];
+                dist([off(0), 0.0, off(2)], [0.0; 3])
+            });
+            reading(off, json!({"body": body, "ground": ground}))
+        }
+        Measure::Sink { body, step } => {
+            let p = path(t, body);
+            let sink = p.get(*step).zip(p.first()).map(|(a, z)| z[1] - a[1]);
+            reading(sink, json!({"body": body}))
+        }
+        Measure::Turn { body } => {
+            let rots: Vec<[f64; 4]> = t
+                .states
+                .iter()
+                .filter_map(|s| body_of(s, body).map(|b| b.rot))
+                .collect();
+            let turns = rots.iter().map(|q| centres::turn_between(rots[0], *q));
+            let most = turns
+                .enumerate()
+                .reduce(|a, b| if b.1 > a.1 { b } else { a });
+            reading(
+                most.map(|m| m.1),
+                json!({"body": body, "step": most.map(|m| m.0)}),
+            )
+        }
+        Measure::Along { body, along, step } => {
+            let p = path(t, body);
+            let ends = p.get(*step).zip(p.first());
+            let moved = ends.map(|(a, z)| (0..3).map(|i| (a[i] - z[i]) * along[i]).sum());
+            reading(moved, json!({"body": body}))
+        }
+        Measure::Held { body, along, from } => {
+            let steps = t.states.iter().enumerate().skip(*from);
+            let speeds = steps.filter_map(|(k, s)| {
+                let v = body_of(s, body)?.linear;
+                Some((k, (0..3).map(|i| v[i] * along[i]).sum::<f64>()))
+            });
+            let off = |x: &(usize, f64)| (x.1 - f.answer).abs();
+            let worst = speeds.max_by(|a, b| off(a).total_cmp(&off(b)));
+            reading(
+                worst.map(|w| w.1),
+                json!({"body": body, "step": worst.map(|w| w.0)}),
+            )
+        }
+        Measure::Meet(m) => met(t, m),
+        Measure::Past { body, edge, drop } => small::past(&path(t, body), body, *edge, *drop),
+        Measure::Topple { last, tilt } => small::toppled(t, *last, *tilt),
+        Measure::Parked { body, from, to } => {
+            let p = path(t, body);
+            let moved = p.get(*from).zip(p.get(*to)).map(|(a, z)| dist(*a, *z));
+            reading(moved, json!({"body": body}))
+        }
+        Measure::Reach { body, from } => chains::reach(w, t, body, *from, f.answer),
+        Measure::Lowest { body, from, along } => chains::lowest(w, t, body, (*from, *along)),
+        Measure::Orbit {
+            body,
+            point,
+            period,
+        } => laws::orbit_of(t, (body, *point), *period, (f.answer, room(f, t.rate))),
+        Measure::Gyration {
+            body,
+            speed,
+            band,
+            between,
+        } => laws::gyration_of(t, body, (*speed, *band), *between, room(f, t.rate)),
+        Measure::Apart { a, b, step } => laws::apart_of(t, a, b, *step),
     }
 }
 
@@ -493,23 +894,93 @@ fn named_measure(m: &Measure) -> String {
         Measure::Cell { mover, sensor, .. } => {
             format!("step of {mover}'s sensor_enter on {sensor}")
         }
+        Measure::Walks(cases) => {
+            let bodies: Vec<&str> = cases.iter().map(|c| c.body).collect();
+            format!("characters of {} that break their rule", bodies.join(", "))
+        }
+        Measure::Sag { body, step } => {
+            format!("compression of {body}'s springs after step {step}, m")
+        }
+        Measure::Stop { body, step } => {
+            format!("distance {body} travels from step {step} until it stops, m")
+        }
+        Measure::Speed { body, step } => format!("speed of {body} after step {step}, m/s"),
+        Measure::Circle { body, .. } => {
+            format!("radius of the circle {body}'s rear axle traces over one turn, m")
+        }
+        Measure::Wheels { kind, body, ground } => {
+            format!("time of each of {body}'s wheels' first {kind} with {ground}, s")
+        }
+        Measure::Load { body, from, to } => {
+            format!("contact impulse of {body} per step's length over steps {from} to {to}, N")
+        }
+        Measure::Angle { joint, from } => {
+            format!("coordinate of joint {joint} from step {from} on, deg")
+        }
+        Measure::Carried { body, ground, step } => {
+            format!("distance along the ground of {body} from its place on {ground} after step {step}, m")
+        }
+        Measure::Sink { body, step } => {
+            format!("how far {body} is below where it started after step {step}, m")
+        }
+        Measure::Turn { body } => format!("most {body} turned from how it was built, deg"),
+        Measure::Along { body, step, .. } => {
+            format!("how far {body} has moved along its belt by step {step}, m")
+        }
+        Measure::Held { body, from, .. } => {
+            format!("speed of {body} along its belt from step {from} on, m/s")
+        }
+        Measure::Meet(m) => format!(
+            "distance between the axes of {} and {} after the last step, m",
+            m.walker, m.other
+        ),
+        Measure::Past { body, drop, .. } => {
+            format!("how far past the edge {body}'s centre is once it has dropped {drop} m, m")
+        }
+        Measure::Topple { .. } => {
+            "how deep the deepest two neighbouring dominoes are inside each other after the last step, m".into()
+        }
+        Measure::Parked { body, from, to } => {
+            format!("distance {body} moves from step {from} to step {to}, m")
+        }
+        Measure::Reach { body, .. } => {
+            format!("distance of {body}'s centre from the fixed point at every step, m")
+        }
+        Measure::Lowest { body, .. } => format!("speed of {body} at its lowest point, m/s"),
+        Measure::Orbit { body, .. } => {
+            format!("distance of {body} from the point farthest from the answer, m")
+        }
+        Measure::Gyration { body, .. } => format!("radius of the circle {body} turns in, m"),
+        Measure::Apart { a, b, step } => {
+            format!("distance between {a} and {b} after step {step}, m")
+        }
     }
 }
 
 /// Whether a measure in steps is read in seconds (a time) rather than in steps (a count).
 fn in_seconds(m: &Measure) -> bool {
-    matches!(m, Measure::When { .. } | Measure::Wall { .. })
+    matches!(
+        m,
+        Measure::When { .. } | Measure::Wall { .. } | Measure::Wheels { .. }
+    )
 }
 
-fn within(f: &Fixture, m: f64, rate: f64) -> bool {
-    let room = match f.tolerance {
+/// How far `f`'s measure may land from its answer, in the measure's unit.
+fn room(f: &Fixture, rate: f64) -> f64 {
+    match f.tolerance {
         Tolerance::Relative(r) => r * f.answer.abs(),
         Tolerance::M(x) | Tolerance::Deg(x) => x,
         Tolerance::Steps(n) if in_seconds(&f.measure) => n / rate,
         Tolerance::Steps(n) => n,
-    };
+    }
+}
+
+fn within(f: &Fixture, m: f64, rate: f64) -> bool {
+    let room = room(f, rate);
     if f.never_past {
         m <= f.answer + room
+    } else if f.past {
+        m > f.answer + room
     } else {
         (m - f.answer).abs() <= room
     }
@@ -532,6 +1003,11 @@ fn one(
         .copied()
         .filter(|c| !claims.contains(c))
         .collect();
+    if !missing.is_empty() && planted == Planted::CountsExcludedPassed {
+        row["result"] = json!("pass");
+        row["what"] = json!(format!("{name} passes {}", f.name));
+        return row;
+    }
     if !missing.is_empty() && planted != Planted::RunsExcluded {
         row["result"] = json!("excluded_by_caps");
         row["what"] = json!(format!(
@@ -573,7 +1049,7 @@ fn one(
             .clone()
             .filter(|w| !w.is_empty())
             .map_or_else(String::new, |w| format!("; {w}"));
-        let named = ["joint", "hit"]
+        let named = ["joint", "hit", "wheel"]
             .iter()
             .filter_map(|k| r.extra.get(*k)?.as_str().map(|v| format!("; {k} {v}")))
             .collect::<String>();
@@ -611,16 +1087,26 @@ pub fn run(new: &dyn Fn() -> Box<dyn Backend>, fixtures: &[Fixture], planted: Pl
                 backend: name,
                 refused,
                 results: Vec::new(),
+                miscounted: Vec::new(),
             };
         }
     }
-    let results = fixtures
+    let results: Vec<Value> = fixtures
         .iter()
         .map(|f| one(new, f, &name, claims, planted))
+        .collect();
+    // #251: a fixture its caps exclude reads excluded_by_caps, never a pass; a report that counts
+    // one as passed is refused, naming it.
+    let miscounted = fixtures
+        .iter()
+        .zip(&results)
+        .filter(|(f, r)| r["result"] == "pass" && f.caps.iter().any(|c| !claims.contains(c)))
+        .map(|(f, _)| f.name.clone())
         .collect();
     Report {
         backend: name,
         refused: Vec::new(),
         results,
+        miscounted,
     }
 }

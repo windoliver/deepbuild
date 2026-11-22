@@ -3,7 +3,7 @@
 // `--check` makes its reply carry the check's verdict, `--include …,pixels` is `--snap`, and `--claim` names the claim
 // the check is for. It prints the reply as one JSON line with --json, and exits by the deep commands' table.
 import { readFileSync } from 'node:fs';
-import { call } from './client.js';
+import { call, notAnswered } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { startOf } from './wire.js';
 
@@ -43,20 +43,12 @@ export async function showCommand(args: readonly string[]): Promise<number> {
     ...(opts.has('--claim') ? { claim: opts.get('--claim') } : {}),
   };
   const at = rootOf(installedRoot());
-  let token: string;
-  try {
-    token = readFileSync(at.token, 'utf8').trim();
-  } catch {
-    process.stderr.write('deep show: the hub is not running (no control token); start it with deep hub start\n');
-    return 3;
-  }
   const peer = { pid: process.pid, start: (await startOf(process.pid)) ?? '' };
   let reply;
   try {
-    reply = await call(hubAddress().path, token, 'canvas.show', params, peer);
+    reply = await call(hubAddress().path, readFileSync(at.token, 'utf8').trim(), 'canvas.show', params, peer);
   } catch (error) {
-    process.stderr.write(`deep show: ${(error as Error).message}\n`);
-    return 3;
+    return notAnswered(error);
   }
   if ('error' in reply) {
     process.stderr.write(`deep show: ${reply.error.remediation}\n`);

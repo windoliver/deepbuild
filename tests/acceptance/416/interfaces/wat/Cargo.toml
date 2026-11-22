@@ -1,0 +1,21 @@
+# #416's interface suite's assembler: #190's (tests/acceptance/190/wat, its source used in place, not copied), built with
+# this lockfile from a working directory outside the checkout (helpers.ts: assemble), so the checkout's
+# .cargo/config.toml [patch] table, which #190's lockfile doesn't match since patches were added to it, never applies.
+# WebAssembly text to bytes, and with --library or --program a relocatable object (#190's README: Relocatable
+# objects). Test tooling only, outside the workspace; it shares no code with the linker under test.
+[package]
+name = "acceptance-416-wat"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+[[bin]]
+name = "acceptance-416-wat"
+path = "../../../190/wat/src/main.rs"
+
+[dependencies]
+wat = "=1.263.0"
+wasmparser = "=0.263.0"
+
+[workspace]

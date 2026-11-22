@@ -81,6 +81,9 @@ export function openIssues(planted) {
 export function fakeGh(sandbox, { offline = false, issues = [] } = {}) {
   const data = join(sandbox, 'gh-issues.json');
   writeFileSync(data, JSON.stringify(issues));
+  // The fake tracker brings its own list of names that aren't event kinds (#2063), an empty one: the checkout's
+  // list names real issues, which this tracker doesn't hold. The live test has no fake gh and keeps the real list.
+  writeFileSync(join(sandbox, 'repo', 'scripts', 'not-event-kinds.txt'), '');
   const script = `#!${process.execPath}
 const { appendFileSync, readFileSync } = require('node:fs');
 const args = process.argv.slice(2);

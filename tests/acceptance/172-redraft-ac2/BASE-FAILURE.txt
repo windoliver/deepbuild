@@ -1,0 +1,31 @@
+#172 criterion 2, the refusals (blind redraft): where the test fails at the base d8c46f0d5 ("Merge pull request #2601").
+Observed, not read from code: the test was run once at the base, on this Mac, with deep-show built at the base
+(`cargo build --locked --bin deep-show --no-default-features --features full`) and ffmpeg
+with libx264 at /opt/homebrew/bin/ffmpeg.
+
+Run:
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/172-redraft-ac2 refusals.test.ts --testTimeout=3600000
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/172-redraft-ac2/tsconfig.json (exit 0).
+
+Result: 1 test, 1 failed (46.8 s). It fails at the file's one `none(...)` ("each piece the bundle can't carry is
+refused by its web export, naming each item, with nothing written"), listing all seven pieces:
+
+- Six pieces were presented by the base's own `deep show` (outcome `presented`, no issue): the plate with the status
+  binding lamp_status (from the agent's tree), the figure with the device control wave on hands@1 (with its role,
+  label and fallback wave_key), the film with the video strip clip, #503's scene with the 360° video background sky,
+  #503's scene with the depth video as the point set depth, and the film with all three of the first.
+  Each one's web export then answers, writing nothing:
+    {"code":"unknown_target","target":"web","codec":"web","outcome":"refused","core":"core@0.0.0","set_digest":"4496b93c…"}
+  so each fails at "the reply holds no refused: [{item, why}]": the base names none of the items.
+- The figure with an item of test.native: deep-show can't be built with `full,test-web-lacks` at the base (no such
+  Cargo feature), so it fails at "no deep-show built with features full,test-web-lacks: the binary builds".
+
+Also observed at the base, with the full build, in a scratch script (not committed):
+- The same native figure shown on the full build is refused by document.validate with `module_missing` at
+  requires/modules/test.native (and the item skipped as `unknown_kind`), as the design says for a build that lacks the
+  module. The piece's document is meant for the build that holds test.native (`test-web-lacks`), where the app has the
+  module and the player doesn't; whether that build presents it can't be observed until the feature exists.
+- The first draft's capture control (no `role`, no `fallback`) is refused by document.validate with `out_of_range` at
+  controls/wave/role ("required, and absent"), so it was never presented; this draft's control, with a role and a
+  fallback, is presented.

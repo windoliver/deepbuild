@@ -10,7 +10,9 @@ import { homedir } from 'node:os';
 import { delimiter, dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFacts } from '@deepbuild/adapters';
+import { coverage, coveredBy } from './adapter-facts.js';
 import { canvasItems } from './canvas-doctor.js';
+import { appFootprintItem } from './footprint-doctor.js';
 import { claudeSettings, commands, FORWARDER, installed, readJson, shadowedBy, topLevel } from './claude-settings.js';
 import { call } from './client.js';
 import { deprecatedCalls, rpcTable } from './contracts.js';
@@ -22,10 +24,13 @@ import { relationItems } from './setup.js';
 import { describe, unrunnable } from './hook-programs.js';
 import { claudeHomes, denyHolds, homeMods, loginPlan, managedSettings, overrideWords } from './mods.js';
 import { probeSignIn } from './sign-in.js';
+import { lostIn } from './rule-load.js';
+import { readRuleFiles } from './rules.js';
 import { isRecord as isObj } from '@deepbuild/contracts';
+import type { DoctorItem } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-export interface Item { item: string; agent: string; code: string; level: 'ok' | 'warn' | 'fail' | 'skip'; evidence: string; fix: string }
+export interface Item { item: string; agent: string; code: DoctorItem['code']; level: 'ok' | 'warn' | 'fail' | 'skip'; evidence: string; fix: string }
 import { hooksDisabled, installedCodex, modified, readTrust, recordedHome, trustProblems } from './codex-settings.js';
 const OURS = /deep-hook|packages\/cli\/dist\/main\.js/;
 
@@ -50,22 +55,7 @@ async function which(name: string, path: string): Promise<string | undefined> {
   }
   return undefined;
 }
-const facts = (agent: string): { versions: string[]; billing?: { apiKeyVariables?: string[] } } => readFacts(`${agent}.facts.json`);
-const parts = (v: string) => v.split(/[.-]/).map((p) => (/^\d+$/.test(p) ? Number(p) : p));
-function compare(a: string, b: string): number {
-  const x = parts(a), y = parts(b);
-  for (let i = 0; i < Math.max(x.length, y.length); i++) {
-    const p = x[i] ?? 0, q = y[i] ?? 0;
-    if (p === q) continue;
-    if (typeof p === 'number' && typeof q === 'number') return p - q;
-    return String(p) < String(q) ? -1 : 1;
-  }
-  return 0;
-}
-const covered = (agent: string, version: string) => {
-  const range = facts(agent).versions;
-  return range.length > 0 && compare(version, range[0]!) >= 0 && compare(version, range[range.length - 1]!) <= 0;
-};
+const facts = (agent: string): { billing?: { apiKeyVariables?: string[] } } => readFacts(`${agent}.facts.json`);
 /** A job is reported only at this many failures in a row (#909), so one blip stays quiet. */
 const JOB_FAILURES = 3;
 
@@ -93,7 +83,7 @@ async function firstFree(from: number, to: number): Promise<number | undefined> 
 export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boolean; cwd: string }): Promise<Item[]> {
   const root = installedRoot();
   const items: Item[] = [];
-  const add = (item: string, agent: string, code: string, level: Item['level'], evidence: string, fix: string) => items.push({ item, agent, code, level, evidence, fix });
+  const add = (item: string, agent: string, code: Item['code'], level: Item['level'], evidence: string, fix: string) => items.push({ item, agent, code, level, evidence, fix });
 
   // The hub and its disk.
   let socket = '';
@@ -124,6 +114,10 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
       });
       for (const f of failing) add('hub.jobs', 'deepbuild', 'job_failing', 'warn', `the hub's job ${f.name} failed ${f.failures} times in a row since ${new Date(f.since).toISOString()}: ${f.error}`, 'Read the error; the job runs again on its own, and its next clean run clears this.');
       if (!failing.length) add('hub.jobs', 'deepbuild', 'healthy', 'ok', `none of the hub's ${Object.keys(jobs).length} jobs has failed ${JOB_FAILURES} times in a row`, 'Nothing to do.');
+      // A hook handler set aside (#2402): one item each, naming its extension, its hook kind and its last failure.
+      for (const a of isObj(reply.result.hooks) && Array.isArray(reply.result.hooks.aside) ? reply.result.hooks.aside.filter(isObj) : []) {
+        add('extensions.hooks', 'deepbuild', 'handler_set_aside', 'warn', `${String(a.extension)}'s ${String(a.hook)} handler is set aside after ${String(a.failures)} failures in a row, so DeepBuild no longer asks it; the last: ${String(a.last)}`, `Install ${String(a.extension)} again, or a fixed version, with \`deep install <its folder>\`, or restart the hub (\`deep hub stop\`, then \`deep hub start\`): either gives its handler a fresh try.`);
+      }
       // The release's packs (#1720): one that failed the canvas core's pack check isn't installed, and is named here.
       const packs = Array.isArray(reply.result.packs) ? reply.result.packs.filter(isObj) : [];
       const named = (p: Obj) => `${typeof p.pack === 'string' ? `${p.pack}@${String(p.version)}` : 'a pack'} (packs/${String(p.folder)})`;
@@ -179,6 +173,7 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
   const repo = topLevel(options.cwd);
   const shadows = plant() === 'statusline-user-settings-only' ? [] : shadowedBy(repo);
   for (const s of shadows) add('claude.statusline_shadowed', 'claude-code', 'statusline_shadowed', 'warn', `${s.file} sets ${s.key}, which Claude Code runs instead of the forwarder in ${repo}, so no plan window is read there`, `Take ${s.key} out of ${s.file}, or run your status line from statusline.yours in ~/.deepbuild/config.json, which the forwarder runs after it reads the windows.`);
+  items.push(...rulesItems(repo));
 
   // Each agent's binary, version, sign-in and billing; Claude Code's token lifetime, test prompt and jobs' binary.
   const path = env.PATH ?? '';
@@ -187,7 +182,21 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
   await Promise.all([claudeItems(claude, loginPath, env, options.prompt, add), codexItems(codex, env, add)]);
   // The canvas: its GPU adapter and tier, a fixture rendered headless against its golden, and its verdict (#140).
   items.push(...(await canvasItems(env)));
+  // The app's footprint beside the gauges for what it owns (#1431).
+  items.push(await appFootprintItem(env));
   return items;
+}
+
+/**
+ * The rule lines an agent never gets in a repo (#1514), as each agent's facts' rule-load entry predicts them: one failed
+ * item per file an agent loses lines of, naming the file, its first line lost and why, else one item that's ok.
+ */
+function rulesItems(repo: string): Item[] {
+  if (!existsSync(join(repo, '.git'))) return [];
+  const p = plant();
+  const lost = lostIn(repo, readRuleFiles(repo, null).map((f) => dirname(f.path)), { perFile: p === 'doctor-sums-per-file', linesOnly: p === 'doctor-counts-lines-only' });
+  if (!lost.length) return [{ item: 'rules.not_loaded', agent: 'deepbuild', code: 'healthy', level: 'ok', evidence: `every rule line in ${repo} reaches each agent its facts cover, by the agent's own loading`, fix: 'Nothing to do.' }];
+  return lost.map((l) => ({ item: 'rules.not_loaded', agent: l.agent, code: 'not_loaded', level: 'fail', evidence: l.why, fix: `${l.fix} Until then DeepBuild sends these rules to ${l.name}'s sessions itself where they fit.` }));
 }
 
 /**
@@ -196,7 +205,7 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
  */
 function serviceItem(root: string): Item {
   const file = serviceFile();
-  const item = (code: string, level: Item['level'], evidence: string, fix: string): Item => ({ item: 'hub.service', agent: 'deepbuild', code, level, evidence, fix });
+  const item = (code: Item['code'], level: Item['level'], evidence: string, fix: string): Item => ({ item: 'hub.service', agent: 'deepbuild', code, level, evidence, fix });
   let text: string;
   try { text = readFileSync(file, 'utf8'); } catch { return item('not_checked', 'skip', `no login service for the hub at ${file}`, 'Run `deep setup`, which installs it.'); }
   const unxml = (v: string) => v.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
@@ -232,7 +241,7 @@ function serviceItem(root: string): Item {
 export function hookItems(env: NodeJS.ProcessEnv, cwd: string): Item[] {
   const root = installedRoot();
   const items: Item[] = [];
-  const add = (item: string, agent: string, code: string, level: Item['level'], evidence: string, fix: string) => items.push({ item, agent, code, level, evidence, fix });
+  const add = (item: string, agent: string, code: Item['code'], level: Item['level'], evidence: string, fix: string) => items.push({ item, agent, code, level, evidence, fix });
   const file = claudeSettings();
   const settings = readJson(file);
   const record = installed(root);
@@ -268,9 +277,8 @@ export function hookItems(env: NodeJS.ProcessEnv, cwd: string): Item[] {
   return items;
 }
 
-async function claudeItems(claude: string | undefined, loginPath: string | undefined, env: NodeJS.ProcessEnv, prompt: boolean, add: (...a: [string, string, string, Item['level'], string, string]) => void): Promise<void> {
+async function claudeItems(claude: string | undefined, loginPath: string | undefined, env: NodeJS.ProcessEnv, prompt: boolean, add: (...a: [string, string, Item['code'], Item['level'], string, string]) => void): Promise<void> {
   const agent = 'claude-code';
-  const range = facts(agent).versions;
   if (!claude) {
     add('claude.binary', agent, 'binary_missing', 'fail', 'no claude on your PATH', 'Install Claude Code, or put it on your PATH.');
     return;
@@ -280,7 +288,7 @@ async function claudeItems(claude: string | undefined, loginPath: string | undef
   ]);
   const v = /(\d+\.\d+\.\d+[\w.-]*)/.exec(version?.out ?? '')?.[1];
   if (!v) add('claude.binary', agent, 'binary_missing', 'fail', `${claude} --version printed no version`, 'Reinstall Claude Code.');
-  else if (!covered(agent, v)) add('claude.binary', agent, 'version_uncovered', 'fail', `${claude} is Claude Code ${v}, outside what its facts cover (${range[0]} to ${range[range.length - 1]}): its hooks are recorded unverified, and its holds and every block but the floor are watch-only; its fail_closed guard entries still deny`, 'Install a version the facts cover, or update DeepBuild.');
+  else if (!coveredBy(agent, v)) add('claude.binary', agent, 'version_uncovered', 'fail', `${claude} is Claude Code ${v}, not a version its facts cover (${coverage(agent).join(', ')}): its hooks are recorded unverified, and its holds and every block but the floor are watch-only; its fail_closed guard entries still deny`, 'Install a version the facts cover, or update DeepBuild.');
   else add('claude.binary', agent, 'healthy', 'ok', `${claude} is Claude Code ${v}, which its facts cover`, 'Nothing to do.');
   if (jobs !== undefined) {
     const same = (() => { try { return realpathSync(jobs) === realpathSync(claude); } catch { return jobs === claude; } })();
@@ -318,7 +326,7 @@ async function claudeItems(claude: string | undefined, loginPath: string | undef
  * each that can approve a call past a PreToolUse deny or submit prompts, unless the setup holds the deny; OK
  * when none can; not checked when the home's plugins can't be read.
  */
-async function modItems(claude: string, env: NodeJS.ProcessEnv, add: (...a: [string, string, string, Item['level'], string, string]) => void): Promise<void> {
+async function modItems(claude: string, env: NodeJS.ProcessEnv, add: (...a: [string, string, Item['code'], Item['level'], string, string]) => void): Promise<void> {
   const agent = 'claude-code';
   for (const [i, home] of claudeHomes(env).entries()) {
     // The first home's plan is the one `claude auth status` reads with this environment.
@@ -336,22 +344,21 @@ async function modItems(claude: string, env: NodeJS.ProcessEnv, add: (...a: [str
     if (!risky.length) add('claude.mods', agent, 'healthy', 'ok', read.mods.length ? `${home} loads ${read.mods.map((m) => m.name).join(', ')}, none of which handles a tool or prompt event` : `${home} loads no mods`, 'Nothing to do.');
   }
 }
-async function codexItems(codex: string | undefined, env: NodeJS.ProcessEnv, add: (...a: [string, string, string, Item['level'], string, string]) => void): Promise<void> {
+async function codexItems(codex: string | undefined, env: NodeJS.ProcessEnv, add: (...a: [string, string, Item['code'], Item['level'], string, string]) => void): Promise<void> {
   const agent = 'codex';
   for (const i of hookItems(env, '').filter((h) => h.agent === agent)) add(i.item, agent, i.code, i.level, i.evidence, i.fix);
   if (!codex) return;
   const [version, signedIn] = await Promise.all([ran(codex, ['--version']), probeSignIn(agent, codex)]);
   const v = /(\d+\.\d+\.\d+[\w.-]*)/.exec(version?.out ?? '')?.[1];
-  const range = facts(agent).versions;
   if (!v) add('codex.binary', agent, 'binary_missing', 'fail', `${codex} --version printed no version`, 'Reinstall Codex.');
-  else if (!covered(agent, v)) add('codex.binary', agent, 'version_uncovered', 'fail', `${codex} is Codex ${v}, outside what its facts cover (${range[0]} to ${range[range.length - 1]})`, 'Install a version the facts cover, or update DeepBuild.');
+  else if (!coveredBy(agent, v)) add('codex.binary', agent, 'version_uncovered', 'fail', `${codex} is Codex ${v}, not a version its facts cover (${coverage(agent).join(', ')})`, 'Install a version the facts cover, or update DeepBuild.');
   else add('codex.binary', agent, 'healthy', 'ok', `${codex} is Codex ${v}, which its facts cover`, 'Nothing to do.');
   if (signedIn === 'signed_in') add('codex.sign_in', agent, 'healthy', 'ok', 'codex login status exits 0: signed in', 'Nothing to do.');
   else add('codex.sign_in', agent, 'signed_out', 'fail', signedIn === 'signed_out' ? 'codex login status exits non-zero: not signed in' : "codex login status couldn't be read: not signed in", 'Run codex login.');
   billing(agent, 'Codex', env, add);
 }
 /** A billing key set where your sessions start makes them bill an API account; never shows its value. */
-function billing(agent: string, name: string, env: NodeJS.ProcessEnv, add: (...a: [string, string, string, Item['level'], string, string]) => void): void {
+function billing(agent: string, name: string, env: NodeJS.ProcessEnv, add: (...a: [string, string, Item['code'], Item['level'], string, string]) => void): void {
   const set = (facts(agent).billing?.apiKeyVariables ?? []).filter((k) => env[k]);
   for (const key of set) add(`${agent === 'codex' ? 'codex' : 'claude'}.billing`, agent, 'billing_api_key', 'warn', `${key} is set in the shell your sessions start from, so ${name} sessions bill an API account, not your plan`, `Unset ${key} where you start sessions if you mean to use your plan.`);
   if (!set.length) add(`${agent === 'codex' ? 'codex' : 'claude'}.billing`, agent, 'healthy', 'ok', `no API billing variable is set, so ${name} sessions use your plan`, 'Nothing to do.');
@@ -459,7 +466,8 @@ export async function doctorCommand(args: readonly string[], also: () => Promise
   const next = (i: Item) => (fixes(i) ? `\n  Fix: ${i.fix}` : i.code === 'not_checked' ? `\n  To check: ${i.fix}` : '');
   for (const i of items) {
     const state = i.code === 'not_checked' ? 'not checked' : i.level.toUpperCase();
-    console.log(json ? JSON.stringify(i) : `${agents[i.agent] ?? i.agent} ${i.item}: ${state} (${i.code})\n  ${i.evidence}${next(i)}`);
+    // Its state once, in words; its code name is the JSON's (#1812).
+    console.log(json ? JSON.stringify(i) : `${agents[i.agent] ?? i.agent} ${i.item}: ${state}\n  ${i.evidence}${next(i)}`);
   }
   const failed = items.some((i) => i.level === 'fail');
   // A shadowed status line leaves the plan windows unread, which no item can decide (#1296).

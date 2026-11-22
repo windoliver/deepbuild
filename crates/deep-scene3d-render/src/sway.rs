@@ -39,9 +39,16 @@ struct Mover {
 pub struct Sways {
     pipeline: Option<(wgpu::ComputePipeline, wgpu::BindGroupLayout)>,
     movers: BTreeMap<Shape, Mover>,
+    /// Whether the pass has run, for #2657's planted `sway_first_frame_only`.
+    ran: bool,
 }
 
 impl Sways {
+    /// #1431: lets go of `shape`'s sway once its mesh is freed.
+    pub fn remove(&mut self, shape: Shape) {
+        self.movers.remove(&shape);
+    }
+
     /// The swaying mesh `m` of `shape`, whose rest vertices `v` the pass reads and whose drawn
     /// vertices it writes into `drawn`.
     pub fn add(
@@ -140,11 +147,15 @@ impl Sways {
     }
 
     /// Writes every swaying solid's vertices at this frame's t, in one submission. A solid whose
-    /// params hold uploads none again.
-    pub fn move_all(&mut self, device: &Device, scene: &Scene) {
+    /// params hold uploads none again and keeps the vertices its pass last wrote, so a frame in
+    /// which every one holds records no pass and submits nothing (#2657).
+    pub fn move_all(&mut self, device: &Device, scene: &Scene, first_frame_only: bool) {
         let Some((pipeline, _)) = &self.pipeline else {
             return;
         };
+        if first_frame_only && self.ran {
+            return;
+        }
         let mut moving = Vec::new();
         for s in scene.layers.iter().flat_map(|l| &l.solids) {
             let (Some(at), Some(sway), Some(mover)) = (
@@ -173,19 +184,21 @@ impl Sways {
                 counts: [mover.vertices, at.seed as u32, (at.seed >> 32) as u32, 0],
             };
             let held = mover.moved.as_ref();
-            if !held.is_some_and(|m| bytemuck::bytes_of(m) == bytemuck::bytes_of(&p)) {
-                mover.moved = Some(p);
-                deep_gpu::alloc::outside(|| {
-                    device
-                        .queue
-                        .write_buffer(&mover.params, 0, bytemuck::bytes_of(&p))
-                });
+            if held.is_some_and(|m| bytemuck::bytes_of(m) == bytemuck::bytes_of(&p)) {
+                continue;
             }
+            mover.moved = Some(p);
+            deep_gpu::alloc::outside(|| {
+                device
+                    .queue
+                    .write_buffer(&mover.params, 0, bytemuck::bytes_of(&p))
+            });
             moving.push((mover.bind.clone(), mover.vertices));
         }
         if moving.is_empty() {
             return;
         }
+        self.ran = true;
         deep_gpu::alloc::outside(|| {
             let mut encoder =
                 device
@@ -194,6 +207,7 @@ impl Sways {
                         label: Some("scene3d sway"),
                     });
             {
+                deep_gpu::counted::compute_pass();
                 let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                     label: Some("scene3d sway"),
                     timestamp_writes: None,

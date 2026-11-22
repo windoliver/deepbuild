@@ -1,0 +1,84 @@
+
+ RUN  v5.0.5 <home>/doneright-2365
+
+ ❯ tests/acceptance/20/retention.test.ts (3 tests | 3 failed) 5581ms
+   ❯ AC9 #20.5b690079 each archived transcript is one evidence file by hash with one transcript.archived event, and both remain 31 days after the agent deleted it (3)
+     × AC9 a session archived on day 0 and deleted by its agent on day 1: on day 32, after the hub's retention pass, its one event and its one evidence file remain and read back 2041ms
+     × AC9 (wrong program) an archive that writes only to its own folder leaves no evidence file and no event, and fails this test naming the session 1623ms
+     × AC9 (wrong program) an archive whose copies the evidence retention removes (its link kept in a ledger of its own) loses the copy by day 32, and fails this test naming the session 1477ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/20/retention.test.ts > AC9 #20.5b690079 each archived transcript is one evidence file by hash with one transcript.archived event, and both remain 31 days after the agent deleted it > AC9 a session archived on day 0 and deleted by its agent on day 1: on day 32, after the hub's retention pass, its one event and its one evidence file remain and read back
+Error: BLOCKED: the hub didn't start on <tmp>/home (deep hub run): deep hub: the core stopped: Error: no deep-hook is built under <home>/doneright-2365/target; run cargo build -p deep-hook first
+    at deepHook (file://<home>/doneright-2365/packages/hub/dist/paths.js:227:15)
+    at Object.guard (file://<home>/doneright-2365/packages/hub/dist/core.js:376:75)
+    at Products.secure (file://<home>/doneright-2365/packages/hub/dist/products.js:203:36)
+    at Products.open (file://<home>/doneright-2365/packages/hub/dist/products.js:191:24)
+    at Core.openExecution (file://<home>/doneright-2365/packages/hub/dist/core.js:823:29)
+    at async Core.init (file://<home>/doneright-2365/packages/hub/dist/core.js:568:9)
+
+ ❯ startHub tests/acceptance/20/hub.ts:49:11
+     47|   if (!ok) {
+     48|     await stopHub(hub);
+     49|     throw Error(`BLOCKED: the hub didn't start on ${home} (deep hub ru…
+       |           ^
+     50|   }
+     51|   return hub;
+ ❯ retained tests/acceptance/20/retention.test.ts:46:15
+ ❯ tests/acceptance/20/retention.test.ts:72:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/20/retention.test.ts > AC9 #20.5b690079 each archived transcript is one evidence file by hash with one transcript.archived event, and both remain 31 days after the agent deleted it > AC9 (wrong program) an archive that writes only to its own folder leaves no evidence file and no event, and fails this test naming the session
+Error: BLOCKED: the hub didn't start on <tmp>/home (deep hub run): deep hub: the core stopped: Error: no deep-hook is built under <home>/doneright-2365/target; run cargo build -p deep-hook first
+    at deepHook (file://<home>/doneright-2365/packages/hub/dist/paths.js:227:15)
+    at Object.guard (file://<home>/doneright-2365/packages/hub/dist/core.js:376:75)
+    at Products.secure (file://<home>/doneright-2365/packages/hub/dist/products.js:203:36)
+    at Products.open (file://<home>/doneright-2365/packages/hub/dist/products.js:191:24)
+    at Core.openExecution (file://<home>/doneright-2365/packages/hub/dist/core.js:823:29)
+    at async Core.init (file://<home>/doneright-2365/packages/hub/dist/core.js:568:9)
+
+ ❯ startHub tests/acceptance/20/hub.ts:49:11
+     47|   if (!ok) {
+     48|     await stopHub(hub);
+     49|     throw Error(`BLOCKED: the hub didn't start on ${home} (deep hub ru…
+       |           ^
+     50|   }
+     51|   return hub;
+ ❯ retained tests/acceptance/20/retention.test.ts:46:15
+ ❯ tests/acceptance/20/retention.test.ts:76:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/20/retention.test.ts > AC9 #20.5b690079 each archived transcript is one evidence file by hash with one transcript.archived event, and both remain 31 days after the agent deleted it > AC9 (wrong program) an archive whose copies the evidence retention removes (its link kept in a ledger of its own) loses the copy by day 32, and fails this test naming the session
+Error: BLOCKED: the hub didn't start on <tmp>/home (deep hub run): deep hub: the core stopped: Error: no deep-hook is built under <home>/doneright-2365/target; run cargo build -p deep-hook first
+    at deepHook (file://<home>/doneright-2365/packages/hub/dist/paths.js:227:15)
+    at Object.guard (file://<home>/doneright-2365/packages/hub/dist/core.js:376:75)
+    at Products.secure (file://<home>/doneright-2365/packages/hub/dist/products.js:203:36)
+    at Products.open (file://<home>/doneright-2365/packages/hub/dist/products.js:191:24)
+    at Core.openExecution (file://<home>/doneright-2365/packages/hub/dist/core.js:823:29)
+    at async Core.init (file://<home>/doneright-2365/packages/hub/dist/core.js:568:9)
+
+ ❯ startHub tests/acceptance/20/hub.ts:49:11
+     47|   if (!ok) {
+     48|     await stopHub(hub);
+     49|     throw Error(`BLOCKED: the hub didn't start on ${home} (deep hub ru…
+       |           ^
+     50|   }
+     51|   return hub;
+ ❯ retained tests/acceptance/20/retention.test.ts:46:15
+ ❯ tests/acceptance/20/retention.test.ts:83:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed | 8 passed (9)
+      Tests  3 failed | 37 passed (40)
+   Start at  22:43:30
+   Duration  23.12s (tests 92%, import 4%, transform 3%)
+
+    Isolate  9 workers spawned · ~215ms startup each (spawn + environment, per file)
+             at least ~1.72s faster with isolate: false — reuses workers across files instead of one per file
+
+exit=0

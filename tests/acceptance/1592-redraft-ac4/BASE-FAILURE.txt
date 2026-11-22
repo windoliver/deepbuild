@@ -1,0 +1,29 @@
+#1592 AC4 redraft at the base f6ddd396f, with only this folder and its scripts/lanes.mjs line added. One run, 2026-11-18
+20:26 local, on macOS. Node v24.22.0 and cargo 1.99.1, with CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0; npm ci
+--ignore-scripts and npm run build --workspaces had run. No DA1592_SHEETS.
+
+  caffeinate -di npx vitest run --root tests/acceptance/1592-redraft-ac4 --no-file-parallelism --testTimeout=600000
+
+Result: 1 failed, FAIL for the expected reason, at the missing surface: deep-app has no contact-sheet feature, so the
+build that the check run takes its contact sheets with can't be made, and no sheet, report or taste call was reached.
+
+ ❯ shown.test.ts (1 test | 1 failed) 227ms
+   ❯ AC4 #1592.15a3cc5f a contact sheet shown to you (1)
+     × AC4 #1592.15a3cc5f: the check run takes a contact sheet of every state mark and icon in light and dark from the real app, and reads INCONCLUSIVE unless a recorded taste call on exactly these files says it looks right 223ms
+
+ FAIL  shown.test.ts > AC4 #1592.15a3cc5f a contact sheet shown to you > AC4 #1592.15a3cc5f: the check run takes a contact sheet of every state mark and icon in light and dark from the real app, and reads INCONCLUSIVE unless a recorded taste call on exactly these files says it looks right
+AssertionError: crates/deep-app/Cargo.toml has no feature contact-sheet, so the real app has no contact sheet to draw (README: Surface choices). cargo build --locked -p deep-app --bin deep-app --features contact-sheet builds the real app with its contact sheet:
+error: the package 'deep-app' does not contain this feature: contact-sheet: expected 101 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 101
+
+ ❯ build shown.test.ts:59:124
+ ❯ shown.test.ts:129:19
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Duration  533ms (tests 72%, transform 19%, import 8%, worker 1%)

@@ -11,6 +11,7 @@
 #[cfg(target_os = "macos")]
 mod apple;
 mod audio;
+pub mod catalog;
 mod chunks;
 pub mod color;
 mod export;
@@ -22,6 +23,8 @@ pub mod mp4;
 mod ogg;
 mod pipe;
 mod stream;
+#[cfg(target_os = "macos")]
+pub mod surface;
 pub mod table;
 mod wav;
 
@@ -277,10 +280,25 @@ fn over_caps(f: &Format, caps: &Caps) -> Option<Value> {
     })
 }
 
+/// #518: whether this machine's decode worker decodes `codec`, a video codec by its export name.
+/// The build's own codecs always; AV1 where the platform's decoder has it.
+pub fn decodes(codec: &str) -> bool {
+    match codec {
+        "av1" => {
+            #[cfg(target_os = "macos")]
+            return apple::decodes_av1();
+            #[cfg(not(target_os = "macos"))]
+            return false;
+        }
+        _ => true,
+    }
+}
+
 fn codec(fourcc: &[u8; 4]) -> String {
     match fourcc {
         b"avc1" | b"avc3" => "h264".into(),
         b"hvc1" | b"hev1" => "hevc".into(),
+        b"av01" => "av1".into(),
         b"mp4v" => "mpeg4".into(),
         b"mp4a" => "aac".into(),
         other => String::from_utf8_lossy(other).trim().to_string(),
@@ -969,7 +987,7 @@ pub fn run(job: &Map<String, Value>, caps: &Caps, planted: &Planted) -> (Value, 
         return (v, sha);
     }
     let Some(path) = job.s("path") else {
-        return (json!({"error": "a job names its path"}), None);
+        return catalog::job(&job, planted);
     };
     let opened = match open(path, caps, planted) {
         Ok(o) => o,
@@ -1057,7 +1075,12 @@ fn map_job(data: &[u8], job: &Job, planted: &Planted) -> Value {
     } else {
         "png"
     };
-    match maps::ready(data, role, bc, planted.is("applies_image_gamma")) {
+    let blocks = if bc {
+        maps::Blocks::Bc
+    } else {
+        maps::Blocks::None
+    };
+    match maps::ready(data, role, blocks, planted.is("applies_image_gamma")) {
         Ok(r) => match std::fs::write(out, &r.data) {
             Ok(()) => {
                 let mut v = r.json();

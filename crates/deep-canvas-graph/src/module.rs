@@ -8,7 +8,7 @@ use deep_canvas::schedule::core_ops::Fields;
 use deep_canvas::schedule::{OpError, Val, View};
 use serde_json::{json, Value};
 
-use crate::{keep, layered, read_graph, read_layout, read_memory, Refused};
+use crate::{lay, read_graph, read_layout, read_memory, Refused};
 
 /// The graph module: its manifest and its one register call.
 pub fn module() -> Module {
@@ -54,7 +54,7 @@ fn layout_cost(item: &Value) -> f64 {
             .map_or(0.0, |a| a.len() as f64)
     };
     let rows = count("nodes") + count("edges");
-    NS_PER_ROW_DOUBLING * rows * rows.max(2.0).log2() / 1e6
+    NS_PER_ROW_DOUBLING * rows * deep_canvas::ops::log2(rows.max(2.0)) / 1e6
 }
 
 fn manifest(implementation: &str) -> Manifest {
@@ -246,20 +246,18 @@ fn layout_with(v: &mut View<'_>, as_listed: bool) -> Result<(), OpError> {
     }
     let laid = read_layout(&params["layout"]).map_err(|r| refused(&id, r))?;
     let memory = match params.get("memory") {
-        None | Some(Value::Null) => layered(&graph, &laid).map_err(|r| refused(&id, r))?,
-        Some(m) => {
-            let memory = read_memory(m).map_err(|r| refused(&id, r))?;
-            keep(&graph, &laid, &memory)
-                .map_err(|r| refused(&id, r))?
-                .map(|(kept, _)| kept)
-                .map_err(|_| {
-                    OpError::new(
-                        "layout.relayout_needed",
-                        format!("items/{id}/params/memory"),
-                    )
-                })?
-        }
+        None | Some(Value::Null) => None,
+        Some(m) => Some(read_memory(m).map_err(|r| refused(&id, r))?),
     };
+    let memory = lay(&graph, &laid, memory.as_ref())
+        .map_err(|r| refused(&id, r))?
+        .map_err(|_| {
+            OpError::new(
+                "layout.relayout_needed",
+                format!("items/{id}/params/memory"),
+            )
+        })?
+        .memory;
     v.write("graph.layout", Val::typed(memory))
 }
 

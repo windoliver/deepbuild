@@ -1,0 +1,8 @@
+Captured output, paths redacted. This is not a passing full preflight.
+
+FAIL known-failures.json: cargo -p deep-replica --test acceptance_326_panels_planted › base_loader_reaches_the_network was added 2026-10-31, more than 14 days ago: fix it, or take it out and let it fail
+FAIL known-failures.json: cargo -p deep-replica --test acceptance_327_card was added 2026-10-31, more than 14 days ago: fix it, or take it out and let it fail
+FAIL known-failures.json: packages/hub/test/memory-overrule.test.ts › deep memory overrule › stays overruled across a re-read of the transcript, and a new prompt rejects it again was added 2026-10-31, more than 14 days ago: fix it, or take it out and let it fail
+FAIL known-failures.json: tests/acceptance/882/lint.test.mjs › #882.f3bc7068 crates/deep-app/src holds no color literal: no rgb(0x, rgba(0x, hsla(, hex inside rgb(...) or "#rrggbb" line was added 2026-10-31, more than 14 days ago: fix it, or take it out and let it fail
+FAIL known-failures.json: tests/preflight.test.mjs › the unit lane runs each reference-Mac budget file alone, after the parallel block was added 2026-10-31, more than 14 days ago: fix it, or take it out and let it fail
+5 of 5 known failures fail

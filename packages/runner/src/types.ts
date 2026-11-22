@@ -8,8 +8,9 @@ import type { Grant, Launch, Supervisor } from '@deepbuild/supervisor';
 export type Agent = 'claude-code' | 'codex' | 'pi';
 /** draft: the drafting job; review: the review check's second model; read: wiki reads and reading by reference;
  *  smoke: an agent release's live smoke test, the one kind that may run a version its facts don't cover yet;
- *  acceptance: the blind acceptance job (#1328), the one kind that writes, and only its issue's test folder. */
-export type JobKind = 'draft' | 'review' | 'read' | 'smoke' | 'acceptance' | 'eval';
+ *  acceptance: the blind acceptance job (#1328), which writes only its issue's test folder;
+ *  work: a model turn of a job that repeats (#1527), run in that job's workspace, the one folder it writes. */
+export type JobKind = 'draft' | 'review' | 'read' | 'smoke' | 'acceptance' | 'eval' | 'work';
 /** A trusted eval orchestrates sandboxed replays, not an agent asked to judge itself. Never accepted over RPC. */
 export type EvaluationWork = (context: {
   job: string; folder: string; env: Record<string, string>; signal: AbortSignal;
@@ -46,6 +47,8 @@ export interface JobSpec {
   inputs?: JobInput[];
   /** An acceptance job's one folder it writes, in its checkout: `tests/acceptance/<issue>`. */
   writes?: string;
+  /** A work job's folder (#1527): a folder the hub made for it, an absolute path: a copy of the job's workspace, or its dry run's empty folder, and the one folder it writes. */
+  workspace?: string;
   /** The only MCP servers it gets; their tools are allowed without asking. */
   mcp?: Record<string, McpServer>;
   /** Sub-agents it may hand work to, by name, each on its own model: Claude Code's `--agents`, with its Task tool. */
@@ -115,7 +118,9 @@ export interface JobRecord {
  *  (`five_hour`/`seven_day`: `used_percentage`, `resets_at` in Unix seconds); a Codex token event's `rate_limits`. */
 export interface WindowReport { agent: Agent; account: string; rate_limits: unknown }
 /** The planted wrong programs the acceptance tests select; tests only. */
-export type Plant = 'records-launched-model' | 'checkout-of-session-head' | 'worktree-of-mirror' | 'widens-range-on-smoke' | 'first-model-listed';
+export type Plant = 'records-launched-model' | 'checkout-of-session-head' | 'worktree-of-mirror' | 'widens-range-on-smoke' | 'first-model-listed'
+  // #2650's: a runner that keeps every ended job with its output, and one that answers '' for an ended job still inside the bound.
+  | 'churn-keeps-every-output' | 'empty-output-inside-bound';
 export interface RunnerOptions {
   record: RecordStore;
   asks: Asks;
@@ -143,11 +148,18 @@ export interface Runner {
   /** deep.runner.run(job): submit, then wait. */
   run(spec: JobSpec): Promise<JobRecord>;
   status(job: string): Promise<JobRecord>;
-  /** Every job the record holds, newest last. */
+  /** Every job the record holds, newest last: an ended job past the newest 64 as the record holds it (#2650). */
   list(): Promise<JobRecord[]>;
+  /** The jobs held in memory, newest last: every live one and the newest 64 ended. What the hook path reads (#2650). */
+  recent(): Promise<JobRecord[]>;
+  /**
+   * Of the jobs held in memory, newest last, only those whose session ID is `session` or whose folder is `cwd` or holds
+   * it: what a hook's whose reads, with no copy of the other jobs (#2651).
+   */
+  near(session: string | undefined, cwd: string | undefined): Promise<JobRecord[]>;
   /** Stops its group; resolves with the job as it reads then. */
   cancel(job: string): Promise<JobRecord>;
-  /** Its stdout, as the runner read it. */
+  /** Its stdout, as the runner read it: '' for an ended job whose output is no longer kept (#2650). */
   output(job: string): Promise<string>;
   report(reading: WindowReport): Promise<void>;
   /** The newest reading of each account's 5-hour window, by account: used percent, reset and when it was read, by the clock. */

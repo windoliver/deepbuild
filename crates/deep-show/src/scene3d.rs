@@ -17,32 +17,7 @@ use serde_json::{json, Value};
 
 use crate::snapshot::Unfit;
 
-/// The look a revision draws in here: the palette's roles, exposed as its camera's `exposure`
-/// says, an EV100 (#1938; Camera `camera@1`: lens), else at the unit exposure.
-pub(crate) fn look_of(doc: &Value, palette: &Palette) -> Look3 {
-    let mut look = Look3::from_roles(palette.clone());
-    let camera = doc
-        .get("camera")
-        .and_then(Value::as_str)
-        .and_then(|id| doc.get("items")?.get(id));
-    // #468: `from_lens` exposes from the lens's aperture, shutter and ISO at the frame rate.
-    let rate = doc
-        .get("transport")
-        .and_then(deep_canvas::document::frame_rate_of)
-        .filter(|(p, q)| *p > 0 && *q > 0)
-        .map_or(60.0, |(p, q)| f64::from(p) / f64::from(q));
-    let ev = camera
-        .and_then(|c| c.get("params")?.as_object())
-        .and_then(|p| {
-            deep_canvas_scene3d::lens::read(p, "", false)
-                .ok()?
-                .ev100(rate)
-        });
-    if let Some(ev) = ev {
-        look.exposure = deep_canvas_scene3d::finish::exposure_scale(ev);
-    }
-    look
-}
+pub(crate) use deep_play::scene::look_of;
 
 /// The rows of a frame of `size` render.exposure's reduction reads: all of them, or, under
 /// #2513's planted reduction, those in whole 32-row groups.
@@ -60,6 +35,208 @@ pub struct Targets {
     pub view_depth: Option<Vec<u8>>,
 }
 
+/// #3017: a 3D snapshot's visible table, read from its frame's own object-ID pass (Render-back):
+/// each item whose box meets the frame and that drew px, as `{id, box, px, at}`, and each such
+/// item that drew none, `hidden`; past [`ROWS`] of either, `cut` says how many it left out.
+#[derive(Default)]
+pub struct Shown {
+    pub visible: Vec<(String, Value)>,
+    pub hidden: Vec<String>,
+    pub cut: [usize; 2],
+}
+
+/// The most rows `visible`, and `hidden`, hold.
+pub const ROWS: usize = crate::snapshot::VISIBLE_ROWS;
+
+/// Whether a box `[x, y, w, h]` in px meets a frame of `size`.
+fn meets(b: &[f64; 4], size: [u16; 2]) -> bool {
+    let (w, h) = (f64::from(size[0]), f64::from(size[1]));
+    b[0] < w && b[1] < h && b[0] + b[2] > 0.0 && b[1] + b[3] > 0.0
+}
+
+impl Shown {
+    /// `boxes` (2D items drawn over the frame, in the 2D frame's units, `scale` to the snapshot's
+    /// px) listed by their boxes, as a 2D table lists them, in the room the 3D rows leave.
+    pub fn over(&mut self, boxes: Vec<(String, [f64; 4])>, scale: f64, size: [u16; 2]) {
+        let mut rows: Vec<(String, [f64; 4])> = boxes
+            .into_iter()
+            .map(|(id, b)| (id, b.map(|v| v * scale)))
+            .filter(|(_, b)| meets(b, size))
+            .collect();
+        rows.sort_by(|a, b| a.0.cmp(&b.0));
+        for (id, b) in rows {
+            if self.visible.len() < ROWS {
+                let row = json!({"id": id, "box": b});
+                self.visible.push((id, row));
+            } else {
+                self.cut[0] += 1;
+            }
+        }
+        self.visible.sort_by(|a, b| a.0.cmp(&b.0));
+    }
+
+    /// The table into a reply: `visible`, `hidden` and, when it left any out, `cut`.
+    pub fn put(self, reply: &mut serde_json::Map<String, Value>) {
+        let visible: Vec<Value> = self.visible.into_iter().map(|(_, r)| r).collect();
+        reply.insert("visible".into(), Value::Array(visible));
+        reply.insert("hidden".into(), json!(self.hidden));
+        if self.cut != [0, 0] {
+            reply.insert(
+                "cut".into(),
+                json!({"visible": self.cut[0], "hidden": self.cut[1]}),
+            );
+        }
+    }
+}
+
+/// #3017's wrong programs, each reachable only through the scenario's `planted`: the merge base's
+/// table, rows from boxes alone; `px` as the box's area; `at` at the box's centre; past 200
+/// rows the first 200 by ID; a cut that reports no `cut`; and the picks of the frame drawn
+/// without its cutaway (Hub::shown3d draws that one).
+pub const AS_BOXES: &str = "visible_table_as_boxes";
+pub const BEFORE_CUTAWAY: &str = "visible_picks_before_cutaway";
+pub const PLANTED: [&str; 6] = [
+    AS_BOXES,
+    "visible_px_from_box",
+    "visible_at_box_centre",
+    "visible_first_200_by_id",
+    "visible_cut_unreported",
+    BEFORE_CUTAWAY,
+];
+
+impl Shown {
+    /// The merge base's table, under [`AS_BOXES`]: `{id, box}` for each drawn item or part
+    /// whose box meets the frame, the first 200 by ID, read from no ID pass.
+    pub fn of_boxes(boxes: Vec<(String, [f64; 4])>, size: [u16; 2]) -> Shown {
+        let rows = crate::snapshot::visible(boxes, 1.0, size);
+        let visible = rows.as_array().into_iter().flatten();
+        let id = |r: &Value| r["id"].as_str().unwrap_or_default().to_string();
+        Shown {
+            visible: visible.map(|r| (id(r), r.clone())).collect(),
+            ..Shown::default()
+        }
+    }
+}
+
+impl Targets {
+    /// The visible table of the frame these targets are of, drawn at `size`, its items' boxes
+    /// `boxes` (each item's or part's, in the snapshot's px): each item whose box meets the frame,
+    /// its parts' boxes joined, with the snapshot's px whose pick resolves to it (a part's to its
+    /// item, as probes resolve them) and the px the ID view numbers it at; `plant`, the scenario's
+    /// planted program.
+    pub fn shown(
+        &self,
+        boxes: Vec<(String, [f64; 4])>,
+        size: [u16; 2],
+        plant: Option<&str>,
+    ) -> Shown {
+        if plant == Some(AS_BOXES) {
+            return Shown::of_boxes(boxes, size);
+        }
+        let (w, h) = (usize::from(size[0]), usize::from(size[1]));
+        let mut items: std::collections::BTreeMap<String, [f64; 4]> = Default::default();
+        for (id, b) in boxes.into_iter().filter(|(_, b)| meets(b, size)) {
+            let item = id.split('#').next().unwrap_or(&id).to_string();
+            items
+                .entry(item)
+                .and_modify(|u| {
+                    let (x1, y1) = (
+                        (u[0] + u[2]).max(b[0] + b[2]),
+                        (u[1] + u[3]).max(b[1] + b[3]),
+                    );
+                    let (x0, y0) = (u[0].min(b[0]), u[1].min(b[1]));
+                    *u = [x0, y0, x1 - x0, y1 - y0];
+                })
+                .or_insert(b);
+        }
+        let ids: Vec<&String> = items.keys().collect();
+        // Each pick's row, 1 up, or 0 for an item the table doesn't list.
+        let top = self.picks.keys().next_back().map_or(0, |p| *p as usize);
+        let mut slot = vec![0u32; top + 1];
+        for (p, id) in &self.picks {
+            let item = id.split('#').next().unwrap_or(id);
+            if let Ok(k) = ids.binary_search_by(|i| i.as_str().cmp(item)) {
+                slot[*p as usize] = k as u32 + 1;
+            }
+        }
+        // Each snapshot px's row, from the target px under its centre (the probes' mapping); a
+        // run of px of one pick is looked up and counted once.
+        let [tw, th] = self.size.map(|v| v as usize);
+        let same = [tw, th] == [w, h];
+        let axis = |n: usize, t: usize| -> Vec<usize> {
+            (0..if same { 0 } else { n })
+                .map(|v| ((v as f64 + 0.5) * t as f64 / n as f64) as usize)
+                .map(|s| s.min(t.saturating_sub(1)))
+                .collect()
+        };
+        let (xs, ys) = (axis(w, tw), axis(h, th));
+        let picks = (0..w * h)
+            .map(|i| if same { i } else { ys[i / w] * tw + xs[i % w] })
+            .map(|t| self.pick_bytes(t * 4));
+        let mut px = vec![0u64; ids.len() + 1];
+        let mut keys = vec![0u32; w * h];
+        let (mut last, mut key, mut run) = (u32::MAX, 0u32, 0u64);
+        for (k, p) in keys.iter_mut().zip(picks) {
+            if p != last {
+                px[key as usize] += run;
+                (last, key, run) = (p, slot.get(p as usize).copied().unwrap_or(0), 0);
+            }
+            *k = key;
+            run += 1;
+        }
+        px[key as usize] += run;
+        let px = &px[1..];
+        let mut at = deep_canvas_loop::review::centres(&keys, w, ids.len());
+        let mut shown = Shown::default();
+        let mut rows: Vec<usize> = (0..ids.len()).filter(|k| px[*k] > 0).collect();
+        // Past the table's rows, the items with the most px, ties by ID.
+        if rows.len() > ROWS {
+            if plant != Some("visible_first_200_by_id") {
+                rows.sort_by(|a, b| px[*b].cmp(&px[*a]).then(a.cmp(b)));
+            }
+            shown.cut[0] = rows.len() - ROWS;
+            rows.truncate(ROWS);
+            rows.sort_unstable();
+        }
+        let area = |b: [f64; 4]| (b[2] * b[3]).round() as u64;
+        shown.visible = rows
+            .into_iter()
+            .map(|k| {
+                let (id, b) = (ids[k], items[ids[k]]);
+                let px = match plant {
+                    Some("visible_px_from_box") => area(b),
+                    _ => px[k],
+                };
+                if plant == Some("visible_at_box_centre") {
+                    let c = |o: usize, n: usize| {
+                        ((b[o] + b[o + 2] / 2.0).max(0.0) as u32).min(n as u32 - 1)
+                    };
+                    at[k] = Some([c(0, w), c(1, h)]);
+                }
+                let row = json!({"id": id, "box": b, "px": px, "at": at[k]});
+                (id.clone(), row)
+            })
+            .collect();
+        shown.hidden = (0..ids.len())
+            .filter(|k| px[*k] == 0)
+            .map(|k| ids[k].clone())
+            .collect();
+        shown.cut[1] = shown.hidden.len().saturating_sub(ROWS);
+        shown.hidden.truncate(ROWS);
+        if plant == Some("visible_cut_unreported") {
+            shown.cut = [0, 0];
+        }
+        shown
+    }
+
+    /// The pick the object-ID pass holds at byte `i`, 0 past its end.
+    fn pick_bytes(&self, i: usize) -> u32 {
+        self.ids
+            .get(i..i + 4)
+            .map_or(0, |b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+    }
+}
+
 pub struct Gpu3 {
     _gpu: Arc<Gpu>,
     device: Arc<Device>,
@@ -73,6 +250,9 @@ pub struct Gpu3 {
     outlines: Vec<deep_canvas::registry::SealedOutline>,
     fills: Vec<deep_canvas::contributed::Sealed>,
     planted: Option<String>,
+    /// #1561: Vello GPU and the compositor a drawn look's 2D frames draw through, on this GPU.
+    #[cfg(target_os = "macos")]
+    pub(crate) frames2: Option<deep_groups_render::frame2::Frames2>,
 }
 
 impl Gpu3 {
@@ -103,12 +283,31 @@ impl Gpu3 {
             outlines: sealed.outlines.clone(),
             fills: sealed.fills.clone(),
             planted,
+            #[cfg(target_os = "macos")]
+            frames2: None,
         })
     }
 
     /// An evaluated scene drawn offscreen over the look's ground: straight RGBA, rows top-down.
+    /// When it has readouts or card lines, the picture is the draw with them as labels (#419, #504).
     pub fn draw(&mut self, scene: &Scene, look: &Look3) -> Option<Vec<u8>> {
-        let mut bytes = draw_offscreen(&self.device, &mut self.renderer, scene, look, None)?;
+        let over = if scene.readouts.is_empty() {
+            None
+        } else {
+            let mut sc = scene.clone();
+            deep_scene3d_render::readouts_as_labels(&mut sc);
+            Some(draw_offscreen(
+                &self.device,
+                &mut self.renderer,
+                &sc,
+                look,
+                None,
+            )?)
+        };
+        // The plain draw goes last even under readouts, so the ids, picks and light the renderer
+        // keeps for `targets`, `picks` and `light` are the frame's own, not its labels'.
+        let plain = draw_offscreen(&self.device, &mut self.renderer, scene, look, None)?;
+        let mut bytes = over.unwrap_or(plain);
         for p in bytes.as_chunks_mut::<4>().0 {
             p.swap(0, 2);
         }
@@ -126,26 +325,18 @@ impl Gpu3 {
         size: [u16; 2],
         assets: deep_canvas_scene3d::scene::Assets<'_>,
     ) -> Result<(Scene, Look3), Unfit> {
-        let mut doc = doc.clone();
-        if let Some(d) = doc.as_object_mut() {
-            d.insert("size".into(), json!(size));
-        }
-        deep_canvas_physics::skin::write(&mut doc, t);
-        let look = look_of(&doc, palette);
         let fills = Fills {
             outlines: &self.outlines,
             module: &self.fills,
             planted: self.planted.as_deref(),
             memo: None,
         };
-        let scene =
-            evaluate_any(&doc, t, &look, &mut self.labels, Some(assets), fills).map_err(|r| {
-                Unfit {
-                    code: r.code,
-                    path: r.path,
-                }
-            })?;
-        Ok((scene, look))
+        deep_play::scene::evaluate(doc, t, palette, size, &mut self.labels, assets, fills).map_err(
+            |r| Unfit {
+                code: r.code,
+                path: r.path,
+            },
+        )
     }
 
     /// #1401: an evaluated scene drawn offscreen as render-back draws it: straight RGBA, rows
@@ -202,14 +393,27 @@ impl Gpu3 {
 
     /// #2513: the last frame drawn, kept on this GPU for render.exposure to reduce after later
     /// frames draw: a frame's reduction in place of its linear image.
-    pub fn kept_light(&mut self, short: bool) -> Option<Reduce> {
+    /// #457: each reduction's GPU time (ms, by the pass's timestamps), the bytes it read back and
+    /// one run are added to `cost`.
+    pub fn kept_light(
+        &mut self,
+        short: bool,
+        cost: Arc<std::sync::Mutex<[f64; 3]>>,
+    ) -> Option<Reduce> {
         let reducer = self.reducer();
         let (pre_tone, ids, size) = self.renderer.light_source()?;
         let kept = Kept::copy(&self.device, pre_tone, ids, size);
         let device = self.device.clone();
         let rows = read_rows(size, short);
+        let bytes = deep_scene3d_render::exposure::readback_bytes(rows) as f64;
         Some(Reduce(Arc::new(move |q| {
-            kept.reduce(&device, &reducer, rows, q)
+            let (sums, gpu_ms) = kept.reduce(&device, &reducer, rows, q, true)?;
+            if let Ok(mut c) = cost.lock() {
+                c[0] += gpu_ms.unwrap_or(f64::NAN);
+                c[1] += bytes + if gpu_ms.is_some() { 16.0 } else { 0.0 };
+                c[2] += 1.0;
+            }
+            Some(sums)
         })))
     }
 

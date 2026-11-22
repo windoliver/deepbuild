@@ -1,0 +1,32 @@
+On the fix (#2896 merged with main, error cap's bytes whole), each file alone:
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/fix-2896-reply-fits-client-d66389
+
+ ↓ tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#393) > AC1 #393 AC4, AC6: writer layers from the connection, the peer check inside each agent's tree, a call bound to no session, and payloads that name a layer or a writer give the stand-in's replies
+ ↓ tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#393) > AC1 #393 AC5: bindings to the session's own handles and to another session's give the stand-in's replies, ref_unresolved naming the handle and no snapshot
+ ↓ tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#393) > AC1 #393 AC7: whole revisions, removes and the diff give the stand-in's replies, the revisions by hash
+ ✓ tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#393) > AC1 #393 AC9: 5,000 unnamed marks refused give the stand-in's replies, the full list by its evidence hash compared by content 69942ms
+ ↓ tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#393) > AC1 #393 AC3: a settled snapshot never proves a claim that names another deliverable: the same results as the stand-in
+ ↓ tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#393) > AC1 #393 AC2: deep_show on a hidden panel is not presented within 2 s, as the stand-in answers
+ ↓ tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#393) > AC1 #393 AC1: a frame held by fallback_pipeline is waited for 1.5 s, and when it can't settle deep_show is not presented within 2 s and the check is BLOCKED, as the stand-in answers
+ ↓ tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#393) > AC1 #393 AC1: a frame held by rebuild_queue is waited for 1.5 s, and when it can't settle deep_show is not presented within 2 s and the check is BLOCKED, as the stand-in answers
+ ↓ tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#393) > AC1 #393 AC1: a frame held by asset_decode is waited for 1.5 s, and when it can't settle deep_show is not presented within 2 s and the check is BLOCKED, as the stand-in answers
+ ↓ tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#393) > AC1 #393 AC8: an agent document with the highest order key and bounds 100 times the window leaves the question card's interior equal to its isolated render in the app's window
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 9 skipped (10)
+   Start at  15:03:50
+   Duration  73.01s (tests 100%)
+
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/fix-2896-reply-fits-client-d66389
+
+ ✓ tests/acceptance/806-redraft-393ac9/ac1-393-ac9.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#393 AC9, redrafted) > AC1 #393 AC9: 5,000 unnamed marks sent with deep_show give the stand-in's reply field for field, the full issue list compared by content 41272ms
+ ✓ tests/acceptance/806-redraft-393ac9/ac1-393-ac9.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#393 AC9, redrafted) > AC1 #393 AC9: 5,000 unnamed marks sent with deep show --check give the stand-in's reply field for field, the full issue list compared by content 30762ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  15:05:04
+   Duration  73.49s (tests 100%)
+
+

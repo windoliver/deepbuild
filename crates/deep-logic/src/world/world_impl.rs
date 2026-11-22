@@ -1,0 +1,1650 @@
+use super::*;
+
+impl World {
+    pub(super) fn runner(bytes: &[u8], id: &str) -> Result<Runner, Failed> {
+        Runner::new(bytes, Faults::default(), true)
+            .map_err(|e| json!({"ok": false, "code": "instantiate_failed", "item": id, "what": e}))
+    }
+
+    /// Every item instantiated, its start function and `init` run under a step's budgets; a trap
+    /// there fails the item before step 0. `counted`: one item runs its counted rewrite instead.
+    pub fn new(
+        piece: Rc<Piece>,
+        track: Track,
+        store: bool,
+        planted: Planted,
+        rec: &mut Record,
+        counted: Option<(usize, &[u8])>,
+    ) -> Result<World, Failed> {
+        for e in track.get(REWIND).into_iter().flatten() {
+            rewind::fits(&piece, e)?;
+        }
+        let mut lives = Vec::new();
+        for (i, item) in piece.items.iter().enumerate() {
+            let bytes = counted
+                .filter(|(c, _)| *c == i)
+                .map_or(item.bytes.as_slice(), |(_, b)| b);
+            let mut runner = World::runner(bytes, &item.id)?;
+            let names = Rc::new(names(bytes));
+            let mut failed = false;
+            // The data assets, copied once before the start function: then they're memory.
+            if !item.assets.is_empty() {
+                let at = item.assets_at as usize;
+                let bytes = item.asset_bytes();
+                runner.memory_mut("memory").expect("a memory")[at..at + bytes.len()]
+                    .copy_from_slice(&bytes);
+            }
+            let mut calls = Vec::new();
+            if runner.exports(START) {
+                calls.push((START, vec![]));
+            }
+            calls.push(("init", vec![Val::I64(step_seed(piece.seed, &item.id, 0))]));
+            for (export, args) in calls {
+                let call = Call {
+                    export: export.into(),
+                    args,
+                    fuel: item.fuel,
+                    stack: item.stack,
+                    deadline: None,
+                };
+                let out = runner.call(&call).map_err(
+                    |e| json!({"ok": false, "code": "run_failed", "item": item.id, "what": e}),
+                )?;
+                if let Some(t) = out.trap {
+                    rec.traps.push(json!({"item": item.id, "step": null, "t": null, "kind": t.kind, "function": t.function, "offset": t.offset, "inputs": [], "source": source(item, &planted, t.function, t.offset)}));
+                    failed = true;
+                    break;
+                }
+            }
+            // #211: the world's page map from init, and the requests init wrote, for step lead - 1.
+            let mut paged = item.pages.as_ref().map(|p| {
+                crate::pages::State::new(p, crate::pages::new_store(p, planted.page_store))
+            });
+            if let (Some(p), Some(st), false) = (&item.pages, paged.as_mut(), failed) {
+                let memory = runner.memory("memory").expect("a memory");
+                if let Err((kind, fields)) = st.requests(p, -1, memory) {
+                    let mut trap = json!({"item": item.id, "step": null, "t": null, "kind": kind, "function": null, "offset": null, "inputs": []});
+                    extend(&mut trap, fields);
+                    rec.traps.push(trap);
+                    failed = true;
+                }
+            }
+            let size = item.layout.size("writes") as usize;
+            let linear = item.writes.iter().any(|w| w.linear);
+            lives.push(Live {
+                runner,
+                names,
+                failed,
+                next: 0,
+                ran: 0,
+                last: -1,
+                arrays: vec![0; size],
+                prev: if linear { vec![0; size] } else { Vec::new() },
+                cursor: BTreeMap::new(),
+                pending: BTreeMap::new(),
+                mirrors: vec![Some(Vec::new()); item.mirrors.len()],
+                late: false,
+                filled: None,
+                mirror_ns: 0,
+                read_ns: 0,
+                pages_ns: 0,
+                asked: None,
+                dirty: BTreeSet::new(),
+                kdirty: BTreeSet::new(),
+                rdirty: BTreeSet::new(),
+                stored: Vec::new(),
+                checked: None,
+                spacing: item.every,
+                rerun: false,
+                spare: None,
+                previewed: None,
+                preview: preview_region(item),
+                paged,
+            });
+        }
+        let published = lives.iter().map(|l| l.arrays.clone()).collect();
+        Ok(World {
+            // #860: a rewind restores from the ring, so a piece with rewind keeps one.
+            store: store || piece.rewind.is_some(),
+            piece,
+            track,
+            lives,
+            published,
+            planted,
+            saves_dir: None,
+            held: None,
+            saves_ns: 0,
+            saved: Vec::new(),
+            seen: 0,
+            adapter: String::new(),
+            cache: None,
+            branches: Branches::default(),
+            draw: Default::default(),
+        })
+    }
+
+    pub fn failed(&self) -> Vec<String> {
+        self.piece
+            .items
+            .iter()
+            .zip(&self.lives)
+            .filter(|(_, l)| l.failed)
+            .map(|(i, _)| i.id.clone())
+            .collect()
+    }
+
+    pub fn peek(&mut self, item: &str, at: usize, len: usize) -> Option<String> {
+        let i = self.piece.items.iter().position(|x| x.id == item)?;
+        let m = self.lives[i].memory();
+        Some(hex(m.get(at..at.checked_add(len)?)?))
+    }
+
+    /// Each array, by `<item>.<write>`, as its item's last step left it, as its write region lays
+    /// it out.
+    pub fn arrays(&self) -> Vec<(String, Vec<u8>)> {
+        arrays_of(&self.piece, self.lives.iter().map(|l| &l.arrays[..]))
+    }
+
+    /// Item `i`'s write region as its last step left it.
+    pub fn write_region(&self, i: usize) -> &[u8] {
+        &self.lives[i].arrays
+    }
+
+    /// What a frame draws from, per item: its last step that ran, its write region before that
+    /// step (empty without a linear write) and after it.
+    pub fn shown(&self) -> Vec<Shown> {
+        self.lives
+            .iter()
+            .map(|l| (l.last, l.prev.clone(), l.arrays.clone()))
+            .collect()
+    }
+
+    /// Each item's deep hash now.
+    pub fn deep_hashes(&mut self) -> Map<String, Value> {
+        let ids: Vec<String> = self.piece.items.iter().map(|i| i.id.clone()).collect();
+        let mut out: Map<String, Value> = ids
+            .into_iter()
+            .zip(self.lives.iter_mut())
+            .map(|(id, l)| (id, json!(format!("{:016x}", l.deep_hash()))))
+            .collect();
+        for id in &self.piece.machine {
+            out.insert(id.clone(), json!(format!("{:016x}", self.seen_hash())));
+        }
+        out
+    }
+
+    /// A same-machine counter's full-state hash.
+    pub(crate) fn seen_hash(&self) -> u64 {
+        h64(&self.seen.to_le_bytes())
+    }
+
+    /// Whether every item's ring holds a checkpoint at step `k`.
+    pub fn has_checkpoint(&self, k: i64) -> bool {
+        self.lives
+            .iter()
+            .all(|l| l.stored.iter().any(|s| s.step == k))
+    }
+    /// The steps every item's ring holds a checkpoint at, in order.
+    pub fn checkpoint_steps(&self) -> Vec<i64> {
+        let Some(first) = self.lives.first() else {
+            return Vec::new();
+        };
+        first
+            .stored
+            .iter()
+            .map(|s| s.step)
+            .filter(|k| self.has_checkpoint(*k))
+            .collect()
+    }
+
+    /// #211: each item with pages' meters: `pages.late`, the moves whose page was still on the
+    /// store's disk when their step came, which held the step.
+    pub fn meters(&self) -> Map<String, Value> {
+        let mut out = Map::new();
+        for (item, l) in self.piece.items.iter().zip(&self.lives) {
+            if let Some(st) = &l.paged {
+                out.insert(item.id.clone(), json!({"pages.late": st.late}));
+            }
+        }
+        out
+    }
+
+    /// #211: item `i`'s pages that arrived fresh, each with its bytes' hash now.
+    pub fn generated(&mut self, i: usize) -> Option<BTreeMap<u32, crate::pages::Hash>> {
+        let p = self.piece.items[i].pages.clone()?;
+        let l = &mut self.lives[i];
+        let memory = l.runner.memory("memory").unwrap_or(&[]).to_vec();
+        Some(l.paged.as_ref()?.generated(&p, &memory))
+    }
+
+    /// The step every item is about to run, when they agree.
+    pub fn at(&self) -> Option<i64> {
+        let k = self.lives.first()?.next;
+        self.lives.iter().all(|l| l.next == k).then_some(k)
+    }
+
+    pub(super) fn checkpoint(&mut self, i: usize, rec: &mut Record) {
+        let (ring, id) = (self.piece.items[i].ring, self.piece.items[i].id.clone());
+        let (store, planted) = (self.store, self.planted);
+        let l = &mut self.lives[i];
+        if let Some(cache) = self.cache.as_mut().filter(|_| !l.failed) {
+            cache.take(i, l);
+        }
+        // Labelled by the step after the last that ran: on a fixed clock, the step about to run.
+        let at = l.last + 1;
+        if l.failed || l.ran % l.spacing != 0 || l.checked == Some(at) {
+            return;
+        }
+        l.checked = Some(at);
+        let deep = if rec.deferred { 0 } else { l.deep_hash() };
+        // The CPU time storing it; the full-state hash beside it is the record's evidence.
+        let t = cpu_ns();
+        rec.checkpoint(&id, at, deep, &l.arrays);
+        // The counters checkpoint with the first item that hasn't failed; they have no arrays.
+        if self.lives.iter().position(|l| !l.failed) == Some(i) {
+            let seen = self.seen_hash();
+            for m in &self.piece.machine {
+                rec.checkpoint(m, at, seen, &[]);
+            }
+        }
+        // #211: the page map this checkpoint names, and its changes since the one before: whole
+        // in the ring's first checkpoint, else only the changes.
+        let pages = self.piece.items[i].pages.clone();
+        let l = &mut self.lives[i];
+        let mut kept = None;
+        if let (Some(p), Some(st)) = (&pages, l.paged.as_mut()) {
+            let started = cpu_ns();
+            let k = st.kept(l.stored.is_empty());
+            let map_ns = cpu_ns() - started;
+            let changed = std::mem::take(&mut st.recorded).len();
+            let named = st.named(p, l.runner.memory("memory").unwrap_or(&[]));
+            let fields = json!({"map": named, "map_changed": changed, "map_bytes": k.map_bytes(), "map_ns": map_ns});
+            if let Some(c) = rec
+                .checkpoints
+                .get_mut(&id)
+                .and_then(Value::as_array_mut)
+                .and_then(|a| a.last_mut())
+            {
+                extend(c, fields);
+            }
+            kept = Some(k);
+        }
+        // A seek back replays steps the ring has passed: it keeps only checkpoints past its last.
+        if !store || l.stored.last().is_some_and(|s| s.step >= at) {
+            rec.took(&id, cpu_ns() - t);
+            return;
+        }
+        let memory = if l.stored.len().is_multiple_of(8) {
+            Memory::Whole(l.memory().to_vec())
+        } else {
+            let dirty: Vec<u32> = l.dirty.iter().copied().collect();
+            let m = l.memory();
+            Memory::Pages(
+                dirty
+                    .into_iter()
+                    .map(|p| (p, m[p as usize * PAGE as usize..][..PAGE as usize].to_vec()))
+                    .collect(),
+            )
+        };
+        let mut stored = l.stored(memory);
+        stored.paged = kept;
+        if planted.checkpoint_drops_globals {
+            stored.globals = Vec::new();
+        }
+        // The record of written pages clears only once the store succeeds, so a failed store
+        // loses nothing from the next checkpoint.
+        if planted.store_fails_at_step_120 && at == 120 {
+            return;
+        }
+        stored.ns = cpu_ns() - t;
+        l.stored.push(stored);
+        l.dirty.clear();
+        if let Some(st) = l.paged.as_mut() {
+            st.changed.clear();
+        }
+        l.thin(ring, planted.ring_drops_oldest);
+        rec.took(&id, cpu_ns() - t);
+    }
+
+    /// Each item's ring as it stands (the bake's `ring`): its budget, the bytes its checkpoints
+    /// count, its spacing and each checkpoint with the pages and bytes it holds.
+    pub fn ring(&self) -> Map<String, Value> {
+        let mut out = Map::new();
+        for (item, l) in self.piece.items.iter().zip(&self.lives) {
+            let list: Vec<Value> = l
+                .stored
+                .iter()
+                .map(|s| {
+                    let (whole, pages): (bool, Vec<u32>) = match &s.memory {
+                        Memory::Whole(m) => (true, (0..(m.len() as u64 / PAGE) as u32).collect()),
+                        Memory::Pages(p) => (false, p.keys().copied().collect()),
+                    };
+                    json!({"step": s.step, "whole": whole, "memory": pages.len() as u64 * PAGE, "pages": pages,
+                        "globals": 8 * s.globals.len(), "bytes": s.bytes(), "ns": s.ns})
+                })
+                .collect();
+            let bytes: u64 = l.stored.iter().map(Stored::bytes).sum();
+            out.insert(
+                item.id.clone(),
+                json!({"budget": item.ring, "bytes": bytes, "spacing": l.spacing, "checkpoints": list}),
+            );
+        }
+        out
+    }
+
+    /// Runs every item's steps below `until`, in time order; at one time, items in piece order,
+    /// each reading the others' arrays as earlier steps left them. `before(k)` runs whenever every
+    /// item is about to run step k, after its checkpoints.
+    pub fn run(&mut self, until: i64, rec: &mut Record, before: &mut dyn FnMut(&mut World, i64)) {
+        self.run_while(&|next, _| next < until, rec, before);
+    }
+
+    /// Runs every item's steps at or before time `t`, as `run` does.
+    pub fn run_through(&mut self, t: i64, rec: &mut Record) {
+        self.run_while(&|next, step| next * step <= t, rec, &mut |_, _| {});
+    }
+
+    pub(super) fn run_while(
+        &mut self,
+        due: &dyn Fn(i64, i64) -> bool,
+        rec: &mut Record,
+        before: &mut dyn FnMut(&mut World, i64),
+    ) {
+        // Where the record starts: each item's arrays before the first step it runs.
+        for (item, l) in self.piece.items.iter().zip(&self.lives) {
+            rec.whole(&item.id, l.next, &l.arrays);
+        }
+        loop {
+            // When the steps before now ended: a save asked for there counts its time from here.
+            let ended_at = web_time::Instant::now();
+            let t = (0..self.lives.len())
+                .filter(|&i| due(self.lives[i].next, self.piece.items[i].step))
+                .map(|i| self.lives[i].next * self.piece.items[i].step)
+                .min();
+            for i in 0..self.lives.len() {
+                if t.is_none_or(|t| self.lives[i].next * self.piece.items[i].step == t) {
+                    self.checkpoint(i, rec);
+                }
+                if std::mem::take(&mut self.lives[i].late) {
+                    self.serve(i, rec);
+                }
+            }
+            if let Some(k) = self.at() {
+                if self.keeps() {
+                    crate::saves::due(self, k, ended_at);
+                }
+                // #860: a rewind stamped by now comes before any step at this time, and the seen
+                // values the current branch carries go back before the step after their stop.
+                if t.is_some_and(|t| self.rewind_due(t)) {
+                    self.rewind(rec);
+                    continue;
+                }
+                self.carry_in(k);
+                before(self, k);
+            }
+            let Some(t) = t else { break };
+            let mut group = Vec::new();
+            for i in 0..self.lives.len() {
+                let next = self.lives[i].next;
+                if due(next, self.piece.items[i].step) && next * self.piece.items[i].step == t {
+                    // A turn clock passes a step nothing asks for: it keeps its number and seed
+                    // for when one is asked, and writes, hashes and bakes nothing.
+                    if self.asked(i) == Some(next) {
+                        group.push(i);
+                    } else {
+                        self.lives[i].next += 1;
+                    }
+                }
+            }
+            if group.is_empty() {
+                continue;
+            }
+            let snapshot = self.published.clone();
+            let mut held = Vec::new();
+            self.seen += 1;
+            let stops = self
+                .piece
+                .rewind
+                .as_ref()
+                .is_some_and(|r| group.contains(&r.item));
+            for i in group {
+                let started = rec.ns.is_some().then(std::time::Instant::now);
+                self.step(i, &snapshot, rec, &mut held);
+                if let (Some(ns), Some(s)) = (rec.ns.as_mut(), started) {
+                    ns.push((i, s.elapsed().as_nanos() as u64));
+                }
+                self.published[i] = self.lives[i].arrays.clone();
+                // Right after the step, before any checkpoint or step k + 1 (Logic: between-step
+                // services); the planted module answers after the next checkpoint instead.
+                if self.planted.services_after_checkpoint {
+                    self.lives[i].late = !self.piece.items[i].services.is_empty();
+                } else {
+                    self.serve(i, rec);
+                }
+            }
+            mirrors::pend(held, &mut self.lives);
+            if stops {
+                self.mark(rec);
+            }
+        }
+    }
+
+    /// Item `i`'s services answering the requests its last step wrote, into its memory: the pages
+    /// they wrote join the next checkpoint's. A service that can't answer traps `services`.
+    pub(super) fn serve(&mut self, i: usize, rec: &mut Record) {
+        let item = &self.piece.items[i];
+        let l = &mut self.lives[i];
+        if item.services.is_empty() || l.failed {
+            return;
+        }
+        let (k, started) = (l.last, web_time::Instant::now());
+        let memory = l.runner.memory_mut("memory").expect("a memory");
+        match services::serve(item, k, memory) {
+            Ok((pages, n)) => {
+                l.mark(pages.into_iter().map(|p| p as u32));
+                // The time answering what step k asked: 0 when it asked nothing.
+                let ns = if n == 0 {
+                    0
+                } else {
+                    (started.elapsed().as_nanos() as u64).max(1)
+                };
+                if let Some(row) = rec
+                    .steps
+                    .get_mut(&k)
+                    .and_then(|(items, _)| items.get_mut(&item.id))
+                {
+                    row["service_ns"] = json!(ns);
+                }
+            }
+            Err((service, what)) => {
+                l.failed = true;
+                rec.traps.push(json!({"item": item.id, "step": k, "t": k * item.step, "kind": "services", "service": service, "what": what, "function": null, "offset": null, "inputs": []}));
+            }
+        }
+    }
+
+    /// The first step from item `i`'s next on that it runs (Logic: turn clock): the next step on
+    /// a fixed clock; on `on_input`, step 0, then the first step at or after an entry it hasn't
+    /// read of a control or reading it reads, or the step `due` names when that's after the step
+    /// that wrote it; None while nothing asks. It reads only the track and the item's own state,
+    /// so a seek runs the steps play does.
+    pub(super) fn asked(&self, i: usize) -> Option<i64> {
+        let (item, l) = (&self.piece.items[i], &self.lives[i]);
+        if !item.turn || l.last < 0 {
+            return Some(l.next);
+        }
+        let mut k: Option<i64> = None;
+        for r in &item.layout.entries {
+            // A control's entries and a reading's values ask alike (Logic: turn clock). A
+            // `latest` reading keeps its last value, which asks for no step of its own.
+            let waits = match r.read {
+                Read::Control => true,
+                Read::Reading { each, .. } => each,
+                _ => continue,
+            };
+            // Entries past a step's PER_STEP wait for the next step, as on a fixed clock.
+            if waits && l.pending.get(&r.name).is_some_and(|q| !q.is_empty()) {
+                return Some(l.next);
+            }
+            let c = l.cursor.get(&r.name).copied().unwrap_or(0);
+            if let Some(e) = self.track.get(&r.name).and_then(|list| list.get(c)) {
+                let mut t = e.t;
+                if self.planted.turn_runs_at_frame_boundary {
+                    let frame = crate::F / 30;
+                    t = t.div_euclid(frame) * frame
+                        + if t.rem_euclid(frame) != 0 { frame } else { 0 };
+                }
+                let s =
+                    (t.div_euclid(item.step) + i64::from(t.rem_euclid(item.step) != 0)).max(l.next);
+                k = Some(k.map_or(s, |k| k.min(s)));
+            }
+        }
+        if let Some(at) = item.due.filter(|_| !self.planted.turn_ignores_due) {
+            let b = &l.arrays[at as usize..at as usize + 4];
+            let d = i64::from(i32::from_le_bytes(b.try_into().expect("4 bytes")));
+            if d >= l.next {
+                k = Some(k.map_or(d, |k| k.min(d)));
+            }
+        }
+        k
+    }
+
+    /// The first step any item runs, from where each stands; None while nothing asks.
+    pub fn wake(&self) -> Option<i64> {
+        (0..self.lives.len()).filter_map(|i| self.asked(i)).min()
+    }
+
+    /// The first time after `t` a frame of this state changes: t + 1 while a linear write still
+    /// blends, else the time of the first step an item runs; None while nothing asks, so a still
+    /// turn game's frame stays valid until an entry arrives or `due` comes.
+    pub fn valid_until(&self, t: i64) -> Option<i64> {
+        (0..self.lives.len())
+            .filter_map(|i| {
+                let (item, l) = (&self.piece.items[i], &self.lives[i]);
+                if !l.prev.is_empty() && l.last >= 0 && t < (l.last + 1) * item.step {
+                    return Some(t + 1);
+                }
+                self.asked(i).map(|k| k * item.step)
+            })
+            .min()
+    }
+
+    /// Each item's arrays as a frame at `t` (flicks) draws them, by `<item>.<write>` (Logic:
+    /// interpolated writes): `drawn` over this state.
+    pub fn drawn(&self, t: i64) -> Map<String, Value> {
+        let shown = self
+            .lives
+            .iter()
+            .map(|l| (l.last, &l.prev[..], &l.arrays[..]));
+        drawn(&self.piece, shown, t, self.planted.linear_blends_forward)
+    }
+
+    pub(super) fn step(
+        &mut self,
+        i: usize,
+        snapshot: &[Vec<u8>],
+        rec: &mut Record,
+        held: &mut mirrors::Held,
+    ) {
+        let piece = self.piece.clone();
+        let item = &piece.items[i];
+        let k = self.lives[i].next;
+        let t = k * item.step;
+        let before = self.lives[i].last * item.step; // #277: `net.seats` since the step before
+        let read_started = web_time::Instant::now();
+        // Each read control's entries stamped by now, at most PER_STEP a step, the step's own by
+        // time, player and seq, never by arrival (Input track); each reading's values as recorded.
+        let mut taken: BTreeMap<&str, Vec<Entry>> = BTreeMap::new();
+        {
+            let l = &mut self.lives[i];
+            for r in &item.layout.entries {
+                let (most, each, reading) = match r.read {
+                    Read::Control => (PER_STEP, true, false),
+                    Read::Reading { each, max, .. } => (max as usize, each, true),
+                    _ => continue,
+                };
+                let list = self.track.get(&r.name).map_or(&[][..], Vec::as_slice);
+                let c = l.cursor.entry(r.name.clone()).or_insert(0);
+                let q = l.pending.entry(r.name.clone()).or_default();
+                let mut fresh: Vec<Entry> = Vec::new();
+                while *c < list.len() && list[*c].t <= t {
+                    // Entries stamped since the last step that ran, never before it (#551).
+                    fresh.extend((list[*c].t > l.last * item.step).then(|| list[*c].clone()));
+                    *c += 1;
+                }
+                if r.read == Read::Control {
+                    if self.planted.read_region_orders_by_arrival {
+                        fresh.sort_by_key(|e| e.arrived);
+                    } else {
+                        fresh.sort_by_key(|e| (e.t, e.player, e.seq, e.arrived));
+                    }
+                }
+                if !each {
+                    // `latest`: the last value recorded at or before this step, kept until the next.
+                    if let Some(last) = fresh.pop() {
+                        q.clear();
+                        q.push_back(last);
+                    }
+                    taken.insert(&r.name, q.iter().cloned().collect());
+                    continue;
+                }
+                q.extend(fresh);
+                // Past four steps' worth of an `each` reading, the oldest are dropped and counted,
+                // never silently (Logic: readings).
+                let room = 4 * most;
+                if reading && q.len() > room && !self.planted.read_region_keeps_last {
+                    let dropped = q.len() - room;
+                    q.drain(..dropped);
+                    rec.issues
+                        .push(json!({"code": "reading.overflow", "reading": r.name,
+                        "item": item.id, "step": k, "dropped": dropped}));
+                }
+                // The planted read region keeps only the last value a step received.
+                if reading && self.planted.read_region_keeps_last && q.len() > 1 {
+                    let last = q.pop_back();
+                    q.clear();
+                    q.extend(last);
+                }
+                // A text control's one commit a step; a second waits for the next (#542).
+                let n = q.len().min(if r.ty == "text" { 1 } else { most });
+                taken.insert(&r.name, q.drain(..n).collect());
+            }
+        }
+        let inputs: Vec<Value> = taken.values().flatten().map(Entry::to_json).collect();
+        let l = &mut self.lives[i];
+        l.next = k + 1;
+        l.ran += 1;
+        l.last = k;
+        l.filled = None;
+        l.mirror_ns = 0;
+        l.read_ns = 0;
+        l.pages_ns = 0;
+        // What a linear write blends from: the arrays as they stood before this step ran.
+        if !l.prev.is_empty() {
+            l.prev.clone_from(&l.arrays);
+        }
+        if l.failed {
+            report(rec, item, k, l, None, 0, Vec::new(), &Vec::new());
+            return;
+        }
+        // #211: the moves queued for this step, ahead of the read region fill; the pages they
+        // load are the module's own writes, so no slot counts them as written.
+        if let (Some(p), Some(st)) = (&item.pages, l.paged.as_mut()) {
+            let started = cpu_ns();
+            let memory = l.runner.memory_mut("memory").expect("a memory");
+            let wrote = st.moves_before(p, k, memory, self.planted.pagers);
+            if st.moved > 0 {
+                l.pages_ns = (cpu_ns() - started).max(1);
+            }
+            l.mark(wrote);
+        }
+        // The read region, in declaration order.
+        let size = item.layout.size("reads") as usize;
+        let mut region = vec![0u8; size];
+        for e in &item.layout.entries {
+            let at = e.offset as usize;
+            match &e.read {
+                // #542: a text commit's `u32` length and its bytes, then zero bytes to the next
+                // multiple of 8; with no commit this step, a length of 0.
+                Read::Control if e.ty == "text" => {
+                    if let Some(x) = taken[e.name.as_str()].first() {
+                        let v = x.value.bytes();
+                        if matches!(x.value, Given::Text(_)) && v.len() <= e.size as usize {
+                            region[at..at + v.len()].copy_from_slice(&v);
+                        }
+                    }
+                }
+                // #540: a point control's entries packed, each its 248 B record and, after a box
+                // release holding unit keys, their tail, so a step walks them by its flags.
+                Read::Control if e.ty == "point" => {
+                    let list = &taken[e.name.as_str()];
+                    region[at..at + 4].copy_from_slice(&(list.len() as u32).to_le_bytes());
+                    let mut o = at + 8;
+                    for x in list {
+                        let v = x.value.bytes();
+                        if !matches!(x.value, Given::Point(_))
+                            || o + 8 + v.len() > at + e.size as usize
+                        {
+                            continue;
+                        }
+                        region[o..o + 4].copy_from_slice(&x.player.to_le_bytes());
+                        region[o + 8..o + 8 + v.len()].copy_from_slice(&v);
+                        o += 8 + v.len();
+                    }
+                }
+                // #542: a scroll's entries, each `i32 position, i32 delta`, the delta from the
+                // entry before it on the track, or from the control's default.
+                Read::Control if e.ty == "scroll" => {
+                    let list = &taken[e.name.as_str()];
+                    let all = self.track.get(&e.name).map_or(&[][..], Vec::as_slice);
+                    let from = match piece.limits.get(&e.name) {
+                        Some(crate::piece::Limit::Scroll { from, .. }) => *from,
+                        _ => 0,
+                    };
+                    let pos = |x: &Entry| match x.value {
+                        Given::Number(n) => n as i32,
+                        _ => from,
+                    };
+                    region[at..at + 4].copy_from_slice(&(list.len() as u32).to_le_bytes());
+                    for (j, x) in list.iter().enumerate() {
+                        let k = all
+                            .partition_point(|y| (y.t, y.player, y.seq) < (x.t, x.player, x.seq));
+                        let before = k.checked_sub(1).map_or(from, |k| pos(&all[k]));
+                        let o = at + 8 + 16 * j;
+                        region[o..o + 4].copy_from_slice(&x.player.to_le_bytes());
+                        region[o + 8..o + 12].copy_from_slice(&pos(x).to_le_bytes());
+                        region[o + 12..o + 16].copy_from_slice(&(pos(x) - before).to_le_bytes());
+                    }
+                }
+                Read::Control => {
+                    // Each entry a u32 player, 4 zero bytes, then its value as the control's
+                    // form lays it out; a value of another form leaves its bytes zero. A
+                    // choice's option is its index in the choice's options as an f64 (#1040;
+                    // Control); any other string value is no entry of a number's slot.
+                    let options = match piece.limits.get(&e.name) {
+                        Some(crate::piece::Limit::Choice(options)) => &options[..],
+                        _ => &[],
+                    };
+                    let read = |x: &Entry| match &x.value {
+                        Given::Text(t) => {
+                            let i = options.iter().position(|o| o == t)?;
+                            Some(Given::Number(i as f64))
+                        }
+                        v => Some(v.clone()),
+                    };
+                    let list: Vec<(&Entry, Given)> = taken[e.name.as_str()]
+                        .iter()
+                        .filter_map(|x| Some((x, read(x)?)))
+                        .collect();
+                    let stride = (e.size as usize - 8) / PER_STEP;
+                    region[at..at + 4].copy_from_slice(&(list.len() as u32).to_le_bytes());
+                    for (j, (x, value)) in list.iter().enumerate() {
+                        let o = at + 8 + stride * j;
+                        let player = if self.planted.read_region_drops_player {
+                            0
+                        } else {
+                            x.player
+                        };
+                        region[o..o + 4].copy_from_slice(&player.to_le_bytes());
+                        let v = value.bytes();
+                        if v.len() == stride - 8 {
+                            region[o + 8..o + stride].copy_from_slice(&v);
+                        }
+                    }
+                }
+                // Each value as its shape lays it out (an f64 each for scalar and vec, a layout's
+                // bytes padded to 8), then its as-of time as an i64 of microseconds.
+                Read::Reading { shape, .. } => {
+                    let list = &taken[e.name.as_str()];
+                    let size = shape.size() as usize;
+                    region[at..at + 4].copy_from_slice(&(list.len() as u32).to_le_bytes());
+                    for (j, x) in list.iter().enumerate() {
+                        let o = at + 8 + (size + 8) * j;
+                        let v = x.value.bytes();
+                        let n = v.len().min(size);
+                        region[o..o + n].copy_from_slice(&v[..n]);
+                        region[o + size..o + size + 8]
+                            .copy_from_slice(&x.as_of.unwrap_or(0).to_le_bytes());
+                    }
+                }
+                Read::Array { item: from, offset } => {
+                    let src = &snapshot[*from][*offset as usize..(*offset + e.size) as usize];
+                    region[at..at + e.size as usize].copy_from_slice(src);
+                }
+                Read::Seed => region[at..at + 8]
+                    .copy_from_slice(&step_seed(piece.seed, &item.id, k).to_le_bytes()),
+                // #182: the last value the world's steps before this step's time recorded.
+                Read::World => {
+                    let list = self.track.get(&e.name).map_or(&[][..], Vec::as_slice);
+                    let before = list.partition_point(|x| x.t < t);
+                    let on = before
+                        .checked_sub(1)
+                        .is_some_and(|i| matches!(list[i].value, Given::Number(n) if n != 0.0));
+                    region[at..at + 4].copy_from_slice(&i32::from(on).to_le_bytes());
+                }
+                Read::Draws => self
+                    .draw
+                    .fill(&self.track, (t - item.step, t), &mut region[at..]),
+                Read::Carry | Read::Profile => {
+                    crate::profile::fill_read(item, &self.track, e, k, &mut region)
+                }
+                Read::Seats => seats::fill(&self.track, (before, t), item.step, &mut region[at..]),
+                Read::Mirror(_) | Read::None => {}
+            }
+        }
+        // The time its reads took to take and lay out: each control's entries and each reading's values.
+        l.read_ns = (read_started.elapsed().as_nanos() as u64).max(1);
+        let from = item.reads_at as usize;
+        let fits = l
+            .runner
+            .memory("memory")
+            .is_some_and(|m| from + size <= m.len());
+        if !fits {
+            l.failed = true;
+            rec.traps.push(json!({"item": item.id, "step": k, "t": t, "kind": "bounds", "region": "reads", "function": null, "offset": null, "inputs": inputs}));
+            report(rec, item, k, l, None, 0, Vec::new(), &Vec::new());
+            return;
+        }
+        let memory = l.runner.memory_mut("memory").expect("a memory");
+        // The bitmap starts each step with the pages the logic module's own writes touched: the
+        // read region, each mirror's copied ranges and each emitted kind's count, zeroed before
+        // the step.
+        let mut touched = Vec::new();
+        let mut filled = Map::new();
+        if !item.mirrors.is_empty() {
+            let started = web_time::Instant::now();
+            let lists = mirrors::fill(
+                item,
+                &mut l.mirrors,
+                snapshot,
+                &mut region,
+                memory,
+                &mut touched,
+            );
+            l.mirror_ns = (started.elapsed().as_nanos() as u64).max(1);
+            filled.insert("reads".into(), json!(format!("{lists:016x}")));
+        }
+        if !item.services.is_empty() {
+            let h = services::results_hash(item, memory);
+            filled.insert("services".into(), json!(format!("{h:016x}")));
+            if let Some(r) = rec.regions.as_mut() {
+                let at = item.services_at as usize;
+                let bytes = &memory[at..at + services::size(item) as usize];
+                r.entry(k)
+                    .or_default()
+                    .insert(item.id.clone(), json!({"services": hex(bytes)}));
+            }
+        }
+        if let (Some(p), Some(st)) = (&item.pages, l.paged.as_ref()) {
+            let h = st.table_hash(p, memory);
+            filled.insert("slot_table".into(), json!(format!("{h:016x}")));
+        }
+        l.filled = (!filled.is_empty()).then_some(Value::Object(filled));
+        memory[from..from + size].copy_from_slice(&region);
+        if size > 0 {
+            touched.extend(from as u64 / PAGE..=(from + size - 1) as u64 / PAGE);
+        }
+        crate::piece::fires::clear(item, memory, &mut touched, PAGE);
+        let mut words = vec![0u64; l.names.pages.len()];
+        for p in touched {
+            if let Some(w) = words.get_mut((p / 64) as usize) {
+                *w |= 1 << (p % 64);
+            }
+        }
+        let names = l.names.clone();
+        for (w, n) in words.iter().zip(&names.pages) {
+            let _ = l.runner.set(n, Val::I64(*w as i64));
+        }
+        // The answers after the last step charge this one: each request its fuel_per_request.
+        let mut debt = services::debt(item, l.runner.memory("memory").expect("a memory"));
+        // #211: each move charges its step 65,536 fuel.
+        if let Some(st) = &l.paged {
+            debt += i64::from(st.moved) * crate::pages::MOVE_FUEL;
+        }
+        let call = Call {
+            export: "step".into(),
+            args: vec![Val::I64(k)],
+            fuel: (item.fuel - debt).max(0),
+            stack: item.stack,
+            deadline: None,
+        };
+        let out = l.runner.call(&call);
+        let left = match l.runner.global(FUEL) {
+            Some(Val::I64(f)) => f,
+            _ => 0,
+        };
+        let fuel = (item.fuel - left).clamp(0, item.fuel);
+        let mut pages = Vec::new();
+        for (w, n) in names.pages.iter().enumerate() {
+            if let Some(Val::I64(bits)) = l.runner.global(n) {
+                for b in 0..64 {
+                    if (bits as u64) >> b & 1 == 1 {
+                        pages.push(w as u32 * 64 + b);
+                    }
+                }
+            }
+        }
+        l.mark(pages.iter().copied());
+        rec.fuel.entry(i).or_default().push((k, fuel));
+        let trap = match out {
+            Ok(o) => o.trap.map(|t| (t.kind, Some(t.function), Some(t.offset))),
+            Err(e) => Some((format!("run_failed: {e}"), None, None)),
+        };
+        if let Some((kind, function, offset)) = trap {
+            l.failed = true;
+            let src = function
+                .zip(offset)
+                .and_then(|(f, o)| source(item, &self.planted, f, o));
+            rec.traps.push(json!({"item": item.id, "step": k, "t": t, "kind": kind, "function": function, "offset": offset, "inputs": inputs, "source": src}));
+            report(rec, item, k, l, None, fuel, pages, &Vec::new());
+            return;
+        }
+        // #211: the slots it wrote and the written cap, then the requests it left, for step
+        // k + lead; either traps as any trap does.
+        if let (Some(p), Some(st)) = (&item.pages, l.paged.as_mut()) {
+            let memory = l.runner.memory("memory").expect("a memory");
+            let done = st
+                .after_step(p, &pages)
+                .and_then(|()| st.requests(p, k, memory));
+            if let Err((kind, fields)) = done {
+                l.failed = true;
+                let mut trap = json!({"item": item.id, "step": k, "t": t, "kind": kind, "function": null, "offset": null, "inputs": inputs});
+                extend(&mut trap, fields);
+                rec.traps.push(trap);
+                report(rec, item, k, l, None, fuel, pages, &Vec::new());
+                return;
+            }
+        }
+        let memory = l.runner.memory("memory").expect("a memory");
+        let fires = crate::piece::fires::fired(item, memory);
+        let mut rows = match emitted(item, memory, &self.planted) {
+            Ok(rows) => rows,
+            // A count past its kind's max_per_step traps as any trap does: no row is dropped.
+            Err((kind, count)) => {
+                l.failed = true;
+                rec.traps.push(json!({"item": item.id, "step": k, "t": t, "kind": "occurrences", "occurrence": kind, "count": count, "function": null, "offset": null, "inputs": inputs}));
+                report(rec, item, k, l, None, fuel, pages, &Vec::new());
+                return;
+            }
+        };
+        // A request count past its max_per_step traps as an occurrence count does: none dropped.
+        if let Some((service, count)) = services::over(item, memory) {
+            l.failed = true;
+            rec.traps.push(json!({"item": item.id, "step": k, "t": t, "kind": "services", "service": service, "count": count, "function": null, "offset": null, "inputs": inputs}));
+            report(rec, item, k, l, None, fuel, pages, &Vec::new());
+            return;
+        }
+        if self.planted.seek_repeats_occurrences && l.rerun {
+            rows.extend(rows.clone());
+        }
+        let w = item.writes_at as usize;
+        let n = l.arrays.len();
+        let mut fresh = memory[w..w + n].to_vec();
+        if self.planted.replay_changes_step_37 && k == 37 && i == 0 {
+            changed(item, &mut fresh);
+        }
+        if self.planted.reads_wall_clock && i == 0 {
+            walled(item, &mut fresh);
+        }
+        let started = web_time::Instant::now();
+        let mut changed = bake::ranges(item, k, &l.arrays, &fresh);
+        let ms = started.elapsed().as_secs_f64() * 1000.0;
+        rec.compares
+            .entry(item.id.clone())
+            .or_default()
+            .push((k, n, ms));
+        if self.planted.ranges_drop_second_at_step_5000 && k == 5000 && changed.len() > 1 {
+            changed.remove(1);
+        }
+        mirrors::changed(&piece, i, &changed, held);
+        rec.ranges
+            .entry(item.id.clone())
+            .or_default()
+            .extend(changed);
+        l.arrays = fresh;
+        // A slot number in `ends`, or else in `request`, saves that slot once the step ends.
+        if let Some(s) = &item.saves {
+            let at = |o: u32| {
+                i32::from_le_bytes(l.arrays[o as usize..][..4].try_into().expect("an i32"))
+            };
+            let slot = |o: u32| Some(at(o)).filter(|n| (1..=s.slots).contains(n));
+            l.asked = s
+                .ends
+                .and_then(slot)
+                .map(|n| (n, true))
+                .or(slot(s.request).map(|n| (n, false)));
+        }
+        let h = l.step_hash(&rows);
+        report(rec, item, k, l, Some(h), fuel, pages, &rows);
+        crate::piece::fires::record(rec, item, k, fires);
+    }
+
+    /// Runs each item's `preview` (Logic: preview) when the state it would read changed since its
+    /// last: a step ran, a seek landed or a control it reads changed (`values`, each read's bytes
+    /// by read name; one not given is zero), so a frame that calls this runs at most one per item. Each
+    /// runs on a throwaway copy of the item's memory and globals as its last step left them, under
+    /// the item's fuel and stack; the item's own state is never touched. A trap clears the item's
+    /// preview arrays and is returned as its report; the item plays on. Returns the previews that
+    /// ran and the traps.
+    pub fn preview(&mut self, values: &BTreeMap<String, Vec<u8>>) -> (usize, Vec<Value>) {
+        let piece = self.piece.clone();
+        let (mut ran, mut traps) = (0, Vec::new());
+        for (i, item) in piece.items.iter().enumerate() {
+            let Some(p) = &item.preview else { continue };
+            let l = &mut self.lives[i];
+            let mut region = vec![0u8; (p.writes_at - p.at) as usize];
+            for e in &p.reads {
+                if let Some(b) = values.get(&e.name).filter(|b| b.len() == e.size as usize) {
+                    region[e.offset as usize..][..b.len()].copy_from_slice(b);
+                }
+            }
+            let k = l.last;
+            let key = (
+                if self.planted.preview_runs_on_hover_only {
+                    0
+                } else {
+                    k
+                },
+                region,
+            );
+            if l.previewed.as_ref() == Some(&key) {
+                continue;
+            }
+            let region = &key.1;
+            ran += 1;
+            if l.failed {
+                l.preview.fill(0);
+                l.previewed = Some(key);
+                continue;
+            }
+            if l.spare.is_none() && !self.planted.preview_writes_item_memory {
+                match World::runner(&item.bytes, &item.id) {
+                    Ok(r) => l.spare = Some(r),
+                    Err(e) => {
+                        traps.push(e);
+                        continue;
+                    }
+                }
+            }
+            let runner = match l.spare.as_mut() {
+                Some(spare) if !self.planted.preview_writes_item_memory => {
+                    let from = l.runner.memory("memory").expect("a memory");
+                    spare
+                        .memory_mut("memory")
+                        .expect("a memory")
+                        .copy_from_slice(from);
+                    for (n, _) in &l.names.globals {
+                        let v = l.runner.global(n).unwrap_or(Val::I32(0));
+                        let _ = spare.set(n, v);
+                    }
+                    spare
+                }
+                _ => &mut l.runner,
+            };
+            let _ = runner.write("memory", p.at as usize, region);
+            let call = Call {
+                export: "preview".into(),
+                args: vec![Val::I64(k)],
+                fuel: item.fuel,
+                stack: item.stack,
+                deadline: None,
+            };
+            let trap = match runner.call(&call) {
+                Ok(o) => o.trap.map(|t| (t.kind, Some(t.function), Some(t.offset))),
+                Err(e) => Some((format!("run_failed: {e}"), None, None)),
+            };
+            let n = l.preview.len();
+            match trap {
+                None => {
+                    let m = runner.memory("memory").expect("a memory");
+                    let from = p.writes_at as usize;
+                    match m.get(from..from + n) {
+                        Some(b) => l.preview.copy_from_slice(b),
+                        None => l.preview.fill(0),
+                    }
+                }
+                Some((kind, function, offset)) => {
+                    l.preview.fill(0);
+                    let src = function
+                        .zip(offset)
+                        .and_then(|(f, o)| source(item, &self.planted, f, o));
+                    traps.push(json!({"item": item.id, "export": "preview", "step": k,
+                        "t": k.max(0) * item.step, "kind": kind, "function": function, "offset": offset, "inputs": [], "source": src}));
+                }
+            }
+            l.previewed = Some(key);
+        }
+        (ran, traps)
+    }
+
+    /// How many elements of linear writes a frame at `t` blends (Logic: interpolated writes).
+    pub fn blends(&self, t: i64) -> usize {
+        blends(
+            &self.piece,
+            self.lives.iter().map(|l| (l.last, l.prev.is_empty())),
+            t,
+        )
+    }
+
+    /// The input track's entries, in its order: closed branches' and rewinds too (#860).
+    pub fn track_entries(&self) -> Vec<Value> {
+        let mut all: Vec<&Entry> = self
+            .track
+            .values()
+            .flatten()
+            .chain(&self.branches.off)
+            .collect();
+        all.sort_by_key(|e| (e.t, e.player, e.seq));
+        all.into_iter().map(Entry::to_json).collect()
+    }
+
+    /// Each preview array, by `<item>.preview.<write>`, as the last preview left it.
+    pub fn previews(&self) -> Map<String, Value> {
+        let mut out = Map::new();
+        for (item, l) in self.piece.items.iter().zip(&self.lives) {
+            let Some(p) = &item.preview else { continue };
+            for (w, e) in p.writes.iter().zip(&p.entries) {
+                let size = w.ty.size() as usize;
+                let values: Vec<Value> = (0..w.count as usize)
+                    .map(|n| {
+                        w.ty.value(&l.preview[e.offset as usize + n * size..][..size])
+                    })
+                    .collect();
+                out.insert(
+                    format!("{}.preview.{}", item.id, w.name),
+                    Value::Array(values),
+                );
+            }
+        }
+        out
+    }
+
+    /// The nearest checkpoint every item's ring holds at or before step `k`.
+    pub fn nearest(&self, k: i64) -> Option<i64> {
+        self.checkpoint_steps()
+            .into_iter()
+            .filter(|c| *c <= k)
+            .max()
+    }
+
+    /// Seeks this world to the checkpoint at step `c`, in place: each item's state is restored
+    /// into a fresh instance, as `restore` does, and its ring is kept.
+    pub fn seek(&mut self, c: i64) -> Result<(), Failed> {
+        let back = self.restore(c, None)?;
+        self.adopt(back, c);
+        Ok(())
+    }
+
+    /// Seeks this world to its cache's keyframe at step `c`, in place, keeping its ring.
+    pub fn seek_keyframe(&mut self, c: i64) -> Result<(), Failed> {
+        let cache = self
+            .cache
+            .as_ref()
+            .ok_or_else(|| json!({"ok": false, "code": "bad_input", "what": "no cache"}))?;
+        let mut lives = Vec::new();
+        for i in 0..self.lives.len() {
+            let (memory, s) = cache.load(i, c)?;
+            let mut live = self.revive(i, &self.piece.items[i].bytes, memory, s)?;
+            if let (Some(st), Some(k)) = (&self.lives[i].paged, &s.paged) {
+                live.paged = Some(crate::pages::State::restored(
+                    st.store.clone(),
+                    &[k],
+                    self.planted.pagers,
+                ));
+            }
+            lives.push(live);
+        }
+        let back = self.restored(lives, c);
+        self.adopt(back, c);
+        Ok(())
+    }
+
+    pub(super) fn adopt(&mut self, mut back: World, c: i64) {
+        for (l, mut r) in self.lives.iter_mut().zip(back.lives.drain(..)) {
+            r.stored = std::mem::take(&mut l.stored);
+            r.checked = Some(c);
+            r.spacing = l.spacing;
+            r.spare = l.spare.take();
+            // The preview drawn stays until the next one runs, which the landed seek asks for.
+            r.preview = std::mem::take(&mut l.preview);
+            *l = r;
+        }
+        self.published = back.published;
+        self.seen = back.seen;
+        self.branches.stops = back.branches.stops;
+    }
+
+    /// The input track, in the track's order: closed branches' and rewinds too (#860).
+    pub fn entries(&self) -> Vec<Entry> {
+        let all = self.track.values().flatten().chain(&self.branches.off);
+        let mut out: Vec<Entry> = all.cloned().collect();
+        out.sort_by_key(|e| (e.t, e.player, e.seq, e.arrived));
+        out
+    }
+
+    /// An entry joining the track as it arrives: a writer's as stamped, and a reading's value at
+    /// the first step not yet run of the items that read it (Logic: readings). An entry a step
+    /// already read would rewrite the past, which only a fork or the net module's rollback does.
+    pub fn append(&mut self, mut e: Entry) -> Result<Entry, Failed> {
+        // #860: a rewind of more stops than the piece's depth is refused, naming the depth.
+        rewind::fits(&self.piece, &e)?;
+        let steps = self.piece.items.iter().zip(&self.lives);
+        if e.as_of.is_some() {
+            let Some(read) = self.piece.reading(&e.control) else {
+                return Err(
+                    json!({"ok": false, "code": "bad_input", "what": format!("the piece declares no source {}", e.control)}),
+                );
+            };
+            // A value whose shape doesn't match its source's is refused before it's recorded,
+            // naming the source (Logic: readings).
+            if let Read::Reading { shape, .. } = &read {
+                if !crate::piece::fits(shape, &e.value) {
+                    let source = e.control.trim_start_matches("reading:");
+                    let source = source.split_once('#').map_or(source, |(s, _)| s);
+                    return Err(
+                        json!({"ok": false, "code": "reading_refused", "why": "shape", "source": source,
+                        "what": format!("a value of {source} that isn't its declared shape, {shape:?}"),
+                        "value": e.value.to_json()}),
+                    );
+                }
+            }
+            // The first step not yet run of its readers, or of every item when none reads it:
+            // the first any of them runs after the time the furthest of them has read to.
+            let next = |only: bool| {
+                let of = || {
+                    steps
+                        .clone()
+                        .filter(|(i, _)| !only || i.reads.contains(&e.control))
+                };
+                let read = of().map(|(i, l)| (l.next - 1) * i.step).max()?;
+                of().map(|(i, l)| l.next.max(read.div_euclid(i.step) + 1) * i.step)
+                    .min()
+            };
+            e.t = next(true).or_else(|| next(false)).unwrap_or(0);
+            e.seq = self.track.get(&e.control).map_or(0, Vec::len) as u32;
+        }
+        // The last step run by the entry's readers, or by every item when none reads it.
+        let ran = |only: bool| {
+            steps
+                .clone()
+                .filter(|(i, _)| !only || i.reads.contains(&e.control))
+                .map(|(i, l)| (l.next - 1) * i.step)
+                .max()
+        };
+        let read = ran(true).or_else(|| ran(false)).unwrap_or(-1);
+        if e.t <= read {
+            return Err(
+                json!({"ok": false, "code": "bad_input", "what": format!("an entry at {} is before the first step not yet run", e.t)}),
+            );
+        }
+        e.arrived = self.track.values().map(Vec::len).sum::<usize>() as u64;
+        let list = self.track.entry(e.control.clone()).or_default();
+        let at = list.partition_point(|x| (x.t, x.player, x.seq) <= (e.t, e.player, e.seq));
+        list.insert(at, e.clone());
+        Ok(e)
+    }
+
+    /// Every item's whole state as plain data: what a canvas module carries between steps
+    /// (`module`). Entries still waiting stay with it; its place on the track doesn't, since the
+    /// world that loads it reads a track of its own.
+    pub fn saved(&mut self) -> Value {
+        World::saved_of(&self.snapshot())
+    }
+
+    /// A world on `track` holding the state `saved` gave, each item in a fresh instance; the start
+    /// function and `init` never run again.
+    pub fn from_saved(
+        piece: Rc<Piece>,
+        track: Track,
+        saved: &Value,
+        planted: Planted,
+    ) -> Result<World, Failed> {
+        let bad =
+            || json!({"ok": false, "code": "bad_input", "what": "a saved state of another piece"});
+        let unhex = |v: &Value| -> Option<Vec<u8>> {
+            let s = v.as_str()?.as_bytes();
+            let digit = |c: u8| char::from(c).to_digit(16);
+            (s.len() % 2 == 0).then_some(())?;
+            (s.chunks_exact(2))
+                .map(|p| Some((digit(p[0])? * 16 + digit(p[1])?) as u8))
+                .collect()
+        };
+        let mut lives = Vec::new();
+        for (item, s) in piece.items.iter().zip(saved.as_array().ok_or_else(bad)?) {
+            let globals: Vec<Val> = s["globals"]
+                .as_array()
+                .ok_or_else(bad)?
+                .iter()
+                .map(|g| match (g[0].as_str(), &g[1]) {
+                    (Some("i32"), x) => x.as_i64().map(|x| Val::I32(x as i32)),
+                    (Some("i64"), x) => x.as_i64().map(Val::I64),
+                    (Some("f32"), x) => x.as_u64().map(|x| Val::F32(x as u32)),
+                    (Some("f64"), x) => x.as_u64().map(Val::F64),
+                    _ => None,
+                })
+                .collect::<Option<_>>()
+                .ok_or_else(bad)?;
+            let memory = unhex(&s["memory"]).ok_or_else(bad)?;
+            let mut live = World::load(&item.bytes, item, &memory, &globals)?;
+            live.next = s["next"].as_i64().ok_or_else(bad)?;
+            // Its place on this track: past every entry the steps it ran took.
+            let ran = (live.next - 1) * item.step;
+            for r in item
+                .layout
+                .entries
+                .iter()
+                .filter(|r| matches!(r.read, Read::Control | Read::Reading { .. }))
+            {
+                let n = track
+                    .get(&r.name)
+                    .map_or(0, |l| l.partition_point(|e| e.t <= ran));
+                live.cursor.insert(r.name.clone(), n);
+            }
+            live.failed = s["failed"].as_bool().ok_or_else(bad)?;
+            live.arrays = unhex(&s["arrays"]).ok_or_else(bad)?;
+            if let Some(p) = &item.pages {
+                let store = crate::pages::new_store(p, planted.page_store);
+                live.paged =
+                    Some(crate::pages::State::from_json(p, store, &s["pages"]).ok_or_else(bad)?);
+            }
+            for (k, q) in s["pending"].as_object().into_iter().flatten() {
+                let q: VecDeque<Entry> = q
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Entry::parse)
+                    .collect();
+                live.pending.insert(k.clone(), q);
+            }
+            lives.push(live);
+        }
+        if lives.len() != piece.items.len() {
+            return Err(bad());
+        }
+        let published = lives.iter().map(|l| l.arrays.clone()).collect();
+        Ok(World {
+            piece,
+            track,
+            lives,
+            published,
+            store: false,
+            cache: None,
+            planted,
+            saves_dir: None,
+            held: None,
+            saves_ns: 0,
+            saved: Vec::new(),
+            seen: 0,
+            adapter: String::new(),
+            branches: Branches::default(),
+            draw: Default::default(),
+        })
+    }
+
+    /// Item `i`'s array `name` as its last step left it, element by element.
+    pub fn array(&self, i: usize, name: &str) -> Option<Vec<Value>> {
+        let item = &self.piece.items[i];
+        let w = item.writes.iter().find(|w| w.name == name)?;
+        let at = item.write(name)?.offset as usize;
+        let n = w.ty.size() as usize;
+        let bytes = self.published[i].get(at..at + n * w.count as usize)?;
+        Some(bytes.chunks(n).map(|b| w.ty.value(b)).collect())
+    }
+
+    /// Forks the input track at step `k`: entries stamped after step k's time are dropped,
+    /// `entries` are added, and checkpoints past step k, which didn't see them, leave the ring.
+    pub fn fork_track(&mut self, k: i64, entries: &[Entry]) {
+        let len = self.piece.items.first().map_or(0, |i| i.step);
+        let mut kept: Vec<Entry> = self
+            .track
+            .values()
+            .flatten()
+            .filter(|e| e.t <= (k - 1) * len)
+            .cloned()
+            .collect();
+        kept.extend(entries.iter().cloned());
+        self.track = track_of(&kept);
+        for l in &mut self.lives {
+            l.stored.retain(|s| s.step <= k);
+            if l.checked.is_some_and(|c| c > k) {
+                l.checked = None;
+            }
+        }
+        // #860: the rewinds and closed entries after it go with the rest.
+        self.fork_branches(k, len);
+    }
+
+    /// A fresh instance per item, loaded from the checkpoint at step `c`: the last whole memory at
+    /// or before it, then the pages each later one kept, and the globals and arrays; the start
+    /// function and `init` never run again.
+    pub fn restore(&self, c: i64, counted: Option<(usize, &[u8])>) -> Result<World, Failed> {
+        let mut lives = Vec::new();
+        for (i, item) in self.piece.items.iter().enumerate() {
+            let stored = &self.lives[i].stored;
+            let Some(j) = stored.iter().position(|s| s.step == c) else {
+                return Err(
+                    json!({"ok": false, "code": "bad_input", "what": format!("{} has no checkpoint at step {c}", item.id)}),
+                );
+            };
+            let whole = (0..=j)
+                .rev()
+                .find(|&w| matches!(stored[w].memory, Memory::Whole(_)))
+                .expect("the first checkpoint is whole");
+            let Memory::Whole(m) = &stored[whole].memory else {
+                unreachable!()
+            };
+            let mut memory = m.clone();
+            for s in &stored[whole + 1..=j] {
+                if let Memory::Pages(pages) = &s.memory {
+                    for (p, bytes) in pages {
+                        memory[*p as usize * PAGE as usize..][..PAGE as usize]
+                            .copy_from_slice(bytes);
+                    }
+                }
+            }
+            let bytes = counted
+                .filter(|(x, _)| *x == i)
+                .map_or(item.bytes.as_slice(), |(_, b)| b);
+            let mut live = self.revive(i, bytes, memory, &stored[j])?;
+            // #211: the map from the last whole one at or before it and the changes after it.
+            if let Some(st) = &self.lives[i].paged {
+                let from = (0..=j)
+                    .rev()
+                    .find(|&w| {
+                        matches!(
+                            stored[w].paged.as_ref().map(|k| &k.map),
+                            Some(crate::pages::MapPart::Whole(_))
+                        )
+                    })
+                    .unwrap_or(0);
+                let parts: Vec<&crate::pages::Kept> = stored[from..=j]
+                    .iter()
+                    .filter_map(|s| s.paged.as_ref())
+                    .collect();
+                live.paged = Some(crate::pages::State::restored(
+                    st.store.clone(),
+                    &parts,
+                    self.planted.pagers,
+                ));
+            }
+            lives.push(live);
+        }
+        Ok(self.restored(lives, c))
+    }
+
+    /// A fresh instance of item `i` running `bytes`, holding checkpoint `s` with `memory`.
+    pub(super) fn revive(
+        &self,
+        i: usize,
+        bytes: &[u8],
+        mut memory: Vec<u8>,
+        s: &Stored,
+    ) -> Result<Live, Failed> {
+        let item = &self.piece.items[i];
+        if self.planted.restore_keeps_regions_only {
+            let mut kept = vec![0u8; memory.len()];
+            for (at, n) in [
+                (item.reads_at, item.layout.size("reads")),
+                (item.writes_at, item.layout.size("writes")),
+            ] {
+                let r = at as usize..(at + n) as usize;
+                kept[r.clone()].copy_from_slice(&memory[r]);
+            }
+            memory = kept;
+        }
+        // #1164's planted restore: the checkpoint a seek to step 225 restores from.
+        let spacing = self.lives[i].spacing;
+        if self.planted.restore_zeroes_move_count && s.step <= 225 && 225 < s.step + spacing {
+            let at = crate::piece::global_at(&item.given, "moves_at").map(|a| a as usize);
+            if let Some(count) = at.and_then(|a| memory.get_mut(a..a + 4)) {
+                count.fill(0);
+            }
+        }
+        if self.planted.restore_copies_assets && !item.assets.is_empty() {
+            let b = item.asset_bytes();
+            memory[item.assets_at as usize..][..b.len()].copy_from_slice(&b);
+        }
+        let mut live = World::load(bytes, item, &memory, &s.globals)?;
+        live.rerun = true;
+        live.next = s.step;
+        live.ran = s.ran;
+        live.last = s.step - 1;
+        live.spacing = self.lives[i].spacing;
+        live.arrays = s.arrays.clone();
+        if !self.planted.seek_restores_arrays_only {
+            live.prev = s.prev.clone();
+        }
+        live.cursor = s.cursor.clone();
+        live.pending = s.pending.clone();
+        live.mirrors = match self.planted.mirror_restores_whole {
+            true => vec![None; s.mirrors.len()],
+            false => s.mirrors.clone(),
+        };
+        Ok(live)
+    }
+
+    /// A world of restored items at step `c` on this one's track, keeping no checkpoints. A run
+    /// from step 0 has seen c steps at step c. #860: the rewinds that came stay taken.
+    pub(super) fn restored(&self, lives: Vec<Live>, c: i64) -> World {
+        let mut w = World::of(
+            self.piece.clone(),
+            self.track.clone(),
+            lives,
+            self.planted,
+            c as u64,
+        );
+        w.branches = Branches {
+            stops: self.stops_before(c),
+            ..self.branches.clone()
+        };
+        w
+    }
+
+    /// A world of the piece's items in these states, as a seek or an opened save starts.
+    pub(crate) fn of(
+        piece: Rc<Piece>,
+        track: Track,
+        lives: Vec<Live>,
+        planted: Planted,
+        seen: u64,
+    ) -> World {
+        let published = lives.iter().map(|l| l.arrays.clone()).collect();
+        World {
+            store: piece.rewind.is_some(),
+            piece,
+            track,
+            lives,
+            published,
+            planted,
+            saves_dir: None,
+            held: None,
+            saves_ns: 0,
+            saved: Vec::new(),
+            seen,
+            adapter: String::new(),
+            cache: None,
+            branches: Branches::default(),
+            draw: Default::default(),
+        }
+    }
+
+    pub(crate) fn load(
+        bytes: &[u8],
+        item: &Item,
+        memory: &[u8],
+        globals: &[Val],
+    ) -> Result<Live, Failed> {
+        let mut runner = World::runner(bytes, &item.id)?;
+        let names = Rc::new(names(bytes));
+        runner
+            .memory_mut("memory")
+            .expect("a memory")
+            .copy_from_slice(memory);
+        for ((n, _), v) in names.globals.iter().zip(globals) {
+            runner.set(n, *v).map_err(
+                |e| json!({"ok": false, "code": "run_failed", "item": item.id, "what": e}),
+            )?;
+        }
+        let pages = (memory.len() as u64).div_ceil(PAGE) as u32;
+        Ok(Live {
+            runner,
+            names,
+            failed: false,
+            next: 0,
+            ran: 0,
+            last: -1,
+            arrays: Vec::new(),
+            prev: Vec::new(),
+            cursor: BTreeMap::new(),
+            pending: BTreeMap::new(),
+            mirrors: Vec::new(),
+            late: false,
+            filled: None,
+            mirror_ns: 0,
+            read_ns: 0,
+            pages_ns: 0,
+            asked: None,
+            // The restore wrote every page.
+            dirty: (0..pages).collect(),
+            kdirty: (0..pages).collect(),
+            rdirty: (0..pages).collect(),
+            stored: Vec::new(),
+            checked: None,
+            spacing: item.every,
+            rerun: false,
+            spare: None,
+            previewed: None,
+            preview: preview_region(item),
+            paged: None,
+        })
+    }
+
+    /// A fresh instance per item holding this world's state now, on another track: the entries at
+    /// or after step `k` (those a step from k on reads) are replaced by `entries`.
+    pub fn fork(&mut self, entries: &[Entry]) -> Result<World, Failed> {
+        let k = self.at().unwrap_or(0);
+        let mut lives = Vec::new();
+        for i in 0..self.lives.len() {
+            let item = &self.piece.items[i];
+            let (memory, globals) = {
+                let l = &mut self.lives[i];
+                (l.memory().to_vec(), l.globals())
+            };
+            let l = &self.lives[i];
+            let mut live = World::load(&item.bytes, item, &memory, &globals)?;
+            live.failed = l.failed;
+            live.next = l.next;
+            live.ran = l.ran;
+            live.last = l.last;
+            live.spacing = l.spacing;
+            live.arrays = l.arrays.clone();
+            live.prev = l.prev.clone();
+            live.cursor = l.cursor.clone();
+            live.pending = l.pending.clone();
+            live.mirrors = l.mirrors.clone();
+            live.paged = l.paged.clone();
+            lives.push(live);
+        }
+        let len = self.piece.items.first().map_or(0, |i| i.step);
+        let mut kept: Vec<Entry> = self
+            .track
+            .values()
+            .flatten()
+            .filter(|e| k > 0 && e.t <= (k - 1) * len)
+            .cloned()
+            .collect();
+        kept.extend(entries.iter().cloned());
+        let track = track_of(&kept);
+        let branches = Branches {
+            stops: self.stops_before(k),
+            taken: self
+                .branches
+                .taken
+                .min(track.get(REWIND).map_or(0, Vec::len)),
+            ..self.branches.clone()
+        };
+        Ok(World {
+            piece: self.piece.clone(),
+            track,
+            lives,
+            published: self.published.clone(),
+            store: self.piece.rewind.is_some(),
+            planted: self.planted,
+            saves_dir: None,
+            held: None,
+            saves_ns: 0,
+            saved: Vec::new(),
+            seen: self.seen,
+            adapter: self.adapter.clone(),
+            cache: None,
+            branches,
+            draw: self.draw,
+        })
+    }
+
+    /// The counts of each block of item `i`'s counted rewrite, zeroed first.
+    pub fn zero_blocks(&mut self, i: usize) {
+        for b in 0..self.lives[i].names.blocks {
+            let _ = self.lives[i]
+                .runner
+                .set(&format!("{BLOCK}{b}"), Val::I64(0));
+        }
+    }
+    pub fn blocks(&mut self, i: usize) -> Vec<i64> {
+        (0..self.lives[i].names.blocks)
+            .map(
+                |b| match self.lives[i].runner.global(&format!("{BLOCK}{b}")) {
+                    Some(Val::I64(n)) => n,
+                    _ => 0,
+                },
+            )
+            .collect()
+    }
+}
+
+/// `fields`' entries added to the object `v`.
+pub(super) fn extend(v: &mut Value, fields: Value) {
+    if let (Some(o), Value::Object(f)) = (v.as_object_mut(), fields) {
+        o.extend(f);
+    }
+}

@@ -15,11 +15,13 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
+#[cfg(test)]
+use crate::arming::HOLD_STILL;
 use crate::{
     answer::Answer,
-    arming::{Machine, Outcome, Press, Slot, Source, State, HOLD_STILL},
-    confirm,
-    kinds::Model,
+    arming::{Machine, Outcome, Press, Slot, Source, State},
+    confirm, copy,
+    kinds::{self, Hold, Model},
     states,
 };
 
@@ -27,10 +29,16 @@ use crate::{
 /// tall): a slot smaller than this, or than the card as drawn, never arms.
 pub const CARD_SIZE: [i64; 2] = [480, 560];
 /// What a card says before it arms when words or an image are set and no option is chosen: the answer is this
-/// ask's alone, never a decision for the key.
-pub const ANSWERS_THIS_ASK_ONLY: &str = "Answers this ask only";
+/// ask's alone, never a decision for the key. Each line's key in the app's table (#2403).
+pub const ANSWERS_THIS_ASK_ONLY: &str = "question.answers_this_ask_only";
 /// The same on an authority card: words never run the plan.
-pub const WONT_RUN: &str = "Sends your words as the reason; this won't run";
+pub const WONT_RUN: &str = "question.wont_run";
+/// The options a card shows before it folds the rest behind a count: about nine a level (#394, #1808).
+pub const SHOWN_OPTIONS: usize = 9;
+/// What a card says on a press while options folded behind its count were never shown (#1808).
+pub const OPEN_THE_FOLD: &str = "question.open_the_fold";
+/// What a long card says on a press while its end was never shown (#1808).
+pub const READ_TO_THE_END: &str = "question.read_to_the_end";
 
 /// Presentations are numbered across the process, so a card presented again after a relaunch gets a new `seq`.
 static NEXT_SEQ: AtomicU64 = AtomicU64::new(0);
@@ -75,6 +83,8 @@ pub enum Target {
     SignIn,
     /// A sign-in task's plan line, which opens the maker's price page (#1349).
     Page,
+    /// The count the options past the ninth fold behind, which shows them (#1808).
+    Fold,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -94,7 +104,7 @@ pub struct Input {
 }
 
 /// What the card says when you approve with the ask's own steps switched off.
-pub const SWITCH_FIRST: &str = "Switch on this ask's steps to approve it";
+pub const SWITCH_FIRST: &str = "question.switch_first";
 
 /// What the card did with an input.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -141,6 +151,11 @@ pub enum Row {
     SignIn,
     /// A sign-in task's plan line (#1349), which opens the maker's price page.
     Page(String),
+    /// The options past the ninth, folded behind their count until it's pressed (#1808).
+    Fold {
+        hidden: usize,
+        label: String,
+    },
 }
 
 impl Row {
@@ -148,10 +163,13 @@ impl Row {
     pub fn label(&self) -> &str {
         match self {
             Row::Text(text) | Row::Page(text) => text,
-            Row::Option { label, .. } | Row::Step { label, .. } | Row::Call { label, .. } => label,
-            Row::Send => "Send",
-            Row::Undo => "Undo",
-            Row::SignIn => "Sign in",
+            Row::Option { label, .. }
+            | Row::Step { label, .. }
+            | Row::Call { label, .. }
+            | Row::Fold { label, .. } => label,
+            Row::Send => copy::text("question.send"),
+            Row::Undo => copy::text("question.undo"),
+            Row::SignIn => copy::text("question.sign_in"),
         }
     }
 
@@ -222,6 +240,17 @@ struct Receipt {
     says: String,
     /// The other open asks the answer also answered, as the record stood then: handle and question.
     also: Vec<(String, String)>,
+    /// A yes to steps that can't be undone, which the hub holds before they start (#1101).
+    held: Option<Held>,
+}
+
+/// The hub's hold on a yes, as the receipt counts it down (#1101): the asks whose steps wait, when they start, and
+/// whether they did. Once they ran the receipt has no Undo.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Held {
+    asks: Vec<String>,
+    until: u64,
+    ran: bool,
 }
 
 /// An answer through Send from an input that isn't hardware, waiting for the OS.
@@ -252,11 +281,19 @@ pub struct Controller {
     switch_waiting: Option<SwitchWaiting>,
     /// What the card says after a refused press, until it arms.
     holding: Option<&'static str>,
+    /// Whether the card, as laid out, showed its end: unmeasured, not yet, or once (#1808).
+    end: Option<bool>,
+    /// The options folded behind their count were shown (#1808).
+    fold_open: bool,
     /// An approval was held back because the ask's own steps are off.
     switch_first: bool,
     receipt: Option<Receipt>,
     answers: Vec<Value>,
+    /// The `ask.undo` params written since last taken: Undo inside the hub's hold (#1101).
+    undos: Vec<Value>,
     usage: Vec<Value>,
+    /// The clock as the shell last gave it: what a hold's countdown reads (#1101).
+    now: u64,
 }
 
 impl Controller {
@@ -269,7 +306,12 @@ impl Controller {
         slot: Slot,
         faults: Faults,
     ) -> Option<Controller> {
-        if !states::is_open(events, ask) {
+        // An answered yes whose steps the hub still holds shows its receipt, counting down with Undo (#1101).
+        let held = match kinds::hold(events, ask) {
+            Some(Hold::Waiting(until)) if !states::is_open(events, ask) => Some(until),
+            _ => None,
+        };
+        if !states::is_open(events, ask) && held.is_none() {
             return None;
         }
         let model = Model::read(events, ask, now)?;
@@ -287,12 +329,29 @@ impl Controller {
             send_waiting: None,
             switch_waiting: None,
             holding: None,
+            end: None,
+            fold_open: false,
             switch_first: false,
             receipt: None,
             answers: Vec::new(),
+            undos: Vec::new(),
             usage: Vec::new(),
+            now,
         };
+        controller.machine.hold(controller.held(), now);
         controller.record("presented", now);
+        if let Some(until) = held {
+            controller.machine.answered();
+            controller.receipt = Some(Receipt {
+                says: String::new(),
+                also: Vec::new(),
+                held: Some(Held {
+                    asks: vec![ask.to_owned()],
+                    until,
+                    ran: false,
+                }),
+            });
+        }
         Some(controller)
     }
 
@@ -322,12 +381,64 @@ impl Controller {
         }
     }
 
-    /// Time passed to `now`: the card arms once its interval ran, and stops saying to hold still.
-    pub fn tick(&mut self, now: u64) {
+    /// Time passed to `now`: the card arms once its interval ran, and stops saying to hold still. Whether that
+    /// changed what the card shows (#1482): a tick that arms nothing draws nothing.
+    pub fn tick(&mut self, now: u64) -> bool {
+        let (state, holding, counted) = (self.machine.state(), self.holding, self.counted());
+        self.now = now;
         self.machine.tick(now);
         if matches!(self.machine.state(), State::Armed { .. }) {
             self.holding = None;
         }
+        (self.machine.state(), self.holding, self.counted()) != (state, holding, counted)
+    }
+
+    /// The whole seconds before a held yes's steps start, as the receipt says them (#1101); `None` with no hold
+    /// counting down.
+    fn counted(&self) -> Option<u64> {
+        let held = self.receipt.as_ref()?.held.as_ref().filter(|held| !held.ran)?;
+        Some(held.until.saturating_sub(self.now).div_ceil(1000))
+    }
+
+    /// How many options are folded behind their count: those past the ninth, until it's pressed (#1808).
+    pub fn folded(&self) -> usize {
+        if self.fold_open {
+            0
+        } else {
+            self.model.options.len().saturating_sub(SHOWN_OPTIONS)
+        }
+    }
+
+    /// Why the card can't arm besides its interval and its slot (#1808): options never shown, or an end never shown.
+    /// #1808's planted card arms with its fold never opened.
+    fn held(&self) -> Option<&'static str> {
+        if self.folded() > 0 && !crate::plain::planted("card-arms-folded") {
+            Some(copy::text(OPEN_THE_FOLD))
+        } else if self.end == Some(false) {
+            Some(copy::text(READ_TO_THE_END))
+        } else {
+            None
+        }
+    }
+
+    /// Tells the machine what holds the card now; the line a refused press left says the reason now, or leaves.
+    fn rehold(&mut self, now: u64) {
+        self.machine.hold(self.held(), now);
+        if matches!(self.machine.state(), State::Armed { .. }) {
+            self.holding = None;
+        } else if self.holding.is_some() {
+            self.holding = Some(self.machine.says());
+        }
+    }
+
+    /// The card on its page, as laid out at `now`, showed its end (`true`), or its rows run past what shows and their
+    /// end hasn't (#1808). An end once shown stays shown while the card shows the same thing.
+    pub fn end_shown(&mut self, shown: bool, now: u64) {
+        if self.end == Some(true) || self.end == Some(shown) {
+            return;
+        }
+        self.end = Some(shown);
+        self.rehold(now);
     }
 
     /// The record changed while the card shows. Its scope and count stay as presented (the planted twin re-reads
@@ -335,6 +446,7 @@ impl Controller {
     /// finishing, a batch member closing, the plan landing): the card shows it, each member still in the batch
     /// keeping its switch, and, as any change to what it shows, is presented again unarmed.
     pub fn record_changed(&mut self, events: &[Value], now: u64) {
+        self.hold_changed(events, now);
         // Answered on another device, decided for you or defaulted: the core refuses any answer now.
         if !states::is_open(events, &self.model.ask) {
             self.machine.withdrawn();
@@ -377,10 +489,41 @@ impl Controller {
             self.model = fresh;
             self.switch_first = false;
             self.machine.present(now, self.slot);
+            // What it shows changed: its end and its fold are to be shown again (#1808).
+            self.end = None;
+            self.fold_open = false;
+            self.machine.hold(self.held(), now);
             self.send_down = None;
             self.send_waiting = None;
             self.holding = None;
             self.record("presented", now);
+        }
+    }
+
+    /// Whether the receipt counts down a yes the hub holds, whose end the record will say (#1101).
+    pub fn counting_down(&self) -> bool {
+        self.counted().is_some()
+    }
+
+    /// The hub's hold, as the core recorded it (#1101): when the steps start, that they did, or that the yes was
+    /// withdrawn (Undo on another device, or the hub starting again during it), when the ask is open here again.
+    pub fn hold_changed(&mut self, events: &[Value], now: u64) {
+        self.now = now;
+        if let Some(held) = self.receipt.as_mut().and_then(|receipt| receipt.held.as_mut()) {
+            let holds: Vec<Option<Hold>> = held.asks.iter().map(|ask| kinds::hold(events, ask)).collect();
+            if holds.contains(&Some(Hold::Withdrawn)) {
+                self.receipt = None;
+                self.machine.undo(now);
+                self.record("undone", now);
+            } else {
+                if let Some(until) = holds.iter().find_map(|hold| match hold {
+                    Some(Hold::Waiting(until)) => Some(*until),
+                    _ => None,
+                }) {
+                    held.until = until;
+                }
+                held.ran = held.ran || holds.iter().all(|hold| *hold == Some(Hold::Ran));
+            }
         }
     }
 
@@ -390,9 +533,21 @@ impl Controller {
         self.machine.measured(size, now);
     }
 
+    /// The card on its ask's page measured `size` points (#1808): its rows scroll inside the page, so it needs no more
+    /// than the page, and no least size of its own.
+    pub fn measured_on_page(&mut self, size: [i64; 2], now: u64) {
+        self.machine.measured(size, now);
+    }
+
     /// The `ask.answer` params written since last taken, in order, for the shell to sign and send.
     pub fn take_answers(&mut self) -> Vec<Value> {
         std::mem::take(&mut self.answers)
+    }
+
+    /// The `ask.undo` params written since last taken, for the shell to sign and send: Undo inside the hub's hold
+    /// reaches the hub's undo, the one `deep inbox undo` calls (#1101).
+    pub fn take_undos(&mut self) -> Vec<Value> {
+        std::mem::take(&mut self.undos)
     }
 
     /// The usage rows written since last taken, in order.
@@ -420,10 +575,26 @@ impl Controller {
             rows.push(Row::Text(crate::plain::PLANTED_PR_LINE.to_owned()));
         }
         if let Some(receipt) = &self.receipt {
-            rows.push(Row::Text(format!("Answered: {}", receipt.says)));
-            rows.push(Row::Undo);
+            // A yes the hub holds counts down with Undo; once its steps ran, they can't be taken back (#1101).
+            match (&receipt.held, self.counted()) {
+                (Some(held), _) if held.ran => {
+                    rows.push(Row::Text(copy::text("question.ran_for_good").to_owned()));
+                    // #1101's planted receipt still offers Undo once its steps ran.
+                    if crate::plain::planted("receipt-keeps-undo") {
+                        rows.push(Row::Undo);
+                    }
+                }
+                (Some(_), Some(seconds)) => {
+                    rows.push(Row::Text(copy::count("question.starts_in", seconds, &[])));
+                    rows.push(Row::Undo);
+                }
+                _ => {
+                    rows.push(Row::Text(copy::fill("question.answered", &[&receipt.says])));
+                    rows.push(Row::Undo);
+                }
+            }
             for (_, question) in &receipt.also {
-                rows.push(Row::Text(format!("Also answered: {question}")));
+                rows.push(Row::Text(copy::fill("question.also_answered", &[question])));
             }
             return rows;
         }
@@ -445,52 +616,68 @@ impl Controller {
             }));
             return rows;
         }
+        let folded = self.folded();
         for (index, option) in self.model.options.iter().enumerate() {
-            let mut label = option.label.clone();
-            if option.recommended {
-                label.push_str(" (recommended)");
+            if folded > 0 && index >= SHOWN_OPTIONS {
+                break;
             }
-            if let Some(cost) = &option.cost {
-                label.push_str(&format!(" · {cost}"));
-            }
+            let label = match (option.recommended, &option.cost) {
+                (true, Some(cost)) => {
+                    copy::fill("question.recommended_cost", &[&option.label, cost])
+                }
+                (true, None) => copy::fill("question.recommended", &[&option.label]),
+                (false, Some(cost)) => format!("{} · {cost}", option.label),
+                (false, None) => option.label.clone(),
+            };
             rows.push(Row::Option {
                 index,
                 label,
                 focused: self.focused == Some(index),
             });
         }
+        if folded > 0 {
+            rows.push(Row::Fold {
+                hidden: folded,
+                label: copy::count("question.more_options", folded as u64, &[]),
+            });
+        }
         if !self.faults.no_default {
-            rows.push(Row::Text(format!(
-                "Default: {} · at {}",
-                self.model.default, self.model.applies
+            rows.push(Row::Text(copy::fill(
+                "question.default_at",
+                &[&self.model.default, &self.model.applies],
             )));
         }
         for (name, value) in &self.model.fields {
-            if self.faults.diff_after_answer && (name == "moved" || name.starts_with("checks on")) {
+            if self.faults.diff_after_answer && crate::kinds::is_moved(name) {
                 continue;
             }
-            rows.push(Row::Text(format!("{name}: {value}")));
+            rows.push(Row::Text(copy::fill("question.field", &[name, value])));
         }
         // A step is a switch: its state is the node's value and its mark, never a word in its label (#1458).
         for (index, step) in self.model.steps.iter().enumerate() {
-            let mut label = format!(
-                "{} · {}",
-                step.does,
+            let mut label = copy::fill(
                 if step.undoable {
-                    "can be undone"
+                    "question.step_undoable"
                 } else {
-                    "can't be undone"
-                }
+                    "question.step_not_undoable"
+                },
+                &[&step.does],
             );
             // #1458's planted switch says its state as a word in its label.
             if crate::plain::planted("step-state-in-label") {
-                label.push_str(if step.on { " · on" } else { " · off" });
+                let state = if step.on { " · on" } else { " · off" }; // copy-exception: planted
+                label.push_str(state);
             }
-            rows.push(Row::Step {
-                index,
-                label,
-                on: step.on,
-            });
+            // One step has no switch (#1101): Allow is its switch. #1101's planted card keeps it.
+            if self.model.steps.len() == 1 && !crate::plain::planted("single-step-switch") {
+                rows.push(Row::Text(label));
+            } else {
+                rows.push(Row::Step {
+                    index,
+                    label,
+                    on: step.on,
+                });
+            }
         }
         if let Some(label) = self.model.approve_label() {
             rows.push(Row::Text(label));
@@ -501,17 +688,26 @@ impl Controller {
         let mut unannounced = crate::plain::planted("card-row-reverts-unannounced");
         let mut timeless = crate::plain::planted("card-row-without-time");
         for call in &self.model.calls {
-            let mut lines = vec![call.question.clone(), format!("{} (recommended)", call.yes)];
+            let mut lines = vec![
+                call.question.clone(),
+                copy::fill("question.recommended", &[&call.yes]),
+            ];
             if unannounced && call.sends == crate::kinds::REVERTS {
                 unannounced = false;
                 lines.push(call.back.clone());
             } else {
-                lines.push(format!("{} · {}", call.back, call.sends));
+                lines.push(copy::fill(
+                    "question.back_sends",
+                    &[&call.back, &copy::text(call.sends)],
+                ));
             }
             if timeless {
                 timeless = false;
             } else {
-                lines.push(format!("{} applies at {}", call.yes, call.applies));
+                lines.push(copy::fill(
+                    "question.applies_at",
+                    &[&call.yes, &call.applies],
+                ));
             }
             rows.push(Row::Call {
                 ask: call.ask.clone(),
@@ -520,36 +716,43 @@ impl Controller {
             });
         }
         for call in &self.model.past {
-            rows.push(Row::Text(format!(
-                "Past call: {} · {}",
-                call.question, call.answer
+            rows.push(Row::Text(copy::fill(
+                "question.past_call",
+                &[&call.question, &call.answer],
             )));
         }
         if let Some(scope) = self.model.scope.as_ref().filter(|_| !self.faults.no_scope) {
             rows.push(Row::Text(scope.words.clone()));
             if scope.also > 0 {
-                rows.push(Row::Text(format!("Answers {} more", scope.also)));
+                rows.push(Row::Text(copy::count(
+                    "question.answers_more",
+                    scope.also as u64,
+                    &[],
+                )));
             }
         }
         if !self.words.is_empty() {
-            rows.push(Row::Text(format!("Your words: {}", self.words)));
+            rows.push(Row::Text(copy::fill("question.your_words", &[&self.words])));
         }
         if let Some(image) = &self.image {
-            rows.push(Row::Text(format!("Your image: {}", &image[..12])));
+            rows.push(Row::Text(copy::fill(
+                "question.your_image",
+                &[&&image[..12]],
+            )));
         }
         if !self.words.is_empty() || self.image.is_some() {
             rows.push(Row::Text(
-                if self.allow_option().is_some() {
+                copy::text(if self.allow_option().is_some() {
                     WONT_RUN
                 } else {
                     ANSWERS_THIS_ASK_ONLY
-                }
+                })
                 .to_owned(),
             ));
         }
         rows.push(Row::Send);
         if self.switch_first && !self.model.own_on() {
-            rows.push(Row::Text(SWITCH_FIRST.to_owned()));
+            rows.push(Row::Text(copy::text(SWITCH_FIRST).to_owned()));
         }
         if let Some(holding) = self.holding {
             rows.push(Row::Text(holding.to_owned()));
@@ -560,30 +763,69 @@ impl Controller {
     /// The card's rows on an ask's page (#1461), where the box under it holds your words, the lines that say what
     /// they do and the send control: every row but those.
     pub fn page_rows(&self) -> Vec<Row> {
+        let words = (!self.words.is_empty())
+            .then(|| visible(&copy::fill("question.your_words", &[&self.words])));
         self.rows()
             .into_iter()
             .filter(|row| match row {
                 Row::Send => false,
                 Row::Text(text) => {
-                    !text.starts_with("Your words: ")
-                        && text != WONT_RUN
-                        && text != ANSWERS_THIS_ASK_ONLY
+                    words.as_ref() != Some(text)
+                        && text != copy::text(WONT_RUN)
+                        && text != copy::text(ANSWERS_THIS_ASK_ONLY)
                 }
                 _ => true,
             })
             .collect()
     }
 
+    /// The card's rows on its page, split where it scrolls (#1808): the rows read above, which scroll, and its last
+    /// block, which stays in view under them: its options and their count, its default, what it's saved as, the steps a
+    /// yes runs, the line held back for a switch and what a press was told; on a receipt, its Undo; on a sign-in task,
+    /// its button.
+    pub fn page_parts(&self) -> (Vec<Row>, Vec<Row>) {
+        let scope = self.model.scope.as_ref().filter(|_| !self.faults.no_scope);
+        let last: Vec<String> = [
+            (!self.faults.no_default).then(|| {
+                copy::fill(
+                    "question.default_at",
+                    &[&self.model.default, &self.model.applies],
+                )
+            }),
+            scope.map(|scope| scope.words.clone()),
+            scope
+                .filter(|scope| scope.also > 0)
+                .map(|scope| copy::count("question.answers_more", scope.also as u64, &[])),
+            self.model.approve_label(),
+            self.switch_first
+                .then(|| copy::text(SWITCH_FIRST).to_owned()),
+            self.holding.map(str::to_owned),
+        ]
+        .into_iter()
+        .flatten()
+        .map(|text| visible(&text))
+        .collect();
+        self.page_rows().into_iter().partition(|row| match row {
+            Row::Option { .. } | Row::Fold { .. } | Row::Undo | Row::SignIn => false,
+            Row::Text(text) => !last.contains(text),
+            _ => true,
+        })
+    }
+
     /// The box's send control on an ask's page (#1461), saying what the press does: Say no on an approval, whose words
     /// go as the reason, else Answer; and the lines above it once it holds words.
     pub fn words_send(&self) -> (&'static str, Vec<&'static str>) {
         let approval = self.allow_option().is_some();
-        let label = if approval { "Say no" } else { "Answer" };
+        let label = copy::text(if approval {
+            "question.say_no"
+        } else {
+            "question.answer"
+        });
         let mut lines = Vec::new();
         if !self.words.is_empty() || self.image.is_some() {
-            lines.push(ANSWERS_THIS_ASK_ONLY);
+            lines.push(copy::text(ANSWERS_THIS_ASK_ONLY));
             if approval {
-                lines.push(WONT_RUN);
+                lines.push(copy::text(WONT_RUN));
             }
         }
         (label, lines)
@@ -659,6 +901,14 @@ impl Controller {
                 (Some(page), Phase::Up) if shown => Did::Page(page.clone()),
                 _ => Did::Nothing,
             },
+            // The count shows the options folded behind it (#1808): it answers nothing.
+            Target::Fold => {
+                if phase == Phase::Up && shown && !self.fold_open {
+                    self.fold_open = true;
+                    self.rehold(now);
+                }
+                Did::Nothing
+            }
             // An approval whose own steps are off runs nothing the core would take: the card holds it back.
             Target::Option(index) if self.is_allow(index) && !self.model.own_on() => {
                 self.switch_first = true;
@@ -688,7 +938,8 @@ impl Controller {
                         self.send_down = Some(source);
                         Did::Nothing
                     } else {
-                        self.refuse(now)
+                        let says = self.machine.says();
+                        self.refuse(says, now)
                     }
                 }
                 Phase::Up => {
@@ -706,19 +957,25 @@ impl Controller {
                         self.send_waiting = Some(SendWaiting {
                             seq: self.machine.seq(),
                         });
-                        Did::NeedsConfirmation(confirm::reason(&self.model.question, "Send"))
+                        Did::NeedsConfirmation(confirm::reason(
+                            &self.model.question,
+                            copy::text("question.send"),
+                        ))
                     }
                 }
             },
             // The receipt's Undo and a step's switch change what the card does next: hardware works them, and any
             // other press once the OS confirms you, as an option's does (#1462).
             Target::Undo => {
-                if phase != Phase::Up || self.receipt.is_none() {
+                if phase != Phase::Up || !self.undoable() {
                     return Did::Nothing;
                 }
                 if !source.trusted() {
                     self.switch_waiting = Some(SwitchWaiting::Undo);
-                    return Did::NeedsConfirmation(confirm::reason(&self.model.question, "Undo"));
+                    return Did::NeedsConfirmation(confirm::reason(
+                        &self.model.question,
+                        copy::text("question.undo"),
+                    ));
                 }
                 self.undo_answer(t, now)
             }
@@ -821,7 +1078,7 @@ impl Controller {
                     self.toggle_step(index);
                     Did::Switched
                 }
-                (true, SwitchWaiting::Undo) if self.receipt.is_some() => self.undo_answer(now, now),
+                (true, SwitchWaiting::Undo) if self.undoable() => self.undo_answer(now, now),
                 (true, SwitchWaiting::Undo) => Did::Nothing,
             };
         }
@@ -849,8 +1106,19 @@ impl Controller {
         Did::Nothing
     }
 
-    /// Takes back the answer the receipt shows.
+    /// Whether the receipt offers Undo: it shows, and no step it held has started (#1101).
+    fn undoable(&self) -> bool {
+        self.receipt.as_ref().is_some_and(|receipt| {
+            !receipt.held.as_ref().is_some_and(|held| held.ran)
+                || crate::plain::planted("receipt-keeps-undo")
+        })
+    }
+
+    /// Takes back the answer the receipt shows. Inside the hub's hold it asks the hub to withdraw the yes (#1101).
     fn undo_answer(&mut self, t: u64, now: u64) -> Did {
+        if self.receipt.as_ref().is_some_and(|receipt| receipt.held.is_some()) {
+            self.undos.push(json!({ "ask": self.model.ask }));
+        }
         self.receipt = None;
         self.send_waiting = None;
         self.machine.undo(t);
@@ -875,7 +1143,7 @@ impl Controller {
     fn took(&mut self, outcome: Outcome, t: u64, events: &[Value], now: u64) -> Did {
         match outcome {
             Outcome::Ignored => Did::Nothing,
-            Outcome::Refused { .. } => self.refuse(now),
+            Outcome::Refused { says, .. } => self.refuse(says, now),
             Outcome::Answered { option, .. } => {
                 self.send_waiting = None;
                 self.answer_option(option, t, events, now);
@@ -898,8 +1166,8 @@ impl Controller {
         }
     }
 
-    fn refuse(&mut self, now: u64) -> Did {
-        self.holding = Some(HOLD_STILL);
+    fn refuse(&mut self, says: &'static str, now: u64) -> Did {
+        self.holding = Some(says);
         self.record("refused", now);
         Did::Refused
     }
@@ -959,7 +1227,36 @@ impl Controller {
                 }
             }
         }
-        self.receipt = Some(Receipt { says: label, also });
+        // The steps a yes runs that can't be undone wait out the hub's hold first (#1101).
+        let held = allow.then(|| self.held_by_yes()).filter(|asks| !asks.is_empty());
+        self.receipt = Some(Receipt {
+            says: label,
+            also,
+            held: held.map(|asks| Held {
+                asks,
+                until: now + crate::kinds::HOLD_MS,
+                ran: false,
+            }),
+        });
+    }
+
+    /// The asks a yes on this card runs whose plans hold a public step that can't be undone, which the hub holds
+    /// before it starts (#1101), as the asks core decides.
+    fn held_by_yes(&self) -> Vec<String> {
+        let runs = if self.model.batch.len() > 1 {
+            self.model.runs()
+        } else {
+            vec![self.model.own_member]
+        };
+        runs.into_iter()
+            .filter(|member| {
+                self.model
+                    .steps
+                    .iter()
+                    .any(|step| step.member == *member && !step.undoable && step.public)
+            })
+            .filter_map(|member| self.model.batch.get(member).map(|(ask, _)| ask.clone()))
+            .collect()
     }
 
     /// The answer through Send with no option: your words and image alone, this ask's only, never a decision
@@ -1004,13 +1301,14 @@ impl Controller {
         }
         self.record("answered", now);
         let says = match (&answer.words, &answer.image) {
-            (Some(words), _) => format!("your words, “{words}”"),
-            (None, Some(_)) => "your image".to_owned(),
-            (None, None) => "nothing".to_owned(),
+            (Some(words), _) => copy::fill("question.said_words", &[words]),
+            (None, Some(_)) => copy::text("question.said_image").to_owned(),
+            (None, None) => copy::text("question.said_nothing").to_owned(),
         };
         self.receipt = Some(Receipt {
             says,
             also: Vec::new(),
+            held: None,
         });
     }
 
@@ -1050,643 +1348,4 @@ fn token(ask: &str, seq: u64, t: u64) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::arming::ARM_AFTER;
-
-    const SLOT: Slot = Slot {
-        rect: [100, 100, CARD_SIZE[0], CARD_SIZE[1]],
-        visible: [0, 0, 1512, 982],
-    };
-    const NOW: u64 = 1_800_000_000_000;
-
-    fn ask(id: &str, kind: &str, options: Value, extra: Value) -> Value {
-        let mut data = json!({
-            "kind": kind, "question": format!("Question {id}?"), "options": options, "recommended": null,
-            "deadline": NOW + 3 * 86_400_000, "default": options[0]["id"], "key": "k",
-            "pinned_to": {"kind": "commit", "ref": "abc"},
-        });
-        if let Some(extra) = extra.as_object() {
-            for (name, value) in extra {
-                data[name] = value.clone();
-            }
-        }
-        json!({"kind": "ask.created", "id": id, "session": "S", "log_pos": 1, "data": data})
-    }
-
-    fn taste(id: &str) -> Value {
-        ask(
-            id,
-            "taste",
-            json!([{"id": "blue", "label": "Blue", "decision": "none"}, {"id": "green", "label": "Green", "decision": "none"}]),
-            json!({}),
-        )
-    }
-
-    fn hardware(t: u64, target: Target, phase: Phase) -> Input {
-        Input {
-            t,
-            source: Source::Hardware,
-            target,
-            phase,
-        }
-    }
-
-    /// A press the OS can't vouch for, from pid 4242.
-    fn synthetic(t: u64, target: Target, phase: Phase) -> Input {
-        Input {
-            t,
-            source: Source::Synthetic { pid: Some(4242) },
-            target,
-            phase,
-        }
-    }
-
-    /// An authority ask to push origin/x, declined by default.
-    fn approval(id: &str) -> Value {
-        ask(
-            id,
-            "authority",
-            json!([{"id": "approve", "label": "Allow", "decision": "allow"}, {"id": "decline", "label": "Decline", "decision": "deny"}]),
-            json!({"default": "decline", "subject": {"effect": "push", "target": {"ref": "origin/x"}}}),
-        )
-    }
-
-    /// The usage rows the card wrote since they were last taken, by name.
-    fn usage_rows(card: &mut Controller) -> Vec<String> {
-        card.take_usage()
-            .iter()
-            .map(|row| row["row"].as_str().unwrap().to_owned())
-            .collect()
-    }
-
-    fn click(controller: &mut Controller, events: &[Value], t: u64, target: Target) -> Did {
-        match controller.press(hardware(t, target, Phase::Down), events, t) {
-            Did::Nothing => controller.press(hardware(t + 30, target, Phase::Up), events, t + 30),
-            other => other,
-        }
-    }
-
-    #[test]
-    fn a_sign_in_task_draws_one_button_and_its_steps_and_its_press_starts_the_agents_sign_in_answering_nothing(
-    ) {
-        let events = vec![ask(
-            "S",
-            "unblock",
-            json!([{"id": "done", "label": "I did it", "decision": "none"}, {"id": "wait", "label": "Leave it blocked", "decision": "none"}]),
-            json!({
-                "steps": ["Press Sign in: Claude Code opens its own window or browser page", "Claude Code needs a paid plan."],
-                "where": "Claude Code's own window or browser page", "why": "w", "unblocks": ["req:0"], "proves": "claude-code sign-in probe",
-            }),
-        )];
-        let mut card = Controller::present(&events, "ask:S", NOW, SLOT, Faults::default()).unwrap();
-        let controls: Vec<Row> = card
-            .rows()
-            .into_iter()
-            .filter(|row| !matches!(row, Row::Text(_)))
-            .collect();
-        assert_eq!(
-            controls,
-            vec![Row::SignIn],
-            "one button, Sign in: no option and no Send"
-        );
-        assert!(card
-            .lines()
-            .contains(&"Claude Code needs a paid plan.".to_owned()));
-        assert_eq!(
-            click(&mut card, &events, NOW + 10, Target::SignIn),
-            Did::SignIn("ask:S".into())
-        );
-        assert!(card.take_answers().is_empty(), "Sign in answers nothing");
-    }
-
-    #[test]
-    fn a_sign_in_tasks_plan_line_opens_the_makers_price_page_from_the_apps_own_facts() {
-        // The record's step names the page's host; the address opened is the one the app ships, whatever the record says.
-        let events = vec![ask(
-            "P",
-            "unblock",
-            json!([{"id": "done", "label": "I did it", "decision": "none"}]),
-            json!({
-                "steps": ["Press Sign in", "Claude Code needs a paid plan. Its plans: claude.com/pricing"],
-                "where": "w", "why": "w", "unblocks": ["req:0"], "proves": "claude-code sign-in probe",
-            }),
-        )];
-        let mut card = Controller::present(&events, "ask:P", NOW, SLOT, Faults::default()).unwrap();
-        let controls: Vec<Row> = card
-            .rows()
-            .into_iter()
-            .filter(|row| !matches!(row, Row::Text(_)))
-            .collect();
-        assert_eq!(
-            controls,
-            vec![
-                Row::SignIn,
-                Row::Page("Claude Code needs a paid plan. Its plans: claude.com/pricing".into())
-            ],
-            "Sign in, and the plan line as the way to the price page"
-        );
-        assert_eq!(
-            click(&mut card, &events, NOW + 10, Target::Page),
-            Did::Page("https://claude.com/pricing".into())
-        );
-        assert!(
-            card.take_answers().is_empty(),
-            "the price page answers nothing"
-        );
-    }
-
-    #[test]
-    fn a_click_before_the_interval_is_refused_and_recorded_once_and_one_after_answers_the_drawn_option(
-    ) {
-        let events = vec![taste("A")];
-        let mut card = Controller::present(&events, "ask:A", NOW, SLOT, Faults::default()).unwrap();
-        assert_eq!(
-            click(&mut card, &events, NOW + ARM_AFTER - 1, Target::Option(1)),
-            Did::Refused
-        );
-        assert!(card.lines().contains(&HOLD_STILL.to_owned()));
-        assert!(card.take_answers().is_empty());
-        card.tick(NOW + ARM_AFTER);
-        assert!(
-            !card.lines().contains(&HOLD_STILL.to_owned()),
-            "armed, it no longer says to hold still"
-        );
-        assert_eq!(
-            click(&mut card, &events, NOW + ARM_AFTER, Target::Option(1)),
-            Did::Answered
-        );
-        let answers = card.take_answers();
-        assert_eq!(answers.len(), 1);
-        assert_eq!(answers[0]["option"], "green");
-        assert_eq!(answers[0]["ask"], "ask:A");
-        assert!(
-            answers[0].get("token").is_none(),
-            "a taste answer carries no click token"
-        );
-        let rows = usage_rows(&mut card);
-        assert_eq!(rows, ["presented", "refused", "answered"]);
-        assert_eq!(card.state_name(), "answered");
-        assert!(card.lines().contains(&"Undo".to_owned()));
-        assert_eq!(
-            click(&mut card, &events, NOW + ARM_AFTER + 100, Target::Undo),
-            Did::Undone
-        );
-        assert_eq!(card.state_name(), "presented");
-        assert_eq!(card.take_usage()[0]["row"], "undone");
-    }
-
-    #[test]
-    fn an_approval_whose_own_step_cant_be_undone_waits_for_its_switch() {
-        let delete = approval("D");
-        let events = vec![
-            delete,
-            json!({"kind": "plan.proposed", "id": "p", "writer": "core", "session": "S", "log_pos": 2, "data": {"ask": "ask:D", "steps": [{"does": "delete the branch", "undo": "none", "public": true}], "diff": "d", "hash": "h"}}),
-        ];
-        let mut card = Controller::present(&events, "ask:D", NOW, SLOT, Faults::default()).unwrap();
-        assert_eq!(card.approve(), Some((0, 1)));
-        assert_eq!(
-            click(&mut card, &events, NOW + ARM_AFTER, Target::Option(0)),
-            Did::Nothing
-        );
-        assert!(
-            card.take_answers().is_empty(),
-            "the core would run the delete: nothing is sent"
-        );
-        assert!(card.lines().contains(&SWITCH_FIRST.to_owned()));
-        assert_eq!(
-            click(&mut card, &events, NOW + ARM_AFTER + 100, Target::Step(0)),
-            Did::Switched
-        );
-        assert!(!card.lines().contains(&SWITCH_FIRST.to_owned()));
-        assert_eq!(card.approve(), Some((1, 1)));
-        assert_eq!(
-            click(&mut card, &events, NOW + ARM_AFTER + 200, Target::Option(0)),
-            Did::Answered
-        );
-        assert_eq!(card.take_answers()[0]["option"], "approve");
-    }
-
-    #[test]
-    fn switching_the_asks_own_steps_off_while_the_os_asks_sends_nothing() {
-        let push = approval("P");
-        let events = vec![
-            push,
-            json!({"kind": "plan.proposed", "id": "p", "writer": "core", "session": "S", "log_pos": 2, "data": {"ask": "ask:P", "steps": [{"does": "push the branch", "undo": "force back", "public": true}], "diff": "d", "hash": "h"}}),
-        ];
-        let mut card = Controller::present(&events, "ask:P", NOW, SLOT, Faults::default()).unwrap();
-        let t = NOW + ARM_AFTER;
-        for (dt, phase) in [(0, Phase::Down), (30, Phase::Up)] {
-            card.press(synthetic(t + dt, Target::Option(0), phase), &events, t + dt);
-        }
-        assert!(
-            card.machine.confirming().is_some(),
-            "the OS asks about the approval"
-        );
-        assert_eq!(
-            click(&mut card, &events, t + 100, Target::Step(0)),
-            Did::Switched
-        );
-        assert_eq!(card.confirmed(true, &events, t + 200), Did::Nothing);
-        assert!(
-            card.take_answers().is_empty(),
-            "the step was switched off: nothing is sent"
-        );
-        assert!(card.lines().contains(&SWITCH_FIRST.to_owned()));
-    }
-
-    #[test]
-    fn on_an_asks_page_the_box_holds_the_words_and_says_no_on_an_approval() {
-        let events = vec![approval("P"), taste("B")];
-        let mut push = Controller::present(&events, "ask:P", NOW, SLOT, Faults::default()).unwrap();
-        assert_eq!(push.words_send(), ("Say no", vec![]));
-        push.type_words("yes, but squash first");
-        assert_eq!(
-            push.words_send(),
-            ("Say no", vec![ANSWERS_THIS_ASK_ONLY, WONT_RUN])
-        );
-        let rows = push.page_rows();
-        assert!(
-            !rows.contains(&Row::Send),
-            "the card draws no Send of its own"
-        );
-        assert!(rows
-            .iter()
-            .all(|r| !r.label().starts_with("Your words") && r.label() != WONT_RUN));
-        let mut taste =
-            Controller::present(&events, "ask:B", NOW, SLOT, Faults::default()).unwrap();
-        taste.type_words("keep it, but smaller");
-        assert_eq!(taste.words_send(), ("Answer", vec![ANSWERS_THIS_ASK_ONLY]));
-        // A moved slot presents it again, unarmed.
-        taste.tick(NOW + ARM_AFTER);
-        assert_eq!(taste.state_name(), "armed");
-        taste.placed(
-            Slot {
-                rect: [10, 10, CARD_SIZE[0], CARD_SIZE[1]],
-                ..SLOT
-            },
-            NOW + ARM_AFTER + 1,
-        );
-        assert_eq!(taste.state_name(), "presented");
-    }
-
-    #[test]
-    fn words_alone_answer_this_ask_only_and_a_typed_yes_never_runs_the_plan() {
-        let push = approval("P");
-        let events = vec![
-            push,
-            taste("B"),
-            json!({"kind": "plan.proposed", "id": "p", "writer": "core", "session": "S", "log_pos": 2, "data": {"ask": "ask:P", "steps": [{"does": "git push", "undo": "force back", "public": true}], "diff": "d", "hash": "h"}}),
-        ];
-        let mut card = Controller::present(&events, "ask:P", NOW, SLOT, Faults::default()).unwrap();
-        card.type_words("yes");
-        assert!(card.lines().contains(&WONT_RUN.to_owned()));
-        assert_eq!(
-            click(&mut card, &events, NOW + ARM_AFTER, Target::Send),
-            Did::Answered
-        );
-        let answers = card.take_answers();
-        assert_eq!(answers.len(), 1);
-        assert_eq!(answers[0]["words"], "yes");
-        assert!(answers[0].get("option").is_none() && answers[0].get("plan_hash").is_none());
-
-        let mut card = Controller::present(&events, "ask:P", NOW, SLOT, Faults::default()).unwrap();
-        assert_eq!(
-            click(&mut card, &events, NOW + ARM_AFTER, Target::Option(0)),
-            Did::Answered
-        );
-        let answers = card.take_answers();
-        assert_eq!(answers[0]["option"], "approve");
-        assert_eq!(answers[0]["plan_hash"], "h");
-        assert!(answers[0]["token"]
-            .as_str()
-            .is_some_and(|token| token.len() == 64));
-
-        let mut card = Controller::present(&events, "ask:B", NOW, SLOT, Faults::default()).unwrap();
-        card.type_words("darker");
-        assert!(card.lines().contains(&ANSWERS_THIS_ASK_ONLY.to_owned()));
-        assert_eq!(
-            click(&mut card, &events, NOW + ARM_AFTER, Target::Send),
-            Did::Answered
-        );
-        assert_eq!(
-            card.take_answers().len(),
-            1,
-            "the words answer this ask alone, never the other open ask with the key"
-        );
-    }
-
-    #[test]
-    fn an_untrusted_press_waits_for_the_os_and_a_cancelled_prompt_leaves_the_card_armed() {
-        let events = vec![taste("A")];
-        let mut card = Controller::present(&events, "ask:A", NOW, SLOT, Faults::default()).unwrap();
-        let t = NOW + ARM_AFTER;
-        card.press(synthetic(t, Target::Option(1), Phase::Down), &events, t);
-        let did = card.press(
-            synthetic(t + 30, Target::Option(1), Phase::Up),
-            &events,
-            t + 30,
-        );
-        let Did::NeedsConfirmation(reason) = did else {
-            panic!("{did:?}")
-        };
-        assert!(
-            reason.contains("Question A?") && reason.contains("Green"),
-            "{reason}"
-        );
-        assert_eq!(card.confirmed(false, &events, t + 40), Did::Nothing);
-        assert_eq!(card.state_name(), "armed");
-        assert!(card.take_answers().is_empty());
-        card.press(
-            synthetic(t + 50, Target::Option(1), Phase::Down),
-            &events,
-            t + 50,
-        );
-        card.press(
-            synthetic(t + 80, Target::Option(1), Phase::Up),
-            &events,
-            t + 80,
-        );
-        assert_eq!(card.confirmed(true, &events, t + 90), Did::Answered);
-        assert_eq!(card.take_answers()[0]["option"], "green");
-    }
-
-    #[test]
-    fn tab_reaches_each_option_and_space_presses_the_focused_one() {
-        let events = vec![taste("A")];
-        let mut card = Controller::present(&events, "ask:A", NOW, SLOT, Faults::default()).unwrap();
-        card.key("tab", NOW, Source::Hardware, &events, NOW);
-        assert_eq!(card.focused(), Some(0));
-        card.key("tab", NOW, Source::Hardware, &events, NOW);
-        assert_eq!(card.focused(), Some(1));
-        assert_eq!(
-            card.key("space", NOW + 10, Source::Hardware, &events, NOW + 10),
-            Did::Refused
-        );
-        assert_eq!(
-            card.key(
-                "space",
-                NOW + ARM_AFTER,
-                Source::Hardware,
-                &events,
-                NOW + ARM_AFTER
-            ),
-            Did::Answered
-        );
-        assert_eq!(card.take_answers()[0]["option"], "green");
-    }
-
-    #[test]
-    fn a_check_finishing_while_the_card_shows_changes_what_it_says_and_presents_it_again_unarmed() {
-        let start = json!({"kind": "run.started", "writer": "core", "data": {"run": "r1", "check": "unit", "claim": "c", "commit": "abc"}});
-        let mut events = vec![taste("A"), start];
-        let mut card = Controller::present(&events, "ask:A", NOW, SLOT, Faults::default()).unwrap();
-        assert!(card
-            .lines()
-            .contains(&"look at: unit, still running".to_owned()));
-        card.tick(NOW + ARM_AFTER);
-        let first = card.seq();
-        assert_eq!(card.state_name(), "armed");
-
-        // A change the card doesn't show leaves it armed on the same presentation.
-        events.push(json!({"kind": "note.added", "writer": "core", "data": {}}));
-        card.record_changed(&events, NOW + ARM_AFTER + 10);
-        assert_eq!((card.state_name(), card.seq()), ("armed", first));
-
-        events.push(json!({"kind": "run.finished", "writer": "core", "data": {"run": "r1", "check": "unit", "outcome": "failed", "points_to": "src/a.rs:3", "findings": []}}));
-        card.record_changed(&events, NOW + ARM_AFTER + 20);
-        let lines = card.lines();
-        assert!(
-            lines.contains(&"checks: 0 of 1 passed".to_owned()),
-            "{lines:?}"
-        );
-        assert!(
-            lines.contains(&"look at: src/a.rs:3".to_owned()),
-            "{lines:?}"
-        );
-        assert_eq!(card.state_name(), "presented");
-        assert_ne!(card.seq(), first);
-        assert_eq!(
-            click(&mut card, &events, NOW + ARM_AFTER + 30, Target::Option(1)),
-            Did::Refused,
-            "a press on what it said before is refused"
-        );
-        let rows = usage_rows(&mut card);
-        assert_eq!(rows, ["presented", "presented", "refused"]);
-
-        // Send held down on what it said before answers nothing on release, even once armed again.
-        card.tick(NOW + ARM_AFTER + 1_000);
-        card.type_words("Blue, but darker");
-        let at = NOW + ARM_AFTER + 1_100;
-        assert_eq!(
-            card.press(hardware(at, Target::Send, Phase::Down), &events, at),
-            Did::Nothing
-        );
-        events.push(json!({"kind": "run.started", "writer": "core", "data": {"run": "r2", "check": "unit", "claim": "c", "commit": "abc"}}));
-        card.record_changed(&events, at + 50);
-        let up = at + 50 + ARM_AFTER + 100;
-        assert_eq!(
-            card.press(hardware(up, Target::Send, Phase::Up), &events, up),
-            Did::Nothing
-        );
-        assert!(card.take_answers().is_empty());
-    }
-
-    #[test]
-    fn a_batch_card_follows_a_member_closing_and_a_plan_landing_and_keeps_your_switches() {
-        let authority = |id: &str| {
-            ask(
-                id,
-                "authority",
-                json!([{"id": "allow", "label": "Allow", "decision": "allow"}, {"id": "deny", "label": "Deny", "decision": "deny"}]),
-                json!({"subject": {"effect": "push", "target": {"kind": "branch", "ref": "main", "owner": "you"}, "change": null}}),
-            )
-        };
-        let plan = |id: &str, undo: &str| {
-            json!({"kind": "plan.proposed", "id": format!("P{id}"), "writer": "core", "log_pos": 2, "data": {
-                "ask": format!("ask:{id}"), "diff": "d".repeat(64), "hash": id.repeat(64),
-                "steps": [{"does": format!("push {id}"), "changes": [], "undo": undo, "public": false, "cost": 0}]}})
-        };
-        let mut events = vec![
-            authority("A"),
-            authority("B"),
-            authority("C"),
-            plan("A", "force-push back"),
-            plan("B", "none"),
-            json!({"kind": "ask.batched", "id": "K", "writer": "core", "log_pos": 4, "data": {"batch": "b", "asks": [
-                {"ask": "ask:A", "plan_hash": null}, {"ask": "ask:B", "plan_hash": null}, {"ask": "ask:C", "plan_hash": null}]}}),
-        ];
-        let mut card = Controller::present(&events, "ask:C", NOW, SLOT, Faults::default()).unwrap();
-        let doing = |card: &Controller| -> Vec<(String, bool)> {
-            card.model()
-                .steps
-                .iter()
-                .map(|step| (step.does.clone(), step.on))
-                .collect()
-        };
-        assert_eq!(
-            doing(&card),
-            [("push A".to_owned(), true), ("push B".to_owned(), false)]
-        );
-        assert_eq!(card.model().plan_hash, None);
-        card.toggle_step(1);
-        card.toggle_step(0);
-        assert_eq!(
-            doing(&card),
-            [("push A".to_owned(), false), ("push B".to_owned(), true)]
-        );
-        card.tick(NOW + ARM_AFTER);
-        let first = card.seq();
-
-        // C's own plan lands after the card showed: its step draws, its hash binds, and your switches stand.
-        events.push(plan("C", "none"));
-        card.record_changed(&events, NOW + ARM_AFTER + 10);
-        assert_eq!(
-            doing(&card),
-            [
-                ("push A".to_owned(), false),
-                ("push B".to_owned(), true),
-                ("push C".to_owned(), false)
-            ]
-        );
-        assert_eq!(card.model().plan_hash, Some("C".repeat(64)));
-        assert_eq!(card.state_name(), "presented");
-        assert_ne!(card.seq(), first);
-
-        // A is answered on its own card: the core won't run it, so the card neither draws nor counts it.
-        events.push(
-            json!({"kind": "ask.answered", "writer": "core", "subject": "ask:A", "data": {}}),
-        );
-        card.record_changed(&events, NOW + ARM_AFTER + 20);
-        assert_eq!(
-            doing(&card),
-            [("push B".to_owned(), true), ("push C".to_owned(), false)]
-        );
-        assert_eq!(card.model().runs(), [1, 2]);
-    }
-
-    #[test]
-    fn a_record_change_the_card_doesnt_show_leaves_it_armed_however_late_it_comes() {
-        let mut events = vec![taste("A")];
-        let mut card = Controller::present(&events, "ask:A", NOW, SLOT, Faults::default()).unwrap();
-        card.tick(NOW + ARM_AFTER);
-        let first = card.seq();
-        // A day on, when its default applies reads differently: that's the clock, not the record.
-        events.push(json!({"kind": "note.added", "writer": "core", "data": {}}));
-        card.record_changed(&events, NOW + 86_400_000);
-        assert_eq!((card.state_name(), card.seq()), ("armed", first));
-    }
-
-    #[test]
-    fn a_closed_ask_is_never_presented_and_one_closing_elsewhere_takes_its_card_down() {
-        let mut events = vec![taste("A"), taste("B")];
-        events.push(
-            json!({"kind": "ask.defaulted", "writer": "core", "subject": "ask:B", "data": {}}),
-        );
-        assert!(Controller::present(&events, "ask:B", NOW, SLOT, Faults::default()).is_none());
-
-        let mut card = Controller::present(&events, "ask:A", NOW, SLOT, Faults::default()).unwrap();
-        card.tick(NOW + ARM_AFTER);
-        // Answered on another device: the core takes no answer now, so this card answers nothing.
-        events.push(
-            json!({"kind": "ask.answered", "writer": "core", "subject": "ask:A", "data": {}}),
-        );
-        card.record_changed(&events, NOW + ARM_AFTER + 10);
-        assert_eq!(card.state_name(), "hidden");
-        assert_eq!(
-            click(&mut card, &events, NOW + ARM_AFTER + 20, Target::Option(1)),
-            Did::Nothing
-        );
-        assert!(card.take_answers().is_empty());
-    }
-
-    #[test]
-    fn a_batch_approvals_receipt_lists_the_other_members_it_ran() {
-        let authority = |id: &str| {
-            ask(
-                id,
-                "authority",
-                json!([{"id": "allow", "label": "Allow", "decision": "allow"}, {"id": "deny", "label": "Deny", "decision": "deny"}]),
-                json!({"key": format!("k{id}"), "subject": {"effect": "push", "target": {"kind": "branch", "ref": "main", "owner": "you"}, "change": null}}),
-            )
-        };
-        let plan = |id: &str| {
-            json!({"kind": "plan.proposed", "id": format!("P{id}"), "writer": "core", "log_pos": 2, "data": {
-                "ask": format!("ask:{id}"), "diff": "d".repeat(64), "hash": id.repeat(64),
-                "steps": [{"does": format!("push {id}"), "changes": [], "undo": "force-push back", "public": false, "cost": 0}]}})
-        };
-        let events = vec![
-            authority("A"),
-            authority("B"),
-            authority("C"),
-            plan("A"),
-            plan("B"),
-            plan("C"),
-            json!({"kind": "ask.batched", "id": "K", "writer": "core", "log_pos": 4, "data": {"batch": "b", "asks": [
-                {"ask": "ask:A", "plan_hash": null}, {"ask": "ask:B", "plan_hash": null}, {"ask": "ask:C", "plan_hash": null}]}}),
-        ];
-        let mut card = Controller::present(&events, "ask:B", NOW, SLOT, Faults::default()).unwrap();
-        card.toggle_step(2);
-        card.tick(NOW + ARM_AFTER);
-        assert_eq!(
-            click(&mut card, &events, NOW + ARM_AFTER, Target::Option(0)),
-            Did::Answered
-        );
-        assert_eq!(card.take_answers()[0]["steps"], json!([0, 1]));
-        let lines = card.lines();
-        assert!(
-            lines.contains(&"Also answered: Question A?".to_owned()),
-            "{lines:?}"
-        );
-        assert!(
-            !lines.iter().any(|line| line.contains("Question C?")),
-            "C was switched off: {lines:?}"
-        );
-        assert!(
-            !lines.contains(&"Also answered: Question B?".to_owned()),
-            "the receipt is B's own: {lines:?}"
-        );
-    }
-
-    /// #1510: the card marks the set `deep inbox` marks, each character in place; joiners and selectors stay.
-    #[test]
-    fn visible_marks_each_control_direction_and_invisible_character() {
-        let marked = [
-            (0x00, 0x1f),
-            (0x7f, 0x9f),
-            (0x61c, 0x61c),
-            (0x200b, 0x200b),
-            (0x200e, 0x200f),
-            (0x2028, 0x202e),
-            (0x2060, 0x2064),
-            (0x2066, 0x206f),
-            (0xfeff, 0xfeff),
-            (0xfff9, 0xfffb),
-            (0xe0000, 0xe007f),
-        ];
-        for (from, to) in marked {
-            for n in from..=to {
-                let c = char::from_u32(n).unwrap();
-                let escape = match c {
-                    '\n' => "\\n".to_owned(),
-                    '\r' => "\\r".to_owned(),
-                    '\t' => "\\t".to_owned(),
-                    _ if n < 0x100 => format!("\\x{n:02x}"),
-                    _ => format!("\\u{{{n:x}}}"),
-                };
-                assert_eq!(
-                    visible(&format!("a{c}b")),
-                    format!("a{escape}b"),
-                    "U+{n:04X}"
-                );
-            }
-        }
-        for n in [
-            0x20, 0x7e, 0xa0, 0x61b, 0x200c, 0x200d, 0x2027, 0x202f, 0x2065, 0xfe0f, 0xfffc,
-            0xe0080,
-        ] {
-            let c = char::from_u32(n).unwrap().to_string();
-            assert_eq!(visible(&c), c, "U+{n:04X}");
-        }
-    }
-}
+mod tests;

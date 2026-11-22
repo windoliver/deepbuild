@@ -36,9 +36,20 @@ pub struct Memo {
     points: BTreeMap<String, (String, Vec<V3>)>,
     meshes: BTreeMap<String, (String, Mesh)>,
     mapped: Vec<String>,
+    /// Each item's box and mesh deforms' binds (#1929), by modifier, as its last build left
+    /// them: a frame whose mesh and box or control mesh are unchanged reads its weights here.
+    pub(crate) binds: BTreeMap<String, Vec<Option<crate::bind::Bind>>>,
+    /// #2760: the issue of the refusal the last evaluation ended on, where it names more than
+    /// its path.
+    pub(crate) refused: Option<Value>,
 }
 
 impl Memo {
+    /// The issue the last refused evaluation left, once.
+    pub fn take_refused(&mut self) -> Option<Value> {
+        self.refused.take()
+    }
+
     /// The items mapped since the last call, in the order they were.
     pub fn take_mapped(&mut self) -> Vec<String> {
         std::mem::take(&mut self.mapped)
@@ -200,7 +211,7 @@ pub(crate) fn mesh(
 /// across a smooth surface stays smooth and a split one stays sharp.
 fn normals(m: &Mesh) -> Vec<V3> {
     let mut acc = vec![[0.0; 3]; m.positions.len()];
-    for t in m.indices.chunks_exact(3) {
+    for t in m.indices.as_chunks::<3>().0 {
         let [a, b, c] = [t[0], t[1], t[2]].map(|i| m.positions[i as usize]);
         let n = cross(sub(b, a), sub(c, a));
         for i in t {
@@ -291,10 +302,54 @@ pub(crate) fn place(
 }
 
 /// Where a kind a module draws as marks puts them: its layer, with the opacities of those drawn
-/// below full, and the frame's bounds.
+/// below full, the frame's bounds, and each image that pictures a 2D item (#2450), by its ID,
+/// with that item's ID and the item as at t.
 pub(crate) struct Out<'a> {
     pub layer: &'a mut Layer3,
     pub bounds: &'a mut Vec<V3>,
+    pub pictured: &'a mut Vec<(String, String, Value)>,
+}
+
+/// Each pictured image's picture, once the camera is known (#2450): its 2D item alone, boxed by
+/// the size its quad takes on screen, quantized as a label's glyphs are, in a 2D document the
+/// host rasters as an inset's content. The image takes the picture's key as its asset.
+pub(crate) fn pictures(
+    pictured: Vec<(String, String, Value)>,
+    camera: &crate::scene::Camera,
+    layers: &mut [Layer3],
+) -> Vec<crate::inset::Picture> {
+    let mut out = Vec::new();
+    for (id, of, mut item) in pictured {
+        let mut images = layers.iter_mut().flat_map(|l| l.images.iter_mut());
+        let Some(image) = images.find(|i| i.id == id) else {
+            continue;
+        };
+        let px = match image.world {
+            true => camera.px_per_m(camera.to_view(image.pos)[2]),
+            false => 1.0,
+        };
+        let h = f64::from(deep_text::raster_size(image.size[1] * px)).round();
+        let w = (h * image.size[0] / image.size[1]).round();
+        let size = [w, h].map(|s| s.max(1.0) as u32);
+        if let Some(o) = item.as_object_mut() {
+            o.remove("parent");
+            o.remove("visible");
+            o.insert("at".into(), serde_json::json!({"pos": [0, 0]}));
+        }
+        if let Some(p) = item.get_mut("params").and_then(Value::as_object_mut) {
+            p.insert("size".into(), serde_json::json!(size));
+        }
+        let document = crate::inset::content_doc(&id, size, &Map::from_iter([(of, item)]));
+        let key = crate::inset::picture_key(&id, &document);
+        image.asset.clone_from(&key);
+        out.push(crate::inset::Picture {
+            id,
+            key,
+            size,
+            document: std::sync::Arc::new(document),
+        });
+    }
+    out
 }
 
 /// A kind a module draws (#226): each mark its fill returns, drawn as scene3d draws that mark
@@ -329,8 +384,11 @@ pub(crate) fn drawn(
         },
     })?;
     let world = crate::scene::world_moved(items, id, None);
+    let path = format!("items/{id}/params");
     for mark in marks.into_iter().filter(|m| m.opacity > 0.0) {
         let sub = format!("{id}#{}", mark.sub);
+        let at = crate::scene::local_of(mark.at, [0.0; 3], [1.0; 3], [1.0; 3]);
+        let m = crate::scene::matmul(&world, &at);
         match mark.kind {
             "mark.line@1" => {
                 let mut l = crate::scene::line(items, id, &mark.params, look, doc)?;
@@ -339,12 +397,23 @@ pub(crate) fn drawn(
                 out.layer.lines.push(l);
             }
             "mark.text@1" => {
-                let at = crate::scene::local_of(mark.at, [0.0; 3], [1.0; 3], [1.0; 3]);
-                let m = crate::scene::matmul(&world, &at);
-                let path = format!("items/{id}/params");
                 let l = crate::scene::label(&sub, &mark.params, &path, &m, look, labels)?;
                 out.bounds.push(l.pos);
                 out.layer.labels.push(l);
+            }
+            "mark.image@1" => {
+                let of = mark.params.get("item").and_then(Value::as_str);
+                let Some((of, pictured)) = of.and_then(|i| Some((i, (ask.item)(i)?))) else {
+                    return Err(Refused {
+                        code: "ref_unresolved",
+                        path,
+                    });
+                };
+                let image = crate::scene::quad(&sub, "", &mark.params, &path, &m)?;
+                out.bounds.push(image.pos);
+                out.layer.images.push(image);
+                out.pictured
+                    .push((sub.clone(), of.to_string(), pictured.clone()));
             }
             _ => {
                 return Err(Refused {
@@ -422,6 +491,39 @@ fn names(v: &Value) -> Vec<&str> {
     }
 }
 
+/// #1381: a terrain plate's mesh, its horizon table's bake among it, kept by the plate's own
+/// content (its place aside, its time where its stack reads time) between a run's frames, so a
+/// frame that changed nothing it reads, such as one where only the sun moved, builds nothing.
+/// Every other item is built afresh.
+fn plate(
+    ask: &Ask<'_>,
+    (doc, id, item): (&Value, &str, &Value),
+    seconds: f64,
+    fills: Fills<'_>,
+) -> Result<Mesh, Refused> {
+    let terrain = item.get("kind").and_then(Value::as_str) == Some("plate@1")
+        && item.get("params").and_then(crate::terrain::of_params).is_some();
+    let Some(memo) = ask.memo.filter(|_| terrain) else {
+        return crate::scene::mesh_of(doc, id, item, seconds, fills);
+    };
+    let mut own = item.clone();
+    if let Some(o) = own.as_object_mut() {
+        o.remove("at");
+    }
+    if crate::stack::reads_time_by_kind(item) {
+        own["\u{0}t"] = Value::from(seconds);
+    }
+    let key = serde_json::json!({"plate": own, "planted": fills.planted}).to_string();
+    if let Some((_, m)) = memo.borrow().meshes.get(id).filter(|m| m.0 == key) {
+        return Ok(m.clone());
+    }
+    let mesh = crate::scene::mesh_of(doc, id, item, seconds, fills)?;
+    memo.borrow_mut()
+        .meshes
+        .insert(id.to_string(), (key, mesh.clone()));
+    Ok(mesh)
+}
+
 /// A builder's mesh after its stack (#226), where it carries a module's deform: built from the
 /// document with what the deform reads as at t, and kept by its key, so a frame where neither the
 /// item nor what its deform reads changed builds and maps nothing.
@@ -432,7 +534,7 @@ pub(crate) fn built(
     fills: Fills<'_>,
 ) -> Result<Mesh, Refused> {
     if carried(item).is_empty() {
-        return crate::scene::mesh_of(doc, id, item, seconds, fills);
+        return plate(ask, (doc, id, item), seconds, fills);
     }
     let mut own = item.clone();
     if let Some(o) = own.as_object_mut() {

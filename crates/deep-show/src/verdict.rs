@@ -121,6 +121,23 @@ fn blocked_rows(by_kind: BTreeMap<String, Vec<String>>) -> Vec<Value> {
 }
 
 impl<'a> Hub<'a> {
+    /// #2450's planted check, by the scenario's `planted`: `issues` less each refusal of a 3D
+    /// axis's title that names an item of `doc`, which the data module's check refuses for
+    /// every kind but a vector.
+    pub fn plant_axis_titles(&self, doc: &Value, issues: &mut Vec<Issue>) {
+        let name = deep_canvas_marks::axes3d::TAKES_ANY_KIND;
+        if self.scenario.module_planted.as_deref() != Some(name) {
+            return;
+        }
+        let names_item = |path: &str| {
+            let named = doc.pointer(&format!("/{path}")).and_then(Value::as_str);
+            named.is_some_and(|id| doc.get("items").is_some_and(|i| i.get(id).is_some()))
+        };
+        issues.retain(|i| {
+            !(i.code == "bad_axis" && i.path.contains("/params/titles/") && names_item(&i.path))
+        });
+    }
+
     /// What blocks a `deep show --check`'s claim on this revision: the items of a kind the
     /// build doesn't know, when the claim names the document among its deliverables. Outside a
     /// claim they stay notices (#389).
@@ -251,7 +268,9 @@ impl<'a> Hub<'a> {
         let determinism = self.determinism_runs(c);
         let layout = self.film_layout_runs(c);
         let audits = self.geometry_audit_runs(claim, c);
-        let shapes = self.geometry_shape_runs(c);
+        let mut shapes = self.geometry_shape_runs(c);
+        // #1781: each attribute table read back.
+        shapes.extend(self.geometry_attributes_runs(c));
         // #456: render.review's readings, each from its model in a fresh context.
         let reviews = self.review_rows(claim, c);
         // #407: the film audit and the flicker check on every deliverable, the brief's own checks,
@@ -260,6 +279,8 @@ impl<'a> Hub<'a> {
         let flickers = self.film_flicker_runs(c);
         let mut briefed = self.brief_rows(claim, c);
         briefed.extend(self.heard_rows(claim, c));
+        // #1518: each cut recording's result heard back.
+        briefed.extend(self.cut_rows(claim, c));
         let shown = self.first_shown_by_doc(c);
         let mut docs: Vec<(String, Current)> = Vec::new();
         let mut missing = false;
@@ -311,7 +332,7 @@ impl<'a> Hub<'a> {
                         row
                     }
                     _ => self.judge(
-                        r,
+                        &with_brief_sweeps(r, c.brief.as_ref()),
                         &docs,
                         missing,
                         &read,
@@ -765,6 +786,7 @@ impl<'a> Hub<'a> {
 
     /// One requirement's row: its check input's kind run on every deliverable, with the machines
     /// its result holds on and the determinism class of what it read (#411).
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn judge(
         &self,
         r: &Requirement,
@@ -859,6 +881,7 @@ impl<'a> Hub<'a> {
         // #1183: each length mapping with the ratio it is drawn at, and whether any went unread.
         let (mut lengths, mut unchecked) = (Vec::new(), false);
         let mut results: Vec<Value> = Vec::new();
+        let mut timing = Map::new();
         // #1938: pixels that hold on another machine than the run's.
         let mut elsewhere: Vec<Value> = Vec::new();
         // #1938: the environment each deliverable's pixels were drawn in, by document.
@@ -896,7 +919,9 @@ impl<'a> Hub<'a> {
             // checked against none, and a scene over its class names its fix as patch ops.
             if budget {
                 if deep_canvas::budget::of(&checked.lowered).is_none() {
-                    blocked.push(json!({"code": "not_run", "kind": kind, "ids": [], "path": "budget/class"}));
+                    blocked.push(
+                        json!({"code": "not_run", "kind": kind, "ids": [], "path": "budget/class"}),
+                    );
                 }
                 let over = raised.iter().position(|i| i["code"] == "over_budget");
                 if let Some(k) = over {
@@ -954,6 +979,7 @@ impl<'a> Hub<'a> {
                     // proof surface plants its wrong program.
                     if let Some(map) = input.as_object_mut() {
                         map.insert("assets".into(), self.assets_of(&checked.lowered));
+                        map.insert("catalogs".into(), self.catalogs_of(&checked.lowered));
                         map.remove("planted");
                         if let Some(p) = &self.scenario.module_planted {
                             map.insert("planted".into(), json!(p));
@@ -963,20 +989,38 @@ impl<'a> Hub<'a> {
                         v["doc"] = json!(doc);
                         v
                     };
+                    // #457: the check's own time on the requirement, and its parts' times.
+                    let started = std::time::Instant::now();
                     // #1938: a pixel check runs on the frames drawn for it here, or not at all.
                     let out = match (check.frames, drawn.and_then(|d| d.get(doc))) {
-                        (Some((_, run)), Some(crate::pixels::Drawn::Frames(f, fp))) => {
+                        (Some((draws, run)), Some(crate::pixels::Drawn::Frames(f, fp))) => {
+                            if let Ok(mut c) = self.light_cost.lock() {
+                                *c = [0.0; 3];
+                            }
+                            add_timing(
+                                &mut timing,
+                                "times",
+                                (f.len() / usize::from(draws.max(1))) as f64,
+                            );
                             prints.push((doc.clone(), fp.clone()));
                             // #466: the captions the frames drew, read as texts by their names.
                             let picks: Vec<&str> = f
                                 .iter()
                                 .flat_map(|fr| fr.picks.values().map(String::as_str))
                                 .collect();
-                            run(
+                            let out = run(
                                 &self.with_caption_texts(&checked.lowered, &picks),
                                 &input,
                                 f,
-                            )
+                            );
+                            // What its reductions added on the GPU and read back.
+                            if let Ok(c) = self.light_cost.lock() {
+                                if c[2] > 0.0 {
+                                    add_timing(&mut timing, "gpu_ms", c[0]);
+                                    add_timing(&mut timing, "readback_bytes", c[1]);
+                                }
+                            }
+                            out
                         }
                         (Some(_), Some(crate::pixels::Drawn::Elsewhere(e))) => {
                             elsewhere.push(in_doc(e.clone()));
@@ -996,16 +1040,32 @@ impl<'a> Hub<'a> {
                         (None, _) => check
                             .report
                             .map(|run| {
-                                run(
-                                    &crate::played::with_track(
-                                        &checked.lowered,
-                                        &self.track_json(doc),
-                                    ),
-                                    &input,
-                                )
+                                let played = crate::played::with_track(
+                                    &checked.lowered,
+                                    &self.track_json(doc),
+                                );
+                                // #457: camera.framing times its occluded share and its camera
+                                // paths through this clock; the loop reads none of its own.
+                                if kind == deep_canvas_loop::framing::KIND {
+                                    let clock = || started.elapsed().as_secs_f64() * 1000.0;
+                                    let timer = deep_canvas_loop::framing::Timer::new(Some(&clock));
+                                    let out = deep_canvas_loop::framing::report_with(
+                                        &played, &input, &timer,
+                                    );
+                                    for (k, v) in timer.timing() {
+                                        add_timing(&mut timing, &k, v.as_f64().unwrap_or(0.0));
+                                    }
+                                    return out;
+                                }
+                                run(&played, &input)
                             })
                             .unwrap_or_default(),
                     };
+                    add_timing(
+                        &mut timing,
+                        "check_ms",
+                        started.elapsed().as_secs_f64() * 1000.0,
+                    );
                     for (id, r, actual) in out.raised {
                         let mut issue = raised_json(self, &kind, &m.name, &id, r);
                         issue["actual"] = actual;
@@ -1109,6 +1169,7 @@ impl<'a> Hub<'a> {
         }
         if registered.is_some_and(|(_, c)| c.report.is_some() || c.frames.is_some()) {
             row.insert("results".into(), Value::Array(results));
+            row.insert("timing".into(), Value::Object(timing));
         }
         // #1938: a pixel row names the environment it holds in: one fingerprint, or one a
         // deliverable where they differ.
@@ -1168,16 +1229,79 @@ impl<'a> Hub<'a> {
             .map(|(_, v)| v)
         {
             // #548: a logic item's program and its debug sidecar, beside a media item's bytes.
-            for at in ["/params/sha256", "/params/program", "/params/debug"] {
+            // #457: an image's or a video's own pixels, which camera.framing's raster reads.
+            for at in [
+                "/params/sha256",
+                "/params/program",
+                "/params/debug",
+                "/params/asset",
+            ] {
                 if let Some(sha) = item.pointer(at).and_then(Value::as_str) {
                     if let Some(b) = crate::evidence::read(&self.scenario.evidence, sha) {
                         out.insert(sha.to_string(), json!(deep_canvas::base64::encode(&b)));
                     }
                 }
             }
+            // #194: a logic item's data assets, a catalog among them.
+            for sha in data_assets(item) {
+                if let Some(b) = crate::evidence::read(&self.scenario.evidence, sha) {
+                    out.insert(sha.to_string(), json!(deep_canvas::base64::encode(&b)));
+                }
+            }
         }
         Value::Object(out)
     }
+
+    /// #194: the record of each catalog among the data assets a lowered document's logic items
+    /// name, by hash, as `catalog_import` kept it beside the bytes (`catalogs/<sha256>.json`).
+    fn catalogs_of(&self, lowered: &Value) -> Value {
+        let items = lowered
+            .get("items")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten();
+        let dir = self.scenario.evidence.join("catalogs");
+        let records = items.flat_map(|(_, i)| data_assets(i)).filter_map(|sha| {
+            let text = std::fs::read_to_string(dir.join(format!("{sha}.json"))).ok()?;
+            Some((sha.to_string(), serde_json::from_str::<Value>(&text).ok()?))
+        });
+        Value::Object(records.collect())
+    }
+}
+
+/// The data assets a logic item names in `assets`, by hash.
+fn data_assets(item: &Value) -> impl Iterator<Item = &str> {
+    let list = item.pointer("/params/assets").and_then(Value::as_array);
+    list.into_iter().flatten().filter_map(Value::as_str)
+}
+
+/// #457: camera.framing's `sweeps: from_brief` (its default) as the claim's brief's own
+/// `sweeps`, which it runs across; a brief with none sweeps nothing.
+fn with_brief_sweeps(r: &Requirement, brief: Option<&Value>) -> Requirement {
+    let mut check = r.check.clone();
+    if check["kind"] == deep_canvas_loop::framing::KIND
+        && check.get("sweeps").is_none_or(|s| s == "from_brief")
+    {
+        if let Some(m) = check.as_object_mut() {
+            match brief
+                .and_then(|b| b.get("sweeps"))
+                .filter(|s| s.is_object())
+            {
+                Some(s) => m.insert("sweeps".into(), s.clone()),
+                None => m.remove("sweeps"),
+            };
+        }
+    }
+    Requirement {
+        id: r.id.clone(),
+        check,
+    }
+}
+
+/// Adds `ms` (or a count) to a row's timing `key`, summed over its deliverables (#457).
+fn add_timing(timing: &mut Map<String, Value>, key: &str, v: f64) {
+    let was = timing.get(key).and_then(Value::as_f64).unwrap_or(0.0);
+    timing.insert(key.into(), json!(was + v));
 }
 
 /// #407: a film audit's or flicker check's row: BLOCKED where it can't decide (a script with no
@@ -1223,7 +1347,13 @@ pub fn run_check(
 }
 
 /// An issue a module's check raised, as a reply carries it, naming the check kind.
-pub(crate) fn raised_json(hub: &Hub<'_>, kind: &str, module: &str, id: &str, raised: Raised) -> Value {
+pub(crate) fn raised_json(
+    hub: &Hub<'_>,
+    kind: &str,
+    module: &str,
+    id: &str,
+    raised: Raised,
+) -> Value {
     let mut issue = Issue::error(raised.code, id, raised.path, Value::Null, &raised.what);
     issue.severity = raised.severity;
     issue.fix = fix_of(hub, module, raised.code);

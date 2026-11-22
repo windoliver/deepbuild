@@ -62,6 +62,16 @@ export interface Deep {
         };
         deadline: number;
     }): Promise<unknown>;
+    "schedule.read"(params: {
+        source: string;
+    }): Promise<unknown>;
+    "source.ask"(params: {
+        name: string;
+        request: {
+            provider: string;
+            prompt: string;
+        };
+    }): Promise<unknown>;
     "store.get"(params: {
         kind: string;
         key: string;
@@ -208,6 +218,15 @@ export interface Deep {
                 sha256: string;
             }>;
             needs?: Array<string>;
+        };
+    }): Promise<unknown>;
+    registerPort(params: {
+        name: string;
+        port: {
+            entries: Array<string>;
+            rows: Array<string>;
+            sources: Array<string>;
+            sound: boolean;
         };
     }): Promise<unknown>;
     registerResolver(params: {

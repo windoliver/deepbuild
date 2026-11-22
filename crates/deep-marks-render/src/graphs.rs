@@ -31,9 +31,10 @@ fn refused(code: &str, path: &str) -> Value {
 
 /// A graph's or a label's refusal code, as the document check raises it.
 pub(crate) fn code(refusal: &Value) -> &'static str {
-    const CODES: [&str; 7] = [
+    const CODES: [&str; 8] = [
         "ref_unresolved",
         "layout.cycle",
+        "layout.not_a_tree",
         "layout.seed_required",
         "layout.algo_unsupported",
         "graph.bad_edge",
@@ -134,9 +135,9 @@ fn sizes(
     items: &Map<String, Value>,
     vectors: &crate::Vectors,
 ) -> BTreeMap<String, [f64; 2]> {
-    let input = json!({"items": items, "bound_values": doc.get("bound_values")});
+    let bound = doc.get("bound_values");
     let solved = SHAPER
-        .with(|s| deep_canvas_marks::layout::solve(&input, &mut s.borrow_mut()))
+        .with(|s| deep_canvas_marks::layout::solve_items(items, bound, &mut s.borrow_mut()))
         .unwrap_or_default();
     let mut out = BTreeMap::new();
     for g in items.values().filter(|i| kind(i) == "graph@1") {

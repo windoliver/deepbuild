@@ -14,6 +14,7 @@ use crate::frames::session_view;
 use crate::hub::EvalTime;
 use crate::hub::Hub;
 
+pub(crate) mod attributes;
 pub(crate) mod shape;
 
 /// `geometry`: which items, at what time, which stage, and whether to count only.
@@ -115,6 +116,9 @@ pub fn parse(c: &Map<String, Value>) -> Option<Geometry> {
 
 const BUILD_OPS: [&str; 3] = ["scene3d.build", "scene3d.rebuild", "building.build"];
 
+/// How many binds a played call's frames computed (#1929), by item and modifier.
+type Binds = std::collections::BTreeMap<(String, usize), u64>;
+
 fn has_geometry(kind: &str) -> bool {
     builders::KINDS.contains(&kind)
         || deep_canvas_scene3d::building::KINDS.contains(&kind)
@@ -167,7 +171,8 @@ fn curve_row(
     row
 }
 
-/// A `mesh.asset@1`'s mesh, its glTF read from the evidence store by sha256; or the refusal.
+/// A `mesh.asset@1`'s mesh, its glTF read from the evidence store by sha256, its vertices where
+/// a soft volume's skin written on the item puts them (#2457); or the refusal.
 fn asset_mesh(evidence: &std::path::Path, id: &str, item: &Value) -> Result<Mesh, Value> {
     let at = format!("items/{id}/params/sha256");
     let sha = item
@@ -178,6 +183,7 @@ fn asset_mesh(evidence: &std::path::Path, id: &str, item: &Value) -> Result<Mesh
         .ok_or_else(|| json!({"code": "asset_missing", "path": at}))?;
     let node = item.pointer("/params/node").cloned().unwrap_or(json!(0));
     deep_canvas_scene3d::gltf::mesh(&bytes, &node)
+        .and_then(|m| deep_canvas_scene3d::skin::applied(m, item))
         .map_err(|why| json!({"code": "out_of_range", "path": format!("items/{id}/{}", why.split(':').next().unwrap_or(""))}))
 }
 
@@ -215,8 +221,10 @@ fn placement(item: &Value) -> impl Fn([f64; 3]) -> [f64; 3] {
 
 impl Hub<'_> {
     pub(crate) fn geometry(&mut self, g: &Geometry) -> Value {
+        // #1929: the binds the played frames' builds computed, by item and modifier.
+        let mut binds = Binds::new();
         if g.track.is_none() && g.play.is_none() {
-            return self.geometry_rows(g);
+            return self.geometry_rows(g, &binds);
         }
         let t = match self.resolve_time(&g.doc, &g.t) {
             Ok(t) => t,
@@ -241,9 +249,19 @@ impl Hub<'_> {
                 };
                 let view = session_view(session, &Map::new());
                 session.frame(&mut self.sched, k * step, &view);
+                for array in ["scene3d.built", "scene3d.livebuilt"] {
+                    for (id, built) in session.ran_values(&self.sched, array) {
+                        let built = built.as_typed::<Built>();
+                        let rows = built.iter().flat_map(|b| b.rows.iter().enumerate());
+                        for (m, _) in rows.filter(|r| r.1.bind.as_ref().is_some_and(|b| b.computed))
+                        {
+                            *binds.entry((id.unwrap_or_default().into(), m)).or_default() += 1;
+                        }
+                    }
+                }
             }
         }
-        let reply = self.geometry_rows(g);
+        let reply = self.geometry_rows(g, &binds);
         // #504's rule: a call's own track lasts the call; the session goes back to the hub's.
         if g.track.is_some() {
             self.replay(&g.doc, t);
@@ -251,7 +269,7 @@ impl Hub<'_> {
         reply
     }
 
-    fn geometry_rows(&mut self, g: &Geometry) -> Value {
+    fn geometry_rows(&mut self, g: &Geometry, binds: &Binds) -> Value {
         let t = match self.resolve_time(&g.doc, &g.t) {
             Ok(t) => t,
             Err(code) => return json!({"code": code}),
@@ -326,6 +344,7 @@ impl Hub<'_> {
                     fills: self.startup.sealed.fills.clone(),
                     clock: None,
                     pool: None,
+                    kept: Vec::new(),
                 };
                 let ctx = Ctx {
                     id: id.as_str(),
@@ -391,6 +410,25 @@ impl Hub<'_> {
         } else {
             Default::default()
         };
+        // #1782: a mesh-edge line with a hidden style answers its edges' spans in the view at t.
+        let hides = |id: &String| {
+            items.get(id).is_some_and(|i| {
+                i.get("kind").and_then(Value::as_str) == Some("mark.line@1")
+                    && i.pointer("/params/hidden").is_some_and(|h| !h.is_null())
+            })
+        };
+        let viewed = if ids.iter().any(hides) {
+            let sealed = &self.startup.sealed;
+            match crate::scene3d::scene_at(&doc, t, &self.look.light, sealed, planted.as_deref()) {
+                Ok(mut scene) => {
+                    scene.plant_edges(false, false, planted.as_deref());
+                    Some(scene)
+                }
+                Err(u) => return json!({"code": u.code, "path": u.path}),
+            }
+        } else {
+            None
+        };
         let mut out = Vec::new();
         let node_of = |id: &str| {
             nodes
@@ -417,13 +455,30 @@ impl Hub<'_> {
                 let (Some(mesh), Some(kind)) = (mesh, EdgeKind::read(edges).ok()) else {
                     return json!({"code": "ref_unresolved", "path": format!("items/{id}/params/edges/of")});
                 };
-                let place = placement(items.get(target).unwrap_or(&Value::Null));
+                let of = items.get(target).unwrap_or(&Value::Null);
+                let place = placement(of);
+                // #1782: each triangle's material on the item, where the crease kind picks by it.
+                let materials = match kind {
+                    EdgeKind::Crease { material: true, .. } => mesh.material_ids(of),
+                    _ => None,
+                };
                 let segments: Vec<[[f64; 3]; 2]> = mesh
-                    .edge_list(kind, planted.as_deref())
+                    .edge_list(kind, materials.as_deref(), planted.as_deref())
                     .into_iter()
                     .map(|[a, b]| [place(a), place(b)])
                     .collect();
-                out.push(json!({"id": id, "kind": "mark.line@1", "segments": segments}));
+                let mut row = json!({"id": id, "kind": "mark.line@1", "segments": segments});
+                let spans = viewed.as_ref().and_then(|scene| {
+                    let mut lines = scene.layers.iter().flat_map(|l| &l.lines);
+                    let line = lines.find(|l| l.id == *id)?;
+                    deep_canvas_scene3d::spans::report(scene, line, &mut Default::default())
+                });
+                if let Some(r) = spans {
+                    row["spans"] = (r.spans.iter())
+                        .map(|s| json!({"edge": s.edge, "from": s.from, "to": s.to, "hidden": s.hidden}))
+                        .collect();
+                }
+                out.push(row);
                 continue;
             }
             // #2013: an instancer's row is its elements as its scatter (or its written columns)
@@ -507,6 +562,7 @@ impl Hub<'_> {
                             .pool
                             .clone()
                             .map(|p| (p, evaluated.threads())),
+                        kept: Vec::new(),
                     };
                     let seconds = t as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
                     let started = now_ms();
@@ -584,10 +640,15 @@ impl Hub<'_> {
             };
             let mut row = json!({"id": id, "kind": b.kind, "declared": declared_json(declared, welded), "key": node.key,
                                  "blocks": b.blocks,
-                                 "stack": b.rows.iter().map(|r| {
+                                 "stack": b.rows.iter().enumerate().map(|(k, r)| {
                                      let mut step = r.to_json();
                                      if let Some(ms) = r.ms {
                                          step["ms"] = json!(ms);
+                                     }
+                                     // #1929: a played call's work counters on a box or mesh deform.
+                                     if g.play.is_some() && r.bind.is_some() {
+                                         let n = binds.get(&(id.clone(), k)).copied().unwrap_or(0);
+                                         step["work"] = json!({"binds": n});
                                      }
                                      step
                                  }).collect::<Vec<_>>()});
@@ -606,12 +667,23 @@ impl Hub<'_> {
                         .get_mut("outputs")
                         .and_then(Value::as_object_mut)
                         .and_then(|o| o.remove("grid_lines"));
+                    // #1636: a tree's branches, forks and leaf cards stand on the row.
+                    let tree: Vec<(&str, Value)> = ["branches", "forks", "cards"]
+                        .into_iter()
+                        .filter_map(|k| {
+                            let v = mj.get_mut("outputs")?.as_object_mut()?.remove(k)?;
+                            Some((k, v))
+                        })
+                        .collect();
                     r.extend(mj);
                     if let Some(rings) = rings {
                         r.insert("rings".into(), rings);
                     }
                     if let Some(grid) = grid {
                         r.insert("grid_lines".into(), grid);
+                    }
+                    for (k, v) in tree {
+                        r.insert(k.into(), v);
                     }
                     // #224: its colors in OKLab, through the document's look's roles.
                     let params = items

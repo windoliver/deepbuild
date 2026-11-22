@@ -1,0 +1,116 @@
+Issue: #2470
+Base: e0c90a5a5c11453bc41dfd4846703d054fa4a4d8
+Acceptance tests: independent draft from the issue, design and pristine base.
+Command: node --test --test-reporter=tap tests/acceptance/2470/deep-contracts.test.mjs
+Run: in the checkout at the base after npm ci, at nice 10; Node v24.22.2, npm 11.19.1, cargo 1.99.1 (rust-toolchain.toml).
+Paths: <checkout> is the checkout the run was made in. AC2 works on a temporary copy, which its output here does not name.
+Result: 2 tests, 0 pass, 2 fail. Each fails at its assertion in deep-contracts.test.mjs, by the lanes' rule (an
+AssertionError whose innermost frame lies under the test paths), read from scripts/proof-reporter.mjs run beside TAP.
+AC1: cargo exits 101 with the issue's two errors, E0428 for RULE_340 and RULE_341 in src/generated.rs.
+AC2: the generate exits 0 and rewrites crates/deep-contracts/src/generated.rs, the one file it changes, from line 86396.
+
+TAP version 13
+# Subtest: AC1 \#2470.16c0da75 `cargo check --locked -p deep-contracts` passes in the checkout: it exits 0
+not ok 1 - AC1 \#2470.16c0da75 `cargo check --locked -p deep-contracts` passes in the checkout: it exits 0
+  ---
+  duration_ms: 5403.092625
+  type: 'test'
+  location: '<checkout>/tests/acceptance/2470/deep-contracts.test.mjs:69:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    cargo check --locked -p deep-contracts fails in the checkout
+    $ cargo check --locked -p deep-contracts
+    exit 101
+      |     Checking deep-contracts v0.0.0 (<checkout>/crates/deep-contracts)
+      | error[E0428]: the name `RULE_340` is defined multiple times
+      |      --> crates/deep-contracts/src/generated.rs:86396:1
+      |       |
+      | 84003 | static RULE_340: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: None, format: None, pattern: Some(PATTERN_...
+      |       | -------------------------------------------------------------------- previous definition of the value `RULE_340` here
+      | ...
+      | 86396 | static RULE_340: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: None, items: Some(&RULE_5) };
+      |       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `RULE_340` redefined here
+      |       |
+      |       = note: `RULE_340` must be defined only once in the value namespace of this module
+      |
+      | error[E0428]: the name `RULE_341` is defined multiple times
+      |      --> crates/deep-contracts/src/generated.rs:86398:1
+      |       |
+      | 84005 | static RULE_341: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: None, items: Some(&RULE_340) };
+      |       | ------------------------------------------------------------------- previous definition of the value `RULE_341` here
+      | ...
+      | 86398 | static RULE_341: deep_contracts::Rule = deep_contracts::Rule::Nullable(&RULE_111);
+      |       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `RULE_341` redefined here
+      |       |
+      |       = note: `RULE_341` must be defined only once in the value namespace of this module
+      |
+      | For more information about this error, try `rustc --explain E0428`.
+      | error: could not compile `deep-contracts` (lib) due to 2 previous errors
+    
+    101 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 101
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/2470/deep-contracts.test.mjs:72:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.start (node:internal/test_runner/test:1262:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+  ...
+# Subtest: AC2 \#2470.296a591a a second `npm run generate -w @deepbuild/contracts` leaves no diff: run on a copy of the checkout, it changes, adds and removes no file
+not ok 2 - AC2 \#2470.296a591a a second `npm run generate -w @deepbuild/contracts` leaves no diff: run on a copy of the checkout, it changes, adds and removes no file
+  ---
+  duration_ms: 3777.364292
+  type: 'test'
+  location: '<checkout>/tests/acceptance/2470/deep-contracts.test.mjs:75:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    a second npm run generate -w @deepbuild/contracts leaves a diff: 1 file no longer as the checkout holds it
+    changed crates/deep-contracts/src/generated.rs: 87098 lines in the checkout, 87098 after the generate; the first to differ is line 86396
+        checkout: static RULE_340: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: None, items: Some(&RULE_5) };
+        generate: static RULE_344: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: None, items: Some(&RULE_5) };
+    $ npm run generate -w @deepbuild/contracts
+    exit 0
+      |
+      | > @deepbuild/contracts@0.0.0 generate
+      | > tsc -p tsconfig.json && node dist/generate.js
+    + actual - expected
+    
+    + [
+    +   'changed crates/deep-contracts/src/generated.rs: 87098 lines in the checkout, 87098 after the generate; the first to differ is line 86396\n' +
+    +     '    checkout: static RULE_340: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: None, items: Some(&RULE_5) };\n' +
+    +     '    generate: static RULE_344: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: None, items: Some(&RULE_5) };'
+    + ]
+    - []
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual:
+    0: |-
+      changed crates/deep-contracts/src/generated.rs: 87098 lines in the checkout, 87098 after the generate; the first to differ is line 86396
+          checkout: static RULE_340: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: None, items: Some(&RULE_5) };
+          generate: static RULE_344: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: None, items: Some(&RULE_5) };
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/2470/deep-contracts.test.mjs:92:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+    Test.postRun (node:internal/test_runner/test:1542:19)
+    Test.run (node:internal/test_runner/test:1467:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 0
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 9263.443583

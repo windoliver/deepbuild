@@ -84,6 +84,9 @@ export function repoOf(cwd: string): string | undefined {
   return id;
 }
 
+/** A program on PATH, without loading setup's agent facts into a lifecycle command. */
+export const onPath = (name: string): string | undefined => (process.env.PATH ?? '').split(':').map((dir) => join(dir, name)).find((file) => file.startsWith('/') && existsSync(file));
+
 /** The installed hub's root: ~/.deepbuild. A dev hub's is the folder given to --root. */
 export const installedRoot = (): string => join(homedir(), '.deepbuild');
 /**
@@ -104,9 +107,10 @@ export function lastingNode(node: string = process.execPath): string {
   const opt = join(at[1]!, 'opt', at[2]!, 'bin', 'node');
   try { return realpathSync(opt) === realpathSync(node) ? opt : node; } catch { return node; }
 }
+/** A path by its real path, so a link to the installed root is the installed root; the path itself where none exists. */
+export const real = (p: string): string => { try { return realpathSync(p); } catch { return p; } };
 /** Whether a path is under a temp folder, as written or by its real path: a place a reboot or a cleanup empties. */
 export function underTemp(path: string): boolean {
-  const real = (p: string) => { try { return realpathSync(p); } catch { return p; } };
   const temps = [tmpdir(), process.env.TMPDIR ?? '', '/tmp', '/private/tmp', '/var/folders', '/private/var/folders'].filter(Boolean).flatMap((t) => [t, real(t)]).map((t) => (t.endsWith(sep) ? t : t + sep));
   return temps.some((t) => path.startsWith(t) || real(path).startsWith(t));
 }

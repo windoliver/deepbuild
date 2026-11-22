@@ -1,0 +1,4 @@
+ccb97b834def74b120f4219febc515fcffa2345dad6b24c541e4486c84e47ed8  tests/acceptance/2332/README.md
+23bbe7f6c1e48a19081b72c0588ee86099d07088d37560e8e28a7d4640bdb0ce  tests/acceptance/2332/measure.mjs
+6f5b143ae70253b1e39d80e1c4c841bbd9fd92a65a98abd1466ba8c311977524  tests/acceptance/2332/ready.test.mjs
+efdf28b629b23f4bdb2a8b6547b455b9ad54f01a84baeae09d231891f493b526  tests/acceptance/2332/rusage.c

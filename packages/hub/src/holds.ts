@@ -18,7 +18,7 @@ import { AskRefused, type Asks, type PlanInput, type Target } from '@deepbuild/a
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { execFile } from 'node:child_process';
-import { countMcp, toolLists, type Listed } from './mcp-servers.js';
+import { countMcp, OWN_SERVERS, toolLists, type Listed } from './mcp-servers.js';
 import { namedIn, pushBranches, type Named } from './named.js';
 import { offerPlan, type Effect } from './questions.js';
 import type { About } from './standing.js';
@@ -48,11 +48,15 @@ interface HoldOptions {
 
 /**
  * The plan an authority ask shows (#69): the one call it holds, what it changes, and its undo. A call the guards class
- * as a delete or a send, or a tool that can destroy, can't be undone from here; a push or a merge reverts.
+ * as a delete or a send, or a tool that can destroy, can't be undone from here, and neither can a push, which others
+ * may have fetched once it ran; a pull request or a merge reverts. A call of an authority effect class, or a delete
+ * that couldn't be staged, acts outside the session, so its step is public: one that can't be undone starts only after
+ * the hub's hold (#1101). A tool you let run, or a decision your standing rules answer, acts on your machine.
  */
 function planFor(source: string, does: string, changes: string[], targets: Target[] = []): PlanInput {
-  const undo = /^effect\.(push|pr|merge)$/.test(source) ? 'Revert it with a new commit' : null;
-  return { steps: [{ does: does.slice(0, 8192), changes: changes.length ? changes.map((c) => c.slice(0, 8192)) : ['what the call touches'], undo, public: undo !== null, cost: 0, ...(targets.length ? { targets } : {}) }], diff: key({ source, does, changes }) };
+  const undo = /^effect\.(pr|merge)$/.test(source) ? 'Revert it with a new commit' : null;
+  const outside = /^effect\.(push|pr|merge|dispatch|send|delete)$/.test(source) || source === 'command.unstageable';
+  return { steps: [{ does: does.slice(0, 8192), changes: changes.length ? changes.map((c) => c.slice(0, 8192)) : ['what the call touches'], undo, public: outside, cost: 0, ...(targets.length ? { targets } : {}) }], diff: key({ source, does, changes }) };
 }
 /**
  * A push's words up to the end of its command, each tool's own flags before its push skipped: git's, jj's, sl's, and
@@ -143,9 +147,13 @@ export class Holds {
     await this.raise(meta.session, meta.agent, meta.cwd, source, k, `The agent offers: "${question}" It needs your authority.`, yes, offerPlan(source, `Let the agent do what it offered: ${question}`));
   }
 
-  /** The proceed whose turn the session is in, or undefined: the newest of its proceeds, stops and prompts is a proceed. */
+  /**
+   * The proceed whose turn the session is in, or undefined: the newest of its proceeds, stops and prompts is a proceed.
+   * A subagent's stop, which names its child, ends no turn of the session's (#1836), as in the record's projections.
+   */
   private async proceeding(session: string): Promise<{ id: string; question: string; rule: string } | undefined> {
-    const [last] = (await this.o.raw(`SELECT id, kind, data FROM events WHERE session_id = ? AND kind IN ('question.proceeded', 'agent.stop', 'user.ask') ORDER BY log_pos DESC LIMIT 1`, [session])) as { id: string; kind: string; data: string }[];
+    const child = this.o.plant === 'proceed-ends-at-child-stop' ? '' : ` AND NOT (kind = 'agent.stop' AND json_extract(data, '$.child') IS NOT NULL)`;
+    const [last] = (await this.o.raw(`SELECT id, kind, data FROM events WHERE session_id = ? AND kind IN ('question.proceeded', 'agent.stop', 'user.ask')${child} ORDER BY log_pos DESC LIMIT 1`, [session])) as { id: string; kind: string; data: string }[];
     if (last?.kind !== 'question.proceeded') return undefined;
     const d = JSON.parse(last.data) as { question: string; rule: string };
     return { id: last.id, question: d.question, rule: d.rule };
@@ -154,6 +162,8 @@ export class Holds {
   /** The ask with this key, newest first: its handle, status and decision. */
   private async askOf(k: string): Promise<{ id: string; status: string; decision: string | null } | undefined> {
     const [row] = (await this.o.raw(`SELECT id, status, decision FROM asks WHERE key = ? ORDER BY created DESC LIMIT 1`, [k])) as { id: string; status: string; decision: string | null }[];
+    // Your yes to a step that can't be undone lets it run only once the hub's hold is over (#1101): until then it waits.
+    if (row?.decision === 'allow' && await this.o.asks().stepHeld(`ask:${row.id}`)) return { ...row, status: 'held', decision: null };
     return row;
   }
   /** Raises one authority ask from `source` (a choice that approves, for the hold-as-choice plant); its handle. */
@@ -190,6 +200,7 @@ export class Holds {
   /** Why a call held by `handle` doesn't run: still waiting, or you said no. */
   async waiting(handle: string, label: string): Promise<string> {
     const row = await this.askOf((await this.o.raw(`SELECT key FROM asks WHERE id = ?`, [handle.slice(4)]) as { key: string }[])[0]?.key ?? '');
+    if (row?.status === 'held') return `DeepBuild is holding this: you said yes to \`${label}\` (${handle}), and since it can't be undone it starts only once its 10 s hold is over, with Undo on its card until then. Run the same call again after that.`;
     return row && row.status !== 'open' && row.status !== 'later'
       ? `DeepBuild held this: you said no to \`${label}\` (${handle}, ${row.status}); it doesn't run.`
       : `DeepBuild is holding this: \`${label}\` needs your authority and waits for ${handle}. Once you say yes, run the same call again.`;
@@ -425,6 +436,8 @@ export class Holds {
    * update's ask that holds it, or, with none (a tool no list shows, or an ask that couldn't be raised), on its own.
    */
   private async heldTool(meta: HookMeta, server: string, tool: string): Promise<string | undefined> {
+    // DeepBuild's own tools are never held; their list is on the record only for the reply limit it names (#2896).
+    if (OWN_SERVERS.includes(server)) return undefined;
     const lists = await this.lists(server);
     const latest = lists.at(-1);
     if (!latest) return undefined;

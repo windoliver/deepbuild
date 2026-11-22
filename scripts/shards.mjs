@@ -8,7 +8,7 @@
 // dead holder's is taken. `node shards.mjs <root> <k>` prepares shard k, as claimShards runs it, one child per shard.
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statfsSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statfsSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,6 +40,11 @@ const clone = (from, to) => {
   const result = spawnSync('cp', [COW, '-R', '-p', from, to], { encoding: 'utf8' });
   if (result.status !== 0) throw Error(`cp ${COW} ${from} failed: ${result.stderr.trim()}`);
 };
+
+/** The worktree's package builds into a shard, as each use clones them, and again once a run has built them anew. */
+export function cloneBuilds(root, dir) {
+  for (const path of listFiles(root).filter((path) => /^packages\/[^/]+\/package\.json$/.test(path))) clone(join(root, path.replace('package.json', 'dist')), join(dir, path.replace('package.json', 'dist')));
+}
 
 /**
  * Takes shard k's lock for this process, or null when a live process holds it. The lock is a folder, made by one mkdir
@@ -92,7 +97,11 @@ function prepare(root, k) {
     // On macOS the worktree's files are cloned first, so the reset reads them once and target/ starts warm. Elsewhere,
     // where the disk can't clone (ext4), that is a full copy of target/'s many GB, and from a main checkout of every
     // worktree under .claude/, so git writes the tree alone and the shard builds its own target/, once, through sccache.
-    if (MAC) for (const name of readdirSync(root).filter((name) => name !== '.git')) clone(join(root, name), join(dir, name));
+    // A folder that is or holds another worktree of the repository's, as .claude/worktrees/ holds them all, stays
+    // behind on macOS too: the shard runs this tree only.
+    const own = MAC ? realpathSync(root) : null;
+    const others = MAC ? git(root, ['worktree', 'list', '--porcelain']).split('\n').filter((line) => line.startsWith('worktree ')).map((line) => line.slice(9)).filter((path) => path.startsWith(`${own}/`)) : [];
+    if (MAC) for (const name of readdirSync(root).filter((name) => name !== '.git' && !others.some((path) => path === `${own}/${name}` || path.startsWith(`${own}/${name}/`)))) clone(join(root, name), join(dir, name));
     // Incremental data is keyed by the crate's path, so at the shard's path it is never read, only rewritten.
     rmSync(join(dir, 'target/debug/incremental'), { recursive: true, force: true });
     git(dir, ['init', '-q', '--template=', dir]);
@@ -117,12 +126,12 @@ function prepare(root, k) {
     clone(join(root, 'node_modules'), join(dir, 'node_modules'));
     writeFileSync(marker, lockHash);
   }
-  for (const path of listFiles(root).filter((path) => /^packages\/[^/]+\/package\.json$/.test(path))) clone(join(root, path.replace('package.json', 'dist')), join(dir, path.replace('package.json', 'dist')));
+  cloneBuilds(root, dir);
   return `SHARD ${k} ${dir}: ${made ? 'reused' : 'made'}, at tree ${tree}${packages ? ', node_modules cloned' : ''}`;
 }
 
 /**
- * Up to `want` shards made `root`'s tree, each as { dir, release }: free ones that exist first, then new ones, each
+ * Up to `want` shards made `root`'s tree, each as { dir, lock, release }: free ones that exist first, then new ones, each
  * only while the disk holds one more above its floor, all made ready at once, each in a child of its own. `say` gets
  * one line per shard.
  */
@@ -147,7 +156,7 @@ export async function claimShards(root, want, say) {
     child.stdout.on('data', (chunk) => { out += chunk; });
     child.stderr.on('data', (chunk) => { out += chunk; });
     child.on('close', (status) => {
-      if (status === 0) return say(out.trim()), done({ dir, release: () => rmSync(taken, { recursive: true, force: true }) });
+      if (status === 0) return say(out.trim()), done({ dir, lock: taken, release: () => rmSync(taken, { recursive: true, force: true }) });
       rmSync(taken, { recursive: true, force: true });
       say(`SHARD ${k} not used: ${out.trim().split('\n').at(-1)}`);
       done(null);

@@ -1,9 +1,10 @@
 //! The GPU-layer adapter and its declared pass costs. Public entry remains the crate root.
 
 use crate::{
-    ao, clouds, cull, dof, hdr, history, inset, local, lock, read_texture, texture2d, After, Planted,
-    Post, Renderer, CASCADE_PASS, CULL_PASS, FLARE_PASS, GEOMETRY_PASS, LABEL_PASS, MIRROR_PASS,
-    MSAA, OUTLINE_PASS, OUTPUT_PASS, SHADOW_PASS, SHARPEN_PASS, UPSCALE_PASS, WATER_PASS,
+    ao, clouds, cull, dof, fill, hdr, history, inset, local, local_tone, lock, read_texture,
+    texture2d, After, Planted, Post, Renderer, CASCADE_PASS, CULL_PASS, FLARE_PASS, GEOMETRY_PASS,
+    LABEL_PASS, MIRROR_PASS, MSAA, OUTLINE_PASS, OUTPUT_PASS, SHADOW_PASS, SHARPEN_PASS,
+    UPSCALE_PASS, WATER_PASS,
 };
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::scene::Scene;
@@ -67,11 +68,29 @@ pub struct Counts {
     pub counts_read_back: u32,
     /// Each indirect draw this frame: its instancer, its view and its batch (#484).
     pub indirect: Vec<(String, String, String)>,
+    /// #1636: each draw of a mesh the color pass issues this frame, as its layer's `draw_names`
+    /// name its first record: the item it draws for (an instancer, for its elements), the item
+    /// whose mesh it draws, its material's ID ("" for none), and the instances it draws (an
+    /// indirect draw: the records its cull reads).
+    pub draws: Vec<(String, String, String, u32)>,
     pub meshes_built: u32,
     /// The lights the light policy left out of this frame's view, by ID (#421).
     pub lights_left_out: Vec<String>,
     /// The lights asking for a shadow that the shadow budget left without one, by ID (#421).
     pub shadows_dropped: Vec<String>,
+    /// The clusters past their cap at this frame's view, each with the fill lights it dropped
+    /// (#1634: `cluster_over_budget`).
+    pub clusters_over: Vec<crate::fill::Over>,
+    /// #1634: the CPU time in ms this frame's light policy took to score its lights, order the
+    /// fill lights and write them for their pass; the bytes the fill lights and their lists hold
+    /// on the device; and the lights the fill lights' pass walked over its cells, in a frame
+    /// that ran it.
+    pub scoring_ms: f64,
+    pub lists_bytes: u64,
+    pub fill_walked: usize,
+    /// #1634: the cost model's estimate of this frame's GPU time in ms, of the scoring in ms and
+    /// of the bytes its fill lights hold.
+    pub light_estimate: [f64; 3],
     /// Each material operator this frame couldn't draw, `(operator, why)`: its solids draw with
     /// their material's own values, and a caller refuses the frame (#429).
     pub operators_refused: Vec<(String, String)>,
@@ -374,6 +393,18 @@ impl Module3 {
                 ns_per_px: PYRAMID_NS_PER_PX,
                 determinism: Determinism::SameMachine,
             },
+            // The fill lights listed cell by cell in the light policy's grid (#1634), when a light
+            // or the view changes: its cost is its cells' walk of the lights, never its pixels'.
+            Pass {
+                name: fill::PASS.into(),
+                place: "compute",
+                order: u32::MAX,
+                reads: Vec::new(),
+                writes: vec!["light_lists"],
+                resolution: Resolution::Full,
+                ns_per_px: 0.0,
+                determinism: Determinism::SameMachine,
+            },
             // The key sun's cascades (#422), each drawn only when its key changed.
             Pass {
                 name: CASCADE_PASS.into(),
@@ -471,6 +502,18 @@ impl Module3 {
                 writes: vec!["linear"],
                 resolution: Resolution::Full,
                 ns_per_px: 0.1,
+                determinism: Determinism::SameMachine,
+            },
+            // #971: the look's local tone map, before the output (which its name follows), drawn
+            // only while the look has one off its identity.
+            Pass {
+                name: local_tone::LOCAL_TONE_PASS.into(),
+                place: "tone_mapping",
+                order: 0,
+                reads: vec!["linear"],
+                writes: vec!["linear"],
+                resolution: Resolution::Full,
+                ns_per_px: 0.15,
                 determinism: Determinism::SameMachine,
             },
             Pass {

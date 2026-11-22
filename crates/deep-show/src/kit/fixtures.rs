@@ -16,7 +16,7 @@ use super::goldens::{render, Render};
 use super::instance::{self, How, Painter};
 use super::manifest::{sidecar_faults, Entry};
 use super::repair::{play_scene, who};
-use super::{failure, Case, Ctx, PartRun, Verdict};
+use super::{failure, Case, Ctx, PartRun, Verdict, REFERENCES_PART};
 use crate::hub::{Hub, Planted};
 
 /// One frame at 60 fps, in flicks.
@@ -57,8 +57,8 @@ fn lowered_of(hub: &Hub<'_>, doc: &Value, item: &str) -> Value {
     })
 }
 
-/// The document with the sidecar's twin applied: `{path, value}` at `items/<id>/...`.
-fn twinned(doc: &Value, twin: &Value) -> Option<Value> {
+/// The document with a twin applied: `{path, value}` at `items/<id>/...`.
+pub(super) fn twinned(doc: &Value, twin: &Value) -> Option<Value> {
     let path = twin["path"].as_str()?;
     let mut out = doc.clone();
     let parts: Vec<&str> = path.split('/').collect();
@@ -254,6 +254,65 @@ fn agent_decision(hub: &mut Hub<'_>, module: &str, f: &Entry) -> Case {
         case.fail(Verdict::Fail, fl);
     }
     case
+}
+
+/// The `references` part (#1801): each fixture of the module holding items of its own kinds, a
+/// case each; a field of one of those items that names another item or an asset of the document
+/// without its kind (or the core) declaring it a reference fails, `undeclared_reference`, naming
+/// the field as `<kind>/params/<field>`, since `refs_to` would miss it.
+pub fn references(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
+    let module = ctx.module;
+    let sealed = &hub.startup.sealed;
+    let own = |item: &Value| {
+        let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
+        let full = kind.split('@').next().unwrap_or(kind);
+        sealed.module_of_kind(full) == Some(module)
+    };
+    let fixtures: Vec<&Entry> = ctx
+        .manifest
+        .of_module(module)
+        .into_iter()
+        .filter(|f| {
+            f.document
+                .get("items")
+                .and_then(Value::as_object)
+                .is_some_and(|items| items.values().any(own))
+        })
+        .collect();
+    if fixtures.is_empty() {
+        return None;
+    }
+    let mut run = PartRun::new(fixtures.len() as u64);
+    for f in fixtures {
+        let items = f.document.get("items").and_then(Value::as_object);
+        let mut case = Case::new(format!("{}#references", f.name), Verdict::Pass)
+            .with("fixture", json!(f.name));
+        for (id, path) in deep_canvas::refs::undeclared(&f.document, sealed) {
+            let Some(item) = items.and_then(|i| i.get(&id)).filter(|i| own(i)) else {
+                continue;
+            };
+            let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
+            // The field as its kind declares it: below the item, without list indices.
+            let below = path.strip_prefix(&format!("items/{id}/")).unwrap_or(&path);
+            let field: Vec<&str> = below
+                .split('/')
+                .filter(|p| p.parse::<usize>().is_err())
+                .collect();
+            let field = format!("{kind}/{}", field.join("/"));
+            let what = format!("{path} names an ID, but {kind} declares no reference at {field}");
+            let fl = failure(
+                "undeclared_reference",
+                module,
+                REFERENCES_PART,
+                json!({"case": case.name(), "fixture": f.name, "kind": kind, "field": field,
+                   "id": id, "path": path, "what": what}),
+            );
+            case.fail(Verdict::Fail, fl.clone());
+            run.failures.push(fl);
+        }
+        run.cases.push(case);
+    }
+    Some(run)
 }
 
 /// The `fixtures` part.

@@ -51,27 +51,56 @@ pub struct Placed {
 
 /// Each view overlay of `doc` in a frame of `size` px: `size` a share of the safe frame's width
 /// and height, in its bottom-right corner (Overlay: `overlay.view@1`), its border in its role.
-pub fn placed(doc: &Value, size: [u32; 2], look: Option<&crate::look::Look3>) -> Result<Vec<Placed>, Refused> {
-    let safe = doc.get("safe").and_then(Value::as_f64).unwrap_or(24.0).max(0.0);
+pub fn placed(
+    doc: &Value,
+    size: [u32; 2],
+    look: Option<&crate::look::Look3>,
+) -> Result<Vec<Placed>, Refused> {
+    let safe = doc
+        .get("safe")
+        .and_then(Value::as_f64)
+        .unwrap_or(24.0)
+        .max(0.0);
     let mut out = Vec::new();
-    for (id, item) in doc.get("items").and_then(Value::as_object).into_iter().flatten() {
+    for (id, item) in doc
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
         if item.get("kind").and_then(Value::as_str) != Some(KIND) {
             continue;
         }
         let path = format!("items/{id}/params");
         let p = item.get("params").cloned().unwrap_or(Value::Null);
         let Some(camera) = p.get("camera").and_then(Value::as_str) else {
-            return Err(Refused { code: "bad_input", path: format!("{path}/camera") });
+            return Err(Refused {
+                code: "bad_input",
+                path: format!("{path}/camera"),
+            });
         };
         let share = match p.get("size").and_then(Value::as_array).map(Vec::as_slice) {
             None => [0.3, 0.3],
             Some([w, h]) => match (w.as_f64(), h.as_f64()) {
                 (Some(w), Some(h)) if w > 0.0 && w <= 1.0 && h > 0.0 && h <= 1.0 => [w, h],
-                _ => return Err(Refused { code: "out_of_range", path: format!("{path}/size") }),
+                _ => {
+                    return Err(Refused {
+                        code: "out_of_range",
+                        path: format!("{path}/size"),
+                    })
+                }
             },
-            _ => return Err(Refused { code: "out_of_range", path: format!("{path}/size") }),
+            _ => {
+                return Err(Refused {
+                    code: "out_of_range",
+                    path: format!("{path}/size"),
+                })
+            }
         };
-        let (fw, fh) = (f64::from(size[0]) - 2.0 * safe, f64::from(size[1]) - 2.0 * safe);
+        let (fw, fh) = (
+            f64::from(size[0]) - 2.0 * safe,
+            f64::from(size[1]) - 2.0 * safe,
+        );
         let w = (share[0] * fw).round().max(1.0);
         let h = (share[1] * fh).round().max(1.0);
         let x = (f64::from(size[0]) - safe - w).max(0.0);
@@ -120,7 +149,10 @@ pub fn lay(view: &Placed, picture: &[u8], frame: &mut [u8], size: [u32; 2], bord
 /// level deep), and of what draws only what its `include` keeps (all, with none) less `exclude`.
 pub fn document(doc: &Value, view: &Placed) -> Value {
     let mut out = doc.clone();
-    let params = doc.pointer(&format!("/items/{}/params", view.id)).cloned().unwrap_or(Value::Null);
+    let params = doc
+        .pointer(&format!("/items/{}/params", view.id))
+        .cloned()
+        .unwrap_or(Value::Null);
     let map = doc.as_object().cloned().unwrap_or_default();
     let keep = crate::inset::kept_view(&map, &params);
     if let Some(o) = out.as_object_mut() {
@@ -128,7 +160,8 @@ pub fn document(doc: &Value, view: &Placed) -> Value {
         if let Some(items) = o.get_mut("items").and_then(Value::as_object_mut) {
             items.retain(|id, item| {
                 let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
-                let draws = crate::scene::is_3d(kind) || kind.starts_with("light.") || kind == "sky@1";
+                let draws =
+                    crate::scene::is_3d(kind) || kind.starts_with("light.") || kind == "sky@1";
                 kind != KIND && (!draws || keep.as_ref().is_none_or(|k| k.contains(id)))
             });
         }
@@ -163,14 +196,18 @@ pub fn framed(doc: &Value) -> Vec<Framed> {
             .get(frame)
             .and_then(|f| f.pointer("/params/box"))
             .and_then(Value::as_array)
-            .map_or([0.0; 2], |b| [0, 1].map(|k| b.get(k).and_then(Value::as_f64).unwrap_or(0.0)));
+            .map_or([0.0; 2], |b| {
+                [0, 1].map(|k| b.get(k).and_then(Value::as_f64).unwrap_or(0.0))
+            });
         let mut held = BTreeSet::from([frame.to_string()]);
         loop {
             let more: Vec<String> = items
                 .iter()
                 .filter(|(c, i)| {
                     !held.contains(*c)
-                        && i.get("parent").and_then(Value::as_str).is_some_and(|p| held.contains(p))
+                        && i.get("parent")
+                            .and_then(Value::as_str)
+                            .is_some_and(|p| held.contains(p))
                 })
                 .map(|(c, _)| c.clone())
                 .collect();
@@ -243,21 +280,24 @@ pub fn clip(s: &mut Scene, plane: (Vec3, f64), id: String) {
 /// window.
 pub fn seen(scene: &Scene, v: &View) -> Scene {
     let mut s = scene.clone();
-    if let Some(sources) = &scene.sources {
-        s.layers = sources.as_ref().clone();
-    }
-    s.sources = None;
-    let windows: BTreeSet<&str> = scene.views.iter().map(|w| w.id.as_str()).collect();
-    let keeps = |id: &str| {
-        !windows.contains(owner(id)) && v.keep.as_ref().is_none_or(|k| k.contains(owner(id)))
+    seen_into(&mut s, scene, v);
+    s
+}
+
+/// [`seen`] written into `s`, the view the frame before drew (#3016): what holds is kept where
+/// it is, so a frame copies nothing new for the inset.
+pub fn seen_into(s: &mut Scene, scene: &Scene, v: &View) {
+    crate::refresh::shared(s, scene);
+    let window = |id: &str| scene.views.iter().any(|w| w.id == owner(id));
+    let keeps = |id: &str| !window(id) && v.keep.as_ref().is_none_or(|k| k.contains(owner(id)));
+    let keeps = crate::refresh::Keeps {
+        solid: &keeps,
+        item: &keeps,
+        labels: true,
     };
-    for layer in &mut s.layers {
-        layer.solids.retain(|x| keeps(&x.id));
-        layer.lines.retain(|x| keeps(&x.id));
-        layer.points.retain(|x| keeps(&x.id));
-        layer.labels.retain(|x| keeps(&x.id));
-        layer.puffs.retain(|x| keeps(&x.id));
-    }
+    let layers = scene.sources.as_deref().unwrap_or(&scene.layers);
+    crate::refresh::layers(&mut s.layers, layers, &keeps);
+    s.sources = None;
     // An eye inset's view follows the viewing camera as it is now, at the frame's own size.
     let (camera, size) = match &v.eye {
         Some(e) => (moved(&scene.camera, &e.by), scene.size),
@@ -266,21 +306,22 @@ pub fn seen(scene: &Scene, v: &View) -> Scene {
     let k = f64::from(size[0]) / f64::from(scene.size[0].max(1));
     s.camera = camera;
     s.size = size;
-    s.jitter = [s.jitter[0] * k, s.jitter[1] * k];
+    s.jitter = [scene.jitter[0] * k, scene.jitter[1] * k];
     s.views.clear();
     s.light_cut = None;
     s.overlays.clear();
     s.readouts.clear();
     s.motion = None;
     s.velocity = None;
+    crate::refresh::same(&mut s.mirror, &scene.mirror);
     s.flare = None;
     s.read_reflection = false;
     s.read_foam = false;
     s.read_normal = false;
+    crate::refresh::same(&mut s.cutaway, &scene.cutaway);
     if let Some(e) = &v.eye {
-        clip(&mut s, e.plane, format!("{}#window", v.id));
+        clip(s, e.plane, format!("{}#window", v.id));
     }
-    s
 }
 
 #[cfg(test)]
@@ -316,7 +357,9 @@ mod tests {
         let c = camera();
         let m = moved(&c, &by);
         for p in [[0.0, 0.0, -3.0], [0.4, -0.2, -1.5], [-1.0, 1.0, 0.5]] {
-            let q = std::array::from_fn(|r| by[r][0] * p[0] + by[r][1] * p[1] + by[r][2] * p[2] + by[r][3]);
+            let q = std::array::from_fn(|r| {
+                by[r][0] * p[0] + by[r][1] * p[1] + by[r][2] * p[2] + by[r][3]
+            });
             let a = c.project(p).unwrap();
             let b = m.project(q).unwrap();
             assert!((0..3).all(|k| (a[k] - b[k]).abs() < 1e-9), "{a:?} {b:?}");

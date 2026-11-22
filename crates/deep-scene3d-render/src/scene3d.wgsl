@@ -1,6 +1,11 @@
 // Issue #378: scene3d's draws into the linear and object-ID targets, and the output pass.
 // Pixels are y down from the top left; a fragment's position is its pixel centre.
 
+// #172: derivatives here are read inside branches on per-pixel values, as the app's own compiler
+// takes them; the browser's WebGPU refuses that unless this check is off. Nothing it computes
+// changes.
+diagnostic(off, derivative_uniformity);
+
 struct Frame {
     clip: mat4x4<f32>,
     right: vec4<f32>,
@@ -158,6 +163,11 @@ struct Lights {
     // Each shaded light's x: the policy's weight near the cut (in its color too); y: a hash of
     // its ID (u32 bits), for a light response (#485).
     answers: array<vec4<f32>, 32>,
+    // The fill lights' clusters (#1634): x: 1 with any; y and z: their grid's far and near
+    // planes; w: a cluster's most.
+    fill: vec4<f32>,
+    // x: what a world point's distance along the forward axis is measured from.
+    fill_view: vec4<f32>,
 };
 
 @group(1) @binding(0) var<uniform> lights: Lights;
@@ -172,8 +182,14 @@ struct Lights {
 // The IES tables, one layer each, and their sampler, wrapping in azimuth (#446).
 @group(1) @binding(15) var ies_tables: texture_2d_array<f32>;
 @group(1) @binding(16) var ies_sampler: sampler;
-// The light grid's cells (#446; clusters.rs): each a bit per shaded light that reaches it.
+// The light grid's cells (#446; clusters.rs): each a bit per shaded light that reaches it. Then,
+// once a scene holds a fill light (#1634; fill.rs), the view's fill lights in the policy's order,
+// each a key light's six rows and a hash of its ID; and each cell's list of them (fill.wgsl): how
+// many it holds and how many reached it, then the lights by their place, then their weights.
 @group(1) @binding(17) var<storage, read> light_grid: array<u32>;
+const FILL_LIGHTS: u32 = 3456u;
+const FILL_LIGHT_WORDS: u32 = 28u;
+const FILL_LISTS: u32 = 60800u;
 
 // The environment (#422; Sky `sky@1`: environment): its prefiltered cubes, each mip a roughness,
 // and their irradiance ÷ π as nine SH coefficients.
@@ -193,7 +209,7 @@ struct Env {
     top: vec4<f32>,
     low: vec4<f32>,
     moon: vec4<f32>,
-    // Fog: density (1/m), curve (0 exp, 1 exp2), height fog's top (m) and density (1/m).
+    // Fog: density (1/m), curve (0 exp, 1 exp2, 2 linear), height fog's top (m) and density (1/m).
     fog: vec4<f32>,
     // Its color; w 1 to mix toward what the background shows instead.
     fog_color: vec4<f32>,
@@ -204,6 +220,8 @@ struct Env {
     // disk's radiance.
     sun: vec4<f32>,
     sun_color: vec4<f32>,
+    // The linear fog curve's near and far (m); z: what the background draws, as a scale (#1992).
+    range: vec4<f32>,
 };
 
 @group(1) @binding(3) var env_cube: texture_cube<f32>;
@@ -251,7 +269,7 @@ const OF: u32 = 64u;
 const MASKS_INDEPENDENT: bool = false;
 
 fn band_hash(px: vec2<u32>, key: u32) -> u32 {
-    var h = px.x * 0x8da6b343u ^ px.y * 0xd8163841u ^ key * 0xcb1ab31fu;
+    var h = (px.x * 0x8da6b343u) ^ (px.y * 0xd8163841u) ^ (key * 0xcb1ab31fu);
     h = (h ^ (h >> 16u)) * 0x7feb352du;
     h = (h ^ (h >> 15u)) * 0x846ca68bu;
     return h ^ (h >> 16u);
@@ -395,7 +413,8 @@ struct MapSlot {
 struct Maps {
     slots: array<MapSlot, 5>,
     // x: which maps it has (bit k for map k); y: which read uv1 (bit k); z: 1 to rebuild a
-    // normal map's z and skip its stored one; w: 1 for a terrain tile's normals (#2017).
+    // normal map's z and skip its stored one; w: bit 0 for a terrain tile's normals (#2017),
+    // bit 1 for a terrain plate's horizon table (#1381).
     has: vec4<u32>,
     // x: the normal map's scale; y: the occlusion strength; z: the alpha cutoff (mask);
     // w: the alpha mode's coverage from the base color factor alone.
@@ -415,6 +434,10 @@ struct Maps {
 @group(3) @binding(10) var sampler_emission: sampler;
 // A terrain tile's plate's full-detail normals (#2017): x and z per sample, row by row.
 @group(3) @binding(40) var terrain_n: texture_2d<f32>;
+// A terrain plate's horizon table (#1381): its texels a side in element 0's x and y, then per
+// texel row by row 16 azimuths' horizon angle codes, azimuth k in byte k % 4 (low first) of word
+// k ÷ 4, azimuth 0 along +X turning toward +Z.
+@group(3) @binding(41) var<storage, read> terrain_h: array<vec4<u32>>;
 
 fn map_uv(k: u32, uv: vec4<f32>) -> vec2<f32> {
     let t = select(uv.xy, uv.zw, (maps.has.y & (1u << k)) != 0u);
@@ -897,6 +920,11 @@ fn tangent_to_world(in: MeshOut, n: vec3<f32>, m: vec3<f32>) -> vec3<f32> {
 // the part's own pixels and adds back. Every diffuse below is times `sss_keep` (1 − the weight on
 // a subsurface part, else 1); with `sss_only` the lights shade the diffuse alone, as the share.
 var<private> sss_keep: f32 = 1.0;
+// #1381: on a terrain plate with a horizon table, the key sun's visibility past the cascades
+// and the sky's occlusion; 1 and 1 elsewhere.
+var<private> far_on: bool = false;
+var<private> far_sun: f32 = 1.0;
+var<private> far_sky: f32 = 1.0;
 var<private> sss_only: bool = false;
 // Set by `sss_fs`: shade the share too, into `sss_share`, with the exit factor it's over.
 var<private> sss_pass: bool = false;
@@ -1118,6 +1146,13 @@ const P_SHADOW_ONE: u32 = 2097152u;
 const P_CALLS_CUT: u32 = 4194304u;
 const P_WORLD_N: u32 = 8388608u;
 const P_VIEW_AWAY: u32 = 16777216u;
+// #1381's: a terrain plate's sky occlusion from its slope alone, (1 + n.y) ÷ 2.
+const P_SKY_BY_SLOPE: u32 = 33554432u;
+// #458's: the summed light stops at 1.0; the specular lobe is stretched along the part's own +X;
+// a shadowed light's share is multiplied by 2 − visibility.
+const P_SUM_CLAMPED: u32 = 67108864u;
+const P_LOCAL_TANGENT: u32 = 134217728u;
+const P_SHADOW_BRIGHTENS: u32 = 268435456u;
 
 fn planted(bit: u32) -> bool {
     return (lights.count.z & bit) != 0u;
@@ -1358,6 +1393,46 @@ fn terrain_normal(in: MeshOut) -> vec3<f32> {
     }
     let qv = vec3<f32>(unpack2x16snorm(in.mask.y), unpack2x16snorm(in.mask.z).x);
     return rotate_q(vec4<f32>(qv, sqrt(max(1.0 - dot(qv, qv), 0.0))), n);
+}
+
+// A terrain plate's horizon at a pixel (#1381): the four texels' codes around its place on the
+// plate's grid (uv1) mixed, then read as angles (horizon.rs `angle`: tan(c ÷ 255 · atan 4π) ÷
+// 8). x: the key sun's visibility, a smoothstep of its elevation less the horizon toward it, both
+// in the plate's own space, across its ±0.27°; y: the sky's occlusion, 1 − mean sin² h over the
+// 16 azimuths, h at least 0.
+fn horizon_at(in: MeshOut, toward: vec3<f32>) -> vec2<f32> {
+    let size = vec2<i32>(terrain_h[0].xy);
+    let g = in.uv.zw * vec2<f32>(size - vec2<i32>(1));
+    let c = clamp(vec2<i32>(floor(g)), vec2<i32>(0), max(size - vec2<i32>(2), vec2<i32>(0)));
+    let f = clamp(g - vec2<f32>(c), vec2<f32>(0.0), vec2<f32>(1.0));
+    var codes = array<vec4<f32>, 4>(vec4<f32>(0.0), vec4<f32>(0.0), vec4<f32>(0.0), vec4<f32>(0.0));
+    let w = vec4<f32>((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+    var at = array<vec2<i32>, 4>(vec2<i32>(0, 0), vec2<i32>(1, 0), vec2<i32>(0, 1), vec2<i32>(1, 1));
+    for (var k = 0u; k < 4u; k++) {
+        let q = c + at[k];
+        let t = terrain_h[1 + q.y * size.x + q.x];
+        for (var j = 0u; j < 4u; j++) {
+            codes[j] += w[k] * unpack4x8unorm(t[j]);
+        }
+    }
+    let top = atan(4.0 * PI);
+    var sin2 = 0.0;
+    var hs: array<vec4<f32>, 4>;
+    for (var j = 0u; j < 4u; j++) {
+        hs[j] = tan(codes[j] * top) / 8.0;
+        let s = sin(hs[j]);
+        sin2 += dot(s, s);
+    }
+    // The sun in the plate's own space: the part's rotation undone.
+    let qv = vec3<f32>(unpack2x16snorm(in.mask.y), unpack2x16snorm(in.mask.z).x);
+    let sun = rotate_q(vec4<f32>(-qv, sqrt(max(1.0 - dot(qv, qv), 0.0))), normalize(toward));
+    let x = fract(atan2(sun.z, sun.x) / TAU + 1.0) * 16.0;
+    let k0 = min(u32(x), 15u);
+    let k1 = (k0 + 1u) % 16u;
+    let h = mix(hs[k0 / 4u][k0 % 4u], hs[k1 / 4u][k1 % 4u], x - f32(k0));
+    let half = radians(0.27);
+    let lit = smoothstep(-half, half, asin(clamp(sun.y, -1.0, 1.0)) - h);
+    return vec2<f32>(lit, 1.0 - sin2 / 16.0);
 }
 
 // A terrain normal stored as its x and z, its y ≥ 0 rebuilt.
@@ -1733,9 +1808,11 @@ fn lit_share(world: vec3<f32>, n: vec3<f32>, curved: bool, px: vec2<f32>) -> f32
             let lit = cascade_lit(i, world, n, curved, px);
             let near = select(0.0, lights.splits[max(i, 1u) - 1u], i > 0u);
             let edge = far - 0.1 * (far - near);
-            if lights.forward.w > 0.5 && d > edge {
-                var next = 1.0;
-                if i + 1u < count {
+            // A terrain plate's horizon fades in over the last cascade's far tenth (#1381).
+            let last = i + 1u == count;
+            if (lights.forward.w > 0.5 || (far_on && last)) && d > edge {
+                var next = far_sun;
+                if !last {
                     next = cascade_lit(i + 1u, world, n, curved, px);
                 }
                 return mix(lit, next, (d - edge) / max(far - edge, 1e-6));
@@ -1743,7 +1820,8 @@ fn lit_share(world: vec3<f32>, n: vec3<f32>, curved: bool, px: vec2<f32>) -> f32
             return lit;
         }
     }
-    return 1.0;
+    // Past the last cascade, a terrain plate's horizon shadows it (#1381).
+    return far_sun;
 }
 
 // Which of the shaded lights reach a fragment: a bit each, by the policy's order.
@@ -1756,6 +1834,27 @@ fn cluster_at(px: vec2<f32>, world: vec3<f32>) -> u32 {
     let x = min(u32(px.x / frame.viewport.x * 16.0), 15u);
     let y = min(u32(px.y / frame.viewport.y * 9.0), 8u);
     return light_grid[(slice * 9u + y) * 16u + x];
+}
+
+// Where a fragment's cell's list starts in the light grid's buffer (#1634; fill.wgsl's cells).
+fn fill_at(px: vec2<f32>, world: vec3<f32>) -> u32 {
+    let near = lights.fill.z;
+    let far = lights.fill.y;
+    let z = clamp(dot(world, lights.forward.xyz) + lights.fill_view.x, near, far);
+    var t = (z - near) / (far - near);
+    if lights.view.w > 0.5 {
+        t = log(z / near) / log(far / near);
+    }
+    let slice = min(u32(t * 24.0), 23u);
+    let x = min(u32(px.x / frame.viewport.x * 16.0), 15u);
+    let y = min(u32(px.y / frame.viewport.y * 9.0), 8u);
+    return FILL_LISTS + ((slice * 9u + y) * 16u + x) * (2u + 2u * u32(lights.fill.w));
+}
+
+// Four of the light grid's words as one row of a fill light.
+fn fill_row(at: u32) -> vec4<f32> {
+    return vec4<f32>(bitcast<f32>(light_grid[at]), bitcast<f32>(light_grid[at + 1u]),
+        bitcast<f32>(light_grid[at + 2u]), bitcast<f32>(light_grid[at + 3u]));
 }
 
 // The illuminance an area light (a one-sided Lambertian rect or disk) gives at `p` on a surface
@@ -1856,7 +1955,7 @@ fn area_light(li: Light, p: vec3<f32>, n: vec3<f32>, v: vec3<f32>, s: Surface, a
 
 // A seeded integer hash to [0, 1).
 fn hash3(p: vec3<i32>, seed: u32) -> f32 {
-    var h = bitcast<u32>(p.x) * 73856093u ^ bitcast<u32>(p.y) * 19349663u ^ bitcast<u32>(p.z) * 83492791u ^ seed * 2654435761u;
+    var h = (bitcast<u32>(p.x) * 73856093u) ^ (bitcast<u32>(p.y) * 19349663u) ^ (bitcast<u32>(p.z) * 83492791u) ^ (seed * 2654435761u);
     h = (h ^ (h >> 16u)) * 0x45d9f3bu;
     h = (h ^ (h >> 16u)) * 0x45d9f3bu;
     h = h ^ (h >> 16u);
@@ -2108,6 +2207,9 @@ fn answer_light(in: MeshOut, n: vec3<f32>, v: vec3<f32>, s: Surface, i: u32, cur
     if planted(P_SHADOW_ONE) {
         shadow = 1.0;
     }
+    if planted(P_SHADOW_BRIGHTENS) {
+        shadow = 2.0 - shadow;
+    }
     let w = lights.answers[i].x;
     let radiance = select(vec3<f32>(0.0), a.e / w, w > 0.0);
     let hash = bitcast<u32>(lights.answers[i].y);
@@ -2139,8 +2241,27 @@ fn answer_ambient(in: MeshOut, n: vec3<f32>, s: Surface, occ: f32) -> vec3<f32> 
         s.base, in.emission.w, s.metallic, s.rough, s.level));
 }
 
+// #458's planted lobe: the part's own +X along the surface, the direction its x grows in.
+fn local_x(in: MeshOut) -> vec3<f32> {
+    let wx = dpdx(in.world);
+    let wy = dpdy(in.world);
+    let lx = dpdx(in.local.x);
+    let ly = dpdy(in.local.x);
+    let a = dot(wx, wx);
+    let b = dot(wx, wy);
+    let c = dot(wy, wy);
+    let det = a * c - b * b;
+    let g = ((lx * c - ly * b) * wx + (ly * a - lx * b) * wy) / max(det, 1e-30);
+    let len = length(g);
+    return select(vec3<f32>(0.0), g / len, len > 1e-8);
+}
+
 fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32, curved: bool) -> Direct {
     let v = select(normalize(lights.view.xyz), normalize(lights.view.xyz - in.world), lights.view.w > 0.5);
+    var local_t = vec3<f32>(0.0);
+    if planted(P_LOCAL_TANGENT) {
+        local_t = local_x(in);
+    }
     let rough = clamp(s.rough, 0.045, 1.0);
     // Geometric specular antialiasing (Kaplanyan): the normal's change across the pixel widens
     // the lobe.
@@ -2160,7 +2281,7 @@ fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32, curved: bool) -> D
     var removed = 0.0;
     let reach = cluster_at(in.pos.xy, in.world);
     for (var i = 0u; i < lights.count.x; i++) {
-        if (reach >> i & 1u) == 0u {
+        if ((reach >> i) & 1u) == 0u {
             continue;
         }
         let li = lights.items[i];
@@ -2191,7 +2312,12 @@ fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32, curved: bool) -> D
             if s.k != 0u {
                 add = extra_lobes(n, v, l, s, a2, dfg_v) * e;
             } else if nl > 0.0 {
-                let b = lobes(n, v, l, s, a2, dfg_v);
+                var a2l = a2;
+                if planted(P_LOCAL_TANGENT) {
+                    let ht = dot(local_t, normalize(v + l));
+                    a2l = clamp(a2 * (1.0 + 60.0 * ht * ht), 0.0, 1.0);
+                }
+                let b = lobes(n, v, l, s, a2l, dfg_v);
                 add = (b.diffuse + b.spec) * e * nl;
             }
         }
@@ -2210,7 +2336,7 @@ fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32, curved: bool) -> D
             total += y;
             removed += y * (1.0 - lit);
         } else {
-            add = add * lit;
+            add = add * select(lit, 2.0 - lit, planted(P_SHADOW_BRIGHTENS));
         }
         // A thin subsurface part lets the key sun through from behind by the thickness its
         // cascades measure, exp(−d ÷ radius), into its share (#481).
@@ -2225,12 +2351,58 @@ fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32, curved: bool) -> D
         }
         out += add;
     }
+    // The fill lights that reach the fragment's cluster (#1634), in the policy's order, each
+    // at its weight there: no shadow, and its receivers as a key light's.
+    if lights.fill.x > 0.5 {
+        let at = fill_at(in.pos.xy, in.world);
+        let most = u32(lights.fill.w);
+        let count = min(light_grid[at], most);
+        for (var k = 0u; k < count; k++) {
+            let f = FILL_LIGHTS + light_grid[at + 2u + k] * FILL_LIGHT_WORDS;
+            let w = bitcast<f32>(light_grid[at + 2u + most + k]);
+            let only = light_grid[f + 15u];
+            if w <= 0.0 || (only != 0u && (in.color & only) == 0u) {
+                continue;
+            }
+            // Most of a cell's lights end short of any one pixel of it.
+            let pos = fill_row(f);
+            let dir = fill_row(f + 4u);
+            let to = pos.xyz - in.world;
+            if dot(to, to) >= dir.w * dir.w {
+                continue;
+            }
+            let li = Light(pos, dir, fill_row(f + 8u), fill_row(f + 12u), fill_row(f + 16u), fill_row(f + 20u));
+            let arrived = arriving(li, in.world, u32(li.up.w));
+            if HAS_LIGHT && !catches {
+                let eye = select(v, -v, planted(P_VIEW_AWAY));
+                out += response_light(LightIn(to_view(n), to_view(eye), to_view(arrived.l), arrived.e, 1.0,
+                    light_grid[f + 24u], s.base, in.emission.w, s.metallic, s.rough, s.level)) * w;
+                continue;
+            }
+            var add = vec3<f32>(0.0);
+            let nl = dot(n, arrived.l);
+            if s.k != 0u {
+                add = extra_lobes(n, v, arrived.l, s, a2, dfg_v) * arrived.e;
+            } else if nl > 0.0 {
+                let b = lobes(n, v, arrived.l, s, a2, dfg_v);
+                add = (b.diffuse + b.spec) * arrived.e * nl;
+            }
+            if catches {
+                total += dot(add, vec3<f32>(0.2126, 0.7152, 0.0722)) * w;
+            } else {
+                out += add * w;
+            }
+        }
+    }
     // The planted loop that calls `light` for the lights the policy cut too, at weight 1.
     if HAS_LIGHT && !catches && planted(P_CALLS_CUT) {
         for (var k = 0u; k < u32(lights.answers[0].z); k++) {
             out += response_light(LightIn(to_view(n), to_view(v), to_view(n), vec3<f32>(0.0), 1.0, 0u,
                 s.base, in.emission.w, s.metallic, s.rough, s.level));
         }
+    }
+    if planted(P_SUM_CLAMPED) {
+        out = min(out, vec3<f32>(1.0));
     }
     return Direct(out, select(0.0, removed / total, total > 0.0));
 }
@@ -2344,8 +2516,19 @@ fn share(in: MeshOut, front: bool, keyed: bool) -> Share {
 fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, keyed: bool) -> Targets {
     var in = in0;
     // A terrain tile shades from its plate's full-detail normals at every level (#2017).
-    if maps.has.w != 0u {
+    if (maps.has.w & 1u) != 0u {
         in.normal = terrain_normal(in);
+    }
+    // A terrain plate's horizon: the key sun past the cascades and the sky's occlusion (#1381).
+    if (maps.has.w & 2u) != 0u {
+        let key = select(frame.light.xyz, -lights.items[max(lights.count.y, 1u) - 1u].dir.xyz, lights.count.y > 0u);
+        let h = horizon_at(in, key);
+        far_on = true;
+        far_sun = h.x;
+        far_sky = h.y;
+        if planted(P_SKY_BY_SLOPE) {
+            far_sky = 0.5 + 0.5 * normalize(in.normal).y;
+        }
     }
     // A cutaway hides what lies past its planes (#424); with a cap, a back face seen through the
     // cut shades as the cut face: a matte surface of the cap's role on its plane, facing along
@@ -2399,7 +2582,7 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
                 m.n = coat_n;
             }
         }
-        m.occlusion = m.occlusion * op_occlusion;
+        m.occlusion = m.occlusion * op_occlusion * far_sky;
         // Its coverage: the material's alpha (times its base color map's) times the item's
         // opacity (#418). A mask with maps keeps its coverage here, from the map.
         var alpha = m.alpha;
@@ -2422,7 +2605,9 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
             sss_keep = 1.0 - sw;
         }
         if (in.flags & UNLIT) != 0u {
-            return targets(see_through(adjusted(s.base + m.emission, in.op.w), alpha, mode), in.pick);
+            // An unlit part takes the sky's fog as a lit one does (#1992).
+            let unlit = fogged(adjusted(s.base + m.emission, in.op.w), in.world);
+            return targets(see_through(unlit, alpha, mode), in.pick);
         }
         let d = direct(in, facing, s, m.spread, curved);
         // A shadow catcher writes black, as opaque as the share of light its shadow removes, at
@@ -2431,7 +2616,7 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
             return targets(vec4<f32>(0.0, 0.0, 0.0, d.removed * alpha * in.base.w), in.pick);
         }
         // A part with a light response takes no key light: its responses answer for its light.
-        if keyed && lights.count.x == 0u && frame.sky_top.w <= 0.0 && env.k.x <= 0.0 && !HAS_LIGHT && !HAS_AMBIENT {
+        if keyed && lights.count.x == 0u && lights.fill.x < 0.5 && frame.sky_top.w <= 0.0 && env.k.x <= 0.0 && !HAS_LIGHT && !HAS_AMBIENT {
             let key = 0.45 * occlusion(in.pos.xy, in.world, normalize(in.normal), s.base) + 0.55 * max(dot(facing, frame.light.xyz), 0.0);
             let unlit = fogged(adjusted(s.base * key + in.emission.rgb, in.op.w), in.world);
             return targets(see_through(unlit, alpha, mode), in.pick);
@@ -2482,7 +2667,7 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
         direct = direct * lit_share(in.world, n, curved, in.pos.xy) * contact_at(in.pos.xy);
     }
     let albedo = projected(tinted(select(paint(in.color), in.tangent.rgb, tinted_by_vertex(in)), in.pick, in.local), in.pick, in.world, n);
-    let lit = ambient * occlusion(in.pos.xy, in.world, normalize(in.normal), albedo) + vec3<f32>(direct);
+    let lit = ambient * occlusion(in.pos.xy, in.world, normalize(in.normal), albedo) * far_sky + vec3<f32>(direct);
     let a = in.emission.w;
     return targets(vec4<f32>(fogged(adjusted(albedo * lit + in.emission.rgb, in.op.w), in.world) * a, a), in.pick);
 }
@@ -2731,7 +2916,11 @@ struct LineOut {
     // the segment's length in m and its ends' clip w, so the dash follows the segment in depth.
     @location(7) @interpolate(flat) dash: vec2<f32>,
     @location(8) @interpolate(flat) metres: vec3<f32>,
+    // Its caps; bit 3: the sky's fog applies to it (#1992).
     @location(9) @interpolate(flat) caps: u32,
+    // Its ends in the world, each with its clip w, which place a fragment for the fog.
+    @location(10) @interpolate(flat) wa: vec4<f32>,
+    @location(11) @interpolate(flat) wb: vec4<f32>,
 };
 
 @vertex
@@ -2752,6 +2941,8 @@ fn line_vs(
     out.pick = pick;
     out.joined = (flags >> 3u) & 1u;
     out.caps = flags >> 6u;
+    out.wa = vec4<f32>(a.xyz, ca.w);
+    out.wb = vec4<f32>(b.xyz, cb.w);
     out.dash = unpack2x16float(dash);
     out.metres = vec3<f32>(0.0);
     if (flags & 16u) != 0u {
@@ -2835,7 +3026,13 @@ fn line_fs(in: LineOut) -> Targets {
         discard;
     }
     let alpha = cov * mix(in.alpha.x, in.alpha.y, t) * unpack4x8unorm(in.color).a;
-    return targets(vec4<f32>(paint(in.color) * alpha, alpha), select(0u, in.pick, cov >= 0.5));
+    var c = paint(in.color);
+    if (in.caps & 8u) != 0u {
+        // Where the fragment lies along the segment in the world, through its ends' depths.
+        let s = (t / in.wb.w) / ((1.0 - t) / in.wa.w + t / in.wb.w);
+        c = fogged(c, mix(in.wa.xyz, in.wb.xyz, s));
+    }
+    return targets(vec4<f32>(c * alpha, alpha), select(0u, in.pick, cov >= 0.5));
 }
 
 // ---- points: a disc, square or diamond in px or m about the point's projection
@@ -2847,6 +3044,8 @@ struct PointOut {
     @location(2) @interpolate(flat) color: u32,
     @location(3) @interpolate(flat) pick: u32,
     @location(4) @interpolate(flat) shape: u32,
+    // Where it is in the world; w 1 when the sky's fog applies to it (#1992).
+    @location(5) @interpolate(flat) world: vec4<f32>,
 };
 
 @vertex
@@ -2862,6 +3061,7 @@ fn point_vs(
     out.color = color;
     out.pick = pick;
     out.shape = (flags >> 1u) & 3u;
+    out.world = vec4<f32>(p.xyz, f32((flags >> 3u) & 1u));
     if c.w <= 0.0 {
         out.pos = OFF;
         return out;
@@ -2890,14 +3090,18 @@ fn point_fs(in: PointOut) -> Targets {
     if cov <= 0.0 {
         discard;
     }
-    return targets(vec4<f32>(paint(in.color) * cov, cov), select(0u, in.pick, cov >= 0.5));
+    var c = paint(in.color);
+    if in.world.w > 0.5 {
+        c = fogged(c, in.world.xyz);
+    }
+    return targets(vec4<f32>(c * cov, cov), select(0u, in.pick, cov >= 0.5));
 }
 
 // ---- labels: a quad per glyph from the core's glyph atlas, in a label that faces the camera,
 // stays upright or keeps its axes
 
-@group(1) @binding(0) var atlas: texture_2d_array<f32>;
-@group(1) @binding(1) var atlas_sampler: sampler;
+@group(2) @binding(0) var atlas: texture_2d_array<f32>;
+@group(2) @binding(1) var atlas_sampler: sampler;
 
 struct TextOut {
     @builtin(position) pos: vec4<f32>,
@@ -2906,11 +3110,16 @@ struct TextOut {
     @location(2) @interpolate(flat) pick: u32,
     @location(3) @interpolate(flat) page: u32,
     @location(4) @interpolate(flat) later: u32,
+    // Where the fragment is in the world, and whether the sky's fog applies to it (#1992).
+    @location(5) world: vec3<f32>,
+    @location(6) @interpolate(flat) fog: u32,
 };
 
 // A glyph whose color the label pass draws after the upscale (#1174): here it writes only the
 // label's depth and pick.
 const LATER: u32 = 256u;
+// A label the sky's fog applies to, which draws here whatever its size space.
+const FOG: u32 = 512u;
 
 @vertex
 fn text_vs(
@@ -2931,6 +3140,8 @@ fn text_vs(
     out.pick = pick;
     out.page = (flags >> 3u) & 31u;
     out.later = flags & LATER;
+    out.fog = flags & FOG;
+    out.world = p.xyz;
     let c = frame.clip * vec4<f32>(p.xyz, 1.0);
     if c.w <= 0.0 {
         out.pos = OFF;
@@ -2954,7 +3165,8 @@ fn text_vs(
         right = ax_r.xyz;
         up = ax_u.xyz;
     }
-    out.pos = frame.clip * vec4<f32>(p.xyz + right * offset.x - up * offset.y, 1.0);
+    out.world = p.xyz + right * offset.x - up * offset.y;
+    out.pos = frame.clip * vec4<f32>(out.world, 1.0);
     return out;
 }
 
@@ -2965,7 +3177,28 @@ fn text_fs(in: TextOut) -> Targets {
         discard;
     }
     let shown = select(a, 0.0, in.later != 0u) * unpack4x8unorm(in.color).a;
-    return targets(vec4<f32>(paint(in.color) * shown, shown), select(0u, in.pick, a >= 0.5));
+    var c = paint(in.color);
+    if in.fog != 0u {
+        c = fogged(c, in.world);
+    }
+    return targets(vec4<f32>(c * shown, shown), select(0u, in.pick, a >= 0.5));
+}
+
+// ---- image marks (#1992): a picture on one quad, placed and turned as a label's glyph is
+
+@group(2) @binding(2) var mark_image: texture_2d<f32>;
+
+@fragment
+fn image_fs(in: TextOut) -> Targets {
+    let t = textureSample(mark_image, atlas_sampler, in.uv);
+    if t.a <= 0.002 {
+        discard;
+    }
+    var c = t.rgb;
+    if in.fog != 0u {
+        c = fogged(c, in.world);
+    }
+    return targets(vec4<f32>(c * t.a, t.a), select(0u, in.pick, t.a >= 0.5));
 }
 
 // ---- the sky (#422): drawn first, behind everything, and what fog mixes toward
@@ -3019,10 +3252,11 @@ fn sky_fields(d: vec3<f32>) -> vec3<f32> {
 }
 
 // What the background shows along `d` from the eye: the environment (on its ground when it has
-// one, at its blur) or the sky's own fields.
+// one, at its blur) or the sky's own fields, at the background's own intensity, which scales
+// nothing the environment lights (#1992).
 fn background(d: vec3<f32>) -> vec3<f32> {
     if env.bg.x < 0.5 {
-        return sky_fields(d);
+        return sky_fields(d) * env.range.z;
     }
     var dir = d;
     if env.bg.w > 0.0 {
@@ -3040,9 +3274,9 @@ fn background(d: vec3<f32>) -> vec3<f32> {
         let e = env_dir(dir);
         let a = textureSampleLevel(env_bg, env_sampler, e, 0.0).rgb;
         let b = textureSampleLevel(env_bg_to, env_sampler, e, 0.0).rgb;
-        return select(a, mix(a, b, env.m.x), env.m.x > 0.0) * env.k.z;
+        return select(a, mix(a, b, env.m.x), env.m.x > 0.0) * env.k.z * env.range.z;
     }
-    return env_radiance(dir, 0.0) * env.k.z;
+    return env_radiance(dir, 0.0) * env.k.z * env.range.z;
 }
 
 @fragment
@@ -3050,17 +3284,22 @@ fn sky_fs(@builtin(position) pos: vec4<f32>) -> Targets {
     return targets(vec4<f32>(background(view_ray(pos.xy)), 1.0), 0u);
 }
 
-// Fog on a lit surface at `world` (#422; Sky `sky@1` and its height fog): the distance fog by
-// its curve, and the mist below the height fog's top along the ray's length beneath it, mixed
-// toward the fog's color or what the background shows along the ray.
+// Fog on a lit surface or a mark at `world` (#422, #1992; Sky `sky@1` and its height fog): the
+// distance fog by its curve, over the distance from the eye whatever the curve, and the mist
+// below the height fog's top along the ray's length beneath it, mixed toward the fog's color or
+// what the background shows along the ray.
 fn fogged(c: vec3<f32>, world: vec3<f32>) -> vec3<f32> {
-    if env.low.w < 0.5 || (env.fog.x <= 0.0 && env.fog.w <= 0.0) {
+    let ramp = env.fog.y > 1.5;
+    if env.low.w < 0.5 || (env.fog.x <= 0.0 && env.fog.w <= 0.0 && !ramp) {
         return c;
     }
     let ray = world - env.eye.xyz;
     let dist = length(ray);
     let a = env.fog.x * dist;
     var keep = select(exp(-a), exp(-a * a), env.fog.y > 0.5);
+    if ramp {
+        keep = 1.0 - clamp((dist - env.range.x) / (env.range.y - env.range.x), 0.0, 1.0);
+    }
     if env.fog.w > 0.0 {
         // The share of the ray below the top, from the eye to the surface.
         let y0 = env.eye.y;

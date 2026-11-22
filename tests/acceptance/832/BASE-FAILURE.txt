@@ -1,0 +1,55 @@
+# #832's acceptance tests on the base, cfc1e6a71 ("design(#832): name catalog.dominance's surface as built"), on
+# macOS arm64 at load about 200. The checkout's path is <checkout>.
+#
+# One run of the three files, after npm ci and npm run build --workspaces, under the machine's build grant:
+#   PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+#     node scripts/throttle.mjs build --wait 600 -- \
+#     npx vitest run --root tests/acceptance/832 --testTimeout=600000 --no-file-parallelism --reporter=verbose
+# Before the assertion each file packed its catalogs with deep-catalog, assembled the duel (deep-logic's layout probe,
+# #533's assembler) and started four deep-drive replicas, all of which the base has. Every test then fails at the same
+# named assertion, for the issue's reason: the base's catalog plug-in has no catalog.dominance (its manifest lists six
+# kinds), so the hub can't route the check. Each file's second test (a planted runner) fails at that assertion too, the
+# hub it waits on having failed; past it, the base has no packages/checks/catalog/dominance.ts either.
+# npx tsc -p tests/acceptance/832/tsconfig.json passes at the base.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/832
+
+ × ac01-dominant.test.ts > #832.d6fbcd45 … > #832.d6fbcd45 the planted card fails catalog.dominant, naming the card and its shares with and without it 10968ms
+   → the catalog plug-in's manifest lists catalog.dominance beside its six kinds, so the hub routes it there: ["catalog.refs","catalog.reach","catalog.economy","catalog.bounds","catalog.copy","scenario.reach"]: expected [ 'catalog.refs', …(5) ] to include 'catalog.dominance'
+ × ac01-dominant.test.ts > #832.d6fbcd45 … > #832.d6fbcd45 with the card at normal damage catalog.dominance passes 8ms
+   → (the same assertion)
+ × ac03-pairing.test.ts > #832.d550c82e … > #832.d550c82e each pair's two runs share a seed and differ only in the row's offers, and both replay from their tracks 9060ms
+   → (the same assertion)
+ × ac03-pairing.test.ts > #832.d550c82e … > #832.d550c82e a planted pairing on different seeds (dominance_unpaired_seeds) fails catalog.unpaired, naming the pair 0ms
+   → (the same assertion)
+ × ac02-inconclusive.test.ts > #832.c07dc2c3 … > #832.c07dc2c3 edge, whose interval over 200 pairs holds the limit, reads INCONCLUSIVE, naming the pairs it would need 10959ms
+   → (the same assertion)
+ × ac02-inconclusive.test.ts > #832.c07dc2c3 … > #832.c07dc2c3 a planted plug-in that reads PASS there (dominance_straddle_passes) fails 0ms
+   → (the same assertion)
+
+ Test Files  3 failed (3)
+      Tests  6 failed (6)
+   Duration  33.07s
+
+ FAIL  ac01-dominant.test.ts > … (both tests)
+AssertionError: the catalog plug-in's manifest lists catalog.dominance beside its six kinds, so the hub routes it there: ["catalog.refs","catalog.reach","catalog.economy","catalog.bounds","catalog.copy","scenario.reach"]: expected [ 'catalog.refs', …(5) ] to include 'catalog.dominance'
+ ❯ openHub helpers.ts:140:152
+ ❯ ac01-dominant.test.ts:27:138
+ ❯ dominance ac01-dominant.test.ts:35:25
+ ❯ ac01-dominant.test.ts:44:39
+
+ FAIL  ac02-inconclusive.test.ts > … (both tests)
+AssertionError: (the same message)
+ ❯ openHub helpers.ts:140:152
+ ❯ ac02-inconclusive.test.ts:24:138
+ ❯ ac02-inconclusive.test.ts:49:27
+
+ FAIL  ac03-pairing.test.ts > … (both tests)
+AssertionError: (the same message)
+ ❯ openHub helpers.ts:140:152
+ ❯ ac03-pairing.test.ts:33:138
+ ❯ ac03-pairing.test.ts:79:27
+
+# What the base does, read from plays of the duel made here before this run (README: How the numbers were chosen):
+# deep-drive plays the duel with its catalog among its data assets under the greedy legal bot on the none form,
+# 128 steps from each run's seed, and replays a track to the same checkpoints (0, 60, 120) and final hash.

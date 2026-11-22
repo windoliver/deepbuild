@@ -1,0 +1,1 @@
+{ "alone": true, "why": "Each file builds deep-canvas-render or deep-show with cargo, and the deep-show files draw snapshots and run the interaction scope's clock." }

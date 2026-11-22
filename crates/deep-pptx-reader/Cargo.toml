@@ -1,0 +1,15 @@
+[package]
+name = "deep-pptx-reader"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #732: the pptx export's fidelity reader (canvas primitives: Export), apart from its writer.
+# The writer packs its zip and writes its XML by hand in deep-show; this reads the package with its
+# own zip walk, zune-inflate and roxmltree, each pinned, and runs the pinned LibreOffice headless to
+# draw each slide.
+
+[dependencies]
+roxmltree = { version = "=0.21.1", default-features = false, features = ["std"] }
+zune-inflate = { version = "=0.2.54", default-features = false, features = ["std"] }

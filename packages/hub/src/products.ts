@@ -17,7 +17,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, watch, type FSWatcher } from 'node:fs';
 import { lstat, readdir, rm } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
-import { parse } from 'yaml';
+import { parseYaml as parse } from './yaml.js';
 import { DISK_FLOOR, freeBytes } from './disk.js';
 import { repoOf } from './paths.js';
 import { writeSynced } from './vfs.js';
@@ -574,6 +574,9 @@ export class Products {
   async hook(meta: { event: string; session: string; cwd: string; toolUse?: string | undefined }): Promise<void> {
     let s = this.sessions.get(meta.session);
     if (!s && meta.cwd) {
+      // Nothing is stored or placed, and this folder declares no products: there is no product work to observe.
+      // Once any entry exists, calls from other repos still participate in detecting writes to the store.
+      if (!this.index.entries.length && !this.index.placed.length && !specAbove(meta.cwd)) return;
       const repo = await this.repoAt(meta.cwd);
       if (repo) s = this.seen(meta.session, repo.top);
     }

@@ -1,0 +1,250 @@
+# Base run of tests/acceptance/1904 at dcb63a0a0a374d6759c1d352eb31439597792905 (nothing of #1904 implemented), 2026-11-20T20:30Z, Node v24.22.0, macOS 27.2.1 (arm64), load { 80.39 77.36 85.33 }
+# node node_modules/vitest/vitest.mjs run tests/acceptance/1904 --reporter=verbose (after npm run build --workspaces)
+
+ RUN  v5.0.5 <repo>
+
+ × tests/acceptance/1904/one-header.test.ts > #1904.9f3f4bff exactly one place in packages/*/src sets GitHub's authorization header 78ms
+   → the places that set a bearer authorization header for GitHub: packages/archive/src/index.ts:292, packages/github/src/apps.ts:40, packages/github/src/pushes.ts:28, packages/hub/src/forge.ts:112, packages/hub/src/github-source.ts:53, packages/hub/src/github-source.ts:78, packages/hub/src/intake.ts:368, packages/hub/src/landing.ts:120, packages/hub/src/landing.ts:303, packages/hub/src/work.ts:330, packages/hub/src/workspaces.ts:246: expected 11 to be 1 // Object.is equality
+ × tests/acceptance/1904/redirects.test.ts > #1904.b57b5ae4 github restOf (githubPushes): a forge that redirects off its origin is refused, and the token goes nowhere else 112ms
+   → returned [{"commit":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","author":"elsewhere","committer":"elsewhere","ref":"refs/heads/main","tree":"fffffffffffffffffffffffffffff: expected { forgeAskedWithToken: true, …(3) } to deeply equal { forgeAskedWithToken: true, …(3) }
+ × tests/acceptance/1904/redirects.test.ts > #1904.b57b5ae4 github restOf (githubPushes): a forge that redirects to itself forever ends in a refusal within five redirects 65ms
+   → threw fetch failed; the forge was asked 21 times: expected { refused: true, bounded: false } to deeply equal { refused: true, bounded: true }
+ × tests/acceptance/1904/redirects.test.ts > #1904.b57b5ae4 github apps call (revoke): a forge that redirects off its origin is refused, and the token goes nowhere else 3ms
+   → returned undefined: expected { forgeAskedWithToken: true, …(3) } to deeply equal { forgeAskedWithToken: true, …(3) }
+ × tests/acceptance/1904/redirects.test.ts > #1904.b57b5ae4 github apps call (revoke): a forge that redirects to itself forever ends in a refusal within five redirects 25ms
+   → threw fetch failed; the forge was asked 21 times: expected { refused: true, bounded: false } to deeply equal { refused: true, bounded: true }
+ × tests/acceptance/1904/redirects.test.ts > #1904.b57b5ae4 hub Forge (pullFor): a forge that redirects off its origin is refused, and the token goes nowhere else 4ms
+   → returned "http://elsewhere.invalid/o/r/pull/1": expected { forgeAskedWithToken: true, …(3) } to deeply equal { forgeAskedWithToken: true, …(3) }
+ × tests/acceptance/1904/redirects.test.ts > #1904.b57b5ae4 hub Forge (pullFor): a forge that redirects to itself forever ends in a refusal within five redirects 7ms
+   → returned undefined; the forge was asked 21 times: expected { refused: true, bounded: false } to deeply equal { refused: true, bounded: true }
+ × tests/acceptance/1904/redirects.test.ts > #1904.b57b5ae4 hub github-source liveFetch: a forge that redirects off its origin is refused, and the token goes nowhere else 3ms
+   → returned {"status":200,"headers":{"connection":"keep-alive","content-type":"application/json","date":"Fri, 20 Nov 2026 20:30:39 GMT","keep-alive":"timeout=5","transfer-e: expected { forgeAskedWithToken: true, …(3) } to deeply equal { forgeAskedWithToken: true, …(3) }
+ × tests/acceptance/1904/redirects.test.ts > #1904.b57b5ae4 hub github-source liveFetch: a forge that redirects to itself forever ends in a refusal within five redirects 6ms
+   → returned {"status":599,"headers":{}}; the forge was asked 21 times: expected { refused: true, bounded: false } to deeply equal { refused: true, bounded: true }
+ × tests/acceptance/1904/redirects.test.ts > #1904.b57b5ae4 hub github-source liveGraphql: a forge that redirects off its origin is refused, and the token goes nowhere else 5ms
+   → returned {"status":200,"headers":{},"body":{"data":{"elsewhere":true}}}: expected { forgeAskedWithToken: true, …(3) } to deeply equal { forgeAskedWithToken: true, …(3) }
+ × tests/acceptance/1904/redirects.test.ts > #1904.b57b5ae4 hub github-source liveGraphql: a forge that redirects to itself forever ends in a refusal within five redirects 68ms
+   → returned {"status":599,"headers":{}}; the forge was asked 21 times: expected { refused: true, bounded: false } to deeply equal { refused: true, bounded: true }
+ ✓ tests/acceptance/1904/redirects.test.ts > #1904.b57b5ae4 archive forgeRuns (openArchive pass): a forge that redirects off its origin is refused, and the token goes nowhere else 161ms
+ ✓ tests/acceptance/1904/redirects.test.ts > #1904.b57b5ae4 archive forgeRuns (openArchive pass): a forge that redirects to itself forever ends in a refusal within five redirects 53ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1904/one-header.test.ts > #1904.9f3f4bff exactly one place in packages/*/src sets GitHub's authorization header
+AssertionError: the places that set a bearer authorization header for GitHub: packages/archive/src/index.ts:292, packages/github/src/apps.ts:40, packages/github/src/pushes.ts:28, packages/hub/src/forge.ts:112, packages/hub/src/github-source.ts:53, packages/hub/src/github-source.ts:78, packages/hub/src/intake.ts:368, packages/hub/src/landing.ts:120, packages/hub/src/landing.ts:303, packages/hub/src/work.ts:330, packages/hub/src/workspaces.ts:246: expected 11 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 11
+
+ ❯ tests/acceptance/1904/one-header.test.ts:39:109
+     37|     return text.split('\n').flatMap((line, n) => [...line.matchAll(SET…
+     38|   });
+     39|   expect(sites.length, `the places that set a bearer authorization hea…
+       |                                                                                                             ^
+     40| }, 30_000);
+     41|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯
+
+ FAIL  tests/acceptance/1904/redirects.test.ts > #1904.b57b5ae4 github restOf (githubPushes): a forge that redirects off its origin is refused, and the token goes nowhere else
+AssertionError: returned [{"commit":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","author":"elsewhere","committer":"elsewhere","ref":"refs/heads/main","tree":"fffffffffffffffffffffffffffff: expected { forgeAskedWithToken: true, …(3) } to deeply equal { forgeAskedWithToken: true, …(3) }
+
+- Expected
++ Received
+
+  {
+    "forgeAskedWithToken": true,
+-   "refused": true,
+-   "requestsElsewhere": 0,
++   "refused": false,
++   "requestsElsewhere": 4,
+    "tokenSentElsewhere": 0,
+  }
+
+ ❯ tests/acceptance/1904/redirects.test.ts:137:37
+    135|       requestsElsewhere: elsewhere.seen.length,
+    136|     };
+    137|     expect(summary, shown(outcome)).toEqual({ forgeAskedWithToken: tru…
+       |                                     ^
+    138|   }, TIMEOUT);
+    139|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯
+
+ FAIL  tests/acceptance/1904/redirects.test.ts > #1904.b57b5ae4 github restOf (githubPushes): a forge that redirects to itself forever ends in a refusal within five redirects
+ FAIL  tests/acceptance/1904/redirects.test.ts > #1904.b57b5ae4 github apps call (revoke): a forge that redirects to itself forever ends in a refusal within five redirects
+AssertionError: threw fetch failed; the forge was asked 21 times: expected { refused: true, bounded: false } to deeply equal { refused: true, bounded: true }
+
+- Expected
++ Received
+
+  {
+-   "bounded": true,
++   "bounded": false,
+    "refused": true,
+  }
+
+ ❯ tests/acceptance/1904/redirects.test.ts:144:90
+    142|     const { outcome, refused } = await c.run(forge.url, c.token);
+    143|     const summary = { refused, bounded: forge.seen.length >= 1 && forg…
+    144|     expect(summary, `${shown(outcome)}; the forge was asked ${forge.se…
+       |                                                                                          ^
+    145|   }, TIMEOUT);
+    146| }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯
+
+ FAIL  tests/acceptance/1904/redirects.test.ts > #1904.b57b5ae4 github apps call (revoke): a forge that redirects off its origin is refused, and the token goes nowhere else
+AssertionError: returned undefined: expected { forgeAskedWithToken: true, …(3) } to deeply equal { forgeAskedWithToken: true, …(3) }
+
+- Expected
++ Received
+
+  {
+    "forgeAskedWithToken": true,
+-   "refused": true,
+-   "requestsElsewhere": 0,
++   "refused": false,
++   "requestsElsewhere": 1,
+    "tokenSentElsewhere": 0,
+  }
+
+ ❯ tests/acceptance/1904/redirects.test.ts:137:37
+    135|       requestsElsewhere: elsewhere.seen.length,
+    136|     };
+    137|     expect(summary, shown(outcome)).toEqual({ forgeAskedWithToken: tru…
+       |                                     ^
+    138|   }, TIMEOUT);
+    139|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/11]⎯
+
+ FAIL  tests/acceptance/1904/redirects.test.ts > #1904.b57b5ae4 hub Forge (pullFor): a forge that redirects off its origin is refused, and the token goes nowhere else
+AssertionError: returned "http://elsewhere.invalid/o/r/pull/1": expected { forgeAskedWithToken: true, …(3) } to deeply equal { forgeAskedWithToken: true, …(3) }
+
+- Expected
++ Received
+
+  {
+    "forgeAskedWithToken": true,
+-   "refused": true,
+-   "requestsElsewhere": 0,
++   "refused": false,
++   "requestsElsewhere": 1,
+    "tokenSentElsewhere": 0,
+  }
+
+ ❯ tests/acceptance/1904/redirects.test.ts:137:37
+    135|       requestsElsewhere: elsewhere.seen.length,
+    136|     };
+    137|     expect(summary, shown(outcome)).toEqual({ forgeAskedWithToken: tru…
+       |                                     ^
+    138|   }, TIMEOUT);
+    139|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/11]⎯
+
+ FAIL  tests/acceptance/1904/redirects.test.ts > #1904.b57b5ae4 hub Forge (pullFor): a forge that redirects to itself forever ends in a refusal within five redirects
+AssertionError: returned undefined; the forge was asked 21 times: expected { refused: true, bounded: false } to deeply equal { refused: true, bounded: true }
+
+- Expected
++ Received
+
+  {
+-   "bounded": true,
++   "bounded": false,
+    "refused": true,
+  }
+
+ ❯ tests/acceptance/1904/redirects.test.ts:144:90
+    142|     const { outcome, refused } = await c.run(forge.url, c.token);
+    143|     const summary = { refused, bounded: forge.seen.length >= 1 && forg…
+    144|     expect(summary, `${shown(outcome)}; the forge was asked ${forge.se…
+       |                                                                                          ^
+    145|   }, TIMEOUT);
+    146| }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/11]⎯
+
+ FAIL  tests/acceptance/1904/redirects.test.ts > #1904.b57b5ae4 hub github-source liveFetch: a forge that redirects off its origin is refused, and the token goes nowhere else
+AssertionError: returned {"status":200,"headers":{"connection":"keep-alive","content-type":"application/json","date":"Fri, 20 Nov 2026 20:30:39 GMT","keep-alive":"timeout=5","transfer-e: expected { forgeAskedWithToken: true, …(3) } to deeply equal { forgeAskedWithToken: true, …(3) }
+
+- Expected
++ Received
+
+  {
+    "forgeAskedWithToken": true,
+-   "refused": true,
+-   "requestsElsewhere": 0,
++   "refused": false,
++   "requestsElsewhere": 1,
+    "tokenSentElsewhere": 0,
+  }
+
+ ❯ tests/acceptance/1904/redirects.test.ts:137:37
+    135|       requestsElsewhere: elsewhere.seen.length,
+    136|     };
+    137|     expect(summary, shown(outcome)).toEqual({ forgeAskedWithToken: tru…
+       |                                     ^
+    138|   }, TIMEOUT);
+    139|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/11]⎯
+
+ FAIL  tests/acceptance/1904/redirects.test.ts > #1904.b57b5ae4 hub github-source liveFetch: a forge that redirects to itself forever ends in a refusal within five redirects
+ FAIL  tests/acceptance/1904/redirects.test.ts > #1904.b57b5ae4 hub github-source liveGraphql: a forge that redirects to itself forever ends in a refusal within five redirects
+AssertionError: returned {"status":599,"headers":{}}; the forge was asked 21 times: expected { refused: true, bounded: false } to deeply equal { refused: true, bounded: true }
+
+- Expected
++ Received
+
+  {
+-   "bounded": true,
++   "bounded": false,
+    "refused": true,
+  }
+
+ ❯ tests/acceptance/1904/redirects.test.ts:144:90
+    142|     const { outcome, refused } = await c.run(forge.url, c.token);
+    143|     const summary = { refused, bounded: forge.seen.length >= 1 && forg…
+    144|     expect(summary, `${shown(outcome)}; the forge was asked ${forge.se…
+       |                                                                                          ^
+    145|   }, TIMEOUT);
+    146| }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/11]⎯
+
+ FAIL  tests/acceptance/1904/redirects.test.ts > #1904.b57b5ae4 hub github-source liveGraphql: a forge that redirects off its origin is refused, and the token goes nowhere else
+AssertionError: returned {"status":200,"headers":{},"body":{"data":{"elsewhere":true}}}: expected { forgeAskedWithToken: true, …(3) } to deeply equal { forgeAskedWithToken: true, …(3) }
+
+- Expected
++ Received
+
+  {
+    "forgeAskedWithToken": true,
+-   "refused": true,
+-   "requestsElsewhere": 0,
++   "refused": false,
++   "requestsElsewhere": 1,
+    "tokenSentElsewhere": 0,
+  }
+
+ ❯ tests/acceptance/1904/redirects.test.ts:137:37
+    135|       requestsElsewhere: elsewhere.seen.length,
+    136|     };
+    137|     expect(summary, shown(outcome)).toEqual({ forgeAskedWithToken: tru…
+       |                                     ^
+    138|   }, TIMEOUT);
+    139|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/11]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  11 failed | 2 passed (13)
+   Start at  12:30:38
+   Duration  1.15s (tests 65%, transform 25%, import 8%, setup 2%)
+

@@ -1,0 +1,9 @@
+{
+  "issue": 1484,
+  "criterion": "#1484.c44e2788",
+  "verdict": null,
+  "who": null,
+  "when": null,
+  "screenshots": {},
+  "note": "No call recorded yet. A person makes it once, on the three pictures one check run of taste.test.ts wrote to docs/evidence/1484/ (weight-400.png, weight-450.png, weight-500.png): verdict looks_right or looks_wrong, who, when (ISO 8601), and screenshots with each file's name and the SHA-256 that run printed."
+}

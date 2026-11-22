@@ -1,0 +1,73 @@
+# #3014 acceptance tests, run once on the base commit b6b99ad8c, where the issue's bug is present: deep-show run's
+# `run` arm (crates/deep-show/src/answer.rs) writes every listed fixture's assets into the scenario's evidence store
+# before it plays any call.
+# Node v24.22.2, Vitest 5.0.5, macOS 27.2 (arm64). Before it: npm ci, npm run build --workspaces (the root Vitest
+# config imports scripts/lanes.mjs, which needs the workspaces' dist), and
+# PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease nice -n 10 \
+#   cargo build --locked --bin deep-show
+# Command, from the worktree's root, with the same PATH and CARGO_* variables (so each file's own cargo build is a
+# no-op): NO_COLOR=1 nice -n 10 node node_modules/vitest/vitest.mjs run tests/acceptance/3014 --testTimeout=600000
+# --reporter=verbose
+# Machine paths redacted: <repo> is the worktree. The tests' own folders are $TMPDIR/dh3014-*, removed after each test.
+#
+# Expected on the base: both AC1 tests fail at their assertions, and both AC2 tests pass, since the base is the program
+# #2363 left (their wrong programs are the twins never-writes and record-sheet-regressed; README). That is what ran:
+#   AC1, writer.test.ts (6365 ms): suite 393's writer.test.ts ran unchanged; one of its tests failed, the unbound-call
+#     test, at writer.test.ts:63 "no evidence was attached: expected [ …(8) ] to deeply equal []", so this test fails at
+#     ac1-unbound.test.ts:22, "every test of writer.test.ts passes".
+#   AC1, a run that lists and opens no fixture (403 ms): the unbound call is refused with no_session, and its fresh
+#     store holds 8 objects, the 8 assets the listed fixtures carry (loop's six shading-* glTFs, logic's program,
+#     vector's SVG); fails at ac1-unbound.test.ts:36, before the plain-board run.
+#   AC2, every listed fixture opens in a fresh store (6332 ms): passes; 52 fixtures listed, all presented.
+#   AC2, the kit's fixtures part over record and sheet (180 ms): passes; record 2 cases, sheet 3 cases, all PASS.
+
+ RUN  v5.0.5 <repo>
+
+ ✓ tests/acceptance/3014/ac2-fixtures.test.ts > #3014.2d0d5e25 the canvas kit's record and sheet fixtures still pass as #2363 left them > #3014.2d0d5e25 AC2 every fixture the fixtures call lists opens in a reader's fresh store, one no run listed fixtures in, among them one that names an asset by its hash 6332ms
+ ✓ tests/acceptance/3014/ac2-fixtures.test.ts > #3014.2d0d5e25 the canvas kit's record and sheet fixtures still pass as #2363 left them > #3014.2d0d5e25 AC2 the canvas kit's fixtures part, run over the record and sheet modules in a fresh store, passes each module and every case of their fixtures 180ms
+ × tests/acceptance/3014/ac1-unbound.test.ts > #3014.2c886ba2 tests/acceptance/393/writer.test.ts passes, its unbound-call test finding no object in the evidence store > #3014.2c886ba2 AC1 tests/acceptance/393/writer.test.ts, run unchanged, passes every test, its unbound-call test among them 6365ms
+   → every test of writer.test.ts passes; the unbound-call test finds no object in the evidence store: expected [ Array(1) ] to deeply equal []
+ × tests/acceptance/3014/ac1-unbound.test.ts > #3014.2c886ba2 tests/acceptance/393/writer.test.ts passes, its unbound-call test finding no object in the evidence store > #3014.2c886ba2 AC1 a run that lists and opens no fixture writes no fixture's asset: an unbound deep_show leaves its fresh store empty, and a bound deep_show of a plain board leaves none of the hashes the listed fixtures name 403ms
+   → a run of one deep_show call bound to no session leaves its fresh evidence store with no object: expected [ …(8) ] to deeply equal []
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/3014/ac1-unbound.test.ts > #3014.2c886ba2 tests/acceptance/393/writer.test.ts passes, its unbound-call test finding no object in the evidence store > #3014.2c886ba2 AC1 tests/acceptance/393/writer.test.ts, run unchanged, passes every test, its unbound-call test among them
+AssertionError: every test of writer.test.ts passes; the unbound-call test finds no object in the evidence store: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "AC4 a `deep show` run from inside an agent's process tree draws in that agent's writer layer, stamped as that agent and never as you, and a deep_show call bound to no session is refused AC4 a deep_show call bound to no session is refused: it draws nothing, makes no revision and attaches no evidence [failed]: AssertionError: no evidence was attached: expected [ …(8) ] to deeply equal []
++     at <repo>/tests/acceptance/393/writer.test.ts:63:68
++     (nine frames in node_modules/vitest elided here)",
++ ]
+
+ ❯ tests/acceptance/3014/ac1-unbound.test.ts:22:120
+
+ FAIL  tests/acceptance/3014/ac1-unbound.test.ts > #3014.2c886ba2 tests/acceptance/393/writer.test.ts passes, its unbound-call test finding no object in the evidence store > #3014.2c886ba2 AC1 a run that lists and opens no fixture writes no fixture's asset: an unbound deep_show leaves its fresh store empty, and a bound deep_show of a plain board leaves none of the hashes the listed fixtures name
+AssertionError: a run of one deep_show call bound to no session leaves its fresh evidence store with no object: expected [ …(8) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "18744e7ec2a873b20c97ec9d9df8f1c6f94cb945b4a67c8526d1ec1704df51a1",
++   "5ae11728ef9627d2928c8e543a6f45642ee5649ca0b842dc2cbda54228318e40",
++   "6c8d1dbd5cb4b380912bd90fd7b3f34510af575584c9254bd573f5fd3f500a34",
++   "7f60de2c5525784f4af03a29dfb6b7f23fc92faf9ea85290e8f429a55fa265f9",
++   "8aca2acde98f5159992544c9343a9f6968224e3f9fe88bc6fc77c47f8b3424ec",
++   "b0f43858b967a275f650ea109ca873a50085d4753167132c58a8604ddf1a2431",
++   "bbf9428dd440d126a33cd1ea151b4145d86a224dbd16651444a526ffe954ecd0",
++   "ceaa8b754bf1e495d950c7e288f486486ecb215a18baca19b877fd3614f7c549",
++ ]
+
+ ❯ tests/acceptance/3014/ac1-unbound.test.ts:36:133
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  2 failed | 2 passed (4)
+   Start at  08:56:53
+   Duration  8.40s (tests 100%)

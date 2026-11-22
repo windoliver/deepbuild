@@ -1,0 +1,9 @@
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/lazy-conjuring-kite/tests/acceptance/416/interfaces
+
+
+ Test Files  6 passed (6)
+      Tests  13 passed (13)
+   Start at  10:26:11
+   Duration  268.35s (tests 100%)
+

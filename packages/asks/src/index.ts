@@ -38,7 +38,7 @@ import type { JsonValue } from '@deepbuild/contracts';
 import { asCore, ulid } from '@deepbuild/record';
 import type { Connection, Event, RecordStore } from '@deepbuild/record';
 import { KINDS, place, remotesOf, targetsOf, type CardTarget } from './targets.js';
-import { AskRefused, bare, CANT_UNDO, isObj, letters } from './model.js';
+import { AskRefused, bare, CANT_UNDO, cantUndo, HOLD_MS, isObj, letters } from './model.js';
 import type { Ask, AskKind, AsksPlant, BatchCard, BudgetLeft, Card, Decision, HeldDecision, InboxStatus, Missing, Obj, Option, PlanStep, Refusal, Resolver, ResolverAsk, RuleState, Subject } from './model.js';
 import { blockKey, BLOCK_SOURCE, boundFor, DecisionKeys, foldKey, FOLD_SOURCE, linesOf, nearOf, needsPerson, requestKey, REQUEST_SOURCE, subjectKey, SUBJECT_KINDS } from './decision-keys.js';
 import { ResolverGate } from './resolver-gate.js';
@@ -46,7 +46,7 @@ import { Showing } from './showing.js';
 import { duration } from './duration.js';
 export { duration } from './duration.js';
 
-export { AskRefused, CANT_UNDO } from './model.js';
+export { AskRefused, CANT_UNDO, cantUndo, HOLD_MS, HOLD_PLANTS } from './model.js';
 export type { AskKind, AsksPlant, BatchCard, BudgetLeft, Card, Change, Decision, EffectSubject, InboxStatus, Missing, PlanStep, PointSubject, Refusal, Resolver, ResolverAnswer, ResolverAsk, RuleState, Subject, TasteSubject } from './model.js';
 export { subjectKey } from './decision-keys.js';
 
@@ -137,6 +137,8 @@ export interface InboxRow {
   status: InboxStatus;
   /** 'unanswered' while open; otherwise how it closed. */
   outcome: string;
+  /** When it closed, in ms, by the event that closed it; null while open. */
+  closed_at: number | null;
   owner: string;
   /** How long since it was raised, in ms. */
   age: number;
@@ -148,6 +150,8 @@ export interface InboxRow {
   missing: Missing | null;
   /** What you typed beside an ask that typed text can't close, as its card shows it. */
   words: string[];
+  /** The exception "this session keeps asking" that holds it, while it shows only there (#667); null otherwise. */
+  folded: string | null;
 }
 export interface Asks {
   raise(connection: Connection, source: string, ask: unknown, plan?: PlanInput): Promise<string>;
@@ -181,8 +185,17 @@ export interface Asks {
   later(connection: Connection, ask: string, until: number): Promise<void>;
   /** Later until `before` ms ahead of the ask's deadline (#1462). */
   laterBefore(connection: Connection, ask: string, before: number): Promise<void>;
-  /** Undo, on the trusted path: a defaulted ask opens again, waiting as long as it first did. */
+  /**
+   * Undo, on the trusted path: a defaulted ask opens again, waiting as long as it first did; inside a hold (#1101), each
+   * step your yes on its card holds is withdrawn, never starts, and its ask is open again.
+   */
   undo(connection: Connection, ask: string): Promise<void>;
+  /** Whether Undo on the ask's card would withdraw a step the hub still holds (#1101). */
+  holding(ask: string): Promise<boolean>;
+  /** Whether the ask's own step is held: you said yes, and its hold isn't over (#1101). */
+  stepHeld(ask: string): Promise<boolean>;
+  /** When the next held step starts, or null with none (#1101): the hub ticks the core then. */
+  heldUntil(): number | null;
   /** Every ask in the record, open or closed, with its status, owner and age. */
   inbox(): Promise<InboxRow[]>;
   /** A task's check, run again on your "I did it", still fails (#323): each open task it proves says what's missing. */
@@ -388,17 +401,23 @@ const isAgent = (writer: string): boolean => writer === 'hook' || writer.startsW
  * of garbage at each start.
  */
 const PAGE = 100;
+/** The kinds `apply` reads, which the core's reads of the log name: an event of any other kind is never decoded (#2646). */
+const APPLIED = ['session.start', 'agent.stop', 'session.continued', 'session.end', 'task.closed', 'ask.created', 'plan.proposed', 'decision.created', 'decision.revoked', 'decision.overruled', 'decision.judged', 'decision.applied', 'ask.answered', 'ask.defaulted', 'ask.escalated', 'ask.cancelled', 'ask.superseded', 'ask.moot', 'default.undone', 'deadline.moved', 'ask.batched', 'ask.later', 'approval.held', 'approval.started', 'approval.withdrawn', 'tool.before', 'user.ask', 'verdict.made', 'claim.made', 'tool.after'];
 /** Time the hub didn't run, down or with the Mac asleep, moves deadlines once it is longer than this (#908). */
 const AWAY = 10_000;
 /** How many ended sessions' closed asks stay in memory; the record keeps them all. */
 const ENDED_KEPT = 64;
 
 const git = promisify(execFile);
+/** What git said to each command in a worktree, by the command: shared by the cards of one Needs you load. */
+type GitSaid = Map<string, Promise<string>>;
 
 /** One stop of a session's own turn, as agent.stop@4 and @5 record it (#85): the structure the core raises a task or a continue from. */
 interface Stop { id: string; session: string; ts: number; pos: number; cause: string; owner: string; signature: string; resets: number | null; finished: boolean; who: Ask['who'] }
-/** An automatic continue the core recorded: the stop it continued from, why, and when. */
-interface Continued { stop: string; because: string; ts: number }
+/** Whether a stop is newer than another: by deep-hook's stamp, then by log order. */
+const newer = (a: Stop, b: Stop): boolean => a.ts > b.ts || (a.ts === b.ts && a.pos > b.pos);
+/** An automatic continue the core recorded: the stop it continued from, why, and when; and that stop's stamp, read as the continue was (#2653). */
+interface Continued { stop: string; because: string; ts: number; at?: number }
 
 const CLOSING: Readonly<Record<string, string>> = {
   'ask.answered': 'answered', 'ask.defaulted': 'defaulted', 'ask.escalated': 'escalated', 'ask.cancelled': 'cancelled',
@@ -407,20 +426,26 @@ const CLOSING: Readonly<Record<string, string>> = {
 
 class AsksCore implements Asks {
   private cursor = 0;
-  /**
-   * When the hub last ran before this core opened (#908): the newest event the core appended in the log, a stop's
-   * hub.stopped included but not the one a start appends for a crash, which carries the start's time.
-   */
-  private logged: number | undefined;
   private opened = false;
   /** Since when the app has said macOS won't show its notifications (#994). */
   private notificationsOff: number | undefined;
   private readonly sessions = new Map<string, { thread: string; worktree: string; project: string | null; agent: string }>();
   /** The sessions whose verified end the core read, oldest first: past the newest ENDED_KEPT they leave memory (#824). */
   private readonly endOrder = new Set<string>();
-  /** Each session's stops in log order, and every stop by ID (#85). */
+  /**
+   * Each session's stops a rule can still read, in log order, and each of them by ID (#85): its newest, and each one a
+   * task covers while the task is open or its default can still be undone, which its check and its reset read. The rest
+   * go as they are applied, at a start's fold as well as live (#2653); the record keeps them all.
+   */
   private readonly stops = new Map<string, Stop[]>();
   private readonly stopIds = new Map<string, Stop>();
+  /** How many tasks, open or with a default that can be undone, cover each stop. */
+  private readonly pins = new Map<string, number>();
+  /**
+   * What each session's stops still tell once they've gone: the stamp of its newest finished stop among those stamped
+   * before its newest, and among them all (`continuedSince`); and where its stops start in the log since it last left memory.
+   */
+  private readonly stopTimes = new Map<string, { before: number; last: number; from: number }>();
   /** The stamp of the last prompt you typed in each session, and the continues the core recorded for it. */
   private readonly typedAt = new Map<string, number>();
   private readonly continued = new Map<string, Continued[]>();
@@ -558,6 +583,10 @@ class AsksCore implements Asks {
         const allow = options.find((o) => o.decision === 'allow');
         if (allow) throw new AskRefused(`option ${allow.id} declares allow, which only DeepBuild writes`, { option: allow.id });
       }
+      // #2563: `deep inbox answer` takes an option by its ID on a command line, which carries no NUL (the schema
+      // already refuses a lone surrogate).
+      const untypable = options.find((o) => o.id.includes('\0'));
+      if (untypable) throw new AskRefused(`option ${JSON.stringify(untypable.id)} holds a NUL, which no command line carries, so deep inbox answer could never choose it`, { option: untypable.id });
       const ids = new Set(options.map((o) => o.id));
       if (data.recommended !== null && !ids.has(data.recommended as string)) throw new AskRefused('the recommendation names no option', { field: 'recommended' });
       if (!ids.has(data.default as string)) throw new AskRefused('the default names no option', { field: 'default' });
@@ -693,6 +722,10 @@ class AsksCore implements Asks {
         if ((planHash ?? null) !== (ask.plan?.hash ?? null)) throw new AskRefused(`${ask.handle}'s approval names a plan it didn't show`, { field: 'plan_hash' });
         if (token === undefined) throw new AskRefused('an approval binds to its click token', { field: 'token' });
       }
+      // A yes to a step that can't be undone is answered now, and the step starts only after the hub's hold (#1101):
+      // this ask, and each member of the batch, whose plan holds one. The rest run at once.
+      const until = now + HOLD_MS;
+      const holds = new Set(decision === 'allow' && via !== 'channel' ? [ask, ...others.map((o) => o.member)].filter((a) => this.holdsYes(a)) : []);
       // The fold's "answer them together" answers, with its recommended option, each open ask of its thread that
       // you've seen: the ones it holds and the ones already on their own cards. An ask still queued for a batch
       // isn't answered unseen, and one whose recommended option approves, or an unblock, waits for its own card.
@@ -728,14 +761,21 @@ class AsksCore implements Asks {
         },
       });
       await this.sync();
-      this.hand(ask, chosen?.id ?? null, (words as string | undefined) ?? null, false, decision, null, null, null, (image as string | undefined) ?? null);
+      const give = (): void => this.hand(ask, chosen?.id ?? null, (words as string | undefined) ?? null, false, decision, null, null, null, (image as string | undefined) ?? null);
+      // A held yes saves its decision once its step starts.
+      const scope = chosen && via !== 'channel' && !ask.fold && !ask.block && !this.unplaced(ask).length ? this.scopeOf(ask) : null;
+      if (holds.has(ask)) await this.holdSteps(connection, ask, until, give, scope);
+      else give();
       for (const rider of riders) {
         await this.options.record.append(asCore({ ...connection, ...rider.who }), {
           v, id: ulid(now), kind: 'ask.answered', subject: rider.handle, ts: now,
           data: { answer: chosen!.id, option: chosen!.id, plan_hash: null, decision, via, verified: true, on: rider.data.pinned_to!, token: null, words: null, image: null },
         });
         await this.sync();
-        this.hand(rider, chosen!.id, null, false, decision);
+        // The same question through this card is held with it.
+        const ride = (): void => this.hand(rider, chosen!.id, null, false, decision);
+        if (holds.has(ask)) await this.holdSteps(connection, rider, until, ride, null);
+        else ride();
         ask.receiptAlso.push(rider.handle);
       }
       for (const { member, allow } of others) {
@@ -744,18 +784,111 @@ class AsksCore implements Asks {
           data: { answer: allow.id, option: allow.id, plan_hash: member.plan?.hash ?? null, decision: allow.decision, via, verified: true, on: member.data.pinned_to!, token: token ?? null, words: null, image: null },
         });
         await this.sync();
-        this.hand(member, allow.id, null, false, allow.decision);
+        const run = (): void => this.hand(member, allow.id, null, false, allow.decision);
+        if (holds.has(member)) await this.holdSteps(connection, member, until, run, null);
+        else run();
         ask.receiptAlso.push(member.handle);
       }
       // An option you chose is saved as a decision for the ask's repo, or its session, whatever its words claim. A
       // block's task saves none: "I did it" answers this block, and the next one of its kind needs doing again (#85).
       // A card with a target only the agent read saves your answer for this ask only (#1098).
-      const scope = chosen && via !== 'channel' && !ask.fold && !ask.block && !this.unplaced(ask).length ? this.scopeOf(ask) : null;
-      if (scope !== null) await this.saveAt(connection, ask, scope, chosen!.id);
+      if (scope !== null && !holds.has(ask)) await this.saveAt(connection, ask, scope, chosen!.id);
       await this.settle();
-      return scope === null ? null : String(ask.data.key);
+      return scope === null || holds.has(ask) ? null : String(ask.data.key);
     });
     if (saved !== null) await this.reconsult(saved);
+  }
+
+  // ---- The hold before what can't be undone (#1101; design: Plans before acting).
+
+  /**
+   * Whether the hub holds the steps your yes to `ask` runs: its plan has one that can't be undone and acts where others see
+   * it or DeepBuild can't put it back (a push, a send, a delete outside staging, an outside post), which the plan marks
+   * public. A permission granted on your machine runs at once.
+   */
+  private holdsYes(ask: Ask): boolean {
+    if (this.options.plant === 'hold-starts-at-click' || !ask.plan) return false;
+    return this.options.plant === 'batch-holds-all' || this.unrecoverable(ask).length > 0;
+  }
+
+  /** The steps of an ask's plan the hold covers, each as it says what it does. */
+  private unrecoverable(ask: Ask): string[] {
+    const steps = ask.plan?.steps ?? [];
+    const held = steps.filter((step) => cantUndo(step) && step.public);
+    return (held.length || this.options.plant !== 'batch-holds-all' ? held : steps).map((step) => step.does);
+  }
+
+  /** Your answered yes to `ask`, its steps held until `until` (#1101): recorded, and how they start kept for then. */
+  private async holdSteps(connection: Connection, ask: Ask, until: number, give: () => void, save: string | null): Promise<void> {
+    const now = this.options.now();
+    await this.options.record.append(asCore({ ...connection, ...ask.who }), { v: 1, id: ulid(now), kind: 'approval.held', subject: ask.handle, ts: now, data: { until, steps: this.unrecoverable(ask) } });
+    await this.sync();
+    if (ask.held) ask.held.run = { give, connection, save };
+  }
+
+  /** A held step withdrawn before it started (#1101), by your Undo or the hub starting again: its ask is open again. */
+  private async withdraw(ask: Ask, restarted: boolean, connection?: Connection): Promise<void> {
+    const now = this.options.now();
+    const as = connection ? asCore({ ...connection, ...ask.who }) : { ...CORE, ...ask.who, ...(ask.session ? { session: ask.session } : {}) };
+    const steps = ask.held?.steps ?? this.unrecoverable(ask);
+    await this.options.record.append(as, { v: 1, id: ulid(now), kind: 'approval.withdrawn', subject: ask.handle, ts: now, data: { steps: steps.length ? steps : (ask.plan?.steps ?? []).map((s) => s.does), restarted } });
+    await this.sync();
+  }
+
+  /**
+   * Each held step whose hold is over starts: recorded, your answer handed on as it was given, and the decision it saves
+   * saved. One the log holds from before the hub started again is withdrawn, so it never runs unseen.
+   */
+  private async endHolds(): Promise<void> {
+    const now = this.options.now();
+    for (const ask of [...this.asks.values()]) {
+      const held = ask.held;
+      if (!held || ask.closed?.outcome !== 'answered') continue;
+      if (!held.run && this.options.plant !== 'restart-runs-held') {
+        await this.withdraw(ask, true);
+        continue;
+      }
+      if (now < held.until) continue;
+      const run = held.run ?? { give: () => this.hand(ask, ask.closed?.answer ?? null, null, false, 'allow'), connection: { ...CORE, ...ask.who }, save: null };
+      await this.options.record.append({ ...CORE, ...ask.who, ...(ask.session ? { session: ask.session } : {}) }, { v: 1, id: ulid(now), kind: 'approval.started', subject: ask.handle, ts: now, data: { steps: held.steps } });
+      await this.sync();
+      run.give();
+      if (run.save !== null && ask.closed.answer !== undefined) {
+        await this.saveAt(run.connection, ask, run.save, ask.closed.answer);
+        void this.reconsult(String(ask.data.key)).catch(() => undefined);
+      }
+    }
+  }
+
+  /** The steps Undo on `ask`'s card withdraws (#1101): its own, held, and each other its same yes holds, by its click. */
+  private heldBy(ask: Ask): Ask[] {
+    const token = ask.approval?.token ?? null;
+    const same = (a: Ask): boolean => a === ask || (token !== null && a.approval?.token === token);
+    // The planted Undo withdraws the batch's steps that already ran too.
+    const ran = (a: Ask): boolean => this.options.plant === 'undo-withdraws-ran' && a.closed?.outcome === 'answered';
+    return [...this.asks.values()].filter((a) => a.closed?.outcome === 'answered' && same(a) && (a.held !== undefined || ran(a)));
+  }
+
+  holding(handle: string): Promise<boolean> {
+    return this.exclusive(async () => {
+      await this.sync();
+      await this.endHolds();
+      const ask = this.asks.get(bare(handle));
+      return ask !== undefined && this.heldBy(ask).some((a) => a.held);
+    });
+  }
+
+  stepHeld(handle: string): Promise<boolean> {
+    return this.exclusive(async () => {
+      await this.sync();
+      await this.endHolds();
+      return this.asks.get(bare(handle))?.held !== undefined;
+    });
+  }
+
+  heldUntil(): number | null {
+    const until = [...this.asks.values()].flatMap((a) => (a.held?.run ? [a.held.until] : []));
+    return until.length ? Math.min(...until) : null;
   }
 
   away(from: number, to: number): Promise<void> {
@@ -799,7 +932,9 @@ class AsksCore implements Asks {
       await this.sync();
       // The same question from another thread shows through the older one's card.
       const shown = this.open().filter((a) => this.status(a) === 'shown' && !this.rides(a));
-      return Promise.all(shown.map((a) => this.cardOf(a, true)));
+      // One load runs each git command once per worktree and commit (#2647): its cards share what git said.
+      const said: GitSaid = new Map();
+      return Promise.all(shown.map((a) => this.cardOf(a, true, said)));
     });
   }
 
@@ -854,6 +989,27 @@ class AsksCore implements Asks {
       if (TRUSTED[connection.writer] === undefined) throw new AskRefused(`an undo counts only on the trusted path, not from ${connection.writer}`, { field: 'writer' });
       const ask = this.asks.get(bare(handle));
       if (!ask) throw new AskRefused(`${handle} is no ask`, { ask: handle });
+      // Undo inside the hold (#1101): each step your yes on this card holds is withdrawn and never starts, and its ask is
+      // open again; a step that already started stays as it ran.
+      await this.endHolds();
+      const held = this.heldBy(ask);
+      if (held.some((a) => a.held)) {
+        // The planted host takes the Undo and lets the steps run anyway.
+        if (this.options.plant !== 'undo-runs-anyway') for (const a of held) await this.withdraw(a, false, connection);
+        // The planted host closes each as declined instead.
+        if (this.options.plant === 'undo-closes-declined') {
+          const now = this.options.now();
+          for (const a of held) {
+            const no = a.options.find((o) => o.decision === 'deny');
+            if (!no || a.closed) continue;
+            await this.options.record.append(asCore({ ...connection, ...a.who }), { v: 6, id: ulid(now), kind: 'ask.answered', subject: a.handle, ts: now, data: { answer: no.id, option: no.id, plan_hash: null, decision: 'deny', via: TRUSTED[connection.writer]!, verified: true, on: a.data.pinned_to!, token: null, words: null, image: null } });
+            await this.sync();
+            this.hand(a, no.id, null, false, 'deny');
+          }
+        }
+        await this.settle();
+        return;
+      }
       // Only a default is undone: an answer stands, and an open ask has nothing to undo.
       if (ask.closed?.outcome !== 'defaulted') {
         throw new AskRefused(ask.closed ? `${ask.handle} closed as ${ask.closed.outcome}, not by its default` : `${ask.handle} is open; there's no default to undo`, { ask: ask.handle, ...(ask.closed ? { outcome: ask.closed.outcome, closed_at: ask.closed.at } : {}) });
@@ -873,8 +1029,9 @@ class AsksCore implements Asks {
       // A block someone else owns never reaches your inbox; the request drafted for it does.
       return [...this.asks.values()].filter((a) => !a.theirs).map((a) => ({
         ask: a.handle, kind: a.data.kind as AskKind, session: a.session, status: this.status(a),
-        outcome: a.closed?.outcome ?? 'unanswered', owner: String(a.data.owner), age: now - a.created,
+        outcome: a.closed?.outcome ?? 'unanswered', closed_at: a.closed?.at ?? null, owner: String(a.data.owner), age: now - a.created,
         request: a.request ? { ...a.request } : null, decision: a.closed?.decision ?? null, missing: a.closed ? null : a.missing ?? null, words: [...a.words],
+        folded: !a.closed && this.inFold(a) ? a.folded! : null,
       }));
     });
   }
@@ -912,7 +1069,10 @@ class AsksCore implements Asks {
   authorized(handle: string, planHash: string): Promise<string | null> {
     return this.exclusive(async () => {
       await this.sync();
+      await this.endHolds();
       const ask = this.asks.get(bare(handle));
+      // A step the hub still holds hasn't been let run (#1101).
+      if (ask?.held) return null;
       const approval = ask?.closed?.outcome === 'answered' ? ask.approval : undefined;
       return approval?.decision === 'allow' && approval.hash === planHash ? approval.token : null;
     });
@@ -921,8 +1081,11 @@ class AsksCore implements Asks {
   async beforeStep(handle: string, step: PlanStep): Promise<StepCheck> {
     const check = await this.exclusive(async (): Promise<StepCheck | { again: Ask; key: string }> => {
       await this.sync();
+      await this.endHolds();
       const ask = this.asks.get(bare(handle));
       if (!ask || ask.data.kind !== 'authority') throw new AskRefused(`${handle} is no authority ask`, { ask: handle });
+      // Its steps wait out the hub's hold first (#1101).
+      if (ask.held) return { run: false, ask: ask.handle };
       const marked = markStep(step);
       const approval = ask.closed?.outcome === 'answered' && ask.approval?.decision === 'allow' ? ask.approval : undefined;
       // Not yet answered, or answered anything but yes: the run waits on the ask itself.
@@ -1290,7 +1453,7 @@ class AsksCore implements Asks {
    * What the card shows. `presented` is a read through the card surface (`card`, `needsYou`): the first such read
    * fixes what the card says it saves; a resolver's read never presents it.
    */
-  private async cardOf(ask: Ask, presented = false): Promise<Card> {
+  private async cardOf(ask: Ask, presented = false, said?: GitSaid): Promise<Card> {
     if (presented && ask.saves === undefined && !ask.closed) {
       ask.saves = this.savesOf(ask);
       if (this.notificationsOff !== undefined) {
@@ -1304,7 +1467,7 @@ class AsksCore implements Asks {
       options: ask.options.map((o) => ({ id: o.id, label: o.label, decision: o.decision })),
       plan: ask.plan ? structuredClone(ask.plan) : null,
       words: [...ask.words],
-      changed: await this.changed(ask),
+      changed: await this.changed(ask, said),
       folded: ask.fold ? this.openIn(ask.thread).filter((a) => a.folded === ask.handle && (a.shown || !a.unread)).map((a) => a.handle) : [],
       undo: ask.closed?.outcome === 'defaulted',
       cost_usd: typeof ask.data.cost_usd === 'number' ? ask.data.cost_usd : null,
@@ -1331,14 +1494,24 @@ class AsksCore implements Asks {
     return { scope: words, also };
   }
 
-  /** What changed since the commit an ask showed, when its session's worktree has moved on from it. */
-  private async changed(ask: Ask): Promise<Card['changed']> {
+  /**
+   * What changed since the commit an ask showed, when its session's worktree has moved on from it. `said` holds what
+   * git said to each command in a worktree, for one read of several cards; by default, this card's own.
+   */
+  private async changed(ask: Ask, said: GitSaid = new Map()): Promise<Card['changed']> {
     const pin = ask.data.pinned_to as Obj;
     const worktree = this.sessions.get(ask.session)?.worktree;
     if (pin.kind !== 'commit' || worktree === undefined) return null;
     const from = pin.ref as string;
     try {
-      const run = async (...args: string[]) => (await git('git', ['-C', worktree, ...args], { maxBuffer: 1 << 24 })).stdout;
+      const run = (...args: string[]): Promise<string> => {
+        const key = JSON.stringify([worktree, ...args]);
+        const known = said.get(key);
+        if (known) return known;
+        const out = git('git', ['-C', worktree, ...args], { maxBuffer: 1 << 24 }).then((r) => r.stdout);
+        said.set(key, out);
+        return out;
+      };
       const to = (await run('rev-parse', 'HEAD')).trim();
       if (to === from) return null;
       const files = (await run('diff', '--name-only', from, to)).split('\n').filter(Boolean);
@@ -1378,8 +1551,9 @@ class AsksCore implements Asks {
       for (const stop of this.stops.get(session) ?? []) {
         this.stopIds.delete(stop.id);
         this.covered.delete(stop.id);
+        this.pins.delete(stop.id);
       }
-      for (const kept of [this.stops, this.typedAt, this.continued, this.ended, this.replaced, this.done]) kept.delete(session);
+      for (const kept of [this.stops, this.stopTimes, this.typedAt, this.continued, this.ended, this.replaced, this.done]) kept.delete(session);
       this.attempts.delete(session);
       this.unread.delete(session);
       this.running.delete(session);
@@ -1392,11 +1566,14 @@ class AsksCore implements Asks {
 
   /** Reads what the log gained since the last read. */
   private async sync(): Promise<void> {
-    for (;;) {
-      const page = await this.options.record.read({ after: this.cursor, limit: PAGE });
+    // The log's head first: with nothing past the cursor nothing is read, and the cursor ends at the head, past the other kinds' events, which are scanned once.
+    const head = Number(((await this.options.record.raw('SELECT max(log_pos) AS head FROM events')) as { head: number | null }[])[0]?.head ?? 0);
+    // The planted wrong program leaves tool.before out of its kinds.
+    const kinds = this.options.plant === 'asks-without-tool-before' ? APPLIED.filter((kind) => kind !== 'tool.before') : APPLIED;
+    while (this.cursor < head) {
+      const page = await this.options.record.read({ after: this.cursor, limit: PAGE, kinds, most: true });
       for (const event of page) await this.apply(event);
-      if (page.length) this.cursor = page[page.length - 1]!.log_pos;
-      if (page.length < PAGE) return;
+      this.cursor = page.length < PAGE ? Math.max(head, page.at(-1)?.log_pos ?? 0) : page[page.length - 1]!.log_pos;
     }
   }
 
@@ -1446,8 +1623,6 @@ class AsksCore implements Asks {
   private async apply(e: Event): Promise<void> {
     const d: Obj = isObj(e.data) ? e.data : {};
     const target = e.subject?.startsWith('ask:') ? this.asks.get(bare(e.subject)) : undefined;
-    // Only a running hub appends as the core; a crash's hub.stopped carries the time of the start that found it.
-    if (e.writer === 'core' && !(e.kind === 'hub.stopped' && d.reason === 'crashed')) this.logged = Math.max(this.logged ?? e.ts, e.ts);
     switch (e.kind) {
       case 'session.start':
         // A session started in another's place in the same process (the session tree's lineage) replaced its attempt.
@@ -1476,15 +1651,32 @@ class AsksCore implements Asks {
           // A turn that ended normally is a Stop (outcome finished); one that ended on an API error is a StopFailure (failed).
           finished: d.outcome !== 'failed', who: { actor: e.actor, scope: e.scope },
         };
-        this.stops.set(e.session, [...(this.stops.get(e.session) ?? []), stop]);
-        this.stopIds.set(stop.id, stop);
+        const top = this.newest(e.session);
+        const times = this.stopTimes.get(e.session) ?? this.stopTimes.set(e.session, { before: -Infinity, last: -Infinity, from: e.log_pos }).get(e.session)!;
+        // Stamped after the newest, every stop so far was stamped before it; stamped before the newest, it is one of those.
+        if (top && stop.ts > top.ts) times.before = times.last;
+        else if (top && stop.ts < top.ts && stop.finished) times.before = Math.max(times.before, stop.ts);
+        if (stop.finished) times.last = Math.max(times.last, stop.ts);
+        // Only the session's newest is held from here; a stop stamped before it is never the newest, so nothing reads it.
+        if (!top || newer(stop, top)) {
+          this.stops.set(e.session, [...(this.stops.get(e.session) ?? []), stop]);
+          this.stopIds.set(stop.id, stop);
+          if (top) this.release(top);
+        }
         this.signatures.set(blockKey(stop.signature), stop.signature);
         this.fresh.add(e.session);
         return;
       }
-      case 'session.continued':
-        if (e.writer === 'core' && e.session) this.continued.set(e.session, [...(this.continued.get(e.session) ?? []), { stop: String(d.stop), because: String(d.because), ts: e.ts }]);
+      case 'session.continued': {
+        if (e.writer !== 'core' || !e.session) return;
+        const stop = String(d.stop);
+        const because = String(d.because);
+        // The stamp of the stop it continued from, which `continuedSince` reads: a newer stop of its session applied
+        // first has let that stop go, so it is read back from the record (#2653).
+        const at = because === 'task_closed' ? undefined : this.stopIds.get(stop)?.ts ?? await this.stampOf(stop, e.log_pos);
+        this.continued.set(e.session, [...(this.continued.get(e.session) ?? []), { stop, because, ts: e.ts, ...(at === undefined ? {} : { at }) }]);
         return;
+      }
       case 'session.end':
         // A session you stopped (its SessionEnd, or the core's end for a Codex process that exited without one, #1023)
         // isn't resumed by a task closing: a continue would wake nobody.
@@ -1526,7 +1718,10 @@ class AsksCore implements Asks {
         };
         if (request) this.requested.set(request.block, ask.handle);
         if (ask.block) {
-          for (const id of ask.block.stops.values()) this.covered.add(id);
+          for (const id of ask.block.stops.values()) {
+            this.covered.add(id);
+            this.pin(id);
+          }
           if (joins) ask.pending.superseded = joins.handle;
           else this.blockTasks.set(ask.block.signature, ask);
         }
@@ -1601,7 +1796,17 @@ class AsksCore implements Asks {
           if (this.blockTasks.get(ask.block.signature) === ask) this.blockTasks.delete(ask.block.signature);
           // A session's task folded into the shared one: the shared task covers its stop from then on.
           const into = e.kind === 'ask.superseded' ? this.asks.get(bare(String(d.by))) : undefined;
-          if (into?.block) for (const [session, id] of ask.block.stops) into.block.stops.set(session, id);
+          if (into?.block) {
+            for (const [session, id] of ask.block.stops) {
+              const was = into.block.stops.get(session);
+              into.block.stops.set(session, id);
+              if (into.closed && into.closed.outcome !== 'defaulted') continue;
+              this.pin(id);
+              if (was !== undefined) this.unpin(was);
+            }
+          }
+          // Closed for good, it reads its stops no more; one closed by its default opens again on an undo, so it keeps them.
+          if (ask.closed.outcome !== 'defaulted') for (const id of ask.block.stops.values()) this.unpin(id);
           // Closed on its check, or by your "I did it" (its done option; until the done gate re-runs the check on that
           // answer, #323, the next turn is the check: a block that holds stops the session again): its sessions
           // resume. "Leave it blocked" and a default leave them stopped, as the option says.
@@ -1614,6 +1819,22 @@ class AsksCore implements Asks {
         if (request && !request.closed) request.pending.moot ??= d;
         return;
       }
+      case 'approval.held':
+        // Your answered yes, its steps held before they start (#1101).
+        if (target?.closed?.outcome === 'answered' && e.writer === 'core' && typeof d.until === 'number') target.held = { until: d.until, steps: Array.isArray(d.steps) ? d.steps.map(String) : [] };
+        return;
+      case 'approval.started':
+        if (target && e.writer === 'core') delete target.held;
+        return;
+      case 'approval.withdrawn':
+        // Withdrawn before its steps started: the ask is open again, unanswered, still shown, its deadline as it was.
+        if (!target || target.closed?.outcome !== 'answered' || e.writer !== 'core') return;
+        delete target.held;
+        delete target.closed;
+        delete target.approval;
+        target.receiptAlso = [];
+        if (target.block && !this.blockTasks.has(target.block.signature)) this.blockTasks.set(target.block.signature, target);
+        return;
       case 'default.undone':
         // Open again, still shown, with the new deadline the undo gave it; it no longer waits in an exception.
         if (!target || target.closed?.outcome !== 'defaulted' || e.writer !== 'core' || typeof d.deadline !== 'number') return;
@@ -1711,8 +1932,12 @@ class AsksCore implements Asks {
     // The core's first call: the hub was down from the last time it appended until now.
     if (!this.opened) {
       this.opened = true;
-      if (this.logged !== undefined) await this.moveAway(this.logged, this.options.now());
+      // When the hub last ran before this core opened (#908): the newest event the core appended among those read so far, of any kind, a stop's hub.stopped included but not the one a start appends for a crash, which carries the start's time.
+      const [last] = (await this.options.record.raw(`SELECT max(ts) AS ts FROM events WHERE log_pos <= ${this.cursor} AND writer = 'core' AND NOT (kind = 'hub.stopped' AND json_extract(data, '$.reason') IS 'crashed')`)) as { ts: number | null }[];
+      if (last && last.ts !== null) await this.moveAway(last.ts, this.options.now());
     }
+    // Held steps whose hold is over start; one held before the hub started again is withdrawn (#1101).
+    await this.endHolds();
     // Each open chat-app task's thread, read once a call through the connector.
     await this.readThreads();
     this.readNetwork();
@@ -1844,8 +2069,40 @@ class AsksCore implements Asks {
   /** A session's newest stop, by deep-hook's stamp (then by log order), or none. */
   private newest(session: string): Stop | undefined {
     let top: Stop | undefined;
-    for (const stop of this.stops.get(session) ?? []) if (!top || stop.ts > top.ts || (stop.ts === top.ts && stop.pos > top.pos)) top = stop;
+    for (const stop of this.stops.get(session) ?? []) if (!top || newer(stop, top)) top = stop;
     return top;
+  }
+  /** A task open, or closed by a default that can be undone, covers the stop: it stays while one does. */
+  private pin(id: string): void {
+    this.pins.set(id, (this.pins.get(id) ?? 0) + 1);
+  }
+  private unpin(id: string): void {
+    const left = (this.pins.get(id) ?? 0) - 1;
+    if (left > 0) {
+      this.pins.set(id, left);
+      return;
+    }
+    this.pins.delete(id);
+    const stop = this.stopIds.get(id);
+    if (stop) this.release(stop);
+  }
+  /** Lets a stop go once no rule reads it: no longer its session's newest, and no task open or undoable covers it. */
+  private release(stop: Stop): void {
+    if (this.pins.has(stop.id) || this.newest(stop.session) === stop) return;
+    this.stops.set(stop.session, (this.stops.get(stop.session) ?? []).filter((s) => s !== stop));
+    this.stopIds.delete(stop.id);
+    // Whether a task covered it is read of a session's newest only, which this stop can never be again.
+    this.covered.delete(stop.id);
+  }
+  /**
+   * The stamp of a stop a continue names, read back from the record: memory let it go when a newer stop of its session
+   * was applied before the continue (#2653). Only a stop memory would otherwise still hold counts: the hook's own, not a
+   * child's, applied before the continue and since its session last left memory.
+   */
+  private async stampOf(id: string, before: number): Promise<number | undefined> {
+    const [row] = (await this.options.record.raw(`SELECT ts, session_id AS session, log_pos AS pos FROM events WHERE id = ? AND kind = 'agent.stop' AND writer = 'hook' AND log_pos < ? AND json_type(data, '$.child') IS NOT 'text'`, [id, before])) as { ts: number; session: string | null; pos: number }[];
+    const from = row?.session ? this.stopTimes.get(row.session)?.from : undefined;
+    return from !== undefined && Number(row!.pos) >= from ? Number(row!.ts) : undefined;
   }
   /** The stop a task covers in each session it unblocks: that session's newest when the task was raised. */
   private coveringStops(data: Obj): Map<string, string> {
@@ -1868,15 +2125,15 @@ class AsksCore implements Asks {
    * Whether the session already had its one automatic continue since its last turn that ended normally: a continue
    * from an earlier stop stamped after the session's newest finished stop before this one (a Stop, not a StopFailure),
    * after your last prompt, or after the last resume of a task that closed, whichever is latest; each starts the
-   * count again. Counted per session, never per stop: a second transient stop right after a continue gets none.
+   * count again. Counted per session, never per stop: a second transient stop right after a continue gets none. Read
+   * of the session's newest stop, whose earlier finished stops' latest stamp the session keeps once they've gone.
    */
   private continuedSince(stop: Stop): boolean {
     const resumed = (this.continued.get(stop.session) ?? []).filter((c) => c.because === 'task_closed').map((c) => c.ts);
-    const finished = (this.stops.get(stop.session) ?? []).filter((s) => s.finished && s.ts < stop.ts).map((s) => s.ts);
-    const since = Math.max(this.typedAt.get(stop.session) ?? -Infinity, ...resumed, ...finished);
+    const since = Math.max(this.typedAt.get(stop.session) ?? -Infinity, ...resumed, this.stopTimes.get(stop.session)?.before ?? -Infinity);
     return (this.continued.get(stop.session) ?? []).some((c) => {
-      const earlier = c.because !== 'task_closed' ? this.stopIds.get(c.stop) : undefined;
-      return earlier !== undefined && earlier.ts > since && earlier.ts < stop.ts;
+      const earlier = c.because !== 'task_closed' ? c.at ?? this.stopIds.get(c.stop)?.ts : undefined;
+      return earlier !== undefined && earlier > since && earlier < stop.ts;
     });
   }
 
@@ -2189,7 +2446,7 @@ export async function openAsks(options: AsksOptions): Promise<Asks> {
     raise: core.raise.bind(core), answer: core.answer.bind(core), tick: core.tick.bind(core), away: core.away.bind(core), notifications: core.notifications.bind(core), card: core.card.bind(core),
     needsYou: core.needsYou.bind(core), holds: core.holds.bind(core), authorized: core.authorized.bind(core),
     beforeStep: core.beforeStep.bind(core), batch: core.batch.bind(core), approveBatch: core.approveBatch.bind(core),
-    later: core.later.bind(core), laterBefore: core.laterBefore.bind(core), undo: core.undo.bind(core), inbox: core.inbox.bind(core), stillFails: core.stillFails.bind(core), signIn: core.signIn.bind(core),
+    later: core.later.bind(core), laterBefore: core.laterBefore.bind(core), undo: core.undo.bind(core), holding: core.holding.bind(core), stepHeld: core.stepHeld.bind(core), heldUntil: core.heldUntil.bind(core), inbox: core.inbox.bind(core), stillFails: core.stillFails.bind(core), signIn: core.signIn.bind(core),
     registerResolver: core.registerResolver.bind(core), saveDecision: core.saveDecision.bind(core), revokeDecision: core.revokeDecision.bind(core), refusals: core.refusals.bind(core),
     overrule: core.overrule.bind(core), widen: core.widen.bind(core), judged: core.judged.bind(core),
   };

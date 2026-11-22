@@ -5,12 +5,12 @@
 // out under <dir>, ready for `npm pack`:
 //   deepbuild/  the `deep` command: the workspaces the CLI loads at the checkout's relative paths (package.json and
 //               runtime files, built dist/ without tests, maps or declarations), the root folders their code reads
-//               (adapters/, the first-party packs/, skills/deepbuild/, deep-hook's default rules, setup's one list of steps, the banner's mark), and the third-party
+//               (adapters/, the first-party packs/, skills/deepbuild/ and skills/deepbuild-canvas/, deep-hook's default rules, setup's one list of steps, the banner's mark), and the third-party
 //               packages they load, bundled with what they don't need at run time left out. bin/deep.mjs is
 //               scripts/npm-launcher.mjs. This platform's deep-hook package is its optional dependency.
 //   deep-hook-<platform>-<arch>/  `@deepbuild/deep-hook-<platform>-<arch>`, for this host's platform and linux-x64 and
-//               linux-arm64: bin/deep-hook and SQLite's native module; built-<platform>-<arch>/ holds the same files as
-//               built, for release-verify.
+//               linux-arm64: bin/deep-hook and SQLite's native module, and this host's also bin/deep-show, the canvas
+//               core `deep export` draws with; built-<platform>-<arch>/ holds the same files as built, for release-verify.
 // <dir>/stage.json lists the package folders, each with its built tree when it has one.
 //   node scripts/release-stage.mjs --out <dir> --here
 // lays out the same two packages for this host alone, from this checkout as it is already built (no npm ci, no
@@ -52,9 +52,13 @@ const cargo = existsSync(join(cargoHome, 'bin', 'cargo')) ? join(cargoHome, 'bin
 // No compiler wrapper (a build cache your cargo config may name): the release compiles with rustc itself.
 const cargoEnv = { ...process.env, CARGO_HOME: cargoHome, RUSTUP_HOME: process.env.RUSTUP_HOME ?? join(home, '.rustup'), RUSTC_WRAPPER: '' };
 run(cargo, ['build', '--release', '--locked', '-q', '-p', 'deep-hook'], cargoEnv);
+// The canvas core, which `deep export` draws a still with (#1495: the app download exports one from its own folder),
+// for this host's package only: it links the platform's graphics stack, which zig can't link for Linux.
+run(cargo, ['build', '--release', '--locked', '-q', '-p', 'deep-show', '--bin', 'deep-show'], cargoEnv);
+const HOST = `${process.platform}-${process.arch}`;
 // The release's platforms: this host's, and Linux on both architectures, whose deep-hook is a static musl build
 // linked by zig from any host. Each needs its rustup target (`rustup target add <triple>`) and zig.
-const builds = new Map([[`${process.platform}-${process.arch}`, join(REPO, 'target', 'release', 'deep-hook')]]);
+const builds = new Map([[HOST, join(REPO, 'target', 'release', 'deep-hook')]]);
 const LINUX = { x64: ['x86_64-unknown-linux-musl', 'x86_64-linux-musl'], arm64: ['aarch64-unknown-linux-musl', 'aarch64-linux-musl'] };
 const zig = [...(process.env.PATH ?? '').split(':'), '/opt/homebrew/bin', '/usr/local/bin'].map((d) => join(d, 'zig')).find((p) => existsSync(p));
 for (const [arch, [triple, zigTarget]] of Object.entries(LINUX)) {
@@ -129,7 +133,7 @@ for (const dir of workspaces) {
 }
 
 // The root folders the workspaces read by relative path.
-for (const file of ['README.md', 'LICENSE', 'adapters', 'packs', 'skills/deepbuild', 'crates/deep-hook/default-rules.json', 'contracts/setup-steps.json', 'brand/png/favicon-32.png']) copy(join(REPO, file), join(pkg, file));
+for (const file of ['README.md', 'LICENSE', 'adapters', 'packs', 'skills/deepbuild', 'skills/deepbuild-canvas', 'crates/deep-hook/default-rules.json', 'contracts/setup-steps.json', 'brand/png/favicon-32.png']) copy(join(REPO, file), join(pkg, file));
 
 // Third-party packages, bundled: what they don't load at run time is left out. SQLite's native module is in the
 // platform package, which the launcher links in.
@@ -163,7 +167,10 @@ for (const [platform, hook] of builds) {
   const [os, cpu] = platform.split('-');
   const hookPkg = join(out, `deep-hook-${platform}`);
   const built = join(out, `built-${platform}`);
-  const sources = { 'deep-hook': hook, 'better_sqlite3.node': join(REPO, 'node_modules', 'better-sqlite3', 'prebuilds', `${platform}.node`) };
+  const sources = {
+    'deep-hook': hook, 'better_sqlite3.node': join(REPO, 'node_modules', 'better-sqlite3', 'prebuilds', `${platform}.node`),
+    ...(platform === HOST && { 'deep-show': join(REPO, 'target', 'release', 'deep-show') }),
+  };
   for (const [name, from] of Object.entries(sources)) {
     if (!existsSync(from)) fail(`${from} is not built for ${platform}`);
     for (const dir of [join(hookPkg, 'bin'), built]) {

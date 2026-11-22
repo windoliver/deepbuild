@@ -30,31 +30,66 @@ fn only(doc: &Value, keep: impl Fn(&str) -> bool) -> Value {
     out
 }
 
+/// #298: `doc` with the view values its drivers read at t bound on it for a frame of `size`
+/// (Overlay: clamped to the edge), as `view3d` binds them, so the 3D frame and the 2D raster of
+/// an overlay's own items read one `edge` and `edge_angle`; none where no driver reads one.
+fn edged(doc: &Value, t: i64, size: [u16; 2]) -> Result<Option<Value>, Unfit> {
+    use deep_canvas_scene3d::scene::{bound, view_values, Refused};
+    let unfit = |r: Refused| Unfit {
+        code: r.code,
+        path: r.path,
+    };
+    let reads = |d: &Value| {
+        let vars = d.get("vars").and_then(Value::as_object);
+        let mut names = vars.into_iter().flatten().filter_map(|(_, v)| v.as_str());
+        names.any(|v| v.ends_with(".edge") || v.ends_with(".edge_angle"))
+    };
+    let drivers = doc.get("drivers").and_then(Value::as_object);
+    if !drivers.into_iter().flatten().any(|(_, d)| reads(d)) {
+        return Ok(None);
+    }
+    // The values are the frame's: its size is the one the camera projects onto.
+    let mut sized = doc.clone();
+    sized["size"] = json!(size);
+    let values = view_values(&sized, t, None).map_err(unfit)?;
+    if values.is_empty() {
+        return Ok(None);
+    }
+    let mut out = bound(&sized, t, &values).map_err(unfit)?;
+    if let Some(o) = out.as_object_mut() {
+        match doc.get("size") {
+            Some(own) => o.insert("size".into(), own.clone()),
+            None => o.remove("size"),
+        };
+    }
+    Ok(Some(out))
+}
+
 impl Hub<'_> {
-    /// `doc`'s 3D frame at `t` and `size`, each inset's picture rastered into the scene's texels
-    /// first (kept by key between frames); straight RGBA and the scene it drew.
-    pub(crate) fn painted3d(
-        &mut self,
-        doc: &Value,
-        t: i64,
-        size: [u16; 2],
-    ) -> Result<(Vec<u8>, Scene), Unfit> {
-        // Insets and view overlays the check refuses draw nothing (#506), as in view3d.
-        if let Some(issue) = deep_canvas_scene3d::inset::refusals(doc).into_iter().next() {
-            return Err(Unfit {
-                code: "refused",
-                path: issue["path"].as_str().unwrap_or("items").to_string(),
-            });
-        }
-        let posed = crate::film::posed(doc, t);
-        let doc = posed.as_ref().unwrap_or(doc);
-        let (mut scene, look) = self.evaluate3d(doc, t, size)?;
+    /// Each picture `scene` draws (an inset's, or a module's mark's, #2450), rastered into its
+    /// texels under its key and kept by key between frames.
+    pub(crate) fn paint_pictures(&mut self, scene: &mut Scene) -> Result<(), Unfit> {
         let record = self.record();
         let keys: Vec<String> = scene.pictures.iter().map(|p| p.key.clone()).collect();
         self.inset_pictures.retain(|k, _| keys.contains(k));
         for p in &scene.pictures {
             if !self.inset_pictures.contains_key(&p.key) {
-                let map = p.document.as_object().cloned().unwrap_or_default();
+                // #2450: a pictured module's item draws as the core kind its module registered, a
+                // vector's outline imported again at its picture's size.
+                let mut form = (*p.document).clone();
+                self.inline_vectors(&mut form);
+                let sealed = &self.startup.sealed;
+                let items = form.get_mut("items").and_then(Value::as_object_mut);
+                for item in items.into_iter().flat_map(|m| m.values_mut()) {
+                    let kind = item["kind"].as_str().unwrap_or("").to_string();
+                    if let (Some(core), Some(draw)) =
+                        (sealed.draws_as(&kind), sealed.draw_of(&kind))
+                    {
+                        item["params"] = draw(&item["params"]);
+                        item["kind"] = json!(core);
+                    }
+                }
+                let map = form.as_object().cloned().unwrap_or_default();
                 let drawn = self.renderer.prepare(
                     &map,
                     0,
@@ -78,6 +113,27 @@ impl Hub<'_> {
                 .texels
                 .insert(p.key.clone(), self.inset_pictures[&p.key].clone());
         }
+        Ok(())
+    }
+
+    /// `doc`'s 3D frame at `t` and `size`, its pictures in the scene's texels
+    /// ([`Hub::paint_pictures`]); straight RGBA and the scene it drew.
+    pub(crate) fn painted3d(
+        &mut self,
+        doc: &Value,
+        t: i64,
+        size: [u16; 2],
+    ) -> Result<(Vec<u8>, Scene), Unfit> {
+        // Insets and view overlays the check refuses draw nothing (#506), as in view3d.
+        if let Some(issue) = deep_canvas_scene3d::inset::refusals(doc).into_iter().next() {
+            return Err(Unfit {
+                code: "refused",
+                path: issue["path"].as_str().unwrap_or("items").to_string(),
+            });
+        }
+        let posed = crate::film::posed(doc, t);
+        let doc = posed.as_ref().unwrap_or(doc);
+        let (scene, look) = self.evaluate3d(doc, t, size)?;
         let rgba = self
             .gpu3()
             .and_then(|g| g.draw(&scene, &look))
@@ -86,6 +142,43 @@ impl Hub<'_> {
                 path: String::new(),
             })?;
         Ok((rgba, scene))
+    }
+
+    /// #3017: `doc`'s 3D frame at `t` and `size` ([`Hub::painted3d`]) with its visible table,
+    /// read from the object-ID pass that frame drew. Under the planted `visible_table_as_boxes`
+    /// nothing is read; under `visible_picks_before_cutaway` the frame is drawn again without its
+    /// cutaway for its picks.
+    pub(crate) fn shown3d(
+        &mut self,
+        doc: &Value,
+        t: i64,
+        size: [u16; 2],
+    ) -> Result<(Vec<u8>, crate::scene3d::Shown), Unfit> {
+        use crate::scene3d::{Shown, AS_BOXES, BEFORE_CUTAWAY};
+        let edged = edged(doc, t, size)?;
+        let doc = edged.as_ref().unwrap_or(doc);
+        let (rgba, scene) = self.painted3d(doc, t, size)?;
+        let plant = self.scenario.module_planted.clone();
+        let plant = plant.as_deref();
+        if plant == Some(AS_BOXES) {
+            return Ok((rgba, Shown::of_boxes(scene.boxes(), size)));
+        }
+        let unfit = || Unfit {
+            code: "unsupported_platform",
+            path: String::new(),
+        };
+        let targets = if plant == Some(BEFORE_CUTAWAY) {
+            let posed = crate::film::posed(doc, t);
+            let (_, look) = self.evaluate3d(posed.as_ref().unwrap_or(doc), t, size)?;
+            let mut uncut = scene.clone();
+            uncut.set_cutaway(None);
+            let gpu = self.gpu3().ok_or_else(unfit)?;
+            gpu.draw_scene(&uncut, &look, false).ok_or_else(unfit)?.1
+        } else {
+            let gpu = self.gpu3().ok_or_else(unfit)?;
+            gpu.targets(size.map(u32::from), false).ok_or_else(unfit)?
+        };
+        Ok((rgba, targets.shown(scene.boxes(), size, plant)))
     }
 
     /// `doc`'s frame at `t` and `size` with what #506 sets in and over it (see the module's note).
@@ -98,10 +191,15 @@ impl Hub<'_> {
         size: [u16; 2],
         drawing: Option<&crate::frames::Painted>,
     ) -> Result<Vec<u8>, Unfit> {
+        let edged = edged(doc, t, size)?;
+        let doc = edged.as_ref().unwrap_or(doc);
         let (mut rgba, scene) = self.painted3d(doc, t, size)?;
         let shown = crate::shared::drawable(doc);
         let overlays = deep_canvas_scene3d::views::framed(doc);
-        let inside: BTreeSet<String> = overlays.iter().flat_map(|f| f.items.iter().cloned()).collect();
+        let inside: BTreeSet<String> = overlays
+            .iter()
+            .flat_map(|f| f.items.iter().cloned())
+            .collect();
         let record = self.record();
         let mut layer = |this: &mut Hub<'_>, mut drawn: Drawn, view: Option<Affine>| {
             drawn.view = view;
@@ -111,8 +209,14 @@ impl Hub<'_> {
         let prepare = |this: &mut Hub<'_>, part: &Value| -> Result<Drawn, Unfit> {
             let map: &Map<String, Value> = part.as_object().expect("a document is an object");
             let look = &this.look;
-            this.renderer
-                .prepare(map, t, &look.light, look.status.as_ref(), &record, &this.scenario.evidence)
+            this.renderer.prepare(
+                map,
+                t,
+                &look.light,
+                look.status.as_ref(),
+                &record,
+                &this.scenario.evidence,
+            )
         };
         let base = match drawing {
             Some(d) => {
@@ -134,7 +238,12 @@ impl Hub<'_> {
         };
         layer(self, base, None);
         for f in &overlays {
-            let Some(origin) = scene.overlays.iter().find(|o| o.id == f.overlay).and_then(|o| o.origin) else {
+            let Some(origin) = scene
+                .overlays
+                .iter()
+                .find(|o| o.id == f.overlay)
+                .and_then(|o| o.origin)
+            else {
                 continue;
             };
             let shift = Affine::translate((origin[0] - f.corner[0], origin[1] - f.corner[1]));
@@ -144,8 +253,11 @@ impl Hub<'_> {
         // Each view overlay: the document again from its camera, one level deep.
         let look = deep_canvas_scene3d::look::Look3::from_roles(self.look.light.clone());
         let [w, h] = size.map(u32::from);
-        let placed = deep_canvas_scene3d::views::placed(doc, [w, h], Some(&look))
-            .map_err(|r| Unfit { code: r.code, path: r.path })?;
+        let placed =
+            deep_canvas_scene3d::views::placed(doc, [w, h], Some(&look)).map_err(|r| Unfit {
+                code: r.code,
+                path: r.path,
+            })?;
         for p in placed {
             let mut sub = deep_canvas_scene3d::views::document(doc, &p);
             sub["size"] = json!([p.rect[2], p.rect[3]]);
@@ -159,12 +271,66 @@ impl Hub<'_> {
 
     /// The view of `doc` at `t`, a 3D document, as [`Hub::frame3d`] draws it; `None` without a
     /// GPU.
-    pub(crate) fn view3d(&mut self, doc: &Value, t: i64) -> Result<Option<(Vec<u8>, [u16; 2])>, Value> {
+    #[allow(clippy::type_complexity)]
+    pub(crate) fn view3d(
+        &mut self,
+        doc: &Value,
+        t: i64,
+    ) -> Result<Option<(Vec<u8>, [u16; 2])>, Value> {
         let size = snapshot::px([0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(1.0)));
         match self.frame3d(doc, t, size, None) {
             Ok(rgba) => Ok(Some((rgba, size))),
             Err(u) if u.code == "unsupported_platform" => Ok(None),
             Err(u) => Err(json!({"code": u.code, "path": u.path})),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #298: a tag on a post near the frame's right side, and an arrow in it a driver turns by
+    /// the tag's `edge_angle`. The post's top projects 0.9 of the half width right of the center.
+    fn tagged(vars: Value) -> Value {
+        let item = |kind: &str, order: &str, params: Value| json!({"kind": kind, "order": order, "params": params});
+        let cam = json!({"projection": "perspective", "position": [0, 0, 9.6], "target": [0, 0, 0], "fov": 90, "near": 0.05, "far": 500});
+        let mut post = item("mark.box@1", "a1", json!({"size": [0.6, 2.4, 0.6]}));
+        post["at"] = json!({"pos": [8.64, 1.2, 0]});
+        let mut arrow = item("path@1", "a4", json!({"d": "M -16 -14 L 16 0 L -16 14 Z"}));
+        arrow["parent"] = json!("tag-frame");
+        arrow["at"] = json!({"pos": [24, 24, 0], "rot": [0, 0, 0]});
+        let tag = json!({"frame": "tag-frame", "anchor": {"item": "post", "point": [0, 1.2, 0]}, "offset": [-24, -24], "hide": "clamp"});
+        json!({"size": [320, 180], "camera": "cam", "safe": 48, "transport": {"span": "1s"},
+            "items": {"cam": item("camera@1", "a0", cam), "post": post, "tag-frame": item("frame@1", "a2", json!({"box": [0, 0, 48, 48]})),
+                "tag": item("overlay.frame@1", "a3", tag), "arrow": arrow},
+            "drivers": {"turn": {"target": "items/arrow/at/rot/2", "expr": "a", "vars": vars}}})
+    }
+
+    #[test]
+    fn a_frame_binds_the_edge_values_its_drivers_read_at_the_frames_own_size() {
+        let doc = tagged(json!({"a": "tag.edge_angle"}));
+        let bound = |size| {
+            edged(&doc, 0, size)
+                .expect("it evaluates")
+                .expect("a driver reads it")
+        };
+        // On 1920 x 1080 the top projects to (1824, 300), inside the safe frame: the tag rests on
+        // it, and its arrow turns toward it, atan2(-240, 864) = 344.476 deg.
+        let wide = bound([1920, 1080]);
+        assert_eq!(
+            wide["size"],
+            json!([320, 180]),
+            "the document keeps its own size"
+        );
+        assert_eq!(wide["items"]["tag"]["edge"], json!(0));
+        let turn = wide["items"]["arrow"]["at"]["rot"][2]
+            .as_f64()
+            .expect("the arrow's turn");
+        assert!((turn - 344.4759).abs() < 1e-3, "{turn}");
+        // On 320 x 180 it projects to (304, 50), past the 48 px margin: clamped.
+        assert_eq!(bound([320, 180])["items"]["tag"]["edge"], json!(1));
+        let other = tagged(json!({"a": "time"}));
+        assert_eq!(edged(&other, 0, [1920, 1080]).expect("it evaluates"), None);
     }
 }

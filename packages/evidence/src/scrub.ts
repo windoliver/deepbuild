@@ -32,9 +32,16 @@ const folded = (bytes: Buffer) => (text: Buffer, at: number) => {
   for (let j = 0; j < bytes.length; j++) if (FOLD[text[at + j]!] !== bytes[j]) return -1;
   return at + bytes.length;
 };
-for (const keyword of new Set(rules.flatMap((rule) => rule.keywords))) {
+// Index each rule once instead of scanning every rule again for each keyword.
+const byKeyword = new Map<string, Rule[]>();
+for (const rule of rules) for (const keyword of new Set(rule.keywords)) {
+  const group = byKeyword.get(keyword);
+  if (group) group.push(rule);
+  else byKeyword.set(keyword, [rule]);
+}
+for (const [keyword, rules] of byKeyword) {
   const bytes = Buffer.from(keyword.toLowerCase(), 'latin1');
-  const needle: Needle = { match: folded(bytes), rules: rules.filter((rule) => rule.keywords.includes(keyword)) };
+  const needle: Needle = { match: folded(bytes), rules };
   if (bytes.length >= 3) add(keywordBits, keywords, bytes, needle);
   // A two-byte keyword is found by each three bytes it can start.
   else for (let next = 0; next < 256; next++) if (FOLD[next] === next) add(keywordBits, keywords, Buffer.from([...bytes, next]), needle);
@@ -87,9 +94,110 @@ export function scrub(text: Buffer, values: readonly string[], patterns = true):
   return Buffer.from(out + latin.slice(at), 'latin1');
 }
 
+/** How far a multi-line match reaches: what a cut looks ahead by, and what a continued copy reads again before its end. */
+export const scrubReach = (values: readonly string[]): number => Math.max(MULTILINE_WINDOW, ...values.map((v) => Buffer.byteLength(v) * 3));
+
+/**
+ * A complete-line prefix whose masks do not cross the cut. Lookahead keeps multi-line rules and held values whole;
+ * field masks can extend beyond that window, so an unfinished one keeps its opening line until more text arrives.
+ * `end` is a byte offset in the UTF-8 input. Zero asks the caller for more complete lines, never an unsafe cut.
+ * The first `from` bytes are whole lines an earlier pass copied, here as context: `bytes` and `matches` start after
+ * them, and the result is `stale` when the text after them changes how they scrub, so nothing can be appended.
+ */
+export function scrubPrefix(text: Buffer, values: readonly string[], target: number, final: boolean | 'growing', from = 0): { end: number; bytes: Buffer; continuable: boolean; stale?: true; matches: { at: number; match: string; field: boolean }[] } {
+  const lookahead = scrubReach(values);
+  const scanned = masksOf(text, values, true);
+  let safe = final ? growingEnd(text, values, scanned) : Math.max(0, text.length - lookahead);
+  for (const at of scanned.unfinished) safe = Math.min(safe, at ? text.lastIndexOf(10, at - 1) + 1 : 0);
+  const ceiling = final === true ? text.length : safe;
+  const none = { end: 0, bytes: Buffer.alloc(0), continuable: false, matches: [] };
+  const { latin, masks, fields, matches } = scanned;
+  const found = matched(text, fields, matches);
+  const ranges = merge([...masks, ...fields, ...matches]);
+  const render = (start: number, stop: number): Buffer => {
+    let out = '', at = start;
+    for (const [open, close, replacement = MASK] of ranges) {
+      if (close <= start) continue;
+      if (open >= stop) break;
+      out += latin.slice(at, open) + replacement; at = close;
+    }
+    return Buffer.from(out + latin.slice(at, stop), 'latin1');
+  };
+  // Whatever the rule, a continued copy holds only when the copied lines scrub alone as they do with what follows.
+  if (from && (ranges.some(([open, close]) => open < from && close > from) || !scrub(text.subarray(0, from), values).equals(render(0, from)))) return { ...none, stale: true };
+  if (ceiling <= from) return none;
+  const limit = Math.min(from + target, ceiling);
+  let end = limit > 0 ? text.lastIndexOf(10, limit - 1) + 1 : 0;
+  // A single long line is indivisible. It is eligible only when its complete line and lookahead are present.
+  if (end <= from) {
+    const newline = text.indexOf(10, from);
+    if (newline >= 0 && newline < ceiling) end = newline + 1;
+    else if (final === true) end = text.length;
+    else return none;
+  }
+  // Prefer moving backwards so ordinary parts stay bounded, but re-check earlier masks after every move.
+  // When a mask reaches from the first line there is no safe earlier cut: advance past it and any masks that
+  // cross that new boundary. Keeping the direction avoids cycling between two masks on one shared line.
+  let forward = false;
+  for (;;) {
+    const crossing = end < text.length ? ranges.find(([open, close]) => open < end && close >= end) : undefined;
+    if (!crossing) break;
+    const [open, close] = crossing;
+    // A mask from the text's first byte has no line before it; an offset of -1 would search from the text's end.
+    const before = open ? text.lastIndexOf(10, open - 1) + 1 : 0;
+    if (!forward && before > from) { end = before; continue; }
+    forward = true;
+    const after = text.indexOf(10, close);
+    if (after >= 0 && after < ceiling) end = after + 1;
+    else if (final === true) end = text.length;
+    else return none;
+  }
+  return { end, bytes: render(from, end), continuable: end <= safe, matches: found.flatMap(([match, field]) => {
+    const at = match.byteOffset - text.byteOffset;
+    return at >= from && at + match.length <= end ? [{ at: at - from, match: match.toString('utf8'), field }] : [];
+  }) };
+}
+
+/** The complete prefix of a live tail that cannot still be the opening of a multi-line scrub match. */
+function growingEnd(bytes: Buffer, values: readonly string[], scanned: ReturnType<typeof masksOf>): number {
+  let end = bytes.lastIndexOf(10) + 1;
+  const lineOf = (at: number) => at ? bytes.lastIndexOf(10, at - 1) + 1 : 0;
+  // Only raw held values can span literal newlines (their URL/base64 forms cannot). Keep a matching partial suffix
+  // from its opening line; it is compared and scrubbed again with the rest at the next pass.
+  for (const value of values) {
+    const b = Buffer.from(value);
+    const newline = b.indexOf(10);
+    if (newline < 0) continue;
+    const first = b.subarray(0, newline + 1);
+    for (let at = bytes.indexOf(first); at >= 0; at = bytes.indexOf(first, at + 1)) {
+      const tail = bytes.subarray(at);
+      if (tail.length < b.length && tail.equals(b.subarray(0, tail.length))) end = Math.min(end, lineOf(at));
+    }
+  }
+  const { latin, hits } = scanned;
+  for (const [at, candidates] of hits) {
+    const start = lineOf(at);
+    if (start >= end || bytes.length - start >= MULTILINE_WINDOW) continue;
+    const nl = latin.indexOf('\n', at);
+    if (nl >= 0) {
+      // Agent JSONL entries close every string on their own physical line. Escaped newlines are part of that line
+      // and already scrubbed, not the start of a literal multi-line block continuing in the next message.
+      try { JSON.parse(latin.slice(start, nl)); continue; } catch { /* a plain/multi-line source */ }
+    }
+    const window = latin.slice(start, start + MULTILINE_WINDOW);
+    for (const rule of candidates) if (rule.multiline && ![...window.matchAll(rule.regex)].some((m) => m.index! <= at - start && m.index! + m[0].length > at - start)) {
+      end = Math.min(end, start); break;
+    }
+  }
+  return end;
+}
+
 /** Each pattern rule's match in `text`, in order and once, as printed, and whether a field rule's mask covers part of it too. */
 export function patternMatches(text: Buffer): [match: Buffer, field: boolean][] {
   const { fields, matches } = masksOf(text, [], true);
+  return matched(text, fields, matches);
+}
+function matched(text: Buffer, fields: Range[], matches: Range[]): [match: Buffer, field: boolean][] {
   // The field masks as disjoint ranges in order, so each match finds the first that may overlap it by halving.
   const covered = merge(fields);
   const found: [Buffer, boolean][] = [];
@@ -105,7 +213,7 @@ export function patternMatches(text: Buffer): [match: Buffer, field: boolean][] 
 }
 
 /** The text as latin1, and the ranges its scrub masks: by held value, by field name and by pattern. */
-function masksOf(text: Buffer, values: readonly string[], patterns: boolean): { latin: string; masks: Range[]; fields: Range[]; matches: Range[] } {
+function masksOf(text: Buffer, values: readonly string[], patterns: boolean): { latin: string; masks: Range[]; fields: Range[]; matches: Range[]; hits: [number, Rule[]][]; unfinished: number[] } {
   const latin = text.toString('latin1');
   const { bits, byValue, short } = tablesFor(values);
   const masks: Range[] = [];
@@ -123,7 +231,8 @@ function masksOf(text: Buffer, values: readonly string[], patterns: boolean): { 
   for (const form of short) for (let at = text.indexOf(form); at >= 0; at = text.indexOf(form, at + 1)) masks.push([at, at + form.length]);
 
   // Fields and patterns are found in the text as printed, so no mask can hide what another rule would find.
-  return { latin, masks, fields: patterns ? fieldRanges(latin, fields, MASK) : [], matches: patterns ? patternRanges(latin, hits) : [] };
+  const unfinished: number[] = [];
+  return { latin, masks, fields: patterns ? fieldRanges(latin, fields, MASK, unfinished) : [], matches: patterns ? patternRanges(latin, hits) : [], hits, unfinished };
 }
 
 /** Raw, and base64 after 0, 1 or 2 leading bytes in both alphabets: only the characters the value alone decides. */
@@ -171,7 +280,7 @@ function merge(ranges: Range[]): Range[] {
 function patternRanges(text: string, hits: [number, Rule[]][]): Range[] {
   const windows = new Map<number, Set<Rule>>();
   for (const [at, found] of hits) {
-    const start = text.lastIndexOf('\n', at - 1) + 1;
+    const start = at > 0 ? text.lastIndexOf('\n', at - 1) + 1 : 0;
     const set = windows.get(start) ?? new Set();
     for (const rule of found) set.add(rule);
     windows.set(start, set);

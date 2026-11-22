@@ -8,13 +8,13 @@
 
 use serde_json::{json, Map, Value};
 
-use super::packs::{Derived, Expansion, Resolved};
+use super::packs::{Derived, Expansion, Packs, Resolved};
 use super::{kind_text, member, Issue};
 use crate::registry::{Registrar, Sealed};
 use crate::schedule::{canonical, Hasher};
 
-/// The sections an expansion may write besides items.
-pub const SECTIONS: [&str; 3] = ["channels", "markers", "constraints"];
+/// The sections an expansion may write besides items: `strips` for a media kind's (#1518).
+pub const SECTIONS: [&str; 4] = ["channels", "markers", "constraints", "strips"];
 
 /// What a module's expansion reads.
 pub struct Request<'a> {
@@ -27,6 +27,38 @@ pub struct Request<'a> {
     pub entries: &'a Entries<'a>,
     /// A planted wrong program of the module's, by name, off by default.
     pub planted: Option<&'static str>,
+    /// What the host reads for it, when the host gave a reader (#1518).
+    pub reads: Option<&'a dyn Reads>,
+}
+
+/// An asset's sound as the host's decode worker reads it, every channel interleaved (#1518).
+pub struct Sound {
+    pub rate: i64,
+    pub channels: usize,
+    pub samples: Vec<f32>,
+    /// SHA-256 of the samples as interleaved f32 little-endian: the PCM a record names.
+    pub sha256: String,
+    /// Whether the asset holds a video stream too.
+    pub video: bool,
+}
+
+/// What the host reads for a module's expansion at check (#1518): an asset's sound and a record
+/// of the evidence store, each by hash, and bytes it keeps there for a job. The core reads no
+/// file, so an expansion that needs one asks the host through this, and refuses without it.
+pub trait Reads: Send + Sync {
+    fn sound(&self, asset: &str) -> Result<std::sync::Arc<Sound>, Value>;
+    fn record(&self, sha: &str) -> Option<Value>;
+    fn keep(&self, bytes: &[u8]) -> Option<String>;
+}
+
+/// The host's reader, as the packs a check runs with hold it.
+#[derive(Clone)]
+pub struct Reader(pub std::sync::Arc<dyn Reads>);
+
+impl std::fmt::Debug for Reader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Reader")
+    }
 }
 
 /// The registry entries a document can use: those canvas modules filled at the seal, then those
@@ -55,11 +87,13 @@ impl<'a> Entries<'a> {
     }
 }
 
-/// What an expansion wrote: derived items by ID, and section entries by section, then ID.
+/// What an expansion wrote: derived items by ID, section entries by section, then ID, and what
+/// its row in a reply reports beside them (#1518: a cut's `removed`, `fragments` and `cuts`).
 #[derive(Default)]
 pub struct Lowered {
     pub items: Map<String, Value>,
     pub sections: Map<String, Value>,
+    pub report: Map<String, Value>,
 }
 
 /// Why an expansion refused its item: a code of the module's catalog, at a path in the document.
@@ -119,9 +153,10 @@ pub(super) fn run(
     items: &mut Map<String, Value>,
     sealed: &Sealed,
     resolved: &Resolved<'_>,
-    planted: Option<&'static str>,
+    packs: &Packs,
     issues: &mut Vec<Issue>,
 ) -> Vec<Expansion> {
+    let planted = packs.planted.expander;
     let fns: Vec<&(String, Expand)> = sealed
         .modules
         .iter()
@@ -152,6 +187,7 @@ pub(super) fn run(
             item: &item,
             entries: &entries,
             planted,
+            reads: packs.reads.as_ref().map(|r| r.0.as_ref()),
         };
         let lowered = match expand(&request) {
             Ok(l) => l,
@@ -214,6 +250,7 @@ pub(super) fn run(
             channels: Map::new(),
             sections: lowered.sections,
             placed: Vec::new(),
+            report: lowered.report,
         });
     }
     out
@@ -296,7 +333,7 @@ pub(super) fn resolve_times(doc: &Value, expansions: &mut [Expansion], issues: &
         return;
     }
     let frame_rate = member(doc, "transport")
-        .and_then(|t| super::check::frame_rate_of(t))
+        .and_then(super::check::frame_rate_of)
         .unwrap_or((60, 1));
     let mut ctx = TimeContext {
         frame_rate,

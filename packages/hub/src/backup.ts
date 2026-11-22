@@ -7,10 +7,11 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync }
 import { join, resolve } from 'node:path';
 import { prepareRestore, type PreparedRestore } from '@deepbuild/record';
 import { writtenOf } from '@deepbuild/wiki';
-import { call, withPrompt } from './client.js';
+import { call, notAnswered, withPrompt } from './client.js';
 import { Confirmer } from './confirm.js';
 import { takeLock } from './lock.js';
 import { dropTestSettings, hubAddress, installedRoot, rootOf } from './paths.js';
+import { activePlant } from './plant.js';
 import { Devices } from './trusted.js';
 import { startOf } from './wire.js';
 import { copySynced, syncPath, writeSynced } from './vfs.js';
@@ -20,7 +21,10 @@ const FOLDERS = ['evidence', 'wiki'] as const;
 
 /** `deep backup <folder>`: through the running hub, into an empty folder. */
 export async function backupCommand(args: readonly string[]): Promise<number> {
-  if (args.length !== 1 || !args[0]) {
+  // A flag where the folder goes is a usage error, never a folder named for it (#2200). The planted
+  // dispatches-before-help (#1359) still hands its flag on, as the wrong program it plants.
+  const flag = args[0]?.startsWith('-') && activePlant() !== 'dispatches-before-help';
+  if (args.length !== 1 || !args[0] || flag) {
     process.stderr.write('Usage: deep backup <folder>\n');
     return 2;
   }
@@ -33,8 +37,7 @@ export async function backupCommand(args: readonly string[]): Promise<number> {
       return 1;
     }
   } catch (error) {
-    process.stderr.write(`deep backup: no hub answered (${error instanceof Error ? error.message : String(error)}); the record is backed up through the hub. Start it with deep hub start, then run deep backup again.\n`);
-    return 1;
+    return notAnswered(error, hubAddress(null).path);
   }
   process.stdout.write(`Backed up the record, its evidence and its wiki to ${folder}. deep restore ${folder} puts them back.\n`);
   return 0;

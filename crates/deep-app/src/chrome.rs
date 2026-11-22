@@ -9,6 +9,9 @@
 //! the `space` scale, one corner radius, the shell's two sizes and the chrome's faces. No module names a
 //! size or a distance of its own, and the same guard holds the source to that. The theme writes the kit's
 //! type, faces, radii and spacing from them too.
+//!
+//! Issue #1592: the one icon set's two sizes and its one stroke are roles of the look too, and so are the status
+//! marks, one drawn glyph per state in a slot of their own (`crate::icons` draws both).
 
 use std::cell::Cell;
 use std::sync::OnceLock;
@@ -149,6 +152,8 @@ pub struct Sizes {
     pub sidebar: Pixels,
     pub band: Pixels,
     pub window: (Pixels, Pixels),
+    /// The window's smallest size: it never gets smaller (#1808).
+    pub window_min: (Pixels, Pixels),
     /// The list's narrowest width, the page's narrowest, and the reading lane's widest (#1461).
     pub list_min: Pixels,
     pub page_min: Pixels,
@@ -161,6 +166,12 @@ pub struct Sizes {
     /// The chrome's text face, and its code face.
     pub face: SharedString,
     pub code: SharedString,
+    /// #1592: the one icon set's two sizes, in a row and in a page's chrome, and the one stroke its lines draw at; and
+    /// the slot a status mark is drawn in.
+    pub icon_row: Pixels,
+    pub icon_page: Pixels,
+    pub icon_stroke: f32,
+    pub mark: Pixels,
 }
 
 impl Sizes {
@@ -203,6 +214,10 @@ pub fn sizes() -> &'static Sizes {
                 px(given.shell["window_width"] as f32),
                 px(given.shell["window_height"] as f32),
             ),
+            window_min: (
+                px(given.shell["window_min_width"] as f32),
+                px(given.shell["window_min_height"] as f32),
+            ),
             list_min: px(given.shell["list_min"] as f32),
             page_min: px(given.shell["page_min"] as f32),
             lane: px(given.shell["lane"] as f32),
@@ -212,8 +227,20 @@ pub fn sizes() -> &'static Sizes {
             bar: px(given.stroke["bar"] as f32),
             face: face("text"),
             code: face("code"),
+            icon_row: px(given.icons.row as f32),
+            icon_page: px(given.icons.page as f32),
+            icon_stroke: given.icons.stroke as f32,
+            mark: px(marks().slot as f32),
         }
     })
+}
+
+/// The status marks the clean look draws, one drawn glyph per state (#1592).
+pub fn marks() -> &'static look::Marks {
+    look()
+        .marks
+        .as_ref()
+        .expect("the clean look draws its status marks")
 }
 
 /// The reading lane on a page `page` wide (#1461): the card, a session's content and the box share

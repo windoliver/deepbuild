@@ -12,7 +12,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Mutex;
 
-use deep_canvas_physics::backend::{Canonical, SoftHeld, SoftState};
+use deep_canvas_physics::backend::{Canonical, SoftHeld, SoftState, PARTICLE_FIELDS};
 use deep_canvas_physics::doc::{Rule, Soft, SoftShape, Stiffness, World};
 use deep_canvas_physics::occurrence::{self, Payload, Raw};
 use rapier3d::prelude::*;
@@ -224,14 +224,15 @@ impl Softs {
         b
     }
 
-    /// Steps `world` once with its soft bodies, and the `tear` rows its tears wrote.
-    pub(crate) fn step(&mut self, world: &mut PhysicsWorld) -> Vec<Raw> {
+    /// Steps `world` once with its soft bodies, under its contact hook `hooks` (#2241), and the
+    /// `tear` rows its tears wrote.
+    pub(crate) fn step(&mut self, world: &mut PhysicsWorld, hooks: &dyn PhysicsHooks) -> Vec<Raw> {
         if self.bodies.is_empty() {
-            world.step();
+            world.step_with_events(hooks, &());
             return Vec::new();
         }
         let tears = Tears::default();
-        world.step_with_events(&(), &tears);
+        world.step_with_events(hooks, &tears);
         let events = tears.0.into_inner().unwrap_or_default();
         let mut touched = BTreeSet::new();
         for e in &events {
@@ -340,6 +341,7 @@ impl Softs {
                 out.push(Canonical {
                     id: format!("{id}#{name}"),
                     values: vec![p.x, p.y, p.z, v.x, v.y, v.z],
+                    names: &PARTICLE_FIELDS,
                 });
             }
         }
@@ -614,8 +616,12 @@ mod ours {
             }
         }
 
-        pub(crate) fn step(&mut self, world: &mut PhysicsWorld) -> Vec<Raw> {
-            world.step();
+        pub(crate) fn step(
+            &mut self,
+            world: &mut PhysicsWorld,
+            hooks: &dyn PhysicsHooks,
+        ) -> Vec<Raw> {
+            world.step_with_events(hooks, &());
             let n = world.integration_parameters.num_solver_iterations.max(1);
             let h = world.integration_parameters.dt / n as f32;
             let g = world.gravity;
@@ -685,6 +691,7 @@ mod ours {
                     out.push(Canonical {
                         id: format!("{id}#{a}"),
                         values: vec![p.x, p.y, p.z, v.x, v.y, v.z],
+                        names: &PARTICLE_FIELDS,
                     });
                 }
             }

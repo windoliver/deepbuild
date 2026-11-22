@@ -9,6 +9,9 @@
 //! with a node it lacks, or an edge its ranks break, returns `layout.relayout_needed` with the full
 //! relayout offered beside it, never moving a kept node on its own. R2 lands the memory rules that
 //! place new nodes into a kept picture.
+//!
+//! Issue #1826: graph's other own layouts, `tree`, `treemap` and `grid`, beside `layered` and
+//! `pinned`, each under the memory's rules; [`lay`] lays a graph out by its layout's `algo`.
 
 pub mod labels;
 pub mod module;
@@ -42,6 +45,8 @@ pub struct Node {
     pub group: Option<String>,
     /// The item that draws it (a frame, card, icon or recipe instance), if any.
     pub item: Option<String>,
+    /// What a treemap gives its rectangle's area in proportion to: 1 unless set, never negative.
+    pub size: f64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -65,10 +70,20 @@ pub enum Direction {
     Right,
 }
 
+/// A layout's algorithm: graph's own entries of `graph.layout@1`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Algo {
+    Layered,
+    Tree,
+    Treemap,
+    Grid,
+    /// Every node at its memory's place.
+    Pinned,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Layout {
-    /// `pinned`: every node at its memory's place; otherwise `layered`.
-    pub pinned: bool,
+    pub algo: Algo,
     pub direction: Direction,
     /// Required and non-zero, never the clock's. The basic layered layout draws nothing at random,
     /// so the same graph gives the same picture under any seed.
@@ -77,6 +92,8 @@ pub struct Layout {
     pub node: f64,
     pub rank: f64,
     pub edge: f64,
+    /// A treemap's box `[x, y, w, h]` in u, which its leaves tile.
+    pub bounds: Option<[f64; 4]>,
 }
 
 /// A node's entry in the layout memory: its rank from 0, its place in its rank from 0, and its
@@ -112,7 +129,7 @@ fn text(value: Option<&Value>, path: &str) -> Result<String, Refused> {
     }
 }
 
-/// Reads `{nodes: [{id, w, h, …}], edges: [{id, a, b, min_len?, …}]}`.
+/// Reads `{nodes: [{id, w, h, size?, …}], edges: [{id, a, b, min_len?, …}]}`.
 pub fn read_graph(value: &Value) -> Result<Graph, Refused> {
     let (Some(Value::Array(nodes)), Some(Value::Array(edges))) =
         (value.get("nodes"), value.get("edges"))
@@ -137,6 +154,10 @@ pub fn read_graph(value: &Value) -> Result<Graph, Refused> {
         read_nodes.push(Node {
             w: size(n.get("w"), &format!("nodes/{i}/w"))?,
             h: size(n.get("h"), &format!("nodes/{i}/h"))?,
+            size: match n.get("size") {
+                None => 1.0,
+                some => size(some, &format!("nodes/{i}/size"))?,
+            },
             id,
             group,
             item,
@@ -171,11 +192,15 @@ pub fn read_graph(value: &Value) -> Result<Graph, Refused> {
     })
 }
 
-/// Reads `{algo: "layered" | "pinned", direction?, seed, spacing?}`.
+/// Reads `{algo: "layered" | "tree" | "treemap" | "grid" | "pinned", direction?, seed, spacing?}`,
+/// and a treemap's `box: [x, y, w, h]`.
 pub fn read_layout(value: &Value) -> Result<Layout, Refused> {
-    let pinned = match value.get("algo").and_then(Value::as_str) {
-        Some("layered") => false,
-        Some("pinned") => true,
+    let algo = match value.get("algo").and_then(Value::as_str) {
+        Some("layered") => Algo::Layered,
+        Some("tree") => Algo::Tree,
+        Some("treemap") => Algo::Treemap,
+        Some("grid") => Algo::Grid,
+        Some("pinned") => Algo::Pinned,
         _ => return refuse("layout.algo_unsupported", "algo"),
     };
     let direction = match value.get("direction").map(Value::as_str) {
@@ -192,13 +217,29 @@ pub fn read_layout(value: &Value) -> Result<Layout, Refused> {
         None => Ok(default),
         some => size(some, &format!("spacing/{name}")),
     };
+    let bounds = match value
+        .get("box")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+    {
+        _ if algo != Algo::Treemap => None,
+        Some([x, y, w, h]) => {
+            let finite = |v: &Value| v.as_f64().filter(|v| v.is_finite());
+            match (finite(x), finite(y), finite(w), finite(h)) {
+                (Some(x), Some(y), Some(w), Some(h)) if w >= 0.0 && h >= 0.0 => Some([x, y, w, h]),
+                _ => return refuse("bad_input", "box"),
+            }
+        }
+        _ => return refuse("bad_input", "box"),
+    };
     Ok(Layout {
-        pinned,
+        algo,
         direction,
         seed,
         node: gap("node", 24.0)?,
         rank: gap("rank", 48.0)?,
         edge: gap("edge", 12.0)?,
+        bounds,
     })
 }
 
@@ -634,6 +675,16 @@ pub fn keep(
     layout: &Layout,
     memory: &Memory,
 ) -> Result<Result<(Memory, Vec<u32>), Relayout>, Refused> {
+    kept(graph, layout, memory, layered)
+}
+
+/// [`keep`], offering `afresh`'s layout as the relayout: `layered`'s, or `tree`'s.
+fn kept(
+    graph: &Graph,
+    layout: &Layout,
+    memory: &Memory,
+    afresh: fn(&Graph, &Layout) -> Result<Memory, Refused>,
+) -> Result<Result<(Memory, Vec<u32>), Relayout>, Refused> {
     let index: BTreeMap<&str, usize> = graph
         .nodes
         .iter()
@@ -720,7 +771,7 @@ pub fn keep(
     if !broken.is_empty() {
         return Ok(Err(Relayout {
             nodes: broken.into_iter().collect(),
-            offered: layered(graph, layout)?,
+            offered: afresh(graph, layout)?,
         }));
     }
     let along = |i: usize| match layout.direction {
@@ -866,4 +917,376 @@ fn settle(row: &[usize], cross: &mut [f64], across: &dyn Fn(usize) -> f64, gap: 
     for k in 1..row.len() {
         cross[row[k]] = cross[row[k]].max(cross[row[k - 1]] + across(row[k - 1]) + gap);
     }
+}
+
+/// What [`lay`] placed: the memory; against a memory, the ranks it placed again, ascending (a
+/// layout afresh places every rank and lists none); and for a treemap each leaf's rectangle
+/// `[x, y, w, h]`, whose size is the layout's to give.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Laid {
+    pub memory: Memory,
+    pub replaced: Vec<u32>,
+    pub boxes: BTreeMap<String, [f64; 4]>,
+}
+
+/// A graph laid out by its layout's `algo` (#1826): afresh with no memory, else against it, by
+/// the memory's rules, so a graph its memory holds whole comes back as the memory says. `pinned`
+/// lays out as `layered` here: a view pins its nodes itself.
+pub fn lay(
+    graph: &Graph,
+    layout: &Layout,
+    memory: Option<&Memory>,
+) -> Result<Result<Laid, Relayout>, Refused> {
+    let afresh: fn(&Graph, &Layout) -> Result<Memory, Refused> = if layout.algo == Algo::Tree {
+        tree
+    } else {
+        layered
+    };
+    let (laid, boxes) = match (layout.algo, memory) {
+        (Algo::Grid, _) => (grid(graph, layout, memory), BTreeMap::new()),
+        (Algo::Treemap, _) => treemap(graph, layout, memory)?,
+        (_, None) => (afresh(graph, layout)?, BTreeMap::new()),
+        (_, Some(memory)) => {
+            if layout.algo == Algo::Tree {
+                forest(graph)?;
+            }
+            return Ok(
+                kept(graph, layout, memory, afresh)?.map(|(memory, replaced)| Laid {
+                    memory,
+                    replaced,
+                    boxes: BTreeMap::new(),
+                }),
+            );
+        }
+    };
+    // The ranks of the entries the memory lacked or held elsewhere.
+    let replaced: BTreeSet<u32> = memory.map_or_else(BTreeSet::new, |m| {
+        laid.iter()
+            .filter(|(id, place)| m.get(*id) != Some(*place))
+            .map(|(_, place)| place.rank)
+            .collect()
+    });
+    Ok(Ok(Laid {
+        memory: laid,
+        replaced: replaced.into_iter().collect(),
+        boxes,
+    }))
+}
+
+/// The rooted forest a graph's edges make: its roots, and each node's children, both in ID
+/// order. An edge, taken in ID order, into a node that has a parent already, or from one of that
+/// node's own descendants, breaks the tree and is the one named.
+fn forest(graph: &Graph) -> Result<(Vec<usize>, Vec<Vec<usize>>), Refused> {
+    let n = graph.nodes.len();
+    let index: BTreeMap<&str, usize> = graph
+        .nodes
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (n.id.as_str(), i))
+        .collect();
+    // Each node's way up to its tree's root so far, halved as it is walked.
+    let mut up: Vec<usize> = (0..n).collect();
+    let mut child = vec![false; n];
+    let mut children: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for e in &graph.edges {
+        let (a, b) = (index[e.a.as_str()], index[e.b.as_str()]);
+        let mut root = a;
+        while up[root] != root {
+            up[root] = up[up[root]];
+            root = up[root];
+        }
+        if child[b] || root == b {
+            return refuse("layout.not_a_tree", &e.id);
+        }
+        child[b] = true;
+        up[b] = root;
+        children[a].push(b);
+    }
+    for row in &mut children {
+        row.sort_unstable();
+    }
+    Ok(((0..n).filter(|&i| !child[i]).collect(), children))
+}
+
+/// The tree layout: one rank per depth along `direction`, `spacing.rank` between ranks as
+/// `layered` spaces them, each parent centred over its children's centres, and each subtree in a
+/// span of its own, `spacing.node` from its siblings'. A forest's trees stand side by side.
+fn tree(graph: &Graph, layout: &Layout) -> Result<Memory, Refused> {
+    let (roots, children) = forest(graph)?;
+    let n = graph.nodes.len();
+    let along = |i: usize| match layout.direction {
+        Direction::Down => graph.nodes[i].h,
+        Direction::Right => graph.nodes[i].w,
+    };
+    let across = |i: usize| match layout.direction {
+        Direction::Down => graph.nodes[i].w,
+        Direction::Right => graph.nodes[i].h,
+    };
+    // Parents before children, each depth from its first node across to its last.
+    let mut order = roots.clone();
+    let mut depth = vec![0usize; n];
+    let mut next = 0;
+    while let Some(&i) = order.get(next) {
+        for &c in &children[i] {
+            depth[c] = depth[i] + 1;
+            order.push(c);
+        }
+        next += 1;
+    }
+    // Each subtree's reach to either side of its root's centre, and each child's centre from
+    // its parent's.
+    let mut reach = vec![(0.0, 0.0); n];
+    let mut from = vec![0.0; n];
+    for &i in order.iter().rev() {
+        let half = across(i) / 2.0;
+        let mut at = 0.0;
+        let mut centres = Vec::with_capacity(children[i].len());
+        for &c in &children[i] {
+            if !centres.is_empty() {
+                at += layout.node;
+            }
+            centres.push(at + reach[c].0);
+            at += reach[c].0 + reach[c].1;
+        }
+        if centres.is_empty() {
+            reach[i] = (half, half);
+            continue;
+        }
+        let mid = centres.iter().sum::<f64>() / centres.len() as f64;
+        for (&c, centre) in children[i].iter().zip(&centres) {
+            from[c] = centre - mid;
+        }
+        reach[i] = (half.max(mid), half.max(at - mid));
+    }
+    let mut deep = vec![0.0f64; depth.iter().max().map_or(0, |d| d + 1)];
+    for i in 0..n {
+        deep[depth[i]] = deep[depth[i]].max(along(i));
+    }
+    let mut top = Vec::with_capacity(deep.len());
+    let mut at = 0.0;
+    for d in &deep {
+        top.push(at);
+        at += d + layout.rank;
+    }
+    let mut centre = vec![0.0; n];
+    let mut at = 0.0;
+    for &r in &roots {
+        centre[r] = at + reach[r].0;
+        at += reach[r].0 + reach[r].1 + layout.node;
+    }
+    let mut placed = vec![0u32; deep.len()];
+    let mut memory = Memory::new();
+    for &i in &order {
+        for &c in &children[i] {
+            centre[c] = centre[i] + from[c];
+        }
+        let cross = centre[i] - across(i) / 2.0;
+        let main = top[depth[i]] + (deep[depth[i]] - along(i)) / 2.0;
+        let (x, y) = match layout.direction {
+            Direction::Down => (cross, main),
+            Direction::Right => (main, cross),
+        };
+        memory.insert(
+            graph.nodes[i].id.clone(),
+            Place {
+                rank: depth[i] as u32,
+                order: placed[depth[i]],
+                x,
+                y,
+            },
+        );
+        placed[depth[i]] += 1;
+    }
+    Ok(memory)
+}
+
+/// The grid layout: nodes in ID order in rows of ceil(√n), each centred in a cell the size of the
+/// largest node, cells `spacing.node` apart; a row is a rank, stacked along `direction`. With a
+/// memory, kept nodes keep their cells, and their x and y unless a new node widens the cell,
+/// which changes every rank's width; new nodes take the free cells in order.
+fn grid(graph: &Graph, layout: &Layout, memory: Option<&Memory>) -> Memory {
+    let along = |n: &Node| match layout.direction {
+        Direction::Down => n.h,
+        Direction::Right => n.w,
+    };
+    let across = |n: &Node| match layout.direction {
+        Direction::Down => n.w,
+        Direction::Right => n.h,
+    };
+    let held = |n: &Node| memory.and_then(|m| m.get(&n.id));
+    // The largest node's size, over every node or over the kept ones alone.
+    let cell = |kept: bool| {
+        graph
+            .nodes
+            .iter()
+            .filter(|n| !kept || held(n).is_some())
+            .fold((0.0f64, 0.0f64), |(w, h), n| {
+                (w.max(across(n)), h.max(along(n)))
+            })
+    };
+    let (wide, deep) = cell(false);
+    let settled = cell(true) == (wide, deep);
+    let at = |rank: u32, order: u32, n: &Node| {
+        let cross = f64::from(order) * (wide + layout.node) + (wide - across(n)) / 2.0;
+        let main = f64::from(rank) * (deep + layout.node) + (deep - along(n)) / 2.0;
+        let (x, y) = match layout.direction {
+            Direction::Down => (cross, main),
+            Direction::Right => (main, cross),
+        };
+        Place { rank, order, x, y }
+    };
+    let taken: BTreeSet<(u32, u32)> = graph
+        .nodes
+        .iter()
+        .filter_map(held)
+        .map(|p| (p.rank, p.order))
+        .collect();
+    let columns = (1u32..)
+        .find(|c| (*c as usize).saturating_mul(*c as usize) >= graph.nodes.len())
+        .unwrap_or(1)
+        .max(
+            taken
+                .iter()
+                .map(|&(_, order)| order.saturating_add(1))
+                .max()
+                .unwrap_or(1),
+        );
+    let mut next = 0;
+    let mut free = || loop {
+        let slot = (next / columns, next % columns);
+        next += 1;
+        if !taken.contains(&slot) {
+            return slot;
+        }
+    };
+    let mut out = Memory::new();
+    for n in &graph.nodes {
+        let place = match held(n) {
+            Some(&kept) if settled => kept,
+            Some(kept) => at(kept.rank, kept.order, n),
+            None => {
+                let (rank, order) = free();
+                at(rank, order, n)
+            }
+        };
+        out.insert(n.id.clone(), place);
+    }
+    out
+}
+
+/// A squarified tiling of `rect` among `weights`, in their order: rows across the rectangle's
+/// shorter side, each grown while its worst aspect ratio gets no worse, and each tile's area its
+/// weight's share of the rectangle's. A weight of 0 takes no area.
+fn squarify(weights: &[f64], rect: [f64; 4]) -> Vec<[f64; 4]> {
+    let [mut x, mut y, mut w, mut h] = rect;
+    let mut out = vec![[x, y, 0.0, 0.0]; weights.len()];
+    let total: f64 = weights.iter().sum();
+    let areas: Vec<(usize, f64)> = weights
+        .iter()
+        .enumerate()
+        .filter(|(_, v)| **v > 0.0)
+        .map(|(k, v)| (k, v / total * w * h))
+        .collect();
+    let mut i = 0;
+    while i < areas.len() && w.min(h) > 0.0 {
+        let short = w.min(h);
+        let worst = |sum: f64, lo: f64, hi: f64| {
+            (short * short * hi / (sum * sum)).max(sum * sum / (short * short * lo))
+        };
+        let (mut sum, mut lo, mut hi) = (areas[i].1, areas[i].1, areas[i].1);
+        let mut j = i + 1;
+        while let Some(&(_, a)) = areas.get(j) {
+            if worst(sum + a, lo.min(a), hi.max(a)) > worst(sum, lo, hi) {
+                break;
+            }
+            (sum, lo, hi) = (sum + a, lo.min(a), hi.max(a));
+            j += 1;
+        }
+        // The row: a strip down the left of a wide rectangle, or across the top of a tall one.
+        let strip = sum / short;
+        let mut at = if w >= h { y } else { x };
+        for &(k, a) in &areas[i..j] {
+            let len = a / strip;
+            out[k] = if w >= h {
+                [x, at, strip, len]
+            } else {
+                [at, y, len, strip]
+            };
+            at += len;
+        }
+        if w >= h {
+            (x, w) = (x + strip, w - strip);
+        } else {
+            (y, h) = (y + strip, h - strip);
+        }
+        i = j;
+    }
+    out
+}
+
+/// The treemap layout: the layout's box tiled by the graph's nodes as leaves, each leaf's
+/// rectangle's area in proportion to its `size`, the leaves of one `group` nested in one
+/// rectangle of the box. Tiles go largest first, ties by ID, a group at its leaves' sizes'
+/// sum; with a memory, kept leaves keep their order and new ones follow. It has one rank, and a
+/// leaf's order is its place in the tiling. Beside the memory, each leaf's rectangle.
+fn treemap(
+    graph: &Graph,
+    layout: &Layout,
+    memory: Option<&Memory>,
+) -> Result<(Memory, BTreeMap<String, [f64; 4]>), Refused> {
+    let Some(bounds) = layout.bounds else {
+        return refuse("bad_input", "box");
+    };
+    let nodes = &graph.nodes;
+    let mut leaves: Vec<usize> = (0..nodes.len()).collect();
+    match memory {
+        Some(m) => leaves.sort_by_key(|&i| {
+            m.get(&nodes[i].id)
+                .map_or((true, 0), |place| (false, place.order))
+        }),
+        None => leaves.sort_by(|&a, &b| nodes[b].size.total_cmp(&nodes[a].size)),
+    }
+    // The box's tiles: a group's leaves together where its first leaf stands, any other leaf alone.
+    let mut tiles: Vec<Vec<usize>> = Vec::new();
+    let mut groups: BTreeMap<&str, usize> = BTreeMap::new();
+    for i in leaves {
+        match nodes[i].group.as_deref() {
+            Some(group) => match groups.get(group) {
+                Some(&tile) => tiles[tile].push(i),
+                None => {
+                    groups.insert(group, tiles.len());
+                    tiles.push(vec![i]);
+                }
+            },
+            None => tiles.push(vec![i]),
+        }
+    }
+    let sizes = |tile: &[usize]| tile.iter().map(|&i| nodes[i].size).collect::<Vec<_>>();
+    let weight = |tile: &Vec<usize>| sizes(tile).iter().sum::<f64>();
+    if memory.is_none() {
+        tiles.sort_by(|a, b| weight(b).total_cmp(&weight(a)));
+    }
+    let outer = squarify(&tiles.iter().map(weight).collect::<Vec<_>>(), bounds);
+    let mut laid = Memory::new();
+    let mut boxes = BTreeMap::new();
+    for (tile, rect) in tiles.iter().zip(outer) {
+        let inner = match tile.as_slice() {
+            [_] => vec![rect],
+            _ => squarify(&sizes(tile), rect),
+        };
+        for (&i, [x, y, w, h]) in tile.iter().zip(inner) {
+            let order = laid.len() as u32;
+            laid.insert(
+                nodes[i].id.clone(),
+                Place {
+                    rank: 0,
+                    order,
+                    x,
+                    y,
+                },
+            );
+            boxes.insert(nodes[i].id.clone(), [x, y, w, h]);
+        }
+    }
+    Ok((laid, boxes))
 }

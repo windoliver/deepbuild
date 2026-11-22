@@ -237,6 +237,12 @@ impl Canonical for TextSpec {
         if !self.spans.is_empty() {
             format!("{:?}", self.spans).encode(out);
         }
+        // #1215: a vertical text's columns; a horizontal one encodes as it did before them.
+        if let deep_text::Flow::Vertical(c) = self.flow {
+            (c.rl, c.upright, c.combine).encode(out);
+            c.height.map(f64::from).encode(out);
+            self.line_height.encode(out);
+        }
     }
 }
 
@@ -247,6 +253,10 @@ impl Canonical for Run {
         s.glyphs.len().encode(out);
         for g in &s.glyphs {
             (g.font.index, g.size, g.id, g.x, g.y, g.grapheme).encode(out);
+            // #1215: a glyph a vertical run turns; an upright one encodes as before.
+            if g.turn {
+                true.encode(out);
+            }
         }
         (s.width, s.height, s.lines, s.ellipsized).encode(out);
         s.shown.encode(out);
@@ -501,7 +511,7 @@ fn animate(v: &mut View<'_>) -> Result<(), OpError> {
     let reduced = v.reduced_motion()?;
     let t = 0;
     let id = v.id().unwrap_or_default().to_string();
-    let mut out: Vec<[f64; 2]> = vec![[0.0, 1.0]; run.shaped.glyphs.len()];
+    let mut out = vec![crate::animated::UNIT; run.shaped.glyphs.len()];
     let animators = fields
         .get("params")
         .and_then(|p| p.get("animators"))
@@ -532,15 +542,9 @@ fn animate(v: &mut View<'_>) -> Result<(), OpError> {
             }
         }
     }
-    // #466 (#2456): a reveal at the progress this frame evaluated, each glyph by its unit's share.
+    // #466 (#2456): a reveal at the progress this frame evaluated, as a fade or a write draws it.
     if let Some(Value::Object(params)) = fields.get("params") {
-        if let Some(shares) =
-            crate::animator::reveal_opacity(params, &run.shaped, &id).map_err(refused)?
-        {
-            for (unit, share) in out.iter_mut().zip(shares) {
-                unit[1] *= share;
-            }
-        }
+        crate::animated::reveal(&mut out, params, &run.shaped, &id).map_err(refused)?;
     }
     v.write("text.animated", Val::typed(out))
 }
@@ -792,245 +796,8 @@ fn status_record() -> Value {
 // ------------------------------------------------------------------------------------------------
 // look
 
-/// The look module.
-pub fn look() -> Module {
-    Module {
-        manifest: manifest("look", &[]),
-        register: register_look,
-    }
-}
-
-/// A planted implementation of look@1 (#418's `test-look-finish-off`): declared bit and
-/// canonical, under its own name, whose finish at identity moves one value of one role, so the
-/// kit's bit part fails it and a release build refuses it.
-pub fn look_finish_off() -> Module {
-    let mut m = manifest("look", &[]);
-    m.implementation = deep_canvas::registry::Implementation::reference(
-        "look.finish_off",
-        Semver::parse("1.0.0").expect("a version"),
-    );
-    Module {
-        manifest: m,
-        register: |r| look_with(r, finish_off),
-    }
-}
-
-/// A look as the frame reads it: each role's color, the status map, and the type its text is set
-/// in (#239).
-#[derive(Debug)]
-pub struct LookValue {
-    pub palette: Palette,
-    pub status: Option<Status>,
-    pub ty: scene::Type,
-}
-
-impl Canonical for Status {
-    fn encode(&self, out: &mut Vec<u8>) {
-        (&self.colors, &self.glyphs, self.core_min_px, &self.outline).encode(out);
-        self.min_distance.encode(out);
-    }
-}
-
-impl deep_canvas::schedule::Canonical for LookValue {
-    fn encode(&self, out: &mut Vec<u8>) {
-        // A look that sets no font role apart from the bundled ones keys as it did before #239.
-        if self.ty.fonts.is_empty() {
-            deep_canvas::schedule::Canonical::encode(&(&self.palette, &self.status), out);
-        } else {
-            let fonts: Vec<(&String, &str)> = self.ty.fonts.iter().map(|(k, v)| (k, *v)).collect();
-            deep_canvas::schedule::Canonical::encode(&(&self.palette, &self.status, &fonts), out);
-        }
-    }
-}
-
-fn register_look(r: &mut Registrar) {
-    look_with(r, finish);
-}
-
-/// #463: a pack's `looks` (Pack: art@1 painterly looks), each a look@1 by its ID, checked as
-/// a film resolves one (roles, fonts, the status distance where status shows), stating its GPU ms
-/// at 1080p in 2D and 3D (`cost: {"2d", "3d"}`) and its known limits (`limits`).
-fn pack_looks(manifest: &Value) -> Vec<(String, String)> {
-    let Some(looks) = manifest["looks"].as_object() else {
-        return vec![(
-            String::new(),
-            "looks maps each look's ID to its look@1".into(),
-        )];
-    };
-    let bundled: Vec<&str> = deep_text::FACES.iter().map(|f| f.file).collect();
-    let mut out = Vec::new();
-    for (id, def) in looks {
-        if let Err(r) =
-            crate::look::resolve_in(def, &bundled, crate::look::Distance::WhereStatusShows)
-        {
-            out.push((id.clone(), r.to_json().to_string()));
-            continue;
-        }
-        let ms = |d: &str| def["cost"][d].as_f64().is_some_and(|v| v > 0.0);
-        if !(ms("2d") && ms("3d")) {
-            out.push((
-                format!("{id}/cost"),
-                format!("{id} states its GPU ms at 1080p in 2d and 3d"),
-            ));
-        }
-        let limits = def["limits"].as_array();
-        if !limits.is_some_and(|l| !l.is_empty() && l.iter().all(Value::is_string)) {
-            out.push((
-                format!("{id}/limits"),
-                format!("{id} states its known limits"),
-            ));
-        }
-    }
-    out
-}
-
-fn look_with(r: &mut Registrar, finish: fn(&mut View<'_>) -> Result<(), OpError>) {
-    r.pack_field("looks", pack_looks);
-    r.array("look.palette", "palette", "document", "shading", "items");
-    // #418: a finish swatch, `look.finish@1`: the look's roles through the look's finish at the
-    // item's settings (its tone map, exposure and grade, and the deband, ao and bloom it names),
-    // each role's swatch as the finish leaves it. An implementation whose finish moves a pixel at
-    // identity differs here from the reference's.
-    r.kind(finish_kind(), &[], "");
-    r.array("look.finish", "palette", "item", "shading", "items");
-    // The status map every status mark draws from, into the core's array (The status-color rule).
-    r.contribution(
-        "look.status",
-        "status",
-        "document",
-        "shading",
-        "items",
-        "core.status",
-    );
-    r.operator(
-        "palette",
-        "items",
-        &["look"],
-        &["look.palette", "look.status"],
-    )
-    .document()
-    .run(palette);
-    r.operator(
-        "finish",
-        "items",
-        &["self", "look.palette"],
-        &["look.finish"],
-    )
-    .applies(is_finish)
-    .run(finish);
-    r.fixture("roles", roles_board(), None).sidecar(json!({
-        "checks": [{"kind": "document.determinism", "probe": "pixels", "render": "seek_vs_play"}],
-        "oracles": ["seek_play"],
-        "codes": ["unknown_kind"],
-        "twin": {"path": "items/ink/params/box", "value": [86, 40, 56, 40]},
-    }));
-    // The finish at its identity defaults, and under each tone map with a grade, the deband, ao
-    // and bloom: the analytic fixtures the issue's proof names, evaluated headless.
-    r.fixture("finish", finish_board(), None).sidecar(json!({
-        "codes": [],
-        "covers": {"kinds": ["look.finish@1"], "fields": [
-            "look.finish@1/params/tone_map", "look.finish@1/params/exposure",
-            "look.finish@1/params/grade", "look.finish@1/params/deband",
-            "look.finish@1/params/deband_lsb", "look.finish@1/params/ao",
-            "look.finish@1/params/bloom",
-        ]},
-    }));
-}
-
-fn finish_kind() -> deep_canvas::kinds::Entry {
-    use deep_canvas::kinds::{Entry, Param, ParamType, Version};
-    let param = |name, ty, default: Value| Param {
-        name,
-        ty,
-        unit: "",
-        default,
-        min: None,
-        max: None,
-        minor: 0,
-        module: "",
-        operator: "",
-    };
-    Entry {
-        family: "look",
-        name: "finish",
-        versions: vec![Version {
-            major: 1,
-            minor: 0,
-            params: vec![
-                // The forms each reader takes (#1973): `read_tone_map` takes any object holding
-                // `agx`, whatever its value; `read_grade` any white balance; the finish skips a
-                // deband_lsb that is no number; ao and bloom as look@1's readers take them.
-                param(
-                    "tone_map",
-                    ParamType::Json(
-                        "none | filmic | agx | neutral | {agx} (agx: {white: f32, contrast: f32})",
-                    ),
-                    json!("none"),
-                ),
-                // EV100; the default's exposure scale is 1.
-                param("exposure", ParamType::Json("EV100"), Value::Null),
-                param(
-                    "grade",
-                    ParamType::Json(
-                        "{white_balance, slope: linear RGB, offset: linear RGB, power: linear RGB, saturation: f32} (white_balance: {temperature: K, tint})",
-                    ),
-                    json!({}),
-                ),
-                param("deband", ParamType::Str, json!("none")),
-                param("deband_lsb", ParamType::Json("0..2 (8-bit steps)"), json!(1)),
-                param(
-                    "ao",
-                    ParamType::Json(
-                        "none | {radius, strength, samples, resolution, multi_bounce, specular} (radius: m, samples: 8 | 16, resolution: half | full)",
-                    ),
-                    json!("none"),
-                ),
-                param(
-                    "bloom",
-                    ParamType::Json(
-                        "none | {intensity, radius, threshold, tint, dirt} (threshold: EV100 | none, tint: linear RGB, dirt: {texture: sha256 | seeded, intensity})",
-                    ),
-                    json!("none"),
-                ),
-            ],
-        }],
-        migrations: vec![],
-    }
-}
-
-fn is_finish(_: &Value, _: &str, item: &Value) -> bool {
-    item.get("kind").and_then(Value::as_str) == Some("look.finish@1")
-}
-
-/// Swatches of the look's finish: at its identity defaults, then under filmic, AgX and Neutral, a
-/// grade, the deband, ao and bloom.
-fn finish_board() -> Value {
-    let swatch = |id: &str, order: &str, params: Value| {
-        json!({"id": id, "kind": "look.finish@1", "name": format!("Finish {id}"), "order": order,
-               "params": params})
-    };
-    json!({
-        "format": 1, "profile": "board", "seed": 418, "title": "Finish",
-        "requires": {"modules": {"look": "^1"}},
-        "description": "The look's roles through its finish: at the identity defaults, under each tone map, a grade, the deband, ambient occlusion and bloom: the look module's finish fixture.",
-        "size": [320, 200],
-        "items": {
-            "identity": swatch("identity", "a0", json!({
-                "tone_map": "none", "deband": "none", "ao": "none", "bloom": "none",
-                "grade": {"white_balance": {"temperature": 6500, "tint": 0},
-                          "slope": [1, 1, 1], "offset": [0, 0, 0], "power": [1, 1, 1], "saturation": 1}})),
-            "filmic": swatch("filmic", "a1", json!({"tone_map": "filmic", "exposure": -1.263})),
-            "agx": swatch("agx", "a2", json!({"tone_map": {"agx": {"white": 16.29, "contrast": 1.25}}, "exposure": -1.263})),
-            "neutral": swatch("neutral", "a3", json!({
-                "tone_map": "neutral", "deband": "spatial", "deband_lsb": 1,
-                "ao": {"radius": 0.5, "strength": 1, "samples": 8, "resolution": "half",
-                       "multi_bounce": true, "specular": true},
-                "bloom": {"intensity": 0.04, "radius": 0.85},
-                "grade": {"white_balance": {"temperature": 5600, "tint": 0},
-                          "slope": [1.05, 1, 0.95], "offset": [0, 0, 0], "power": [1, 1, 1], "saturation": 0.9}})),
-        }
-    })
-}
+mod looks;
+pub use looks::*;
 
 /// Each role's color through the finish at the swatch's settings: decoded, exposed,
 /// white-balanced, tone-mapped, graded and encoded. The deband, ao and bloom are spatial, so a
@@ -1117,27 +884,35 @@ pub fn look_tokens(look: &crate::look::Look) -> BTreeMap<String, Value> {
             (bundled.family(role) != Some(family)).then(|| (role.clone(), json!(family)))
         })
         .collect();
-    if !fonts.is_empty() {
-        out.insert(TYPE_TOKEN.into(), json!({ "fonts": fonts }));
+    // #297: and its fallback faces, so a grapheme the run's face lacks is set in the first that
+    // has it, as an entry text's range assumes.
+    let fallback = &look.light_type.fallback;
+    if !fonts.is_empty() || !fallback.is_empty() {
+        out.insert(TYPE_TOKEN.into(), json!({ "fonts": fonts, "fallback": fallback }));
     }
     out
 }
 
-/// The type a session's tokens set text in: [`TYPE_TOKEN`]'s font roles over the bundled ones.
+/// The type a session's tokens set text in: [`TYPE_TOKEN`]'s font roles over the bundled ones,
+/// and its fallback faces.
 fn type_of(tokens: &BTreeMap<String, Value>) -> scene::Type {
     let mut ty = scene::Type::default();
     let fonts = tokens
         .get(TYPE_TOKEN)
         .and_then(|t| t.get("fonts"))
         .and_then(Value::as_object);
+    let face = |f: &Value| {
+        let f = f.as_str()?;
+        deep_text::FACES.iter().find(|face| face.family == f)
+    };
     for (role, family) in fonts.into_iter().flatten() {
-        let face = family
-            .as_str()
-            .and_then(|f| deep_text::FACES.iter().find(|face| face.family == f));
-        if let Some(face) = face {
+        if let Some(face) = face(family) {
             ty.fonts.insert(role.clone(), face.family);
         }
     }
+    let fallback = tokens.get(TYPE_TOKEN).and_then(|t| t.get("fallback"));
+    let fallback = fallback.and_then(Value::as_array).into_iter().flatten();
+    ty.fallback = fallback.filter_map(|f| face(f).map(|face| face.family)).collect();
     ty
 }
 
@@ -1262,6 +1037,8 @@ fn register_data(r: &mut Registrar, decimate: fn(&mut View<'_>) -> Result<(), Op
     crate::axes3d::register(r);
     // #225: the vector field, its stream table and flow, and its `follow_stream` entry.
     crate::vector_field::register(r);
+    // #2776: what each path does with the two kinds drawn as marks in 3D.
+    r.paths(include_str!("paths.json"));
     // A scale it can't read raises marks2d's `scale_type` or `bad_scale`, which mark sets and
     // axes raise through the same scale.
     r.fixture("points", points_board(), None).sidecar(json!({
@@ -1278,6 +1055,7 @@ fn register_data(r: &mut Registrar, decimate: fn(&mut View<'_>) -> Result<(), Op
         "codes": ["unknown_kind"],
         "twin": {"path": "items/ys/params/range", "value": [190, 30]},
     }));
+    crate::arrays::fixture(r, points_board());
     r.fixture("decimated", decimated_board(), None)
         .sidecar(json!({
             "checks": [{"kind": "document.validate"}],
@@ -1478,13 +1256,15 @@ pub fn marks2d_planted(planted: relations::Planted) -> Module {
     }
 }
 
-/// What the frame draws: the draw list, each text's shaped run and each animated text's units as
-/// `[lift, opacity]`. The status marks are the text module's (`text.status`).
+/// What the frame draws: the draw list, each text's shaped run and each animated text's units
+/// ([`crate::animated::Unit`]). The status marks are the text module's (`text.status`).
 #[derive(Debug)]
 pub struct Drawing {
     pub frame: Frame,
-    pub runs: BTreeMap<String, Arc<Run>>,
-    pub animated: BTreeMap<String, Vec<[f64; 2]>>,
+    /// Each text's run and each animated text's units, shared with the next frame that replaces
+    /// marks in this one's list (#2660), never copied.
+    pub runs: Arc<BTreeMap<String, Arc<Run>>>,
+    pub animated: Arc<BTreeMap<String, Vec<crate::animated::Unit>>>,
     /// The marks this frame put into its draw list: every mark when it built the list, the
     /// changed items' when it replaced them in the last one (#896).
     pub built: usize,
@@ -1525,7 +1305,7 @@ impl Canonical for Frame {
 
 impl deep_canvas::schedule::Canonical for Drawing {
     fn encode(&self, out: &mut Vec<u8>) {
-        deep_canvas::schedule::Canonical::encode(&(&self.frame, &self.runs, &self.animated), out);
+        deep_canvas::schedule::Canonical::encode(&(&self.frame, &*self.runs, &*self.animated), out);
     }
 }
 
@@ -1540,10 +1320,7 @@ fn register_marks2d_with(r: &mut Registrar, planted: relations::Planted) {
         json!({"form": "path", "fixture": crate::outline_sources::path_fixture()}),
         crate::outline_sources::path_fill,
     );
-    // #221: placement by relation, the module's entries in the core's `constraint@1`.
-    for (name, value) in relations::entries(planted) {
-        r.entry("constraint@1", name, value, "R2");
-    }
+    relations::register(r, planted, marks_board());
     // Each frame, every placed item's world position from its relations, solved in one order
     // over the evaluated boxes; then each placed item's own transform there.
     r.array("marks2d.places", "places", "document", "transform", "items");
@@ -1640,6 +1417,10 @@ fn register_marks2d_with(r: &mut Registrar, planted: relations::Planted) {
         &["marks2d.frame"],
     )
     .document()
+    // A light is no mark (#1634): the frame builds nothing from one, and costs nothing on it.
+    .applies(|_, _, item| {
+        !(item.get("kind").and_then(Value::as_str)).is_some_and(|k| k.starts_with("light."))
+    })
     .run(frame);
     r.code(
         "bad_doc",
@@ -1968,15 +1749,21 @@ fn item(v: &mut View<'_>) -> Result<(), OpError> {
     v.write("marks2d.item", Val::typed(placed))
 }
 
-/// What a frame reads of the document beside its items: every other member, as written.
-fn envelope_of(doc: &Value) -> Key {
+/// What a frame reads of the document beside its items: every other member, as written. The
+/// revision's own key of them stands in for hashing them again, with the ID, which it leaves out
+/// (#2660).
+fn envelope_of(v: &mut View<'_>, doc: &Value) -> Result<Key, OpError> {
     let mut h = Hasher::new("marks2d.envelope");
+    if let Some(kept) = v.envelope()? {
+        let id = doc.get("id").and_then(Value::as_str).unwrap_or_default();
+        return Ok(h.key(&kept).text(id).finish());
+    }
     for (k, v) in doc.as_object().into_iter().flatten() {
         if k != "items" {
             h.text(k).bytes(&canonical(v));
         }
     }
-    h.finish()
+    Ok(h.finish())
 }
 
 /// The last frame's draw list with the marks of the items whose own marks changed replaced in
@@ -2056,8 +1843,8 @@ fn replaced(v: &mut View<'_>, envelope: Key) -> Result<Option<Drawing>, OpError>
     }
     Ok(Some(Drawing {
         frame,
-        runs: last.runs.clone(),
-        animated: last.animated.clone(),
+        runs: Arc::clone(&last.runs),
+        animated: Arc::clone(&last.animated),
         built,
         damage,
         basis: Some(Basis {
@@ -2107,7 +1894,7 @@ fn warp_time(v: &mut View<'_>) -> Result<(), OpError> {
 /// The frame's draw list from every item's evaluated fields and transform.
 fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     let doc = v.document()?;
-    let envelope = envelope_of(doc);
+    let envelope = envelope_of(v, doc)?;
     if let Some(drawing) = replaced(v, envelope)? {
         return v.write("marks2d.frame", Val::typed(drawing));
     }
@@ -2180,7 +1967,7 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     }
     let mut animated = BTreeMap::new();
     for (id, a) in v.every("text.animated")? {
-        if let Some(units) = a.as_typed::<Vec<[f64; 2]>>() {
+        if let Some(units) = a.as_typed::<Vec<crate::animated::Unit>>() {
             animated.insert(id.to_string(), (*units).clone());
         }
     }
@@ -2201,7 +1988,7 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     // #223's twin: a flow that finds its stream table by a vector field's kind.
     let planted = match v.planted() {
         Some(crate::warp::FLOW_BY_KIND) => scene::Planted::WarpFlowByKind,
-        _ => scene::Planted::None,
+        p => crate::atlas::planted(p, &mut items),
     };
     let (frame, basis) = match scene::frame_prebuilt(
         doc,
@@ -2248,8 +2035,8 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
         "marks2d.frame",
         Val::typed(Drawing {
             frame,
-            runs,
-            animated,
+            runs: Arc::new(runs),
+            animated: Arc::new(animated),
             built,
             damage: Vec::new(),
             basis,

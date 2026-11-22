@@ -29,6 +29,8 @@ interface HostSourcesOptions {
   record: RecordStore; now(): number; files: HostFiles;
   exts: ReadonlyMap<string, Ext>;
   ask(ext: Ext, ms: number, what: string, method: string, params: unknown): Promise<unknown>;
+  /** #2648's planted host, which reads notices.json once, at its start. */
+  plant?: 'reads-files-at-start-only';
 }
 /** Loaded source calls, cursor and visibility state belong to this host's source service. */
 export class HostSources {
@@ -42,7 +44,11 @@ export class HostSources {
   /** The work-source calls under way, by the call ID their context's fetch names (#66). */
   private readonly workCalls = new Map<string, { ext: Ext; source: string; work: Omit<WorkDecl, 'delivers'>; library?: LibraryDecl; noAnswer: boolean }>();
   private workCount = 0;
-  constructor(private readonly options: HostSourcesOptions, private readonly sources: Sources, private readonly series: SeriesStore | undefined) {}
+  /** The notices #2648's planted host read at its start, which it reads no more. */
+  private readonly noticesAtStart: Readonly<Record<string, SavedNotice>> | undefined;
+  constructor(private readonly options: HostSourcesOptions, private readonly sources: Sources, private readonly series: SeriesStore | undefined) {
+    if (options.plant) this.noticesAtStart = options.files.read<SavedNotice>('notices.json');
+  }
   workExt(source: string): Ext | undefined {
     return [...this.options.exts.values()].find((e) => e.live && e.ask && e.mode === 'loaded' && (e.sources.get(source) as { work?: unknown } | undefined)?.work);
   }
@@ -194,13 +200,14 @@ export class HostSources {
    */
   async shownTick(): Promise<void> {
     const now = this.options.now();
-    const standIn = new Map<string, number>();
-    for (const n of Object.values(this.options.files.read<SavedNotice>('notices.json'))) if (n.every !== null) standIn.set(n.source, Math.min(standIn.get(n.source) ?? Infinity, n.every));
+    // A notice stands in only for a shown source: with none shown notices.json isn't looked at, and with one shown it
+    // is read again only once it changed (#2648).
+    let standIn: Map<string, number> | undefined;
     for (const ext of [...this.options.exts.values()].filter((e) => e.live)) {
       for (const source of ext.sources.values()) {
         if (source.variant !== 'polled' || !source.whileShown) continue;
         const every = source.whileShown.every;
-        if (!this.sourceShown(source.name, now) || (standIn.get(source.name) ?? Infinity) <= every) {
+        if (!this.sourceShown(source.name, now) || ((standIn ??= this.standIns()).get(source.name) ?? Infinity) <= every) {
           this.shownNext.delete(source.name);
           continue;
         }
@@ -210,6 +217,13 @@ export class HostSources {
         await this.readPolled(ext, source.name);
       }
     }
+  }
+
+  /** The shortest schedule a saved notice gives each source's checking job, which stands in for its while-shown cadence. */
+  private standIns(): Map<string, number> {
+    const by = new Map<string, number>();
+    for (const n of Object.values(this.noticesAtStart ?? this.options.files.kept<SavedNotice>('notices.json'))) if (n.every !== null) by.set(n.source, Math.min(by.get(n.source) ?? Infinity, n.every));
+    return by;
   }
 
   /** Whether a view that binds the source is shown: the app reported it in the last 10 s, visible, not minimized, on an awake display, unlocked, and not a replica's. */
@@ -293,6 +307,27 @@ export class HostSources {
     const named = [...this.options.exts.entries()].flatMap(([id, ext]) => (ext.manifest.secrets ?? []).map((s) => ({ secret: s.name, provider: id })));
     const held = await Promise.all(named.map((n) => this.sources.holds(n.provider, n.secret)));
     return named.filter((_, i) => held[i]);
+  }
+
+  /**
+   * #1048: a plug-in asks its model source, one its manifest lists as a `model` source, for a reply to `prompt`: the
+   * hub makes the call (from a recording when replaying), and the plug-in gets the answer's status and body, or no
+   * answer, never the network.
+   */
+  async ask(ext: Ext, name: unknown, request: unknown): Promise<{ status: number | null; body: string; why?: string }> {
+    const id = ext.entry.id;
+    if (!(ext.manifest.sources ?? []).some((s) => s.name === name && s.variant === 'model')) throw Error(`deep.source.ask: ${String(name)} isn't a model source ${id}'s manifest lists`);
+    const r = (typeof request === 'object' && request !== null ? request : {}) as { provider?: unknown; prompt?: unknown };
+    if (typeof r.provider !== 'string' || typeof r.prompt !== 'string') throw Error('deep.source.ask takes {provider, prompt}');
+    // The provider's host is its name's, name@version; the grant must name it for a live call.
+    const host = (ext.entry.grant.hosts ?? []).find((h) => h.host === (r.provider as string).split('@')[0]) ?? null;
+    try {
+      const answer = await this.sources.ask(id, name as string, host, r.prompt);
+      return { status: answer.status, body: answer.body };
+    } catch (e) {
+      if (e instanceof NoAnswer) return { status: null, body: '', why: e.message };
+      throw e;
+    }
   }
 
   async workFetch(ext: Ext, call: unknown, request: unknown): Promise<unknown> {
@@ -582,6 +617,12 @@ export const openBrowser = (url: string): Promise<void> => new Promise((done, fa
 type Outcome = HttpAnswer | { error: string };
 /** What the record keeps of a source's calls and readings, appended as the core. */
 type Append = (kind: 'source.called' | 'reading.recorded', data: Record<string, unknown>) => Promise<void>;
+/**
+ * A recording's bound (#2650): this many calls, and this many bytes of their answers' bodies, a library file's bytes
+ * staying in the file its call names. Past either, the recording keeps what it holds and no later call.
+ */
+const RECORDED_CALLS = 10_000;
+const RECORDED_BYTES = 64 * 1024 * 1024;
 
 /** The hub's side of every source: its calls, cache, quotas, back-off, recording and the secret values it holds to scrub. */
 export class Sources {
@@ -590,6 +631,8 @@ export class Sources {
   private readonly spent = new Map<string, number[]>();
   private readonly backoff = new Map<string, { until: number; gap: number }>();
   private readonly recorded: RecordedCall[] = [];
+  /** The bytes of the answers `recorded` holds. */
+  private recordedBytes = 0;
   private readonly binary = new Map<number, { file: string; offset: number; size: number; sha256: string }>();
   private readonly replayed = new Set<number>();
   /** Every secret value the hub read or was given: each is scrubbed from what a package gets and from the recording. */
@@ -597,6 +640,8 @@ export class Sources {
 
   constructor(private readonly options: {
     now: () => number; http: HttpClient; secrets: SecretStore; append: Append; replay?: Recording;
+    /** False: no call's answer is kept, and the recording stays empty (#2650). `every`: #2650's planted host, past any bound. */
+    recording?: boolean | 'every';
     /** A series call's values, landed as one batch (#262). */
     land?: (source: Polled, asOf: number, values: Map<string, number>) => Promise<Batch>;
   }) {}
@@ -819,6 +864,26 @@ export class Sources {
     return answer;
   }
 
+  /**
+   * #1048: one ask of a plug-in's model source. Replaying, it's the first recorded call of that source not yet
+   * answered, whatever its request: a prompt holds a run's state, so a recording is a model's answers in order. Live,
+   * it's a POST of the prompt to the provider's host, which the grant must name, under that host's quota, recorded.
+   */
+  async ask(owner: string, name: string, host: { host: string; quota: { calls: number; per_ms: number } } | null, body: string): Promise<HttpAnswer> {
+    const replay = this.options.replay;
+    if (replay) {
+      const at = replay.calls.findIndex((c, i) => !this.replayed.has(i) && c.source === name);
+      if (at < 0) throw new NoAnswer(`no recorded call of ${name} is left to answer`);
+      this.replayed.add(at);
+      const answer = replay.calls[at]!.answer;
+      if ('error' in answer) throw new NoAnswer(`${name} gave no answer: ${answer.error}`);
+      return this.scrubAnswer(answer);
+    }
+    if (!host) throw new NoAnswer(`${name}'s provider is at no host the grant names`);
+    const perDay = Math.max(1, Math.round((host.quota.calls * DAY) / Math.max(1, host.quota.per_ms)));
+    return this.workFetch(owner, name, { host: host.host, secret: null, auth: null, quota: { per_minute: host.quota.calls, per_day: perDay } }, { method: 'POST', path: '/', headers: { 'content-type': 'text/plain' }, body });
+  }
+
   /** A networked asset job's file: quota on each bounded range, resumable on no answer, admitted only by its hash. */
   async download(owner: string, name: string, source: Omit<WorkDecl, 'delivers'> & { timeout?: number }, path: string, spec: { file: string; sha256: string; size: number; kept?: string }): Promise<string> {
     const disk = await statfs(dirname(spec.file));
@@ -870,7 +935,11 @@ export class Sources {
       const answer = replay.calls[at]!.answer;
       return 'error' in answer ? { error: describe(answer.error, source) } : this.scrubAnswer(answer);
     }
-    const signal = AbortSignal.timeout(source.timeout);
+    // The call's own timer, cleared once it has an answer: a finished call leaves no timer behind for its whole
+    // timeout, as AbortSignal.timeout would (#2650).
+    const stop = new AbortController();
+    const timer = setTimeout(() => stop.abort(new DOMException(`timeout after ${source.timeout} ms`, 'TimeoutError')), source.timeout).unref();
+    const signal = stop.signal;
     const aborted = new Promise<never>((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
     const started = performance.now();
     let answer: RecordedCall['answer'];
@@ -882,17 +951,32 @@ export class Sources {
       answer = this.scrubAnswer(got);
     } catch {
       answer = { error: signal.aborted ? 'timeout' : 'unreachable' };
+    } finally {
+      clearTimeout(timer);
     }
-    if (request.recording && !('error' in answer)) {
-      const bytes = Buffer.from(answer.body, 'base64');
-      this.binary.set(this.recorded.length, { ...request.recording, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') });
-      this.recorded.push({ source: source.name, request: stripped, answer: { ...answer, body: '' } });
-    } else this.recorded.push({ source: source.name, request: stripped, answer: structuredClone(answer) });
+    this.keep(source, stripped, request, answer);
     await this.options.append('source.called', {
       source: source.name, host: new URL(request.url).host, outcome: 'error' in answer ? answer.error : answer.partial ? 'unreachable' : 'answered',
       ...('error' in answer || request.method === 'CONNECT' ? {} : { status: answer.status }), ms: Math.round(performance.now() - started), bytes,
     });
     return 'error' in answer ? { error: describe(answer.error, source) } : answer;
+  }
+
+  /**
+   * A call into the recording (#2650): only while this host records, and only within its bound. A library file's bytes
+   * stay in the file its call names, read back and checked when the recording is taken.
+   */
+  private keep(source: Polled, stripped: HttpRequest, request: HttpRequest, answer: RecordedCall['answer']): void {
+    if (this.options.recording === false) return;
+    const binary = request.recording && !('error' in answer);
+    const bytes = 'error' in answer || binary ? 0 : Buffer.byteLength(answer.body);
+    if (this.options.recording !== 'every' && (this.recorded.length >= RECORDED_CALLS || this.recordedBytes + bytes > RECORDED_BYTES)) return;
+    this.recordedBytes += bytes;
+    if (binary) {
+      const file = Buffer.from(answer.body, 'base64');
+      this.binary.set(this.recorded.length, { ...request.recording!, size: file.length, sha256: createHash('sha256').update(file).digest('hex') });
+      this.recorded.push({ source: source.name, request: stripped, answer: { ...answer, body: '' } });
+    } else this.recorded.push({ source: source.name, request: stripped, answer: structuredClone(answer) });
   }
 
   private scrub(text: string): string {

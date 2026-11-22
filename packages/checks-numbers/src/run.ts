@@ -1,4 +1,4 @@
-// One run of a numbers check (#87): its queries in the probe's process group, ended at the deadline (runProbe).
+// One run of a numbers check (#87): through the hub's host@1, or locally for standalone kit fixtures (runProbe).
 import { fileURLToPath } from 'node:url';
 import type { CheckContext, CheckResult } from '@deepbuild/conformance';
 import { runProbe } from '@deepbuild/conformance/findings';

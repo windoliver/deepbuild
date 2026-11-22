@@ -51,8 +51,10 @@ pub fn implementation(name: &str, wasmtime: &str) -> Module {
 
 /// The module registers no kind, array or operator: it runs programs only at check, for the items,
 /// packs and registries that name one, so a document that names none costs it nothing. It fills
-/// the core's `data.layout@1` with the first-party layouts, whose validators it runs (#415).
+/// the core's `data.layout@1` with the first-party layouts, whose validators it runs (#415), and
+/// declares `lib.interface@1`, which packs fill (#416).
 fn register(r: &mut Registrar) {
+    r.registry(crate::interfaces::registry());
     for l in crate::layouts::first_party() {
         r.entry("data.layout@1", l.name, l.entry(), "R6");
     }

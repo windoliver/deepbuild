@@ -1,0 +1,5 @@
+start 15:18:36 at 2710afd87 node v24.22.0 load { 56.73 68.13 86.09 }
+INCONCLUSIVE no grant: no test grant came within 30 min
+... 1368 lines of the form 'INCONCLUSIVE <file>: not run, for want of a test grant' left out; the selection is in affected-selection.txt ...
+INCONCLUSIVE affected: 0 new, 0 already failing on main, 1368 inconclusive or blocked, 0 listed skips, 0 passed, in 1837 s at load 288; no job started
+exit=2 15:49:14 load { 287.53 316.40 266.20 }

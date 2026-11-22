@@ -4,7 +4,7 @@ import { copyFileSync, cpSync, existsSync, linkSync, lstatSync, mkdirSync, mkdte
 import { homedir, hostname, tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { compare, fingerprint, judgeTargets, judgeTask, measureOnce, prepareCopy, validateBudgets } from './benchmark.mjs';
+import { approvedItems, compare, fingerprint, judgeTargets, judgeTask, measureOnce, prepareCopy, validateBudgets } from './benchmark.mjs';
 // The machine's throttle table and the bays' replacement rule, beside this script in a checkout. A copy of perf alone,
 // as a test's fixture holds, has no table to wait on, and starts its copies afresh each run.
 const beside = (name) => existsSync(new URL(name, import.meta.url));
@@ -238,7 +238,8 @@ try {
   const current = JSON.parse(readFileSync(join(root, manifest), 'utf8'));
   const base = run('git', ['ls-tree', '--name-only', baseCommit, manifest]).trim()
     ? JSON.parse(run('git', ['show', `${baseCommit}:${manifest}`])) : null;
-  validateBudgets(current, base);
+  // A limit only moves down: a raise passes only by an approved proposal on the change's commits (#2665).
+  validateBudgets(current, base, approvedItems(root, baseCommit, 'HEAD'));
   if (!current.preflight) throw Error('missing preflight budget');
   // Each copy's checks may run as long as the budget allows this checkout's, margin included.
   const allowance = current.preflight.limits.elapsedMs * (1 + current.preflight.margin);
@@ -309,7 +310,7 @@ try {
     const established = base?.tasks?.find(({ id }) => id === budget.id);
     let judged;
     try {
-      judged = judgeTask(budget, established, root, archive);
+      judged = judgeTask(budget, established, root, archive, fingerprint);
     } catch (error) {
       verdicts.push(['BLOCKED', `${budget.id}: ${error.message}`, 'Build the measured command; the check lanes build it.']);
       continue;
@@ -331,7 +332,8 @@ try {
     for (const [metric, { status, reason }] of Object.entries(limits)) {
       if (status === 'PASS') continue;
       const fix = status === 'BLOCKED' ? 'Repair the measured command so each run reports this metric.'
-        : status === 'FAIL' ? `Bring ${budget.id} back under its ${metric} limit; budgets are frozen once they reach main.`
+        : status === 'FAIL' ? `Bring ${budget.id} back under its ${metric} limit; a limit only moves down.`
+        : /can't be read/.test(reason) ? `Have each run of ${budget.id} give its ${metric}: a count that can't be read is missing, never 0.`
         : /reference Mac/.test(reason) ? 'Run perf on a reference Mac (Mac15,7, M3 Pro, 36 GB; Mac15,12, M3, 16 GB; or Mac17,10, M5 Max, 64 GB) on mains power, with Low Power Mode off and the thermal state nominal.'
         : 'Rerun perf on a quiet reference Mac; the five runs straddle the limit.';
       verdicts.push([status, `${budget.id}: ${metric}: ${reason}`, fix]);

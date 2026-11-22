@@ -84,6 +84,76 @@ pub(crate) fn call(_app: &mut App, _out: &str, call: &Value) -> Value {
     json!({"outcome": "checked", "issues": [], "trails": out})
 }
 
+/// #265's planted `trail_reads_stored_steps`: `doc` with each array read as its steps stored it,
+/// a `linear` write held at its last step, which the trails then read in place of the blend.
+pub(crate) fn stored(doc: &Value) -> Value {
+    let mut out = doc.clone();
+    for (_, a) in out["arrays"].as_object_mut().into_iter().flatten() {
+        a["linear"] = json!(false);
+    }
+    out
+}
+
+/// Each trail line of `scene` as `from` draws it.
+pub(crate) fn take_trails(scene: &mut Scene, from: &Scene) {
+    let lines = || from.layers.iter().flat_map(|l| &l.lines);
+    for l in scene.layers.iter_mut().flat_map(|l| &mut l.lines) {
+        if let Some(o) = lines().find(|o| o.id == l.id && l.trail.is_some()) {
+            *l = o.clone();
+        }
+    }
+}
+
+/// #265: each water's wake samples, newest first with their flicks, as the last frame this
+/// process drew kept them: the planted `wake_keeps_last_frame` draws these.
+static WAKES: Mutex<BTreeMap<String, Vec<(i64, [f64; 2])>>> = Mutex::new(BTreeMap::new());
+
+/// The planted `wake_keeps_last_frame`: a wake's samples are those the last frame this process
+/// drew kept, less those older than its span, and the item's place at t; it never reads the
+/// item's chain at earlier times.
+pub(crate) fn plant_wake(scene: &mut Scene, planted: Option<Planted>, t: i64) {
+    if planted != Some(Planted::WakeKeepsLastFrame) {
+        return;
+    }
+    let Some(water) = scene.water.as_mut().map(std::sync::Arc::make_mut) else {
+        return;
+    };
+    let Some(wake) = water.wake.as_mut() else {
+        return;
+    };
+    let span = (wake.span * 705_600_000.0).round() as i64;
+    let now = wake.path.first().copied().unwrap_or_default();
+    let mut all = WAKES.lock().unwrap_or_else(|e| e.into_inner());
+    let kept = all.entry(water.material.clone()).or_default();
+    kept.retain(|(at, _)| *at < t && *at >= t - span);
+    kept.insert(0, (t, now));
+    wake.path = kept.iter().map(|(_, p)| *p).collect();
+}
+
+/// #265: the check's refusal of a document's trails before anything draws, as the trail rule
+/// raises it (a span past the logic bake's oldest step, a source a live drag moves):
+/// `{"code": "refused", "issues": [...]}`, each issue naming its line.
+pub(crate) fn refuse(doc: &Value) -> Result<(), Value> {
+    let issues: Vec<Value> = (doc["items"].as_object().into_iter().flatten())
+        .filter(|(_, i)| i["kind"] == "mark.line@1" && !i["params"]["trail"].is_null())
+        .flat_map(|(id, i)| {
+            deep_canvas_motion::trail::rule(doc, id, i)
+                .into_iter()
+                .filter(|r| r.severity == "error")
+                .map(move |r| {
+                    json!({"code": r.code, "severity": r.severity, "ids": [id], "path": r.path,
+                           "actual": Value::Null, "what": r.what,
+                           "fix": "Keep the trail's span within its source's bake, and its source off a live drag."})
+                })
+        })
+        .collect();
+    if issues.is_empty() {
+        Ok(())
+    } else {
+        Err(json!({"code": "refused", "issues": issues}))
+    }
+}
+
 /// The trail's evaluated-data hash: SHA-256 over each trace in order, its point count as a u32
 /// little-endian, then each point's x, y and z as f64 little-endian.
 fn hash(d: &trail::Drawn) -> String {
@@ -151,7 +221,7 @@ pub(crate) fn plant(scene: &mut Scene, planted: Option<Planted>, t: i64) {
                 points: kept.iter().map(|k| k.1).collect(),
             }];
             let tr = d.trail.clone();
-            *l = trail::line(&l.id, &tr, d, l.color, l.world, l.cap);
+            *l = trail::line(&l.id, &tr, d, l.color, l.world, l.cap, l.fog);
         }
     }
 }

@@ -154,11 +154,15 @@ impl Relation {
     /// derived items, read as the group its parts hang from (`<id>.all`), and `<id>[i]` as part i:
     /// that group's i-th child in draw order.
     fn through_parts(&mut self, items: &Map<String, Value>) {
-        let (Relation::Beside { target, .. } | Relation::Onto { target, .. } | Relation::Align { to: target, .. }) = self
+        let (Relation::Beside { target, .. }
+        | Relation::Onto { target, .. }
+        | Relation::Align { to: target, .. }) = self
         else {
             return;
         };
-        let Target::Item { id, .. } = target else { return };
+        let Target::Item { id, .. } = target else {
+            return;
+        };
         if items.contains_key(id.as_str()) {
             return;
         }
@@ -166,9 +170,17 @@ impl Relation {
             let all = format!("{base}.all");
             let mut kids: Vec<(&str, &str)> = (items.iter())
                 .filter(|(_, v)| v.get("parent").and_then(Value::as_str) == Some(all.as_str()))
-                .map(|(k, v)| (v.get("order").and_then(Value::as_str).unwrap_or(""), k.as_str()))
+                .map(|(k, v)| {
+                    (
+                        v.get("order").and_then(Value::as_str).unwrap_or(""),
+                        k.as_str(),
+                    )
+                })
                 .collect();
-            kids.sort_by(|a, b| a.0.cmp(b.0).then_with(|| crate::grid_rules::natural(a.1, b.1)));
+            kids.sort_by(|a, b| {
+                a.0.cmp(b.0)
+                    .then_with(|| crate::grid_rules::natural(a.1, b.1))
+            });
             kids.get(i.parse::<usize>().ok()?).map(|k| k.1.to_string())
         };
         let found = match id.strip_suffix(']').and_then(|b| b.split_once('[')) {
@@ -1155,6 +1167,25 @@ pub fn entries(planted: Planted) -> Vec<(&'static str, Value)> {
             )
         })
         .collect()
+}
+
+/// #221: the module's entries in the core's `constraint@1`. #2363: and `board` with its caption
+/// placed by relation and its line under a time-bound warp, so each has a node at 0 s.
+pub(crate) fn register(
+    r: &mut deep_canvas::registry::Registrar,
+    planted: Planted,
+    mut placed: Value,
+) {
+    for (name, value) in entries(planted) {
+        r.entry("constraint@1", name, value, "R2");
+    }
+    placed["items"]["cap"]["at"] = json!({"place": {"beside": "box", "side": "s", "gap": 8}});
+    placed["items"]["warp"] = json!({"id": "warp", "kind": "group@1", "name": "Warp", "order": "a5",
+        "params": {"warp": {"map": {"x": "x", "y": "y + u"}, "vars": {"u": "time"}}}});
+    placed["items"]["line"]["parent"] = json!("warp");
+    r.fixture("relations", placed, None).sidecar(json!({
+        "checks": [{"kind": "document.validate"}], "oracles": ["analytic"], "codes": ["unknown_kind"],
+    }));
 }
 
 #[cfg(test)]

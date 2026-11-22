@@ -6,7 +6,7 @@
 import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { parse as parseYaml } from 'yaml';
+import { parseYaml } from './yaml.js';
 import { isRecord as isObj } from '@deepbuild/contracts';
 import type { ClaimCheck } from './gate-runner.js';
 
@@ -26,7 +26,7 @@ export function releaseSpec(cwd: string): ReleaseSpec {
 
 const SPEC = '.deepbuild/done.yaml';
 /** A spec check the gate can't run (#2205): it stands on the claim missing its cause, yours to clear, never left out. */
-const blocked = (check: string, cause: string): ClaimCheck => ({ check, approved: null, command: '', covers: [], depth: 'unit', on_base: 'passes', asserts: [], source: 'spec', prerequisite: { outcome: 'missing', cause }, holds: false });
+export const blocked = (check: string, cause: string): ClaimCheck => ({ check, approved: null, command: '', covers: [], depth: 'unit', on_base: 'passes', asserts: [], source: 'spec', prerequisite: { outcome: 'missing', cause }, holds: false });
 /** The names of the spec's `checks` entries, whatever each one holds. */
 export const specEntries = (spec: unknown): string[] => (isObj(spec) && isObj(spec.checks) ? Object.keys(spec.checks) : []);
 /** A name of the done claim nothing can run (#2205): one `checks` doesn't define, or an entry with no `run` line that no check kind takes. */

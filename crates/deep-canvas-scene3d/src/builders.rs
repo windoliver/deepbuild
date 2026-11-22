@@ -12,7 +12,7 @@ use crate::curve::{self, Sampled};
 use crate::geom::{add, area2, cross, dot, length, scale, sub, triangulate, unit, Mesh, V2, V3};
 
 /// The builder kinds, as documents name them.
-pub const KINDS: [&str; 10] = [
+pub const KINDS: [&str; 12] = [
     "hull@1",
     "slab@1",
     "lathe@1",
@@ -23,6 +23,9 @@ pub const KINDS: [&str; 10] = [
     "plate@1",
     "display@1",
     "surface@1",
+    "tree@1",
+    // #1781: the fixture builder, whose kind only a test build registers.
+    crate::attrs::FIXTURE,
 ];
 
 /// The builders with known charts, which emit uv1 analytically (Builder: uv; #440).
@@ -58,6 +61,8 @@ pub struct Plants {
     pub hull: crate::hull::Plants,
     /// #443's planted outline reader: every contour filled on its own, so no counter is a hole.
     pub outline_ignores_rule: bool,
+    /// #1636's planted tree builders.
+    pub tree: crate::tree::Plants,
 }
 
 impl Plants {
@@ -77,7 +82,7 @@ impl Plants {
             "hull_keeps_face_points" => p.hull.keeps_face_points = true,
             "hull_fan_input_order" => p.hull.fan_input_order = true,
             "outline_ignores_fill_rule" => p.outline_ignores_rule = true,
-            _ => return None,
+            name => p.tree = crate::tree::Plants::named(name)?,
         }
         Some(p)
     }
@@ -263,6 +268,8 @@ pub fn build(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<Mesh, Fault> {
                 .unwrap_or_default(),
             ctx.pool,
         )?,
+        "tree@1" => crate::tree::build(params, ctx.plants.tree)?,
+        crate::attrs::FIXTURE => slab(&crate::attrs::fixture_box(), ctx)?,
         _ => return Err("kind".into()),
     };
     m.orient();
@@ -275,6 +282,9 @@ pub fn build(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<Mesh, Fault> {
         _ => {}
     }
     annotate(&mut m, kind, params, ctx)?;
+    if kind == crate::attrs::FIXTURE {
+        crate::attrs::listed(&mut m, params)?;
+    }
     Ok(m)
 }
 
@@ -464,6 +474,11 @@ pub fn counts(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<(u64, u64), F
             (n, (2 * n).saturating_sub(4))
         }
         "surface@1" => crate::surface::counts(params)?,
+        "tree@1" => crate::tree::counts(params)?,
+        crate::attrs::FIXTURE => match slab_shape(&crate::attrs::fixture_box(), ctx)? {
+            SlabShape::Levels(levels, _) => layered_count(&levels),
+            SlabShape::Along(section, path) => sweep_count(&section, &path),
+        },
         _ => return Err("kind".into()),
     };
     let declared = if shade_flat(params)? && !ctx.plants.flat_as_smooth {
@@ -2157,7 +2172,10 @@ fn annotate(m: &mut Mesh, kind: &str, p: &Value, ctx: &Ctx<'_>) -> Result<(), Fa
         let v: f64 = m.closed.values().map(|(t, _)| m.volume(t)).sum();
         m.values.insert("volume".into(), v);
     }
-    m.true_shape = true_shape(kind, p, lo, hi)?;
+    // A tree keeps its capsule chain per branch (#1636).
+    if kind != "tree@1" {
+        m.true_shape = true_shape(kind, p, lo, hi)?;
+    }
     // uv0 in metres (Builder: uv); uv1 from the builder's own charts where it has known ones.
     let (proj, uv_scale) = crate::uv::read(p)?;
     let natural = (m.uv0.len() == m.positions.len()).then(|| m.uv0.clone());
@@ -2170,7 +2188,11 @@ fn annotate(m: &mut Mesh, kind: &str, p: &Value, ctx: &Ctx<'_>) -> Result<(), Fa
     };
     m.uv0 = crate::uv::uv0(m, proj, uv_scale, natural.as_deref(), fallback);
     if CHARTED.contains(&kind) {
-        m.uv1 = crate::uv::uv1(m, natural.as_deref());
+        // A terrain plate's chart is its own grid, which its horizon table is read on (#1381).
+        m.uv1 = match crate::terrain::places(kind, p, m) {
+            Some(uv) => uv,
+            None => crate::uv::uv1(m, natural.as_deref()),
+        };
     }
     let span = (hi[1] - lo[1]).max(1e-12);
     let height = m.positions.iter().map(|q| (q[1] - lo[1]) / span).collect();
@@ -2578,50 +2600,4 @@ mod tests {
 }
 
 #[cfg(test)]
-mod platonic_tests {
-    use super::*;
-    use serde_json::json;
-
-    /// Builder `ball`: tessellation (#423): detail 0 gives the four Platonic solids, closed, with
-    /// flat faces and the declared 3 × faces × (detail + 1)² vertices; the dodecahedron's twelve
-    /// pentagons are flat, so each of its 36 triangles shares its normal with two others.
-    #[test]
-    fn detail_zero_gives_the_four_platonic_solids_with_flat_faces() {
-        for (base, faces, corners) in [
-            ("tetra", 4, 4),
-            ("octa", 8, 6),
-            ("icosa", 20, 12),
-            ("dodeca", 36, 20),
-        ] {
-            let p = json!({"tessellation": "geodesic", "base": base, "radius": 1.0});
-            let m = ball(&p, Plants::default()).unwrap();
-            assert_eq!(m.triangles(), faces, "{base}");
-            assert_eq!(
-                ball_count(&p).unwrap(),
-                (3 * faces as u64, faces as u64),
-                "{base}"
-            );
-            let mut distinct: Vec<V3> = Vec::new();
-            for q in &m.positions {
-                if !distinct.iter().any(|d| length(sub(*d, *q)) < 1e-9) {
-                    distinct.push(*q);
-                }
-            }
-            assert_eq!(distinct.len(), corners, "{base}");
-            for t in m.indices.as_chunks::<3>().0 {
-                let [a, b, c] = t.map(|i| m.positions[i as usize]);
-                let n = unit(cross(sub(b, a), sub(c, a)));
-                assert!(
-                    dot(n, unit(add(add(a, b), c))) > 0.0,
-                    "{base}: wound outward"
-                );
-                for i in t {
-                    assert!(
-                        length(sub(m.normals[*i as usize], n)) < 1e-9,
-                        "{base}: flat"
-                    );
-                }
-            }
-        }
-    }
-}
+mod platonic_tests;

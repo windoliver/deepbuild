@@ -10,14 +10,22 @@ export const VERSION = 1;
 export const FEATURES: readonly string[] = [
   // Every method the app calls (#41): crates/deep-app/src/hub.rs NEEDS checks this hello against them.
   'inbox.read', 'stream.subscribe', 'events.read', 'notifications.report', 'views.shown', 'views.hidden', 'row.read', 'canvas.drawn', 'canvas.user',
+  // A hub that restarts on the token alone and asks the OS inside itself before a stop (#1865): the CLI's stop reads it.
+  'hub.restart',
 ];
 /** The hub's contract version, "major.minor": a client needing a newer one shows the hub as older (compat.ts). */
 export const CONTRACT = '1.0';
 /** What a stream subscribe asks for (#1575): one session's events, or the list's rows; with none, every event, as the app subscribes. */
 export type Scope = { kind: 'session'; session: string } | { kind: 'list' };
 
-/** error@3: one refusal. */
-export interface Refusal { code: string; retryable: boolean; remediation: string; path: string; actual: string; evidence: string[] }
+/**
+ * error@5: one refusal. `missing_field` carries the tool's input schema; `not_ready` what loaded of the total and when to
+ * call again (#1415).
+ */
+export interface Refusal {
+  code: string; retryable: boolean; remediation: string; path: string; actual: string; evidence: string[];
+  schema?: Record<string, unknown>; loaded?: number; total?: number; retry_after_ms?: number;
+}
 const actualText = (actual: unknown): string => (typeof actual === 'string' ? actual : actual === undefined ? '' : JSON.stringify(actual) ?? String(actual));
 export function refusal(code: string, path: string, remediation: string, actual: unknown = '', retryable = false): Refusal {
   return { code, retryable, remediation, path, actual: actualText(actual).slice(0, 8192), evidence: [] };
@@ -34,6 +42,19 @@ export class Refused extends Error {
 /** A refusal that keeps the whole refused value beside the cut one. */
 export const refuse = (code: string, path: string, remediation: string, actual: unknown = '', retryable = false): Refused =>
   new Refused(refusal(code, path, remediation, actual, retryable), actualText(actual));
+
+/** The settled asks or sessions one page of a list read holds, newest first, after every open one (#1576). */
+export const SETTLED_PAGE = 25;
+/**
+ * A read's `next` (#1576): where the last item its page held stands (when it settled, or its log_pos) and its ID; the
+ * read's `page` takes it back.
+ */
+export const cursorOf = (at: number, id: string): string => `${at}:${id}`;
+export function cursorAt(page: unknown): { at: number; id: string } {
+  const m = typeof page === 'string' ? /^(\d+):(.+)$/.exec(page) : null;
+  if (!m) throw new Refused(refusal('pattern', '/params/page', 'Read the next page with the `next` the read before gave.', page));
+  return { at: Number(m[1]), id: m[2]! };
+}
 
 /** One socket line: the object with the protocol version first; a bigint (a seq) is written as its decimal string. */
 export const line = (o: object): string => `${JSON.stringify({ v: VERSION, ...o }, (_, v: unknown) => (typeof v === 'bigint' ? v.toString() : v))}\n`;
@@ -242,6 +263,8 @@ export interface CoreOptions {
   held: string[];
   plant?: Plant;
   vfs?: VfsSettings;
+  /** Safe mode, from `deep hub run --safe`: the extension host loads no extension. */
+  safe?: boolean;
   /** A module whose default export takes the local host and returns the host@1 the hub uses instead, from DEEP_HUB_TEST_HOST; only tests set it. */
   host?: string;
   /** The term of every lease the hub grants, from DEEP_HUB_TEST_LEASE_MS; only tests set it. */
@@ -256,6 +279,8 @@ export interface CoreOptions {
   index?: string;
   /** The forge's REST API the archive copies CI runs from, from DEEP_HUB_TEST_FORGE; only tests set it. */
   forge?: string;
+  /** The package registry a dependency's reading is read from in place of the public ones, from DEEP_HUB_TEST_REGISTRY; only tests set it (#1509). */
+  registry?: string;
   /** The planted sorter's file, from DEEP_HUB_TEST_SORTER: the questions it answers "proceed" and its rule; only tests set it. */
   sorter?: string;
   /** The definitions handed to the kernel, from DEEP_HUB_TEST_DRAFTS: by a prompt's text or a work item's ID; only tests set it. */
@@ -270,4 +295,6 @@ export interface CoreOptions {
   github?: string;
   /** A file of runs for the background job `test` (#909), from DEEP_HUB_TEST_FAIL_JOB: a line `fail` throws, `ok` passes; only tests set it. */
   failJob?: string;
+  /** A JSON file of release entries `[{ id, version, digest }]` the extension host loads in the hub, from DEEP_HUB_TEST_RELEASE; only tests set it (#2402). */
+  release?: string;
 }

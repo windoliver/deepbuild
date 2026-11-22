@@ -10,6 +10,8 @@ use std::time::Duration;
 
 use serde_json::{json, Value};
 
+use crate::copy;
+
 /// The installed hub's root: ~/.deepbuild.
 pub fn root() -> PathBuf {
     PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".deepbuild")
@@ -41,9 +43,9 @@ pub fn address() -> PathBuf {
 pub const CONTRACT: &str = "1.0";
 /// Every hub method the app calls (#41), which the hub's hello must list (`FEATURES` in packages/hub/src/wire.ts).
 pub const NEEDS: &[&str] = &[
-    "inbox.read",
-    "stream.subscribe",
-    "events.read",
+    crate::record::CALLS[0],
+    crate::record::CALLS[1],
+    crate::record::CALLS[2],
     "notifications.report",
     "views.shown",
     "views.hidden",
@@ -51,9 +53,9 @@ pub const NEEDS: &[&str] = &[
     "canvas.drawn",
     "canvas.user",
 ];
-const HUB_FIX: &str =
-    "Update DeepBuild so the hub matches this app, then restart it with `deep setup`.";
-const CLIENT_FIX: &str = "Update this app or CLI to the version that matches the running hub.";
+/// The keys of the one step that fixes each side being older.
+const HUB_FIX: &str = "hub.hub_fix";
+const CLIENT_FIX: &str = "hub.client_fix";
 
 /// The one screen the app shows instead of calling, when the hub's hello doesn't cover what the app calls: which side
 /// is older and the one step that fixes it, as packages/hub/src/compat.ts words it. `None` when the hello covers it.
@@ -75,18 +77,26 @@ pub fn older(hello: &Value) -> Option<String> {
     };
     let missing: Vec<&str> = NEEDS.iter().filter(|m| !listed(m)).copied().collect();
     match contract.map(parts) {
-        Some(have) if have.0 > need.0 => Some(format!(
-            "This app is older than the hub: it speaks contract {CONTRACT} and the hub speaks {}.\n{CLIENT_FIX}",
-            contract.unwrap_or_default()
+        Some(have) if have.0 > need.0 => Some(copy::fill(
+            "hub.app_older",
+            &[
+                &CONTRACT,
+                &contract.unwrap_or_default(),
+                &copy::text(CLIENT_FIX),
+            ],
         )),
         Some(have) if have >= need && missing.is_empty() => None,
-        Some(have) if have >= need => Some(format!(
-            "The hub is older than this app: it does not list {}.\n{HUB_FIX}",
-            missing.join(", ")
+        Some(have) if have >= need => Some(copy::fill(
+            "hub.hub_missing",
+            &[&missing.join(", "), &copy::text(HUB_FIX)],
         )),
-        _ => Some(format!(
-            "The hub is older than this app: it speaks contract {} and this app needs {CONTRACT}.\n{HUB_FIX}",
-            contract.unwrap_or("none")
+        _ => Some(copy::fill(
+            "hub.hub_older",
+            &[
+                &contract.unwrap_or(copy::text("hub.none")),
+                &CONTRACT,
+                &copy::text(HUB_FIX),
+            ],
         )),
     }
 }
@@ -188,11 +198,21 @@ impl HubClient {
             .ok_or_else(|| HubError::Io(io::ErrorKind::TimedOut.into()))
     }
 
-    /// The next line within `timeout`, or None when none came; a line cut by the timeout is kept for the next read.
+    /// The next line within `timeout`, or None when none came; a line cut by the timeout is kept for the next read. A
+    /// zero `timeout` takes only what has come, waiting for nothing (#2661): the window's idle tick never blocks.
     fn read_within(&mut self, timeout: Duration) -> Result<Option<Value>, HubError> {
-        self.writer
-            .set_read_timeout(Some(timeout.max(Duration::from_millis(1))))?;
-        match self.reader.read_line(&mut self.partial) {
+        let waits = !timeout.is_zero();
+        if waits {
+            self.writer
+                .set_read_timeout(Some(timeout.max(Duration::from_millis(1))))?;
+        } else {
+            self.writer.set_nonblocking(true)?;
+        }
+        let read = self.reader.read_line(&mut self.partial);
+        if !waits {
+            self.writer.set_nonblocking(false)?;
+        }
+        match read {
             Ok(0) => return Err(HubError::Protocol("the hub closed the connection".into())),
             Ok(_) => {}
             Err(e)
@@ -263,18 +283,19 @@ impl HubClient {
         let id = format!("app#{}", self.ids);
         self.send(json!({ "v": 1, "id": id, "method": method, "params": params }))?;
         loop {
-            let line = self.read()?;
+            let mut line = self.read()?;
             if line.get("id").and_then(Value::as_str) != Some(id.as_str()) {
                 self.pending.push_back(line);
                 continue;
             }
-            if let Some(error) = line.get("error") {
-                return Err(HubError::Refused(error.clone()));
+            // The line is the call's own: its result is taken out of it, never copied (#2661).
+            let mut reply = std::mem::take(line.as_object_mut().expect("a line with an id"));
+            if let Some(error) = reply.remove("error") {
+                return Err(HubError::Refused(error));
             }
-            return line
-                .get("result")
-                .cloned()
-                .ok_or_else(|| HubError::Protocol(line.to_string()));
+            return reply
+                .remove("result")
+                .ok_or_else(|| HubError::Protocol(Value::Object(reply).to_string()));
         }
     }
 }

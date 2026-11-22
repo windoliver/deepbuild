@@ -53,49 +53,126 @@ pub fn color(id: &str, salt: &str) -> [u8; 3] {
 }
 
 /// Each px's chamfer distance (3 to a side, 4 to a corner) to the nearest px of another pick or
-/// the frame's edge: the visible centre of an item is its px farthest in.
+/// the frame's edge: the visible centre of an item is its px farthest in. Two passes, each row
+/// first lowered from the row before it, where every px is independent, then along itself
+/// (#3017: a 1936 × 1584 frame in a few ms, the same distances as px by px).
 fn inside(ids: &[u32], w: usize, h: usize) -> Vec<u32> {
     const FAR: u32 = u32::MAX / 2;
-    let at = |x: isize, y: isize| -> Option<u32> {
-        (x >= 0 && y >= 0 && (x as usize) < w && (y as usize) < h).then(|| ids[y as usize * w + x as usize])
-    };
-    let mut d: Vec<u32> = (0..w * h)
-        .map(|i| {
-            let (x, y) = ((i % w) as isize, (i / w) as isize);
-            let edge = [(-1, 0), (1, 0), (0, -1), (0, 1)]
-                .iter()
-                .any(|(dx, dy)| at(x + dx, y + dy) != Some(ids[i]));
-            if edge {
-                1
-            } else {
-                FAR
-            }
-        })
-        .collect();
-    let forward = [(-1isize, 0isize, 3u32), (-1, -1, 4), (0, -1, 3), (1, -1, 4)];
+    let mut d = vec![0u32; w * h];
+    // Forward: 1 on the frame's edge and beside a px of another pick, else FAR lowered from the
+    // row above (straight up 3, its corners 4); then from the left (3).
     for y in 0..h {
-        for x in 0..w {
-            for (dx, dy, c) in forward {
-                let (nx, ny) = (x as isize + dx, y as isize + dy);
-                if at(nx, ny).is_some() {
-                    let v = d[ny as usize * w + nx as usize] + c;
-                    d[y * w + x] = d[y * w + x].min(v);
-                }
-            }
+        let (done, rest) = d.split_at_mut(y * w);
+        let row = &mut rest[..w];
+        if y == 0 || y + 1 == h || w < 3 {
+            row.fill(1);
+            continue;
         }
+        let n = w - 2;
+        let at = |r: usize, x: usize| &ids[r * w + x..r * w + x + n];
+        let (c, l, r, u, b) = (at(y, 1), at(y, 0), at(y, 2), at(y - 1, 1), at(y + 1, 1));
+        let above = &done[(y - 1) * w..];
+        let (a0, a1, a2) = (&above[..n], &above[1..n + 1], &above[2..n + 2]);
+        let out = &mut row[1..n + 1];
+        for i in 0..n {
+            let k = c[i];
+            let edge = (k != l[i]) | (k != r[i]) | (k != u[i]) | (k != b[i]);
+            let seed = if edge { 1 } else { FAR };
+            out[i] = seed.min(a1[i] + 3).min(a0[i] + 4).min(a2[i] + 4);
+        }
+        row[0] = 1;
+        row[w - 1] = 1;
+        run_right(row);
     }
-    for y in (0..h).rev() {
-        for x in (0..w).rev() {
-            for (dx, dy, c) in forward {
-                let (nx, ny) = (x as isize - dx, y as isize - dy);
-                if at(nx, ny).is_some() {
-                    let v = d[ny as usize * w + nx as usize] + c;
-                    d[y * w + x] = d[y * w + x].min(v);
-                }
+    // Backward: from the row below, then from the right. The first and last rows hold 1s.
+    for y in (1..h.saturating_sub(1)).rev() {
+        let (row, below) = d[y * w..].split_at_mut(w);
+        if w > 2 {
+            let n = w - 2;
+            let (b0, b1, b2) = (&below[..n], &below[1..n + 1], &below[2..n + 2]);
+            let out = &mut row[1..n + 1];
+            for i in 0..n {
+                out[i] = out[i].min(b1[i] + 3).min(b0[i] + 4).min(b2[i] + 4);
             }
         }
+        run_left(row);
     }
     d
+}
+
+/// Each px of `row` lowered to the px on its left plus 3. Eight px at a time: a block whose own
+/// left neighbours, as they stand, lower none of it, and whose first px the run reaching it
+/// doesn't lower either, is left as it is (most are), so only the rest wait on the px before.
+fn run_right(row: &mut [u32]) {
+    let w = row.len();
+    let Some(&first) = row.first() else { return };
+    let (mut prev, mut x) = (first, 1);
+    while x < w {
+        let end = (x + 8).min(w);
+        let (block, left) = (&row[x..end], &row[x - 1..end - 1]);
+        let still = left
+            .iter()
+            .zip(block)
+            .fold(prev + 3 >= block[0], |a, (l, v)| a & (l + 3 >= *v));
+        if !still {
+            for v in &mut row[x..end] {
+                if prev + 3 < *v {
+                    *v = prev + 3;
+                }
+                prev = *v;
+            }
+        }
+        prev = row[end - 1];
+        x = end;
+    }
+}
+
+/// [`run_right`] the other way: each px lowered to the px on its right plus 3.
+fn run_left(row: &mut [u32]) {
+    let Some(&last) = row.last() else { return };
+    let (mut prev, mut x) = (last, row.len() - 1);
+    while x > 0 {
+        let start = x.saturating_sub(8);
+        let (block, right) = (&row[start..x], &row[start + 1..x + 1]);
+        let still = right
+            .iter()
+            .zip(block)
+            .fold(prev + 3 >= block[x - start - 1], |a, (r, v)| {
+                a & (r + 3 >= *v)
+            });
+        if !still {
+            for v in row[start..x].iter_mut().rev() {
+                if prev + 3 < *v {
+                    *v = prev + 3;
+                }
+                prev = *v;
+            }
+        }
+        prev = row[start];
+        x = start;
+    }
+}
+
+/// Where each of `n` keys shows farthest in, in a frame `w` px wide keyed per px (key `k` in
+/// `1..=n`, 0 for none): its px of the largest [`inside`] distance, the first in row order on a
+/// tie, as `[x, y]`; `None` for a key with no px. The ID view numbers its items there, and a 3D
+/// snapshot's visible table gives it as each row's `at` (#3017).
+pub fn centres(keys: &[u32], w: usize, n: usize) -> Vec<Option<[u32; 2]>> {
+    let h = if w == 0 { 0 } else { keys.len() / w };
+    let depth = inside(keys, w, h);
+    // Each key's largest distance so far (0: none yet, as every px's is at least 1) and its px.
+    let (mut far, mut at) = (vec![0u32; n + 1], vec![0usize; n + 1]);
+    for (i, (&k, &d)) in keys.iter().zip(&depth).enumerate() {
+        if let Some(f) = far.get_mut(k as usize) {
+            if d > *f {
+                *f = d;
+                at[k as usize] = i;
+            }
+        }
+    }
+    (1..=n)
+        .map(|k| (far[k] > 0).then(|| [(at[k] % w) as u32, (at[k] / w) as u32]))
+        .collect()
 }
 
 /// 3 × 5 glyphs of the digits, a row a byte, its three low bits left to right.
@@ -116,7 +193,10 @@ const DIGITS: [[u8; 5]; 10] = [
 fn number(rgba: &mut [u8], [w, h]: [usize; 2], n: u16, at: [u32; 2], s: usize) {
     let text = n.to_string();
     let (tw, th) = (text.len() * 4 * s - s, 5 * s);
-    let (x0, y0) = (at[0] as isize - (tw as isize) / 2 - s as isize, at[1] as isize - (th as isize) / 2 - s as isize);
+    let (x0, y0) = (
+        at[0] as isize - (tw as isize) / 2 - s as isize,
+        at[1] as isize - (th as isize) / 2 - s as isize,
+    );
     let mut put = |x: isize, y: isize, v: u8| {
         if x >= 0 && y >= 0 && (x as usize) < w && (y as usize) < h {
             let i = (y as usize * w + x as usize) * 4;
@@ -155,7 +235,12 @@ pub fn id_view(frame: &Frame, table: &[String], salt: &str) -> IdView {
     let entry_of_pick: std::collections::BTreeMap<u32, usize> = frame
         .picks
         .iter()
-        .filter_map(|(p, id)| table.iter().position(|t| scene::is_of(id, t)).map(|k| (*p, k)))
+        .filter_map(|(p, id)| {
+            table
+                .iter()
+                .position(|t| scene::is_of(id, t))
+                .map(|k| (*p, k))
+        })
         .collect();
     let entries: Vec<Option<usize>> = (0..n)
         .map(|i| frame.ids.get(i).and_then(|p| entry_of_pick.get(p).copied()))
@@ -164,15 +249,7 @@ pub fn id_view(frame: &Frame, table: &[String], salt: &str) -> IdView {
         .iter()
         .map(|e| e.map_or(0, |k| k as u32 + 1))
         .collect();
-    let depth = inside(&keyed, w, h);
-    let mut best: Vec<Option<(u32, usize)>> = vec![None; table.len()];
-    for (i, e) in entries.iter().enumerate() {
-        if let Some(k) = e {
-            if best[*k].is_none_or(|(d, _)| depth[i] > d) {
-                best[*k] = Some((depth[i], i));
-            }
-        }
-    }
+    let best = centres(&keyed, w, table.len());
     let colors: Vec<[u8; 3]> = table.iter().map(|id| color(id, salt)).collect();
     let mut rgba = vec![0u8; n * 4];
     for (i, e) in entries.iter().enumerate() {
@@ -185,7 +262,7 @@ pub fn id_view(frame: &Frame, table: &[String], salt: &str) -> IdView {
         .map(|(k, id)| Numbered {
             n: k as u16 + 1,
             id: id.clone(),
-            at: best[k].map(|(_, i)| [(i % w) as u32, (i / w) as u32]),
+            at: best[k],
         })
         .collect();
     let s = (w.min(h) / 180).max(2);
@@ -204,10 +281,13 @@ pub fn id_view(frame: &Frame, table: &[String], salt: &str) -> IdView {
 /// The observations a reading keeps, each `(category, number)` with its item's ID, and how many
 /// it dropped: one with no number, a number `view` doesn't list, or a category outside `observe`
 /// (the check input's list, else the closed list).
-pub fn sift(observations: &[Value], view: &[Numbered], observe: &[String]) -> (Vec<(String, u16, String)>, u16) {
-    let allowed = |c: &str| {
-        OBSERVE.contains(&c) && (observe.is_empty() || observe.iter().any(|o| o == c))
-    };
+pub fn sift(
+    observations: &[Value],
+    view: &[Numbered],
+    observe: &[String],
+) -> (Vec<(String, u16, String)>, u16) {
+    let allowed =
+        |c: &str| OBSERVE.contains(&c) && (observe.is_empty() || observe.iter().any(|o| o == c));
     let mut kept = Vec::new();
     let mut dropped = 0u16;
     for o in observations {
@@ -266,7 +346,70 @@ mod tests {
         assert_eq!(f.ids[(at(1)[1] * 40 + at(1)[0]) as usize], 2);
         assert_eq!(v.items[2].at, None);
         // The left half's centre, give or take the chamfer's ties.
-        assert!((8..=11).contains(&at(0)[0]) && (8..=11).contains(&at(0)[1]), "{:?}", at(0));
+        assert!(
+            (8..=11).contains(&at(0)[0]) && (8..=11).contains(&at(0)[1]),
+            "{:?}",
+            at(0)
+        );
+    }
+
+    /// The chamfer pass as #456 first wrote it, px by px: the reference the row-wise passes keep.
+    fn inside_px_by_px(ids: &[u32], w: usize, h: usize) -> Vec<u32> {
+        let at = |x: isize, y: isize| {
+            (x >= 0 && y >= 0 && (x as usize) < w && (y as usize) < h)
+                .then(|| ids[y as usize * w + x as usize])
+        };
+        let mut d: Vec<u32> = (0..w * h)
+            .map(|i| {
+                let (x, y) = ((i % w) as isize, (i / w) as isize);
+                let edge = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+                    .iter()
+                    .any(|(dx, dy)| at(x + dx, y + dy) != Some(ids[i]));
+                if edge {
+                    1
+                } else {
+                    u32::MAX / 2
+                }
+            })
+            .collect();
+        let steps = [(-1isize, 0isize, 3u32), (-1, -1, 4), (0, -1, 3), (1, -1, 4)];
+        for back in [false, true] {
+            for j in 0..w * h {
+                let i = if back { w * h - 1 - j } else { j };
+                let (x, y) = ((i % w) as isize, (i / w) as isize);
+                for (dx, dy, c) in steps {
+                    let (dx, dy) = if back { (-dx, -dy) } else { (dx, dy) };
+                    if at(x + dx, y + dy).is_some() {
+                        let v = d[(y + dy) as usize * w + (x + dx) as usize] + c;
+                        d[i] = d[i].min(v);
+                    }
+                }
+            }
+        }
+        d
+    }
+
+    #[test]
+    fn the_row_wise_chamfer_matches_the_px_by_px_one_on_random_frames() {
+        let mut seed = 0x2545_f491_4f6c_dd1du64;
+        let mut next = |m: u64| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed % m
+        };
+        for _ in 0..300 {
+            let (w, h) = (1 + next(24) as usize, 1 + next(24) as usize);
+            // Blocks of a few keys, so regions have insides as well as edges.
+            let (bw, bh, keys) = (1 + next(8) as usize, 1 + next(8) as usize, 1 + next(5));
+            let cells: Vec<u32> = (0..w.div_ceil(bw) * h.div_ceil(bh))
+                .map(|_| next(keys) as u32)
+                .collect();
+            let ids: Vec<u32> = (0..w * h)
+                .map(|i| cells[(i / w / bh) * w.div_ceil(bw) + (i % w) / bw])
+                .collect();
+            assert_eq!(inside(&ids, w, h), inside_px_by_px(&ids, w, h), "{w} × {h}");
+        }
     }
 
     #[test]

@@ -4,8 +4,9 @@ import { createHash } from 'node:crypto';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { parse as parseYaml } from 'yaml';
+import { parseYaml } from './yaml.js';
 import { run } from './children.js';
+import { agentOf, loadedAtStart } from './rule-load.js';
 import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
@@ -40,11 +41,16 @@ const upFrom = (cwd: string): string[] => {
   }
 };
 
-/** What a Claude Code session in `cwd` loads: instruction files, skills, hook settings and MCP servers, each digested. */
-export async function loadsOf(cwd: string): Promise<Load[]> {
+/**
+ * What a session in `cwd` loads: instruction files, skills, hook settings and MCP servers, each digested. The instruction
+ * files are the ones its agent's facts' rule-load entry says it loads at its start (#1514), AGENTS.md and path-scoped
+ * rules included; for an agent with no entry, the CLAUDE.md files from `cwd` up.
+ */
+export async function loadsOf(cwd: string, agent?: string): Promise<Load[]> {
   const claude = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude');
   const out: Load[] = [];
-  const instructions = [join(claude, 'CLAUDE.md'), ...upFrom(cwd).flatMap((d) => [join(d, 'CLAUDE.md'), join(d, 'CLAUDE.local.md'), join(d, '.claude', 'CLAUDE.md')])];
+  const instructions = (agent === undefined ? undefined : loadedAtStart(agentOf(agent), cwd))
+    ?? [join(claude, 'CLAUDE.md'), ...upFrom(cwd).flatMap((d) => [join(d, 'CLAUDE.md'), join(d, 'CLAUDE.local.md'), join(d, '.claude', 'CLAUDE.md')])];
   for (const file of instructions) {
     const body = await text(file);
     if (body !== undefined) out.push({ kind: 'instructions', name: file.slice(file.lastIndexOf('/') + 1), source: file, digest: sha([body]) });

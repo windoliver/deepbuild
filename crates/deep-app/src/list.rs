@@ -9,6 +9,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::address::{Address, Place};
+use crate::copy;
 
 /// How long a row that left its state keeps its slot once you've left the list, in ms.
 pub const HOLD: u64 = 2_000;
@@ -77,8 +78,12 @@ impl Doing {
     pub fn line(&self, now: u64) -> String {
         let age = now.saturating_sub(self.at);
         crate::states::changes_after(crate::states::changes_in(age));
-        let ago = if self.ago { " ago" } else { "" };
-        format!("{} · {}{ago}", self.words, crate::states::span(age))
+        let span = crate::states::span(age);
+        if self.ago {
+            copy::fill("list.doing_ago", &[&self.words, &span])
+        } else {
+            format!("{} · {span}", self.words)
+        }
     }
 }
 
@@ -110,12 +115,12 @@ pub fn doing_of(
     }
     if crate::plain::planted("line-keeps-running") {
         if let Some(object) = doing.words.strip_prefix("Couldn't run ") {
-            (doing.words, doing.ago) = (format!("Running {object}"), false);
+            (doing.words, doing.ago) = (format!("Running {object}"), false); // copy-exception: planted wrong program
         }
     }
     if crate::plain::planted("line-whole-command") {
         if let Some(command) = newest("tool.before").and_then(|e| e["data"]["command"].as_str()) {
-            doing.words = format!("Running {command}");
+            doing.words = format!("Running {command}"); // copy-exception: planted wrong program
         }
     }
     if crate::plain::planted("line-stalls-on-timer") && stalled(view, session, now) {
@@ -210,8 +215,8 @@ impl Item {
 
 /// The heading Needs you's id; a project's is `heading:<project>`.
 pub const HEADING: &str = "heading:needs-you";
-/// What a project with no name is listed under.
-pub const NO_PROJECT: &str = "No project";
+/// The key of what a project with no name is listed under.
+pub const NO_PROJECT: &str = "list.no_project";
 
 /// A project's id in an address: its name, with anything an address can't hold made a dash.
 pub fn project_id(project: Option<&str>) -> String {
@@ -242,21 +247,21 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
     }
     items.push(Item::Heading {
         id: HEADING.to_owned(),
-        title: "Needs you".to_owned(),
+        title: copy::text("list.needs_you").to_owned(),
         count: Some(asks.len()),
     });
     for ask in asks {
         let waits = match ask.status.as_str() {
             // #1461's planted list tells them apart by ink alone, as the base drew them.
             _ if crate::plain::planted("wait-by-ink") => None,
-            "folded" => Some("folded"),
-            "later" => Some("set for later"),
-            "held" => Some("held"),
+            "folded" => Some(copy::text("list.folded")),
+            "later" => Some(copy::text("list.set_for_later")),
+            "held" => Some(copy::text("list.held")),
             _ => None,
         };
         // #1461's planted list draws every ask's word alike.
         let kind = if crate::plain::planted("ask-words-alike") {
-            "needs you".to_owned()
+            "needs you".to_owned() // copy-exception: planted wrong program
         } else {
             ask.kind.clone()
         };
@@ -293,7 +298,7 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
         let id = project_id(project);
         items.push(Item::Heading {
             id: format!("heading:{}", project.unwrap_or("none")),
-            title: project.unwrap_or(NO_PROJECT).to_owned(),
+            title: project.unwrap_or(copy::text(NO_PROJECT)).to_owned(),
             count: None,
         });
         let mine = sessions.iter().filter(|s| s.project.as_deref() == project);
@@ -320,10 +325,7 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
             items.push(Item::Row(Box::new(Row {
                 id: format!("quiet:{id}"),
                 address: Address::new(Place::Project, &id),
-                title: match quiet.len() {
-                    1 => "1 quiet session".to_owned(),
-                    n => format!("{n} quiet sessions"),
-                },
+                title: copy::count("list.quiet_sessions", quiet.len() as u64, &[]),
                 word: "quiet".to_owned(),
                 value: "idle".to_owned(),
                 entry: "idle",
@@ -351,12 +353,14 @@ pub fn opens_on(asks: &[Ask], sessions: &[Session]) -> Option<Address> {
         .map(|s| Address::new(Place::Project, &project_id(s.project.as_deref())))
 }
 
+/// A reading, the key it was read at, and when what it wrote from the clock next reads differently (#1482).
+type ReadAt = ((u64, u64, bool), std::rc::Rc<(Vec<Ask>, Vec<Session>)>, Option<u64>);
+
 thread_local! {
     /// The last reading of the record, by its `log_pos`, the second it was read at and whether the record before the
     /// reads was folded (#2026): a frame reads it once.
     #[allow(clippy::type_complexity)]
-    static READ: std::cell::RefCell<Option<((u64, u64, bool), std::rc::Rc<(Vec<Ask>, Vec<Session>)>)>> =
-        const { std::cell::RefCell::new(None) };
+    static READ: std::cell::RefCell<Option<ReadAt>> = const { std::cell::RefCell::new(None) };
 }
 
 /// The asks and sessions the list reads from the one record reader at `now` (#1461), read once per change of the
@@ -368,10 +372,17 @@ pub fn read_now(now: u64) -> std::rc::Rc<(Vec<Ask>, Vec<Session>)> {
         READ.with(|cell| {
             let mut cell = cell.borrow_mut();
             match cell.as_ref() {
-                Some((at, read)) if *at == key => read.clone(),
+                Some((at, read, until)) if *at == key => {
+                    // A reading kept past the frame that made it still says when its ages change.
+                    if let Some(until) = until {
+                        crate::states::changes_after(until.saturating_sub(now));
+                    }
+                    read.clone()
+                }
                 _ => {
-                    let fresh = std::rc::Rc::new(read(view, now));
-                    *cell = Some((key, fresh.clone()));
+                    let (fresh, changes) = crate::states::written_in(|| read(view, now));
+                    let fresh = std::rc::Rc::new(fresh);
+                    *cell = Some((key, fresh.clone(), changes.map(|wait| now + wait)));
                     fresh
                 }
             }
@@ -546,6 +557,11 @@ impl Kept {
         self.left_at.remove(id);
     }
 
+    /// You're in the list at `now`, and the list as drawn stands (#1482): a row that left waits for you to leave.
+    pub fn attended(&mut self, now: u64) {
+        self.attended_until = Some(now);
+    }
+
     /// The list as drawn after the record gave `fresh` at `now`, with `attended` saying whether you're in the list.
     pub fn settle(&mut self, fresh: Vec<Item>, attended: bool, now: u64) -> &[Item] {
         // #1461's planted list closes a gap at once, under a resting pointer or not.
@@ -613,7 +629,7 @@ impl Kept {
                         row.loud = false;
                         // An ask's row that left is drawn answered, in its slot, until it goes.
                         if row.id.starts_with("ask:") {
-                            row.word = "answered".to_owned();
+                            row.word = copy::text("list.answered").to_owned();
                             row.value = "answered".to_owned();
                         }
                     }
@@ -689,6 +705,77 @@ fn offsets(items: &[Item]) -> HashMap<String, u32> {
             (item.id().to_owned(), at)
         })
         .collect()
+}
+
+/// Where the list's items sit as it scrolls (#1808): each item's top in the list's content, from the items' heights, in
+/// points. Only the items in view are drawn, so a frame over 700 rows costs what it shows.
+pub struct Scroll {
+    tops: Vec<f32>,
+    end: f32,
+}
+
+impl Scroll {
+    pub fn new(heights: impl IntoIterator<Item = f32>) -> Self {
+        let mut tops = Vec::new();
+        let mut end = 0.;
+        for height in heights {
+            tops.push(end);
+            end += height;
+        }
+        Scroll { tops, end }
+    }
+
+    /// Where the items end.
+    pub fn end(&self) -> f32 {
+        self.end
+    }
+
+    /// Where item `at` starts, or where the items end past the last.
+    pub fn top_of(&self, at: usize) -> f32 {
+        self.tops.get(at).copied().unwrap_or(self.end)
+    }
+
+    /// Item `at`'s top and bottom.
+    pub fn span(&self, at: usize) -> (f32, f32) {
+        (self.top_of(at), self.top_of(at + 1))
+    }
+
+    /// Whether item `at` shows whole in a view `room` tall scrolled to `top`.
+    pub fn shows(&self, at: usize, top: f32, room: f32) -> bool {
+        let (from, to) = self.span(at);
+        from >= top && to <= top + room
+    }
+
+    /// Where the view scrolls to show item `at` whole, with the items either side of it when the three fit, so the
+    /// next item an arrow goes to is in view too (#2021); where it is, when it shows them already.
+    pub fn reveal(&self, at: usize, top: f32, room: f32) -> f32 {
+        let (from, to) = self.span(at);
+        let before = at.checked_sub(1).map_or(from, |before| self.span(before).0);
+        let after = if at + 1 < self.tops.len() {
+            self.span(at + 1).1
+        } else {
+            to
+        };
+        let (from, to) = if after - before <= room {
+            (before, after)
+        } else {
+            (from, to)
+        };
+        if from < top {
+            from
+        } else if to > top + room {
+            to - room
+        } else {
+            top
+        }
+    }
+
+    /// The items any part of which shows in a view `room` tall scrolled to `top`.
+    pub fn drawn(&self, top: f32, room: f32) -> std::ops::Range<usize> {
+        let first = self.tops.partition_point(|at| *at <= top).saturating_sub(1);
+        let last = self.tops.partition_point(|at| *at < top + room);
+        first..last.max(first)
+    }
 }
 
 #[cfg(test)]

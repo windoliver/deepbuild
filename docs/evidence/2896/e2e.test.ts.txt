@@ -1,0 +1,40 @@
+import { it } from 'vitest';
+import { writeFileSync } from 'node:fs'; type Line = any;
+it('e2e 2896', async () => {
+// Manual e2e for #2896: page large canvas replies through `deep mcp` by cursor, as each client, and record every page's size.
+const { CLAUDE, CODEX, OTHER, DOC, call, client, cleanup, draw, openWorld, rowsDocument, sizeReceived, keeps } = await import("../tests/acceptance/2896/helpers.ts");
+const out = '<scratch>';
+const specs = [CLAUDE, CODEX, OTHER];
+const w = await openWorld(specs);
+const log: Line[] = [];
+try {
+  await draw(w, client(w, CLAUDE), DOC.page, rowsDocument('E2E page', 3, 999));
+  for (const spec of specs) {
+    const c = client(w, spec);
+    const sheet: Line[] = [];
+    let offset: number | undefined = 0;
+    while (offset !== undefined) {
+      const r = await call(w, c, 'deep_kinds', { op: 'sheet', offset });
+      const v = r.value as Line;
+      sheet.push({ offset, ...sizeReceived(r), kept: keeps(spec, r).how, next: v.next ?? null, error: r.isError || undefined });
+      offset = typeof v.next === 'number' ? v.next : undefined;
+    }
+    const pages: Line[] = [];
+    let cursor: string | null = null;
+    let rows = 0;
+    for (let n = 1; n < 100; n++) {
+      const r = await call(w, c, 'deep_query', { doc: DOC.page, what: 'rows', cap: 3000, cursor });
+      const v = r.value as Line;
+      rows += Array.isArray(v.rows) ? v.rows.length : 0;
+      pages.push({ n, rows: v.rows?.length ?? 0, ...sizeReceived(r), kept: keeps(spec, r).how, next: v.next ? 'cursor' : null, error: r.isError || undefined });
+      if (!v.next) break;
+      cursor = String(v.next);
+    }
+    log.push({ client: `${spec.name} ${spec.version}`, rows_total: rows, rows_pages: pages, sheet_pages: sheet });
+    console.log(spec.name, 'rows', rows, 'pages', pages.length, 'max chars', Math.max(...pages.map((p) => p.chars as number)), 'max tokens', Math.max(...pages.map((p) => p.tokens as number)), 'kept', [...new Set(pages.map((p) => p.kept))].join(','), '| sheet pages', sheet.length, [...new Set(sheet.map((p) => p.kept))].join(','));
+  }
+} finally {
+  writeFileSync(out, JSON.stringify({ when: new Date().toISOString(), clients: log }, null, 1));
+  await cleanup();
+}
+}, 1_200_000);

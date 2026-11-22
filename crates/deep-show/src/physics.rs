@@ -8,21 +8,23 @@
 
 use deep_canvas::document::Issue;
 use deep_canvas::registry::Module;
+use deep_canvas::schedule::CarriedState;
 use deep_canvas_physics::caps::RAPIER3D;
 use deep_canvas_physics::check::check;
 use deep_canvas_physics::doc::World;
-use deep_canvas_physics::module::changed;
-use deep_canvas_physics::occurrence::{step_flicks, timed};
-use deep_canvas_physics::written;
-use deep_physics_rapier::channels::{output_channels, pose_at};
+use deep_canvas_physics::occurrence::step_flicks;
+use deep_physics_rapier::channels::pose_at;
 use deep_physics_rapier::runner::Run;
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 
 use crate::hub::Hub;
 
 pub(crate) mod cast;
+pub(crate) mod defaults;
 mod derive;
 pub(crate) mod kit;
+mod lap;
+pub(crate) mod saves;
 pub(crate) use derive::{parse, Bake};
 
 /// The physics module the full set seals, on the Rapier backend this build links, its pins as
@@ -46,6 +48,7 @@ pub(crate) fn module() -> Option<Module> {
         m.register = |r| {
             (deep_canvas_physics::module::module(&deep_physics_rapier::build()).register)(r);
             kit::register(r);
+            lap::register(r);
             cast::register(r);
         };
         if cfg!(feature = "test-physics-needs-logic") {
@@ -89,6 +92,12 @@ pub enum Planted {
     CastAnswersLate,
     /// #213: the logic module writes services' results after the checkpoint that follows a step.
     ResultsAfterCheckpoint,
+    /// #189: a save whose runtime digest alone differs opens straight, its world's backend bytes
+    /// loaded into this build's world, with no re-derivation.
+    RestoreLoadsOldWorld,
+    /// #189: the content a save binds, and the piece's it is matched against, hold the piece's
+    /// data assets only, never a world.
+    ContentLeavesOutWorlds,
 }
 
 pub(crate) fn planted(name: &str) -> Option<crate::hub::Planted> {
@@ -101,75 +110,36 @@ pub(crate) fn planted(name: &str) -> Option<crate::hub::Planted> {
     }))
 }
 
-fn refused(id: &str, what: Value) -> Issue {
-    let msg = "the physics module refuses this world in its scene";
-    Issue::error("physics_refused", id, format!("worlds/{id}"), what, msg)
-}
-
-/// The readings `form`'s mark-set columns read of world `id` (`<id>.<ID>.<read>`), each baked
-/// from the body's state after every step in the shape the core's column view folds: one vec3
-/// element, held between steps, each step that changes it with the range it hands the view. A
-/// reading of no body of the world is left to the view, which names it; a read this host can't
-/// bake from a body's states is refused, naming #2248.
-fn readings(
-    form: &Value,
-    id: &str,
-    w: &World,
-    bodies: &Value,
-) -> Result<Map<String, Value>, Value> {
-    let mut named = std::collections::BTreeSet::new();
-    for p in form["items"]
-        .as_object()
-        .into_iter()
-        .flatten()
-        .map(|(_, i)| &i["params"])
-    {
-        let columns = p["columns"]
-            .as_object()
+/// Each character reading of `reads` (`(name, body, read)`) as logic track entries from a bake's or
+/// a restore's body states, the first at step `from`: its value at the first state and after every
+/// step that changes it, at that step's time.
+fn character_reads(
+    reply: &Value,
+    reads: &[(&str, &str, &str)],
+    step: i64,
+    from: i64,
+    out: &mut Vec<Value>,
+) {
+    for (name, body, read) in reads {
+        let mut last = None;
+        for (k, s) in reply["bodies"][body]
+            .as_array()
             .into_iter()
             .flatten()
-            .map(|(_, c)| &c["array"]);
-        for a in columns
-            .chain([&p["alive"]["array"]])
-            .filter_map(Value::as_str)
+            .enumerate()
         {
-            if a.strip_prefix(id).is_some_and(|r| r.starts_with('.')) {
-                named.insert(a.to_string());
+            let on = s["character"][read] == json!(true);
+            if last != Some(on) {
+                out.push(json!({"t": (from + k as i64) * step, "seq": 0, "control": name, "value": u8::from(on), "writer": "physics", "player": 0}));
+                last = Some(on);
             }
         }
     }
-    let mut out = Map::new();
-    for name in named {
-        let Some((body, read)) = name[id.len() + 1..].rsplit_once('.') else {
-            continue;
-        };
-        if !w.bodies.contains_key(body) {
-            continue;
-        }
-        let field = match read {
-            "position" => "pos",
-            "velocity" => "linear",
-            _ => {
-                let what = format!(
-                    "the reading {read} isn't baked for a column by this host yet; #2248 brings it"
-                );
-                return Err(json!({"code": "physics.unsupported", "path": name, "what": what}));
-            }
-        };
-        let (mut prev, mut steps) = (Vec::new(), Vec::new());
-        for (k, state) in bodies[body].as_array().into_iter().flatten().enumerate() {
-            let now = vec![state[field].clone()];
-            let ranges = changed(&prev, &now);
-            if !ranges.is_empty() {
-                steps.push(json!({"step": k, "changed": ranges, "values": [[0, now]]}));
-            }
-            prev = now;
-        }
-        let baked = json!({"type": "vec3", "count": 1, "every": step_flicks(w), "linear": false, "steps": steps});
-        out.insert(name, baked);
-    }
-    Ok(out)
 }
+
+#[cfg(test)]
+use deep_play::worlds::readings;
+use deep_play::worlds::refused;
 
 /// A world a scene lists, its reading and each body's pose at a time.
 pub(crate) type Posed = (String, World, Vec<(String, ([f64; 3], [f64; 4]))>);
@@ -210,109 +180,120 @@ pub(crate) fn poses_at(form: &Value, t: i64) -> Result<Vec<Posed>, Value> {
 }
 
 impl Hub<'_> {
-    /// Each world `form` lists under `worlds`, baked over the transport's span in its scene: its
-    /// occurrence list, each row stamped with its step's time, written through the core's column
-    /// view into `occurrences` (`<world ID>.occurrences`), and its outputs' channels into
-    /// `channels`. A world or a scene the physics module refuses is the revision's issue. Each
-    /// world takes the entries it derives from the core's input track `track` and the entries
-    /// canvas modules fire (#522); a world input on a module the build lacks is `module_missing`.
+    /// Each world `form` lists under `worlds`, baked over the transport's span in its scene, as
+    /// [`deep_play::worlds::inline`] bakes it, with this build's fired entries and plants.
     pub(crate) fn inline_worlds(
         &self,
         form: &mut Value,
         track: &[Value],
     ) -> Result<(), Box<Issue>> {
-        let Some(worlds) = form.get("worlds").and_then(Value::as_object).cloned() else {
-            return Ok(());
+        let root = &self.scenario.evidence;
+        let host = deep_play::worlds::Host {
+            fired: &derive::fired,
+            modules_first: derive::MODULES_FIRST,
+            whole_transform: self.planted(crate::hub::Planted::Physics(Planted::WholeTransform)),
+            assets: Some(&|sha| crate::evidence::read(root, sha)),
         };
+        deep_play::worlds::inline(&self.startup.sealed, form, track, &host)
+    }
+
+    /// #2457: `form` as the physics module reads it, which reads no store: with the mesh assets
+    /// its worlds' soft volumes are built from, read from the evidence store.
+    fn sourced<'a>(&self, form: &'a Value) -> std::borrow::Cow<'a, Value> {
+        let root = &self.scenario.evidence;
+        let mut out =
+            deep_physics_rapier::source::sourced(form, &|sha| crate::evidence::read(root, sha));
+        // #189's test builds: each world as if its document declared its gravity times this.
+        if let Some(times) = deep_physics_rapier::GRAVITY_TIMES {
+            for w in out.to_mut()["worlds"]
+                .as_object_mut()
+                .into_iter()
+                .flat_map(|m| m.values_mut())
+            {
+                for g in w["gravity"].as_array_mut().into_iter().flatten() {
+                    *g = json!(g.as_f64().unwrap_or(0.0) * times);
+                }
+            }
+        }
+        out
+    }
+
+    /// #182: the values a logic item's reads of a world's character readings take,
+    /// `<world ID>.<body ID>.<read>` of `names`, as logic track entries: each world baked over the
+    /// transport's span on the core input track `core`, and each reading's value (1 or 0) after
+    /// every step that changes it, at the step's time, from the state the bake left before any step.
+    /// A logic step reads the last value recorded before its own time.
+    pub(crate) fn logic_readings(
+        &self,
+        form: &Value,
+        core: &[Value],
+        names: &[String],
+    ) -> Result<Vec<Value>, Box<Issue>> {
+        Ok(self.world_runs(form, core, names)?.0)
+    }
+
+    /// [`Hub::logic_readings`], with each world's bake as a save keeps it (#189): its checkpoints,
+    /// their states included, and its step's length.
+    pub(crate) fn world_runs(
+        &self,
+        form: &Value,
+        core: &[Value],
+        names: &[String],
+    ) -> Result<(Vec<Value>, Vec<saves::Baked>), Box<Issue>> {
+        let mut baked = Vec::new();
+        let sourced = self.sourced(form);
+        let form = &*sourced;
+        let mut out = Vec::new();
         let span = deep_canvas_media::doc::time(form, form.pointer("/transport/span"))
             .unwrap_or(0)
             .max(0);
-        let rate = form
-            .pointer("/transport/frame_rate")
-            .cloned()
-            .unwrap_or(json!([60, 1]));
-        let Ok((_, frame)) = deep_canvas_physics::bake::frame_rate(&rate) else {
-            return Ok(());
-        };
-        let frames: Vec<i64> = (0..)
-            .map(|f: i64| f * frame)
-            .take_while(|t| *t <= span)
-            .collect();
         let run = Run::new(None).expect("the unplanted runner");
-        // The core input track: the caller's, else the one the form carries (#525: a document's
-        // recorded track, or the one a mixdown's replay sets).
-        let own: Vec<Value> = form
-            .get("track")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        let core = if track.is_empty() { &own[..] } else { track };
-        let (mut lists, mut channels, mut arrays) = (Map::new(), Map::new(), Map::new());
-        let whole = self.planted(crate::hub::Planted::Physics(Planted::WholeTransform));
-        for (id, doc) in &worlds {
-            let w = deep_physics_rapier::bound::expand(Some(form), doc);
-            let w = w.and_then(|d| check(&d, &RAPIER3D, &deep_canvas_physics::roles::TABLE));
-            // #524: a skin off its soft body's lattice is the world's refusal too.
-            let w = w.and_then(|w| match deep_canvas_physics::skin::check(&w, form) {
-                e if e.is_empty() => Ok(w),
-                e => Err(e),
-            });
-            let w = w.map_err(|e| {
-                refused(
-                    id,
-                    json!(e
-                        .iter()
-                        .map(|r| json!({"code": r.code, "path": r.path, "what": r.what}))
-                        .collect::<Vec<_>>()),
-                )
-            })?;
-            let held = |m: &str| self.startup.sealed.modules.iter().any(|x| x.name == m);
-            if let Some(i) = derive::missing(id, &w, held) {
-                return Err(Box::new(i));
+        let mut by_world: std::collections::BTreeMap<&str, Vec<(&str, &str, &str)>> =
+            Default::default();
+        for n in names {
+            let mut parts = n.splitn(3, '.');
+            if let (Some(w), Some(b), Some(r)) = (parts.next(), parts.next(), parts.next()) {
+                by_world.entry(w).or_default().push((n.as_str(), b, r));
             }
-            let kept = derive::kept(form, &w, core).map_err(|r| {
+        }
+        for (id, reads) in by_world {
+            let Some(doc) = form.pointer(&format!("/worlds/{id}")) else {
+                continue;
+            };
+            let w = deep_physics_rapier::bound::expand(Some(form), doc)
+                .and_then(|d| check(&d, &RAPIER3D, &deep_canvas_physics::roles::TABLE))
+                .map_err(|e| {
+                    refused(
+                        id,
+                        json!(e
+                            .iter()
+                            .map(|r| json!({"code": r.code, "path": r.path, "what": r.what}))
+                            .collect::<Vec<_>>()),
+                    )
+                })?;
+            let kept = derive::kept(form, id, &w, core).map_err(|r| {
                 refused(
                     id,
                     json!([{"code": r.code, "path": r.path, "what": r.what}]),
                 )
             })?;
             let step = step_flicks(&w);
-            // #525: over its own span; its inputs the ones the core input track derives (#522).
             let steps = crate::stepped::steps_of(form, doc, span, step);
-            let call = json!({"call": "bake", "scene": form, "world": id, "steps": steps, "frame_rate": rate,
-                              "track": derive::track_of(&kept)});
+            let bodies: Vec<&str> = reads.iter().map(|r| r.1).collect();
+            let call = json!({"call": "bake", "scene": form, "world": id, "steps": steps, "read": bodies,
+                              "track": derive::track_of(&kept), "checkpoints": true});
             let reply = run.answer(&call).unwrap_or(Value::Null);
             if reply["ok"] != json!(true) {
                 return Err(Box::new(refused(id, reply)));
             }
-            let rows = reply["occurrences"].as_array().cloned().unwrap_or_default();
-            lists.insert(format!("{id}.occurrences"), json!(timed(&rows, &w)));
-            output_channels(id, &w, &reply["bodies"], &frames, whole, &mut channels)
-                .map_err(|e| refused(id, e))?;
-            arrays.extend(readings(form, id, &w, &reply["bodies"]).map_err(|e| refused(id, e))?);
-            arrays.extend(written::arrays(id, &w, form, &reply["bodies"]));
-            arrays.extend(deep_canvas_physics::skin::arrays(
-                id,
-                &w,
-                &reply["particles"],
-            ));
+            character_reads(&reply, &reads, step, 0, &mut out);
+            baked.push(saves::Baked {
+                id: id.to_string(),
+                step,
+                checkpoints: reply["checkpoints"].as_array().cloned().unwrap_or_default(),
+            });
         }
-        let entries = self.startup.sealed.registry(deep_canvas::columns::REGISTRY);
-        let entries = entries.map_or(&[][..], |r| r.entries.as_slice());
-        if let Some(i) = deep_canvas::columns::lists(form, entries, lists)
-            .into_iter()
-            .next()
-        {
-            return Err(Box::new(i));
-        }
-        if let Some(doc) = form.as_object_mut() {
-            for (key, add) in [("channels", channels), ("arrays", arrays)] {
-                if let Some(all) = doc.entry(key).or_insert_with(|| json!({})).as_object_mut() {
-                    all.extend(add);
-                }
-            }
-        }
-        Ok(())
+        Ok((out, baked))
     }
 
     /// `physics_bake` (#522): the bake of world `b.world` of the document `b.doc` presents, over
@@ -325,13 +306,10 @@ impl Hub<'_> {
     /// The bake `physics_bake` answers; with `bodies`, also every body's state after each step
     /// and the occurrences (#540's `world`).
     pub(crate) fn physics_bake_read(&self, b: &Bake, bodies: bool) -> Value {
-        let Some(doc) = self
-            .sessions
-            .get(&b.doc)
-            .and_then(|s| s.document().cloned())
-        else {
+        let Some(doc) = self.sessions.get(&b.doc).and_then(|s| s.document()) else {
             return json!({"ok": false, "code": "no_revision"});
         };
+        let doc = self.sourced(doc).into_owned();
         let Some(world) = doc.pointer(&format!("/worlds/{}", b.world)) else {
             return json!({"ok": false, "code": "ref_unresolved", "path": format!("worlds/{}", b.world)});
         };
@@ -364,7 +342,7 @@ impl Hub<'_> {
         } else {
             &b.track[..]
         };
-        let kept = match derive::kept(&doc, &w, core) {
+        let kept = match derive::kept(&doc, &b.world, &w, core) {
             Ok(k) => k,
             Err(r) => return json!({"ok": false, "code": r.code, "path": r.path, "what": r.what}),
         };
@@ -385,6 +363,99 @@ impl Hub<'_> {
         if bodies {
             out["bodies"] = reply["bodies"].clone();
             out["occurrences"] = reply["occurrences"].clone();
+        }
+        out
+    }
+
+    /// #1040: `form` with its worlds and logic items baked on its own track as an export bakes
+    /// them (programs not yet inlined), kept by the form's hash so each played form of a page's
+    /// listing bakes once however many times its rest, key and frame ask.
+    pub(crate) fn baked_once(&self, form: &Value) -> Option<Value> {
+        use std::cell::RefCell;
+        use std::collections::HashMap;
+        thread_local! {
+            static BAKED: RefCell<HashMap<String, Option<Value>>> = RefCell::new(HashMap::new());
+        }
+        let key = deep_canvas::canon::sha256_hex(form.to_string().as_bytes());
+        if let Some(hit) = BAKED.with(|b| b.borrow().get(&key).cloned()) {
+            return hit;
+        }
+        let mut out = form.clone();
+        let track = form["track"].as_array().cloned().unwrap_or_default();
+        let baked = self
+            .inline_occurrences(&mut out, &track)
+            .is_ok()
+            .then_some(out);
+        BAKED.with(|b| b.borrow_mut().insert(key, baked.clone()));
+        baked
+    }
+
+    /// #1040: `form` as its frames move, for a playable page's rest: its worlds and logic items
+    /// baked on its own track as an export bakes them, each world output a channel keyed at every
+    /// frame, with each run of equal keys cut to its two ends and the last run to its first key.
+    /// That draws the same frames, so a body at rest moves nothing and one still moving keeps its
+    /// play from resting.
+    pub(crate) fn settled(&self, form: &Value) -> Value {
+        let Some(mut out) = self.baked_once(form) else {
+            return form.clone();
+        };
+        let channels = out["channels"].as_object_mut().into_iter().flatten();
+        for (_, c) in channels.filter(|(name, _)| name.starts_with("physics-")) {
+            let mut keys: Vec<(i64, Value)> = (c["keys"].as_object().into_iter().flatten())
+                .filter_map(|(_, k)| {
+                    let f = k["t"].as_str()?.strip_suffix('f')?.parse().ok()?;
+                    Some((f, k.clone()))
+                })
+                .collect();
+            keys.sort_by_key(|(f, _)| *f);
+            let value = |i: usize| keys.get(i).map(|(_, k)| &k["value"]);
+            let last_change = (1..keys.len()).rev().find(|&i| value(i) != value(i - 1));
+            let kept: serde_json::Map<String, Value> = (keys.iter().enumerate())
+                .filter(|&(i, _)| {
+                    let (before, after) = (i.checked_sub(1).and_then(value), value(i + 1));
+                    let inside = before == value(i) && after == value(i);
+                    !inside && i <= last_change.unwrap_or(0)
+                })
+                .map(|(_, (f, k))| (format!("f{f}"), k.clone()))
+                .collect();
+            c["keys"] = Value::Object(kept);
+        }
+        out
+    }
+
+    /// #1040: each world of `form` as a play of it on its own track leaves it at `t`, as a row of
+    /// the core's carried-state list (a bake row, which no session holds): the world's step hash
+    /// there, from the bake `physics_bake` runs. A playable page keys its states by these too, so
+    /// two plays that leave a body moving where another rests stay two states.
+    pub(crate) fn world_rows(&self, form: &Value, t: i64) -> Vec<CarriedState> {
+        let sourced = self.sourced(form);
+        let form = &*sourced;
+        let rate = (form.pointer("/transport/frame_rate").cloned()).unwrap_or(json!([60, 1]));
+        let track = form.get("track").and_then(Value::as_array);
+        let track = track.cloned().unwrap_or_default();
+        let mut out = Vec::new();
+        for (id, world) in form["worlds"].as_object().into_iter().flatten() {
+            let w = deep_physics_rapier::bound::expand(Some(form), world)
+                .and_then(|d| check(&d, &RAPIER3D, &deep_canvas_physics::roles::TABLE));
+            let Some(kept) = w
+                .ok()
+                .and_then(|w| Some((derive::kept(form, id, &w, &track).ok()?, w)))
+            else {
+                continue;
+            };
+            let k = t / step_flicks(&kept.1).max(1);
+            let call = json!({"call": "bake", "scene": form, "world": id, "steps": k + 1,
+                              "frame_rate": rate, "track": derive::track_of(&kept.0), "read": []});
+            let run = Run::new(None).expect("the unplanted runner");
+            let reply = run.answer(&call).unwrap_or(Value::Null);
+            if let Some(hash) = reply["step_hashes"].get(k as usize).and_then(Value::as_str) {
+                out.push(CarriedState {
+                    module: "physics".into(),
+                    kind: "bake".into(),
+                    key: id.clone(),
+                    hash: hash.into(),
+                });
+            }
         }
         out
     }

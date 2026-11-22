@@ -1,0 +1,9 @@
+{
+  "issue": 1592,
+  "criterion": "AC4",
+  "verdict": null,
+  "who": null,
+  "when": null,
+  "files": {},
+  "note": "No call recorded yet. A person fills this in once, on the contact sheet one check run of shown.test.ts wrote to $DA1592_SCREENS: verdict looks_right or looks_wrong, who, when, and files with each file's name and SHA-256, run.json among them."
+}

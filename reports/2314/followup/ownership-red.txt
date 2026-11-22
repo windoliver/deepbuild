@@ -1,0 +1,36 @@
+
+ RUN  v5.0.5 <repo>
+
+ ❯ packages/supervisor/src/check-host.test.ts (2 tests | 1 failed | 1 skipped) 21848ms
+   × a rejected duplicate run never becomes this check's cleanup target 14949ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/supervisor/src/check-host.test.ts > a rejected duplicate run never becomes this check's cleanup target
+AssertionError: a run this scope never started must survive its cleanup
+
+false !== true
+
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ packages/supervisor/src/check-host.test.ts:57:12
+     55|     await assert.rejects(scope.host.start(launch), /already started/);
+     56|     await scope.close();
+     57|     assert.equal(await supervisor.lives(launch.run), true, 'a run this…
+       |            ^
+     58|   } finally { await supervisor.cleanup(launch.run); await supervisor.c…
+     59| }, 60_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 skipped (2)
+   Start at  17:14:35
+   Duration  31.08s (tests 77%, transform 19%, import 2%, setup 2%)
+

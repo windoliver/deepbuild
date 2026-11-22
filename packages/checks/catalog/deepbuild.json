@@ -1,0 +1,34 @@
+{
+  "id": "deepbuild/catalog",
+  "version": "1.0.0",
+  "digest": "d1:e04f5cfcd033b1df23bc324c475fed10c3ea5772102123371e5c2f2c13752323",
+  "checks": [
+    "catalog.refs",
+    "catalog.reach",
+    "catalog.economy",
+    "catalog.bounds",
+    "catalog.copy",
+    "scenario.reach",
+    "catalog.dominance"
+  ],
+  "codes": [
+    "catalog.ref_missing",
+    "catalog.unreachable",
+    "catalog.gain_cycle",
+    "catalog.out_of_range",
+    "catalog.copy_missing",
+    "scenario.unreachable",
+    "catalog.dominant",
+    "catalog.unpaired"
+  ],
+  "access": {
+    "words": [
+      "canvas"
+    ]
+  },
+  "requires": {
+    "preview": [
+      "deep.canvas.play"
+    ]
+  }
+}

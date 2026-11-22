@@ -1,0 +1,206 @@
+# #1838 acceptance tests: the run on the base (58d3e19e) and on the planted wrong program
+
+Node v24.22.0, macOS, a Mac15,12 (M3, 16 GB, 8 cores): a reference Mac, under other sessions' load.
+Paths: the checkout reads <checkout>, temporary folders <tmp>, home ~.
+
+## affected.test.mjs and before.test.mjs on the base
+
+$ node --test tests/acceptance/1838/affected.test.mjs tests/acceptance/1838/before.test.mjs
+ 1:55  up 6 days, 18:57, 4 users, load averages: 10.06 9.79 8.88
+✔ #1838.241106cb affected.mjs on a change that deletes a test file plans no run for it, runs the test the change leaves, and ends with its verdict line (6343.361375ms)
+✖ #1838.737ec09d in the before lane, a test that fails on the merge base at its assertion, with a line `at /tmp/x.js:1:1` inside its assertion message, is proven at that assertion (7926.562333ms)
+✖ #1838.737ec09d in the before lane, a parent test whose subtests are each proven reads proven (0.479875ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 1
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8023.017583
+
+✖ failing tests:
+
+test at tests/acceptance/1838/before.test.mjs:67:1
+✖ #1838.737ec09d in the before lane, a test that fails on the merge base at its assertion, with a line `at /tmp/x.js:1:1` inside its assertion message, is proven at that assertion (7926.562333ms)
+  AssertionError [ERR_ASSERTION]: tests/acceptance/9838/message.test.mjs › #9838.958cbcfd adds two numbers is not proven
+  exit 1
+  stdout:
+  | FAIL before: tests/acceptance/9838/message.test.mjs › #9838.958cbcfd adds two numbers: failed on the base before its assertion (AssertionError [ERR_ASSERTION]: add(2, 3) is not 5)
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | PASS before: tests/acceptance/9838/parent.test.mjs › #9838.bb5a70b7 sums and halves › adds: failed on the merge base at its assertion
+  | PASS before: tests/acceptance/9838/parent.test.mjs › #9838.bb5a70b7 sums and halves › halves: failed on the merge base at its assertion
+  | FAIL before: tests/acceptance/9838/parent.test.mjs › #9838.bb5a70b7 sums and halves: failed on the base before its assertion (Error [ERR_TEST_FAILURE]: 2 subtests failed)
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | proof: wall time 6.5 s
+  | 
+  stderr:
+  | 
+      at proven (file://<checkout>/tests/acceptance/1838/before.test.mjs:64:36)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1838/before.test.mjs:69:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAIL before: tests/acceptance/9838/message.test.mjs › #9838.958cbcfd adds two numbers: failed on the base before its assertion (AssertionError [ERR_ASSERTION]: add(2, 3) is not 5)',
+    expected: /^PASS before: /,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1838/before.test.mjs:73:1
+✖ #1838.737ec09d in the before lane, a parent test whose subtests are each proven reads proven (0.479875ms)
+  AssertionError [ERR_ASSERTION]: tests/acceptance/9838/parent.test.mjs › #9838.bb5a70b7 sums and halves is not proven
+  exit 1
+  stdout:
+  | FAIL before: tests/acceptance/9838/message.test.mjs › #9838.958cbcfd adds two numbers: failed on the base before its assertion (AssertionError [ERR_ASSERTION]: add(2, 3) is not 5)
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | PASS before: tests/acceptance/9838/parent.test.mjs › #9838.bb5a70b7 sums and halves › adds: failed on the merge base at its assertion
+  | PASS before: tests/acceptance/9838/parent.test.mjs › #9838.bb5a70b7 sums and halves › halves: failed on the merge base at its assertion
+  | FAIL before: tests/acceptance/9838/parent.test.mjs › #9838.bb5a70b7 sums and halves: failed on the base before its assertion (Error [ERR_TEST_FAILURE]: 2 subtests failed)
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | proof: wall time 6.5 s
+  | 
+  stderr:
+  | 
+      at proven (file://<checkout>/tests/acceptance/1838/before.test.mjs:64:36)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1838/before.test.mjs:76:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAIL before: tests/acceptance/9838/parent.test.mjs › #9838.bb5a70b7 sums and halves: failed on the base before its assertion (Error [ERR_TEST_FAILURE]: 2 subtests failed)',
+    expected: /^PASS before: /,
+    operator: 'match',
+    diff: 'simple'
+  }
+exit 1
+
+affected.test.mjs (#1838.241106cb) PASSES on the base: #2249 (afaaa2a8e) already leaves a deleted test out of the
+run. The base ends with 'PASS affected: 0 new, ... 1 passed'. Its wrong program is the twin, below.
+Both before.test.mjs tests (#1838.737ec09d) fail at their assertion: on the base the message test and the parent
+each read 'FAIL before: ... failed on the base before its assertion', while both subtests read PASS.
+
+## affected.test.mjs on the twin reads-deleted-test (the base's affected.mjs without the existsSync filter)
+
+$ node --test tests/acceptance/1838/affected.test.mjs   # in a copy of the checkout with twins/reads-deleted-test/scripts laid over scripts/
+✖ #1838.241106cb affected.mjs on a change that deletes a test file plans no run for it, runs the test the change leaves, and ends with its verdict line (2119.6035ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2206.765917
+
+✖ failing tests:
+
+test at tests/acceptance/1838/affected.test.mjs:25:1
+✖ #1838.241106cb affected.mjs on a change that deletes a test file plans no run for it, runs the test the change leaves, and ends with its verdict line (2119.6035ms)
+  AssertionError [ERR_ASSERTION]: affected.mjs read a file the change deleted
+  exit 1
+  stdout:
+  | 
+  stderr:
+  | node:fs:483
+  |     return binding.readFileUtf8(path, stringToFlags(options.flag));
+  |                    ^
+  | 
+  | Error: ENOENT: no such file or directory, open '<tmp>/deep-1838-iJENXf/tree/tests/one.test.mjs'
+  |     at readFileSync (node:fs:483:20)
+  |     at plan (file://<tmp>/deep-1838-iJENXf/tree/scripts/affected.mjs:283:200)
+  |     at main (file://<tmp>/deep-1838-iJENXf/tree/scripts/affected.mjs:463:67)
+  |     at file://<tmp>/deep-1838-iJENXf/tree/scripts/affected.mjs:608:82 {
+  |   errno: -2,
+  |   code: 'ENOENT',
+  |   syscall: 'open',
+  |   path: '<tmp>/deep-1838-iJENXf/tree/tests/one.test.mjs'
+  | }
+  | 
+  | Node.js v24.22.0
+  | 
+      at TestContext.<anonymous> (file://<twin checkout>/tests/acceptance/1838/affected.test.mjs:28:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: "node:fs:483\n    return binding.readFileUtf8(path, stringToFlags(options.flag));\n                   ^\n\nError: ENOENT: no such file or directory, open '<tmp>/deep-1838-iJENXf/tree/tests/one.test.mjs'\n    at readFileSync (node:fs:483:20)\n    at plan (file://<tmp>/deep-1838-iJENXf/tree/scripts/affected.mjs:283:200)\n    at main (file://<tmp>/deep-1838-iJENXf/tree/scripts/affected.mjs:463:67)\n    at file://<tmp>/deep-1838-iJENXf/tree/scripts/affected.mjs:608:82 {\n  errno: -2,\n  code: 'ENOENT',\n  syscall: 'open',\n  path: '<tmp>/deep-1838-iJENXf/tree/tests/one.test.mjs'\n}\n\nNode.js v24.22.0\n",
+    expected: /ENOENT/,
+    operator: 'doesNotMatch',
+    diff: 'simple'
+  }
+exit 1
+
+## lane568.test.mjs on the base
+
+$ node --test tests/acceptance/1838/lane568.test.mjs   # tried 40 times, 10 s apart
+﹣ #1838.25e8bbd8 tests/acceptance/568/lane.test.mjs passes on a fit reference Mac: its planted fingerprint reaches judgeTask, so every one of its tests passes (0.701416ms) # INCONCLUSIVE: not a fit reference Mac (the one-minute load 12.6 is above the 8 cores); this is not a pass
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 93.084959
+ 2:01  up 6 days, 19:03, 4 users, load averages: 11.69 12.38 10.56
+attempts 40
+
+The load stayed above the 8 cores for the whole window, so the test skipped INCONCLUSIVE (never PASS) and did not
+reach 568's suite. The suite it runs, run directly on the base a few minutes earlier at load 5.88 (below the cores),
+fails 3 of its 5 tests. Each prints the real machine's fingerprint (Mac15,12, thermal state fair), not the planted
+one, because judgeTask calls benchmark.mjs's own fingerprint():
+
+$ node --test tests/acceptance/568/lane.test.mjs
+✖ every result perf prints records the whole fingerprint, the macOS build included, on and off the reference Mac (1164.417625ms)
+✖ on the reference Mac, a task within its limits passes on five runs taken after an unmeasured warm-up (2035.513167ms)
+✖ on the reference Mac, a task over its limit in all five runs by more than the margin fails the lane (2608.320084ms)
+✔ off the reference Mac, a task within its limits is a reading: INCONCLUSIVE with its five runs, and the lane does not pass (2381.025333ms)
+✔ off the reference Mac, a task over its limit is a reading too: INCONCLUSIVE, never FAIL (5364.234458ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 2
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 13605.419625
+
+✖ failing tests:
+
+test at tests/acceptance/568/lane.test.mjs:21:1
+✖ every result perf prints records the whole fingerprint, the macOS build included, on and off the reference Mac (1164.417625ms)
+  AssertionError [ERR_ASSERTION]: quick records the fingerprint it ran under (Mac15,7): {"task":"quick","baseCommit":"6915317a209d5ab2acec5fc4ffd3cf39428cd5ec","status":"INITIAL","reason":"Fixture first measurement.","current":{"p50Ms":8.904166999999973,"p95Ms":9.698750000000018,"peakBytes":2113536,"samples":20,"instructions":[23370686,23434408,23471243,23440296,23377712,23415936,23426946,23423578,23506875,23308754,23399005,23292703,23398648,23492138,23412471,23576049,23295943,23417127,23333653,23421822],"uncounted":[],"qos":[1105200,0,0,0,682201,0,0]},"base":null,"counter":"/usr/bin/time -l and scripts/count-children.c: instructions retired, children included","fingerprint":{"model":"Mac15,12","chip":"Apple M3","memoryBytes":17179869184,"power":"ac","lowPowerMode":false,"thermalState":"fair","macosBuild":"26B131"},"limits":{"p50Ms":{"status":"INCONCLUSIVE","limit":500,"runs":[6.7082079999999,6.019625000000019,6.027584000000047,5.744709000000057,5.776749999999993],"margin":0.05,"reason":"a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): thermal state is \"fair\", not \"nominal\""},"peakBytes":{"status":"INCONCLUSIVE","limit":1000000000,"runs":[2113536,2113536,2113536,2113536,2113536],"margin":0.05,"reason":"a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): thermal state is \"fair\", not \"nominal\""}}}
+  + actual - expected
+  
+    {
+  +   chip: 'Apple M3',
+  -   chip: 'Apple M3 Pro',
+      lowPowerMode: false,
+  +   macosBuild: '26B131',
+  +   memoryBytes: 17179869184,
+  +   model: 'Mac15,12',
+  -   macosBuild: '25G104',
+  -   memoryBytes: 38654705664,
+  -   model: 'Mac15,7',
+      power: 'ac',
+  +   thermalState: 'fair'
+  -   thermalState: 'nominal'
+    }
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/568/lane.test.mjs:27:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+(… the rest of the dump is cut)
+
+To be rerun at load <= 8: lane568.test.mjs is then expected to fail on the base at its 'fails' assertion.

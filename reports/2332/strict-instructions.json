@@ -1,0 +1,1583 @@
+{
+  "base": "031292bf15c0b9a32260413793f3b2d17e87115b",
+  "candidate": "fdedb13fd7d24d48698e6f48a10147571fb31074",
+  "rounds": [
+    {
+      "change": {
+        "atReady": 3613971212,
+        "settledTotal": 4534636105,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 730115604,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 63540074,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 75210016,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      },
+      "base": {
+        "atReady": 4710957218,
+        "settledTotal": 5651523942,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 774375300,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 67426582,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 74497047,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "base": {
+        "atReady": 4954054034,
+        "settledTotal": 5923228910,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 761566623,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 67761234,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 89387775,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      },
+      "change": {
+        "atReady": 3542322050,
+        "settledTotal": 4415797765,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 729404182,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 64520259,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 70838520,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "change": {
+        "atReady": 3559696023,
+        "settledTotal": 4490810786,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 729423265,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 65150124,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 72117595,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      },
+      "base": {
+        "atReady": 4948069456,
+        "settledTotal": 6032764465,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 763288174,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 68542524,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 88300691,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "base": {
+        "atReady": 4933312020,
+        "settledTotal": 5877151319,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 774698547,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 71239253,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 82991460,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      },
+      "change": {
+        "atReady": 3635527281,
+        "settledTotal": 4472928422,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 735755967,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 64917209,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 70975016,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "change": {
+        "atReady": 3604252018,
+        "settledTotal": 4499944046,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 735244094,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 78914219,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 78633880,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      },
+      "base": {
+        "atReady": 5004438261,
+        "settledTotal": 5932617536,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 767508284,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 67160066,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 74004414,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "base": {
+        "atReady": 4875267171,
+        "settledTotal": 5842322453,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 765099491,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 67144071,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 74995268,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      },
+      "change": {
+        "atReady": 3631799764,
+        "settledTotal": 4464262549,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 729297985,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 64530708,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 71063770,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "change": {
+        "atReady": 3575567671,
+        "settledTotal": 4458816744,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 738540864,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 67326404,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 79902457,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      },
+      "base": {
+        "atReady": 5052925752,
+        "settledTotal": 6050128015,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 789691141,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 74199955,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 95696153,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "base": {
+        "atReady": 4985991779,
+        "settledTotal": 6000921463,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 773878170,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 77187636,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 107240808,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      },
+      "change": {
+        "atReady": 3592389064,
+        "settledTotal": 4523375821,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 730160290,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 66860705,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 71425410,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "change": {
+        "atReady": 3563722964,
+        "settledTotal": 4385259223,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 735718759,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 65647676,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 71575573,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      },
+      "base": {
+        "atReady": 4967358314,
+        "settledTotal": 5933068201,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 764453431,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 68110751,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 90642171,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "base": {
+        "atReady": 4824694984,
+        "settledTotal": 5782957086,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 768622918,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 66253743,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 83067507,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      },
+      "change": {
+        "atReady": 3610436288,
+        "settledTotal": 4502545483,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 730822017,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 66047294,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 70852310,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "change": {
+        "atReady": 3576625173,
+        "settledTotal": 4437661215,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 731909830,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 64950433,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 71204770,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      },
+      "base": {
+        "atReady": 4927279021,
+        "settledTotal": 5875284257,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 760098883,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 70218650,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 91363781,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "base": {
+        "atReady": 4887657632,
+        "settledTotal": 5851176713,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 755866531,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 70108140,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 75708155,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      },
+      "change": {
+        "atReady": 3616132385,
+        "settledTotal": 4467216473,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 732116896,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 66065072,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 73155439,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "change": {
+        "atReady": 3547293499,
+        "settledTotal": 4434398460,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 734273775,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 65184235,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 77630921,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      },
+      "base": {
+        "atReady": 4911537293,
+        "settledTotal": 5859082381,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 757076708,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 69492643,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 76314204,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "base": {
+        "atReady": 4818676426,
+        "settledTotal": 5740569984,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 762340539,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 69171570,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 75759140,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      },
+      "change": {
+        "atReady": 3597571219,
+        "settledTotal": 4442438405,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 722062334,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 65279979,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 71122771,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "change": {
+        "atReady": 3568454504,
+        "settledTotal": 4405927360,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 728527854,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 66280821,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 72228896,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      },
+      "base": {
+        "atReady": 4886916890,
+        "settledTotal": 5817813861,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 770617525,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 70407666,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 76874077,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "base": {
+        "atReady": 4851114669,
+        "settledTotal": 5830971214,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 779978283,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 67882584,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 93279575,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      },
+      "change": {
+        "atReady": 3642931602,
+        "settledTotal": 4464894328,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 733059846,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 64445194,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 77646925,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "change": {
+        "atReady": 3569193743,
+        "settledTotal": 4477051587,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 737935807,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 65302227,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 78456900,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      },
+      "base": {
+        "atReady": 5033438928,
+        "settledTotal": 5975206087,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 775370870,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 70932651,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 83564848,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "base": {
+        "atReady": 4986805298,
+        "settledTotal": 5922143728,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 770412875,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 67064013,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 83396559,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      },
+      "change": {
+        "atReady": 3588485510,
+        "settledTotal": 4764489005,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 731310878,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 67170681,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 87741324,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "change": {
+        "atReady": 3574315763,
+        "settledTotal": 4559065471,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 723426798,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 70383068,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 87580078,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      },
+      "base": {
+        "atReady": 4974628855,
+        "settledTotal": 6117280452,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 762295810,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 67076455,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 75701958,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "base": {
+        "atReady": 4762026799,
+        "settledTotal": 5730578835,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 767538577,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 69128847,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 73320169,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      },
+      "change": {
+        "atReady": 3594190841,
+        "settledTotal": 4493162117,
+        "readySettled": true,
+        "steps": [
+          {
+            "event": "SessionStart",
+            "instructions": 734826752,
+            "settled": true
+          },
+          {
+            "event": "UserPromptSubmit",
+            "instructions": 65082892,
+            "settled": true
+          },
+          {
+            "event": "PreToolUse",
+            "instructions": 78341642,
+            "settled": true
+          }
+        ],
+        "replies": [
+          0,
+          0,
+          0
+        ]
+      }
+    }
+  ],
+  "verdicts": {
+    "ready": {
+      "status": "PASS",
+      "threshold": 0.75,
+      "pairs": 20,
+      "medianRatio": 0.7240596583345364,
+      "pAbove": 1,
+      "pBelow": 9.999000099990002e-05,
+      "seed": 2332,
+      "counts": [
+        {
+          "change": 3613971212,
+          "base": 4710957218
+        },
+        {
+          "change": 3542322050,
+          "base": 4954054034
+        },
+        {
+          "change": 3559696023,
+          "base": 4948069456
+        },
+        {
+          "change": 3635527281,
+          "base": 4933312020
+        },
+        {
+          "change": 3604252018,
+          "base": 5004438261
+        },
+        {
+          "change": 3631799764,
+          "base": 4875267171
+        },
+        {
+          "change": 3575567671,
+          "base": 5052925752
+        },
+        {
+          "change": 3592389064,
+          "base": 4985991779
+        },
+        {
+          "change": 3563722964,
+          "base": 4967358314
+        },
+        {
+          "change": 3610436288,
+          "base": 4824694984
+        },
+        {
+          "change": 3576625173,
+          "base": 4927279021
+        },
+        {
+          "change": 3616132385,
+          "base": 4887657632
+        },
+        {
+          "change": 3547293499,
+          "base": 4911537293
+        },
+        {
+          "change": 3597571219,
+          "base": 4818676426
+        },
+        {
+          "change": 3568454504,
+          "base": 4886916890
+        },
+        {
+          "change": 3642931602,
+          "base": 4851114669
+        },
+        {
+          "change": 3569193743,
+          "base": 5033438928
+        },
+        {
+          "change": 3588485510,
+          "base": 4986805298
+        },
+        {
+          "change": 3574315763,
+          "base": 4974628855
+        },
+        {
+          "change": 3594190841,
+          "base": 4762026799
+        }
+      ]
+    },
+    "sessionStart": {
+      "status": "PASS",
+      "threshold": 1,
+      "pairs": 20,
+      "medianRatio": 0.9512698816589025,
+      "pAbove": 1,
+      "pBelow": 9.999000099990002e-05,
+      "seed": 2332,
+      "counts": [
+        {
+          "change": 730115604,
+          "base": 774375300
+        },
+        {
+          "change": 729404182,
+          "base": 761566623
+        },
+        {
+          "change": 729423265,
+          "base": 763288174
+        },
+        {
+          "change": 735755967,
+          "base": 774698547
+        },
+        {
+          "change": 735244094,
+          "base": 767508284
+        },
+        {
+          "change": 729297985,
+          "base": 765099491
+        },
+        {
+          "change": 738540864,
+          "base": 789691141
+        },
+        {
+          "change": 730160290,
+          "base": 773878170
+        },
+        {
+          "change": 735718759,
+          "base": 764453431
+        },
+        {
+          "change": 730822017,
+          "base": 768622918
+        },
+        {
+          "change": 731909830,
+          "base": 760098883
+        },
+        {
+          "change": 732116896,
+          "base": 755866531
+        },
+        {
+          "change": 734273775,
+          "base": 757076708
+        },
+        {
+          "change": 722062334,
+          "base": 762340539
+        },
+        {
+          "change": 728527854,
+          "base": 770617525
+        },
+        {
+          "change": 733059846,
+          "base": 779978283
+        },
+        {
+          "change": 737935807,
+          "base": 775370870
+        },
+        {
+          "change": 731310878,
+          "base": 770412875
+        },
+        {
+          "change": 723426798,
+          "base": 762295810
+        },
+        {
+          "change": 734826752,
+          "base": 767538577
+        }
+      ]
+    },
+    "prompt": {
+      "status": "PASS",
+      "threshold": 1,
+      "pairs": 20,
+      "medianRatio": 0.9430497158103622,
+      "pAbove": 0.9972002799720028,
+      "pBelow": 0.0028997100289971,
+      "seed": 2332,
+      "counts": [
+        {
+          "change": 63540074,
+          "base": 67426582
+        },
+        {
+          "change": 64520259,
+          "base": 67761234
+        },
+        {
+          "change": 65150124,
+          "base": 68542524
+        },
+        {
+          "change": 64917209,
+          "base": 71239253
+        },
+        {
+          "change": 78914219,
+          "base": 67160066
+        },
+        {
+          "change": 64530708,
+          "base": 67144071
+        },
+        {
+          "change": 67326404,
+          "base": 74199955
+        },
+        {
+          "change": 66860705,
+          "base": 77187636
+        },
+        {
+          "change": 65647676,
+          "base": 68110751
+        },
+        {
+          "change": 66047294,
+          "base": 66253743
+        },
+        {
+          "change": 64950433,
+          "base": 70218650
+        },
+        {
+          "change": 66065072,
+          "base": 70108140
+        },
+        {
+          "change": 65184235,
+          "base": 69492643
+        },
+        {
+          "change": 65279979,
+          "base": 69171570
+        },
+        {
+          "change": 66280821,
+          "base": 70407666
+        },
+        {
+          "change": 64445194,
+          "base": 67882584
+        },
+        {
+          "change": 65302227,
+          "base": 70932651
+        },
+        {
+          "change": 67170681,
+          "base": 67064013
+        },
+        {
+          "change": 70383068,
+          "base": 67076455
+        },
+        {
+          "change": 65082892,
+          "base": 69128847
+        }
+      ]
+    },
+    "preToolUse": {
+      "status": "PASS",
+      "threshold": 1,
+      "pairs": 20,
+      "medianRatio": 0.9388378171962082,
+      "pAbove": 0.9974002599740026,
+      "pBelow": 0.0026997300269973002,
+      "seed": 2332,
+      "counts": [
+        {
+          "change": 75210016,
+          "base": 74497047
+        },
+        {
+          "change": 70838520,
+          "base": 89387775
+        },
+        {
+          "change": 72117595,
+          "base": 88300691
+        },
+        {
+          "change": 70975016,
+          "base": 82991460
+        },
+        {
+          "change": 78633880,
+          "base": 74004414
+        },
+        {
+          "change": 71063770,
+          "base": 74995268
+        },
+        {
+          "change": 79902457,
+          "base": 95696153
+        },
+        {
+          "change": 71425410,
+          "base": 107240808
+        },
+        {
+          "change": 71575573,
+          "base": 90642171
+        },
+        {
+          "change": 70852310,
+          "base": 83067507
+        },
+        {
+          "change": 71204770,
+          "base": 91363781
+        },
+        {
+          "change": 73155439,
+          "base": 75708155
+        },
+        {
+          "change": 77630921,
+          "base": 76314204
+        },
+        {
+          "change": 71122771,
+          "base": 75759140
+        },
+        {
+          "change": 72228896,
+          "base": 76874077
+        },
+        {
+          "change": 77646925,
+          "base": 93279575
+        },
+        {
+          "change": 78456900,
+          "base": 83564848
+        },
+        {
+          "change": 87741324,
+          "base": 83396559
+        },
+        {
+          "change": 87580078,
+          "base": 75701958
+        },
+        {
+          "change": 78341642,
+          "base": 73320169
+        }
+      ]
+    },
+    "settledTotal": {
+      "status": "PASS",
+      "threshold": 1,
+      "pairs": 20,
+      "medianRatio": 0.7579128510394588,
+      "pAbove": 1,
+      "pBelow": 9.999000099990002e-05,
+      "seed": 2332,
+      "counts": [
+        {
+          "change": 4534636105,
+          "base": 5651523942
+        },
+        {
+          "change": 4415797765,
+          "base": 5923228910
+        },
+        {
+          "change": 4490810786,
+          "base": 6032764465
+        },
+        {
+          "change": 4472928422,
+          "base": 5877151319
+        },
+        {
+          "change": 4499944046,
+          "base": 5932617536
+        },
+        {
+          "change": 4464262549,
+          "base": 5842322453
+        },
+        {
+          "change": 4458816744,
+          "base": 6050128015
+        },
+        {
+          "change": 4523375821,
+          "base": 6000921463
+        },
+        {
+          "change": 4385259223,
+          "base": 5933068201
+        },
+        {
+          "change": 4502545483,
+          "base": 5782957086
+        },
+        {
+          "change": 4437661215,
+          "base": 5875284257
+        },
+        {
+          "change": 4467216473,
+          "base": 5851176713
+        },
+        {
+          "change": 4434398460,
+          "base": 5859082381
+        },
+        {
+          "change": 4442438405,
+          "base": 5740569984
+        },
+        {
+          "change": 4405927360,
+          "base": 5817813861
+        },
+        {
+          "change": 4464894328,
+          "base": 5830971214
+        },
+        {
+          "change": 4477051587,
+          "base": 5975206087
+        },
+        {
+          "change": 4764489005,
+          "base": 5922143728
+        },
+        {
+          "change": 4559065471,
+          "base": 6117280452
+        },
+        {
+          "change": 4493162117,
+          "base": 5730578835
+        }
+      ]
+    }
+  }
+}

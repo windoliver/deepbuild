@@ -26,6 +26,26 @@ impl Printing {
     pub fn inked(&self) -> BTreeSet<String> {
         self.inks.iter().flatten().cloned().collect()
     }
+
+    /// The finish pass's uniforms for this frame at `size`.
+    fn params(&self, size: [u32; 2]) -> deep_scene3d_render::print::Params {
+        deep_scene3d_render::print::params(
+            &self.print,
+            &self.frame,
+            size,
+            self.placed,
+            self.ground,
+            false,
+            self.planted,
+        )
+    }
+
+    /// #1619: the SHA-256 of what the finish pass is given for this frame beside its pixels:
+    /// its uniforms, which hold every value it draws a 2D frame from (its masks serve a 3D
+    /// frame's IDs alone).
+    pub fn finish_hash(&self, size: [u32; 2]) -> String {
+        crate::frames::hex(bytemuck::bytes_of(&self.params(size)))
+    }
 }
 
 /// The role an item's paint names, its fill's or else its stroke's.
@@ -151,15 +171,7 @@ impl Stage {
         format: wgpu::TextureFormat,
         linear: bool,
     ) {
-        let params = deep_scene3d_render::print::params(
-            &printing.print,
-            &printing.frame,
-            self.size,
-            printing.placed,
-            printing.ground,
-            false,
-            printing.planted,
-        );
+        let params = printing.params(self.size);
         let covs = Coverage::Textures(
             self.covs
                 .iter()
@@ -225,32 +237,7 @@ pub(crate) fn read_f32(
     )
 }
 
-/// A mapped buffer's rows, each `width` bytes of a `row`-byte stride.
-pub(crate) fn map_rows(
-    device: &deep_gpu::counted::Wgpu,
-    buffer: &wgpu::Buffer,
-    row: usize,
-    width: usize,
-    rows: usize,
-) -> Result<Vec<u8>, String> {
-    let (tx, rx) = std::sync::mpsc::channel();
-    buffer.slice(..).map_async(wgpu::MapMode::Read, move |r| {
-        let _ = tx.send(r);
-    });
-    let _ = device.poll(wgpu::PollType::wait_indefinitely());
-    if !matches!(rx.recv(), Ok(Ok(()))) {
-        return Err("the read back didn't map".into());
-    }
-    let data = buffer
-        .slice(..)
-        .get_mapped_range()
-        .map_err(|_| "the read back didn't map".to_string())?;
-    let mut out = Vec::with_capacity(width * rows);
-    for y in 0..rows {
-        out.extend_from_slice(&data[y * row..y * row + width]);
-    }
-    Ok(out)
-}
+pub(crate) use deep_groups_render::read::map_rows;
 
 /// A look's print fields for a 2D frame at document time `t`, or `None` when it prints nothing.
 #[allow(clippy::too_many_arguments)]
@@ -282,6 +269,15 @@ pub(crate) fn printing(
                 frame.flicker = 1.0 + w.flicker * (2.0 * print::unit(now, seed, 0x11) - 1.0);
             }
         }
+        Some(crate::Planted::TrackingWallTime)
+            if print.screen.is_some_and(|s| s.tracking.is_some()) =>
+        {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.subsec_nanos());
+            frame.tracking_step = now;
+            frame.tracking = print::unit(now, frame.tracking_seed, 0x81);
+        }
         _ => {}
     }
     Ok(Some(Printing {
@@ -292,6 +288,7 @@ pub(crate) fn printing(
         ground,
         planted: Planted {
             vignette_pixels: planted == Some(crate::Planted::VignettePixels),
+            convergence_angle_ignored: planted == Some(crate::Planted::ConvergenceAngleIgnored),
         },
     }))
 }

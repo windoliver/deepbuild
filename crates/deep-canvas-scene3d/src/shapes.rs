@@ -3,7 +3,7 @@
 //! item on and `distribute` projects onto, so the contact one of them makes is the contact the
 //! audit finds.
 
-use deep_canvas::geometry_audit::{Shape, V3};
+use deep_canvas::geometry_audit::{Joint, Shape, V3};
 use deep_canvas::ops::sqrt;
 use serde_json::Value;
 
@@ -70,9 +70,117 @@ fn terrain(item: &Value, m: &Affine3) -> Result<Option<Shape>, String> {
     ))))
 }
 
+/// #1636: a capsule chain a piece carries itself, `{"points": [p], "radii": [one per span]}` in
+/// its own space, placed by `m`; none for a piece that reads its item's path (a tube's, a coil's).
+fn chain(c: &Value, m: &Affine3, scale: f64) -> Option<Vec<Shape>> {
+    let points: Vec<V3> = c
+        .get("points")?
+        .as_array()?
+        .iter()
+        .map(v3)
+        .collect::<Option<_>>()?;
+    let radii = c.get("radii")?.as_array()?;
+    if points.len() < 2 || radii.len() + 1 != points.len() {
+        return None;
+    }
+    let placed: Vec<V3> = points.iter().map(|q| apply(m, *q)).collect();
+    Some(
+        placed
+            .windows(2)
+            .zip(radii)
+            .map(|(w, r)| Shape::Capsule {
+                a: w[0],
+                b: w[1],
+                r: r.as_f64().unwrap_or(0.0) * scale,
+            })
+            .collect(),
+    )
+}
+
+/// #1636: how near their fork, in the parent's radius there, a fork's branches may meet.
+const FORK_ZONE: f64 = 1.5;
+
+/// #1636: a builder's pieces that are solids of their own (a tree's capsule chain per branch,
+/// `{"capsules": {"branch", "points", "radii"}}`) placed by `m`: each piece's ID `<id>#<branch>`,
+/// its capsules and its joints. Each fork the mesh lists (`outputs.forks`: `{parent, children}`)
+/// joins its parent and its children, two by two, within 1.5 times the parent's last ring's radius
+/// of that ring's centre (the mean of its vertices, and their mean distance from it). Empty for a
+/// mesh none of whose pieces names a branch.
+pub fn pieces(
+    id: &str,
+    mesh: &crate::geom::Mesh,
+    m: &Affine3,
+) -> Vec<(String, Vec<Shape>, Vec<Joint>)> {
+    let scale = (0..3).map(|j| norm(column(m, j))).fold(0.0, f64::max);
+    let mut out: Vec<(String, Vec<Shape>, Vec<Joint>)> = mesh
+        .true_shape
+        .iter()
+        .filter_map(|piece| {
+            let c = piece.get("capsules")?;
+            let branch = c.get("branch")?.as_str()?;
+            Some((format!("{id}#{branch}"), chain(c, m, scale)?, Vec::new()))
+        })
+        .collect();
+    let rows = mesh.outputs.get("branches").and_then(Value::as_array);
+    let last_ring = |branch: &str| -> Option<(V3, f64)> {
+        let row = rows?
+            .iter()
+            .find(|b| b.get("id").and_then(Value::as_str) == Some(branch))?;
+        let ring: Vec<V3> = row
+            .get("rings")?
+            .as_array()?
+            .last()?
+            .get("vertices")?
+            .as_array()?
+            .iter()
+            .map(|i| {
+                mesh.positions
+                    .get(usize::try_from(i.as_u64()?).ok()?)
+                    .copied()
+            })
+            .collect::<Option<_>>()?;
+        let n = ring.len() as f64;
+        let c: V3 = std::array::from_fn(|k| ring.iter().map(|p| p[k]).sum::<f64>() / n);
+        let r = ring
+            .iter()
+            .map(|p| norm([p[0] - c[0], p[1] - c[1], p[2] - c[2]]))
+            .sum::<f64>()
+            / n;
+        Some((c, r))
+    };
+    let forks = mesh.outputs.get("forks").and_then(Value::as_array);
+    for fork in forks.into_iter().flatten() {
+        let Some(parent) = fork.get("parent").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some((c, r)) = last_ring(parent) else {
+            continue;
+        };
+        let kin: Vec<String> = std::iter::once(parent)
+            .chain(
+                fork.get("children")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str),
+            )
+            .map(|b| format!("{id}#{b}"))
+            .collect();
+        let at = apply(m, c);
+        for (solid, _, joints) in out.iter_mut().filter(|(s, _, _)| kin.contains(s)) {
+            joints.extend(kin.iter().filter(|k| *k != solid).map(|k| Joint {
+                with: k.clone(),
+                at,
+                r: FORK_ZONE * r * scale,
+            }));
+        }
+    }
+    out
+}
+
 /// A part's true shape from its builder's pieces (`true_shape`, in its own space) placed by `m`:
-/// a sphere, a box, capsules along its path (whose first and last points are its ends), or the
-/// box around its mesh where nothing simpler is exact.
+/// a sphere, a box, capsules along its path (whose first and last points are its ends) or along
+/// the chain it carries, or the box around its mesh where nothing simpler is exact.
 pub fn built(
     doc: &Value,
     item: &Value,
@@ -97,6 +205,10 @@ pub fn built(
             continue;
         }
         if let Some(c) = piece.get("capsules") {
+            if let Some(chain) = chain(c, m, scale) {
+                shapes.extend(chain);
+                continue;
+            }
             let r = c.get("radius").and_then(Value::as_f64).unwrap_or(0.0) * scale;
             let path = crate::builders::path(doc, item.pointer("/params/path"));
             if let Some(p) = path.filter(|p| p.points.len() > 1) {

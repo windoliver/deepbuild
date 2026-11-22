@@ -77,7 +77,7 @@ struct Stub {
 }
 
 struct Args {
-    look: Look3,
+    look: crate::flat::CallLook,
     /// #462: the looks the fixtures' shots and regions name.
     looks: BTreeMap<String, crate::regions::Named>,
     writer: String,
@@ -117,9 +117,10 @@ impl Screen {
     #[cfg(target_os = "macos")]
     fn open(app: &App, size: [u32; 2]) -> Result<Screen, Value> {
         let gpu = app.worker.call(|state| state.gpu.clone());
-        let instance = gpu.seam().map(|c| c.instance.clone()).ok_or_else(|| {
-            refused("unsupported_platform", "the noop backend has no display")
-        })?;
+        let instance = gpu
+            .seam()
+            .map(|c| c.instance.clone())
+            .ok_or_else(|| refused("unsupported_platform", "the noop backend has no display"))?;
         let layer = deep_app::hdr_layer::ScreenLayer::main(&instance)
             .map_err(|e| refused("unsupported_platform", e))?;
         // Configured here, the surface asks the display for EDR before the headroom is read, so
@@ -212,6 +213,7 @@ fn parse(call: &Value) -> Result<Args, Value> {
         ));
     };
     let look = Look3::read(&call["look"]).map_err(|e| bad(&format!("look: {e}")))?;
+    let look = crate::flat::CallLook::of(look, call);
     let looks = crate::regions::looks_of(call, None)?;
     let separate = match call.get("separate_items") {
         None => None,
@@ -345,7 +347,7 @@ struct Played {
 /// The check of `path` as the writer's revision, with its warm-up.
 fn checked(
     path: &PathBuf,
-    args_look: &Look3,
+    args_look: &crate::flat::CallLook,
     writer: &str,
     size: Option<[u32; 2]>,
     labels: &mut Labels,
@@ -638,10 +640,12 @@ fn play(
             let t = (k as f64 * FLICKS_PER_SECOND / rate).round() as i64;
             // #177: the frame through the main display's HDR surface, beside every other pass.
             let hdr = screen.and_then(|s| Some((s.frame()?, s.headroom)));
-            view.hdr = hdr.as_ref().map(|(t, headroom)| deep_scene3d_render::HdrFrame {
-                into: t.texture.create_view(&Default::default()),
-                headroom: *headroom,
-            });
+            view.hdr = hdr
+                .as_ref()
+                .map(|(t, headroom)| deep_scene3d_render::HdrFrame {
+                    into: t.texture.create_view(&Default::default()),
+                    headroom: *headroom,
+                });
             let (cpu, resolved) = draw(device, &kit, &args.look, &mut view, t, labels, &mut timer)?;
             if timed {
                 played.timed_frames += 1;
@@ -1135,83 +1139,8 @@ fn first_frame_wait(app: &App, out: &str, args: &Args, call: &Value) -> Result<V
     }
 }
 
-/// `envelope_opens`, the fresh process's half of the first frame wait: the scene checked and
-/// opened, closed, then checked and opened again, each timed from the start of its check to its
-/// first presented frame.
-pub fn opens(app: &mut App, call: &Value) -> Value {
-    let (Some(writer), Some(doc), Some(size)) = (
-        call["writer"].as_str().map(str::to_string),
-        call["doc"].as_str().map(PathBuf::from),
-        pair(&call["pixels"]),
-    ) else {
-        return bad("envelope_opens is {look, writer, doc, pixels}");
-    };
-    let look = match Look3::read(&call["look"]) {
-        Ok(l) => l,
-        Err(e) => return bad(&format!("look: {e}")),
-    };
-    let looks = match crate::regions::looks_of(call, None) {
-        Ok(l) => l,
-        Err(e) => return e,
-    };
-    let delay = match test_only(call, "stub_pipeline_delay_ms") {
-        Ok(d) => d.and_then(Value::as_u64),
-        Err(e) => return e,
-    };
-    let planted = app.planted;
-    app.worker.call(move |state| {
-        let device = match state.gpu.recover() {
-            Ok(d) => d,
-            Err(e) => return refused("no_device", e),
-        };
-        let plants = Plants::of(planted);
-        let mut labels = Labels::new();
-        if let Some(ms) = delay {
-            device.device.delay_next_pipeline(ms);
-        }
-        let mut opens = Vec::new();
-        for open in ["fresh", "same_process"] {
-            let mut start = (Instant::now(), device.device.counts().read());
-            let result = (|| {
-                let (_, a) = checked(
-                    &doc,
-                    &look,
-                    &writer,
-                    Some(size),
-                    &mut labels,
-                    &plants,
-                    planted,
-                )?;
-                let mut kit = Kit::new(&device);
-                let mut view = opened(
-                    &device,
-                    &mut kit,
-                    &look,
-                    &looks,
-                    a,
-                    &mut labels,
-                    &plants,
-                    planted,
-                )?;
-                // The planted meter starts its clock once the check's warm-up is done.
-                if planted == Some(Planted::WaitClockAfterWarmup) {
-                    start = (Instant::now(), device.device.counts().read());
-                }
-                let mut timer = Timer::new(&device);
-                draw(&device, &kit, &look, &mut view, 0, &mut labels, &mut timer)
-            })();
-            if let Err(e) = result {
-                return e;
-            }
-            let made: Reading = device.device.counts().read().since(start.1);
-            opens.push(
-                json!({"open": open, "ms": start.0.elapsed().as_secs_f64() * 1e3,
-                              "pipelines": made.pipelines}),
-            );
-        }
-        json!({"opens": opens})
-    })
-}
+mod opens;
+pub use opens::*;
 
 /// This process's peak resident memory, in bytes.
 fn peak_rss() -> Option<f64> {
@@ -1381,6 +1310,10 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
         h["potential_headroom"] = json!(potential);
         h["headroom"] = json!(current);
     }
+    // #1431: the process's footprint as the runs left it, beside the gauges.
+    if reply.get("verdict").is_some() {
+        reply["footprint"] = deep_gpu::footprint::read(deep_gpu::footprint::SYSTEM).json();
+    }
     reply
 }
 
@@ -1396,7 +1329,7 @@ pub fn counts(app: &mut App, call: &Value) -> Value {
         return bad("envelope_counts is {look, writer, doc, render: {seconds, pixels}}");
     };
     let look = match Look3::read(&call["look"]) {
-        Ok(l) => l,
+        Ok(l) => crate::flat::CallLook::of(l, call),
         Err(e) => return bad(&format!("look: {e}")),
     };
     let looks = match crate::regions::looks_of(call, None) {

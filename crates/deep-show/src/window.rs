@@ -53,8 +53,22 @@ enum Entry {
         panel: [f64; 4],
         name: Option<String>,
         button: Option<[f64; 4]>,
+        /// #552: the app's own Join prompt over the panel while no one has clicked Join: its
+        /// words (a piece that reads `match.me` adds the courtesy line) and its button.
+        join: Option<(String, [f64; 4])>,
     },
     Card,
+}
+
+/// The Join prompt's widest card, in points.
+const JOIN_WIDTH: f32 = 520.;
+
+/// The Join prompt's words as the window lays them out in its card.
+fn join_label(text: &str) -> Label {
+    Label {
+        width: Some(JOIN_WIDTH - 32.),
+        ..Label::new(text.to_string())
+    }
 }
 
 struct Scene {
@@ -75,6 +89,16 @@ impl Scene {
                 _ => None,
             })
             .collect();
+        for e in &self.entries {
+            if let Entry::Layer {
+                join: Some((text, _)),
+                ..
+            } = e
+            {
+                out.push(join_label(text));
+                out.push(Label::new(String::from("Join")));
+            }
+        }
         if let Some((question, options, _)) = &self.card {
             out.push(Label {
                 weight: 600,
@@ -97,6 +121,7 @@ fn paint_entry(scene: &Scene, entry: &Entry, window: &mut Window) {
             panel,
             name,
             button,
+            join,
         } => {
             let panel = bounds(*panel);
             window.with_content_mask(Some(ContentMask { bounds: panel }), |w| {
@@ -126,6 +151,9 @@ fn paint_entry(scene: &Scene, entry: &Entry, window: &mut Window) {
                 }
                 if let Some(b) = button {
                     full_screen_button(scene, bounds(*b), w);
+                }
+                if let Some((text, b)) = join {
+                    join_prompt(scene, text, *b, w);
                 }
             });
         }
@@ -180,6 +208,41 @@ fn paint_entry(scene: &Scene, entry: &Entry, window: &mut Window) {
             }
         }
     }
+}
+
+/// #552: the Join prompt the app draws over a panel, never the piece: a ground card of its words
+/// above its Join button, both outlined in ink.
+fn join_prompt(scene: &Scene, text: &str, b: [f64; 4], window: &mut Window) {
+    let words = join_label(text);
+    let height = f32::from(deep_text_gpui::measure(&words).height) + 32.;
+    let centre = (b[0] + b[2] / 2.) as f32;
+    let card = Bounds {
+        origin: point(px(centre - JOIN_WIDTH / 2.), px(b[1] as f32 - 12. - height)),
+        size: size(px(JOIN_WIDTH), px(height)),
+    };
+    for (r, radius) in [(card, 8.), (bounds(b), 6.)] {
+        window.paint_quad(quad(
+            r,
+            px(radius),
+            hsla(scene.ground),
+            px(1.),
+            hsla(scene.ink),
+            BorderStyle::Solid,
+        ));
+    }
+    deep_text_gpui::paint_label(
+        card.origin + point(px(16.), px(16.)),
+        &words,
+        hsla(scene.ink),
+        window,
+    );
+    let join = Label {
+        weight: 600,
+        ..Label::new(String::from("Join"))
+    };
+    let w = f32::from(deep_text_gpui::measure(&join).width);
+    let at = point(px(centre - w / 2.), px(b[1] as f32 + 8.));
+    deep_text_gpui::paint_label(at, &join, hsla(scene.ink), window);
 }
 
 /// The full-screen button (#383): a ground square outlined in muted, four ink corner ticks.
@@ -300,6 +363,29 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
         } else {
             None
         };
+        // #552: a copy `match` put on the panel draws through its own match.me, as it stood
+        // after the match's last step; a shared piece no match has put there draws this copy
+        // played alone, its logic baked on its own track.
+        let shown = hub.scopes.get(&panel_id).and_then(|s| s.join.shown.clone());
+        let mut alone = || {
+            let net = deep_net::Config::of(&Value::Object(stamped.clone())).is_some();
+            let track = hub.track_json(doc);
+            net.then(|| hub.copy_form(doc, &track, &Value::Null).ok())
+                .flatten()
+        };
+        let (stamped, t) = match shown.or_else(|| alone().map(|f| (f, t))) {
+            Some((Value::Object(form), at)) => (form, at),
+            _ => (stamped, t),
+        };
+        // #552: the app's own Join prompt, in window points, while no one has clicked Join.
+        let prompt = hub.join_prompt(&panel_id);
+        let join = (prompt["state"] == "open").then(|| {
+            let b: Vec<f64> = (prompt["button"].as_array().into_iter().flatten())
+                .filter_map(Value::as_f64)
+                .collect();
+            let text = prompt["text"].as_str().unwrap_or_default().to_string();
+            (text, [panel[0] + b[0], panel[1] + b[1], b[2], b[3]])
+        });
         let rgba = if deep_canvas_scene3d::scene::has_3d(&Value::Object(stamped.clone())) {
             // A 3D writer layer draws natively on the GPU (#378), its frame scaled to fit the
             // panel from the top left as a 2D layer's is.
@@ -334,6 +420,8 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
                     hub.pointer_over(&form, t, &mut drawn, drawn_size);
                 }
             }
+            // #1217: the panel's measure, the viewer's own, over its frame.
+            hub.measure_over(&panel_id, &scene, &mut drawn, drawn_size);
             let (pw, dw) = (usize::from(size[0]) * 4, usize::from(drawn_size[0]) * 4);
             let mut rgba = vec![0u8; pw * usize::from(size[1])];
             for (y, line) in drawn.chunks_exact(dw).enumerate() {
@@ -399,6 +487,7 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
                 panel,
                 name,
                 button,
+                join,
             },
         ));
     }

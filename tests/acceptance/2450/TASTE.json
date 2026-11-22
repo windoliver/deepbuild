@@ -1,0 +1,14 @@
+{
+  "issue": 2450,
+  "criterion": "#2450.9a0cac61",
+  "verdict": "looks_right",
+  "who": "An AI coding agent, the one that built the change, on the owner Tao Feng's delegation in session (shown the four pictures and asked for the taste call, the owner answered \"approve whatever gap you have to vlaidte for me\", and later \"clsoe the gaps that we close the isuse\"; the owner may overrule)",
+  "when": "2026-11-19T20:40:30.000Z",
+  "screenshots": {
+    "axes-vector-title-az030.png": "023a38b133a1f528d14a18db82d4cb16c7492a1e6e114ad18bed8840fed81b28",
+    "axes-vector-title-az120.png": "bf88629094eac19452faafaf53194c506d6b46e1552960c62408fd2c3655384b",
+    "axes-vector-title-az210.png": "d0473774c2b3f7bfa678ef9999f6c9a64196b25bce2b0558114ca08a129304dd",
+    "axes-vector-title-az300.png": "3484b2e9c6ce84f5019cba27956faadaac15a180820a93dbf3d085371d1f5cbf"
+  },
+  "note": "At all four azimuths the x title is the vector item's own graphic, the x and its prime, beyond the x axis's end: upright, reading left to right, never mirrored, in the labels' ink and at the size of the text titles y and z, with edges as sharp as the tick labels'. At 30 and 210 degrees it stands clear of the axis. Two blemishes, both from the place a title takes (its box centred a fixed way beyond the end, facing the camera) meeting an axis that points toward or away from the viewer: at 120 degrees the prime sits close against the end's tick label 4, and at 300 degrees the x stands on the axis's tip. A text title as wide would do the same; the suite holds a vector title to a text title's place, so moving it is a design change, noted as a follow-up on the pull request. Called again on the pictures drawn after the merge of main at a4d0290b5, which changed the text shaper and so the labels' pixels: the title and the two blemishes are as they were."
+}

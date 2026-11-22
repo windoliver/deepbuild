@@ -4,7 +4,7 @@
 // replaying it. An event's ID is its identity; its `seq` is its order within its session; its `log_pos`
 // is its position in the log, assigned here at append inside the commit that writes it.
 import { ulid } from '@deepbuild/record/ids';
-import { closeSync, copyFileSync, existsSync, fsyncSync, openSync, renameSync, rmSync } from 'node:fs';
+import { closeSync, copyFileSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
 import Database from 'better-sqlite3';
 import { canonicalize, listSchemas, registry, sha256Hex } from '@deepbuild/contracts';
@@ -102,8 +102,12 @@ export interface RecordStore {
   append(connection: Connection, event: EventInput, receipt?: Receipt): Promise<Appended>;
   /** A write's outcome on its receipt, the receipt kept alone when no event carried it (#1577). */
   keepReceipt(receipt: Receipt, outcome: JsonValue): Promise<void>;
-  /** Events after a log position, in log order; `kinds`: only those kinds, the rest never decoded. */
-  read(query: { after: number; limit?: number; kinds?: readonly string[] }): Promise<Event[]>;
+  /**
+   * Events after a log position, in log order; `kinds`: only those kinds, the rest never decoded. Each kind is sought
+   * through the kind index, which suits a few rare kinds; `most` says the kinds are most of the log, so it is walked in
+   * order and each event's kind tested, where seeking them would sort every later event of theirs for each page (#2646).
+   */
+  read(query: { after: number; limit?: number; kinds?: readonly string[]; most?: boolean }): Promise<Event[]>;
   table(name: string): Promise<Table>;
   session(id: string): Promise<SessionView | undefined>;
   rebuild(): Promise<void>;
@@ -111,6 +115,11 @@ export interface RecordStore {
   sync(): Promise<void>;
   /** One read-only SELECT; each `?` in it takes the next of `params`, bound, never written into the text. */
   raw(sql: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
+  /**
+   * raw's SELECT, a row at a time as the caller takes each, so no row it has passed is held (#2652). Nothing else reads
+   * or writes the record until the last is taken or the caller's loop ends.
+   */
+  rows(sql: string, params?: readonly (string | number | bigint | null)[]): Iterable<unknown>;
   /** What a session reads at its start, and, for the rules you typed, at its next prompt (#62). */
   startSlice(session: string): Promise<SliceEntry[]>;
   /**
@@ -180,7 +189,19 @@ const SCHEMA_VERSION = 1;
 const REPLAY_PAGE = 5000;
 /** The kinds that record a decision: only the core appends them, and each commits FULL, in its own commit. */
 const CORE_ONLY = new Set(['verdict.made', 'verdict.stale', 'workspace.created', 'workspace.moved', 'state.read', 'work.read', 'work.delivery', 'definition.locked', 'definition.revised', 'definition.stood_in', 'definition.checked', 'decision.created', 'decision.applied', 'decision.revoked', 'decision.overruled', 'ask.answered', 'ask.defaulted', 'default.undone', 'deadline.moved',
-  'spend.approved', 'spend.reserved', 'spend.charged', 'spend.asked', 'card_rule.set', 'claim.progress']);
+  'approval.held', 'approval.started', 'approval.withdrawn', 'spend.approved', 'spend.reserved', 'spend.charged', 'spend.asked', 'card_rule.set', 'claim.progress']);
+/**
+ * The evidence an event's data names by hash beside its own list (#1410): a verdict's run output, an answer's image or
+ * the page it approved, a lock's approved bytes, a workspace's readings. Synced before a FULL commit as what its own
+ * list names is, but not cited by it, so retention treats it as before. A hash the store doesn't hold has nothing to sync.
+ */
+function namedIn(value: unknown): string[] {
+  if (typeof value === 'string') return SHA256.test(value) ? [value] : [];
+  if (Array.isArray(value)) return value.flatMap(namedIn);
+  return isObj(value) ? Object.values(value).flatMap(namedIn) : [];
+}
+const SHA256 = /^[0-9a-f]{64}$/;
+
 /** The evidence store's own events: only the core, which runs the store, appends them; they stream. */
 const STORE_ONLY = new Set(['evidence.stored', 'evidence.removed']);
 /** The core's check of a learned change: only the core appends it, in the change's own batch. */
@@ -222,6 +243,7 @@ CREATE TABLE IF NOT EXISTS events (
   unverified  INTEGER NOT NULL DEFAULT 0
 ) STRICT;
 CREATE INDEX IF NOT EXISTS events_session ON events (session_id, log_pos);
+CREATE INDEX IF NOT EXISTS events_session_bounds ON events (session_id, log_pos) WHERE kind IN ('session.start', 'session.end');
 CREATE INDEX IF NOT EXISTS events_kind ON events (kind, log_pos);
 CREATE TRIGGER IF NOT EXISTS events_no_update BEFORE UPDATE ON events BEGIN SELECT RAISE(ABORT, 'events is append-only: no UPDATE'); END;
 CREATE TRIGGER IF NOT EXISTS events_no_delete BEFORE DELETE ON events BEGIN SELECT RAISE(ABORT, 'events is append-only: no DELETE'); END;
@@ -242,7 +264,7 @@ function versionsOf(entries: readonly SchemaEntry[], into: Map<string, number[]>
   }
   return into;
 }
-/** The published schemas' versions, read once: they never change in a process, so a record opened again reads none. */
+/** Published versions generated from the schemas at build: one small read, with no work deferred to a hook. */
 let published: ReadonlyMap<string, number[]> | undefined;
 /** A string cut to at most `max` UTF-16 units without splitting a surrogate pair. */
 function cut(text: string, max: number): string {
@@ -281,7 +303,7 @@ class SqliteRecord implements RecordStore {
   private readonly db: Db;
   /** Statements on `events` and `meta`, which no rebuild drops, compiled once: appends run them per event. */
   private readonly statements = new Map<string, Statement<unknown[]>>();
-  /** raw()'s read statements, the READS_KEPT most recently used, compiled once: SQLite recompiles one whose tables a rebuild replaced. */
+  /** raw()'s and rows()' read statements, the READS_KEPT most recently used, compiled once: SQLite recompiles one whose tables a rebuild replaced. */
   private readonly reads = new Map<string, Statement<unknown[]>>();
   private readonly backend: Backend;
   private readonly projector: Projector;
@@ -291,6 +313,8 @@ class SqliteRecord implements RecordStore {
   private readonly evidenceWriter: EvidenceWriter | undefined;
   private readonly queue: Pending[] = [];
   private scheduled = false;
+  /** A FULL commit waiting for the evidence it names to sync: every commit after it waits too, so the log keeps arrival order. */
+  private syncing: Promise<void> | undefined;
   /** The one stop every close waits for, once a close began. */
   private closing: Promise<void> | undefined;
   private inFlight = 0;
@@ -329,7 +353,7 @@ class SqliteRecord implements RecordStore {
     this.stale = this.projector.ensure();
     const extra = options.schemas ?? [];
     this.registry = registry([...listSchemas(), ...extra]);
-    published ??= versionsOf(listSchemas(), new Map());
+    published ??= new Map(JSON.parse(readFileSync(new URL('../dist/versions.json', import.meta.url), 'utf8')) as [string, number[]][]);
     this.versions = versionsOf(extra, new Map(published));
     for (const m of options.migrations ?? []) {
       // Forward only, one step per version, so a replay through them always ends.
@@ -525,7 +549,10 @@ class SqliteRecord implements RecordStore {
         const appended = await run;
         // An archived copy is read as it lands, so an ask placing its plan's targets finds it parsed (#1098).
         if (input.kind === 'transcript.archived' && typeof (input.data as { evidence?: unknown } | undefined)?.evidence === 'string') {
-          await placingTranscript(this.options.evidence, this.placing, (input.data as { evidence: string }).evidence);
+          const sha = (input.data as { evidence: string }).evidence;
+          // A multi-part copy is read on demand. Eagerly parsing every preceding part on each append defeats the
+          // incremental archive and can exceed V8's string limit before the session's event has even returned.
+          if (!(await this.options.evidence?.get(sha))?.parts) await placingTranscript(this.options.evidence, this.placing, sha);
         }
         return appended;
       } finally {
@@ -575,7 +602,11 @@ class SqliteRecord implements RecordStore {
     }
     this.sealed(prepared);
     if (CORE_ONLY.has(input.kind) || this.options.commitEach) {
-      const [outcome] = this.commit([prepared], CORE_ONLY.has(input.kind) || this.resumes([prepared]) ? 'full' : 'normal');
+      while (this.syncing) await this.syncing;
+      const mode = CORE_ONLY.has(input.kind) || this.resumes([prepared]) ? 'full' : 'normal';
+      const synced = this.evidenceSynced([prepared], mode);
+      if (synced) await synced;
+      const [outcome] = this.commit([prepared], mode);
       if (!outcome!.ok) throw outcome!.error;
       return outcome!.appended;
     }
@@ -612,29 +643,59 @@ class SqliteRecord implements RecordStore {
       if (checked && !byRule) this.queue.push({ prepared: checked, resolve: () => undefined, reject: () => undefined });
       if (!this.scheduled) {
         this.scheduled = true;
-        setImmediate(() => this.flush());
+        setImmediate(() => void this.flush());
       }
     });
   }
 
-  /** Commits the queued stream events in one NORMAL batch, each taking its log_pos inside the commit. */
-  private flush(): void {
-    this.scheduled = false;
+  /**
+   * Commits the queued stream events in one NORMAL batch, each taking its log_pos inside the commit. A FULL one waits
+   * for the evidence it names, still scheduled, so a read that settles the queue waits for it too.
+   */
+  private async flush(): Promise<void> {
     const batch = this.queue.splice(0);
-    if (!batch.length) return;
-    let outcomes: Outcome[];
+    let outcomes: Outcome[] = [];
     try {
       const items = batch.map((p) => p.prepared);
-      outcomes = this.commit(items, this.resumes(items) ? 'full' : 'normal');
+      while (this.syncing) await this.syncing;
+      const mode = this.resumes(items) ? 'full' : 'normal';
+      const synced = this.evidenceSynced(items, mode);
+      if (synced) await synced;
+      if (items.length) outcomes = this.commit(items, mode);
     } catch (error) {
       for (const p of batch) p.reject(error as Error);
-      return;
+    } finally {
+      this.scheduled = false;
+      if (this.queue.length) {
+        this.scheduled = true;
+        setImmediate(() => void this.flush());
+      }
     }
     for (const [i, outcome] of outcomes.entries()) {
       const pending = batch[i]!;
       if (outcome.ok) pending.resolve(outcome.appended);
       else pending.reject(outcome.error);
     }
+  }
+
+  /**
+   * Before a commit: the evidence a FULL one names, synced with its folders (#1410), so a commit that survives a power
+   * cut never names a file that didn't. The caller first waits for a FULL commit already waiting, so a later event never
+   * lands first and its own mode is read from the log that commit left. The sync runs off this thread. A record opened without a store holds no files to sync. Undefined
+   * when there is nothing to wait for, so such a commit stays in this turn.
+   */
+  private evidenceSynced(items: readonly Prepared[], mode: Durability): Promise<void> | undefined {
+    const named = mode === 'full' && this.options.evidence ? [...new Set(items.flatMap((p) => [...p.evidence, ...namedIn(p.data)]))] : [];
+    return named.length ? this.syncNamed(items, named) : undefined;
+  }
+  private async syncNamed(items: readonly Prepared[], named: string[]): Promise<void> {
+    const synced = this.options.evidence!.sync(named);
+    const waiting = (this.syncing = synced.then(() => undefined, () => undefined).finally(() => { if (this.syncing === waiting) this.syncing = undefined; }));
+    await synced.catch((error: unknown) => {
+      // Nothing of the commit is in the log, as when the storage refuses it: its sessions have lost events.
+      for (const p of items) if (p.session) this.markLost(p.session);
+      throw new RecordError('storage', `the evidence a FULL commit names could not be synced: ${error instanceof Error ? error.message : String(error)}`);
+    });
   }
 
   /**
@@ -713,8 +774,8 @@ class SqliteRecord implements RecordStore {
 
   // ---- Reads.
 
-  async read({ after, limit = 1000, kinds }: { after: number; limit?: number; kinds?: readonly string[] }): Promise<Event[]> {
-    const only = kinds ? ` AND kind IN (SELECT value FROM json_each(?))` : '';
+  async read({ after, limit = 1000, kinds, most }: { after: number; limit?: number; kinds?: readonly string[]; most?: boolean }): Promise<Event[]> {
+    const only = kinds ? ` AND ${most ? '+' : ''}kind IN (SELECT value FROM json_each(?))` : '';
     const rows = this.stmt(`SELECT * FROM events WHERE log_pos > ?${only} ORDER BY log_pos LIMIT ?`).safeIntegers(true)
       .all(after, ...(kinds ? [JSON.stringify(kinds)] : []), limit) as StoredRow[];
     return rows.map(toEvent);
@@ -793,6 +854,12 @@ class SqliteRecord implements RecordStore {
 
   /** Reads only: a statement that would write, the log's triggers and tables included, is refused. */
   async raw(sql: string, params: readonly (string | number | bigint | null)[] = []): Promise<unknown[]> {
+    return this.reading(sql).all(...params);
+  }
+  rows(sql: string, params: readonly (string | number | bigint | null)[] = []): Iterable<unknown> {
+    return this.reading(sql).iterate(...params);
+  }
+  private reading(sql: string): Statement<unknown[]> {
     // Refused before it is prepared: SQLite runs a PRAGMA while compiling it, so a check after prepare is too late.
     if (!/^\s*(SELECT|WITH)\b/i.test(sql) || /;\s*\S/.test(sql)) throw new RecordError('storage', 'raw SQL reads the record with one SELECT; it never writes it');
     let statement = this.reads.get(sql);
@@ -804,7 +871,7 @@ class SqliteRecord implements RecordStore {
     }
     // Most recently used last, so the oldest goes first.
     this.reads.set(sql, statement);
-    return statement.all(...params);
+    return statement;
   }
 
   async startSlice(session: string): Promise<SliceEntry[]> {
@@ -974,7 +1041,7 @@ export function openRecordReader(options: { path: string; evidence?: EvidenceSto
     sessions: async () => db.prepare('SELECT id, agent, worktree, branch, transcript FROM sessions WHERE transcript IS NOT NULL ORDER BY id').all() as Awaited<ReturnType<RecordReader['sessions']>>,
     findable: async () => [
       ...(db.prepare("SELECT id FROM decisions WHERE state = 'active' ORDER BY created, id").all() as { id: string }[]).map((r) => `decision:${r.id}`),
-      ...(db.prepare("SELECT hash FROM evidence WHERE type NOT IN ('png', 'jpeg', 'mp4') AND kind != 'transcript' ORDER BY hash").all() as { hash: string }[]).map((r) => `ev:${r.hash}`),
+      ...(db.prepare("SELECT hash FROM evidence WHERE type NOT IN ('png', 'jpeg', 'mp4', 'webm') AND kind NOT IN ('transcript', 'transcript-copy') ORDER BY hash").all() as { hash: string }[]).map((r) => `ev:${r.hash}`),
     ],
     findMessages: (terms, sessions) => findMessages(db, terms, sessions, (session) => sessionTranscript(db, options.evidence, transcripts, session)),
     touched: async (file, cwd) => touched(db, file, cwd),

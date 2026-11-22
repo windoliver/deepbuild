@@ -1,5 +1,5 @@
 {
-  "schema": "adapter.facts@4",
+  "schema": "adapter.facts@8",
   "versions": ["0.144.0", "0.160.0", "0.163.0-alpha.10.2", "0.166.0-alpha.5.1"],
   "agent": "codex",
   "hookTimeouts": {
@@ -51,7 +51,7 @@
     }
   },
   "sandbox": {
-    "readBy": "a session DeepBuild starts runs inside the agent's own sandbox (#1330): per version, the config overrides that turn it on (spliced where {sandbox} stands), the walls they hold, how the agent's way out is turned off, and the approval policy each mode takes under it. {filesystem} is a TOML inline table: your home read-only and each credential folder denied. A wall not named here is not held, and a version not listed starts with no sandbox and says so. Checked on 0.166.0-alpha.5.1 (spikes/1330): its trusted hooks run outside the sandbox and reach the hub",
+    "readBy": "a session DeepBuild starts runs inside the agent's own sandbox (#1330): per version, the config overrides that turn it on (spliced where {sandbox} stands), the walls they hold, how the agent's way out is turned off, and the approval policy each mode takes under it. {filesystem} is a TOML inline table: your home read-only, each credential folder denied, and what a commit on the session's own branch writes outside its worktree writable (#1666): the worktree's git folder and the repo's shared objects, refs, packed refs and ref logs. A wall not named here is not held, and a version not listed starts with no sandbox and says so. Checked on 0.166.0-alpha.5.1 (spikes/1330): its trusted hooks run outside the sandbox and reach the hub",
     "conformance": "codex/sandbox/walls",
     "versions": {
       "0.166.0-alpha.5.1": {
@@ -67,7 +67,7 @@
         ],
         "modes": { "on-request": "{granular={sandbox_approval=false,rules=true,mcp_elicitations=true,request_permissions=true,skill_approval=true}}" },
         "walls": {
-          "writes": "a command writes only its worktree and the temp folders, your home read-only: a profile extending :workspace",
+          "writes": "a command writes only its worktree, the temp folders and what a commit on its branch writes, its worktree's git folder and the repo's shared objects, refs and ref logs, each \"write\" in the profile's filesystem; your home, the checkout's files and the rest of its git folder, and every other worktree's git folder stay read-only: a profile extending :workspace",
           "credentials": "a command can't read the credential folders: each one \"deny\" in the profile's filesystem",
           "network": "a command reaches no host at all, the approval's hosts included, since naming hosts needs Codex's network proxy: the profile's network.enabled false; the agent's own API calls run outside its sandbox"
         },
@@ -884,9 +884,9 @@
     }
   },
   "toolKinds": {
-    "readBy": "a tool call's kind (shell, read, edit, write, search, fetch, mcp or unknown, which guards treat as change), by tool name or name prefix",
-    "conformance": "codex/toolKinds/unknown-otherwise",
-    "tools": { "Bash": "shell", "apply_patch": "edit" },
+    "readBy": "a tool call's kind (shell, read, edit, write, search, fetch, mcp or unknown, which guards treat as change), by tool name, then by name prefix; deep_query changes nothing, so it is a read (#1801)",
+    "conformance": "facts/reads-count-as-read",
+    "tools": { "Bash": "shell", "apply_patch": "edit", "mcp__deep__deep_query": "read" },
     "prefixes": { "mcp__": "mcp" },
     "otherwise": "unknown"
   },
@@ -933,6 +933,72 @@
     "name": "o200k_base",
     "package": "gpt-tokenizer",
     "version": "4.0.0"
+  },
+  "toolResult": {
+    "readBy": "a deep_* reply's cap (#2896): deep mcp names its client, and a reply in the text that client receives stays a fifth under each figure here, the rest by next; a refusal a fifth under the error figures' characters and tokens, and within their bytes as Codex receives an error",
+    "conformance": "codex/toolResult/per-version",
+    "tokenizer": { "name": "o200k_base", "package": "gpt-tokenizer", "version": "4.0.0", "readBy": "what a reply's tokens are counted in: Codex's own tokenizer entry, above; the counter is the one packages/hub/src/reply-fit.ts imports, pinned in packages/hub/package.json, so a change here changes that import and pin with it" },
+    "entries": [
+      {
+        "versions": ["0.144.0"],
+        "result": { "tokens": 10000, "bytes": 10000, "past": "cut in the middle: both ends kept, with a marker where the cut is" },
+        "error": { "tokens": 10000, "bytes": 10000, "past": "cut in the middle, as a result is: Codex truncates a tool's output alike whether it failed or not" },
+        "source": "the catalog `codex debug models` prints, as 0.144.0 builds it in (codex-rs/models-manager/models.json at tag rust-v0.144.0, read Nov 19 2026): every model's truncation_policy is {mode: tokens, limit: 10000} but gpt-5.2's, {mode: bytes, limit: 10000}, so both hold"
+      },
+      {
+        "versions": ["0.160.0", "0.163.0-alpha.10.2", "0.166.0-alpha.5.1"],
+        "result": { "tokens": 10000, "past": "cut in the middle: both ends kept, with a marker where the cut is" },
+        "error": { "tokens": 10000, "past": "cut in the middle, as a result is: Codex truncates a tool's output alike whether it failed or not" },
+        "source": "`codex debug models` on 0.160.0, run Nov 19 2026 (its 10 models), and the catalog it prints as each version builds it in (codex-rs/models-manager/models.json at tags rust-v0.160.0, rust-v0.163.0-alpha.10.2 and rust-v0.166.0-alpha.5.1): every model's truncation_policy is {mode: tokens, limit: 10000}"
+      }
+    ]
+  },
+  "ruleLoad": {
+    "readBy": "which rule lines reach a Codex session by Codex's own loading (#1514): the rules page marks a line it says won't, naming Codex and the cause, deep doctor reports the same as rules.not_loaded with the file and the first line lost, the start slice sends such a rule by DeepBuild's own route, and the session facts digest the files it says a session loads; a load the agent reports itself outranks it",
+    "conformance": "rules/load-entry",
+    "entries": [
+      {
+        "versions": ["0.144.0"],
+        "source": "codex-rs/core/src/agents_md.rs at rust-v0.144.0 (read_agents_md: one project_doc_max_bytes budget for the files from the project root down to the session's folder, a file cut where the remaining budget ends and the rest skipped once it is spent, a blank file costing nothing; candidate_filenames: AGENTS.override.md before AGENTS.md, one per folder; no trust check before a load) and codex-rs/config defaults (project_doc_max_bytes = 32768, project_root_markers = [\".git\"]), read Nov 18 2026",
+        "home": { "dir": "~/.codex", "env": "CODEX_HOME" },
+        "walk": { "from": "project", "markers": [".git"], "markersKey": "project_root_markers" },
+        "sets": [{ "name": "agents", "files": ["AGENTS.override.md", "AGENTS.md"], "pick": "first", "moreKey": "project_doc_fallback_filenames" }],
+        "user": { "name": "user", "files": ["~/.codex/AGENTS.override.md", "~/.codex/AGENTS.md"], "pick": "first" },
+        "setting": null,
+        "modes": { "default": { "sets": ["agents"], "user": true } },
+        "cap": { "maxBytes": 32768, "per": "project", "past": "cut", "key": "project_doc_max_bytes", "file": "~/.codex/config.toml" },
+        "memoryIndex": null,
+        "stops": [],
+        "loadEvent": null
+      },
+      {
+        "versions": ["0.160.0", "0.163.0-alpha.10.2", "0.166.0-alpha.5.1"],
+        "source": "codex-rs/core/src/agents_md.rs at rust-v0.160.0, rust-v0.163.0-alpha.10.2 and rust-v0.166.0-alpha.5.1 (load_project_instructions loads no project file when config.active_project.is_untrusted(), a project whose trust_level is \"untrusted\"; read_agents_md and candidate_filenames as at 0.144.0) and codex-rs/config/src/config_toml.rs (DEFAULT_PROJECT_DOC_MAX_BYTES = 32 * 1024), read Nov 18 2026",
+        "home": { "dir": "~/.codex", "env": "CODEX_HOME" },
+        "walk": { "from": "project", "markers": [".git"], "markersKey": "project_root_markers" },
+        "sets": [{ "name": "agents", "files": ["AGENTS.override.md", "AGENTS.md"], "pick": "first", "moreKey": "project_doc_fallback_filenames" }],
+        "user": { "name": "user", "files": ["~/.codex/AGENTS.override.md", "~/.codex/AGENTS.md"], "pick": "first" },
+        "setting": null,
+        "modes": { "default": { "sets": ["agents"], "user": true } },
+        "cap": { "maxBytes": 32768, "per": "project", "past": "cut", "key": "project_doc_max_bytes", "file": "~/.codex/config.toml" },
+        "memoryIndex": null,
+        "stops": [{ "cause": "untrusted", "file": "~/.codex/config.toml", "key": "projects.<root>.trust_level", "value": "untrusted" }],
+        "loadEvent": null
+      }
+    ]
+  },
+  "toolLoading": {
+    "readBy": "what a session holds of DeepBuild's MCP servers at its start is counted the way its client loads them (#2897); a way not read charges neither, and a Codex session's start records no count, since the hub records one only for a Claude Code session whose config loads deepbuild",
+    "conformance": "codex/toolLoading/unread",
+    "entries": [
+      {
+        "versions": ["0.144.0", "0.160.0", "0.163.0-alpha.10.2", "0.166.0-alpha.5.1"],
+        "way": "unread",
+        "instructionsCutChars": null,
+        "mark": null,
+        "source": "not read, Nov 19, 2026: no corpus session of these versions calls a DeepBuild tool, and 0.160.0's desktop-heartbeat calls a tool_search tool for the app's own tools without saying whether it defers an MCP server's (#2897 names Codex 0.170.0's tool search as unread)"
+      }
+    ]
   },
   "entries": {
     "readBy": "where the hub's sync (#148) writes and reads this agent's MCP servers and skills, at user level only, and the fields it refuses; checked against each entry before a plan shows",

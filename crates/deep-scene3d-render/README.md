@@ -14,7 +14,7 @@ scene3d's render module on the GPU layer (#378): each 3D writer layer is a batch
 
 ## What it may import
 
-A render crate on the GPU layer: deep-canvas-scene3d, deep-canvas-effects (a material operator's graph), deep-canvas-marks (the look's print fields) and deep-gpu through their crate roots, plus wgpu, wgpu-profiler and bytemuck. No GPUI and no app crate.
+A render crate on the GPU layer: deep-canvas-scene3d, deep-canvas-effects (a material operator's graph), deep-canvas-marks (the look's print fields) and deep-gpu through their crate roots, plus wgpu, wgpu-profiler, bytemuck and meshopt (a proxy band's mesh, made where a scene is drawn, #2738). No GPUI and no app crate.
 
 ## Deviations
 

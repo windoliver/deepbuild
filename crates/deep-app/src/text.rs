@@ -11,10 +11,34 @@ use std::sync::Arc;
 
 use crate::canvas::record;
 
+/// The look's fallback faces, in its order (#417): what a label names none of draws from, so a caption in Simplified
+/// Chinese (#2403), Arabic or emoji draws its glyphs, not empty boxes.
+fn fallback() -> Vec<&'static str> {
+    static FALLBACK: std::sync::LazyLock<Vec<&'static str>> = std::sync::LazyLock::new(|| {
+        let look = deep_canvas_marks::look::shipped("clean").expect("the clean look ships");
+        look["fallback"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|font| look["fonts"][font.as_str()?]["family"].as_str())
+            .map(|family| &*Box::leak(family.to_owned().into_boxed_str()))
+            .collect()
+    });
+    FALLBACK.clone()
+}
+
 /// A label as a canvas element. Its box is the wider of its text and `widest`, the string a
 /// readout must hold, such as a bound value's widest form, so a readout keeps its place as its
 /// value changes; the text is drawn whole in it.
 pub fn label(id: &str, label: Label, color: Hsla, widest: Option<&str>) -> Canvas<Arc<Shaped>> {
+    let label = if label.fallback.is_empty() {
+        Label {
+            fallback: fallback(),
+            ..label
+        }
+    } else {
+        label
+    };
     let id = id.to_owned();
     let widest = widest.map(str::to_owned);
     let own = measure(&label).width;
@@ -47,19 +71,21 @@ pub fn label(id: &str, label: Label, color: Hsla, widest: Option<&str>) -> Canva
                 .map(Font::name);
             record(
                 &id,
-                json!({
-                    "text": label.text,
-                    "role": role,
-                    "bound": label.bound,
-                    "widest": widest,
-                    "at": [f32::from(bounds.origin.x), f32::from(bounds.origin.y)],
-                    "box": [width, f32::from(height)],
-                    "width": shaped.width,
-                    "lines": shaped.lines,
-                    "ellipsized": shaped.ellipsized,
-                    "sprites": painted.sprites,
-                    "pages": painted.pages.iter().map(|(page, _)| *page).collect::<Vec<_>>(),
-                }),
+                || {
+                    json!({
+                        "text": label.text,
+                        "role": role,
+                        "bound": label.bound,
+                        "widest": widest,
+                        "at": [f32::from(bounds.origin.x), f32::from(bounds.origin.y)],
+                        "box": [width, f32::from(height)],
+                        "width": shaped.width,
+                        "lines": shaped.lines,
+                        "ellipsized": shaped.ellipsized,
+                        "sprites": painted.sprites,
+                        "pages": painted.pages.iter().map(|(page, _)| *page).collect::<Vec<_>>(),
+                    })
+                },
                 bounds,
             );
         },

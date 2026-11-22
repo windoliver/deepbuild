@@ -6,8 +6,9 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { writeJson } from './claude-settings.js';
-import { call, withPrompt, type Reply } from './client.js';
+import { call, failure, notAnswered, Unanswered, withPrompt, type Reply } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { stopAsPeer } from './service.js';
 import { startOf } from './wire.js';
 
 type Obj = Record<string, unknown>;
@@ -24,19 +25,32 @@ export async function confirmed(command: string, detail?: string): Promise<strin
     const reply = await asYou('you.confirm', { command, ...(detail ? { detail } : {}) });
     return 'error' in reply ? reply.error.remediation : undefined;
   } catch (error) {
-    return `${command} changed nothing: no hub answered to ask the OS to confirm you (${error instanceof Error ? error.message : String(error)}). Start it with deep hub start, then run ${command} again.`;
+    return failure(error, hubAddress(null).path);
+  }
+}
+
+/**
+ * The installed hub stopped once the OS confirms you inside the hub (#1865), the stop itself asking, so the prompt
+ * names `command` once. Why it didn't stop, or undefined once its socket goes quiet.
+ */
+export async function stopAsYou(command: 'deep hub stop' | 'deep setup --undo'): Promise<string | undefined> {
+  const path = rootOf(installedRoot()).socket;
+  try {
+    const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
+    const peer = { pid: process.pid, start: (await startOf(process.pid)) ?? '' };
+    return await withPrompt(() => stopAsPeer(path, token, { command }, peer, () => confirmed(command)));
+  } catch (error) {
+    return error instanceof Unanswered || (error as NodeJS.ErrnoException).code === 'ENOENT' ? failure(error, path) : `${command}: the hub at unix:${path} didn't stop: ${error instanceof Error ? error.message : String(error)}`;
   }
 }
 
 /** `deep off` or `deep on`: every gate watch-only at once, or back, while the floor holds. */
 export async function gatesCommand(off: boolean): Promise<number> {
-  const command = off ? 'deep off' : 'deep on';
   let reply: Reply;
   try {
     reply = await asYou(off ? 'gates.off' : 'gates.on', {});
   } catch (error) {
-    process.stderr.write(`${command} changed nothing: no hub answered to ask the OS to confirm you (${error instanceof Error ? error.message : String(error)}).\n`);
-    return 3;
+    return notAnswered(error, hubAddress(null).path);
   }
   if ('error' in reply) {
     process.stderr.write(`${reply.error.remediation}\n`);

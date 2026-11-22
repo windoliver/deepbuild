@@ -97,10 +97,10 @@ const retried = (attempts: RecordedRun['attempts']): boolean => attempts.some((a
 /**
  * Whether a run's record is whole in run.finished, so a restarted hub may read it again (KeyFacts.plain): no test both
  * failed and passed on its attempts, no stand-in seeded, every failure on an assertion and read back from its finding as
- * it was, no contract, nothing uncounted.
+ * it was, no contract, nothing uncounted, and no run that no test tool counted, which run.finished can't tell from one it did (#1861).
  */
 export const plain = (r: RecordedRun): boolean =>
-  !retried(r.attempts) && !r.seeded.some((s) => s.standIn) && r.failures.length <= FINDINGS && r.failures.every((f) => f.assertion && survives(f)) && r.contract === null && r.mask === null;
+  r.tested !== false && !retried(r.attempts) && !r.seeded.some((s) => s.standIn) && r.failures.length <= FINDINGS && r.failures.every((f) => f.assertion && survives(f)) && r.contract === null && r.mask === null;
 
 export class SharedRuns {
   private readonly groups = new Map<string, Group>();
@@ -153,8 +153,8 @@ export function keptRecord(run: string, d: { outcome: string; tests_run: number;
     return m ? [{ test: m[1]!, file: m[2]!, line: Number(m[3]), stack: null, assertion: true, message: m[4]! }] : [];
   }) : [];
   return {
-    // A head run's key holds what it read outside its installs, its own files among them.
-    run, outcome: d.outcome as RecordedRun['outcome'], testsRun: d.tests_run, failures, evidence: [], read: d.key.base ? [] : [...d.key.paths], mask: null, exit: null,
+    // A head run's key holds what it read outside its installs, its own files among them: the run reads the key's list, never changed.
+    run, outcome: d.outcome as RecordedRun['outcome'], testsRun: d.tests_run, failures, evidence: [], read: d.key.base ? [] : d.key.paths, mask: null, exit: null,
     output: { stdout: '', stderr: '', sha256: { stdout: d.evidence[0] ?? EMPTY, stderr: d.evidence[1] ?? EMPTY } }, attempts: [], seeded: [], contract: null,
   };
 }

@@ -1,0 +1,107 @@
+{
+  "issue": 1297,
+  "criterion": "#1297.a04bad6a",
+  "fingerprint": {
+    "os": "27.2 (26B8119)",
+    "gpu": "Apple M5 Max",
+    "driver": "Metal",
+    "wgpu": "30.0.1"
+  },
+  "hashes": {
+    "422/golden/castle-t0": {
+      "recorded": "5268e5c1d1c1813b44e125fdfff5dc933da618a93284fc785e40af8a1367479c",
+      "drawn": "5268e5c1d1c1813b44e125fdfff5dc933da618a93284fc785e40af8a1367479c",
+      "moved": false
+    },
+    "422/golden/castle-t1": {
+      "recorded": "88da4bfa3c147d3017be6feabd0d69d6a8f510c50df5bc069bedd1e52765feaf",
+      "drawn": "88da4bfa3c147d3017be6feabd0d69d6a8f510c50df5bc069bedd1e52765feaf",
+      "moved": false
+    },
+    "422/golden/castle-t2": {
+      "recorded": "5f156d9632cf4569263fba174efd893696eabb0b6b5b987ffab59883e147da5a",
+      "drawn": "5f156d9632cf4569263fba174efd893696eabb0b6b5b987ffab59883e147da5a",
+      "moved": false
+    },
+    "422/golden/castle-t3": {
+      "recorded": "8ab6c4c982e8582a2584ae8b2849d5d4f0e51843494c887e74793dcdaa20d2f9",
+      "drawn": "8ab6c4c982e8582a2584ae8b2849d5d4f0e51843494c887e74793dcdaa20d2f9",
+      "moved": false
+    },
+    "422/taste/castle-orbit.apng": {
+      "recorded": "1190faf9e6ba5c8516da0f8cf7730e87008b865579b66bf9f2e328f668c1b2a7",
+      "drawn": "1190faf9e6ba5c8516da0f8cf7730e87008b865579b66bf9f2e328f668c1b2a7",
+      "moved": false
+    },
+    "422/taste/castle-t0.png": {
+      "recorded": "0450b7d4af9aa25b28f8b398ce40931a5a867d3ba0097b6d2d091cc4615c442f",
+      "drawn": "0450b7d4af9aa25b28f8b398ce40931a5a867d3ba0097b6d2d091cc4615c442f",
+      "moved": false
+    },
+    "422/taste/castle-t1.png": {
+      "recorded": "319b10fcbb6c55d4ac839454d5f86e72d2f9a323fe7de44b3130f75ebcef52e9",
+      "drawn": "319b10fcbb6c55d4ac839454d5f86e72d2f9a323fe7de44b3130f75ebcef52e9",
+      "moved": false
+    },
+    "422/taste/castle-t2.png": {
+      "recorded": "2224e30726ced132994e16b7889107d211473423c94bd4adf80bc560c772b90b",
+      "drawn": "2224e30726ced132994e16b7889107d211473423c94bd4adf80bc560c772b90b",
+      "moved": false
+    },
+    "422/taste/castle-t3.png": {
+      "recorded": "7b653b2f1a471bf9513639fe80ef4bc1a2601e18a230f24e279da8e0327fd2f6",
+      "drawn": "7b653b2f1a471bf9513639fe80ef4bc1a2601e18a230f24e279da8e0327fd2f6",
+      "moved": false
+    },
+    "422/taste/furnace-metal.png": {
+      "recorded": "937f2e8d98eb067418488832af235f858f012d3f3c52b6ed70f55ff612a670c2",
+      "drawn": "937f2e8d98eb067418488832af235f858f012d3f3c52b6ed70f55ff612a670c2",
+      "moved": false
+    },
+    "422/taste/sunlit-metal.png": {
+      "recorded": "bdde86802a4e7d9eb8ef8421c2e845587924c810a189da47b159748113d37b99",
+      "drawn": "bdde86802a4e7d9eb8ef8421c2e845587924c810a189da47b159748113d37b99",
+      "moved": false
+    },
+    "424/taste/additive-beams.png": {
+      "recorded": "d89d318182c0b127da110b25f331b6cd6ad92cfafd17a6c2ac9c859466a9b3f3",
+      "drawn": "d89d318182c0b127da110b25f331b6cd6ad92cfafd17a6c2ac9c859466a9b3f3",
+      "moved": false
+    },
+    "424/taste/cutaway-section.png": {
+      "recorded": "d1d8d79d6b52929c93a00847e579bd7cd067fd1f6b17e7c78550382e15d7d8ed",
+      "drawn": "d1d8d79d6b52929c93a00847e579bd7cd067fd1f6b17e7c78550382e15d7d8ed",
+      "moved": false
+    },
+    "424/taste/cutaway-shells.png": {
+      "recorded": "3c5bc1a2da5e05d5f74ef473617f2b424135b5b650e066d21f29b307c0d153d8",
+      "drawn": "3c5bc1a2da5e05d5f74ef473617f2b424135b5b650e066d21f29b307c0d153d8",
+      "moved": false
+    },
+    "424/taste/engine-block.png": {
+      "recorded": "dd69dd9c050e9bb2e1d3c68cf7525b391bce9f4e11c3c857b3c2ca533c1b68f8",
+      "drawn": "dd69dd9c050e9bb2e1d3c68cf7525b391bce9f4e11c3c857b3c2ca533c1b68f8",
+      "moved": false
+    },
+    "425/taste/band-blend.png": {
+      "recorded": "b00eccfb00a773eb37d4c101b646ec9394aa470588fd2ea3426ab09de76c8494",
+      "drawn": "b00eccfb00a773eb37d4c101b646ec9394aa470588fd2ea3426ab09de76c8494",
+      "moved": false
+    },
+    "425/taste/ladder-climb.png": {
+      "recorded": "6fba2461e57a5777cdc4d918127b8d4de1f758b91a7f333703cad83dec828423",
+      "drawn": "6fba2461e57a5777cdc4d918127b8d4de1f758b91a7f333703cad83dec828423",
+      "moved": false
+    },
+    "425/taste/mesh-levels.png": {
+      "recorded": "685596966d656712f365fa4b88cf978df19a7ec2d6edd30c2ed5b4cce139b6a1",
+      "drawn": "685596966d656712f365fa4b88cf978df19a7ec2d6edd30c2ed5b4cce139b6a1",
+      "moved": false
+    },
+    "425/taste/orbit-zoom.apng": {
+      "recorded": "230a111f2a07a4b4e0b99805c8c136b69b609b8e807f068f5dfccb4fceb413fa",
+      "drawn": "230a111f2a07a4b4e0b99805c8c136b69b609b8e807f068f5dfccb4fceb413fa",
+      "moved": false
+    }
+  }
+}

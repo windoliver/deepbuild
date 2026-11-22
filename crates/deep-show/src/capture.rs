@@ -389,7 +389,7 @@ pub(crate) fn append(
 }
 
 /// Standard base64, for the planted program that writes frames into the record.
-fn base64(bytes: &[u8]) -> String {
+pub(crate) fn base64(bytes: &[u8]) -> String {
     const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::new();
     for chunk in bytes.chunks(3) {
@@ -672,6 +672,15 @@ impl Hub<'_> {
             send.state = if sent { "sent" } else { "failed" };
         }
         json!({"send": {"id": id, "state": send.state}})
+    }
+
+    /// The clock at a call's arrival: a plug-in's panel scripts run up to it (#401), terminals take
+    /// the output that arrived by then (#402), and captures the frames (#105).
+    pub fn arrive(&mut self, at: i64) {
+        self.advance_ring(at);
+        self.advance_terms(at);
+        self.advance_capture(at);
+        self.now = at;
     }
 
     /// The captures' frames up to `to`: each recording keeps every frame its display presents

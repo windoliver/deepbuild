@@ -108,33 +108,26 @@ pub fn issues(doc: &Value, every: Option<u32>) -> Vec<Issue> {
     out
 }
 
-/// A world-space emitter's anchor that a logic array or a live drag moves (Particles
-/// `particles@1`: space and paths): its pose at an earlier birth bucket can't be read again, so
-/// the check refuses it, naming the anchor.
+/// A world-space emitter's anchor that a live drag moves (Particles `particles@1`: space and
+/// paths): its pose at an earlier birth bucket can't be read again, so the check refuses it,
+/// naming the anchor. One a logic array moves is read from the logic bake's earlier steps (#265).
 fn live_anchor(doc: &Value, id: &str, p: &Value) -> Option<Refusal> {
     let anchor = p["emit"]["anchor"].as_str()?;
     let item = anchor.split('#').next().unwrap_or(anchor);
-    let kind = |i: &str| doc["items"][i]["kind"].as_str().unwrap_or("").to_string();
-    let by_logic = kind(item).starts_with("logic")
-        || shore::reads_logic(&doc["items"][item]["params"], &|owner| {
-            kind(owner).starts_with("logic")
-        });
     let dragged = doc["controls"]
         .as_object()
         .into_iter()
         .flatten()
         .any(|(_, c)| c["handle"]["item"].as_str() == Some(item));
-    let how = match (by_logic, dragged) {
-        (true, _) => "a logic array moves it",
-        (false, true) => "a live drag moves it",
-        _ => return None,
-    };
+    if !dragged {
+        return None;
+    }
     Some(
         Refusal::new(
             "out_of_range",
             format!("items/{id}/params/emit/anchor"),
             format!(
-                "{id}: a world-space emitter's anchor {anchor} can't be read at earlier birth buckets: {how}"
+                "{id}: a world-space emitter's anchor {anchor} can't be read at earlier birth buckets: a live drag moves it"
             ),
         )
         .with(Value::from(anchor))

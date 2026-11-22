@@ -27,8 +27,8 @@
 // once a period while a view that binds its source is shown, as the app reports it; and a series call lands as one
 // batch file named by one reading.batch event, its windows' rollups as files named by reading.rollup events
 // (./series.ts), so a bound value resolves at a frame's pinned log position.
-import { createHash, createPublicKey, randomUUID, verify as verifySignature } from 'node:crypto';
-import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { createPublicKey, randomUUID, verify as verifySignature } from 'node:crypto';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createServer, type AddressInfo, type Socket } from 'node:net';
 import { homedir } from 'node:os';
@@ -41,13 +41,14 @@ import type { EvidenceStore } from '@deepbuild/evidence';
 import type { StateSource, StateSourceFill } from '@deepbuild/conformance';
 import type { ChannelCtx, ChannelDelivered, ChannelFill, ChannelItem, ChannelReceived, CheckResult, CheckRunnerFill, CheckSpec, EnvironmentFill, EnvironmentHandle, EnvironmentLease, EnvironmentSpec, SlotFill, SlotKit } from '@deepbuild/conformance';
 import { canonicalize, checkManifest, extensionApi, frozenDigests, hubSlots, registry, sha256Hex, validate, type ApiEntry, type HookContribution, type JoinedHookReply, type JsonValue, type Schema } from '@deepbuild/contracts';
-import { contentFree, toJson, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
+import { contentFree, toJson, ulid, type Connection, type Event, type EventInput, type Receipt, type RecordStore } from '@deepbuild/record';
 import type { LeaseKind, LeaseResult, LeaseTable } from '@deepbuild/leases';
 import type { Runner } from '@deepbuild/runner';
-import { badDeadline, type Host as RunHost, type Supervisor } from '@deepbuild/supervisor';
+import { badDeadline, checkHost, type Host as RunHost, type Supervisor } from '@deepbuild/supervisor';
 import { API, extensionSide, peer } from '../runtime/deep.mjs';
 import { cycleThrough, dependents, graph, refusal, resolve, servedAt, type Piece, type UseRow } from './compose.js';
 import { packageDigest } from './digest.js';
+import { botOf, canonical, playInput, runSeed, unpaired, type PlayInput, type Played } from './plays.js';
 import type { BuildPlant, HeldJobs, JobBytes, JobCall, JobCounter, Weight } from './job-kinds.js';
 import { Jobs, JobTools, type Answer, type JobListing } from './jobs.js';
 export type { JobListing } from './jobs.js';
@@ -61,6 +62,7 @@ import { actionRules, unchecked, rejected, declaredPath, type Action } from './a
 import { CORE, CALL_MS, HostFiles, Overran, within, stretchable, isPlain, texts, message, trustedPath } from './host-shared.js';
 import { NODE_HOME, NODE_LIBS } from './node-runtime.js';
 import { checkReply, join as joinReplies, type JoinPlant } from './replies.js';
+import { HandlerMisses, type SetAside } from './aside.js';
 import { Schedules, HostSchedules, type Ended, type RunEvent, type ScheduleDecl, type ScheduleRow, type ScheduleRun, type Settings, type Verdict } from './schedules.js';
 import { SeriesStore, type BoundValue, type Rollup, type Span } from './series.js';
 import { Sends, Notices, type SendRow, type SendRule, type NoticeRow } from './sends.js';
@@ -68,6 +70,7 @@ export type { NoticeRow } from './sends.js';
 import { WorkSources, type Added, type DeliveryRow, type WorkEvent, type WorkKitFixture, type WorkPage, type WorkResult, type WorkTask } from './work.js';
 import { AnswerTooLarge, declareSource, handleOf, nodeFetch, nodeHttp, osSecrets, Sources, HostSources, type HttpClient, type KeyTest, type Polled, type Reading, type Recording, type SecretStore, type SourceRead, type StreamRead } from './sources.js';
 import { TERMINAL_PLANTS, TERMINAL_PROTOCOL, Terminals, type OpenSpec, type TerminalPlant, type TerminalTab } from './terminals.js';
+import { shellRefusal, type ShellInput } from './shell-plays.js';
 import type { ProjectTrust } from './trust.js';
 
 /** A package inside DeepBuild's signed release, as the release's signed manifest lists it. */
@@ -94,7 +97,16 @@ export type Plant = 'hub-unless-agent-built' | 'grants-only-in-record-query' | '
   // read as ended a host of another protocol version.
   | TerminalPlant
   // #184's: a host that plays any seed a check runner passes to deep.canvas.play.
-  | 'plays-any-seed';
+  | 'plays-any-seed'
+  // #2650's: a host that keeps every source call's answer, one that keeps every action call's result, a series store
+  // that keeps every set of names, and a host that forgets a request ID and runs its call again.
+  | 'churn-keeps-every-answer' | 'churn-keeps-every-result' | 'churn-keeps-every-name-set' | 'forgets-request-runs-again'
+  // #2402's: a host that counts a handler's failures and never clears them.
+  | 'failures-never-cleared'
+  // #2651's: a host that hands every package one value of an event, which any of them can write.
+  | 'hands-one-writable-event'
+  // #2648's: a host that reads notices.json once, at its start.
+  | 'reads-files-at-start-only';
 
 /** One hook request to every loaded handler of its kind (#350). */
 export interface HookRequest {
@@ -106,8 +118,11 @@ export interface HookRequest {
   /** The hook's total context bound, in characters, as hook.joined@1 counts it. */
   bound: number;
 }
-/** The joined reply: hook.joined@1's fields, and the handlers recorded as failed. */
-export interface HookReply extends JoinedHookReply { failed: { extension: string; reason: string }[] }
+/**
+ * The joined reply: hook.joined@1's fields, and the handlers recorded as failed. `aside`, only when there are any, holds
+ * the handlers of the kind set aside (#2402): each one this request didn't ask, and each its failure set aside.
+ */
+export interface HookReply extends JoinedHookReply { failed: { extension: string; reason: string }[]; aside?: SetAside[] }
 /** What an action call targets: the providing piece, `ext:<id>`, and the version of it the caller means. */
 export interface ActionTarget { handle: string; version: string }
 export interface ActionCall {
@@ -173,6 +188,8 @@ export interface ExtensionHostOptions {
   http?: HttpClient;
   /** Replay: each source call is answered from this recording, never through the client, and no secret is read. */
   replay?: Recording;
+  /** False: this host keeps no source call's answer, so `recording()` stays empty, as the hub opens it (#2650). */
+  recording?: boolean;
   /** The evidence store a series' batch and rollup files go to and are read back from, through their hash (#262). Without one, a series call makes no reading. */
   evidence?: EvidenceStore;
   /** The runner R1 built (#366): every plug-in's model job goes through it, on your own agent. Without one, deep.runner.run refuses. */
@@ -275,7 +292,11 @@ export interface ExtensionHost {
   /** Whether a conformance result is kept for this id and version, passed or failed; a load with none is refused. */
   checked(pkg: Installed): boolean;
   load(pkg: Installed): Promise<Load>;
+  /** Stops a loaded package and loads it again, as a new load (#2402). */
+  restart(id: string): Promise<Load>;
   loaded(): Promise<Loaded[]>;
+  /** The installed packages started, their code run and what it fills registered, of those to start; undefined once none is loading (#1415). */
+  loadProgress(): { loaded: number; total: number } | undefined;
   checks(): Promise<{ kind: string; extension: string }[]>;
   /** Select a live environment by its registered name; absence and revoked trust refuse, never fall back. */
   environment(name: string): Promise<RuntimeEnvironment>;
@@ -292,6 +313,8 @@ export interface ExtensionHost {
   hooks(): string[];
   /** Every live handler of the request's kind replies within its deadline; their replies joined in one fixed order. */
   hook(request: HookRequest): Promise<HookReply>;
+  /** The handlers set aside, three failures in a row each (#2402), until their extension loads again. */
+  setAside(): SetAside[];
   /** A hook line, mapped through the adapter `line.agent` names; binds and gates the session it carries (#349). */
   hook(line: HookRequestLine): Promise<{ adapter: string; events: { kind: string }[] }>;
   /**
@@ -356,7 +379,10 @@ export interface ExtensionHost {
   assetOnline(pack: string, url: string): Promise<boolean>;
   /** A pack's license file, read through the Source block after the job is authorized. */
   assetTerms(pack: string, url: string): Promise<string>;
-  /** Every source call this host made, with its secrets stripped. */
+  /**
+   * Every source call this host made while it records, with its secrets stripped: its first 10,000 calls and 64 MiB of
+   * answers, and nothing when it was opened with `recording: false` (#2650).
+   */
   recording(): Recording;
   /** The readings the record holds of a source with an as-of time in the window, both ends in, in as-of order. */
   readings(source: string, window: { from: number; to: number }): Promise<Reading[]>;
@@ -460,8 +486,24 @@ const BODY = 1024 * 1024;
 /** The largest answer an outside call the host makes for a package takes. */
 const ANSWER = 1024 * 1024;
 const PAGE = 1000;
+/**
+ * The settled request IDs an action's retry is answered from in memory (#2650): the newest, up to this many and this
+ * many bytes of results. Past them a change or send is answered from its receipt in the record, and a read runs again.
+ */
+const REQUESTS_KEPT = 64;
+const REQUESTS_BYTES = 1024 * 1024;
+/** The receipt method an action call's request ID is kept under (#2650), beside the hub's own writes (#1577). */
+const ACTION_RECEIPT = 'action.call';
 /** How many readings through its edges a piece keeps by handle, for its model jobs (#103). */
 const EDGE_READS = 256;
+/** A value parsed from JSON, frozen through: what one package is handed, no other can change it (#2651). */
+function frozen<T>(value: T): T {
+  if (value && typeof value === 'object') {
+    for (const v of Object.values(value)) frozen(v);
+    Object.freeze(value);
+  }
+  return value;
+}
 /** Folder-safe, as extension.manifest@1 writes them. */
 const ID = /^[a-z0-9][a-z0-9_-]*\/[a-z0-9][a-z0-9_-]*$/;
 const VERSION = /^\d+\.\d+\.\d+([-+][0-9A-Za-z.+-]+)?$/;
@@ -520,24 +562,6 @@ function schemaBreak(name: string, schema: unknown, value: unknown): string | un
     return `/ (its schema can't be read: ${message(e)})`;
   }
 }
-/**
- * What a check's input gives `deep.canvas.play` (Check input: plug-in reads, #184): the piece, the seed, the runs (20
- * by default), the bots and the recorded tracks it may play; a playtest's input holds more, which the host ignores.
- */
-interface PlayInput { piece?: unknown; seed?: unknown; runs?: unknown; bots?: unknown; tracks?: unknown }
-/** One play a running check made: its seed, its bot, its track's hash and whether it read values. */
-interface Played { seed: number; bot: unknown; track: string; values: boolean }
-/** JSON with every object's keys sorted, so two values parsed apart compare. */
-const canonical = (v: unknown): string => JSON.stringify(v, (_k, x: unknown) => (isPlain(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : x));
-/** Run i's seed: hash(the check's seed, i), the first 8 bytes of SHA-256(seed as u64 LE, i as u32 LE) big-endian, shifted right 11 bits to stay a JSON-safe integer. */
-function runSeed(seed: number, i: number): number {
-  const b = Buffer.alloc(12);
-  b.writeBigUInt64LE(BigInt(seed));
-  b.writeUInt32LE(i, 8);
-  return Number(createHash('sha256').update(b).digest().readBigUInt64BE(0) >> 11n);
-}
-/** A bot as a play runs it: its policy or logic, without the names and authorship a check's input adds. */
-const botOf = (bot: unknown): unknown => (isPlain(bot) ? Object.fromEntries(Object.entries(bot).filter(([k]) => k === 'policy' || k === 'logic')) : bot);
 const nothing = (outcome: CheckResult['outcome'], failure?: string): CheckResult => ({
   outcome, testsRun: 0, evidence: [], read: [], mask: null,
   failures: failure ? [{ test: 'extension host', file: '', line: 0, stack: null, assertion: false, message: failure }] : [],
@@ -548,21 +572,29 @@ const RUN_AS_YOU = 'run_as_you';
 const granted = (m: Manifest, needs: string): boolean => (needs === 'notices' ? (m.notices ?? []).length > 0 : (m.access?.words ?? []).includes(needs));
 /** The interpreters a `main` may name, each only as the program of that name on the hub's own PATH. */
 const INTERPRETERS = ['python3', 'python', 'node', 'ruby', 'perl'];
+/** Where Apple's `/usr/bin/python3` finds the real Python: the stub runs the one in the developer folder it is told. */
+const COMMAND_LINE_TOOLS = '/Library/Developer/CommandLineTools';
 /**
- * The install of the interpreter a `main` names on its first line (the folder above its program's own), so it can
- * run in the sandbox: only an interpreter the hub itself would run by name, and only an install of its own, never
- * one holding your home or the package. A system program (`#!/bin/sh`) needs no grant, and any other adds none.
+ * What lets the interpreter a `main` names on its first line run in the sandbox: its install to read (the folder
+ * above its program's own; on macOS a framework's `Versions/<v>`), and for Apple's `/usr/bin/python3` the command
+ * line tools, named as its developer folder too, since the selected one may be an Xcode outside the grant. Only an
+ * interpreter the hub itself would run by name, and only an install of its own, never one holding your home or the
+ * package. A system program (`#!/bin/sh`) needs no grant, and any other adds none.
  */
-function interpreter(folder: string): string[] {
+function interpreter(folder: string): { read: string[]; env: Record<string, string> } {
+  const none = { read: [], env: {} };
   const first = readFileSync(join(folder, 'main'), 'utf8').split('\n', 1)[0] ?? '';
   const program = first.startsWith('#!') ? first.slice(2).trim().split(/\s+/)[0] ?? '' : '';
-  if (!program.startsWith('/') || !existsSync(program)) return [];
+  if (!program.startsWith('/') || !existsSync(program)) return none;
   const real = realpathSync(program);
   const known = (process.env.PATH ?? '').split(':').filter((dir) => dir.startsWith('/'))
     .some((dir) => INTERPRETERS.some((name) => existsSync(join(dir, name)) && realpathSync(join(dir, name)) === real));
-  const install = dirname(dirname(real));
+  if (!known) return none;
+  const mac = process.platform === 'darwin';
+  if (mac && real === '/usr/bin/python3') return existsSync(COMMAND_LINE_TOOLS) ? { read: [COMMAND_LINE_TOOLS], env: { DEVELOPER_DIR: COMMAND_LINE_TOOLS } } : none;
+  const install = (mac ? /^(.+\.framework\/Versions\/[^/]+)\//.exec(real)?.[1] : undefined) ?? dirname(dirname(real));
   const holds = (path: string): boolean => path === install || path.startsWith(`${install}/`);
-  return known && install.split('/').filter(Boolean).length >= 3 && !holds(realpathSync(homedir())) && !holds(folder) ? [install] : [];
+  return install.split('/').filter(Boolean).length >= 3 && !holds(realpathSync(homedir())) && !holds(folder) ? { read: [install], env: {} } : none;
 }
 
 class Host implements ExtensionHost {
@@ -574,7 +606,7 @@ class Host implements ExtensionHost {
   /** The content keys each running check's `deep.canvas.read` calls returned, by the package running it (#411). */
   private readonly canvasKeys = new Map<Ext, string[]>();
   /** Each running check's input and the plays its `deep.canvas.play` calls made, by the package running it (#184). */
-  private readonly plays = new Map<Ext, { input: PlayInput | undefined; played: Played[]; tracks: Set<string> }>();
+  private readonly plays = new Map<Ext, { input: PlayInput | undefined; played: Played[]; tracks: Set<string>; shell?: boolean }>();
   /** The packages you approved run-as-you for, by ID. */
   private runAsYou: Record<string, boolean>;
   private readonly terminals: Terminals;
@@ -586,6 +618,7 @@ class Host implements ExtensionHost {
   /** Conformance runs under way. */
   private readonly checking = new Set<Promise<Conformance>>();
   private isReady = false;
+  private startedAll = false;
   /** What each loaded package's code returned at its load (#139). */
   private readonly loadResults = new Map<string, Record<string, unknown>>();
   /** The published API by method, whose stability each call is held to (#139). */
@@ -619,14 +652,17 @@ class Host implements ExtensionHost {
   /** The hub's series, once it has an evidence store (#262). */
   private readonly series: SeriesStore | undefined;
   private readonly files: HostFiles;
+  /** Each load's hook failures in a row, by hook kind: three set its handler aside (#2402). */
+  private readonly misses: HandlerMisses;
   constructor(private readonly options: ExtensionHostOptions) {
+    this.misses = new HandlerMisses(options.plant === 'failures-never-cleared');
     this.files = new HostFiles(options.home);
     this.entries = this.read('installed.json');
     // An install recorded before #351 holds the check kinds its manifest declares.
     for (const e of Object.values(this.entries)) e.holds ??= manifestOf(e.folder).checks ?? [];
     this.results = this.read('checked.json');
     this.keys = this.read('keys.json');
-    this.jobTools = new JobTools({ entries: this.entries, supervisor: options.supervisor, home: options.home, now: options.now, files: this.files, plant: options.plant });
+    this.jobTools = new JobTools({ entries: this.entries, supervisor: options.supervisor, home: options.home, now: options.now, files: this.files, plant: options.plant, ...(options.canvas ? { canvas: options.canvas } : {}) });
     this.published = new Map((options.api ?? extensionApi()).map((e) => [e.method, e]));
     this.runAsYou = this.read('run-as-you.json');
     const plant = options.plant;
@@ -641,11 +677,12 @@ class Host implements ExtensionHost {
       ...(options.point ? { point: options.point } : {}), now: options.now,
     });
     const series = this.series = options.evidence ? new SeriesStore({
-      record: options.record, evidence: options.evidence, now: options.now, connection: CORE,
+      record: options.record, evidence: options.evidence, now: options.now, connection: CORE, ...(plant === 'churn-keeps-every-name-set' ? { keepsEvery: true } : {}),
       timeoutOf: (name) => [...this.exts.values()].map((e) => e.live ? e.sources.get(name) : undefined).find((s): s is Polled => s?.variant === 'polled')?.timeout,
     }) : undefined;
     this.sources = new Sources({
       now: options.now, http: options.http ?? nodeHttp, secrets: options.secrets ?? osSecrets(), ...(options.replay ? { replay: options.replay } : {}),
+      ...(plant === 'churn-keeps-every-answer' ? { recording: 'every' as const } : options.recording === false ? { recording: false } : {}),
       ...(series ? { land: (source: Polled, asOf: number, values: Map<string, number>) => series.land(source, asOf, values) } : {}),
       // Each call's cost and each new reading, as the core: the hub makes every source call.
       append: async (kind, data) => { await options.record.append(CORE, { v: 1, id: ulid(options.now()), kind, ts: options.now(), data } as EventInput); },
@@ -664,7 +701,7 @@ class Host implements ExtensionHost {
       saved: (name, settings) => this.save('schedules.json', { ...this.read('schedules.json'), [name]: settings }),
     });
     this.work = new WorkSources(this.workHost());
-    this.sourceHost = new HostSources({ record: options.record, now: options.now, files: this.files, exts: this.exts, ask: (ext, ms, what, method, params) => this.ask(ext, ms, what, method, params) }, this.sources, series);
+    this.sourceHost = new HostSources({ record: options.record, now: options.now, files: this.files, exts: this.exts, ask: (ext, ms, what, method, params) => this.ask(ext, ms, what, method, params), ...(options.plant === 'reads-files-at-start-only' ? { plant: options.plant } : {}) }, this.sources, series);
     this.scheduleHost = new HostSchedules({ record: options.record, exts: this.exts, sources: { holds: (id, name) => this.sources.holds(id, name), workExt: (source) => this.sourceHost.workExt(source) }, sending: this.sending }, this.scheduler);
     this.routing = new AdapterRouting({ usable: async (ext) => !(await this.revoked(ext)), ask: (ext, ms, what, method, params) => this.ask(ext, ms, what, method, params), plant: options.plant });
     this.modelJobs = new Jobs({ record: options.record, now: options.now, runner: options.runner, access: { reaches: (ext, kind) => this.reaches(ext, kind), visible: (ext, event) => this.visible(ext, event), refuse: (ext, scope, clause, given) => this.refused(this.connection(ext, scope), 'deep.runner.run', 'grant', clause, [given]) } });
@@ -810,7 +847,7 @@ class Host implements ExtensionHost {
     const before = this.entries[id];
     let entry: Entry;
     try {
-      copyPackage(from.from, folder);
+      cpSync(from.from, folder, { recursive: true });
       const hosts = from.grant?.hosts?.map((h) => ({ host: h.host, quota: { calls: h.quota.calls, per_ms: h.quota.per_ms } }));
       const digest = this.options.plant === 'trusts-envelope-digest' ? manifest.digest! : packageDigest(folder);
       entry = {
@@ -1211,7 +1248,7 @@ class Host implements ExtensionHost {
         const run = async (spec: CheckSpec, ctx: { deadline: number }): Promise<CheckResult> => {
           if (stuck) throw Error(stuck);
           try {
-            return await within(ctx.deadline + KIT_GRACE_MS, `${entry.id}'s ${kind} at install`, ext.ask!('run', { type: kind, spec, ctx: this.checkContext(ext, ctx) }) as Promise<CheckResult>);
+            return await this.checkRun(ext, ctx, (context) => within(ctx.deadline + KIT_GRACE_MS, `${entry.id}'s ${kind} at install`, ext.ask!('run', { type: kind, spec, ctx: context }))) as CheckResult;
           } catch (e) {
             if (e instanceof Overran) stuck = message(e);
             throw e;
@@ -1596,7 +1633,7 @@ class Host implements ExtensionHost {
   private ext(entry: Entry, folder: string, manifest: Manifest, digest: string, place: Ext['place'], mode: Ext['mode']): Ext {
     const released = this.options.release.some((r) => r.id === entry.id && r.version === entry.version && r.digest === digest);
     return {
-      entry, project: entry.project && (existsSync(entry.project) ? realpathSync(entry.project) : entry.project), folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], jobKinds: new Map(), jobTools: [], subscribed: new Set(), routes: new Set(),
+      entry, project: entry.project && (existsSync(entry.project) ? realpathSync(entry.project) : entry.project), folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], jobKinds: new Map(), jobTools: [], subscribed: new Set(), routes: new Set(), ports: new Map(),
       released: released && place === 'hub', live: false, actions: new Map(), provides: new Set(), uses: new Map(), detached: false, reads: new Set(), refuseReads: new Set(), scopes: new Map(), callOf: new Map(), stores: new Map(), edgeReads: new Map(),
       adapters: new Set(), channels: new Map(), stateSources: [], leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), views: new Map(), commands: new Map(), panels: new Map(), checkReads: new Map(), starts: 0, deadlines: new Map(),
       environmentStarts: new Set(), environmentStops: new Set(),
@@ -1614,7 +1651,7 @@ class Host implements ExtensionHost {
   private snapshot(entry: Entry): { folder: string; digest: string } {
     const folder = mkdtempSync(join(this.options.home, 'run-'));
     try {
-      copyPackage(entry.folder, folder);
+      cpSync(entry.folder, folder, { recursive: true });
       return { folder, digest: packageDigest(folder) };
     } catch (e) {
       rmSync(folder, { recursive: true, force: true });
@@ -1624,6 +1661,16 @@ class Host implements ExtensionHost {
 
   async load(pkg: Installed): Promise<Load> {
     return this.serial(pkg.id, () => this.loadNow(pkg));
+  }
+  /**
+   * A loaded package restarted (#2402): its code stops and loads again as a new load, so nothing it held carries over,
+   * a hook handler set aside among it. One that isn't loaded is refused.
+   */
+  async restart(id: string): Promise<Load> {
+    const entry = this.entries[id];
+    if (!entry || !this.exts.has(id)) return { status: 'refused', id, version: entry?.version ?? '', reason: `${id} isn't loaded, so there is nothing to restart` };
+    await this.serial(id, async () => { const running = this.exts.get(id); if (running) await this.unload(running); });
+    return this.load(this.installedOf(entry));
   }
   /** One load or unload of a package at a time, so two callers can't each start a process of it. */
   private serial<T>(id: string, work: () => Promise<T>): Promise<T> {
@@ -1780,9 +1827,10 @@ class Host implements ExtensionHost {
     try {
       await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(path, resolve); });
       const connected = new Promise<Socket>((resolve) => server.once('connection', resolve));
+      const runs = entry === 'main' ? interpreter(folder) : { read: [], env: {} };
       const started = await supervisor.start({
-        run, argv: [process.execPath, RUNNER, path, folder, entry], cwd: folder, inherit: false, env: { PATH: '/usr/bin:/bin', HOME: folder, ...(NODE_LIBS.length ? { OPENSSL_CONF: '/dev/null' } : {}) },
-        grant: { read: [NODE_HOME, ...NODE_LIBS, RUNTIME, ...(entry === 'main' ? interpreter(folder) : [])], sockets: [path] },
+        run, argv: [process.execPath, RUNNER, path, folder, entry], cwd: folder, inherit: false, env: { PATH: '/usr/bin:/bin', HOME: folder, ...(NODE_LIBS.length ? { OPENSSL_CONF: '/dev/null' } : {}), ...runs.env },
+        grant: { read: [NODE_HOME, ...NODE_LIBS, RUNTIME, ...runs.read], sockets: [path] },
       });
       if (started.status !== 'started') throw Error(`the sandbox held it: BLOCKED on ${started.kind}`);
       // Stoppable from here on: an unload while it connects, at close or a revoke, ends its process.
@@ -2036,10 +2084,22 @@ class Host implements ExtensionHost {
         if (!given && this.options.plant !== 'plays-any-seed') throw Error(`deep.canvas.play: seed ${String(seed)} isn't one ${id}'s check input gives`);
         const bots = Array.isArray(input.bots) ? input.bots.map((b) => canonical(botOf(b))) : [];
         if (r.bot !== undefined && !bots.includes(canonical(botOf(r.bot)))) throw Error(`deep.canvas.play: the bot ${canonical(r.bot).slice(0, 200)} isn't one ${id}'s check input gives`);
+        // #555: the play interface a run reads is the one the input's brief locked, never one the runner passes.
+        if (r.play !== undefined && canonical(r.play) !== canonical(input.play)) throw Error(`deep.canvas.play: the play interface isn't the one ${id}'s check input gives`);
+        // #851: a shell's journey, device, size, level policy, pause and budget are the shell.journeys input's.
+        if (r.shell !== undefined) {
+          const why = running.shell ? shellRefusal(input as ShellInput, r.shell) : 'the check input gives no shell journeys';
+          if (why) throw Error(`deep.canvas.play: ${id}'s shell run: ${why}`);
+        }
         if (r.track !== undefined) {
           const tracks = Array.isArray(input.tracks) ? input.tracks.map(canonical) : [];
           const track = canonical(r.track);
           if (!tracks.includes(track) && !running.tracks.has(track)) throw Error(`deep.canvas.play: the track isn't one ${id}'s check input gives or a play of this run recorded`);
+        }
+        // #832: a row's offers off only on the catalog and table a catalog.dominance check's input gives, at one of its rows.
+        const off = (isPlain(r.off) ? r.off : undefined) as { catalog?: unknown; table?: unknown; row?: unknown } | undefined;
+        if (r.off !== undefined && !(off && input.off && off.catalog === input.off.catalog && off.table === input.off.table && Number.isInteger(off.row) && (off.row as number) >= 0 && (off.row as number) < input.off.rows)) {
+          throw Error(`deep.canvas.play: the off isn't a row of the catalog and table ${id}'s check input gives`);
         }
         if (!this.options.replica) throw Error('deep.canvas.play: this hub has no replica');
         const reply = await this.options.replica({ ...r, call: 'play', piece: target });
@@ -2047,9 +2107,13 @@ class Host implements ExtensionHost {
           const e = (isPlain(reply.error) ? reply.error : {}) as Record<string, unknown>;
           throw Error(`deep.canvas.play: ${String(e.code ?? 'refused')}: ${String(e.message ?? '')}${e.control !== undefined ? ` (control ${String(e.control)})` : ''}`);
         }
-        const values = isPlain(reply.values) && Object.values(reply.values).some((v) => Array.isArray(v) && v.length > 0);
-        running.played.push({ seed: seed as number, bot: r.bot === undefined ? undefined : canonical(botOf(r.bot)), track: String(reply.track), values });
+        // #556: an array recorded only at the steps it changed is read as surely as one read at every step.
+        const values = [reply.values, reply.changes].some((r) => isPlain(r) && Object.values(r).some((v) => Array.isArray(v) && v.length > 0));
+        running.played.push({ seed: seed as number, bot: r.bot === undefined ? undefined : canonical(botOf(r.bot)), track: String(reply.track), values, ...(off ? { off: off.row as number } : {}) });
         if (Array.isArray(reply.entries)) running.tracks.add(canonical(reply.entries));
+        // #1048: a probe's track for each copy that trapped or broke a range, the run's recorded entries and what it
+        // put, which the check plays again in a fresh replica.
+        if (Array.isArray(reply.tests)) for (const t of reply.tests as { track?: unknown }[]) if (Array.isArray(t?.track)) running.tracks.add(canonical(t.track));
         return reply;
       }
       case 'deep.registerCheck': {
@@ -2145,6 +2209,10 @@ class Host implements ExtensionHost {
       }
       case 'deep.work.fetch':
         return this.sourceHost.workFetch(ext, args[0], args[1]);
+      // #1048: a plug-in's model source asked through the hub, as a model bot asks it between steps.
+      case 'deep.source.ask':
+        quiet();
+        return this.sourceHost.ask(ext, args[0], args[1]);
       case 'deep.channel.fetch': {
         // Only a send or read of its own under way: the hub's call, with the channel's settings and token.
         const [call, request] = args;
@@ -2178,6 +2246,19 @@ class Host implements ExtensionHost {
         ext.sources.set(source.name, source);
         // A work source (#66): each one you switched on over it gets its schedule again.
         if (!conformance && source.variant === 'stream' && source.work) await this.work.registered(source.name, ext.entry.id);
+        return null;
+      }
+      case 'deep.registerPort': {
+        // #210: what the package's port takes and gives; a document's port is opened by your Connect, never by this.
+        const [name, port] = args as [unknown, { entries?: unknown; rows?: unknown; sources?: unknown; sound?: unknown } | undefined];
+        if (typeof name !== 'string' || !/^[a-z][a-z0-9_.-]*$/.test(name)) throw Error(`deep.registerPort takes the port's name first, not ${JSON.stringify(name)}`);
+        const lists = (['entries', 'rows', 'sources'] as const).map((k) => port?.[k]);
+        if (!lists.every((l) => Array.isArray(l) && l.every((s) => typeof s === 'string'))) throw Error(`deep.registerPort: ${name} lists its entries, rows and sources as text`);
+        if (typeof port?.sound !== 'boolean') throw Error(`deep.registerPort: ${name} says whether its gear makes sound`);
+        // Each source it gives for `in` is one it registers.
+        const unknown = (port.sources as string[]).find((s) => !ext.sources.has(s));
+        if (unknown !== undefined) throw Error(`deep.registerPort: ${name} gives the source ${unknown}, which ${id} doesn't register`);
+        ext.ports.set(name, { entries: [...(port.entries as string[])], rows: [...(port.rows as string[])], sources: [...(port.sources as string[])], sound: port.sound });
         return null;
       }
       case 'deep.registerRoute': {
@@ -2477,8 +2558,8 @@ class Host implements ExtensionHost {
     let refusal: string | undefined;
     if (m.stability === 'stable') {
       if (this.options.plant !== 'stable-may-call-preview') refusal = `${m.id} declares itself stable and calls ${method}, a preview method; a stable package calls stable methods only`;
-      // A work source's context fetch is part of the deep.registerSource that registered it (#66).
-    } else if (!(m.requires?.preview ?? []).includes(method === 'deep.work.fetch' ? 'deep.registerSource' : method)) refusal = `preview_unrequested: ${m.id} calls ${method}, a preview method its manifest doesn't list in requires.preview`;
+      // A work source's context fetch is part of its deep.registerSource (#66); a run's read, of its deep.schedule (#1887).
+    } else if (!(m.requires?.preview ?? []).includes(method === 'deep.work.fetch' ? 'deep.registerSource' : method === 'deep.schedule.read' ? 'deep.schedule' : method)) refusal = `preview_unrequested: ${m.id} calls ${method}, a preview method its manifest doesn't list in requires.preview`;
     if (!refusal) return;
     // Kept on the run, so a package that never awaits the call is refused all the same.
     ext.refusals.push(refusal);
@@ -2591,10 +2672,17 @@ class Host implements ExtensionHost {
    * workspace the grant names, with only its content-free fields unless the grant names text. A release package in
    * the hub sees every event whole.
    */
-  private visible(ext: Ext, e: Event): unknown {
+  private visible(ext: Ext, e: Event, views?: Map<Event, { whole?: unknown; free?: unknown }>): unknown {
     const { projects, text } = ext.entry.grant;
     if (!this.reaches(ext, e.kind) || (!ext.released && projects && !projects.includes(e.project ?? ''))) return undefined;
-    return JSON.parse(toJson(text || ext.released ? e : contentFree(e)));
+    const whole = Boolean(text || ext.released);
+    const made = () => JSON.parse(toJson(whole ? e : contentFree(e))) as unknown;
+    if (!views) return made();
+    let of = views.get(e);
+    if (!of) views.set(e, (of = {}));
+    const key = whole ? 'whole' : 'free';
+    // The planted wrong program hands every package the one value unfrozen, so one package's change reaches the rest.
+    return (of[key] ??= this.options.plant === 'hands-one-writable-event' ? made() : frozen(made()));
   }
   /**
    * What a passed run of a check whose input gives a seed lacks (Check input: plug-in reads, #184): each run its input
@@ -2605,7 +2693,10 @@ class Host implements ExtensionHost {
     const running = this.plays.get(ext);
     const input = running?.input;
     if (!running || typeof input?.seed !== 'number') return [];
+    // #851: a shell.journeys input's plays are its journeys, which its own check counts; it gives no runs of bots.
+    if (running.shell) return [];
     const runs = typeof input.runs === 'number' ? input.runs : 20;
+    if (input.off) return unpaired(running.played, input as PlayInput & { seed: number; off: { rows: number } }, runs, result);
     const bots: (string | undefined)[] = Array.isArray(input.bots) && input.bots.length ? input.bots.map((b) => canonical(botOf(b))) : [undefined];
     const lacks: string[] = [];
     // Each run's track, one copy a run: runs that recorded the same track need as many copies among the evidence.
@@ -2796,10 +2887,20 @@ class Host implements ExtensionHost {
     const bad = badDeadline('deadline', deadline);
     if (bad) throw Error(`a hook request's ${bad}`);
     const failed: HookReply['failed'] = [];
+    const aside: SetAside[] = [];
     const contributions: HookContribution[] = [];
     await Promise.all([...this.exts.values()].filter((ext) => ext.live && ext.subscribed.has(kind)).map(async (ext) => {
       const id = ext.entry.id;
+      // Set aside (#2402): it is asked nothing, so the hook takes a failure's policy at once, with no wait for it.
+      const held = this.misses.aside(ext, id, kind);
+      if (held) return void aside.push(held);
       const fail = (reason: string): void => void failed.push({ extension: id, reason });
+      // A missed deadline or a throw counts toward setting it aside; the third in a row does.
+      const count = (reason: string): void => {
+        const now = this.misses.missed(ext, id, kind, reason, this.options.now());
+        if (now) aside.push(now);
+      };
+      const missed = (reason: string): void => { fail(reason); count(reason); };
       // One clock for all of this extension's part: its trust check, an unload that check may start, and its handler.
       // A slow one fails this extension alone, by the deadline, so its siblings' replies still reach the agent in time.
       const due = performance.now() + deadline + HOOK_GRACE_MS;
@@ -2818,9 +2919,9 @@ class Host implements ExtensionHost {
         // Its own deadline only: a handler that misses it stays loaded, and its late reply goes nowhere.
         replies = await within(left(), `${id}'s ${kind} handler`, ext.ask('hook', { kind, request: { kind, data: request.data }, deadline }));
       } catch (e) {
-        if (e instanceof Overran) return fail(`${id} missed the hook's deadline of ${deadline} ms`);
+        if (e instanceof Overran) return missed(`${id} missed the hook's deadline of ${deadline} ms`);
         // An error's text is the package's own words: only a release package's reaches the reply.
-        return fail(`${id}'s ${kind} handler failed${ext.released ? `: ${message(e)}` : ''}`);
+        return missed(`${id}'s ${kind} handler failed${ext.released ? `: ${message(e)}` : ''}`);
       }
       const replier = { id, firstParty: ext.released, templates: ext.manifest.templates ?? [] };
       const context: string[] = [];
@@ -2828,12 +2929,16 @@ class Host implements ExtensionHost {
       // Late by the host's own clock, whatever the package's said: the grace is for the trip back, so what came after
       // the deadline fails and its context goes, though a deny it carries still stands. The same for a version removed
       // or replaced while its handler ran: its context reaches no one, and its deny still stops the call.
-      let failure: string | undefined = this.exts.get(id) !== ext || !ext.live ? `${id} was removed while its ${kind} handler ran` : performance.now() - asked > deadline ? `${id} missed the hook's deadline of ${deadline} ms` : undefined;
+      const removed = this.exts.get(id) !== ext || !ext.live;
+      // A missed deadline or a throw, of the package or of one of its handlers: what counts toward setting it aside.
+      let miss: string | undefined = !removed && performance.now() - asked > deadline ? `${id} missed the hook's deadline of ${deadline} ms` : undefined;
+      let failure: string | undefined = removed ? `${id} was removed while its ${kind} handler ran` : miss;
       for (const reply of Array.isArray(replies) ? replies : [replies]) {
         // The runtime's marker for one handler that threw or missed the deadline: it fails, its siblings still count.
         const marker = typeof reply === 'object' && reply !== null && Object.keys(reply).length === 1 ? (reply as { $handler?: unknown }).$handler : undefined;
         if (marker === 'threw' || marker === 'late') {
-          failure ??= marker === 'late' ? `${id} missed the hook's deadline of ${deadline} ms` : `${id}'s ${kind} handler failed`;
+          miss ??= marker === 'late' ? `${id} missed the hook's deadline of ${deadline} ms` : `${id}'s ${kind} handler failed`;
+          failure ??= miss;
           continue;
         }
         const checked = checkReply(replier, kind, reply, this.options.plant === 'context-as-text');
@@ -2846,49 +2951,85 @@ class Host implements ExtensionHost {
       }
       // A failed reply takes all its package's context with it, but no handler's failure removes a deny that stands.
       if (failure !== undefined) { fail(failure); context.length = 0; }
+      // A reply in time clears the count, whatever else failed of it.
+      if (miss !== undefined) count(miss);
+      else if (!removed) this.misses.replied(ext, kind);
       if (context.length || deny) contributions.push({ extension: id, firstParty: ext.released, context, ...(deny ? { deny } : {}) });
     }));
     const plant = this.options.plant === 'join-by-id-alone' || this.options.plant === 'cut-in-join-order' ? this.options.plant : undefined;
-    return { ...joinReplies(contributions, request.bound, plant), failed: failed.sort((a, b) => (a.extension < b.extension ? -1 : a.extension > b.extension ? 1 : 0)) };
+    const byId = <T extends { extension: string }>(list: T[]): T[] => list.sort((a, b) => (a.extension < b.extension ? -1 : a.extension > b.extension ? 1 : 0));
+    return { ...joinReplies(contributions, request.bound, plant), failed: byId(failed), ...(aside.length ? { aside: byId(aside) } : {}) };
+  }
+  /** The handlers set aside, of every live extension and hook kind (#2402). */
+  setAside(): SetAside[] {
+    return [...this.exts.values()].filter((ext) => ext.live).flatMap((ext) => [...ext.subscribed].flatMap((kind) => this.misses.aside(ext, ext.entry.id, kind) ?? []));
   }
 
-  /** Each request ID's call (#363), by its caller: the digest of what it asked, and its result, which a retry gets. */
-  private readonly requests = new Map<string, { digest: string; result: Promise<ActionResult> }>();
+  /**
+   * Each request ID's call (#363), by its caller: the digest of what it asked, and its result, which a retry gets. A
+   * call stays while it runs; once settled, only the newest REQUESTS_KEPT stay, within REQUESTS_BYTES (#2650).
+   */
+  private readonly requests = new Map<string, { digest: string; result: Promise<ActionResult>; bytes?: number }>();
+  /** The bytes of the settled results `requests` holds. */
+  private requestBytes = 0;
   /** The notices each change or send call sent while its handler ran, by its call ID (#363). */
   private readonly notices = new Map<string, string[]>();
   async callAction(call: ActionCall): Promise<ActionResult> {
     const { request } = call;
-    if (request === undefined) return this.callNow(call);
+    if (request === undefined || this.options.plant === 'forgets-request-runs-again') return this.callNow(call);
     if (typeof request !== 'string' || !request) return { status: 'refused', reason: 'a call\'s request ID is a non-empty string' };
     // An identical retry runs nothing again; the same ID with other input is refused before anything is written or run.
     const key = `${call.caller.writer}\u0000${request}`;
     const digest = sha256Hex(canonicalize(JSON.parse(JSON.stringify({ action: call.action, target: call.target ?? null, input: call.input ?? null })) as JsonValue));
     const seen = this.requests.get(key);
     if (seen) return seen.digest === digest ? seen.result : { status: 'refused', reason: `the request ID ${request} was used for another call; nothing was run or written for this one` };
-    const result = this.entered(call, request).then((before) => before ?? this.callNow(call));
-    this.requests.set(key, { digest, result });
+    const receipt: Receipt = { device: call.caller.writer, request, method: ACTION_RECEIPT, params: digest };
+    const result = this.entered(call, receipt).then((before) => before ?? this.callNow(call, receipt));
+    const kept: { digest: string; result: Promise<ActionResult>; bytes?: number } = { digest, result };
+    this.requests.set(key, kept);
+    void result.then((settled) => this.settled(kept, settled), () => this.requests.delete(key));
     return result;
   }
+  /** A settled call kept for its retries, and the oldest let go past the bound: the record answers for them (#2650). */
+  private settled(kept: { bytes?: number }, result: ActionResult): void {
+    kept.bytes = JSON.stringify(result).length;
+    this.requestBytes += kept.bytes;
+    if (this.options.plant === 'churn-keeps-every-result') return;
+    let settled = 0;
+    for (const entry of this.requests.values()) if (entry.bytes !== undefined) settled++;
+    for (const [old, entry] of this.requests) {
+      if (settled <= REQUESTS_KEPT && this.requestBytes <= REQUESTS_BYTES) break;
+      if (entry.bytes === undefined) continue;
+      this.requests.delete(old);
+      this.requestBytes -= entry.bytes;
+      settled--;
+    }
+  }
   /**
-   * A request ID's call entered before this host started (#363), as its action.entered holds it, or undefined: an
-   * identical retry runs nothing again and gets no output, which isn't kept, and one whose call never reported or
-   * failed gets the call refused; the same ID with other input is refused.
+   * A request ID's call entered before (#363, #2650): from its receipt, which its action.entered carried, the first
+   * call's result; else, for a call entered before receipts or whose result the hub never kept, from its
+   * action.entered and action.reported: an identical retry runs nothing again and gets no output, and one whose call
+   * never reported or failed gets the call refused. The same ID with other input is refused; undefined when no call
+   * of it was entered.
    */
-  private async entered(call: ActionCall, request: string): Promise<ActionResult | undefined> {
+  private async entered(call: ActionCall, receipt: Receipt): Promise<ActionResult | undefined> {
+    const other: ActionResult = { status: 'refused', reason: `the request ID ${receipt.request} was used for another call; nothing was run or written for this one` };
+    const [kept] = (await this.options.record.raw('SELECT method, params, outcome FROM receipts WHERE device = ? AND request = ?', [receipt.device, receipt.request])) as { method: string; params: string; outcome: string | null }[];
+    if (kept && (kept.method !== receipt.method || kept.params !== receipt.params)) return other;
+    if (kept?.outcome) return (JSON.parse(kept.outcome) as { result: ActionResult }).result;
     const { session, actor } = call.caller;
     const [row] = (await this.options.record.raw(`SELECT data FROM events WHERE kind = 'action.entered' AND writer = 'core' AND actor = ?
-      AND session_id IS ? AND json_extract(data, '$.request') = ? ORDER BY log_pos LIMIT 1`, [actor, session ?? null, request])) as { data: string }[];
+      AND session_id IS ? AND json_extract(data, '$.request') = ? ORDER BY log_pos LIMIT 1`, [actor, session ?? null, receipt.request])) as { data: string }[];
     if (!row) return undefined;
     const before = JSON.parse(row.data) as { call: string; plugin: string; action: string; input: JsonValue };
     const same = (v: unknown): string => sha256Hex(canonicalize((JSON.parse(JSON.stringify(v ?? null)) ?? null) as JsonValue));
-    if (`ext:${before.plugin}` !== call.target?.handle || before.action !== call.action || same(before.input) !== same(call.input)) {
-      return { status: 'refused', reason: `the request ID ${request} was used for another call; nothing was run or written for this one` };
-    }
+    if (`ext:${before.plugin}` !== call.target?.handle || before.action !== call.action || same(before.input) !== same(call.input)) return other;
     const [ended] = (await this.options.record.raw("SELECT data FROM events WHERE kind = 'action.reported' AND json_extract(data, '$.call') = ? LIMIT 1", [before.call])) as { data: string }[];
     const error = ended ? (JSON.parse(ended.data) as { error: string | null }).error : `${call.action}'s call ${before.call} never reported, so what it did is unknown`;
     return error === null ? { status: 'done', output: null } : { status: 'refused', reason: error, started: true, call: before.call };
   }
-  private async callNow(call: ActionCall): Promise<ActionResult> {
+  /** `receipt`: the request ID's, which its action.entered carries and its result joins (#2650). */
+  private async callNow(call: ActionCall, receipt?: Receipt): Promise<ActionResult> {
     const refuse = (reason: string): ActionResult => ({ status: 'refused', reason });
     const { action, target, caller, request } = call;
     const id = /^ext:(.+)$/.exec(target?.handle ?? '')?.[1];
@@ -2922,7 +3063,7 @@ class Host implements ExtensionHost {
         const { log_pos } = await this.options.record.append(core, {
           // A call that came with no request ID, such as a panel's, is entered under its own call ID: nothing retries it.
           v: 1, id: ulid(now), kind: 'action.entered', ts: now, data: { call: callId, plugin: id!, action, request: request ?? callId, input: call.input as JsonValue },
-        });
+        }, receipt);
         entered = { call: callId, at: log_pos };
         ext.callOf.set(scope, callId);
         this.notices.set(callId, []);
@@ -2941,11 +3082,14 @@ class Host implements ExtensionHost {
     }
     if (entered) await this.reported(ext, entered, core, returned, failure);
     const ran = { started: true as const, ...(entered ? { call: entered.call } : {}) };
-    if (failure !== undefined) return { ...refuse(failure), ...ran };
-    // Removed while it ran: what it returns reaches no one, and nothing it does later goes through its replacement.
-    if (this.exts.get(ext.entry.id) !== ext || !ext.live) return { ...refuse(`${id}@${target.version} was removed while ${action} ran`), ...ran };
-    // A change or send returns { output, report }: its caller gets the output, and the report is on record.
-    return { status: 'done', output: entered && isPlain(returned) && Object.hasOwn(returned, 'output') ? returned.output : returned };
+    const result: ActionResult = failure !== undefined ? { ...refuse(failure), ...ran }
+      // Removed while it ran: what it returns reaches no one, and nothing it does later goes through its replacement.
+      : this.exts.get(ext.entry.id) !== ext || !ext.live ? { ...refuse(`${id}@${target.version} was removed while ${action} ran`), ...ran }
+      // A change or send returns { output, report }: its caller gets the output, and the report is on record.
+      : { status: 'done', output: entered && isPlain(returned) && Object.hasOwn(returned, 'output') ? returned.output : returned };
+    // The first result joins the receipt its action.entered carried, so a retry the memory let go still gets it (#2650).
+    if (entered && receipt) await this.options.record.keepReceipt(receipt, { result: result as JsonValue }).catch(() => undefined);
+    return result;
   }
   /**
    * action.reported for a change or send call, when its handler ends (#363): the report's `verified` and `checked`,
@@ -2990,6 +3134,11 @@ class Host implements ExtensionHost {
 
   async loaded(): Promise<Loaded[]> {
     return [...this.exts.values()].map((ext) => this.loadedOf(ext));
+  }
+  loadProgress(): { loaded: number; total: number } | undefined {
+    const loaded = [...this.exts.values()].filter((ext) => ext.live).length;
+    const total = Math.max(Object.keys(this.entries).length, loaded + this.loading.size);
+    return (this.startedAll && !this.loading.size) || loaded >= total ? undefined : { loaded, total };
   }
   async checks(): Promise<{ kind: string; extension: string }[]> {
     return [...this.exts.values()].flatMap((ext) => ext.kinds.map((kind) => ({ kind, extension: ext.entry.id })));
@@ -3058,15 +3207,15 @@ class Host implements ExtensionHost {
    * the supervisor's, so its process starts only through it and the supervisor sandboxes it. A kind the sandbox runs
    * gets no host: its context crosses a wire, and it never starts a process of its own.
    */
-  private checkContext<C extends { deadline: number }>(ext: Ext, ctx: C): C | (C & { host: RunHost }) {
-    return ext.place === 'hub' ? { ...ctx, host: this.runHost() } : ctx;
+  private async checkRun<C extends { deadline: number }>(ext: Ext, ctx: C, call: (ctx: C | (C & { host: RunHost })) => Promise<unknown>): Promise<unknown> {
+    if (ext.place !== 'hub') return call(ctx);
+    const scope = checkHost(this.options.supervisor);
+    try { return await call({ ...ctx, host: scope.host }); }
+    finally {
+      // The outer deadline can win before the runner's own timer; never return while its processes remain.
+      await scope.close();
+    }
   }
-  /** host@1 and nothing more of the supervisor: its name, start, signal, wait and facts, bound to it. */
-  private runHost(): RunHost {
-    const s = this.options.supervisor;
-    return (this.hostOne ??= { name: s.name, start: (spec) => s.start(spec), signal: (run, signal) => s.signal(run, signal), wait: (run) => s.wait(run), facts: () => s.facts() });
-  }
-  private hostOne: RunHost | undefined;
   async runCheck(kind: string, spec: CheckSpec, ctx: { checkout: string; deadline: number; environment?: string }): Promise<CheckResult> {
     // Refused before any package is asked.
     const bad = badDeadline('deadline', ctx.deadline);
@@ -3081,9 +3230,11 @@ class Host implements ExtensionHost {
     if (ctx.environment !== undefined) await this.usedFirstParty(ext.entry.id, ctx.environment);
     try {
       this.canvasKeys.set(ext, []);
-      const input = (spec as CheckSpec & { play?: unknown }).play;
-      this.plays.set(ext, { input: isPlain(input) ? input as PlayInput : undefined, played: [], tracks: new Set() });
-      const result = await this.ask(ext, ctx.deadline, kind, 'run', { type: kind, spec, ctx: this.checkContext(ext, ctx) });
+      const input = playInput(spec as CheckSpec & { play?: unknown });
+      // #851: a shell.journeys input names its devices, sizes or journeys, which a playtest's never does.
+      const shellInput = isPlain(input) && ['journeys', 'devices', 'sizes'].some((k) => k in input);
+      this.plays.set(ext, { input, played: [], tracks: new Set(), shell: shellInput });
+      const result = await this.checkRun(ext, ctx, (context) => this.ask(ext, ctx.deadline, kind, 'run', { type: kind, spec, ctx: context }));
       const read = this.canvasKeys.get(ext) ?? [];
       const { isCheckResult } = await import('@deepbuild/conformance');
       if (!isCheckResult(result)) return nothing('failed', `${ext.entry.id}'s ${kind} returned no check result as check.kind@1 defines one`);
@@ -3105,9 +3256,12 @@ class Host implements ExtensionHost {
   }
   async deliver(events: Event[]): Promise<void> {
     const failed: string[] = [];
+    // Each event's view, whole or content-free, is made and frozen once, and every package it reaches is handed that
+    // one value, which none of them can change (#2651).
+    const views = new Map<Event, { whole?: unknown; free?: unknown }>();
     await Promise.all([...this.exts.values()].filter((ext) => ext.live).map(async (ext) => {
       // Filtered by its grant before anything crosses to it, as a query is.
-      const mine = events.filter((e) => ext.subscribed.has(e.kind)).map((e) => this.visible(ext, e)).filter((e) => e !== undefined);
+      const mine = events.filter((e) => ext.subscribed.has(e.kind)).map((e) => this.visible(ext, e, views)).filter((e) => e !== undefined);
       if (!mine.length) return;
       if (!ext.ask || (await this.revoked(ext))) return void failed.push(`${ext.entry.id}: it stopped, its project no longer trusted or unloaded`);
       await this.ask(ext, CALL_MS, 'events', 'deliver', { events: mine }).catch((e) => failed.push(`${ext.entry.id}: ${message(e)}`));
@@ -3162,7 +3316,7 @@ class Host implements ExtensionHost {
       }
       // The rest started; each that didn't is unloaded and named.
       if (failed.length) throw Error(`not every package loaded before ready started: ${failed.join('; ')}`);
-    })();
+    })().finally(() => { this.startedAll = true; });
     return this.starting;
   }
 
@@ -3282,22 +3436,6 @@ class Host implements ExtensionHost {
     await Promise.all(stopping.map((t) => this.terminals.stop(t).catch(() => undefined)));
     this.terminals.close();
   }
-}
-
-/**
- * Copies a package's folder with each file's mode as it is: the digest counts modes, and a copy made under a tighter
- * umask (the hub's is 077) would otherwise digest differently from the folder it was checked as.
- */
-function copyPackage(from: string, to: string): void {
-  cpSync(from, to, { recursive: true });
-  const modes = (src: string, dst: string): void => {
-    for (const name of readdirSync(src)) {
-      const stat = lstatSync(join(src, name));
-      if (stat.isDirectory()) modes(join(src, name), join(dst, name));
-      else if (stat.isFile()) chmodSync(join(dst, name), stat.mode & 0o7777);
-    }
-  };
-  modes(from, to);
 }
 
 export async function openExtensionHost(options: ExtensionHostOptions): Promise<ExtensionHost> {

@@ -238,7 +238,7 @@ export interface SessionStatePort {
   verify(meta: HookMeta): Promise<boolean>;
   forgetEnded(): void;
   mcpHello(fd: number | undefined, claimed: { pid: number; start: string } | undefined, paseo?: string): Promise<{ session: string | null; parent?: { pid: number; start: string } }>;
-  sessionRows(seen?: string): Promise<Record<string, unknown>[]>;
+  sessionRows(seen?: string, params?: Record<string, unknown>): Promise<Record<string, unknown>>;
   rowsSeen(role: string, detail: boolean): Promise<Obj>;
   renameSession(params: Obj): Promise<Obj>;
   whySeen(role: string, params: Obj): Promise<Obj>;
@@ -255,7 +255,7 @@ export interface McpOperationsPort {
   index: Promise<IndexFill | undefined>;
   mcpCall(params: Obj, context: CallContext): Promise<unknown>;
   agentConnection(session: string): Connection;
-  checksOf(worktree: string): Map<string, { run: string; deadline?: unknown; type?: string; host?: string }>;
+  checksOf(worktree: string): Map<string, { run: string; deadline?: unknown; type?: string; host?: string; runs?: unknown; accept?: unknown; min_tests?: unknown }>;
   pinOf(worktree: string, question: string): Promise<Obj>;
   propose(session: string, args: Obj): Promise<Obj>;
 }

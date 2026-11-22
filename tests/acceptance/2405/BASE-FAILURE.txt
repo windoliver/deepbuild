@@ -1,0 +1,136 @@
+# #2405 acceptance tests: the one run at the base
+
+## The base (031292bf1, no implementation), in this worktree, run once
+
+$ npm ci && npm run build -w packages/contracts
+$ node --test --test-concurrency=1 --test-reporter=spec 'tests/acceptance/2405/*.test.mjs'
+(2026-11-15T23:59:35Z to 2026-11-16T00:39:35Z; gh signed in, network on; DEEP_STUDIED_NAMES_LIST unset; load average
+200 to 400 from other sessions; stack-trace lines dropped, and the sandboxes' temp folder written $TMPDIR)
+
+Seven tests: one passes, four fail and two skip as INCONCLUSIVE.
+
+- AC1 #2405.94f76478: both offline tests fail, since the base has no scripts/studied-names.mjs (`Cannot find module`).
+  The live test skips as INCONCLUSIVE: DEEP_STUDIED_NAMES_LIST is unset here, and this job never sees the private list.
+- AC2 #2405.67f3c930: skips as INCONCLUSIVE, with no verdict. The lane never ran: the machine's throttle gave it no
+  build grant within its 30 minutes while other sessions held the one build slot (`INCONCLUSIVE no grant`).
+- AC3 #2405.2014d5d9: the first test passes: at the base no direct dependency or adapter name reads as listed in the
+  106 hashes. The second fails: with objc2's hash planted, the base's public text lane still passes (1 changed file, 1
+  commit message and 3 open issues), so nothing fails on a dependency's name. Its twin, the run before the plant, passed.
+- AC4 #2405.bb6d2053: fails, since no sentence of CONTRIBUTING.md says a study adds its names before it files. The doc
+  lanes didn't run: the sentence is checked first.
+
+The planted programs, right and wrong, that each test was checked against are in the README, under "Wrong programs,
+planted by hand".
+
+✖ #2405.94f76478 AC1: with every name on an invented private list hashed in the file, its plain word left out, the script exits 0 and prints the count of names it checked, 6, and no name (66212.838ms)
+✖ #2405.94f76478 AC1: with the name on line 11 of the private list not hashed, the script fails, naming line 11 and no name (84784.678625ms)
+﹣ #2405.94f76478 AC1 (live): every name on the maintainers' private list that isn't a plain word hashes to an entry of scripts/studied-names.json, and the script, run on that list, exits 0, prints that count and no name (0.859292ms) # INCONCLUSIVE: DEEP_STUDIED_NAMES_LIST doesn't name the maintainers' private list, so its names can't be checked; set it to the list's path outside the repo
+﹣ #2405.67f3c930 AC2 (live): with the checkout's list, the public text lane run on main, which reads every open issue, reads no finding (2120986.869709ms) # INCONCLUSIVE: the public text lane couldn't read the open issues of windoliver/deepbuild or didn't finish, so it has no verdict:
+RUN public text
+INCONCLUSIVE no grant: no build grant came within 30 min
+  Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+INCONCLUSIVE public text: no grant: no build grant came within 30 min
+  Fix: Restate each finding above in our own words, without the name; a name DeepBuild runs, links, calls, reads or writes leaves the list in its own pull request; offline, run again with network and gh signed in.
+  Elapsed: 1803.20 s
+
+ℹ RUN public text
+INCONCLUSIVE no grant: no build grant came within 30 min
+  Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+INCONCLUSIVE public text: no grant: no build grant came within 30 min
+  Fix: Restate each finding above in our own words, without the name; a name DeepBuild runs, links, calls, reads or writes leaves the list in its own pull request; offline, run again with network and gh signed in.
+  Elapsed: 1803.20 s
+
+✔ #2405.2014d5d9 AC3: every direct dependency named in scripts/repo-rules.json and every adapter's name reads as not listed in scripts/studied-names.json (24.20875ms)
+✖ #2405.2014d5d9 AC3: the public text lane passes with the checkout's list, and fails, naming it, once a change plants the hash of the dependency objc2 (124585.630625ms)
+✖ #2405.bb6d2053 AC4 (live): CONTRIBUTING.md says a study adds its names before it files, and the doc lanes pass with CONTRIBUTING.md as the change and every real open issue (1.70325ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 1
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 2
+ℹ todo 0
+ℹ duration_ms 2399414.970792
+
+✖ failing tests:
+
+test at tests/acceptance/2405/ac1-names-script.test.mjs:42:1
+✖ #2405.94f76478 AC1: with every name on an invented private list hashed in the file, its plain word left out, the script exits 0 and prints the count of names it checked, 6, and no name (66212.838ms)
+  AssertionError [ERR_ASSERTION]: the script didn't exit 0 with every name hashed:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '$TMPDIR/deep-2405-FgudGw/repo/scripts/studied-names.mjs'
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.2
+  
+  
+  1 !== 0
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2405/ac1-names-script.test.mjs:51:1
+✖ #2405.94f76478 AC1: with the name on line 11 of the private list not hashed, the script fails, naming line 11 and no name (84784.678625ms)
+  AssertionError [ERR_ASSERTION]: the script crashed rather than reporting the missing name:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '$TMPDIR/deep-2405-lqBa1w/repo/scripts/studied-names.mjs'
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.2
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: "node:internal/modules/cjs/loader:1568\n  throw err;\n  ^\n\nError: Cannot find module '$TMPDIR/deep-2405-lqBa1w/repo/scripts/studied-names.mjs'\n    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)\n    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)\n    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)\n    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)\n    at Module._load (node:internal/modules/cjs/loader:1341:5)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)\n    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)\n    at node:internal/main/run_main_module:33:47 {\n  code: 'MODULE_NOT_FOUND',\n  requireStack: []\n}\n\nNode.js v24.22.2\n",
+    expected: /^\s+at .+:\d+:\d+\)?$/m,
+    operator: 'doesNotMatch',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2405/ac3-dependencies.test.mjs:23:1
+✖ #2405.2014d5d9 AC3: the public text lane passes with the checkout's list, and fails, naming it, once a change plants the hash of the dependency objc2 (124585.630625ms)
+  AssertionError [ERR_ASSERTION]: the public text lane doesn't fail on a list holding the dependency objc2:
+  RUN public text
+  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node scripts/public-text.mjs` runs unleased
+  public text: 1 changed files, 1 commit messages and 3 open issues name no studied product
+  PASS public text (4.64 s)
+  
+  + actual - expected
+  
+    [
+  +   'PASS'
+  -   'FAIL'
+    ]
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'PASS' ],
+    expected: [ 'FAIL' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2405/ac4-contributing.live.test.mjs:15:1
+✖ #2405.bb6d2053 AC4 (live): CONTRIBUTING.md says a study adds its names before it files, and the doc lanes pass with CONTRIBUTING.md as the change and every real open issue (1.70325ms)
+  AssertionError [ERR_ASSERTION]: no sentence of CONTRIBUTING.md says a study adds its names before it files
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

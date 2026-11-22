@@ -8,9 +8,10 @@
 //! Everything here is a pure function of the document and t, so seeking equals playing; nothing
 //! is simulated, integrated or read from an earlier frame.
 
+use std::cell::RefCell;
 use std::collections::BTreeSet;
 
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use crate::scene::{Layer3, Refused};
 
@@ -56,6 +57,238 @@ pub struct Wake {
     pub step: f64,
 }
 
+/// The most rings touches may keep alive at one time on one part (#2760); a list that would
+/// keep more is refused at check.
+pub const MAX_RINGS: usize = 64;
+
+/// #2760: one ring a touch starts: the part it lies on, its occurrence's index in the list its
+/// `on` names (counted before the filter, as a Spawn's voice names it), its point dropped onto
+/// the plate at rest (world x and z) and its flick.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Touch {
+    pub part: String,
+    pub occurrence: usize,
+    pub at: [f64; 2],
+    pub born: i64,
+}
+
+/// #2760: rings where something touches the water. Each occurrence its `on` matches starts one
+/// ring at its flick, at its point: the rain's ring, its crest at radius speed × age, fading to
+/// nothing at `span`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Rings {
+    /// The baked occurrence list and its filter, as Spawn takes it.
+    pub on: Value,
+    pub speed: f64,
+    pub span: f64,
+    pub strength: f64,
+    /// The touches of the whole list, in flick order, read from its bake at check.
+    pub touches: Vec<Touch>,
+    /// The frame's flick.
+    pub now: i64,
+}
+
+const FLICKS: f64 = deep_canvas::camera::FLICKS_PER_SECOND as f64;
+
+/// #2760: [`Rings::cells`]' grid: its origin in world x and z, its cells per m along each, and
+/// each cell's rings as bits, row by row along z.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Cells {
+    pub origin: [f64; 2],
+    pub per_m: [f64; 2],
+    pub masks: Vec<u32>,
+}
+
+impl Rings {
+    /// A ring's life in flicks.
+    fn life(&self) -> i64 {
+        (self.span * FLICKS).round() as i64
+    }
+
+    /// The grid the shading pass finds a pixel's rings by: over the box the alive rings' crests
+    /// reach, [`RING_GRID`] cells a side, each cell a bit for every ring (by its place among the
+    /// first `most` alive, 32 a word) whose crest can bend a point of it. A point outside the box
+    /// is bent by none, so a pixel reads the few rings near it and never all of them.
+    pub fn cells(&self, most: usize) -> Cells {
+        let reach = 3.0 * RING_WIDTH + 1e-3;
+        let live: Vec<([f64; 2], f64)> = (self.alive().take(most))
+            .map(|(c, age)| (c.at, self.speed * age))
+            .collect();
+        let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+        for (at, radius) in &live {
+            for a in 0..2 {
+                lo[a] = lo[a].min(at[a] - radius - reach);
+                hi[a] = hi[a].max(at[a] + radius + reach);
+            }
+        }
+        let words = live.len().div_ceil(32);
+        let mut cells = Cells {
+            origin: lo,
+            per_m: [0, 1].map(|a| RING_GRID as f64 / (hi[a] - lo[a])),
+            masks: vec![0; RING_GRID * RING_GRID * words],
+        };
+        for (k, (at, radius)) in live.iter().enumerate() {
+            let (near, far) = (radius + reach, (radius - reach).max(0.0));
+            for j in 0..RING_GRID {
+                for i in 0..RING_GRID {
+                    // The cell's nearest and furthest points from the ring's centre, squared.
+                    let (mut nearest, mut furthest) = (0.0, 0.0);
+                    for (a, c) in [i, j].into_iter().enumerate() {
+                        let (c0, c1) = (c as f64, (c + 1) as f64);
+                        let (d0, d1) = (
+                            lo[a] + c0 / cells.per_m[a] - at[a],
+                            at[a] - lo[a] - c1 / cells.per_m[a],
+                        );
+                        let (out, across) = (d0.max(d1).max(0.0), (-d0).max(-d1));
+                        nearest += out * out;
+                        furthest += across * across;
+                    }
+                    if nearest <= near * near && furthest >= far * far {
+                        cells.masks[(j * RING_GRID + i) * words + k / 32] |= 1 << (k % 32);
+                    }
+                }
+            }
+        }
+        cells
+    }
+
+    /// The rings alive at the frame's flick, in the list's order, each with its age in s: a
+    /// touch draws from its flick until its age reaches `span`.
+    pub fn alive(&self) -> impl Iterator<Item = (&Touch, f64)> {
+        let life = self.life();
+        self.touches.iter().filter_map(move |c| {
+            let age = self.now - c.born;
+            (0..life).contains(&age).then(|| (c, age as f64 / FLICKS))
+        })
+    }
+
+    /// Reads the list's touches on `plates` (each part's extent at rest): `kept`, its `on`'s
+    /// matches in flick order, each numbered by its place in `whole`, the list unfiltered. An
+    /// occurrence with no point, or whose point lies off every plate, starts no ring. More than
+    /// [`MAX_RINGS`] alive at one time on one part are refused, naming the part, the time and the
+    /// count: the list is whole before playback.
+    fn read(
+        &mut self,
+        material: &str,
+        plates: &[(String, [f64; 4])],
+        whole: &[deep_canvas_motion::occurrence::Occurrence],
+        kept: &[deep_canvas_motion::occurrence::Occurrence],
+    ) -> Result<(), Fault> {
+        let mut next = 0;
+        self.touches = kept
+            .iter()
+            .filter_map(|o| {
+                // The filter keeps the list's order, so each match lies past the one before.
+                let occurrence = next + whole[next..].iter().position(|w| w == o)?;
+                next = occurrence + 1;
+                let p = o.payload.get("point")?.as_array()?;
+                let at = [p.first()?.as_f64()?, p.get(2)?.as_f64()?];
+                let (part, _) = plates.iter().find(|(_, [x0, z0, x1, z1])| {
+                    at[0] >= *x0 && at[0] <= *x1 && at[1] >= *z0 && at[1] <= *z1
+                })?;
+                Some(Touch {
+                    part: part.clone(),
+                    occurrence,
+                    at,
+                    born: o.t,
+                })
+            })
+            .collect();
+        let life = self.life();
+        for (part, _) in plates {
+            let born: Vec<i64> = (self.touches.iter())
+                .filter(|c| c.part == *part)
+                .map(|c| c.born)
+                .collect();
+            // At each birth, the rings alive are those born in the `span` up to it.
+            let mut from = 0;
+            for (k, &b) in born.iter().enumerate() {
+                while born[from] <= b - life {
+                    from += 1;
+                }
+                let alive = k + 1 - from;
+                if alive > MAX_RINGS {
+                    let at = b as f64 / FLICKS;
+                    return Err(carrying(
+                        "over_budget",
+                        &format!("items/{material}/params/water/rings"),
+                        json!({"ids": [material, part], "actual": {"part": part, "count": alive, "t": b},
+                            "what": format!("{alive} rings are alive at one time on {part}, at {at} s: a part draws {MAX_RINGS}"),
+                            "fix": "Start fewer rings at one time on the part: narrow `on`, or shorten `span`."}),
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// #2760: a list none of whose kinds carries a point starts no ring ever, so a water's rings on
+/// it are refused at check, naming the list. A logic item's kinds are those it declares in
+/// `emits`, a kind's point its field named `point`; a marker and an input entry have no place,
+/// and a world's contacts and hits do.
+fn pointed(
+    doc: &serde_json::Map<String, Value>,
+    material: &str,
+    list: &str,
+    path: &str,
+) -> Result<(), Fault> {
+    let emits = list
+        .strip_suffix(".occurrences")
+        .and_then(|id| doc.get("items")?.get(id))
+        .filter(|i| i.get("kind").and_then(Value::as_str) == Some("logic@1"))
+        .map(|i| i.pointer("/params/emits").and_then(Value::as_object));
+    let carries = match emits {
+        Some(kinds) => kinds
+            .into_iter()
+            .flat_map(|k| k.values())
+            .any(|k| k.pointer("/fields/point").is_some()),
+        None => !(list.starts_with("markers.") || list.starts_with("input.")),
+    };
+    if carries {
+        return Ok(());
+    }
+    Err(carrying(
+        "out_of_range",
+        path,
+        json!({"ids": [material], "actual": {"list": list},
+            "what": format!("no kind of {list} carries a point, so none of its occurrences starts a ring"),
+            "fix": "Name a list one of whose kinds carries a point: a physics world's, or a logic item's with a field named `point`."}),
+    ))
+}
+
+/// What [`find`] refuses with: the refusal every host gets and, for a refusal that names more
+/// than its path, the issue a host that checks a document raises (`{code, severity, ids, path,
+/// actual, what, fix}`).
+#[derive(Debug)]
+pub struct Fault(Refused, Option<Value>);
+
+impl From<Refused> for Fault {
+    fn from(r: Refused) -> Fault {
+        Fault(r, None)
+    }
+}
+
+impl Fault {
+    /// The refusal, its issue left in the host's memo where the host keeps one.
+    pub(crate) fn kept(self, memo: Option<&RefCell<crate::contributed::Memo>>) -> Refused {
+        if let (Some(memo), Some(issue)) = (memo, self.1) {
+            memo.borrow_mut().refused = Some(issue);
+        }
+        self.0
+    }
+}
+
+/// A refusal at `path` with the `ids`, `actual`, `what` and `fix` of its issue; a host that
+/// keeps no issue reads what it found after the path.
+fn carrying(code: &'static str, path: &str, mut issue: Value) -> Fault {
+    issue["code"] = json!(code);
+    issue["severity"] = json!("error");
+    issue["path"] = json!(path);
+    let what = issue["what"].as_str().unwrap_or_default();
+    Fault(bad(code, format!("{path}: {what}")), Some(issue))
+}
+
 /// A view's water (at most one per view, like its mirror).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Water {
@@ -84,6 +317,8 @@ pub struct Water {
     /// #968: the flow the ripples' and the foam's noise moves along, or none.
     pub flow: Option<crate::flow::Flow>,
     pub wake: Option<Wake>,
+    /// #2760: the rings its touches start, or none.
+    pub rings: Option<Rings>,
     /// Its shore (#268), with the field baked at check, or none.
     pub shore: Option<crate::shore::Shore>,
     /// The water's plane at rest: its first part's world y.
@@ -269,6 +504,22 @@ pub fn parse(material: &str, spec: &Value, seed: u32, t: f64) -> Result<Water, R
             })
         }
     };
+    let rings = match spec.get("rings") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) if s == "none" => None,
+        Some(r) => Some(Rings {
+            on: r
+                .get("on")
+                .filter(|on| on.is_string() || on.is_object())
+                .ok_or_else(|| bad("bad_input", at("rings/on")))?
+                .clone(),
+            speed: num(r.get("speed"), "rings/speed", 0.3, [1e-3, 100.0])?,
+            span: num(r.get("span"), "rings/span", 2.0, [1e-3, 60.0])?,
+            strength: num(r.get("strength"), "rings/strength", 0.2, [0.0, 1.0])?,
+            touches: Vec::new(),
+            now: 0,
+        }),
+    };
     Ok(Water {
         material: material.to_string(),
         parts: BTreeSet::new(),
@@ -285,6 +536,7 @@ pub fn parse(material: &str, spec: &Value, seed: u32, t: f64) -> Result<Water, R
         foam_speed,
         flow: crate::flow::parse(material, spec.get("flow"))?,
         wake,
+        rings,
         shore: crate::shore::parse(material, spec.get("shore"))?,
         level: 0.0,
         seed,
@@ -310,14 +562,16 @@ fn wind_of(
     Ok((wind(speed, direction), [d[0] * speed, d[1] * speed]))
 }
 
-/// The view's water, from the materials its solids name: the first in item order, its parts the
-/// solids whose material it is. `None` when no drawn solid's material carries one.
+/// The view's water at flick `t`, from the materials its solids name: the first in item order,
+/// its parts the solids whose material it is. `None` when no drawn solid's material carries one.
 pub fn find<'a>(
     layers: &[Layer3],
     get: impl Fn(&str) -> Option<&'a Value>,
-    seed: u32,
-    t: f64,
-) -> Result<Option<Water>, Refused> {
+    doc: &serde_json::Map<String, Value>,
+    program: &deep_canvas_motion::program::Program,
+    t: i64,
+) -> Result<Option<Water>, Fault> {
+    let seed = doc.get("seed").and_then(Value::as_u64).unwrap_or(0) as u32;
     let mut found: Option<Water> = None;
     for s in layers.iter().flat_map(|l| &l.solids) {
         let owner = s.id.split_once('#').map_or(s.id.as_str(), |(o, _)| o);
@@ -335,7 +589,7 @@ pub fn find<'a>(
         };
         let first = found.is_none();
         if first {
-            found = Some(parse(name, spec, seed, t)?);
+            found = Some(parse(name, spec, seed, t as f64 / FLICKS)?);
         }
         if let Some(w) = found.as_mut().filter(|w| w.material == name) {
             w.parts.insert(s.id.clone());
@@ -353,6 +607,21 @@ pub fn find<'a>(
                     zs.fold(f64::NEG_INFINITY, f64::max),
                 ],
             ));
+        }
+    }
+    // #2760: the rings its touches start, from the baked list its `on` names.
+    if let Some(w) = &mut found {
+        if let Some(rings) = &mut w.rings {
+            let path = format!("items/{}/params/water/rings/on", w.material);
+            let list = |on: &Value| {
+                deep_canvas_motion::occurrence::matches(program, doc, on, &path)
+                    .map_err(|r| bad(r.code, r.path))
+            };
+            let name = rings.on.get("list").unwrap_or(&rings.on);
+            let (whole, kept) = (list(name)?, list(&rings.on)?);
+            pointed(doc, &w.material, name.as_str().unwrap_or(""), &path)?;
+            rings.now = t;
+            rings.read(&w.material, &w.plates, &whole, &kept)?;
         }
     }
     Ok(found)
@@ -382,6 +651,10 @@ pub fn wake_times(t: i64, step: i64, span: f64) -> Vec<i64> {
 /// A rain ring's speed outward in m/s and its life in s (water.wgsl's RING_SPEED and RING_LIFE).
 pub const RING_SPEED: f64 = 0.3;
 pub const RING_LIFE: f64 = 0.35;
+/// A ring's crest's width in m, and the side in cells of the grid a touch's rings are found by
+/// (water.wgsl's RING_WIDTH and TOUCH_GRID).
+pub const RING_WIDTH: f64 = 0.015;
+pub const RING_GRID: usize = 16;
 
 /// The rain's hash (water.wgsl's `hash`, bit for bit).
 pub fn hash(a: u32) -> u32 {
@@ -464,42 +737,42 @@ impl Water {
     }
 }
 
-/// A wake or a trail (#450) behind an item a logic array moves is refused at check, naming the
-/// item: a driver whose target is the item or one of its parents and one of whose variables reads
-/// a `logic` item's array. A logic program's earlier steps aren't kept for either to read.
-pub fn logic_moved(doc: &serde_json::Map<String, Value>) -> Result<(), Refused> {
+impl Water {
+    /// #2760's wrong rings, reachable only through `deep-gpu --planted`: each ring centred where
+    /// the rain's hash puts a drop on its part, by the seed and the ring's place among the
+    /// touches, never at its occurrence's point.
+    pub fn plant_rings_at_rain_hash(&mut self) {
+        let touches = self.rings.iter_mut().flat_map(|r| &mut r.touches);
+        for (k, c) in touches.enumerate() {
+            let plate = self.plates.iter().find(|(part, _)| *part == c.part);
+            if let Some((_, [x0, z0, x1, z1])) = plate {
+                let h = hash3(k as i32, 0, 0, self.seed);
+                c.at = [x0 + unit(h) * (x1 - x0), z0 + unit(hash(h)) * (z1 - z0)];
+            }
+        }
+    }
+}
+
+/// A wake or a trail (#450) behind an item a live drag moves is refused at check, naming the
+/// item: a document control whose handle drags the item or one of its parents, whose earlier
+/// places nothing keeps for either to read. One a logic array moves reads the logic bake's
+/// earlier steps through its drivers (#265).
+pub fn dragged(doc: &serde_json::Map<String, Value>) -> Result<(), Refused> {
     let empty = serde_json::Map::new();
     let items = doc
         .get("items")
         .and_then(Value::as_object)
         .unwrap_or(&empty);
-    let kind = |id: &str| {
-        items
-            .get(id)
-            .and_then(|i| i.get("kind"))
-            .and_then(Value::as_str)
-    };
-    let drivers: Vec<&Value> = doc
-        .get("drivers")
+    let handles: Vec<&str> = doc
+        .get("controls")
         .and_then(Value::as_object)
         .into_iter()
-        .flat_map(|d| d.values())
+        .flat_map(|c| c.values())
+        .filter_map(|c| c.pointer("/handle/item").and_then(Value::as_str))
         .collect();
-    if drivers.is_empty() {
+    if handles.is_empty() {
         return Ok(());
     }
-    let from_logic = |d: &Value| {
-        d.get("vars")
-            .and_then(Value::as_object)
-            .is_some_and(|vars| {
-                vars.values().any(|v| {
-                    v.as_str()
-                        .and_then(|p| p.split_once('.'))
-                        .and_then(|(owner, _)| kind(owner))
-                        .is_some_and(|k| k.starts_with("logic"))
-                })
-            })
-    };
     for item in items.values() {
         let source = item
             .pointer("/params/water/wake/item")
@@ -511,27 +784,191 @@ pub fn logic_moved(doc: &serde_json::Map<String, Value>) -> Result<(), Refused> 
             continue;
         };
         // The item and its parents.
-        let mut chain = vec![wake.to_string()];
+        let mut chain = vec![wake];
         while let Some(p) = items
-            .get(chain.last().map_or("", String::as_str))
+            .get(chain[chain.len() - 1])
             .and_then(|i| i.get("parent"))
             .and_then(Value::as_str)
         {
-            if chain.iter().any(|c| c == p) {
+            if chain.contains(&p) {
                 break;
             }
-            chain.push(p.to_string());
+            chain.push(p);
         }
-        for d in &drivers {
-            let target = d.get("target").and_then(Value::as_str).unwrap_or("");
-            if from_logic(d)
-                && chain
-                    .iter()
-                    .any(|c| target.starts_with(&format!("items/{c}/")))
-            {
-                return Err(bad("out_of_range", format!("items/{wake}")));
-            }
+        if chain.iter().any(|c| handles.contains(c)) {
+            return Err(bad("out_of_range", format!("items/{wake}")));
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use deep_canvas_motion::occurrence::Occurrence;
+    use serde_json::json;
+
+    use super::*;
+
+    const F: i64 = deep_canvas::camera::FLICKS_PER_SECOND;
+
+    fn rings(now: i64) -> Rings {
+        let spec = json!({"rings": {"on": "game.occurrences"}});
+        let mut r = parse("pond", &spec, 0, 0.0).unwrap().rings.unwrap();
+        r.now = now;
+        r
+    }
+
+    fn touch(t: i64, point: Value) -> Occurrence {
+        Occurrence {
+            t,
+            end: t,
+            a: None,
+            b: None,
+            kind: "lap".into(),
+            tags: Vec::new(),
+            payload: json!({"point": point}),
+        }
+    }
+
+    /// #2760: a touch starts one ring at its flick, at its point dropped onto the plate; one with
+    /// no point, or off the plate, starts none; a ring is gone when its age reaches the span.
+    #[test]
+    fn a_touch_starts_a_ring_at_its_point_and_it_dies_at_its_span() {
+        let plates = [("pond".to_string(), [-2.0, -2.0, 2.0, 2.0])];
+        let list = [
+            touch(F, json!([0.5, 3.0, -1.0])),
+            touch(F * 3 / 2, json!([3.0, 0.0, 0.0])),
+            touch(F * 3 / 2, Value::Null),
+            touch(F * 2, json!([0.0, 0.0, 0.0])),
+        ];
+        let mut r = rings(F * 9 / 4);
+        r.read("lake", &plates, &list, &list).unwrap();
+        let alive: Vec<(usize, [f64; 2], f64)> = r
+            .alive()
+            .map(|(c, age)| (c.occurrence, c.at, age))
+            .collect();
+        assert_eq!(alive, [(0, [0.5, -1.0], 1.25), (3, [0.0, 0.0], 0.25)]);
+        assert!(r.alive().all(|(c, _)| c.part == "pond"));
+        // The first touch, at 1 s, with the default span of 2 s: alive a flick before 3 s, gone at 3 s.
+        r.now = F * 3 - 1;
+        assert_eq!(r.alive().count(), 2);
+        r.now = F * 3;
+        assert_eq!(
+            r.alive().map(|(c, _)| c.occurrence).collect::<Vec<_>>(),
+            [3]
+        );
+        // A filter's matches keep their places in the whole list, as a Spawn's voices name them.
+        r.read("lake", &plates, &list, &list[3..]).unwrap();
+        assert_eq!(r.touches[0].occurrence, 3);
+        // The planted rings sit where the rain's hash puts them, not at their points.
+        let mut w = parse("lake", &json!({}), 2760, 0.0).unwrap();
+        (w.plates, w.rings) = (plates.to_vec(), Some(r));
+        w.plant_rings_at_rain_hash();
+        let at = w.rings.unwrap().touches[0].at;
+        assert!(
+            at != [0.0, 0.0] && at.iter().all(|x| x.abs() <= 2.0),
+            "{at:?}"
+        );
+    }
+
+    /// #2760: every point a ring's crest bends lies in a cell that holds the ring's bit, so the
+    /// grid drops no ring a pixel would draw; and a cell inside a wide ring's crest holds none.
+    #[test]
+    fn the_grid_holds_every_ring_that_reaches_a_point() {
+        let mut r = rings(F * 2);
+        r.touches = (0..40)
+            .map(|k: i64| Touch {
+                part: "pond".into(),
+                occurrence: k as usize,
+                at: [
+                    (k * 37 % 23) as f64 * 0.31 - 3.0,
+                    (k * 53 % 19) as f64 * 0.27 - 2.0,
+                ],
+                born: F * 2 - (k + 1) * F / 21,
+            })
+            .collect();
+        let cells = r.cells(64);
+        let live: Vec<([f64; 2], f64)> = r.alive().map(|(c, age)| (c.at, 0.3 * age)).collect();
+        assert_eq!((live.len(), cells.masks.len()), (40, 16 * 16 * 2));
+        let (mut held, mut reached) = (0, 0);
+        for n in 0..90_000 {
+            let p = [(n % 300) as f64 * 0.03 - 4.5, (n / 300) as f64 * 0.03 - 4.5];
+            let cell = [0, 1].map(|a| ((p[a] - cells.origin[a]) * cells.per_m[a]).floor());
+            let inside = cell.iter().all(|c| (0.0..16.0).contains(c));
+            let at = (cell[1] as usize * 16 + cell[0] as usize) * 2;
+            for (k, (c, radius)) in live.iter().enumerate() {
+                let d2 = (p[0] - c[0]) * (p[0] - c[0]) + (p[1] - c[1]) * (p[1] - c[1]);
+                let (lo, hi) = ((radius - 0.045).max(0.0), radius + 0.045);
+                if d2 > lo * lo && d2 < hi * hi {
+                    reached += 1;
+                    assert!(
+                        inside && cells.masks[at + k / 32] >> (k % 32) & 1 == 1,
+                        "ring {k} bends {p:?}"
+                    );
+                }
+                held += usize::from(inside && cells.masks[at + k / 32] >> (k % 32) & 1 == 1);
+            }
+        }
+        // Far fewer rings are held at a point than are alive, and the crests are all found.
+        assert!(
+            reached > 5_000 && held < 90_000 * 40 / 8,
+            "{reached} {held}"
+        );
+    }
+
+    /// #2760: 64 rings alive at one time on one part draw; 65 are refused, naming the part, the
+    /// time and the count; the same 65 over two parts, or further apart than the span, draw.
+    #[test]
+    fn more_than_64_rings_alive_on_one_part_are_refused() {
+        let plates = [
+            ("east".to_string(), [0.0, -2.0, 2.0, 2.0]),
+            ("west".to_string(), [-2.0, -2.0, -0.01, 2.0]),
+        ];
+        let within = |n: i64, gap: i64, x: fn(i64) -> f64| -> Vec<Occurrence> {
+            (0..n)
+                .map(|k| touch(F + k * gap, json!([x(k), 0.0, 0.0])))
+                .collect()
+        };
+        let mut r = rings(0);
+        let mut read = |list: Vec<Occurrence>| r.read("lake", &plates, &list, &list);
+        assert!(read(within(64, F / 65, |_| 1.0)).is_ok());
+        let Fault(refused, issue) = read(within(65, F / 65, |_| 1.0)).unwrap_err();
+        assert_eq!(refused.code, "over_budget");
+        let at = (F + 64 * (F / 65)) as f64 / F as f64;
+        assert_eq!(
+            refused.path,
+            format!("items/lake/params/water/rings: 65 rings are alive at one time on east, at {at} s: a part draws 64")
+        );
+        let issue = issue.unwrap();
+        assert_eq!(issue["path"], json!("items/lake/params/water/rings"));
+        assert_eq!(
+            issue["actual"],
+            json!({"part": "east", "count": 65, "t": F + 64 * (F / 65)})
+        );
+        assert_eq!(issue["ids"], json!(["lake", "east"]));
+        let split = |k: i64| if k % 2 == 0 { 1.0 } else { -1.0 };
+        assert!(read(within(65, F / 65, split)).is_ok());
+        assert!(read(within(65, F / 32, |_| 1.0)).is_ok());
+    }
+
+    /// #2760: a list none of whose kinds carries a point is refused, naming the list.
+    #[test]
+    fn a_list_with_no_point_is_refused_by_name() {
+        let doc = |fields: Value| {
+            let doc = json!({"items": {"game": {"kind": "logic@1", "params": {"emits": {"step": {}, "lap": {"fields": fields}}}}}});
+            doc.as_object().cloned().unwrap()
+        };
+        let list = "game.occurrences";
+        assert!(pointed(&doc(json!({"point": "vec3"})), "pond", list, "p").is_ok());
+        let Fault(refused, issue) =
+            pointed(&doc(json!({"speed": "f64"})), "pond", list, "p").unwrap_err();
+        assert_eq!(refused.code, "out_of_range");
+        assert!(refused
+            .path
+            .starts_with("p: no kind of game.occurrences carries a point"));
+        assert_eq!(issue.unwrap()["actual"], json!({"list": list}));
+        let world = doc(json!({}));
+        assert!(pointed(&world, "pond", "pool.occurrences", "p").is_ok());
+        assert!(pointed(&world, "pond", "markers.beat", "p").is_err());
+    }
 }

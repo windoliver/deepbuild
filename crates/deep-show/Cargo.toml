@@ -77,6 +77,9 @@ test-mesh-item = ["dep:deep-canvas-test-modules"]
 test-prog-registry = ["dep:deep-canvas-test-modules"]
 test-sandbox-needs-logic = []
 test-sandbox-alt = []
+# Issue #192: the full set with only the logic module's version raised, or only the sandbox module's.
+test-logic-version-bump = []
+test-sandbox-version-bump = []
 # Issue #533: the logic module's test builds (the #533 acceptance README: Test features of
 # deep-show): a patch release of the shipped logic implementation in its place, and a planted
 # logic module that requires physics; #1919's `test-leave-out-physics` is the full set without it.
@@ -102,6 +105,17 @@ test-peek = ["dep:deep-canvas-test-modules"]
 # Issue #157: `test.guards`, whose kinds plant a NaN in a frame's float target, lose the device at
 # a frame, and draw a frame differently the second time it is drawn.
 test-export-guards = ["dep:deep-canvas-test-modules"]
+# Issue #1415: `test.boom`, whose operator panics at a frame at or after its `at`, freezing a live
+# session as an operator's panic does; and the state table's planted call, left undecided for one
+# state (deep-show then fails to compile) or decided for all six.
+test-boom = ["dep:deep-canvas-test-modules"]
+test-session-call-undecided = []
+test-session-call-decided = []
+# Issue #518: the native test encode tools of the #518 acceptance README, each a tool of the job
+# kind `encode` that encodes only for an export whose brief pins it. Its AV1 tools encode with
+# rav1e (BSD-2-Clause), which the image crate's AVIF writer already brings into the lock; its
+# surface tools hash what they read with the blake3 crate the canvas core hashes with.
+test-encode-tools = ["dep:rav1e", "dep:blake3"]
 # Issue #412: the #412 acceptance README's test canvas modules: a preview kind, a registry of cue
 # kinds with the cue list that plays it (pop_in's default span 0.5 s, or 0.8 s), the ring at
 # fixture digests A and B, and a kind whose one-liner overruns the sheet.
@@ -124,6 +138,12 @@ test-scatter = ["dep:deep-canvas-test-modules"]
 # Issue #488: a stepping module with checkpoints, and a module whose cache is keyed by frame
 # number (the #488 acceptance README: The test canvas modules).
 test-tick = ["dep:deep-canvas-test-modules"]
+# #172: the full set and the test canvas module test.native, which no web player carries.
+test-web-lacks = ["dep:deep-canvas-test-modules"]
+# #2776: the test canvas module test.paths, three kinds drawn in 3D with their paths' answers, and
+# the planted twin whose test.paths.mist@1 gives no answer for a final.
+test-paths = ["dep:deep-canvas-test-modules"]
+test-paths-no-final = ["test-paths"]
 test-frame-cache = ["dep:deep-canvas-test-modules"]
 # Issue #497: a module stepping at its item's step_rate into a held array.
 test-held = ["dep:deep-canvas-test-modules"]
@@ -165,6 +185,8 @@ test-kit-gpu-pass-shifted = ["test-kit"]
 test-kit-gpu-pass-cpu-ref-fails = ["test-kit"]
 test-kit-sneak = ["test-kit"]
 test-kit-order = ["test-kit"]
+test-kit-pointer = ["test-kit"]
+test-kit-pointer-declared = ["test-kit"]
 test-kit-mig-1 = ["test-kit"]
 test-kit-mig-2 = ["test-kit"]
 test-kit-mig-2-moves = ["test-kit"]
@@ -210,6 +232,13 @@ test-sim-a-1-0-1 = ["test-sim"]
 test-sim-b-1-0-1 = ["test-sim"]
 test-sim-b-pin-feature = ["test-sim"]
 test-physics-rapier-patch = []
+# Issue #189: the full set with test-physics-rapier-patch's physics record, whose backend builds every
+# world under its gravity times 1.000001 (drift) or twice it (heavy) (tests/acceptance/189/lab/README.md: Builds).
+test-physics-rapier-patch-drift = ["test-physics-rapier-patch", "deep-physics-rapier/test-gravity-drift"]
+test-physics-rapier-patch-heavy = ["test-physics-rapier-patch", "deep-physics-rapier/test-gravity-heavy"]
+# Issue #1781: the full set with scene3d's fixture builder `test.attrs@1`, a 1 m box with the
+# attributes its params list (the #1781 acceptance README: The test build and its fixture builder).
+test-attrs = []
 # Issue #421: a planted implementation of scene3d@1, declared bit, whose light policy breaks a tie
 # by registration order instead of by ID; the kit fails it and a release build refuses it.
 test-scene3d-tie-by-order = []
@@ -242,6 +271,9 @@ test-mark-binds-author = ["dep:deep-canvas-test-modules"]
 test-mark-schema-changed = ["dep:deep-canvas-test-modules"]
 test-mark-v2 = ["dep:deep-canvas-test-modules"]
 test-mode-closed = ["dep:deep-canvas-test-modules"]
+# Issue #2777: test.tone's kind test.tint@1, its field tone's list of three words unclosed or closed.
+test-tone-unclosed = ["dep:deep-canvas-test-modules"]
+test-tone-closed = ["dep:deep-canvas-test-modules"]
 test-mode-registry = ["dep:deep-canvas-test-modules"]
 test-mode-renumbered = ["dep:deep-canvas-test-modules"]
 test-fill-a = ["dep:deep-canvas-test-modules"]
@@ -287,6 +319,10 @@ test-cast-sorts-by-id = ["deep-physics-rapier/test-cast-sorts-by-id"]
 test-motion-reads-physics-array = []
 
 [dependencies]
+# Issue #1561: a 2D frame under a drawn look, through the compositor and the drawn passes the
+# live window and `film2d` run, on macOS; and #1250's clips read their frames' indices through
+# its indexed reader on every platform.
+deep-groups-render = { path = "../deep-groups-render" }
 deep-canvas = { path = "../deep-canvas" }
 # Issue #1486: the one image service: still pictures drawn at their levels.
 deep-images = { path = "../deep-images" }
@@ -307,7 +343,9 @@ deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 deep-canvas-media = { path = "../deep-canvas-media" }
 deep-canvas-export = { path = "../deep-canvas-export" }
 deep-lottie-reader = { path = "../deep-lottie-reader" }
+deep-pptx-reader = { path = "../deep-pptx-reader" }
 deep-logic = { path = "../deep-logic" }
+deep-play = { path = "../deep-play" }
 # Issue #1918: the physics module, physics@1, and the Rapier backend a scene's worlds bake on.
 deep-canvas-physics = { path = "../deep-canvas-physics" }
 deep-physics-rapier = { path = "../deep-physics-rapier" }
@@ -321,21 +359,35 @@ deep-sandbox-wasmtime = { path = "../deep-sandbox-wasmtime" }
 deep-canvas-seams = { path = "../deep-canvas-seams" }
 # Issue #498: the decode worker and the encode tool, which this binary's copies run as.
 deep-codecs = { path = "../deep-codecs" }
+rav1e = { version = "0.8.1", default-features = false, optional = true }
+blake3 = { version = "1", default-features = false, features = ["std"], optional = true }
 # Issue #309: the network seam's macOS backend and relay@1.
 deep-relay = { path = "../deep-relay" }
+# Issue #549: the net module: net@1, a match's copies, the Join prompt and the check kinds.
+deep-net = { path = "../deep-net" }
 deep-gpu = { path = "../deep-gpu" }
 deep-effects-render = { path = "../deep-effects-render", optional = true }
 deep-scene3d-render = { path = "../deep-scene3d-render" }
 deep-marks-vello = { path = "../deep-marks-vello" }
+deep-marks-raster = { path = "../deep-marks-raster" }
 deep-text = { path = "../deep-text" }
 # Issue #402: a terminal's PTY (openpty, login_tty, the window size) and stopping what serve
 # started, by PID; already in the lockfile.
 libc = "0.2"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# Issue #1250: a clip of a play on an indexed look, a GIF of its index frames, and a still, an
+# indexed PNG; both already in the lockfile.
+gif = "0.14"
+png = "0.18"
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 # Issue #542: the planted text control that normalizes its commit to NFC; already in the lockfile.
 unicode-normalization = "0.1"
 sha2 = "0.10"
+# Issue #2892: a web bundle stores each file whose format doesn't compress its own data as gzip,
+# deflated by miniz_oxide called directly (flate2's backend follows feature unification, so it
+# isn't pinned), with crc32fast for the trailer; both already in the lockfile.
+miniz_oxide = "0.9"
+crc32fast = "1"
 # Issue #1897: the u8 pipeline too, so a cross-machine record drawn through it is real and refused.
 vello_cpu ={ version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline", "u8_pipeline"] }
 # Issue #138: the kit's headless backend (wgpu's noop) and its GPU backend.
@@ -345,6 +397,10 @@ wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "n
 # lockfile.
 [build-dependencies]
 sha2 = "0.10"
+# Issue #2892: the player's prebuilt module sets stored as gzip once per build, by the export's own
+# compressor (src/export/gzip.rs).
+miniz_oxide = "0.9"
+crc32fast = "1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "noop", "metal"] }

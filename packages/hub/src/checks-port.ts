@@ -26,6 +26,8 @@ export interface CommandCheck {
 /** Full command evidence, not just the check.kind result: retries, seeds and clock movement remain observable. */
 export interface CommandRun extends CheckResult {
   run: string;
+  /** Whether a test tool's report counted the run's tests (#1861); the gate labels a check none of whose runs one counted a static check. */
+  tested?: boolean;
   exit: { code: number | null; signal: NodeJS.Signals | null; cause: 'exit' | 'deadline' | 'stop' | 'limit' } | null;
   output: { stdout: string; stderr: string; sha256: { stdout: string; stderr: string } };
   env: string[];
@@ -55,6 +57,8 @@ export interface KindsOptions {
   plant?: string | undefined;
   /** The extension host a first-party plug-in's kind runs in (#184), once the hub opened it. */
   extensions(): ExtensionHost | undefined;
+  /** The evidence store's root, whose catalogs a catalog kind's spec carries (#194). */
+  evidence?: string;
 }
 export interface CheckKinds {
   list(): { kind: string; routes: string[] }[];
@@ -68,6 +72,6 @@ export interface CheckKinds {
 }
 export interface ChecksProvider {
   command(options: CommandCheck): Promise<CommandRun>;
-  kinds(options: KindsOptions): CheckKinds;
+  kinds(options: KindsOptions): () => Promise<CheckKinds>;
   reviewOutcomes(checkout: string, sent: { commit: string; items: ReviewItem[] }[], settled: string): Promise<(ReviewItem & { ended: 'fixed' | 'left'; commit: string })[]>;
 }

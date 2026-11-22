@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { parseDocument, isSeq } from 'yaml';
+import { yaml } from './yaml.js';
 import { ulid } from '@deepbuild/record';
 import type { Plant } from './plant.js';
 import { installedCodex, recordedHome } from './codex-settings.js';
@@ -19,12 +19,20 @@ const sha = (bytes: Buffer | string): string => createHash('sha256').update(byte
 const SPEC = join('.deepbuild', 'done.yaml');
 const WEEK = 7 * 86_400_000;
 /** What the box reads, said back when it reads nothing. */
-const READS = 'The box reads: remove DeepBuild from Codex, stop checking <check> in <repo>, forget <lesson>, learn again, mute or unmute.';
+const READS = 'The box reads: remove DeepBuild from Codex, stop checking <check> in <repo>, forget <lesson>, learn again, mute or unmute, use <language>.';
+/** The languages the app draws in (#2403: crates/deep-app/copy), by the names the box reads; `system` follows macOS. */
+const LANGUAGES: Record<string, { tag: string | null; name: string }> = {
+  english: { tag: 'en', name: 'English' }, en: { tag: 'en', name: 'English' }, 英文: { tag: 'en', name: 'English' }, 英语: { tag: 'en', name: 'English' },
+  chinese: { tag: 'zh-Hans', name: 'Simplified Chinese' }, 'simplified chinese': { tag: 'zh-Hans', name: 'Simplified Chinese' }, 'zh-hans': { tag: 'zh-Hans', name: 'Simplified Chinese' },
+  zh: { tag: 'zh-Hans', name: 'Simplified Chinese' }, 中文: { tag: 'zh-Hans', name: 'Simplified Chinese' }, 简体中文: { tag: 'zh-Hans', name: 'Simplified Chinese' },
+  'the system language': { tag: null, name: "the system's language" }, "the system's language": { tag: null, name: "the system's language" },
+};
 
 type Change =
   | { kind: 'agent'; agent: 'codex' }
   | { kind: 'spec'; check: string; repo: string; root: string }
   | { kind: 'sounds'; on: boolean }
+  | { kind: 'language'; tag: string | null; name: string }
   | { kind: 'forget'; lesson: string; text: string }
   | { kind: 'learn' };
 interface Revision { thing: string; at: string }
@@ -54,6 +62,10 @@ const bytesOf = (file: string): Buffer | null => { try { return readFileSync(fil
 /** Whether sounds play (#1998): `sounds` in config.json, on unless it says false. */
 function soundsOn(root: string): boolean {
   try { return (JSON.parse(readFileSync(join(root, 'config.json'), 'utf8')) as Obj).sounds !== false; } catch { return true; }
+}
+/** The language the app draws in (#2403): `language` in config.json, read at the app's launch; null follows the system. */
+function languageSet(root: string): string | null {
+  try { const l = (JSON.parse(readFileSync(join(root, 'config.json'), 'utf8')) as Obj).language; return typeof l === 'string' ? l : null; } catch { return null; }
 }
 
 export class Box {
@@ -87,6 +99,9 @@ export class Box {
     if (/^(mute|turn (the )?sounds? off|sounds? off)$/.test(said)) return { change: { kind: 'sounds', on: false } };
     if (/^(unmute|turn (the )?sounds? on|sounds? on)$/.test(said)) return { change: { kind: 'sounds', on: true } };
     if (said === 'learn again') return { change: { kind: 'learn' } };
+    const language = /^(?:(?:use|speak|switch to|show (?:the app |deepbuild )?in|change (?:the )?language to|language:?)\s+|用|使用|切换到)(.+)$/.exec(said);
+    const named = language && (LANGUAGES[language[1]!.trim()] ?? LANGUAGES[language[1]!.trim().replace(/^the /, '')]);
+    if (named) return { change: { kind: 'language', ...named } };
     const stop = /^stop checking (\S+) in (\S+)$/.exec(said);
     if (stop) {
       const [check, name] = [stop[1]!, stop[2]!];
@@ -113,6 +128,7 @@ export class Box {
     if (c.kind === 'agent') return ['hooks.json', 'config.toml'].map((f) => ({ thing: `agent:codex:${f}`, shown: `Codex's ${f}`, file: join(recordedHome(this.o.root), f) }));
     if (c.kind === 'spec') return [{ thing: `spec:${c.root}`, shown: `${c.repo}'s ${SPEC}`, file: join(c.root, SPEC) }];
     if (c.kind === 'sounds') return [{ thing: 'config:sounds', shown: 'sounds' }];
+    if (c.kind === 'language') return [{ thing: 'config:language', shown: 'the app\'s language' }];
     if (c.kind === 'forget') return [{ thing: `lesson:${c.lesson}`, shown: `the lesson “${c.text}”` }];
     return [];
   }
@@ -121,6 +137,7 @@ export class Box {
     if (c.kind === 'spec') return `${git(c.root, ['log', '-1', '--format=%H', 'HEAD', '--', SPEC])}:${sha(bytesOf(join(c.root, SPEC)) ?? '')}`;
     if (c.kind === 'agent') { const b = bytesOf(this.things(c).find((t) => t.thing === thing)!.file!); return b ? sha(b) : 'absent'; }
     if (c.kind === 'sounds') return String(soundsOn(this.o.root));
+    if (c.kind === 'language') return String(languageSet(this.o.root));
     if (c.kind === 'forget') { const l = (await this.o.lessons()).find((x) => x.id === c.lesson); return l ? sha(l.text) : 'gone'; }
     return '';
   }
@@ -129,6 +146,7 @@ export class Box {
     if (c.kind === 'agent') return installedCodex(this.o.root) ? undefined : 'DeepBuild is not in Codex; nothing to remove.';
     if (c.kind === 'spec') return this.specWithout(c) === undefined ? `${c.repo}'s ${SPEC} doesn't check ${c.check}; nothing to change.` : undefined;
     if (c.kind === 'sounds') return soundsOn(this.o.root) === c.on ? `Sounds are already ${c.on ? 'on' : 'off'}.` : undefined;
+    if (c.kind === 'language') return languageSet(this.o.root) === c.tag ? `The app already draws in ${c.name}.` : undefined;
     if (c.kind === 'forget') return (await this.o.lessons()).some((l) => l.id === c.lesson) ? undefined : `The lesson “${c.text}” is gone already.`;
     return undefined;
   }
@@ -137,6 +155,11 @@ export class Box {
     if (c.kind === 'spec') return { question: `Stop checking ${c.check} in ${c.repo}? ${SPEC} no longer lists ${c.check}; you commit the file.`, does: `Take ${c.check} out of ${c.repo}'s ${SPEC}`, undo: `git checkout -- ${SPEC} in ${c.repo}` };
     if (c.kind === 'sounds') return { question: `Turn sounds ${c.on ? 'on' : 'off'}? Sounds are ${c.on ? 'off' : 'on'} now; ${c.on ? 'the question sound plays again' : 'the question sound stops'}.`, does: `Turn sounds ${c.on ? 'on' : 'off'}`, undo: c.on ? 'say mute in the box' : 'say unmute in the box' };
     if (c.kind === 'forget') return { question: `Forget the lesson “${c.text}”? Agents stop getting it.`, does: `Forget “${c.text}”`, undo: 'learn again' };
+    if (c.kind === 'language') {
+      const was = languageSet(this.o.root);
+      const now = was === null ? "the system's language" : (Object.values(LANGUAGES).find((l) => l.tag === was)?.name ?? was);
+      return { question: `Draw the app in ${c.name}? It draws in ${now} now; the change shows from the app's next launch. What agents are sent stays in English.`, does: `Draw the app in ${c.name}`, undo: `say use ${now === "the system's language" ? 'the system language' : now.toLowerCase()} in the box` };
+    }
     return { question: 'Learn again? The wiki is built again from the record.', does: 'Build the wiki again from the record', undo: "can't undo" };
   }
   private async draft(words: string, change: Change, reason: string): Promise<Proposal | { unread: string }> {
@@ -206,6 +229,7 @@ export class Box {
     if (c.kind === 'agent') removeCodex(this.o.root);
     else if (c.kind === 'spec') { const text = this.specWithout(c); if (text !== undefined) writeFileSync(join(c.root, SPEC), text); }
     else if (c.kind === 'sounds') editConfig(this.o.root, (config) => { config.sounds = c.on; });
+    else if (c.kind === 'language') editConfig(this.o.root, (config) => { if (c.tag === null) delete config.language; else config.language = c.tag; });
     else if (c.kind === 'forget') { const why = await this.o.forget(c.lesson); if (why) throw Error(why); }
     else await this.o.learn();
   }
@@ -213,6 +237,7 @@ export class Box {
   private specWithout(c: Extract<Change, { kind: 'spec' }>): string | undefined {
     const bytes = bytesOf(join(c.root, SPEC));
     if (!bytes) return undefined;
+    const { parseDocument, isSeq } = yaml();
     const doc = parseDocument(bytes.toString('utf8'));
     let changed = false;
     const claims = doc.get('claims');

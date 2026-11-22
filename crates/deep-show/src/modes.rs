@@ -420,6 +420,7 @@ impl Hub<'_> {
                     cap: Default::default(),
                     trail: None,
                     points: Vec::new(),
+                    fog: false,
                 }],
                 ..Default::default()
             });
@@ -431,14 +432,24 @@ impl Hub<'_> {
         let (rgba, counts) = gpu
             .render(&scene, &look, &diag)
             .ok_or_else(|| refuse("unsupported_platform", json!({})))?;
+        // #3017: the table is read from an object-ID pass of the frame the mode drew, which the
+        // views with pipelines of their own don't write: the scene drawn plain once for its IDs,
+        // without the mode's lines.
+        if !read_out.lines.is_empty() {
+            scene.layers.pop();
+        }
+        let (_, targets) = gpu
+            .draw_scene(&scene, &look, false)
+            .ok_or_else(|| refuse("unsupported_platform", json!({})))?;
         let png = crate::snapshot::png(rgba, size);
         let sha = crate::evidence::put(&self.scenario.evidence, &png)
             .map_err(|_| refuse("evidence_unwritable", json!({})))?;
         self.display_only.insert(sha.clone());
         reply["snapshots"] =
             json!([{"sha256": sha, "w": size[0], "h": size[1], "display_only": true}]);
-        reply["visible"] = crate::snapshot::visible(boxes, 1.0, size);
         if let Some(r) = reply.as_object_mut() {
+            let plant = self.scenario.module_planted.as_deref();
+            targets.shown(boxes, size, plant).put(r);
             r.extend(read_out.extra);
         }
         let mut rows = read_out.rows;

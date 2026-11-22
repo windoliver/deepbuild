@@ -3,16 +3,16 @@
 // you, which the hub asks for; run inside an agent's process tree, the command acts as that agent's session, and no
 // agent answers.
 import { readFileSync } from 'node:fs';
-import { call, UNDECIDED_CODES, withPrompt, type Reply } from './client.js';
+import { call, notAnswered, UNDECIDED_CODES, withPrompt, type Reply } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { asksNeedYou, databaseRead, hubDown, when } from './list.js';
 import { elapsed } from './promises.js';
 import { activePlant } from './plant.js';
 import type { Row as ListRow } from './rows.js';
-import { visible } from './visible.js';
+import { typed, visible } from './visible.js';
 import { startOf } from './wire.js';
 
-const USAGE = 'Usage: deep inbox [--json]\n       deep inbox answer <ask> <option>\n       deep inbox undo <ask>\n       deep inbox save <offer>';
+const USAGE = 'Usage: deep inbox [--json]\n       deep inbox answer <ask> [--] <option>\n       deep inbox undo <ask>\n       deep inbox save <offer>';
 /** One line of output: an ask's, a plan's or a call's text comes from the record, so it prints through `visible` (#1510). */
 const say = (line: string): void => void process.stdout.write(`${visible(line)}\n`);
 /** Refusals of what you typed: nothing ran. */
@@ -21,24 +21,29 @@ const USAGE_CODES = new Set(['handle_syntax', 'not_found', 'enum']);
 /** How far back `deep inbox` lists what was decided for you. */
 const DAY_MS = 86_400_000;
 
-interface Row { opens?: { kind: string; name?: string; command?: string }; ask: string; kind: string; session: string; status: string; outcome: string; age: number; question: string; options: string[]; plan?: { hash: string; steps: Step[] } | null; decision: string | null; answer?: string | null }
+interface Row { opens?: { kind: string; name?: string; command?: string }; ask: string; kind: string; session: string; status: string; outcome: string; closed_at?: number | null; age: number; question: string; options: string[]; plan?: { hash: string; steps: Step[] } | null; decision: string | null; answer?: string | null; folded?: string | null }
 /** A plan's step, as an authority ask shows it (#69). */
 interface Step { does: string; changes: string[]; undo: string; cost: number }
 /** A permission you said yes to in the terminal, offered back as a decision to save (#23). */
 interface Offer { offer: string; session: string; command: string; scope: string }
 
 /** `deep inbox [--json | answer <ask> <option> | undo <ask> | save <offer>]`: exit 0 listed or counted, 2 a usage error, 3 not decided, 1 refused otherwise. */
-export async function inboxCommand(args: readonly string[]): Promise<number> {
+export async function inboxCommand(args: readonly string[], setUp: () => Promise<number> = async () => 0): Promise<number> {
   const json = args.length === 1 && args[0] === '--json';
   if (json) args = [];
   const answering = args[0] === 'answer';
   const undoing = args[0] === 'undo';
   const saving = args[0] === 'save';
+  // `--` before the option ends the flags, so an option that starts with `-` is read as typed (#2563).
+  const ended = answering && args.length === 4 && args[2] === '--';
+  if (ended) args = [args[0]!, args[1]!, args[3]!];
   // A flag where an ask or option goes is a usage error, never read as one (#19's exit table).
-  if ((answering ? args.length !== 3 : undoing || saving ? args.length !== 2 : args.length !== 0) || args.slice(1).some((a) => a.startsWith('-'))) {
+  if ((answering ? args.length !== 3 : undoing || saving ? args.length !== 2 : args.length !== 0) || args.slice(1, ended ? 2 : undefined).some((a) => a.startsWith('-'))) {
     process.stderr.write(`${USAGE}\n`);
     return 2;
   }
+  const stopped = await setUp();
+  if (stopped) return stopped;
   const at = rootOf(installedRoot());
   let reply: Reply;
   /** When the hub stopped answering, for a list read from its database. */
@@ -52,13 +57,16 @@ export async function inboxCommand(args: readonly string[]): Promise<number> {
       : undoing ? await withPrompt(() => call(hubAddress().path, token, 'ask.undo', { ask: args[1] }, peer))
       : saving ? await withPrompt(() => call(hubAddress().path, token, 'offer.save', { offer: args[1] }, peer))
       : await call(hubAddress().path, token, 'inbox.read', {});
+    // The settled asks come a page at a time, newest first (#1576): what was decided for you in the last day is read on
+    // while a page's oldest closed within it.
+    for (let page = reply; !answering && !undoing && !saving && 'result' in page && typeof page.result.next === 'string' && Number((page.result.asks as Row[]).at(-1)?.closed_at) > Date.now() - DAY_MS;) {
+      page = await call(hubAddress().path, token, 'inbox.read', { page: page.result.next });
+      if ('result' in page && 'result' in reply) (reply.result.asks as Row[]).push(...(page.result.asks as Row[]));
+    }
   } catch (error) {
     // With the hub down the list reads its database, as deep does, and says so and since when (#2026).
     const read = answering || undoing || saving ? undefined : await databaseRead(hubAddress().path, false).catch(() => undefined);
-    if (!read) {
-      process.stderr.write(`BLOCKED: ${error instanceof Error ? error.message : String(error)}${answering ? `; ${args[1]} stays open` : undoing ? `; ${args[1]} keeps its default` : saving ? `; ${args[1]} isn't saved` : ''}\n`);
-      return 3;
-    }
+    if (!read) return notAnswered(error);
     down = read.down;
     reply = { result: { log_pos: read.log_pos, rows: read.rows.filter((r) => r.id.startsWith('ask:')), asks: [], offers: [] } };
   }
@@ -68,11 +76,17 @@ export async function inboxCommand(args: readonly string[]): Promise<number> {
   }
   if (answering) {
     // A block's task (#85), a fold and an ask with no repo or session save no decision; the sentence says only what the record holds.
+    if (reply.result.held === true) {
+      say(`${String(reply.result.ask)}: your yes is held, and its step that can't be undone starts in 10 s; deep inbox undo ${String(reply.result.ask)} withdraws it until then`);
+      return 0;
+    }
     say(`${String(reply.result.ask)} answered ${String(reply.result.answer)}${reply.result.scope === null ? '; no decision saved' : `, saved as a decision for ${String(reply.result.scope)}`}`);
     return 0;
   }
   if (undoing) {
-    say(`${String(reply.result.ask)} is open again, its default undone; it now takes its default ${when(Number(reply.result.deadline))}`);
+    say(reply.result.withdrawn === true
+      ? `${String(reply.result.ask)} is open again: your yes is withdrawn, and its step never started`
+      : `${String(reply.result.ask)} is open again, its default undone; it now takes its default ${when(Number(reply.result.deadline))}`);
     return 0;
   }
   if (saving) {
@@ -88,17 +102,32 @@ export async function inboxCommand(args: readonly string[]): Promise<number> {
   }
   if (down !== undefined) say(hubDown(down));
   const extra = new Map((reply.result.asks as Row[]).map((r) => [r.ask, r]));
+  // A folded ask shows inside the exception that holds it (#667), under the exception's lines, while that is listed.
+  const listed = new Set(asks.map((a) => a.id));
+  const inside = new Map<string, ListRow[]>();
   for (const a of asks) {
+    const holder = extra.get(a.id)?.folded;
+    if (holder && listed.has(holder)) inside.set(holder, [...(inside.get(holder) ?? []), a]);
+  }
+  const held = new Set([...inside.values()].flat().map((a) => a.id));
+  /** An ask's question, its kind, its age and its default, then its handle: on its own line, or inside its exception. */
+  const line = (a: ListRow): string => {
     // The planted wrong program leaves each ask's default out.
     const fallback = a.default !== undefined && a.default_at !== undefined && activePlant() !== 'inbox-no-default' ? `  If you don't answer: ${a.default}, ${when(a.default_at)}` : '';
     // Its kind, the session that raised it and its age (#24), between the question and the handle.
     const kind = extra.get(a.id)?.kind ?? a.why;
     const age = a.since === null ? '' : `  ${elapsed(Math.max(0, Date.now() - a.since))}`;
-    say(`${a.title}  ${kind}  ${a.project ?? 'no repo'}  ${a.session}${age}${fallback}  ${a.id}`);
+    return `${a.title}  ${kind}  ${a.project ?? 'no repo'}  ${a.session}${age}${fallback}  ${a.id}`;
+  };
+  for (const a of asks) {
+    if (held.has(a.id)) continue;
+    say(line(a));
     // Under it, the option IDs `deep inbox answer` takes (#2199), each with its label where that reads differently.
     // The planted wrong program prints the labels alone.
     const labels = activePlant() === 'inbox-labels-only';
-    if (a.actions.length) say(`    answer with ${a.actions.map((o) => (labels ? o.label : o.label.toLowerCase() === o.answer.toLowerCase() ? o.answer : `${o.answer} (${o.label})`)).join(', ')}`);
+    // Each ID as you type it back into a shell (#2563): quoted where it needs it, after `--` where it starts with `-`.
+    if (a.actions.length) say(`    answer with ${a.actions.map((o) => (labels ? o.label : o.label.toLowerCase() === o.answer.toLowerCase() ? typed(o.answer) : `${typed(o.answer)} (${o.label})`)).join(', ')}`);
+    for (const f of inside.get(a.id) ?? []) say(`    folded here: ${line(f)}`);
     const r = extra.get(a.id);
     if (!r) continue;
     // Where a task sends you, from the trusted path alone (#84).
@@ -140,12 +169,11 @@ export async function raceCommand(args: readonly string[]): Promise<number> {
     const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
     reply = await call(hubAddress().path, token, 'race.start', { issue: Number(args[0]) }, { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
   } catch (error) {
-    process.stderr.write(`BLOCKED: ${error instanceof Error ? error.message : String(error)}; no race started\n`);
-    return 3;
+    return notAnswered(error);
   }
   if ('error' in reply) {
     process.stderr.write(`${reply.error.remediation}\n`);
-    return 1;
+    return UNDECIDED_CODES.has(reply.error.code) ? 3 : 1;
   }
   process.stdout.write(`A race on issue #${args[0]} started: its sessions settle on the first PASS.\n`);
   return 0;

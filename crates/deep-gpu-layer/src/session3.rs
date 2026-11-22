@@ -38,6 +38,10 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             _ => deep_scene3d_render::ao::Planted::None,
         },
         emission_thresholds_color: p == Some(Planted::EmissionThresholdsColor),
+        instanced_skips_velocity: p == Some(Planted::InstancedSkipsVelocity),
+        instances_skip_normal: p == Some(Planted::InstancesSkipNormalTarget),
+        exposure_after_tone_map: p == Some(Planted::ExposureAfterToneMap),
+        absolute_positions: p == Some(Planted::AbsoluteF32WorldPositions),
         sample_grad_implicit: p == Some(Planted::SampleGradImplicit),
         backdrop_after_see_through: p == Some(Planted::BackdropAfterSeeThrough),
         encodes_twice: p == Some(Planted::EncodesTwice),
@@ -61,8 +65,16 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             fixed_ghosts: p == Some(Planted::FlareFixedGhosts),
             ignores_occlusion: p == Some(Planted::FlareIgnoresOcclusion),
         },
+        mirror: deep_scene3d_render::mirror::Planted {
+            halves_twice: p == Some(Planted::MirrorHalvesTwice),
+            samples_full_frame: p == Some(Planted::MirrorSamplesFullFrame),
+        },
         dof: deep_scene3d_render::dof::Planted {
             linear_coc: p == Some(Planted::CocLinearInDistance),
+        },
+        local_tone: deep_scene3d_render::local_tone::Planted {
+            edge_blind: p == Some(Planted::LocalBaseIgnoresEdges),
+            fixed_levels: p == Some(Planted::LocalPyramidFixedLevels),
         },
         ties_by_submission: p == Some(Planted::TiesBySubmission),
         spot_counts_cone: p == Some(Planted::SpotCountsCone),
@@ -82,6 +94,8 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         add_without_depth_test: p == Some(Planted::AddWithoutDepthTest),
         ids_by_draw_position: p == Some(Planted::IdsByDrawPosition),
         overlay_keeps_grid_on_seek: p == Some(Planted::OverlayKeepsGridOnSeek),
+        horizon_unbaked: p == Some(Planted::TerrainNoHorizonBake),
+        occlusion_from_slope: p == Some(Planted::TerrainOcclusionFromSlope),
         ids_ignore_mask: p == Some(Planted::IdsIgnoreMask),
         cuts_color_only: p == Some(Planted::CutsColorOnly),
         local: deep_scene3d_render::local::Planted {
@@ -94,6 +108,11 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             no_reach: p == Some(Planted::CascadeNoPenumbraReach),
             noise_from_frame: p == Some(Planted::SoftNoiseFromFrame),
             filter_in_texels: p == Some(Planted::CascadeFilterInTexels),
+        },
+        fill: deep_scene3d_render::fill::Planted {
+            top_32: p == Some(Planted::FillTop32),
+            arrival_order: p == Some(Planted::ClusterArrivalOrder),
+            cap_by_list_order: p == Some(Planted::ClusterCapByListOrder),
         },
         cull: deep_scene3d_render::cull::Plants {
             centers: p == Some(Planted::GpuCullByCenter),
@@ -135,7 +154,16 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         ]
         .iter()
         .position(|q| p == Some(*q))
-        .map_or(0, |i| 16 << i),
+        .map_or(0, |i| 16 << i)
+            // #458's, above #1381's bit: scene3d.wgsl's `P_SUM_CLAMPED` and the two after it.
+            | [
+                Planted::LightSumClamped,
+                Planted::ShadesByLocalTangent,
+                Planted::ShadowBrightens,
+            ]
+            .iter()
+            .position(|q| p == Some(*q))
+            .map_or(0, |i| (1 << 26) << i),
         ..msaa_planted(p)
     }
 }
@@ -510,16 +538,19 @@ pub fn pipelines(app: &mut App) -> Vec<&'static str> {
     })
 }
 
-/// The surface's `msaa` and the targets the session's geometry pass draws into (#1173).
-pub fn render_targets(app: &mut App) -> (Value, Value) {
+/// The surface's `msaa`, the targets the session's geometry pass draws into (#1173) and the size
+/// its mirror's pass drew its last frame's picture at, null with no mirror (#2691).
+pub fn render_targets(app: &mut App) -> (Value, Value, Value) {
     let claims = app.planted == Some(Planted::ClaimsMsaaOverSingleSample);
     app.worker
         .call(move |state| {
             let s = state.scene3d.as_ref()?;
             let shared = lock(&s.shared);
-            Some(msaa(shared.renderer.as_ref()?, claims))
+            let renderer = shared.renderer.as_ref()?;
+            let (count, targets) = msaa(renderer, claims);
+            Some((count, targets, json!(renderer.mirror_px())))
         })
-        .unwrap_or((Value::Null, Value::Null))
+        .unwrap_or((Value::Null, Value::Null, Value::Null))
 }
 
 /// `renderer`'s sample count, as the surface reports it (4 under the planted claim), and its
@@ -547,6 +578,16 @@ pub fn close_on(worker: &Worker) {
     worker.call(|state| state.scene3d = None);
 }
 
+/// Forces the session's device lost (#1993: view3d's `lose_device_at`); its next frame draws on
+/// the device that replaces it.
+pub fn lose_device(app: &App) {
+    app.worker.call(|state| {
+        if let Some(s) = state.scene3d.as_ref() {
+            s.view.lose_device();
+        }
+    });
+}
+
 /// What the render thread answers for one frame.
 #[derive(Clone)]
 pub struct Drawn {
@@ -560,6 +601,8 @@ pub struct Drawn {
     pub targets: Option<(Vec<u8>, Vec<u8>)>,
     /// The linear image the output pass read, f32 RGBA, read with the targets (#418).
     pub pre_tone: Option<Vec<u8>>,
+    /// #971: that image as the look's local tone map left it, in a frame that has one.
+    pub toned: Option<Vec<u8>>,
     /// The frame's GPU time and each pass's share, ms.
     pub timing: Option<(f64, std::collections::BTreeMap<String, f64>)>,
     /// What the passes' declared costs price this frame at, ms (#1637).
@@ -583,6 +626,10 @@ pub struct Drawn {
     pub normal: Option<Vec<u8>>,
     /// #468: the depth of field's signed circle of confusion in px, f32 a pixel.
     pub coc: Option<Vec<u8>>,
+    /// #458: the core's velocity target while the frame builds it, f32 x, y a pixel.
+    pub velocity: Option<Vec<u8>>,
+    /// #458: the solids' world normals while the frame builds that target, f32 RGBA.
+    pub geometry_normal: Option<Vec<u8>>,
 }
 
 /// Draws frame `n` of `scene` under `look`: the frame is rendered into a free slot and waited
@@ -626,6 +673,22 @@ pub fn view_depth(app: &App) -> Result<Option<Vec<u8>>, Value> {
             Ok(r.read_view_depth(&device))
         })
         .map_err(|e| refused("render_failed", e))
+}
+
+/// #1634: each cluster's fill lights as the frame the session drew last walked them, read back
+/// from the cluster pass's lists: nothing on the noop lane, which runs no pass.
+pub fn clusters(app: &App) -> Vec<([u32; 3], Vec<(String, f32)>)> {
+    if app.backend == Backend::Noop {
+        return Vec::new();
+    }
+    app.worker.call(move |state| {
+        let Some(s) = state.scene3d.as_mut() else {
+            return Vec::new();
+        };
+        let device = s.view.device().clone();
+        let shared = lock(&s.shared);
+        (shared.renderer.as_ref()).map_or_else(Vec::new, |r| r.read_clusters(&device))
+    })
 }
 
 /// [`draw`] on `on`.
@@ -689,10 +752,12 @@ pub fn draw_on(
                 };
                 s.view.wait_done(drawn.slot);
             }
-            // #485: the light responses that returned a negative or non-finite value.
+            // #485: the light responses that returned a negative or non-finite value; #1634: the
+            // clusters that dropped a fill light.
             if !noop {
                 if let Some(r) = lock(&s.shared).renderer.as_mut() {
                     r.check_responses(&device);
+                    r.check_clusters(&device);
                 }
             }
             // The frame's GPU time, as its passes' timestamp queries measured it.
@@ -730,6 +795,11 @@ pub fn draw_on(
                 } else {
                     None
                 },
+                toned: if read_targets && !noop {
+                    r.read_toned(&device)
+                } else {
+                    None
+                },
                 view_depth: if read_targets && !noop {
                     r.read_view_depth(&device)
                 } else {
@@ -752,6 +822,16 @@ pub fn draw_on(
                 },
                 coc: if read_targets && !noop {
                     r.read_coc(&device)
+                } else {
+                    None
+                },
+                velocity: if read_targets && !noop {
+                    r.read_velocity(&device)
+                } else {
+                    None
+                },
+                geometry_normal: if read_targets && !noop {
+                    r.read_geometry_normal(&device)
                 } else {
                     None
                 },

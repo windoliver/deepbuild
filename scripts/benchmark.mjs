@@ -5,6 +5,7 @@ import { availableParallelism, homedir, loadavg, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
+import { readApprovals } from './proof-approvals.mjs';
 
 const metrics = ['p50Ms', 'p95Ms', 'peakBytes'];
 
@@ -44,6 +45,7 @@ let counter;
 function counterBuild() {
   if (counter !== undefined) return counter;
   counter = null;
+  if (process.platform === 'linux') return (counter = linuxCounter());
   if (process.platform !== 'darwin') return counter;
   try {
     const source = fileURLToPath(new URL('count-children.c', import.meta.url));
@@ -70,6 +72,47 @@ function counterBuild() {
   return counter;
 }
 
+// On Linux the runner alone counts, through the kernel's counter, which follows every child (#2960): no library.
+function linuxCounter() {
+  try {
+    const source = fileURLToPath(new URL('count-linux.c', import.meta.url));
+    const cache = join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'deepbuild-perf');
+    const directory = join(cache, `counter-linux-${createHash('sha256').update(readFileSync(source)).digest('hex').slice(0, 16)}`);
+    const build = { run: join(directory, 'run'), library: null };
+    if (!existsSync(build.run)) {
+      mkdirSync(cache, { recursive: true, mode: 0o700 });
+      const building = mkdtempSync(`${directory}-`);
+      try {
+        execFileSync('cc', ['-O2', '-Wall', '-Werror', '-o', join(building, 'run'), source], { stdio: 'ignore' });
+        renameSync(building, directory);
+      } catch (error) {
+        if (!existsSync(build.run)) throw error;
+      } finally {
+        rmSync(building, { recursive: true, force: true });
+      }
+    }
+    return build;
+  } catch {
+    return null;
+  }
+}
+
+// count-linux.c's log: the run's whole count, or null with why. A counter the kernel refused is BLOCKED, naming
+// the setting that refused it, or that the host has none; a counter that wasn't on the command all the time it ran,
+// and a process the command left running, which never joined the count, leave it null. The count is user space only,
+// so it compares with a Linux count; an instructions ceiling set from macOS counts doesn't hold for it (none is set).
+function countLinux(log) {
+  const lines = log.split('\n').filter(Boolean).map((line) => line.split(' '));
+  const blocked = lines.find(([kind]) => kind === 'blocked');
+  if (blocked && ['1', '13'].includes(blocked[1])) throw Error(`BLOCKED: the kernel refused an instruction counter (errno ${blocked[1]}): kernel.perf_event_paranoid is ${blocked[2]}, and a process not run as root may count its own instructions only at 2 or less. Its owner can lower it (sysctl kernel.perf_event_paranoid=2)`);
+  if (blocked) throw Error(`BLOCKED: this host has no instruction counter for the command (perf_event_open errno ${blocked[1]}; kernel.perf_event_paranoid is ${blocked[2]}), as a virtual machine without a PMU has none`);
+  const partial = lines.find(([kind]) => kind === 'partial');
+  if (partial) return { instructions: null, uncounted: [`the time the counter wasn't on the command (${partial[1]} of ${partial[2]} ns counted)`], qos: null };
+  if (lines.some(([kind]) => kind === 'left')) return { instructions: null, uncounted: ['a process the command left running'], qos: null };
+  const total = Number(lines.find(([kind]) => kind === 'total')?.[1]);
+  return { instructions: Number.isSafeInteger(total) && total > 0 ? total : null, uncounted: [], qos: null };
+}
+
 // Tools benches read a process with. Their counts can't all be read (ps is setuid; lsof's forked helper
 // and a tailed log are out of the library's reach), and none of our code runs in them.
 const observers = new Set(['/bin/ps', '/usr/sbin/lsof', '/usr/bin/log']);
@@ -86,18 +129,54 @@ function countChildren(log, command) {
   const reaped = select('reap').map(([parent, child, instructions, elapsed, childElapsed, ...qos]) => ({ parent, child, instructions: Number(instructions), childElapsed: Number(childElapsed), time: Number(elapsed) + Number(childElapsed), qos: qos.map(Number) }));
   const waited = new Set([...reaped, ...unread].map(({ child }) => child));
   const left = select('exit').filter(([child]) => !waited.has(child)).map(([child, instructions, childElapsed, ...qos]) => ({ child, instructions: Number(instructions), childElapsed: Number(childElapsed), qos: qos.map(Number) }));
-  const starts = select('start').map(([, child, ...path]) => ({ child, path: path.join(' ') }));
+  // A process that exec'd is named by what it became (#2960): the program it runs now, such as an observer.
+  // A child whose count was denied is named as it started: it may have done our work before it exec'd one.
+  const became = becameOf(rows);
+  const starts = select('start').map(([, child, ...path]) => ({ child, started: path.join(' '), path: became.get(child)?.path ?? path.join(' ') }));
   const nameOf = (pid) => starts.find(({ child }) => child === pid)?.path ?? command[0];
+  const startedAs = (pid) => starts.find(({ child }) => child === pid)?.started ?? command[0];
   const accounted = new Map();
   for (const { parent, time } of [...reaped, ...unread]) accounted.set(parent, (accounted.get(parent) ?? 0) + time);
-  const counts = [...reaped, ...left];
   const ended = new Set([...waited, ...left.map(({ child }) => child)]);
+  // One that became an observer and has no end counts what it did before it exec'd: ours, and the observer's isn't.
+  // One that became anything else and has no end is uncounted.
+  const unended = [...became.values()].filter(({ count }) => !ended.has(count.child));
+  const counts = [...reaped, ...left, ...unended.filter(({ path }) => observers.has(path)).map(({ count }) => count)];
   const uncounted = [...new Set([
     ...starts.filter(({ child }) => !ended.has(child)).map(({ path }) => path),
-    ...unread.map(({ child }) => nameOf(child)),
-    ...counts.filter(({ child, childElapsed }) => (accounted.get(child) ?? 0) !== childElapsed).map(({ child }) => nameOf(child)).map((name) => (observers.has(name) ? name : `a child of ${name}`)),
+    ...unended.map(({ path }) => path),
+    ...unread.map(({ child }) => startedAs(child)),
+    // An observer's children aren't followed, so its child time past what was reaped is forgiven; but not what a
+    // process that became one hadn't accounted for when it exec'd, which was ours.
+    ...counts.filter(({ child, childElapsed }) => (accounted.get(child) ?? 0) !== childElapsed).map(({ child }) => {
+      const before = became.get(child)?.count.childElapsed;
+      return before !== undefined && (accounted.get(child) ?? 0) !== before ? startedAs(child) : nameOf(child);
+    }).map((name) => (observers.has(name) ? name : `a child of ${name}`)),
   ])].filter((name) => !observers.has(name));
   return { instructions: !reaped.length || uncounted.length ? null : counts.reduce((sum, { instructions }) => sum + instructions, 0), uncounted, qos: sumQos(counts.map(({ qos }) => qos)) };
+}
+
+// What each process exec'd into last, in log order, with its count as it exec'd; an exec that failed is undone,
+// back to what the process was before it.
+function becameOf(rows) {
+  const execs = new Map();
+  for (const [kind, child, instructions, childElapsed, ...rest] of rows) {
+    if (kind === 'exec') execs.set(child, [...(execs.get(child) ?? []), { path: rest.slice(QOS_CLASSES.length).join(' '), count: { child, instructions: Number(instructions), childElapsed: Number(childElapsed), qos: rest.slice(0, QOS_CLASSES.length).map(Number) } }]);
+    if (kind === 'unexec') execs.set(child, (execs.get(child) ?? []).slice(0, -1));
+  }
+  return new Map([...execs].filter(([, all]) => all.length).map(([child, all]) => [child, all.at(-1)]));
+}
+
+// A process dyld stopped because the counting library can't load into it, as an x86_64 binary under Rosetta
+// can't take the arm64 library, is BLOCKED, named by its program, never a count of the run it cut short (#2960).
+function refusedLibrary(output, log, command) {
+  const pid = output.match(/dyld\[(\d+)\]: terminating because inserted dylib '[^']*' could not be loaded/)?.[1];
+  if (!pid) return;
+  const why = output.match(new RegExp(`dyld\\[${pid}\\]:[^\\n]*?(incompatible architecture \\([^)]*\\))`))?.[1];
+  const rows = log.split('\n').map((line) => line.split(' '));
+  const start = rows.find(([kind, , child]) => kind === 'start' && child === pid);
+  const program = becameOf(rows).get(pid)?.path ?? (start ? start.slice(3).join(' ') : command[0]);
+  throw Error(`BLOCKED: ${program} (process ${pid}) couldn't take the counting library${why ? `: ${why}` : ''}, so dyld stopped it and the run has no count. An x86_64 program, or a universal one started from a shell under Rosetta, runs translated: put a native arm64 build of it first on PATH (rustup's x86_64 ~/.cargo/bin/cargo: the arm64 toolchain's bin), or start the run from a native shell (arch -arm64)`);
 }
 
 // The CPU time at each QoS class count-children.c logs, summed, or null when any is missing.
@@ -132,7 +211,7 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000, f
   const build = follow ? counterBuild() : null;
   try {
     if (build) writeFileSync(counted, '');
-    const argv = build ? [build.run, follow ? build.library : '-', ...command] : command;
+    const argv = build ? [build.run, follow && build.library ? build.library : '-', ...command] : command;
     const env = build ? { ...process.env, DEEP_COUNT_LOG: counted } : process.env;
     const loadStart = loadavg()[0];
     const started = performance.now();
@@ -152,10 +231,12 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000, f
       throw result.error;
     }
     const report = readFileSync(timing, 'utf8');
+    if (build && !stream) refusedLibrary(`${result.stdout}${result.stderr}`, readFileSync(counted, 'utf8'), command);
     const peakBytes = parsePeakRss(report, process.platform);
     const own = parseInstructions(report, process.platform);
-    const { instructions, uncounted, qos } = !follow ? { instructions: own, uncounted: [], qos: null } : build && own !== null ? countChildren(readFileSync(counted, 'utf8'), command) : { instructions: null, uncounted: [], qos: null };
-    return { elapsedMs, loadStart, loadEnd, cpuMs: parseCpuMs(report, process.platform), peakBytes, instructions, uncounted, qos, status: result.status, output: stream ? '' : result.stdout + result.stderr };
+    const { instructions, uncounted, qos } = build && !build.library ? countLinux(readFileSync(counted, 'utf8'))
+      : !follow ? { instructions: own, uncounted: [], qos: null } : build && own !== null ? countChildren(readFileSync(counted, 'utf8'), command) : { instructions: null, uncounted: [], qos: null };
+    return { elapsedMs, loadStart, loadEnd, cpuMs: parseCpuMs(report, process.platform), peakBytes, instructions, uncounted, qos, status: result.status, output: stream ? '' : result.stdout + result.stderr, stdout: stream ? '' : result.stdout };
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -164,7 +245,8 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000, f
 // Alternates current and merge-base runs so both see the same machine load, and swaps which side runs first each
 // round, so a cache one run leaves warm favors neither: one warmup round, then 20 rounds.
 // Returns [current] or [current, base], each with its sample count, its instructions retired per round, in round order,
-// what started a child no count covers, and its CPU time at each QoS class over its rounds.
+// the one-minute load at each round's start and end, what started a child no count covers, and its CPU time at each QoS
+// class over its rounds.
 export function measure(command, cwd, base) {
   const sides = base ? [[command, cwd], [base.command, base.cwd]] : [[command, cwd]];
   const samples = sides.map(() => []);
@@ -174,10 +256,10 @@ export function measure(command, cwd, base) {
       const [argv, directory] = sides[side];
       const result = measureOnce(argv, directory);
       if (result.status !== 0) throw Error(`${argv[0]} exited ${result.status}: ${result.output}`);
-      if (round) samples[side].push({ ms: result.elapsedMs, peakBytes: result.peakBytes, instructions: result.instructions, uncounted: result.uncounted, qos: result.qos });
+      if (round) samples[side].push({ ms: result.elapsedMs, peakBytes: result.peakBytes, instructions: result.instructions, load: { start: result.loadStart, end: result.loadEnd }, uncounted: result.uncounted, qos: result.qos });
     }
   }
-  return samples.map((side) => ({ ...summarize(side), samples: side.length, instructions: side.map(({ instructions }) => instructions), uncounted: [...new Set(side.flatMap(({ uncounted }) => uncounted))], qos: sumQos(side.map(({ qos }) => qos)) }));
+  return samples.map((side) => ({ ...summarize(side), samples: side.length, instructions: side.map(({ instructions }) => instructions), loads: side.map(({ load }) => load), uncounted: [...new Set(side.flatMap(({ uncounted }) => uncounted))], qos: sumQos(side.map(({ qos }) => qos)) }));
 }
 
 // A rise in instructions retired is judged against 2%, by 10,000 sign flips decided at p under 0.01.
@@ -266,11 +348,11 @@ export function prepareCopy(directory) {
 
 // A timing or memory budget counts only on a reference Mac, on mains power, with Low Power Mode
 // off and the thermal state nominal (design: The reference Mac). There are three, and a budget holds
-// on each.
-const references = [
-  { name: 'Mac15,7 (M3 Pro, 36 GB)', model: 'Mac15,7', chip: 'Apple M3 Pro', memoryBytes: 36 * 2 ** 30 },
-  { name: 'Mac15,12 (M3, 16 GB)', model: 'Mac15,12', chip: 'Apple M3', memoryBytes: 16 * 2 ** 30 },
-  { name: 'Mac17,10 (M5 Max, 64 GB)', model: 'Mac17,10', chip: 'Apple M5 Max', memoryBytes: 64 * 2 ** 30 },
+// on each. The agent harness and the canvas cost writer import this list, and deep-show's copy is held to it (#1831).
+export const references = [
+  { name: 'Mac15,7 (M3 Pro, 36 GB)', model: 'Mac15,7', chip: 'Apple M3 Pro', memoryBytes: 36 * 2 ** 30, cores: 12 },
+  { name: 'Mac15,12 (M3, 16 GB)', model: 'Mac15,12', chip: 'Apple M3', memoryBytes: 16 * 2 ** 30, cores: 8 },
+  { name: 'Mac17,10 (M5 Max, 64 GB)', model: 'Mac17,10', chip: 'Apple M5 Max', memoryBytes: 64 * 2 ** 30, cores: 18 },
 ];
 const hardware = ['model', 'chip', 'memoryBytes'];
 const conditions = [
@@ -340,16 +422,62 @@ const numbers = ({ limits, changeReason, ...rest } = {}) => rest;
 const movedOnce = (current, established) => typeof current?.changeReason === 'string' && current.changeReason.trim() !== ''
   && !('changeReason' in established) && isDeepStrictEqual(numbers(current), numbers(established));
 const frozen = (current, established) => isDeepStrictEqual(current, established) || movedOnce(current, established);
+// A task's criteria say what it proves, not how it is judged: the budget window reads them as the merge base has them.
+const definition = ({ criteria, ...task } = {}) => task;
 
-export function validateBudgets(current, base) {
+// A count a task's run gives, which a ceiling in its limits may hold on any machine (#2665): `instructions`, the
+// instructions retired of the command and every child it waits for, as measure counts them, or `report.<name>`, the
+// number <name> in its report, the command's last stdout line that is a JSON object.
+const isCount = (metric) => metric === 'instructions' || /^report\.\w+$/.test(metric);
+
+// An approved proposal's item for one loosening of a task (#2665): the manifest, the task, the field, and its value at
+// the merge base and in the change, as JavaScript prints a number, `none` for a limit removed, a command as JSON.
+const shown = (value) => (value === undefined ? 'none' : Array.isArray(value) ? JSON.stringify(value) : String(value));
+const proposal = (id, { field, before, after }) => `benchmarks/budgets.json › ${id} › ${field} ${shown(before)} → ${shown(after)}`;
+
+/**
+ * What a change does to a task main holds (#2665): each limit it lowers, as `{metric, old, new}`, and each loosening,
+ * a limit raised or removed, a wider margin or a changed command, as `{field, before, after}`. A limit added or a margin
+ * narrowed only tightens. `other` is any other field it changes; its criteria are free.
+ */
+function changesOf(current, established) {
+  const lowered = [], loosened = [];
+  for (const [metric, before] of Object.entries(established.limits)) {
+    const after = current.limits?.[metric];
+    if (after === undefined || after > before) loosened.push({ field: metric, before, after });
+    else if (after < before) lowered.push({ metric, old: before, new: after });
+  }
+  if (current.margin > established.margin) loosened.push({ field: 'margin', before: established.margin, after: current.margin });
+  if (!isDeepStrictEqual(current.command, established.command)) loosened.push({ field: 'command', before: established.command, after: current.command });
+  const rest = ({ margin, command, limits, ...task }) => task;
+  return { lowered, loosened, other: !isDeepStrictEqual(rest(definition(current)), rest(definition(established))) };
+}
+
+/**
+ * Checks a manifest against its merge base's, and returns each limit the change lowers, `{id, metric, old, new}`.
+ * Ceilings only move down (#2665): a task main holds may lower a limit or narrow its margin, and a raised or removed
+ * limit, a wider margin or a changed command is refused, naming the task and the field, unless `approved`, the items of
+ * the approvals on the change's commits, holds that loosening's proposal. Any other change to such a task is refused.
+ */
+export function validateBudgets(current, base, approved = []) {
   if (!Array.isArray(current?.tasks)) throw Error('Missing budget tasks');
   if (base?.preflight && !frozen(current.preflight, base.preflight)) throw Error('Budget preflight changed or disappeared; restore its frozen definition');
   if (base?.harness && !frozen(current.harness, base.harness)) throw Error('Budget harness changed or disappeared; restore its frozen definition');
-  // A task's criteria say what it proves, not how it is judged: the budget window reads them as the merge base has them.
-  const definition = ({ criteria, ...task } = {}) => task;
+  const lowered = [], refused = [];
   for (const established of base?.tasks ?? []) {
-    if (!frozen(definition(current.tasks.find(({ id }) => id === established.id)), definition(established)))
-      throw Error(`Budget ${established.id} changed or disappeared; restore its frozen definition`);
+    const task = current.tasks.find(({ id }) => id === established.id);
+    if (task && frozen(definition(task), definition(established))) continue;
+    const change = task && changesOf(task, established);
+    if (!change || change.other) throw Error(`Budget ${established.id} changed or disappeared; restore its frozen definition`);
+    refused.push(...change.loosened.filter((loosening) => !approved.includes(proposal(established.id, loosening))).map((loosening) => ({ id: established.id, ...loosening })));
+    lowered.push(...change.lowered.map((lowering) => ({ id: established.id, ...lowering })));
+  }
+  if (refused.length) {
+    const said = ({ id, field, before, after }) => `Budget ${id}: ${field === 'command' ? `its command changed from ${shown(before)} to ${shown(after)}`
+      : field === 'margin' ? `its margin widened from ${before} to ${after}`
+      : after === undefined ? `its ${field} limit ${before} removed` : `its ${field} limit raised from ${before} to ${after}`}`;
+    const items = refused.map((loosening) => `Approves: ${proposal(loosening.id, loosening)}`).join(', ');
+    throw Error(`${refused.map(said).join('; ')}. A ceiling only moves down: restore ${refused.length === 1 ? 'it' : 'them'}, or have the maintainer approve the commit with a signed tag under deep/approved/ holding ${items}`);
   }
   const ids = new Set();
   for (const task of [...current.tasks, ...(current.preflight ? [{ id: 'preflight', ...current.preflight }] : [])]) {
@@ -358,10 +486,17 @@ export function validateBudgets(current, base) {
     if (task.id !== 'preflight' && (!Array.isArray(task.command) || !task.command.length || task.command.some((part) => typeof part !== 'string' || !part))) throw Error(`${task.id}: invalid command`);
     if (!Number.isFinite(task.margin) || task.margin < 0) throw Error(`${task.id}: invalid margin`);
     if (typeof task.initialReason !== 'string' || !task.initialReason.trim()) throw Error(`${task.id}: first measurement requires a reason`);
-    const allowed = task.id === 'preflight' ? ['elapsedMs', 'peakBytes'] : metrics;
-    if (!task.limits || Object.entries(task.limits).some(([key, value]) => !allowed.includes(key) || !Number.isFinite(value) || value <= 0)) throw Error(`${task.id}: invalid limits`);
+    const allowed = (key) => (task.id === 'preflight' ? ['elapsedMs', 'peakBytes'].includes(key) : metrics.includes(key) || isCount(key));
+    if (!task.limits || Object.entries(task.limits).some(([key, value]) => !allowed(key) || !Number.isFinite(value) || value <= 0)) throw Error(`${task.id}: invalid limits`);
   }
   if (!ids.size) throw Error('No budget task was measured');
+  return lowered;
+}
+
+/** The items of the approvals on the commits from `base` to `head` (#1326), which may hold a budget's proposal. */
+export function approvedItems(root, base, head) {
+  const commits = execFileSync('git', ['rev-list', `${base}..${head}`], { cwd: root, encoding: 'utf8' }).split('\n').filter(Boolean).map((sha) => ({ sha }));
+  return [...readApprovals(root, { base, commits }, null).values()].flat();
 }
 
 // p95 has only absolute caps: between identical binaries on a shared machine, the tail of 20
@@ -379,19 +514,47 @@ export function compare(budget, current, base, keys = metrics) {
   return base ? { status: 'PASS' } : { status: 'INITIAL', reason: budget.initialReason };
 }
 
+// A count's ceiling, judged on any machine (#2665): FAIL when every reading is over it, PASS when every one is within it,
+// and INCONCLUSIVE when they straddle it or any reading is missing, null, which is never read as 0.
+export function judgeCount({ limit, runs }) {
+  const missing = runs.filter((reading) => !Number.isFinite(reading)).length;
+  if (!runs.length || missing) return { status: 'INCONCLUSIVE', limit, runs, reason: `the count can't be read in ${missing} of ${runs.length} runs, and a count that can't be read is missing, never 0` };
+  if (runs.every((reading) => reading > limit)) return { status: 'FAIL', limit, runs, reason: `every reading is over ${limit}: ${runs.join(', ')}` };
+  if (runs.every((reading) => reading <= limit)) return { status: 'PASS', limit, runs };
+  return { status: 'INCONCLUSIVE', limit, runs, reason: `the readings straddle ${limit}: ${runs.join(', ')}` };
+}
+
+/** The number `name` in a run's report, its last stdout line that is a JSON object; null when it can't be read. */
+function reported(stdout, name) {
+  try {
+    const value = JSON.parse(stdout.trim().split('\n').filter((line) => line.trim().startsWith('{')).at(-1))[name];
+    return Number.isFinite(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 // One task judged against its merge base, as perf and the budget window judge it: 20 alternated rounds a side, its
-// limits on five runs after one untimed warm-up run, instructions retired where both sides ran, and the merge-base
-// regression, whose message is `regression`. A command that won't run throws.
-export function judgeTask(budget, established, cwd, baseCwd) {
+// limits on five runs after one untimed warm-up run, an instructions ceiling on the rounds' counts (every child
+// counted), instructions retired where both sides ran, and the merge-base regression, whose message is `regression`.
+// Each limit's verdict holds its value and readings. The limits and margin judged are the merge base's, since a change
+// never moves its own budget (#2665), except an estimate moved once with its reason (#12). A command that won't run throws.
+// The machine is read after the runs through `machineOf`, the caller's own fingerprint(), so a lane whose benchmark.mjs
+// answers for the machine is judged on that answer (#1838).
+export function judgeTask(budget, established, cwd, baseCwd, machineOf = fingerprint) {
+  const held = established && !movedOnce(definition(budget), definition(established)) ? established : budget;
   const [now, then = null] = measure(budget.command, cwd, established && { command: established.command, cwd: baseCwd });
   const once = () => {
     const result = measureOnce(budget.command, cwd, false, undefined, false);
     if (result.status !== 0) throw Error(`${budget.command[0]} exited ${result.status}: ${result.output}`);
     return result;
   };
-  const runs = Object.keys(budget.limits).length ? (once(), Array.from({ length: 5 }, once)) : [];
-  const machine = fingerprint();
-  const limits = Object.fromEntries(Object.entries(budget.limits).map(([metric, limit]) => [metric, judgeLimit({ limit, runs: runs.map((run) => (metric === 'peakBytes' ? run.peakBytes : run.elapsedMs)), fingerprint: machine, loads: runs.map(({ loadStart, loadEnd }) => ({ start: loadStart, end: loadEnd })) })]));
+  const runs = Object.keys(held.limits).some((metric) => metric !== 'instructions') ? (once(), Array.from({ length: 5 }, once)) : [];
+  const machine = machineOf();
+  const loads = runs.map(({ loadStart, loadEnd }) => ({ start: loadStart, end: loadEnd }));
+  const limits = Object.fromEntries(Object.entries(held.limits).map(([metric, limit]) => [metric, metric === 'instructions' ? judgeCount({ limit, runs: now.instructions })
+    : isCount(metric) ? judgeCount({ limit, runs: runs.map(({ stdout }) => reported(stdout, metric.slice('report.'.length))) })
+    : judgeLimit({ limit, runs: runs.map((run) => (metric === 'peakBytes' ? run.peakBytes : run.elapsedMs)), fingerprint: machine, loads })]));
   // Judged off the reference Macs too, where the limits are only readings; it never changes a limit's verdict. Sides that
   // ran at different QoS don't compare: what waits counts its waiting, so a count moves with how the side was scheduled.
   const judged = then && judgeInstructions(now.instructions.map((current, round) => ({ current, base: then.instructions[round] })), [...new Set([...now.uncounted, ...then.uncounted])]);
@@ -400,11 +563,11 @@ export function judgeTask(budget, established, cwd, baseCwd) {
   let outcome, regression = null;
   try {
     // compare holds only the merge-base regression here; the limits are judged above.
-    outcome = compare({ ...budget, limits: {} }, now, then);
+    outcome = compare({ ...budget, margin: held.margin, limits: {} }, now, then);
   } catch (error) {
     regression = error.message;
   }
-  return { now, then, machine, limits, instructions, outcome, regression };
+  return { now, then, machine, loads, limits, instructions, outcome, regression };
 }
 
 // A task's report is its command's last stdout line; `<bench> judge` reads it on stdin and prints its verdict.

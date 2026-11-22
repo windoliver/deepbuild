@@ -5,13 +5,13 @@
 // stops its tool calls too, through deep-hook. Your past taste decisions: the ones for the screen a session starts on.
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import type { EvidenceStore } from '@deepbuild/evidence';
 import type { Connection, Message, RecordStore } from '@deepbuild/record';
 import { ulid } from '@deepbuild/record/ids';
 import { startOf } from './wire.js';
-import { call, withPrompt, type Reply } from './client.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { call, notAnswered, withPrompt, type Reply } from './client.js';
+import { hubAddress, installedRoot, repoOf, rootOf } from './paths.js';
 import { dropEntries, writeRejected } from './guards.js';
 
 type LessonKind = 'guard' | 'shared-rule' | 'removal';
@@ -24,6 +24,20 @@ export interface Lesson {
 type Raw = RecordStore['raw'];
 const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
 const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');
+/** Archive sources without adapters (#111), independent of the wiki builder that reads their copies later. */
+export const MEMORY_TRANSCRIPTS = [
+  { agent: 'pi', transcripts: { home: ['~/.pi/agent'], path: 'sessions/{folder}/{stamp}_{session}.jsonl' } },
+  { agent: 'cursor', transcripts: { home: ['~/.cursor'], path: 'projects/{folder}/agent-transcripts/{session}.jsonl' }, folderNames: -3 },
+];
+/** A transcript's repo identity, including a gone folder; the planted merges remain deliberately wrong. */
+export function projectOf(cwd: string, agent: string, plant?: string): string | undefined {
+  let id = repoOf(cwd);
+  if (!id && !existsSync(cwd)) id = `${letters(basename(cwd))}${sha256(cwd).slice(0, 8)}`;
+  if (!id) return undefined;
+  if (plant === 'merge-by-name') id = id.slice(0, -8);
+  if (plant === 'never-merge') id += letters(agent).toLowerCase();
+  return id;
+}
 const parsed = (text: string | null): unknown => { try { return JSON.parse(text ?? 'null'); } catch { return text; } };
 /** What a text names in backticks. */
 const ticked = (text: string): string[] => [...text.matchAll(/`([^`]+)`/g)].map((m) => m[1]!);
@@ -34,6 +48,8 @@ const REJECTED = /(?:^|[.!?]\s+|\n\s*)rejected:[ \t]*`([^`\n]{1,200})`/g;
 /** What an agent's host writes under the user's role: a repo's AGENTS.md, as a Codex rollout carries it, or its environment. */
 const INJECTED = /^\s*(?:<|# AGENTS\.md)/;
 export const decisionKey = (lesson: string): string => sha256(`memory ${lesson}`);
+/** A lesson's ID: its kind and the claim it was drawn from. */
+export const lessonId = (kind: LessonKind, claim: string): string => `lesson-${sha256(`${kind} ${claim}`).slice(0, 12)}`;
 const rejectedKey = (scope: string, direction: string): string => sha256(`rejected ${scope} ${direction}`);
 
 /** The folder each repo's sessions worked in, read from the first of its transcripts that names one. */
@@ -67,7 +83,7 @@ export async function lessonsOf(raw: Raw, folders: ReadonlyMap<string, string>):
     const held = sources.get(c.handle) ?? [];
     const kind: LessonKind | undefined = NEVER.test(c.text) ? 'guard' : c.page === 'rules' && held.length >= 2 ? 'shared-rule' : stale(c, held) ? 'removal' : undefined;
     if (!kind) continue;
-    const id = `lesson-${sha256(`${kind} ${c.handle}`).slice(0, 12)}`;
+    const id = lessonId(kind, c.handle);
     if (!decided.has(decisionKey(id))) lessons.push({ id, kind, text: c.text, claim: c.handle, scope: c.scope, sources: held });
   }
   const order: LessonKind[] = ['guard', 'shared-rule', 'removal'];
@@ -206,13 +222,15 @@ export const tasteBlock = (tastes: readonly Taste[]): string | undefined =>
 
 const USAGE = 'Usage: deep memory [--json]\n       deep memory keep <lesson>\n       deep memory remove <lesson>\n       deep memory overrule <decision>';
 /** `deep memory`: the ranked list and your rejections; keep, remove or overrule one once the OS confirms you. Exit 0 done, 1 refused, 2 usage, 3 not decided. */
-export async function memoryCommand(args: readonly string[]): Promise<number> {
+export async function memoryCommand(args: readonly string[], setUp: () => Promise<number> = async () => 0): Promise<number> {
   const overruling = args[0] === 'overrule';
   const acting = args[0] === 'keep' || args[0] === 'remove' || overruling;
-  if (acting ? args.length !== 2 : args.length > 1 || (args.length === 1 && args[0] !== '--json')) {
+  if (acting ? args.length !== 2 || args[1]!.startsWith('-') : args.length > 1 || (args.length === 1 && args[0] !== '--json')) {
     process.stderr.write(`${USAGE}\n`);
     return 2;
   }
+  const stopped = await setUp();
+  if (stopped) return stopped;
   let reply: Reply;
   try {
     const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
@@ -223,8 +241,7 @@ export async function memoryCommand(args: readonly string[]): Promise<number> {
       ? await withPrompt(() => call(hubAddress().path, token, 'memory.act', { verb: args[0], lesson: args[1] }, peer))
       : await call(hubAddress().path, token, 'memory.list', {});
   } catch (error) {
-    process.stderr.write(`BLOCKED: ${error instanceof Error ? error.message : String(error)}\n`);
-    return 3;
+    return notAnswered(error);
   }
   if ('error' in reply) {
     process.stderr.write(`${reply.error.remediation}\n`);

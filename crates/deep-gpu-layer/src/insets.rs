@@ -17,7 +17,7 @@ use crate::refused;
 /// The one conversion from the raster's premultiplied render to straight alpha (#506): each
 /// pixel's color over its alpha, a transparent one black.
 pub fn straight(rgba: &mut [u8]) {
-    for p in rgba.chunks_exact_mut(4) {
+    for p in rgba.as_chunks_mut::<4>().0 {
         let a = u32::from(p[3]);
         if a == 0 {
             p[..3].fill(0);
@@ -85,7 +85,11 @@ impl Pictures {
     }
 
     /// A 2D document's items at `size` px, premultiplied as the raster draws them.
-    pub fn draw(&self, doc: &Map<String, Value>, size: [u32; 2]) -> Result<image::RgbaImage, Value> {
+    pub fn draw(
+        &self,
+        doc: &Map<String, Value>,
+        size: [u32; 2],
+    ) -> Result<image::RgbaImage, Value> {
         self.draw_at(doc, size, [0.0; 2])
     }
 
@@ -97,16 +101,24 @@ impl Pictures {
         shift: [f64; 2],
     ) -> Result<image::RgbaImage, Value> {
         let empty = Map::new();
-        let items = doc.get("items").and_then(Value::as_object).unwrap_or(&empty);
+        let items = doc
+            .get("items")
+            .and_then(Value::as_object)
+            .unwrap_or(&empty);
         let frame = scene::frame(doc, items, &self.palette, &Record::default(), 1.0)
             .map_err(|r| refused(r.code, r.path))?;
-        let marks: Vec<_> = frame.layers.iter().flat_map(|l| l.marks.iter().cloned()).collect();
+        let marks: Vec<_> = frame
+            .layers
+            .iter()
+            .flat_map(|l| l.marks.iter().cloned())
+            .collect();
         deep_marks_render::layer::premultiplied(&marks, size, shift, self.store())
     }
 
     /// #506: each overlay frame `doc` shows at t, drawn: its overlay, the whole px its picture's
     /// top left sits at (the frame's corner at its anchor's place), and the picture,
     /// premultiplied.
+    #[allow(clippy::type_complexity)]
     pub fn frames(
         &self,
         doc: &Value,
@@ -116,14 +128,27 @@ impl Pictures {
         let mut kept = self.frames.borrow_mut();
         let mut drawn = BTreeMap::new();
         for f in deep_canvas_scene3d::views::framed(doc) {
-            let Some(origin) = overlays.iter().find(|o| o.id == f.overlay).and_then(|o| o.origin) else {
+            let Some(origin) = overlays
+                .iter()
+                .find(|o| o.id == f.overlay)
+                .and_then(|o| o.origin)
+            else {
                 continue;
             };
-            let Some(frame) = doc.pointer(&format!("/items/{}/params/frame", f.overlay)).and_then(Value::as_str) else {
+            let Some(frame) = doc
+                .pointer(&format!("/items/{}/params/frame", f.overlay))
+                .and_then(Value::as_str)
+            else {
                 continue;
             };
-            let b = doc.pointer(&format!("/items/{frame}/params/box")).and_then(Value::as_array);
-            let wh = [2, 3].map(|k| b.and_then(|b| b.get(k)).and_then(Value::as_f64).unwrap_or(0.0));
+            let b = doc
+                .pointer(&format!("/items/{frame}/params/box"))
+                .and_then(Value::as_array);
+            let wh = [2, 3].map(|k| {
+                b.and_then(|b| b.get(k))
+                    .and_then(Value::as_f64)
+                    .unwrap_or(0.0)
+            });
             // The picture on a whole pixel, the place's fraction moving the marks inside it, so
             // the frame sits on its anchor's projection to the sub-pixel.
             let place = [0, 1].map(|k| origin[k] - f.corner[k]);
@@ -160,12 +185,19 @@ impl Pictures {
             for (x, y, s) in picture.enumerate_pixels() {
                 let (dx, dy) = (at[0] + i64::from(x), at[1] + i64::from(y));
                 let a = u32::from(s[3]);
-                if a == 0 || dx < 0 || dy < 0 || dx >= i64::from(size[0]) || dy >= i64::from(size[1]) {
+                if a == 0
+                    || dx < 0
+                    || dy < 0
+                    || dx >= i64::from(size[0])
+                    || dy >= i64::from(size[1])
+                {
                     continue;
                 }
                 let o = ((dy * i64::from(size[0]) + dx) * 4) as usize;
                 let d = &mut bgra[o..o + 4];
-                let over = |src: u8, dst: u8| (u32::from(src) + u32::from(dst) * (255 - a) / 255).min(255) as u8;
+                let over = |src: u8, dst: u8| {
+                    (u32::from(src) + u32::from(dst) * (255 - a) / 255).min(255) as u8
+                };
                 d[0] = over(s[2], d[0]);
                 d[1] = over(s[1], d[1]);
                 d[2] = over(s[0], d[2]);
@@ -175,13 +207,36 @@ impl Pictures {
         Ok(())
     }
 
+    /// #2450: each vector item of a picture's document as the items its import draws, its SVG the
+    /// one inlined in it (#443) or read from the call's assets.
+    fn lower(&self, doc: &mut Map<String, Value>) {
+        let Some(Value::Object(items)) = doc.get("items") else {
+            return;
+        };
+        let read = |sha: &str| {
+            let inlined = items
+                .values()
+                .find(|i| i.pointer("/params/src").and_then(Value::as_str) == Some(sha))
+                .and_then(|i| i.pointer("/params/outline/svg")?.as_str());
+            match inlined {
+                Some(svg) => Some(svg.as_bytes().to_vec()),
+                None => std::fs::read(self.store()?.join(sha)).ok(),
+            }
+        };
+        let honest = deep_canvas_vector::svg::Twin::Honest;
+        let (_, vectors) = deep_canvas_vector::check(doc, read, honest);
+        let lowered = deep_canvas_vector::lower_items(items, &vectors, Default::default());
+        doc.insert("items".into(), Value::Object(lowered));
+    }
+
     /// Each picture the scene's insets draw, under its key in the scene's texels.
     pub fn paint(&mut self, scene: &mut Scene) -> Result<(), Value> {
         let keys: Vec<String> = scene.pictures.iter().map(|p| p.key.clone()).collect();
         self.kept.retain(|k, _| keys.contains(k));
         for p in &scene.pictures {
             if !self.kept.contains_key(&p.key) {
-                let doc = p.document.as_object().cloned().unwrap_or_default();
+                let mut doc = p.document.as_object().cloned().unwrap_or_default();
+                self.lower(&mut doc);
                 let mut rgba = self.draw(&doc, p.size)?.into_raw();
                 if !self.as_drawn {
                     straight(&mut rgba);
@@ -195,7 +250,9 @@ impl Pictures {
                 };
                 self.kept.insert(p.key.clone(), Arc::new(texels));
             }
-            scene.texels.insert(p.key.clone(), self.kept[&p.key].clone());
+            scene
+                .texels
+                .insert(p.key.clone(), self.kept[&p.key].clone());
         }
         Ok(())
     }

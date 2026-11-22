@@ -6,7 +6,7 @@
 // tree, an MCP call or a plug-in, whatever it claims. The agent is the unmodified CLI in a terminal the hub hosts,
 // never typed into, its permission mode set at launch; with no first event in 60 s it ends as never started.
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, delimiter, isAbsolute, join } from 'node:path';
 import type { JsonObject } from '@deepbuild/adapters';
@@ -15,7 +15,9 @@ import type { Asks } from '@deepbuild/asks';
 import type { AppKey, SessionCredentials } from './forge-port.js';
 import { TERMINAL_PROTOCOL } from '@deepbuild/extension-host';
 import { alive, HELPER, type Supervisor } from '@deepbuild/supervisor';
+import { writeThrough } from './agent-files.js';
 import { parents } from './children.js';
+import { coverage, coveredBy } from './adapter-facts.js';
 import { registry } from './hookmap.js';
 import { refusal, Refused, ulid, type Plant } from './wire.js';
 import { ROLES, type Rule } from './work-rule.js';
@@ -41,6 +43,8 @@ const NONE: Sandbox = { sandboxed: false, walls: { writes: false, credentials: f
 interface Approval { ask: string; at: number; repo: string; issues: number[]; rule?: Rule | null; agents: string[]; homes: Record<string, string>; modes: Record<string, string>; at_once: number; plan_share: number; until: number | null; hosts: string[] }
 /** A start the hub made: its approval, its agent's process, the session its first hook named, and its sandbox. */
 interface Started { run: string; ask: string; agent: string; pid?: number; dir?: string; session?: string; sandbox: Sandbox; ended: boolean; timer?: NodeJS.Timeout; worktree?: string; token?: string; model?: string; adopted?: number }
+/** What a commit on a session's branch writes outside its worktree, and the rest of the repo's git folder it may not (#1666). */
+interface GitFolders { writes: string[]; closed: string[] }
 /** A session's own forge credential while it lives, and the login GitHub records its pushes as. */
 interface Credential { token: string; login: string | null }
 type StartResult = { status: 'started'; run: string; worktree: string; branch: string; agent: string; version: string; mode: string; sandbox: Sandbox } | { status: 'refused'; reason: string; bound: string };
@@ -396,13 +400,12 @@ export class Starts {
     if (used !== undefined && used >= approval.plan_share) return refuse('plan_share', `${agent}'s plan window in ${home} is ${used}% used, at the ${approval.plan_share}% plan share ${approval.ask} allows.`);
     const found = await this.versionOf(agent).catch((error: Error) => error);
     if (found instanceof Error) return refuse('version', `${agent} can't start: ${found.message}`);
-    const facts = this.factsOf(agent)!;
-    if (!(facts.versions as string[]).includes(found.version)) {
-      return refuse('version', `${agent} ${found.version} is past the versions its facts cover (${(facts.versions as string[]).join(', ')}), so its hooks would be watch-only; it doesn't start.`);
+    if (!coveredBy(agent, found.version)) {
+      return refuse('version', `${agent} ${found.version} is not a version its facts cover (${coverage(agent).join(', ')}), so its hooks would be watch-only; it doesn't start.`);
     }
     const tree = r.worktree ?? await this.worktree(repo, issue, run);
     const { sandbox, entry } = this.o.plant === 'starts-without-sandbox' ? { sandbox: NONE, entry: undefined } : this.sandboxOf(agent, found.version);
-    const argv = this.argvOf(started, entry, mode, approval, prompt, tree.path);
+    const argv = this.argvOf(started, entry, mode, approval, prompt, tree.path, await this.gitFolders(tree.path));
     const env = this.envOf(started, home);
     const forge = await this.credential(repo, env);
     this.trust(started, home, tree.path);
@@ -641,8 +644,26 @@ export class Starts {
     await this.o.appendCore('worktree.created', { path, branch, owner: `task:${id}`, base });
     return { path: real(path), branch, base };
   }
+  /**
+   * A worktree's git folders (#1666). `writes` is what a commit on its branch writes outside it: its own git folder and
+   * the repo's shared objects, refs, packed refs and ref logs. `closed` is the rest of the repo's git folder as it
+   * stands now, each entry with its lock (the checkout's own index, HEAD, config, hooks and HEAD log among them), and
+   * every other worktree's git folder by name: a sandbox's globs can't say "every worktree but this one".
+   */
+  private async gitFolders(worktree: string): Promise<GitFolders> {
+    const [own, common] = (await exec('git', ['-C', worktree, 'rev-parse', '--path-format=absolute', '--git-dir', '--git-common-dir'])).trim().split('\n').map(real) as [string, string];
+    const shared = ['objects', 'refs', 'logs', 'packed-refs', 'worktrees'];
+    const names = new Set(['index', 'HEAD', 'config', 'hooks', ...readdirSync(common).filter((n) => !shared.includes(n) && !n.endsWith('.lock')), 'logs/HEAD']);
+    const others = readdirSync(join(common, 'worktrees')).map((n) => join(common, 'worktrees', n)).filter((p) => real(p) !== own);
+    const closed = [...[...names].flatMap((n) => [join(common, n), join(common, `${n}.lock`)]), ...others];
+    // The planted wrong programs: a sandbox that leaves the worktree's own git folder closed, and one that opens the
+    // repo's whole git folder (the worktree's own named too, which Codex holds closed under a parent's "write").
+    if (this.o.plant === 'sandbox-closes-worktree-git') return { writes: [], closed: [own, ...closed] };
+    if (this.o.plant === 'sandbox-opens-whole-git') return { writes: [own, common], closed: [] };
+    return { writes: [own, ...['objects', 'refs', 'logs/refs', 'packed-refs', 'packed-refs.lock'].map((p) => join(common, p))], closed };
+  }
   /** The launch's arguments from the facts: mode, settings and sandbox filled, your words as the prompt's argument. */
-  private argvOf(started: Obj, entry: Obj | undefined, mode: string, approval: Approval, prompt: string, worktree: string): string[] {
+  private argvOf(started: Obj, entry: Obj | undefined, mode: string, approval: Approval, prompt: string, worktree: string, git: GitFolders): string[] {
     const home = homedir();
     // Your keys and other tools' sign-ins, and where the hub keeps sessions' own forge credentials.
     const credentials = [...CREDENTIALS.map((c) => join(home, c)), join(this.o.root, 'starts')];
@@ -652,7 +673,8 @@ export class Starts {
     const value = (!open && isObj(entry?.modes) ? (entry!.modes as Record<string, string>)[mode] : undefined) ?? modes[mode] ?? mode;
     let settings: Obj = {};
     if (typeof entry?.settings === 'string') {
-      settings = JSON.parse(entry.settings, (_, v: unknown) => (v === '{credentials}' ? credentials : v === '{hosts}' ? approval.hosts : v === '{sockets}' ? sockets : v)) as Obj;
+      const lists: Record<string, string[]> = { '{credentials}': credentials, '{hosts}': approval.hosts, '{sockets}': sockets, '{gitWrites}': git.writes, '{gitClosed}': git.closed };
+      settings = JSON.parse(entry.settings, (_, v: unknown) => (typeof v === 'string' && Object.hasOwn(lists, v) ? lists[v] : v)) as Obj;
       // The planted wrong program: the setting that turns the way out off, set the other way.
       const way = isObj(entry.wayOut) ? entry.wayOut : {};
       if (open && typeof way.setting === 'string') {
@@ -663,14 +685,15 @@ export class Starts {
       }
     }
     const toml = (s: string) => JSON.stringify(s);
-    const filesystem = `{${[`${toml(home)}="read"`, ...credentials.map((c) => `${toml(c)}="deny"`)].join(',')}}`;
+    const filesystem = `{${[`${toml(home)}="read"`, ...credentials.map((c) => `${toml(c)}="deny"`), ...git.writes.map((p) => `${toml(p)}="write"`)].join(',')}}`;
     const sandboxArgs = Array.isArray(entry?.args) ? (entry!.args as string[]).map((a) => a.replaceAll('{filesystem}', filesystem)) : [];
     return (started.args as string[]).flatMap((a) => a === '{sandbox}' ? sandboxArgs : a === '{prompt}' ? [prompt]
       : [a.replaceAll('{mode}', value).replaceAll('{settings}', JSON.stringify(settings)).replaceAll('{worktree}', worktree)]);
   }
   /**
    * The worktree a start made is one you approved, so it starts trusted where the agent keeps folder trust as JSON
-   * (its facts' `trust`): nothing types into its trust dialog. Written whole through a rename, the rest kept.
+   * (its facts' `trust`): nothing types into its trust dialog. Written whole through the file a link points to, the
+   * rest kept, as setup writes it, so a link into your dotfiles stays a link. The planted wrong program renames over the path.
    */
   private trust(started: Obj, home: string, worktree: string): void {
     const t = isObj(started.trust) ? started.trust : undefined;
@@ -682,8 +705,10 @@ export class Starts {
     let at = config;
     for (const k of path.slice(0, -1)) at = (isObj(at[k]) ? at[k] : (at[k] = {})) as Obj;
     at[path.at(-1)!] = true;
+    const text = `${JSON.stringify(config, null, 2)}\n`;
+    if (this.o.plant !== 'trust-renames-over-link') return writeThrough(file, text);
     const tmp = `${file}.deep-${process.pid}`;
-    writeFileSync(tmp, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+    writeFileSync(tmp, text, { mode: 0o600 });
     renameSync(tmp, file);
   }
   /** Your login shell's environment minus what marks a nested session and your forge login, with the account's home only when it isn't the default. */

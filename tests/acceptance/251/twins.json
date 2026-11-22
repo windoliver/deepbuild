@@ -1,0 +1,28 @@
+{
+  "#251.1571a36a": [
+    "spring_on_whole_mass"
+  ],
+  "#251.acf8ab9a": [
+    "brake_whole_force_each_wheel"
+  ],
+  "#251.d72490eb": [
+    "steer_clamps_angle",
+    "steer_parallel"
+  ],
+  "#251.0d1641fc": [
+    "contact_names_body_only"
+  ],
+  "#251.eadd341f": [
+    "checkpoint_drops_steer"
+  ],
+  "#251.2e102906": [
+    "check_counts_wheels_only"
+  ],
+  "#251.9fb00bb4": [
+    "kit_counts_excluded_passed"
+  ],
+  "#251.a96ef62b": [
+    "place_keeps_spin_rate",
+    "place_keeps_angular_velocity"
+  ]
+}

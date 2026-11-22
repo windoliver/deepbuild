@@ -1,11 +1,12 @@
 #!/usr/bin/env node
-// Generates the agent skill (skills/deepbuild/SKILL.md) and each deep_* tool's description (packages/hub/tools.json)
-// from the Building blocks table of docs/technical-design.md (#26): every row whose "Agents, through MCP" cell names a
-// tool gives that tool's description and the skill its block and what the block never is. Only what a tool can't teach
+// Generates each MCP tool's title and hints (packages/hub/annotations.json, #2898, from HINTS below), and the agent
+// skill (skills/deepbuild/SKILL.md) and each deep_* tool's description (packages/hub/tools.json) from the Building
+// blocks table of docs/technical-design.md (#26): every row whose "Agents, through MCP" cell names a tool gives that tool's description and the skill its block and what the block never is. Only what a tool can't teach
 // goes in the skill, when to use each block and what it never does, and never a tool's parameters, which agents read
 // from its schema. tests/acceptance/26 fails when either drifts from the table. The skill also states each craft@1
 // check in its own words, from crates/deep-canvas/src/craft.json, the table the checks read (#409);
-// tests/acceptance/409 fails when it drifts from what the checks state.
+// tests/acceptance/409 fails when it drifts from what the checks state. It also writes each MCP server's `instructions`
+// and the tools marked to load up front (packages/hub/instructions.json, and the reading server's line), #2897.
 //   node scripts/skill.mjs
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -64,7 +65,7 @@ const TOOLS = {
     proves: 'A listing does not prove your document is right: only its check and the checks that run on it say so, and an example is read, never run.',
   },
   deep_query: {
-    use: 'Read a revision of a document as evaluated data by stable ID instead of as a picture: its rows and the values at items/<id>/<field> at the times you name, each answer with a coverage block that names what it cut; its summary, with counts by kind, writer layer and canvas module; or the why behind one value, naming the canvas module, operator and document paths that made it. It reads only what your session may read.',
+    use: 'Read a revision of a document as evaluated data by stable ID instead of as a picture: its rows and the values at items/<id>/<field> at the times you name, each answer with a coverage block that names what it cut; its summary, with counts by kind, writer layer and canvas module; the why behind one value, naming the canvas module, operator and document paths that made it; every row that names an item, a table row, a pack entry or an asset, before you remove or rename it; or what costs most, its items and assets ranked by the meter\'s own terms. It reads only what your session may read.',
     proves: 'A reading does not prove your work is right: it is never evidence for a claim, only check results are, and an absence concluded from a cut answer is refused.',
   },
   deep_job: {
@@ -80,6 +81,48 @@ const TOOLS = {
     proves: 'A plan proposed has not run: only the run deep host run records, from a copy only root can write, shows what it did.',
   },
 };
+
+/**
+ * Each MCP tool's title and its four hints (#2898): every tool of deep mcp, of deep mcp actions and of the reading
+ * tools, each hint stated, none left to the protocol's cautious default. R: read-only, a tool every form of which
+ * changes nothing but the record of the call; D: destructive, only call_action, since a plug-in's action may delete;
+ * I: idempotent, a read, or a change whose repeat the design makes a no-op; O: open-world, a form reaches past this
+ * machine. A hint is the server's word to a client: the hub never reads its own tools' hints, it counts them by the
+ * adapters' facts.
+ */
+const HINTS = {
+  deep_ask: ['Ask the person', ''],
+  deep_wait: ['Wait on an ask', 'RI'],
+  deep_open_item: ['Record an open item', ''],
+  deep_status: ['Read where the session stands', 'RI'],
+  deep_search: ['Search the wiki, decisions and spec', 'RI'],
+  deep_claim: ['Claim the task done', ''],
+  deep_evidence: ['Attach a file as evidence', ''],
+  deep_propose: ['Propose a change', ''],
+  deep_run: ['Run a check', 'O'],
+  deep_show: ['Draw a canvas document', ''],
+  deep_drive: ['Drive a replica', ''],
+  deep_kinds: ['Look up what the canvas can draw', 'O'],
+  deep_query: ['Read a document as data', 'RI'],
+  deep_job: ['List or run a job', 'IO'],
+  deep_env: ['Bring the worktree\'s stack up or down', ''],
+  deep_root_plan: ['Propose a root plan', ''],
+  find_actions: ['Find plug-in actions', 'RI'],
+  call_action: ['Call a plug-in action', 'DIO'],
+  read: ['Read a slice of a handle', 'RI'],
+  find: ['Find messages in the given sessions', 'RI'],
+};
+/** The MCP annotations of each tool, by name, as packages/hub/annotations.json holds them. */
+function annotations() {
+  for (const tool of Object.keys(TOOLS)) if (!HINTS[tool]) throw Error(`HINTS gives ${tool} no title or hints`);
+  return Object.fromEntries(Object.entries(HINTS).map(([tool, [title, hints]]) => [tool, {
+    title,
+    readOnlyHint: hints.includes('R'),
+    destructiveHint: hints.includes('D'),
+    idempotentHint: hints.includes('I'),
+    openWorldHint: hints.includes('O'),
+  }]));
+}
 
 /** Table text as an agent reads it: no backticks or bold. */
 const plain = (text) => text.replace(/`|\*\*/g, '');
@@ -143,12 +186,53 @@ export function generate(rows = blocks()) {
     ...CRAFT.checks.map((c) => `- ${c.name}. ${c.description} Threshold — ${c.threshold}. Fix — ${c.fix}`),
     '',
   ].join('\n');
-  return { descriptions, skill };
+  return { descriptions, skill, instructions: instructions(used) };
+}
+
+/**
+ * The tools a client that reads a load mark loads at a session's start (#2897): deep_status alone, since its reply
+ * names what a session calls next. Every other tool stays behind the client's search.
+ */
+const UP_FRONT = ['deep_status'];
+/**
+ * Each server's `instructions` on initialize (#2897), which a client that loads tools by search reads at a session's
+ * start in place of the tool list: what the tools are for, when to look for them and which to call first. deep's names
+ * every other tool by the first Building blocks row that names it, so one search loads what a task needs. The same bytes
+ * at every start: nothing here reads the clock, the machine or the session.
+ */
+function instructions(used) {
+  const named = new Set(UP_FRONT);
+  const groups = used.flatMap((r) => {
+    const tools = Object.keys(TOOLS).filter((tool) => r.mcp.includes(`\`${tool}\``) && !named.has(tool));
+    tools.forEach((tool) => named.add(tool));
+    return tools.length ? [`${plain(r.block).replace(/\s*\(.*\)$/, '')}: ${tools.join(', ')}.`] : [];
+  });
+  return {
+    upFront: UP_FRONT,
+    servers: {
+      deep: [
+        'DeepBuild records this session\'s work; only check results decide when it is done, never your word.',
+        `Begin each task with ${UP_FRONT.join(', ')}, which is loaded already: its reply says where your session stands and what to call next.`,
+        'Every other deep_* tool loads when you search for it, so name in one search each tool your task needs. By block:',
+        ...groups,
+      ].join(' '),
+      'deep-actions': 'Actions the plug-ins installed in DeepBuild offer, such as sending a message or changing data outside the repo. Search for find_actions to list them with each one\'s input schema, and for call_action to run one by name, once a task needs a plug-in\'s action.',
+      'deepbuild-reading': 'This reading job\'s only way into the sessions, evidence and wiki pages it was given. Read each handle you were given a slice at a time, continuing with next until the reply has none; call find for the message handles of your sessions that hold a query.',
+    },
+  };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { descriptions, skill } = generate();
+  const { descriptions, skill, instructions: given } = generate();
   writeFileSync(join(ROOT, 'packages/hub/tools.json'), `${JSON.stringify(descriptions, null, 2)}\n`);
+  // The hub serves deep and deep-actions; the reading server's text stands in its own file, below.
+  const { 'deepbuild-reading': _reading, ...hub } = given.servers;
+  writeFileSync(join(ROOT, 'packages/hub/instructions.json'), `${JSON.stringify({ ...given, servers: hub }, null, 2)}\n`);
+  // The reading server is one file a reading job is granted alone, so its text stands in it, on its marked line.
+  const reading = join(ROOT, 'packages/reading/src/tools.mts');
+  const line = `const INSTRUCTIONS = ${JSON.stringify(given.servers['deepbuild-reading'])}; // scripts/skill.mjs writes this line`;
+  writeFileSync(reading, readFileSync(reading, 'utf8').replace(/^const INSTRUCTIONS = .*$/m, () => line));
+  writeFileSync(join(ROOT, 'packages/hub/annotations.json'), `${JSON.stringify(annotations(), null, 2)}\n`);
   mkdirSync(join(ROOT, 'skills/deepbuild'), { recursive: true });
   writeFileSync(join(ROOT, 'skills/deepbuild/SKILL.md'), skill);
 }

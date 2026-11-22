@@ -21,7 +21,10 @@ pub const MAX_ARGS: usize = 4;
 pub enum Arg<'a> {
     /// A number path: a logic array (`<logic>.<name>[index]`) or a template's slot path, with the
     /// widest text it may show.
-    Number { path: &'a str, widest: Option<&'a str> },
+    Number {
+        path: &'a str,
+        widest: Option<&'a str>,
+    },
     /// A nested lookup `{copy: <table>[<array path>]}`, one level deep, with no arguments.
     Lookup { table: &'a str, key: &'a str },
 }
@@ -98,14 +101,29 @@ fn is_key(k: &str) -> bool {
 
 /// The copy tables `doc` carries in `locale`: `data.copy[locale][table]` objects alone (a string
 /// there is #407's flat copy).
-pub fn table<'a>(doc: &'a Map<String, Value>, locale: &str, name: &str) -> Option<&'a Map<String, Value>> {
-    doc.get("data")?.get("copy")?.get(locale)?.get(name)?.as_object()
+pub fn table<'a>(
+    doc: &'a Map<String, Value>,
+    locale: &str,
+    name: &str,
+) -> Option<&'a Map<String, Value>> {
+    doc.get("data")?
+        .get("copy")?
+        .get(locale)?
+        .get(name)?
+        .as_object()
 }
 
 /// The locales the document's copy tables are in, in byte order.
 pub fn locales(doc: &Map<String, Value>) -> Vec<&str> {
-    let copy = doc.get("data").and_then(|d| d.get("copy")).and_then(Value::as_object);
-    let mut out: Vec<&str> = copy.into_iter().flatten().map(|(l, _)| l.as_str()).collect();
+    let copy = doc
+        .get("data")
+        .and_then(|d| d.get("copy"))
+        .and_then(Value::as_object);
+    let mut out: Vec<&str> = copy
+        .into_iter()
+        .flatten()
+        .map(|(l, _)| l.as_str())
+        .collect();
     out.sort_unstable();
     out
 }
@@ -121,12 +139,15 @@ pub fn locale_for<'a>(doc: &'a Map<String, Value>, asked: &'a str, name: &str) -
 
 /// Each key a table holds, by value.
 pub fn keys(t: &Map<String, Value>) -> Vec<i32> {
-    t.keys().filter(|k| is_key(k)).filter_map(|k| k.parse().ok()).collect()
+    t.keys()
+        .filter(|k| is_key(k))
+        .filter_map(|k| k.parse().ok())
+        .collect()
 }
 
 /// The table's string for `key`, its plural form picked by `rules` applied to the first
 /// argument as shown; `None` where the table lacks the key. Looked up by value.
-pub fn pick<'a>(t: &'a Map<String, Value>, key: i64, plural: impl Fn() -> &'static str) -> Option<&'a str> {
+pub fn pick(t: &Map<String, Value>, key: i64, plural: impl Fn() -> &'static str) -> Option<&str> {
     match t.get(&key.to_string())? {
         Value::String(s) => Some(s),
         Value::Object(forms) => forms
@@ -139,7 +160,9 @@ pub fn pick<'a>(t: &'a Map<String, Value>, key: i64, plural: impl Fn() -> &'stat
 
 /// The table's `missing` string (empty by default).
 pub fn missing(t: Option<&Map<String, Value>>) -> &str {
-    t.and_then(|t| t.get("missing")).and_then(Value::as_str).unwrap_or("")
+    t.and_then(|t| t.get("missing"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
 }
 
 /// `text` with `{0}` to `{3}` replaced by the arguments as shown.
@@ -150,7 +173,12 @@ pub fn fill(text: &str, args: &[String]) -> String {
         out.push_str(&rest[..at]);
         let tail = &rest[at..];
         let slot = tail[1..].find('}').map(|e| &tail[1..1 + e]);
-        match slot.and_then(|s| s.parse::<usize>().ok().filter(|i| *i < MAX_ARGS).map(|i| (s, i))) {
+        match slot.and_then(|s| {
+            s.parse::<usize>()
+                .ok()
+                .filter(|i| *i < MAX_ARGS)
+                .map(|i| (s, i))
+        }) {
             Some((s, i)) => {
                 out.push_str(args.get(i).map_or("", String::as_str));
                 rest = &tail[s.len() + 2..];
@@ -201,11 +229,19 @@ impl Frame<'_> {
             return number(v);
         }
         let data = json!({"data": self.doc.get("data"), "controls": self.doc.get("controls")});
-        deep_canvas::template::value(&data, path).map(|s| s.text).unwrap_or_default()
+        deep_canvas::template::value(&data, path)
+            .map(|s| s.text)
+            .unwrap_or_default()
     }
 
     /// The string `name` holds for `key`, its arguments already shown; and the key it missed.
-    pub fn string(&self, name: &str, key: Option<(f64, i64)>, key_path: &str, args: &[String]) -> (String, Option<Missing>) {
+    pub fn string(
+        &self,
+        name: &str,
+        key: Option<(f64, i64)>,
+        key_path: &str,
+        args: &[String],
+    ) -> (String, Option<Missing>) {
         let locale = locale_for(self.doc, self.locale, name);
         let t = table(self.doc, locale, name);
         let rules = || self.plurals.of(locale);
@@ -269,7 +305,12 @@ pub fn missing_issue(id: &str, path: &str, m: &Missing, row: Option<usize>) -> I
 
 /// The steps an array path's key begins to be missing from the table `name` in `locale`, by the
 /// baked steps alone: `(step, key)`.
-pub fn missing_steps(doc: &Map<String, Value>, locale: &str, name: &str, path: &str) -> Vec<(i64, f64)> {
+pub fn missing_steps(
+    doc: &Map<String, Value>,
+    locale: &str,
+    name: &str,
+    path: &str,
+) -> Vec<(i64, f64)> {
     let Some((form, index)) = element_path(path) else {
         return Vec::new();
     };
@@ -278,7 +319,9 @@ pub fn missing_steps(doc: &Map<String, Value>, locale: &str, name: &str, path: &
     };
     let t = table(doc, locale_for(doc, locale, name), name);
     let has = |v: f64| {
-        v.fract() == 0.0 && v.is_finite() && t.is_some_and(|t| pick(t, v as i64, || "other").is_some())
+        v.fract() == 0.0
+            && v.is_finite()
+            && t.is_some_and(|t| pick(t, v as i64, || "other").is_some())
     };
     let mut was = true;
     let mut out = Vec::new();
@@ -290,6 +333,33 @@ pub fn missing_steps(doc: &Map<String, Value>, locale: &str, name: &str, path: &
         was = now;
     }
     out
+}
+
+/// #194: the missing span an array path's key is in at step `k`, as the step the span began and
+/// the key the step shows; none when the table holds that key in `locale`.
+pub fn missing_at(
+    doc: &Map<String, Value>,
+    locale: &str,
+    name: &str,
+    path: &str,
+    k: i64,
+) -> Option<(i64, f64)> {
+    let (form, index) = element_path(path)?;
+    let array = doc.get("arrays")?.get(form)?;
+    let t = table(doc, locale_for(doc, locale, name), name);
+    let has = |v: f64| {
+        v.fract() == 0.0
+            && v.is_finite()
+            && t.is_some_and(|t| pick(t, v as i64, || "other").is_some())
+    };
+    let mut span = None;
+    for (step, v) in element_steps(array, index)
+        .into_iter()
+        .take_while(|(s, _)| *s <= k)
+    {
+        span = (!has(v)).then(|| (span.map_or(step, |(began, _)| began), v));
+    }
+    span
 }
 
 /// The code the fit check fails a key with, and the one it refuses an argument with no widest.
@@ -311,11 +381,18 @@ fn widest_of(doc: &Map<String, Value>, path: &str, widest: Option<&str>) -> Opti
 /// The lookups a text holds: its `text: {copy, args}`, and each `{copy: …}` slot of its template.
 pub fn lookups_of(item: &Value) -> Vec<(String, Value)> {
     let mut out = Vec::new();
-    if let Some(t) = item.pointer("/params/text").filter(|t| t.get("copy").is_some()) {
+    if let Some(t) = item
+        .pointer("/params/text")
+        .filter(|t| t.get("copy").is_some())
+    {
         out.push(("text".to_string(), t.clone()));
     }
     let template = item.pointer("/params/template").and_then(Value::as_str);
-    for part in template.and_then(|t| deep_canvas::template::parts(t).ok()).into_iter().flatten() {
+    for part in template
+        .and_then(|t| deep_canvas::template::parts(t).ok())
+        .into_iter()
+        .flatten()
+    {
         if let deep_canvas::template::Part::Slot(s) = part {
             if let Some(slot) = slot(s) {
                 out.push(("template".to_string(), slot));
@@ -341,9 +418,17 @@ pub fn slot(s: &str) -> Option<Value> {
 pub fn fit_issues(doc: &Map<String, Value>, ty: &crate::scene::Type, issues: &mut Vec<Issue>) {
     // One shaper for the check, made only when a text holds a lookup.
     let mut shaper: Option<deep_text::Shaper> = None;
-    let items = doc.get("items").and_then(Value::as_object).into_iter().flatten();
+    let items = doc
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten();
     for (id, item) in items.filter(|(_, i)| i["kind"] == "text@1") {
-        let params = item.get("params").and_then(Value::as_object).cloned().unwrap_or_default();
+        let params = item
+            .get("params")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
         for (field, v) in lookups_of(item) {
             let at = format!("items/{id}/params/{field}");
             let Ok(l) = lookup(&v) else { continue };
@@ -368,7 +453,13 @@ fn fit_one(
                 Some(w) => widest.push(Some(w)),
                 None => {
                     let what = "a number argument names neither a widest nor a range its source declares, so the fit check can't size it";
-                    issues.push(Issue::error(NO_WIDEST, id, format!("{at}/args/{i}"), json!({"arg": i, "path": path}), what));
+                    issues.push(Issue::error(
+                        NO_WIDEST,
+                        id,
+                        format!("{at}/args/{i}"),
+                        json!({"arg": i, "path": path}),
+                        what,
+                    ));
                     return;
                 }
             },
@@ -383,26 +474,39 @@ fn fit_one(
             p.remove("box");
             p.remove("max_lines");
         }
-        let shown = crate::scene::Shown { bound: "copy".into(), text: String::new(), stale: false, age: None, changes_at: None };
+        let shown = crate::scene::Shown {
+            bound: "copy".into(),
+            text: String::new(),
+            stale: false,
+            age: None,
+            changes_at: None,
+        };
         crate::scene::text_spec_in(id, &p, Some(&shown), ty).ok()
     };
     let mut specs = [spec_of(true), spec_of(false)];
-    let mut shape_width = |shaper: &mut deep_text::Shaper, text: &str, boxed: bool| -> Option<(bool, f32)> {
-        let spec = specs[usize::from(!boxed)].as_mut()?;
-        spec.text = text.to_string();
-        let f = shaper.fit(&spec.shaper_spec()?, None);
-        Some((f.fits, f.width))
-    };
+    let mut shape_width =
+        |shaper: &mut deep_text::Shaper, text: &str, boxed: bool| -> Option<(bool, f32)> {
+            let spec = specs[usize::from(!boxed)].as_mut()?;
+            spec.text = text.to_string();
+            let f = shaper.fit(&spec.shaper_spec()?, None);
+            Some((f.fits, f.width))
+        };
     for locale in locales(doc) {
-        let Some(t) = table(doc, locale, l.table) else { continue };
+        let Some(t) = table(doc, locale, l.table) else {
+            continue;
+        };
         let mut args: Vec<String> = Vec::with_capacity(widest.len());
         for (a, w) in l.args.iter().zip(&widest) {
             args.push(match (a, w) {
                 (_, Some(w)) => w.clone(),
                 (Arg::Lookup { table: nested, .. }, None) => {
                     let strings = table(doc, locale, nested).map(strings).unwrap_or_default();
-                    let widths = strings.into_iter().filter_map(|s| shape_width(shaper, s, false).map(|(_, w)| (w, s)));
-                    widths.max_by(|a, b| a.0.total_cmp(&b.0)).map_or(String::new(), |(_, s)| s.to_string())
+                    let widths = strings
+                        .into_iter()
+                        .filter_map(|s| shape_width(shaper, s, false).map(|(_, w)| (w, s)));
+                    widths
+                        .max_by(|a, b| a.0.total_cmp(&b.0))
+                        .map_or(String::new(), |(_, s)| s.to_string())
                 }
                 _ => String::new(),
             });
@@ -465,13 +569,26 @@ pub(crate) fn register(r: &mut deep_canvas::registry::Registrar) {
     r.operator(
         "copy",
         "items",
-        &["core.fields", "refs", "t", "view(locale)", "table:text.plurals"],
+        &[
+            "core.fields",
+            "refs",
+            "t",
+            "view(locale)",
+            "table:text.plurals",
+        ],
         &["text.copy"],
     )
     .applies(is_keyed)
     .run(copy);
     // A mark set's copy columns, rewritten as the str columns they show at t.
-    r.contribution("text.columns", "fields", "item", "geometry", "items", "core.fields");
+    r.contribution(
+        "text.columns",
+        "fields",
+        "item",
+        "geometry",
+        "items",
+        "core.fields",
+    );
     r.operator(
         "copy_columns",
         "items",
@@ -482,7 +599,9 @@ pub(crate) fn register(r: &mut deep_canvas::registry::Registrar) {
     .run(copy_columns_op);
 }
 
-fn copy_columns_op(v: &mut deep_canvas::schedule::View<'_>) -> Result<(), deep_canvas::schedule::OpError> {
+fn copy_columns_op(
+    v: &mut deep_canvas::schedule::View<'_>,
+) -> Result<(), deep_canvas::schedule::OpError> {
     use deep_canvas::schedule::core_ops::{Datum, Edit, Edits};
     use deep_canvas::schedule::Val;
     if v.planted() == Some(KEEPS_FIRST_LOCALE) {
@@ -496,11 +615,24 @@ fn copy_columns_op(v: &mut deep_canvas::schedule::View<'_>) -> Result<(), deep_c
     let locale = v.locale()?;
     let plurals = v.table::<Table>("text.plurals")?;
     let empty = Map::new();
-    let frame = Frame { doc: doc.as_object().unwrap_or(&empty), t, locale, plurals: &plurals };
+    let frame = Frame {
+        doc: doc.as_object().unwrap_or(&empty),
+        t,
+        locale,
+        plurals: &plurals,
+    };
+    let entries = crate::entries::Frame {
+        doc: frame.doc,
+        t,
+        planted: crate::entries::planted(v.planted()),
+    };
+    let shown = entries.columns(item).into_iter().map(|(n, c, _)| (n, c));
     let edits = frame
         .columns(item)
         .into_iter()
-        .map(|(name, column, _)| Edit {
+        .map(|(n, c, _)| (n, c))
+        .chain(shown)
+        .map(|(name, column)| Edit {
             add: false,
             path: vec!["params".into(), "columns".into(), name],
             value: Datum::Typed(Val::json(column)),
@@ -515,12 +647,16 @@ fn plurals() -> deep_canvas::registry::TableValue {
 
 /// A text holding a lookup: `text: {copy, args}` or a template with a `{copy: …}` slot.
 pub fn is_keyed(_: &Value, _: &str, item: &Value) -> bool {
-    item["kind"] == "text@1" && !lookups_of(item).is_empty()
+    item["kind"] == "text@1"
+        && (!lookups_of(item).is_empty() || crate::entries::is_entry_text(item))
 }
 
 fn copy(v: &mut deep_canvas::schedule::View<'_>) -> Result<(), deep_canvas::schedule::OpError> {
     use deep_canvas::schedule::{core_ops::Fields, OpError, Val};
-    let item = v.typed::<Fields>("core.fields")?.ok_or_else(|| OpError::new("input_missing", v.path()))?.to_json();
+    let item = v
+        .typed::<Fields>("core.fields")?
+        .ok_or_else(|| OpError::new("input_missing", v.path()))?
+        .to_json();
     let doc = v.document()?;
     let t = v.t()?;
     let locale = v.locale()?;
@@ -530,52 +666,111 @@ fn copy(v: &mut deep_canvas::schedule::View<'_>) -> Result<(), deep_canvas::sche
     let id = v.id().unwrap_or_default().to_string();
     let empty = Map::new();
     let doc = doc.as_object().unwrap_or(&empty);
-    let frame = Frame { doc, t, locale, plurals: english.as_ref().unwrap_or(&pinned) };
-    let shown = frame.text(&id, &item).map_err(|r| OpError::new(r.code, r.path))?;
+    // #297: an entry text shows its player's latest entry, read from the track.
+    if let Some(Ok(e)) = item
+        .pointer("/params/text")
+        .filter(|t| crate::entries::is_entry(t))
+        .map(crate::entries::spec)
+    {
+        let frame = crate::entries::Frame {
+            doc,
+            t,
+            planted: crate::entries::planted(planted),
+        };
+        // An entry shows as text does, never as a bound number: it ellipsizes when it overflows.
+        let shown = crate::scene::Shown {
+            bound: "copy".into(),
+            text: frame.text(&e).unwrap_or_default(),
+            stale: false,
+            age: None,
+            changes_at: None,
+        };
+        return v.write("text.copy", Val::typed(Some(shown)));
+    }
+    let frame = Frame {
+        doc,
+        t,
+        locale,
+        plurals: english.as_ref().unwrap_or(&pinned),
+    };
+    let shown = frame
+        .text(&id, &item)
+        .map_err(|r| OpError::new(r.code, r.path))?;
     v.write("text.copy", Val::typed(shown))
 }
 
 impl Frame<'_> {
     /// What a keyed text shows at the frame: its lookup's string, or its template with each
     /// `{copy: …}` slot filled and every other slot as a template fills it.
-    pub fn text(&self, id: &str, item: &Value) -> Result<Option<crate::scene::Shown>, crate::scene::Refused> {
-        let shown = |text: String| crate::scene::Shown { bound: "copy".into(), text, stale: false, age: None, changes_at: None };
-        if let Some(t) = item.pointer("/params/text").filter(|t| t.get("copy").is_some()) {
-            let l = lookup(t).map_err(|f| crate::scene::Refused { code: "bad_doc", path: format!("items/{id}/params/text/{f}") })?;
+    pub fn text(
+        &self,
+        id: &str,
+        item: &Value,
+    ) -> Result<Option<crate::scene::Shown>, crate::scene::Refused> {
+        let shown = |text: String| crate::scene::Shown {
+            bound: "copy".into(),
+            text,
+            stale: false,
+            age: None,
+            changes_at: None,
+        };
+        if let Some(t) = item
+            .pointer("/params/text")
+            .filter(|t| t.get("copy").is_some())
+        {
+            let l = lookup(t).map_err(|f| crate::scene::Refused {
+                code: "bad_doc",
+                path: format!("items/{id}/params/text/{f}"),
+            })?;
             return Ok(Some(shown(self.show(&l).0)));
         }
         let Some(template) = item.pointer("/params/template").and_then(Value::as_str) else {
             return Ok(None);
         };
-        let parts = deep_canvas::template::parts(template)
-            .map_err(|_| crate::scene::Refused { code: "ref_unresolved", path: format!("items/{id}/params/template") })?;
+        let parts = deep_canvas::template::parts(template).map_err(|_| crate::scene::Refused {
+            code: "ref_unresolved",
+            path: format!("items/{id}/params/template"),
+        })?;
         let mut filled = String::new();
         for part in parts {
             match part {
                 deep_canvas::template::Part::Words(w) => filled.push_str(w),
-                deep_canvas::template::Part::Slot(s) => match slot(s).as_ref().and_then(|l| lookup(l).ok()) {
-                    // A string holds no slot of its own.
-                    Some(l) => filled.push_str(&self.show(&l).0.replace(['{', '}'], "")),
-                    None => {
-                        filled.push('{');
-                        filled.push_str(s);
-                        filled.push('}');
+                deep_canvas::template::Part::Slot(s) => {
+                    match slot(s).as_ref().and_then(|l| lookup(l).ok()) {
+                        // A string holds no slot of its own.
+                        Some(l) => filled.push_str(&self.show(&l).0.replace(['{', '}'], "")),
+                        None => {
+                            filled.push('{');
+                            filled.push_str(s);
+                            filled.push('}');
+                        }
                     }
-                },
+                }
             }
         }
         let mut rest = item.clone();
         rest["params"]["template"] = json!(filled);
-        let text = crate::scene::bound_text(self.doc, id, &rest, &crate::scene::Record::default(), self.locale)?;
+        let text = crate::scene::bound_text(
+            self.doc,
+            id,
+            &rest,
+            &crate::scene::Record::default(),
+            self.locale,
+        )?;
         Ok(Some(shown(text.map_or(filled, |s| s.text))))
     }
 }
 
-/// Each keyed text's `copy.missing` a frame at `t` in `locale` raises: each lookup whose key
-/// begins to be missing at the frame's step; every one at check (`t` none).
+/// Each keyed text's `copy.missing` a frame at `t` in `locale` raises: each lookup whose key is
+/// missing at the frame's step, naming the step its span began (#194); every span at check (`t`
+/// none).
 pub fn raised_at(doc: &Map<String, Value>, t: Option<i64>, locale: &str) -> Vec<Issue> {
     let mut out = Vec::new();
-    let items = doc.get("items").and_then(Value::as_object).into_iter().flatten();
+    let items = doc
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten();
     for (id, item) in items.filter(|(_, i)| i["kind"] == "text@1") {
         for (field, v) in lookups_of(item) {
             let Ok(l) = lookup(&v) else { continue };
@@ -589,11 +784,26 @@ pub fn raised_at(doc: &Map<String, Value>, t: Option<i64>, locale: &str) -> Vec<
                     .and_then(|(form, _)| doc.get("arrays")?.get(form)?["every"].as_i64())
                     .unwrap_or(1)
                     .max(1);
-                for (step, value) in missing_steps(doc, locale, name, key) {
-                    if t.is_none_or(|t| t.div_euclid(every) == step) {
-                        let m = Missing { table: name.into(), key: value as i64, array: key.into(), step };
-                        out.push(missing_issue(id, &format!("items/{id}/params/{field}"), &m, None));
-                    }
+                // At check every span a key is missing; a frame its own key's span, if it's in one.
+                let spans = match t {
+                    None => missing_steps(doc, locale, name, key),
+                    Some(t) => missing_at(doc, locale, name, key, t.div_euclid(every))
+                        .into_iter()
+                        .collect(),
+                };
+                for (step, value) in spans {
+                    let m = Missing {
+                        table: name.into(),
+                        key: value as i64,
+                        array: key.into(),
+                        step,
+                    };
+                    out.push(missing_issue(
+                        id,
+                        &format!("items/{id}/params/{field}"),
+                        &m,
+                        None,
+                    ));
                 }
             }
         }
@@ -609,12 +819,18 @@ pub fn is_copy_column(c: &Value) -> bool {
 /// The set's copy columns, by name.
 fn copy_columns(set: &Value) -> Vec<(&str, &Value)> {
     let columns = set.pointer("/params/columns").and_then(Value::as_object);
-    columns.into_iter().flatten().filter(|(_, c)| is_copy_column(c)).map(|(n, c)| (n.as_str(), c)).collect()
+    columns
+        .into_iter()
+        .flatten()
+        .filter(|(_, c)| is_copy_column(c))
+        .map(|(n, c)| (n.as_str(), c))
+        .collect()
 }
 
 /// A mark set holding a copy column.
 pub fn has_copy_column(_: &Value, _: &str, item: &Value) -> bool {
-    item["kind"] == "marks@1" && !copy_columns(item).is_empty()
+    item["kind"] == "marks@1"
+        && (!copy_columns(item).is_empty() || crate::entries::has_entry_column(item))
 }
 
 impl Frame<'_> {
@@ -628,33 +844,60 @@ impl Frame<'_> {
             return Some((m.values, m.step, form));
         }
         let col = crate::data::column_of(c, n, "").ok()?;
-        Some(((0..n).map(|i| col.number(i).unwrap_or(f64::NAN)).collect(), 0, name.to_string()))
+        Some((
+            (0..n).map(|i| col.number(i).unwrap_or(f64::NAN)).collect(),
+            0,
+            name.to_string(),
+        ))
     }
 
     /// Each copy column of `set` as the str column it shows at the frame: each row's string
     /// looked up by its key column's value; and the rows whose key the table lacks.
+    #[allow(clippy::type_complexity)]
     pub fn columns(&self, set: &Value) -> Vec<(String, Value, Vec<(usize, Missing)>)> {
         let mut out = Vec::new();
         for (name, c) in copy_columns(set) {
             let Ok(l) = column(c) else { continue };
             let key = set.pointer("/params/columns").and_then(|c| c.get(l.key));
             let count = |k: &str| key.and_then(|c| c.get(k)).and_then(Value::as_u64);
-            let n = set.pointer("/params/n").and_then(Value::as_u64).or_else(|| count("len")).or_else(|| count("count"));
-            let Some(n) = n.map(|n| n as usize) else { continue };
-            let Some((keys, step, array)) = self.numbers(set, l.key, n) else { continue };
-            let args: Vec<Vec<f64>> = l.args.iter().filter_map(|a| match a {
-                Arg::Number { path, .. } => Some(self.numbers(set, path, n).map_or(vec![f64::NAN; n], |v| v.0)),
-                Arg::Lookup { .. } => None,
-            }).collect();
+            let n = set
+                .pointer("/params/n")
+                .and_then(Value::as_u64)
+                .or_else(|| count("len"))
+                .or_else(|| count("count"));
+            let Some(n) = n.map(|n| n as usize) else {
+                continue;
+            };
+            let Some((keys, step, array)) = self.numbers(set, l.key, n) else {
+                continue;
+            };
+            let args: Vec<Vec<f64>> = l
+                .args
+                .iter()
+                .filter_map(|a| match a {
+                    Arg::Number { path, .. } => Some(
+                        self.numbers(set, path, n)
+                            .map_or(vec![f64::NAN; n], |v| v.0),
+                    ),
+                    Arg::Lookup { .. } => None,
+                })
+                .collect();
             let mut data = Vec::with_capacity(n);
             let mut missed = Vec::new();
             for (row, key) in keys.iter().enumerate().take(n) {
-                let shown: Vec<String> = args.iter().map(|a| a.get(row).map_or(String::new(), |v| number(*v))).collect();
+                let shown: Vec<String> = args
+                    .iter()
+                    .map(|a| a.get(row).map_or(String::new(), |v| number(*v)))
+                    .collect();
                 let (s, m) = self.string(l.table, Some((*key, step)), &array, &shown);
                 data.push(s);
                 missed.extend(m.map(|m| (row, m)));
             }
-            out.push((name.to_string(), json!({"dtype": "str", "len": n, "data": data}), missed));
+            out.push((
+                name.to_string(),
+                json!({"dtype": "str", "len": n, "data": data}),
+                missed,
+            ));
         }
         out
     }
@@ -663,13 +906,26 @@ impl Frame<'_> {
 /// `items` with each keyed text's string and each copy column's rows as a frame at `t` in
 /// `locale` shows them, for a reader that draws from items as written (the check, a render);
 /// `None` where no item holds copy a key picks.
-pub fn apply(doc: &Map<String, Value>, items: &Map<String, Value>, t: i64, locale: &str) -> Option<Map<String, Value>> {
+pub fn apply(
+    doc: &Map<String, Value>,
+    items: &Map<String, Value>,
+    t: i64,
+    locale: &str,
+) -> Option<Map<String, Value>> {
+    // #297: entry texts and columns first, then keyed copy over what they show.
+    let entered = crate::entries::apply(doc, items, t, crate::entries::Planted::None);
+    let items = entered.as_ref().unwrap_or(items);
     let keyed = |i: &Value| is_keyed(&Value::Null, "", i) || has_copy_column(&Value::Null, "", i);
     if !items.values().any(keyed) {
-        return None;
+        return entered;
     }
     let plurals = Table::pinned();
-    let frame = Frame { doc, t, locale, plurals: &plurals };
+    let frame = Frame {
+        doc,
+        t,
+        locale,
+        plurals: &plurals,
+    };
     let mut out = items.clone();
     for (id, item) in out.iter_mut().filter(|(_, i)| keyed(i)) {
         if let Ok(Some(shown)) = frame.text(id, item) {
@@ -690,14 +946,34 @@ pub fn apply(doc: &Map<String, Value>, items: &Map<String, Value>, t: i64, local
 pub fn column_missing(doc: &Map<String, Value>, t: Option<i64>, locale: &str) -> Vec<Issue> {
     let plurals = Table::default();
     let mut out = Vec::new();
-    let items = doc.get("items").and_then(Value::as_object).into_iter().flatten();
+    let items = doc
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten();
     for (id, set) in items.filter(|(_, i)| has_copy_column(&Value::Null, "", i)) {
         for (name, c) in copy_columns(set) {
             let Ok(l) = column(c) else { continue };
-            let Some(key) = set.pointer("/params/columns").and_then(|c| c.get(l.key)).filter(|k| k.get("steps").is_some()) else {
-                let frame = Frame { doc, t: t.unwrap_or(0), locale, plurals: &plurals };
+            let Some(key) = set
+                .pointer("/params/columns")
+                .and_then(|c| c.get(l.key))
+                .filter(|k| k.get("steps").is_some())
+            else {
+                let frame = Frame {
+                    doc,
+                    t: t.unwrap_or(0),
+                    locale,
+                    plurals: &plurals,
+                };
                 for (_, _, missed) in frame.columns(set).into_iter().filter(|c| c.0 == name) {
-                    out.extend(missed.iter().map(|(r, m)| missing_issue(id, &format!("items/{id}/params/columns/{name}"), m, Some(*r))));
+                    out.extend(missed.iter().map(|(r, m)| {
+                        missing_issue(
+                            id,
+                            &format!("items/{id}/params/columns/{name}"),
+                            m,
+                            Some(*r),
+                        )
+                    }));
                 }
                 continue;
             };
@@ -705,14 +981,28 @@ pub fn column_missing(doc: &Map<String, Value>, t: Option<i64>, locale: &str) ->
             let rows = key["count"].as_u64().unwrap_or(0) as usize;
             let array = key["array"].as_str().unwrap_or(l.key);
             let doc_t = table(doc, locale_for(doc, locale, l.table), l.table);
-            let has = |v: f64| v.fract() == 0.0 && v.is_finite() && doc_t.is_some_and(|tb| pick(tb, v as i64, || "other").is_some());
+            let has = |v: f64| {
+                v.fract() == 0.0
+                    && v.is_finite()
+                    && doc_t.is_some_and(|tb| pick(tb, v as i64, || "other").is_some())
+            };
             for row in 0..rows {
                 let mut was = true;
                 for (step, v) in element_steps(key, row) {
                     let now = has(v);
                     if !now && was && t.is_none_or(|t| t.div_euclid(every) == step) {
-                        let m = Missing { table: l.table.into(), key: v as i64, array: array.into(), step };
-                        out.push(missing_issue(id, &format!("items/{id}/params/columns/{name}"), &m, Some(row)));
+                        let m = Missing {
+                            table: l.table.into(),
+                            key: v as i64,
+                            array: array.into(),
+                            step,
+                        };
+                        out.push(missing_issue(
+                            id,
+                            &format!("items/{id}/params/columns/{name}"),
+                            &m,
+                            Some(row),
+                        ));
                     }
                     was = now;
                 }
@@ -744,32 +1034,84 @@ mod tests {
         .clone()
     }
 
+    /// `d` with a caption that shows `loot[rules.item]`.
+    fn caption(d: &Map<String, Value>) -> Map<String, Value> {
+        let mut c = d.clone();
+        c.insert(
+            "items".into(),
+            json!({"cap": {"kind": "text@1", "params": {"text": {"copy": "loot[rules.item]"}}}}),
+        );
+        c
+    }
+
     #[test]
     fn a_key_shows_its_plural_form_by_value_in_each_locale_and_a_missing_one_raises() {
         let en = json!({"4": "four", "17": {"one": "You found {0} gold coin", "other": "You found {0} gold coins"}, "9": "nine"});
         let d = doc(en);
         let plurals = Table::pinned();
         let every = 705_600_000 / 10;
-        let v = json!({"copy": "loot[rules.item]", "args": [{"path": "rules.count", "widest": "999"}]});
+        let v =
+            json!({"copy": "loot[rules.item]", "args": [{"path": "rules.count", "widest": "999"}]});
         let l = lookup(&v).unwrap();
-        let at = |t: i64, locale: &str| Frame { doc: &d, t, locale, plurals: &plurals }.show(&l);
+        let at = |t: i64, locale: &str| {
+            Frame {
+                doc: &d,
+                t,
+                locale,
+                plurals: &plurals,
+            }
+            .show(&l)
+        };
         assert_eq!(at(0, "en").0, "You found 0 gold coins");
         assert_eq!(at(0, "fr").0, "Vous trouvez 0 pièce d'or");
         assert_eq!(at(every, "en").0, "You found 1 gold coin");
         let (shown, missed) = at(2 * every, "en");
         assert_eq!(shown, "");
-        assert_eq!(missed, [Missing { table: "loot".into(), key: 99, array: "rules.item".into(), step: 2 }]);
+        assert_eq!(
+            missed,
+            [Missing {
+                table: "loot".into(),
+                key: 99,
+                array: "rules.item".into(),
+                step: 2
+            }]
+        );
         assert_eq!(missing_steps(&d, "en", "loot", "rules.item"), [(2, 99.0)]);
+        // #194: a frame inside the span raises it too, naming the step it began.
+        assert_eq!(missing_at(&d, "en", "loot", "rules.item", 1), None);
+        assert_eq!(
+            missing_at(&d, "en", "loot", "rules.item", 2),
+            Some((2, 99.0))
+        );
+        assert_eq!(
+            missing_at(&d, "en", "loot", "rules.item", 7),
+            Some((2, 99.0))
+        );
+        let raised = |k: i64| raised_at(&caption(&d), Some(k * every), "en").len();
+        assert_eq!([raised(1), raised(2), raised(7)], [0, 1, 1]);
         // Sorting the table again changes nothing: a key is found by its value.
         let sorted = doc(json!({"4": "four", "9": "nine", "17": "seventeen"}));
-        let f = Frame { doc: &sorted, t: 0, locale: "en", plurals: &plurals };
+        let f = Frame {
+            doc: &sorted,
+            t: 0,
+            locale: "en",
+            plurals: &plurals,
+        };
         assert_eq!(f.show(&l).0, "seventeen");
     }
 
     #[test]
     fn placeholders_fill_by_index_and_leave_other_braces() {
-        assert_eq!(fill("{1} and {0}, {x} {9}", &["a".into(), "b".into()]), "b and a, {x} {9}");
-        assert!(lookup(&json!({"copy": "t[a.b]", "args": [{"copy": "u[c.d]", "args": []}]})).is_err());
-        assert_eq!(keyed("names[units.kind[3]]"), Some(("names", "units.kind[3]")));
+        assert_eq!(
+            fill("{1} and {0}, {x} {9}", &["a".into(), "b".into()]),
+            "b and a, {x} {9}"
+        );
+        assert!(
+            lookup(&json!({"copy": "t[a.b]", "args": [{"copy": "u[c.d]", "args": []}]})).is_err()
+        );
+        assert_eq!(
+            keyed("names[units.kind[3]]"),
+            Some(("names", "units.kind[3]"))
+        );
     }
 }

@@ -3,9 +3,10 @@
 //! (`deep-drive`'s `play`) is this: the piece's own logic items step on the track, and a bot, a
 //! policy given as data or a logic item added to this copy of the piece, writes entries with the
 //! writer `bot`. It answers the recorded track by hash, the values at the paths asked for at each
-//! step, the piece's first trap, the bot's, each step's time, the first step whose fuel passed
-//! its class's ceiling, and the piece's full-state hash at every checkpoint and at the end. A
-//! replay is the same call with the recorded track and no bot. It judges nothing: the check does.
+//! step (or, #556, at only the steps they change), the piece's first trap, the bot's, each step's
+//! time, the first step whose fuel passed its class's ceiling, and the piece's full-state hash at
+//! every checkpoint and at the end. A replay is the same call with the recorded track and no bot.
+//! It judges nothing: the check does.
 
 use std::collections::BTreeMap;
 use std::rc::Rc;
@@ -13,9 +14,12 @@ use std::rc::Rc;
 use serde_json::{json, Map, Value};
 use sha2::Digest as _;
 
+use crate::grid_bot::{Action, Bot as GridBot, Iface};
 use crate::piece::{check_in, h64, History};
-use crate::world::{track_of, Entry, Given, Record, World};
+use crate::world::{track_of, Entry, Given, Record, To, World, REWIND};
 use crate::Planted;
+
+mod off;
 
 const F: i64 = 705_600_000;
 
@@ -23,11 +27,19 @@ const F: i64 = 705_600_000;
 const BOT: &str = "bot";
 
 /// The replica's planted faults (#184's twins): its recorded track drops the run's first bot
-/// entry; a logic bot's entry made only when its value changes, not its serial.
+/// entry; a logic bot's entry made only when its value changes, not its serial; (#1048) the
+/// explorer and the descender walk as if the grid had no links; (#556) the piece keeps the
+/// document's seed under `piece_seed: run`.
 #[derive(Clone, Copy, Default)]
 pub struct Plants {
     pub drops_first_bot_entry: bool,
     pub entry_on_change: bool,
+    pub ignores_links: bool,
+    pub keeps_document_seed: bool,
+    /// #552: a lone piece's bits from the host's secure source, not hash(the run's seed, the
+    /// draw's number); and the draw that hashes its step in place of its number.
+    pub alone_secure: Option<fn() -> u64>,
+    pub draw_hashes_step: bool,
 }
 
 /// A document's logic items as one piece, as the logic module checks one: its seed, its budget
@@ -56,15 +68,79 @@ pub fn piece_of(form: &Value) -> Option<Value> {
         "controls": form.get("controls").cloned().unwrap_or(json!({})),
         "items": items,
     });
+    let reads = world_reads(form);
+    if !reads.is_empty() {
+        piece["world_reads"] = json!(reads);
+    }
     if let Some(class) = form.pointer("/budget/class") {
         piece["class"] = class.clone();
+    }
+    // #192: the libraries the document's pinned packs carry, a provider's library form among
+    // them, which its items' `links` reach (#190).
+    if let Some(libraries) = form.get("libraries") {
+        piece["packs"] = libraries.clone();
+    }
+    // #276: a match's seats, each with its block of a profile's read entry.
+    let net = form
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten();
+    if let Some(n) = net
+        .filter_map(|(_, i)| (i["kind"] == "net@1").then(|| i.pointer("/params/players")))
+        .next()
+    {
+        piece["players"] = n.cloned().unwrap_or(json!(2));
+    }
+    // #860: the document's rewind, which the logic module checks against its items.
+    if let Some(r) = form.get("rewind") {
+        piece["rewind"] = r.clone();
+    }
+    // #552: the controls whose entries take a draw, from the document's net item.
+    if let Some(d) = (form["items"].as_object().into_iter().flatten())
+        .find(|(_, i)| i["kind"] == "net@1")
+        .and_then(|(_, i)| i.pointer("/params/draw_after"))
+    {
+        piece["draw_after"] = d.clone();
     }
     Some(piece)
 }
 
+/// #182: each character reading a document's worlds declare as outputs, `<world ID>.<body
+/// ID>.<read>` (grounded, sliding or crouched), which a logic item may read; the host steps the
+/// worlds and records each one's values on the track.
+pub fn world_reads(form: &Value) -> Vec<String> {
+    form.get("worlds")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .flat_map(|(w, doc)| {
+            doc.get("outputs")
+                .and_then(Value::as_object)
+                .into_iter()
+                .flatten()
+                .filter_map(move |(_, o)| {
+                    let read = o.get("read")?.as_str()?;
+                    let from = o.get("from")?.as_str()?;
+                    matches!(read, "grounded" | "sliding" | "crouched")
+                        .then(|| format!("{w}.{from}.{read}"))
+                })
+        })
+        .collect()
+}
+
 /// A refusal before any step, naming what.
-fn refused(code: &str, what: Value) -> Value {
+pub(crate) fn refused(code: &str, what: Value) -> Value {
     json!({"ok": false, "code": code, "what": what})
+}
+
+/// #552: the `draw_after` a piece (or a document's net item) names.
+fn piece_json_draw_after(piece: &Value) -> Vec<Value> {
+    piece
+        .get("draw_after")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
 }
 
 /// A u64 seed, given as a decimal string or a number.
@@ -99,7 +175,7 @@ fn track_hash(entries: &[Value]) -> String {
 }
 
 /// The piece's full state as one hash: each of its items' deep hashes, in piece order.
-fn full(hashes: &Map<String, Value>, ids: &[String]) -> String {
+pub(crate) fn full(hashes: &Map<String, Value>, ids: &[String]) -> String {
     let mut b = Vec::new();
     for id in ids {
         b.extend(id.as_bytes());
@@ -121,20 +197,36 @@ fn stamp(t: i64, step: i64) -> i64 {
     (t + step - 1).div_euclid(step) * step
 }
 
+/// A policy value's entries on a control: a number's, or a play interface action's gesture.
+type Values<'a> = &'a dyn Fn(&str, &Value) -> Result<Vec<Given>, Value>;
+
 /// The policy's entries over the span, each with the writer `bot`: its keys at their times and
-/// each pick every `every` seconds, drawn by hash(the run's seed, the control, the step).
-fn policy(p: &Value, seed: u64, step: i64, steps: i64) -> Result<Vec<Entry>, Value> {
+/// each pick every `every` seconds, drawn by hash(the run's seed, the control, the step). A value
+/// is a number, or (#555) the name of a play interface's action on that control, put as the
+/// entries that action's gesture makes (`values`).
+fn policy(
+    p: &Value,
+    seed: u64,
+    step: i64,
+    steps: i64,
+    values: Values<'_>,
+) -> Result<Vec<Entry>, Value> {
     let bad = |what: &str| refused("bad_input", json!(format!("bot.policy: {what}")));
     let mut out = Vec::new();
-    let entry = |t: i64, control: &str, value: f64| Entry {
-        t,
-        seq: 0,
-        control: control.to_string(),
-        value: Given::Number(value),
-        writer: "bot".into(),
-        player: 1,
-        as_of: None,
-        arrived: 0,
+    let mut entry = |t: i64, control: &str, value: &Value| -> Result<(), Value> {
+        for value in values(control, value)? {
+            out.push(Entry {
+                t,
+                seq: 0,
+                control: control.to_string(),
+                value,
+                writer: "bot".into(),
+                player: 1,
+                as_of: None,
+                arrived: 0,
+            });
+        }
+        Ok(())
     };
     let end = steps * step;
     for (control, keys) in p
@@ -149,13 +241,13 @@ fn policy(p: &Value, seed: u64, step: i64, steps: i64) -> Result<Vec<Entry>, Val
         {
             let (Some(t), Some(v)) = (
                 k.get(0).and_then(Value::as_f64),
-                k.get(1).and_then(Value::as_f64),
+                k.get(1).filter(|v| v.is_number() || v.is_string()),
             ) else {
                 return Err(bad("keys are [t, value] pairs"));
             };
             let t = stamp((t * F as f64).round() as i64, step);
             if t < end {
-                out.push(entry(t, control, v));
+                entry(t, control, v)?;
             }
         }
     }
@@ -165,11 +257,11 @@ fn policy(p: &Value, seed: u64, step: i64, steps: i64) -> Result<Vec<Entry>, Val
         .into_iter()
         .flatten()
     {
-        let from: Vec<f64> = pick
+        let from: Vec<Value> = pick
             .get("from")
             .and_then(Value::as_array)
-            .and_then(|a| a.iter().map(Value::as_f64).collect())
-            .filter(|f: &Vec<f64>| !f.is_empty())
+            .filter(|f| !f.is_empty() && f.iter().all(|v| v.is_number() || v.is_string()))
+            .cloned()
             .ok_or_else(|| bad("a pick draws from a list of values"))?;
         let every = pick
             .get("every")
@@ -184,14 +276,15 @@ fn policy(p: &Value, seed: u64, step: i64, steps: i64) -> Result<Vec<Entry>, Val
                 break;
             }
             let k = t / step;
-            out.push(entry(
+            entry(
                 t,
                 control,
-                from[(pick_hash(seed, control, k) % from.len() as u64) as usize],
-            ));
+                &from[(pick_hash(seed, control, k) % from.len() as u64) as usize],
+            )?;
             n += 1;
         }
     }
+    drop(entry);
     out.sort_by(|a, b| (a.t, &a.control).cmp(&(b.t, &b.control)));
     let mut seq: BTreeMap<String, u32> = BTreeMap::new();
     for e in &mut out {
@@ -200,6 +293,118 @@ fn policy(p: &Value, seed: u64, step: i64, steps: i64) -> Result<Vec<Entry>, Val
         *s += 1;
     }
     Ok(out)
+}
+
+/// #860: a policy's `rewind: {every, from: [min, max]}`: at each multiple of `every` seconds
+/// after 0 within the span, the stops it goes back, drawn from min to max by hash(the run's seed,
+/// rewind, the step) as a pick draws; by step, with the piece's depth.
+fn rewinds_of(
+    r: &Value,
+    piece: &crate::piece::Piece,
+    seed: u64,
+    step: i64,
+    steps: i64,
+) -> Result<(BTreeMap<i64, u64>, u64), Value> {
+    let bad = |what: &str| refused("bad_input", json!(format!("bot.policy.rewind: {what}")));
+    let depth = piece
+        .rewind
+        .as_ref()
+        .ok_or_else(|| bad("the piece declares no rewind"))?
+        .depth;
+    let every = r
+        .get("every")
+        .and_then(Value::as_f64)
+        .filter(|e| *e > 0.0)
+        .ok_or_else(|| bad("every is seconds"))?;
+    let (min, max) = match r.get("from").and_then(Value::as_array).map(Vec::as_slice) {
+        Some([a, b]) => a.as_u64().zip(b.as_u64()).filter(|(a, b)| a <= b),
+        _ => None,
+    }
+    .ok_or_else(|| bad("from is [min, max] stops"))?;
+    let every = ((every * F as f64).round() as i64).max(1);
+    let mut out = BTreeMap::new();
+    let mut m = 1;
+    loop {
+        let t = stamp(m * every, step);
+        if t >= steps * step {
+            break;
+        }
+        let k = t / step;
+        out.insert(k, min + pick_hash(seed, "rewind", k) % (max - min + 1));
+        // The next multiple stamped past this step.
+        m = k * step / every + 1;
+    }
+    Ok((out, u64::from(depth)))
+}
+
+/// The values a player's gesture on a listed row's action writes (Play interface `game.play@1`):
+/// on an actions control, its named action's index there with repeat 0; a cell on a point
+/// control, a press and a release of its first button there; on a pick on rows, the key in its
+/// first set; otherwise the row's first argument, an option's index.
+pub(crate) fn gesture(controls: &Value, action: &Action, [_, a, b]: [i32; 3]) -> Vec<Given> {
+    let control = &controls[&action.control];
+    match control.get("kind").and_then(Value::as_str) {
+        Some("actions") => {
+            let index = action
+                .action
+                .as_deref()
+                .and_then(|name| {
+                    control
+                        .get("actions")
+                        .and_then(Value::as_object)?
+                        .keys()
+                        .position(|k| k == name)
+                })
+                .unwrap_or(0);
+            vec![Given::Number(index as f64)]
+        }
+        Some("point") => {
+            let button = control
+                .pointer("/buttons/0")
+                .and_then(Value::as_str)
+                .unwrap_or("primary");
+            ["press", "release"]
+                .iter()
+                .filter_map(|phase| {
+                    crate::point::Point::parse(
+                        &json!({"phase": phase, "button": button, "cell": [a, b]}),
+                    )
+                    .map(Given::Point)
+                })
+                .collect()
+        }
+        _ if control.get("verb").and_then(Value::as_str) == Some("pick")
+            && control.get("rows").is_some() =>
+        {
+            vec![Given::Pick {
+                set: 0,
+                key: [i64::from(a), i64::from(b)],
+            }]
+        }
+        _ => vec![Given::Number(f64::from(a))],
+    }
+}
+
+/// The call's seed, and the piece with the run's seed in place of its own under `piece_seed: run`.
+pub(crate) fn seeded(piece: &Value, call: &Value) -> Result<(Value, u64), Value> {
+    let seed =
+        seed_of(call.get("seed")).ok_or_else(|| refused("bad_input", json!("seed: a u64")))?;
+    let mut piece = piece.clone();
+    match call
+        .get("piece_seed")
+        .and_then(Value::as_str)
+        .unwrap_or("own")
+    {
+        "own" => {}
+        "run" => piece["seed"] = json!(seed as i64),
+        other => {
+            return Err(refused(
+                "bad_input",
+                json!(format!("piece_seed is own or run, not {other}")),
+            ))
+        }
+    }
+    Ok((piece, seed))
 }
 
 /// Every control a bot names that the piece doesn't declare: refused before any run.
@@ -230,32 +435,19 @@ fn undeclared(bot: &Value, declared: &dyn Fn(&str) -> bool) -> Option<String> {
 
 /// Plays `piece` (the logic module's piece: seed, class, controls, items) on `call`: `{seed,
 /// piece_seed: own | run, span: seconds | {steps}, bot?: {policy} | {logic}, track?: [entry],
-/// values?: [path]}`; `stored` reads an asset's bytes by hash. `frame` sees the world after each
-/// of the piece's steps and answers the frame it keeps there, if any. It judges nothing and stops
-/// at no failure: the check reads what it recorded.
+/// values?: [path], changes?: [path]}`; `stored` reads an asset's bytes by hash. `frame` sees the
+/// world after each of the piece's steps and answers the frame it keeps there, if any. It judges
+/// nothing and stops at no failure: the check reads what it recorded.
 pub fn play(
-    piece: &Value,
+    document: &Value,
     stored: &dyn Fn(&str) -> Option<Vec<u8>>,
     call: &Value,
     plants: Plants,
     frame: &mut dyn FnMut(i64, &World) -> Option<Value>,
 ) -> Result<Value, Value> {
-    let seed =
-        seed_of(call.get("seed")).ok_or_else(|| refused("bad_input", json!("seed: a u64")))?;
-    let mut piece = piece.clone();
-    match call
-        .get("piece_seed")
-        .and_then(Value::as_str)
-        .unwrap_or("own")
-    {
-        "own" => {}
-        "run" => piece["seed"] = json!(seed as i64),
-        other => {
-            return Err(refused(
-                "bad_input",
-                json!(format!("piece_seed is own or run, not {other}")),
-            ))
-        }
+    let (mut piece, seed) = seeded(document, call)?;
+    if plants.keeps_document_seed {
+        piece["seed"] = document["seed"].clone();
     }
     let controls = piece.get("controls").cloned().unwrap_or(json!({}));
     let bot = call.get("bot").filter(|b| !b.is_null());
@@ -298,16 +490,55 @@ pub fn play(
         }
         piece["items"][BOT] = json!({"kind": "logic@1", "params": params});
     }
+    // #832: the catalog without a row, in the catalog's place under its own hash.
+    let off = off::of(call, stored, &mut piece)?;
+    let swapped = |sha: &str| match &off {
+        Some(o) if o.sha256 == sha => Some(o.bytes.clone()),
+        _ => stored(sha),
+    };
     let piece = Rc::new(
         check_in(
             &piece,
             &Planted::default(),
             &mut History::new(),
-            stored,
+            &swapped,
             &[],
         )
         .map_err(|r| r.0)?,
     );
+    // #555: the play interface, checked against the piece before any step, and a first-party bot
+    // that plays it.
+    let iface = call
+        .get("play")
+        .filter(|p| !p.is_null())
+        .map(|p| Iface::of(p, &piece))
+        .transpose()?;
+    let mut walker = bot
+        .map(|b| GridBot::of(b, iface.as_ref(), seed))
+        .transpose()?
+        .flatten();
+    if let Some(w) = walker.as_mut() {
+        w.ignores_links = plants.ignores_links;
+    }
+    // #1048: a model bot's replies so far (the call's `rows`), each a row it chose after a step,
+    // `[step, action, a, b]`; one the piece doesn't list at that step sends no entry.
+    let chosen: BTreeMap<i64, [i32; 3]> = bot
+        .filter(|b| b.get("model").is_some())
+        .and_then(|_| call.get("rows"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|r| {
+            let n: Vec<i64> = r.as_array()?.iter().filter_map(Value::as_i64).collect();
+            (n.len() == 4).then(|| (n[0], [n[1] as i32, n[2] as i32, n[3] as i32]))
+        })
+        .collect();
+    if bot.is_some_and(|b| b.get("model").is_some()) && iface.is_none() {
+        return Err(refused(
+            "bad_input",
+            json!("a model bot plays a play interface's listed rows, and the play gives none"),
+        ));
+    }
     let bot_i = piece
         .items
         .iter()
@@ -333,30 +564,37 @@ pub fn play(
             .and_then(Value::as_i64)
             .ok_or_else(|| refused("bad_input", json!("span: seconds or {steps}")))?,
     };
-    // The paths asked for: `<item>.<array>` of the piece's own items.
-    let mut paths = Vec::new();
-    for p in call
-        .get("values")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
-        let p = p
-            .as_str()
-            .ok_or_else(|| refused("bad_input", json!("values: array paths")))?;
-        let (id, name) = p
-            .split_once('.')
-            .ok_or_else(|| refused("ref_unresolved", json!(p)))?;
-        let i = own
-            .iter()
-            .copied()
-            .find(|i| piece.items[*i].id == id)
-            .ok_or_else(|| refused("ref_unresolved", json!(p)))?;
-        if !piece.items[i].writes.iter().any(|w| w.name == name) {
-            return Err(refused("ref_unresolved", json!(p)));
+    // The paths asked for: `<item>.<array>` of the piece's own items, each step's (`values`) or
+    // (#556) only the steps it changes at (`changes`), so a grid a check reads per floor isn't
+    // copied at every step.
+    let paths_of = |field: &str| -> Result<Vec<(String, usize, String)>, Value> {
+        let mut paths = Vec::new();
+        for p in call
+            .get(field)
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let p = p
+                .as_str()
+                .ok_or_else(|| refused("bad_input", json!(format!("{field}: array paths"))))?;
+            let (id, name) = p
+                .split_once('.')
+                .ok_or_else(|| refused("ref_unresolved", json!(p)))?;
+            let i = own
+                .iter()
+                .copied()
+                .find(|i| piece.items[*i].id == id)
+                .ok_or_else(|| refused("ref_unresolved", json!(p)))?;
+            if !piece.items[i].writes.iter().any(|w| w.name == name) {
+                return Err(refused("ref_unresolved", json!(p)));
+            }
+            paths.push((p.to_string(), i, name.to_string()));
         }
-        paths.push((p.to_string(), i, name.to_string()));
-    }
+        Ok(paths)
+    };
+    let paths = paths_of("values")?;
+    let watched = paths_of("changes")?;
     let mut entries: Vec<Entry> = match call.get("track") {
         None | Some(Value::Null) => Vec::new(),
         Some(t) => t
@@ -365,8 +603,35 @@ pub fn play(
             .ok_or_else(|| refused("bad_input", json!("track: entries")))?,
     };
     if let Some(p) = bot.and_then(|b| b.get("policy")) {
-        entries.extend(policy(p, seed, step, steps)?);
+        // A number is the control's value; a name, an action the play interface declares on
+        // that control, as its gesture's entries.
+        let values = |control: &str, v: &Value| -> Result<Vec<Given>, Value> {
+            let Some(name) = v.as_str() else {
+                return Ok(vec![Given::Number(v.as_f64().unwrap_or(0.0))]);
+            };
+            // #1048: on a text control a string is a commit of that string, not an action's name.
+            if controls
+                .pointer(&format!("/{control}/kind"))
+                .and_then(Value::as_str)
+                == Some("text")
+            {
+                return Ok(vec![Given::Text(name.to_string())]);
+            }
+            let action = iface
+                .as_ref()
+                .and_then(|i| i.actions.iter().find(|a| a.name == name && a.control == control))
+                .ok_or_else(|| {
+                    json!({"ok": false, "code": "action_undeclared", "action": name,
+                           "what": format!("the policy puts the action {name} on {control}, which the play interface doesn't declare there")})
+                })?;
+            Ok(gesture(&controls, action, [0, 0, 0]))
+        };
+        entries.extend(policy(p, seed, step, steps, &values)?);
     }
+    let rewinds = bot
+        .and_then(|b| b.pointer("/policy/rewind"))
+        .map(|r| rewinds_of(r, &piece, seed, step, steps))
+        .transpose()?;
     let mut rec = Record {
         ns: Some(Vec::new()),
         ..Default::default()
@@ -379,7 +644,19 @@ pub fn play(
         &mut rec,
         None,
     )?;
+    if plants.draw_hashes_step {
+        world.draw.wrong = crate::draws::Wrong::HashesStep;
+    }
+    let draw_after: Vec<String> = (piece_json_draw_after(document).into_iter())
+        .filter_map(|c| c.as_str().map(str::to_string))
+        .collect();
+    let mut alone_bits = |n: u64| match plants.alone_secure {
+        Some(secure) => secure(),
+        None => crate::draws::alone_bits(seed, n),
+    };
     let mut values: Vec<Vec<Value>> = vec![Vec::new(); paths.len()];
+    // Each watched array's `{step, value}` at step 0 and at each step it differs from the last.
+    let mut changes: Vec<(Vec<Value>, Option<Value>)> = vec![(Vec::new(), None); watched.len()];
     let mut fuel: Vec<Vec<i64>> = vec![Vec::new(); own.len()];
     let mut step_times = Vec::new();
     let mut frames = Vec::new();
@@ -387,6 +664,12 @@ pub fn play(
     let mut serials = vec![0.0; plays.len()];
     let mut last: Vec<Option<f64>> = vec![None; plays.len()];
     let mut bot_ran = -1;
+    // #1048: a soak's readings, every `soak.every` steps: the piece's own logic memories' size.
+    let every = call
+        .pointer("/soak/every")
+        .and_then(Value::as_i64)
+        .filter(|e| *e > 0);
+    let mut memory = Vec::new();
     for k in 0..steps {
         world.run_through(k * step, &mut rec);
         // A bot step that ran: each play whose serial differs from the step before puts its value
@@ -427,6 +710,60 @@ pub fn play(
                 }
             }
         }
+        // A first-party bot's row, or a model bot's listed reply, as the entries a player's
+        // gesture on its action's control makes, stamped at the next step; none past the span's
+        // last step.
+        if let Some(iface) = iface.as_ref() {
+            let row = match walker.as_mut() {
+                Some(b) => b.act(k, &world, iface),
+                None => chosen
+                    .get(&k)
+                    .copied()
+                    .filter(|r| iface.listed(&world).contains(r)),
+            };
+            if k + 1 < steps {
+                if let Some(row) = row {
+                    for value in gesture(&controls, &iface.actions[row[0] as usize], row) {
+                        let control = iface.actions[row[0] as usize].control.clone();
+                        let seq = world.track.get(&control).map_or(0, Vec::len) as u32;
+                        world.append(Entry {
+                            t: (k + 1) * step,
+                            seq,
+                            control,
+                            value,
+                            writer: "bot".into(),
+                            player: 1,
+                            as_of: None,
+                            arrived: 0,
+                        })?;
+                    }
+                }
+            }
+        }
+        // #860: the policy's rewind drawn at this step, when that many stops lie behind the
+        // current one within the depth, stamped at the next step.
+        if let Some((draws, depth)) = rewinds.as_ref().filter(|_| k + 1 < steps) {
+            let behind = world.branches.stops.len().saturating_sub(1) as u64;
+            if let Some(&n) = draws
+                .get(&k)
+                .filter(|n| (1..=behind.min(*depth)).contains(*n))
+            {
+                world.append(Entry {
+                    t: (k + 1) * step,
+                    seq: world.track.get(REWIND).map_or(0, Vec::len) as u32,
+                    control: REWIND.into(),
+                    value: Given::Rewind(To::Stop(n as u32)),
+                    writer: "bot".into(),
+                    player: 1,
+                    as_of: None,
+                    arrived: 0,
+                })?;
+            }
+        }
+        // #552: a piece played alone writes its own bits for each drawn step at the next step.
+        if k + 1 < steps {
+            crate::draws::alone(&mut world, &draw_after, (k, step), &mut alone_bits)?;
+        }
         let ns: u64 = rec
             .ns
             .as_mut()
@@ -453,8 +790,30 @@ pub fn play(
         for ((_, i, name), v) in paths.iter().zip(&mut values) {
             v.push(world.array(*i, name).map_or(Value::Null, Value::Array));
         }
+        for ((_, i, name), (at, last)) in watched.iter().zip(&mut changes) {
+            let now = world.array(*i, name).map_or(Value::Null, Value::Array);
+            if last.as_ref() != Some(&now) {
+                at.push(json!({"step": k, "value": now}));
+                *last = Some(now);
+            }
+        }
         if let Some(f) = frame(k, &world) {
             frames.push(f);
+        }
+        // The sandbox lets no memory grow, so a memory's size is read as a save keeps it: its
+        // 64 KiB pages that hold a nonzero byte.
+        if every.is_some_and(|e| (k + 1) % e == 0 || k + 1 == steps) {
+            let bytes: usize = own
+                .iter()
+                .map(|i| {
+                    let m = world.lives[*i].memory();
+                    m.chunks(1 << 16)
+                        .filter(|p| p.iter().any(|b| *b != 0))
+                        .count()
+                        << 16
+                })
+                .sum();
+            memory.push(json!({"step": k, "bytes": bytes}));
         }
     }
     let is_bot = |t: &&Value| bot_i.is_some_and(|b| t["item"] == json!(piece.items[b].id));
@@ -494,6 +853,11 @@ pub fn play(
         .zip(values)
         .map(|((p, _, _), v)| (p, Value::Array(v)))
         .collect();
+    let changes: Map<String, Value> = watched
+        .into_iter()
+        .zip(changes)
+        .map(|((p, _, _), (at, _))| (p, Value::Array(at)))
+        .collect();
     let fuel: Map<String, Value> = own_ids
         .iter()
         .cloned()
@@ -515,6 +879,7 @@ pub fn play(
         "track": track_hash(&track),
         "entries": track,
         "values": values,
+        "changes": changes,
         "trap": trap,
         "bot_trap": bot_trap,
         "step_times": step_times,
@@ -523,5 +888,7 @@ pub fn play(
         "checkpoints": checkpoints,
         "final": end,
         "frames": frames,
+        "memory": memory,
+        "off": off.map(|o| o.answer),
     }))
 }

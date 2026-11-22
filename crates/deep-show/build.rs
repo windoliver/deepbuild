@@ -2,12 +2,16 @@
 //! build time, else the committed `kit-ledger.json`, so its seal can refuse every canvas module
 //! the kit didn't pass. Issue #855: every build records its Cargo profile and toolchain, which
 //! the `costs` call reports beside the coefficients it measures. Issue #1901: every build names
-//! the digest of the sources it was built from.
+//! the digest of the sources it was built from. Issue #2892: each prebuilt player module set's
+//! WebAssembly is stored as gzip once per build, by the web export's own compressor.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
+
+#[path = "src/export/gzip.rs"]
+mod gzip;
 
 fn main() {
     println!("cargo:rerun-if-env-changed=DEEP_KIT_LEDGER");
@@ -47,6 +51,33 @@ fn main() {
         .unwrap_or_default();
     println!("cargo:rustc-env=DEEP_TOOLCHAIN={toolchain}");
     println!("cargo:rustc-env=DEEP_SOURCE_DIGEST={}", source_digest(&dir));
+    stored_players(&dir, &out_dir);
+}
+
+/// Issue #2892: each of the player's module sets (crates/deep-player/web/dist) as the web bundle
+/// stores it, `<set>.wasm.gz` in OUT_DIR, so no export spends its time deflating the player. This
+/// script reruns on any source change, so a set is deflated again only when its player or the
+/// compressor changed (the key beside it: SHA-256 over both).
+fn stored_players(manifest_dir: &Path, out_dir: &Path) {
+    let dist = manifest_dir.join("../deep-player/web/dist");
+    for set in ["figure", "game2d", "full"] {
+        let wasm = dist.join(set).join("player_bg.wasm");
+        println!("cargo:rerun-if-changed={}", wasm.display());
+        let bytes = std::fs::read(&wasm).expect("the committed player set is in the checkout");
+        let mut key = Sha256::new();
+        key.update(include_str!("src/export/gzip.rs"));
+        key.update(&bytes);
+        let key: String = key.finalize().iter().map(|b| format!("{b:02x}")).collect();
+        let (stored, keyed) = (
+            out_dir.join(format!("{set}.wasm.gz")),
+            out_dir.join(format!("{set}.wasm.gz.key")),
+        );
+        if stored.exists() && std::fs::read_to_string(&keyed).ok().as_deref() == Some(&key) {
+            continue;
+        }
+        std::fs::write(&stored, gzip::gzip(&bytes)).expect("the stored player is written");
+        std::fs::write(&keyed, key).expect("its key is written");
+    }
 }
 
 /// Issue #1901: the build the machine fingerprint names: SHA-256 over the sources of the canvas

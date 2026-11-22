@@ -159,8 +159,7 @@ struct Doc<'a> {
 }
 
 impl<'a> Doc<'a> {
-    fn new(doc: &'a Value) -> Option<Self> {
-        let items = doc.get("items")?.as_object()?;
+    fn new(items: &'a Map<String, Value>, bound_values: Option<&'a Value>) -> Self {
         let mut children: BTreeMap<&str, Vec<(&str, &str)>> = BTreeMap::new();
         for (id, item) in items {
             if let Some(parent) = item.get("parent").and_then(Value::as_str) {
@@ -172,12 +171,14 @@ impl<'a> Doc<'a> {
             .into_iter()
             .map(|(parent, mut kids)| {
                 // #233: numbers in tied IDs read whole, so a recipe's derived cells flow in order.
-                kids.sort_by(|a, b| a.0.cmp(b.0).then_with(|| crate::grid_rules::natural(a.1, b.1)));
+                kids.sort_by(|a, b| {
+                    a.0.cmp(b.0)
+                        .then_with(|| crate::grid_rules::natural(a.1, b.1))
+                });
                 (parent, kids.into_iter().map(|(_, id)| id).collect())
             })
             .collect();
-        let bound = doc
-            .get("bound_values")
+        let bound = bound_values
             .and_then(Value::as_object)
             .into_iter()
             .flat_map(|b| b.values())
@@ -185,12 +186,12 @@ impl<'a> Doc<'a> {
             .filter_map(|t| t.strip_prefix("items/")?.strip_suffix("/params/text"))
             .map(str::to_string)
             .collect();
-        Some(Doc {
+        Doc {
             items,
             children,
             bound,
             empty: Map::new(),
-        })
+        }
     }
 
     fn kind(&self, id: &str) -> &str {
@@ -434,13 +435,10 @@ impl Tree<'_, '_, '_> {
         }
         // #1964: its runs' styled spans, so it lays out as it draws; a refusal keeps the run's path.
         let ty = crate::scene::Type::default();
-        let item = (Some(role.family()), weight as u16);
         let spans =
-            crate::scene::text_spans(params, &format!("items/{id}"), &ty, item).map_err(|r| {
-                Refusal {
-                    code: r.code,
-                    item: r.path.trim_start_matches("items/").to_string(),
-                }
+            crate::scene::text_spans(params, &format!("items/{id}"), &ty).map_err(|r| Refusal {
+                code: r.code,
+                item: r.path.trim_start_matches("items/").to_string(),
             })?;
         // #1966: a list lays out as it draws, its items `indent` in and `gap` apart.
         let list =
@@ -663,9 +661,19 @@ impl Tree<'_, '_, '_> {
 /// out. A frame whose parent doesn't lay it out is a root at its `at.pos` plus its box's corner,
 /// in its parent's space; it hugs its children unless its box fixes a side.
 pub fn solve(doc: &Value, shaper: &mut Shaper) -> Result<BTreeMap<String, Rect4>, Refusal> {
-    let Some(doc) = Doc::new(doc) else {
+    let Some(items) = doc.get("items").and_then(Value::as_object) else {
         return refuse("bad_input", "");
     };
+    solve_items(items, doc.get("bound_values"), shaper)
+}
+
+/// [`solve`] over a document's `items` and `bound_values` where they are, never copied (#2660).
+pub fn solve_items(
+    items: &Map<String, Value>,
+    bound_values: Option<&Value>,
+    shaper: &mut Shaper,
+) -> Result<BTreeMap<String, Rect4>, Refusal> {
+    let doc = Doc::new(items, bound_values);
     let mut out = BTreeMap::new();
     for (id, item) in doc.items {
         let parent = item.get("parent").and_then(Value::as_str);

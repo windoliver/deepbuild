@@ -2,7 +2,7 @@
 // no extension at all; and the rule behind AC5 the acceptance tests reach only with changed bytes: what an agent
 // built runs sandboxed even when its bytes are the release's. Each runs a real package through a real host, record
 // and supervisor.
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer, request } from 'node:http';
 import { PassThrough } from 'node:stream';
 import { join } from 'node:path';
@@ -214,6 +214,52 @@ process.stdin.once('data', () => process.stdout.write(JSON.stringify(read ? { js
       expect(await granted('test/beside', join(dir, 'home')), 'an install that holds the package is not').not.toContain(join(dir, 'home'));
     } finally {
       for (const key of ['HOME', 'PATH'] as const) if (was[key] === undefined) delete process.env[key]; else process.env[key] = was[key];
+    }
+  }, 60_000);
+
+  it.runIf(process.platform === 'darwin')('on macOS a main on /usr/bin/python3 may read the command line tools, and one on a framework Python its Versions/<v> (#2312)', async () => {
+    const dir = temp();
+    const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
+    const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
+    const supervisor: Supervisor = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 86_400_000 } } } });
+    closing.push(record, supervisor);
+    const started: { read: string[]; env: Record<string, string | undefined> }[] = [];
+    const start: Supervisor['start'] = (o) => { started.push({ read: [...(o.grant?.read ?? [])], env: { ...o.env } }); return supervisor.start(o); };
+    const spying = new Proxy(supervisor, { get: (to, key) => (key === 'start' ? start : (Reflect.get(to, key) as (...a: unknown[]) => unknown).bind(to)) });
+    mkdirSync(join(dir, 'home'));
+    const h = await openExtensionHost({ record, supervisor: spying, trust: await openTrust({ record, now: Date.now }), home: join(dir, 'home'), now: Date.now, release: [] });
+    closing.push(h);
+    await h.ready();
+    const was = process.env.PATH;
+    const startsOf = async (id: string, program: string, path: string): Promise<typeof started> => {
+      process.env.PATH = path;
+      started.length = 0;
+      await h.check(await h.install({ from: pkgOf(id, `#!${program}\n`, { checks: [] }, 'main'), builtBy: null }));
+      expect(started.length, `${id}'s conformance started a run`).toBeGreaterThan(0);
+      return [...started];
+    };
+    try {
+      // Apple's stub: xcrun finds the real Python in the command line tools, whichever developer folder is selected.
+      const tools = '/Library/Developer/CommandLineTools';
+      if (!existsSync(tools)) throw Error(`BLOCKED: ${tools} is not installed, so the grant for /usr/bin/python3 can't be shown`);
+      for (const s of await startsOf('test/apple', '/usr/bin/python3', `/usr/bin:${was}`)) {
+        expect(s.read, 'the command line tools are readable').toContain(tools);
+        expect(s.env.DEVELOPER_DIR, 'and are the developer folder the stub uses').toBe(tools);
+      }
+      // A framework install's program lies four folders below its Versions/<v>, which holds its libraries.
+      const version = join(realpathSync(temp()), 'Frameworks', 'Python.framework', 'Versions', '3.99');
+      const program = join(version, 'Resources', 'Python.app', 'Contents', 'MacOS', 'Python');
+      mkdirSync(join(program, '..'), { recursive: true });
+      writeFileSync(program, '#!/bin/sh\nexit 0\n');
+      chmodSync(program, 0o755);
+      const bin = temp();
+      symlinkSync(program, join(bin, 'python3'));
+      for (const s of await startsOf('test/framework', program, `${bin}:${was}`)) {
+        expect(s.read, 'its Versions/<v> is readable').toContain(version);
+        expect(s.env.DEVELOPER_DIR, 'and no developer folder is named').toBeUndefined();
+      }
+    } finally {
+      process.env.PATH = was;
     }
   }, 60_000);
 

@@ -10,7 +10,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { readFacts } from '@deepbuild/adapters';
-import { isRecord as isObj, canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
+import { isRecord as isObj, canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts/runtime';
 
 type Obj = Record<string, unknown>;
 interface Counted { counts: 'read' | 'change' | 'send' | 'destructive'; effect?: string }
@@ -86,6 +86,9 @@ export function countMcp(server: string, tool: string, cwd: string, unknownAs: C
   return counted;
 }
 
+/** DeepBuild's own servers: the deep_* tools, which the gate never holds, and the plug-ins' actions. */
+export const OWN_SERVERS: readonly string[] = ['deep', 'deepbuild', 'deep-actions'];
+
 /** One server's tool list at a session's start (#321): each tool with its input schema's digest and its hints. */
 export interface Listed { server: string; scope: 'local' | 'project' | 'user'; version: string | null; tools: { name: string; digest: string; hints: Obj }[] }
 const LIST_MS = 10_000;
@@ -102,7 +105,7 @@ export async function toolLists(cwd: string): Promise<Listed[]> {
   // Our own servers are DeepBuild's, not a third party's to list: the deep_* tools, which the gate never holds, and the
   // plug-ins' actions. `deep setup` names them `deepbuild` and `deep-actions` for Claude Code; Codex and pi call the
   // first `deep`.
-  for (const own of ['deep', 'deepbuild', 'deep-actions']) names.delete(own);
+  for (const own of OWN_SERVERS) names.delete(own);
   const out = await Promise.all([...names].map(async (server) => {
     const source = sourceOf(server, cwd);
     if (!source || typeof source.config.command !== 'string' || (source.config.type !== undefined && source.config.type !== 'stdio')) return undefined;
