@@ -176,6 +176,32 @@ describe('a held push (#1156)', () => {
     expect(seen).toEqual(['s1 with 0 asks']);
   });
 
+  it("holds a delete after a Codex subagent's prompt: a child's prompt starts no turn of the session's (#2764)", async () => {
+    dir = mkdtempSync(join(tmpdir(), 'holds-'));
+    writeFileSync(join(dir, 'config.json'), JSON.stringify({ asks: { deadline: { authority: '1d' }, default: { authority: 'no' } } }));
+    let t = 1_760_000_000_000;
+    const now = () => (t += 1000);
+    const record = await openRecord({ path: join(dir, 'record.db'), now });
+    const asks = await openAsks({ record, now, deliver: () => undefined, home: dir });
+    const as = (writer: string, session: string, agent = 'codex'): Connection => ({ writer, actor: 'you', scope: 'you', session, agent });
+    const holds = new Holds({
+      raw: (q, params) => record.raw(q, params), asks: () => asks, now, plant: undefined, sorter: undefined,
+      append: async (c, e) => { await record.append(c, e); }, connection: (s) => as('core', s), pin: async () => ({ kind: 'commit', ref: '0'.repeat(40) }),
+      archived: async () => undefined, reading: async () => undefined,
+    });
+    const prompt = (from: string, agent?: string) => record.append(as('hook', 's1', agent), { v: 2, id: ulid(now()), kind: 'user.ask', ts: now(), data: { msg: 1, text: 'look into it', tasks: [], from } });
+    const remove = () => holds.gate({ session: 's1', agent: 'codex', cwd: dir } as HookMeta, { label: 'gh release delete v1 --yes', classes: ['delete'] });
+    await record.append(as('core', 's1'), { v: 1, id: ulid(now()), kind: 'question.proceeded', ts: now(), data: { question: 'Clean up the release?', rule: 'r' } });
+    await prompt('subagent');
+    const held = await remove();
+    expect(held ?? 'let through', "the delete waits on an ask though a Codex subagent started in the proceed's turn").toContain('ask:');
+    const raised = (await record.raw("SELECT question FROM asks WHERE kind = 'authority'")) as { question: string }[];
+    expect(raised.map((a) => a.question), 'one ask, naming the proceed').toEqual([expect.stringContaining('the turn a "proceed" started for "Clean up the release?"')]);
+    // Claude Code's subagent prompt (a background subagent's report) does start a turn, as a prompt you type does.
+    await prompt('subagent', 'claude-code');
+    expect(await remove(), "past Claude Code's subagent report no proceed holds the delete").toBeUndefined();
+  });
+
   it("holds a merge after a subagent's stop: a child's stop ends no turn a proceed started (#1836)", async () => {
     dir = mkdtempSync(join(tmpdir(), 'holds-'));
     writeFileSync(join(dir, 'config.json'), JSON.stringify({ asks: { deadline: { authority: '1d' }, default: { authority: 'no' } } }));

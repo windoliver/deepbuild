@@ -1,0 +1,62 @@
+Base run of tests/acceptance/2764 at 58b4a8cb2 (main), 2026-11-21, Linux aarch64, Node 24.22.0.
+Built: env -u CARGO_TARGET_DIR cargo build --locked -q -p deep-hook --target-dir target; npm ci; npm run build --workspaces.
+Command: node node_modules/vitest/vitest.mjs run --root tests/acceptance/2764 --no-file-parallelism
+tsc -p tests/acceptance/2764/tsconfig.json: exit 0. Paths redacted to <repo>. Read at a 1-minute load near 69 on 20 cores.
+An earlier run at that load had the Codex stop spooled unheld (the hub's acknowledgement late), which these files now
+report as INCONCLUSIVE (README, Run); this run's stop was held and answered proceed.
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/2764
+
+ ❯ proceed-codex-subagent.test.ts (2 tests | 2 failed) 8591ms
+   ❯ #2764.d93a7447 a Codex subagent's prompt ends no turn a proceed started: the delete after it is held with one authority ask (2)
+     × #2764.d93a7447 in the turn a proceed started, after a Codex subagent's prompt, `gh release delete v1.2.0 --yes` is held at PreToolUse with one authority ask naming the proceed 7612ms
+     × #2764.d93a7447 (wrong program) a hub whose proceed-turn query counts a subagent's prompt (DEEP_HUB_PLANT=proceed-ends-at-subagent-prompt) lets the delete run and fails this test, naming the call 977ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  proceed-codex-subagent.test.ts > #2764.d93a7447 a Codex subagent's prompt ends no turn a proceed started: the delete after it is held with one authority ask > #2764.d93a7447 in the turn a proceed started, after a Codex subagent's prompt, `gh release delete v1.2.0 --yes` is held at PreToolUse with one authority ask naming the proceed
+Error: #2764.d93a7447 `gh release delete v1.2.0 --yes` ran in the turn the proceed started, after the Codex subagent's prompt, with no authority ask: deep-hook allowed it at PreToolUse with nothing held (exit 0 after 12 ms, stdout "", stderr "")
+ ❯ notRun helpers.ts:427:9
+
+ ❯ heldBy proceed-codex-subagent.test.ts:27:5
+ ❯ scenario proceed-codex-subagent.test.ts:53:17
+ ❯ verdict helpers.ts:54:5
+ ❯ proceed-codex-subagent.test.ts:71:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  proceed-codex-subagent.test.ts > #2764.d93a7447 a Codex subagent's prompt ends no turn a proceed started: the delete after it is held with one authority ask > #2764.d93a7447 (wrong program) a hub whose proceed-turn query counts a subagent's prompt (DEEP_HUB_PLANT=proceed-ends-at-subagent-prompt) lets the delete run and fails this test, naming the call
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=proceed-ends-at-subagent-prompt did not start: file://<repo>/packages/hub/dist/plant.js:140
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=proceed-ends-at-subagent-prompt names no planted program
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:140:15)
+    at Module.runHub (file://<repo>/packages/hub/dist/server.js:1651:19)
+    at hubCommand (file://<repo>/packages/hub/dist/hub-command.js:29:58)
+    at async file://<repo>/packages/cli/dist/main.js:345:24
+
+Node.js v24.22.0
+
+ ❯ startHub helpers.ts:197:45
+    195|     sleep(120_000).then(() => undefined),
+    196|   ]);
+    197|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o…
+       |                                             ^
+    198|   return { pid: Number(ready.pid), socket: String(ready.socket), root:…
+    199| }
+ ❯ scenario proceed-codex-subagent.test.ts:42:15
+ ❯ failureOf helpers.ts:63:5
+ ❯ proceed-codex-subagent.test.ts:76:19
+ ❯ verdict helpers.ts:54:5
+ ❯ proceed-codex-subagent.test.ts:75:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  23:52:50
+   Duration  9.28s (tests 95%, transform 4%, import 1%)
+
