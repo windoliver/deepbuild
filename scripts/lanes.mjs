@@ -1747,17 +1747,34 @@ export function crates(cwd) {
 export function cargoResults(output, status, workspace) {
   const targets = new Map(workspace.flatMap((crate) => crate.targets.flatMap((target) => [[target.key, target.rerun], ...(target.doc ? [[`doc ${target.doc}`, `-p ${crate.name} --doc`]] : [])])));
   const failures = [], passed = [], skips = [], failed = new Set();
-  let target = null;
+  // #3100: a failed test reads as the state its own failure message names, so one that panics with INCONCLUSIVE: or
+  // BLOCKED: reads as that. libtest gives the message in the test's block, `---- <test> stdout ----`, as the panic of
+  // the test's own thread there (lines the test printed can look like one, so the last). A custom harness that runs its
+  // cases on the main thread prints a case's panic just before its result line, or its message first in a
+  // `---- <test> ----` block after it.
+  let target = null, block = null, next = null, uncaught = null;
   for (const line of output.split('\n')) {
+    const test = line.match(/^test (.+?) \.\.\. (ok|FAILED|BLOCKED|INVALID|INCONCLUSIVE)$/);
+    if (next === 'panic' || (next === 'block' && line.trim() && !test)) {
+      const failure = block && failures.findLast(({ id }) => id === block.id);
+      if (failure) Object.assign(failure, { state: stateOf(line), message: line });
+      else if (!block) uncaught = line;
+      next = null;
+    }
+    const header = line.match(/^---- (.+?)( stdout)? ----$/);
+    if (header) block = { id: `cargo ${target} › ${header[1]}`, test: header[1], captured: Boolean(header[2]) }, next = header[2] ? null : 'block';
+    else if (test || /^(?:failures:|test result: .*)$/.test(line)) block = null, next = null;
+    const thread = line.match(/^thread '(.+?)'(?: \(\d+\))? panicked at .+:$/)?.[1];
+    if (thread && (block ? block.captured && thread === block.test : thread === 'main')) next = 'panic';
     const running = line.match(/^\s*Running (?:unittests )?(.+?) \(.*?deps\/(\w+)-[0-9a-f]+\)\s*$/);
     const doc = line.match(/^\s*Doc-tests (\w+)\s*$/);
     if (running || doc) {
       const key = running ? `${running[2]} ${running[1]}` : `doc ${doc[1]}`;
       target = targets.get(key) ?? key;
     }
-    const test = line.match(/^test (.+?) \.\.\. (ok|FAILED|BLOCKED|INVALID|INCONCLUSIVE)$/);
     if (test && test[2] === 'ok') passed.push(`cargo ${target} › ${test[1]}`);
-    if (test && test[2] !== 'ok') failures.push({ id: `cargo ${target} › ${test[1]}`, state: test[2] === 'FAILED' ? 'FAIL' : test[2], message: '' }), failed.add(target);
+    if (test && test[2] !== 'ok') failures.push({ id: `cargo ${target} › ${test[1]}`, ...test[2] === 'FAILED' ? { state: stateOf(uncaught ?? ''), message: uncaught ?? '' } : { state: test[2], message: '' } }), failed.add(target);
+    if (test || running || doc) uncaught = null;
     const ignored = line.match(/^test (.+?) \.\.\. ignored(?:, (.*))?$/);
     if (ignored) skips.push({ id: `cargo ${target} › ${ignored[1]}`, note: ignored[2] ?? '' });
     // Custom harnesses report unrun cases too; a listed target must not turn those into passes.
