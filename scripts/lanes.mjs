@@ -880,6 +880,17 @@ timed.push('tests/acceptance/172/budgets.test.ts', 'tests/acceptance/172/images.
 // place.
 alone.push('tests/acceptance/172-redraft-ac2/');
 byHand.push('tests/acceptance/172/refusals.test.ts');
+// #2892's files each build deep-show (full) and export #172's lab; wire, stops, first-frame and same serve it to headless
+// Chrome with WebGPU on, and same also builds the merge base's deep-show. first-frame times the lab's first frame on the
+// reference Mac. The size half of #172's criterion 4 is redrafted beside it, counting the player as the bundle stores it.
+alone.push('tests/acceptance/2892/', 'tests/acceptance/172-redraft-ac4/');
+timed.push('tests/acceptance/2892/first-frame.test.ts');
+// #2892 stores a bundle's files gzip, so first-draft tests that read bundle files' raw bytes fail on it or stop seeing
+// what they search for (each first draft's DISPUTE-2892.md); their blind redrafts run in their place.
+alone.push('tests/acceptance/172-redraft-2892/', 'tests/acceptance/1490-redraft-2892/', 'tests/acceptance/210-redraft-2892/');
+alone.push('tests/acceptance/192/packs-redraft-2892/');
+byHand.push('tests/acceptance/172/hashes.test.ts', 'tests/acceptance/1490/picks.test.ts');
+byHand.push('tests/acceptance/192/packs/outside.test.ts', 'tests/acceptance/210/ac6-web-export.test.ts');
 // #1041's files each build deep-show (full) and play the dungeon's saves in headless Chrome with WebGPU on.
 alone.push('tests/acceptance/1041/');
 // #1045's files each build deep-show (full) and drive headless Chrome with WebGPU on.
