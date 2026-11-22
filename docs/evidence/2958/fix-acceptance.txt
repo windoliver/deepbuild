@@ -1,3 +1,4 @@
+# node --test tests/acceptance/2958 at head 327635e34 (2026-11-22); rerun at be872306b with the same 3 passes (AC1 1770 ms, AC2 1020 ms, AC3 112 ms).
 ✔ AC1 #2958.9c0089ca with hub.address pointing at a hub run with --root in another folder, deep-app --hub-check is answered by that hub as the app, with no refusal (3205.59792ms)
 ✔ AC2 #2958.db948145 with no hub.address configured, deep-app --hub-check reaches the installed hub as before (1058.911193ms)
 ✔ AC3 #2958.2a729810 a source site in crates/deep-app/src or crates/deep-replica/src naming control.token outside the one function fails, naming the file and line (484.90993ms)
@@ -10,4 +11,11 @@
 ℹ todo 0
 ℹ duration_ms 4885.866001
 EXIT 0
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 111 filtered out; finished in 0.00s
+
+# cargo test --locked -p deep-app --lib -- hub::tests record::tests::the_windows_reader (head be872306b, 2026-11-22)
+test hub::tests::the_token_beside_the_socket_else_the_installed_roots ... ok
+test record::tests::the_windows_reader_presents_the_token_of_a_hub_started_after_it ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 111 filtered out; finished in 0.00s
+# the same record test with the token picked when the reader is made (a mutant, reverted): FAILED
+test record::tests::the_windows_reader_presents_the_token_of_a_hub_started_after_it ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 112 filtered out; finished in 10.17s

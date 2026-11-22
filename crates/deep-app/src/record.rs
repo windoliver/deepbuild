@@ -657,8 +657,7 @@ pub fn sync(cx: &mut gpui_kit::App) {
         let moved = shown.at != at;
         if moved {
             // Events alone moved it, if the start, the bound values and the fold stand as they stood.
-            let events =
-                (shown.at.0.as_str(), shown.at.2, shown.at.3) == (at.0.as_str(), at.2, at.3);
+            let events = (shown.at.0.as_str(), shown.at.2, shown.at.3) == (at.0.as_str(), at.2, at.3);
             shown.touched = touched.filter(|_| events);
             shown.at = at;
             cx.notify();
@@ -676,9 +675,7 @@ pub fn sync(cx: &mut gpui_kit::App) {
 pub fn moved_for(session: &str, cx: &gpui_kit::App) -> bool {
     cx.try_global::<Live>().is_none_or(|live| {
         let touched = &live.0.read(cx).touched;
-        touched
-            .as_ref()
-            .is_none_or(|sessions| sessions.contains(session))
+        touched.as_ref().is_none_or(|sessions| sessions.contains(session))
     })
 }
 
