@@ -41,6 +41,10 @@ pub enum Planted {
     ShadowInsideOutline,
     ShadowRemovesAmbient,
     ShadowEdgeAliased,
+    NormalFlippedGreen,
+    NormalDotAlone,
+    NormalUnturned,
+    LightStaleHeight,
 }
 
 /// A refusal as a call answers it.
