@@ -115,7 +115,8 @@ function principles() {
     if ([...plain].length > 160) problems.push(`${at} is ${[...plain].length} characters, over 160`);
     const invariant = i < 4 ? invariants[i] : undefined;
     if (i < 4 && !invariant) problems.push(`${at} has no invariant ${i + 1} in AGENTS.md to match`);
-    else if (invariant && !plain.startsWith(rendered(invariant.text))) problems.push(`${at} doesn't start with invariant ${i + 1} as AGENTS.md:${invariant.number} has it: "${rendered(invariant.text)}"`);
+    // The whole invariant, then only its link and check in parentheses, so a shorter invariant isn't a prefix match.
+    else if (invariant && !(plain.startsWith(rendered(invariant.text)) && /^(?:\s+\([^()]*\))?$/.test(plain.slice(rendered(invariant.text).length)))) problems.push(`${at} doesn't hold invariant ${i + 1}, then only its link and check, as AGENTS.md:${invariant.number} has it: "${rendered(invariant.text)}"`);
     // An invariant's own sentences stand as AGENTS.md has them; anything else on a line is one sentence at most.
     const extra = sentences(text) - (invariant ? sentences(invariant.text) : 0);
     if (extra > (invariant ? 0 : 1)) problems.push(`${at} is ${sentences(text)} sentences, not ${invariant ? `invariant ${i + 1}'s ${sentences(invariant.text)}` : 'one'}`);
