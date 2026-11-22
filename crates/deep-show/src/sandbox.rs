@@ -1386,13 +1386,17 @@ impl Host {
                         });
                         let outside = (0..n.min(count)).find_map(|i| {
                             let at = (12 + i * (4 + layouts::PAGE)) as usize;
-                            let page = u64::from(u32::from_le_bytes(b.get(at..at + 4)?.try_into().ok()?));
+                            let page =
+                                u64::from(u32::from_le_bytes(b.get(at..at + 4)?.try_into().ok()?));
                             (!(first..first + count).contains(&page)).then_some(page)
                         });
                         if let Some(page) = outside {
                             return failed(
                                 "out",
-                                format!("page {page} is outside its range, {first} to {}", first + count),
+                                format!(
+                                    "page {page} is outside its range, {first} to {}",
+                                    first + count
+                                ),
                             );
                         }
                         ("pages@1".to_string(), b)

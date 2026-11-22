@@ -742,7 +742,10 @@ impl Logic {
         let mut out = checks::determinism(&piece, &entries, steps, &at, self.planted)?;
         // #211: with `orders`, two or more tracks that move through a world with pages.
         if let Some(o) = line.get("orders") {
-            let list = o.as_array().filter(|l| l.len() >= 2).ok_or_else(|| bad("orders: two or more input tracks"))?;
+            let list = o
+                .as_array()
+                .filter(|l| l.len() >= 2)
+                .ok_or_else(|| bad("orders: two or more input tracks"))?;
             let tracks = list
                 .iter()
                 .map(|t| track(&piece, &json!({"track": t}), steps, &self.planted))
