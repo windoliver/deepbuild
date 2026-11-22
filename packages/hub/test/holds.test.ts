@@ -200,6 +200,10 @@ describe('a held push (#1156)', () => {
     // Claude Code's subagent prompt (a background subagent's report) does start a turn, as a prompt you type does.
     await prompt('subagent', 'claude-code');
     expect(await remove(), "past Claude Code's subagent report no proceed holds the delete").toBeUndefined();
+    // A Codex prompt you type ends the proceed's turn too.
+    await record.append(as('core', 's1'), { v: 1, id: ulid(now()), kind: 'question.proceeded', ts: now(), data: { question: 'Tag it?', rule: 'r' } });
+    await prompt('person');
+    expect(await remove(), 'past your Codex prompt no proceed holds the delete').toBeUndefined();
   });
 
   it("holds a merge after a subagent's stop: a child's stop ends no turn a proceed started (#1836)", async () => {
