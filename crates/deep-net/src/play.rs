@@ -254,6 +254,8 @@ pub struct Ask {
     pub log: bool,
     /// #550: a planted defect one copy makes.
     pub defect: Option<(u8, Defect)>,
+    /// #552: the seed of each copy's test source in place of its platform's secure one.
+    pub draw_seed: u64,
     /// #280: the host's clock, in ns, which only net.feel's planted wall-clock meter reads.
     pub clock: Option<fn() -> i64>,
     /// #278: a room's start, the copies that join after it, its next match, the planted relay,
@@ -278,6 +280,8 @@ pub struct Carried {
     /// The copy it went to, and the frame's bytes, as hex, when the log keeps them.
     pub to: u8,
     pub bytes: Option<String>,
+    /// #552: with the log, each of its steps' messages as the net module's codec reads them back.
+    pub messages: Option<Vec<Value>>,
 }
 
 /// What a copy showed at a time: its last step, the app's notice then, and (#265) its logic
@@ -315,7 +319,7 @@ impl<S> Played<S> {
             .filter(|_| log)
             .map(|c| {
                 json!({"player": c.player, "to": c.to, "first": c.first, "count": c.count, "confirmed": c.confirmed,
-                       "at": s(c.at), "delivered": c.delivered.map(s), "bytes": c.bytes})
+                       "at": s(c.at), "delivered": c.delivered.map(s), "bytes": c.bytes, "messages": c.messages})
             })
             .collect();
         json!({"frames": self.log.len(), "dropped": self.dropped(), "log": rows})
@@ -422,6 +426,13 @@ pub fn play<S: Stepper>(
             now,
         );
         copy.limit(ask.steps);
+        let wrong = match planted {
+            Planted::RevealsOtherBits => crate::draw::Wrong::BitsDiffer,
+            Planted::WithholdsBits => crate::draw::Wrong::Withholds,
+            _ => crate::draw::Wrong::None,
+        };
+        let source = crate::draw::seeded(ask.draw_seed ^ u64::from(me).wrapping_mul(0x9e37_79b9));
+        copy.draw_source(source, wrong);
         if let Some((_, d)) = ask.defect.as_ref().filter(|(on, _)| *on == me) {
             copy.plant(d.clone());
         }
@@ -889,6 +900,7 @@ fn carry<S: Stepper>(
             delivered: (!dropped && waits.is_none()).then_some(kept_back.unwrap_or(at)),
             to: to as u8 + 1,
             bytes: ask.log.then(|| deep_relay::wire::hex(&sent)),
+            messages: ask.log.then(|| crate::message::read_frame(&sent)),
         });
         let row = played.log.len() - 1;
         let late = (ask.faults.late.iter()).find(|l| l.player == player && l.to as usize == to + 1);
@@ -980,6 +992,7 @@ fn send<S: Stepper>(
                         delivered: Some(at),
                         to: i as u8 + 1,
                         bytes: ask.log.then(|| deep_relay::wire::hex(&f)),
+                        messages: ask.log.then(|| crate::message::read_frame(&f)),
                     });
                 }
                 q.push(at, Event::Deliver(i, f));

@@ -53,9 +53,9 @@ enum Entry {
         panel: [f64; 4],
         name: Option<String>,
         button: Option<[f64; 4]>,
-        /// #278: the app's own prompt over the panel, never the piece's: its words, its button's
-        /// word and its button. #549's Join while nobody has clicked it, or a room's Start while
-        /// the first player may press it.
+        /// The app's own prompt over the panel, never the piece's: its words, its button's word
+        /// and its button. #552's Join while no one has clicked it (a piece that reads `match.me`
+        /// adds the courtesy line), or #278's Start while the first player may press it.
         prompt: Option<(String, &'static str, [f64; 4])>,
     },
     Card,
@@ -216,8 +216,8 @@ fn paint_entry(scene: &Scene, entry: &Entry, window: &mut Window) {
     }
 }
 
-/// The app's own prompt over a panel (#278): a ground card of its words above its button, both
-/// outlined in ink, the button's word centred in it.
+/// The app's own prompt over a panel (#552's Join, #278's Start), never the piece's: a ground
+/// card of its words above its button, both outlined in ink, the button's word centred in it.
 fn prompt_card(scene: &Scene, text: &str, word: &str, b: [f64; 4], window: &mut Window) {
     let [words, word] = prompt_labels(text, word);
     let height = f32::from(deep_text_gpui::measure(&words).height) + 32.;
@@ -368,6 +368,20 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
         } else {
             None
         };
+        // #552: a copy `match` put on the panel draws through its own match.me, as it stood
+        // after the match's last step; a shared piece no match has put there draws this copy
+        // played alone, its logic baked on its own track.
+        let shown = hub.scopes.get(&panel_id).and_then(|s| s.join.shown.clone());
+        let mut alone = || {
+            let net = deep_net::Config::of(&Value::Object(stamped.clone())).is_some();
+            let track = hub.track_json(doc);
+            net.then(|| hub.copy_form(doc, &track, &Value::Null).ok())
+                .flatten()
+        };
+        let (stamped, t) = match shown.or_else(|| alone().map(|f| (f, t))) {
+            Some((Value::Object(form), at)) => (form, at),
+            _ => (stamped, t),
+        };
         let rgba = if deep_canvas_scene3d::scene::has_3d(&Value::Object(stamped.clone())) {
             // A 3D writer layer draws natively on the GPU (#378), its frame scaled to fit the
             // panel from the top left as a 2D layer's is.
@@ -462,7 +476,8 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
         let name = (row.band == Band::Agent && row.outline)
             .then(|| row.name.clone())
             .flatten();
-        // #278: the app's own Join or Start, its button in window points.
+        // The app's own prompt, its button in window points: #552's Join while no one has
+        // clicked it, or #278's Start while the first player may press it.
         let prompt = hub.window_prompt(&panel_id).map(|(text, word, b)| {
             let at = [panel[0] + b[0], panel[1] + b[1], b[2], b[3]];
             (text, word, at)

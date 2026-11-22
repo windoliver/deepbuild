@@ -225,6 +225,10 @@ impl<S: Stepper> Copy<S> {
         while self.roll.settled < upto {
             let k = self.roll.settled;
             self.roll.settled += 1;
+            // #552: a step's draws once it is confirmed.
+            if self.end.is_none() {
+                self.drawn(k);
+            }
             if let Ok(i) = self.hashes.binary_search_by_key(&k, |h| h.step) {
                 let h = self.hashes[i];
                 self.owed.push_back(h);

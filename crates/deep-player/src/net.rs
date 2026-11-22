@@ -87,6 +87,23 @@ pub fn budget(
 /// #277: the share of the class's frame CPU a catch-up's slice takes, leaving the frame its draw.
 const SLICE_SHARE: f64 = 0.6;
 
+/// #552: 64 bits from the browser's secure random source, `crypto.getRandomValues`.
+fn secure_u64() -> u64 {
+    use wasm_bindgen::JsCast as _;
+    let buf = js_sys::Uint8Array::new_with_length(8);
+    let crypto = js_sys::Reflect::get(&js_sys::global(), &"crypto".into()).ok();
+    let fill = crypto
+        .as_ref()
+        .and_then(|c| js_sys::Reflect::get(c, &"getRandomValues".into()).ok())
+        .and_then(|f| f.dyn_into::<js_sys::Function>().ok());
+    if let (Some(c), Some(f)) = (crypto, fill) {
+        let _ = f.call1(&c, &buf);
+    }
+    let mut b = [0u8; 8];
+    buf.copy_to(&mut b);
+    u64::from_le_bytes(b)
+}
+
 /// The page's clock, in ms, as flicks.
 fn flicks(ms: f64) -> i64 {
     (ms * (FLICKS / 1000) as f64).round() as i64
@@ -145,6 +162,7 @@ impl Match {
             &self.cfg.host,
             self.cfg.min,
             self.cfg.players,
+            self.cfg.courtesy,
             self.cfg.controls.get(deep_net::kind::PROFILE).is_some(),
             &self.state,
         )
@@ -288,6 +306,8 @@ impl Match {
                     self.planted,
                     now,
                 );
+                // #552: a draw's bits come from the browser's secure random source.
+                copy.draw_source(Box::new(secure_u64), Default::default());
                 if let Some(seats) = &seats {
                     copy.seat(seats);
                 }

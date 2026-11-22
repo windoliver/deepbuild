@@ -255,6 +255,8 @@ alone.push('tests/acceptance/33/');
 alone.push('tests/acceptance/1427/');
 byHand.push('tests/acceptance/1427/ac8-budget.live.test.ts');
 timed.push('tests/acceptance/1427/ac8-budget.live.test.ts');
+// #1861's claim starts a hub of its own.
+alone.push('tests/acceptance/1861/');
 // #1550's files build a GPUI text probe and deep-drive, and start replicas.
 alone.push('tests/acceptance/1550/');
 // #533's files build deep-logic, a wat assembler and four deep-show feature sets, and run the logic kit.
@@ -294,6 +296,8 @@ timed.push('tests/acceptance/1485/panel.test.ts');
 // #1486's files build deep-canvas-render in release; grid.test.ts times the first screen and the UI thread's frames.
 alone.push('tests/acceptance/1486/');
 timed.push('tests/acceptance/1486/grid.test.ts');
+// #2494's files build deep-show and the app, start a hub each and open the app's window.
+alone.push('tests/acceptance/2494/');
 // #1485's first AC2 draft is kept as written, by hand only: it draws its five pictures in 20 u boxes and needs the
 // fifth refused, where image@1's budget now counts the levels a frame draws (#1486); its blind redraft,
 // 1485-redraft-ac2/, draws them at full size and runs in its place.
@@ -860,6 +864,13 @@ byHand.push('tests/acceptance/280/ac4-depth.test.ts');
 // #277's files each build deep-show (ac1 and ac5 also the shipped relay) and play matches in process; ac1 and ac5 also
 // play live matches between app copies and headless Chrome's web player through the shipped relay.
 alone.push('tests/acceptance/277/');
+// #552's files each build deep-show (ac5 builds deep-drive with env-plants instead) and play matches in process; ac1,
+// ac2, ac6 and ac7 draw on the GPU, ac7 the app's window, and ac7 waits on your taste call in tests/acceptance/552/TASTE.json.
+alone.push('tests/acceptance/552/');
+// #553's files each build deep-show and play matches in process, rendering each copy's sound; ac1 runs the network
+// seam's interop part, which builds deep-show and the shipped relay and plays the app against headless Chrome's web
+// player through it, and ac4 reads net.budget's five runs (INCONCLUSIVE off a reference Mac or under load).
+alone.push('tests/acceptance/553/');
 // #278's files each build deep-show (ac1 and ac4 also the shipped relay) and play matches in process; ac1 and ac4 also
 // play live rooms of app copies, ac1 one with headless Chrome's web player, through the shipped relay.
 alone.push('tests/acceptance/278/');
@@ -935,6 +946,7 @@ timed.push('tests/acceptance/468/ac5-budgets.test.ts');
 // role deep-show's look lacks, is kept by hand, its orbit and fly-through tests with it (506-redraft-ac5/DISPUTE.md).
 alone.push('tests/acceptance/506/', 'tests/acceptance/506-redraft-ac5/');
 byHand.push('tests/acceptance/506/ac5-lamp-card.test.ts');
+alone.push('tests/acceptance/298/'); // #298's files each build deep-gpu or deep-show (and #544's assembler) and draw clamped overlays and a tilting card on the Metal GPU.
 // #508's files build deep-gpu and deep-show and draw effects on the Metal GPU; ac4-budgets times release builds, and
 // ac1's live sessions start real Claude Code and Codex sessions on your plan.
 alone.push('tests/acceptance/508/');
@@ -1192,6 +1204,11 @@ timed.push('tests/acceptance/2760/budgets.test.ts');
 alone.push('tests/acceptance/2760-redraft-ac8/');
 timed.push('tests/acceptance/2760-redraft-ac8/budget-timing.test.ts');
 byHand.push('tests/acceptance/2760/budgets.test.ts');
+// #2897's files (blind) start a hub and DeepBuild's MCP servers as Claude Code, as #26's do. Its AC6 runs as its blind
+// redraft: the first draft reads deep_status's argument-free schema, which AC7 keeps, as empty on any program, so it is
+// kept by hand (tests/acceptance/2897-redraft-ac6/DISPUTE.md).
+alone.push('tests/acceptance/2897/', 'tests/acceptance/2897-redraft-ac6/');
+byHand.push('tests/acceptance/2897/ac6-full-schema.test.ts');
 // #1826's files each build deep-graph, and its taste call deep-canvas-render; CPU only, no GPU and no timing.
 alone.push('tests/acceptance/1826/');
 // #732's files each build deep-show (ac9-atomic.test.ts also with test-export-guards), export decks through the GPU and
@@ -1262,11 +1279,17 @@ timed.push('tests/acceptance/1489/ui-thread.test.ts');
 
 // #2777's files each build deep-show (full, and with the test.tone module), and its preflight file times the lane.
 alone.push('tests/acceptance/2777/');
+// #211's files build deep-logic and deep-show, start Chrome and hold page stores of hundreds of MiB;
+// ac8-budgets times release builds.
+alone.push('tests/acceptance/211/');
+timed.push('tests/acceptance/211/ac8-budgets.test.ts');
 
 // #981's files (blind) each build deep-logic and #416's assembler; ac7 starts headless Chrome, ac5 runs eight simulated
 // hours, and ac8 judges a step's and a route search's time on the reference Mac.
 alone.push('tests/acceptance/981/');
 timed.push('tests/acceptance/981/ac8-budget.test.ts');
+// #1255's folder (blind) runs alone by its lane.json; ac5-budget.test.ts times conflicts over forty movers with judgeLimit.
+timed.push('tests/acceptance/1255/ac5-budget.test.ts');
 
 // #2898's files (blind) each start real hubs, plug-ins and jobs and hold 40 s deep_wait calls; no timing.
 alone.push('tests/acceptance/2898/');

@@ -36,6 +36,9 @@ pub struct Join {
     state: Option<State>,
     pressed: bool,
     log: Vec<Value>,
+    /// #552: the copy `match`'s `on_panel` put on the panel: its drawn form, through its own
+    /// `match.me`, and the time it stood at after the match's last step.
+    pub(crate) shown: Option<(Value, i64)>,
     /// #278: the room this copy sits in, its one connection kept from the Join through every
     /// match the room plays.
     room: Option<live::Room>,
@@ -143,6 +146,13 @@ pub struct MatchCall {
     on: Vec<String>,
     seeks: Vec<(u8, i64)>,
     full: bool,
+    /// #552: the seed of each copy's test source in place of its secure one, the copies' views
+    /// asked for, and the copy the document's panel shows after the match.
+    secure: Option<u64>,
+    views: Vec<crate::matched::ViewAsk>,
+    on_panel: Option<u8>,
+    /// #553: where each copy keeps its saves, `<saves_dir>/<player>/`.
+    saves_dir: Option<PathBuf>,
     /// #280: net.feel's check input but `steps`, which is the match's own.
     feel: Option<Box<deep_net::feel::Feel>>,
     /// #276: each copy's own saves folder, its viewer's store (`saves_dirs: {"<player>": path}`).
@@ -434,6 +444,22 @@ fn parse_match(c: &Map<String, Value>) -> Option<MatchCall> {
                 .is_some()
                 .then_some(true)?,
         },
+        secure: match c.get("secure") {
+            None => None,
+            Some(s) => Some(s.get("seed")?.as_u64()?),
+        },
+        views: match c.get("views") {
+            None => Vec::new(),
+            Some(v) => crate::matched::views_of(v)?,
+        },
+        on_panel: match c.get("on_panel") {
+            None => None,
+            Some(p) => Some(player(p)?),
+        },
+        saves_dir: match c.get("saves_dir") {
+            None => None,
+            Some(d) => Some(PathBuf::from(d.as_str()?)),
+        },
         feel: match c.get("feel") {
             None => None,
             Some(f) => {
@@ -448,10 +474,10 @@ fn parse_match(c: &Map<String, Value>) -> Option<MatchCall> {
     })
 }
 
-/// A match's reply: each copy's report with its logic items' steps, the relay's report, and the
-/// room's next match the same way when it played one (#278).
+/// #278: the reply of a room's next match: each copy's report with its logic items' steps, the
+/// relay's report, and the match after it the same way when the room played one.
 fn match_reply(
-    played: &Played<Logic>,
+    played: &Played<crate::voiced::Voiced<Logic>>,
     track: &[Value],
     log: bool,
     saves_dirs: &BTreeMap<u8, PathBuf>,
@@ -464,7 +490,7 @@ fn match_reply(
             // #276: the profile records its confirmed steps wrote, into its own folder.
             if let Some(dir) = saves_dirs.get(&c.me) {
                 let upto = c.record()["confirmed"].as_i64().unwrap_or(-1);
-                let written: Vec<Value> = c.sim().profiles(upto).into_iter().map(|r| {
+                let written: Vec<Value> = c.sim().inner.profiles(upto).into_iter().map(|r| {
                     match deep_logic::profile::write(dir, &r["record"]) {
                         Ok((hash, file)) => json!({"item": r["item"], "step": r["step"], "hash": hash, "file": file}),
                         Err(e) => json!({"ok": false, "code": "profile_failed", "step": r["step"], "what": e}),
@@ -472,7 +498,7 @@ fn match_reply(
                 }).collect();
                 report.insert("profiles".into(), json!(written));
             }
-            report.insert("steps".into(), json!(c.sim().rows));
+            report.insert("steps".into(), json!(c.sim().inner.rows));
             report.insert("track".into(), json!(track));
             // #297: a refusal of an entry text's range names its reason and grapheme.
             if let Some(Value::Array(rows)) = report.get_mut("refused") {
@@ -663,6 +689,18 @@ impl Hub<'_> {
             .or_else(|| self.piece_press(panel, event))
     }
 
+    /// #553: whether `doc`'s current revision holds a net item, read once a revision.
+    pub(crate) fn has_net(&self, doc: &str) -> bool {
+        self.presented_doc(doc)
+            .is_some_and(|rev| deep_net::kind::item(&rev).is_some())
+    }
+
+    /// #553: the net module's work in one frame of `doc`'s panel: the state of its match, which
+    /// the app's notice and overlay draw from.
+    pub(crate) fn net_frame(&mut self, doc: &str) -> bool {
+        self.join_mut(doc).is_some_and(|j| j.state.is_some())
+    }
+
     fn join_mut(&mut self, panel: &str) -> Option<&mut Join> {
         self.panel_scope(panel).ok().map(|s| &mut s.join)
     }
@@ -690,15 +728,20 @@ impl Hub<'_> {
             plays: m.plays.clone(),
             faults: m.faults.clone(),
             planted,
-            // #550: the planted copy that stamps a peer's entries with its own player is copy 1.
-            planted_on: matches!(
-                planted,
-                Planted::StampsOwnPlayer | Planted::ProfileFromOwnStore
-            )
-            .then_some(1),
+            // #550: the planted copy that stamps a peer's entries with its own player is copy 1, as
+            // is #276's that reads its profile from its own store; #552's guesser, and its copy
+            // whose bits are wrong or never come, copy 2.
+            planted_on: match planted {
+                Planted::StampsOwnPlayer | Planted::ProfileFromOwnStore => Some(1),
+                Planted::GuessesFromSeed | Planted::RevealsOtherBits | Planted::WithholdsBits => {
+                    Some(2)
+                }
+                _ => None,
+            },
             shows: m.renders.iter().map(|(p, t)| (*p, flicks(*t))).collect(),
             log: m.log,
             defect: m.plant.clone(),
+            draw_seed: m.secure.unwrap_or(m.faults.seed),
             // #280: only net.feel's planted wall-clock meter reads the host's clock.
             clock: Some(wall_ns),
             start: m.start.clone(),
@@ -709,6 +752,7 @@ impl Hub<'_> {
         };
         let (piece, track, doc) = (s.piece.clone(), s.track.clone(), s.doc.clone());
         let rounds = planted == Planted::HashRoundsFloats;
+        let first_bits = planted == Planted::DrawsFromFirstBits;
         let ring = match m.full {
             true => Plant::Full,
             false => name.and_then(Plant::named).unwrap_or_default(),
@@ -727,6 +771,9 @@ impl Hub<'_> {
                 .unwrap_or_default(),
             false => deep_logic::Planted::default(),
         };
+        // #553: each copy's media module plays the drawn form's spawns.
+        let media = self.match_media(&m.doc);
+        let saves = m.saves_dir.clone();
         let dirs = m.saves_dirs.clone();
         let make = &mut |p: u8| {
             let mut l = Logic::planted(piece.clone(), &track, true, logic)?;
@@ -735,11 +782,20 @@ impl Hub<'_> {
                 .get(&p)
                 .and_then(|d| deep_logic::profile::brought(&piece, d));
             l.rounds = rounds;
+            if first_bits {
+                l.draws_wrong(deep_logic::draws::Wrong::FirstBits);
+            }
             l.plant_ring(ring);
             l.worlds(&doc)?;
             l.name_items(&doc, &items);
             l.range = deep_play::net::Range::of(&form, ty.clone(), lax);
-            Ok(l)
+            if let Some(dir) = &saves {
+                l.saves_in(dir.join(p.to_string()), planted == Planted::SavesPredicted);
+            }
+            if planted == Planted::KeepsReplacedRows {
+                l.keeps_replaced_rows();
+            }
+            Ok(crate::voiced::Voiced::new(l, media.clone(), planted))
         };
         let run = match m.check.as_deref() {
             None => deep_net::play::play(&s.cfg, &s.card, &ask, make).map(|p| (p, None)),
@@ -792,7 +848,99 @@ impl Hub<'_> {
                 Some(s)
             })
             .collect();
-        let mut reply = match_reply(&played, &s.track, m.log, &m.saves_dirs);
+        // #552: each copy's merged track, which its views and its readers draw from.
+        let tracks: BTreeMap<u8, Vec<Value>> = (played.copies.iter())
+            .map(|c| {
+                (
+                    c.me,
+                    c.record()["track"].as_array().cloned().unwrap_or_default(),
+                )
+            })
+            .collect();
+        let reads = (s.piece.items.iter()).any(|i| !i.emits.is_empty());
+        let mut copies = Vec::new();
+        for c in &played.copies {
+            let mut report = c.report();
+            // #276: the profile records its confirmed steps wrote, into its own folder.
+            if let Some(dir) = m.saves_dirs.get(&c.me) {
+                let upto = c.record()["confirmed"].as_i64().unwrap_or(-1);
+                let written: Vec<Value> = c.sim().inner.profiles(upto).into_iter().map(|r| {
+                    match deep_logic::profile::write(dir, &r["record"]) {
+                        Ok((hash, file)) => json!({"item": r["item"], "step": r["step"], "hash": hash, "file": file}),
+                        Err(e) => json!({"ok": false, "code": "profile_failed", "step": r["step"], "what": e}),
+                    }
+                }).collect();
+                report.insert("profiles".into(), json!(written));
+            }
+            report.insert("steps".into(), json!(c.sim().inner.rows));
+            report.insert("track".into(), json!(s.track));
+            // #553: the voices its media module started, its audio thread, and its saves.
+            if let Some(v) = c.sim().voices() {
+                report.insert("voices".into(), v);
+            }
+            if let Some((rate, blocks, out)) = c.sim().audio() {
+                let wav = crate::mixdown::float_wav(out, 2, rate);
+                let sha = crate::evidence::put(&self.scenario.evidence, &wav).ok();
+                report.insert(
+                    "audio".into(),
+                    json!({"sample_rate": rate, "blocks": blocks, "wav": sha}),
+                );
+            }
+            if m.saves_dir.is_some() {
+                report.insert("saves".into(), json!(c.sim().inner.saved()));
+            }
+            // #297: a refusal of an entry text's range names its reason and grapheme.
+            if let Some(Value::Array(rows)) = report.get_mut("refused") {
+                for row in rows.iter_mut() {
+                    let why = row["why"].clone();
+                    for k in ["reason", "grapheme", "code_points"] {
+                        if let Some(v) = why.get(k) {
+                            row[k] = v.clone();
+                        }
+                    }
+                }
+            }
+            // Every burst and voice this copy's readers made, through its own fog.
+            if reads {
+                let form = self.copy_form(&m.doc, &tracks[&c.me], &json!(c.me));
+                let effects = form.map(|f| self.copy_effects(&m.doc, &f));
+                report.insert("effects".into(), effects.map_or_else(|e| e, |e| json!(e)));
+            }
+            copies.push(Value::Object(report));
+        }
+        let mut reply = json!({"copies": copies, "relay": played.relay(m.log)});
+        let len = s.cfg.step();
+        if !m.views.is_empty() {
+            match self.copy_views(&m.doc, &m.views, &tracks, len) {
+                Ok(v) => reply["views"] = json!(v),
+                Err(e) => return e,
+            }
+        }
+        if let Some(me) = m.on_panel {
+            let last = played
+                .copies
+                .iter()
+                .find(|c| c.me == me)
+                .map_or(0, |c| c.ran() - 1);
+            let form = match self.copy_form(
+                &m.doc,
+                &tracks.get(&me).cloned().unwrap_or_default(),
+                &json!(me),
+            ) {
+                Ok(f) => f,
+                Err(e) => return e,
+            };
+            let panel = self.scenario.docs.get(&m.doc).cloned().unwrap_or_default();
+            // That copy joined its match: the panel shows it playing, not the Join prompt.
+            if let Some(join) = self.join_mut(&panel) {
+                join.shown = Some((form, last.max(0) * len));
+                join.state = Some(State::Joined);
+            }
+        }
+        // #278: the room's next match, when this one finished and the ask named one.
+        if let Some(next) = &played.next {
+            reply["next"] = match_reply(next, &s.track, m.log, &m.saves_dirs);
+        }
         if !m.seeks.is_empty() {
             reply["seeks"] = json!(seeks);
         }
@@ -957,6 +1105,7 @@ impl Hub<'_> {
             &cfg.host,
             cfg.min,
             cfg.players,
+            cfg.courtesy,
             cfg.controls.get(deep_net::kind::PROFILE).is_some(),
             &state.unwrap_or(State::Open),
         );

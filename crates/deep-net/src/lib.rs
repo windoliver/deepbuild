@@ -8,6 +8,7 @@
 pub mod card;
 pub mod checks;
 pub mod copy;
+pub mod draw;
 pub mod feel;
 pub mod kind;
 pub mod locate;

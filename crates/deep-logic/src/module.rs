@@ -47,7 +47,7 @@ const STEP: i64 = 11_760_000;
 /// `fires`, each with the form its reader takes (#1973); `wasm` is the program's bytes, which
 /// whoever holds the evidence store inlines by the program's hash before a frame, as a vector's
 /// outline is.
-const PARAMS: [(&str, &str); 24] = [
+const PARAMS: [(&str, &str); 26] = [
     ("program", "asset ID"),
     ("debug", "asset ID"),
     ("step_rate", "Hz"),
@@ -62,7 +62,7 @@ const PARAMS: [(&str, &str); 24] = [
         "writes",
         "{name → {type, count?: u32, interpolate?, unit?}}",
     ),
-    ("emits", "{kind → {fields, max_per_step?: u16}}"),
+    ("emits", "{kind → {fields, max_per_step?: u16, always_visible?: bool}}"),
     ("fires", "{world → [input ID]}"),
     (
         "budget",
@@ -93,6 +93,16 @@ const PARAMS: [(&str, &str); 24] = [
     ),
     ("services", "{service@major → {max_per_step: u16}}"),
     ("mirrors", "[{array: path, at: name}]"),
+    // #552: courtesy fog beyond rows (Net: this copy's player).
+    (
+        "fog",
+        "{grid: <logic>.<name> (i32, two bits a player), size: [cols, rows], origin?: [x, z], cell?: m}",
+    ),
+    // #211: a world past its memory, in pages it asks for between steps.
+    (
+        "pages",
+        "{max: u32, slots: u16, moves?: u8, lead?: u8, init?: zero | {asset: asset ID} | {gen: <pack>.<provider>, params}, written_max?: integer, web_max?: integer}",
+    ),
     // process@1's kind names, which its kind rules read (#980).
     ("process", "{kinds: [name]}"),
     ("wasm", "text (the program's bytes, which the hub inlines)"),

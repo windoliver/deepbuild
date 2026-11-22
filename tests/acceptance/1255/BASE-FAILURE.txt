@@ -1,0 +1,82 @@
+# #1255 suite at the base: every test fails at its first step, for the missing interface
+
+Base: 9f97c35ef (this worktree's HEAD, "Merge pull request #3039 …"), with only this job's files added. No
+implementation of #1255 exists.
+Host: the reference Mac (Mac17,10), macOS 27.2, arm64; one-minute load about 9 when the run was granted.
+`deep-logic` (debug) and #416's assembler were built for this base beforehand through the build slot (cargo exit 0
+for both), so the suite's own cargo calls found them built.
+
+What was run, once, through the build slot (home paths redacted as <checkout>):
+
+  cd <checkout> && PATH="$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH" NO_COLOR=1 CARGO_INCREMENTAL=0 \
+    CARGO_PROFILE_DEV_DEBUG=0 node scripts/throttle.mjs build --wait 180 -- sh scripts/lease \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/1255 --no-file-parallelism --testTimeout=600000 \
+    ac1-crossing.test.ts ac2-by-pair.test.ts ac3-delay.test.ts ac4-solver.test.ts ac5-budget.test.ts ac5-hosts.test.ts \
+    ac6-basis.test.ts ac7-kit.test.ts
+
+  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node node_modules/vitest/vitest.mjs run …` runs unleased
+  (expected here). The request waited 32 minutes for the slot; the run itself took 7 s.
+
+   Test Files  8 failed (8)
+        Tests  11 failed (11)
+
+No test passes at the base. Every test first runs its own node-side checks (the model against the values worked by
+hand, the fixtures' numbers), which pass, then calls `separation()` (helpers.ts), which sends `{"call":
+"first_party"}` and expects a first-party pack that declares separation@1. The base lists three packs and none does,
+so each test fails on the same assertion, reached from its own line:
+
+  AssertionError: a first-party pack declares separation@1 (packs: interfaces@1.0.0, lanes@1.0.0, modslib@1.0.0): expected undefined to be defined
+   ❯ separation helpers.ts:53:133
+       53|   expect(pack, `a first-party pack declares ${SEPARATION} (packs: ${pa…
+
+Results (each test, with the line of its file that reached the assertion):
+
+ × ac1-crossing.test.ts > #1255.34150321 closest approach and a breach between two samples, in closed form > #1255.34150321 two movers on straight crossing routes at fixture speeds: closest gives the analytic smallest distance and its time within 1e-6 m and 1e-6 s
+     ❯ ac1-crossing.test.ts:46:15
+ × ac1-crossing.test.ts > … > #1255.34150321 on a fixture whose pair is under its 5,556 m minimum for 0.6 s between two whole seconds, conflicts returns that window within 1e-6 s, and the planted once-a-second library returns none and fails separation.clear, naming the pair
+     ❯ ac1-crossing.test.ts:80:15
+ × ac2-by-pair.test.ts > #1255.6e2a9493 a row by pair of classes, measured when the leader passes a fix > #1255.6e2a9493 a heavy leader and a light follower on one final approach, the follower 9,260 m behind at the threshold fix, with a by-pair row of 11,112 m at that fix: conflicts returns one window naming the row and its basis, and with the row removed it returns none
+     ❯ ac2-by-pair.test.ts:32:15
+ × ac3-delay.test.ts > #1255.cfaf0d3e a delay by speed, by path or by hold, or a refusal that names the band > #1255.cfaf0d3e delay(follower, 60) with a band that allows it returns a speed control; after apply, the follower passes the threshold 60 s later within 0.5 s, every speed stays inside its band, separation.exact passes and conflicts is empty
+     ❯ ac3-delay.test.ts:39:15
+ × ac3-delay.test.ts > … > #1255.cfaf0d3e with a band too narrow for 60 s it returns a stretch, and for a departure not yet started a hold; with neither possible it refuses, naming the band
+     ❯ ac3-delay.test.ts:79:15
+ × ac4-solver.test.ts > #1255.32464096 a solver that leaves the band fails separation.exact > #1255.32464096 a planted solver that gives the speed for 60 s even when it's below the band's minimum fails separation.exact, naming the mover, the fix and the speed
+     ❯ ac4-solver.test.ts:33:15
+ × ac5-budget.test.ts > #1255.a22f4ff6 conflicts over two hours of forty movers, on the reference Mac > #1255.a22f4ff6 forty movers over two hours: conflicts over the whole span gives every window of the closed form, and its result holds conflicts and clear pairs
+     ❯ ac5-budget.test.ts:50:15
+ × ac5-budget.test.ts > … > #1255.a22f4ff6 forty movers over two hours: conflicts over the whole span runs in under 20 ms on the reference Mac
+     ❯ ac5-budget.test.ts:59:15
+ × ac5-hosts.test.ts > #1255.a22f4ff6 forty movers' conflicts, equal on every host by state hash > #1255.a22f4ff6 forty movers over two hours: the result of conflicts over the whole span is equal on macOS, Linux and in headless Chrome by state hash
+     ❯ ac5-hosts.test.ts:33:15
+ × ac6-basis.test.ts > #1255.eba2ab94 every row carries its basis > #1255.eba2ab94 a row with no basis is refused at check, naming the row, and an invented row's basis reaches the layout so a bound value can show it
+     ❯ ac6-basis.test.ts:27:15
+ × ac7-kit.test.ts > #1255.fcafb56d the interface's kind kit > #1255.fcafb56d the interface's kind kit holds: each planted twin of the reference library fails the rule its criterion names
+     ❯ ac7-kit.test.ts:22:15
+
+Not reached at the base, by design: the timing's frames and judgeLimit (it fails before any frame, so it reads the
+missing interface, not INCONCLUSIVE); Docker's Linux build and headless Chrome (ac5-hosts fails before either, so no
+Linux build was started).
+
+Past that first step the base also lacks the rest of the surface. Asked directly of the base's `deep-logic` with this
+suite's own documents (scratch probes, since deleted; README: Checked before the base run):
+
+  check of an item with `separation`  → {"ok":false,"code":"logic_refused","item":"approach","refusals":[{"rule":"field","what":"logic@1 has no field separation","field":"separation"}]}
+  judge of an item without `lanes`    → {"ok":true,"items":{}}
+  judge of an item with `separation`  → the same logic_refused
+  pack_check of a copied interface whose entry carries `twins` → {"ok":true,…,"installed":true,…}: no `kit`, the twins unread
+
+and it already does what the tests lean on without crediting it: this suite's programs, linked by name to a do-nothing
+library of the seven exports, bake without a trap, with a step hash at every step and checkpoints at steps 0 to 3 for
+`checkpoint.every` 1; `web_plan` answers; `view` and `frame` give each frame's steps and eval_ns (the first frame ran
+two steps, each later one a single step; the timing counts only one-step frames, after 120 of warm-up; only the busy
+program's frames were read); the region map puts the arrays at the README's offsets.
+
+What else was run here (README: Checked before the base run): the type-check
+(`node node_modules/typescript/bin/tsc -p tests/acceptance/1255/tsconfig.json`, clean), and the eleven tests against a
+JavaScript stand-in for the implementation, where ten passed and the timing read
+
+  Error: INCONCLUSIVE: conflicts over two hours of forty movers: 0.066, 0.065, 0.064, 0.064, 0.064 ms against 20 ms, one-minute load at each run's start and end 59.0/59.0, …, on Mac17,10: INCONCLUSIVE (a reading, not a budget result: … load 59.00244140625 at a run's start or end is above the 18 cores)
+
+(the stand-in's time, not a library's), then against twelve wrong stand-ins, each failing its criterion's tests at
+their own assertions.

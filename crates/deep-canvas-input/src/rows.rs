@@ -8,13 +8,15 @@ use std::cmp::Ordering;
 /// The wrong programs of picks on rows, chosen only by a proof scenario's `planted`: a pick
 /// whose row a replay resolves again from the pointer's point, a hit test that meets rows whose
 /// `alive` is false, one that takes a hex row by its quad, an export that keeps the live hover,
-/// and a focus that moves over rows that don't draw.
-pub const PLANTED: [&str; 5] = [
+/// and a focus that moves over rows that don't draw; and #298's export that keeps the pointer's
+/// live place over an item (`hover_at`).
+pub const PLANTED: [&str; 6] = [
     "pick_resolves_on_replay",
     "hit_ignores_alive",
     "hit_by_quad_bounds",
     "export_keeps_live_hover",
     "focus_stops_on_hidden_rows",
+    "export_keeps_live_hover_at",
 ];
 
 /// A drawn row of a set a pick control names.

@@ -585,6 +585,15 @@ impl Hub<'_> {
             0,
         );
         copy.limit(p.steps);
+        // #552: a draw's bits come from the platform's secure random source.
+        copy.draw_source(
+            Box::new(|| {
+                random16().map_or(0, |b| {
+                    u64::from_le_bytes(b[..8].try_into().unwrap_or_default())
+                })
+            }),
+            Default::default(),
+        );
         copy.script(
             p.plays
                 .iter()

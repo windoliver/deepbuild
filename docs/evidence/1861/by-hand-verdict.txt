@@ -1,0 +1,20 @@
+# #1861 by hand: one claim through deep_claim on a real hub (deep hub run) at 8568df0d9, the acceptance fixture with verdict.made's rows printed
+# R1: .deepbuild/checks/types.sh runs tsc --noEmit -p tsconfig.json; R2: .deepbuild/checks/sum.sh runs vitest run tests/sum.test.ts
+
+E2E verdict.made {
+  "outcome": "PASS",
+  "requirements": [
+    {
+      "req": "req:session7906dea6351f4f3692e60fc26cab51f20#R1",
+      "outcome": "PASS",
+      "check": ".deepbuild/checks/types.sh",
+      "proof": "static_check"
+    },
+    {
+      "req": "req:session7906dea6351f4f3692e60fc26cab51f20#R2",
+      "outcome": "PASS",
+      "check": ".deepbuild/checks/sum.sh",
+      "proof": "test_run"
+    }
+  ]
+}
