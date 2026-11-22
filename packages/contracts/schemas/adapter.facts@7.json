@@ -1742,6 +1742,100 @@
         "entries"
       ],
       "additionalProperties": false
+    },
+    "toolLoading": {
+      "type": "object",
+      "description": "How the client loads an MCP server's tools, per version (#2897): whole at the start or by search, what loads at the start, where a server's instructions are cut and the mark it reads on a tool, each entry naming where it was read. The hub records what a session holds of DeepBuild's servers both ways and says which way its client takes.",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "versions": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "$ref": "#/$defs/version"
+                },
+                "description": "The versions this entry holds for."
+              },
+              "way": {
+                "type": "string",
+                "enum": [
+                  "whole",
+                  "search",
+                  "unread"
+                ],
+                "description": "How the client loads an MCP server's tools: whole, every tool's schema at the session's start; search, by name at the start and a tool's schema when a search loads it; unread, not read yet, so a count charges neither way.",
+                "x-closure": {
+                  "closed": "the two ways a client is known to load a server's tools, and not read",
+                  "reopens": "a new major of this schema",
+                  "mark": "exhaustive"
+                }
+              },
+              "instructionsCutChars": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1,
+                "description": "The characters of a server's instructions the client keeps, or null when it reads none or this isn't read."
+              },
+              "mark": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "field": {
+                    "$ref": "#/$defs/text"
+                  },
+                  "key": {
+                    "$ref": "#/$defs/text"
+                  },
+                  "value": {
+                    "type": "boolean",
+                    "description": "The value the key carries to load the tool up front."
+                  }
+                },
+                "required": [
+                  "field",
+                  "key",
+                  "value"
+                ],
+                "additionalProperties": false,
+                "description": "The mark on a tool that loads it up front: the tool's field, its key and value; null when the client reads none."
+              },
+              "source": {
+                "$ref": "#/$defs/text",
+                "description": "Where this was read, with the date or version read."
+              }
+            },
+            "required": [
+              "versions",
+              "way",
+              "instructionsCutChars",
+              "mark",
+              "source"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance",
+        "entries"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [

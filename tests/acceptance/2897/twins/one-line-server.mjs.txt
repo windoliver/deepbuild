@@ -1,0 +1,20 @@
+// AC6's planted server (README: How the plants work), laid in a scratch folder as one-line-server.mjs and started over
+// stdio: #1105's one-line entries listed to every client. Each of deep's tools at the merge base (base-tools.json, whose
+// path is BASE_TOOLS) is listed with its description's first sentence and an empty schema, and every call is refused
+// as an error@2 refusal with the code schema_needed, so the agent fetches the schema first.
+import { readFileSync } from 'node:fs';
+import { createInterface } from 'node:readline';
+
+const tools = JSON.parse(readFileSync('BASE_TOOLS', 'utf8')).servers.deep.map((t) => ({ name: t.name, description: t.description.split('. ')[0] + '.', inputSchema: { type: 'object' } }));
+const send = (m) => process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...m })}\n`);
+createInterface({ input: process.stdin }).on('line', (line) => {
+  let m;
+  try { m = JSON.parse(line); } catch { return; }
+  if (m.id === undefined) return;
+  if (m.method === 'initialize') send({ id: m.id, result: { protocolVersion: m.params?.protocolVersion ?? '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'deep', version: '0.0.0' } } });
+  else if (m.method === 'tools/list') send({ id: m.id, result: { tools } });
+  else if (m.method === 'tools/call') {
+    const refusal = { code: 'schema_needed', retryable: true, remediation: `Read ${m.params?.name}'s schema, then call again.`, path: '', actual: '', evidence: [] };
+    send({ id: m.id, result: { content: [{ type: 'text', text: JSON.stringify(refusal) }], isError: true } });
+  } else send({ id: m.id, error: { code: -32601, message: `Method ${m.method} not found.` } });
+});

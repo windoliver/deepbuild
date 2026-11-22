@@ -12,7 +12,7 @@ import { createInterface } from 'node:readline';
 import { CODES, codePage } from './codes.js';
 import { hubAddress } from './paths.js';
 import { shedStartup } from './settle.js';
-import { actionToolList, nearest, toolList } from './tools.js';
+import { actionToolList, instructionsFor, nearest, toolList } from './tools.js';
 import { activePlant, line, refusal, startOf, type Refusal } from './wire.js';
 
 type Obj = Record<string, unknown>;
@@ -170,7 +170,7 @@ export async function runMcp(server: 'deep' | 'deep-actions' = 'deep'): Promise<
     switch (method) {
       case 'initialize':
         await hub.named((params.clientInfo as Obj | undefined)?.name);
-        send({ id, result: { protocolVersion: typeof params.protocolVersion === 'string' ? params.protocolVersion : '2025-06-18', capabilities: { tools: {}, resources: {} }, serverInfo: { name: server, version: '0.0.0' } } });
+        send({ id, result: { protocolVersion: typeof params.protocolVersion === 'string' ? params.protocolVersion : '2025-06-18', capabilities: { tools: {}, resources: {} }, serverInfo: { name: server, version: '0.0.0' }, instructions: instructionsFor(server) } });
         break;
       case 'ping':
         send({ id, result: {} });
