@@ -8,6 +8,14 @@ was read, and every repo file was read at the base commit. The implementing agen
 Proof); a dispute goes to a blind redraft of this job (design: Dogfooding). Criterion 3 is #172's blind redraft, in
 `../172-redraft-ac4/`, with a README of its own.
 
+**Redrafted once, on a dispute** (AC6's memory reading only): the first draft read where the page stood as its highest
+sample before the page asked for the changed file. At the base the page asks for its files about 10 ms after
+index.html arrives, while its renderer is still booting (about 50 MB of resident memory), and the samples come about
+200 ms apart under load, so that sample often predated the boot and the boot counted as the file's rise, by sampling
+luck. The server now holds the changed file's response 8 s and where the page stood is read over the hold's last 4 s
+(The page's memory, below). The criterion's 64,000,000 B, the 1 GiB file and the planted `web_inflates_before_check`
+are unchanged.
+
 **Run only where cheap.** The surface plainly doesn't exist at the base: the export writes every file as it is, the
 receipt gives no inflated bytes, deep-show has no `ship` call and none of the planted names below. `BASE-FAILURE.txt`
 says, per test, the assertion it meets first at the base: `decision.test.ts` was run; the others are read from the
@@ -142,7 +150,9 @@ The design keeps `load.retries` in "the run's record"; this suite reads that rec
 A `node:http` listener in a child process of its own (as #172's), serving a bundle folder at `http://127.0.0.1:<port>/`
 as a static host does: `index.html` with `no-cache`, every other file with `max-age=31536000`, WebAssembly by its magic
 bytes as `application/wasm`, no COOP or COEP. It logs one JSON line per response: when the request arrived, status,
-path, the bytes of body sent, the content encoding sent and the SHA-256 of the file as stored. Two modes:
+path, the bytes of body sent, the content encoding sent, the SHA-256 of the file as stored and when the response was
+sent. For AC6's memory runs it holds its response to the page's first request for the changed file 8 s (`HOLD_MS`),
+then sends it as any other. Two modes:
 
 - `stored`: every file as stored, with no content encoding.
 - `compressing`: every body compressed as it is sent, Brotli at quality 5 to a request that accepts `br` (the issue's
@@ -161,9 +171,14 @@ The server's log is the visit.
 Sampled every 100 ms from the blank page on: V8's count for the page (`Runtime.getHeapUsage`: `usedSize`,
 `embedderHeapUsedSize` and `backingStorageSize`, the backing stores of its ArrayBuffers and WebAssembly memories) and
 the resident memory of each Chrome renderer process (the processes of Chrome's process group named Renderer, by `ps`).
-For each reading, where the page stood is its highest sample before the server logged the page's request for the
-changed file, and its rise is its highest sample from then on less that; the page's rise is the largest of V8's and
-each renderer's that was sampled both before and after (a spare renderer Chrome starts later isn't the page's).
+The page asks for its files while it is still booting (its WebGPU gate, then each file in the manifest's order, the
+first about 10 ms after index.html arrives), and its boot alone moves its renderer by tens of MB, so where it stood is
+never read before the page has booted: the server holds its response to the page's first request for the changed file
+8 s, and for each reading where the page stood is its highest sample in the hold's last 4 s, the page booted and
+waiting on that file. Its rise is its highest sample from the response on less that; the page's rise is the largest
+of V8's and each renderer's that was sampled both in that window and after (a spare renderer Chrome starts later
+isn't the page's). A page that inflates nothing it hasn't checked moves only by the file's stored bytes (a few MB)
+and what checking them takes; one that inflates first moves by the 1 GiB it inflates.
 
 ## Planted programs
 
@@ -179,7 +194,7 @@ Chosen by the scenario's `planted` key on `deep-show run`; at the base each name
 
 Made in test code: one byte of the stored player changed, and the stored player replaced by a gzip stream that
 inflates to 1 GiB (a 4 KiB block of bytes from a generator seeded 2892, repeated, compressed by Node's zlib at level 9,
-about 6 MB), each in a copy of a real bundle; criterion 1's wrong records.
+a few MB, estimated), each in a copy of a real bundle; criterion 1's wrong records.
 
 ## Readings where the issue and design leave a choice
 
@@ -202,7 +217,8 @@ about 6 MB), each in a copy of a real bundle; criterion 1's wrong records.
   first visit": every response's body bytes from the index page until `ready` and 2 s after.
 - **"A stored file"** (AC6): the player's WebAssembly as stored. It is stored compressed and is the lab's one large
   file, so a page that checks before it inflates handles nothing else large while it loads; "where it stood" is the
-  page's memory just before it asked for that file (above). **"64 MB"**: 64,000,000 B, as the issue's other MB.
+  page's memory once it has booted and waits on that file, read while the server holds the file's response (above).
+  **"64 MB"**: 64,000,000 B, as the issue's other MB.
 - **"Stops the player before `ready`, naming the file"**: a notice shows, `ready` stays false 5 s more, and a notice
   holds the file's path, its stored SHA-256 or the SHA-256 it inflates to.
 - **"The merge base's"** (AC7): the step hashes the merge base's own bundle gives through its own player, its

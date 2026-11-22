@@ -11,8 +11,9 @@
 //   - a copy with one byte of the stored player changed doesn't reach `ready` (a notice shows and `ready` stays false
 //     for 5 s more) and a notice names the file (its path, its stored or its inflated SHA-256);
 //   - a copy whose stored player is a gzip stream that inflates to 1 GiB stops the same way, naming the file, and the
-//     page's memory (README: The page's memory) rises under 64,000,000 B above where it stood before the page asked
-//     for that file;
+//     page's memory (README: The page's memory) rises under 64,000,000 B above where it stood: the server holds its
+//     response to the page's first request for that file 8 s, and where the page stood is read over the hold's last
+//     4 s, with the page booted and waiting on the file, never before its boot;
 //   - the planted page `web_inflates_before_check` (it inflates each stored file whole, then checks it) on the same
 //     1 GiB copy of its own bundle fails, and the failure names the memory.
 // Wrong programs: the merge base (it stores the player as it is); a page that skips the check (it reaches `ready` or

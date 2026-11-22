@@ -166,13 +166,15 @@ export function indexScripts(out: string): IndexScripts {
 // spawnSync blocks this process's event loop. It serves the folder as a static host does (the index page with
 // no-cache, every other file with a max-age of a year, no cross-origin isolation headers) and logs one JSON line per
 // response: when the request arrived, its status and path, the bytes of body sent, the content encoding sent (null for
-// none) and the SHA-256 of the file as stored. `stored` sends every file as stored with no content encoding;
-// `compressing` compresses every body as it sends it, Brotli at quality 5 to a request that accepts br, else gzip at
-// level 6 to one that accepts gzip. `/.canary` answers a blank page, unlogged.
+// none), the SHA-256 of the file as stored, and when the response was sent. `stored` sends every file as stored with
+// no content encoding; `compressing` compresses every body as it sends it, Brotli at quality 5 to a request that
+// accepts br, else gzip at level 6 to one that accepts gzip. Given a path to hold, it holds its response to the first
+// request for that path for the time given (the page's memory, below). `/.canary` answers a blank page, unlogged.
 
 const SERVER = `
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto'), zlib = require('zlib');
-const [root, log, mode] = process.argv.slice(1);
+const [root, log, mode, holdPath, holdMs] = process.argv.slice(1);
+let held = false;
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.wasm': 'application/wasm', '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg' };
 const s = http.createServer((q, r) => {
   const at = Date.now();
@@ -180,7 +182,7 @@ const s = http.createServer((q, r) => {
   if (url === '/.canary') { r.setHeader('content-type', 'text/html'); r.end('<!doctype html><title>canary</title>'); return; }
   const rel = url === '/' ? 'index.html' : url.replace(/^\\/+/, '');
   const file = path.resolve(root, rel);
-  const line = (o) => fs.appendFileSync(log, JSON.stringify({ at, path: rel, accept: q.headers['accept-encoding'] || null, ...o }) + '\\n');
+  const line = (o) => fs.appendFileSync(log, JSON.stringify({ at, sent: Date.now(), path: rel, accept: q.headers['accept-encoding'] || null, ...o }) + '\\n');
   let stored = null;
   if (file.startsWith(path.resolve(root) + path.sep)) { try { stored = fs.readFileSync(file); } catch {} }
   if (!stored) { line({ status: 404, bytes: 0, encoding: null, sha: null }); r.statusCode = 404; r.setHeader('content-length', '0'); r.end(); return; }
@@ -196,21 +198,21 @@ const s = http.createServer((q, r) => {
     if (encoding) { r.setHeader('content-encoding', encoding); r.setHeader('vary', 'accept-encoding'); }
   }
   r.setHeader('content-length', String(body.length));
-  line({ status: 200, bytes: body.length, encoding, sha: crypto.createHash('sha256').update(stored).digest('hex') });
-  r.end(body);
+  const send = () => { line({ status: 200, bytes: body.length, encoding, sha: crypto.createHash('sha256').update(stored).digest('hex') }); r.end(body); };
+  if (holdPath && rel === holdPath && !held) { held = true; setTimeout(send, Number(holdMs)); } else send();
 });
 s.listen(0, '127.0.0.1', () => console.log(s.address().port));`;
 
 export type Mode = 'stored' | 'compressing';
-export interface Logged { at: number; status: number; path: string; bytes: number; encoding: string | null; sha: string | null; accept: string | null }
+export interface Logged { at: number; sent: number; status: number; path: string; bytes: number; encoding: string | null; sha: string | null; accept: string | null }
 export class WireServer {
   private child: ChildProcess | null = null;
   private dir = '';
   private file = '';
-  async start(root: string, mode: Mode): Promise<string> {
+  async start(root: string, mode: Mode, hold?: { path: string; ms: number }): Promise<string> {
     this.dir = mkdtempSync(join(tmpdir(), 'deep-2892-server-'));
     this.file = join(this.dir, 'served.jsonl');
-    const child = spawn(process.execPath, ['-e', SERVER, root, this.file, mode], { stdio: ['ignore', 'pipe', 'inherit'] });
+    const child = spawn(process.execPath, ['-e', SERVER, root, this.file, mode, hold?.path ?? '', String(hold?.ms ?? 0)], { stdio: ['ignore', 'pipe', 'inherit'] });
     this.child = child;
     const port = await new Promise<number>((done, fail) => { child.stdout!.once('data', (d: Buffer) => done(Number(String(d).trim()))); child.once('error', fail); });
     return `http://127.0.0.1:${port}`;
@@ -245,9 +247,14 @@ export const describeLog = (log: Logged[]): string => log.map((l) => `${l.status
 // The page's memory (README: The page's memory). Two readings, sampled every 100 ms: V8's count for the page's isolate
 // (`Runtime.getHeapUsage`: its heap, the embedder's heap and the backing stores of its ArrayBuffers and WebAssembly
 // memories) and the resident memory of each of Chrome's renderer processes (its process group's processes named
-// Renderer, by `ps`). "Where it stood" is a reading's highest sample before the server logged the page's request for
-// the watched file; the rise is the largest, over V8's count and each renderer process sampled both before and after,
-// of its highest sample from then on less where it stood (a renderer Chrome starts later, a spare, isn't the page's).
+// Renderer, by `ps`). The page asks for its files while it is still booting, so where it stood is never read before
+// that request: the server holds its response to the page's first request for the watched file for HOLD_MS, and "where
+// it stood" is a reading's highest sample in the hold's second half, with the page booted and waiting on that file; the
+// rise is the largest, over V8's count and each renderer process sampled both then and after, of its highest sample from
+// the response on less where it stood (a renderer Chrome starts later, a spare, isn't the page's).
+
+/** How long the server holds the watched file's response: twice the window in which where the page stood is read. */
+export const HOLD_MS = 8_000;
 
 type Raw = { send(method: string, params?: Record<string, unknown>, session?: string, timeoutMs?: number): Promise<Record<string, unknown>> };
 /** #172's Tab keeps its DevTools session private; a visit needs three more of its methods (the cache back on, the
@@ -276,16 +283,18 @@ async function sampleMemory(tab: Tab, group: number | undefined): Promise<Memory
 }
 export interface MemoryReading { asked: boolean; rise: number | null; says: string }
 function readMemory(samples: MemorySample[], log: Logged[], watched: string): MemoryReading {
-  const asked = log.filter((l) => l.path === watched).map((l) => l.at);
-  if (!asked.length) return { asked: false, rise: null, says: `the page never asked for ${watched}` };
-  const from = Math.min(...asked);
-  const parts: string[] = []; let rise: number | null = null;
+  const first = log.filter((l) => l.path === watched).sort((a, b) => a.at - b.at)[0];
+  if (!first) return { asked: false, rise: null, says: `the page never asked for ${watched}` };
+  const released = first.sent;
+  const from = released - HOLD_MS / 2;
+  const parts: string[] = [`the server held ${watched} ${released - first.at} ms after the page asked; where the page stood is read over the hold's last ${HOLD_MS / 2} ms`];
+  let rise: number | null = null;
   const readings: [string, (s: MemorySample) => number | null][] = [['V8 heap and buffers', (s) => s.v8]];
   const pids = new Set(samples.flatMap((s) => [...s.renderers.keys()]));
   for (const pid of pids) readings.push([`renderer ${pid} resident`, (s) => s.renderers.get(pid) ?? null]);
   for (const [name, of] of readings) {
-    const before = samples.filter((s) => s.at < from).map(of).filter((x): x is number => x !== null);
-    const after = samples.filter((s) => s.at >= from).map(of).filter((x): x is number => x !== null);
+    const before = samples.filter((s) => s.at >= from && s.at < released).map(of).filter((x): x is number => x !== null);
+    const after = samples.filter((s) => s.at >= released).map(of).filter((x): x is number => x !== null);
     if (!before.length || !after.length) { if (name.startsWith('V8')) parts.push(`${name}: no reading`); continue; }
     const stood = Math.max(...before); const peak = Math.max(...after);
     parts.push(`${name}: stood at ${stood} B, peaked at ${peak} B (+${peak - stood} B)`);
@@ -303,7 +312,7 @@ const READY_MS = 180_000;
 export interface Visit { log: Logged[]; ready: boolean; notices: string[]; errors: string[]; memory: MemoryReading | null }
 export async function visit(folder: string, mode: Mode, what: string, o: { mustBeReady?: boolean; watch?: string } = {}): Promise<Visit> {
   const server = new WireServer();
-  const origin = await server.start(folder, mode);
+  const origin = await server.start(folder, mode, o.watch === undefined ? undefined : { path: o.watch, ms: HOLD_MS });
   let chrome: Chrome | undefined;
   const sampler = { on: false, samples: [] as MemorySample[], loop: Promise.resolve() };
   try {
@@ -348,7 +357,7 @@ export const namesFile = (notices: string[], f: Stored): boolean => notices.some
 
 // ---------------------------------------------------------------------------------------------------
 // A gzip stream that inflates to 1 GiB (AC6): a 4 KiB block of seeded bytes repeated 262,144 times, compressed by
-// Node's zlib at level 9 (about 6 MB). No 4 KiB page of it repeats within itself, so neither V8's count nor the
+// Node's zlib at level 9 (a few MB, estimated, not measured). No 4 KiB page of it repeats within itself, so neither V8's count nor the
 // renderer's resident memory can shrink what a page inflates.
 
 export async function gzipBomb(to: string): Promise<number> {
