@@ -34,12 +34,14 @@ function packages(command: string): { manager: string; names: string[] } | undef
   return names.length ? { manager: w[at - 1]!.replace(/^.*\//, ''), names } : undefined;
 }
 
-/** The AWS profile a command names, `--profile <name>` or `--profile=<name>`, else the default. */
-function profileOf(command: string): string {
-  const w = words(command);
+/**
+ * The AWS profile one run signs in with, as deep-hook reads it (#2134): its own `--profile <name>` or
+ * `--profile=<name>`, else the `AWS_PROFILE` its line sets, else the default.
+ */
+function profileOf(w: readonly string[], env: Record<string, string>): string {
   const at = w.findIndex((x) => x === '--profile' || x.startsWith('--profile='));
-  if (at < 0) return 'default';
-  return w[at]!.includes('=') ? w[at]!.slice('--profile='.length) : w[at + 1] ?? 'default';
+  if (at < 0) return env.AWS_PROFILE ?? 'default';
+  return w[at]!.includes('=') ? w[at]!.slice('--profile='.length) : w[at + 1] ?? '';
 }
 
 /** The account a profile signs into, from ~/.aws/config: its sso_account_id, else none. */
@@ -63,21 +65,34 @@ function accountOf(home: string, profile: string): string | undefined {
   return undefined;
 }
 
-/** The cloud and account a cloud command names: an AWS command's account, else its tool. */
-function cloudOf(command: string, home: string): { owner: string; kind: string; named: string } {
-  const w = words(command);
+/** deep-hook's note on a call that creates one cloud resource: the one run that creates it (#2134). */
+const ONE_CREATE = /^It creates a cloud resource: (.+)$/;
+
+/**
+ * The cloud and account a cloud command creates under, read from the one run deep-hook's note names: an AWS run's
+ * account, else its tool. A line with no such note, as one with more than one creating run, is owned by itself
+ * alone, so no standing rule for an account or a tool covers it (#2134).
+ */
+function cloudOf(command: string, notes: Record<string, string> | undefined, home: string): { owner: string; kind: string; named: string } {
+  const run = Object.values(notes ?? {}).map((n) => ONE_CREATE.exec(n)?.[1]).find((r) => r !== undefined);
+  if (run === undefined) return { owner: `cloud-line:${command}`, kind: 'cloud', named: 'more than one cloud command, or one that can\'t be read,' };
+  const all = words(run);
+  const env: Record<string, string> = {};
+  let k = 0;
+  for (; k < all.length && /^[A-Za-z_]\w*=/.test(all[k]!); k++) env[all[k]!.slice(0, all[k]!.indexOf('='))] = all[k]!.slice(all[k]!.indexOf('=') + 1);
+  const w = all.slice(k);
   if (w[0] === 'aws') {
-    const profile = profileOf(command);
+    const profile = profileOf(w, env);
     const account = accountOf(home, profile);
     return { owner: account ? `aws:${account}` : `aws-profile:${profile}`, kind: `aws ${w[1] ?? ''}`.trim(), named: account ? `AWS account ${account} (profile ${profile})` : `the AWS profile ${profile}` };
   }
   return { owner: w[0] ?? 'cloud', kind: w[0] ?? 'cloud', named: w[0] ?? 'a cloud' };
 }
 
-/** What a PreToolUse's call of a decided class is about; undefined for one this module can't read. */
-export function aboutCall(classes: readonly string[], command: string, home: string): About | undefined {
+/** What a PreToolUse's call of a decided class is about, with deep-hook's notes on it; undefined for one this module can't read. */
+export function aboutCall(classes: readonly string[], command: string, notes: Record<string, string> | undefined, home: string): About | undefined {
   if (classes.includes('cloud-resource')) {
-    const cloud = cloudOf(command, home);
+    const cloud = cloudOf(command, notes, home);
     return {
       source: 'effect.cloud_resource',
       subject: { effect: 'cloud-resource', target: { kind: cloud.kind, ref: command, owner: cloud.owner }, change: null },
@@ -156,7 +171,7 @@ export interface Gate {
 export async function decide(g: Gate, meta: HookMeta, call: Gated): Promise<{ held?: string; allow?: string; deny?: string }> {
   const note = call.decided?.includes('dependency') && !call.decided.includes('cloud-resource') ? noteOf(meta.notes) : undefined;
   if (!note) {
-    const about = call.decided?.length && call.command ? aboutCall(call.decided, call.command, homedir()) : undefined;
+    const about = call.decided?.length && call.command ? aboutCall(call.decided, call.command, meta.notes, homedir()) : undefined;
     return about ? g.holds.decide(meta, about) : {};
   }
   const names = note.form === 'manifest' ? await addedSince(note.items) : note.items;

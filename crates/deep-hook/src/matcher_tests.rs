@@ -346,6 +346,15 @@ fn an_options_value_is_not_read_as_the_subcommand() {
         ("gh pr --repo acme/shop create --fill", "pr"),
         ("gh issue -R acme/shop comment 3 --body hi", "send"),
         ("gh release -R acme/shop delete v1", "delete"),
+        // #2134: pulumi's, cdk's and the JS package managers' valued options.
+        ("pulumi -C infra up", "cloud-resource"),
+        ("pulumi --stack prod --color never up", "cloud-resource"),
+        ("cdk --profile prod deploy", "cloud-resource"),
+        ("cdk -a 'node app.js' -c env=prod deploy", "cloud-resource"),
+        ("npm --prefix web install left-pad", "dependency"),
+        ("npm -C web install left-pad", "dependency"),
+        ("pnpm -C web add left-pad", "dependency"),
+        ("bun --workspace web add left-pad", "dependency"),
     ] {
         assert!(has(line, class), "{line} as {class}");
     }
@@ -356,11 +365,70 @@ fn an_options_value_is_not_read_as_the_subcommand() {
         ("docker compose -f docker-compose.dev.yml ps", "service"),
         ("docker --context run ps", "service"),
         ("gh pr -R acme/shop view 12", "merge"),
+        ("pulumi -C up preview", "cloud-resource"),
+        ("cdk --profile deploy diff", "cloud-resource"),
+        ("npm -C install run build", "dependency"),
     ] {
         assert!(!has(line, class), "{line} as {class}");
     }
     let read = |line: &str| bash(line).matches("effect:merge").unwrap().detail.unwrap();
     assert_eq!(read("gh pr -R acme/shop merge 12"), "merge pr=12");
+    // #2134: the profile each creating run signs in with is its own, and a line names every creating run.
+    let profiles = |line: &str| {
+        bash(line)
+            .cloud_creates()
+            .map(|runs| runs.iter().map(|r| aws_profile(r)).collect::<Vec<_>>())
+    };
+    let some = |p: &[&str]| Some(p.iter().map(|p| Some(p.to_string())).collect::<Vec<_>>());
+    for (line, wanted) in [
+        (
+            "aws s3 ls --profile dev; aws kms create-key --profile prod",
+            some(&["prod"]),
+        ),
+        (
+            "aws --profile=dev s3 ls && aws kms create-key",
+            some(&["default"]),
+        ),
+        ("AWS_PROFILE=prod aws kms create-key", some(&["prod"])),
+        (
+            "export AWS_PROFILE=prod; aws kms create-key",
+            some(&["prod"]),
+        ),
+        (
+            "AWS_PROFILE=prod aws kms create-key --profile dev",
+            some(&["dev"]),
+        ),
+        (
+            "echo --profile prod; aws kms create-key --profile dev",
+            some(&["dev"]),
+        ),
+        (
+            "aws kms create-key --profile dev && aws kms create-key --profile prod",
+            some(&["dev", "prod"]),
+        ),
+        (
+            "aws kms create-key --profile dev && pulumi up",
+            Some(vec![Some("dev".to_string()), None]),
+        ),
+        ("\"$(printf aws)\" kms create-key --profile dev", None),
+    ] {
+        assert_eq!(profiles(line), wanted, "{line}");
+    }
+    let note = |line: &str| {
+        bash(line)
+            .matches("effect:cloud-resource")
+            .unwrap()
+            .detail
+            .unwrap()
+    };
+    assert_eq!(
+        note("aws s3 ls --profile dev; AWS_PROFILE=prod aws kms create-key"),
+        "It creates a cloud resource: AWS_PROFILE=prod aws kms create-key"
+    );
+    assert_eq!(
+        note("pulumi -C infra up && cdk deploy"),
+        "It runs 2 commands that create cloud resources: pulumi -C infra up; cdk deploy"
+    );
     assert_eq!(
         read("gh pr merge --repo acme/shop 12 --auto"),
         "merge pr=12 auto"

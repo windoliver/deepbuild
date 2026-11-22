@@ -53,6 +53,7 @@ const PIP_VALUED: &[&str] = &[
 const JS_VALUED: &[&str] = &[
     "--registry",
     "--prefix",
+    "-C",
     "-w",
     "--workspace",
     "--filter",

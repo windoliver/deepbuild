@@ -614,6 +614,15 @@ impl Call {
         }
     }
 
+    /// The runs that create a cloud resource, as `effect:cloud-resource` reads them; None when a run the reader couldn't
+    /// read whole may create one too (#2134).
+    pub fn cloud_creates(&self) -> Option<Vec<&Run>> {
+        if self.runs.iter().any(|r| r.unread.is_some()) {
+            return None;
+        }
+        Some(self.runs.iter().filter(|r| creates_cloud(r)).collect())
+    }
+
     /// A `kill` of the hub's process or its group, the hub's PID read from its socket's peer.
     fn kills_hub(&self) -> Option<Hit> {
         let kills: Vec<&Run> = self.runs.iter().filter(|r| r.is("kill")).collect();
@@ -660,6 +669,26 @@ impl Call {
             })?;
             return Some(Hit {
                 detail: Some(format!("It makes the top-level folder {}.", new.display())),
+            });
+        }
+        // The hub reads the account each create runs under from this note, as deep-hook does (#2134).
+        if class == "cloud-resource" {
+            let creates: Vec<&Run> = self.runs.iter().filter(|r| creates_cloud(r)).collect();
+            let detail = match creates.as_slice() {
+                [] => return None,
+                [run] => format!("It creates a cloud resource: {}", cloud_line(run)),
+                several => format!(
+                    "It runs {} commands that create cloud resources: {}",
+                    several.len(),
+                    several
+                        .iter()
+                        .map(|r| cloud_line(r))
+                        .collect::<Vec<_>>()
+                        .join("; ")
+                ),
+            };
+            return Some(Hit {
+                detail: Some(detail),
             });
         }
         let found = self.runs.iter().find(|r| self.has_effect(r, class));
@@ -755,6 +784,41 @@ fn command_of(run: &Run) -> String {
     let mut line = vec![run.program.clone()];
     line.extend(run.words().iter().map(|w| quote(w)));
     line.join(" ")
+}
+
+/// The AWS profile an aws run signs in with: its own `--profile`, else `AWS_PROFILE` in its environment, else
+/// `default`; None for a run that isn't aws (#2134).
+pub fn aws_profile(run: &Run) -> Option<String> {
+    if !run.is("aws") {
+        return None;
+    }
+    let words = run.words();
+    let named = words.iter().enumerate().find_map(|(k, w)| match *w {
+        "--profile" => Some(words.get(k + 1).copied().unwrap_or("")),
+        _ => w.strip_prefix("--profile="),
+    });
+    let env = || {
+        run.env
+            .iter()
+            .rev()
+            .find(|(n, _)| n == "AWS_PROFILE")
+            .map(|(_, v)| v.as_str())
+    };
+    Some(named.or_else(env).unwrap_or("default").to_string())
+}
+
+/// A run that creates a cloud resource as the hub reads it: the command, led by the `AWS_PROFILE` its environment
+/// sets, if any.
+fn cloud_line(run: &Run) -> String {
+    let profile = run
+        .env
+        .iter()
+        .rev()
+        .find(|(n, _)| n == "AWS_PROFILE")
+        .filter(|_| run.is("aws"))
+        .map(|(_, v)| format!("AWS_PROFILE={} ", quote(v)))
+        .unwrap_or_default();
+    format!("{profile}{}", command_of(run))
 }
 
 /// A match on a run, naming it: the command for you to run yourself, if you mean it.
@@ -1118,10 +1182,24 @@ fn creates_cloud(run: &Run) -> bool {
     }
     (run.is("gsutil") && op(0) == "mb")
         || ((run.is("terraform") || run.is("tofu")) && op(0) == "apply")
-        || (run.is("pulumi") && op(0) == "up")
-        || ((run.is("cdk") || run.is("sam") || run.is("serverless") || run.is("sls"))
-            && op(0) == "deploy")
+        || (run.is("pulumi") && first_two(&words, PULUMI_VALUED)[0] == "up")
+        || (run.is("cdk") && first_two(&words, CDK_VALUED)[0] == "deploy")
+        || ((run.is("sam") || run.is("serverless") || run.is("sls")) && op(0) == "deploy")
 }
+
+/// pulumi's options that take a value before its subcommand (#2134).
+const PULUMI_VALUED: &[&str] = &["-C", "--cwd", "-s", "--stack", "--color"];
+
+/// cdk's options that take a value before its subcommand (#2134).
+const CDK_VALUED: &[&str] = &[
+    "--profile",
+    "--app",
+    "-a",
+    "-o",
+    "--output",
+    "-c",
+    "--context",
+];
 
 /// A `gh` run whose first two plain words are one of `subs`.
 /// A `gh api` call that posts in your name: a POST (by `--method` or `-X`, or by a field, which makes gh post) to an

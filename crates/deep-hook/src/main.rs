@@ -281,22 +281,9 @@ fn standing(value: Option<&Value>) -> Vec<String> {
         .collect()
 }
 
-/// The cloud owner a command creates its resource under, as the hub names it: an AWS command's account, by its
-/// `--profile`'s `sso_account_id` in ~/.aws/config (`aws:<account>`), else the profile (`aws-profile:<name>`).
-fn cloud_owner(command: &str) -> Option<String> {
-    let words: Vec<&str> = command.split_whitespace().collect();
-    if words.first().map(|w| w.trim_matches(['"', '\''])) != Some("aws") {
-        return None;
-    }
-    let profile = words
-        .iter()
-        .position(|w| *w == "--profile" || w.starts_with("--profile="))
-        .and_then(|i| match words[i].strip_prefix("--profile=") {
-            Some(p) => Some(p),
-            None => words.get(i + 1).copied(),
-        })
-        .unwrap_or("default")
-        .trim_matches(['"', '\'']);
+/// The cloud owner an AWS profile creates its resource under, as the hub names it: the profile's `sso_account_id` in
+/// ~/.aws/config (`aws:<account>`), else the profile (`aws-profile:<name>`).
+fn cloud_owner(profile: &str) -> String {
     let config = fs::read_to_string(
         PathBuf::from(env::var_os("HOME").unwrap_or_default()).join(".aws/config"),
     )
@@ -308,12 +295,12 @@ fn cloud_owner(command: &str) -> Option<String> {
         } else if section == profile {
             if let Some((key, value)) = line.split_once('=') {
                 if key.trim() == "sso_account_id" {
-                    return Some(format!("aws:{}", value.trim()));
+                    return format!("aws:{}", value.trim());
                 }
             }
         }
     }
-    Some(format!("aws-profile:{profile}"))
+    format!("aws-profile:{profile}")
 }
 
 /// A `classes` member, `{<tool>: read | change | send | destructive}`; none when it is absent.
@@ -581,15 +568,12 @@ fn check() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// Whether a standing rule the hub copied covers the cloud resource this call creates (#23).
-fn covered(parsed: Option<&Value>, rules: &Rules) -> bool {
-    match parsed
-        .and_then(|p| member(p, "tool_input"))
-        .and_then(|i| member(i, "command"))
-    {
-        Some(Value::String(c)) => {
-            cloud_owner(c).is_some_and(|owner| rules.standing.contains(&owner))
-        }
+/// Whether a standing rule the hub copied covers the cloud resource this call creates (#23): the owner is read from
+/// the one run that creates it, and a call with more than one such run is covered by none (#2134).
+fn covered(called: Option<&matcher::Call>, rules: &Rules) -> bool {
+    match called.and_then(matcher::Call::cloud_creates).as_deref() {
+        Some([run]) => matcher::aws_profile(run)
+            .is_some_and(|profile| rules.standing.contains(&cloud_owner(&profile))),
         _ => false,
     }
 }
@@ -690,7 +674,7 @@ fn matching() -> ExitCode {
                     .map(|(g, _)| quoted(&g.name))
                     .collect::<Vec<_>>()
                     .join(",");
-                let denied = denials(&matched, covered(parsed.as_ref(), &rules))
+                let denied = denials(&matched, covered(called.as_ref(), &rules))
                     .iter()
                     .map(|d| quoted(d))
                     .collect::<Vec<_>>()
@@ -1269,7 +1253,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     let matched = met(&rules.guards, called.as_ref());
     // A cloud resource a standing rule the hub copied covers is let through, and spooled like any call (#23).
     // With the hub away, each fail_closed entry the call matched still denies it, each in its own words.
-    let denied = denials(&matched, covered(parsed.as_ref(), &rules));
+    let denied = denials(&matched, covered(called.as_ref(), &rules));
     if !denied.is_empty() {
         let _ = DENIAL.set(denied.join("\n"));
     }
