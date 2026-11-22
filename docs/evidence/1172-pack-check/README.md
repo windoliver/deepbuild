@@ -75,8 +75,12 @@ evidence store lost bytes the check kept there, checks it afresh.
 
 `crates/deep-show/tests/pack_vet_once.rs` reads it as cost, since the library check counts in none of the sandbox's
 counters: a later `packs` call must take under a quarter of the first. Without the fix it fails, a later call at
-1.015 s against the first's 1.047 s (`vet-once-fails-first.txt`); with it, it passes, the first call at 1.040 s and later ones at 5 to 10 ms (`vet-once-passes.txt`). It shows the
-cost only, not that a replayed host equals a fresh one; that rests on review.
+1.015 s against the first's 1.047 s (`vet-once-fails-first.txt`); with it, it passes, the first call at 0.929 s and
+later ones at 4 ms (`vet-once-passes.txt`). It shows the cost only, not that a replayed host equals a fresh one;
+that rests on review (two rounds, whose findings 09d3cb5f8 and d893a7390 fix).
 
-`spark-vet-once.txt`, the head on the Spark at load 19 (INCONCLUSIVE as times): later calls with all packs 142 to
-146 ms, from 1,640 ms; the first call in a new process is still 6.9 s here and the shipped check 7.8 s.
+`spark-vet-once.txt`, the head on the Spark at load 13 to 18 (INCONCLUSIVE as times): later calls with all packs
+144 to 146 ms, from 1,640 ms; the first call in a new process is still 6.6 s here and the shipped check 6.9 s. A
+call whose world drops one pack misses for each pack after it, since its other packs differ, and takes 4.0 to 5.3 s
+once. Not covered: a planted twin of another pack under the same `id@version` gives the same key; it needs two
+scenarios in one `run` process.
