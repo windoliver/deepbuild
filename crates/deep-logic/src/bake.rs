@@ -310,8 +310,9 @@ impl Record {
     /// Each array as the core's column view reads it (Mark set: logic columns), by
     /// `<item>.<write>`: its type, count, step length and interpolation, and each step that
     /// changed it, ascending, with the index ranges the logic module hands the view (at most
-    /// [`crate::world::HANDED`], [`handed`]) and the runs it wrote, `[start, [values]]`. Before
-    /// step 0 every element is zero.
+    /// [`crate::world::HANDED`], [`handed`]) and the runs it wrote, `[start, [values]]`; #2035: a
+    /// linear write with a cut also has `cut`, the runs of the elements its cut left true that
+    /// step. Before step 0 every element is zero.
     pub fn arrays(&self, piece: &Piece) -> Map<String, Value> {
         let mut out = Map::new();
         for item in &piece.items {
@@ -328,10 +329,30 @@ impl Record {
                     step.0.push([u64::from(r.start), u64::from(r.end)]);
                     step.1.push(json!([r.start, values]));
                 }
+                // #2035: the cut write's elements as each step left them, folded in step order.
+                let cut = w.cut.as_ref();
+                let cut = cut.and_then(|c| item.writes.iter().position(|x| &x.name == c));
+                let mut cuts: Vec<&Range> = list
+                    .iter()
+                    .filter(|r| Some(r.write as usize) == cut)
+                    .collect();
+                cuts.sort_by_key(|r| r.step);
+                let (mut cuts, mut now) =
+                    (cuts.into_iter().peekable(), vec![false; w.count as usize]);
                 let list: Vec<Value> = steps
                     .iter()
                     .map(|(k, (runs, values))| {
-                        json!({"step": k, "changed": handed(runs), "values": values})
+                        let mut s = json!({"step": k, "changed": handed(runs), "values": values});
+                        while let Some(r) = cuts.next_if(|r| r.step <= *k) {
+                            for (i, b) in r.bytes.chunks(4).enumerate() {
+                                now[r.start as usize + i] = b != [0; 4];
+                            }
+                        }
+                        let marked = runs_of(&now);
+                        if cut.is_some() && !marked.is_empty() {
+                            s["cut"] = json!(marked);
+                        }
+                        s
                     })
                     .collect();
                 out.insert(
@@ -351,6 +372,18 @@ impl Record {
         }
         out
     }
+}
+
+/// #2035: the runs `[start, end)` of the true elements of `marks`, ascending.
+fn runs_of(marks: &[bool]) -> Vec<[u64; 2]> {
+    let mut out: Vec<[u64; 2]> = Vec::new();
+    for (i, _) in marks.iter().enumerate().filter(|(_, m)| **m) {
+        match out.last_mut() {
+            Some(run) if run[1] == i as u64 => run[1] += 1,
+            _ => out.push([i as u64, i as u64 + 1]),
+        }
+    }
+    out
 }
 
 /// The most index ranges a step hands the column view per array.
