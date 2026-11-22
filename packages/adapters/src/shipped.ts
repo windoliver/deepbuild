@@ -159,7 +159,8 @@ export const codexParts: AdapterParts = {
   readUsage: readCodexUsage,
   // Codex's model provider, from its config.toml, and OPENAI_BASE_URL: each other than the default moves its route.
   // The file is read whole, never parsed (#1886): any provider other than OpenAI's, a profile, a profiles or provider
-  // table, or a base URL key, wherever it stands, reads as moved, so a config this misreads errs toward a moved route.
+  // table, or a base URL or OSS provider key, wherever it stands, reads as moved, so a config this misreads errs toward
+  // a moved route. Command-line overrides and config layers other than this home's are not seen.
   routeAtStart: (env) => {
     let moved = false;
     try {
@@ -169,7 +170,10 @@ export const codexParts: AdapterParts = {
       moved = providers.some((p) => p !== 'openai')
         || /^\s*["']?(?:profile|profiles|model_providers|openai_base_url|chatgpt_base_url|oss_provider)["']?\s*[.=]/m.test(config)
         || /^\s*\[{1,2}\s*["']?(?:profiles|model_providers)["']?\s*[.\]]/m.test(config);
-    } catch { /* no config: the default provider */ }
+    } catch (error) {
+      // No config is the default provider; one that can't be read is no word for it.
+      moved = (error as NodeJS.ErrnoException).code !== 'ENOENT';
+    }
     return { OPENAI_BASE_URL: !!env.OPENAI_BASE_URL, model_provider: moved };
   },
   // The PermissionRequest hook's output, by Codex's rules: only allow or deny for this one call, a deny with its

@@ -19,6 +19,8 @@ const NO_CONFIG = '01a15756-1886-7910-90bb-db79d3fddb7f';
 const AFTER_ARRAY = '01a15756-1886-7910-90bb-db79d3fddb80';
 const BASE_URL = '01a15756-1886-7910-90bb-db79d3fddb81';
 const TYPICAL = '01a15756-1886-7910-90bb-db79d3fddb82';
+const MOVED = ['chatgpt_base_url = "http://127.0.0.1:9"\n', 'oss_provider = "ollama"\n', 'model_provider = "openai"\nmodel_provider = "ollama"\n', '[tui]\nmodel_provider = "ollama"\n', 'profile = "work"\n', '[profiles.work]\nmodel = "o3"\n', 'openai_base_url = "http://127.0.0.1:9/v1"\n', 'model_providers.local.base_url = "http://127.0.0.1:9/v1"\n'].map((config, i) => ({ id: `01a15756-1886-7910-90bb-db79d3fddc${String(i).padStart(2, '0')}`, config }));
+const UNREADABLE = '01a15756-1886-7910-90bb-db79d3fddb83';
 const UNREPORTED = '3b9f1c2e-1886-4222-8333-44445555cccc';
 
 describe('the route a session started on', () => {
@@ -61,6 +63,11 @@ describe('the route a session started on', () => {
       // A provider after a value whose lines start with a bracket, and OpenAI's own base URL moved by a provider table.
       await codex(AFTER_ARRAY, '.codex-array', 'notify = [\n  ["say", "done"],\n]\nmodel_provider = "ollama"\n');
       await codex(BASE_URL, '.codex-base', '[model_providers.openai]\nbase_url = "http://127.0.0.1:9/v1"\n');
+      // Each other key or line that may move the route, on its own.
+      for (const [i, m] of MOVED.entries()) await codex(m.id, `.codex-moved-${i}`, m.config);
+      // A config that can't be read is no word for the default provider.
+      mkdirSync(join(home, '.codex-unreadable', 'config.toml'), { recursive: true });
+      await codex(UNREADABLE, '.codex-unreadable', null);
       // An ordinary config on OpenAI's provider: its tables move nothing.
       await codex(TYPICAL, '.codex-typical', 'approval_policy = "on-request"\nsandbox_mode = "workspace-write"\n\n[tui]\nnotifications = true\n\n[mcp_servers.docs]\ncommand = "npx"\nargs = ["-y", "docs-mcp"]\n\n[projects."/work"]\ntrust_level = "trusted"\n\n[history]\npersistence = "save-all"\n');
       // A start whose line reports no route, as an older deep-hook sends it: the record keeps none, never "own route".
@@ -79,6 +86,8 @@ describe('the route a session started on', () => {
         expect(routeOf(NO_CONFIG), 'Codex with no config').toEqual({ OPENAI_BASE_URL: false, model_provider: false });
         expect(routeOf(AFTER_ARRAY), 'Codex\'s route on a provider after a bracketed value').toEqual({ OPENAI_BASE_URL: false, model_provider: true });
         expect(routeOf(BASE_URL), 'Codex\'s route on OpenAI\'s provider at another base URL').toEqual({ OPENAI_BASE_URL: false, model_provider: true });
+        for (const m of MOVED) expect(routeOf(m.id), `Codex's route under ${JSON.stringify(m.config)}`).toEqual({ OPENAI_BASE_URL: false, model_provider: true });
+        expect(routeOf(UNREADABLE), 'Codex\'s route on a config it can\'t read').toEqual({ OPENAI_BASE_URL: false, model_provider: true });
         expect(routeOf(TYPICAL), 'Codex\'s own route under an ordinary config').toEqual({ OPENAI_BASE_URL: false, model_provider: false });
         expect(routeOf(UNREPORTED), 'a start that reported no route').toBeUndefined();
         expect(routeOf(OWN), 'Claude Code\'s own route').toEqual({ ANTHROPIC_BASE_URL: false, ANTHROPIC_AUTH_TOKEN: false, CLAUDE_CODE_USE_BEDROCK: false, CLAUDE_CODE_USE_VERTEX: false });
