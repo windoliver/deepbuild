@@ -955,6 +955,7 @@ impl Hub<'_> {
         let state = self.scopes.get(panel).and_then(|s| s.join.state.clone());
         let mut p = prompt::prompt(
             &cfg.host,
+            cfg.min,
             cfg.players,
             cfg.controls.get(deep_net::kind::PROFILE).is_some(),
             &state.unwrap_or(State::Open),

@@ -28,11 +28,16 @@ impl State {
     }
 }
 
-/// The prompt as its host shows it: `{state, relay, players, refused, text}`. A piece that keeps a
-/// profile record says its numbers go to the other players (#276).
-pub fn prompt(host: &str, players: u8, profile: bool, state: &State) -> Value {
+/// The prompt as its host shows it: `{state, relay, players, refused, text}`. `min` is the copies
+/// a room's match starts with, `players` where the piece declares one count (#278). A piece that
+/// keeps a profile record says its numbers go to the other players (#276).
+pub fn prompt(host: &str, min: u8, players: u8, profile: bool, state: &State) -> Value {
+    let count = match min < players {
+        true => format!("{min} to {players}"),
+        false => players.to_string(),
+    };
     let mut about = format!(
-        "This piece is played by {players} players through the relay {host}. \
+        "This piece is played by {count} players through the relay {host}. \
          The relay, and on a direct path the other players, see this copy's network address."
     );
     if profile {
@@ -66,18 +71,25 @@ mod tests {
 
     #[test]
     fn the_prompt_names_the_relay_host_and_who_sees_the_address() {
-        let p = prompt("relay.test:4433", 2, false, &State::Open);
+        let p = prompt("relay.test:4433", 2, 2, false, &State::Open);
         let text = p["text"].as_str().unwrap();
         assert!(
             text.contains("relay.test:4433") && text.contains("network address"),
             "{text}"
         );
+        assert!(text.contains("played by 2 players"), "{text}");
+        // #278: a room's prompt names its range, and `players` stays its seats.
+        let room = prompt("relay.test:4433", 2, 8, false, &State::Open);
+        let text = room["text"].as_str().unwrap();
+        assert!(text.contains("played by 2 to 8 players"), "{text}");
+        assert_eq!(room["players"], json!(8));
         assert_eq!(
             (&p["state"], &p["refused"]),
             (&json!("open"), &json!("none"))
         );
         let r = prompt(
             "relay.test",
+            2,
             2,
             false,
             &refused_by_relay("relay.test", "started"),

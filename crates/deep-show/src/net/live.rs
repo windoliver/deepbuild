@@ -341,6 +341,24 @@ impl Hub<'_> {
         Some(json!({"state": state, "button": button, "players": n, "text": text}))
     }
 
+    /// The prompt the app's window draws over the panel, never the piece: a room's Start while
+    /// the first player may press it, else the Join while nobody has clicked it. Its words, its
+    /// button's word and its button in panel px.
+    pub(crate) fn window_prompt(
+        &mut self,
+        panel: &str,
+    ) -> Option<(String, &'static str, [f64; 4])> {
+        let start = self.start_prompt(panel).unwrap_or(Value::Null);
+        let (shown, word) = match start["state"] == "open" {
+            true => (start, "Start"),
+            false => (self.join_prompt(panel), "Join"),
+        };
+        let text = shown["text"]
+            .as_str()
+            .filter(|_| shown["state"] == "open")?;
+        Some((text.to_string(), word, self.join_button(panel)))
+    }
+
     /// An input over the open Start's button is the Start's, never the piece's. Only a person's
     /// click presses it: a press and a release from hardware, which the input router gives a
     /// gesture serial. One a process posts holds none and leaves Start as it was.

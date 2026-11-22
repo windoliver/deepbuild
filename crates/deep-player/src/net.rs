@@ -143,6 +143,7 @@ impl Match {
     pub fn prompt(&self) -> Value {
         prompt::prompt(
             &self.cfg.host,
+            self.cfg.min,
             self.cfg.players,
             self.cfg.controls.get(deep_net::kind::PROFILE).is_some(),
             &self.state,

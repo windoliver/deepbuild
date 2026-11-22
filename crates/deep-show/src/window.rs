@@ -53,8 +53,29 @@ enum Entry {
         panel: [f64; 4],
         name: Option<String>,
         button: Option<[f64; 4]>,
+        /// #278: the app's own prompt over the panel, never the piece's: its words, its button's
+        /// word and its button. #549's Join while nobody has clicked it, or a room's Start while
+        /// the first player may press it.
+        prompt: Option<(String, &'static str, [f64; 4])>,
     },
     Card,
+}
+
+/// The prompt's widest card, in points.
+const PROMPT_WIDTH: f32 = 520.;
+
+/// The prompt's words as the window lays them out in its card, and its button's word.
+fn prompt_labels(text: &str, word: &str) -> [Label; 2] {
+    [
+        Label {
+            width: Some(PROMPT_WIDTH - 32.),
+            ..Label::new(text.to_string())
+        },
+        Label {
+            weight: 600,
+            ..Label::new(word.to_string())
+        },
+    ]
 }
 
 struct Scene {
@@ -75,6 +96,15 @@ impl Scene {
                 _ => None,
             })
             .collect();
+        for e in &self.entries {
+            if let Entry::Layer {
+                prompt: Some((text, word, _)),
+                ..
+            } = e
+            {
+                out.extend(prompt_labels(text, word));
+            }
+        }
         if let Some((question, options, _)) = &self.card {
             out.push(Label {
                 weight: 600,
@@ -97,6 +127,7 @@ fn paint_entry(scene: &Scene, entry: &Entry, window: &mut Window) {
             panel,
             name,
             button,
+            prompt,
         } => {
             let panel = bounds(*panel);
             window.with_content_mask(Some(ContentMask { bounds: panel }), |w| {
@@ -126,6 +157,9 @@ fn paint_entry(scene: &Scene, entry: &Entry, window: &mut Window) {
                 }
                 if let Some(b) = button {
                     full_screen_button(scene, bounds(*b), w);
+                }
+                if let Some((text, word, b)) = prompt {
+                    prompt_card(scene, text, word, *b, w);
                 }
             });
         }
@@ -180,6 +214,40 @@ fn paint_entry(scene: &Scene, entry: &Entry, window: &mut Window) {
             }
         }
     }
+}
+
+/// The app's own prompt over a panel (#278): a ground card of its words above its button, both
+/// outlined in ink, the button's word centred in it.
+fn prompt_card(scene: &Scene, text: &str, word: &str, b: [f64; 4], window: &mut Window) {
+    let [words, word] = prompt_labels(text, word);
+    let height = f32::from(deep_text_gpui::measure(&words).height) + 32.;
+    let centre = (b[0] + b[2] / 2.) as f32;
+    let card = Bounds {
+        origin: point(
+            px(centre - PROMPT_WIDTH / 2.),
+            px(b[1] as f32 - 12. - height),
+        ),
+        size: size(px(PROMPT_WIDTH), px(height)),
+    };
+    for (r, radius) in [(card, 8.), (bounds(b), 6.)] {
+        window.paint_quad(quad(
+            r,
+            px(radius),
+            hsla(scene.ground),
+            px(1.),
+            hsla(scene.ink),
+            BorderStyle::Solid,
+        ));
+    }
+    deep_text_gpui::paint_label(
+        card.origin + point(px(16.), px(16.)),
+        &words,
+        hsla(scene.ink),
+        window,
+    );
+    let w = f32::from(deep_text_gpui::measure(&word).width);
+    let at = point(px(centre - w / 2.), px(b[1] as f32 + 8.));
+    deep_text_gpui::paint_label(at, &word, hsla(scene.ink), window);
 }
 
 /// The full-screen button (#383): a ground square outlined in muted, four ink corner ticks.
@@ -394,6 +462,11 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
         let name = (row.band == Band::Agent && row.outline)
             .then(|| row.name.clone())
             .flatten();
+        // #278: the app's own Join or Start, its button in window points.
+        let prompt = hub.window_prompt(&panel_id).map(|(text, word, b)| {
+            let at = [panel[0] + b[0], panel[1] + b[1], b[2], b[3]];
+            (text, word, at)
+        });
         keyed.push((
             key,
             Entry::Layer {
@@ -401,6 +474,7 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
                 panel,
                 name,
                 button,
+                prompt,
             },
         ));
     }
