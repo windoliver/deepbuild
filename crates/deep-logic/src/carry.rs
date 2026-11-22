@@ -190,7 +190,9 @@ pub(crate) fn due(w: &mut World, k: i64) {
         if l.last != k - 1 || asked != Some(&1i32.to_le_bytes()[..]) {
             continue;
         }
-        let Some((hash, record)) = record_of(&piece, item, &l.arrays, k - 1) else { continue };
+        let Some((hash, record)) = record_of(&piece, item, &l.arrays, k - 1) else {
+            continue;
+        };
         let bytes = record.to_string().into_bytes();
         let out = match &w.saves_dir {
             None => json!({"item": item.id, "step": k - 1, "hash": hash, "record": record}),

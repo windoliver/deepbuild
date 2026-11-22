@@ -978,7 +978,11 @@ impl Backend for Rapier {
         let (hz, unit, cap, sleep) = runner::contact::lengths(self.twin, w);
         p.contact_softness = SpringCoefficients::new(hz, w.solver.contact_damping as f32);
         // Rapier holds a contact with a fixed body at twice the frequency; the world keeps that.
-        let fixed = if self.twin == Twin::StaticContactSame { 1.0 } else { 2.0 };
+        let fixed = if self.twin == Twin::StaticContactSame {
+            1.0
+        } else {
+            2.0
+        };
         p.static_contact_softness =
             SpringCoefficients::new(fixed * hz, w.solver.contact_damping as f32);
         p.length_unit = unit as f32;

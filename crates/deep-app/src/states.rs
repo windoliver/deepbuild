@@ -598,9 +598,10 @@ impl Table {
                 };
                 let word = |key: &str| data[key].as_str().unwrap_or_default().to_owned();
                 event["writer"] == "core"
-                    && self.sessions.get(session).is_some_and(|held| {
-                        held.listed == Some((word("state"), word("cause")))
-                    })
+                    && self
+                        .sessions
+                        .get(session)
+                        .is_some_and(|held| held.listed == Some((word("state"), word("cause"))))
             }
             _ => false,
         }

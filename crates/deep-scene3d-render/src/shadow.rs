@@ -323,11 +323,7 @@ pub fn cascades(
             // centered on the far rim when that already holds the near one.
             let zc = (0.5 * (f + n) * (1.0 + k2)).min(f);
             let r = ((f - zc) * (f - zc) + f * f * k2).sqrt();
-            let span = if none {
-                2.0 * r
-            } else {
-                zhi - zlo
-            };
+            let span = if none { 2.0 * r } else { zhi - zlo };
             let r = r + reach(soft, r, span, size);
             let center = [
                 cam.eye[0] + cam.forward[0] * zc,
