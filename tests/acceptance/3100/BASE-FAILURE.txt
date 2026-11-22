@@ -44,5 +44,44 @@ one of them as FAIL:
 The plain failure reads FAIL and the two passes PASS at the base, as the test requires; only the three stated panics
 are read wrong, as FAIL where the criterion asks for their own states.
 
-== AC1 #3100.18bcb434 (ac1-build.test.mjs) and AC2 #3100.40d22871 (ac2-test.test.mjs) ==
-Queued for the machine's one build grant when this was first committed; their base runs are added here when they end.
+== AC1 #3100.18bcb434 (ac1-build.test.mjs): FAILS at its assertion, for the reason the criterion names ==
+Run: node --test tests/acceptance/3100/ac1-build.test.mjs
+Started 2026-11-22T17:18:22Z; the build grant came at 23:04:09Z (load 16), after 5 h 46 min queued behind other
+sessions' builds; cargo ran about 4.6 min on a warm target/ (a clone of one built two merges earlier) and the test ended
+at 23:08:47Z (350.4 min in all).
+
+✖ #3100.18bcb434 cargo build --workspace --locked succeeds natively on main
+  AssertionError [ERR_ASSERTION]: cargo build --workspace --locked fails natively; it can't compile deep-player:
+  error[E0432]: unresolved import `wasm_bindgen` | error[E0433]: cannot find module or crate `js_sys` in this scope
+  (five times). exit 101 after 350.4 min; whole output in target/acceptance-3100/ac1-cargo-build.log; its end:
+     Compiling deep-player v0.0.0 (<repo>/crates/deep-player)
+  error[E0432]: unresolved import `wasm_bindgen`
+    --> crates/deep-player/src/net.rs:92:9
+  92 |     use wasm_bindgen::JsCast as _;
+  error[E0433]: cannot find module or crate `js_sys` in this scope
+    --> crates/deep-player/src/net.rs:93:15
+  93 |     let buf = js_sys::Uint8Array::new_with_length(8);
+  (and net.rs:94:18, 94:40, 97:23, 98:36, the same error)
+  error: could not compile `deep-player` (lib) due to 6 previous errors
+  warning: build failed, waiting for other jobs to finish...
+  101 !== 0
+
+== AC2 #3100.40d22871 (ac2-test.test.mjs): FAILS at its assertion, for the reason the criterion names ==
+Run: node --test tests/acceptance/3100/ac2-test.test.mjs
+Started 2026-11-22T17:18:34Z, queued behind AC1; the build grant came at 23:08:47Z (load 149), and cargo test stopped
+16 s later, at 23:09:03Z (350.5 min in all). cargo test --no-fail-fast doesn't build on past a crate that fails to
+compile, so at the base it runs no test: deep-player's library and its test target stop the whole run.
+
+✖ #3100.40d22871 cargo test --workspace --locked --no-fail-fast on main leaves no failure the unit lane reads as FAIL, apart from those scripts/known-failures.json lists with an open issue
+ℹ cargo test exited 101 after 350.5 min: the reader reads 0 PASS, 1 not, 0 ignored; output in target/acceptance-3100/ac2-cargo-test.log
+  AssertionError [ERR_ASSERTION]: cargo test --workspace --locked --no-fail-fast leaves 1 failures the unit lane reads as FAIL that no listing with an open issue excuses:
+  FAIL cargo test (not listed): error[E0432]: unresolved import `wasm_bindgen`
+  exit 101 after 350.5 min; whole output in target/acceptance-3100/ac2-cargo-test.log; its end:
+  … (the six E0432/E0433 errors in crates/deep-player/src/net.rs, as in AC1)
+  error: could not compile `deep-player` (lib) due to 6 previous errors
+  warning: build failed, waiting for other jobs to finish...
+  error: could not compile `deep-player` (lib test) due to 6 previous errors
+
+The log holds no `test result:` line: no test target ran. `cargoResults` reads the run as one ID, `cargo test`, FAIL,
+with the first error line as its message; no ID reads BLOCKED or INCONCLUSIVE, and none is listed in
+known-failures.json (which lists no cargo ID at the base).
