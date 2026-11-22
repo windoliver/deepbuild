@@ -24,6 +24,7 @@ mod laws;
 pub mod scan;
 mod sensors;
 mod small;
+mod turns;
 mod vehicles;
 pub mod walks;
 
@@ -213,6 +214,10 @@ pub enum Measure {
         b: &'static str,
         step: usize,
     },
+    /// #2317: how far `body`'s centre is from the vertical through the origin, m, after the step
+    /// that leaves it farthest from the answer; a fail names the first step that leaves it past
+    /// the tolerance.
+    Rides { body: &'static str },
 }
 
 /// One fixture of the behavior part.
@@ -225,6 +230,10 @@ pub struct Fixture {
     pub track: Value,
     /// Each kinematic body moved at a constant velocity, m/s, from its pose.
     pub moves: Vec<(&'static str, [f64; 3])>,
+    /// #2317: each joint whose motor's target rises from 0 to a value, in the motor's own unit,
+    /// over its first so many steps and then holds: the part a scene's channel plays for a motor
+    /// whose `target` names a path.
+    pub ramps: Vec<(&'static str, f64, u64)>,
     pub measure: Measure,
     pub answer: f64,
     pub tolerance: Tolerance,
@@ -239,9 +248,13 @@ pub struct Fixture {
 impl Fixture {
     /// The fixture as the interface's data: `{name, world, measure, answer, tolerance, caps}`.
     pub fn json(&self) -> Value {
-        json!({"name": self.name, "world": self.world, "steps": self.steps, "track": self.track,
+        let mut out = json!({"name": self.name, "world": self.world, "steps": self.steps, "track": self.track,
                "measure": named_measure(&self.measure), "answer": self.answer,
-               "tolerance": tolerance_json(self.tolerance), "caps": self.caps})
+               "tolerance": tolerance_json(self.tolerance), "caps": self.caps});
+        for (joint, to, steps) in &self.ramps {
+            out["ramps"][joint] = json!({"to": to, "steps": steps});
+        }
+        out
     }
 }
 
@@ -357,6 +370,10 @@ fn trace(b: &mut dyn Backend, w: &World, f: &Fixture) -> Result<Trace, String> {
             targets
                 .poses
                 .insert((*id).into(), [0, 1, 2].map(|i| from[i] + v[i] * s));
+        }
+        for (joint, to, steps) in &f.ramps {
+            let target = to * k.min(*steps) as f64 / *steps as f64;
+            targets.motors.insert((*joint).into(), target);
         }
         b.step(&inputs, &targets).map_err(|r| r.what)?;
         t.rows
@@ -831,6 +848,7 @@ fn read(m: &Measure, t: &Trace, b: &dyn Backend, w: &World, f: &Fixture) -> Read
         Measure::Meet(m) => met(t, m),
         Measure::Past { body, edge, drop } => small::past(&path(t, body), body, *edge, *drop),
         Measure::Topple { last, tilt } => small::toppled(t, *last, *tilt),
+        Measure::Rides { body } => turns::rode(&path(t, body), body, f.answer, room(f, t.rate)),
         Measure::Parked { body, from, to } => {
             let p = path(t, body);
             let moved = p.get(*from).zip(p.get(*to)).map(|(a, z)| dist(*a, *z));
@@ -953,6 +971,9 @@ fn named_measure(m: &Measure) -> String {
         Measure::Gyration { body, .. } => format!("radius of the circle {body} turns in, m"),
         Measure::Apart { a, b, step } => {
             format!("distance between {a} and {b} after step {step}, m")
+        }
+        Measure::Rides { body } => {
+            format!("distance of {body}'s centre from the axis after the step that leaves it farthest from the answer, m")
         }
     }
 }

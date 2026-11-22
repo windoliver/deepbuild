@@ -581,7 +581,7 @@ fn run_view(
                 scene.set_cutaway(Some(cut));
             }
             if n == args.from {
-                receipt = made;
+                receipt = crate::textures::listed(made, &scene, app.planted);
             }
             // #420 AC6's wrong programs: mesh edges unwelded, or drawn over their faces.
             scene.plant_edges(

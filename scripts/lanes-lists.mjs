@@ -1405,3 +1405,14 @@ slow.push('tests/acceptance/689-redraft-2047/ac2-checks.test.mjs', 'tests/accept
 // ac08-join-time.test.ts judges a join's time on the reference Mac. The Oracle lane plays upstream's pile.
 alone.push('tests/acceptance/1500/', 'tests/acceptance/1500-oracle/');
 timed.push('tests/acceptance/1500/ac08-join-time.test.ts');
+
+// #2740's as-on-main (blind) runs all of tests/acceptance/1463 (minutes warm, an hour or more cold), whose budget test
+// judges a timing on the reference Mac; its lane.json runs the folder alone.
+slow.push('tests/acceptance/2740/as-on-main.test.ts');
+timed.push('tests/acceptance/2740/as-on-main.test.ts');
+
+// #2215's files (blind) build deep-gpu and draw the brushed pane in raster and, once #178 lands, as path-traced finals at
+// 4,096 samples; ac5 draws the castle and the corpus. No timing.
+alone.push('tests/acceptance/2215/');
+// #2215's AC5 redraft (blind) builds deep-gpu and draws its four-document corpus on the GPU, once under a plant; no timing.
+alone.push('tests/acceptance/2215-redraft-ac5/');
