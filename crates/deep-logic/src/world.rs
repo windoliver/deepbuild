@@ -903,8 +903,7 @@ pub fn drawn<'a>(
             let values: Vec<Value> = (0..w.count as usize)
                 .map(|n| {
                     let to = &arrays[at + n * size..][..size];
-                    if !w.linear || prev.is_empty() || last < 0 || since >= item.step || jumps(n)
-                    {
+                    if !w.linear || prev.is_empty() || last < 0 || since >= item.step || jumps(n) {
                         return w.ty.value(to);
                     }
                     let from = &prev[at + n * size..][..size];
