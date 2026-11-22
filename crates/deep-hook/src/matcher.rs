@@ -696,7 +696,7 @@ impl Call {
             || unquoted.replace(char::is_whitespace, "").contains("()")
             || tokens
                 .iter()
-                .any(|t| AS_ANOTHER.contains(&t.as_str()) || t.starts_with("ENV="))
+                .any(|t| AS_ANOTHER.contains(&t.as_str()))
             || self
                 .runs
                 .iter()
@@ -931,15 +931,17 @@ fn command_of(run: &Run) -> String {
 }
 
 /// The account a profile signs into by an ~/.aws/config's text: its section's `sso_account_id`, else none (#2134). A
-/// config holding anything but printable ASCII, tabs and line ends, or an indented line, is read as naming no account:
+/// config holding anything but printable ASCII, tabs and line ends, an indented line, or a quote or backslash, is read
+/// as naming no account:
 /// readers split such text into lines and words differently, the hub's and the CLI's among them.
 pub fn aws_account<'a>(config: &'a str, profile: &str) -> Option<&'a str> {
     if !config
         .replace("\r\n", "\n")
         .chars()
         .all(|c| c == '\t' || c == '\n' || (' '..='~').contains(&c))
-        // The CLI reads an indented line as going on with the value above it.
+        // The CLI reads an indented line as going on with the value above it, and a header's quotes and escapes away.
         || config.lines().any(|l| l.starts_with([' ', '\t']))
+        || config.contains(['\'', '"', '\\'])
     {
         return None;
     }

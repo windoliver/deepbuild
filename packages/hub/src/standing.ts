@@ -43,9 +43,9 @@ function accountOf(home: string, profile: string): string | undefined {
     return undefined;
   }
   // Readers split anything but printable ASCII, tabs and line ends into lines and words differently, the CLI's and
-  // deep-hook's among them, and the CLI reads an indented line as going on with the value above it: a file holding
-  // either is read as naming no account.
-  if (/[^\t\n -~]/.test(text.replace(/\r\n/g, '\n')) || /^[ \t]/m.test(text)) return undefined;
+  // deep-hook's among them, the CLI reads an indented line as going on with the value above it, and a header's quotes
+  // and escapes away: a file holding any is read as naming no account.
+  if (/[^\t\n -~]/.test(text.replace(/\r\n/g, '\n')) || /^[ \t]/m.test(text) || /['"\\]/.test(text)) return undefined;
   let section = '';
   for (const raw of text.split('\n')) {
     const line = raw.trim();

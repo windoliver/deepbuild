@@ -1033,6 +1033,12 @@ fn a_profiles_account_is_read_only_from_a_config_every_reader_splits_alike() {
         aws_account(&config.replace('\n', "\r\n"), "dev"),
         Some("111")
     );
+    for quoted in ["\"dev\"", "'dev'", "d\\ev"] {
+        let config = format!(
+            "[profile dev]\nsso_account_id = 111\n[profile {quoted}]\nsso_account_id = 222\n"
+        );
+        assert_eq!(aws_account(&config, "dev"), None, "{quoted}");
+    }
     let indented = "[profile dev]\nregion = x\n  sso_account_id = 111\nsso_account_id = 222\n";
     assert_eq!(aws_account(indented, "dev"), None);
     assert_eq!(

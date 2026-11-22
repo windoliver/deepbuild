@@ -41,13 +41,19 @@ describe("a cloud create's owner (#2134)", () => {
     }
   });
 
-  it('is no account from a config with an indented line, which the CLI reads as going on with the value above', () => {
+  it('is no account from a config with an indented line or a quote, which the CLI reads otherwise', () => {
     const other = mkdtempSync(join(tmpdir(), 'hub2134-'));
     mkdirSync(join(other, '.aws'));
-    writeFileSync(join(other, '.aws', 'config'), '[profile dev]\nregion = x\n  sso_account_id = 111111111111\nsso_account_id = 222222222222\n');
+    const note = 'It creates a cloud resource under the AWS profile dev: aws kms create-key --profile dev';
     try {
-      const note = 'It creates a cloud resource under the AWS profile dev: aws kms create-key --profile dev';
-      expect(aboutCall(['cloud-resource'], 'aws kms create-key --profile dev', { 'no-unnamed-cloud-resource': note }, other)?.subject.target.owner).toBe('aws-profile:dev');
+      for (const config of [
+        '[profile dev]\nregion = x\n  sso_account_id = 111111111111\nsso_account_id = 222222222222\n',
+        '[profile dev]\nsso_account_id = 111111111111\n[profile "dev"]\nsso_account_id = 222222222222\n',
+        "[profile dev]\nsso_account_id = 111111111111\n[profile 'dev']\nsso_account_id = 222222222222\n",
+      ]) {
+        writeFileSync(join(other, '.aws', 'config'), config);
+        expect(aboutCall(['cloud-resource'], 'aws kms create-key --profile dev', { 'no-unnamed-cloud-resource': note }, other)?.subject.target.owner, config).toBe('aws-profile:dev');
+      }
     } finally {
       rmSync(other, { recursive: true, force: true });
     }
