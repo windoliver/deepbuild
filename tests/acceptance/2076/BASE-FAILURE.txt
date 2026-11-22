@@ -1,0 +1,38 @@
+The #2076 acceptance suite run on the base commit 2eaaeb0e6, before any implementation.
+
+Machine:      Linux arm64 (aarch64, kernel 7.0.0-1025-nvidia), Node v24.22.0, vitest 5.0.5
+Setup:        npm ci; npm run build --workspaces; cargo build -p deep-hook (target/debug/deep-hook). The hub ran from
+              packages/hub/dist built from the base at 02:09 to 02:10; uncommitted packages/hub/src edits made in the
+              worktree from 02:11 on were not built into it (the suite imports no hub source).
+Command:      systemd-run --user -p AppArmorProfile=claude-desktop -p MemoryMax=24G -p MemorySwapMax=2G -E CARGO_BUILD_JOBS=2 ... --unit=i2076-blind-1
+              bash -c 'node node_modules/vitest/vitest.mjs run --root tests/acceptance/2076 --no-file-parallelism'
+Result:       Test Files 2 failed | 1 passed (3); Tests 2 failed | 1 passed (3); 24.88 s
+Type check:   node node_modules/typescript/bin/tsc -p tests/acceptance/2076/tsconfig.json  -> exit 0
+
+Every failure is at an assertion, none at an import or load error.
+
+- AC1 fails for the issue's reason: your `rejected: \`moment\`.` was saved (the helper's assertion on one decision.created
+  passed), the agent's Edit took the line out of AGENTS.md, and the base's holdRemoved held the line only if its
+  proposal was made; propose refused the change, whose text names `moment`, so the rules page has no rule and the log no
+  proposal. The deleted line is gone from the rules page on the merge base (the issue's Proof).
+- AC2 fails at the planted fault this job invented: the base hub refuses DEEP_HUB_PLANT=hold-raise-fails.
+- AC3, the twin, passes on the base, as it must: an agent's own deep_propose of `moment` is refused citing your decision.
+
+ FAIL  held.test.ts > #2076.c016c716 a deleted rule line that names a rejected direction > #2076.c016c716 with `rejected: `moment`.` saved, an agent's Edit deleting "never use moment" from AGENTS.md leaves the rule held on the rules page and in the next session's start set, with one proposal in the inbox naming the line
+AssertionError: "never use moment" stays on the rules page, held, after the agent's Edit deleted it, though its text names the rejected `moment`; the page lists:
+  Run the linter before every commit [AGENTS.md; all; text]
+and the proposals naming it are: none: expected undefined to be defined
+ ❯ held.test.ts:34:286
+
+ FAIL  raise-fails.test.ts > #2076.ed415a3c a held rule line whose proposal can't be raised > #2076.ed415a3c with the ask's raise planted to fail, the deleted line "never use moment" is still held, and the session's record names the failure; the next rules sync with the raise working raises its one proposal
+AssertionError: the hub runs with DEEP_HUB_PLANT=hold-raise-fails, the planted fault where the ask for a held rule line can't be raised (README, invented surface 1); it did not start: Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=hold-raise-fails did not start: .../packages/hub/dist/plant.js:140
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+Error: DEEP_HUB_PLANT=hold-raise-fails names no planted program
+ ❯ hubFor helpers.ts:40:19
+ ❯ raise-fails.test.ts:16:32
+
+ ✓ twin.test.ts > #2076.8efd8683 an agent's own deep_propose of a rejected direction > #2076.8efd8683 an agent's deep_propose that names `moment`, which you rejected, is refused citing your decision and never reaches you; one naming another direction does  1717 ms
+
+Summary lines:
+ Test Files  2 failed | 1 passed (3)
+      Tests  2 failed | 1 passed (3)
