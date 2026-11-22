@@ -638,20 +638,36 @@ impl Call {
             name.len() > 2 && name != "--profile" && "--profile".starts_with(name)
         };
         let words = run.words();
+        let line = self.command.as_deref().unwrap_or_default();
+        // The line's words as a program would be named by them: quotes taken out, a path's last part.
+        let tokens: Vec<String> = line
+            .split(|c: char| c.is_whitespace() || ";&|()<>`".contains(c))
+            .map(|w| {
+                let w: String = w.chars().filter(|c| !"'\"\\".contains(*c)).collect();
+                same_name(w.rsplit('/').next().unwrap_or_default())
+            })
+            .collect();
+        let own_profile = run.env.iter().any(|(n, _)| n == "AWS_PROFILE");
+        let aws_words = line.matches("AWS_").count();
         if !run.is("aws")
-            || run.args.iter().any(|a| a.text.is_none())
+            || run.glob
+            || run.args.iter().any(|a| a.text.is_none() || a.glob)
             || words.iter().any(shortened)
             || run
                 .env
                 .iter()
                 .any(|(n, _)| n == "HOME" || (n.starts_with("AWS_") && n != "AWS_PROFILE"))
-            || self
-                .runs
+            // The only AWS_ setting it reads is the creating run's own AWS_PROFILE.
+            || aws_words > usize::from(own_profile)
+            || (aws_words == 1 && line.matches("AWS_PROFILE=").count() != 1)
+            || line.contains("HOME")
+            || line.contains("BASH_ENV")
+            || tokens
                 .iter()
-                .any(|r| ENV_BUILTINS.iter().any(|b| r.is(b)))
-            || self.command.as_deref().is_some_and(|c| {
-                c.split(|ch: char| ch.is_whitespace() || ";&|()`".contains(ch))
-                    .any(|w| AS_ANOTHER.contains(&same_name(w).as_str()))
+                .any(|t| AS_ANOTHER.contains(&t.as_str()) || t.starts_with("ENV="))
+            || self.runs.iter().any(|r| {
+                (!std::ptr::eq(r, *run) && !READ_ONLY.iter().any(|p| r.is(p)))
+                    || r.writes.iter().any(|w| w.to_string_lossy().contains(".aws"))
             })
         {
             return None;
@@ -858,17 +874,29 @@ fn command_of(run: &Run) -> String {
     line.join(" ")
 }
 
-/// The builtins that change the environment or the options of what runs after them.
-const ENV_BUILTINS: &[&str] = &[
-    "export", "declare", "typeset", "local", "readonly", "unset", "set", "source", ".", "shopt",
+/// The programs a line may run beside the one aws run a standing rule covers: none changes the account that run
+/// signs in with (#2134). `aws configure` is held apart by its word.
+const READ_ONLY: &[&str] = &[
+    "aws", "echo", "printf", "cd", "pwd", "true", "ls", "sleep", "date",
 ];
 
-/// The wrappers that run a program as another user, with an environment and a home of theirs.
-const AS_ANOTHER: &[&str] = &["sudo", "doas", "su", "runuser", "pkexec"];
+/// The words that change what a run is given or who runs it: a wrapper that changes its user, its environment or its
+/// words, and the aws command that rewrites a profile.
+const AS_ANOTHER: &[&str] = &[
+    "sudo",
+    "doas",
+    "su",
+    "runuser",
+    "pkexec",
+    "env",
+    "xargs",
+    "parallel",
+    "configure",
+];
 
-/// Whether a profile can be said in a note and read back whole: a word of no white space and no colon.
+/// Whether a profile can be said in a note and read back whole: printable ASCII with no space and no colon.
 fn plain_profile(profile: &str) -> bool {
-    !profile.is_empty() && !profile.contains(|c: char| c == ':' || c.is_whitespace())
+    !profile.is_empty() && profile.chars().all(|c| c.is_ascii_graphic() && c != ':')
 }
 
 /// A match on a run, naming it: the command for you to run yourself, if you mean it.

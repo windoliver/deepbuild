@@ -360,6 +360,7 @@ fn an_options_value_is_not_read_as_the_subcommand() {
         ("npm -C web install left-pad", "dependency"),
         ("pnpm -C web add left-pad", "dependency"),
         ("bun --workspace web add left-pad", "dependency"),
+        ("yarn add -C left-pad", "dependency"),
     ] {
         assert!(has(line, class), "{line} as {class}");
     }
@@ -404,16 +405,24 @@ fn an_options_value_is_not_read_as_the_subcommand() {
             named("prod"),
         ),
         (
+            "aws s3 ls --profile prod && aws kms create-key --profile dev > key.json",
+            named("dev"),
+        ),
+        (
+            "aws --region eu-west-1 --profile dev s3 mb s3://b",
+            named("dev"),
+        ),
+        (
+            "/usr/local/bin/aws kms create-key --profile dev",
+            named("dev"),
+        ),
+        (
             "AWS_PROFILE=dev env -u AWS_PROFILE aws kms create-key",
-            named("default"),
+            None,
         ),
         (
-            "AWS_PROFILE=dev env -uAWS_PROFILE aws kms create-key",
-            named("default"),
-        ),
-        (
-            "AWS_PROFILE=dev env -i aws kms create-key",
-            named("default"),
+            "AWS_PROFILE=dev env -vuAWS_PROFILE aws kms create-key",
+            None,
         ),
         // More than one creating run, or one it couldn't read whole.
         (
@@ -453,6 +462,33 @@ fn an_options_value_is_not_read_as_the_subcommand() {
             None,
         ),
         ("sudo aws kms create-key --profile dev", None),
+        ("/usr/bin/sudo aws kms create-key --profile dev", None),
+        ("s'u'do aws kms create-key --profile dev", None),
+        ("sh -c 'sudo aws kms create-key --profile dev'", None),
+        (
+            "aws configure set sso_account_id 2 --profile dev && aws kms create-key --profile dev",
+            None,
+        ),
+        (
+            "printf x > ~/.aws/config; aws kms create-key --profile dev",
+            None,
+        ),
+        (
+            "cp other.cfg ~/.aws/config && aws kms create-key --profile dev",
+            None,
+        ),
+        ("HOME=/tmp/x; aws kms create-key --profile dev", None),
+        (
+            "AWS_PROFILE=dev bash -c 'AWS_PROFILE=prod; aws kms create-key'",
+            None,
+        ),
+        (
+            "BASH_ENV=f.sh bash -c 'aws kms create-key --profile dev'",
+            None,
+        ),
+        ("cat f.txt | xargs aws kms create-key --profile dev", None),
+        ("aws kms create-key --profile dev *", None),
+        ("a?s kms create-key --profile dev", None),
         ("aws kms create-key --profile 'my prod'", None),
     ] {
         assert_eq!(profile(line), wanted, "{line}");

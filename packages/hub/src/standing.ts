@@ -60,7 +60,7 @@ function accountOf(home: string, profile: string): string | undefined {
  * with said whole, and any other tool's run. Its other notes, as on a line with more than one creating run, name no
  * owner.
  */
-const AWS_CREATE = /^It creates a cloud resource under the AWS profile ([^\s:]+): aws(?:\s+(\S+))?/;
+const AWS_CREATE = /^It creates a cloud resource under the AWS profile ([!-9;-~]+): aws(?:\s+(\S+))?/;
 const TOOL_CREATE = /^It creates a cloud resource: (\S+)/;
 
 /**
