@@ -379,6 +379,11 @@ serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 # Issue #542: the planted text control that normalizes its commit to NFC; already in the lockfile.
 unicode-normalization = "0.1"
 sha2 = "0.10"
+# Issue #2892: a web bundle stores each file whose format doesn't compress its own data as gzip,
+# deflated by miniz_oxide called directly (flate2's backend follows feature unification, so it
+# isn't pinned), with crc32fast for the trailer; both already in the lockfile.
+miniz_oxide = "0.9"
+crc32fast = "1"
 # Issue #1897: the u8 pipeline too, so a cross-machine record drawn through it is real and refused.
 vello_cpu ={ version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline", "u8_pipeline"] }
 # Issue #138: the kit's headless backend (wgpu's noop) and its GPU backend.
@@ -388,6 +393,10 @@ wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "n
 # lockfile.
 [build-dependencies]
 sha2 = "0.10"
+# Issue #2892: the player's prebuilt module sets stored as gzip once per build, by the export's own
+# compressor (src/export/gzip.rs).
+miniz_oxide = "0.9"
+crc32fast = "1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "noop", "metal"] }
