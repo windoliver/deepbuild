@@ -44,6 +44,7 @@ mod host;
 mod hub;
 mod input;
 mod jobs;
+mod joins;
 mod kept;
 mod kinds;
 mod kinds_word;
@@ -823,6 +824,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 tour_pointer: flag("tour_pointer")?,
             })));
         }
+        "play_frames" => return joins::parse(c).map(|p| Call::PlayFrames(Box::new(p))),
         "frames" => {
             // #856: a whole revision arriving at a frame's latch.
             let revise = match c.get("revise") {
@@ -2783,6 +2785,9 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
             Ok(StartPlanted::KitAdmitsAll(Box::leak(
                 name.to_string().into_boxed_str(),
             )))
+        }
+        _ if joins::planted(twin).is_some() => {
+            joins::planted(twin).map(StartPlanted::Run).ok_or(())
         }
         _ if export_planted(twin).is_some() => {
             export_planted(twin).map(StartPlanted::Run).ok_or(())
