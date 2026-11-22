@@ -81,7 +81,7 @@ export class HubCanvas {
     else if (kind === 'ask.created') this.asksBehind.add(input.id);
     else if (kind === 'ask.batched') { for (const a of isObj(data) && Array.isArray(data.asks) ? data.asks : []) if (isObj(a) && typeof a.ask === 'string') this.asksBehind.add(bare(a.ask)); }
     else if (kind === 'decision.applied') { if (isObj(data) && typeof data.ask === 'string') this.asksBehind.add(bare(data.ask)); }
-    else if ((kind.startsWith('ask.') || kind === 'default.undone' || kind === 'approval.withdrawn') && typeof input.subject === 'string') this.asksBehind.add(bare(input.subject));
+    else if ((kind.startsWith('ask.') || kind === 'card.taken_over' || kind === 'default.undone' || kind === 'approval.withdrawn') && typeof input.subject === 'string') this.asksBehind.add(bare(input.subject));
   }
 
   /** One at a time, so two calls never read the same change twice out of order. */
