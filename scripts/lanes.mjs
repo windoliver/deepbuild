@@ -862,6 +862,13 @@ byHand.push('tests/acceptance/280/ac4-depth.test.ts');
 // #277's files each build deep-show (ac1 and ac5 also the shipped relay) and play matches in process; ac1 and ac5 also
 // play live matches between app copies and headless Chrome's web player through the shipped relay.
 alone.push('tests/acceptance/277/');
+// #552's files each build deep-show (ac5 builds deep-drive with env-plants instead) and play matches in process; ac1,
+// ac2, ac6 and ac7 draw on the GPU, ac7 the app's window, and ac7 waits on your taste call in tests/acceptance/552/TASTE.json.
+alone.push('tests/acceptance/552/');
+// #553's files each build deep-show and play matches in process, rendering each copy's sound; ac1 runs the network
+// seam's interop part, which builds deep-show and the shipped relay and plays the app against headless Chrome's web
+// player through it, and ac4 reads net.budget's five runs (INCONCLUSIVE off a reference Mac or under load).
+alone.push('tests/acceptance/553/');
 byHand.push('tests/acceptance/549/ac2-join-only.test.ts');
 // #297's files each build deep-show and run its scenarios; the Oracle lane runs thousands of frames through it.
 alone.push('tests/acceptance/297/', 'tests/acceptance/297-oracle/');

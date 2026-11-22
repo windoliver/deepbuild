@@ -5,7 +5,7 @@
 // suite FAILs, and its last line is `{"conformance": {seam: {suite, status, backend, reason?}}}`.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,6 +20,32 @@ function run(name, args, line) {
   return r.stdout.split('\n').filter((l) => l.startsWith('{')).map((l) => JSON.parse(l));
 }
 const blocked = (suite, reason, backend = null) => ({ suite, status: 'BLOCKED', backend, reason });
+
+/** The network seam's interop part (scripts/net-interop.mjs) on the gallery's rally, played with a window of 8 and a
+ * full-state hash every step, paddle 2 on the keys 1 to 7, and player 1 moving its paddle every 20 steps. */
+function interop() {
+  const gallery = join(root, 'crates', 'deep-show', 'gallery');
+  const doc = JSON.parse(readFileSync(join(gallery, 'net-rally.json'), 'utf8'));
+  doc.id = '01JB553SEAMS000000000000IN';
+  doc.items.match.params = { ...doc.items.match.params, window: 8, hash_every: 1, timeout: 120 };
+  doc.controls.paddle2.keys = Object.fromEntries([1, 2, 3, 4, 5, 6, 7].map((k) => [String(k), (k - 4) * 3]));
+  const program = readFileSync(join(gallery, 'net-rally.wasm'));
+  const sha = createHash('sha256').update(program).digest('hex');
+  const evidence = join(out, 'interop-evidence');
+  mkdirSync(join(evidence, sha.slice(0, 2)), { recursive: true });
+  writeFileSync(join(evidence, sha.slice(0, 2), sha.slice(2)), program);
+  writeFileSync(join(out, 'interop-piece.json'), JSON.stringify(doc));
+  const plays = Array.from({ length: 60 }, (_, i) => ({ step: 20 * i, control: 'paddle1', value: ((i * 7) % 21) - 10 }));
+  writeFileSync(join(out, 'interop-plays.json'), JSON.stringify({ 1: plays }));
+  const r = spawnSync(process.execPath, [join(root, 'scripts', 'net-interop.mjs'), '--doc', join(out, 'interop-piece.json'), '--evidence', evidence,
+    '--plays', join(out, 'interop-plays.json'), '--steps', '1200', '--seed', '1'], { cwd: root, encoding: 'utf8', maxBuffer: 2 ** 28 });
+  const last = (r.stdout ?? '').trim().split('\n').at(-1) ?? '';
+  let report = null;
+  try { report = JSON.parse(last).interop; } catch { /* named below */ }
+  const status = report?.status === 'INCONCLUSIVE' ? 'BLOCKED' : (report?.status ?? 'FAIL');
+  const reason = report?.reason ?? (report?.failures?.length ? JSON.stringify(report.failures.slice(0, 3)) : report ? undefined : `no report: ${(r.stderr ?? '').slice(-400)}`);
+  return { suite: 'network.interop', status, backend: report?.backends ?? null, ...(reason ? { reason } : {}) };
+}
 
 const conformance = {};
 try {
@@ -51,6 +77,10 @@ try {
   const [net] = run('deep-show', ['run'], { evidence: out, calls: [{ call: 'seam_suite', seam: 'network', backend: 'network.macos', messages: 10000, seed: 1 }] });
   const n = net?.replies?.[0];
   conformance.network = { suite: n?.suite ?? 'network.conformance@1', status: n?.status ?? 'FAIL', backend: n?.backend ?? null };
+
+  // network, its interop part (#553): the app's backend and the web player's play the gallery's two-player rally for
+  // 1,200 match steps through the shipped relay behind the test relay's faults, with a window, and pass net.rollback.
+  conformance['network.interop'] = interop();
 
   // input: the window and input backends' capability table, every absent capability's consumers naming their behavior.
   const [caps] = run('deep-show', ['run'], { evidence: out, calls: [{ call: 'window_caps' }] });

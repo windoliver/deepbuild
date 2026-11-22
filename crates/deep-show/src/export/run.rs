@@ -280,6 +280,8 @@ impl Hub<'_> {
         };
         let _ = self.inline_tables(&mut doc);
         let _ = self.inline_vectors(&mut doc);
+        // #552: the side it draws, a view value its frames read through `match.me`.
+        doc["match.me"] = job.me.clone();
         self.inline_occurrences(&mut doc, &job.track)
             .map_err(|i| json!({"code": i.code, "issues": [i.to_json()]}))?;
         let _ = self.column_view(&mut doc, 0);
