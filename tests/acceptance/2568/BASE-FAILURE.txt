@@ -1,0 +1,108 @@
+The one run of the whole suite at the base, 2eaaeb0e6 (origin/main), 2026-11-22, on the Linux arm64 dev machine
+(load average about 9): node node_modules/vitest/vitest.mjs run --root tests/acceptance/2568, with DEEP_PI_CLI set to
+pi 1.4.0's dist/cli.js. 5 tests: AC1 and AC2 fail, AC3 (2) and AC4 pass. The checkout's path is replaced by <repo>.
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/2568
+
+ ❯ pi-rules-unreadable.test.ts (5 tests | 2 failed) 12680ms
+   ❯ #2568.3ae12f6f hub running, rules.json cut to its first 40 bytes (1)
+     × #2568.3ae12f6f a pi tool_call for `pkill -f node` is blocked, naming rules.json and that it isn't JSON 3655ms
+   ❯ #2568.8523ddc0 hub running, setup finished, rules.json removed, a hub that never read it (1)
+     × #2568.8523ddc0 a pi tool_call for `pkill -f node` is blocked, naming rules.json 3591ms
+   ✓ #2568.2ab07f36 hub stopped: each of those two states blocks the call, as today (2)
+     ✓ #2568.2ab07f36 rules.json cut to its first 40 bytes: a pi tool_call for `pkill -f node` is blocked 1737ms
+     ✓ #2568.2ab07f36 setup finished, rules.json removed: a pi tool_call for `pkill -f node` is blocked 1759ms
+   ✓ #2568.4918d42c readable rules.json, hub running: a fail_closed entry's call is the hub's to decide (1)
+     ✓ #2568.4918d42c `git checkout -- a.txt`, which a fail_closed entry matches, is decided by the hub's reply and runs, and `ls` runs 1936ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  pi-rules-unreadable.test.ts > #2568.3ae12f6f hub running, rules.json cut to its first 40 bytes > #2568.3ae12f6f a pi tool_call for `pkill -f node` is blocked, naming rules.json and that it isn't JSON
+AssertionError: with the hub running and rules.json cut to its first 40 bytes, the pi tool_call for `pkill -f node` must be blocked; the pi package let `pkill -f node` run: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ judgeBlocked pi-rules-unreadable.test.ts:36:82
+     34|
+     35| function judgeBlocked(r: Ended, what: string): void {
+     36|   expect(r.byNet, `${what} must be blocked; the pi package let \`${CAL…
+       |                                                                                  ^
+     37|   expect(r.blocked, `${what} must be blocked; the pi package let \`${C…
+     38| }
+ ❯ pi-rules-unreadable.test.ts:71:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  pi-rules-unreadable.test.ts > #2568.8523ddc0 hub running, setup finished, rules.json removed, a hub that never read it > #2568.8523ddc0 a pi tool_call for `pkill -f node` is blocked, naming rules.json
+AssertionError: with the hub running, setup finished, rules.json removed and a hub that never read it, the pi tool_call for `pkill -f node` must be blocked; the pi package let `pkill -f node` run: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ judgeBlocked pi-rules-unreadable.test.ts:36:82
+     34|
+     35| function judgeBlocked(r: Ended, what: string): void {
+     36|   expect(r.byNet, `${what} must be blocked; the pi package let \`${CAL…
+       |                                                                                  ^
+     37|   expect(r.blocked, `${what} must be blocked; the pi package let \`${C…
+     38| }
+ ❯ pi-rules-unreadable.test.ts:92:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 3 passed (5)
+   Start at  02:20:50
+   Duration  12.85s (tests 99%)
+
+exit=1
+
+==== AC4's twin: twins/blocks-on-every-denial laid over the base (packages/pi/src/index.ts, then npm run build -w
+packages/pi), the same command. 5 tests: AC1, AC2 and AC3 (2) pass, AC4 fails at its assertion, naming the call.
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/2568
+
+ ❯ pi-rules-unreadable.test.ts (5 tests | 1 failed) 13027ms
+   ✓ #2568.3ae12f6f hub running, rules.json cut to its first 40 bytes (1)
+     ✓ #2568.3ae12f6f a pi tool_call for `pkill -f node` is blocked, naming rules.json and that it isn't JSON 3602ms
+   ✓ #2568.8523ddc0 hub running, setup finished, rules.json removed, a hub that never read it (1)
+     ✓ #2568.8523ddc0 a pi tool_call for `pkill -f node` is blocked, naming rules.json 3717ms
+   ✓ #2568.2ab07f36 hub stopped: each of those two states blocks the call, as today (2)
+     ✓ #2568.2ab07f36 rules.json cut to its first 40 bytes: a pi tool_call for `pkill -f node` is blocked 1855ms
+     ✓ #2568.2ab07f36 setup finished, rules.json removed: a pi tool_call for `pkill -f node` is blocked 1764ms
+   ❯ #2568.4918d42c readable rules.json, hub running: a fail_closed entry's call is the hub's to decide (1)
+     × #2568.4918d42c `git checkout -- a.txt`, which a fail_closed entry matches, is decided by the hub's reply and runs, and `ls` runs 2089ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  pi-rules-unreadable.test.ts > #2568.4918d42c readable rules.json, hub running: a fail_closed entry's call is the hub's to decide > #2568.4918d42c `git checkout -- a.txt`, which a fail_closed entry matches, is decided by the hub's reply and runs, and `ls` runs
+AssertionError: with rules.json readable and the hub running, the pi tool_call for `git checkout -- a.txt` (matched by no-discarding-edits) must be decided by the hub's reply, which lets it run; it was blocked: {"content":[{"type":"text","text":"DeepBuild blocked this: This discards uncommitted edits to tracked files, which git can't restore, and with the hub down nothing can stage them first or ask you. Commit the edits first, or retry once the hub is up, or ask the person to run it. To run it yourself: git checkout -- a.txt (guard no-discarding-edits, which holds while the hub doesn't answer)"}],"details":{}}: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ pi-rules-unreadable.test.ts:137:240
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+   Start at  02:21:23
+   Duration  13.10s (tests 100%)
+
+exit=1
