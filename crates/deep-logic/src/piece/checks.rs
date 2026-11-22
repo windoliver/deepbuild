@@ -32,6 +32,8 @@ pub(super) struct Declared {
     lanes: Option<Value>,
     /// `process`: process@1's kind names (#980).
     process: Option<Vec<String>>,
+    /// `separation`: its movers and minima, built into a table at check (#1255).
+    separation: Option<Value>,
     /// The item's fields as given, for its bake key.
     given: String,
 }
@@ -68,6 +70,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             "pages",
             "lanes",
             "process",
+            "separation",
         ]
         .contains(&k.as_str())
         {
@@ -316,6 +319,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
         preview,
         lanes: params.get("lanes").cloned(),
         process,
+        separation: params.get("separation").cloned(),
         given: Value::Object(params.clone()).to_string(),
     })
 }
@@ -980,6 +984,15 @@ pub fn check_in(
                 Some(std::sync::Arc::new(g))
             }
         };
+        // #1255: the table `separation` declares, its movers and minima, is asset 0.
+        let separation = match &d.separation {
+            None => None,
+            Some(v) => {
+                let t = crate::separation::build(v).map_err(|r| logic_refused(id, r))?;
+                assets.push((rewrite::hash(&t.bytes), t.bytes.clone()));
+                Some(std::sync::Arc::new(t))
+            }
+        };
         for sha in &d.assets {
             assets.push((sha.clone(), asset(sha).ok_or_else(|| missing("data", sha))?));
         }
@@ -1127,6 +1140,7 @@ pub fn check_in(
             pages,
             lanes,
             process: d.process.clone(),
+            separation,
         });
     }
     // A save holds every item at one instant, so a piece with saves steps at one rate.
