@@ -326,7 +326,7 @@ pub(super) fn scopes_of(
             // draws outside it.
             if let Some(l) = lit.get(a).filter(|_| by_parent) {
                 if crate::light::is_lit(items, id, a, &status_bound, planted) {
-                    light = Some(crate::light::scope(a, l));
+                    light = Some(crate::light::scope_for(a, l, id, item));
                 }
             }
             let Some(mut scope) = scope else { continue };
