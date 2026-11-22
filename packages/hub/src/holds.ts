@@ -162,15 +162,19 @@ export class Holds {
 
   /** The ask with this key, newest first: its handle, status and decision. */
   private async askOf(k: string): Promise<{ id: string; status: string; decision: string | null } | undefined> {
-    const [row] = (await this.o.raw(`SELECT id, status, decision FROM asks WHERE key = ? ORDER BY created DESC LIMIT 1`, [k])) as { id: string; status: string; decision: string | null }[];
+    const read = async () => ((await this.o.raw(`SELECT id, status, decision FROM asks WHERE key = ? ORDER BY created DESC LIMIT 1`, [k])) as { id: string; status: string; decision: string | null }[])[0];
+    const row = await read();
     // Your yes to a step that can't be undone lets it run only once the hub's hold is over (#1101): until then it waits.
-    if (row?.decision === 'allow' && await this.o.asks().stepHeld(`ask:${row.id}`)) return { ...row, status: 'held', decision: null };
-    return row;
+    if (row?.decision !== 'allow') return row;
+    if (await this.o.asks().stepHeld(`ask:${row.id}`)) return { ...row, status: 'held', decision: null };
+    // Undo may have withdrawn the yes after the read: read it again now that its hold is known over.
+    return read();
   }
   /**
    * The ask raised under `k` once a hold on your yes to it is over (#1101; design: Plans before acting): a call your yes
    * holds waits in the hub and runs when its step starts, or meets the ask again after Undo. One still held past
-   * HELD_WAIT_MS is told so. A call that can be undone (`waits` false) is told at once: no hold should cover it.
+   * HELD_WAIT_MS is told so. A call that can be undone (`waits` false) runs at once when nothing holds it, and is told
+   * at once when something does, rather than kept waiting.
    */
   private async settledAsk(k: string, waits = true): Promise<{ id: string; status: string; decision: string | null } | undefined> {
     const until = Date.now() + (waits ? HELD_WAIT_MS : 0);
@@ -287,7 +291,7 @@ export class Holds {
       const does = [...new Set(open.map((o) => DOES[o.effect]!))].join(' and ');
       const source = `effect.${effect}`;
       const k = key({ source, sessions: sessions[0], call: call.label });
-      // Of the named effects only a push can't be undone; a pull request or a merge reverts.
+      // Of the named effects only a push can't be undone; a pull request or a merge reverts, so its call isn't kept waiting.
       const asked = await this.settledAsk(k, open.some((o) => o.effect === 'push'));
       if (asked?.decision !== 'allow') {
         const handle = asked ? `ask:${asked.id}` : await this.raise(meta.session, meta.agent, meta.cwd, source, k,
