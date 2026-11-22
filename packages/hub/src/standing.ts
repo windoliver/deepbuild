@@ -34,14 +34,6 @@ function packages(command: string): { manager: string; names: string[] } | undef
   return names.length ? { manager: w[at - 1]!.replace(/^.*\//, ''), names } : undefined;
 }
 
-/** The AWS profile a command names, `--profile <name>` or `--profile=<name>`, else the default. */
-function profileOf(command: string): string {
-  const w = words(command);
-  const at = w.findIndex((x) => x === '--profile' || x.startsWith('--profile='));
-  if (at < 0) return 'default';
-  return w[at]!.includes('=') ? w[at]!.slice('--profile='.length) : w[at + 1] ?? 'default';
-}
-
 /** The account a profile signs into, from ~/.aws/config: its sso_account_id, else none. */
 function accountOf(home: string, profile: string): string | undefined {
   let text: string;
@@ -50,34 +42,78 @@ function accountOf(home: string, profile: string): string | undefined {
   } catch {
     return undefined;
   }
-  let section = '';
+  // The CLI lays ~/.aws/credentials over the config, an account named there over the config's.
+  let credentials = '';
+  try {
+    credentials = readFileSync(join(home, '.aws', 'credentials'), 'utf8');
+  } catch {
+    // No credentials file lays nothing over the config.
+  }
+  if (credentials.toLowerCase().includes('sso_account_id')) return undefined;
+  // Readers split anything but printable ASCII, tabs and line ends into lines and words differently, the CLI's and
+  // deep-hook's among them, the CLI reads an indented line as going on with the value above it, and a header's quotes
+  // and escapes away: a file holding any is read as naming no account.
+  if (/[^\t\n -~]/.test(text.replace(/\r\n/g, '\n')) || /^[ \t]/m.test(text) || /['"\\]/.test(text)) return undefined;
+  // The CLI's profile is its last section to name it, read whole: one header's words are `profile <name>`, after any
+  // word that starts with profile, or `default` (#2134).
+  // A `[DEFAULT]` key is every profile's that doesn't set it.
+  let section: string | undefined;
+  let shared = false;
+  let found = false;
+  let own: string | undefined;
+  let fallback: string | undefined;
   for (const raw of text.split('\n')) {
     const line = raw.trim();
-    const head = /^\[(?:profile\s+)?([^\]]+)\]$/.exec(line);
-    if (head) section = head[1]!.trim();
-    else if (section === profile) {
-      const kv = /^sso_account_id\s*=\s*(\S+)$/.exec(line);
-      if (kv) return kv[1];
+    // A header is read as the CLI's parser reads it: up to its last `]`, whatever follows.
+    const header = /^\[(.+)\]/.exec(line)?.[1];
+    if (header !== undefined) {
+      const words = header.split(/\s+/).filter((w) => w !== '');
+      shared = header === 'DEFAULT';
+      section = header === 'default' ? 'default' : words.length === 2 && header.startsWith('profile') ? words[1] : undefined;
+      if (section === profile) [own, found] = [undefined, true];
+    } else if (shared || section === profile) {
+      // A key ends at its first `=` or `:`, in any case.
+      const kv = /^([^=:]*)[=:](.*)$/.exec(line);
+      if (kv && kv[1]!.trim().toLowerCase() === 'sso_account_id') {
+        if (shared) fallback = kv[2]!.trim();
+        else own = kv[2]!.trim();
+      }
     }
   }
-  return undefined;
+  const value = own ?? fallback;
+  return found && value !== undefined && value !== '' && !/\s/.test(value) ? value : undefined;
 }
 
-/** The cloud and account a cloud command names: an AWS command's account, else its tool. */
-function cloudOf(command: string, home: string): { owner: string; kind: string; named: string } {
-  const w = words(command);
-  if (w[0] === 'aws') {
-    const profile = profileOf(command);
+/**
+ * deep-hook's notes on a call whose one creating run it read whole (#2134): an aws run, with the profile it signs in
+ * with said whole, and any other tool's run. Its other notes, as on a line with more than one creating run, name no
+ * owner.
+ */
+const AWS_CREATE = /^It creates a cloud resource under the AWS profile ([!-9;-~]+): aws(?:\s+(\S+))?/;
+const TOOL_CREATE = /^It creates a cloud resource: (\S+)/;
+
+/**
+ * The cloud and account a cloud command creates under, as deep-hook's note reads it: an AWS run's account, else its
+ * tool. A line whose note names no owner is owned by itself alone, so no standing rule for an account or a tool
+ * covers it (#2134).
+ */
+function cloudOf(command: string, notes: Record<string, string> | undefined, home: string): { owner: string; kind: string; named: string } {
+  const said = Object.values(notes ?? {});
+  const aws = said.map((n) => AWS_CREATE.exec(n)).find((m) => m);
+  if (aws) {
+    const profile = aws[1]!;
     const account = accountOf(home, profile);
-    return { owner: account ? `aws:${account}` : `aws-profile:${profile}`, kind: `aws ${w[1] ?? ''}`.trim(), named: account ? `AWS account ${account} (profile ${profile})` : `the AWS profile ${profile}` };
+    return { owner: account ? `aws:${account}` : `aws-profile:${profile}`, kind: `aws ${aws[2] ?? ''}`.trim(), named: account ? `AWS account ${account} (profile ${profile})` : `the AWS profile ${profile}` };
   }
-  return { owner: w[0] ?? 'cloud', kind: w[0] ?? 'cloud', named: w[0] ?? 'a cloud' };
+  const tool = said.map((n) => TOOL_CREATE.exec(n)?.[1]).find((t) => t !== undefined && t !== 'aws');
+  if (tool) return { owner: tool, kind: tool, named: tool };
+  return { owner: `cloud-line:${command}`, kind: 'cloud', named: 'more than one cloud command, or one that can\'t be read whole,' };
 }
 
-/** What a PreToolUse's call of a decided class is about; undefined for one this module can't read. */
-export function aboutCall(classes: readonly string[], command: string, home: string): About | undefined {
+/** What a PreToolUse's call of a decided class is about, with deep-hook's notes on it; undefined for one this module can't read. */
+export function aboutCall(classes: readonly string[], command: string, notes: Record<string, string> | undefined, home: string): About | undefined {
   if (classes.includes('cloud-resource')) {
-    const cloud = cloudOf(command, home);
+    const cloud = cloudOf(command, notes, home);
     return {
       source: 'effect.cloud_resource',
       subject: { effect: 'cloud-resource', target: { kind: cloud.kind, ref: command, owner: cloud.owner }, change: null },
@@ -156,7 +192,7 @@ export interface Gate {
 export async function decide(g: Gate, meta: HookMeta, call: Gated): Promise<{ held?: string; allow?: string; deny?: string }> {
   const note = call.decided?.includes('dependency') && !call.decided.includes('cloud-resource') ? noteOf(meta.notes) : undefined;
   if (!note) {
-    const about = call.decided?.length && call.command ? aboutCall(call.decided, call.command, homedir()) : undefined;
+    const about = call.decided?.length && call.command ? aboutCall(call.decided, call.command, meta.notes, homedir()) : undefined;
     return about ? g.holds.decide(meta, about) : {};
   }
   const names = note.form === 'manifest' ? await addedSince(note.items) : note.items;
