@@ -1,0 +1,144 @@
+Acceptance suite for #1837 (#1837.78b8f3bb), run 2026-11-22 on the base commit 2eaaeb0e6693410db653a43377ec32dde1cc63ab.
+Each run is a fresh copy of the base (scripts/, packages/contracts/ with dist built from the base's src by tsc, the root's files,
+and docs/technical-design.md and docs/canvas-primitives.md from 'git show 2eaaeb0e6:'), this folder copied in, and for a twin
+the twin's files laid over it. Command in each copy: node --test 'tests/acceptance/1837/*.test.mjs'. Durations removed.
+
+=== base
+ℹ tests 26
+ℹ pass 22
+ℹ fail 4
+failing tests, each with its assertion and the lane's verdict line where the lane ran:
+✖ #1837.78b8f3bb a planted catalogue missing resource.created fails the catalogue drift lane, naming resource.created
+  AssertionError [ERR_ASSERTION]: the lane's verdict with resource.created missing from the catalogue is FAIL:
+  PASS catalogue drift
+✖ #1837.78b8f3bb a planted catalogue missing transcript.archived fails the catalogue drift lane, naming transcript.archived
+  AssertionError [ERR_ASSERTION]: the lane's verdict with transcript.archived missing from the catalogue is FAIL:
+  PASS catalogue drift
+✖ #1837.78b8f3bb a planted catalogue missing archive.quiet fails the catalogue drift lane, naming archive.quiet
+  AssertionError [ERR_ASSERTION]: no output line names archive.quiet:
+  FAIL catalogue drift: scripts/not-event-kinds.txt has 1 stale or useless entries: archive.scene (the lane reads it as no uncatalogued event kind: remove the entry)
+✖ #1837.78b8f3bb a planted catalogue missing ci.archived fails the catalogue drift lane, naming ci.archived
+  AssertionError [ERR_ASSERTION]: the lane's verdict with ci.archived missing from the catalogue is FAIL:
+  PASS catalogue drift
+
+=== design-without-lines
+ℹ tests 26
+ℹ pass 6
+ℹ fail 20
+failing tests, each with its assertion and the lane's verdict line where the lane ran:
+✖ #1837.78b8f3bb each item has its line in docs/technical-design.md: #112 (the configuration eval, its gate lane and RecordReader.sessions())
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no line for #112: the configuration eval, its gate lane and RecordReader.sessions()
+✖ #1837.78b8f3bb each item has its line in docs/technical-design.md: #724 (perf judges instructions retired against the merge base)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no line for #724: perf judges instructions retired against the merge base
+✖ #1837.78b8f3bb each item has its line in docs/technical-design.md: #723 (learned changes that loosen safety are held for you; learned step specs are checked again when they load)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no line for #723: learned changes that loosen safety are held for you; learned step specs are checked again when they load
+✖ #1837.78b8f3bb each item has its line in docs/technical-design.md: #907 (the check slot kept for a held stop's quick checks; the 30-minute cap on slow checks held by background work)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no line for #907: the check slot kept for a held stop's quick checks; the 30-minute cap on slow checks held by background work
+✖ #1837.78b8f3bb each item has its line in docs/technical-design.md: #606 (`ask.superseded`; `ask.moot`; `task.completed`; `access@1`)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no line for #606: `ask.superseded`; `ask.moot`; `task.completed`; `access@1`
+✖ #1837.78b8f3bb each item has its line in docs/technical-design.md: #342 (`resources`, recorded as `resource.created`; `session.archived`; the facts field `transcripts.archived`)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no line for #342: `resources`, recorded as `resource.created`; `session.archived`; the facts field `transcripts.archived`
+✖ #1837.78b8f3bb each item has its line in docs/technical-design.md: #20 (retention that keeps CI logs; `transcript.archived@2`'s `source`; `archive.quiet`; `ci.archived`)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no line for #20: retention that keeps CI logs; `transcript.archived@2`'s `source`; `archive.quiet`; `ci.archived`
+✖ #1837.78b8f3bb each item has its line in docs/technical-design.md: #1731 (the hub-slot table row for `asset.library@1`)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no line for #1731: the hub-slot table row for `asset.library@1`
+✖ #1837.78b8f3bb a planted design missing #112's line fails the design-line check, naming #112
+  AssertionError [ERR_ASSERTION]: the planted design for #112 removed no line
+✖ #1837.78b8f3bb a planted design missing #724's line fails the design-line check, naming #724
+  AssertionError [ERR_ASSERTION]: the planted design for #724 removed no line
+✖ #1837.78b8f3bb a planted design missing #723's line fails the design-line check, naming #723
+  AssertionError [ERR_ASSERTION]: the planted design for #723 removed no line
+✖ #1837.78b8f3bb a planted design missing #907's line fails the design-line check, naming #907
+  AssertionError [ERR_ASSERTION]: the planted design for #907 removed no line
+✖ #1837.78b8f3bb a planted design missing #606's line fails the design-line check, naming #606
+  AssertionError [ERR_ASSERTION]: the planted design for #606 removed no line
+✖ #1837.78b8f3bb a planted design missing #342's line fails the design-line check, naming #342
+  AssertionError [ERR_ASSERTION]: the planted design for #342 removed no line
+✖ #1837.78b8f3bb a planted design missing #20's line fails the design-line check, naming #20
+  AssertionError [ERR_ASSERTION]: the planted design for #20 removed no line
+✖ #1837.78b8f3bb a planted design missing #1731's line fails the design-line check, naming #1731
+  AssertionError [ERR_ASSERTION]: the planted design for #1731 removed no line
+✖ #1837.78b8f3bb a planted catalogue missing resource.created fails the catalogue drift lane, naming resource.created
+  AssertionError [ERR_ASSERTION]: the lane's verdict with resource.created missing from the catalogue is FAIL:
+  PASS catalogue drift
+✖ #1837.78b8f3bb a planted catalogue missing transcript.archived fails the catalogue drift lane, naming transcript.archived
+  AssertionError [ERR_ASSERTION]: the lane's verdict with transcript.archived missing from the catalogue is FAIL:
+  PASS catalogue drift
+✖ #1837.78b8f3bb a planted catalogue missing archive.quiet fails the catalogue drift lane, naming archive.quiet
+  AssertionError [ERR_ASSERTION]: no output line names archive.quiet:
+  FAIL catalogue drift: scripts/not-event-kinds.txt has 1 stale or useless entries: archive.scene (the lane reads it as no uncatalogued event kind: remove the entry)
+✖ #1837.78b8f3bb a planted catalogue missing ci.archived fails the catalogue drift lane, naming ci.archived
+  AssertionError [ERR_ASSERTION]: the lane's verdict with ci.archived missing from the catalogue is FAIL:
+  PASS catalogue drift
+
+=== catalogue-drops-ci-archived
+ℹ tests 26
+ℹ pass 21
+ℹ fail 5
+failing tests, each with its assertion and the lane's verdict line where the lane ran:
+✖ #1837.78b8f3bb each event kind named in the Scope is in the event catalogue: ask.superseded, ask.moot, task.completed, session.archived, resource.created, transcript.archived, archive.quiet, ci.archived
+  AssertionError [ERR_ASSERTION]: the catalogue lacks these Scope kinds
+✖ #1837.78b8f3bb a planted catalogue missing resource.created fails the catalogue drift lane, naming resource.created
+  AssertionError [ERR_ASSERTION]: the lane's verdict with resource.created missing from the catalogue is FAIL:
+  PASS catalogue drift
+✖ #1837.78b8f3bb a planted catalogue missing transcript.archived fails the catalogue drift lane, naming transcript.archived
+  AssertionError [ERR_ASSERTION]: the lane's verdict with transcript.archived missing from the catalogue is FAIL:
+  PASS catalogue drift
+✖ #1837.78b8f3bb a planted catalogue missing archive.quiet fails the catalogue drift lane, naming archive.quiet
+  AssertionError [ERR_ASSERTION]: no output line names archive.quiet:
+  FAIL catalogue drift: scripts/not-event-kinds.txt has 1 stale or useless entries: archive.scene (the lane reads it as no uncatalogued event kind: remove the entry)
+✖ #1837.78b8f3bb a planted catalogue missing ci.archived fails the catalogue drift lane, naming ci.archived
+  AssertionError [ERR_ASSERTION]: the lane's verdict with ci.archived missing from the catalogue is FAIL:
+  PASS catalogue drift
+
+=== empty-catalogue
+ℹ tests 26
+ℹ pass 21
+ℹ fail 5
+failing tests, each with its assertion and the lane's verdict line where the lane ran:
+✖ #1837.78b8f3bb the catalogue drift lane passes over the design docs and a fixed open-issue list, naming none of the Scope kinds
+  AssertionError [ERR_ASSERTION]: the lane's verdict over the checkout's design docs and a clean open-issue list is PASS:
+  FAIL catalogue drift: 280 event kinds named in backticks are not in the catalogue, nor in scripts/not-event-kinds.txt: transcript.archived (docs/technical-design.md:159,205,2313,2649), ci.archived (docs/technical-design.md:159,2313), layer.rows (docs/technical-design.md:159,838), learn_check.made (docs/technical-design.md:191), learn.rolled_back (docs/technical-design.md:195), mcp.tools_listed (
+✖ #1837.78b8f3bb a planted catalogue missing resource.created fails the catalogue drift lane, naming resource.created
+  AssertionError [ERR_ASSERTION]: no output line names resource.created:
+  FAIL catalogue drift: 278 event kinds named in backticks are not in the catalogue, nor in scripts/not-event-kinds.txt: transcript.archived (docs/technical-design.md:159,205,2313,2649), ci.archived (docs/technical-design.md:159,2313), layer.rows (docs/technical-design.md:159,838), learn_check.made (docs/technical-design.md:191), learn.rolled_back (docs/technical-design.md:195), mcp.tools_listed (
+✖ #1837.78b8f3bb a planted catalogue missing transcript.archived fails the catalogue drift lane, naming transcript.archived
+  AssertionError [ERR_ASSERTION]: no output line names transcript.archived:
+  FAIL catalogue drift: 278 event kinds named in backticks are not in the catalogue, nor in scripts/not-event-kinds.txt: ci.archived (docs/technical-design.md:159,2313), layer.rows (docs/technical-design.md:159,838), learn_check.made (docs/technical-design.md:191), learn.rolled_back (docs/technical-design.md:195), mcp.tools_listed (docs/technical-design.md:208,2295), worktree.created (docs/technic
+✖ #1837.78b8f3bb a planted catalogue missing archive.quiet fails the catalogue drift lane, naming archive.quiet
+  AssertionError [ERR_ASSERTION]: no output line names archive.quiet:
+  FAIL catalogue drift: 278 event kinds named in backticks are not in the catalogue, nor in scripts/not-event-kinds.txt: transcript.archived (docs/technical-design.md:159,205,2313,2649), ci.archived (docs/technical-design.md:159,2313), layer.rows (docs/technical-design.md:159,838), learn_check.made (docs/technical-design.md:191), learn.rolled_back (docs/technical-design.md:195), mcp.tools_listed (
+✖ #1837.78b8f3bb a planted catalogue missing ci.archived fails the catalogue drift lane, naming ci.archived
+  AssertionError [ERR_ASSERTION]: no output line names ci.archived:
+  FAIL catalogue drift: 278 event kinds named in backticks are not in the catalogue, nor in scripts/not-event-kinds.txt: transcript.archived (docs/technical-design.md:159,205,2313,2649), layer.rows (docs/technical-design.md:159,838), learn_check.made (docs/technical-design.md:191), learn.rolled_back (docs/technical-design.md:195), mcp.tools_listed (docs/technical-design.md:208,2295), worktree.crea
+
+=== reads-no-docs
+ℹ tests 26
+ℹ pass 18
+ℹ fail 8
+failing tests, each with its assertion and the lane's verdict line where the lane ran:
+✖ #1837.78b8f3bb a planted catalogue missing ask.superseded fails the catalogue drift lane, naming ask.superseded
+  AssertionError [ERR_ASSERTION]: the lane's verdict with ask.superseded missing from the catalogue is FAIL:
+  PASS catalogue drift
+✖ #1837.78b8f3bb a planted catalogue missing ask.moot fails the catalogue drift lane, naming ask.moot
+  AssertionError [ERR_ASSERTION]: the lane's verdict with ask.moot missing from the catalogue is FAIL:
+  PASS catalogue drift
+✖ #1837.78b8f3bb a planted catalogue missing task.completed fails the catalogue drift lane, naming task.completed
+  AssertionError [ERR_ASSERTION]: the lane's verdict with task.completed missing from the catalogue is FAIL:
+  PASS catalogue drift
+✖ #1837.78b8f3bb a planted catalogue missing session.archived fails the catalogue drift lane, naming session.archived
+  AssertionError [ERR_ASSERTION]: the lane's verdict with session.archived missing from the catalogue is FAIL:
+  PASS catalogue drift
+✖ #1837.78b8f3bb a planted catalogue missing resource.created fails the catalogue drift lane, naming resource.created
+  AssertionError [ERR_ASSERTION]: the lane's verdict with resource.created missing from the catalogue is FAIL:
+  PASS catalogue drift
+✖ #1837.78b8f3bb a planted catalogue missing transcript.archived fails the catalogue drift lane, naming transcript.archived
+  AssertionError [ERR_ASSERTION]: the lane's verdict with transcript.archived missing from the catalogue is FAIL:
+  PASS catalogue drift
+✖ #1837.78b8f3bb a planted catalogue missing archive.quiet fails the catalogue drift lane, naming archive.quiet
+  AssertionError [ERR_ASSERTION]: no output line names archive.quiet:
+  FAIL catalogue drift: scripts/not-event-kinds.txt has 1 stale or useless entries: archive.scene (the lane reads it as no uncatalogued event kind: remove the entry)
+✖ #1837.78b8f3bb a planted catalogue missing ci.archived fails the catalogue drift lane, naming ci.archived
+  AssertionError [ERR_ASSERTION]: the lane's verdict with ci.archived missing from the catalogue is FAIL:
+  PASS catalogue drift
+
