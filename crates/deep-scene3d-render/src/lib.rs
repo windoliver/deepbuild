@@ -8329,6 +8329,7 @@ impl Renderer {
     /// #379), with its timestamp writes when given.
     pub fn record_geometry(
         &mut self,
+        device: &Device,
         encoder: &mut wgpu::CommandEncoder,
         timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
     ) {
@@ -8338,6 +8339,8 @@ impl Renderer {
         if let Some(job) = self.occlusion_job() {
             job(encoder);
         }
+        // #290: the hidden views, which the live path draws as a snapshot does.
+        let hidden = self.hidden_frame(device);
         let Some(t) = self.targets.as_ref() else {
             return;
         };
@@ -8364,6 +8367,11 @@ impl Renderer {
         );
         if let Some(core) = self.core_draws() {
             core.record(encoder);
+        }
+        if let Some(h) = &hidden {
+            let crop = self.crop.map(|c| crop_px(c, t.size));
+            let over = [&t.linear_view, &t.drawn.ids];
+            h.record(encoder, over, self.clear_depth(), crop, &self.profiler);
         }
     }
 

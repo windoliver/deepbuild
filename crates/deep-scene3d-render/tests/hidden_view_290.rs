@@ -148,3 +148,29 @@ fn an_element_behind_another_element_of_its_instancer_draws_no_hidden_view() {
         "pixels the hidden view changed where the item's nearest surface, the additive brick, shows"
     );
 }
+
+/// The live path records the geometry pass on the calling thread (`record_geometry`), where a
+/// snapshot records it as a job: the hidden view draws there too.
+#[test]
+fn the_live_path_draws_the_hidden_view_as_a_snapshot_does() {
+    let gpu = Gpu::open(Backend::Gpu).expect("this test runs on the machine's GPU");
+    let device = gpu.device();
+    let linear = |scene: &Scene| {
+        let mut renderer = Renderer::new(&device, Planted::default());
+        renderer.prepare(&device, scene, &look());
+        let mut encoder = device.device.create_command_encoder(&Default::default());
+        renderer.record_geometry(&device, &mut encoder, None);
+        device.queue.submit([encoder.finish()]);
+        let (linear, _) = renderer.read_targets(&device).expect("the frame's targets");
+        linear
+    };
+    let walled = linear(&scene(None, With::Wall));
+    let through = linear(&scene(Some(0.4), With::Wall));
+    let differing = (walled.chunks(16).zip(through.chunks(16)))
+        .filter(|(a, b)| a != b)
+        .count();
+    assert!(
+        differing > 500,
+        "the bricks show through the wall in the live path's linear target: {differing} pixels differ"
+    );
+}
