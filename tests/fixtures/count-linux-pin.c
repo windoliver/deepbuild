@@ -1,5 +1,6 @@
 // For tests/count-linux.test.mjs: holds every hardware counter of core 0 with pinned events on itself, then works,
-// so an instruction counter that follows it from outside never runs while it does.
+// so an instruction counter that follows it from outside never runs while it does. Pinned instruction events too,
+// for a core whose instructions event has a fixed counter of its own (Intel, arm with FEAT_PMUv3_ICNTR).
 #define _GNU_SOURCE
 #include <dirent.h>
 #include <linux/perf_event.h>
@@ -30,13 +31,14 @@ int main(void) {
     if (f) fclose(f);
   }
   if (pmus) closedir(pmus);
+  static const uint64_t events[] = { PERF_COUNT_HW_CPU_CYCLES, PERF_COUNT_HW_INSTRUCTIONS };
   for (int kind = 0; kind < kinds; kind++)
-    for (int at = 0; at < 32; at++) {
+    for (int at = 0; at < 64; at++) {
       struct perf_event_attr attr;
       memset(&attr, 0, sizeof attr);
       attr.size = sizeof attr;
       attr.type = PERF_TYPE_HARDWARE;
-      attr.config = PERF_COUNT_HW_CPU_CYCLES | ((uint64_t)types[kind] << 32);
+      attr.config = events[at % 2] | ((uint64_t)types[kind] << 32);
       attr.pinned = 1;
       attr.exclude_kernel = 1;
       if (syscall(SYS_perf_event_open, &attr, 0, -1, -1, 0) >= 0) held++;
