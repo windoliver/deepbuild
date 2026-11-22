@@ -24,6 +24,7 @@ dispute goes to a blind redraft of this job (design: Dogfooding).
   file, `stateOf`, `worst`); `scripts/proof-guard.mjs` (the lane file's shape); `scripts/bays.mjs` (a bay's git);
   `scripts/closed-sweep.mjs` (which files hold an ID); `scripts/wait-ratchet.mjs`; `scripts/known-failures.json`; and
   `tests/acceptance/2513-redraft-2047/` as the pattern for a suite run unchanged through vitest's JSON report.
+- Later, at the coordinator's request, main `2eaaeb0e6`'s `packages/hub/src/client.ts` alone, to rebuild the twin on it.
 
 ## The criterion
 
@@ -87,13 +88,15 @@ of 100–200, reads INCONCLUSIVE.
 
 | Twin | File it replaces | The wrong program | Where this test fails |
 |---|---|---|---|
-| `utc-clock` | `packages/hub/src/client.ts`, blob `4ef1c14640f858c011f599ace9434a181fe94eae` at `188b3100a` (162 lines) | `clock` writes `getUTCHours()` and `getUTCMinutes()` where the base writes `getHours()` and `getMinutes()`; one comment added, nothing else changed | Row by row, at its FAIL assertion, naming the three cases above. `clock` reaches each one: `notAnsweringSince` for the hub that isn't answering, and `when` (in `list.ts`) for the default line and the undo (`inbox.ts`). Asia/Kolkata is UTC+5:30, so UTC never passes for it. |
+| `utc-clock` | `packages/hub/src/client.ts`, blob `e92e429e4cb545d2c98f9571748a60bacf78dd22` at main `2eaaeb0e6` (162 lines) | `clock` writes `getUTCHours()` and `getUTCMinutes()` where main writes `getHours()` and `getMinutes()`; that one line is the whole diff | Row by row, at its FAIL assertion, naming the three cases above. `clock` reaches each one: `notAnsweringSince` for the hub that isn't answering, and `when` (in `list.ts`) for the default line and the undo (`inbox.ts`). Asia/Kolkata is UTC+5:30, so UTC never passes for it. |
 
 `clock` lives in `client.ts`; `list.ts` imports it and builds `when` on it, so the twin replaces `client.ts`. A twin
 replaces code under test, never a test's files, and the proof lane builds the workspaces after laying it, so the
-CLI's `dist` carries it. **Risk:** the twin is a whole copy of the base's file. If `client.ts` changes on main after
-`188b3100a`, the copy drops that change and may not build there. Rebuild it from main's file with the same two words
-changed.
+CLI's `dist` carries it. The first draft copied the file at this job's base `188b3100a` (blob `4ef1c146…`). Main then
+changed it (#1885: `callAsYou` reads the socket and token through `hubControl()`), so the twin was rebuilt from main
+`2eaaeb0e6`'s file, at the coordinator's request, with only the `clock` line changed. **Risk:** the twin is a whole
+copy of that file. If `client.ts` changes on main after `2eaaeb0e6`, the copy drops that change and may not build
+there. Rebuild it from main's file with the same two words changed.
 
 **Not run here.** The twin run takes the whole suite, an hour or more on this Mac, and is the coordinator's. Its
 failure is reasoned from the code and the issue's measurement.

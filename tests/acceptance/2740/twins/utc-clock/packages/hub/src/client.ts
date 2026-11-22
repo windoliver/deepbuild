@@ -2,10 +2,10 @@
 // call the peer check judges, naming this process as the peer, so the hub can tell whether an agent's process tree
 // runs the command.
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import net from 'node:net';
 import { dirname, join } from 'node:path';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { hubControl, installedRoot, rootOf } from './paths.js';
 import { checkCompat, type Hello } from './compat.js';
 import { refusedGeneration, StaleHub } from './generations.js';
 import { CONTRACT, startOf, type Refusal } from './wire.js';
@@ -18,7 +18,6 @@ export type Reply = { result: Obj } | { error: Refusal };
 export class Unanswered extends Error {}
 
 /** `at` as a clock time in your time zone: 16:40. */
-// The planted wrong program (#2740's twin utc-clock): the clock time in UTC, not in your time zone.
 export const clock = (at: number): string => {
   const d = new Date(at);
   return Number.isNaN(d.getTime()) ? 'Invalid Date' : `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
@@ -145,9 +144,9 @@ export const UNDECIDED_CODES = new Set(['unconfirmed', 'role', 'unavailable']);
 export async function callAsYou(method: string, params: Obj): Promise<Obj | number> {
   let reply: Reply;
   try {
-    const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
+    const { path: socket, token } = hubControl();
     const peer = { pid: process.pid, start: (await startOf(process.pid)) ?? '' };
-    reply = await withPrompt(() => call(hubAddress().path, token, method, params, peer));
+    reply = await withPrompt(() => call(socket, token, method, params, peer));
   } catch (error) {
     return notAnswered(error);
   }
