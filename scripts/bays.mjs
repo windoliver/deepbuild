@@ -472,7 +472,8 @@ function take(key, into) {
     return { laid: entry.files.length };
   } catch (error) {
     // A lay stopped halfway takes back what it laid, as a laid .tsbuildinfo would leave tsc nothing to emit; the entry
-    // goes, and the build that follows isn't kept. What can't be taken back leaves the bay dirty, and it doesn't build.
+    // goes, and the build that follows isn't kept. What can't be taken back, a staged copy too, leaves the bay dirty, and it
+    // doesn't build.
     let dirty = false;
     for (const target of laid) {
       try {
@@ -485,7 +486,7 @@ function take(key, into) {
       try {
         rmSync(fresh, { force: true });
       } catch {
-        dirty ||= laying;
+        dirty = true;
       }
     }
     return { why: `the kept build ${key} was not used: ${error.message}`, broken: Boolean(error.broken) || laying, unkept: laying, dirty };
