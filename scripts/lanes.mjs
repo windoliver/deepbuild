@@ -1288,6 +1288,9 @@ alone.push('tests/acceptance/2777/');
 alone.push('tests/acceptance/211/');
 timed.push('tests/acceptance/211/ac8-budgets.test.ts');
 
+// #2896's files (blind) start real hubs with deep mcp stand-ins and walk 10,000 rows through the debug canvas core.
+alone.push('tests/acceptance/2896/');
+
 // #981's files (blind) each build deep-logic and #416's assembler; ac7 starts headless Chrome, ac5 runs eight simulated
 // hours, and ac8 judges a step's and a route search's time on the reference Mac.
 alone.push('tests/acceptance/981/');
