@@ -1220,6 +1220,10 @@ timed.push('tests/acceptance/2760/budgets.test.ts');
 alone.push('tests/acceptance/2760-redraft-ac8/');
 timed.push('tests/acceptance/2760-redraft-ac8/budget-timing.test.ts');
 byHand.push('tests/acceptance/2760/budgets.test.ts');
+// #2386's folder runs alone by its own lane file; ac6-budget.test.ts times 10,000 atlas rows on a release deep-show.
+timed.push('tests/acceptance/2386/ac6-budget.test.ts');
+// Its blind redraft of the pixel-hash test (tests/acceptance/2386-redraft-ac6-hashes/DISPUTE.md) builds deep-canvas-render.
+alone.push('tests/acceptance/2386-redraft-ac6-hashes/');
 // #2897's files (blind) start a hub and DeepBuild's MCP servers as Claude Code, as #26's do. Its AC6 runs as its blind
 // redraft: the first draft reads deep_status's argument-free schema, which AC7 keeps, as empty on any program, so it is
 // kept by hand (tests/acceptance/2897-redraft-ac6/DISPUTE.md).
