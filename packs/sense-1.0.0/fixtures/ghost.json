@@ -1,0 +1,595 @@
+{
+  "name": "ghost",
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "86ef9fcdd8f09cf020d1e230b72d25d2f17cbd27c2ac886492dcc4f58165d6e1",
+      "writes": {
+        "blip": {
+          "type": "i32",
+          "count": 3
+        },
+        "blip_pos": {
+          "type": "vec2",
+          "count": 3
+        },
+        "fog": {
+          "type": "i32",
+          "count": 1024
+        },
+        "ghost": {
+          "type": "i32",
+          "count": 6
+        },
+        "ghost_kind": {
+          "type": "i32",
+          "count": 6
+        },
+        "ghost_pos": {
+          "type": "vec2",
+          "count": 6
+        },
+        "seen": {
+          "type": "i32",
+          "count": 3
+        }
+      },
+      "assets": [
+        "3043a8266c044617068a1282d277361b30b7c87387be627388409b721294adce",
+        "766e5a5351551d6c00b8c9cc5e7cec244e9ed8e244b86ec3480b8262899c5c2e"
+      ],
+      "budget": {
+        "fuel": 4000000,
+        "memory": 4
+      }
+    }
+  },
+  "track": [],
+  "steps": 10,
+  "expect": {
+    "arrays": {
+      "0": {
+        "seen": [
+          2,
+          3,
+          2
+        ],
+        "blip": [
+          0,
+          0,
+          0
+        ],
+        "ghost": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ghost_kind": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ghost_pos": [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ]
+        ]
+      },
+      "1": {
+        "seen": [
+          2,
+          3,
+          3
+        ],
+        "blip": [
+          0,
+          0,
+          0
+        ],
+        "ghost": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ghost_kind": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ghost_pos": [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ]
+        ]
+      },
+      "2": {
+        "seen": [
+          2,
+          3,
+          3
+        ],
+        "blip": [
+          0,
+          0,
+          0
+        ],
+        "ghost": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ghost_kind": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ghost_pos": [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ]
+        ]
+      },
+      "3": {
+        "seen": [
+          3,
+          3,
+          3
+        ],
+        "blip": [
+          0,
+          0,
+          0
+        ],
+        "ghost": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ghost_kind": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ghost_pos": [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ]
+        ]
+      },
+      "4": {
+        "seen": [
+          3,
+          3,
+          2
+        ],
+        "blip": [
+          0,
+          0,
+          0
+        ],
+        "ghost": [
+          0,
+          0,
+          0,
+          0,
+          1,
+          0
+        ],
+        "ghost_kind": [
+          0,
+          0,
+          0,
+          0,
+          7,
+          0
+        ],
+        "ghost_pos": [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            36,
+            20
+          ],
+          [
+            0,
+            0
+          ]
+        ]
+      },
+      "5": {
+        "seen": [
+          3,
+          3,
+          0
+        ],
+        "blip": [
+          0,
+          0,
+          0
+        ],
+        "ghost": [
+          0,
+          0,
+          0,
+          0,
+          1,
+          0
+        ],
+        "ghost_kind": [
+          0,
+          0,
+          0,
+          0,
+          7,
+          0
+        ],
+        "ghost_pos": [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            36,
+            20
+          ],
+          [
+            0,
+            0
+          ]
+        ]
+      },
+      "6": {
+        "seen": [
+          3,
+          3,
+          0
+        ],
+        "blip": [
+          0,
+          0,
+          0
+        ],
+        "ghost": [
+          0,
+          0,
+          0,
+          0,
+          1,
+          0
+        ],
+        "ghost_kind": [
+          0,
+          0,
+          0,
+          0,
+          7,
+          0
+        ],
+        "ghost_pos": [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            36,
+            20
+          ],
+          [
+            0,
+            0
+          ]
+        ]
+      },
+      "7": {
+        "seen": [
+          3,
+          3,
+          0
+        ],
+        "blip": [
+          0,
+          0,
+          0
+        ],
+        "ghost": [
+          0,
+          0,
+          0,
+          0,
+          1,
+          0
+        ],
+        "ghost_kind": [
+          0,
+          0,
+          0,
+          0,
+          7,
+          0
+        ],
+        "ghost_pos": [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            36,
+            20
+          ],
+          [
+            0,
+            0
+          ]
+        ]
+      },
+      "8": {
+        "seen": [
+          3,
+          3,
+          0
+        ],
+        "blip": [
+          0,
+          0,
+          0
+        ],
+        "ghost": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ghost_kind": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ghost_pos": [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ]
+        ]
+      },
+      "9": {
+        "seen": [
+          3,
+          3,
+          0
+        ],
+        "blip": [
+          0,
+          0,
+          0
+        ],
+        "ghost": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ghost_kind": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ghost_pos": [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ]
+        ]
+      }
+    },
+    "tolerance": "exact"
+  },
+  "answer": "The flat 128 m plate; side 0 is player 1, side 1 player 2. Side 0's eye at (−40, −40) sees the cells around side 1's cloaked unit 0 at (−28, −36), whose decloak radius is 4 sight cells (32 m), and its plain unit 1. Side 0's detector stands 34.5 − k m from the cloaked unit at step k: 32.5 m (4.0625 cells) at step 2, 31.5 m (3.9375 cells) at step 3, so the cloaked unit is seen by side 0 from step 3 and not before, while the plain unit is seen from step 0. Side 1's structure, unit 2 of kind 7 at (36, 20), is seen by a second eye of side 0 at steps 1 to 3. That eye is gone from step 4: from then side 0 holds a ghost row (row 4: unit 2, side 0) at (36, 20) of kind 7. The structure itself is gone from step 5 and the ghost stays; a radar of side 0 holds its cell from step 6 and the ghost stays; the eye is back at step 8, the cell is seen, and the ghost row clears."
+}

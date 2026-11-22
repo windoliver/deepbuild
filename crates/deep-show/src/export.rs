@@ -15,6 +15,7 @@ mod fidelity;
 mod frames;
 mod gltf;
 mod guards;
+mod gzip;
 mod lottie;
 mod page;
 mod paths;
@@ -28,6 +29,8 @@ mod test_guards;
 #[cfg(feature = "test-encode-tools")]
 pub(crate) mod test_tools;
 pub(crate) mod tools;
+// #2892: `ship.bytes` and the ship checks' test server.
+pub(crate) mod ship;
 mod web;
 pub(crate) use web::full_player;
 
@@ -138,6 +141,16 @@ pub enum Guard {
     WebPlaysOnFailure,
     /// #2856: the web player leaves the index page's line that it hasn't started in place.
     WebElementLeavesLine,
+    /// #2892: the web export stores the player's WebAssembly as it is.
+    WebStoresPlayerAsIs,
+    /// #2892: the web player inflates each stored file whole as it arrives, then checks it.
+    WebInflatesBeforeCheck,
+    /// #2892: the web export writes its time into each stored file's gzip header.
+    WebGzipHeaderTime,
+    /// #2892: the web export pads the player with 13,000,000 seeded pseudo-random bytes.
+    WebPlayerOver12mb,
+    /// #2892: the `ship` call's `bytes` sums each file's inflated bytes, not its stored bytes.
+    ShipBytesSumsInflated,
     /// A wrong encoder, muxer or reader in the helper processes, by its name there.
     Codec(&'static str),
 }
@@ -239,6 +252,11 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "web_export_carries_refused" => Planted::Export(G::WebCarriesRefused),
         "web_plays_on_failure" => Planted::Export(G::WebPlaysOnFailure),
         "web_element_leaves_line" => Planted::Export(G::WebElementLeavesLine),
+        "web_stores_player_as_is" => Planted::Export(G::WebStoresPlayerAsIs),
+        "web_inflates_before_check" => Planted::Export(G::WebInflatesBeforeCheck),
+        "web_gzip_header_time" => Planted::Export(G::WebGzipHeaderTime),
+        "web_player_over_12mb" => Planted::Export(G::WebPlayerOver12mb),
+        "ship_bytes_sums_inflated" => Planted::Export(G::ShipBytesSumsInflated),
         other => Planted::Export(G::Codec(CODEC_PLANTS.iter().find(|p| **p == other)?)),
     })
 }
@@ -420,6 +438,9 @@ pub struct Job {
     pub readback: bool,
     /// #544: the input track the document's logic items read.
     pub track: Vec<Value>,
+    /// #552: the side the export draws, `match.me` (1 to 8, or "none" for every side): a recorded
+    /// match's own player unless the call names another, and a piece played alone's 1.
+    pub me: Value,
     /// #502: `captions: {profile, files, mode}` and `loudness_profile`.
     pub captions: Captions,
     pub loudness_profile: Option<String>,
@@ -470,6 +491,7 @@ impl Default for Job {
             software: false,
             readback: false,
             track: Vec::new(),
+            me: Value::Null,
             captions: Captions::default(),
             loudness_profile: None,
             quality: "standard".into(),
@@ -593,9 +615,19 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
             Some(a) => a.as_str()? == "software",
         },
         readback: c.get("readback").and_then(Value::as_bool).unwrap_or(false),
-        track: c
-            .get("track")
-            .map_or(Some(Vec::new()), |t| t.as_array().cloned())?,
+        // #552: a recorded match's merged track, which the export draws in place of the
+        // document's.
+        track: match (c.get("track"), c.get("record")) {
+            (Some(t), _) => t.as_array().cloned()?,
+            (None, Some(r)) => r.get("track")?.as_array().cloned()?,
+            (None, None) => Vec::new(),
+        },
+        me: match (c.get("me"), c.get("record")) {
+            (Some(Value::String(s)), _) if s == "none" => json!("none"),
+            (Some(m), _) => json!(m.as_u64().filter(|p| (1..=8).contains(p))?),
+            (None, Some(r)) => r.get("player").cloned().unwrap_or(Value::Null),
+            (None, None) => Value::Null,
+        },
         captions: {
             let cap = c.get("captions");
             Captions {

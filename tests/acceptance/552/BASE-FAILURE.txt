@@ -1,0 +1,539 @@
+#552 at the base, 16fafb08b (main at 86b99ac36, "Merge pull request #2932", with the branch of #550 merged in), each
+file run once on 2026-11-20 from 16:36Z to 16:53Z, in the blind job's worktree: a checkout of the base with only this
+folder and the lanes line added (uncommitted). The machine: a Mac17,10 with 18 cores, Node v24.22.2, vitest 5.0.5, the
+1-minute load between about 150 and 200 (the machine was shared; no test reads a time or the load). The hub wasn't
+running, so `scripts/lease` ran each command with no lease and said so once a file; those lines are left out below,
+and this checkout's path reads `<checkout>`.
+
+Every test fails at the base: 18 of 18 in the 7 files. None passes, so none is a guard. Every failure is an assertion
+these files name (an AssertionError with the file's own message); none is a TypeError, a timeout, a BLOCKED or an
+INCONCLUSIVE.
+
+The commands are the README's (Run them), one file at a time, in this order: ac1, ac2, ac3, ac4, ac6, ac7, ac5 (the
+build hooks found the base's `full` build made beforehand by `cargo build --locked --bin deep-show
+--no-default-features --features full`, 29m25s on the loaded machine; ac5's hook built `deep-drive` with `env-plants`,
+about 15 minutes):
+
+  export PATH="$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH"
+  node node_modules/typescript/bin/tsc -p tests/acceptance/552/tsconfig.json     # exit 0
+  node node_modules/vitest/vitest.mjs list --root tests/acceptance/552           # 18 tests in 7 files
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 sh scripts/lease \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/552 <file>.test.ts --testTimeout=600000
+
+No file changed after its run.
+
+Why they fail, by file (the base's behaviour is the README's "What the base already does"):
+
+- ac1: the base doesn't present the fog piece: its one error is `unknown_field` at `items/enemies/params/seen`
+  ("instance@1.0 does not define `seen`"), in the honest test and in the test of the logic item that reads match.me,
+  whose honest control is the same piece. The two planted tests ask for `net_sends_match_me` and
+  `seen_reads_player_one`, and the base refuses the scenario: `{"ok":false,"code":"bad_input"}`.
+- ac2: the fog piece isn't presented (the same `seen` error), before its prompt or its stills are read.
+- ac3: both tests ask for the planted guesser `net_guesses_from_seed`, which the base refuses (`bad_input`). The dice
+  piece itself is refused there too (a probe, README: What the base already does): `logic_refused` for `net.draws`
+  ("names no control or logic item of this piece") and `unknown_field` for `draw_after` on net@1.
+- ac4: each test asks for its planted copy or module (`net_reveals_other_bits`, `net_withholds_bits`,
+  `draws_from_first_bits`), which the base refuses (`bad_input`).
+- ac5: the replica refuses the dice piece: `logic_refused`, `net.draws` names no control or logic item. With the two
+  plants, `deep-drive` answers `{"ready":false,"error":"no planted replica alone-bits-from-secure"}` (and
+  `draw-hashes-step`) before any play.
+- ac6: the war piece isn't presented: `logic_refused` and `unknown_field` for the logic item's `fog`, `out_of_range` at
+  `items/ground/params/overlays/0/player`; the planted tests' `fog_overlay_reads_player_one` and `burst_ignores_fog`
+  are refused (`bad_input`).
+- ac7: the war piece framed for the window isn't presented (the same `fog` and `player` errors), before any picture
+  is taken; no TASTE.json exists and none was written, and nothing was written to docs/evidence/552/.
+
+The runs, each file's output as vitest printed it:
+
+== ac1-fog-column start 16:36:44Z load { 200.49 210.46 213.46 }
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/552
+
+ ❯ ac1-fog-column.test.ts (4 tests | 4 failed) 11664ms
+   ❯ AC1 #552.1b7a8fff each copy's courtesy fog through a seen column (4)
+     × AC1 #552.1b7a8fff player 1's frames, picks and accessibility tree omit the enemy only player 2 sees, player 2's show it, both copies share every full-state hash, and no message holds anything but the design's members 4175ms
+     × AC1 #552.1b7a8fff a planted logic item that reads match.me is refused at check, naming the item, where the same piece without that read is presented 1449ms
+     × AC1 #552.1b7a8fff a planted net module that puts match.me into its messages fails on the relay's log, naming the field 976ms
+     × AC1 #552.1b7a8fff a planted column that reads player 1's bit on every copy hides from player 2 what player 1 can't see and fails, naming the copy and the enemy 1112ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-fog-column.test.ts > AC1 #552.1b7a8fff each copy's courtesy fog through a seen column > AC1 #552.1b7a8fff player 1's frames, picks and accessibility tree omit the enemy only player 2 sees, player 2's show it, both copies share every full-state hash, and no message holds anything but the design's members
+AssertionError: AC1 the fog piece: the fog piece is presented: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["enemies"],"path":"items/enemies/params/seen","actual":{"array":"sight.seen","as":"i32"},"what":"instance@1.0 does not define `seen`","fix":"Remove the field, or require the kind's minor that defines it."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented ../549/helpers.ts:334:81
+    332|   const r = obj(reply, what);
+    333|   const issues = Array.isArray(r['issues']) ? r['issues'].filter(isObj…
+    334|   expect(r['outcome'], `${what} is presented: ${show(r['issues'] ?? r,…
+       |                                                                                 ^
+    335|   expect(issues.filter((i) => i['severity'] === 'error'), `${what} is …
+    336| }
+ ❯ fogMatch ac1-fog-column.test.ts:39:3
+ ❯ ac1-fog-column.test.ts:46:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  ac1-fog-column.test.ts > AC1 #552.1b7a8fff each copy's courtesy fog through a seen column > AC1 #552.1b7a8fff a planted logic item that reads match.me is refused at check, naming the item, where the same piece without that read is presented
+AssertionError: AC1 the fog piece is presented: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["enemies"],"path":"items/enemies/params/seen","actual":{"array":"sight.seen","as":"i32"},"what":"instance@1.0 does not define `seen`","fix":"Remove the field, or require the kind's minor that defines it."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented ../549/helpers.ts:334:81
+    332|   const r = obj(reply, what);
+    333|   const issues = Array.isArray(r['issues']) ? r['issues'].filter(isObj…
+    334|   expect(r['outcome'], `${what} is presented: ${show(r['issues'] ?? r,…
+       |                                                                                 ^
+    335|   expect(issues.filter((i) => i['severity'] === 'error'), `${what} is …
+    336| }
+ ❯ ac1-fog-column.test.ts:64:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  ac1-fog-column.test.ts > AC1 #552.1b7a8fff each copy's courtesy fog through a seen column > AC1 #552.1b7a8fff a planted net module that puts match.me into its messages fails on the relay's log, naming the field
+AssertionError: AC1 the net module that sends match.me (planted net_sends_match_me): deep-show run answers the scenario ok (it takes the planted net_sends_match_me); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ fogMatch ac1-fog-column.test.ts:38:13
+ ❯ ac1-fog-column.test.ts:70:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  ac1-fog-column.test.ts > AC1 #552.1b7a8fff each copy's courtesy fog through a seen column > AC1 #552.1b7a8fff a planted column that reads player 1's bit on every copy hides from player 2 what player 1 can't see and fails, naming the copy and the enemy
+AssertionError: AC1 the column that reads player 1's bit (planted seen_reads_player_one): deep-show run answers the scenario ok (it takes the planted seen_reads_player_one); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ fogMatch ac1-fog-column.test.ts:38:13
+ ❯ ac1-fog-column.test.ts:76:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  08:36:46
+   Duration  14.49s (tests 82%, transform 16%, import 2%)
+
+== ac1-fog-column exit 1 end 16:37:00Z
+
+== ac2-join-alone-export start 16:37:00Z load { 187.91 207.23 212.26 }
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/552
+
+ ❯ ac2-join-alone-export.test.ts (2 tests | 2 failed) 10767ms
+   ❯ AC2 #552.1430609d the courtesy line, a piece played alone, and an export of the recorded match (2)
+     × AC2 #552.1430609d the fog piece's Join prompt shows the courtesy line and the paddle piece's doesn't 4695ms
+     × AC2 #552.1430609d the piece played alone draws player 1's side; the recorded match's export draws player 1's fog by default, player 2's when it names player 2, every enemy when it names none 1617ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac2-join-alone-export.test.ts > AC2 #552.1430609d the courtesy line, a piece played alone, and an export of the recorded match > AC2 #552.1430609d the fog piece's Join prompt shows the courtesy line and the paddle piece's doesn't
+AssertionError: AC2 the fog piece is presented: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["enemies"],"path":"items/enemies/params/seen","actual":{"array":"sight.seen","as":"i32"},"what":"instance@1.0 does not define `seen`","fix":"Remove the field, or require the kind's minor that defines it."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented ../549/helpers.ts:334:81
+    332|   const r = obj(reply, what);
+    333|   const issues = Array.isArray(r['issues']) ? r['issues'].filter(isObj…
+    334|   expect(r['outcome'], `${what} is presented: ${show(r['issues'] ?? r,…
+       |                                                                                 ^
+    335|   expect(issues.filter((i) => i['severity'] === 'error'), `${what} is …
+    336| }
+ ❯ ac2-join-alone-export.test.ts:44:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac2-join-alone-export.test.ts > AC2 #552.1430609d the courtesy line, a piece played alone, and an export of the recorded match > AC2 #552.1430609d the piece played alone draws player 1's side; the recorded match's export draws player 1's fog by default, player 2's when it names player 2, every enemy when it names none
+AssertionError: AC2 the fog piece is presented: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["enemies"],"path":"items/enemies/params/seen","actual":{"array":"sight.seen","as":"i32"},"what":"instance@1.0 does not define `seen`","fix":"Remove the field, or require the kind's minor that defines it."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented ../549/helpers.ts:334:81
+    332|   const r = obj(reply, what);
+    333|   const issues = Array.isArray(r['issues']) ? r['issues'].filter(isObj…
+    334|   expect(r['outcome'], `${what} is presented: ${show(r['issues'] ?? r,…
+       |                                                                                 ^
+    335|   expect(issues.filter((i) => i['severity'] === 'error'), `${what} is …
+    336| }
+ ❯ ac2-join-alone-export.test.ts:68:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  08:37:02
+   Duration  12.16s (tests 91%, transform 6%, import 3%)
+
+== ac2-join-alone-export exit 1 end 16:37:14Z
+
+== ac3-guesses start 16:37:14Z load { 174.15 203.25 210.75 }
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/552
+
+ ❯ ac3-guesses.test.ts (2 tests | 2 failed) 8440ms
+   ❯ AC3 #552.18ec780d rolls drawn after commit, which no copy reads ahead (2)
+     × AC3 #552.18ec780d in each of 5 seeded matches the planted guesser is right on at most 50 of 200, and each match replays from either copy's merged track to the same 200 rolls and full-state hashes 3561ms
+     × AC3 #552.18ec780d against the same piece without draw_after, rolling from the step's seed, the planted guesser is right on all 200 889ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac3-guesses.test.ts > AC3 #552.18ec780d rolls drawn after commit, which no copy reads ahead > AC3 #552.18ec780d in each of 5 seeded matches the planted guesser is right on at most 50 of 200, and each match replays from either copy's merged track to the same 200 rolls and full-state hashes
+AssertionError: AC3 match 1 (planted net_guesses_from_seed): deep-show run answers the scenario ok (it takes the planted net_guesses_from_seed); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ guessed ac3-guesses.test.ts:39:13
+ ❯ ac3-guesses.test.ts:69:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac3-guesses.test.ts > AC3 #552.18ec780d rolls drawn after commit, which no copy reads ahead > AC3 #552.18ec780d against the same piece without draw_after, rolling from the step's seed, the planted guesser is right on all 200
+AssertionError: AC3 the piece without draw_after (planted net_guesses_from_seed): deep-show run answers the scenario ok (it takes the planted net_guesses_from_seed); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ guessed ac3-guesses.test.ts:39:13
+ ❯ ac3-guesses.test.ts:99:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  08:37:15
+   Duration  9.71s (tests 91%, transform 6%, import 2%, worker 1%)
+
+== ac3-guesses exit 1 end 16:37:25Z
+
+== ac4-draw-faults start 16:37:25Z load { 166.10 200.57 209.71 }
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/552
+
+ ❯ ac4-draw-faults.test.ts (3 tests | 3 failed) 8448ms
+   ❯ AC4 #552.6bdf52ad bits that break their commitment, bits withheld, and a draw delivered early (3)
+     × AC4 #552.6bdf52ad a planted copy whose bits differ from its commitment ends the match as faulted on both copies, net.fault naming player 2, step 14 and the kind draw 3209ms
+     × AC4 #552.6bdf52ad a planted copy that never sends its bits ends the match as timeout, naming player 2 964ms
+     × AC4 #552.6bdf52ad a planted logic module that delivers a draw from the bits that arrived first makes the copies part, and the match stops with net.desync naming the first step that differs 749ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac4-draw-faults.test.ts > AC4 #552.6bdf52ad bits that break their commitment, bits withheld, and a draw delivered early > AC4 #552.6bdf52ad a planted copy whose bits differ from its commitment ends the match as faulted on both copies, net.fault naming player 2, step 14 and the kind draw
+AssertionError: AC4 the copy whose bits break its commitment (planted net_reveals_other_bits): deep-show run answers the scenario ok (it takes the planted net_reveals_other_bits); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ planted ac4-draw-faults.test.ts:33:13
+ ❯ ac4-draw-faults.test.ts:45:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  ac4-draw-faults.test.ts > AC4 #552.6bdf52ad bits that break their commitment, bits withheld, and a draw delivered early > AC4 #552.6bdf52ad a planted copy that never sends its bits ends the match as timeout, naming player 2
+AssertionError: AC4 the copy that withholds its bits (planted net_withholds_bits): deep-show run answers the scenario ok (it takes the planted net_withholds_bits); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ planted ac4-draw-faults.test.ts:33:13
+ ❯ ac4-draw-faults.test.ts:57:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  ac4-draw-faults.test.ts > AC4 #552.6bdf52ad bits that break their commitment, bits withheld, and a draw delivered early > AC4 #552.6bdf52ad a planted logic module that delivers a draw from the bits that arrived first makes the copies part, and the match stops with net.desync naming the first step that differs
+AssertionError: AC4 the module that draws from the first bits (planted draws_from_first_bits): deep-show run answers the scenario ok (it takes the planted draws_from_first_bits); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ planted ac4-draw-faults.test.ts:33:13
+ ❯ ac4-draw-faults.test.ts:66:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  08:37:26
+   Duration  9.44s (tests 92%, transform 6%, import 2%)
+
+== ac4-draw-faults exit 1 end 16:37:35Z
+
+== ac6-fog-grid start 16:37:35Z load { 162.64 198.69 208.94 }
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/552
+
+ ❯ ac6-fog-grid.test.ts (3 tests | 3 failed) 7979ms
+   ❯ AC6 #552.5d140522 courtesy fog over a 128 × 128 grid, gating what each copy shows and plays (3)
+     × AC6 #552.5d140522 copy 1 fogs the cells player 1 doesn't see and copy 2 its own; the grenade in player 1's fog bursts and sounds on copy 2 alone; every full-state hash agrees 3152ms
+     × AC6 #552.5d140522 a planted overlay that reads player 1's bits on every copy fails, naming the copy and the cell 769ms
+     × AC6 #552.5d140522 a planted burst that ignores the gate fails, naming the occurrence and the step 833ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac6-fog-grid.test.ts > AC6 #552.5d140522 courtesy fog over a 128 × 128 grid, gating what each copy shows and plays > AC6 #552.5d140522 copy 1 fogs the cells player 1 doesn't see and copy 2 its own; the grenade in player 1's fog bursts and sounds on copy 2 alone; every full-state hash agrees
+AssertionError: AC6 the war piece: the war piece is presented: [{"check":"document.validate","code":"logic_refused","severity":"error","ids":["war"],"path":"items/war/params","actual":{"ok":false,"code":"logic_refused","item":"war","refusals":[{"rule":"field","what":"logic@1 has no field fog","field":"fog"}]},"what":"the logic module refuses this logic item","fix":"See the issue."},{"check":"document.validate","code":"out_of_range","severity":"error","ids":["ground"],"path":"items/ground/params/overlays/0/player","actual":"match.me","what":"a terrain plate holds at most two overlays, each with a grid of cols × rows values","fix":"Give the field a value of its type inside its range."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["war"],"path":"items/war/params/fog","actual":{"grid":"war.fog","size":[128,128],"origin":[-64,-64],"cell":1},"what":"logic@1.0 does not define `fog`","fix":"`fog` is a field of mark.image@1 or mark.line@1 or mark.point@1 or mark.text@1 or sky@1: give the item that kind, or remove the field.","close":[{"name":"mark.image@1","defines":"fog"},{"name":"mark.line@1","defines":"fog"},{"name":"mark.point@1","defines":"fog"}]}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented ../549/helpers.ts:334:81
+    332|   const r = obj(reply, what);
+    333|   const issues = Array.isArray(r['issues']) ? r['issues'].filter(isObj…
+    334|   expect(r['outcome'], `${what} is presented: ${show(r['issues'] ?? r,…
+       |                                                                                 ^
+    335|   expect(issues.filter((i) => i['severity'] === 'error'), `${what} is …
+    336| }
+ ❯ warMatch ac6-fog-grid.test.ts:38:3
+ ❯ ac6-fog-grid.test.ts:46:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  ac6-fog-grid.test.ts > AC6 #552.5d140522 courtesy fog over a 128 × 128 grid, gating what each copy shows and plays > AC6 #552.5d140522 a planted overlay that reads player 1's bits on every copy fails, naming the copy and the cell
+AssertionError: AC6 the overlay that reads player 1's bits (planted fog_overlay_reads_player_one): deep-show run answers the scenario ok (it takes the planted fog_overlay_reads_player_one); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ warMatch ac6-fog-grid.test.ts:37:13
+ ❯ ac6-fog-grid.test.ts:60:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  ac6-fog-grid.test.ts > AC6 #552.5d140522 courtesy fog over a 128 × 128 grid, gating what each copy shows and plays > AC6 #552.5d140522 a planted burst that ignores the gate fails, naming the occurrence and the step
+AssertionError: AC6 the burst that ignores the gate (planted burst_ignores_fog): deep-show run answers the scenario ok (it takes the planted burst_ignores_fog); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ warMatch ac6-fog-grid.test.ts:37:13
+ ❯ ac6-fog-grid.test.ts:66:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  08:37:36
+   Duration  8.90s (tests 94%, import 3%, transform 3%)
+
+== ac6-fog-grid exit 1 end 16:37:45Z
+
+== ac7-taste start 16:37:45Z load { 155.68 196.00 207.86 }
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/552
+
+ ❯ ac7-taste.test.ts (1 test | 1 failed) 6881ms
+   ❯ AC7 #552.84746f1a the check run's pictures of each copy's fog and of the Join prompt, and the one taste call on them (1)
+     × AC7 #552.84746f1a the check run takes the screenshots from the app at the reference window, and the recorded call on exactly those pictures says they look right; with none the run is INCONCLUSIVE, never PASS 3363ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac7-taste.test.ts > AC7 #552.84746f1a the check run's pictures of each copy's fog and of the Join prompt, and the one taste call on them > AC7 #552.84746f1a the check run takes the screenshots from the app at the reference window, and the recorded call on exactly those pictures says they look right; with none the run is INCONCLUSIVE, never PASS
+AssertionError: AC7 the war piece is presented: [{"check":"document.validate","code":"logic_refused","severity":"error","ids":["war"],"path":"items/war/params","actual":{"ok":false,"code":"logic_refused","item":"war","refusals":[{"rule":"field","what":"logic@1 has no field fog","field":"fog"}]},"what":"the logic module refuses this logic item","fix":"See the issue."},{"check":"document.validate","code":"out_of_range","severity":"error","ids":["ground"],"path":"items/ground/params/overlays/0/player","actual":"match.me","what":"a terrain plate holds at most two overlays, each with a grid of cols × rows values","fix":"Give the field a value of its type inside its range."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["war"],"path":"items/war/params/fog","actual":{"grid":"war.fog","size":[128,128],"origin":[-64,-64],"cell":1},"what":"logic@1.0 does not define `fog`","fix":"`fog` is a field of mark.image@1 or mark.line@1 or mark.point@1 or mark.text@1 or sky@1: give the item that kind, or remove the field.","close":[{"name":"mark.image@1","defines":"fog"},{"name":"mark.line@1","defines":"fog"},{"name":"mark.point@1","defines":"fog"}]}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented ../549/helpers.ts:334:81
+    332|   const r = obj(reply, what);
+    333|   const issues = Array.isArray(r['issues']) ? r['issues'].filter(isObj…
+    334|   expect(r['outcome'], `${what} is presented: ${show(r['issues'] ?? r,…
+       |                                                                                 ^
+    335|   expect(issues.filter((i) => i['severity'] === 'error'), `${what} is …
+    336| }
+ ❯ ac7-taste.test.ts:64:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  08:37:47
+   Duration  7.57s (tests 94%, transform 4%, import 2%)
+
+== ac7-taste exit 1 end 16:37:54Z
+
+== ac5-alone-draws start 16:37:54Z load { 148.25 193.09 206.69 }
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/552
+
+ ❯ ac5-alone-draws.test.ts (3 tests | 3 failed) 891899ms
+   ❯ AC5 #552.eff354f2 a lone piece's draws in a replica (3)
+     × AC5 #552.eff354f2 played alone twice from one seed it rolls the same 200 values, with no commitment on its track, and replayed with the 50th attack and every later one a step later it rolls the same 200 values 2516ms
+     × AC5 #552.eff354f2 a planted module that takes a lone piece's bits from the secure source rolls other values the second time and fails, naming step 11 17ms
+     × AC5 #552.eff354f2 a planted draw that hashes the step in place of the draw's number rolls other values from the 50th attack on and fails, naming that draw 26ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac5-alone-draws.test.ts > AC5 #552.eff354f2 a lone piece's draws in a replica > AC5 #552.eff354f2 played alone twice from one seed it rolls the same 200 values, with no commitment on its track, and replayed with the 50th attack and every later one a step later it rolls the same 200 values
+AssertionError: AC5 the first play: the replica plays the dice piece: {"ok":false,"t":0,"error":{"code":"logic_refused","message":"{\"ok\":false,\"code\":\"logic_refused\",\"item\":\"dice\",\"refusals\":[{\"rule\":\"read\",\"what\":\"net.draws names no control or logic item of this piece\",\"read\":\"net.draws\"}]}"}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ playedOf helpers.ts:449:90
+    447| /** A replica play's per-step arrays (#184's `values`), as text per st…
+    448| export function playedOf(reply: JsonObject, what: string): { steps: st…
+    449|   expect(reply['ok'], `${what}: the replica plays the dice piece: ${sh…
+       |                                                                                          ^
+    450|   const values = obj(reply['values'], `${what}: values`);
+    451|   const per = NAMES.map((n) => arr(values[`${DICE}.${n}`], `${what}: v…
+ ❯ play ac5-alone-draws.test.ts:30:10
+ ❯ ac5-alone-draws.test.ts:69:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  ac5-alone-draws.test.ts > AC5 #552.eff354f2 a lone piece's draws in a replica > AC5 #552.eff354f2 a planted module that takes a lone piece's bits from the secure source rolls other values the second time and fails, naming step 11
+AssertionError: AC5 planted: the first play: deep-drive says {"ready": true}: {"ready":false,"error":"no planted replica alone-bits-from-secure"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ drivePlay helpers.ts:438:93
+    436|   try {
+    437|     const ready = await next(1, 300_000);
+    438|     expect(ready['ready'], `${what}: deep-drive says {"ready": true}: …
+       |                                                                                             ^
+    439|     child.stdin!.write(`${JSON.stringify(call)}\n`);
+    440|     return await next(2, 1_800_000);
+ ❯ play ac5-alone-draws.test.ts:30:19
+ ❯ ac5-alone-draws.test.ts:80:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  ac5-alone-draws.test.ts > AC5 #552.eff354f2 a lone piece's draws in a replica > AC5 #552.eff354f2 a planted draw that hashes the step in place of the draw's number rolls other values from the 50th attack on and fails, naming that draw
+AssertionError: AC5 planted: the first play: deep-drive says {"ready": true}: {"ready":false,"error":"no planted replica draw-hashes-step"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ drivePlay helpers.ts:438:93
+    436|   try {
+    437|     const ready = await next(1, 300_000);
+    438|     expect(ready['ready'], `${what}: deep-drive says {"ready": true}: …
+       |                                                                                             ^
+    439|     child.stdin!.write(`${JSON.stringify(call)}\n`);
+    440|     return await next(2, 1_800_000);
+ ❯ play ac5-alone-draws.test.ts:30:19
+ ❯ ac5-alone-draws.test.ts:86:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  08:37:56
+   Duration  892.74s (tests 100%)
+
+== ac5-alone-draws exit 1 end 16:52:49Z
