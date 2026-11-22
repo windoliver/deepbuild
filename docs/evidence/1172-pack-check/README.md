@@ -69,11 +69,14 @@ The Mac round on 2026-11-22 failed both suites in setup again at load 47 to 99, 
 canvas core's `install` admitted a known version once per process (`ADMITTED`), but still ran the sandbox's half of
 its check, `Host::vet`, on every call: lanes' libraries compiled and their fixtures run again, about 0.65 s of each
 call on the Mac. `Host::vet` now keeps what a passed check gave its host, per process, keyed by the pack, its
-manifest's hash, the planted programs and the folders its runs write to, and gives it to the next host.
+manifest's hash, the planted layouts, the evidence folder and the other packs the host holds (a provider's output
+may name another pack's layout), and gives it to the next host. A host that already checked that version, or whose
+evidence store lost bytes the check kept there, checks it afresh.
 
 `crates/deep-show/tests/pack_vet_once.rs` reads it as cost, since the library check counts in none of the sandbox's
 counters: a later `packs` call must take under a quarter of the first. Without the fix it fails, a later call at
-1.015 s against the first's 1.047 s (`vet-once-fails-first.txt`); with it, it passes (`vet-once-passes.txt`).
+1.015 s against the first's 1.047 s (`vet-once-fails-first.txt`); with it, it passes, the first call at 1.040 s and later ones at 5 to 10 ms (`vet-once-passes.txt`). It shows the
+cost only, not that a replayed host equals a fresh one; that rests on review.
 
 `spark-vet-once.txt`, the head on the Spark at load 19 (INCONCLUSIVE as times): later calls with all packs 142 to
 146 ms, from 1,640 ms; the first call in a new process is still 6.9 s here and the shipped check 7.8 s.

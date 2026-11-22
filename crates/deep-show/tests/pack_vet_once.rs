@@ -1,9 +1,9 @@
 //! Issue #1172: the canvas side builds its store afresh for every call, and a pack version this
 //! process already checked is not checked again, so the hub's later calls don't pay for it.
 //!
-//! The check of a pack's libraries counts in none of the sandbox's counters, so this reads its
-//! cost: lanes' check (its libraries compiled and their fixtures run) is most of a first call,
-//! and a later call that checks it again takes about half of one. The bound is a ratio, not a
+//! Lanes' check (its libraries and interfaces, which Logic checks) counts in none of the sandbox's
+//! counters, so this reads its cost: it is most of a first call, and a later call that checks it
+//! again takes about as long. The bound is a ratio, not a
 //! time, so a loaded machine slows both sides alike.
 #![cfg(unix)]
 
@@ -53,6 +53,7 @@ fn a_checked_pack_version_is_not_checked_again_on_a_later_call() {
         later.push(s);
     }
     let fastest = later.iter().cloned().fold(f64::INFINITY, f64::min);
+    println!("first call {first_s:.3} s, later calls {later:.3?} s");
     assert!(
         fastest < first_s / 4.0,
         "a later call took {fastest:.3} s against the first's {first_s:.3} s: it checked lanes again"

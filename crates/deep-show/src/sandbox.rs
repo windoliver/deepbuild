@@ -61,6 +61,8 @@ pub struct Host {
     /// Each pack version whose providers passed its check, by its manifest's hash.
     vetted: std::collections::BTreeSet<String>,
     key_planted: Option<String>,
+    /// Each hash `put` kept, in order (#1172: a check's are given to the next host).
+    kept: std::cell::RefCell<Vec<String>>,
 }
 
 /// One provider run's result (Provider `gen@1`): its trap (or null), its output (null after a
@@ -103,13 +105,16 @@ struct Vetted {
     rows: Vec<Value>,
     programs: Vec<((String, String), Value)>,
     rewritten: Vec<((String, String), Result<Rewritten, Vec<Refusal>>)>,
-    outputs: Vec<(String, Made)>,
+    validated: Vec<((String, String), Value)>,
     entries: Vec<SealedEntry>,
     vetted: Vec<String>,
+    /// The bytes it kept in the evidence store, by hash.
+    kept: Vec<String>,
 }
 
-/// A pack version, its manifest's hash, the planted programs, and the folders its runs write to.
-type VetKey = (String, String, String, PathBuf, Option<PathBuf>);
+/// A pack version, its manifest's hash, the planted layouts, the evidence folder, and the other
+/// packs the host holds.
+type VetKey = (String, String, String, PathBuf, String);
 
 thread_local! {
     /// #1172: each pack version this process's pack check passed, by what it depends on.
@@ -206,35 +211,46 @@ impl Host {
         pack: &Pack,
         sealed: &Sealed,
     ) -> (Vec<Value>, Vec<Issue>) {
+        // The other packs this host holds are in the key: a provider's output may name one's layout.
+        let others: Vec<String> = self.packs.keys().filter(|k| **k != pack.id.text()).cloned().collect();
         let key = (
             pack.id.text(),
             hash(manifest.to_string().as_bytes()),
-            format!("{:?} {:?}", self.planted, self.key_planted),
+            format!("{:?}", self.planted),
             self.evidence.clone(),
-            self.cache.clone(),
+            others.join(" "),
         );
-        if let Some(v) = VETTED.with(|c| c.borrow().get(&key).cloned()) {
+        // Checked afresh when this host checked it already (#1958's reinstall), or when bytes the
+        // check kept are gone from the evidence store.
+        let cached = VETTED.with(|c| c.borrow().get(&key).cloned()).filter(|v| {
+            v.vetted.iter().all(|h| !self.vetted.contains(h))
+                && v.kept.iter().all(|sha| crate::evidence::read(&self.evidence, sha).is_some())
+        });
+        if let Some(v) = cached {
             self.packs.insert(pack.id.text(), manifest.clone());
             self.programs.extend(v.programs);
             self.rewritten.extend(v.rewritten);
-            self.outputs.extend(v.outputs);
+            self.validated.extend(v.validated);
             self.layout_entries.extend(v.entries);
             self.vetted.extend(v.vetted);
             return (v.rows, Vec::new());
         }
-        let programs: Vec<_> = self.programs.keys().cloned().collect();
+        let programs = self.programs.clone();
         let rewritten: Vec<_> = self.rewritten.keys().cloned().collect();
-        let outputs: Vec<_> = self.outputs.keys().cloned().collect();
+        let validated: Vec<_> = self.validated.keys().cloned().collect();
         let (entries, vetted) = (self.layout_entries.len(), self.vetted.clone());
+        let kept = self.kept.borrow().len();
         let (rows, issues) = self.vet_fresh(manifest, pack, sealed);
         if issues.is_empty() {
             let v = Vetted {
                 rows: rows.clone(),
-                programs: added(&self.programs, &programs),
+                // A program entry's key names no version, so another version's is overwritten.
+                programs: self.programs.iter().filter(|(k, v)| programs.get(*k) != Some(*v)).map(|(k, v)| (k.clone(), v.clone())).collect(),
                 rewritten: added(&self.rewritten, &rewritten),
-                outputs: added(&self.outputs, &outputs),
+                validated: added(&self.validated, &validated),
                 entries: self.layout_entries[entries..].to_vec(),
                 vetted: self.vetted.difference(&vetted).cloned().collect(),
+                kept: self.kept.borrow()[kept..].to_vec(),
             };
             VETTED.with(|c| c.borrow_mut().insert(key, v));
         }
@@ -1090,7 +1106,9 @@ impl Host {
 
     /// Keeps an output's bytes in the evidence store by their hash.
     fn put(&self, bytes: &[u8]) -> Result<String, String> {
-        crate::evidence::put(&self.evidence, bytes).map_err(|e| e.to_string())
+        let sha = crate::evidence::put(&self.evidence, bytes).map_err(|e| e.to_string())?;
+        self.kept.borrow_mut().push(sha.clone());
+        Ok(sha)
     }
 
     /// The drawn form: each param naming `{gen: <pack>.<provider>}` whose output this process
