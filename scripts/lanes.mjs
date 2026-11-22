@@ -875,6 +875,9 @@ alone.push('tests/acceptance/552/');
 // seam's interop part, which builds deep-show and the shipped relay and plays the app against headless Chrome's web
 // player through it, and ac4 reads net.budget's five runs (INCONCLUSIVE off a reference Mac or under load).
 alone.push('tests/acceptance/553/');
+// #278's files each build deep-show (ac1 and ac4 also the shipped relay) and play matches in process; ac1 and ac4 also
+// play live rooms of app copies, ac1 one with headless Chrome's web player, through the shipped relay.
+alone.push('tests/acceptance/278/');
 byHand.push('tests/acceptance/549/ac2-join-only.test.ts');
 // #297's files each build deep-show and run its scenarios; the Oracle lane runs thousands of frames through it.
 alone.push('tests/acceptance/297/', 'tests/acceptance/297-oracle/');
@@ -1396,6 +1399,15 @@ timed.push('tests/acceptance/2661/ac4-tick.live.test.mjs', 'tests/acceptance/266
 // reference Mac.
 alone.push('tests/acceptance/980/');
 timed.push('tests/acceptance/980/ac09-budget.test.ts');
+// The first draft of criterion 9 lays its budget scene's 88,624-byte write region out on #416's one-page probe, which
+// the check refuses before process@1 is reached (tests/acceptance/980-redraft-ac9/DISPUTE.md); its blind redraft runs
+// in its place.
+alone.push('tests/acceptance/980-redraft-ac9/');
+timed.push('tests/acceptance/980-redraft-ac9/ac9-budget.test.ts');
+byHand.push('tests/acceptance/980/ac09-budget.test.ts');
+
+// #689's blind redraft: AC2 builds and tests the whole workspace on 1.99.1; AC4 builds deep-app's hub_client test.
+slow.push('tests/acceptance/689-redraft-2047/ac2-checks.test.mjs', 'tests/acceptance/689-redraft-2047/ac4-app-in-unit-lane.test.mjs');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

@@ -1,0 +1,22 @@
+// Read-only: closed-sweep.mjs's own judging (criteriaOf, testsOnMain, judge) for one issue. Reopens and comments on nothing.
+import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { testPaths } from './clone/scripts/lanes.mjs';
+const issue = 1119, MAIN = 'origin/main';
+const call = (c, a) => spawnSync(c, a, { encoding: 'utf8', maxBuffer: 1 << 30, cwd: new URL('./clone/', import.meta.url) });
+const body = JSON.parse(call('gh', ['issue', 'view', String(issue), '--json', 'body,state']).stdout);
+const id = (t) => `#${issue}.${createHash('sha256').update(t.trim().replace(/\s+/g, ' ')).digest('hex').slice(0, 8)}`;
+const section = body.body.split(/^###\s+Acceptance criteria\s*$/m)[1]?.split(/^#{1,6}\s/m)[0] ?? '';
+const criteria = [...section.matchAll(/^\s*- \[([ xX])\] (.+)$/gm)].map(([, tick, text], i) => ({ n: i + 1, id: id(text), ticked: tick !== ' ', text: text.trim() }));
+const r = call('git', ['-c', 'core.quotePath=false', 'grep', '-I', '-z', '-E', '#[0-9]+\\.[0-9a-f]{8}|AC[0-9]+', MAIN, '--', ...testPaths.map((p) => `:(glob)${p}`)]);
+const named = new Map();
+for (const line of r.stdout.split('\n')) {
+  const [name, text] = line.split('\0');
+  if (!text) continue;
+  const path = name.slice(MAIN.length + 1);
+  if (!/\.(?:[cm]?[jt]sx?|rs)$/.test(path) || /(?:^|\/)(?:twins|fixtures|__fixtures__|node_modules)\//.test(path)) continue;
+  for (const [found] of text.matchAll(/#\d+\.[0-9a-f]{8}\b/g)) if (found.startsWith(`#${issue}.`)) named.set(found, new Set([...(named.get(found) ?? []), path]));
+}
+console.log(`issue #${issue} is ${body.state}; ${MAIN} = ${call('git', ['rev-parse', MAIN]).stdout.trim()}`);
+for (const c of criteria) console.log(`${named.has(c.id) ? 'held  ' : 'UNHELD'} AC${c.n} ${c.id} [${c.ticked ? 'x' : ' '}] ${c.text.slice(0, 70)}… ${named.has(c.id) ? `<- ${[...named.get(c.id)].join(', ')}` : '<- no test on main names it'}`);
+for (const [found, paths] of named) if (!criteria.some((c) => c.id === found)) console.log(`stale ${found} in ${[...paths].join(', ')}`);

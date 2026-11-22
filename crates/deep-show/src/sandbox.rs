@@ -400,7 +400,7 @@ impl Host {
         // interface's planted library failing one of its fixtures. A library whose fixtures
         // haven't run never links.
         if manifest.get("libs").is_some() || manifest.get("interfaces").is_some() {
-            match self.vet_libs(manifest, sealed) {
+            match self.vet_libs(manifest, sealed, &version) {
                 Ok(made) => entries.extend(made),
                 Err(refusals) => {
                     issues.push(Issue::envelope(
@@ -503,7 +503,12 @@ impl Host {
     /// #416), every asset of the pack at hand to it and kept in the evidence store, where a logic
     /// item's link reads it. Returns each interface as a `lib.interface@1` entry, its kit read from
     /// what the pack check judged of its planted libraries.
-    fn vet_libs(&mut self, manifest: &Value, sealed: &Sealed) -> Result<Vec<SealedEntry>, Value> {
+    fn vet_libs(
+        &mut self,
+        manifest: &Value,
+        sealed: &Sealed,
+        version: &str,
+    ) -> Result<Vec<SealedEntry>, Value> {
         let mut assets = Map::new();
         for a in manifest["assets"].as_array().into_iter().flatten() {
             let Some(sha) = a["sha256"].as_str() else {
@@ -521,11 +526,13 @@ impl Host {
         } else {
             "installed"
         };
-        let pack = json!({"name": manifest["name"], "version": manifest["version"], "origin": origin,
-                          "libs": manifest.get("libs").cloned().unwrap_or(json!({})),
-                          "interfaces": manifest.get("interfaces").cloned().unwrap_or(json!({}))});
-        let reply = deep_logic::Logic::new(Default::default())
-            .handle(&json!({"call": "pack_check", "pack": pack, "assets": assets}));
+        let reply = crate::packs::lib_check(version, || {
+            let pack = json!({"name": manifest["name"], "version": manifest["version"], "origin": origin,
+                              "libs": manifest.get("libs").cloned().unwrap_or(json!({})),
+                              "interfaces": manifest.get("interfaces").cloned().unwrap_or(json!({}))});
+            deep_logic::Logic::new(Default::default())
+                .handle(&json!({"call": "pack_check", "pack": pack, "assets": assets}))
+        });
         if reply["ok"].as_bool() != Some(true) {
             return Err(reply.get("refusals").cloned().unwrap_or(reply));
         }

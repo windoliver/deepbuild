@@ -42,6 +42,20 @@ thread_local! {
     /// canvas side builds its store afresh for every call, and a version's check runs once, not on
     /// each. The hub stages a pack in a folder named by its digest, so a folder never changes.
     static ADMITTED: RefCell<HashMap<(String, PathBuf), (Value, Pack)>> = RefCell::new(HashMap::new());
+    /// The logic module's check of each version's libraries and interfaces, by its manifest's hash
+    /// (#3044): it compiles and runs every fixture, seconds a pack, which each call paid again.
+    static LIB_CHECKS: RefCell<HashMap<String, Value>> = RefCell::new(HashMap::new());
+}
+
+/// The logic module's check of the pack version whose manifest hashes to `version`: `check` runs
+/// once a process, as the rest of the version's check does (#3044).
+pub fn lib_check(version: &str, check: impl FnOnce() -> Value) -> Value {
+    if let Some(reply) = LIB_CHECKS.with(|c| c.borrow().get(version).cloned()) {
+        return reply;
+    }
+    let reply = check();
+    LIB_CHECKS.with(|c| c.borrow_mut().insert(version.to_string(), reply.clone()));
+    reply
 }
 
 /// #1958: the store's sweep deleted `owner/name@version`: this process holds it no more.
