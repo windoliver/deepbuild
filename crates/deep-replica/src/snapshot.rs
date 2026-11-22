@@ -367,7 +367,10 @@ pub fn author_id(path: &[ElementId]) -> Option<String> {
 /// element path, so the order is a function of the frame alone. This is a reading of the
 /// layout, not the draw order itself: a view that draws a lower row before a higher one, or
 /// a right column before a left one, would be ordered differently here than the accessibility
-/// tree lists it. The live capture is the proof it matches for the shipped views.
+/// tree lists it. The live capture is the proof it matches for the shipped views. A view that
+/// wraps one element alone, as each of the list's cached rows does (#1482), is no group of its
+/// own: its element goes with the siblings its parent drew around it, as the accessibility tree
+/// lists it there.
 fn children_of(
     parent: Option<usize>,
     observed: &[(Vec<ElementId>, Node)],
@@ -376,9 +379,22 @@ fn children_of(
     let Some(indices) = children.get(&parent) else {
         return Vec::new();
     };
-    let group = |index: usize| {
+    let own = |index: usize| {
         let path = &observed[index].0;
         &path[..path.len().saturating_sub(1)]
+    };
+    let mut members: HashMap<&[ElementId], usize> = HashMap::new();
+    for &index in indices {
+        *members.entry(own(index)).or_default() += 1;
+    }
+    let group = |index: usize| {
+        let mut path = own(index);
+        if members[path] == 1 {
+            while let [rest @ .., ElementId::View(_)] = path {
+                path = rest;
+            }
+        }
+        path
     };
     let corner = |index: usize| (observed[index].1.bounds[1], observed[index].1.bounds[0]);
     let mut group_corners: HashMap<&[ElementId], (i64, i64)> = HashMap::new();
@@ -534,6 +550,32 @@ mod tests {
         let (index, why) = first_difference(&flat, &nested).unwrap();
         assert_eq!(index, 0);
         assert!(why.contains("children"), "{why}");
+    }
+
+    /// The list's rows are each a cached view of one element (#1482): they go between the headings
+    /// drawn around them, top to bottom, while a view of several elements, a panel, stays one group.
+    #[test]
+    fn a_view_of_one_element_goes_with_its_parents_other_children() {
+        let view = |n: u64| ElementId::View(gpui_kit::EntityId::from(n));
+        let at = |mut path: Vec<ElementId>, name: &'static str, y: i64| {
+            path.push(ElementId::Name(name.into()));
+            (path, leaf("label", name, [0, y, 10, 10]))
+        };
+        let observed = vec![
+            at(vec![], "heading:a", 0),
+            at(vec![], "heading:b", 40),
+            at(vec![view(1)], "row:1", 20),
+            at(vec![view(2)], "row:2", 60),
+            at(vec![view(9)], "panel:top", 10),
+            at(vec![view(9)], "panel:bottom", 80),
+        ];
+        let children = HashMap::from([(None, (0..observed.len()).collect())]);
+        let order = children_of(None, &observed, &children)
+            .into_iter()
+            .map(|node| node.name.unwrap())
+            .collect::<Vec<_>>();
+        let expected = ["heading:a", "row:1", "heading:b", "row:2", "panel:top", "panel:bottom"];
+        assert_eq!(order, expected);
     }
 
     /// A snapshot missing a node's children, name or value key, its items, an item's id or value, the menu bar's title
