@@ -195,8 +195,8 @@ int main(int argc, char **argv) {
   // What it can't see: uncounted user work within the kernel time counted, which this lets through. With no new
   // privileges that is only a program a process may run but not read (or whose interpreter it can't read), which the
   // kernel stops counting, and up to 1 ms of a displaced counter or of a core kind whose counter the kernel refused.
-  // And IRQ and steal time, and a child the kernel reaps
-  // itself, under a parent that ignores SIGCHLD, which adds no CPU time here.
+  // And IRQ and steal time, and a child the kernel reaps itself, under a parent that ignores SIGCHLD, which adds no
+  // CPU time here.
   // What it may null: a fully counted run of many short processes on a kernel that splits CPU time by ticks, which
   // gives a process no tick of kernel time saw all its runtime as user time, the part outside the clock included.
   struct rusage used;

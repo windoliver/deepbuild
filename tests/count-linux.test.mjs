@@ -18,10 +18,11 @@ const dropsCounting = () => {
   if (readFileSync('/proc/sys/fs/suid_dumpable', 'utf8').trim() === '1') return 'fs.suid_dumpable is 1, so the kernel keeps counting';
   return false;
 };
-// The mount a path is on: the longest mount point it starts with.
+// The mount a path is on: the longest mount point it starts with, and of mounts at the same point the last, which is
+// the one on top.
 const mountOptions = (path) => readFileSync('/proc/mounts', 'utf8').split('\n').map((line) => line.split(' '))
   .filter(([, point]) => point && (path === point || path.startsWith(point.endsWith('/') ? point : `${point}/`)))
-  .sort((a, b) => b[1].length - a[1].length)[0]?.[3].split(',') ?? [];
+  .reduce((top, mount) => (mount[1].length >= (top?.[1].length ?? -1) ? mount : top), undefined)?.[3].split(',') ?? [];
 // Setuid root on a mount that honours it, and no SELinux in force: under no new privileges SELinux refuses passwd's
 // domain change outright.
 const setuid = () => {
