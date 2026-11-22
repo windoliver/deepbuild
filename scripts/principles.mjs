@@ -15,9 +15,10 @@ const ITEM = /^ {0,3}(?:[-*+]|\d+[.)])\s+/;
 const ANCHOR = /^\s*<a\s[^>]*>(?:\s*<\/a>)?\s*$/i;
 // A line as it reads rendered: links by their label, code spans by their content, emphasis dropped.
 const rendered = (text) => text.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/(`+)(.+?)\1/g, '$2').replace(/\*\*|__/g, '').replace(/\s+/g, ' ').trim();
-// Sentences, each link and code span read as one word: one ends at . ! or ? before anything but a parenthesis that
-// opens with a link, a code span or a lowercase word.
-const sentences = (text) => text.replace(/!?\[[^\]]*\]\([^)]*\)|(`+).+?\1/g, '\u0001').trim().split(/(?<=[.!?]["')\]]?)\s+(?=[^\s(]|\(["“A-Z])/).length;
+// A line without the closing parenthesis that links its rule and names its check.
+const closing = (text) => (text.endsWith(')') && text.includes(' ([') ? text.slice(0, text.lastIndexOf(' ([')) : text);
+// Sentences, the closing parenthesis left out and each link and code span read as one word: one ends at . ! or ? before anything that isn't white space.
+const sentences = (text) => closing(text).replace(/!?\[[^\]]*\]\([^)]*\)|(`+).+?\1/g, '\u0001').trim().split(/(?<=[.!?]["')\]]?)\s+(?=\S)/).length;
 
 // A doc's prose lines from the heading slugged `id` to the next heading of its level or higher, the heading first.
 function section(file, id) {
@@ -69,7 +70,7 @@ export function principles() {
       const text = line.replace(ITEM, '');
       const invariant = index < 4 ? words[index] : undefined;
       // An invariant's line is its words, then the parenthesis that links its rule and names its check.
-      const stated = text.includes(' ([') ? text.slice(0, text.lastIndexOf(' ([')) : text;
+      const stated = closing(text);
       if (invariant === null) fail(where, `has no invariant ${index + 1} to match: AGENTS.md lists none under "The four invariants"`);
       else if (invariant && stated !== invariant.text) fail(where, `doesn't state invariant ${index + 1} as AGENTS.md:${invariant.number} words it: "${invariant.text}"`);
       const length = rendered(text).length;
