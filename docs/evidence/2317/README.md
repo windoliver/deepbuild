@@ -123,7 +123,10 @@ touched files' fmt are clean on the same tree.
   substep, and never the turntable, which is at 120 Hz and 4 substeps and reads `pass` in all three.
 - `tests/acceptance/2310/ac7-seek-golden-merge-base.test.ts`, before the merge, passed its seek, its planted
   checkpoint and its merge-base hashes; its Linux x86_64 leg builds in a container, which was stopped after eight
-  minutes and not read. `scripts/affected.mjs` was not run: its selection is 315 test files in 80 folders.
+  minutes and not read.
+- `scripts/affected.mjs` gave no verdict: one run on the pull request's head, at a load of 250 to 440, was stopped
+  after 41 minutes and reports `BLOCKED`. By then 7 tests had passed and none had failed, and its cargo lane had
+  stopped at a compile error in `crates/deep-player/src/net.rs`, which this change doesn't touch.
 - A dynamic body that turns with no motor on a hinge, one spun by a velocity or swung by its weight, still has its
   pairs' points kept, so what rests on it can slide. The Scope marks by kind; marking by speed toppled settling dice
   in the issue's probe.
