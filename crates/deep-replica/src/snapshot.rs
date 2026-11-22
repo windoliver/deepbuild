@@ -574,7 +574,14 @@ mod tests {
             .into_iter()
             .map(|node| node.name.unwrap())
             .collect::<Vec<_>>();
-        let expected = ["heading:a", "row:1", "heading:b", "row:2", "panel:top", "panel:bottom"];
+        let expected = [
+            "heading:a",
+            "row:1",
+            "heading:b",
+            "row:2",
+            "panel:top",
+            "panel:bottom",
+        ];
         assert_eq!(order, expected);
     }
 
