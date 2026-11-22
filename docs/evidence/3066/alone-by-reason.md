@@ -1,6 +1,6 @@
 # #3066: each alone entry, its reason and where it was read
 
-A first reading, on main 5f5791e2d. The counts: `node scripts/lanes.mjs alone --by-reason`. "not established" marks an entry left for the owner.
+A first reading, on main 5f5791e2d. The counts: `node scripts/lanes.mjs alone --by-reason`. Six entries had no reason established; the owner ruled on them (#3066, issue comment 7075415658): two are shared, and four left `alone` for the parallel block.
 
 | Entry | Reason | Evidence | Starts cargo itself |
 |---|---|---|---|
@@ -164,7 +164,7 @@ A first reading, on main 5f5791e2d. The counts: `node scripts/lanes.mjs alone --
 | tests/acceptance/319/budgets.test.ts | timing | every file it holds is in the timed list |  |
 | tests/acceptance/331/ | shared: a fixed port | tests/acceptance/331/README.md: "listeners on ports from 3000 up, and AC10 needs 3000 itself" |  |
 | tests/acceptance/37/ | shared: the sandbox log stream | tests/acceptance/37/README.md: "through the supervisor" |  |
-| packages/checks-journey/test/unrun.test.ts | no reason | not established: for the owner |  |
+| packages/checks-journey/test/unrun.test.ts | none: left alone | moved to the parallel block: the owner's ruling on #3066 (issue comment 7075415658): "use your suggestions for the six entries"; in a parallel block of 12 files it passed 8 of 8; with packages/checks-journey/src/latency.ts reading `margin < 0` for `!(margin >= 0)` it failed "judges no latency on a margin that is not a number" at its assertion (expected 'passed' to be 'INVALID') |  |
 | tests/acceptance/315/ | timing | lanes.mjs exclusive: #315's files build deep-hook and time it to 50 ms |  |
 | tests/acceptance/21/replay.test.ts | timing | every file it holds is in the timed list |  |
 | tests/acceptance/21/budgets.test.ts | binary | tests/acceptance/21/helpers.ts: run('cargo', ['build', '--locked', '-q', '--release', '-p', 'deep-hook' | yes |
@@ -183,7 +183,7 @@ A first reading, on main 5f5791e2d. The counts: `node scripts/lanes.mjs alone --
 | tests/acceptance/567/fast.test.ts | binary | tests/acceptance/567/helpers.ts: spawnSync('cargo', ['build', '--locked', '-q', '-p', 'deep-hook'], { cwd: REP | yes |
 | tests/acceptance/669/fast.test.ts | timing | every file it holds is in the timed list |  |
 | tests/acceptance/1156/fast.test.ts | timing | every file it holds is in the timed list |  |
-| tests/acceptance/237/ | no reason | not established: for the owner |  |
+| tests/acceptance/237/ | none: left alone | moved to the parallel block: the owner's ruling on #3066 (issue comment 7075415658): "use your suggestions for the six entries"; in a parallel block of 12 files its six alone files passed 40 of 40; with packages/leases/src/index.ts joining the exclusive modes by `&&` for `||` exact.test.ts failed AC1 and AC8 at their assertions |  |
 | tests/acceptance/34/ | binary | tests/acceptance/34/app.test.ts: `cargo test --locked -p deep-app --test acceptance_ | yes |
 | tests/acceptance/667/ | binary | tests/acceptance/667/helpers.ts: hub run`) in a temporary home, with i (starts a hub, which runs deep-hook and deep-show from its checkout's target/: packages/hub/src/pat | no |
 | tests/acceptance/380/ | shared: the GPU | tests/acceptance/380/cts-exact.test.ts calls requireGpu(), tests/acceptance/380/helpers.ts's gate on macOS's Metal device |  |
@@ -202,7 +202,7 @@ A first reading, on main 5f5791e2d. The counts: `node scripts/lanes.mjs alone --
 | tests/acceptance/484/ | shared: the GPU | tests/acceptance/484/counted-dispatch.test.ts calls requireGpu(), tests/acceptance/484/helpers.ts's gate on macOS's Metal device |  |
 | tests/acceptance/252/ | shared: the GPU | tests/acceptance/252/machines.test.ts calls requireGpu(), tests/acceptance/252/helpers.ts's gate on macOS's Metal device |  |
 | tests/acceptance/1993/ | shared: the GPU | tests/acceptance/1993/fields/bodies.test.ts calls requireGpu(), tests/acceptance/1993/fields/helpers.ts's gate on macOS's Metal device |  |
-| tests/acceptance/18/kit/ | no reason | not established: for the owner |  |
+| tests/acceptance/18/kit/ | none: left alone | moved to the parallel block: the owner's ruling on #3066 (issue comment 7075415658): "use your suggestions for the six entries"; in a parallel block of 12 files kit.test.ts and permission.test.ts passed 7 of 7; with packages/conformance/src/kit.ts leaving the ID out of the duplicate-event message kit.test.ts failed AC16 at its assertion |  |
 | tests/acceptance/18/session/ | binary | tests/acceptance/18/session/helpers.ts: run('cargo', ['build', '--locked', '-q', '-p', 'deep-hook'], { timeoutM | yes |
 | tests/acceptance/18/binding/ | binary | tests/acceptance/18/binding/helpers.ts: spawn('cargo', args, { cwd: REPO, env: { ...process.env, HOME: TOOLCHAIN_ | yes |
 | tests/acceptance/18/mapping/callers.test.ts | binary | tests/acceptance/18/mapping/helpers.ts: run('cargo', ['build', '--locked', '-q', '-p', 'deep-hook', '--features | yes |
@@ -323,7 +323,7 @@ A first reading, on main 5f5791e2d. The counts: `node scripts/lanes.mjs alone --
 | tests/acceptance/1493/word.test.ts | binary | tests/acceptance/1493/helpers.ts: spawnSync('cargo', CARGO, { | yes |
 | tests/acceptance/1493/recipe.test.ts | binary | tests/acceptance/1493/helpers.ts: spawnSync('cargo', CARGO, { | yes |
 | tests/acceptance/1493/document.test.ts | binary | tests/acceptance/1493/helpers.ts: spawnSync('cargo', CARGO, { | yes |
-| tests/acceptance/1493-redraft-ac1/ | no reason | not established: for the owner |  |
+| tests/acceptance/1493-redraft-ac1/ | none: left alone | moved to the parallel block: the owner's ruling on #3066 (issue comment 7075415658): "use your suggestions for the six entries"; in a parallel block of 12 files, with scripts/census.mjs skipping an alias that has no row, census.test.ts failed AC1 at its assertion (the planted alias: expected [ …(4) ] to deeply equal []); its first run as it is read BLOCKED for want of its cached reference files, and its run as it is with them cached is pending |  |
 | tests/acceptance/1515/ | binary | tests/acceptance/16/helpers.ts: run('cargo', ['build', '--locked', '-q', '-p', 'deep-hook', ...extra],  | yes |
 | tests/acceptance/1546/ | shared: the GPU | 1546/ac1-journey.test.ts:19 calls 124/helpers.ts:68's gate on GPUI's offscreen Metal renderer |  |
 | tests/acceptance/1348/ | binary | lanes.mjs site comment: "runs the plain words lane, which builds and draws its fixture run in the replica" (the lane's cargo build -p deep-replica) | no |
@@ -724,7 +724,7 @@ A first reading, on main 5f5791e2d. The counts: `node scripts/lanes.mjs alone --
 | tests/acceptance/2776/listing.test.ts | binary | tests/acceptance/2776/helpers.ts: spawnSync('cargo', args, { cwd: REPO, encoding: 'utf8', maxBuffer: 64 * 1024  | yes |
 | tests/acceptance/1215/ | shared: the GPU | 1215/ac8-taste.test.ts:46 calls #1479's needsMac |  |
 | tests/acceptance/2457/ | binary | tests/acceptance/2457/helpers.ts: `cargo build --locked --bin deep-physics`), built be | yes |
-| tests/acceptance/2645/ | no reason | not established: for the owner |  |
+| tests/acceptance/2645/ | shared: memory | writes a 100 MB transcript and measures resident memory; the owner's ruling on #3066 (issue comment 7075415658): "use your suggestions for the six entries" |  |
 | tests/acceptance/2500/ | binary | tests/acceptance/467/helpers.ts: spawnSync('cargo', args, { cwd: REPO, encoding: 'utf8', maxBuffer: 64 * 1024  | yes |
 | tests/acceptance/1489/ | shared: the GPU | 1489/helpers.ts:472: the replica draws with GPUI's offscreen Metal renderer; seek.test.ts:13 |  |
 | tests/acceptance/2777/ | timing | tests/acceptance/2777/preflight.test.ts: environmentProblem( |  |
@@ -739,7 +739,7 @@ A first reading, on main 5f5791e2d. The counts: `node scripts/lanes.mjs alone --
 | tests/acceptance/276/record/ | binary | tests/acceptance/276/record/helpers.ts: spawnSync('cargo', args, { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 | yes |
 | tests/acceptance/276/match/ | binary | tests/acceptance/276/match/helpers.ts: spawnSync('cargo', args, { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 | yes |
 | tests/acceptance/276/web/ | shared: the GPU | 276/web/helpers.ts:247: ready, on WebGPU, used by ac07-web-player.test.ts |  |
-| tests/acceptance/2227/ | no reason | not established: for the owner |  |
+| tests/acceptance/2227/ | shared: the cores | runs the whole workspace build in a copy, 485 s; the owner's ruling on #3066 (issue comment 7075415658): "use your suggestions for the six entries" |  |
 | tests/acceptance/2109/ | binary | lanes.mjs site comment: "runs #83's AC11 goldens, which start real hubs"; a hub runs deep-hook from its checkout's target/ (#2817) | no |
 | tests/acceptance/1518/ | shared: a fixed port | lanes.mjs:1309: "fixed port 8720" |  |
 | tests/acceptance/1518-redraft-ac1/ | shared: a fixed port | 1518-redraft-ac1/heard.test.ts:60 calls withPlugin(w, SPEECH); 509/helpers.ts:425 gives SPEECH port 8720 |  |

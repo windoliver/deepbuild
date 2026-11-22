@@ -2,7 +2,9 @@
 // `aloneReasons`, `binary`, `timing` or `shared: <resource>`, and an entry leaves `alone` only when its reason on the
 // merge base was `binary` and none of its test files that left, or a helper they import, still reads target/, starts
 // cargo, starts a hub, which runs deep-hook from its checkout's target/, or runs a script of scripts/ or a child
-// Vitest, which may do any of those: such files wait for a blind redraft that reads DEEP_BIN_DIR. It reads the names
+// Vitest, which may do any of those: such files wait for a blind redraft that reads DEEP_BIN_DIR. On a merge base
+// older than the reasons, an entry is judged by the reason this checkout names, and one that names none moves on the
+// signature its lanes.mjs edit needs: the owner ruled it had no reason to be alone. It reads the names
 // the files spell out; a start it can't see there rests on the signature the lanes.mjs edit needs. A folder that is
 // alone by its own lane.json isn't read from the merge base: the guard judges a lane file's removal. One
 // `FAIL alone: <entry> ...` line per finding, or one `PASS alone` line; exit 1 on a finding. With no merge base to
@@ -35,7 +37,7 @@ function mergeBase() {
     const tar = join(dir, 'scripts.tar');
     if (git('archive', '-o', tar, base.stdout.trim(), 'scripts').status !== 0 || spawnSync('tar', ['-xf', tar, '-C', dir]).status !== 0) return null;
     symlinkSync(join(root, 'node_modules'), join(dir, 'node_modules'));
-    const code = `const lanes = await import(${JSON.stringify(pathToFileURL(join(dir, 'scripts/lanes.mjs')).href)}); console.log(JSON.stringify({ alone: lanes.alone, reasons: lanes.aloneReasons ?? {} }));`;
+    const code = `const lanes = await import(${JSON.stringify(pathToFileURL(join(dir, 'scripts/lanes.mjs')).href)}); console.log(JSON.stringify({ alone: lanes.alone, reasons: lanes.aloneReasons ?? null }));`;
     const read = spawnSync(process.execPath, ['--input-type=module', '-e', code], { cwd: dir, encoding: 'utf8', maxBuffer: 2 ** 28 });
     return read.status === 0 ? JSON.parse(read.stdout) : null;
   } finally {
@@ -71,7 +73,8 @@ if (base) {
     // An entry whose every file is still listed, by a wider entry or by narrower ones, has not left; nor has one whose files are gone.
     const left = testsOf(entry.replace(/\/$/, '')).filter((file) => !listed(alone, file));
     if (!left.length) continue;
-    const reason = base.reasons[entry];
+    if (!base.reasons && !(entry in aloneReasons)) continue;
+    const reason = (base.reasons ?? aloneReasons)[entry];
     if (reason !== 'binary') findings.push(`${entry} left the alone list, and its reason on the merge base is ${reason ?? 'not named'}: only a binary entry moves\n  Fix: put it back in scripts/lanes.mjs's alone.`);
     const still = reason === 'binary' ? reader(left) : null;
     if (still) findings.push(`${entry} left the alone list while ${still}\n  Fix: put it back in scripts/lanes.mjs's alone until a blind redraft of its files reads their binaries from DEEP_BIN_DIR.`);
