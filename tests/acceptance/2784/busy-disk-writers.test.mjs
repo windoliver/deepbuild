@@ -190,7 +190,11 @@ for (const [name, dd] of [['a dd that fails', failing], ['a dd that writes nothi
     assert.match(reason, /\bdd\b|writ|wrote|load|busy|proves nothing/i, `busy_disk's INCONCLUSIVE line names no reason: ${reading.id}: ${reading.message}`);
   });
 
-test('AC3 #2784.71e24b92 More than three syncs left behind still fails the test: hooks that each leave a spool-sync running read as a NEW FAIL, not INCONCLUSIVE or PASS', LONG, (t) => {
+// AC3 runs twice: with writers that write, and with writers that wrote nothing. Syncs left behind are a failure
+// whatever the load was, so a run whose writers wrote nothing must still read NEW FAIL when its hooks left more than
+// three, never INCONCLUSIVE: a program that answers INCONCLUSIVE for empty writers before it counts the syncs fails.
+for (const [name, dd] of [['', gnuDd], [' even when the writers wrote nothing', empty]])
+test(`AC3 #2784.71e24b92 More than three syncs left behind still fails the test${name}: hooks that each leave a spool-sync running read as a NEW FAIL, not INCONCLUSIVE or PASS`, LONG, (t) => {
   // Each hook leaves one process whose arguments name `spool-sync <its spool folder>`, as a sync the hook stopped
   // waiting for does, and waits until it is running. Its PID is logged and killed after the run.
   let pids = '';
@@ -200,7 +204,7 @@ test('AC3 #2784.71e24b92 More than three syncs left behind still fails the test:
   };
   let run;
   try {
-    run = runBusyDisk(t, { dd: gnuDd, hook });
+    run = runBusyDisk(t, { dd, hook });
   } finally {
     // Kill them before the folder holding their PIDs goes.
     for (const pid of (existsSync(pids) ? readFileSync(pids, 'utf8') : '').split('\n').filter(Boolean).map(Number))

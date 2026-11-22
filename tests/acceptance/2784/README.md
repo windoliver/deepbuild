@@ -35,7 +35,7 @@ this job. Each test carries its tag at the start of its name. All of them run bu
 |---|---|---|
 | AC1 `#2784.3c3e909f` On Linux the writers really write | `AC1 #2784.3c3e909f …` | With the machine's GNU dd judging each writer's operands: GNU dd accepts every writer's operands (opens its file, refuses no number); the operands ask for at least 1 GB (10^9 bytes) per writer, as GNU dd counts them; each writer's file ends that size; each burst starts four writers, each with a file of its own, before its hooks; every hook (the real deep-hook) has its line in the spool folder when it exits; and affected.mjs's reading of the run is a result (PASS or NEW FAIL), never INCONCLUSIVE or BLOCKED |
 | AC2 `#2784.bc2bd4cc` Writers that wrote nothing read INCONCLUSIVE | `AC2 #2784.bc2bd4cc … given a dd that fails …` and `… given a dd that writes nothing …` | With a dd that exits 1 saying GNU dd's `invalid number: '1m'` and writing nothing, and, separately, one that exits 0 leaving its file empty: affected.mjs prints an INCONCLUSIVE line for busy_disk whose text, besides the test's name, names its reason (dd, writing, the load, the disk not busy, or that it proves nothing). It is not a PASS, not a NEW FAIL and not a KNOWN failure |
-| AC3 `#2784.71e24b92` More than three syncs left behind still fails the test | `AC3 #2784.71e24b92 …` | When each of the burst's hooks leaves a process whose arguments are `spool-sync <the run's spool folder>` running, the run reads NEW FAIL (state FAIL) for busy_disk, never INCONCLUSIVE and never PASS |
+| AC3 `#2784.71e24b92` More than three syncs left behind still fails the test | `AC3 #2784.71e24b92 … still fails the test: …` and `… still fails the test even when the writers wrote nothing: …` | When each of the burst's hooks leaves a process whose arguments are `spool-sync <the run's spool folder>` running, the run reads NEW FAIL (state FAIL) for busy_disk, never INCONCLUSIVE and never PASS: once with writers that write (GNU dd's judgment), once with writers that leave their files empty. Syncs left behind are a failure whatever the load was, and a failure outranks a run that proved nothing |
 
 ## How each condition is made
 
@@ -47,7 +47,7 @@ tests/busy_disk.rs (<binary>)` line cargo prints, as `tests/acceptance/2179/` do
 re-links `debug/deep-hook` over the stand-in). Two stand-ins:
 
 - **`dd`, first on the test's PATH.** busy_disk starts `dd` by name from its own environment.
-  - AC1 and AC3, *GNU dd's judgment without its load*: a script that runs the machine's GNU dd (the `dd` on PATH,
+  - AC1 and AC3's first case, *GNU dd's judgment without its load*: a script that runs the machine's GNU dd (the `dd` on PATH,
     checked to be coreutils', else every test is BLOCKED) twice on the test's own operands. First as they are, with
     `count=` set to 0: GNU dd parses every operand and opens the `of=` file, refusing what it refuses (the base's
     `bs=1m` gives `invalid number: '1m'`), and writes nothing. Then with the output to `/dev/null` (and `of=`, `conv=`,
@@ -55,7 +55,7 @@ re-links `debug/deep-hook` over the stand-in). Two stand-ins:
     succeed it gives the writer's file that size, sparse, and exits 0 with GNU dd's own report on stderr; otherwise
     it exits 1 with GNU dd's message. It logs each writer's operands, GNU dd's answer, the bytes and the file's size.
   - AC2, *writers that wrote nothing*: one that prints `dd: invalid number: '1m'` and exits 1, and one that empties
-    its `of=` file, prints a 0-bytes report and exits 0.
+    its `of=` file, prints a 0-bytes report and exits 0. AC3's second case uses the one that empties its file.
 - **The deep-hook the test spawns,** `env!("CARGO_BIN_EXE_deep-hook")`, for this suite `target/acceptance-2784/debug/deep-hook`.
   The test removes that file after the build (cargo's copy in `deps/` stays) and writes a script in its place. The
   hook's environment is cleared to `HOME` alone, so each script's paths are written into its text:
@@ -109,8 +109,9 @@ needs a redraft. The test ID is matched by `busy_disk` in it, so the reading may
   checks only whether the file exists (the same), and one that panics on a failed writer (NEW FAIL, not INCONCLUSIVE).
 - AC3 passes at the base, which is right: 20 syncs left behind fail `most <= 3`, read as NEW FAIL. It is kept as the
   criterion's proof and as regression protection for the fix. It fails on a program that drops or weakens the bound,
-  counts syncs by something the leftover processes don't match, or reads a run with syncs left behind as INCONCLUSIVE
-  (for instance by checking writers after the count and letting that outrank it). None of these was run: each would be
+  counts syncs by something the leftover processes don't match, or reads a run with syncs left behind as INCONCLUSIVE:
+  the first case catches one that lets any writer check outrank the count, and the second one that returns
+  INCONCLUSIVE for writers that wrote nothing before (or instead of) failing on the syncs left behind. None of these was run: each would be
   an edit to `busy_disk.rs` or `lanes.mjs`, outside this folder.
 
 ## Not covered here

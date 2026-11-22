@@ -1,9 +1,11 @@
 Base commit: 2eaaeb0e6 (main, no implementation of #2784)
 Command: node --test --test-reporter=spec tests/acceptance/2784/busy-disk-writers.test.mjs
          (in a systemd --user unit, MemoryMax=24G, CARGO_BUILD_JOBS=2)
-Date: 2026-11-22  Node v24 (the repo's)  linux (the Spark), GNU coreutils dd 9.4 at /usr/bin/dd, load average about 11.
+Date: 2026-11-22  Node v24 (the repo's)  linux (the Spark), GNU coreutils dd 9.4 at /usr/bin/dd, load average about 11 (both drafts' runs).
 Exit code: 1
-Result: 4 tests, 3 failed, 1 passed.
+Result: 5 tests, 3 failed, 2 passed.
+(Second draft, after a blind redraft request: AC3 gained the case with writers that wrote nothing. The first
+draft's run, 4 tests with the same results for AC1, AC2 and AC3's first case, was replaced by this one.)
 
 Why each test reads as it does:
 - AC1 #2784.3c3e909f fails at its first assertion, for the issue's reason: GNU dd, given each writer's own operands
@@ -17,87 +19,108 @@ Why each test reads as it does:
   burst's hooks made `most` 20, busy_disk panicked at busy_disk.rs:211 ("once the hooks exited, 20 spool syncs were
   still running for their spool"), read as NEW FAIL. Kept as the criterion's proof and regression protection; its
   wrong programs are named in README.md. All 20 processes were killed by PID after the run (none left).
+- AC3 #2784.71e24b92's second case ("even when the writers wrote nothing") passes at the base too, as it should: with
+  writers that leave their files empty and hooks that each leave a spool-sync running, busy_disk panicked at
+  busy_disk.rs:211 with 20 syncs left, read as NEW FAIL. The base never checks its writers, so it can't fail this
+  case; it is regression protection against a fix that returns INCONCLUSIVE for empty writers before it counts the
+  syncs. Its 20 processes were killed by PID too (none left after the run).
 
-Checked beside this run (not committed): a planted twin of busy_disk.rs with only the second test's spelling changed
+Checked beside the first draft's run (not committed; AC3's second case didn't exist yet): a planted twin of busy_disk.rs with only the second test's spelling changed
 to `bs=1048576` (the issue's first Scope line). On it AC1 passes (GNU dd accepted all 16 writers' operands, 1073741824
-bytes each, files of that size, the real hook spooled in every call, PASS) and AC3 still passes, while both AC2 cases
+bytes each, files of that size, the real hook spooled in every call, PASS) and AC3's first case still passes, while both AC2 cases
 still fail (PASS): the spelling alone doesn't meet AC2. The twin edit was reverted; the worktree's busy_disk.rs is the
 base's. Not run: a fix that reads empty writers INCONCLUSIVE (that is the implementation), so no run here shows AC2
 passing.
 
+Checked beside the second draft's run (not committed): a planted wrong program, the issue's spelling fix plus, at the
+end of the second test, `return Err("the writers wrote nothing, so the disk was never loaded")` when any busy-<w>.bin
+is missing or empty, before the `most <= 3` assert (the program the redraft request names). On it AC1, both AC2 cases
+and AC3's first case pass (AC2 read "INCONCLUSIVE cargo -p deep-hook --test busy_disk: INCONCLUSIVE.
+hooks_spooling_...: the writers wrote nothing, so the disk was never loaded"), and AC3's second case fails: "a run
+that left syncs behind read as unproven, not as failing", read INCONCLUSIVE where 20 syncs were left. So the new case
+is the one that catches it. The edit was reverted; the worktree's busy_disk.rs is the base's. No leftover spool-sync
+processes after any run.
+
 Output (paths shortened to <checkout>):
 
-✖ AC1 #2784.3c3e909f On Linux the writers really write: GNU dd accepts each writer's operands, each writer's file is written with 1 GB, and the hooks spool after the writers start (3897.437512ms)
+✖ AC1 #2784.3c3e909f On Linux the writers really write: GNU dd accepts each writer's operands, each writer's file is written with 1 GB, and the hooks spool after the writers start (3950.079536ms)
 ℹ busy_disk exited 0; dd ran 16 times, the hook 80; order DDDDHHHHHHHHHHHHHHHHHHHHDDDDHHHHHHHHHHHHHHHHHHHHDDDDHHHHHHHHHHHHHHHHHHHHDDDDHHHHHHHHHHHHHHHHHHHH
 ℹ test hooks_spooling_on_a_stalled_disk_leave_one_sync_and_the_spool_s_makers_running ... ok
 ℹ test result: ok. 1 passed; 0 failed
 ℹ affected.mjs: PASS cargo -p deep-hook --test busy_disk › hooks_spooling_on_a_stalled_disk_leave_one_sync_and_the_spool_s_makers_running
-ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-1.bin → /usr/bin/dd: invalid number: '1m'
-ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-0.bin → /usr/bin/dd: invalid number: '1m'
-ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-3.bin → /usr/bin/dd: invalid number: '1m'
-ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-2.bin → /usr/bin/dd: invalid number: '1m'
-ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-1.bin → /usr/bin/dd: invalid number: '1m'
-ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-0.bin → /usr/bin/dd: invalid number: '1m'
-ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-3.bin → /usr/bin/dd: invalid number: '1m'
-ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-2.bin → /usr/bin/dd: invalid number: '1m'
-ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-2.bin → /usr/bin/dd: invalid number: '1m'
-ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-0.bin → /usr/bin/dd: invalid number: '1m'
-ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-1.bin → /usr/bin/dd: invalid number: '1m'
-ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-3.bin → /usr/bin/dd: invalid number: '1m'
-ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-3.bin → /usr/bin/dd: invalid number: '1m'
-ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-2.bin → /usr/bin/dd: invalid number: '1m'
-ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-1.bin → /usr/bin/dd: invalid number: '1m'
-ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-0.bin → /usr/bin/dd: invalid number: '1m'
-✖ AC2 #2784.bc2bd4cc Writers that wrote nothing read INCONCLUSIVE: given a dd that fails, affected.mjs reports busy_disk INCONCLUSIVE with its reason, never PASS (3838.65929ms)
+ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-0.bin → /usr/bin/dd: invalid number: '1m'
+ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-3.bin → /usr/bin/dd: invalid number: '1m'
+ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-2.bin → /usr/bin/dd: invalid number: '1m'
+ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-1.bin → /usr/bin/dd: invalid number: '1m'
+ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-1.bin → /usr/bin/dd: invalid number: '1m'
+ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-2.bin → /usr/bin/dd: invalid number: '1m'
+ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-0.bin → /usr/bin/dd: invalid number: '1m'
+ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-3.bin → /usr/bin/dd: invalid number: '1m'
+ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-3.bin → /usr/bin/dd: invalid number: '1m'
+ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-2.bin → /usr/bin/dd: invalid number: '1m'
+ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-0.bin → /usr/bin/dd: invalid number: '1m'
+ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-1.bin → /usr/bin/dd: invalid number: '1m'
+ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-1.bin → /usr/bin/dd: invalid number: '1m'
+ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-3.bin → /usr/bin/dd: invalid number: '1m'
+ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-2.bin → /usr/bin/dd: invalid number: '1m'
+ℹ dd if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-0.bin → /usr/bin/dd: invalid number: '1m'
+✖ AC2 #2784.bc2bd4cc Writers that wrote nothing read INCONCLUSIVE: given a dd that fails, affected.mjs reports busy_disk INCONCLUSIVE with its reason, never PASS (3841.233352ms)
 ℹ busy_disk exited 0; dd ran 16 times, the hook 80; order DDDDHHHHHHHHHHHHHHHHHHHHDDDDHHHHHHHHHHHHHHHHHHHHDDDDHHHHHHHHHHHHHHHHHHHHDDDDHHHHHHHHHHHHHHHHHHHH
 ℹ test hooks_spooling_on_a_stalled_disk_leave_one_sync_and_the_spool_s_makers_running ... ok
 ℹ test result: ok. 1 passed; 0 failed
 ℹ affected.mjs: PASS cargo -p deep-hook --test busy_disk › hooks_spooling_on_a_stalled_disk_leave_one_sync_and_the_spool_s_makers_running
-✖ AC2 #2784.bc2bd4cc Writers that wrote nothing read INCONCLUSIVE: given a dd that writes nothing, affected.mjs reports busy_disk INCONCLUSIVE with its reason, never PASS (3865.992757ms)
+✖ AC2 #2784.bc2bd4cc Writers that wrote nothing read INCONCLUSIVE: given a dd that writes nothing, affected.mjs reports busy_disk INCONCLUSIVE with its reason, never PASS (3835.371928ms)
 ℹ busy_disk exited 0; dd ran 16 times, the hook 80; order DDDDHHHHHHHHHHHHHHHHHHHHDDDDHHHHHHHHHHHHHHHHHHHHDDDDHHHHHHHHHHHHHHHHHHHHDDDDHHHHHHHHHHHHHHHHHHHH
 ℹ test hooks_spooling_on_a_stalled_disk_leave_one_sync_and_the_spool_s_makers_running ... ok
 ℹ test result: ok. 1 passed; 0 failed
 ℹ affected.mjs: PASS cargo -p deep-hook --test busy_disk › hooks_spooling_on_a_stalled_disk_leave_one_sync_and_the_spool_s_makers_running
-✔ AC3 #2784.71e24b92 More than three syncs left behind still fails the test: hooks that each leave a spool-sync running read as a NEW FAIL, not INCONCLUSIVE or PASS (414.667313ms)
+✔ AC3 #2784.71e24b92 More than three syncs left behind still fails the test: hooks that each leave a spool-sync running read as a NEW FAIL, not INCONCLUSIVE or PASS (491.594268ms)
 ℹ busy_disk exited 101; dd ran 4 times, the hook 20; order DDDDHHHHHHHHHHHHHHHHHHHH
-ℹ thread 'main' (458396) panicked at crates/deep-hook/tests/busy_disk.rs:211:5:
+ℹ thread 'main' (544027) panicked at crates/deep-hook/tests/busy_disk.rs:211:5:
 ℹ once the hooks exited, 20 spool syncs were still running for their spool
 ℹ test hooks_spooling_on_a_stalled_disk_leave_one_sync_and_the_spool_s_makers_running ... FAILED
 ℹ test result: FAILED. 0 passed; 1 failed
 ℹ affected.mjs: NEW FAIL cargo -p deep-hook --test busy_disk › hooks_spooling_on_a_stalled_disk_leave_one_sync_and_the_spool_s_makers_running
-ℹ tests 4
+✔ AC3 #2784.71e24b92 More than three syncs left behind still fails the test even when the writers wrote nothing: hooks that each leave a spool-sync running read as a NEW FAIL, not INCONCLUSIVE or PASS (485.120394ms)
+ℹ busy_disk exited 101; dd ran 4 times, the hook 20; order DDDDHHHHHHHHHHHHHHHHHHHH
+ℹ thread 'main' (544459) panicked at crates/deep-hook/tests/busy_disk.rs:211:5:
+ℹ once the hooks exited, 20 spool syncs were still running for their spool
+ℹ test hooks_spooling_on_a_stalled_disk_leave_one_sync_and_the_spool_s_makers_running ... FAILED
+ℹ test result: FAILED. 0 passed; 1 failed
+ℹ affected.mjs: NEW FAIL cargo -p deep-hook --test busy_disk › hooks_spooling_on_a_stalled_disk_leave_one_sync_and_the_spool_s_makers_running
+ℹ tests 5
 ℹ suites 0
-ℹ pass 1
+ℹ pass 2
 ℹ fail 3
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 60831.726773
+ℹ duration_ms 14667.873683
 
 ✖ failing tests:
 
 test at tests/acceptance/2784/busy-disk-writers.test.mjs:148:1
-✖ AC1 #2784.3c3e909f On Linux the writers really write: GNU dd accepts each writer's operands, each writer's file is written with 1 GB, and the hooks spool after the writers start (3897.437512ms)
+✖ AC1 #2784.3c3e909f On Linux the writers really write: GNU dd accepts each writer's operands, each writer's file is written with 1 GB, and the hooks spool after the writers start (3950.079536ms)
   AssertionError [ERR_ASSERTION]: GNU dd refused writers' operands, so on Linux those writers write nothing
   + actual - expected
   
   + [
-  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-1.bin: /usr/bin/dd: invalid number: '1m'",
-  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-0.bin: /usr/bin/dd: invalid number: '1m'",
-  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-3.bin: /usr/bin/dd: invalid number: '1m'",
-  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-2.bin: /usr/bin/dd: invalid number: '1m'",
-  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-1.bin: /usr/bin/dd: invalid number: '1m'",
-  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-0.bin: /usr/bin/dd: invalid number: '1m'",
-  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-3.bin: /usr/bin/dd: invalid number: '1m'",
-  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-2.bin: /usr/bin/dd: invalid number: '1m'",
-  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-2.bin: /usr/bin/dd: invalid number: '1m'",
-  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-0.bin: /usr/bin/dd: invalid number: '1m'",
-  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-1.bin: /usr/bin/dd: invalid number: '1m'",
-  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-3.bin: /usr/bin/dd: invalid number: '1m'",
-  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-3.bin: /usr/bin/dd: invalid number: '1m'",
-  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-2.bin: /usr/bin/dd: invalid number: '1m'",
-  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-1.bin: /usr/bin/dd: invalid number: '1m'",
-  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-0.bin: /usr/bin/dd: invalid number: '1m'"
+  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-0.bin: /usr/bin/dd: invalid number: '1m'",
+  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-3.bin: /usr/bin/dd: invalid number: '1m'",
+  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-2.bin: /usr/bin/dd: invalid number: '1m'",
+  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-1.bin: /usr/bin/dd: invalid number: '1m'",
+  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-1.bin: /usr/bin/dd: invalid number: '1m'",
+  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-2.bin: /usr/bin/dd: invalid number: '1m'",
+  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-0.bin: /usr/bin/dd: invalid number: '1m'",
+  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-3.bin: /usr/bin/dd: invalid number: '1m'",
+  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-3.bin: /usr/bin/dd: invalid number: '1m'",
+  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-2.bin: /usr/bin/dd: invalid number: '1m'",
+  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-0.bin: /usr/bin/dd: invalid number: '1m'",
+  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-1.bin: /usr/bin/dd: invalid number: '1m'",
+  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-1.bin: /usr/bin/dd: invalid number: '1m'",
+  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-3.bin: /usr/bin/dd: invalid number: '1m'",
+  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-2.bin: /usr/bin/dd: invalid number: '1m'",
+  +   "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-0.bin: /usr/bin/dd: invalid number: '1m'"
   + ]
   - []
   
@@ -107,14 +130,14 @@ test at tests/acceptance/2784/busy-disk-writers.test.mjs:148:1
       at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
     generatedMessage: false,
     code: 'ERR_ASSERTION',
-    actual: [ "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-1.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-0.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-3.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-2.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-1.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-0.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-3.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-2.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-2.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-0.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-1.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-3.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-3.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-2.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-1.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-456605/busy-0.bin: /usr/bin/dd: invalid number: '1m'" ],
+    actual: [ "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-0.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-3.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-2.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-1.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-1.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-2.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-0.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-3.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-3.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-2.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-0.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-1.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-1.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-3.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-2.bin: /usr/bin/dd: invalid number: '1m'", "if=/dev/zero bs=1m count=1024 of=/tmp/dh315-bound-538420/busy-0.bin: /usr/bin/dd: invalid number: '1m'" ],
     expected: [],
     operator: 'deepStrictEqual',
     diff: 'simple'
   }
 
 test at tests/acceptance/2784/busy-disk-writers.test.mjs:180:3
-✖ AC2 #2784.bc2bd4cc Writers that wrote nothing read INCONCLUSIVE: given a dd that fails, affected.mjs reports busy_disk INCONCLUSIVE with its reason, never PASS (3838.65929ms)
+✖ AC2 #2784.bc2bd4cc Writers that wrote nothing read INCONCLUSIVE: given a dd that fails, affected.mjs reports busy_disk INCONCLUSIVE with its reason, never PASS (3841.233352ms)
   AssertionError [ERR_ASSERTION]: a run whose writers wrote nothing passed, but it never loaded the disk: PASS cargo -p deep-hook --test busy_disk › hooks_spooling_on_a_stalled_disk_leave_one_sync_and_the_spool_s_makers_running
       at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2784/busy-disk-writers.test.mjs:183:12)
       at Test.runInAsyncScope (node:async_hooks:227:14)
@@ -129,7 +152,7 @@ test at tests/acceptance/2784/busy-disk-writers.test.mjs:180:3
   }
 
 test at tests/acceptance/2784/busy-disk-writers.test.mjs:180:3
-✖ AC2 #2784.bc2bd4cc Writers that wrote nothing read INCONCLUSIVE: given a dd that writes nothing, affected.mjs reports busy_disk INCONCLUSIVE with its reason, never PASS (3865.992757ms)
+✖ AC2 #2784.bc2bd4cc Writers that wrote nothing read INCONCLUSIVE: given a dd that writes nothing, affected.mjs reports busy_disk INCONCLUSIVE with its reason, never PASS (3835.371928ms)
   AssertionError [ERR_ASSERTION]: a run whose writers wrote nothing passed, but it never loaded the disk: PASS cargo -p deep-hook --test busy_disk › hooks_spooling_on_a_stalled_disk_leave_one_sync_and_the_spool_s_makers_running
       at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2784/busy-disk-writers.test.mjs:183:12)
       at Test.runInAsyncScope (node:async_hooks:227:14)
