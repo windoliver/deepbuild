@@ -12,6 +12,7 @@ const PROXIED = '3b9f1c2e-1886-4222-8333-44445555aaaa';
 const OWN = '3b9f1c2e-1886-4222-8333-44445555bbbb';
 const CODEX = '01a15756-1886-7910-90bb-db79d3fddb7a';
 const LITERAL = '01a15756-1886-7910-90bb-db79d3fddb7b';
+const QUOTED = '01a15756-1886-7910-90bb-db79d3fddb7c';
 const UNREPORTED = '3b9f1c2e-1886-4222-8333-44445555cccc';
 
 describe('the route a session started on', () => {
@@ -28,12 +29,12 @@ describe('the route a session started on', () => {
       await start(PROXIED, { ANTHROPIC_BASE_URL: true, OPENAI_BASE_URL: false });
       await start(OWN, { ANTHROPIC_BASE_URL: false, OPENAI_BASE_URL: false });
       // Codex sessions whose home, the folder its rollout sits under, sets a model provider other than OpenAI's, in a
-      // basic and in a literal TOML string.
-      const codex = async (id: string, folder: string, provider: string) => {
+      // basic and in a literal TOML string, and under a quoted key.
+      const codex = async (id: string, folder: string, provider: string, key = 'model_provider') => {
         const codexHome = join(home, folder);
         const day = join(codexHome, 'sessions', '2026', '11', '22');
         mkdirSync(day, { recursive: true });
-        writeFileSync(join(codexHome, 'config.toml'), `model = "gpt-5-codex"\nmodel_provider = ${provider}\n`);
+        writeFileSync(join(codexHome, 'config.toml'), `model = "gpt-5-codex"\n${key} = ${provider}\n`);
         const rollout = join(day, `rollout-2026-11-22T02-00-00-${id}.jsonl`);
         writeFileSync(rollout, '');
         mkdirSync(join(home, 'work'), { recursive: true });
@@ -45,6 +46,7 @@ describe('the route a session started on', () => {
       };
       await codex(CODEX, '.codex-work', '"ollama"');
       await codex(LITERAL, '.codex-literal', "'ollama'");
+      await codex(QUOTED, '.codex-quoted', '"ollama"', '"model_provider"');
       // A start whose line reports no route, as an older deep-hook sends it: the record keeps none, never "own route".
       const old = session(home, UNREPORTED);
       expect(await send(join(root, 'hub.sock'), hookLine(ulid(Date.now()), 'SessionStart', old.payload('SessionStart', { source: 'startup' }), { ppid: process.pid, billing: { ANTHROPIC_API_KEY: false } }))).toContain('"ack"');
@@ -55,6 +57,7 @@ describe('the route a session started on', () => {
         expect(routeOf(PROXIED), 'Claude Code\'s route behind a base URL').toEqual({ ANTHROPIC_BASE_URL: true, ANTHROPIC_AUTH_TOKEN: false, CLAUDE_CODE_USE_BEDROCK: false, CLAUDE_CODE_USE_VERTEX: false });
         expect(routeOf(CODEX), 'Codex\'s route on its home\'s model provider').toEqual({ OPENAI_BASE_URL: false, model_provider: true });
         expect(routeOf(LITERAL), 'Codex\'s route on a provider named in a literal string').toEqual({ OPENAI_BASE_URL: false, model_provider: true });
+        expect(routeOf(QUOTED), 'Codex\'s route on a provider under a quoted key').toEqual({ OPENAI_BASE_URL: false, model_provider: true });
         expect(routeOf(UNREPORTED), 'a start that reported no route').toBeUndefined();
         expect(routeOf(OWN), 'Claude Code\'s own route').toEqual({ ANTHROPIC_BASE_URL: false, ANTHROPIC_AUTH_TOKEN: false, CLAUDE_CODE_USE_BEDROCK: false, CLAUDE_CODE_USE_VERTEX: false });
       } finally {
