@@ -447,7 +447,7 @@ fn imports(source: &str) -> Vec<Import> {
             _ if word == "require" && templates.contains(&after) => after,
             _ => continue,
         };
-        if method(&code[..at], bytes, after) {
+        if method(&code[..at], bytes, source.as_bytes(), after) {
             continue;
         }
         let plain = starts
@@ -466,9 +466,10 @@ fn imports(source: &str) -> Vec<Import> {
 
 /// Whether the `(` at `open` begins the parameters of a method named `import` or `require`, `import(name) {`, not a
 /// call: the name stands where only a method's can (`before` ends with `{`, `}`, `;`, `,`, `*`, `static`, `get`,
-/// `set` or `async`), and its `)` is followed by `{` on the same line. A call there followed by `{` doesn't parse;
-/// one elsewhere may (`class A extends import(n) {}`), so it stays a call.
-fn method(before: &str, code: &[u8], open: usize) -> bool {
+/// `set` or `async`), and its `)` is followed by `{` on the same line, with only white space between in the source (a
+/// template's blanked text is no white space: ``import(m)`${{}}` `` is a call). A call there followed by `{` doesn't
+/// parse; one elsewhere may (`class A extends import(n) {}`), so it stays a call.
+fn method(before: &str, code: &[u8], source: &[u8], open: usize) -> bool {
     let before = before.trim_end();
     let name_place = before.ends_with(['{', '}', ';', ',', '*'])
         || ["static", "get", "set", "async"]
@@ -493,10 +494,10 @@ fn method(before: &str, code: &[u8], open: usize) -> bool {
         at += 1;
     }
     at += 1;
-    while code.get(at).is_some_and(|&b| space(b)) {
+    while source.get(at).is_some_and(|&b| space(b)) {
         at += 1;
     }
-    code.get(at) == Some(&b'{')
+    source.get(at) == Some(&b'{') && code.get(at) == Some(&b'{')
 }
 
 /// Where the clause of the `import` or `export` statement whose `from` ends `head` starts, if one does.
@@ -674,7 +675,17 @@ fn scan(source: &str) -> Scan {
                         };
                         let body = &source[at..end];
                         let close = body.rfind('/').map_or(end, |slash| at + slash + 1);
-                        if body.contains(['"', '\'', '`', '{', '}', '(', ')', '[', ']', '*'])
+                        // Read as division, the text between the slashes must end in a value, or the closing `/`
+                        // starts a regex there (`a / / */`, `a / x in /`).
+                        let inner = source[at + 1..close - 1].trim_end_matches([' ', '\t']);
+                        let last = inner.rsplit(|c: char| !ident(c)).next().unwrap_or("");
+                        let ends_in_value = inner.ends_with(ident)
+                            && !EXPRESSION_KEYWORDS.contains(&last)
+                            && !matches!(last, "of" | "yield" | "await")
+                            || inner.ends_with("++")
+                            || inner.ends_with("--");
+                        if !ends_in_value
+                            || body.contains(['"', '\'', '`', '{', '}', '(', ')', '[', ']', '*'])
                             || body
                                 .get(1..close - at - 1)
                                 .is_some_and(|inner| inner.contains('/'))
@@ -792,10 +803,11 @@ fn scan(source: &str) -> Scan {
             b'+' | b'-' if next == Some(byte) => {
                 // Postfix after a value on its line (`a++ / b` divides); prefix otherwise (`++/re/.lastIndex`), as
                 // a line terminator before `++` ends the statement.
-                before = if before == Before::Value && !was_new_line {
-                    Before::Value
-                } else {
-                    Before::Operator
+                before = match before {
+                    Before::Value if !was_new_line => Before::Value,
+                    // `of++` is postfix on a name `of`; `of ++x` isn't: what follows reads either way.
+                    Before::Either => Before::Either,
+                    _ => Before::Operator,
                 };
                 at += 2;
             }
@@ -809,13 +821,18 @@ fn scan(source: &str) -> Scan {
             }
             _ if byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'$' | b'#') => {
                 let start = at;
-                // A number's `.` (`1.5`) is part of it; a name's isn't.
+                // A number's one `.` (`1.5`) is part of it, after decimal digits only; a second (`1.5.x`, `1..x`,
+                // `1e5.x`, `0x1.x`) reaches a property.
                 let number = byte.is_ascii_digit();
                 at += 1;
                 while at < bytes.len()
                     && (bytes[at].is_ascii_alphanumeric()
                         || matches!(bytes[at], b'_' | b'$')
-                        || (number && bytes[at] == b'.'))
+                        || (number
+                            && bytes[at] == b'.'
+                            && bytes[start..at]
+                                .iter()
+                                .all(|&b| b.is_ascii_digit() || b == b'_')))
                 {
                     at += 1;
                 }
@@ -1120,6 +1137,17 @@ mod tests {
             "let a = 1\nlet x = a\n/ [/*] / \"*/ + import('gpui-kit') + /\"/ ]",
             "let x = {} / [/*] / \"*/ + import('gpui-kit') + /\"/ ];",
             "for (const x of [/*] / \"*/ + import('gpui-kit') + /\"/ ]) {}",
+            // Round 10, from a fuzzer checked against V8: a number's second `.` reaches a property; `of++` may be
+            // postfix; a template's text is no white space before a method's `{`; a slash read either way whose
+            // division ends in no value.
+            "let x = 1.5. in / 1; import('gpui-kit'); x = x /1;",
+            "let x = 1e5. in / 1; import('gpui-kit'); x = x /1;",
+            "let of = 0;\nof++ / 1; import(\"gpui-kit\"); 0 /1;",
+            ";import(n)`${{}}`",
+            "{import(`gpui-kit`)`${{}}`}",
+            "String(1, `${import(n)}${{}}`);",
+            "let a = 1;\na\n/ / */; import(\"gpui-kit\"); 0 /1;",
+            "let a = 1;\na\n/ + / */; import(\"gpui-kit\"); 0 /1;",
         ];
         for case in cases {
             let source = format!("const n = \"gpui-\" + \"kit\";\n{case}\n");
