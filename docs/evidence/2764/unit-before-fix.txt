@@ -1,5 +1,5 @@
 
- RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-2764-codex-subagent-hold-2c7675/packages/hub
+ RUN  v5.0.5 <repo>/packages/hub
 
  ❯ test/holds.test.ts (40 tests | 1 failed | 39 skipped) 3693ms
    ❯ a held push (#1156) (38)
