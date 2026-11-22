@@ -168,6 +168,16 @@ side's outlier round doesn't move; the base against itself read medians of 20,33
 moving 9.9 KB of proofs out saves 0.3 M in a release build is the issue's drafted number (from the audit's 0.3 to 1 M);
 if the change's honest saving is below it, that is a dispute about the number, not about this test.
 
+## Redraft
+
+One assertion of `setup.test.ts` (AC1) was redrafted blind, by an approved dispute: it held that `proofs.json` holds
+the merge base's 31 proofs "and no other". A running hub installs one guard entry of its own, with its proof, at
+every start (`no-product-store-write`), on the merge base too, where the proof lands in rules.json, so exactly 31 can't
+hold after setup on any program, and the criterion asks only that the file "holds all 31, each equal to what the
+merge base wrote". It now asks that each of the 31 is there; the next assertion still holds each equal to the base's,
+and other proofs are free. Nothing else changed. On the base it still fails at its first assertion, naming the key
+`proofs` (`BASE-FAILURE.txt`, last section).
+
 ## What this job could not prove
 
 - No test can pass here: no implementation exists, so none of the five failing tests was seen passing, and the

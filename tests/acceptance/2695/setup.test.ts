@@ -30,6 +30,7 @@ test(`${AC1} after deep setup, rules.json holds no proof and ${PROOFS} holds all
   const file = readJson(proofsPath(h));
   expect(file, `after deep setup, ~/.deepbuild/${PROOFS} must be JSON holding the proofs`).toBeDefined();
   const held = proofsHeld(file!);
-  expect(Object.keys(held).sort(), `${PROOFS} must hold the proof of each of the merge base's 31 entries, and no other`).toEqual(Object.keys(want).sort());
+  // Redraft (blind, approved): the hub installs proofs of its own at start (no-product-store-write), so others are free.
+  expect(Object.keys(want).filter((n) => !(n in held)), `${PROOFS} must hold the proof of each of the merge base's 31 entries; other proofs are free (the entries whose proof is missing)`).toEqual([]);
   expect(Object.keys(want).filter((n) => canonical(held[n]) !== canonical(want[n])), `each proof in ${PROOFS} must equal the merge base's (the entries whose proof differs)`).toEqual([]);
 }, T);
