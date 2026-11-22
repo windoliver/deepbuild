@@ -1,0 +1,27 @@
+{
+  "recorded": {
+    "base": "5f5791e2d",
+    "model": "Mac17,10",
+    "os": "27.2",
+    "how": "drawn by the base’s deep-gpu (cargo build --locked --bin deep-gpu at 5f5791e2d) through helpers.ts’s corpusCalls, the reading ac5-nothing-moves.test.ts makes, in two runs whose hashes agreed"
+  },
+  "raster": {
+    "castle": {
+      "final": "1236d7078f4df273654d0f4c495edbbdf2126cf9d46fa10376a41ad5031df3b2",
+      "linear": "0666297b2277d90eb894b80295c63cade21ad866162232cd7841851212c510b0"
+    },
+    "surfaces": {
+      "final": "5a0a0f18cc84a3c995369ff94a6f689961b6d5ca1449bb5cb1533b9ee08f529e",
+      "linear": "de80994fc5e307ddae5c59673672a636f37903f92132e6e11f03fdf8de2d3f95"
+    },
+    "brushed": {
+      "final": "e8345116ca23d2d53b8c0aec9cb3e668c43cfaa2eb62d8e2cff9a08dd8d515d5",
+      "linear": "563b8fada93b1cc16393d92ad54ec0da6df3ad13ba2d6934894e1e93a18500ca"
+    },
+    "frost": {
+      "final": "85422821e6396c1277b4fb98f990c19beff56ceec0901a344eec198644ff40b8",
+      "linear": "36528c4ded3292cf3d10be4f7b0cb47dfeaa27201899cd2832a5230eeb9fd1eb"
+    }
+  },
+  "final": null
+}
