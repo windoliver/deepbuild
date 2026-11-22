@@ -4,7 +4,8 @@
 import { readFileSync } from 'node:fs';
 import { posix } from 'node:path';
 
-const REPO = 'https://github.com/windoliver/deepbuild/blob/main/';
+/** Where the repo's files are on GitHub, as a bare link names them. */
+export const REPO = 'https://github.com/windoliver/deepbuild/blob/main/';
 /** The design docs. */
 export const DOCS = ['docs/technical-design.md', 'docs/canvas-primitives.md'];
 
@@ -26,9 +27,9 @@ export function* prose(text) {
 
 // GitHub's slug: lowercase, keeping letters, marks, numbers, connectors, spaces and hyphens, each space a hyphen.
 const slug = (text) => text.toLowerCase().replace(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, '').replaceAll(' ', '-');
-// A heading's text as GitHub renders it: code spans, links and images by their text, without tags, entities,
+// A heading's text, or a line's, as GitHub renders it: code spans, links and images by their text, without tags, entities,
 // emphasis or closing hashes.
-const headingText = (raw) => raw.replace(/\s+#+\s*$/, '').trim()
+export const headingText = (raw) => raw.replace(/\s+#+\s*$/, '').trim()
   .replace(/(`+)(.+?)\1|!?\[([^\]]*)\]\([^)]*\)|<[^>]*>|&#?\w+;|\*+|__+/g, (_, tick, code, label) => code ?? label ?? '');
 
 // A doc's anchors in order, each to the slug of the heading it belongs to: a heading's own slug, slugged as GitHub

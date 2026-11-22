@@ -9,7 +9,7 @@ The prototype app is in `app/` on the `public-history-oct15/spike-gpui-app` bran
 Each line below is an idea that decides a new question, with a link to the rule in full and the check that fails when the line is broken; the first four are AGENTS.md's invariants, word for word.
 
 1. An agent's word is never evidence. Only check results are. ([Verdicts](#verdicts), `verdict proofs`)
-2. Nothing missing or unrun passes. It's `BLOCKED`, `INVALID` or `INCONCLUSIVE`, never `PASS`. ([Verdicts](#verdicts), `scripts/proof.mjs`)
+2. Nothing missing or unrun passes. It's `BLOCKED`, `INVALID` or `INCONCLUSIVE`, never `PASS`. ([Verdicts](#verdicts), `verdict proofs`, `scripts/proof.mjs`)
 3. Agents can't change checks or decisions. ([The edit guard](#built-to-be-hard-to-get-wrong), `scripts/proof-guard.mjs`)
 4. A person sees only what needs a person, and never the same question twice. ([Asks](#an-ask-and-your-answer-getting-back), `unit`)
 5. Every document is checked as data before it shows, and each failure comes back with its fix ([Checked before it shows](#prim-rules), `canvas kit`).

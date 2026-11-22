@@ -5,7 +5,7 @@
 // INCONCLUSIVE, never PASS. It also reads the design's Principles section (#2339): see principles() below.
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { posix } from 'node:path';
-import { DOCS, anchors, prose, resolve, targets } from './doc-links.mjs';
+import { DOCS, REPO, anchors, headingText, prose, resolve, targets } from './doc-links.mjs';
 import { checks } from './lanes.mjs';
 import { openIssues } from './open-issues.mjs';
 
@@ -55,19 +55,26 @@ const TD = 'docs/technical-design.md';
 const CANVAS = 'docs/canvas-primitives.md';
 const CONVENTIONS = 'Conventions every primitive uses';
 const LANES = new Set(checks.map(({ name }) => name));
-// A line as GitHub renders it: links by their label, code spans by their text, without tags, emphasis or extra space.
-const rendered = (text) => text.replace(/(`+)(.+?)\1|!?\[([^\]]*)\]\([^)]*\)|<[^>]*>|\*+|__+/g, (_, tick, code, label) => code ?? label ?? '').replace(/\s+/g, ' ').trim();
-// The sentence ends of a line as rendered, code spans left out: a . ! or ? with any closing quote or bracket, then space.
-const sentences = (text) => (rendered(text.replace(/(`+).+?\1/g, '')).match(/[.!?]["'’”)\]]*(?=\s|$)/g) ?? []).length;
+// A line as GitHub renders it, its white space collapsed.
+const rendered = (text) => headingText(text).replace(/\s+/g, ' ');
+// The sentences of a line as rendered, code spans and the closing parenthesis of links and checks left out: each end
+// (a . ! or ? with any closing quote or bracket, then space, never e.g., i.e. or etc.), and text after the last end.
+function sentences(text) {
+  const plain = rendered(text.replace(/(`+).+?\1/g, '')).replace(/\s*\([^()]*\)\s*([.!?]?)$/, '$1').replace(/\b(?:e\.g|i\.e|etc)\./gi, 'eg');
+  const ends = plain.match(/[.!?]["'’”)\]]*(?=\s|$)/g) ?? [];
+  return ends.length + (/[.!?]["'’”)\]]*$/.test(plain) || !plain ? 0 : 1);
+}
 const HEADING = /^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$/;
-// A section of a doc: the headings before its heading, the heading after it, and its list items, each with its line
-// number and its continuation lines joined, as GitHub joins an indented or lazy one. Lines in fenced code are skipped.
+// A level-2 section of a doc: the headings before its heading, the heading after it, its list items, each with its
+// line number and its continuation lines joined as GitHub joins an indented or lazy one, and the lines of any paragraph
+// after the first item. Lines in fenced code are skipped.
 function section(file, title) {
   const lines = [...prose(readFileSync(file, 'utf8'))];
-  const at = lines.findIndex(({ line }) => line.match(HEADING)?.[2].toLowerCase() === title.toLowerCase());
+  const at = lines.findIndex(({ line }) => { const heading = line.match(HEADING); return heading?.[1] === '##' && heading[2].toLowerCase() === title.toLowerCase(); });
   if (at < 0) return null;
   const before = lines.slice(0, at).filter(({ line }) => HEADING.test(line));
   const found = [];
+  const stray = [];
   let open = false;
   let next;
   for (const { number, line } of lines.slice(at + 1)) {
@@ -78,22 +85,23 @@ function section(file, title) {
     const item = line.match(/^ {0,3}(?:[-*+]|\d{1,9}[.)])\s+(.*)$/);
     if (item) found.push({ number, text: item[1] });
     else if (found.length && line.trim() && (open || /^\s+\S/.test(line))) found.at(-1).text += ` ${line.trim()}`;
+    else if (found.length && line.trim() && !/^\s*<a\s[^>]*>(?:\s*<\/a>)?\s*$/i.test(line)) stray.push(number);
     open = item ? true : open && Boolean(line.trim());
   }
-  return { before, next, found };
+  return { before, next, found, stray };
 }
-const REPO = 'https://github.com/windoliver/deepbuild/blob/main/';
 // The scripts a line names: a code span whose first word is a path under scripts/, or a link to one.
 function scriptsOf(text) {
   const spans = [...text.matchAll(/(`+)(.+?)\1/g)].map((m) => m[2].trim().split(/\s/)[0]);
   const links = targets(text).map((target) => target.replace(/[?#].*$/, '')).map((path) => (path.startsWith(REPO) ? path.slice(REPO.length) : /^[a-z][\w+.-]*:/i.test(path) ? '' : posix.join(posix.dirname(TD), path)));
-  return [...new Set([...spans, ...links].filter((path) => path.startsWith('scripts/')))];
+  return [...new Set([...spans, ...links].filter((path) => path.startsWith('scripts/')).map((path) => posix.normalize(path)))];
 }
 function principles() {
   const problems = [];
   const principled = section(TD, 'Principles');
   if (!principled) return [`${TD} has no \`## Principles\` section before "What version 0 builds, and what waits"`];
-  const { before, next, found } = principled;
+  const { before, next, found, stray } = principled;
+  for (const number of stray) problems.push(`${TD}:${number} is text in Principles outside its lines: only the opening paragraph may stand outside the list`);
   if (before.length !== 1 || !/^# /.test(before[0].line)) problems.push(`${TD}:${before.at(-1)?.number ?? 1} Principles doesn't follow the doc's title alone`);
   if (!/^##\s+What version 0 builds, and what waits\s*$/.test(next ?? '')) problems.push(`${TD} Principles isn't right before "What version 0 builds, and what waits"`);
   if (found.length < 8 || found.length > 12) problems.push(`${TD} Principles holds ${found.length} lines, not 8 to 12`);
@@ -110,13 +118,13 @@ function principles() {
     if (extra > (invariant ? 0 : 1)) problems.push(`${at} is ${sentences(text)} sentences, not ${invariant ? `invariant ${i + 1}'s ${sentences(invariant.text)}` : 'one'}`);
     if (!targets(text).some((target) => { const link = resolve(target, TD); return link?.id && DOCS.includes(link.file); })) problems.push(`${at} has no link into the design`);
     const scripts = scriptsOf(text);
-    for (const script of scripts) if (!existsSync(script) || !statSync(script).isFile()) problems.push(`${at} names ${script}, which isn't a file`);
+    for (const script of scripts) if (!script.startsWith('scripts/') || !existsSync(script) || !statSync(script).isFile()) problems.push(`${at} names ${script}, which isn't a file under scripts/`);
     const lanes = [...text.matchAll(/(`+)(.+?)\1/g)].map((m) => m[2].trim()).filter((code) => LANES.has(code));
     if (!scripts.length && !lanes.length) problems.push(`${at} names no check: a \`scripts/…\` file or a lane of scripts/lanes.mjs, in code`);
   }
   const canvas = readFileSync(CANVAS, 'utf8').split(/\r?\n/);
   const conventions = canvas.findIndex((line) => line === `## ${CONVENTIONS}`);
-  const opening = canvas.slice(conventions + 1).find((line) => line.trim() && !/^\s*<a\s[^>]*>(?:\s*<\/a>)?\s*$/i.test(line));
+  const opening = canvas.slice(conventions + 1).find((line) => line.trim() && !/^\s*(?:<a\s[^>]*>(?:\s*<\/a>)?|<!--.*-->)\s*$/i.test(line));
   const lands = HEADING.test(opening ?? '') ? [] : targets(opening ?? '').map((target) => resolve(target, CANVAS)).filter((link) => link?.file === TD && anchors(TD).get(link.id) === 'principles');
   if (conventions < 0 || lands.length !== 1) problems.push(`${CANVAS}:${conventions + 1} "${CONVENTIONS}" doesn't open with one link to ${TD}#principles`);
   return problems;
