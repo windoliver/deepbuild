@@ -1478,6 +1478,8 @@ workloads['between-steps'] = async () => (await import('./between-steps.mjs')).b
 workloads['world-pages'] = async () => (await import('./world-pages.mjs')).worldPages({ root, release, once, runs });
 workloads['water-rings'] = async () => (await import('./water-rings.mjs')).waterRings({ root, release, once, runs });
 workloads['atlas-draw'] = async () => (await import('./atlas-draw.mjs')).atlasDraw({ release, once, runs });
+// #161's budgets: the fx@1 pack's own check, each operator's compile and a still canvas's dispatches (benchmarks/fx-pack.mjs).
+workloads['fx-pack'] = async () => (await import('./fx-pack.mjs')).fxPack({ root, release, once, runs });
 // #184's budgets: the maze's 40 runs and replays on two replicas with no work added to a piece played without the
 // plug-in, and 20 runs of the 2-minute maze on four replicas as a multiple of real time (benchmarks/playtest.mjs).
 for (const task of ['playtest-maze', 'playtest-throughput', 'playtest-crawler']) workloads[task] = async () => (await import('./playtest.mjs')).playtest({ root, release, task, planted: planted() });
