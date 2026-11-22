@@ -47,7 +47,7 @@ export function shippedRules(): { v: number; entries: Obj; proofs?: Obj } {
  * between an install's two writes leaves the newer ones there); why not when the file exists and can't be read or isn't
  * that shape. A missing file holds none.
  */
-export function readProofs(dir: string, rules: Obj): { proofs: Obj } | { why: string } {
+function readProofs(dir: string, rules: Obj): { proofs: Obj } | { why: string } {
   const legacy = isObj(rules.proofs) ? rules.proofs : {};
   const file = join(dir, PROOFS);
   let read: unknown;
@@ -112,9 +112,9 @@ export async function blocksCall(dir: string, deepHook: string, command: string)
 }
 
 /**
- * The guard entries in `<dir>/rules.json` that name a rule they enforce (`proofs.<name>.rule`, #344) and pass their check
- * now: deep-hook's matcher denies the planted call and allows the twin. An entry that fails, or that can't be checked, is
- * left out, so its rule reads text only.
+ * The guard entries in `<dir>/rules.json` whose proof names a rule they enforce (`proofs.<name>.rule` in proofs.json, #344)
+ * and that pass their check now: deep-hook's matcher denies the planted call and allows the twin. An entry that fails, or
+ * that can't be checked, is left out, so its rule reads text only.
  */
 export async function provenGuards(dir: string, deepHook: string): Promise<{ name: string; rule: string }[]> {
   let read: { entries?: Obj; classes?: Obj };
