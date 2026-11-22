@@ -1,0 +1,89 @@
+Base commit: edf0e0349 ("Blind base for a redraft (local, never pushed): main 188b3100a with one issue's change undone
+             and its old suite left out"), branch blind-689-suite.
+Machine: macOS 27.2 on Apple silicon (Mac17,10, 18 cores), the shared Mac this job ran on, one-minute load 70 to 140.
+Rust: rustup 1.29.3 (Homebrew, /opt/homebrew/opt/rustup/bin, not on PATH; the tests find it there). Installed under
+      ~/.rustup: 1.99.1-aarch64-apple-darwin (rustc 1.99.1 58cf8f9c3 2026-10-13, with rustfmt, clippy and the wasm32
+      target) and stable-aarch64-apple-darwin, which is rustc 1.100.0 (0ef1bc386 2026-11-09). No settings.toml, so rustup
+      falls back to stable. RUSTUP_HOME and CARGO_HOME unset in the calling shell.
+IDs: the first 8 hex digits of SHA-256 of each criterion line of the issue body, "- [ ] " dropped, trimmed, whitespace
+     collapsed: 6c214cc8, aa1fa756, 4283cde6, a5c89962, as briefed.
+Setup: node_modules linked to the main checkout's; npm run build --workspaces once (85 s), for packages/cli/dist.
+Nothing installed or downloaded a toolchain: every child ran with RUSTUP_AUTO_INSTALL=0 and rustup's servers at
+http://127.0.0.1:9.
+
+== The base, once (each file once)
+
+AC3, 01:46 Nov 22, 4.4 s:
+  node --test tests/acceptance/689-redraft-2047/ac3-preflight-homes.test.mjs
+  (A first start of this file waited for a top-level timed grant, which waits for load under the cores, and was stopped
+  by its PID after 3 min; the fixture now runs under a build grant of its own table, as #12's does, and this is the run.)
+  ✖ AC3 #689.4283cde6 ... (4372 ms)
+    AssertionError [ERR_ASSERTION]: with RUSTUP_HOME and CARGO_HOME unset by the caller, each check lane gets [lane,
+    RUSTUP_HOME, CARGO_HOME] other than the user's /Users/<user>/.rustup and /Users/<user>/.cargo.
+    + actual - expected: for each of the 22 check lanes (typecheck, lint, unit, contracts, interfaces, noop, seams,
+    relay, wasm32, catalogue drift, design links and names, public text, plain words, corpus, motion, canvas kit, field
+    lists, parity suite quick, parity quick, proof, verdict proofs, config eval):
+      +     null,
+      +     null
+      -     '/Users/<user>/.rustup',
+      -     '/Users/<user>/.cargo'
+    The preflight's output: RUN and FAIL for each probe lane, "BLOCKED perf: the check lanes did not pass", "BLOCKED
+    harness budgets", SKIP for each release lane, "Checks elapsed: 3.94 s".
+
+AC1, AC2, AC4, 01:52 to 01:54 Nov 22, 2 min 43 s in all:
+  node --test --test-concurrency=1 tests/acceptance/689-redraft-2047/ac1-pin.test.mjs \
+    tests/acceptance/689-redraft-2047/ac2-checks.test.mjs tests/acceptance/689-redraft-2047/ac4-app-in-unit-lane.test.mjs
+  ✖ AC1 #689.6c214cc8 rustc --version run at the repository root reports 1.99.1, chosen by the checkout itself (142 ms)
+    AssertionError [ERR_ASSERTION]: rustc --version at the repository root reports rustc 1.100.0 (0ef1bc386
+    2026-11-09), not 1.99.1   (ac1-pin.test.mjs:31; + '1.100.0' - '1.99.1')
+    The isolated-home half wasn't reached. Probed apart, before the test was written: in a rustup home holding only
+    1.99.1 and no settings, rustc at a folder whose rust-toolchain.toml names no channel (the base's) says "error:
+    toolchain 'stable-aarch64-apple-darwin' is not installed" (exit 1); with channel "1.99.1" it reports rustc 1.99.1.
+  ✖ AC2 #689.aa1fa756 on 1.99.1, cargo fmt --all -- --check, cargo clippy ... and cargo test --workspace --locked
+    pass (5175 ms)
+    AssertionError [ERR_ASSERTION]: cargo fmt --all -- --check fails on 1.99.1, 35 files unformatted:
+    crates/deep-app/src/card.rs, crates/deep-app/src/list.rs, crates/deep-app/src/question.rs,
+    crates/deep-app/src/record.rs, crates/deep-app/src/states.rs, crates/deep-canvas/src/horizon.rs, ... (176 diff hunks;
+    among them import order, as in crates/deep-scene3d-render/src/lib.rs:72, and line breaks, as in
+    crates/deep-show/src/sandbox.rs:1386). Clippy and cargo test weren't reached.
+  ✔ AC4 #689.a5c89962 #16 AC2's app test passes in the unit lane, its cargo run downloading no toolchain into the
+    test's HOME (157745 ms)
+    ℹ warm build: exit 0 after 2.5 min (cargo test -p deep-app --test hub_client --locked --no-run, a cold target/;
+      the lease printed "The hub isn't answering ... runs with no lease")
+    It passes at the base: tests/vitest-setup.ts (there before this change) sets RUSTUP_HOME and CARGO_HOME from
+    homedir() for every vitest file when unset, so #16's cargo run reached ~/.rustup though the base's preflight passes
+    no homes; with no pin, it built on stable (1.100.0) and there was nothing to download.
+
+== A stand-in fix and the twins (scratch copies under the worktree's ignored target/, never committed)
+
+Stand-in fix: rust-toolchain.toml with channel "1.99.1", components rustfmt and clippy, the wasm32 target; and in
+scripts/preflight.mjs, after `delete process.env.CARGO_TARGET_DIR;`:
+  process.env.RUSTUP_HOME ??= join(homedir(), '.rustup');
+  process.env.CARGO_HOME ??= join(homedir(), '.cargo');
+Small checkouts (this checkout's scripts/, benchmarks/budgets.json, rust-toolchain.toml and this folder), node --test
+--test-concurrency=1 ac1-pin.test.mjs ac3-preflight-homes.test.mjs in each, 01:50 Nov 22:
+  fix                        exit 0, 13.7 s   ✔ AC1  ✔ AC3
+  fix + pin-stable           exit 1, 13.0 s   ✖ AC1: rustc --version at the repository root reports rustc 1.100.0
+                                                (0ef1bc386 2026-11-09), not 1.99.1          ✔ AC3
+  fix + homes-dropped        exit 1, 5.9 s    ✔ AC1  ✖ AC3: with RUSTUP_HOME and CARGO_HOME unset by the caller, each
+                                                check lane gets ... other than the user's ... (null, null)
+  fix + caller-overridden    exit 1, 11.8 s   ✔ AC1  ✖ AC3: with RUSTUP_HOME and CARGO_HOME set by the caller, each
+                                                check lane gets ... other than the caller's ...
+  fix + fresh-homes          exit 1, 6.1 s    ✔ AC1  ✖ AC3: with RUSTUP_HOME and CARGO_HOME unset by the caller ...
+All four failures are node:assert AssertionErrors thrown in the test files.
+
+fmt-violation over a clone copy of the base's tracked files (no .git), node --test ac2-checks.test.mjs, 8.0 s:
+  ✖ AC2: cargo fmt --all -- --check fails on 1.99.1, 36 files unformatted: ..., crates/deep-canvas-drawn/src/lib.rs, ...
+  (the base's 35 and the twin's file; rustfmt 1.99.1 on the twin's `pub  mod geometry {}` alone prints
+  "-pub  mod geometry {} +pub mod geometry {}").
+
+AC4 over clone copies of the base's tracked files (no .git; packages/*/dist and the node_modules link added), node
+--test ac4-app-in-unit-lane.test.mjs, each with a cold target/ of its own, 01:55 to 02:08 Nov 22:
+  fresh-homes over the base     exit 1, 124.9 s (warm build 1.9 min)
+    ✖ AC4: cargo test --locked -q -p deep-app --test hub_client (HOME /private/tmp/dh16-…/h, RUSTUP_HOME
+      <box>/unit-tmp/deep-rustup-…, CARGO_HOME <box>/unit-tmp/deep-cargo-…) failed with exit 1.
+      The lane: "FAIL unit: AssertionError: cargo test -p deep-app --test hub_client: error: toolchain
+      'stable-aarch64-apple-darwin' is not installed" (with the pin it would ask for 1.99.1, the same way).
+  the stand-in fix              exit 0, 143.8 s (warm build 2.3 min, on 1.99.1 by the pin)
+    ✔ AC4: RUN unit, PASS unit; #16's "AC2 the app (#34)" passed; its cargo run took ~/.rustup and ~/.cargo from the
+      preflight, outside its temporary HOME, and left no toolchain there.
