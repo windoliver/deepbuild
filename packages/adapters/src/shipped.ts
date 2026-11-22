@@ -158,18 +158,16 @@ export const codexParts: AdapterParts = {
   doctor: () => notChecked('codex'),
   readUsage: readCodexUsage,
   // Codex's model provider, from its config.toml, and OPENAI_BASE_URL: each other than the default moves its route.
-  // The provider is a top-level key, before the first table; a profile or a provider table may name another, and a
-  // base URL key moves OpenAI's own, so a config with any of them reads as moved, never as the default (#1886).
+  // The file is read whole, never parsed (#1886): any provider other than OpenAI's, a profile, a profiles or provider
+  // table, or a base URL key, wherever it stands, reads as moved, so a config this misreads errs toward a moved route.
   routeAtStart: (env) => {
     let moved = false;
     try {
       const config = readFileSync(join(env.CODEX_HOME ?? join(env.HOME ?? '', '.codex'), 'config.toml'), 'utf8');
-      const top = config.split(/^\s*\[/m)[0]!;
       // A bare or quoted key, and a basic or a literal TOML string.
-      const named = /^\s*(?:model_provider|"model_provider"|'model_provider')\s*=\s*(?:"([^"]*)"|'([^']*)')/m.exec(top);
-      const provider = named ? named[1] ?? named[2] : undefined;
-      moved = (provider !== undefined && provider !== 'openai')
-        || /^\s*["']?(?:profile|profiles|model_providers|openai_base_url)["']?\s*[.=]/m.test(top)
+      const providers = [...config.matchAll(/^\s*(?:model_provider|"model_provider"|'model_provider')\s*=\s*(?:"([^"]*)"|'([^']*)')/gm)].map((m) => m[1] ?? m[2]);
+      moved = providers.some((p) => p !== 'openai')
+        || /^\s*["']?(?:profile|profiles|model_providers|openai_base_url|chatgpt_base_url|oss_provider)["']?\s*[.=]/m.test(config)
         || /^\s*\[{1,2}\s*["']?(?:profiles|model_providers)["']?\s*[.\]]/m.test(config);
     } catch { /* no config: the default provider */ }
     return { OPENAI_BASE_URL: !!env.OPENAI_BASE_URL, model_provider: moved };
