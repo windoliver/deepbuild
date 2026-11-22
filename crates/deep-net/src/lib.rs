@@ -20,11 +20,14 @@ pub mod window;
 pub use copy::{Change, Copy, Defect, End, Hashed, Planted, Stepper};
 
 /// #551's planted names that aren't a copy's: logic's rollback ring and page tracker, and the
-/// rate rule.
-pub const PLANTED: [&str; 4] = [
+/// rate rule; and #278's, the test relay's.
+pub const PLANTED: [&str; 6] = [
     "net_ring_misses_fill",
     "net_ring_keeps_after",
     "net_keeps_replaced_checkpoint",
     "net_rate_faster_only",
+    // #278's planted relays, which answer a copy that joins with state.
+    "relay_sends_joiner_state",
+    "relay_sends_old_seat_state",
 ];
 pub use kind::{Config, FLICKS};

@@ -875,6 +875,9 @@ alone.push('tests/acceptance/552/');
 // seam's interop part, which builds deep-show and the shipped relay and plays the app against headless Chrome's web
 // player through it, and ac4 reads net.budget's five runs (INCONCLUSIVE off a reference Mac or under load).
 alone.push('tests/acceptance/553/');
+// #278's files each build deep-show (ac1 and ac4 also the shipped relay) and play matches in process; ac1 and ac4 also
+// play live rooms of app copies, ac1 one with headless Chrome's web player, through the shipped relay.
+alone.push('tests/acceptance/278/');
 byHand.push('tests/acceptance/549/ac2-join-only.test.ts');
 // #297's files each build deep-show and run its scenarios; the Oracle lane runs thousands of frames through it.
 alone.push('tests/acceptance/297/', 'tests/acceptance/297-oracle/');
