@@ -237,8 +237,11 @@ const CEILING = 10 * 2 ** 30;
 const TOOLS = [['node', ['--version']], ['npm', ['--version']], ['rustc', ['-vV']], ['cargo', ['-V']], ['cc', ['--version']], ['pkg-config', ['--version']],
   ...(process.platform === 'darwin' ? [['swiftc', ['--version']], ['xcrun', ['--show-sdk-version']]] : [['ldd', ['--version']]])];
 // The environment a build reads besides its files: cargo's and rustc's, the C toolchain's as the cc, bindgen and
-// pkg-config crates read it (per target too), and node's and npm's.
-const BUILD_ENV = /^(?:CARGO_.*|RUSTC.*|RUSTFLAGS|RUSTDOCFLAGS|RUSTUP_TOOLCHAIN|(?:CC|CXX|AR|CFLAGS|CXXFLAGS|CPPFLAGS|LDFLAGS)(?:_.+)?|(?:TARGET|HOST)_.+|CRATE_CC_NO_DEFAULTS|PKG_CONFIG.*|LIBCLANG_PATH|CLANG_PATH|LLVM_CONFIG_PATH|BINDGEN_.+|.+_SYS_.+|CPATH|C_INCLUDE_PATH|CPLUS_INCLUDE_PATH|OBJC_INCLUDE_PATH|LIBRARY_PATH|TOOLCHAINS|SDKROOT|MACOSX_DEPLOYMENT_TARGET|DEVELOPER_DIR|NODE_OPTIONS|NODE_ENV|NODE_PATH|[Nn][Pp][Mm]_[Cc][Oo][Nn][Ff][Ii][Gg]_.+)$/;
+// pkg-config crates read it (per target too), node's and npm's, and the project's own, which a package's build script
+// or what it imports may read, as pi's tools.mjs reads DEEP_HUB_PLANT through the hub's dist. Left out are what differs
+// on every run and no build reads: the lane's own lease, paths and settings, and where cargo writes.
+const BUILD_ENV = /^(?:DEEP_.+|CARGO_.*|RUSTC.*|RUSTFLAGS|RUSTDOCFLAGS|RUSTUP_TOOLCHAIN|(?:CC|CXX|AR|CFLAGS|CXXFLAGS|CPPFLAGS|LDFLAGS)(?:_.+)?|(?:TARGET|HOST)_.+|CRATE_CC_NO_DEFAULTS|PKG_CONFIG.*|LIBCLANG_PATH|CLANG_PATH|LLVM_CONFIG_PATH|BINDGEN_.+|.+_SYS_.+|CPATH|C_INCLUDE_PATH|CPLUS_INCLUDE_PATH|OBJC_INCLUDE_PATH|LIBRARY_PATH|TOOLCHAINS|SDKROOT|MACOSX_DEPLOYMENT_TARGET|DEVELOPER_DIR|NODE_OPTIONS|NODE_ENV|NODE_PATH|[Nn][Pp][Mm]_[Cc][Oo][Nn][Ff][Ii][Gg]_.+)$/;
+const PER_RUN = /^(?:CARGO_TARGET_DIR|CARGO_BUILD_TARGET_DIR|npm_config_local_prefix|DEEP_(?:THROTTLE.*|BIN_DIR|PROOF_.+|BUILD_CACHE_BYTES|OPEN_ISSUES|WINDOW|PERF_LOCK|APPROVERS))$/;
 const LOCKS = ['package-lock.json', 'npm-shrinkwrap.json', 'Cargo.lock'];
 const DAY = 24 * 60 * 60_000;
 
@@ -314,11 +317,15 @@ function buildInputs(bay) {
     } catch {}
     for (const name of names) {
       const script = join(bay, folder, name, 'build.rs');
-      if (existsSync(script)) for (const [, variable] of readFileSync(script, 'utf8').matchAll(/rerun-if-env-changed=([A-Za-z_][A-Za-z0-9_]*)/g)) declared.add(variable);
+      let text = '';
+      try {
+        text = readFileSync(script, 'utf8');
+      } catch {}
+      for (const [, variable] of text.matchAll(/rerun-if-env-changed=([A-Za-z_][A-Za-z0-9_]*)/g)) declared.add(variable);
     }
   }
   // A variable that names a file stands for that file's bytes too, as DEEP_KIT_LEDGER does for deep-show's ledger.
-  const env = Object.entries(process.env).filter(([name]) => (BUILD_ENV.test(name) || declared.has(name)) && !['CARGO_TARGET_DIR', 'CARGO_BUILD_TARGET_DIR', 'npm_config_local_prefix'].includes(name))
+  const env = Object.entries(process.env).filter(([name]) => (BUILD_ENV.test(name) || declared.has(name)) && !PER_RUN.test(name))
     .sort(([a], [b]) => (a < b ? -1 : 1)).map(([name, value]) => [name, value, isAbsolute(value) ? hashOf(value) : null]);
   return { lanes: LANE_CODE, tools, locks, installed, configs, above, env };
 }
@@ -340,6 +347,19 @@ function stamps(bay, at = '', found = new Map()) {
     else found.set(path, stamp(join(bay, path)).text);
   }
   return found;
+}
+
+/** What lies at the top of the folders a bay keeps, which a keep can't carry: node_modules by scope, and target/. */
+function outside(bay) {
+  const names = (folder) => {
+    try {
+      return readdirSync(join(bay, folder)).sort();
+    } catch {
+      return null;
+    }
+  };
+  const modules = names('node_modules');
+  return JSON.stringify([modules?.flatMap((name) => (name.startsWith('@') ? [name, ...(names(`node_modules/${name}`) ?? [])] : [name])), names('target'), hashOf(join(bay, 'node_modules/.deep-bay-installed'))]);
 }
 
 /** A hash of every entry in the bay outside what it keeps: its path, its kind and mode, and its bytes or its link. */
@@ -789,10 +809,11 @@ class Pair {
   build(role, run) {
     const state = this.roles[role];
     const line = { index: this.index, role, use: state.use, tree: state.tree.tree };
-    let key = null, taken, before = null, unkept = null;
+    let key = null, taken, before = null, around = null, unkept = null;
     try {
       // Taken before the key's files are read, so a file that changes between the two is one the keep refuses.
       before = stamps(state.bay);
+      around = outside(state.bay);
       const inputs = buildInputs(state.bay);
       key = sha(JSON.stringify({ bay: state.bay, files: state.untouched, ...inputs }));
       taken = reach(key, state.bay);
@@ -815,7 +836,8 @@ class Pair {
       // A workspace build adds files in its packages, since the bay's dist folders are pruned before it. A file that
       // was there before and changed, one deleted, or one outside the packages is another writer's, such as a hub a
       // test left running, and no later use may get it laid back.
-      const stray = paths.find((path) => before.has(path) || !/^packages\/[^/]+\/./.test(path)) ?? [...before.keys()].find((path) => !after.has(path));
+      const stray = paths.find((path) => before.has(path) || !/^packages\/[^/]+\/./.test(path)) ?? [...before.keys()].find((path) => !after.has(path))
+        ?? (outside(state.bay) !== around ? 'node_modules or target' : undefined);
       return stray ? { refused: `${stray} changed while the bay built, which a workspace build doesn't do` } : { from: state.bay, paths };
     }) : { kept: false };
     this.print(`BUILD ${JSON.stringify({ ...line, key, reused: false, why: taken.why, ...kept })}`);
