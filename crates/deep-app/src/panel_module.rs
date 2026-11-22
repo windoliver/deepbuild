@@ -653,7 +653,14 @@ fn scan(source: &str) -> Scan {
             }
             b'/' => {
                 let regex = regex_end(bytes, at);
-                let starts_regex = match before {
+                // A line terminator after a value ends the statement where it can't go on (`let a`, `debugger`, an
+                // import with no `;`), and then the `/` starts a regex: the token before can't tell which.
+                let reading = if before == Before::Value && was_new_line {
+                    Before::Either
+                } else {
+                    before
+                };
+                let starts_regex = match reading {
                     Before::Value => false,
                     Before::Operator => true,
                     Before::Either => {
@@ -809,10 +816,9 @@ fn scan(source: &str) -> Scan {
                     at += 1;
                 }
                 let word = &source[start..at];
-                // A property's name is no keyword; after a number's own `.` (`1. if`) it may be one, so a name
-                // there is read as a property's for the `/` but still as a call (`1.` ends a statement, then
-                // `import(…)` on the next line).
-                let property = dotted || last_words[1].ends_with('.');
+                // A property's name is no keyword. A name after a number's own `.` is none (`1. in /re/`), as only
+                // a `.` of its own reaches a property.
+                let property = dotted;
                 if !dotted {
                     if let Some(call) = ["import", "require"].into_iter().find(|w| *w == word) {
                         if last_words[1] != "function" {
@@ -1097,6 +1103,15 @@ mod tests {
             // Round 2: a heritage is a call followed by `{`.
             "try { class A extends import(n) {} } catch (e) {}",
             "class B extends require(n) {}",
+            // Round 8: a line terminator ends a statement that can't go on, so the `/` after it starts a regex;
+            // and a name after a number's own `.` is an operator or keyword, not a property.
+            "import { View } from \"@deepbuild/panel\"\n/'/; import { Chart } from \"gpui-kit\"; //'",
+            "let a\n/'/; import { Chart } from \"gpui-kit\"; //'",
+            "debugger\n/'/; import { Chart } from \"gpui-kit\"; //'",
+            "for (;;) { break\n/'/; import(n); //'\n}",
+            "const r = 1. in /'/; import { Chart } from \"gpui-kit\"; //'",
+            "const r = 1. instanceof /'/; import { Chart } from \"gpui-kit\"; //'",
+            "let x = 1.\ntypeof /'/; import { Chart } from \"gpui-kit\"; //'",
         ];
         for case in cases {
             let source = format!("const n = \"gpui-\" + \"kit\";\n{case}\n");
