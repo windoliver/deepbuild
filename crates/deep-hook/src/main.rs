@@ -231,7 +231,8 @@ const REMOVED: &str = "was removed after setup (`deep setup` writes it again)";
 
 /// ~/.deepbuild/rules.json, `{"v": 1, "entries": {<name>: guard@1}, "classes": {<tool>: <class>}}`; nothing when it
 /// is missing before setup has finished, and why not when it was removed since, can't be read or isn't that shape.
-/// Other members, such as each entry's planted call and twin, are the hub's.
+/// Other members are the hub's. Each entry's planted call and twin are in proofs.json beside it, which deep-hook never
+/// opens (#2695); a rules.json an older hub wrote still holds them, and they are parsed with it until the next install.
 fn rules() -> Result<Rules, String> {
     // The planted wrong program for #304's AC1 reads no entry: its one rule is compiled in.
     if cfg!(feature = "plant-compiled-rule") {

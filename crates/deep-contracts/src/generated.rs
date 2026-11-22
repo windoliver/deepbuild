@@ -49995,6 +49995,7 @@ pub enum DoctorItemCode {
     NotLoaded,
     HandlerSetAside,
     FootprintUnknown,
+    ProofsUnreadable,
     Unknown,
 }
 
@@ -50036,6 +50037,7 @@ impl Contract for DoctorItemCode {
             "not_loaded" => Ok(Self::NotLoaded),
             "handler_set_aside" => Ok(Self::HandlerSetAside),
             "footprint_unknown" => Ok(Self::FootprintUnknown),
+            "proofs_unreadable" => Ok(Self::ProofsUnreadable),
             "unknown" => Ok(Self::Unknown),
             other => Err(format!("{at}: {other:?} is not one of the listed values")),
         }
@@ -50077,6 +50079,7 @@ impl Contract for DoctorItemCode {
             Self::NotLoaded => "not_loaded",
             Self::HandlerSetAside => "handler_set_aside",
             Self::FootprintUnknown => "footprint_unknown",
+            Self::ProofsUnreadable => "proofs_unreadable",
             Self::Unknown => "unknown",
         }.to_string())
     }

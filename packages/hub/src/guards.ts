@@ -5,10 +5,13 @@
 // matcher, over each pair; an entry whose planted call goes through, or whose twin is matched, is refused, naming it and the call.
 // Then it rewrites rules.json with every installed entry, its mode included, and what each tool counts as, so
 // deep-hook matches a call the same way with the hub up or down. The hub never reads an entry's `match` itself.
+// Each entry's planted call and twin go beside it in proofs.json, `{"v": 1, "proofs": {<name>: ...}}`, which only the
+// hub reads (#2695): deep-hook parses rules.json at every PreToolUse, so it holds only what deep-hook reads. A
+// rules.json an older hub wrote, its proofs in it, is read as before, and the next install moves them.
 // A fail_closed entry that names a program or an effect class must also deny its planted call with the program
 // computed by the line (#1097).
 import { execFile } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { isRecord as isObj } from '@deepbuild/contracts/json';
 import { callAsYou } from './client.js';
@@ -28,6 +31,39 @@ function computed(c: Call): Call | undefined {
   const found = /^((?:\s*\w+=\S*\s+)*)\s*([\w.+-]+)(?=\s|$)/.exec(command);
   if (!found) return undefined;
   return { ...c, tool_input: { ...c.tool_input, command: `${found[1]}"$(printf ${found[2]})"${command.slice(found[0].length)}` } };
+}
+
+/** The hub's file of each guard entry's planted call and twin, beside rules.json (#2695). */
+export const PROOFS = 'proofs.json';
+
+/**
+ * The proofs `<dir>/proofs.json` holds, over any an older hub left in `rules`, rules.json as read; why not when the file
+ * exists and can't be read or isn't that shape. A missing file holds none.
+ */
+function readProofs(dir: string, rules: Obj): { proofs: Obj } | { why: string } {
+  const legacy = isObj(rules.proofs) ? rules.proofs : {};
+  const file = join(dir, PROOFS);
+  let read: unknown;
+  try {
+    read = JSON.parse(readFileSync(file, 'utf8'));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { proofs: legacy };
+    return { why: `${file} can't be read (${error instanceof Error ? error.message : String(error)})` };
+  }
+  return isObj(read) && isObj(read.proofs) ? { proofs: { ...legacy, ...read.proofs } } : { why: `${file} has no proofs object` };
+}
+
+/**
+ * Why `<dir>/proofs.json` holds no proofs the hub can read, once rules.json was written without them: missing, can't be
+ * read or isn't that shape. None while there is no readable rules.json, or one still holds them, as an older hub wrote it.
+ */
+export function proofsProblem(dir: string): string | undefined {
+  let rules: unknown;
+  try { rules = JSON.parse(readFileSync(join(dir, 'rules.json'), 'utf8')); } catch { return undefined; }
+  if (!isObj(rules) || isObj(rules.proofs)) return undefined;
+  if (!existsSync(join(dir, PROOFS))) return `${join(dir, PROOFS)} is missing`;
+  const read = readProofs(dir, rules);
+  return 'why' in read ? read.why : undefined;
 }
 
 /** Whether deep-hook's matcher reads `c` under `entry`, through its check mode. */
@@ -57,10 +93,12 @@ export async function blocksCall(dir: string, deepHook: string, command: string)
  * left out, so its rule reads text only.
  */
 export async function provenGuards(dir: string, deepHook: string): Promise<{ name: string; rule: string }[]> {
-  let read: { entries?: Obj; proofs?: Obj; classes?: Obj };
+  let read: { entries?: Obj; classes?: Obj };
   try { read = JSON.parse(readFileSync(join(dir, 'rules.json'), 'utf8')) as typeof read; } catch { return []; }
+  const stored = isObj(read) ? readProofs(dir, read as Obj) : { why: '' };
+  if (!('proofs' in stored)) return [];
   const out: { name: string; rule: string }[] = [];
-  for (const [name, proof] of Object.entries(read.proofs ?? {})) {
+  for (const [name, proof] of Object.entries(stored.proofs)) {
     const entry = read.entries?.[name];
     if (!isObj(entry) || !isObj(proof) || typeof proof.rule !== 'string' || !isCall(proof.planted) || !isCall(proof.twin)) continue;
     const classes = read.classes ?? {};
@@ -121,9 +159,13 @@ export async function addGuards(dir: string, given: unknown, o: { deepHook: stri
   let entries: Obj = { ...current.entries, ...given.entries };
   // The planted wrong program for AC3 writes only the fail_closed entries.
   if (o.plant === 'fail-closed-only-rules') entries = Object.fromEntries(Object.entries(entries).filter(([, e]) => isObj(e) && e.fail_closed === true));
-  const kept = isObj(current.proofs) ? current.proofs : {};
+  // The proofs of every entry this install didn't touch are kept, those an older hub left in rules.json included.
+  const kept = readProofs(dir, current);
+  if (!('proofs' in kept)) return refused(`${kept.why}; fix or remove it, then add again.`);
   const names = Object.keys(given.entries);
-  const rules = { v: 1, entries, proofs: { ...kept, ...Object.fromEntries(names.map((n) => [n, proofs[n]])) }, classes: o.classes, ...(Array.isArray(current.standing) ? { standing: current.standing } : {}) };
+  const rules = { v: 1, entries, classes: o.classes, ...(Array.isArray(current.standing) ? { standing: current.standing } : {}) };
+  // The proofs first: a cut between the two writes leaves an older rules.json whose proofs are all still read.
+  writeSynced(join(dir, PROOFS), Buffer.from(`${JSON.stringify({ v: 1, proofs: { ...kept.proofs, ...Object.fromEntries(names.map((n) => [n, proofs[n]])) } }, null, 2)}\n`));
   writeSynced(file, Buffer.from(`${JSON.stringify(rules, null, 2)}\n`));
   return { status: 'installed', names };
 }

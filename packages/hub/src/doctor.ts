@@ -22,6 +22,7 @@ import { activePlant as plant } from './plant.js';
 import { serviceFile } from './service.js';
 import { relationItems } from './setup.js';
 import { describe, unrunnable } from './hook-programs.js';
+import { PROOFS, proofsProblem } from './guards.js';
 import { claudeHomes, denyHolds, homeMods, loginPlan, managedSettings, overrideWords } from './mods.js';
 import { probeSignIn } from './sign-in.js';
 import { lostIn } from './rule-load.js';
@@ -174,6 +175,10 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
   const shadows = plant() === 'statusline-user-settings-only' ? [] : shadowedBy(repo);
   for (const s of shadows) add('claude.statusline_shadowed', 'claude-code', 'statusline_shadowed', 'warn', `${s.file} sets ${s.key}, which Claude Code runs instead of the forwarder in ${repo}, so no plan window is read there`, `Take ${s.key} out of ${s.file}, or run your status line from statusline.yours in ~/.deepbuild/config.json, which the forwarder runs after it reads the windows.`);
   items.push(...rulesItems(repo));
+  // The guard entries' planted calls and twins (#2695): deep-hook never reads them, so its guards hold without them.
+  const proofs = proofsProblem(root);
+  if (proofs) add('guards.proofs', 'deepbuild', 'proofs_unreadable', 'warn', `${proofs}, so no install can keep your guard entries' planted calls and twins, and the rules page names no guard as enforcing a rule; deep-hook's guards still hold`, `${existsSync(join(root, PROOFS)) ? `Make ${join(root, PROOFS)} readable JSON again, or remove it and run` : 'Run'} \`deep setup\`, which writes the shipped entries' proofs again; then add your own entries again with \`deep guard add\`.`);
+  else if (existsSync(join(root, PROOFS))) add('guards.proofs', 'deepbuild', 'healthy', 'ok', `${join(root, PROOFS)} holds your guard entries' planted calls and twins`, 'Nothing to do.');
 
   // Each agent's binary, version, sign-in and billing; Claude Code's token lifetime, test prompt and jobs' binary.
   const path = env.PATH ?? '';
