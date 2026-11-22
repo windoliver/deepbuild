@@ -1231,21 +1231,31 @@ pub(crate) struct Items<'a> {
 }
 
 impl<'a> Items<'a> {
-    /// `doc`'s items, with `written` from [`eval::written`] of its program at `state`. The
-    /// program's items are the document's in its order, so item `i`'s transform is its
-    /// `TRANSFORM` slots from `i * TRANSFORM`.
+    /// `doc`'s items, with `written` from [`eval::written`] of its program at `state`. Item `id`'s
+    /// transform is its `TRANSFORM` slots from `i * TRANSFORM`, where `i` is `id`'s place in the
+    /// program's items: a program compiled from the canonical form lists them in ID order,
+    /// whatever order `doc` lists them in (#2396).
     fn new(
         doc: &'a Map<String, Value>,
         written: &'a Map<String, Value>,
         state: &'a State,
         program: &Program,
     ) -> Self {
+        let slot: HashMap<&str, usize> = program
+            .items
+            .iter()
+            .enumerate()
+            .map(|(i, id)| (id.as_str(), i))
+            .collect();
         let mut entries = HashMap::with_capacity(doc.len());
         let mut copies = written.iter().peekable();
-        for (i, (id, item)) in doc.iter().enumerate() {
+        for (id, item) in doc {
             let entry = match copies.next_if(|(w, _)| *w == id) {
                 Some((_, evaluated)) => (evaluated, None),
-                None => (item, item.is_object().then_some(i)),
+                None => (
+                    item,
+                    slot.get(id.as_str()).copied().filter(|_| item.is_object()),
+                ),
             };
             entries.insert(id.as_str(), entry);
         }
