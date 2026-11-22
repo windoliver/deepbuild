@@ -173,6 +173,13 @@ pub enum Twin {
     /// inertia.
     CentreIgnored,
     CentreParallelAxis,
+    /// #2035's wrong drawing across a place: outputs that blend; ones that hold the position but
+    /// blend the rotation; ones that hold a vehicle's chassis but blend its wheels; and a seek
+    /// whose restored run keeps no cut.
+    PlaceBlends,
+    PlaceBlendsRotation,
+    PlaceBlendsWheels,
+    RestoreForgetsPlace,
     /// #2239's: a wrapper that drops each body's `ccd`, so none starts a sweep of another body.
     DropsBodyCcd,
     /// #2241's wrong belts: a wrapper that leaves the contact hook out; one that applies a
@@ -281,6 +288,8 @@ pub struct Rapier {
     /// #251: its vehicle bodies, and the wheel contacts this step's places and drives wrote.
     pub(crate) vehicles: vehicle::Vehicles,
     wheel_rows: Vec<Raw>,
+    /// #2035: the character and vehicle bodies a place moved in the last step; none restored.
+    pub(crate) placed: Vec<String>,
     /// #2098: a 2D world, which rapier2d runs in this one's place.
     flat: Option<dim2::World2>,
     /// #2098: the triangles a wind pushes, by body, in the body's frame.
@@ -1118,6 +1127,7 @@ impl Backend for Rapier {
             return Ok(());
         }
         self.wheel_rows.clear();
+        self.placed.clear();
         let resting = self.vehicles.resting(&self.world);
         self.apply(inputs)?;
         self.walk();
@@ -1312,6 +1322,7 @@ impl Backend for Rapier {
 
     fn restore(&mut self, cp: &Checkpoint) -> Result<(), Box<Refusal>> {
         tally("restore");
+        self.placed.clear();
         let pin = self.pin();
         if !self.restore_any_version && (cp.backend != pin.backend || cp.version != pin.version) {
             return Err(Box::new(refusal(

@@ -59,12 +59,12 @@ pub fn issues(w: &World, planted: Planted) -> Vec<Value> {
     let unit = w.solver.length_unit;
     let g = ops::sqrt(w.gravity.iter().map(|x| x * x).sum());
     let sinks = sink(g, w.solver.contact_hz);
-    let shapes = match planted {
-        Planted::None => usize::MAX,
-        Planted::FirstShape => 1,
-    };
     let mut out = Vec::new();
     for (id, b) in &w.bodies {
+        let shapes = match planted {
+            Planted::None => b.shapes.len(),
+            Planted::FirstShape => 1,
+        };
         let Some(extent) =
             crate::fast::thinnest(w, b, shapes).filter(|_| b.kind == BodyKind::Dynamic)
         else {
