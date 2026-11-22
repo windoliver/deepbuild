@@ -1,0 +1,371 @@
+#278's acceptance files, each run once at the base 7a256fd4b (main, which holds #549's to #551's net module, #172's
+web player and #277's seats) on 2026-11-21 between 00:15 and 00:18 local time, on a reference Mac (Mac17,10, Apple M5
+Max, 64 GiB) on 18 cores, at a 1-minute load this job read as 162 before the runs and 408 and 145 after them, Node
+24.22.0, the pinned Rust 1.99.1, the dev build of deep-show (`full`) and deep-relay, one file at a time:
+
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 sh scripts/lease \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/278 <file>.test.ts --testTimeout=600000 --hookTimeout=180000
+
+The lease printed that no hub answered, so each file ran unleased. All 15 tests fail, each at an assertion in its own
+test file, for the reason the README gives, and none passes:
+
+- `players: {min: 2, max: 8}` is refused at the base (`bad_unit` at items/match/params/players: "neither a number nor
+  a unit literal"), and a logic item's `open` and `finish` are refused (`logic_refused`: "logic@1 has no field open";
+  `unknown_field`), so every honest test of criteria 1 to 4 fails at "the eight-seat piece … is presented" (in ac1 and
+  ac4's live tests after the certificate, the shipped relay and the door started; in ac1's web test at the export).
+- The four planted names are refused ({"ok": false, "code": "bad_input"}): ac2's and ac3's planted tests fail at
+  "deep-show run takes the scenario". ac1's and ac4's planted runs come after an honest run in the same test, which
+  fails first.
+- ac5 names that benchmarks/budgets.json has no task naming #278.fe1a5277 and that the join's piece isn't presented.
+  Its other two parts hold at the base and aren't credited alone: the manifest is valid against the merge base's, and
+  the piece with one player count counts exactly BASE_WORK (printed in its output below).
+- ac6 is INCONCLUSIVE: the check run's pictures aren't in docs/evidence/278/.
+
+`node node_modules/typescript/bin/tsc -p tests/acceptance/278/tsconfig.json` exits 0 on the delivered files.
+
+What can't be shown in full, and why. After these runs one helper changed (helpers.ts `joins`: a wait in a live room
+now also ends when a copy's run ends; no base run reaches it, since at the base `liveRoom` returns before any lobby).
+A rerun of ac1 and ac4 on the final files was started at 01:46 and stopped by this job after ten minutes: by then
+this checkout's target/debug/deep-show and deep-relay were gone (not removed by this job) and #549's `useBuilds` had
+begun a full rebuild that didn't finish in this job's time. That rerun overwrote ac1's saved output before it ran a
+test, so ac1's section below is the summary this job captured from the 00:17 run (each test's line, its assertion's
+first line and its place in the file), not the whole output; ac2 to ac6 are whole. The test files themselves didn't
+change after their runs.
+
+Scratch runs at the base, not saved as tests:
+- Criterion 5's piece, the eight-seat piece with `players: 4` and no `open` or `finish` (roomPiece({count: 4, open:
+  false})), is presented with no issue and plays 1,800 steps on its four copies under {seed: 278, back: {up_to: 8},
+  log: true}, each copy running 1,800 steps with end null and 267, 251, 247 and 236 rollbacks. Its counts, the same on
+  two scratch runs and again in ac5's own run, are fixtures.ts's BASE_WORK:
+  {"frames":21612,"bytes":1352496,"messages":179565,"rollbacks":1001,"rerun":1939,"ran":7200}.
+- The rules program validates in Node's own WebAssembly and does what fixtures.ts says: three `joined` rows give seats
+  1 to 3 (tally 106,572 after step 0, the bot moving seats 4 to 8); `left` hands a seat to the bot and a later
+  `joined` gives it back; `absent` and `back` as #277's; an `aim` from a player with no seat changes nothing; two
+  entries in the other order give another tally; `lobby` turns false at its closing step; `done` becomes 1 at step
+  3,000 unless a seated player's `stay` came first.
+- This suite's judges on matches the base plays (the piece with one count): the log check passes on 900 steps of four
+  copies' frames, and fails naming the frame when one row to copy 4 is replaced by bytes that are no frame ("frame 2
+  (to copy 4, …) isn't a relay frame of steps' entries") or by a frame holding one f64 of the piece's state ("frame 2
+  (to copy 4, …) holds the piece's state value 1.943261688431087"); hashes, rows and tracks read as the tests read
+  them (15 hashes over 900 steps, one at step 0; the record's `aim` lines equal the script's); killing copy 3 after
+  step 900 stamps `seat {3, left}` at 903 with this piece, and the rules hand seat 3 to the bot there; #551's
+  `relay.deliver` of player 2's message for step 3,000 to copy 1 at step 3,004 makes copy 1 roll back from 3,004 to
+  3,000 and no other copy roll back, with `held` 1 and `done` 0 after the corrected step, and without the `stay`
+  entry `done` is 0 after 2,999 and 1 after 3,000; a record's `replay` gives the match's hash at each of 51 intervals.
+- At the base the test relay's answer to a catch-up is not a row of its log, and its log holds rows to a killed copy.
+
+=== tests/acceptance/278/ac1-start.test.ts (summary of the 00:17:28 run; see above)
+ ❯ ac1-start.test.ts (4 tests | 4 failed) 14819ms
+   ❯ AC1 #278.108a8250 a match starts with whoever is there, on the first player's click alone (4)
+     × AC1 #278.108a8250 with players {min: 2, max: 8} and three copies joined, the match starts with three played seats and five the piece's bot plays, and every copy reads the same net.seats 3114ms
+     × AC1 #278.108a8250 with three copies joined and Start unclicked no copy runs a step; a planted module that starts the match on the third join with no click fails, naming the step 344ms
+     × AC1 #278.108a8250 in the app, a tour's entry and deep_drive's click in a replica leave Start unpressed and the match unstarted; the first player's own click starts it for the three copies 895ms
+     × AC1 #278.108a8250 in the web player, a synthetic click dispatched in the page leaves Start unpressed and the match unstarted 430ms
+
+ [1/4] AssertionError: the eight-seat piece with players {min: 2, max: 8} is presented: AC1 three of eight: deep show answered refused: [{"check":"document.validate","code":"bad_unit","severity":"error","ids":["match"],"path":"items/match/params/players","actual":{"min":2,"max":8},"what":"neither a number nor a unit literal", …
+ ❯ started ac1-start.test.ts:51:98
+ ❯ ac1-start.test.ts:70:15
+
+ [2/4] AssertionError: the eight-seat piece with players {min: 2, max: 8} is presented: AC1 Start unclicked: deep show answered refused: [{"check":"document.validate","code":"bad_unit", … "path":"items/match/params/players","actual":{"min":2,"max":8}, …
+ ❯ started ac1-start.test.ts:51:98
+ ❯ ac1-start.test.ts:98:30
+
+ [3/4] AssertionError: the eight-seat piece with players {min: 2, max: 8} is presented: AC1 the app: deep show answered refused: [{"check":"document.validate","code":"bad_unit", … "path":"items/match/params/players","actual":{"min":2,"max":8}, …
+ ❯ ac1-start.test.ts:130:106
+
+ [4/4] AssertionError: the eight-seat piece with players {min: 2, max: 8} is presented and exported to the web: AC1 the web bundle: deep show answered refused: [{"check":"document.validate","code":"bad_unit", … "path":"items/match/params/players","actual":{"min":2,"max":8}, …
+ ❯ ac1-start.test.ts:164:138
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  00:17:28
+   Duration  15.41s (tests 97%, transform 2%, import 1%)
+
+=== tests/acceptance/278/ac2-join-open.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/278 ac2-join-open.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/278
+
+ ❯ ac2-join-open.test.ts (3 tests | 3 failed) 10184ms
+   ❯ AC2 #278.9b37a90c a copy joins a started match while the piece's lobby is open, from entries alone (3)
+     × AC2 #278.9b37a90c while open is true, a fourth copy that joins at step 600 receives only entries, replays them from step 0 and enters with one joined entry at a stamped step, reaching the others' full-state hash at the next hash interval 2944ms
+     × AC2 #278.9b37a90c while open is false the same join is refused 1428ms
+     × AC2 #278.9b37a90c a planted relay that sends a joiner state instead of entries fails the log check, naming the frame 205ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac2-join-open.test.ts > AC2 #278.9b37a90c a copy joins a started match while the piece's lobby is open, from entries alone > AC2 #278.9b37a90c while open is true, a fourth copy that joins at step 600 receives only entries, replays them from step 0 and enters with one joined entry at a stamped step, reaching the others' full-state hash at the next hash interval
+AssertionError: the eight-seat piece with players {min: 2, max: 8} and an open array is presented: AC2 open: deep show answered refused: [{"check":"document.validate","code":"bad_unit","severity":"error","ids":["match"],"path":"items/match/params/players","actual":{"min":2,"max":8},"what":"neither a number nor a unit literal","fix":"Write the value as a number in the field's unit or as one of its forms.","forms":[]},{"check":"document.validate","code":"logic_refused","severity":"error","ids":["rules"],"path":"items/rules/params","actual":{"ok":false,"code":"logic_refused","item":"rules","refusals":[{"rule":"field","what":"logic@1 has no field open","field":"open"}]},"what":"the logic module refuses this logic item","fix":"See the issue."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["rules"],"path":"items/rules/params/open","actual":"lobby","what":"logic@1.0 does not define `open`","fix":"`open` is a field of arch.opening@1 or mark.box@1 or mark.cylinder@1 or mark.image@1 or mark.line@1 or mark.point@1 or mark.sphere@1 or mark.text@1: give the item that kind, or remove the field.","close":[{"name":"arch.opening@1","defines":"open"},{"name":"mark.box@1","defines":"open"},{"name":"mark.cylinder@1","defines":"open"}]}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ started ac2-join-open.test.ts:34:116
+     32| function started(r: Played): Match {
+     33|   expect(r.ok, `deep-show run takes the scenario: ${r.why}`).toBe(true…
+     34|   expect(r.outcome, `the eight-seat piece with players {min: 2, max: 8…
+       |                                                                                                                    ^
+     35|   expect(r.code, `the match call answers: ${r.why}`).toBeNull();
+     36|   return r.match!;
+ ❯ ac2-join-open.test.ts:43:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  ac2-join-open.test.ts > AC2 #278.9b37a90c a copy joins a started match while the piece's lobby is open, from entries alone > AC2 #278.9b37a90c while open is false the same join is refused
+AssertionError: the eight-seat piece with players {min: 2, max: 8} and an open array is presented: AC2 closed: deep show answered refused: [{"check":"document.validate","code":"bad_unit","severity":"error","ids":["match"],"path":"items/match/params/players","actual":{"min":2,"max":8},"what":"neither a number nor a unit literal","fix":"Write the value as a number in the field's unit or as one of its forms.","forms":[]},{"check":"document.validate","code":"logic_refused","severity":"error","ids":["rules"],"path":"items/rules/params","actual":{"ok":false,"code":"logic_refused","item":"rules","refusals":[{"rule":"field","what":"logic@1 has no field open","field":"open"}]},"what":"the logic module refuses this logic item","fix":"See the issue."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["rules"],"path":"items/rules/params/open","actual":"lobby","what":"logic@1.0 does not define `open`","fix":"`open` is a field of arch.opening@1 or mark.box@1 or mark.cylinder@1 or mark.image@1 or mark.line@1 or mark.point@1 or mark.sphere@1 or mark.text@1: give the item that kind, or remove the field.","close":[{"name":"arch.opening@1","defines":"open"},{"name":"mark.box@1","defines":"open"},{"name":"mark.cylinder@1","defines":"open"}]}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ started ac2-join-open.test.ts:34:116
+     32| function started(r: Played): Match {
+     33|   expect(r.ok, `deep-show run takes the scenario: ${r.why}`).toBe(true…
+     34|   expect(r.outcome, `the eight-seat piece with players {min: 2, max: 8…
+       |                                                                                                                    ^
+     35|   expect(r.code, `the match call answers: ${r.why}`).toBeNull();
+     36|   return r.match!;
+ ❯ ac2-join-open.test.ts:93:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  ac2-join-open.test.ts > AC2 #278.9b37a90c a copy joins a started match while the piece's lobby is open, from entries alone > AC2 #278.9b37a90c a planted relay that sends a joiner state instead of entries fails the log check, naming the frame
+AssertionError: deep-show run takes the scenario: AC2 planted (planted relay_sends_joiner_state): deep-show run answered {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ started ac2-join-open.test.ts:33:62
+     31| /** A run's match, once the run took the scenario, the piece was prese…
+     32| function started(r: Played): Match {
+     33|   expect(r.ok, `deep-show run takes the scenario: ${r.why}`).toBe(true…
+       |                                                              ^
+     34|   expect(r.outcome, `the eight-seat piece with players {min: 2, max: 8…
+     35|   expect(r.code, `the match call answers: ${r.why}`).toBeNull();
+ ❯ ac2-join-open.test.ts:116:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  00:15:58
+   Duration  11.18s (tests 93%, transform 5%, import 1%)
+
+
+=== tests/acceptance/278/ac3-come-back.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/278 ac3-come-back.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/278
+
+ ❯ ac3-come-back.test.ts (3 tests | 3 failed) 10469ms
+   ❯ AC3 #278.aa43e69b a copy that left comes back while the piece's lobby is open, from entries alone (3)
+     × AC3 #278.aa43e69b copy 3, killed at step 900 and stamped left, joins again at step 1,500 while open is true, receives only entries from step 0, replays them and enters with one joined entry, reaching the others' full-state hash at the next hash interval with the seat the piece's rules give it 2874ms
+     × AC3 #278.aa43e69b with open false at step 1,500 its join is refused 600ms
+     × AC3 #278.aa43e69b a planted relay that answers it with its old seat's state instead of entries fails the log check, naming the frame 497ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac3-come-back.test.ts > AC3 #278.aa43e69b a copy that left comes back while the piece's lobby is open, from entries alone > AC3 #278.aa43e69b copy 3, killed at step 900 and stamped left, joins again at step 1,500 while open is true, receives only entries from step 0, replays them and enters with one joined entry, reaching the others' full-state hash at the next hash interval with the seat the piece's rules give it
+AssertionError: the eight-seat piece with players {min: 2, max: 8} and an open array is presented: AC3 open: deep show answered refused: [{"check":"document.validate","code":"bad_unit","severity":"error","ids":["match"],"path":"items/match/params/players","actual":{"min":2,"max":8},"what":"neither a number nor a unit literal","fix":"Write the value as a number in the field's unit or as one of its forms.","forms":[]},{"check":"document.validate","code":"logic_refused","severity":"error","ids":["rules"],"path":"items/rules/params","actual":{"ok":false,"code":"logic_refused","item":"rules","refusals":[{"rule":"field","what":"logic@1 has no field open","field":"open"}]},"what":"the logic module refuses this logic item","fix":"See the issue."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["rules"],"path":"items/rules/params/open","actual":"lobby","what":"logic@1.0 does not define `open`","fix":"`open` is a field of arch.opening@1 or mark.box@1 or mark.cylinder@1 or mark.image@1 or mark.line@1 or mark.point@1 or mark.sphere@1 or mark.text@1: give the item that kind, or remove the field.","close":[{"name":"arch.opening@1","defines":"open"},{"name":"mark.box@1","defines":"open"},{"name":"mark.cylinder@1","defines":"open"}]}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ started ac3-come-back.test.ts:37:116
+     35| function started(r: Played): Match {
+     36|   expect(r.ok, `deep-show run takes the scenario: ${r.why}`).toBe(true…
+     37|   expect(r.outcome, `the eight-seat piece with players {min: 2, max: 8…
+       |                                                                                                                    ^
+     38|   expect(r.code, `the match call answers: ${r.why}`).toBeNull();
+     39|   return r.match!;
+ ❯ ac3-come-back.test.ts:56:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  ac3-come-back.test.ts > AC3 #278.aa43e69b a copy that left comes back while the piece's lobby is open, from entries alone > AC3 #278.aa43e69b with open false at step 1,500 its join is refused
+AssertionError: the eight-seat piece with players {min: 2, max: 8} and an open array is presented: AC3 closed: deep show answered refused: [{"check":"document.validate","code":"bad_unit","severity":"error","ids":["match"],"path":"items/match/params/players","actual":{"min":2,"max":8},"what":"neither a number nor a unit literal","fix":"Write the value as a number in the field's unit or as one of its forms.","forms":[]},{"check":"document.validate","code":"logic_refused","severity":"error","ids":["rules"],"path":"items/rules/params","actual":{"ok":false,"code":"logic_refused","item":"rules","refusals":[{"rule":"field","what":"logic@1 has no field open","field":"open"}]},"what":"the logic module refuses this logic item","fix":"See the issue."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["rules"],"path":"items/rules/params/open","actual":"lobby","what":"logic@1.0 does not define `open`","fix":"`open` is a field of arch.opening@1 or mark.box@1 or mark.cylinder@1 or mark.image@1 or mark.line@1 or mark.point@1 or mark.sphere@1 or mark.text@1: give the item that kind, or remove the field.","close":[{"name":"arch.opening@1","defines":"open"},{"name":"mark.box@1","defines":"open"},{"name":"mark.cylinder@1","defines":"open"}]}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ started ac3-come-back.test.ts:37:116
+     35| function started(r: Played): Match {
+     36|   expect(r.ok, `deep-show run takes the scenario: ${r.why}`).toBe(true…
+     37|   expect(r.outcome, `the eight-seat piece with players {min: 2, max: 8…
+       |                                                                                                                    ^
+     38|   expect(r.code, `the match call answers: ${r.why}`).toBeNull();
+     39|   return r.match!;
+ ❯ ac3-come-back.test.ts:104:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  ac3-come-back.test.ts > AC3 #278.aa43e69b a copy that left comes back while the piece's lobby is open, from entries alone > AC3 #278.aa43e69b a planted relay that answers it with its old seat's state instead of entries fails the log check, naming the frame
+AssertionError: deep-show run takes the scenario: AC3 planted (planted relay_sends_old_seat_state): deep-show run answered {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ started ac3-come-back.test.ts:36:62
+     34| /** A run's match, once the run took the scenario, the piece was prese…
+     35| function started(r: Played): Match {
+     36|   expect(r.ok, `deep-show run takes the scenario: ${r.why}`).toBe(true…
+       |                                                              ^
+     37|   expect(r.outcome, `the eight-seat piece with players {min: 2, max: 8…
+     38|   expect(r.code, `the match call answers: ${r.why}`).toBeNull();
+ ❯ ac3-come-back.test.ts:124:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  00:16:36
+   Duration  11.36s (tests 94%, transform 5%, import 1%)
+
+
+=== tests/acceptance/278/ac4-finish.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/278 ac4-finish.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/278
+
+ ❯ ac4-finish.test.ts (3 tests | 3 failed) 12456ms
+   ❯ AC4 #278.bbb4eb66 a piece ends its match as finished, and the room plays the next (3)
+     × AC4 #278.bbb4eb66 a piece that writes 1 to finish at step 3,000 ends the match as finished on every copy; the first player's Start begins the next from the document's start with the same seats, and the two matches record two tracks, each replaying alone to its own full-state hashes 2912ms
+     × AC4 #278.bbb4eb66 when a late entry rolls back over step 3,000 and the corrected run doesn't write finish, the match plays on; a planted module that ends on the predicted step ends it on one copy alone and fails, naming the step 315ms
+     × AC4 #278.bbb4eb66 in the app, after a finished match the first player's Start begins the next with the same seats and no Join 1070ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac4-finish.test.ts > AC4 #278.bbb4eb66 a piece ends its match as finished, and the room plays the next > AC4 #278.bbb4eb66 a piece that writes 1 to finish at step 3,000 ends the match as finished on every copy; the first player's Start begins the next from the document's start with the same seats, and the two matches record two tracks, each replaying alone to its own full-state hashes
+AssertionError: the eight-seat piece with players {min: 2, max: 8} and a finish array is presented: AC4 finish: deep show answered refused: [{"check":"document.validate","code":"bad_unit","severity":"error","ids":["match"],"path":"items/match/params/players","actual":{"min":2,"max":8},"what":"neither a number nor a unit literal","fix":"Write the value as a number in the field's unit or as one of its forms.","forms":[]},{"check":"document.validate","code":"logic_refused","severity":"error","ids":["rules"],"path":"items/rules/params","actual":{"ok":false,"code":"logic_refused","item":"rules","refusals":[{"rule":"field","what":"logic@1 has no field open","field":"open"}]},"what":"the logic module refuses this logic item","fix":"See the issue."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["rules"],"path":"items/rules/params/finish","actual":"done","what":"logic@1.0 does not define `finish`","fix":"Remove the field, or require the kind's minor that defines it."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["rules"],"path":"items/rules/params/open","actual":"lobby","what":"logic@1.0 does not define `open`","fix":"`open` is a field of arch.opening@1 or mark.box@1 or mark.cylinder@1 or mark.image@1 or mark.line@1 or mark.point@1 or mark.sphere@1 or mark.text@1: give the item that kind, or remove the field.","close":[{"name":"arch.opening@1","defines":"open"},{"name":"mark.box@1","defines":"open"},{"name":"mark.cylinder@1","defines":"open"}]}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ started ac4-finish.test.ts:46:117
+     44| function started(r: Played): Match {
+     45|   expect(r.ok, `deep-show run takes the scenario: ${r.why}`).toBe(true…
+     46|   expect(r.outcome, `the eight-seat piece with players {min: 2, max: 8…
+       |                                                                                                                     ^
+     47|   expect(r.code, `the match call answers: ${r.why}`).toBeNull();
+     48|   return r.match!;
+ ❯ ac4-finish.test.ts:76:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  ac4-finish.test.ts > AC4 #278.bbb4eb66 a piece ends its match as finished, and the room plays the next > AC4 #278.bbb4eb66 when a late entry rolls back over step 3,000 and the corrected run doesn't write finish, the match plays on; a planted module that ends on the predicted step ends it on one copy alone and fails, naming the step
+AssertionError: the eight-seat piece with players {min: 2, max: 8} and a finish array is presented: AC4 a late entry: deep show answered refused: [{"check":"document.validate","code":"bad_unit","severity":"error","ids":["match"],"path":"items/match/params/players","actual":{"min":2,"max":8},"what":"neither a number nor a unit literal","fix":"Write the value as a number in the field's unit or as one of its forms.","forms":[]},{"check":"document.validate","code":"logic_refused","severity":"error","ids":["rules"],"path":"items/rules/params","actual":{"ok":false,"code":"logic_refused","item":"rules","refusals":[{"rule":"field","what":"logic@1 has no field open","field":"open"}]},"what":"the logic module refuses this logic item","fix":"See the issue."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["rules"],"path":"items/rules/params/finish","actual":"done","what":"logic@1.0 does not define `finish`","fix":"Remove the field, or require the kind's minor that defines it."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["rules"],"path":"items/rules/params/open","actual":"lobby","what":"logic@1.0 does not define `open`","fix":"`open` is a field of arch.opening@1 or mark.box@1 or mark.cylinder@1 or mark.image@1 or mark.line@1 or mark.point@1 or mark.sphere@1 or mark.text@1: give the item that kind, or remove the field.","close":[{"name":"arch.opening@1","defines":"open"},{"name":"mark.box@1","defines":"open"},{"name":"mark.cylinder@1","defines":"open"}]}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ started ac4-finish.test.ts:46:117
+     44| function started(r: Played): Match {
+     45|   expect(r.ok, `deep-show run takes the scenario: ${r.why}`).toBe(true…
+     46|   expect(r.outcome, `the eight-seat piece with players {min: 2, max: 8…
+       |                                                                                                                     ^
+     47|   expect(r.code, `the match call answers: ${r.why}`).toBeNull();
+     48|   return r.match!;
+ ❯ ac4-finish.test.ts:140:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  ac4-finish.test.ts > AC4 #278.bbb4eb66 a piece ends its match as finished, and the room plays the next > AC4 #278.bbb4eb66 in the app, after a finished match the first player's Start begins the next with the same seats and no Join
+AssertionError: the eight-seat piece with players {min: 2, max: 8} and a finish array is presented: AC4 the app: deep show answered refused: [{"check":"document.validate","code":"bad_unit","severity":"error","ids":["match"],"path":"items/match/params/players","actual":{"min":2,"max":8},"what":"neither a number nor a unit literal","fix":"Write the value as a number in the field's unit or as one of its forms.","forms":[]},{"check":"document.validate","code":"logic_refused","severity":"error","ids":["rules"],"path":"items/rules/params","actual":{"ok":false,"code":"logic_refused","item":"rules","refusals":[{"rule":"field","what":"logic@1 has no field open","field":"open"}]},"what":"the logic module refuses this logic item","fix":"See the issue."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["rules"],"path":"items/rules/params/finish","actual":"done","what":"logic@1.0 does not define `finish`","fix":"Remove the field, or require the kind's minor that defines it."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["rules"],"path":"items/rules/params/open","actual":"lobby","what":"logic@1.0 does not define `open`","fix":"`open` is a field of arch.opening@1 or mark.box@1 or mark.cylinder@1 or mark.image@1 or mark.line@1 or mark.point@1 or mark.sphere@1 or mark.text@1: give the item that kind, or remove the field.","close":[{"name":"arch.opening@1","defines":"open"},{"name":"mark.box@1","defines":"open"},{"name":"mark.cylinder@1","defines":"open"}]}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ ac4-finish.test.ts:178:125
+    176|       others: (s, p) => { played[p] = [s.playMatch(steps, { plays: pla…
+    177|     });
+    178|     expect(room.outcome, `the eight-seat piece with players {min: 2, m…
+       |                                                                                                                             ^
+    179|     expect(room.start, `with two copies joined the app shows the first…
+    180|     const runs: [Run, number, number][] = [[room.first!, at.first, at.…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  00:16:49
+   Duration  13.58s (tests 95%, transform 4%, import 1%)
+
+
+=== tests/acceptance/278/ac5-budgets.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/278 ac5-budgets.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/278
+
+stdout | ac5-budgets.test.ts > AC5 #278.fe1a5277 budgets: a join's replay as a reading, and no new work for a piece with one player count > AC5 #278.fe1a5277 the window's task names the criterion against the merge base; a piece without open, finish or a {min, max} count does the merge base's work; a join's replay is recorded in steps a second
+AC5 #278.fe1a5277 the work of 1800 match steps of the piece with one player count: {"frames":21612,"bytes":1352496,"messages":179565,"rollbacks":1001,"rerun":1939,"ran":7200}; at the merge base: {"frames":21612,"bytes":1352496,"messages":179565,"rollbacks":1001,"rerun":1939,"ran":7200}
+
+ ❯ ac5-budgets.test.ts (1 test | 1 failed) 21349ms
+   ❯ AC5 #278.fe1a5277 budgets: a join's replay as a reading, and no new work for a piece with one player count (1)
+     × AC5 #278.fe1a5277 the window's task names the criterion against the merge base; a piece without open, finish or a {min, max} count does the merge base's work; a join's replay is recorded in steps a second 9268ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac5-budgets.test.ts > AC5 #278.fe1a5277 budgets: a join's replay as a reading, and no new work for a piece with one player count > AC5 #278.fe1a5277 the window's task names the criterion against the merge base; a piece without open, finish or a {min, max} count does the merge base's work; a join's replay is recorded in steps a second
+AssertionError: AC5 #278.fe1a5277 the budgets:
+  benchmarks/budgets.json has no task naming #278.fe1a5277, so no budget window measures a join's replay or the piece with one count against the merge base
+  AC5 a join's replay: the piece isn't presented: AC5 a join's replay: deep show answered refused: [{"check":"document.validate","code":"bad_unit","severity":"error","ids":["match"],"path":"items/match/params/players","actual":{"min":2,"max":8},"what":"neither a number nor a unit literal","fix":"Write the value as a number in the field's unit or as one of its forms.","forms":[]},{"check":"document.validate","code":"logic_refused","severity":"error","ids":["rules"],"path":"items/rules/params","actual":{"ok":false,"code":"logic_refused","item":"rules","refusals":[{"rule":"field","what":"logic@1 has no field open","field":"open"}]},"what":"the logic module refuses this logic item","fix":"See the issue."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["rules"],"path":"items/rules/params/open","actual":"lobby","what":"logic@1.0 does not define `open`","fix":"`open` is a field of arch.opening@1 or mark.box@1 or mark.cylinder@1 or mark.image@1 or mark.line@1 or mark.point@1 or mark.sphere@1 or mark.text@1: give the item that kind, or remove the field.","close":[{"name":"arch.opening@1","defines":"open"},{"name":"mark.box@1","defines":"open"},{"name":"mark.cylinder@1","defines":"open"}]}]: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "benchmarks/budgets.json has no task naming #278.fe1a5277, so no budget window measures a join's replay or the piece with one count against the merge base",
++   "AC5 a join's replay: the piece isn't presented: AC5 a join's replay: deep show answered refused: [{\"check\":\"document.validate\",\"code\":\"bad_unit\",\"severity\":\"error\",\"ids\":[\"match\"],\"path\":\"items/match/params/players\",\"actual\":{\"min\":2,\"max\":8},\"what\":\"neither a number nor a unit literal\",\"fix\":\"Write the value as a number in the field's unit or as one of its forms.\",\"forms\":[]},{\"check\":\"document.validate\",\"code\":\"logic_refused\",\"severity\":\"error\",\"ids\":[\"rules\"],\"path\":\"items/rules/params\",\"actual\":{\"ok\":false,\"code\":\"logic_refused\",\"item\":\"rules\",\"refusals\":[{\"rule\":\"field\",\"what\":\"logic@1 has no field open\",\"field\":\"open\"}]},\"what\":\"the logic module refuses this logic item\",\"fix\":\"See the issue.\"},{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"rules\"],\"path\":\"items/rules/params/open\",\"actual\":\"lobby\",\"what\":\"logic@1.0 does not define `open`\",\"fix\":\"`open` is a field of arch.opening@1 or mark.box@1 or mark.cylinder@1 or mark.image@1 or mark.line@1 or mark.point@1 or mark.sphere@1 or mark.text@1: give the item that kind, or remove the field.\",\"close\":[{\"name\":\"arch.opening@1\",\"defines\":\"open\"},{\"name\":\"mark.box@1\",\"defines\":\"open\"},{\"name\":\"mark.cylinder@1\",\"defines\":\"open\"}]}]",
++ ]
+
+ ❯ ac5-budgets.test.ts:68:61
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  00:17:04
+   Duration  22.47s (tests 97%, transform 3%, import 1%)
+
+
+=== tests/acceptance/278/ac6-taste.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/278 ac6-taste.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/278
+
+ ❯ ac6-taste.test.ts (1 test | 1 failed) 7ms
+   ❯ AC6 #278.c711dda6 the Start button, the open lobby, the next match's Start, a recording, and the one taste call on them (1)
+     × AC6 #278.c711dda6 the recorded call on exactly the check run's pictures says they look right; with none the run is INCONCLUSIVE, never PASS 6ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac6-taste.test.ts > AC6 #278.c711dda6 the Start button, the open lobby, the next match's Start, a recording, and the one taste call on them > AC6 #278.c711dda6 the recorded call on exactly the check run's pictures says they look right; with none the run is INCONCLUSIVE, never PASS
+AssertionError: INCONCLUSIVE: the check run's pictures are not in docs/evidence/278/: start-after-second-join.png, lobby-open.png, next-start-after-finish.png, join-and-play-again.webm; this is not a pass
+ ❯ ac6-taste.test.ts:29:32
+     27|   it(`${AC[6]} the recorded call on exactly the check run's pictures s…
+     28|     const missing = NAMES.filter((n) => !existsSync(join(PICTURES, n))…
+     29|     if (missing.length) expect.fail(`INCONCLUSIVE: the check run's pic…
+       |                                ^
+     30|     const hashes = Object.fromEntries(NAMES.map((n) => [n, sha256(read…
+     31|     const listed = NAMES.map((n) => `  ${join('docs', 'evidence', '278…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  00:15:49
+   Duration  2.22s (transform 88%, import 11%)
+
+
