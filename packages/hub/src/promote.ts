@@ -9,7 +9,7 @@
 import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, readlinkSync, renameSync, rmSync, statSync, symlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { installedPrograms, installedRoot, rootOf, type Root } from './paths.js';
+import { installedPrograms, installedRoot, type Root, rootOf, rootToken } from './paths.js';
 import { control, helloAt, startService } from './service.js';
 import { startOf } from './wire.js';
 import { PROMOTE_RESTARTS, readBudget, RESTARTS, spentWhy } from './restart-budget.js';
@@ -64,9 +64,9 @@ export async function promoteCommand(args: readonly string[]): Promise<number> {
   // second here, and lifted when the promotion is stopped or fails before the hub restarts.
   const started = await startOf(process.pid);
   const me = started ? { pid: process.pid, start: started } : undefined;
-  const lift = () => control(root.socket, root.token, 'hub.drain', { on: false }, 10_000, 10_000, me).catch(() => undefined);
+  const lift = () => control(root.socket, rootToken(root), 'hub.drain', { on: false }, 10_000, 10_000, me).catch(() => undefined);
   let renewal: Promise<unknown> = Promise.resolve();
-  const renew = () => (renewal = control(root.socket, root.token, 'hub.drain', {}, 10_000, 10_000, me));
+  const renew = () => (renewal = control(root.socket, rootToken(root), 'hub.drain', {}, 10_000, 10_000, me));
   // The build that was in names `current` again, when this stops or the hub doesn't restart.
   let switched = false;
   const putBack = () => { if (previous) switchTo(versions, previous); else rmSync(join(versions, 'current'), { force: true }); };
@@ -138,7 +138,7 @@ export async function promoteCommand(args: readonly string[]): Promise<number> {
   const back = await up(root, SLOW_UP_MS, false);
   if (back) return refused(`${commit} was rolled back (${why}), but ${previous} didn't come back: ${back}`, 3);
   try {
-    await control(root.socket, root.token, 'build.rolled_back', { commit, restored: previous, why }, 30_000);
+    await control(root.socket, rootToken(root), 'build.rolled_back', { commit, restored: previous, why }, 30_000);
   } catch (error) {
     return refused(`${commit} was rolled back (${why}) and ${previous} is back, but its notice wasn't recorded: ${message(error)}`, 3);
   }
@@ -150,7 +150,7 @@ async function shortOfRestarts(root: Root): Promise<string | undefined> {
   // With no hub up, the new build starts with no restart, and only a rollback would spend one: read from the file.
   if (!(await helloAt(root.socket))) return spentWhy(readBudget(root.dir, Date.now()));
   let restarts: { left?: unknown; frees?: unknown; unreadable?: unknown } | undefined;
-  try { restarts = (await control(root.socket, root.token, 'hub.health', {}, 30_000)).restarts as typeof restarts; } catch (error) { return `the hub's restart budget couldn't be read: ${message(error)}`; }
+  try { restarts = (await control(root.socket, rootToken(root), 'hub.health', {}, 30_000)).restarts as typeof restarts; } catch (error) { return `the hub's restart budget couldn't be read: ${message(error)}`; }
   if (!restarts || typeof restarts.left !== 'number') return undefined;
   if (typeof restarts.unreadable === 'string') return `the hub's restart budget, ${restarts.unreadable}, can't be read, so it counts as spent; stop and start the hub yourself with deep hub stop and deep hub start`;
   if (restarts.left >= PROMOTE_RESTARTS) return undefined;
@@ -178,13 +178,13 @@ async function restart(root: Root, renew?: () => Promise<unknown>): Promise<stri
   const before = await helloAt(root.socket);
   if (!before) return undefined;
   let pid: unknown;
-  try { pid = (await control(root.socket, root.token, 'hub.health', {}, 10_000)).pid; } catch { /* read below by its start */ }
+  try { pid = (await control(root.socket, rootToken(root), 'hub.health', {}, 10_000)).pid; } catch { /* read below by its start */ }
   await renew?.();
   try {
-    await control(root.socket, root.token, 'hub.restart', {}, 10_000);
+    await control(root.socket, rootToken(root), 'hub.restart', {}, 10_000);
   } catch (error) {
     if (message(error).includes('"unknown_method"')) {
-      try { await control(root.socket, root.token, 'hub.stop', {}, 10_000); } catch { /* gone already */ }
+      try { await control(root.socket, rootToken(root), 'hub.stop', {}, 10_000); } catch { /* gone already */ }
     } else if ((await helloAt(root.socket))?.start === before.start) return message(error);
     // Otherwise the hub went meanwhile, and the login service starts it again all the same.
   }
@@ -212,7 +212,7 @@ async function up(root: Root, ms: number, judge: boolean): Promise<string | unde
   if (!hello) return `its hub didn't answer within ${ms / 1000} s`;
   if (!judge) return undefined;
   let check: Record<string, unknown>;
-  try { check = await control(root.socket, root.token, 'hub.check', {}, 30_000); } catch (error) { return `its hub didn't judge the health check's fixture claim: ${message(error)}`; }
+  try { check = await control(root.socket, rootToken(root), 'hub.check', {}, 30_000); } catch (error) { return `its hub didn't judge the health check's fixture claim: ${message(error)}`; }
   if (check.outcome !== EXPECTED) return `its hub judged the health check's fixture claim ${String(check.claim)} ${String(check.outcome)}, where a good build reads ${EXPECTED}`;
   await sleep(STAY_MS);
   const still = await helloAt(root.socket);
