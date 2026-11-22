@@ -167,11 +167,29 @@ interface Held { entry: Entry; why: 'background' | 'due' | 'grace'; record: Held
 /** A reply that ended the turn before its fast lane was ready to place slow checks (#2075). */
 interface TurnEnd { session: string; background: string[]; stopAt: number; repliedAt: number; reading: LoopReading | undefined }
 interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo: Promise<string>; installs: Promise<string>; names: Promise<string>; state?: StatePin | undefined; changes?: Changes; ready?: boolean }
-/** What a claim's worktree changed against its merge base when its snapshot was taken, and the test runners' configs it held, each with its text (#33). */
-interface Changes { changed: string[]; configs: Map<string, string>; scripts: boolean }
-async function changesOf(cwd: string, base: string): Promise<Changes> {
+/**
+ * What a claim's worktree changed against its merge base when its snapshot was taken, and the test runners' configs it held, each with its text (#33);
+ * and, where a read of them failed or ran past its deadline, which one and why (#1869): then nothing is known of what it changed.
+ */
+interface Changes { changed: string[]; configs: Map<string, string>; scripts: boolean; unread?: string }
+/** The least time a read of what a claim changed is given (#1869). */
+const READ_FLOOR_MS = 5_000;
+/** Read with the snapshot's own git options (#1869): fsmonitor off, its 256 MB of output, and all of them ended within `ms`, by SIGKILL. */
+async function changesOf(cwd: string, base: string, ms: number): Promise<Changes> {
+  const deadline = Date.now() + ms;
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
-  const git = (args: string[]): Promise<string[]> => new Promise((done) => execFile('git', ['-c', 'core.hooksPath=/dev/null', ...args], { cwd, env, maxBuffer: 64 << 20 }, (error, out) => done(error ? [] : out.split('\n').filter(Boolean))));
+  const unread: string[] = [];
+  // A read that fails is recorded unless `missing` allows it (a file the base never had); either way it lists nothing.
+  const git = (args: string[], missing = false): Promise<string[]> => new Promise((done) => {
+    const left = Math.max(1, Math.ceil(deadline - Date.now()));
+    execFile('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], { cwd, env, maxBuffer: 1 << 28, timeout: left, killSignal: 'SIGKILL' }, (error, out, err) => {
+      if (error && !(missing && !error.killed)) {
+        const why = (error as { code?: unknown }).code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' ? 'gave more than 256 MB' : error.killed ? `timed out after ${left} ms` : `failed: ${String(err).trim().split('\n')[0] || error.message}`;
+        unread.push(`git ${args.join(' ')} ${why}`);
+      }
+      done(error ? [] : out.split('\n').filter(Boolean));
+    });
+  });
   const [diff, others, tracked] = await Promise.all([git(['diff', '--name-only', '--no-renames', base]), git(['ls-files', '--others', '--exclude-standard']), git(['ls-files'])]);
   const configs = new Map<string, string>();
   for (const path of new Set([...tracked, ...others].filter(runnerConfig))) {
@@ -180,8 +198,8 @@ async function changesOf(cwd: string, base: string): Promise<Changes> {
   }
   // Whether package.json's scripts changed: the script a check runs is its own.
   const scriptsOf = (text: string | undefined): string => { try { return JSON.stringify((JSON.parse(text ?? '{}') as { scripts?: unknown }).scripts ?? null); } catch { return 'unreadable'; } };
-  const scripts = diff.includes('package.json') && scriptsOf((await git(['show', `${base}:package.json`])).join('\n')) !== scriptsOf(await readFile(join(cwd, 'package.json'), 'utf8').catch(() => undefined));
-  return { changed: [...new Set([...diff, ...others])].sort(), configs, scripts };
+  const scripts = diff.includes('package.json') && scriptsOf((await git(['show', `${base}:package.json`], true)).join('\n')) !== scriptsOf(await readFile(join(cwd, 'package.json'), 'utf8').catch(() => undefined));
+  return { changed: [...new Set([...diff, ...others])].sort(), configs, scripts, ...(unread.length ? { unread: unread.join('; ') } : {}) };
 }
 /** Run outcomes a key keeps: a result. Missing, stopped and uncounted runs say nothing of the key, so they never carry. */
 const KEPT = new Set(['passed', 'failed', 'overran', 'ran_nothing']);
@@ -548,10 +566,13 @@ export class GateRunner {
       checks: [...c.entries.values()].map((e) => {
         const { base, why } = this.baseOf(e) ?? {};
         if (why) whys.push(`${e.check.check} ${why}`);
-        const mine = e.check.source === 'own' ? [] : this.ownChanged(c, e);
+        // What the claim changed unread (#1869): any approved check may be its own, so every one counts as the agent's.
+        const unread = e.check.source === 'own' || e.check.check === DEFINITION ? undefined : c.changes?.unread;
+        const mine = e.check.source === 'own' || unread ? [] : this.ownChanged(c, e);
+        if (unread) owns.push(`${e.check.check} counts as the agent's own: what the claim changed couldn't be read (${unread})`);
         if (mine.length) owns.push(`${e.check.check} counts as the agent's own: the claim changed ${mine.join(', ')}, which it loads`);
         return {
-          check: e.check.check, command: e.check.command, source: mine.length ? 'own' as const : e.check.source ?? 'definition' as const, covers: [...e.check.covers], depth: e.check.depth,
+          check: e.check.check, command: e.check.command, source: mine.length || unread ? 'own' as const : e.check.source ?? 'definition' as const, covers: [...e.check.covers], depth: e.check.depth,
           ...(e.check.runs !== undefined ? { needed: e.check.runs } : {}), ...(e.check.min_tests !== undefined ? { min_tests: e.check.min_tests } : {}),
           runs: this.runsOf(c, e, carried),
           ...(base ? { base } : {}),
@@ -640,8 +661,10 @@ export class GateRunner {
     // worktree; the installs its checkouts clone from the worktree; and the names of the files its checkout holds.
     const repo = this.repoOf(r.cwd);
     let installs: Promise<string> | undefined;
-    // Read beside the snapshot, from the same worktree: whose checks count turns on what the claim changed (#33).
-    const changes = changesOf(r.cwd, r.base);
+    // Read beside the snapshot, from the same worktree: whose checks count turns on what the claim changed (#33). It
+    // ends by half the hold that is left, so the claim still gets its verdict inside the hold (#1869), and a hold all
+    // but over still leaves git READ_FLOOR_MS to answer.
+    const changes = changesOf(r.cwd, r.base, Math.max(READ_FLOOR_MS, (r.stopAt + this.o.hold_ms - this.o.now()) / 2));
     let snapshot = r.base;
     // Compared by tree: a snapshot of a dirty folder is a new commit even when its files are the last one's.
     let tree: string | undefined;
