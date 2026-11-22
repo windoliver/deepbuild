@@ -943,6 +943,7 @@ timed.push('tests/acceptance/468/ac5-budgets.test.ts');
 // role deep-show's look lacks, is kept by hand, its orbit and fly-through tests with it (506-redraft-ac5/DISPUTE.md).
 alone.push('tests/acceptance/506/', 'tests/acceptance/506-redraft-ac5/');
 byHand.push('tests/acceptance/506/ac5-lamp-card.test.ts');
+alone.push('tests/acceptance/298/'); // #298's files each build deep-gpu or deep-show (and #544's assembler) and draw clamped overlays and a tilting card on the Metal GPU.
 // #508's files build deep-gpu and deep-show and draw effects on the Metal GPU; ac4-budgets times release builds, and
 // ac1's live sessions start real Claude Code and Codex sessions on your plan.
 alone.push('tests/acceptance/508/');
