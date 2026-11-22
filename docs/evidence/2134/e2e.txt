@@ -1,0 +1,49 @@
+# deep-hook 8b371951f, 2026-11-22T04:26:03Z, load { 124.47 113.10 86.55 }
+# home: <tmp>/h; standing: aws:111111111111 (profile dev); no hub
+
+## AC1: the owner is the creating run's
+
+$ PreToolUse Bash: aws s3 ls --profile dev; aws kms create-key --profile prod
+exit 2
+stderr: deep-hook: spooled 01M80R22XTE49FVX9BSFTC122N, but its sync didn't finish within the hook's 50 ms
+stderr: DeepBuild blocked this: Creating a cloud resource the plan doesn't name is a decision for you, and with the hub down nobody can be asked, so it is denied unless a standing rule covers it. Ask the person to create it, or to add a standing rule that covers it, then retry once the hub is up. It creates a cloud resource under the AWS profile prod: aws kms create-key --profile prod (guard no-unnamed-cloud-resource, which holds while the hub doesn't answer)
+
+$ PreToolUse Bash: aws s3 ls --profile dev && aws kms create-key --profile prod
+exit 2
+stderr: DeepBuild blocked this: Creating a cloud resource the plan doesn't name is a decision for you, and with the hub down nobody can be asked, so it is denied unless a standing rule covers it. Ask the person to create it, or to add a standing rule that covers it, then retry once the hub is up. It creates a cloud resource under the AWS profile prod: aws kms create-key --profile prod (guard no-unnamed-cloud-resource, which holds while the hub doesn't answer)
+
+$ PreToolUse Bash: aws kms create-key --profile dev
+exit 0
+
+$ PreToolUse Bash: aws s3 ls --profile prod && aws kms create-key --profile dev
+exit 0
+
+$ PreToolUse Bash: AWS_PROFILE=prod aws kms create-key
+exit 2
+stderr: DeepBuild blocked this: Creating a cloud resource the plan doesn't name is a decision for you, and with the hub down nobody can be asked, so it is denied unless a standing rule covers it. Ask the person to create it, or to add a standing rule that covers it, then retry once the hub is up. It creates a cloud resource under the AWS profile prod: aws kms create-key (guard no-unnamed-cloud-resource, which holds while the hub doesn't answer)
+
+$ PreToolUse Bash: aws kms create-key --profile dev && aws kms create-key --profile dev
+exit 2
+stderr: DeepBuild blocked this: Creating a cloud resource the plan doesn't name is a decision for you, and with the hub down nobody can be asked, so it is denied unless a standing rule covers it. Ask the person to create it, or to add a standing rule that covers it, then retry once the hub is up. It runs 2 commands that create cloud resources: aws kms create-key --profile dev; aws kms create-key --profile dev (guard no-unnamed-cloud-resource, which holds while the hub doesn't answer)
+
+## AC2: an option's value is never the subcommand
+
+$ check effect:cloud-resource: pulumi -C infra up
+{"matched":true}
+
+$ check effect:cloud-resource: cdk --profile prod deploy
+{"matched":true}
+
+$ check effect:dependency: npm --prefix web install left-pad
+{"matched":true}
+
+$ check effect:cloud-resource: pulumi -C up preview
+{"matched":false}
+
+$ PreToolUse Bash: pulumi -C infra up
+exit 2
+stderr: DeepBuild blocked this: Creating a cloud resource the plan doesn't name is a decision for you, and with the hub down nobody can be asked, so it is denied unless a standing rule covers it. Ask the person to create it, or to add a standing rule that covers it, then retry once the hub is up. It creates a cloud resource: pulumi -C infra up (guard no-unnamed-cloud-resource, which holds while the hub doesn't answer)
+
+$ PreToolUse Bash: cdk --profile prod deploy
+exit 2
+stderr: DeepBuild blocked this: Creating a cloud resource the plan doesn't name is a decision for you, and with the hub down nobody can be asked, so it is denied unless a standing rule covers it. Ask the person to create it, or to add a standing rule that covers it, then retry once the hub is up. It creates a cloud resource: cdk --profile prod deploy (guard no-unnamed-cloud-resource, which holds while the hub doesn't answer)

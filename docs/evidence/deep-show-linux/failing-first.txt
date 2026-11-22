@@ -1,0 +1,110 @@
+warning: unused import: `std::cell::RefCell`
+  --> crates/deep-codecs/src/export.rs:12:5
+   |
+12 | use std::cell::RefCell;
+   |     ^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `std::rc::Rc`
+  --> crates/deep-codecs/src/export.rs:16:5
+   |
+16 | use std::rc::Rc;
+   |     ^^^^^^^^^^^
+
+warning: unused import: `std::collections::BTreeMap`
+ --> crates/deep-codecs/src/stream.rs:8:5
+  |
+8 | use std::collections::BTreeMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `track_color`
+  --> crates/deep-codecs/src/stream.rs:17:56
+   |
+17 | use crate::{codec, mp4, over_caps, points_at, refused, track_color, Caps, Format, Job, Planted};
+   |                                                        ^^^^^^^^^^^
+
+warning: unused variable: `key`
+   --> crates/deep-codecs/src/export.rs:625:13
+    |
+625 |         let key = head["key"].as_bool() == Some(true);
+    |             ^^^ help: if this is intentional, prefix it with an underscore: `_key`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `quality` is never used
+   --> crates/deep-codecs/src/export.rs:111:4
+    |
+111 | fn quality(tier: &str, grain: bool) -> Result<f64, Value> {
+    |    ^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `STARVED` is never used
+   --> crates/deep-codecs/src/export.rs:126:7
+    |
+126 | const STARVED: u32 = 64_000;
+    |       ^^^^^^^
+
+warning: function `hash_file` is never used
+   --> crates/deep-codecs/src/export.rs:436:4
+    |
+436 | fn hash_file(path: &Path) -> std::io::Result<String> {
+    |    ^^^^^^^^^
+
+warning: function `flatten` is never used
+   --> crates/deep-codecs/src/export.rs:908:4
+    |
+908 | fn flatten(plane: &mut [u8], w: usize, h: usize, parts: usize, n: usize) {
+    |    ^^^^^^^
+
+warning: function `without_sei` is never used
+   --> crates/deep-codecs/src/export.rs:950:4
+    |
+950 | fn without_sei(sample: &[u8], length: usize) -> Vec<u8> {
+    |    ^^^^^^^^^^^
+
+warning: function `planted_timescale` is never used
+   --> crates/deep-codecs/src/mov.rs:143:15
+    |
+143 | pub(crate) fn planted_timescale(p: u32, q: u32, planted: &Planted) -> (u32, u32) {
+    |               ^^^^^^^^^^^^^^^^^
+
+warning: fields `bgra`, `matrix`, `range`, and `blocked` are never read
+   --> crates/deep-codecs/src/stream.rs:174:5
+    |
+171 | struct Out<'p, R, W> {
+    |        --- fields in this struct
+...
+174 |     bgra: bool,
+    |     ^^^^
+175 |     /// The file's tagged (or assumed) matrix and range, for BGRA.
+176 |     matrix: String,
+    |     ^^^^^^
+177 |     range: String,
+    |     ^^^^^
+178 |     /// The time spent handing the head and frames to the pipe: a slow reader's, not decoding.
+179 |     blocked: Duration,
+    |     ^^^^^^^
+
+warning: method `frame` is never used
+   --> crates/deep-codecs/src/stream.rs:196:8
+    |
+182 | impl<R: BufRead, W: Write> Out<'_, R, W> {
+    | ---------------------------------------- method in this implementation
+...
+196 |     fn frame(&mut self, k: usize, bytes: &[u8], range: &str) -> bool {
+    |        ^^^^^
+
+warning: `deep-codecs` (lib) generated 13 warnings (run `cargo fix --lib -p deep-codecs` to apply 5 suggestions)
+error[E0433]: cannot find module or crate `deep_groups_render` in this scope
+  --> crates/deep-show/src/clip.rs:21:5
+   |
+21 | use deep_groups_render::indexed::Reader;
+   |     ^^^^^^^^^^^^^^^^^^ use of unresolved module or unlinked crate `deep_groups_render`
+   |
+   = help: if you wanted to use a crate named `deep_groups_render`, use `cargo add deep_groups_render` to add it to your `Cargo.toml`
+
+For more information about this error, try `rustc --explain E0433`.
+error: could not compile `deep-show` (bin "deep-show") due to 1 previous error
+[exit 101]

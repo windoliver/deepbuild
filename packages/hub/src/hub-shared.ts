@@ -15,6 +15,7 @@ import { type Connection, type EventInput, type Receipt, type RecordStore } from
 
 import { readJson } from './claude-settings.js';
 import { statKey } from './agent-files.js';
+import { claudeOnPath, loginPlan } from './mods.js';
 
 import { ownHome } from './keychain.js';
 
@@ -410,4 +411,55 @@ export function crashing(record: RecordStore, point: string): RecordStore {
     return event;
   };
   return withAppend(record, append);
+}
+/**
+ * A wait on `key`, woken by whoever wakes `waits` for it, by the hub stopping or after `ms`. It counts from the
+ * call, so a wake that comes while the caller still reads what it waits on isn't missed; `cancel` ends it.
+ */
+export function wakeable(waits: Map<string, Set<() => void>>, key: string, ms: number): { woken: Promise<void>; cancel: () => void } {
+  const set = waits.get(key) ?? new Set();
+  waits.set(key, set);
+  let wake = (): void => undefined;
+  const woken = new Promise<void>((done) => {
+    wake = () => {
+      clearTimeout(timer);
+      set.delete(wake);
+      if (!set.size && waits.get(key) === set) waits.delete(key);
+      done();
+    };
+  });
+  const timer = setTimeout(wake, Math.max(0, ms));
+  set.add(wake);
+  return { woken, cancel: wake };
+}
+/**
+ * The login plan of a Claude Code home (#1033), read again only after MODS_MS or once a file a sign-in rewrites
+ * changes: each read starts claude, about 175 ms of CPU, on every Claude Code session's start.
+ */
+export function planOf(plansSeen: Map<string, { key: string; at: number; plan: Promise<unknown> }>, now: () => number, home: string): Promise<unknown> {
+  const claude = claudeOnPath(process.env);
+  if (!claude) return Promise.resolve(undefined);
+  const files = [join(home, '.credentials.json'), join(home, '..', '.claude.json'), join(home, '.claude.json')];
+  const key = JSON.stringify([claude, ...files.map(statKey)]);
+  const seen = plansSeen.get(home);
+  if (seen && seen.key === key && now() - seen.at < MODS_MS) return seen.plan;
+  const plan = loginPlan(claude, { ...process.env, ...(home ? { CLAUDE_CONFIG_DIR: home } : {}) });
+  plansSeen.set(home, { key, at: now(), plan });
+  return plan;
+}
+/** What setup wrote to <root>/config.json for the runner: the login shell's PATH and the plan's reserve. */
+export function hubConfig(dir: string): { loginPath: string; reservePct: number; rules: { margin: number; windowMs: number }; acceptance: { slots: number; gateKey: string | null } } {
+  let c: Obj = {};
+  try { c = JSON.parse(readFileSync(join(dir, 'config.json'), 'utf8')) as Obj; } catch { /* none yet: no binary resolves, so every job is refused saying so */ }
+  const runner = isObj(c.runner) ? c.runner : {};
+  const plan = isObj(c.plan) ? c.plan : {};
+  // Standing rules are judged at this margin over this window (#23): the design's 1.5 and 30 days unless you set them.
+  const rules = isObj(c.rules) ? c.rules : {};
+  return {
+    loginPath: typeof runner.login_path === 'string' ? runner.login_path : '',
+    reservePct: typeof plan.reserve_pct === 'number' ? plan.reserve_pct : 10,
+    rules: { margin: typeof rules.margin === 'number' ? rules.margin : 1.5, windowMs: (typeof rules.window_days === 'number' ? rules.window_days : 30) * DAY },
+    // The issues that run at once, and the gate identity's key (#1325): with none, a swap goes to you.
+    acceptance: { slots: isObj(c.acceptance) && typeof c.acceptance.slots === 'number' ? c.acceptance.slots : 1, gateKey: isObj(c.gate) && typeof c.gate.key === 'string' ? c.gate.key : null },
+  };
 }
