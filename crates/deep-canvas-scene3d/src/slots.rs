@@ -19,14 +19,18 @@ use crate::cut::{quat, rotated, MAX_ELEMENTS};
 use crate::scene::{local_of, matmul, Affine3, Assets, Layer3, Material, Refused, Shape, Solid};
 use crate::spec::P;
 
-/// An instancer's columns that may read an array, besides its `attrs`.
-const COLUMNS: [&str; 8] = [
-    "pos", "rot", "yaw", "scale", "proto", "hidden", "live", "gen",
+/// An instancer's columns that may read an array, besides its `attrs`. #552: `seen` holds bit i
+/// where player i + 1 sees the element.
+const COLUMNS: [&str; 9] = [
+    "pos", "rot", "yaw", "scale", "proto", "hidden", "live", "gen", "seen",
 ];
 
 /// The planted instancer that addresses an element by its slot alone (#537 criterion 1): its
 /// elements are `<instancer>#<slot>`, so a selection follows a slot onto its next occupant.
 pub const SLOT_ALONE: &str = "instancer_addresses_by_slot";
+
+/// #552's planted `seen` column, which reads player 1's bit on every copy.
+pub const SEEN_PLAYER_ONE: &str = "seen_reads_player_one";
 
 /// `params` with the columns a fed instancer adds: `live` and `gen` (Instance `instance@1`:
 /// logic columns), and its part poses.
@@ -38,6 +42,7 @@ pub(crate) fn params(mut params: Vec<P>) -> Vec<P> {
     for (name, ty, form) in [
         ("live", "bool column", column),
         ("gen", "u32 column", column),
+        ("seen", "i32 column", column),
         ("parts", parts, posed),
     ] {
         params.push(P {
@@ -352,9 +357,20 @@ pub(crate) fn units(
         .and_then(Value::as_f64)
         .unwrap_or(0.0);
     let scale_all = params["scale"].as_f64().unwrap_or(1.0);
+    // #552: this copy's player, a view value the host gives the frame's document; an element
+    // whose `seen` lacks its bit is hidden on this copy as one that isn't live is.
+    // The planted column reads player 1's bit on every copy.
+    let me = match map.get("planted").and_then(Value::as_str) {
+        Some(SEEN_PLAYER_ONE) => Some(1),
+        _ => deep_canvas::columns::match_me(map.get("match.me").unwrap_or(&Value::Null)),
+    };
     let mut out = Vec::new();
     for slot in 0..n {
-        if one("live", slot) != Some(1.0) {
+        let seen = match (one("seen", slot), me) {
+            (Some(bits), Some(me)) => (bits as i64) >> (me - 1) & 1 == 1,
+            _ => true,
+        };
+        if one("live", slot) != Some(1.0) || !seen {
             continue;
         }
         let shown = one("hidden", slot).is_none_or(|h| h == 0.0)
