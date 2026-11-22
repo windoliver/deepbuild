@@ -65,6 +65,8 @@ try {
     output: async () => `${JSON.stringify({ type: 'result', result: '{"findings":[]}' })}\n`,
     planWindows: () => new Map(),
     list: async () => [],
+    recent: async () => [],
+    takesSubagents: () => true,
   };
   const core = { writer: 'core', actor: 'you', scope: 'you' };
   const build = openWikiBuild({ record, root: rootOf(hub), store, runner, asks, now, archive: () => archive.pass(), core, cli: { writer: 'cli', actor: 'you', scope: 'you' } });
