@@ -830,6 +830,13 @@ class Pair {
   build(role, run) {
     const state = this.roles[role];
     const line = { index: this.index, role, use: state.use, tree: state.tree.tree };
+    // With no cache, nothing is asked of the tools: the bay builds as it would without one.
+    const limit = ceiling();
+    if (limit === null || limit === 0) {
+      const failed = run();
+      this.print(`BUILD ${JSON.stringify({ ...line, key: null, reused: false, why: `no cache: DEEP_BUILD_CACHE_BYTES is ${limit === 0 ? '0' : 'not a whole number'}`, ...(failed ? { failed: true } : this.keep(null, () => ({}))) })}`);
+      return failed;
+    }
     let key = null, taken, before = null, around = null, unkept = null;
     try {
       // Taken before the key's files are read, so a file that changes between the two is one the keep refuses.
@@ -855,10 +862,10 @@ class Pair {
     const kept = failed ? { failed: true } : unkept ? { kept: false, notKept: unkept } : before ? this.keep(key, () => {
       const after = stamps(state.bay);
       const paths = [...after].filter(([path, text]) => before.get(path) !== text).map(([path]) => path);
-      // A workspace build adds files in its packages, since the bay's dist folders are pruned before it. A file that
-      // was there before and changed, one deleted, or one outside the packages is another writer's, such as a hub a
+      // A workspace build adds files in its packages' dist folders, which the bay prunes before it. A file that was
+      // there before and changed, one deleted, or one outside those folders is another writer's, such as a hub a
       // test left running, and no later use may get it laid back.
-      const stray = paths.find((path) => before.has(path) || !/^packages\/[^/]+\/./.test(path)) ?? [...before.keys()].find((path) => !after.has(path))
+      const stray = paths.find((path) => before.has(path) || !/^packages\/[^/]+\/dist\/./.test(path)) ?? [...before.keys()].find((path) => !after.has(path))
         ?? (outside(state.bay) !== around ? 'node_modules or target' : undefined);
       return stray ? { refused: `${stray} changed while the bay built, which a workspace build doesn't do` } : { from: state.bay, paths };
     }) : { kept: false };
