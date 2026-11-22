@@ -170,10 +170,10 @@ export class Holds {
   /**
    * The ask raised under `k` once a hold on your yes to it is over (#1101; design: Plans before acting): a call your yes
    * holds waits in the hub and runs when its step starts, or meets the ask again after Undo. One still held past
-   * HELD_WAIT_MS is told so.
+   * HELD_WAIT_MS is told so. A call that can be undone (`waits` false) is told at once: no hold should cover it.
    */
-  private async settledAsk(k: string): Promise<{ id: string; status: string; decision: string | null } | undefined> {
-    const until = Date.now() + HELD_WAIT_MS;
+  private async settledAsk(k: string, waits = true): Promise<{ id: string; status: string; decision: string | null } | undefined> {
+    const until = Date.now() + (waits ? HELD_WAIT_MS : 0);
     let row = await this.askOf(k);
     while (row?.status === 'held' && Date.now() < until) {
       await sleep(100);
@@ -277,7 +277,7 @@ export class Holds {
     const open: { rule: string; effect: Named }[] = [];
     for (const { rule, effect } of call.named!) {
       if (rule === 'merge-names-head' || every || named.has(effect)) continue;
-      const offer = await this.settledAsk(this.offerKey(effect, sessions[0]!));
+      const offer = await this.settledAsk(this.offerKey(effect, sessions[0]!), effect === 'push');
       if (offer?.decision === 'allow') continue;
       if (offer) return `DeepBuild denied this (guard ${rule}): ${await this.waiting(`ask:${offer.id}`, call.label)}`;
       open.push({ rule, effect });
@@ -287,7 +287,8 @@ export class Holds {
       const does = [...new Set(open.map((o) => DOES[o.effect]!))].join(' and ');
       const source = `effect.${effect}`;
       const k = key({ source, sessions: sessions[0], call: call.label });
-      const asked = await this.settledAsk(k);
+      // Of the named effects only a push can't be undone; a pull request or a merge reverts.
+      const asked = await this.settledAsk(k, open.some((o) => o.effect === 'push'));
       if (asked?.decision !== 'allow') {
         const handle = asked ? `ask:${asked.id}` : await this.raise(meta.session, meta.agent, meta.cwd, source, k,
           `Run \`${call.label}\`? It ${does}, and no request in this thread names that.`, ANSWERS[effect]!, planFor(source, `Run \`${call.label}\`, which ${does}`, [call.label], open.some((o) => o.effect === 'push') ? pushTargets(call.label) : []));

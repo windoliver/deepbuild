@@ -1,0 +1,7 @@
+# #1101 AC5's batch-holds-all plant at 994a4b076, MacBook Pro (Mac18,1), 2026-11-21, run alone (1 of 2; both alike).
+# The planted hub holds the batch's pull requests too, and 994a4b076 kept every held call waiting, so the test's
+# pull-request tries had no answer until the hold ended and it couldn't press Undo at 5 s. Only a push waits now.
+
+ ✓ tests/acceptance/1101/batch.test.ts > #1101 AC5 #1101.538a1251 > #1101.538a1251 a batch of four steps with two that can't be undone runs the two reversible ones at once and holds the other two, and Undo at 5 s withdraws exactly those two 9311ms
+ × tests/acceptance/1101/batch.test.ts > #1101 AC5 #1101.538a1251 > #1101.538a1251 a planted batch that holds all four (batch-holds-all) fails, naming the step 15669ms
+   → INCONCLUSIVE: the hub's clock was past 9 s into the batch's hold before Undo could be pressed at 5 s; this is not a pass
