@@ -711,7 +711,8 @@ impl Call {
                 .any(|w| w != "aws" && w.rsplit('/').next() == Some("aws"))
             // An assignment of its own changes what every later program gets, an exported one as a prefix doesn't. Each
             // statement runs aws or a read-only program, named bare.
-            || unquoted.split([';', '&', '|', '\n', '(', ')']).any(|statement| {
+            // Read with its quotes dropped, never its quoted words, so a quoted wrapper is still its program.
+            || bare.split([';', '&', '|', '\n', '(', ')']).any(|statement| {
                 let words: Vec<&str> = statement.split_whitespace().collect();
                 let assigns = words.iter().take_while(|w| assignment(w)).count();
                 (assigns > 0 && assigns == words.len())
