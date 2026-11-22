@@ -570,7 +570,7 @@ impl Rapier {
                 InteractionTestMode::And,
             ))
             .sensor(u.sensor);
-        c = belt::carrying(c, m.tangent_speed, self.twin);
+        c = belt::carrying(c, m.tangent_speed, belt::turns(w, id, self.twin), self.twin);
         // #191: a sensor reports every body that overlaps it, kinematic ones included, which the
         // engine's default pair filter would skip against a static or kinematic sensor.
         if u.sensor && self.twin != Twin::DefaultPairFilter {
@@ -975,7 +975,7 @@ impl Backend for Rapier {
         p.dt = (1.0 / w.step_rate) as f32;
         // The world's substeps are the solver's iterations, not repeated steps (World and backend).
         p.num_solver_iterations = w.substeps as usize;
-        let (hz, unit, cap, sleep) = runner::contact::lengths(self.twin, w);
+        let (hz, unit, cap, sleep, reuse) = runner::contact::lengths(self.twin, w);
         p.contact_softness = SpringCoefficients::new(hz, w.solver.contact_damping as f32);
         // Rapier holds a contact with a fixed body at twice the frequency; the world keeps that.
         let fixed = if self.twin == Twin::StaticContactSame {
@@ -985,7 +985,7 @@ impl Backend for Rapier {
         };
         p.static_contact_softness =
             SpringCoefficients::new(fixed * hz, w.solver.contact_damping as f32);
-        p.length_unit = unit as f32;
+        (p.length_unit, p.normalized_contact_recycle_distance) = (unit as f32, reuse);
         p.normalized_max_linear_velocity = (w.solver.max_speed / cap) as f32;
         p.max_ccd_substeps = usize::from(w.solver.ccd && self.twin != Twin::NoSweep);
         let mut handles = BTreeMap::new();
@@ -1035,6 +1035,7 @@ impl Backend for Rapier {
                 .can_sleep(b.sleep && w.solver.sleep.on && b.kind != BodyKind::Character)
                 .enabled(b.active)
                 .locked_axes(locks)
+                .user_data(belt::fitted(w, id, self.twin))
                 .build();
             let a = rb.activation_mut();
             a.normalized_linear_threshold = (w.solver.sleep.speed / sleep) as f32;
@@ -1141,10 +1142,7 @@ impl Backend for Rapier {
         self.aim(targets);
         self.push(targets);
         let vehicles = self.vehicles.ids();
-        let belts = belt::Belts {
-            twin: self.twin,
-            up: self.up,
-        };
+        let belts = belt::hook(&mut self.world, &self.bodies, self.twin, self.up);
         // #251: a world never stepped has no broad phase yet, so a wheel's ray would meet nothing
         // on the first step; it is built first, as the world stands.
         if self.step == 0 && !vehicles.is_empty() {
