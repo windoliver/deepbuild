@@ -1598,6 +1598,11 @@ impl<'a> Hub<'a> {
             Call::Migrate(to) => self.migrate(*to),
             Call::Keys { doc, runs } => self.keys(doc, *runs),
             Call::Fingerprint => self.fingerprint_reply(),
+            Call::Ship { bundle, chrome } => crate::export::ship::measure(
+                std::path::Path::new(bundle),
+                std::path::Path::new(chrome),
+                self.planted(Planted::Export(crate::export::Guard::ShipBytesSumsInflated)),
+            ),
             Call::Footprint => {
                 json!({"reading": deep_gpu::footprint::read(deep_gpu::footprint::SYSTEM).json()})
             }

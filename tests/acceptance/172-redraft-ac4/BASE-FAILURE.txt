@@ -1,0 +1,23 @@
+#172 criterion 4, the size half (blind redraft for #2892's criterion 3): where each test fails at the base 5f5791e2d
+("Merge pull request #3068").
+
+Read from code, not run: both tests export the lab with a deep-show build (full), and the Mac was at load 100-200.
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/172-redraft-ac4/tsconfig.json (exit 0).
+vitest list --root tests/acceptance/172-redraft-ac4 collects 2 tests.
+
+At the base, crates/deep-show/src/export/web.rs writes every bundle file as it is: the receipt's player is
+<sha>.wasm, the full set's player_bg.wasm (37,274,227 B; the lab names scene3d, which only `full` holds), with
+`player.hash` its SHA-256 and no `inflated` mark; index.html's import map names the glue <sha>.js (player.js,
+128,501 B) and its module script's `src` the element's script (element.js, 46,609 B); it has no inline script but the
+import map and the bundle's JSON.
+
+  AC4 #172.1e1f958d (#2892's AC3 #2892.62d3dff4) the lab's player is under 12 MB compressed ... — the export works; the
+  receipt names the player (its stored SHA-256 is player.hash) and the file holds that WebAssembly, so
+  `none(c.problems)` holds. It fails at `none(overFailures(c))`: the player as the bundle stores it is
+  37,274,227 + 128,501 + 46,609 = 37,449,337 B, not under 12,000,000 B. The first draft's size test passes at the base
+  (it counts Brotli 11 of each file, about 7.7 MB); this redraft holds the bundle to what it stores, which is what
+  #2892 changes, so it is meant to pass only with #2892's stored form (#2892's re-draft comment: 11,973,747 B for the
+  player and its two scripts as the pinned compressor stores them).
+  AC4 #172.1e1f958d (#2892's AC3 #2892.62d3dff4) a planted bundle whose player is over 12 MB (web_player_over_12mb) ...
+  — fails at exportLab's `deep-show run takes the scenario (planted web_player_over_12mb)`: deep-show answers
+  {"ok":false,"code":"bad_input"} to a planted name it doesn't know (main.rs).

@@ -1,0 +1,90 @@
+// AC1 (#806), redrafted blind for #393's AC9 scenario: 5,000 unnamed marks, sent with deep_show and with `deep show --check`,
+// played against the hub instead of the `deep-show` stand-in, give the stand-in's replies field for field, the full issue list
+// compared by its content (README).
+import { afterEach, describe, expect, it } from 'vitest';
+import {
+  ALPHA, DOC, IN_ALPHA, PANELS, PROCESSES, SESSIONS, arr, asIssues, board, capFailures, issueOrder, isObject, run as standInRun, sorted, str, useShowBinary,
+  type Issue, type JsonObject, type JsonValue,
+} from '../393/helpers.ts';
+import { cleanup, readEvidence } from '../806/helpers.ts';
+import { differences, mutantProblems, normalize, replay, type Replayed } from '../806/replay.ts';
+import { readEvidence as standInEvidence } from '../393/helpers.ts';
+
+afterEach(cleanup, 60_000);
+useShowBinary();
+
+const MARKS = 5_000;
+/** `m-1` … `m-5000`: code-point order (m-1, m-10, m-100 …) is not number order. */
+const IDS = Array.from({ length: MARKS }, (_, i) => `m-${i + 1}`);
+
+/** #393 AC9's document: 5,000 `rect@1` marks with no `name`, written in a seeded shuffle so input order is no order a reply keeps. */
+function unnamedMarks(): JsonObject {
+  const order = [...IDS];
+  let seed = 806;
+  for (let i = order.length - 1; i > 0; i--) {
+    seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
+    const j = seed % (i + 1);
+    [order[i], order[j]] = [order[j]!, order[i]!];
+  }
+  return board('Five thousand marks', [1000, 500], order.map((id) => {
+    const n = Number(id.slice(2)) - 1;
+    return { id, kind: 'rect@1', order: `a${String(n).padStart(4, '0')}`, params: { box: [(n % 100) * 10, Math.floor(n / 100) * 10, 8, 8], paint: { fill: { role: 'ink' } } } };
+  }));
+}
+
+/** The scenario in `deep-show run`'s grammar, one call, as #393's AC9 tests send it. */
+const scenarioOf = (call: JsonObject) => (evidence: string): JsonObject =>
+  ({ evidence, sessions: SESSIONS, processes: PROCESSES, panels: PANELS, docs: { [DOC.a]: { panel: 'main' } }, calls: [call] });
+const VIA = {
+  deep_show: { call: 'deep_show', session: ALPHA.id, doc: DOC.a, document: unnamedMarks(), include: ['issues'] },
+  'deep show --check': { call: 'deep show', peer: IN_ALPHA, check: true, doc: DOC.a, document: unnamedMarks(), include: ['issues'] },
+} as const satisfies Record<string, JsonObject>;
+
+/** What #393's AC9 asks of a reply to the 5,000 marks, read here on the hub's own reply and its own evidence store. */
+async function ac9Failures(reply: JsonObject, list: (sha: string) => Promise<Buffer>): Promise<string[]> {
+  const f: string[] = [];
+  if (reply['outcome'] !== 'refused') f.push(`outcome is ${JSON.stringify(reply['outcome'])}, not refused`);
+  const full = asIssues(arr(JSON.parse((await list(str(reply['issues_evidence'], 'issues_evidence'))).toString('utf8')) as JsonValue, 'the list read back'), 'the list read back');
+  if (full.length !== MARKS) f.push(`the list read back from issues_evidence holds ${full.length} issues, not ${MARKS}`);
+  if (JSON.stringify(sorted(full.flatMap((i: Issue) => i.ids))) !== JSON.stringify(sorted(IDS))) f.push('the list read back is not one issue per unnamed mark, each naming its mark');
+  const errors = full.filter((i) => i.severity === 'error').length;
+  if (errors !== MARKS) f.push(`${errors} of the issues are errors, not ${MARKS}`);
+  const k = full.findIndex((issue, n) => n > 0 && issueOrder(full[n - 1]!, issue) > 0);
+  if (k >= 0) f.push(`the list read back is out of order (errors first, then by code and ID) at ${k}`);
+  f.push(...capFailures(reply, full));
+  const inline = arr(reply['issues'], 'issues').length;
+  if (!(inline > 0 && inline < MARKS)) f.push(`the reply inlines ${inline} issues, not some and fewer than ${MARKS}`);
+  if (!isObject(reply['truncated']) || reply['truncated']['total'] !== MARKS) f.push(`truncated.total is not ${MARKS}: ${JSON.stringify(reply['truncated'] ?? null)}`);
+  return f;
+}
+
+/** The hub's replies against the stand-in's run with #393's planted reply: the differences the comparison reports. */
+async function againstPlanted(r: Replayed, build: (evidence: string) => JsonObject, planted: string): Promise<string[]> {
+  const plantedReplies = standInRun({ ...build(r.evidence), planted }).replies;
+  const norm = await normalize({ replies: plantedReplies, readEvidence: (sha) => standInEvidence(r.evidence, sha), translate: (v) => v });
+  return differences(r.calls, norm, r.hubNorm);
+}
+
+describe('AC1 #393\'s and #384\'s acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#393 AC9, redrafted)', () => {
+  for (const [via, call] of Object.entries(VIA)) {
+    it(`AC1 #393 AC9: 5,000 unnamed marks sent with ${via} give the stand-in's reply field for field, the full issue list compared by content`, async () => {
+      const build = scenarioOf(call);
+      const r = await replay(build, [], { app: false, standIn: (s) => standInRun(s).replies });
+      const hub = r.hub.replies[0]!;
+
+      // The criterion: the hub's reply is the stand-in's, field for field; issues_evidence by the content it reads back to.
+      expect(r.failures, `${via}: the hub's reply against the stand-in's`).toEqual([]);
+      expect(Object.keys(hub).sort(), `${via}: the hub's reply has the stand-in's fields`).toEqual(Object.keys(r.standIn[0]!).sort());
+
+      // What is being compared is #393 AC9's reply, read on the hub's side alone, so the equality is not two empty replies agreeing.
+      expect(await ac9Failures(hub, (sha) => readEvidence(r.opened.home, sha)), `${via}: the hub's reply is #393 AC9's`).toEqual([]);
+      if (via === 'deep show --check') expect(hub['result'], `${via}: the check of a refused document fails`).toBe('FAIL');
+
+      // The comparison can fail: a field of the hub's reply changed is reported, naming the call and the field ...
+      expect(mutantProblems(r.calls, r.standNorm, r.hubNorm), `${via}: a changed field of the hub's reply is reported`).toEqual([]);
+      // ... and #393's two wrong replies, as the stand-in's planted programs give them, differ from the hub's, naming the field.
+      expect((await againstPlanted(r, build, 'inlines_every_issue')).join('\n'), `${via}: a reply that inlines every issue differs, naming issues`).toContain('field `issues`');
+      expect((await againstPlanted(r, build, 'cuts_without_truncated')).join('\n'), `${via}: a reply that cuts with no truncated differs, naming truncated`).toContain('field `truncated`');
+    }, 900_000);
+  }
+});

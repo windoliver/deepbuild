@@ -12,6 +12,9 @@
 //   reap <parent> <child> <instructions> <elapsed> <children's elapsed> <QoS>
 //   unread <parent> <child> <child time>      a child reaped whose count is denied, as a setuid one's is
 //   exit <process> <instructions> <children's elapsed> <QoS>      its own count, for a child nothing waits for
+//   exec <process> <instructions> <children's elapsed> <QoS> <path>      what a process becomes, with its count
+//                                  so far: a forked or spawned one that execs another program (#2960)
+//   unexec <process>      its exec failed: it is still what it was
 //
 // <QoS> is the process's CPU time at each QoS class, in this order: default, maintenance, background,
 // utility, legacy, user-initiated, user-interactive. Code that waits by spinning or on a lock counts its
@@ -35,10 +38,14 @@
 #define QOS_OF(usage) (usage).ri_cpu_time_qos_default, (usage).ri_cpu_time_qos_maintenance, (usage).ri_cpu_time_qos_background, \
   (usage).ri_cpu_time_qos_utility, (usage).ri_cpu_time_qos_legacy, (usage).ri_cpu_time_qos_user_initiated, (usage).ri_cpu_time_qos_user_interactive
 
+// The log's path as the process started: a forked child of a process with threads that ends with _exit asks no
+// lock of the environment for it (#2960).
+static char log_path[1024];
+
 // One write to an O_APPEND file, so the lines of processes running at once don't mix. A log that's gone,
 // as for a daemon that outlives its run, is left gone.
 static void put(const char *line, int length) {
-  const char *path = getenv(LOG);
+  const char *path = log_path[0] ? log_path : getenv(LOG);
   int log = path ? open(path, O_WRONLY | O_APPEND) : -1;
   if (log < 0) return;
   write(log, line, length);
@@ -124,12 +131,55 @@ static pid_t counted_fork(void) {
   return child;
 }
 
-// A child nothing waits for has no one to read it, so it reports itself as it exits normally.
-__attribute__((destructor)) static void exiting(void) {
+// A child nothing waits for has no one to read it, so it reports itself as it exits: normally, through the
+// destructor, or through _exit or _Exit, which run none (#2960), such as the supervisor helper's leash watcher.
+// Once per process: exit() may end in _exit after the destructor ran. A forked child starts unreported.
+static pid_t reported;
+static void exiting(void) {
   struct rusage_info_v4 usage;
   char line[320];
-  if (proc_pid_rusage(getpid(), RUSAGE_INFO_V4, (rusage_info_t *)&usage)) return;
+  if (reported == getpid() || proc_pid_rusage(getpid(), RUSAGE_INFO_V4, (rusage_info_t *)&usage)) return;
+  reported = getpid();
   put(line, snprintf(line, sizeof line, "exit %d %llu %llu" QOS "\n", getpid(), usage.ri_instructions, usage.ri_child_elapsed_abstime, QOS_OF(usage)));
+}
+__attribute__((destructor)) static void destroyed(void) { exiting(); }
+// What a process becomes, logged with its count so far before it execs, since a platform binary it becomes logs
+// nothing of itself; and undone when the exec fails.
+static int became(const char *path) {
+  struct rusage_info_v4 usage;
+  char line[1400];
+  // Unread, it logs nothing: the process is then judged as it started, and a count of 0 is never added.
+  if (proc_pid_rusage(getpid(), RUSAGE_INFO_V4, (rusage_info_t *)&usage)) return 0;
+  put(line, snprintf(line, sizeof line, "exec %d %llu %llu" QOS " %.1024s\n", getpid(), usage.ri_instructions, usage.ri_child_elapsed_abstime, QOS_OF(usage), path));
+  return 1;
+}
+static int failed(int logged, int result) {
+  if (!logged) return result;
+  int saved = errno;
+  char line[64];
+  put(line, snprintf(line, sizeof line, "unexec %d\n", getpid()));
+  errno = saved;
+  return result;
+}
+static int counted_execve(const char *path, char *const argv[], char *const envp[]) {
+  int logged = became(path);
+  return failed(logged, execve(path, argv, envp));
+}
+static int counted_execv(const char *path, char *const argv[]) {
+  int logged = became(path);
+  return failed(logged, execv(path, argv));
+}
+static int counted_execvp(const char *file, char *const argv[]) {
+  int logged = became(file);
+  return failed(logged, execvp(file, argv));
+}
+static void counted__exit(int status) {
+  exiting();
+  _exit(status);
+}
+static void counted__Exit(int status) {
+  exiting();
+  _Exit(status);
 }
 
 // This process's own two settings, whole, as a child's environment holds them. A bench or the hub may hand
@@ -137,6 +187,7 @@ __attribute__((destructor)) static void exiting(void) {
 static char log_setting[1100], library_setting[1100];
 __attribute__((constructor)) static void keep_settings(void) {
   snprintf(log_setting, sizeof log_setting, LOG "=%s", getenv(LOG) ? getenv(LOG) : "");
+  snprintf(log_path, sizeof log_path, "%s", getenv(LOG) ? getenv(LOG) : "");
   snprintf(library_setting, sizeof library_setting, LIBRARY "=%s", getenv(LIBRARY) ? getenv(LIBRARY) : "");
 }
 
@@ -193,6 +244,11 @@ static int counted_posix_spawnp(pid_t *pid, const char *file, const posix_spawn_
 INTERPOSE(counted_waitpid, waitpid)
 INTERPOSE(counted_wait4, wait4)
 INTERPOSE(counted_fork, fork)
+INTERPOSE(counted_execve, execve)
+INTERPOSE(counted_execv, execv)
+INTERPOSE(counted_execvp, execvp)
+INTERPOSE(counted__exit, _exit)
+INTERPOSE(counted__Exit, _Exit)
 INTERPOSE(counted_posix_spawn, posix_spawn)
 INTERPOSE(counted_posix_spawnp, posix_spawnp)
 #endif

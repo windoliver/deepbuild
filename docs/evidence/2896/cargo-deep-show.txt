@@ -1,0 +1,58 @@
+# cargo test -p deep-show --no-fail-fast on the merged branch (b3ac6d2ad): result lines and failures
+     Running unittests src/main.rs (target/debug/deps/deep_show-ef13cf3f90657179)
+test tests::the_published_schedule_matches_its_committed_snapshot ... FAILED
+thread 'tests::the_published_schedule_matches_its_committed_snapshot' (17826854) panicked at crates/deep-show/src/tests.rs:223:9:
+test result: FAILED. 50 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.62s
+     Running tests/arranged_screen.rs (target/debug/deps/arranged_screen-5e7e91576b75bbee)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.64s
+     Running tests/capture.rs (target/debug/deps/capture-b5dcff0efe74ecb6)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s
+     Running tests/composites.rs (target/debug/deps/composites-c7988874aacf85b1)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+     Running tests/full_screen.rs (target/debug/deps/full_screen-7e2eb41fd526d355)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.67s
+     Running tests/gallery.rs (target/debug/deps/gallery-de36e899fd77ff3e)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.70s
+     Running tests/live_forms.rs (target/debug/deps/live_forms-e4da12a60859b9a0)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+     Running tests/logic_canvas.rs (target/debug/deps/logic_canvas-a4ac218703d39c8c)
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.51s
+     Running tests/readouts_export.rs (target/debug/deps/readouts_export-53dfed59ce2d7893)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.98s
+     Running tests/recipe_frames.rs (target/debug/deps/recipe_frames-c2e9eab7ce389c58)
+test an_export_draws_a_recipe_instance_like_the_items_it_derives ... FAILED
+thread 'an_export_draws_a_recipe_instance_like_the_items_it_derives' (17834252) panicked at crates/deep-show/tests/recipe_frames.rs:123:9:
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.58s
+     Running tests/render_back_pipeline.rs (target/debug/deps/render_back_pipeline-4d857446c44e3726)
+test render_back_draws_the_sprite_as_the_base_commit_did ... FAILED
+thread 'render_back_draws_the_sprite_as_the_base_commit_did' (17834565) panicked at crates/deep-show/tests/render_back_pipeline.rs:98:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+     Running tests/render_back_vector_title.rs (target/debug/deps/render_back_vector_title-e2a109480259c3ab)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.56s
+     Running tests/render_back_world.rs (target/debug/deps/render_back_world-1b644521746aaac6)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.47s
+     Running tests/serve_answers.rs (target/debug/deps/serve_answers-19a81e9bcc444be1)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.54s
+     Running tests/shared.rs (target/debug/deps/shared-6dd325072221be9a)
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.65s
+     Running tests/spoken_times.rs (target/debug/deps/spoken_times-c67fa61a06bd1331)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.39s
+     Running tests/stdin_lines.rs (target/debug/deps/stdin_lines-11e72904771eb216)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+     Running tests/view_clock.rs (target/debug/deps/view_clock-2b4d1a8c670fb729)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+# The three failing tests again with crates/deep-show/src/{kinds.rs,kinds/replies.rs,main.rs,query.rs} at the merge base 4bf2fc7ad
+     Running unittests src/main.rs (target/debug/deps/deep_show-ef13cf3f90657179)
+test tests::the_published_schedule_matches_its_committed_snapshot ... FAILED
+thread 'tests::the_published_schedule_matches_its_committed_snapshot' (17895496) panicked at crates/deep-show/src/tests.rs:223:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 50 filtered out; finished in 0.08s
+     Running tests/recipe_frames.rs (target/debug/deps/recipe_frames-c2e9eab7ce389c58)
+test caption_band_sees_a_recipe_rect_in_the_band ... ok
+test an_export_draws_a_recipe_instance_like_the_items_it_derives ... FAILED
+thread 'an_export_draws_a_recipe_instance_like_the_items_it_derives' (17901753) panicked at crates/deep-show/tests/recipe_frames.rs:123:9:
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.88s
+     Running tests/render_back_pipeline.rs (target/debug/deps/render_back_pipeline-4d857446c44e3726)
+test render_back_draws_the_sprite_as_the_base_commit_did ... FAILED
+thread 'render_back_draws_the_sprite_as_the_base_commit_did' (17903417) panicked at crates/deep-show/tests/render_back_pipeline.rs:98:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s

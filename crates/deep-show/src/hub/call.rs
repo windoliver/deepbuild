@@ -26,6 +26,11 @@ pub enum Call {
     },
     /// #1901: the machine fingerprint kept output is keyed by.
     Fingerprint,
+    /// #2892: `ship.bytes` for a web bundle and its test server's record, served to `chrome`.
+    Ship {
+        bundle: String,
+        chrome: String,
+    },
     /// #1431: the process's footprint, its heap, every gauge and what's left unaccounted.
     Footprint,
     /// #1901: a document's frame, capture or final at a time, through the kept-output cache.
