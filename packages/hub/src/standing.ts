@@ -46,8 +46,10 @@ function accountOf(home: string, profile: string): string | undefined {
   for (const raw of text.split('\n')) {
     const line = raw.trim();
     // The CLI reads a named profile from `[profile <name>]` alone, and the default from `[default]` (#2134).
-    const head = /^\[(?:profile\s+([^\]]+)|(default))\]$/.exec(line);
-    if (/^\[.*\]$/.test(line)) section = head ? (head[1] ?? head[2]!).trim() : '';
+    // A header is read as the CLI's parser reads it: up to its last `]`, whatever follows.
+    const header = /^\[(.+)\]/.exec(line)?.[1];
+    const head = header === undefined ? undefined : /^(?:profile\s+(.+)|(default))$/.exec(header);
+    if (header !== undefined) section = head ? (head[1] ?? head[2]!).trim() : '';
     else if (section !== '' && section === profile) {
       const kv = /^sso_account_id\s*=\s*(\S+)$/.exec(line);
       if (kv) return kv[1];

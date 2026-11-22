@@ -290,7 +290,12 @@ fn cloud_owner(profile: &str) -> String {
     .unwrap_or_default();
     let mut section = String::new();
     for line in config.lines().map(str::trim) {
-        if let Some(head) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
+        // A header is read as the CLI's parser reads it: up to its last `]`, whatever follows.
+        if let Some(head) = line
+            .strip_prefix('[')
+            .and_then(|l| l.rfind(']').map(|k| &l[..k]))
+            .filter(|h| !h.is_empty())
+        {
             // The CLI reads a named profile from `[profile <name>]` alone, and the default from `[default]` (#2134).
             section = match head.strip_prefix("profile") {
                 Some(name) if name.starts_with(char::is_whitespace) => name.trim().to_string(),
@@ -300,7 +305,10 @@ fn cloud_owner(profile: &str) -> String {
         } else if !section.is_empty() && section == profile {
             if let Some((key, value)) = line.split_once('=') {
                 let value = value.trim();
-                if key.trim() == "sso_account_id" && !value.contains(char::is_whitespace) {
+                if key.trim() == "sso_account_id"
+                    && !value.is_empty()
+                    && !value.contains(char::is_whitespace)
+                {
                     return format!("aws:{value}");
                 }
             }

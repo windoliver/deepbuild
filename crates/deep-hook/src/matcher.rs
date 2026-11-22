@@ -666,6 +666,14 @@ impl Call {
             }
         }
         let pattern = |p: &Path| p.to_string_lossy().contains(['*', '?', '[']);
+        let assignment = |w: &&str| {
+            w.split_once('=').is_some_and(|(n, _)| {
+                n.chars()
+                    .next()
+                    .is_some_and(|c| c == '_' || c.is_ascii_alphabetic())
+                    && n.chars().all(|c| c == '_' || c.is_ascii_alphanumeric())
+            })
+        };
         let own_profile = run.env.iter().any(|(n, _)| n == "AWS_PROFILE");
         let aws_words = bare.matches("AWS_").count();
         if !run.is("aws")
@@ -692,8 +700,21 @@ impl Call {
                 .runs
                 .iter()
                 .any(|r| !std::ptr::eq(r, *run) && !reads_only(r))
-            // What the line writes is named whole, in folders it knows, so none of it can be the account's files.
-            || self.writes.iter().any(|w| !w.is_absolute() || pattern(w))
+            // A write can reach what decides the account: the CLI's files, its program, the interpreter it runs on.
+            || !self.writes.is_empty()
+            // A disk that ignores case folds letters beyond ASCII onto those names.
+            || !line.is_ascii()
+            // An aws named by a path may be any program.
+            || bare
+                .split(|c: char| c.is_whitespace() || ";&|()<>".contains(c))
+                .any(|w| w != "aws" && w.rsplit('/').next() == Some("aws"))
+            // An assignment of its own changes what every later program gets, an exported one as a prefix doesn't.
+            || unquoted.split([';', '&', '|', '\n', '(', ')']).any(|statement| {
+                let words: Vec<&str> = statement.split_whitespace().collect();
+                let assigns = words.iter().take_while(|w| assignment(w)).count();
+                (assigns > 0 && assigns == words.len())
+                    || words[..assigns].iter().any(|w| !w.starts_with("AWS_PROFILE="))
+            })
             || self.runs.iter().any(|r| r.cwd.as_deref().is_none_or(pattern))
         {
             return None;

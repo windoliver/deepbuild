@@ -405,17 +405,23 @@ fn an_options_value_is_not_read_as_the_subcommand() {
             named("prod"),
         ),
         (
-            "aws s3 ls --profile prod && aws kms create-key --profile dev > key.json",
+            "aws s3 ls --profile prod && aws kms create-key --profile dev",
             named("dev"),
         ),
+        ("aws kms create-key --profile dev > /tmp/key.json", None),
         (
             "aws --region eu-west-1 --profile dev s3 mb s3://b",
             named("dev"),
         ),
+        ("/usr/local/bin/aws kms create-key --profile dev", None),
+        ("./aws kms create-key --profile dev", None),
+        ("PATH=/x:/usr/bin; aws kms create-key --profile dev", None),
+        ("x=1 && aws kms create-key --profile dev", None),
         (
-            "/usr/local/bin/aws kms create-key --profile dev",
-            named("dev"),
+            "echo x > /h/.awſ/config && aws kms create-key --profile dev",
+            None,
         ),
+        ("aws kms create-key --profile dev --description café", None),
         (
             "AWS_PROFILE=dev env -u AWS_PROFILE aws kms create-key",
             None,
