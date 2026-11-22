@@ -1375,6 +1375,9 @@ alone.push('tests/acceptance/953/', 'tests/acceptance/953-oracle/');
 alone.push('tests/acceptance/2738/');
 slow.push('tests/acceptance/2738/ac1-linux-build.test.ts');
 
+// #161's suite times its measured costs and its two budgets on the reference Mac.
+timed.push('tests/acceptance/161/ac4-measured.test.ts', 'tests/acceptance/161/ac6-timed.test.ts');
+
 // #265's files (blind) build deep-gpu (ac4 deep-show), draw on the GPU and play a match; ac6 times eight movers' frame CPU.
 alone.push('tests/acceptance/265/');
 timed.push('tests/acceptance/265/ac6-budgets.test.ts');
@@ -1402,6 +1405,31 @@ timed.push('tests/acceptance/2661/ac4-tick.live.test.mjs', 'tests/acceptance/266
 // reference Mac.
 alone.push('tests/acceptance/980/');
 timed.push('tests/acceptance/980/ac09-budget.test.ts');
+// The first draft of criterion 9 lays its budget scene's 88,624-byte write region out on #416's one-page probe, which
+// the check refuses before process@1 is reached (tests/acceptance/980-redraft-ac9/DISPUTE.md); its blind redraft runs
+// in its place.
+alone.push('tests/acceptance/980-redraft-ac9/');
+timed.push('tests/acceptance/980-redraft-ac9/ac9-budget.test.ts');
+byHand.push('tests/acceptance/980/ac09-budget.test.ts');
+
+// #689's blind redraft: AC2 builds and tests the whole workspace on 1.99.1; AC4 builds deep-app's hub_client test.
+slow.push('tests/acceptance/689-redraft-2047/ac2-checks.test.mjs', 'tests/acceptance/689-redraft-2047/ac4-app-in-unit-lane.test.mjs');
+
+// #1500's files (blind) each build deep-show and play hundreds of frames of a game whose revisions land mid-play;
+// ac08-join-time.test.ts judges a join's time on the reference Mac. The Oracle lane plays upstream's pile.
+alone.push('tests/acceptance/1500/', 'tests/acceptance/1500-oracle/');
+timed.push('tests/acceptance/1500/ac08-join-time.test.ts');
+
+// #2740's as-on-main (blind) runs all of tests/acceptance/1463 (minutes warm, an hour or more cold), whose budget test
+// judges a timing on the reference Mac; its lane.json runs the folder alone.
+slow.push('tests/acceptance/2740/as-on-main.test.ts');
+timed.push('tests/acceptance/2740/as-on-main.test.ts');
+
+// #2215's files (blind) build deep-gpu and draw the brushed pane in raster and, once #178 lands, as path-traced finals at
+// 4,096 samples; ac5 draws the castle and the corpus. No timing.
+alone.push('tests/acceptance/2215/');
+// #2215's AC5 redraft (blind) builds deep-gpu and draws its four-document corpus on the GPU, once under a plant; no timing.
+alone.push('tests/acceptance/2215-redraft-ac5/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

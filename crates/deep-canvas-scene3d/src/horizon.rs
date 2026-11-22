@@ -76,7 +76,8 @@ pub fn asked(params: &serde_json::Value) -> Result<Option<usize>, String> {
     let bad = || "params/horizon".to_string();
     let o = h.as_object().ok_or_else(bad)?;
     if o.keys().any(|k| k != "azimuths" && k != "size")
-        || o.get("azimuths").is_some_and(|a| a.as_u64() != Some(AZIMUTHS as u64))
+        || o.get("azimuths")
+            .is_some_and(|a| a.as_u64() != Some(AZIMUTHS as u64))
     {
         return Err(bad());
     }
@@ -172,7 +173,12 @@ impl Horizon {
 /// The key sun's visibility and the sky's occlusion a plate's pixels read at world point `p`
 /// on the plate placed by `model` (turning and scaling alike on every axis), with the sun
 /// toward `toward` (world, unit): as scene3d.wgsl's `horizon_at` reads them.
-pub fn reading(h: &Horizon, model: &crate::scene::Affine3, p: [f64; 3], toward: [f64; 3]) -> [f64; 2] {
+pub fn reading(
+    h: &Horizon,
+    model: &crate::scene::Affine3,
+    p: [f64; 3],
+    toward: [f64; 3],
+) -> [f64; 2] {
     // The model's inverse: its rotation's transpose over its scale.
     let col = |k: usize| [model[0][k], model[1][k], model[2][k]];
     let len = |v: [f64; 3]| deep_canvas::ops::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
@@ -247,7 +253,13 @@ mod tests {
     #[test]
     fn codes_keep_low_angles_fine() {
         // Half a code's step: 0.031° at 5°, 0.062° at 10°, 0.39° at 30°.
-        for (deg, within) in [(0.5, 0.032), (1.0, 0.032), (5.0, 0.032), (10.0, 0.065), (30.0, 0.4)] {
+        for (deg, within) in [
+            (0.5, 0.032),
+            (1.0, 0.032),
+            (5.0, 0.032),
+            (10.0, 0.065),
+            (30.0, 0.4),
+        ] {
             let h = rad(deg);
             assert!((angle(code(h)) - h).abs() < rad(within), "{deg}°");
         }

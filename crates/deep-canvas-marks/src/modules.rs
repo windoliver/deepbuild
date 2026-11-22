@@ -888,7 +888,10 @@ pub fn look_tokens(look: &crate::look::Look) -> BTreeMap<String, Value> {
     // has it, as an entry text's range assumes.
     let fallback = &look.light_type.fallback;
     if !fonts.is_empty() || !fallback.is_empty() {
-        out.insert(TYPE_TOKEN.into(), json!({ "fonts": fonts, "fallback": fallback }));
+        out.insert(
+            TYPE_TOKEN.into(),
+            json!({ "fonts": fonts, "fallback": fallback }),
+        );
     }
     out
 }
@@ -912,7 +915,9 @@ fn type_of(tokens: &BTreeMap<String, Value>) -> scene::Type {
     }
     let fallback = tokens.get(TYPE_TOKEN).and_then(|t| t.get("fallback"));
     let fallback = fallback.and_then(Value::as_array).into_iter().flatten();
-    ty.fallback = fallback.filter_map(|f| face(f).map(|face| face.family)).collect();
+    ty.fallback = fallback
+        .filter_map(|f| face(f).map(|face| face.family))
+        .collect();
     ty
 }
 

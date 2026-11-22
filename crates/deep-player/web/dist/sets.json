@@ -13,13 +13,13 @@
       "module_set_digest": "e0d535adac31c58c7a65fae890f5575ca14ffaa5a44cc71d4a5fd148fe14ea47",
       "wasm": {
         "path": "crates/deep-player/web/dist/figure/player_bg.wasm",
-        "sha256": "d2f930cd06c04dbd9f17c24384e88473f3d95f6d3ce32a7bc54ba377bdc6c024"
+        "sha256": "ea48ab787539244186d78860499980c14d94516fb2fd83e9fe7e2967f68b8535"
       },
       "glue": {
         "path": "crates/deep-player/web/dist/figure/player.js",
         "sha256": "9142aadedef9fb4480862bc5e14a2499fa88119af57adede6530e14d93bc0413"
       },
-      "compressed": 2538987
+      "compressed": 2539437
     },
     "game2d": {
       "modules": [
@@ -36,13 +36,13 @@
       "module_set_digest": "200af9e6ed0ea577fead7d6f4d1437eaaef4f5ee8879eb482d6920bdb1fe9642",
       "wasm": {
         "path": "crates/deep-player/web/dist/game2d/player_bg.wasm",
-        "sha256": "d3051b801eef9ec32d8d2796ce5f7cc5299fdcfb72cdf4915ba872c1b497d0ba"
+        "sha256": "e8f8157525767633ec0fada0aef3cf17ce5d313488ecb461547c03856fab4d0d"
       },
       "glue": {
         "path": "crates/deep-player/web/dist/game2d/player.js",
-        "sha256": "59b411ada28e60b623ea7decf6e877fa8a26624667debce93e905059a44dda62"
+        "sha256": "8cc0f925aaf52d14514c0e2eab7ed0ba66e8e4730916df89491d58bd0b73f687"
       },
-      "compressed": 4881008
+      "compressed": 4885551
     },
     "full": {
       "modules": [
@@ -70,13 +70,13 @@
       "module_set_digest": "1dc87adb14a5a907a88619bda14b810590aa8938c6ecabbc7c1ee8046fcdb8ed",
       "wasm": {
         "path": "crates/deep-player/web/dist/full/player_bg.wasm",
-        "sha256": "09b632f3cd67467e7c6df618d0b96b6577561d7c7bd5a805ed840c444183b65d"
+        "sha256": "6c41ef57de0645389e9990e84a498757891907f627ee2c2ba34713705be66c0e"
       },
       "glue": {
         "path": "crates/deep-player/web/dist/full/player.js",
-        "sha256": "dec4be490786cbb4dedb1f995317499165e766206551120c5a2a464d4d7ce65e"
+        "sha256": "e29e262e2d0e28e37938cd8e1d5bfc269727dd6a77d87986755d7b0f331fab6a"
       },
-      "compressed": 7671812
+      "compressed": 7647478
     }
   }
 }
