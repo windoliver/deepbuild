@@ -1,0 +1,49 @@
+✖ AC3 #2958.2a729810 a source site in crates/deep-app/src or crates/deep-replica/src naming control.token outside the one function fails, naming the file and line (716.034926ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1169.808489
+
+✖ failing tests:
+
+test at tests/acceptance/2958/token-sites.test.mjs:10:1
+✖ AC3 #2958.2a729810 a source site in crates/deep-app/src or crates/deep-replica/src naming control.token outside the one function fails, naming the file and line (716.034926ms)
+  AssertionError [ERR_ASSERTION]: 8 site(s) name control.token outside the one function (a function body in crates/deep-app/src/hub.rs):
+  crates/deep-app/src/main.rs:163: &deep_app::hub::root().join("control.token"),  (in fn main)
+  crates/deep-app/src/main.rs:321: &deep_app::hub::root().join("control.token"),  (in fn main)
+  crates/deep-app/src/main.rs:568: &hub::root().join("control.token"),  (in fn start)
+  crates/deep-app/src/show.rs:535: let token = root.join("control.token");  (in fn follow)
+  crates/deep-replica/src/canvas.rs:44: match Presentations::open(&deep_app::hub::address(), &root.join("control.token")) {  (in fn run)
+  crates/deep-replica/src/drive/mod.rs:489: let token = deep_app::hub::root().join("control.token");  (in fn launch)
+  crates/deep-replica/src/live.rs:222: &hub::root().join("control.token"),  (in fn run)
+  crates/deep-replica/src/main.rs:149: &root.join("control.token"),  (in fn run)
+  + actual - expected
+  
+  + [
+  +   'crates/deep-app/src/main.rs:163: &deep_app::hub::root().join("control.token"),  (in fn main)',
+  +   'crates/deep-app/src/main.rs:321: &deep_app::hub::root().join("control.token"),  (in fn main)',
+  +   'crates/deep-app/src/main.rs:568: &hub::root().join("control.token"),  (in fn start)',
+  +   'crates/deep-app/src/show.rs:535: let token = root.join("control.token");  (in fn follow)',
+  +   'crates/deep-replica/src/canvas.rs:44: match Presentations::open(&deep_app::hub::address(), &root.join("control.token")) {  (in fn run)',
+  +   'crates/deep-replica/src/drive/mod.rs:489: let token = deep_app::hub::root().join("control.token");  (in fn launch)',
+  +   'crates/deep-replica/src/live.rs:222: &hub::root().join("control.token"),  (in fn run)',
+  +   'crates/deep-replica/src/main.rs:149: &root.join("control.token"),  (in fn run)'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/agent-ae61993fc93e917c6/tests/acceptance/2958/token-sites.test.mjs:32:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'crates/deep-app/src/main.rs:163: &deep_app::hub::root().join("control.token"),  (in fn main)', 'crates/deep-app/src/main.rs:321: &deep_app::hub::root().join("control.token"),  (in fn main)', 'crates/deep-app/src/main.rs:568: &hub::root().join("control.token"),  (in fn start)', 'crates/deep-app/src/show.rs:535: let token = root.join("control.token");  (in fn follow)', 'crates/deep-replica/src/canvas.rs:44: match Presentations::open(&deep_app::hub::address(), &root.join("control.token")) {  (in fn run)', 'crates/deep-replica/src/drive/mod.rs:489: let token = deep_app::hub::root().join("control.token");  (in fn launch)', 'crates/deep-replica/src/live.rs:222: &hub::root().join("control.token"),  (in fn run)', 'crates/deep-replica/src/main.rs:149: &root.join("control.token"),  (in fn run)' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
