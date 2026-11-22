@@ -1,0 +1,213 @@
+{
+  "name": "grant",
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "7355ab04a763bd79ef932be4f9f9ee74c24cefe3612c8111d9c8b09d0253b21d",
+      "step_rate": 60,
+      "writes": {
+        "kind": {
+          "type": "i32",
+          "count": 4
+        },
+        "gen": {
+          "type": "i32",
+          "count": 4
+        },
+        "at": {
+          "type": "i32",
+          "count": 4
+        },
+        "batch": {
+          "type": "i32",
+          "count": 4
+        },
+        "holds": {
+          "type": "i32",
+          "count": 4
+        },
+        "rank": {
+          "type": "i32",
+          "count": 4
+        },
+        "made": {
+          "type": "f64",
+          "count": 4
+        },
+        "d": {
+          "type": "f64",
+          "count": 4
+        },
+        "made_n": {
+          "type": "i32",
+          "count": 1
+        },
+        "out_n": {
+          "type": "i32",
+          "count": 1
+        },
+        "count": {
+          "type": "i32",
+          "count": 9
+        },
+        "left": {
+          "type": "i32",
+          "count": 9
+        },
+        "area": {
+          "type": "f64",
+          "count": 9
+        },
+        "dwell": {
+          "type": "f64",
+          "count": 9
+        },
+        "busy": {
+          "type": "i32",
+          "count": 1
+        },
+        "cap": {
+          "type": "i32",
+          "count": 1
+        },
+        "busy_area": {
+          "type": "f64",
+          "count": 1
+        },
+        "thru": {
+          "type": "f64",
+          "count": 9
+        },
+        "mean": {
+          "type": "f64",
+          "count": 9
+        },
+        "p90": {
+          "type": "f64",
+          "count": 9
+        },
+        "wip": {
+          "type": "f64",
+          "count": 9
+        },
+        "clock": {
+          "type": "f64",
+          "count": 3
+        },
+        "rec_n": {
+          "type": "i32",
+          "count": 1
+        },
+        "rec_t": {
+          "type": "f64",
+          "count": 8
+        },
+        "rec_w": {
+          "type": "f64",
+          "count": 8
+        }
+      },
+      "process": {
+        "kinds": [
+          "order"
+        ]
+      },
+      "budget": {
+        "fuel": 10000000
+      }
+    }
+  },
+  "track": [],
+  "steps": 130,
+  "expect": {
+    "arrays": {
+      "0": {
+        "busy": [
+          2
+        ],
+        "cap": [
+          2
+        ],
+        "holds": [
+          0,
+          0,
+          -1,
+          -1
+        ],
+        "at": [
+          1,
+          1,
+          2,
+          -1
+        ],
+        "out_n": [
+          0
+        ]
+      },
+      "59": {
+        "busy": [
+          2
+        ],
+        "holds": [
+          0,
+          0,
+          -1,
+          -1
+        ],
+        "at": [
+          1,
+          1,
+          2,
+          -1
+        ],
+        "out_n": [
+          0
+        ]
+      },
+      "60": {
+        "busy": [
+          1
+        ],
+        "holds": [
+          -1,
+          -1,
+          0,
+          -1
+        ],
+        "at": [
+          -1,
+          -1,
+          1,
+          -1
+        ],
+        "out_n": [
+          2
+        ]
+      },
+      "120": {
+        "busy": [
+          0
+        ],
+        "holds": [
+          -1,
+          -1,
+          -1,
+          -1
+        ],
+        "at": [
+          -1,
+          -1,
+          -1,
+          -1
+        ],
+        "out_n": [
+          3
+        ]
+      }
+    },
+    "tolerance": {
+      "abs": 1e-9
+    }
+  },
+  "answer": "Three orders made at tick 0 (rows 0, 1, 2) reach the heads of their queues at once and ask the one resource of capacity 2; requests are granted in step order, then by entity ID, so rows 0 and 1 take its two units and row 2 waits at its queue's head, the resource busy 2 of 2. Each holds 1 s = 60 ticks: at tick 60 rows 0 and 1 leave to the sink, freeing the units, and row 2 takes one, held to tick 120, when it leaves too. A resource is never busy past its capacity."
+}

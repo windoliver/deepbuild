@@ -1,0 +1,130 @@
+Acceptance tests for #2960 criterion bb693bcf (blind redraft) on the base dcb63a0a0 (checkout HEAD f37784be), full output.
+The release deep-hook was built first (cargo 1.99.1 arm64; rust-objcopy's strip warning only). XDG_CACHE_HOME pointed at a /tmp
+scratch dir so measureOnce's counter build stayed out of ~/Library/Caches. Home directory paths redacted to ~.
+
+date: 2026-11-21T07:29:46Z
+commit: f37784be
+machine: Mac15,12, macOS 27.2.1 (26B131), node v24.22.0, Now drawing from 'AC Power'
+load before: 23:29  up 7 days, 16:31, 3 users, load averages: 251.33 245.75 202.42
+command: node --test --test-concurrency=1 'tests/acceptance/2960-redraft-ac1/*.test.mjs'
+
+✖ #2960.bb693bcf measureOnce of deep-hook-guards gives a non-null instruction count with an empty uncounted (24454.227208ms)
+✖ #2960.bb693bcf measureOnce of deep-hook-overhead gives a non-null instruction count with an empty uncounted (37723.434417ms)
+✖ #2960.bb693bcf measureOnce of hub-round-trip gives a non-null instruction count with an empty uncounted (6099.759375ms)
+✖ #2960.bb693bcf measureOnce of extension-host gives a non-null instruction count with an empty uncounted (40687.760875ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 0
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 109924.737
+
+✖ failing tests:
+
+test at tests/acceptance/2960-redraft-ac1/forked-counted.test.mjs:18:3
+✖ #2960.bb693bcf measureOnce of deep-hook-guards gives a non-null instruction count with an empty uncounted (24454.227208ms)
+  AssertionError [ERR_ASSERTION]: deep-hook-guards: measureOnce read instructions null, uncounted ["(forked)","/usr/bin/sandbox-exec"]. What the counter saw start and never end: "(forked)" (pid 60019), started by ~/private/dh2960-blind/packages/supervisor/dist/helper (pid 60018): the supervisor helper's watcher, forked by its leash, gone, with no end line in the counter's log; "(forked)" (pid 64723), started by ~/private/dh2960-blind/packages/supervisor/dist/helper (pid 64721): the supervisor helper's watcher, forked by its leash, gone, with no end line in the counter's log
+  + actual - expected
+  
+    {
+  +   instructions: null,
+  +   uncounted: [
+  +     '(forked)',
+  +     '/usr/bin/sandbox-exec'
+  +   ]
+  -   instructions: 'a count',
+  -   uncounted: []
+    }
+  
+      at TestContext.<anonymous> (file://~/private/dh2960-blind/tests/acceptance/2960-redraft-ac1/forked-counted.test.mjs:26:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { instructions: null, uncounted: [ '(forked)', '/usr/bin/sandbox-exec' ] },
+    expected: { instructions: 'a count', uncounted: [] },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2960-redraft-ac1/forked-counted.test.mjs:18:3
+✖ #2960.bb693bcf measureOnce of deep-hook-overhead gives a non-null instruction count with an empty uncounted (37723.434417ms)
+  AssertionError [ERR_ASSERTION]: deep-hook-overhead: measureOnce read instructions null, uncounted ["(forked)","a child of (forked)"]. What the counter saw start and never end: "(forked)" (pid 79722), started by ~/private/dh2960-blind/packages/supervisor/dist/helper (pid 79721): the supervisor helper's watcher, forked by its leash, gone, with no end line in the counter's log; "(forked)" (pid 87649), started by ~/private/dh2960-blind/packages/supervisor/dist/helper (pid 87646): the supervisor helper's watcher, forked by its leash, gone, with no end line in the counter's log
+  + actual - expected
+  
+    {
+  +   instructions: null,
+  +   uncounted: [
+  +     '(forked)',
+  +     'a child of (forked)'
+  +   ]
+  -   instructions: 'a count',
+  -   uncounted: []
+    }
+  
+      at TestContext.<anonymous> (file://~/private/dh2960-blind/tests/acceptance/2960-redraft-ac1/forked-counted.test.mjs:26:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { instructions: null, uncounted: [ '(forked)', 'a child of (forked)' ] },
+    expected: { instructions: 'a count', uncounted: [] },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2960-redraft-ac1/forked-counted.test.mjs:18:3
+✖ #2960.bb693bcf measureOnce of hub-round-trip gives a non-null instruction count with an empty uncounted (6099.759375ms)
+  AssertionError [ERR_ASSERTION]: hub-round-trip: measureOnce read instructions null, uncounted ["(forked)","a child of /usr/bin/cc"]. What the counter saw start and never end: "(forked)" (pid 94467), started by ~/private/dh2960-blind/packages/supervisor/dist/helper (pid 94454): the supervisor helper's watcher, forked by its leash, gone, with no end line in the counter's log
+  + actual - expected
+  
+    {
+  +   instructions: null,
+  +   uncounted: [
+  +     '(forked)',
+  +     'a child of /usr/bin/cc'
+  +   ]
+  -   instructions: 'a count',
+  -   uncounted: []
+    }
+  
+      at TestContext.<anonymous> (file://~/private/dh2960-blind/tests/acceptance/2960-redraft-ac1/forked-counted.test.mjs:26:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { instructions: null, uncounted: [ '(forked)', 'a child of /usr/bin/cc' ] },
+    expected: { instructions: 'a count', uncounted: [] },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2960-redraft-ac1/forked-counted.test.mjs:18:3
+✖ #2960.bb693bcf measureOnce of extension-host gives a non-null instruction count with an empty uncounted (40687.760875ms)
+  AssertionError [ERR_ASSERTION]: extension-host: measureOnce read instructions null, uncounted ["(forked)","~/private/dh2960-blind/packages/supervisor/dist/helper"]. What the counter saw start and never end: "(forked)" (pid 7721), started by ~/private/dh2960-blind/packages/supervisor/dist/helper (pid 7714): the supervisor helper's watcher, forked by its leash, gone, with no end line in the counter's log; "~/private/dh2960-blind/packages/supervisor/dist/helper" (pid 12582), started by ~/.nvm/versions/node/v24.22.0/bin/node (pid 7663), gone, with no end line in the counter's log; "(forked)" (pid 12597), started by ~/private/dh2960-blind/packages/supervisor/dist/helper (pid 12582): the supervisor helper's watcher, forked by its leash, gone, with no end line in the counter's log
+  + actual - expected
+  
+    {
+  +   instructions: null,
+  +   uncounted: [
+  +     '(forked)',
+  +     '~/private/dh2960-blind/packages/supervisor/dist/helper'
+  +   ]
+  -   instructions: 'a count',
+  -   uncounted: []
+    }
+  
+      at TestContext.<anonymous> (file://~/private/dh2960-blind/tests/acceptance/2960-redraft-ac1/forked-counted.test.mjs:26:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { instructions: null, uncounted: [ '(forked)', '~/private/dh2960-blind/packages/supervisor/dist/helper' ] },
+    expected: { instructions: 'a count', uncounted: [] },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+exit: 1
+load after: 23:31  up 7 days, 16:33, 3 users, load averages: 247.31 251.04 210.06

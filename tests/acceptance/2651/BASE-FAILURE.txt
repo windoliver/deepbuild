@@ -1,0 +1,84 @@
+#2651 acceptance tests on the base commit 8bfb6a6330569c96d01342a4c4af6393d02bdb20 (origin/main), 2026-11-20.
+Machine: Mac17,10 (Apple M5 Max), shared with other sessions; load and thermal state are printed with each reading.
+Node 24.22.0; npm ci && npm run build --workspaces; cargo build -p deep-hook (debug). DEEP_2651_BASE, where a file
+needs it, was this same checkout, so "change" and "merge base" are the base twice. Lines below are the runs' own output
+(node --test), cut to the readings, the test lines and the assertion messages; checkout paths shortened to <checkout>.
+
+AC1 opens.test.mjs: FAILS for the expected reason, naming the count (2 opens for each PreToolUse; PostToolUse 1).
+ 2:22  up 6 days, 19:24, 4 users, load averages: 26.31 29.79 29.67
+AC1 opens of /private/tmp/dh2651-ac1-IgqkZd/.deepbuild/config.json per forwarded hook, three rounds: [{"pre":2,"post":1},{"pre":2,"post":1},{"pre":2,"post":1}] (load { 24.92 29.45 29.55 }; Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded)
+  ✖ #2651.251a1058 a forwarded PreToolUse opens config.json once and a forwarded PostToolUse at most once (2173.301166ms)
+✖ #2651.251a1058 deep-hook opens ~/.deepbuild/config.json once for a forwarded PreToolUse, at most once for a PostToolUse (2175.341125ms)
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+✖ #2651.251a1058 a forwarded PreToolUse opens config.json once and a forwarded PostToolUse at most once (2173.301166ms)
+  AssertionError [ERR_ASSERTION]: a forwarded PreToolUse opened ~/.deepbuild/config.json 2 times (round 1); once is required
+
+AC2 instructions.test.mjs: FAILS for the expected reason, naming both counts: the count rises with the jobs (+34%).
+(An earlier draft that summed each round read INCONCLUSIVE at +20% under load 40; each round's count is now its
+median hook. A second run of this draft read FAIL at +35.65%: 5,170,211 vs 3,927,541.)
+ 2:22  up 6 days, 19:25, 4 users, load averages: 21.31 28.32 29.14
+AC2 5,254,993 instructions per PreToolUse with 10,000 ended jobs in the record and 3,676,581 with none (the median over 15 alternated rounds of each round's median of 10 hooks); FAIL: instructions retired changed 34.47% with the jobs over the hub with none (median of 15 pairs): above 2% at p 0.00010 that it's above 2%, p 1.0 that it's under, seed 1405 (load { 19.67 27.73 28.93 }; Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded)
+  ✖ #2651.306dda20 with 10,000 ended jobs and none running, a PreToolUse retires within 2% of the hub's instructions with no job, over 15 alternated rounds (13198.112583ms)
+✖ #2651.306dda20 the hub's instructions for a PreToolUse don't grow with the jobs the record holds (13199.487375ms)
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+✖ #2651.306dda20 with 10,000 ended jobs and none running, a PreToolUse retires within 2% of the hub's instructions with no job, over 15 alternated rounds (13198.112583ms)
+  AssertionError [ERR_ASSERTION]: FAIL: the hub retired 5,254,993 instructions per PreToolUse with 10,000 ended jobs in the record and 3,676,581 with none (the median over 15 alternated rounds of each round's median of 10 hooks); within 2% is required. instructions retired changed 34.47% with the jobs over the hub with none (median of 15 pairs): above 2% at p 0.00010 that it's above 2%, p 1.0 that it's under, seed 1405
+
+AC3 whose.test.mjs: the base's hub judges all four hooks as AC3 states (the first assertion passed); the test FAILS at
+its second assertion because the base has no planted hub: DEEP_HUB_PLANT=whose-running-sessions-only stops the hub
+("names no planted program").
+ 2:19  up 6 days, 19:21, 4 users, load averages: 23.47 34.97 31.17
+  ✖ #2651.1de95500 a running job's own session's hook is the job's, one from its folder before its session ID is read waits, and one that only resumes its session ID or only works in its folder gets its reading; the planted hub fails naming the folder hook (21292.833708ms)
+✖ #2651.1de95500 whose a hook is: a job's, held for one, or the session's with a reading (21294.8925ms)
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+✖ #2651.1de95500 a running job's own session's hook is the job's, one from its folder before its session ID is read waits, and one that only resumes its session ID or only works in its folder gets its reading; the planted hub fails naming the folder hook (21292.833708ms)
+  AssertionError [ERR_ASSERTION]: the planted hub whose-running-sessions-only (DEEP_HUB_PLANT) could not be run, so the judgment is not shown to fail on it: BLOCKED: the hub of <checkout> didn't start with DEEP_HUB_PLANT=whose-running-sessions-only: file://<checkout>/packages/hub/dist/plant.js:135
+
+AC4 delivery.test.mjs: test 1 FAILS for the expected reason, naming the count (8 serializations; the values matched
+the base's, which is itself here). Test 2: the base's isolation holds (each hub package gets its own copy); the test
+FAILS at its second assertion because the base ignores the unknown plant option, so the judgment passes on it.
+ 2:20  up 6 days, 19:22, 4 users, load averages: 28.00 34.68 31.23
+AC4 serializations of the event: change 8, merge base 8; places {"t2651/watch1":"sandbox","t2651/watch2":"sandbox","t2651/watch3":"sandbox","t2651/watch4":"sandbox","t2651/watch5":"sandbox","t2651/watch6":"sandbox","t2651/watch7":"sandbox","t2651/watch8":"sandbox"} (load { 20.59 32.16 30.46 }; Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded)
+  ✖ #2651.bc5a8e8d eight sandboxed packages granted tool.before: the event is serialized once, and each receives the merge base's value (32647.715959ms)
+AC4 isolation: places {"t2651/writer":"hub","t2651/reader":"hub","t2651/watch1":"sandbox","t2651/watch2":"sandbox","t2651/watch3":"sandbox","t2651/watch4":"sandbox","t2651/watch5":"sandbox","t2651/watch6":"sandbox","t2651/watch7":"sandbox","t2651/watch8":"sandbox"}; the writer's change took: [true]
+AC4 the planted host hands-one-writable-event: the judgment passed
+  ✖ #2651.bc5a8e8d a package that changes a field of what it was handed changes nothing another package receives, and the planted host fails naming the field (28874.607459ms)
+✖ #2651.bc5a8e8d one hook's event is serialized once and handed to each package as a value no other package can change (61523.895458ms)
+ℹ tests 2
+ℹ pass 0
+ℹ fail 2
+✖ #2651.bc5a8e8d eight sandboxed packages granted tool.before: the event is serialized once, and each receives the merge base's value (32647.715959ms)
+  AssertionError [ERR_ASSERTION]: one hook's event was serialized 8 times for eight sandboxed packages (the merge base: 8); once is required
+✖ #2651.bc5a8e8d a package that changes a field of what it was handed changes nothing another package receives, and the planted host fails naming the field (28874.607459ms)
+  AssertionError [ERR_ASSERTION]: the planted host hands-one-writable-event (openExtensionHost's plant option) passed the isolation judgment: no package was named receiving the writer's change of data.call. A host with no such plant ignores the option, so this fails until the plant is added (README, Planted programs)
+
+The judgments fail on wrong programs (temporary mutants of the base's built dist, applied, run and restored, never
+committed): a hub whose `whose` looks only at the sessions of running jobs, and a host whose `visible` hands every
+package one shared object per event and view. AC3's first assertion fails naming the folder hook; AC4's test 2's first
+assertion fails naming data.call.
+ 2:21  up 6 days, 19:23, 4 users, load averages: 13.82 28.74 29.28
+  ✖ #2651.1de95500 a running job's own session's hook is the job's, one from its folder before its session ID is read waits, and one that only resumes its session ID or only works in its folder gets its reading; the planted hub fails naming the folder hook (34585.806792ms)
+✖ #2651.1de95500 whose a hook is: a job's, held for one, or the session's with a reading (34587.142333ms)
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+✖ #2651.1de95500 a running job's own session's hook is the job's, one from its folder before its session ID is read waits, and one that only resumes its session ID or only works in its folder gets its reading; the planted hub fails naming the folder hook (34585.806792ms)
+  AssertionError [ERR_ASSERTION]: the PreToolUse 01M7W7KFD09ZRQFCEAQEGX2NEJ from job run:01M7W7KFC33EVZ0F6R8NN00NYA's folder /private/tmp/dh2651-ac3-ep4zXm/.deepbuild/jobs/01M7W7KFC33EVZ0F6R8NN00NYA, sent before its session ID was read is not that job's: no job.event of the job records it; 1 tool.before recorded as session a10dc3bc-01cd-47e8-8a67-24ad8d0391f0's own
+AC4 isolation: places {"t2651/writer":"hub","t2651/reader":"hub","t2651/watch1":"sandbox","t2651/watch2":"sandbox","t2651/watch3":"sandbox","t2651/watch4":"sandbox","t2651/watch5":"sandbox","t2651/watch6":"sandbox","t2651/watch7":"sandbox","t2651/watch8":"sandbox"}; the writer's change took: [true]
+  ✖ #2651.bc5a8e8d a package that changes a field of what it was handed changes nothing another package receives, and the planted host fails naming the field (14196.387667ms)
+✖ #2651.bc5a8e8d one hook's event is serialized once and handed to each package as a value no other package can change (14198.881042ms)
+✖ #2651.bc5a8e8d a package that changes a field of what it was handed changes nothing another package receives, and the planted host fails naming the field (14196.387667ms)
+  AssertionError [ERR_ASSERTION]: t2651/reader received data.call = "changed-by-t2651/writer": t2651/writer changed field data.call of what it was handed, and that change reached this package
+
+AC5 budgets.long.test.mjs: NOT RUN against a merge base. Run by hand (an hour or more; hyperfine and the release
+deep-hook); the base against itself can only PASS or read INCONCLUSIVE. Without DEEP_2651_BASE each test is BLOCKED:
+ℹ tests 4
+ℹ pass 0
+ℹ fail 4
+  AssertionError [ERR_ASSERTION]: BLOCKED: set DEEP_2651_BASE to a built checkout of the merge base (git merge-base HEAD origin/main; 8bfb6a633 when this suite was written)

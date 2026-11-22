@@ -1,0 +1,101 @@
+BASE-RESULT: AC1 (#806) redraft for #393 AC9, run on base 2f05ccb3e (fresh GitHub clone of main).
+Command: npx vitest run tests/acceptance/806-redraft-393ac9/   (output read through rtk proxy; paths redacted: <checkout> = the clone, ~ = home)
+
+== Run 1 on the base (machine loaded, load average ~11): the deep_show test got 'unavailable' from the hub (it did not answer in time); the --check test passed. Rerun once as the job allows. ==
+14:49  up 1 day, 19:15, 4 users, load averages: 11.15 12.42 10.34
+ RUN  v5.0.5 <checkout>
+ ❯ tests/acceptance/806-redraft-393ac9/ac1-393-ac9.test.ts (2 tests | 1 failed) 123778ms
+   ❯ AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#393 AC9, redrafted) (2)
+     × AC1 #393 AC9: 5,000 unnamed marks sent with deep_show give the stand-in's reply field for field, the full issue list compared by content 60539ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/806-redraft-393ac9/ac1-393-ac9.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#393 AC9, redrafted) > AC1 #393 AC9: 5,000 unnamed marks sent with deep_show give the stand-in's reply field for field, the full issue list compared by content
+AssertionError: deep_show: the hub's reply against the stand-in's: expected [ …(16) ] to deeply equal []
+- Expected
++ Received
+- []
++ [
++   "call 1 (deep_show): field `rev` is null on the hub, 1 on the stand-in",
++   "call 1 (deep_show): field `expansions` is null on the hub, [] on the stand-in",
++   "call 1 (deep_show): field `issues` is null on the hub, [{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[\"m-1\"],\"path\":\"items/m-1/name\",\"actual\":null,\"what\":\"not a string\",\"fix\":\"Give the field a value of its type inside its range.\"},{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[\"m-10\"],\"path\":\" on the stand-in",
++   "call 1 (deep_show): field `truncated` is null on the hub, {\"shown\":38,\"total\":5000,\"by_code\":{\"out_of_range\":5000}} on the stand-in",
++   "call 1 (deep_show): field `issues_evidence` is null on the hub, [{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[\"m-1\"],\"path\":\"items/m-1/name\",\"actual\":null,\"what\":\"not a string\",\"fix\":\"Give the field a value of its type inside its range.\"},{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[\"m-10\"],\"path\":\" on the stand-in",
++   "call 1 (deep_show): field `snapshots` is null on the hub, [] on the stand-in",
++   "call 1 (deep_show): field `outcome` is null on the hub, \"refused\" on the stand-in",
++   "call 1 (deep_show): field `backends` is null on the hub, {\"fonts\":{\"name\":\"fonts.bundled\",\"version\":\"1.1.0\"},\"cpu\":{\"name\":\"aarch64\",\"version\":\"1.0.0\"}} on the stand-in",
++   "call 1 (deep_show): field `core` is null on the hub, \"core@0.0.0\" on the stand-in",
++   "call 1 (deep_show): field `set_digest` is null on the hub, \"fde1333abc4199d745d4fa73570283632c222490656f2b67230552bb6614f551\" on the stand-in",
++   "call 1 (deep_show): field `code` is \"unavailable\" on the hub, null on the stand-in",
++   "call 1 (deep_show): field `retryable` is true on the hub, null on the stand-in",
++   "call 1 (deep_show): field `remediation` is \"The DeepBuild hub is unreachable (it did not answer in time); nothing was recorded. Call again once it is back.\" on the hub, null on the stand-in",
++   "call 1 (deep_show): field `path` is \"\" on the hub, null on the stand-in",
++   "call 1 (deep_show): field `actual` is \"\" on the hub, null on the stand-in",
++   "call 1 (deep_show): field `evidence` is [] on the hub, null on the stand-in",
++ ]
+ ❯ tests/acceptance/806-redraft-393ac9/ac1-393-ac9.test.ts:76:76
+     74|
+     75|       // The criterion: the hub's reply is the stand-in's, field for f…
+     76|       expect(r.failures, `${via}: the hub's reply against the stand-in…
+       |                                                                            ^
+     77|       expect(Object.keys(hub).sort(), `${via}: the hub's reply has the…
+     78|
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  14:49:06
+   Duration  124.03s (tests 100%)
+
+== Run 2 on the base (load average ~32 at start): both tests pass ==
+14:51  up 1 day, 19:17, 4 users, load averages: 32.02 18.83 13.14
+ RUN  v5.0.5 <checkout>
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  14:51:18
+   Duration  112.60s (tests 100%)
+
+== Wrong program: the hub's deep_show/deep show reply with truncated.total set to truncated.shown ==
+Planted as one line in packages/hub/dist/hub-canvas.js (HubCanvas.show, before 'return reply;'), the hub's built output, which is ignored by git:
+    if (reply.truncated && typeof reply.truncated === "object") reply.truncated = { ...reply.truncated, total: reply.truncated.shown };
+Restored from a byte copy right after the run; git status shows only the new folder and .vitest/.
+14:53  up 1 day, 19:20, 4 users, load averages: 31.65 23.38 15.78
+ RUN  v5.0.5 <checkout>
+ ❯ tests/acceptance/806-redraft-393ac9/ac1-393-ac9.test.ts (2 tests | 2 failed) 87274ms
+   ❯ AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#393 AC9, redrafted) (2)
+     × AC1 #393 AC9: 5,000 unnamed marks sent with deep_show give the stand-in's reply field for field, the full issue list compared by content 53022ms
+     × AC1 #393 AC9: 5,000 unnamed marks sent with deep show --check give the stand-in's reply field for field, the full issue list compared by content 29535ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/806-redraft-393ac9/ac1-393-ac9.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#393 AC9, redrafted) > AC1 #393 AC9: 5,000 unnamed marks sent with deep_show give the stand-in's reply field for field, the full issue list compared by content
+AssertionError: deep_show: the hub's reply against the stand-in's: expected [ Array(1) ] to deeply equal []
+- Expected
++ Received
+- []
++ [
++   "call 1 (deep_show): field `truncated` is {\"shown\":38,\"total\":38,\"by_code\":{\"out_of_range\":5000}} on the hub, {\"shown\":38,\"total\":5000,\"by_code\":{\"out_of_range\":5000}} on the stand-in",
++ ]
+ ❯ tests/acceptance/806-redraft-393ac9/ac1-393-ac9.test.ts:76:76
+     74|
+     75|       // The criterion: the hub's reply is the stand-in's, field for f…
+     76|       expect(r.failures, `${via}: the hub's reply against the stand-in…
+       |                                                                            ^
+     77|       expect(Object.keys(hub).sort(), `${via}: the hub's reply has the…
+     78|
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+ FAIL  tests/acceptance/806-redraft-393ac9/ac1-393-ac9.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#393 AC9, redrafted) > AC1 #393 AC9: 5,000 unnamed marks sent with deep show --check give the stand-in's reply field for field, the full issue list compared by content
+AssertionError: deep show --check: the hub's reply against the stand-in's: expected [ Array(1) ] to deeply equal []
+- Expected
++ Received
+- []
++ [
++   "call 1 (deep show): field `truncated` is {\"shown\":38,\"total\":38,\"by_code\":{\"out_of_range\":5000}} on the hub, {\"shown\":38,\"total\":5000,\"by_code\":{\"out_of_range\":5000}} on the stand-in",
++ ]
+ ❯ tests/acceptance/806-redraft-393ac9/ac1-393-ac9.test.ts:76:76
+     74|
+     75|       // The criterion: the hub's reply is the stand-in's, field for f…
+     76|       expect(r.failures, `${via}: the hub's reply against the stand-in…
+       |                                                                            ^
+     77|       expect(Object.keys(hub).sort(), `${via}: the hub's reply has the…
+     78|
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  14:53:29
+   Duration  87.72s (tests 100%)

@@ -1,0 +1,232 @@
+{
+  "name": "process",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "description": "process@1 (#980): process models of entities with a kind and a generation, made by sources on an interval, a table or seeded exponential gaps, waiting in queues, holding resources, riding conveyors, packed into batches and taken out by sinks, with statistics over a sliding window, and its kind rules process.conserve, process.busy and process.little. Its fixtures' expected values come from the step contract; its planted libraries drop a belt's blocked lead (failing blocked) and grant past a capacity (failing grant). Written by scripts/process-pack.mjs; the library is src/process.rs, which documents process.state@1, and each program's text is in src/.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "logic": ">=0.0.0",
+      "sandbox": ">=0.0.0"
+    }
+  },
+  "interfaces": {
+    "process@1": {
+      "exports": [
+        {
+          "name": "source",
+          "params": [
+            "i32",
+            "i32",
+            "f64",
+            "f64",
+            "i32",
+            "f64",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "queue",
+          "params": [
+            "i32",
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "resource",
+          "params": [
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "request",
+          "params": [
+            "i32",
+            "i32",
+            "i32",
+            "f64",
+            "f64",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "release",
+          "params": [
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "conveyor",
+          "params": [
+            "i32",
+            "f64",
+            "f64",
+            "f64",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "pack",
+          "params": [
+            "i32",
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "unpack",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "sink",
+          "params": [
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "stats",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": []
+        }
+      ],
+      "layout": "process.state@1",
+      "fixtures": [
+        "7025a2c175508166c32f081efe168b9982cea2daea4a96ef04f8c0a66d182f9c",
+        "14cb721dd899b9a42484dd611f14d1e24ea66397ba32c112dc13d86c9c82186a",
+        "6ecc475b4bcd157bafcd1652982d7d8ccbb19a486c449b5281582ca6a950a020"
+      ],
+      "planted": [
+        "9d06a3b75ad9b4e414b37654e4523ff8c014d5e7239b33169d1a5dbbb3c656e8",
+        "11b18e6a44e83900a9b6850ed6ec8c5365bd95db5b9eb8ef86fa2f88949a2ce0"
+      ],
+      "digest": "232e9e7f89faebaefa8852547284c04d0ace6e3df5e50c79f1a2eade7a3da4dc",
+      "rules": {
+        "process.conserve": {},
+        "process.busy": {},
+        "process.little": {
+          "tolerance": 0.02
+        }
+      }
+    }
+  },
+  "libs": {
+    "process_ref@1.0.0": {
+      "asset": "0a866ab715f621edc0ff3b9fe3e9386777eb6adf774bc8e05fc2f9f003955e92",
+      "exports": [
+        "source",
+        "queue",
+        "resource",
+        "request",
+        "release",
+        "conveyor",
+        "pack",
+        "unpack",
+        "sink",
+        "stats"
+      ],
+      "fixtures": [
+        "26e1340a1f718ee92ee3bf087bf6bced6b19f6ee3e731c3bf990872e029cc00f"
+      ],
+      "implements": [
+        "process@1"
+      ]
+    }
+  },
+  "assets": [
+    {
+      "path": "objects/process_ref.wasm",
+      "sha256": "0a866ab715f621edc0ff3b9fe3e9386777eb6adf774bc8e05fc2f9f003955e92",
+      "size": 16030
+    },
+    {
+      "path": "objects/process_drop.wasm",
+      "sha256": "9d06a3b75ad9b4e414b37654e4523ff8c014d5e7239b33169d1a5dbbb3c656e8",
+      "size": 16188
+    },
+    {
+      "path": "objects/process_over.wasm",
+      "sha256": "11b18e6a44e83900a9b6850ed6ec8c5365bd95db5b9eb8ef86fa2f88949a2ce0",
+      "size": 16030
+    },
+    {
+      "path": "objects/steady.wasm",
+      "sha256": "ee6101151ed778448de496e816a3656548e95ed6b7e3ac052f8f6631f808490d",
+      "size": 637
+    },
+    {
+      "path": "fixtures/steady.json",
+      "sha256": "7025a2c175508166c32f081efe168b9982cea2daea4a96ef04f8c0a66d182f9c",
+      "size": 7193
+    },
+    {
+      "path": "objects/blocked.wasm",
+      "sha256": "243b24c996d30abe3cd68570ce71ae20c5caeba16b3bd53588c9856b0c111168",
+      "size": 700
+    },
+    {
+      "path": "fixtures/blocked.json",
+      "sha256": "14cb721dd899b9a42484dd611f14d1e24ea66397ba32c112dc13d86c9c82186a",
+      "size": 7131
+    },
+    {
+      "path": "objects/grant.wasm",
+      "sha256": "7355ab04a763bd79ef932be4f9f9ee74c24cefe3612c8111d9c8b09d0253b21d",
+      "size": 830
+    },
+    {
+      "path": "fixtures/grant.json",
+      "sha256": "6ecc475b4bcd157bafcd1652982d7d8ccbb19a486c449b5281582ca6a950a020",
+      "size": 3940
+    },
+    {
+      "path": "objects/steady_own.wasm",
+      "sha256": "7f4a6fe034b1d62bfd0bfb4280ecd23a585424cd79ebb6789459da109d20747f",
+      "size": 649
+    },
+    {
+      "path": "fixtures/steady_own.json",
+      "sha256": "26e1340a1f718ee92ee3bf087bf6bced6b19f6ee3e731c3bf990872e029cc00f",
+      "size": 2956
+    }
+  ]
+}

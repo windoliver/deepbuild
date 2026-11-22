@@ -1,0 +1,54 @@
+The #211 suite run once at base commit 531da1ef0 ("Merge pull request #2910 …"; no implementation of #211), on macOS
+27.2 arm64 (rustc 1.99.1, Node 24.22.2, vitest 5.0.5), the checkout's path redacted to <checkout>. The base's deep-logic
+(`cargo build --locked --bin deep-logic`) and deep-show (`cargo build --locked -p deep-show --bin deep-show`, 18 min on
+a shared machine whose load average ran from about 150 to 245 on 18 cores) were built just before through
+`sh scripts/lease`, so each file's own builds were no-ops. Each file was run once, alone:
+
+  export PATH="$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH"
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 sh scripts/lease \
+    npx vitest run --root tests/acceptance/211 <file> --testTimeout=600000 --hookTimeout=600000
+
+Every file plainly lacks its surface at the base (it fails at its first call), so one run per file. Nothing was judged
+on timing: criterion 8's test fails before its gate.
+
+Run: 17 of 17 tests fail, each at an assertion because the surface is absent, none in the harness and none BLOCKED or
+INCONCLUSIVE:
+
+- ac1-walk-seeks (#211.53478a94), 2 tests, exit 1: the straight walk's bake is refused, `logic_refused` naming walk,
+  "pages isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)", field pages; the planted
+  test fails at the same bake, before its planted run.
+- ac2-dirty-write-back (#211.4818ef34), 2 tests, exit 1: the bake is refused the same way, naming dirty; the planted
+  run's `deep-logic --planted pager_skips_dirty_write_back` answers {"ok":false,"code":"bad_input"} and exits 2.
+- ac3-spill-late (#211.aee9d8a7), 2 tests, exit 1: the unlimited ring walk's bake is refused the same way, naming walk,
+  in both tests.
+- ac4-traps (#211.c8b345d9), 1 test, exit 1: the request past max's bake is refused the same way, naming past.
+- ac5-save-pages (#211.0993eba9), 2 tests, exit 1: the bake that saves at the end of step 48 is refused the same way,
+  naming world; the planted run's `--planted save_drops_page_map` answers bad_input and exits 2.
+- ac6-provider-fuel (#211.aaf0f08b), 1 test, exit 1: test/pagegen@1.0.0 installs (the base takes a provider's
+  out: pages), and the figure naming pagegen.region in its world's pages.init raises an error at check:
+  `document.validate`, `logic_refused` at items/world/params naming world, "pages isn't built yet in logic@1 …".
+- ac7-web-export (#211.0a8cf256), 2 tests, exit 1: the figure with a 512 MiB world raises the same error at check, so
+  the export is never reached; the planted scenario's `planted: "web_export_checks_init_only"` answers
+  {"ok":false,"code":"bad_input"}.
+- ac8-budgets (#211.c0b6687b), 1 test, exit 1: the flood of 8 moves a step's bake is refused the same way, naming
+  world.
+- ac9-version-by-hash (#211.4d368ad6), 2 tests, exit 1: the bake is refused the same way, naming versions; the planted
+  run's `--planted store_keeps_one_copy_per_page` answers bad_input and exits 2.
+- ac10-visit-order (#211.15f6aeb8), 2 tests, exit 1: track 0's bake is refused the same way, naming world; the planted
+  generator's logic.determinism is refused the same way.
+
+The type-check, `npx tsc -p tests/acceptance/211/tsconfig.json`, exits 0. A local run of the public-text lane's word
+matcher (scripts/studied-names.mjs's `findings`) over every file here and the commit message finds no studied name.
+
+Before the run, a probe of the harness against the same base (not committed) passed: every program in programs.ts
+assembles with #544's assembler and passes the base's logic check (sandbox@1's subset and the logic role) in an item
+without `pages`, and the same item with `pages` is refused for that field alone; the base's metered fuel of the
+heaviest steps without pages is under each item's budget (the toucher's fill step 4,063,744 of 10,000,000; the reader's
+1,114,453; the spin 12 fuel an iteration), and logic.budget's report gives the app ceiling 12,000,000 for the figure
+class and 6,000,000 for data_view (hence criterion 6's data_view). The programs were also run in Node's own
+WebAssembly under a small emulation of the design's pager: no request ever breaks a page rule; the walk on 32 × 32
+asks 209 times, its first checkpoint after an asking step is 60; the ring walk asks 450 times; the dirty page reads
+0xAB at step 304, and 0 without its write-back; the flood writes 4,096 pages by step 258 and the 4,097th at step 259;
+the toucher's map holds 300 entries at step 49; the reader's sums equal the provider's pages; the mover's 8 moves land
+at step 7; the two seeded tracks on 64 × 64 share 11 generated pages, none differing with the real generator and 4
+with the tree.

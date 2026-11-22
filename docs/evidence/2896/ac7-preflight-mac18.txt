@@ -1,0 +1,452 @@
+# AC7: scripts/preflight on the Mac18,1, in a fresh GitHub clone of #2940 (d99e73a8b) with #2957 merged in locally (c1e79c45d67b, never pushed)
+# Merge base with origin/main: a0c14d935. Stopped by hand (Ctrl-C) during RUN unit: the lint lane had already failed, so perf could only be BLOCKED, and the run held the machine's exclusive timed grant.
+# First attempt, 2026-11-20T20:11Z to 21:11Z: INCONCLUSIVE no grant (another session's affected run held a test grant).
+
+start 2026-11-21T04:49:19Z load { 104.14 158.49 160.51 } head c1e79c45d67b
+// ... 1665 more lines (total: 1666)
+
+## Lane verdicts
+RUN typecheck
+RUN lint
+PASS workflows: .github/workflows/ has no entries
+PASS agent-hooks: no hooks, plugins or hook switch-off in .claude settings, no .codex/ folder
+PASS cards: 41 packages and 53 crates have cards with the four headings; 130 deviations, each naming a file that exists
+PASS physics-build: rapier3d 0.36.1 [alloc, dim3, enhanced-determinism, f32, serde-serialize, std], parry3d 0.31.1, none of simd8, parallel, block-solver, fem, unsync-callbacks, fast-math, and no rustflags with target-cpu=native or +fma
+NOTE deps: vendor/accesskit_macos/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/gpui-pre-apple/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/gpui-pre-macos/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/gpui-pre/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/llrt_crypto/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/mitex-spec-gen/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/mitex-spec/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/quickjs-jit-runtime/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/symphonia-codec-vorbis/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE size: +18596 -51 handwritten lines against merge base a0c14d935, lockfiles and binary files excluded; over the guideline of about 400, so the PR says why it can't be split
+PASS enum closures: every enum carries its closure
+PASS code mappings: every family code maps to a verdict
+PASS kit adapter@1: 29 fakes killed, 74 planted codes raised alone
+PASS slot kit check.kind@1: 7 rules, each refusing its one planted fill
+PASS slot kit index@1: 4 rules, each refusing its one planted fill
+PASS slot kit environment@1: 4 rules, each refusing its one planted fill
+PASS slot kit source@1: 4 rules, each refusing its one planted fill
+PASS slot kit reading.source@1: 3 rules, each refusing its one planted fill
+PASS slot kit resolver@1: 4 rules, each refusing its one planted fill
+PASS slot kit panel@1: 5 rules, each refusing its one planted fill
+PASS slot kit route@1: 3 rules, each refusing its one planted fill
+PASS slot kit action@1: 3 rules, each refusing its one planted fill
+PASS slot kit channel@1: 3 rules, each refusing its one planted fill
+PASS slot kit state-source@1: 3 rules, each refusing its one planted fill
+PASS slot kit job.kind@1: 2 rules, each refusing its one planted fill
+PASS slot kit asset.library@1: 4 rules, each refusing its one planted fill
+PASS slot kit port@1: 1 rules, each refusing its one planted fill
+PASS slots: 17 slots from the published API, each with one row, a frozen interface, a kit and a planted fill it refuses
+PASS closures: 20 lists in 3 canvas schemas each carry a closure
+PASS drift: the table's 64 lists say the closures the closure data holds, and the generated table's 207 field lists say what the fill (crates/deep-canvas/src/registry/fields.json) holds
+PASS paths: the reference's Paths rows say what the sealed listing holds for its 53 holders, each in its section, and every same is held
+PASS record reader: only crates/deep-app/src/record.rs subscribes to the stream or calls the reads
+PASS render
+PASS plant
+PASS loads
+PASS cache: 14 long-lived caches declare a bound in entries and in bytes
+PASS blocking call: no call in crates/deep-app/src waits for a process on the UI thread
+PASS ask source: 82 sources passed to raise, each with its row
+PASS keymap: 20 actions, 15 chords, none moved since the last release
+PASS color literal: crates/deep-app/src and crates/deep-app/panels read every color from the look's roles
+PASS guide: docs/extension-guide.md has one entry per published method (46) and slot (17), each as the contract has it
+PASS panel-catalog: the guide names no toolkit, the 144 toolkit components are each on the catalog or not offered, each with its reason
+PASS fetch-lock: scripts/fetch-lock.json pins 36 files, each at a commit with its sha256, size and credit
+PASS exits: 217 rows, each 0, 1, 2, 3
+RUN unit
+
+## FAIL lines by check (356 in all)
+   2 
+   1 [file] /.../scratchpad/ac7-preflight.log (356)
+   1 356 matches in 1F
+   1 ... +331
+   1   +331
+   1    583
+   1    581
+   1    579
+   1    577
+   1    575
+   1    573
+   1    571
+   1    569
+   1    567
+   1    565
+   1    563
+   1    561
+   1    559
+   1    557
+   1    555
+   1    553
+   1    551
+   1    549
+   1    547
+   1    545
+   1    543
+   1    541
+   1    539
+   1    537
+   1    535
+
+## No FAIL line names a file #2940 changes against origin/main (58 files)
+matches: 70
+
+## Every FAIL line
+FAIL secrets: docs/evidence/2956/failing-first.txt:21:42: home path
+FAIL secrets: docs/evidence/594/manual-e2e.txt:30:13: home path
+FAIL secrets: docs/evidence/594/manual-e2e.txt:92:26: home path
+FAIL secrets: docs/evidence/594/manual-e2e.txt:93:35: home path
+FAIL secrets: docs/evidence/594/manual-e2e.txt:125:83: home path
+FAIL secrets: docs/evidence/594/manual-e2e.txt:125:198: home path
+FAIL secrets: docs/evidence/594/manual-e2e.txt:130:83: home path
+FAIL secrets: docs/evidence/594/manual-e2e.txt:130:212: home path
+FAIL secrets: docs/evidence/594/manual-e2e.txt:130:336: home path
+FAIL secrets: docs/evidence/594/manual-e2e.txt:130:460: home path
+FAIL secrets: docs/evidence/594/manual-e2e.txt:139:26: home path
+FAIL secrets: docs/evidence/594/manual-e2e.txt:140:35: home path
+FAIL secrets: packages/contracts/fixtures/session.loaded@1/01.json:13:18: home path
+FAIL secrets: packages/contracts/fixtures/session.loaded@1/01.json:16:18: home path
+FAIL secrets: tests/acceptance/2175/BASE-FAILURE.txt:22:42: home path
+FAIL secrets: tests/acceptance/2175/BASE-FAILURE.txt:38:29: home path
+FAIL secrets: tests/acceptance/2175/BASE-FAILURE.txt:39:42: home path
+FAIL secrets: tests/acceptance/2175/BASE-FAILURE.txt:57:29: home path
+FAIL secrets: tests/acceptance/2175/BASE-FAILURE.txt:58:42: home path
+FAIL secrets: tests/acceptance/2175/BASE-FAILURE.txt:76:42: home path
+FAIL secrets: tests/acceptance/2175/BASE-FAILURE.txt:94:42: home path
+FAIL secrets: tests/acceptance/2456/BASE-RUN.txt:12:14: home path
+FAIL secrets: tests/acceptance/2649/BASE-FAILURE.txt:29:24: home path
+FAIL secrets: tests/acceptance/2649/BASE-FAILURE.txt:30:42: home path
+FAIL secrets: tests/acceptance/2649/BASE-FAILURE.txt:54:24: home path
+FAIL secrets: tests/acceptance/2649/BASE-FAILURE.txt:55:42: home path
+FAIL secrets: tests/acceptance/2649/BASE-FAILURE.txt:81:24: home path
+FAIL secrets: tests/acceptance/2649/BASE-FAILURE.txt:82:42: home path
+FAIL secrets: tests/acceptance/2649/BASE-FAILURE.txt:108:24: home path
+FAIL secrets: tests/acceptance/2649/BASE-FAILURE.txt:109:42: home path
+FAIL secrets: tests/acceptance/2649/BASE-FAILURE.txt:135:24: home path
+FAIL secrets: tests/acceptance/2649/BASE-FAILURE.txt:136:42: home path
+FAIL secrets: tests/acceptance/2742/BASE-FAILURE.txt:21:14: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:9:65: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:10:65: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:13:50: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:14:52: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:18:65: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:19:65: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:22:50: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:23:52: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:26:65: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:27:65: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:30:50: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:31:52: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:35:65: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:36:65: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:39:50: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:40:52: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:58:65: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:59:67: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:62:52: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:63:54: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:87:65: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:88:67: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:91:52: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:92:54: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:121:65: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:122:67: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:125:52: home path
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:126:54: home path
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:14:65: home path
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:15:65: home path
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:17:50: home path
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:18:52: home path
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:21:65: home path
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:22:65: home path
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:23:67: home path
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:25:50: home path
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:26:52: home path
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:34:65: home path
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:35:65: home path
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:36:101: home path
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:37:67: home path
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:40:50: home path
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:41:52: home path
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:114:65: home path
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:115:67: home path
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:116:103: home path
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:117:69: home path
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:120:52: home path
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:121:54: home path
+FAIL secrets: tests/acceptance/594/TWINS-RUN.txt:50:29: home path
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/cli/package.json dependencies @deepbuild/conformance 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/cli/package.json dependencies @deepbuild/contracts 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/cli/package.json dependencies @deepbuild/evidence 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/cli/package.json dependencies @deepbuild/hub 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/cli/package.json dependencies @deepbuild/otlp 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/cli/package.json dependencies @deepbuild/reading 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/adapters 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/archive 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/asks 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/briefs 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/budget 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/checks-command 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/checks-numbers 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/checks-review 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/checks-work 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/config-eval 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/conformance 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/contracts 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/env-local 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/evidence 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/extension-host 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/gate 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/github 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/leases 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/reading 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/readings 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/record 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/resolver-decisions 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/runner 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/supervisor 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/verdicts 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/wiki 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/workspaces 0.0.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies better-sqlite3 13.0.3 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies yaml 2.9.1 is not in scripts/repo-rules.json
+FAIL deps: crates/deep-codecs/Cargo.toml dependencies deep-catalog * path=../deep-catalog is not in scripts/repo-rules.json
+FAIL deps: crates/deep-catalog/Cargo.toml dependencies serde_json ^1 is not in scripts/repo-rules.json
+FAIL deps: crates/deep-catalog/Cargo.toml dependencies sha2 ^0.10 is not in scripts/repo-rules.json
+FAIL deps: crates/deep-app/Cargo.toml dependencies deep-canvas * path=../deep-canvas is not in scripts/repo-rules.json
+FAIL deps: crates/deep-app/Cargo.toml dependencies unicode-bidi ^0.3 is not in scripts/repo-rules.json
+FAIL deps: crates/deep-app/Cargo.toml dependencies unicode-segmentation ^1 is not in scripts/repo-rules.json
+FAIL deps: crates/deep-images/Cargo.toml dependencies gif ^0.14 is not in scripts/repo-rules.json
+FAIL deps: crates/deep-images/Cargo.toml dependencies image-webp ^0.2 is not in scripts/repo-rules.json
+FAIL deps: crates/deep-images/Cargo.toml dependencies png ^0.18 is not in scripts/repo-rules.json
+FAIL deps: crates/deep-text-gpui/Cargo.toml dependencies deep-canvas * path=../deep-canvas is not in scripts/repo-rules.json
+FAIL deps: crates/deep-logic/Cargo.toml dependencies deep-catalog * path=../deep-catalog is not in scripts/repo-rules.json
+FAIL deps: crates/deep-marks-render/Cargo.toml dependencies deep-canvas-media * path=../deep-canvas-media is not in scripts/repo-rules.json
+FAIL deps: crates/deep-replica/Cargo.toml dependencies deep-canvas * path=../deep-canvas is not in scripts/repo-rules.json
+FAIL deps: crates/deep-replica/Cargo.toml dependencies deep-canvas-cells * path=../deep-canvas-cells is not in scripts/repo-rules.json
+FAIL deps: crates/deep-replica/Cargo.toml dependencies deep-canvas-input * path=../deep-canvas-input is not in scripts/repo-rules.json
+FAIL deps: crates/deep-replica/Cargo.toml dependencies deep-canvas-marks * path=../deep-canvas-marks is not in scripts/repo-rules.json
+FAIL deps: crates/deep-replica/Cargo.toml dependencies deep-gpu * path=../deep-gpu is not in scripts/repo-rules.json
+FAIL deps: crates/deep-replica/Cargo.toml dependencies deep-marks-raster * path=../deep-marks-raster is not in scripts/repo-rules.json
+FAIL deps: crates/deep-replica/Cargo.toml dependencies deep-text * path=../deep-text is not in scripts/repo-rules.json
+FAIL deps: crates/deep-replica/Cargo.toml dependencies vello_cpu ^0.3 is not in scripts/repo-rules.json
+FAIL deps: crates/deep-player/Cargo.toml dependencies deep-codecs * path=../deep-codecs is not in scripts/repo-rules.json
+FAIL deps: crates/deep-show/Cargo.toml dependencies blake3 ^1 is not in scripts/repo-rules.json
+FAIL deps: crates/deep-show/Cargo.toml dependencies rav1e ^0.8.1 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/192/dungeon/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/192/dungeon/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/416/interfaces/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/416/interfaces/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/416/layouts/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json
+FAIL deps: tests/acceptance/416/layouts/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json
+FAIL deps: scripts/repo-rules.json lists crates/deep-marks-render/Cargo.toml target.'cfg(target_os = "macos")'.dependencies deep-canvas-media, which crates/deep-marks-render/Cargo.toml doesn't declare
+FAIL vendor/gpui-pre/src/arena.rs: no row in the carried-patch table
+FAIL vendor/gpui-pre-apple/src/metal_renderer/ycbcr_surface.rs: no row in the carried-patch table
+FAIL vendor/gpui-pre-apple/src/metal_renderer.rs:440: a carried hunk with no mark
+FAIL vendor/gpui-pre-apple/src/metal_renderer.rs:653: a carried hunk with no mark
+FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: 112 added, over the budget of 40 a file
+FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: 112 added, over the budget of 40 a file
+FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: 112 added, over the budget of 40 a file
+FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: 112 added, over the budget of 40 a file
+FAIL vendor/gpui-pre-apple/src/metal_renderer.rs:425: hunk of 14 lines, over the budget of 8
+FAIL vendor/gpui-pre-apple/src/metal_renderer.rs:642: hunk of 16 lines, over the budget of 8
+FAIL vendor/gpui-pre-apple/src/metal_renderer.rs:1305: hunk of 17 lines, over the budget of 8
+FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: 112 added, over the budget of 40 a file
+FAIL vendor/gpui-pre-apple/src/metal_renderer.rs:425: hunk of 14 lines, over the budget of 8
+FAIL vendor/gpui-pre-apple/src/metal_renderer.rs:642: hunk of 16 lines, over the budget of 8
+FAIL vendor/gpui-pre-apple/src/metal_renderer.rs:1305: hunk of 17 lines, over the budget of 8
+FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: 112 added, over the budget of 40 a file
+FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: 112 added, over the budget of 40 a file
+FAIL row #177 The clear region: a BGRA surface registered with `clear_surface::register` draws with blending off, writing its transparent texels over what the scene drew before it, so a live view's HDR surface in a layer beneath GPUI's shows through; while a frame draws one the window's layer isn't opaque, and the first frame without one makes it opaque again: the test tests/acceptance/177/ac4-card.test.ts › AC4 #177.7ae0f098 with HDR on, the card covers the view at its exact colors, and 3D over a 2D page stays SDR › AC4 #177.7ae0f098 the question card over an HDR lamp covers it in the window's capture at the colors it has with HDR off, and the catcher over the page presents SDR byte for byte isn't in its suite's list
+FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: 112 added, over the budget of 40 a file
+FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: 112 added, over the budget of 40 a file
+FAIL canvas-lint: crates/deep-canvas-cells/src/recording.rs:438:19 use of a disallowed type `std::path::Path` (clippy::disallowed_types)
+FAIL canvas-lint: crates/deep-canvas-cells/src/recording.rs:438:40 the env! macro, the building machine's environment compiled into the check
+FAIL canvas-lint: crates/deep-canvas-cells/src/recording.rs:439:33 the fs module, ambient input a check never reads
+FAIL canvas-lint: crates/deep-canvas-cells/src/recording.rs:450:25 the fs module, ambient input a check never reads
+FAIL canvas-lint: crates/deep-canvas-cells/src/recording.rs:452:41 the fs module, ambient input a check never reads
+FAIL canvas-lint: crates/deep-canvas-effects/src/chrome_fx.rs:23:24 include_str! of a file the lint can't read: outside the crate, or not a literal path
+FAIL canvas-lint: crates/deep-canvas-effects/src/fx.rs:10:24 include_str! of a file the lint can't read: outside the crate, or not a literal path
+FAIL canvas-lint: crates/deep-canvas-effects/src/graph.rs:1177:5 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas-graph/src/main.rs:10:1 use of a disallowed type `std::time::Instant` (clippy::disallowed_types)
+FAIL canvas-lint: crates/deep-canvas-graph/src/main.rs:61:19 use of a disallowed method `std::time::Instant::now` (clippy::disallowed_methods)
+FAIL canvas-lint: crates/deep-canvas-graph/src/main.rs:61:19 use of a disallowed type `std::time::Instant` (clippy::disallowed_types)
+FAIL canvas-lint: crates/deep-canvas-graph/src/main.rs:62:33 use of a disallowed method `std::time::Instant::elapsed` (clippy::disallowed_methods)
+FAIL canvas-lint: crates/deep-canvas-marks/src/check.rs:430:5 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas-marks/src/check.rs:431:9 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas-marks/src/scene.rs:1580:5 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas-marks/src/scene.rs:4010:1 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas-marks/src/scene.rs:4012:5 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas-marks/src/story.rs:525:1 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas-marks/src/story.rs:526:5 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas-marks/src/vector_field.rs:1035:1 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas-marks/src/vector_field.rs:374:1 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas-marks/src/vector_field.rs:383:1 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas-marks/src/warp.rs:868:1 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas-marks/src/warp.rs:883:1 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas-marks/src/warp.rs:884:1 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas-media/src/heard/mod.rs:37:5 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas-media/src/heard/normalizer.rs:47:5 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas-media/src/lib.rs:97:1 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas-sandbox/src/check.rs:123:1 a macro definition, whose expansion the scan never reads
+FAIL canvas-lint: crates/deep-canvas-scene3d/src/geom.rs:563:9 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas-scene3d/src/lod.rs:503:5 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas-scene3d/src/lod.rs:522:5 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas-scene3d/src/look.rs:339:28 include_str! of a file the lint can't read: outside the crate, or not a literal path
+FAIL canvas-lint: crates/deep-canvas-scene3d/src/look.rs:349:13 include_str! of a file the lint can't read: outside the crate, or not a literal path
+FAIL canvas-lint: crates/deep-canvas-scene3d/src/look.rs:350:13 include_str! of a file the lint can't read: outside the crate, or not a literal path
+FAIL canvas-lint: crates/deep-canvas-scene3d/src/look.rs:356:24 include_str! of a file the lint can't read: outside the crate, or not a literal path
+FAIL canvas-lint: crates/deep-canvas-scene3d/src/sets.rs:146:5 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas-scene3d/src/shore.rs:610:1 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas-scene3d/src/terrain.rs:277:5 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas/src/craft.rs:30:5 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas/src/document/check.rs:421:9 the thread module, ambient input a check never reads
+FAIL canvas-lint: crates/deep-canvas/src/document/check.rs:446:5 the thread module, ambient input a check never reads
+FAIL canvas-lint: crates/deep-canvas/src/document/packs.rs:3240:27 include_str! of a file the lint can't read: outside the crate, or not a literal path
+FAIL canvas-lint: crates/deep-canvas/src/gauge.rs:267:5 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas/src/gauge.rs:268:5 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas/src/gauge.rs:47:1 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-canvas/src/schedule/tests.rs:223:9 the thread module, ambient input a check never reads
+FAIL canvas-lint: crates/deep-text/src/cache.rs:145:5 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-text/src/cache.rs:172:15 the pointer width (size_of), 32 on wasm32 and 64 on the reference Macs
+FAIL canvas-lint: crates/deep-text/src/cache.rs:173:21 the pointer width (size_of), 32 on wasm32 and 64 on the reference Macs
+FAIL canvas-lint: crates/deep-text/src/cache.rs:176:40 the pointer width (size_of), 32 on wasm32 and 64 on the reference Macs
+FAIL canvas-lint: crates/deep-text/src/cache.rs:177:45 the pointer width (size_of), 32 on wasm32 and 64 on the reference Macs
+FAIL canvas-lint: crates/deep-text/src/cache.rs:331:1 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-text/src/cache.rs:333:1 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-text/src/cache.rs:334:5 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-text/src/fonts.rs:102:11 a target predicate (target_arch), code that computes differently per platform
+FAIL canvas-lint: crates/deep-text/src/fonts.rs:103:5 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-text/src/fonts.rs:138:15 a target predicate (target_arch), code that computes differently per platform
+FAIL canvas-lint: crates/deep-text/src/fonts.rs:146:19 a target predicate (target_arch), code that computes differently per platform
+FAIL canvas-lint: crates/deep-text/src/fonts.rs:153:5 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-text/src/fonts.rs:280:24 a raw pointer (ptr::), an address that differs per process and target
+FAIL canvas-lint: crates/deep-text/src/fonts.rs:63:16 a target predicate (target_arch), code that computes differently per platform
+FAIL canvas-lint: crates/deep-text/src/fonts.rs:68:11 a target predicate (target_arch), code that computes differently per platform
+FAIL canvas-lint: crates/deep-text/src/fonts.rs:69:1 a macro definition, whose expansion the scan never reads
+FAIL canvas-lint: crates/deep-text/src/fonts.rs:71:9 include_bytes! of a file the lint can't read: outside the crate, or not a literal path
+FAIL canvas-lint: crates/deep-text/src/fonts.rs:76:7 a target predicate (target_arch), code that computes differently per platform
+FAIL canvas-lint: crates/deep-text/src/fonts.rs:77:1 a macro definition, whose expansion the scan never reads
+FAIL canvas-lint: crates/deep-text/src/fonts.rs:83:7 a target predicate (target_arch), code that computes differently per platform
+FAIL canvas-lint: crates/deep-text/src/fonts.rs:84:1 a static item, state a check could carry between runs
+FAIL canvas-lint: crates/deep-text/src/fonts.rs:89:7 a target predicate (target_arch), code that computes differently per platform
+FAIL canvas-lint: crates/deep-text/src/lib.rs:19:7 a target predicate (target_arch), code that computes differently per platform
+FAIL canvas-lint: crates/deep-text/src/lib.rs:21:11 a target predicate (target_arch), code that computes differently per platform
+FAIL canvas-lint: crates/deep-text/src/lib.rs:34:17 a build predicate (feature), code that computes differently per build
+FAIL canvas-lint: crates/deep-text/src/vertical.rs:90:1 a static item, state a check could carry between runs
+FAIL canvas-lint: embedded-io is resolved at 0.4.0 for postcard and 0.6.1 for postcard, but the listing audits one version
+FAIL size: benchmarks/canvas.mjs: 2076 lines, over 1500 with no ceiling
+FAIL size: crates/deep-app/src/kinds.rs: 1528 lines, over 1500 with no ceiling
+FAIL size: crates/deep-app/src/states.rs: 1652 lines, over 1500 with no ceiling
+FAIL size: crates/deep-app/src/views.rs: 4960 lines, over its ceiling of 3606
+FAIL size: crates/deep-canvas-marks/src/animator.rs: 1808 lines, over its ceiling of 1782
+FAIL size: crates/deep-canvas-marks/src/data.rs: 2258 lines, over its ceiling of 2250
+FAIL size: crates/deep-canvas-marks/src/look.rs: 1764 lines, over 1500 with no ceiling
+FAIL size: crates/deep-canvas-marks/src/modules.rs: 2050 lines, over its ceiling of 2040
+FAIL size: crates/deep-canvas-marks/src/scene.rs: 5913 lines, over its ceiling of 5841
+FAIL size: crates/deep-canvas-scene3d/src/builders.rs: 2603 lines, over its ceiling of 2589
+FAIL size: crates/deep-canvas-scene3d/src/light.rs: 1546 lines, over 1500 with no ceiling
+FAIL size: crates/deep-canvas-scene3d/src/scene.rs: 3580 lines, over its ceiling of 3541
+FAIL size: crates/deep-canvas-scene3d/src/spec.rs: 2292 lines, over its ceiling of 2183
+FAIL size: crates/deep-canvas/src/document/check.rs: 2733 lines, over its ceiling of 2570
+FAIL size: crates/deep-canvas/src/document/packs.rs: 3243 lines, over its ceiling of 3223
+FAIL size: crates/deep-canvas/src/expr.rs: 2355 lines, over its ceiling of 2319
+FAIL size: crates/deep-canvas/src/registry/mod.rs: 3814 lines, over its ceiling of 3711
+FAIL size: crates/deep-gpu-layer/src/view3d.rs: 2337 lines, over its ceiling of 2152
+FAIL size: crates/deep-logic/src/lib.rs: 1536 lines, over 1500 with no ceiling
+FAIL size: crates/deep-logic/src/world/world_impl.rs: 1513 lines, over 1500 with no ceiling
+FAIL size: crates/deep-marks-render/src/lib.rs: 1520 lines, over 1500 with no ceiling
+FAIL size: crates/deep-marks-render/src/raster.rs: 1767 lines, over its ceiling of 1712
+FAIL size: crates/deep-player/web/dist/figure/player.js: 1894 lines, over 1500 with no ceiling
+FAIL size: crates/deep-player/web/dist/full/player.js: 2595 lines, over 1500 with no ceiling
+FAIL size: crates/deep-player/web/dist/game2d/player.js: 2011 lines, over 1500 with no ceiling
+FAIL size: crates/deep-replica/src/drive/mod.rs: 2697 lines, over its ceiling of 2297
+FAIL size: crates/deep-scene3d-render/src/lib.rs: 9447 lines, over its ceiling of 9002
+FAIL size: crates/deep-scene3d-render/src/scene3d.wgsl: 3398 lines, over its ceiling of 3159
+FAIL size: crates/deep-show/src/export/pptx.rs: 1887 lines, over 1500 with no ceiling
+FAIL size: crates/deep-show/src/hub.rs: 2751 lines, over its ceiling of 2668
+FAIL size: crates/deep-show/src/kit/modules.rs: 1557 lines, over 1500 with no ceiling
+FAIL size: crates/deep-show/src/main.rs: 3093 lines, over its ceiling of 2972
+FAIL size: crates/deep-show/src/shared/calls.rs: 1555 lines, over 1500 with no ceiling
+FAIL size: packages/asks/src/index.ts: 2289 lines, over its ceiling of 2059
+FAIL size: packages/extension-host/src/host.ts: 3440 lines, over its ceiling of 3201
+FAIL size: packages/hub/src/core.ts: 2696 lines, over its ceiling of 2638
+FAIL size: packages/hub/src/stop-judging.ts: 1505 lines, over 1500 with no ceiling
+FAIL size: scripts/lanes.mjs: 1793 lines, over 1500 with no ceiling
+FAIL size: tests/acceptance/1856/twins/missing-rules-always-unreadable/crates/deep-hook/src/main.rs: 2004 lines, over 1500 with no ceiling
+FAIL size: tests/acceptance/2204-redraft-ac3/twins/away-denial-dropped/crates/deep-hook/src/main.rs: 1974 lines, over 1500 with no ceiling
+FAIL size: tests/acceptance/2204-redraft-ac3/twins/away-denial-unnamed/crates/deep-hook/src/main.rs: 1978 lines, over 1500 with no ceiling
+FAIL size: tests/acceptance/2204/twins/rules-read-on-every-event/crates/deep-hook/src/main.rs: 2007 lines, over 1500 with no ceiling
+FAIL size: tests/acceptance/2219/twins/mode-read-as-any/crates/deep-hook/src/main.rs: 1978 lines, over 1500 with no ceiling
+FAIL size: tests/acceptance/2219/twins/skips-unreadable-entry/crates/deep-hook/src/main.rs: 1978 lines, over 1500 with no ceiling
+FAIL size: tests/acceptance/2312/twins/refusal-dropped/packages/extension-host/src/host.ts: 3337 lines, over 1500 with no ceiling
+FAIL size: tests/acceptance/2647/twins/reuses-first-diff/packages/asks/src/index.ts: 2286 lines, over 1500 with no ceiling
+FAIL waits: tests/acceptance/1120/helpers.mjs:199:40: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+FAIL waits: tests/acceptance/1558/helpers.ts:44:66: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/1558/helpers.ts:91:42: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/1558/helpers.ts:99:62: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+FAIL waits: tests/acceptance/1558/hub.test.ts:39:11: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/1558/hub.test.ts:57:13: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/1558/hub.test.ts:62:12: an assertion on a clock difference judges how busy the machine is, unless it only bounds a wait, marked // deadline: <why>
+FAIL waits: tests/acceptance/1558/hub.test.ts:62:46: an assertion on a clock difference judges how busy the machine is, unless it only bounds a wait, marked // deadline: <why>
+FAIL waits: tests/acceptance/194-redraft-ac11/ac11-budgets.test.ts:223:27: an assertion on a clock difference judges how busy the machine is, unless it only bounds a wait, marked // deadline: <why>
+FAIL waits: tests/acceptance/194-redraft-ac11/ac11-budgets.test.ts:223:96: an assertion on a clock difference judges how busy the machine is, unless it only bounds a wait, marked // deadline: <why>
+FAIL waits: tests/acceptance/194-redraft-ac11/ac11-budgets.test.ts:298:27: an assertion on a clock difference judges how busy the machine is, unless it only bounds a wait, marked // deadline: <why>
+FAIL waits: tests/acceptance/194-redraft-ac11/ac11-budgets.test.ts:298:79: an assertion on a clock difference judges how busy the machine is, unless it only bounds a wait, marked // deadline: <why>
+FAIL waits: tests/acceptance/2200/twins/never-sets-up/packages/cli/src/main.ts:387:9: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+FAIL waits: tests/acceptance/2227/helpers.ts:43:19: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+FAIL waits: tests/acceptance/2227/twins/limit-stop-fails/packages/checks-command/src/index.ts:314:14: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+FAIL waits: tests/acceptance/2581/helpers.ts:81:78: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/2581/helpers.ts:131:11: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/2581/helpers.ts:136:70: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/2645/big.test.ts:50:19: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+FAIL waits: tests/acceptance/2645/probe/claim.mjs:80:15: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+FAIL waits: tests/acceptance/2647/gate.ts:20:78: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+FAIL waits: tests/acceptance/2647/gate.ts:98:13: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/2699/bench.ts:33:78: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+FAIL waits: tests/acceptance/2699/bench.ts:256:15: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/2699/bench.ts:272:15: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/2699/bench.ts:285:13: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/2699/inputs-changed.test.ts:32:85: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/2699/twins/looks-at-tree-alone/packages/hub/src/gate-runner.ts:826:127: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+FAIL waits: tests/acceptance/2699/twins/looks-at-tree-alone/packages/hub/src/gate-runner.ts:1068:35: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+FAIL waits: tests/acceptance/2699/twins/looks-at-tree-alone/packages/hub/src/gate-runner.ts:1269:35: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+FAIL waits: tests/acceptance/2699/twins/skips-checkout-when-passed/packages/hub/src/gate-runner.ts:828:127: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+FAIL waits: tests/acceptance/2699/twins/skips-checkout-when-passed/packages/hub/src/gate-runner.ts:1070:35: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+FAIL waits: tests/acceptance/2699/twins/skips-checkout-when-passed/packages/hub/src/gate-runner.ts:1271:35: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+FAIL waits: tests/acceptance/2856/helpers.ts:48:75: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+FAIL waits: tests/acceptance/2856/helpers.ts:161:11: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/2856/helpers.ts:421:9: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/2856/helpers.ts:451:20: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/2896/twins/refusal-schema-12000/packages/hub/src/mcp-operations.ts:142:108: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+FAIL waits: tests/acceptance/2896/twins/refusal-schema-12000/packages/hub/src/mcp-operations.ts:607:59: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+FAIL waits: tests/acceptance/2898/fixtures/plant.mjs:63:33: a call through a timer is a fixed wait
+FAIL waits: tests/acceptance/2898/helpers.ts:101:21: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+FAIL waits: tests/acceptance/2898/helpers.ts:381:17: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/2898/helpers.ts:420:88: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/2898/helpers.ts:442:92: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/2898/repeats.test.ts:30:15: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/2898/repeats.test.ts:36:13: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/2898/repeats.test.ts:42:13: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/2898/together.test.ts:20:13: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/2924/helpers.mjs:98:52: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+FAIL waits: tests/acceptance/594/twins/build-dirs-not-kept/scripts/perf.mjs:139:7: Atomics.wait is a fixed wait
+FAIL waits: tests/acceptance/594/twins/margin-widened-on-lock/scripts/perf.mjs:139:7: Atomics.wait is a fixed wait
+FAIL waits: tests/acceptance/667/redraft-2047/world.ts:63:19: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+FAIL waits: tests/acceptance/667/redraft-2047/world.ts:111:11: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/667/redraft-2047/world.ts:144:9: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/667/redraft-2047/world.ts:158:69: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/667/redraft-2047/world.ts:219:11: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/667/redraft-2047/world.ts:310:83: sleep(…) is a fixed wait
+FAIL waits: tests/acceptance/667/redraft-2047/world.ts:380:11: sleep(…) is a fixed wait
+FAIL size literal: crates/deep-app/src/connect.rs:119: `px(560.)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+FAIL size literal: crates/deep-app/src/connect.rs:137: `px(120.)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+FAIL known-failures.json: tests/acceptance/1477/record.test.ts › #1477.e66d9bdb the record gives all arms with their fingerprint, and an unrun arm reads INCONCLUSIVE. It ends in one line: stop, or build › #1477.e66d9bdb an arm left out reads INCONCLUSIVE and so does the decision; a full run and the committed record give every arm measured with its fingerprint on a quiet reference Mac, net of the blank arm, and end in the same stop or build names issue #2806, which is closed, not open
+FAIL copy literal: crates/deep-app/src/footprint.rs:16: "MetalAtlasTextures::monochrome_textures" is drawn outside the table: draw it with crate::copy from a key in crates/deep-app/copy/en.json, or end the line with // copy-exception: <reason> if no one reads it
+FAIL copy literal: crates/deep-app/src/footprint.rs:23: "MetalAtlasTextures::polychrome_textures" is drawn outside the table: draw it with crate::copy from a key in crates/deep-app/copy/en.json, or end the line with // copy-exception: <reason> if no one reads it
+FAIL copy literal: crates/deep-app/src/footprint.rs:30: "MetalRenderer::path_intermediate_texture" is drawn outside the table: draw it with crate::copy from a key in crates/deep-app/copy/en.json, or end the line with // copy-exception: <reason> if no one reads it
+FAIL copy literal: crates/deep-app/src/footprint.rs:37: "InstanceBufferPool::buffers" is drawn outside the table: draw it with crate::copy from a key in crates/deep-app/copy/en.json, or end the line with // copy-exception: <reason> if no one reads it
+FAIL copy literal: crates/deep-app/src/images.rs:18: "Thumbnails::made" is drawn outside the table: draw it with crate::copy from a key in crates/deep-app/copy/en.json, or end the line with // copy-exception: <reason> if no one reads it
+FAIL copy literal: crates/deep-app/src/show.rs:179: "CanvasPanel::pictures" is drawn outside the table: draw it with crate::copy from a key in crates/deep-app/copy/en.json, or end the line with // copy-exception: <reason> if no one reads it
