@@ -4636,7 +4636,10 @@ pub fn narrow() -> bool {
 
 /// A narrow window shows the page (`true`) or the list (#1808); a wide one shows both whatever this says.
 pub fn show_page_region(page: bool, cx: &mut App) {
-    let Some(shell) = cx.try_global::<ShellRoot>().and_then(|root| root.0.upgrade()) else {
+    let Some(shell) = cx
+        .try_global::<ShellRoot>()
+        .and_then(|root| root.0.upgrade())
+    else {
         return;
     };
     shell.update(cx, |shell, cx| shell.set_hidden(page, cx));
