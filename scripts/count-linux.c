@@ -8,13 +8,14 @@
 //   blocked <errno> <perf_event_paranoid>      the kernel refused the counter: the run has no count
 //   partial <time counted> <time run>      the counter wasn't on the command for all of the time it ran, in ns:
 //                             another counter took its place, it ran on a core no counter covered, or a process
-//                             exec'd a setuid or file-capability program, which the kernel stops counting: no count
+//                             exec'd a program it may run but not read, which the kernel stops counting: no count
 //   left      a process the command started was still running when it ended, so its count never joined
 //
 // A CPU whose cores are of two kinds has a counter for each kind, and a counter counts only on its own kind of core:
-// the command gets one of each, and the run's count is their sum. A counter of one kind is enabled all the time a
-// process it follows exists, running only while that process is on its own kind of core, so one counter's enabled
-// time isn't the time the command ran: the kernel's clock of the command's own time, followed the same way, is.
+// the command gets one of each, and the run's count is their sum. Each kind's counter keeps its own enabled time, and
+// once the command has children the kinds' enabled times differ (51.6 ms against 287.5 ms for one forked child on an
+// aarch64 host, #2960), so neither is the time the command ran: the kernel's software clock of the command's own time,
+// followed the same way, is.
 //
 // The runner is the subreaper of what the command starts, so a process that left the command's group or session is
 // still its descendant, and seen when it is still running. The command stays in the runner's process group, so
@@ -92,6 +93,9 @@ int main(int argc, char **argv) {
     close(go[1]);
     if (read(go[0], &ready, 1) != 1) _exit(126);
     close(go[0]);
+    // No process of the command gains privilege at its exec: a setuid or file-capability program, which the kernel
+    // stops counting, runs as the command's own user instead, counted like any other, or fails where it needs more.
+    if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)) _exit(126);
     execvp(argv[2], argv + 2);
     perror(argv[2]);
     _exit(errno == ENOENT ? 127 : 126);
@@ -176,26 +180,21 @@ int main(int argc, char **argv) {
     else ran = read_out[0];
     close(clock);
   }
-  // The time the command ran while counted, against the CPU time of the command and all it started, every one reaped
-  // by now: a process the kernel stopped counting at its exec ran longer than the clock saw. Both are in ns but on two
-  // clocks: perf's local_clock, IRQ and steal time included, and the scheduler's runtime, IRQ and steal time left out
-  // on a kernel that accounts them apart. Besides that, each process's fork before the counters follow it and its
-  // last steps after its count joined part them: about 0.1 to 0.2 ms a process on an aarch64 host whose cores are of
-  // two kinds (#2960), kernel work, which a user-space count leaves out anyway (a program run 50 times counted the same
-  // instructions to 83 while that gap moved by 0.6 ms). The kernel lets no unprivileged counter count the processes
-  // (a ring of fork records can't follow children), so the gap may be the kernel time the processes used and 1 ms
-  // more; past that is no count.
-  // What it can't see: uncounted work within that bound, so a setuid program's run as long as the run's kernel time
-  // (1.8 s in deep-hook-guards there) can hide in it, IRQ and steal time, and a child the kernel reaps itself, under a
-  // parent that ignores SIGCHLD, which adds no CPU time here.
+  // The time the command ran while counted, user and kernel time, against the user CPU time of the command and all it
+  // started, every one reaped by now: a process the kernel stopped counting at its exec ran longer than the clock saw.
+  // Its whole CPU time can't be the bound: the command's own fork to exec and each process's last steps after its
+  // count joined lie outside the clock, 0.1 to 0.2 ms a process on that aarch64 host, kernel work that a user-space
+  // count leaves out (a program run 50 times counted the same instructions to 83 in 6 M while that gap moved by 0.6
+  // ms), and the kernel lets no unprivileged counter count the processes (a ring of fork records can't follow
+  // children). So user time more than 1 ms past the time counted is no count.
+  // What it can't see: uncounted user work within the kernel time counted, which this lets through. With no new
+  // privileges that is only a program a process may run but not read, which the kernel stops counting. And IRQ and
+  // steal time, and a child the kernel reaps itself, under a parent that ignores SIGCHLD, which adds no CPU time here.
   struct rusage used;
-  uint64_t cpu = UINT64_MAX, kernel = 0;
-  if (!getrusage(RUSAGE_CHILDREN, &used)) {
-    kernel = (uint64_t)used.ru_stime.tv_sec * 1000000000ull + (uint64_t)used.ru_stime.tv_usec * 1000ull;
-    cpu = (uint64_t)used.ru_utime.tv_sec * 1000000000ull + (uint64_t)used.ru_utime.tv_usec * 1000ull + kernel;
-  }
-  if (opened && whole && running < ran) snprintf(line, sizeof line, "partial %llu %llu\n", (unsigned long long)running, (unsigned long long)ran);
-  else if (opened && whole && cpu > ran + kernel + 1000000ull) snprintf(line, sizeof line, "partial %llu %llu\n", (unsigned long long)ran, (unsigned long long)cpu);
+  uint64_t user = getrusage(RUSAGE_CHILDREN, &used) ? UINT64_MAX
+    : (uint64_t)used.ru_utime.tv_sec * 1000000000ull + (uint64_t)used.ru_utime.tv_usec * 1000ull;
+  if (opened && whole && running != ran) snprintf(line, sizeof line, "partial %llu %llu\n", (unsigned long long)running, (unsigned long long)ran);
+  else if (opened && whole && user > ran + 1000000ull) snprintf(line, sizeof line, "partial %llu %llu\n", (unsigned long long)ran, (unsigned long long)user);
   else if (opened && whole) snprintf(line, sizeof line, "total %llu\n", (unsigned long long)total);
   else if (opened) snprintf(line, sizeof line, "partial %llu %llu\n", (unsigned long long)running, (unsigned long long)ran);
   if (opened) put(line);
