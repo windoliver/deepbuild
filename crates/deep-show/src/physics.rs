@@ -199,7 +199,7 @@ impl Hub<'_> {
 
     /// #2457: `form` as the physics module reads it, which reads no store: with the mesh assets
     /// its worlds' soft volumes are built from, read from the evidence store.
-    fn sourced<'a>(&self, form: &'a Value) -> std::borrow::Cow<'a, Value> {
+    pub(crate) fn sourced<'a>(&self, form: &'a Value) -> std::borrow::Cow<'a, Value> {
         let root = &self.scenario.evidence;
         let mut out =
             deep_physics_rapier::source::sourced(form, &|sha| crate::evidence::read(root, sha));
