@@ -27,7 +27,7 @@ import { deepHook, hubAddress, installedPrograms, installedRoot, lastingNode, ro
 import { activePlant as plant } from './plant.js';
 import { removeService, startHub } from './service.js';
 import { changes, doing, installers, key, lands, onPath, planned as plannedRows, saying, setUpLine, type Row } from './setup-steps.js';
-import { PROOFS } from './guards.js';
+import { PROOFS, readProofs, shippedRules } from './guards.js';
 import { Devices } from './trusted.js';
 import { shellQuote as q } from './shell.js';
 import { isRecord as isObj } from '@deepbuild/contracts';
@@ -362,19 +362,22 @@ function recordLoginPath(root: string, also: readonly string[] = []): void {
  */
 function installRules(root: string): number {
   const file = join(root, 'rules.json');
-  const { proofs, ...shipped } = JSON.parse(readFileSync(join(REPO, 'crates', 'deep-hook', 'default-rules.json'), 'utf8')) as { v: number; entries: Obj; proofs?: Obj };
+  const { proofs = {}, ...shipped } = shippedRules();
   const blocking = Object.values(shipped.entries).filter((entry) => isObj(entry) && entry.mode === 'block').length;
   if (!existsSync(file)) {
     // The entries' planted calls and twins go in a file of their own, which only the hub reads (#2695), written first.
-    writeJson(join(root, PROOFS), { v: 1, proofs: proofs ?? {} });
+    writeJson(join(root, PROOFS), { v: 1, proofs });
     writeJson(file, shipped);
     return blocking;
   }
   let current: unknown;
   try { current = JSON.parse(readFileSync(file, 'utf8')); } catch { return blocking; /* unreadable: deep-hook names it */ }
   if (!isObj(current) || !isObj(current.entries)) return blocking;
-  // A proofs' file removed since setup (#2695) gets the shipped entries' proofs back; deep doctor names it until then.
-  if (!isObj(current.proofs) && !existsSync(join(root, PROOFS))) writeJson(join(root, PROOFS), { v: 1, proofs: proofs ?? {} });
+  // Every shipped entry gets its proof back where proofs.json has none (#2695), as after the file was removed; one an
+  // older hub's rules.json holds them in, or a proofs.json that can't be read, is left to the next install.
+  const kept = isObj(current.proofs) ? undefined : readProofs(root, current);
+  const absent = kept && 'proofs' in kept ? Object.keys(proofs).filter((name) => !(name in kept.proofs)) : [];
+  if (kept && 'proofs' in kept && absent.length) writeJson(join(root, PROOFS), { v: 1, proofs: { ...kept.proofs, ...Object.fromEntries(absent.map((n) => [n, proofs[n]])) } });
   const missing = Object.keys(shipped.entries).filter((name) => !(name in (current.entries as Obj)));
   if (missing.length) writeJson(file, { ...current, entries: { ...current.entries, ...Object.fromEntries(missing.map((n) => [n, shipped.entries[n]])) } });
   return blocking;

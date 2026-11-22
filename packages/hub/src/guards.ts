@@ -13,6 +13,7 @@
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { isRecord as isObj } from '@deepbuild/contracts/json';
 import { callAsYou } from './client.js';
 import { writeSynced } from './vfs.js';
@@ -36,11 +37,17 @@ function computed(c: Call): Call | undefined {
 /** The hub's file of each guard entry's planted call and twin, beside rules.json (#2695). */
 export const PROOFS = 'proofs.json';
 
+/** The shipped guard entries and their proofs, crates/deep-hook/default-rules.json. */
+export function shippedRules(): { v: number; entries: Obj; proofs?: Obj } {
+  return JSON.parse(readFileSync(fileURLToPath(new URL('../../../crates/deep-hook/default-rules.json', import.meta.url)), 'utf8')) as { v: number; entries: Obj; proofs?: Obj };
+}
+
 /**
- * The proofs `<dir>/proofs.json` holds, over any an older hub left in `rules`, rules.json as read; why not when the file
- * exists and can't be read or isn't that shape. A missing file holds none.
+ * The proofs `<dir>/proofs.json` holds, over any an older hub left in `rules`, rules.json as read (the file's win: a cut
+ * between an install's two writes leaves the newer ones there); why not when the file exists and can't be read or isn't
+ * that shape. A missing file holds none.
  */
-function readProofs(dir: string, rules: Obj): { proofs: Obj } | { why: string } {
+export function readProofs(dir: string, rules: Obj): { proofs: Obj } | { why: string } {
   const legacy = isObj(rules.proofs) ? rules.proofs : {};
   const file = join(dir, PROOFS);
   let read: unknown;
@@ -54,16 +61,21 @@ function readProofs(dir: string, rules: Obj): { proofs: Obj } | { why: string } 
 }
 
 /**
- * Why `<dir>/proofs.json` holds no proofs the hub can read, once rules.json was written without them: missing, can't be
- * read or isn't that shape. None while there is no readable rules.json, or one still holds them, as an older hub wrote it.
+ * What's wrong with `<dir>/proofs.json`: missing while rules.json holds no proofs of an older hub's, can't be read or
+ * isn't that shape, or holds no proof for a shipped entry rules.json has, as after a hub's install into a missing file.
+ * None while there is no readable rules.json; `unreadable` when the file is there and the hub can't read it.
  */
-export function proofsProblem(dir: string): string | undefined {
+export function proofsProblem(dir: string): { why: string; unreadable: boolean } | undefined {
   let rules: unknown;
   try { rules = JSON.parse(readFileSync(join(dir, 'rules.json'), 'utf8')); } catch { return undefined; }
-  if (!isObj(rules) || isObj(rules.proofs)) return undefined;
-  if (!existsSync(join(dir, PROOFS))) return `${join(dir, PROOFS)} is missing`;
+  if (!isObj(rules) || !isObj(rules.entries)) return undefined;
+  const file = join(dir, PROOFS);
+  if (!isObj(rules.proofs) && !existsSync(file)) return { why: `${file} is missing`, unreadable: false };
   const read = readProofs(dir, rules);
-  return 'why' in read ? read.why : undefined;
+  if ('why' in read) return { why: read.why, unreadable: true };
+  const shipped = shippedRules().proofs ?? {};
+  const lacking = Object.keys(rules.entries).filter((name) => name in shipped && !(name in read.proofs));
+  return lacking.length ? { why: `${file} holds no proof for ${lacking.join(', ')}`, unreadable: false } : undefined;
 }
 
 /** Whether deep-hook's matcher reads `c` under `entry`, through its check mode. */
