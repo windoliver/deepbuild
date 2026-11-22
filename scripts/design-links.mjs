@@ -64,6 +64,8 @@ function sentences(text) {
   const ends = plain.match(/[.!?]["'’”)\]]*(?=\s|$)/g) ?? [];
   return ends.length + (/[.!?]["'’”)\]]*$/.test(plain) || !plain ? 0 : 1);
 }
+// A line without what GitHub never shows as a link or code: HTML comments and backslash-escaped links.
+const shown = (text) => text.replace(/<!--[\s\S]*?-->/g, '').replace(/\\\[[^\]]*\\?\]\([^)]*\)/g, '');
 const HEADING = /^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$/;
 // A level-2 section of a doc: the headings before its heading, the heading after it, its list items, each with its
 // line number and its continuation lines joined as GitHub joins an indented or lazy one, and the lines of any paragraph
@@ -106,7 +108,8 @@ function principles() {
   if (!/^##\s+What version 0 builds, and what waits\s*$/.test(next ?? '')) problems.push(`${TD} Principles isn't right before "What version 0 builds, and what waits"`);
   if (found.length < 8 || found.length > 12) problems.push(`${TD} Principles holds ${found.length} lines, not 8 to 12`);
   const invariants = section('AGENTS.md', 'The four invariants')?.found ?? [];
-  for (const [i, { number, text }] of found.entries()) {
+  for (const [i, { number, text: raw }] of found.entries()) {
+    const text = shown(raw);
     const at = `${TD}:${number} (Principles line ${i + 1})`;
     const plain = rendered(text);
     if ([...plain].length > 160) problems.push(`${at} is ${[...plain].length} characters, over 160`);
@@ -125,7 +128,7 @@ function principles() {
   const canvas = readFileSync(CANVAS, 'utf8').split(/\r?\n/);
   const conventions = canvas.findIndex((line) => line === `## ${CONVENTIONS}`);
   const opening = canvas.slice(conventions + 1).find((line) => line.trim() && !/^\s*(?:<a\s[^>]*>(?:\s*<\/a>)?|<!--.*-->)\s*$/i.test(line));
-  const lands = HEADING.test(opening ?? '') ? [] : targets(opening ?? '').map((target) => resolve(target, CANVAS)).filter((link) => link?.file === TD && anchors(TD).get(link.id) === 'principles');
+  const lands = HEADING.test(opening ?? '') ? [] : targets(shown(opening ?? '')).map((target) => resolve(target, CANVAS)).filter((link) => link?.file === TD && anchors(TD).get(link.id) === 'principles');
   if (conventions < 0 || lands.length !== 1) problems.push(`${CANVAS}:${conventions + 1} "${CONVENTIONS}" doesn't open with one link to ${TD}#principles`);
   return problems;
 }
