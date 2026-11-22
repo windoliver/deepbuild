@@ -107,7 +107,8 @@ export function makeWorld(owned: Owned, base: string, o: { drafts?: unknown[] | 
   for (const [path, bytes] of Object.entries(o.files ?? {})) { mkdirSync(dirname(join(repo, path)), { recursive: true }); writeFileSync(join(repo, path), bytes); }
   for (const path of o.installs ?? []) {
     mkdirSync(dirname(join(repo, path)), { recursive: true });
-    execFileSync('/bin/cp', ['-cR', join(REPO, path), join(repo, path)]);
+    // A clone where the file system makes one: -c is macOS's clonefile flag, which GNU cp refuses (#2955).
+    execFileSync('/bin/cp', [...(process.platform === 'darwin' ? ['-cR'] : ['-R', '--reflink=auto']), join(REPO, path), join(repo, path)]);
   }
   git(repo, ['init', '-q', '-b', 'main']);
   git(repo, ['add', '-A']);
