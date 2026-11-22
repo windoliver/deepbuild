@@ -271,6 +271,10 @@ pub fn uses(item: &Value) -> Vec<(String, Value)> {
                 }
             }
             v if v.get("gen").is_some() => out.push((param.clone(), v.clone())),
+            // #211: a logic item's world pages from a provider's `out: pages`.
+            v if v.pointer("/init/gen").is_some() => {
+                out.push((format!("{param}/init"), v["init"].clone()))
+            }
             _ => {}
         }
     }

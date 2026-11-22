@@ -69,7 +69,8 @@ pub fn inline_programs(form: &mut Value, read: &dyn Fn(&str) -> Option<Vec<u8>>)
         }
     }
     // #192: each logic item's data assets and linked libraries by their hash, with the pinned
-    // packs' libraries the hub listed, which the logic module's steps read as a piece's assets.
+    // packs' libraries the hub listed, which the logic module's steps read as a piece's assets;
+    // #211: and its world's init pages, an asset or a provider's output by hash.
     let shas: Vec<String> = items
         .values()
         .filter(|i| i["kind"] == deep_logic::module::INTERFACE)
@@ -83,10 +84,17 @@ pub fn inline_programs(form: &mut Value, read: &dyn Fn(&str) -> Option<Vec<u8>>)
                 .and_then(Value::as_array)
                 .cloned();
             let links = links.into_iter().flatten().map(|l| l["asset"].clone());
+            let init = i
+                .pointer("/params/pages/init")
+                .map(|v| match v.get("asset") {
+                    Some(a) => a.clone(),
+                    None => v.clone(),
+                });
             assets
                 .into_iter()
                 .flatten()
                 .chain(links)
+                .chain(init)
                 .collect::<Vec<_>>()
         })
         .filter_map(|v| v.as_str().map(str::to_string))
@@ -287,7 +295,27 @@ pub fn inline_logic(
     {
         all.extend(arrays);
     }
+    gate_fog(doc);
     Ok(())
+}
+
+/// #552: the occurrences this copy's player doesn't see (its `match.me`, 1 for a piece played
+/// alone), taken out of every gated list; the planted burst that ignores the gate still reads
+/// them, from `fogged`.
+#[cfg(feature = "logic")]
+fn gate_fog(doc: &mut serde_json::Map<String, Value>) {
+    let (items, me) = (doc.get("items").cloned(), doc.get("match.me").cloned());
+    let arrays = doc.get("arrays").and_then(Value::as_object).cloned();
+    let (Some(items), Some(arrays)) = (items, arrays) else {
+        return;
+    };
+    let Some(Value::Object(lists)) = doc.get_mut("occurrences") else {
+        return;
+    };
+    let fogged = deep_logic::fog::gate(&items, &arrays, lists, &me.unwrap_or(Value::Null));
+    if !fogged.is_empty() {
+        doc.insert("fogged".into(), Value::Object(fogged));
+    }
 }
 
 /// `form`'s logic items as one piece with its seed and controls, checked by the logic module,
