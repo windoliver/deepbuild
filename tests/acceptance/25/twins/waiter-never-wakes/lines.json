@@ -1,0 +1,12 @@
+{
+  "packages/hub/src/plant.ts": [
+    {
+      "find": [
+        "  if (!value) return undefined;"
+      ],
+      "wrong": [
+        "  if (!value) return 'waiter-never-wakes';"
+      ]
+    }
+  ]
+}
