@@ -31,6 +31,9 @@ pub enum Seat {
     Left,
     Absent,
     Back,
+    /// #278: a copy joined: at step 0 with those there at the start, or later while the lobby
+    /// is open.
+    Joined,
 }
 
 impl Seat {
@@ -39,6 +42,7 @@ impl Seat {
             "left" => Seat::Left,
             "absent" => Seat::Absent,
             "back" => Seat::Back,
+            "joined" => Seat::Joined,
             _ => return None,
         })
     }
@@ -48,11 +52,12 @@ impl Seat {
             Seat::Left => "left",
             Seat::Absent => "absent",
             Seat::Back => "back",
+            Seat::Joined => "joined",
         }
     }
 
     /// The seat a message's entries set, if any.
-    fn of(m: &Message) -> Option<Seat> {
+    pub(super) fn of(m: &Message) -> Option<Seat> {
         m.entries
             .iter()
             .find(|(c, _)| c == SEAT)
@@ -71,7 +76,7 @@ struct Leaving {
 /// This copy's own absence: the step its `absent` took, and once it returned, what it asked from,
 /// when, the peers heard since and the step it had reached.
 #[derive(Debug, Default)]
-struct Away {
+pub(super) struct Away {
     returned: Option<i64>,
     from: i64,
     heard: BTreeSet<usize>,
@@ -80,19 +85,38 @@ struct Away {
     /// ms}` each.
     spent: u64,
     frames: Vec<Value>,
+    /// #278: it joins the match from its start: it enters with `joined`, not `back`, at `enter`
+    /// or the first step after it that every copy still has to confirm.
+    pub(super) join: bool,
+    enter: i64,
+}
+
+impl Away {
+    /// #278: a copy that joins a running match at `now`: back from the match's start, with
+    /// everything to step.
+    pub(super) fn joining(now: i64, spent: u64, enter: i64) -> Away {
+        Away {
+            returned: Some(now),
+            spent,
+            join: true,
+            enter,
+            ..Away::default()
+        }
+    }
 }
 
 #[derive(Debug, Default)]
 pub(super) struct Seats {
-    /// Per player, 0-based: the seat its last message held set, and that message's step.
-    last: Vec<Option<(i64, Seat)>>,
+    /// Per player, 0-based: the seat its last message held set, and that message's step; a seat
+    /// nobody took at the start is left from before step 0 (#278).
+    pub(super) last: Vec<Option<(i64, Seat)>>,
     leaving: BTreeMap<usize, Leaving>,
     /// relay@2 messages, and frames of other players' messages, to send beside its own.
-    out: Vec<Value>,
+    pub(super) out: Vec<Value>,
     frames: Vec<Vec<u8>>,
     /// Players catching up, 0-based, counted in the repeat rule from the step they asked from.
     pub(super) returning: BTreeMap<usize, i64>,
-    away: Option<Away>,
+    pub(super) away: Option<Away>,
     /// While it is away, the step of the first message it sends after its `absent`, such as how
     /// its match ended: no peer's `confirmed` counts it, so its frames keep it until it is back.
     pub(super) since: Option<i64>,
@@ -249,11 +273,16 @@ impl<S: Stepper> Copy<S> {
                 self.take(p, step, m);
                 continue;
             }
-            let resumes = matches!(self.seats.last[p], Some((_, Seat::Absent)))
-                .then(|| self.early[p].iter().next())
-                .flatten()
-                .filter(|(_, m)| Seat::of(m) == Some(Seat::Back))
-                .map(|(k, _)| *k);
+            // #278: a left seat, or one nobody took, resumes at a `joined`.
+            let wants = match self.seats.last[p] {
+                Some((_, Seat::Absent)) => Some(Seat::Back),
+                Some((_, Seat::Left)) => Some(Seat::Joined),
+                _ => None,
+            };
+            let resumes = wants
+                .and_then(|w| self.early[p].iter().next().map(|e| (w, e)))
+                .filter(|(w, (_, m))| Seat::of(m) == Some(*w))
+                .map(|(_, (k, _))| *k);
             match resumes {
                 Some(k) => self.through[p] = k,
                 None => break,
@@ -266,7 +295,7 @@ impl<S: Stepper> Copy<S> {
     pub(super) fn seat_of(&mut self, p: usize, step: i64, m: &Message) {
         if let Some(seat) = Seat::of(m) {
             self.seats.last[p] = Some((step, seat));
-            if seat == Seat::Back {
+            if matches!(seat, Seat::Back | Seat::Joined) {
                 self.seats.returning.remove(&p);
             }
         }
@@ -452,9 +481,18 @@ impl<S: Stepper> Copy<S> {
         }
         let (reached, spent) = (a.reached, a.spent);
         let mut frames = a.frames.clone();
-        let back = (self.next + self.cfg.delay).max(self.through[me]);
+        // #278: a copy that joins enters two windows further on, so its `joined` reaches every copy
+        // before that copy confirms the step, however late the relay hands it on; and no earlier
+        // than the step the copy that let it in named, which doesn't move with the network.
+        let (seat, ahead, enter) = match a.join {
+            true => (Seat::Joined, 2 * self.cfg.window, a.enter),
+            false => (Seat::Back, 0, 0),
+        };
+        let back = (self.next + self.cfg.delay + ahead)
+            .max(self.through[me])
+            .max(enter);
         self.through[me] = back;
-        let mut entries = vec![(super::SEAT.to_string(), json!(Seat::Back.name()))];
+        let mut entries = vec![(super::SEAT.to_string(), json!(seat.name()))];
         let made = self.script.remove(&self.next).unwrap_or_default();
         entries.extend(super::seen_by(&made, self.me));
         self.made.clear();
@@ -465,7 +503,10 @@ impl<S: Stepper> Copy<S> {
             ..Message::default()
         });
         self.reached = self.next + 1;
-        self.seats.last[me] = Some((back, Seat::Back));
+        self.seats.last[me] = Some((back, seat));
+        if seat == Seat::Joined {
+            self.entered();
+        }
         self.seats.away = None;
         self.seats.since = None;
         self.due = now;
@@ -484,7 +525,7 @@ impl<S: Stepper> Copy<S> {
         self.seats.caught.push(up);
         let game = wire::hex(&self.game);
         self.seats.out.push(
-            json!({"seat": {"match": game, "player": me, "state": "back", "after": back - 1}}),
+            json!({"seat": {"match": game, "player": me, "state": seat.name(), "after": back - 1}}),
         );
     }
 
@@ -511,6 +552,8 @@ impl<S: Stepper> Copy<S> {
                     self.serve(by, from);
                 }
             }
+        } else if let Some(k) = m.get("knock") {
+            self.knocked(&k["player"]);
         }
         self.watch(now);
         self.locate();
@@ -555,8 +598,11 @@ impl<S: Stepper> Copy<S> {
                 }
             }
         }
+        // #278: a copy that joins a seat somebody left gets that seat's messages too.
+        let joins = self.gone(by);
         for p in 0..self.players as usize {
-            if p != by && p != me && (!self.seated(p) || self.seats.leaving.contains_key(&p)) {
+            let unsent = !self.seated(p) || self.seats.leaving.contains_key(&p);
+            if p != me && unsent && (p != by || joins) {
                 self.forward(p, from, self.through[p]);
             }
         }
@@ -568,7 +614,7 @@ impl<S: Stepper> Copy<S> {
         if k < 0 || k >= self.through[p] {
             return None;
         }
-        let entries = if k < self.next {
+        let mut entries: Vec<(String, Value)> = if k < self.next {
             let list = self.log.get(&k).into_iter().flatten();
             list.filter(|(q, _)| *q as usize == p + 1)
                 .flat_map(|(_, e)| e.clone())
@@ -576,6 +622,10 @@ impl<S: Stepper> Copy<S> {
         } else {
             self.held[p].get(&k)?.entries.clone()
         };
+        // #278: the seats a room started with are every copy's own stamp at step 0, never sent.
+        if k == 0 {
+            entries.retain(|(c, v)| !(c == super::SEAT && v == Seat::Joined.name()));
+        }
         Some(Message {
             entries,
             ..Message::default()

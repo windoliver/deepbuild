@@ -1,0 +1,204 @@
+# #3067 acceptance tests on the base 08f944cec (macOS, 12 cores, 1-minute load about 93).
+# Run: node --test --test-reporter=spec 'tests/acceptance/3067/*.test.mjs'
+# Paths redacted: the checkout to <checkout>, the home to <home>. Expected reason, for all 8: the base's throttle.mjs
+# has no `load` command; `load` and `load --report` print its usage line (BLOCKED throttle: usage: ...) and exit 2,
+# so no sample reaches load.log and no report line is printed. Every failure is at an assertion. None passes.
+
+✖ #3067.4573b740 the sampler's own cost, with the ps listings it runs, is under 1% of one core over 10 minutes of sampling each minute (471.442875ms)
+✖ #3067.4573b740 a ps failure writes a sample that says so (at, load, cores and failed), with no grants, outside or top, never a zero, and the sampler runs on (447.212709ms)
+✖ #3067.eebd7d07 load --report over a fixture log prints the share of minutes above the cores, then one line a class and one for outside over the minutes above that were read, adding up to 100.0, and the count of failed samples (65.891875ms)
+✖ #3067.eebd7d07 load --report's shares add up to 100.0 where each is a third: no 33.3% three times (111.695375ms)
+✖ #3067.eebd7d07 load --report over a log with no minute above the cores prints that share and no shares by class (64.582333ms)
+✖ #3067.d6d9116e one stub grant whose child, named node, spins 2 cores and one ungranted process spinning 2: the sample attributes each within 0.5 of a core, to the grant's ID and to outside (4268.672959ms)
+✖ #3067.a665617d a process under two nested grants is counted once, under the outer top-level grant: the two grants' shares together are its CPU, not twice it, and no more than the machine with outside (4386.981542ms)
+✖ #3067.4ec1293f the log holds PIDs, grant IDs, classes and command names only: no argument, no path under a home folder and no environment value of a grant's child, an ungranted process, a holder or the sampler (4160.653042ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 0
+ℹ fail 8
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 12886.372666
+
+✖ failing tests:
+
+test at tests/acceptance/3067/cost.test.mjs:13:1
+✖ #3067.4573b740 the sampler's own cost, with the ps listings it runs, is under 1% of one core over 10 minutes of sampling each minute (471.442875ms)
+  AssertionError [ERR_ASSERTION]: load wrote no sample to load.log in the table's folder
+  load.log:
+  
+  events:
+  {"name":"idle","pid":634,"throttle":"test:1824757e4ba6aea9"}
+  the table's log:
+  {"at":"2026-11-22T01:32:54.601Z","event":"granted","class":"test","grant":"top-level","id":"1824757e4ba6aea9","pid":424,"index":1,"load":92.90576171875,"cores":12,"wait":1,"readings":null}
+  sh: load, then times: exit 0
+  BLOCKED throttle: usage: throttle.mjs <build|bay-pair|test|timed> [--wait <min>] [--hold <min>] -- <command>, or throttle.mjs window [--wait <min>]
+  
+  idle: still running
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3067/cost.test.mjs:25:10)
+      at async Test.run (node:internal/test_runner/test:1054:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3067/ps-failure.test.mjs:11:1
+✖ #3067.4573b740 a ps failure writes a sample that says so (at, load, cores and failed), with no grants, outside or top, never a zero, and the sampler runs on (447.212709ms)
+  AssertionError [ERR_ASSERTION]: load wrote no sample to load.log in the table's folder
+  load.log:
+  
+  events:
+  {"name":"idle","pid":652,"throttle":"test:56a88e3b366b8891"}
+  the table's log:
+  {"at":"2026-11-22T01:32:54.615Z","event":"granted","class":"test","grant":"top-level","id":"56a88e3b366b8891","pid":423,"index":1,"load":92.90576171875,"cores":12,"wait":1,"readings":null}
+  load : exit 2
+  BLOCKED throttle: usage: throttle.mjs <build|bay-pair|test|timed> [--wait <min>] [--hold <min>] -- <command>, or throttle.mjs window [--wait <min>]
+  
+  idle: still running
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3067/ps-failure.test.mjs:28:10)
+      at async Test.run (node:internal/test_runner/test:1054:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3067/report.test.mjs:26:1
+✖ #3067.eebd7d07 load --report over a fixture log prints the share of minutes above the cores, then one line a class and one for outside over the minutes above that were read, adding up to 100.0, and the count of failed samples (65.891875ms)
+  AssertionError [ERR_ASSERTION]: the share of minutes above the cores
+  BLOCKED throttle: usage: throttle.mjs <build|bay-pair|test|timed> [--wait <min>] [--hold <min>] -- <command>, or throttle.mjs window [--wait <min>]
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3067/report.test.mjs:29:10)
+      at async Test.run (node:internal/test_runner/test:1054:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'BLOCKED throttle: usage: throttle.mjs <build|bay-pair|test|timed> [--wait <min>] [--hold <min>] -- <command>, or throttle.mjs window [--wait <min>]\n',
+    expected: /^75(\.0+)?% of minutes above the cores \(6 of 8\)/m,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3067/report.test.mjs:47:1
+✖ #3067.eebd7d07 load --report's shares add up to 100.0 where each is a third: no 33.3% three times (111.695375ms)
+  AssertionError [ERR_ASSERTION]: the share of minutes above the cores
+  BLOCKED throttle: usage: throttle.mjs <build|bay-pair|test|timed> [--wait <min>] [--hold <min>] -- <command>, or throttle.mjs window [--wait <min>]
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3067/report.test.mjs:49:10)
+      at async Test.run (node:internal/test_runner/test:1054:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:744:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'BLOCKED throttle: usage: throttle.mjs <build|bay-pair|test|timed> [--wait <min>] [--hold <min>] -- <command>, or throttle.mjs window [--wait <min>]\n',
+    expected: /^100(\.0+)?% of minutes above the cores \(1 of 1\)/m,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3067/report.test.mjs:56:1
+✖ #3067.eebd7d07 load --report over a log with no minute above the cores prints that share and no shares by class (64.582333ms)
+  AssertionError [ERR_ASSERTION]: the share of minutes above the cores
+  BLOCKED throttle: usage: throttle.mjs <build|bay-pair|test|timed> [--wait <min>] [--hold <min>] -- <command>, or throttle.mjs window [--wait <min>]
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3067/report.test.mjs:59:10)
+      at async Test.run (node:internal/test_runner/test:1054:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:744:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'BLOCKED throttle: usage: throttle.mjs <build|bay-pair|test|timed> [--wait <min>] [--hold <min>] -- <command>, or throttle.mjs window [--wait <min>]\n',
+    expected: /^0(\.0+)?% of minutes above the cores \(0 of 3\)/m,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3067/sample.test.mjs:46:1
+✖ #3067.d6d9116e one stub grant whose child, named node, spins 2 cores and one ungranted process spinning 2: the sample attributes each within 0.5 of a core, to the grant's ID and to outside (4268.672959ms)
+  AssertionError [ERR_ASSERTION]: load wrote no sample to load.log in the table's folder
+  load.log:
+  
+  events:
+  {"name":"free","pid":427,"throttle":null}
+  {"name":"granted","pid":617,"throttle":"test:70ce6e1d41d63cf8"}
+  the table's log:
+  {"at":"2026-11-22T01:32:54.575Z","event":"granted","class":"test","grant":"top-level","id":"70ce6e1d41d63cf8","pid":426,"index":1,"load":92.90576171875,"cores":12,"wait":1,"readings":null}
+  load : exit 2
+  BLOCKED throttle: usage: throttle.mjs <build|bay-pair|test|timed> [--wait <min>] [--hold <min>] -- <command>, or throttle.mjs window [--wait <min>]
+  
+  granted: still running
+  
+  free: still running
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3067/sample.test.mjs:54:10)
+      at async Test.run (node:internal/test_runner/test:1054:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3067/sample.test.mjs:100:1
+✖ #3067.a665617d a process under two nested grants is counted once, under the outer top-level grant: the two grants' shares together are its CPU, not twice it, and no more than the machine with outside (4386.981542ms)
+  AssertionError [ERR_ASSERTION]: load wrote no sample to load.log in the table's folder
+  load.log:
+  
+  events:
+  {"name":"nested","pid":1753,"throttle":"timed:d423d4e0a40f27bc"}
+  the table's log:
+  {"at":"2026-11-22T01:32:58.793Z","event":"granted","class":"test","grant":"top-level","id":"6c7da4b3dc2d0abd","pid":1638,"index":1,"load":93.5537109375,"cores":12,"wait":1,"readings":null}
+  {"at":"2026-11-22T01:32:58.978Z","event":"granted","class":"timed","grant":"nested","id":"d423d4e0a40f27bc","pid":1706,"index":1,"load":93.5537109375,"cores":12,"wait":1}
+  load : exit 2
+  BLOCKED throttle: usage: throttle.mjs <build|bay-pair|test|timed> [--wait <min>] [--hold <min>] -- <command>, or throttle.mjs window [--wait <min>]
+  
+  nested: still running
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3067/sample.test.mjs:109:10)
+      at async Test.run (node:internal/test_runner/test:1054:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:744:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3067/sample.test.mjs:136:1
+✖ #3067.4ec1293f the log holds PIDs, grant IDs, classes and command names only: no argument, no path under a home folder and no environment value of a grant's child, an ungranted process, a holder or the sampler (4160.653042ms)
+  AssertionError [ERR_ASSERTION]: load wrote no sample to load.log in the table's folder
+  load.log:
+  
+  events:
+  {"name":"free","pid":2207,"throttle":null}
+  {"name":"granted","pid":2258,"throttle":"test:9d3b167ac4df234b"}
+  the table's log:
+  {"at":"2026-11-22T01:33:03.163Z","event":"granted","class":"test","grant":"top-level","id":"9d3b167ac4df234b","pid":2206,"index":1,"load":92.38818359375,"cores":12,"wait":1,"readings":null}
+  load : exit 2
+  BLOCKED throttle: usage: throttle.mjs <build|bay-pair|test|timed> [--wait <min>] [--hold <min>] -- <command>, or throttle.mjs window [--wait <min>]
+  
+  granted: still running
+  
+  free: still running
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3067/sample.test.mjs:145:10)
+      at async Test.run (node:internal/test_runner/test:1054:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:744:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

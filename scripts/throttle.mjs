@@ -3,6 +3,7 @@
 // while a budget is timed. `throttle.mjs <class> [--wait <min>] -- <command>` acquires, runs, releases and exits
 // with the child's status, or ends a command held past its `--hold` bound while another request waits; acquire and release serve the scripts that hold a grant themselves. `throttle.mjs window`
 // opens a budget window (section 12a): a timed grant that waits for every slot to empty, around budget-window.mjs.
+// `throttle.mjs load [--report]` reads the machine's load by who made it (#3067): a sample a minute, and their table.
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { appendFileSync, existsSync, linkSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -420,7 +421,136 @@ export function release(grant) {
   }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+// The load, by who made it (#3067, section 6): a reading. It takes no grant and no lock, and stops no process.
+const KINDS = ['compile', 'node', 'other'];
+const kind = (command) => (command === 'rustc' || command === 'cargo' ? 'compile' : command === 'node' ? 'node' : 'other');
+// CPU is counted in thousandths of a core, whole numbers, so a sum's parts add up to it.
+const cores = (thousandths) => thousandths / 1000;
+const shares = (tally) => ({ cpu: cores(KINDS.reduce((sum, name) => sum + tally[name], 0)), ...Object.fromEntries(KINDS.map((name) => [name, cores(tally[name])])) });
+
+/**
+ * One sample: the load, the cores, and each running process's CPU, by ps, under the outermost held grant whose holder
+ * is the process or above it, or else under `outside`. A reading that can't be made says `failed`, with no numbers. The
+ * reason is this code's own words, never ps's, so the log holds no path.
+ */
+function sample() {
+  const reading = { at: new Date().toISOString(), load: loadavg()[0], cores: cpus().length };
+  let held, procs;
+  try {
+    // The table is replaced whole by a rename, so a read without its lock sees one table or the next.
+    try {
+      held = JSON.parse(readFileSync(join(folder(), 'table.json'), 'utf8')).grants;
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw Error('the table can\'t be read');
+      held = [];
+    }
+    if (!Array.isArray(held)) throw Error('the table can\'t be read');
+    const listing = spawnSync('ps', ['-A', '-o', 'pid=,ppid=,%cpu=,lstart=,ucomm='], { encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, TZ: 'UTC', LC_ALL: 'C' } });
+    if (listing.status !== 0) throw Error(`ps ${listing.error?.code ?? (listing.signal ? `ended by ${listing.signal}` : `exited ${listing.status}`)}`);
+    procs = new Map();
+    for (const line of listing.stdout.split('\n')) {
+      const [, pid, ppid, cpu, start, command] = line.match(/^\s*(\d+)\s+(\d+)\s+(\d+(?:\.\d+)?)\s+(\S+\s+\S+\s+\d+\s+\S+\s+\d+)\s+(.*?)\s*$/) ?? [];
+      if (pid) procs.set(Number(pid), { ppid: Number(ppid), start, cpu: Math.round(Number(cpu) * 10), command });
+    }
+    if (!procs.size) throw Error('ps listed no process');
+  } catch (error) {
+    return { ...reading, failed: error.message };
+  }
+  const tally = () => Object.fromEntries(KINDS.map((name) => [name, 0]));
+  // A holder of two grants counts under the one it took first; the other still has its entry.
+  const entries = held.filter((grant) => procs.get(grant.pid)?.start === grant.start).map((grant) => ({ id: grant.id, class: grant.class, pid: grant.pid, tally: tally() }));
+  const grants = new Map([...entries].reverse().map((entry) => [entry.pid, entry]));
+  const outside = tally();
+  const used = [];
+  for (const [pid, proc] of procs) {
+    const owner = grants.get(chain(procs, pid).findLast((at) => grants.has(at)));
+    (owner?.tally ?? outside)[kind(proc.command)] += proc.cpu;
+    if (proc.cpu) used.push({ pid, command: proc.command, cpu: proc.cpu, ...owner && { grant: owner.id } });
+  }
+  return {
+    ...reading,
+    grants: entries.map(({ tally: mine, ...grant }) => ({ ...grant, ...shares(mine) })),
+    outside: shares(outside),
+    top: used.sort((a, b) => b.cpu - a.cpu).slice(0, 5).map((proc) => ({ ...proc, cpu: cores(proc.cpu) })),
+  };
+}
+
+/**
+ * The table `load --report` prints from the log's samples: the share of minutes above the cores and, over those that
+ * were read, each class's and outside's mean CPU as a share of the mean of all, in tenths of a percent rounded so
+ * they add up to 100.0 (the largest remainders take the tenths left over). The shares are of the CPU read, which the
+ * cores bound, not of the load, so the mean of each is printed beside them, and the commands outside every grant that
+ * the samples' `top` named, a process that outlived its parent among them.
+ */
+function loadReport(samples, torn) {
+  const percent = (tenths) => `${(tenths / 10).toFixed(1)}%`;
+  const above = samples.filter((entry) => entry.load > entry.cores);
+  const read = above.filter((entry) => !('failed' in entry));
+  const failed = samples.filter((entry) => 'failed' in entry).length;
+  const lines = [`${percent(Math.round((1000 * above.length) / samples.length))} of minutes above the cores (${above.length} of ${samples.length})`];
+  const sums = new Map([...CLASSES.map((cls) => [cls, 0]), ...KINDS.map((name) => [`outside ${name}`, 0])]);
+  for (const entry of read) {
+    for (const grant of entry.grants) sums.set(grant.class, (sums.get(grant.class) ?? 0) + grant.cpu);
+    for (const name of KINDS) sums.set(`outside ${name}`, sums.get(`outside ${name}`) + entry.outside[name]);
+  }
+  const total = [...sums.values()].reduce((sum, cpu) => sum + cpu, 0);
+  if (total > 0) {
+    const exact = [...sums].map(([name, cpu]) => ({ name, cpu, tenths: Math.floor((1000 * cpu) / total), rest: ((1000 * cpu) / total) % 1 }));
+    let left = 1000 - exact.reduce((sum, part) => sum + part.tenths, 0);
+    for (const part of [...exact].sort((a, b) => b.rest - a.rest)) if (left-- > 0) part.tenths += 1;
+    const of = new Map(exact.map((part) => [part.name, part]));
+    const classes = new Set(read.flatMap((entry) => entry.grants.map((grant) => grant.class)));
+    for (const cls of sums.keys()) if (classes.has(cls)) lines.push(`${cls} ${percent(of.get(cls).tenths)}`);
+    const [compile, node, other] = KINDS.map((name) => of.get(`outside ${name}`).tenths);
+    lines.push(`outside ${percent(compile + node + other)} (compile ${percent(compile)}, node ${percent(node)}, other ${percent(other)})`);
+    const mean = (sum) => (sum / read.length).toFixed(2);
+    lines.push(`mean CPU read ${mean(total)} of ${mean(read.reduce((sum, entry) => sum + entry.cores, 0))} cores, at a mean load of ${mean(read.reduce((sum, entry) => sum + entry.load, 0))}`);
+    const ungranted = new Map();
+    for (const proc of read.flatMap((entry) => entry.top)) if (!proc.grant) ungranted.set(proc.command, (ungranted.get(proc.command) ?? 0) + proc.cpu);
+    const named = [...ungranted].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([command, cpu]) => `${command} ${mean(cpu)}`);
+    if (named.length) lines.push(`top commands under no grant, mean cores: ${named.join(', ')}`);
+  } else if (above.length) lines.push('no CPU was read in those minutes');
+  if (failed) lines.push(`${failed} of ${samples.length} samples failed and count in no share`);
+  if (torn) lines.push(`${torn} lines of the log can't be read and count as no minute`);
+  return lines.join('\n');
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] === 'load') {
+  const options = process.argv.slice(3);
+  const write = () => appendFileSync(join(folder(), 'load.log'), `${JSON.stringify(sample())}\n`);
+  try {
+    if (options.length && options.join(' ') !== '--report') throw Error('usage: throttle.mjs load [--report]');
+    if (options.length) {
+      // A line a full disk cut short isn't a sample.
+      const lines = readFileSync(join(folder(), 'load.log'), 'utf8').split('\n').filter(Boolean);
+      const samples = lines.flatMap((line) => {
+        try {
+          return [JSON.parse(line)];
+        } catch {
+          return [];
+        }
+      });
+      if (!samples.length) throw Error('load.log holds no sample');
+      console.log(loadReport(samples, lines.length - samples.length));
+      process.exit(0);
+    }
+    mkdirSync(folder(), { recursive: true, mode: 0o700 });
+    write();
+  } catch (error) {
+    console.log(`BLOCKED throttle: ${error.message}`);
+    process.exit(2);
+  }
+  // A minute's sample that can't be written, as on a full disk, is said and the next is still tried.
+  setInterval(() => {
+    try {
+      write();
+    } catch (error) {
+      console.error(`throttle load: ${error.message}`);
+    }
+  }, 60_000);
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== 'load') {
   const args = process.argv.slice(2);
   const split = args.indexOf('--');
   const [named, ...options] = split < 0 ? args : args.slice(0, split);
@@ -432,7 +562,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const wait = given.get('--wait') ?? (window ? 60 : 30), hold = given.get('--hold') ?? HOLD;
   const flags = window ? ['--wait'] : ['--wait', '--hold'];
   if (!LIMITS[cls] || !command.length || options.length !== 2 * given.size || ![...given].every(([flag, value]) => flags.includes(flag) && value >= 0)) {
-    console.log(`BLOCKED throttle: usage: throttle.mjs <${CLASSES.join('|')}> [--wait <min>] [--hold <min>] -- <command>, or throttle.mjs window [--wait <min>]`);
+    console.log(`BLOCKED throttle: usage: throttle.mjs <${CLASSES.join('|')}> [--wait <min>] [--hold <min>] -- <command>, throttle.mjs window [--wait <min>], or throttle.mjs load [--report]`);
     process.exit(2);
   }
   let grant;

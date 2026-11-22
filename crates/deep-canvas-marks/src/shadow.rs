@@ -653,6 +653,7 @@ mod tests {
             energy: 1.0,
             color: [1.0; 3],
             sun: None,
+            height: range / 4.0,
         };
         let sun = |deg: f64| {
             let (sin, cos) = crate::turn::sin_cos(deg);
