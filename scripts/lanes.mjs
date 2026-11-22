@@ -1400,6 +1400,8 @@ timed.push('tests/acceptance/980/ac09-budget.test.ts');
 // #2215's files (blind) build deep-gpu and draw the brushed pane in raster and, once #178 lands, as path-traced finals at
 // 4,096 samples; ac5 draws the castle and the corpus. No timing.
 alone.push('tests/acceptance/2215/');
+// #2215's AC5 redraft (blind) builds deep-gpu and draws its four-document corpus on the GPU, once under a plant; no timing.
+alone.push('tests/acceptance/2215-redraft-ac5/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

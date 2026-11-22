@@ -1,0 +1,31 @@
+{
+  "criterion": "#2215.8e4252d8",
+  "recorded": {
+    "commit": "eb3be2014e154fabc2cd8dfb42b759276cfaeb23",
+    "model": "Mac17,10",
+    "macos": "27.2",
+    "when": "2026-11-22T18:22:44.051Z"
+  },
+  "members": {
+    "castle": {
+      "input": "ba6f86629dfb3c09bd1e2fbccbe5a6079d88d10eedd0bc9637fcb2a6712dd012",
+      "final": "47268391e1d91cc932f2d773df4b43b4892386c62deb76acbbf62b05ce3dbafa",
+      "linear": "6606a1eeb21f8104d02935241fa94a691870c7a923d45ec1ad7adca378b94943"
+    },
+    "lobe-gallery": {
+      "input": "28d340ba8a5844cf2b0740e1639278e480bceab833e867a568a463115ea39e92",
+      "final": "86ffdae27678a6a370e048b902198e27c63e8b2fe9dc1ebc16ebdb4a9cc3c0bd",
+      "linear": "ba88dc1b377bfb514ec116760b203947f8829bbb9c2defaf6ed0756a93ba609e"
+    },
+    "frosted-panes": {
+      "input": "1aa629cf8cfc486ad1ce8d3c9434e8c33371ae658609a23405665c1f4cfa4378",
+      "final": "85422821e6396c1277b4fb98f990c19beff56ceec0901a344eec198644ff40b8",
+      "linear": "36528c4ded3292cf3d10be4f7b0cb47dfeaa27201899cd2832a5230eeb9fd1eb"
+    },
+    "brushed-ball": {
+      "input": "126801a915c6d7fcd4bf270cd50b6741754f29906cd4b9dff376e6a1139e4487",
+      "final": "e8345116ca23d2d53b8c0aec9cb3e668c43cfaa2eb62d8e2cff9a08dd8d515d5",
+      "linear": "563b8fada93b1cc16393d92ad54ec0da6df3ad13ba2d6934894e1e93a18500ca"
+    }
+  }
+}
