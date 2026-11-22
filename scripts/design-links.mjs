@@ -57,15 +57,16 @@ const CONVENTIONS = 'Conventions every primitive uses';
 const LANES = new Set(checks.map(({ name }) => name));
 // A line as GitHub renders it, its white space collapsed.
 const rendered = (text) => headingText(text).replace(/\s+/g, ' ');
-// The sentences of a line as rendered, code spans and the closing parenthesis of links and checks left out: each end
-// (a . ! or ? with any closing quote or bracket, then space, never e.g., i.e. or etc.), and text after the last end.
+// The sentences of a line as rendered, code spans left out: each end (a . ! or ? with any closing quote or bracket,
+// then space, never e.g., i.e. or etc.), and any text after the last end but a closing parenthesis of links and checks.
 function sentences(text) {
-  const plain = rendered(text.replace(/(`+).+?\1/g, '')).replace(/\s*\([^()]*\)\s*([.!?]?)$/, '$1').replace(/\b(?:e\.g|i\.e|etc)\./gi, 'eg');
-  const ends = plain.match(/[.!?]["'’”)\]]*(?=\s|$)/g) ?? [];
-  return ends.length + (/[.!?]["'’”)\]]*$/.test(plain) || !plain ? 0 : 1);
+  const plain = rendered(text.replace(/(`+).+?\1/g, '')).replace(/\b(?:e\.g|i\.e|etc)\./gi, 'eg');
+  const ends = [...plain.matchAll(/[.!?]["'’”)\]]*(?=\s|$)/g)];
+  const tail = plain.slice(ends.length ? ends.at(-1).index + ends.at(-1)[0].length : 0).trim();
+  return ends.length + (!tail || /^\([^()]*\)$/.test(tail) ? 0 : 1);
 }
-// A line without what GitHub never shows as a link or code: HTML comments and backslash-escaped links.
-const shown = (text) => text.replace(/<!--[\s\S]*?-->/g, '').replace(/\\\[[^\]]*\\?\]\([^)]*\)/g, '');
+// A line without what GitHub never shows as a link or code: HTML comments and tags, and backslash-escaped links.
+const shown = (text) => text.replace(/<!--[\s\S]*?-->/g, '').replace(/<\/?[a-z][a-z0-9-]*(?:\s[^>]*)?\/?>/gi, '').replace(/\\\[[^\]]*\\?\]\([^)]*\)/g, '');
 const HEADING = /^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$/;
 // A level-2 section of a doc: the headings before its heading, the heading after it, its list items, each with its
 // line number and its continuation lines joined as GitHub joins an indented or lazy one, and the lines of any paragraph
@@ -74,18 +75,25 @@ function section(file, title) {
   const lines = [...prose(readFileSync(file, 'utf8'))];
   const at = lines.findIndex(({ line }) => { const heading = line.match(HEADING); return heading?.[1] === '##' && heading[2].toLowerCase() === title.toLowerCase(); });
   if (at < 0) return null;
-  const before = lines.slice(0, at).filter(({ line }) => HEADING.test(line));
+  // A setext heading is a line of = or - right under a line of text.
+  const before = lines.slice(0, at).filter(({ number, line }, i, all) => HEADING.test(line) || (/^ {0,3}(?:=+|-+)\s*$/.test(line) && all[i - 1]?.number === number - 1 && all[i - 1].line.trim()));
   const found = [];
   const stray = [];
   let open = false;
+  let inside = 0;
   let next;
   for (const { number, line } of lines.slice(at + 1)) {
     if (HEADING.test(line)) {
       next = line;
       break;
     }
-    const item = line.match(/^ {0,3}(?:[-*+]|\d{1,9}[.)])\s+(.*)$/);
-    if (item) found.push({ number, text: item[1] });
+    // An item indented to the last item's text is nested in it, so it is part of that line.
+    const item = line.match(/^( {0,3}(?:[-*+]|\d{1,9}[.)])\s+)(.*)$/);
+    const nested = item && found.length && item[1].length - item[1].trimStart().length >= inside;
+    if (item && !nested) {
+      found.push({ number, text: item[2] });
+      inside = item[1].length;
+    } else if (nested) found.at(-1).text += ` ${line.trim()}`;
     else if (found.length && line.trim() && (open || /^\s+\S/.test(line))) found.at(-1).text += ` ${line.trim()}`;
     else if (found.length && line.trim() && !/^\s*<a\s[^>]*>(?:\s*<\/a>)?\s*$/i.test(line)) stray.push(number);
     open = item ? true : open && Boolean(line.trim());
