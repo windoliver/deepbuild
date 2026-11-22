@@ -459,10 +459,7 @@ function runTests(directory, files, { env = {}, timed = [] } = {}) {
     // that can start the copy's hub gets this side's hub binaries in the copy's target/, where that hub looks (#2817).
     let names;
     ({ bin: names, target, hub } = selectBinaries(directory, [...files]));
-    const wanted = [...new Set([...names, ...target])];
-    const make = (into) => buildBinaries(directory, into, wanted, (command, args, options) => spawnIn(directory, command, args, options), { timeout: 0 });
-    // In a bay, binaries kept from an earlier build of the same use and names are laid back instead (#3019).
-    bin = pair?.binaries ? pair.binaries(directory, join(temporary('deep-proof-binaries-'), 'bin'), wanted, make) : make(join(temporary('deep-proof-binaries-'), 'bin'));
+    bin = buildBinaries(directory, join(temporary('deep-proof-binaries-'), 'bin'), [...new Set([...names, ...target])], (command, args, options) => spawnIn(directory, command, args, options), { timeout: 0 });
     env = { ...env, DEEP_BIN_DIR: bin };
   } catch (error) {
     return { results: new Map(), fileErrors: new Map(), unrunnable: new Map(files.map((file) => [file, error.message])) };
