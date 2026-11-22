@@ -141,6 +141,22 @@ fn address() -> PathBuf {
     }
 }
 
+/// The address one forwarded hook reads, once its payload's folder is known: config.json is read for it at most once
+/// (#2651). Unset in the modes that outlive one hook, which read the setting again at each use.
+static HOOK_ADDRESS: OnceLock<PathBuf> = OnceLock::new();
+
+/// Whether this process forwards one hook, its folder read: its address is then read once and kept.
+static ONE_HOOK: AtomicBool = AtomicBool::new(false);
+
+/// The hub's address for this process: one forwarded hook's kept one, or the setting as it reads now.
+fn hub_address() -> PathBuf {
+    if ONE_HOOK.load(Ordering::SeqCst) {
+        HOOK_ADDRESS.get_or_init(address).clone()
+    } else {
+        address()
+    }
+}
+
 /// The dev hub `deep hub use --root` sent this worktree to in `uses`, the `hub.use` setting, the longest such
 /// worktree winning.
 fn worktree_hub(uses: Option<&Value>) -> Option<PathBuf> {
@@ -482,7 +498,7 @@ fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> 
         (&paths, &args, names),
         cwd.as_deref(),
         &home,
-        &address(),
+        &hub_address(),
     );
     call.counts = counts;
     Some(call)
@@ -810,7 +826,7 @@ fn exchange(
             Some(stream) => stream,
             None => return (None, late, String::new()),
         },
-        None => match UnixStream::connect(address()) {
+        None => match UnixStream::connect(hub_address()) {
             Ok(stream) => {
                 REACHED.store(true, Ordering::SeqCst);
                 remote::Stream::Unix(stream)
@@ -830,7 +846,7 @@ fn exchange(
     // A hub older than one this machine has seen of it is a copy left behind: nothing goes to it (#1338).
     let hub = match member(&hello_value, "hub") {
         Some(Value::String(id)) => id.clone(),
-        _ => format!("unix:{}", address().display()),
+        _ => format!("unix:{}", hub_address().display()),
     };
     if let Some(why) =
         remote::refused_generation(&home(), &hub, integer(member(&hello_value, "generation")))
@@ -1230,6 +1246,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     if let Some(Value::String(cwd)) = parsed.as_ref().and_then(|p| member(p, "cwd")) {
         set_cwd(PathBuf::from(cwd));
     }
+    ONE_HOOK.store(true, Ordering::SeqCst);
     // A clone of a project this machine joined reaches that project's hub, and the watchdog waits the route's time.
     let joined = REMOTE.get_or_init(|| {
         current_cwd()
