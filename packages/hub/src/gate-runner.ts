@@ -174,7 +174,7 @@ interface Claim { claim: string; session: string; task: string; cwd: string; bas
 interface Changes { changed: string[]; configs: Map<string, string>; scripts: boolean; unread?: string }
 /** The least time a read of what a claim changed is given (#1869). */
 const READ_FLOOR_MS = 5_000;
-/** Read with the snapshot's own git options (#1869): fsmonitor off, its 256 MB of output, and all of them ended within `ms`, by SIGKILL. */
+/** Read as the snapshot's git reads are bounded (#1869): fsmonitor off, up to 256 MB of output, and all of them ended within `ms`, by SIGKILL. */
 async function changesOf(cwd: string, base: string, ms: number): Promise<Changes> {
   const deadline = Date.now() + ms;
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
