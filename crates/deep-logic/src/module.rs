@@ -47,7 +47,7 @@ const STEP: i64 = 11_760_000;
 /// `fires`, each with the form its reader takes (#1973); `wasm` is the program's bytes, which
 /// whoever holds the evidence store inlines by the program's hash before a frame, as a vector's
 /// outline is.
-const PARAMS: [(&str, &str); 23] = [
+const PARAMS: [(&str, &str); 24] = [
     ("program", "asset ID"),
     ("debug", "asset ID"),
     ("step_rate", "Hz"),
@@ -93,6 +93,11 @@ const PARAMS: [(&str, &str); 23] = [
     (
         "fog",
         "{grid: <logic>.<name> (i32, two bits a player), size: [cols, rows], origin?: [x, z], cell?: m}",
+    ),
+    // #211: a world past its memory, in pages it asks for between steps.
+    (
+        "pages",
+        "{max: u32, slots: u16, moves?: u8, lead?: u8, init?: zero | {asset: asset ID} | {gen: <pack>.<provider>, params}, written_max?: integer, web_max?: integer}",
     ),
     // process@1's kind names, which its kind rules read (#980).
     ("process", "{kinds: [name]}"),

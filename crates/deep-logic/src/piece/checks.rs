@@ -17,6 +17,7 @@ pub(super) struct Declared {
     assets: Vec<String>,
     links: Vec<(String, String)>,
     saves: Option<Value>,
+    pages: Option<Value>,
     carry: Option<Value>,
     carry_in: Option<crate::carry::CarryIn>,
     profile: Option<Value>,
@@ -64,6 +65,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             "services",
             "mirrors",
             "preview",
+            "pages",
             "lanes",
             // #552: a fog grid, which gates its occurrences' readers on each copy.
             "fog",
@@ -295,6 +297,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
         ring,
         assets,
         saves: params.get("saves").cloned(),
+        pages: params.get("pages").cloned(),
         carry: params.get("carry").cloned(),
         carry_in: match params.get("carry_in") {
             None => None,
@@ -1040,6 +1043,17 @@ pub fn check_in(
                 None
             }
         };
+        // #211: the page region, after every other region, and init's pages.
+        let pages = match &d.pages {
+            None => None,
+            Some(v) => match crate::pages::of(v, &given, memory, &regions, &segments, &asset) {
+                Ok(p) => Some(p),
+                Err(r) => {
+                    refused.push(r);
+                    None
+                }
+            },
+        };
         let carry = match d
             .carry
             .as_ref()
@@ -1124,6 +1138,7 @@ pub fn check_in(
             services_at: services_at.unwrap_or(0),
             mirrors,
             preview,
+            pages,
             lanes,
             process: d.process.clone(),
         });
