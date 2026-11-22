@@ -994,13 +994,25 @@ mod tests {
         };
         let presses = [press(2, 0), press(5, 1), press(7, 2)];
         let mut rec = Record::default();
-        let mut on = World::new(piece.clone(), track_of(&presses), false, Planted::default(), &mut rec, None)
-            .expect("the fixture starts");
+        let mut on = World::new(
+            piece.clone(),
+            track_of(&presses),
+            false,
+            Planted::default(),
+            &mut rec,
+            None,
+        )
+        .expect("the fixture starts");
         on.run_through(3 * step, &mut rec);
         let saved = World::saved_of(&on.snapshot());
         assert_eq!(saved, on.saved(), "the snapshot's plain data is saved's");
-        let mut restored = World::from_saved(piece.clone(), track_of(&presses), &saved, Planted::default())
-            .expect("the state loads");
+        let mut restored = World::from_saved(
+            piece.clone(),
+            track_of(&presses),
+            &saved,
+            Planted::default(),
+        )
+        .expect("the state loads");
         on.run_through(9 * step, &mut rec);
         restored.run_through(9 * step, &mut Record::default());
         assert_eq!(on.saved(), restored.saved());
