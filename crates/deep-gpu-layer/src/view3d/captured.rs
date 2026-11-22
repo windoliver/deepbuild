@@ -142,7 +142,7 @@ pub(super) fn captured(
         // Each operator output as it stood when this frame drew (#483), and each point
         // set's points in its item's space (#503).
         let (keys, fx2, dir) = (args.read.clone(), fx.clone(), out.to_string());
-        let models = crate::video::models(&evaluated);
+        let models = crate::video::models(evaluated);
         let read = app.worker.call(move |state| -> Result<Value, Value> {
             let device = state.gpu.device();
             let fx = lock(&fx2);
