@@ -104,8 +104,7 @@ const SHADER: &str = concat!(
     include_str!("tint.wgsl"),
     include_str!("caps.wgsl"),
     include_str!("inset_lit.wgsl"),
-    include_str!("inset.wgsl"),
-    include_str!("hidden.wgsl")
+    include_str!("inset.wgsl")
 );
 const MASK_DUMP: &str = include_str!("mask_dump.wgsl");
 /// The line that plants #425's per-band mask keys.
@@ -121,15 +120,6 @@ fn shader(planted: &Planted) -> String {
     }
     if planted.ids_by_compacted_place {
         source = source.replace(IDS_BY_ROW, "const IDS_BY_PLACE: bool = true;");
-    }
-    for (on, name) in [
-        (planted.hidden.draws_visible, "HIDDEN_WHERE_SHOWN"),
-        (planted.hidden.stacks_layers, "HIDDEN_STACKS"),
-    ] {
-        if on {
-            let off = format!("{name}: bool = false");
-            source = source.replace(&off, &format!("{name}: bool = true"));
-        }
     }
     source
 }

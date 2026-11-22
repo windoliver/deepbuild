@@ -193,7 +193,22 @@ impl Hidden {
             bias: Default::default(),
         };
         let buffers = mesh_buffers();
-        let module = &r.scene_module;
+        // The scene's shader with the hidden passes' stages, in a module of their own, so a
+        // renderer that draws no hidden view compiles and holds the scene's module as it stands.
+        let mut source = crate::shader(&r.planted) + include_str!("hidden.wgsl");
+        for (on, name) in [
+            (r.planted.hidden.draws_visible, "HIDDEN_WHERE_SHOWN"),
+            (r.planted.hidden.stacks_layers, "HIDDEN_STACKS"),
+        ] {
+            if on {
+                let off = format!("{name}: bool = false");
+                source = source.replace(&off, &format!("{name}: bool = true"));
+            }
+        }
+        let module = &d.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some(PASS),
+            source: wgpu::ShaderSource::Wgsl(source.into()),
+        });
         let depth = culled(
             d,
             1,
@@ -268,6 +283,10 @@ impl Renderer {
     /// This frame's hidden views, with their targets at the frame's size; none when no item's is
     /// above 0.
     pub(crate) fn hidden_frame(&mut self, device: &Device) -> Option<Frame> {
+        // A frame with no hidden view reads nothing more and allocates nothing.
+        if self.hidden.is_none() || self.batches.values().all(|b| b.hidden.is_empty()) {
+            return None;
+        }
         // Each item's draws, an item once whatever its records' order, and each pick ID's item.
         let mut items: Vec<(String, Vec<Draw>)> = Vec::new();
         let mut table = vec![0u32; self.picks.len() + 1];

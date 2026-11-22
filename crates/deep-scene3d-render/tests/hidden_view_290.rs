@@ -16,17 +16,34 @@ fn look() -> Look3 {
     Look3::read(&json!({"roles": {"accent": "#1aa3c8", "ground": "#000000"}})).unwrap()
 }
 
+/// What stands in the frame beside the two bricks.
+#[derive(Clone, Copy, PartialEq)]
+enum With {
+    Nothing,
+    /// A wall before both bricks.
+    Wall,
+    /// The near brick additive, which writes no depth and no object ID, the tile straight
+    /// behind it and smaller, and a post of another item between the two.
+    Post,
+}
+
 /// Two bricks of one instancer at 160 × 120, a clay one and a slate one half behind it, its
-/// hidden view at `opacity` (none: no such field), and with `wall` a wall before both.
-fn scene(opacity: Option<f64>, wall: bool) -> Scene {
+/// hidden view at `opacity` (none: no such field).
+fn scene(opacity: Option<f64>, with: With) -> Scene {
+    let post = with == With::Post;
+    let (far, tile) = if post { (0.0, 1.0) } else { (0.8, 1.6) };
     let mut bricks = json!({"kind": "instance@1", "params": {
         "of": ["brick", "tile"], "ids": [0, 1], "proto": [0, 1],
-        "pos": [[0, 1, 0], [0.8, 1, -3]]}});
+        "pos": [[0, 1, 0], [far, 1, -3]]}});
     if let Some(o) = opacity {
         bricks["hidden_view"] = json!({"opacity": o});
     }
     let paint =
         |c: [f64; 3]| json!({"kind": "material@1", "params": {"base_color": c, "roughness": 1}});
+    let mut clay = paint([0.85, 0.45, 0.1]);
+    if post {
+        clay["params"]["alpha_mode"] = json!("add");
+    }
     let mut items = vec![
         (
             "cam",
@@ -38,7 +55,7 @@ fn scene(opacity: Option<f64>, wall: bool) -> Scene {
             json!({"kind": "light.sun@1", "params": {"illuminance": 3, "color": [1, 1, 1], "shadow": false},
                 "at": {"rot": [-35, 25, 0]}}),
         ),
-        ("clay", paint([0.85, 0.45, 0.1])),
+        ("clay", clay),
         ("slate", paint([0.1, 0.3, 0.85])),
         ("stone", paint([0.5, 0.5, 0.5])),
         (
@@ -48,17 +65,19 @@ fn scene(opacity: Option<f64>, wall: bool) -> Scene {
         ),
         (
             "tile",
-            json!({"kind": "mark.box@1", "params": {"size": [1.6, 1.6, 0.4]}, "material": "slate",
+            json!({"kind": "mark.box@1", "params": {"size": [tile, tile, 0.4]}, "material": "slate",
                 "visible": false}),
         ),
         ("bricks", bricks),
     ];
-    if wall {
-        items.push((
-            "wall",
-            json!({"kind": "mark.box@1", "params": {"size": [8, 6, 0.2]}, "material": "stone",
-                "at": {"pos": [0, 1, 3]}}),
-        ));
+    let stone = |size: [f64; 3], pos: [f64; 3]| {
+        json!({"kind": "mark.box@1", "params": {"size": size}, "material": "stone",
+            "at": {"pos": pos}})
+    };
+    match with {
+        With::Wall => items.push(("wall", stone([8.0, 6.0, 0.2], [0.0, 1.0, 3.0]))),
+        With::Post => items.push(("post", stone([0.5, 3.0, 0.2], [0.0, 1.0, -1.5]))),
+        With::Nothing => {}
     }
     let items: serde_json::Map<String, Value> = (items.into_iter().enumerate())
         .map(|(k, (id, mut item))| {
@@ -95,8 +114,8 @@ fn an_element_behind_another_element_of_its_instancer_draws_no_hidden_view() {
         |a: &[u8], b: &[u8]| a.chunks(4).zip(b.chunks(4)).filter(|(x, y)| x != y).count();
 
     // The pass runs and draws: behind a wall the bricks show through it.
-    let (walled, none) = draw(&scene(None, true));
-    let (through, drawn) = draw(&scene(Some(0.4), true));
+    let (walled, none) = draw(&scene(None, With::Wall));
+    let (through, drawn) = draw(&scene(Some(0.4), With::Wall));
     assert!(none.is_empty(), "no hidden view, no pass: {none:?}");
     assert_eq!(drawn, ["bricks"], "one item's hidden view draws");
     assert!(
@@ -106,12 +125,26 @@ fn an_element_behind_another_element_of_its_instancer_draws_no_hidden_view() {
     );
 
     // In plain sight nothing hides the item, the far brick behind the near one included.
-    let (plain, _) = draw(&scene(None, false));
-    let (viewed, drawn) = draw(&scene(Some(0.4), false));
+    let (plain, _) = draw(&scene(None, With::Nothing));
+    let (viewed, drawn) = draw(&scene(Some(0.4), With::Nothing));
     assert_eq!(drawn, ["bricks"], "its passes run in plain sight too");
     assert_eq!(
         differing(&plain, &viewed),
         0,
         "pixels the hidden view changed where only the item's own clay brick hides its slate one"
+    );
+    // A part that writes no depth and no object ID is still its item's nearest surface: behind
+    // the additive brick, in plain sight, the post hides the item's tile, and nothing draws.
+    let (plain, _) = draw(&scene(None, With::Post));
+    let (viewed, drawn) = draw(&scene(Some(0.4), With::Post));
+    assert_eq!(
+        drawn,
+        ["bricks"],
+        "its passes run behind the additive brick"
+    );
+    assert_eq!(
+        differing(&plain, &viewed),
+        0,
+        "pixels the hidden view changed where the item's nearest surface, the additive brick, shows"
     );
 }
