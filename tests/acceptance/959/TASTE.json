@@ -1,0 +1,14 @@
+{
+  "issue": 959,
+  "criterion": "#959.3faaa651",
+  "verdict": "looks_right",
+  "who": "the owner (GitHub windoliver), in the #959 session: shown the three frames and the recording in PR #3049's body and in docs/evidence/959, answered \"Looks right\" to \"do the three frames and the fog recording of the strategy map look right?\"",
+  "when": "2026-11-22T05:46:35Z",
+  "screenshots": {
+    "ridge-and-blips.png": "f635e6e9b8a12b6b2c951014a56e988d205f2b347d3e7fe4e9ccda814f5df77c",
+    "last-seen-ghost.png": "6a8b70c286db6651c47b8f9cc13c746edd67c099f71096eab5e9c7e781c9a2ce",
+    "cloaked-unit-revealed.png": "e985442b6a18a4edca8aaab81ee2b09006589e2f2c705599d0aae752f1654189",
+    "fog-changing.apng": "6bb5e6640aae01ffbd34e4a1fa6de54e5214be170d86f980f361b44b31ffeb76"
+  },
+  "note": "The four files as the check run wrote them on 6893cccd8, the branch merged with main 5f5791e2d; every run of the suite since the first has written the same bytes."
+}

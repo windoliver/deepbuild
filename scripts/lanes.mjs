@@ -1262,6 +1262,13 @@ byHand.push('tests/acceptance/2204/rules-unreadable.test.ts');
 // defaults that commit shipped and runs both tests of each file in its place (its REDRAFT.md).
 byHand.push('tests/acceptance/1097/computed.test.ts', 'tests/acceptance/1097/depth.test.ts');
 
+// #323's first draft of review.test.ts is kept as written, by hand only: its prompts name no pull request, so since #84
+// (d6aacc01b) the pr-needs-ask default holds the session's `gh pr create`, no PR is opened and no review thread is read
+// (#2171); the blind redraft, 323-redraft-2171/, types a request that names the PR and runs the file's five tests in its place
+// (its REDRAFT.md and RUNS.txt).
+byHand.push('tests/acceptance/323/review.test.ts');
+alone.push('tests/acceptance/323-redraft-2171/');
+
 // #2776's files build deep-show (full with the test module test.paths) and export 3D scenes to the web.
 alone.push('tests/acceptance/2776/seal.test.ts', 'tests/acceptance/2776/export.test.ts', 'tests/acceptance/2776/listing.test.ts');
 
@@ -1291,6 +1298,9 @@ alone.push('tests/acceptance/2777/');
 // ac8-budgets times release builds.
 alone.push('tests/acceptance/211/');
 timed.push('tests/acceptance/211/ac8-budgets.test.ts');
+
+// #2896's files (blind) start real hubs with deep mcp stand-ins and walk 10,000 rows through the debug canvas core.
+alone.push('tests/acceptance/2896/');
 
 // #981's files (blind) each build deep-logic and #416's assembler; ac7 starts headless Chrome, ac5 runs eight simulated
 // hours, and ac8 judges a step's and a route search's time on the reference Mac.

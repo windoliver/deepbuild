@@ -1,0 +1,84 @@
+# Runs for tests/acceptance/323-redraft-2171 (#2171), macOS arm64, Node 24.22.0, 2026-11-21 UTC, 1-minute load 130-200 from other sessions.
+# Each: npm ci, npm run build --workspaces, cargo build --locked -q -p deep-hook first. Paths and session IDs redacted; trimmed to results and failing assertions.
+
+## 1. The frozen original on main 9905e7428: AC12 and AC13 fail, as #2171 reports
+## npx vitest run --root tests/acceptance/323 review.test.ts --no-file-parallelism --testTimeout=600000
+     × AC12 #323.9ddcf826 PR 21 has two unresolved threads: the stop's claim gets one open item for each, naming the thread and quoting its first comment, and doesn't pass 29434ms
+     × AC13 #323.b0a29209 PRRT_kwDOAcme0023a, resolved by the session's account you-gh, keeps its open item open naming the session; PRRT_kwDOAcme0023b, resolved by maya, closes its item 43166ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+Error: AC12 #323.9ddcf826 the unresolved review thread PRRT_kwDOAcme0021a on PR 21 must become one open item of session:<id>#0, naming the thread: 0 name it; the task's open items are none
+Error: AC13 #323.b0a29209 at the first stop both threads are unresolved, so each is an open item of session:<id>#0: PRRT_kwDOAcme0023a has none, PRRT_kwDOAcme0023b has none; the task's open items are none
+      Tests  2 failed | 3 passed (5)
+
+## 2. Why: a replay of AC12's scenario on main with the record dumped. The session's gh pr create is denied at PreToolUse:
+exit 2, stderr "DeepBuild denied this (guard pr-needs-ask): no request you typed in this thread names it. DeepBuild is holding this: `gh pr create --title \"Reject expired tokens\" --body \"Body.\"` needs your authority and waits for ask:<id>. Once you say yes, run the same call again."
+The record then holds tool.before (matched pr-needs-ask), ask.created (authority), no tool.after for the call, no session.reading "Opened pull request …",
+no open_item.opened, and verdict.made PASS.
+
+## 3. The commit after which AC12 first fails: d6aacc01b (#84, 2026-11-05), which added pr-needs-ask. A fresh clone from GitHub, the same command at each commit.
+## Its parent 4b6c75216: AC12 and AC13 pass. The one failure is BLOCKED in setup under load (the task never landed), not a judged assertion.
+     × AC13 #323.b0a29209 (wrong program) a gate that counts every resolved thread as closed (DEEP_HUB_PLANT=resolved-counts-closed) fails this test, naming PRRT_kwDOAcme0023a 63047ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+Error: BLOCKED: AC13 #323.b0a29209 the prompt "make the auth middleware refuse expired tokens" must open task session:<id>#0 under the session's thread (none recorded)
+      Tests  1 failed | 4 passed (5)
+## d6aacc01b: AC12 fails at its assertion with #2171's message. The BLOCKED lines are the same setup timeout under load.
+     × AC12 #323.9ddcf826 PR 21 has two unresolved threads: the stop's claim gets one open item for each, naming the thread and quoting its first comment, and doesn't pass 26961ms
+     × AC12 #323.9ddcf826 (wrong program) a gate that reads only the PR body (DEEP_HUB_PLANT=pr-body-only) misses both threads and fails this test, naming PRRT_kwDOAcme0021a 64733ms
+     × AC13 #323.b0a29209 PRRT_kwDOAcme0023a, resolved by the session's account you-gh, keeps its open item open naming the session; PRRT_kwDOAcme0023b, resolved by maya, closes its item 64382ms
+     × AC14 #323.d6d5ec0c the session's `gh api … /comments/9101/replies`, tried twice, is held at PreToolUse both times, before anything is posted, as one ask 0ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+Error: AC12 #323.9ddcf826 the unresolved review thread PRRT_kwDOAcme0021a on PR 21 must become one open item of session:<id>#0, naming the thread: 0 name it; the task's open items are none
+Error: BLOCKED: AC12 #323.9ddcf826 the prompt "make the auth middleware reject expired tokens" must open task session:<id>#0 under the session's thread (none recorded)
+Error: BLOCKED: AC13 #323.b0a29209 the prompt "make the auth middleware refuse expired tokens" must open task session:<id>#0 under the session's thread (none recorded)
+      Tests  4 failed | 1 passed (5)
+
+## 4. Only cause on main: main 9905e7428 with pr-needs-ask's mode block -> watch in the working tree (an experiment, reverted, never committed): the frozen file passes
+      Tests  5 passed (5)
+
+## 5. The redraft on main 9905e7428: all five pass
+## npx vitest run --root tests/acceptance/323-redraft-2171 --no-file-parallelism --testTimeout=600000
+      Tests  5 passed (5)
+## node node_modules/typescript/bin/tsc -p tests/acceptance/323-redraft-2171/tsconfig.json
+exit 0
+
+## 6. Mutant: a scratch copy of this folder whose wrong-program tests start the hub with no plant (the right program in the plant's slot).
+## Both fail, as they must. Copy deleted after.  npx vitest run --root <copy> --no-file-parallelism --testTimeout=600000 -t "wrong program"
+     × AC12 #323.9ddcf826 (wrong program) a gate that reads only the PR body (DEEP_HUB_PLANT=pr-body-only) misses both threads and fails this test, naming PRRT_kwDOAcme0021a (redraft 2171) 25940ms
+     × AC13 #323.b0a29209 (wrong program) a gate that counts every resolved thread as closed (DEEP_HUB_PLANT=resolved-counts-closed) fails this test, naming PRRT_kwDOAcme0023a (redraft 2171) 38594ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+Error: AC12 #323.9ddcf826 the planted gate must fail this test: it passed
+Error: AC13 #323.b0a29209 the planted gate must fail this test: it passed
+      Tests  2 failed | 3 skipped (5)
+
+## 7. node scripts/affected.mjs --list tests/acceptance/323/review.test.ts tests/acceptance/323-redraft-2171/review.test.ts (with this change's lanes.mjs)
+alone vitest: tests/acceptance/323-redraft-2171/review.test.ts
+SKIP tests/acceptance/323/review.test.ts (by hand)
+
+## 8. By hand, end to end: a real deep hub run and deep-hook against the suite's recorded GitHub answers (a scratch file beside this folder, deleted after).
+## One unresolved thread on PR 31; then the reviewer resolves it. The item opens at the first stop and closes at the second.
+## Both verdicts read FAIL because the PR claim's review check can't run in this world, so the verdict alone doesn't show the item's hold; AC12's test judges that.
+1. gh pr create at PreToolUse: allow (allowed true)
+2. PR reading: log_pos 22 session.reading {"reading":"Opened pull request https://github.com/acme/shop/pull/31"}
+3. First stop, thread PRRT_kwDOAcme0031a unresolved. Open items of the task: 1
+   log_pos 29 open_item.opened {"task_ref":"session:<id>#0","text":"Review thread PRRT_kwDOAcme0031a on https://github.com/acme/shop/pull/31 (src/auth.js:2), https://github.com/acme/shop/pull/31#discussion_r9301, first comment by maya: “Compare with >= here: a token whose exp is exactly now still passes.”","item":"47f665b04cc43208b5d6e0be6726f0b44089dfa783153cd1e7e28c9ef3925340","from":"review_thread"}  [open: tr
+   verdict: "FAIL"; stop's reply: "https://github.com/acme/shop/pull/31 · Part of · review: run: the review stopped before i… · 2 tests · next: agent\nDeepBuild: https://github.com/acme/shop/pull/31 is open as Part of its issue, with review still unmet. Keep working on it in the same pull request: push to its branch, open no new one.\nhttps://github.com/acme/shop/pull/31 · Part of · review: run: the review st
+4. Second stop, PRRT_kwDOAcme0031a resolved by maya.
+   log_pos 96 open_item.closed {"task_ref":"session:<id>#0","text":"Review thread PRRT_kwDOAcme0031a on https://github.com/acme/shop/pull/31 (src/auth.js:2), https://github.com/acme/shop/pull/31#discussion_r9301, first comment by maya: “Compare with >= here: a token whose exp is exactly now still passes.”","item":"47f665b04cc43208b5d6e0be6726f0b44089dfa783153cd1e7e28c9ef3925340","by":"review thread PRRT_kwDOAcme0
+   item 47f665b04cc4 open: false
+   verdict: "FAIL"; stop's reply: "https://github.com/acme/shop/pull/31 · Part of · review: run: the review stopped before its asserti… · next: agent\nDeepBuild: https://github.com/acme/shop/pull/31 is open as Part of its issue, with review still unmet. Keep working on it in the same pull request: push to its branch, open no new one.\nhttps://github.com/acme/shop/pull/31 · Part of · review: run: the review sto
+hub stderr: ""
+
+## 9. Corrections and notes on reading the runs above (added after review; nothing above was changed)
+- Section 8's last clause, "AC12's test judges that", is wrong and is withdrawn. Once the session's PR is recorded, the claim also gets
+  the review check, which can't run in this world and fails ("the review stopped before its assertion"), at both stops, the second
+  after the item closed. So the verdict is not PASS with or without an open thread item, and AC12's "doesn't pass" assertion is met by
+  the failing review check too. No run in this file isolates the item's hold on the verdict. What the runs show is each thread's item
+  opening, staying open for the session's own resolution, and closing for the reviewer's. The frozen judge is copied exactly; making
+  that assertion tell the two apart is a further dispute, not this redraft's.
+- Section 8 also answers REDRAFT.md's open question, whether a prompt naming the pull request changes anything else the hub does: the
+  stop's reply gains the PR line "… is open as Part of its issue, with review still unmet. Keep working on it in the same pull
+  request …". It touches no judged assertion: the reply doesn't start with PASS, and the items and asks are as before.
+- Section 3, d6aacc01b: the four failures have two causes. AC12's right-program test fails at its judged assertion. The other three are
+  one setup BLOCKED each for AC12's wrong-program run and AC13's scenario; AC14 (0 ms) reads AC13's cached scenario, so it repeats that
+  BLOCKED. The one pass there is AC13's wrong-program test.
+- Section 8's lines are cut at 420 characters by the redaction filter; the cut-off first-stop line ends "[open: true]".

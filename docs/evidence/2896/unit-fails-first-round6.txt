@@ -1,0 +1,27 @@
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/fix-2896-reply-fits-client-d66389/packages/hub
+
+ ❯ test/reply-fit.test.ts (10 tests | 1 failed) 182ms
+   ❯ an error as Codex receives it (1)
+     × holds a quote-dense, non-ASCII refusal to Codex 0.144.0's 10,000 bytes as Codex counts them 73ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/reply-fit.test.ts > an error as Codex receives it > holds a quote-dense, non-ASCII refusal to Codex 0.144.0's 10,000 bytes as Codex counts them
+AssertionError: expected 14273 to be less than or equal to 10000
+ ❯ test/reply-fit.test.ts:70:29
+     68|     const refusal = { code: 'type', path: '/params/arguments/label', r…
+     69|     const out = await refusalFits(refusal, limit.error_cap);
+     70|     expect(codexBytes(out)).toBeLessThanOrEqual(limit.error.bytes!);
+       |                             ^
+     71|   });
+     72| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 9 passed (10)
+   Start at  16:52:25
+   Duration  338ms (tests 71%, transform 19%, import 9%, worker 1%)
+
