@@ -171,8 +171,10 @@ interface Claim { claim: string; session: string; task: string; cwd: string; bas
 interface Changes { changed: string[]; configs: Map<string, string>; scripts: boolean }
 async function changesOf(cwd: string, base: string): Promise<Changes> {
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
-  const git = (args: string[]): Promise<string[]> => new Promise((done) => execFile('git', ['-c', 'core.hooksPath=/dev/null', ...args], { cwd, env, maxBuffer: 64 << 20 }, (error, out) => done(error ? [] : out.split('\n').filter(Boolean))));
-  const [diff, others, tracked] = await Promise.all([git(['diff', '--name-only', '--no-renames', base]), git(['ls-files', '--others', '--exclude-standard']), git(['ls-files'])]);
+  const git = (args: string[]): Promise<string> => new Promise((done) => execFile('git', ['-c', 'core.hooksPath=/dev/null', ...args], { cwd, env, maxBuffer: 64 << 20 }, (error, out) => done(error ? '' : out)));
+  // Paths as git stores them (#3114): with -z, never quoted and escaped by core.quotePath, so they match a run's reads.
+  const paths = async (args: string[]): Promise<string[]> => (await git(args)).split('\0').filter(Boolean);
+  const [diff, others, tracked] = await Promise.all([paths(['diff', '-z', '--name-only', '--no-renames', base]), paths(['ls-files', '-z', '--others', '--exclude-standard']), paths(['ls-files', '-z'])]);
   const configs = new Map<string, string>();
   for (const path of new Set([...tracked, ...others].filter(runnerConfig))) {
     const text = await readFile(join(cwd, path), 'utf8').catch(() => undefined);
@@ -180,7 +182,7 @@ async function changesOf(cwd: string, base: string): Promise<Changes> {
   }
   // Whether package.json's scripts changed: the script a check runs is its own.
   const scriptsOf = (text: string | undefined): string => { try { return JSON.stringify((JSON.parse(text ?? '{}') as { scripts?: unknown }).scripts ?? null); } catch { return 'unreadable'; } };
-  const scripts = diff.includes('package.json') && scriptsOf((await git(['show', `${base}:package.json`])).join('\n')) !== scriptsOf(await readFile(join(cwd, 'package.json'), 'utf8').catch(() => undefined));
+  const scripts = diff.includes('package.json') && scriptsOf(await git(['show', `${base}:package.json`])) !== scriptsOf(await readFile(join(cwd, 'package.json'), 'utf8').catch(() => undefined));
   return { changed: [...new Set([...diff, ...others])].sort(), configs, scripts };
 }
 /** Run outcomes a key keeps: a result. Missing, stopped and uncounted runs say nothing of the key, so they never carry. */
