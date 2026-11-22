@@ -583,6 +583,9 @@ pub struct Item {
     pub lanes: Option<std::sync::Arc<crate::lanes::Graph>>,
     /// process@1's kind names its `process` gives, by kind index (#980).
     pub process: Option<Vec<String>>,
+    /// The table its `separation` declares, its movers and minima checked, whose bytes are its
+    /// asset 0 (#1255).
+    pub separation: Option<std::sync::Arc<crate::separation::Table>>,
     /// What the item's bake key covers of it: its rewritten program, its fields as given and
     /// its assets' hashes (Logic: checkpoints and bake).
     pub content: String,

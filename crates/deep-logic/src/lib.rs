@@ -40,6 +40,7 @@ pub mod probe;
 pub mod process;
 pub mod profile;
 pub mod saves;
+pub mod separation;
 pub mod services;
 pub mod shell;
 pub mod track;

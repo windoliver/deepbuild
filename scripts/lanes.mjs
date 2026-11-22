@@ -294,6 +294,8 @@ timed.push('tests/acceptance/1485/panel.test.ts');
 // #1486's files build deep-canvas-render in release; grid.test.ts times the first screen and the UI thread's frames.
 alone.push('tests/acceptance/1486/');
 timed.push('tests/acceptance/1486/grid.test.ts');
+// #2494's files build deep-show and the app, start a hub each and open the app's window.
+alone.push('tests/acceptance/2494/');
 // #1485's first AC2 draft is kept as written, by hand only: it draws its five pictures in 20 u boxes and needs the
 // fifth refused, where image@1's budget now counts the levels a frame draws (#1486); its blind redraft,
 // 1485-redraft-ac2/, draws them at full size and runs in its place.
@@ -1275,6 +1277,8 @@ timed.push('tests/acceptance/211/ac8-budgets.test.ts');
 // hours, and ac8 judges a step's and a route search's time on the reference Mac.
 alone.push('tests/acceptance/981/');
 timed.push('tests/acceptance/981/ac8-budget.test.ts');
+// #1255's folder (blind) runs alone by its lane.json; ac5-budget.test.ts times conflicts over forty movers with judgeLimit.
+timed.push('tests/acceptance/1255/ac5-budget.test.ts');
 
 // #2898's files (blind) each start real hubs, plug-ins and jobs and hold 40 s deep_wait calls; no timing.
 alone.push('tests/acceptance/2898/');

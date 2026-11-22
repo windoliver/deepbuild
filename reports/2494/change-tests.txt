@@ -1,0 +1,13 @@
+{ 122.46 107.59 122.51 }
+The hub isn't answering; start it with deep hub start. `npx vitest run --root tests/acceptance/2494 --no-file-parallelism` runs with no lease.
+
+ RUN  v5.0.5 <work>/tests/acceptance/2494
+
+
+ Test Files  2 passed (2)
+      Tests  3 passed (3)
+   Start at  16:07:04
+   Duration  87.47s (tests 100%)
+
+vitest exit 0
+{ 93.66 100.70 118.27 }
