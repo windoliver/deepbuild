@@ -189,6 +189,7 @@ class DeepPlayer extends HTMLElement {
   #live = null;
   #said = new Map();
   #join = null;
+  #start = null;
   #socket = null;
   #waiting = null;
   // #2856: where a failure the player can't recover from stopped the play, `{step, message}`, or null.
@@ -847,6 +848,37 @@ class DeepPlayer extends HTMLElement {
     this.#join.setAttribute('data-deep-join', p.state);
     this.#join.firstChild.textContent = p.text;
     this.#join.lastChild.hidden = p.state !== 'open';
+    this.#startPrompt();
+  }
+
+  /** #278: the player's own Start, for the first player of a room once enough copies have joined, and again after a
+   * match finished: drawn by the player, never the piece, and pressed only by a person's click. */
+  #startPrompt() {
+    const p = this.#player.start_prompt ? JSON.parse(this.#player.start_prompt()) : null;
+    if (!p) { this.#start?.remove(); this.#start = null; if (this.#join) this.#join.hidden = false; return; }
+    if (!this.#start) {
+      this.#start = document.createElement('div');
+      this.#start.setAttribute('role', 'group');
+      this.#start.setAttribute('style', 'position:fixed;left:12px;bottom:12px;max-width:560px;padding:10px 12px;background:#1b1b20;color:#e8e8ec;border:1px solid #55555f;border-radius:6px');
+      const text = document.createElement('p');
+      text.setAttribute('style', 'margin:0 0 8px');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = 'Start';
+      // Only a person's click starts the match: an event a script dispatched carries no user activation.
+      button.addEventListener('click', (e) => {
+        if (!e.isTrusted || navigator.userActivation?.isActive === false) return;
+        const begin = this.#player.press_start(crypto.getRandomValues(new Uint8Array(16)));
+        if (begin && this.#socket?.readyState === WebSocket.OPEN) this.#socket.send(begin);
+        this.#startPrompt();
+      });
+      this.#start.append(text, button);
+      this.appendChild(this.#start);
+    }
+    this.#join.hidden = true;
+    this.#start.setAttribute('data-deep-start', p.state);
+    this.#start.firstChild.textContent = p.text;
+    this.#start.lastChild.hidden = p.state !== 'open';
   }
 
   /** A person clicked Join: the one connection the piece declares, the viewer's browser's own, with no credential. */
@@ -873,6 +905,8 @@ class DeepPlayer extends HTMLElement {
       if (frame.length && ws.readyState === WebSocket.OPEN) ws.send(frame);
       sends();
       this.#notify(this.#player.net_waiting(now));
+      // #278: a room's match that finished leaves the connection open, and the first player's Start shows again.
+      if (this.#start === null && this.#player.start_prompt && this.#player.start_prompt() !== 'null') this.#prompt();
       if (this.#player.net_ended()) { clearInterval(timer); ws.close(); this.#notify(0); this.#prompt(); }
     };
     // #277: a page about to be hidden says its copy is absent, at once; shown again, it catches up.
