@@ -1,0 +1,113 @@
+# #3019 acceptance tests: the run on the base, and the planted program and wrong programs
+
+## The base (512d194bb: bays, no build cache), in a checkout with node_modules from npm ci, node v24.22.0, macOS
+
+$ node --test 'tests/acceptance/3019/*.test.mjs'
+(stack-trace, diff and run-dump lines dropped; home paths read ~, each test's sandbox <sandbox>)
+load averages at the start: 134.89 143.36 135.47; at the end: 195.17 158.82 142.29; wall time 1 m 57 s
+
+✖ #3019.2e0b1f52 the cache's disk use stays under its ceiling, and once it is reached the oldest entries go first (18694.032625ms)
+✔ #3019.abf36a2d a run whose merge base differs from every cached build builds fresh, with the verdicts of no cache (42552.984834ms)
+✔ #3019.abf36a2d a run whose toolchain differs from every cached build builds fresh, with the verdicts of no cache (34834.951542ms)
+✔ #3019.abf36a2d a run whose lockfile differs from every cached build builds fresh, with the verdicts of no cache (39139.823ms)
+✖ #3019.52ff5ba5 two before runs at one merge base build its tree once, and the second says it reused that build, naming the tree hash (32173.794458ms)
+✖ #3019.117a4707 a cached build whose files changed after it was stored is not used: the run builds fresh and says why (18304.524584ms)
+✖ #3019.a73b4639 verdicts with the cache match verdicts without it for the same change, which has a twin (41053.212667ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 3
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 116686.684167
+
+The three AC2 tests pass on the base, as expected: a program with no cache always builds fresh and gives the verdicts
+of no cache. They are proven through their twins (twins/README.md, and below). The toolchain test ran with
+~/.nvm/versions/node/v24.14.0/bin/node as the other node. The other four fail at their assertions, in the test files,
+for the reason the criterion names. Every proof run of the fixture exited 0 with the fixture's right verdicts. So the
+fixture, the bays and the build log work on the base, and only the cache is missing:
+
+✖ #3019.2e0b1f52 (ceiling.test.mjs:22)
+  AssertionError [ERR_ASSERTION]: after the first run, with room for three builds, the cache holds no file with the base build's dist/blob.bin
+  run-1: exit 0, 15.762 s
+  builds: e528abfa413b in <sandbox>/home/deepbuild-bays/1/base/packages/w; fcef694cd76a in <sandbox>/home/deepbuild-bays/1/change/packages/w; b595c465a472 in <sandbox>/home/deepbuild-bays/1/change/packages/w
+  PASS before: tests/acceptance/9301/a.test.mjs › #9301.01285c4c the built value is two: failed on the merge base at its assertion
+  PASS before: tests/acceptance/9301/a.test.mjs › #9301.93bcb403 the built label is w: failed on wrong-label at its assertion
+      at TestContext.<anonymous> (file://~/…/tests/acceptance/3019/ceiling.test.mjs:22:59)
+
+✖ #3019.52ff5ba5 (reuse.test.mjs:18)
+  AssertionError [ERR_ASSERTION]: the merge-base tree e9262348e2ba037e5c88c6a7c8458c47e4ef0181 was built 1 time(s) in the first run and 1 in the second, not once in all
+  run-1: exit 0, 15.853 s
+  builds: e528abfa413b in <sandbox>/home/deepbuild-bays/1/base/packages/w; fcef694cd76a in <sandbox>/home/deepbuild-bays/1/change/packages/w; b595c465a472 in <sandbox>/home/deepbuild-bays/1/change/packages/w
+  run-2: exit 0, 11.887 s
+  builds: e528abfa413b in <sandbox>/home/deepbuild-bays/1/base/packages/w; fcef694cd76a in <sandbox>/home/deepbuild-bays/1/change/packages/w; b595c465a472 in <sandbox>/home/deepbuild-bays/1/change/packages/w
+      at TestContext.<anonymous> (file://~/…/tests/acceptance/3019/reuse.test.mjs:18:10)
+
+✖ #3019.117a4707 (tamper.test.mjs:18)
+  AssertionError [ERR_ASSERTION]: after the first run no file under <sandbox>/home/deepbuild-bays/cache holds the merge base's built packages/w/dist/index.mjs, so no cached build of the merge-base tree is there to change
+  run-1: exit 0, 15.065 s
+      at TestContext.<anonymous> (file://~/…/tests/acceptance/3019/tamper.test.mjs:18:10)
+
+✖ #3019.a73b4639 (verdicts.test.mjs:20, after the three runs' verdicts compared equal and the no-cache check passed)
+  AssertionError [ERR_ASSERTION]: the second run built the merge-base tree e9262348e2ba037e5c88c6a7c8458c47e4ef0181 again (1 times), so it ran without the cache
+  run-2: exit 0, 11.583 s
+  builds: e528abfa413b in <sandbox>/home/deepbuild-bays/1/base/packages/w; fcef694cd76a in <sandbox>/home/deepbuild-bays/1/change/packages/w; b595c465a472 in <sandbox>/home/deepbuild-bays/1/change/packages/w
+      at TestContext.<anonymous> (file://~/…/tests/acceptance/3019/verdicts.test.mjs:20:10)
+
+## The planted program (throwaway, in a scratch folder, deleted, never committed)
+
+To check that the surface can be met and that each twin fails, I laid a planted cache into scratch copies of this
+checkout. The copies held `scripts/`, this folder and a link to `node_modules`. The cache was about 70 lines in
+`bays.mjs`: a `Pair.build(role, early, run)` that `inBay` calls in place of `build(bay)`. Its key is a SHA-256 of the
+tree recipe (tree, bundle and untracked hashes), the overlay hash when the overlay is laid before the build,
+`node --version` and `npm --version` from PATH, and the bay's lock hash. A stored entry is
+`<HOME>/deepbuild-bays/cache/<key>/` holding the files the build made (`files/<path>`) and `meta.json` (their SHA-256s
+and the time stored). On a hit, every stored file is checked against its hash before it is copied into the bay. It
+prints `BUILD {"role","use","tree","key","reused"[,"why"]}`. It evicts the oldest entries until the cache is under
+`DEEP_BUILD_CACHE_BYTES`, before each read and after each store.
+
+Right program, the whole suite (load 141.91 at the start, 122.96 at the end; 3 m 8 s, side by side with the six twin
+runs below):
+✔ #3019.2e0b1f52 the cache's disk use stays under its ceiling, and once it is reached the oldest entries go first (66641.974833ms)
+✔ #3019.abf36a2d a run whose merge base differs from every cached build builds fresh, with the verdicts of no cache (82369.821ms)
+✔ #3019.abf36a2d a run whose toolchain differs from every cached build builds fresh, with the verdicts of no cache (50763.921041ms)
+✔ #3019.abf36a2d a run whose lockfile differs from every cached build builds fresh, with the verdicts of no cache (54932.061292ms)
+✔ #3019.52ff5ba5 two before runs at one merge base build its tree once, and the second says it reused that build, naming the tree hash (62125.655708ms)
+✔ #3019.117a4707 a cached build whose files changed after it was stored is not used: the run builds fresh and says why (58654.621417ms)
+✔ #3019.a73b4639 verdicts with the cache match verdicts without it for the same change, which has a twin (78224.274ms)
+
+Each wrong program (one rule changed in the planted program, as twins/README.md describes), its criterion's file:
+
+install-key-only, fresh.test.mjs:
+✖ … whose merge base differs … (61079.924833ms)
+  AssertionError [ERR_ASSERTION]: the run whose merge base differs built its merge-base tree 79b2ffa2debd50b7ad5f3929b1f19da2975e8c9f 0 times, not once (fresh)
+✔ … whose toolchain differs …   ✔ … whose lockfile differs …
+
+no-toolchain-key, fresh.test.mjs:
+✖ … whose toolchain differs … (33309.580458ms)
+  AssertionError [ERR_ASSERTION]: the run whose toolchain differs built its merge-base tree 1fc97bf0663fa53e1dae4f0579f41e9fca9c6c90 0 times, not once (fresh)
+✔ … whose merge base differs …   ✔ … whose lockfile differs …
+
+packages-only-key, fresh.test.mjs:
+✖ … whose lockfile differs … (40576.035708ms)
+  AssertionError [ERR_ASSERTION]: the run whose lockfile differs built its merge-base tree 5661a1567f1ab238a20b70bbec4222b7da38adff 0 times, not once (fresh)
+✔ … whose merge base differs …   ✔ … whose toolchain differs …
+
+unchecked-files, tamper.test.mjs:
+✖ #3019.117a4707 … (56765.975541ms)
+  AssertionError [ERR_ASSERTION]: after its cached files changed, the run built the merge-base tree 40e630f03e1c6361f2180614d4f979175ba9ac0f 0 times, not once (fresh)
+
+change-build-for-twin, verdicts.test.mjs:
+✖ #3019.a73b4639 … (76347.38275ms)
+  AssertionError [ERR_ASSERTION]: the run that filled the cache gave other verdicts than the run with no cache
+  (its C2 line read "FAIL before: … #9301.93bcb403: fails on neither the merge base nor its planted wrong program")
+
+evicts-newest, ceiling.test.mjs:
+✖ #3019.2e0b1f52 … (65741.417417ms)
+  AssertionError [ERR_ASSERTION]: after the second run the cache holds no file with its base build's dist/blob.bin, one of the three newest entries
+
+The first planted program evicted only after a store. So a run with DEEP_BUILD_CACHE_BYTES=0 still reused entries
+that earlier runs had left, and AC4's "no cache" run wasn't one. The tests now check that run (assertNoCache: no
+reused BUILD line, and the merge-base tree built once), and the planted program evicts before each read too. The
+results above are from that second round.

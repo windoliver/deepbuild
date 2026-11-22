@@ -50,8 +50,8 @@ pub const REWIND: &str = ":rewind";
 /// #277: the key a track keeps the net module's seat entries under, `seat {player, state}`, each
 /// entry's value the state's number in `SEATS`.
 pub const SEAT: &str = ":seat";
-/// #277: a seat's states as `net.seats` numbers them, from 1.
-pub const SEATS: [&str; 3] = ["left", "absent", "back"];
+/// #277: a seat's states as `net.seats` numbers them, from 1; #278 adds `joined`.
+pub const SEATS: [&str; 4] = ["left", "absent", "back", "joined"];
 
 /// #860: where a rewind returns on the current branch: back n stops (n ≥ 1) from the current
 /// one, or to the stop at step k.

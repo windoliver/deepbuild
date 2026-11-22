@@ -182,6 +182,20 @@ impl Run {
         open: bool,
         protocol: Option<&str>,
     ) -> Result<usize, String> {
+        let copy = self.enter(game, players, open, protocol, None)?;
+        self.answer(copy)?;
+        Ok(copy)
+    }
+
+    /// Opens a connection and sends its join, a room's with `min` (#278); the copy's index.
+    fn enter(
+        &mut self,
+        game: MatchId,
+        players: u8,
+        open: bool,
+        protocol: Option<&str>,
+        min: Option<u8>,
+    ) -> Result<usize, String> {
         let (conn, _) = match protocol {
             Some(p) => Connection::open_as(&self.relay, &self.ca, p)?,
             None => Connection::open(&self.relay, &self.ca)?,
@@ -195,10 +209,20 @@ impl Run {
             received: vec![],
             controls: vec![],
         };
-        let join = json!({"join": {"match": wire::hex(&game), "players": players, "open": open}});
+        let mut join = json!({"match": wire::hex(&game), "players": players, "open": open});
+        if let Some(min) = min {
+            join["min"] = json!(min);
+        }
         copy.conn
             .as_mut()
-            .map_or(Ok(()), |c| c.send_control(&join))?;
+            .map_or(Ok(()), |c| c.send_control(&json!({ "join": join })))?;
+        self.copies.push(copy);
+        Ok(self.copies.len() - 1)
+    }
+
+    /// Waits for the relay's answer to a copy's join: its seat, or why it was refused.
+    fn answer(&mut self, copy: usize) -> Result<(), String> {
+        let copy = &mut self.copies[copy];
         let until = Instant::now() + WAIT;
         while copy.join == json!({}) && Instant::now() < until {
             copy.drain(Duration::from_millis(20))?;
@@ -218,8 +242,28 @@ impl Run {
         if copy.join.get("refused").is_some() {
             copy.leave();
         }
-        self.copies.push(copy);
-        Ok(self.copies.len() - 1)
+        Ok(())
+    }
+
+    /// Copy `copy` sends the relay a control message.
+    fn say(&mut self, copy: usize, message: Value) -> Result<(), String> {
+        match self.copies[copy].conn.as_mut() {
+            Some(conn) => conn.send_control(&message),
+            None => Ok(()),
+        }
+    }
+
+    /// Copy `copy` is handed `want` under `key` within the wait, or the relay@2 check fails,
+    /// saying `what` it was handed instead.
+    fn handed(&mut self, copy: usize, key: &str, want: &Value, what: &str) -> Result<(), String> {
+        let got = self.copies[copy].control(key, WAIT)?;
+        if got.as_ref().map(|g| &g[key]) != Some(want) {
+            self.fail(
+                "relay@2",
+                format!("{what}: a copy was handed {got:?}, not {key} {want}"),
+            );
+        }
+        Ok(())
     }
 
     fn refused(&self, copy: usize) -> Option<&str> {
@@ -404,6 +448,7 @@ fn play(run: &mut Run) -> Result<(), String> {
     }
 
     relay2(run)?;
+    rooms(run)?;
 
     // Joining: two matches at once, each seated and started; a third copy is refused full, a join
     // to a match never opened unknown.
@@ -535,6 +580,150 @@ fn relay2(run: &mut Run) -> Result<(), String> {
     }
     run.copies[a].leave();
     run.copies[b].leave();
+    Ok(())
+}
+
+/// #278: a room, relay@2's. A match whose opening join names `min` starts on its first player's
+/// `begin` with whoever is seated, under the match ID that copy drew; a Join after the start is
+/// handed to the copies as a `knock` and seated, with the running match's start, once one says the
+/// lobby is open, else refused `started`; and once every copy says the match `finished`, the room
+/// starts its next on the same connections.
+fn rooms(run: &mut Run) -> Result<(), String> {
+    let two = Some(wire::PROTOCOL2);
+    let game = run.new_match();
+    let hex = wire::hex(&game);
+    let a = run.enter(game, 4, true, two, Some(2))?;
+    run.answer(a)?;
+    run.handed(
+        a,
+        "seated",
+        &json!({"match": hex, "seats": [0]}),
+        "a room's first join",
+    )?;
+    let b = run.enter(game, 4, false, two, Some(2))?;
+    run.answer(b)?;
+    for c in [a, b] {
+        let seated = json!({"match": hex, "seats": [0, 1]});
+        run.handed(c, "seated", &seated, "a room's second join")?;
+    }
+    // Two of four seats taken start nothing, and neither does a begin from the second player.
+    run.say(b, json!({"begin": {"match": hex}}))?;
+    for c in [a, b] {
+        if let Some(start) = run.copies[c].control("start", Duration::from_millis(400))? {
+            let what = format!(
+                "a room of two to four started with no begin from its first player: {start}"
+            );
+            run.fail("relay@2", what);
+            return Ok(());
+        }
+    }
+    // The first player's begin starts it with the seats taken, under the ID it drew.
+    let first = run.new_match();
+    run.say(
+        a,
+        json!({"begin": {"match": hex, "next": wire::hex(&first)}}),
+    )?;
+    let start = json!({"players": 4, "seats": [0, 1], "match": wire::hex(&first)});
+    for c in [a, b] {
+        run.handed(
+            c,
+            "start",
+            &start,
+            "the first player's begin with two seats empty",
+        )?;
+        // The room's copies play that match from here: its ID is the one their frames carry.
+        run.copies[c].game = first;
+    }
+    let sent = Frame {
+        game: first,
+        player: 0,
+        confirmed: 0,
+        first: 0,
+        steps: vec![vec![1]],
+    };
+    run.copies[a].send(sent.clone())?;
+    run.copies[b].drain(Duration::from_millis(400))?;
+    if !run.copies[b].received.contains(&sent.encode()) {
+        let what = format!(
+            "a frame of the match {} a room began wasn't forwarded",
+            wire::hex(&first)
+        );
+        run.fail("relay@2", what);
+    }
+    // A Join after the start waits for a copy's word: closed, it is refused started.
+    let knock = json!({"match": wire::hex(&first), "player": 2});
+    let late = run.enter(game, 4, false, two, Some(2))?;
+    for c in [a, b] {
+        run.handed(c, "knock", &knock, "a join to a room's running match")?;
+    }
+    run.say(
+        a,
+        json!({"admit": {"match": wire::hex(&first), "player": 2, "open": false}}),
+    )?;
+    run.answer(late)?;
+    if run.refused(late) != Some("started") {
+        let what = format!(
+            "a join a copy said the lobby is closed to was answered {}, not refused started",
+            run.copies[late].join
+        );
+        run.fail("relay@2", what);
+    }
+    // Open, it takes the seat and is handed the running match's start.
+    let late = run.enter(game, 4, false, two, Some(2))?;
+    for c in [a, b] {
+        run.handed(
+            c,
+            "knock",
+            &knock,
+            "a second join to a room's running match",
+        )?;
+    }
+    run.say(
+        b,
+        json!({"admit": {"match": wire::hex(&first), "player": 2, "open": true, "at": 7}}),
+    )?;
+    run.answer(late)?;
+    if run.copies[late].join != json!({"player": 2}) {
+        let what = format!(
+            "a join a copy said the lobby is open to was answered {}, not seated as player 2",
+            run.copies[late].join
+        );
+        run.fail("relay@2", what);
+        return Ok(());
+    }
+    let mut running = start.clone();
+    running["late"] = json!(true);
+    running["at"] = json!(7);
+    run.handed(late, "start", &running, "a join seated in a running match")?;
+    run.copies[late].game = first;
+    // Finished on every copy, the room starts its next match on the same connections.
+    for c in [a, b, late] {
+        run.copies[c].controls.clear();
+        run.say(c, json!({"finished": {"match": wire::hex(&first)}}))?;
+    }
+    let next = run.new_match();
+    run.handed(
+        a,
+        "seated",
+        &json!({"match": hex, "seats": [0, 1, 2]}),
+        "a room whose match finished",
+    )?;
+    run.say(
+        a,
+        json!({"begin": {"match": hex, "next": wire::hex(&next)}}),
+    )?;
+    let again = json!({"players": 4, "seats": [0, 1, 2], "match": wire::hex(&next)});
+    for c in [a, b, late] {
+        run.handed(
+            c,
+            "start",
+            &again,
+            "the first player's begin after a finished match",
+        )?;
+    }
+    for c in [a, b, late] {
+        run.copies[c].leave();
+    }
     Ok(())
 }
 
