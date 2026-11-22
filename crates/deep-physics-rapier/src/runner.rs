@@ -36,6 +36,7 @@ pub mod contact;
 mod dims;
 pub mod fast;
 mod held;
+mod join;
 pub mod kit;
 pub mod laws;
 pub mod links;
