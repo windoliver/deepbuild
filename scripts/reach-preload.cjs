@@ -15,7 +15,8 @@ const REQUIRE = `--require ${JSON.stringify(__filename)}`;
 const write = (lines) => { try { appendFileSync(KEEP.DEEP_REACH, lines.map((line) => `${line}\n`).join('')); } catch {} };
 // The recorder asks each thread noted here for its coverage, which node writes a thread, so one that left none, as a
 // worker alive when its process is stopped, leaves its test with no row. A `node --test` runner writes none of its
-// own: it loads no test, only starts each file's process, which notes itself.
+// own, so it isn't noted: it starts each file's process, which notes itself, and what the runner loads, a reporter
+// or a setup file, reaches no row.
 if (!(process.execArgv.includes('--test') && !process.env.NODE_TEST_CONTEXT)) write([`pid ${process.pid}-${threadId}`]);
 
 // A command's words: the program, and each word of its arguments, since a shell, env, sandbox-exec or the lease

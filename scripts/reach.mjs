@@ -17,8 +17,9 @@
 // of its own, one started under another name, or a crate that is loaded, not started (a cdylib); a file a test reads
 // without running it; code that runs outside node, as a page's script or a script built into a binary; and whatever
 // a node process loads once a program between it and the test cleaned or replaced its environment (env -i), in a
-// worker thread given an environment of its own, or in a sandbox that can't write the job's folder; and a script
-// vitest.config.ts imports, which vite builds into the config it loads.
+// worker thread given an environment of its own, or in a sandbox that can't write the job's folder; a script
+// vitest.config.ts imports, which vite builds into the config it loads; and what a `node --test` runner loads itself,
+// as scripts/proof-reporter.mjs or a setup file, since it writes no coverage: only each test file's process does.
 import { spawn } from 'node:child_process';
 import { chmodSync, globSync, mkdirSync, mkdtempSync, openSync, closeSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { availableParallelism, constants, homedir, loadavg, tmpdir } from 'node:os';
@@ -214,8 +215,8 @@ async function record(args) {
     // A recording stopped by a signal keeps the rows it has; one whose tree moved keeps none past its last save.
     // git can fail once on a file a leaked process is removing, so the last look is taken up to three times.
     const written = stopped?.status !== 3 && (save() || save() || save());
-    if (!stopped && !written) halt(`ended on ${moved ? `another tree, ${moved},` : 'a tree git could not write'} than the ${tree} it started on (git status names the files), so the rows since its last save are of no known tree and are dropped`, 3);
-    console.log(`${stopped ? `BLOCKED reach: the recording ${stopped.why}; ` : ''}${kept} of ${files.length} test files ran whole and passed, ${files.length - kept} have no row, in ${((performance.now() - started) / 1000).toFixed(0)} s at load ${loadavg()[0].toFixed(0)}: ${held === null ? `nothing was saved to ${path}` : `${path} holds ${held} rows`}`);
+    if (!stopped && !written) halt(`ended on ${moved ? `another tree, ${moved}, than` : 'a tree git could not write, not'} the ${tree} it started on (git status names the files), so the rows since its last save are of no known tree and are dropped`, 3);
+    console.log(`${stopped ? `BLOCKED reach: the recording ${stopped.why}; ` : ''}${kept} of ${files.length} test files ran whole and passed, ${files.length - kept} have no row, in ${((performance.now() - started) / 1000).toFixed(0)} s at load ${loadavg()[0].toFixed(0)}: ${held === null ? `nothing was saved to ${path}` : `${path} holds ${held} rows${written ? '' : ', as its last save left it; the rows since were dropped'}`}`);
     return stopped?.status ?? 0;
   } catch (error) {
     return console.log(`${/^(?:BLOCKED|INCONCLUSIVE)\b/.test(error.message) ? '' : 'BLOCKED reach: '}${error.message}`), error.message.startsWith('INCONCLUSIVE') ? 2 : 3;
@@ -249,9 +250,15 @@ function reaches(row, path, workspace) {
 
 function compare(paths) {
   if (!paths.length) return console.log('usage: node scripts/reach.mjs compare <path ...>'), 3;
-  const workspace = crates(root);
-  const selection = select(root, paths, { workspace });
+  let workspace, selection;
   const tree = exactTree(root);
+  if (!tree) return console.log('BLOCKED reach: the checkout has no tree git can write, so it has no record'), 3;
+  try {
+    workspace = crates(root);
+    selection = select(root, paths, { workspace });
+  } catch (error) {
+    return console.log(`${/^(?:BLOCKED|INCONCLUSIVE)\b/.test(error.message) ? '' : 'BLOCKED reach: '}${error.message}`), 3;
+  }
   let rows = null;
   try { rows = JSON.parse(readFileSync(recordPath(tree), 'utf8')).tests; } catch {}
   console.log(rows ? `record: ${recordPath(tree)}` : `record: none for this tree (${tree}); every selected test counts as reaching`);
