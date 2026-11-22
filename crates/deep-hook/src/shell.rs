@@ -1714,7 +1714,22 @@ impl Reader {
                     } else if let Some(s) = a.strip_prefix("--split-string=").or(env_split(&a)) {
                         spliced = Some((s.to_string(), k + 1));
                         break;
-                    } else if a == "-u" || a == "--unset" || a == "-P" {
+                    } else if a == "-u" || a == "--unset" {
+                        // What env unsets, and with `-i` all it was given, its program doesn't get (#2134).
+                        if let Some(n) = text(k + 1) {
+                            env.retain(|(m, _)| *m != n);
+                        }
+                        k += 2;
+                    } else if let Some(n) = a
+                        .strip_prefix("--unset=")
+                        .or(a.strip_prefix("-u").filter(|n| !n.is_empty()))
+                    {
+                        env.retain(|(m, _)| m != n);
+                        k += 1;
+                    } else if a == "-i" || a == "--ignore-environment" || a == "-" {
+                        env.clear();
+                        k += 1;
+                    } else if a == "-P" {
                         k += 2;
                     } else if a.starts_with('-') && a.len() > 1 {
                         k += 1;

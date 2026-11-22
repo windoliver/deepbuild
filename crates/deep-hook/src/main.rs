@@ -569,13 +569,12 @@ fn check() -> ExitCode {
 }
 
 /// Whether a standing rule the hub copied covers the cloud resource this call creates (#23): the owner is read from
-/// the one run that creates it, and a call with more than one such run is covered by none (#2134).
+/// the one run that creates it, when the reader can know its profile; a call with more than one such run is covered by
+/// none (#2134).
 fn covered(called: Option<&matcher::Call>, rules: &Rules) -> bool {
-    match called.and_then(matcher::Call::cloud_creates).as_deref() {
-        Some([run]) => matcher::aws_profile(run)
-            .is_some_and(|profile| rules.standing.contains(&cloud_owner(&profile))),
-        _ => false,
-    }
+    called
+        .and_then(matcher::Call::aws_profile)
+        .is_some_and(|profile| rules.standing.contains(&cloud_owner(&profile)))
 }
 
 /// What each fail_closed entry a call matched says, denying it with the hub away.

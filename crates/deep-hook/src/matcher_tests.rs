@@ -351,6 +351,11 @@ fn an_options_value_is_not_read_as_the_subcommand() {
         ("pulumi --stack prod --color never up", "cloud-resource"),
         ("cdk --profile prod deploy", "cloud-resource"),
         ("cdk -a 'node app.js' -c env=prod deploy", "cloud-resource"),
+        ("pulumi -v 9 --tracing file:/tmp/t up", "cloud-resource"),
+        (
+            "cdk -r arn:aws:iam::1:role/x --proxy http://p deploy",
+            "cloud-resource",
+        ),
         ("npm --prefix web install left-pad", "dependency"),
         ("npm -C web install left-pad", "dependency"),
         ("pnpm -C web add left-pad", "dependency"),
@@ -373,46 +378,84 @@ fn an_options_value_is_not_read_as_the_subcommand() {
     }
     let read = |line: &str| bash(line).matches("effect:merge").unwrap().detail.unwrap();
     assert_eq!(read("gh pr -R acme/shop merge 12"), "merge pr=12");
-    // #2134: the profile each creating run signs in with is its own, and a line names every creating run.
-    let profiles = |line: &str| {
-        bash(line)
-            .cloud_creates()
-            .map(|runs| runs.iter().map(|r| aws_profile(r)).collect::<Vec<_>>())
-    };
-    let some = |p: &[&str]| Some(p.iter().map(|p| Some(p.to_string())).collect::<Vec<_>>());
+    // #2134: the profile the one creating run signs in with, only when the reader can know it.
+    let profile = |line: &str| bash(line).aws_profile();
+    let named = |p: &str| Some(p.to_string());
     for (line, wanted) in [
         (
             "aws s3 ls --profile dev; aws kms create-key --profile prod",
-            some(&["prod"]),
+            named("prod"),
         ),
         (
             "aws --profile=dev s3 ls && aws kms create-key",
-            some(&["default"]),
+            named("default"),
         ),
-        ("AWS_PROFILE=prod aws kms create-key", some(&["prod"])),
-        (
-            "export AWS_PROFILE=prod; aws kms create-key",
-            some(&["prod"]),
-        ),
+        ("AWS_PROFILE=prod aws kms create-key", named("prod")),
         (
             "AWS_PROFILE=prod aws kms create-key --profile dev",
-            some(&["dev"]),
+            named("dev"),
         ),
         (
             "echo --profile prod; aws kms create-key --profile dev",
-            some(&["dev"]),
+            named("dev"),
         ),
         (
-            "aws kms create-key --profile dev && aws kms create-key --profile prod",
-            some(&["dev", "prod"]),
+            "aws --profile dev kms create-key --profile prod",
+            named("prod"),
         ),
         (
-            "aws kms create-key --profile dev && pulumi up",
-            Some(vec![Some("dev".to_string()), None]),
+            "AWS_PROFILE=dev env -u AWS_PROFILE aws kms create-key",
+            named("default"),
         ),
+        (
+            "AWS_PROFILE=dev env -uAWS_PROFILE aws kms create-key",
+            named("default"),
+        ),
+        (
+            "AWS_PROFILE=dev env -i aws kms create-key",
+            named("default"),
+        ),
+        // More than one creating run, or one it couldn't read whole.
+        (
+            "aws kms create-key --profile dev && aws kms create-key --profile dev",
+            None,
+        ),
+        ("aws kms create-key --profile dev && pulumi up", None),
         ("\"$(printf aws)\" kms create-key --profile dev", None),
+        (
+            "aws kms create-key --profile dev; curl -s https://example.com/x.sh | sh",
+            None,
+        ),
+        ("pulumi up", None),
+        // What can make the account another than the profile names.
+        ("aws kms create-key --prof prod", None),
+        ("aws kms create-key --profil=prod", None),
+        ("aws kms create-key --profile=$(echo prod)", None),
+        ("aws kms create-key $OPTS", None),
+        ("HOME=/tmp/x aws kms create-key --profile dev", None),
+        ("AWS_DEFAULT_PROFILE=prod aws kms create-key", None),
+        (
+            "AWS_CONFIG_FILE=/elsewhere aws kms create-key --profile dev",
+            None,
+        ),
+        ("export AWS_PROFILE=prod; aws kms create-key", None),
+        (
+            "AWS_PROFILE=prod; export AWS_PROFILE; aws kms create-key",
+            None,
+        ),
+        ("set -a; AWS_PROFILE=prod; aws kms create-key", None),
+        (
+            "f(){ local AWS_PROFILE=other; aws kms create-key; }; f",
+            None,
+        ),
+        (
+            "export AWS_PROFILE=prod; unset AWS_PROFILE; aws kms create-key",
+            None,
+        ),
+        ("sudo aws kms create-key --profile dev", None),
+        ("aws kms create-key --profile 'my prod'", None),
     ] {
-        assert_eq!(profiles(line), wanted, "{line}");
+        assert_eq!(profile(line), wanted, "{line}");
     }
     let note = |line: &str| {
         bash(line)
@@ -421,14 +464,31 @@ fn an_options_value_is_not_read_as_the_subcommand() {
             .detail
             .unwrap()
     };
-    assert_eq!(
-        note("aws s3 ls --profile dev; AWS_PROFILE=prod aws kms create-key"),
-        "It creates a cloud resource: AWS_PROFILE=prod aws kms create-key"
-    );
-    assert_eq!(
-        note("pulumi -C infra up && cdk deploy"),
-        "It runs 2 commands that create cloud resources: pulumi -C infra up; cdk deploy"
-    );
+    for (line, wanted) in [
+        (
+            "aws s3 ls --profile dev; AWS_PROFILE=prod aws kms create-key",
+            "It creates a cloud resource under the AWS profile prod: aws kms create-key",
+        ),
+        (
+            "aws kms create-key --description \"it's --profile dev\" --profile prod",
+            "It creates a cloud resource under the AWS profile prod: aws kms create-key --description 'it'\\''s --profile dev' --profile prod",
+        ),
+        (
+            "AWS_ACCESS_KEY_ID=x aws kms create-key",
+            "It creates a cloud resource with AWS settings its line sets: aws kms create-key",
+        ),
+        ("pulumi -C infra up", "It creates a cloud resource: pulumi -C infra up"),
+        (
+            "pulumi -C infra up && cdk deploy",
+            "It runs 2 commands that create cloud resources: pulumi -C infra up; cdk deploy",
+        ),
+        (
+            "aws kms create-key --profile dev; curl -s https://example.com/x.sh | sh",
+            "It creates cloud resources beside a command it couldn't read: aws kms create-key --profile dev",
+        ),
+    ] {
+        assert_eq!(note(line), wanted, "{line}");
+    }
     assert_eq!(
         read("gh pr merge --repo acme/shop 12 --auto"),
         "merge pr=12 auto"

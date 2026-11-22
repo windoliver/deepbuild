@@ -623,6 +623,58 @@ impl Call {
         Some(self.runs.iter().filter(|r| creates_cloud(r)).collect())
     }
 
+    /// The AWS profile the one run that creates a cloud resource signs in with, when the reader can know it: a
+    /// standing rule for its account may cover the call (#2134). None when no single aws run creates one, or the
+    /// account could be another than the profile names: a word the line computes or a shortened `--profile`, a `HOME`
+    /// or an `AWS_` variable besides `AWS_PROFILE` in its environment, a builtin that changes what later programs get,
+    /// or a wrapper that changes who runs it.
+    pub fn aws_profile(&self) -> Option<String> {
+        let creates = self.cloud_creates()?;
+        let [run] = creates.as_slice() else {
+            return None;
+        };
+        let shortened = |w: &&str| {
+            let name = w.split('=').next().unwrap_or_default();
+            name.len() > 2 && name != "--profile" && "--profile".starts_with(name)
+        };
+        let words = run.words();
+        if !run.is("aws")
+            || run.args.iter().any(|a| a.text.is_none())
+            || words.iter().any(shortened)
+            || run
+                .env
+                .iter()
+                .any(|(n, _)| n == "HOME" || (n.starts_with("AWS_") && n != "AWS_PROFILE"))
+            || self
+                .runs
+                .iter()
+                .any(|r| ENV_BUILTINS.iter().any(|b| r.is(b)))
+            || self.command.as_deref().is_some_and(|c| {
+                c.split(|ch: char| ch.is_whitespace() || ";&|()`".contains(ch))
+                    .any(|w| AS_ANOTHER.contains(&same_name(w).as_str()))
+            })
+        {
+            return None;
+        }
+        // The CLI keeps the last --profile it's given.
+        let named = words
+            .iter()
+            .enumerate()
+            .filter_map(|(k, w)| match *w {
+                "--profile" => Some(words.get(k + 1).copied().unwrap_or("")),
+                _ => w.strip_prefix("--profile="),
+            })
+            .last();
+        let env = || {
+            run.env
+                .iter()
+                .rev()
+                .find(|(n, _)| n == "AWS_PROFILE")
+                .map(|(_, v)| v.as_str())
+        };
+        Some(named.or_else(env).unwrap_or("default").to_string()).filter(|p| plain_profile(p))
+    }
+
     /// A `kill` of the hub's process or its group, the hub's PID read from its socket's peer.
     fn kills_hub(&self) -> Option<Hit> {
         let kills: Vec<&Run> = self.runs.iter().filter(|r| r.is("kill")).collect();
@@ -671,20 +723,40 @@ impl Call {
                 detail: Some(format!("It makes the top-level folder {}.", new.display())),
             });
         }
-        // The hub reads the account each create runs under from this note, as deep-hook does (#2134).
+        // The hub reads the owner of a create from this note, as deep-hook reads it (#2134): only the first two
+        // forms name one, and the profile is said whole, so the hub never splits the command again.
         if class == "cloud-resource" {
             let creates: Vec<&Run> = self.runs.iter().filter(|r| creates_cloud(r)).collect();
-            let detail = match creates.as_slice() {
-                [] => return None,
-                [run] => format!("It creates a cloud resource: {}", cloud_line(run)),
-                several => format!(
+            let lines = || {
+                creates
+                    .iter()
+                    .map(|r| command_of(r))
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            };
+            let detail = match (self.cloud_creates().as_deref(), creates.as_slice()) {
+                (_, []) => return None,
+                (Some([run]), _) if !run.is("aws") => {
+                    format!("It creates a cloud resource: {}", command_of(run))
+                }
+                (Some([run]), _) => match self.aws_profile() {
+                    Some(profile) => format!(
+                        "It creates a cloud resource under the AWS profile {profile}: {}",
+                        command_of(run)
+                    ),
+                    None => format!(
+                        "It creates a cloud resource with AWS settings its line sets: {}",
+                        command_of(run)
+                    ),
+                },
+                (Some(several), _) => format!(
                     "It runs {} commands that create cloud resources: {}",
                     several.len(),
-                    several
-                        .iter()
-                        .map(|r| cloud_line(r))
-                        .collect::<Vec<_>>()
-                        .join("; ")
+                    lines()
+                ),
+                (None, _) => format!(
+                    "It creates cloud resources beside a command it couldn't read: {}",
+                    lines()
                 ),
             };
             return Some(Hit {
@@ -786,39 +858,17 @@ fn command_of(run: &Run) -> String {
     line.join(" ")
 }
 
-/// The AWS profile an aws run signs in with: its own `--profile`, else `AWS_PROFILE` in its environment, else
-/// `default`; None for a run that isn't aws (#2134).
-pub fn aws_profile(run: &Run) -> Option<String> {
-    if !run.is("aws") {
-        return None;
-    }
-    let words = run.words();
-    let named = words.iter().enumerate().find_map(|(k, w)| match *w {
-        "--profile" => Some(words.get(k + 1).copied().unwrap_or("")),
-        _ => w.strip_prefix("--profile="),
-    });
-    let env = || {
-        run.env
-            .iter()
-            .rev()
-            .find(|(n, _)| n == "AWS_PROFILE")
-            .map(|(_, v)| v.as_str())
-    };
-    Some(named.or_else(env).unwrap_or("default").to_string())
-}
+/// The builtins that change the environment or the options of what runs after them.
+const ENV_BUILTINS: &[&str] = &[
+    "export", "declare", "typeset", "local", "readonly", "unset", "set", "source", ".", "shopt",
+];
 
-/// A run that creates a cloud resource as the hub reads it: the command, led by the `AWS_PROFILE` its environment
-/// sets, if any.
-fn cloud_line(run: &Run) -> String {
-    let profile = run
-        .env
-        .iter()
-        .rev()
-        .find(|(n, _)| n == "AWS_PROFILE")
-        .filter(|_| run.is("aws"))
-        .map(|(_, v)| format!("AWS_PROFILE={} ", quote(v)))
-        .unwrap_or_default();
-    format!("{profile}{}", command_of(run))
+/// The wrappers that run a program as another user, with an environment and a home of theirs.
+const AS_ANOTHER: &[&str] = &["sudo", "doas", "su", "runuser", "pkexec"];
+
+/// Whether a profile can be said in a note and read back whole: a word of no white space and no colon.
+fn plain_profile(profile: &str) -> bool {
+    !profile.is_empty() && !profile.contains(|c: char| c == ':' || c.is_whitespace())
 }
 
 /// A match on a run, naming it: the command for you to run yourself, if you mean it.
@@ -1188,7 +1238,19 @@ fn creates_cloud(run: &Run) -> bool {
 }
 
 /// pulumi's options that take a value before its subcommand (#2134).
-const PULUMI_VALUED: &[&str] = &["-C", "--cwd", "-s", "--stack", "--color"];
+const PULUMI_VALUED: &[&str] = &[
+    "-C",
+    "--cwd",
+    "-s",
+    "--stack",
+    "--color",
+    "-v",
+    "--verbose",
+    "--tracing",
+    "--tracing-header",
+    "--profiling",
+    "--memprofilerate",
+];
 
 /// cdk's options that take a value before its subcommand (#2134).
 const CDK_VALUED: &[&str] = &[
@@ -1199,6 +1261,13 @@ const CDK_VALUED: &[&str] = &[
     "--output",
     "-c",
     "--context",
+    "-r",
+    "--role-arn",
+    "-p",
+    "--plugin",
+    "--proxy",
+    "--build",
+    "--ca-bundle-path",
 ];
 
 /// A `gh` run whose first two plain words are one of `subs`.

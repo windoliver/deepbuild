@@ -34,16 +34,6 @@ function packages(command: string): { manager: string; names: string[] } | undef
   return names.length ? { manager: w[at - 1]!.replace(/^.*\//, ''), names } : undefined;
 }
 
-/**
- * The AWS profile one run signs in with, as deep-hook reads it (#2134): its own `--profile <name>` or
- * `--profile=<name>`, else the `AWS_PROFILE` its line sets, else the default.
- */
-function profileOf(w: readonly string[], env: Record<string, string>): string {
-  const at = w.findIndex((x) => x === '--profile' || x.startsWith('--profile='));
-  if (at < 0) return env.AWS_PROFILE ?? 'default';
-  return w[at]!.includes('=') ? w[at]!.slice('--profile='.length) : w[at + 1] ?? '';
-}
-
 /** The account a profile signs into, from ~/.aws/config: its sso_account_id, else none. */
 function accountOf(home: string, profile: string): string | undefined {
   let text: string;
@@ -65,28 +55,30 @@ function accountOf(home: string, profile: string): string | undefined {
   return undefined;
 }
 
-/** deep-hook's note on a call that creates one cloud resource: the one run that creates it (#2134). */
-const ONE_CREATE = /^It creates a cloud resource: (.+)$/;
+/**
+ * deep-hook's notes on a call whose one creating run it read whole (#2134): an aws run, with the profile it signs in
+ * with said whole, and any other tool's run. Its other notes, as on a line with more than one creating run, name no
+ * owner.
+ */
+const AWS_CREATE = /^It creates a cloud resource under the AWS profile ([^\s:]+): aws(?:\s+(\S+))?/;
+const TOOL_CREATE = /^It creates a cloud resource: (\S+)/;
 
 /**
- * The cloud and account a cloud command creates under, read from the one run deep-hook's note names: an AWS run's
- * account, else its tool. A line with no such note, as one with more than one creating run, is owned by itself
- * alone, so no standing rule for an account or a tool covers it (#2134).
+ * The cloud and account a cloud command creates under, as deep-hook's note reads it: an AWS run's account, else its
+ * tool. A line whose note names no owner is owned by itself alone, so no standing rule for an account or a tool
+ * covers it (#2134).
  */
 function cloudOf(command: string, notes: Record<string, string> | undefined, home: string): { owner: string; kind: string; named: string } {
-  const run = Object.values(notes ?? {}).map((n) => ONE_CREATE.exec(n)?.[1]).find((r) => r !== undefined);
-  if (run === undefined) return { owner: `cloud-line:${command}`, kind: 'cloud', named: 'more than one cloud command, or one that can\'t be read,' };
-  const all = words(run);
-  const env: Record<string, string> = {};
-  let k = 0;
-  for (; k < all.length && /^[A-Za-z_]\w*=/.test(all[k]!); k++) env[all[k]!.slice(0, all[k]!.indexOf('='))] = all[k]!.slice(all[k]!.indexOf('=') + 1);
-  const w = all.slice(k);
-  if (w[0] === 'aws') {
-    const profile = profileOf(w, env);
+  const said = Object.values(notes ?? {});
+  const aws = said.map((n) => AWS_CREATE.exec(n)).find((m) => m);
+  if (aws) {
+    const profile = aws[1]!;
     const account = accountOf(home, profile);
-    return { owner: account ? `aws:${account}` : `aws-profile:${profile}`, kind: `aws ${w[1] ?? ''}`.trim(), named: account ? `AWS account ${account} (profile ${profile})` : `the AWS profile ${profile}` };
+    return { owner: account ? `aws:${account}` : `aws-profile:${profile}`, kind: `aws ${aws[2] ?? ''}`.trim(), named: account ? `AWS account ${account} (profile ${profile})` : `the AWS profile ${profile}` };
   }
-  return { owner: w[0] ?? 'cloud', kind: w[0] ?? 'cloud', named: w[0] ?? 'a cloud' };
+  const tool = said.map((n) => TOOL_CREATE.exec(n)?.[1]).find((t) => t !== undefined && t !== 'aws');
+  if (tool) return { owner: tool, kind: tool, named: tool };
+  return { owner: `cloud-line:${command}`, kind: 'cloud', named: 'more than one cloud command, or one that can\'t be read whole,' };
 }
 
 /** What a PreToolUse's call of a decided class is about, with deep-hook's notes on it; undefined for one this module can't read. */
