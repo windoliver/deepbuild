@@ -6,20 +6,19 @@ The prototype app is in `app/` on the `public-history-oct15/spike-gpui-app` bran
 
 ## Principles
 
-The ideas that decide a new question, each with the rule in full and the check that fails when it's broken. The first four are AGENTS.md's invariants, word for word.
+Each line below is an idea that decides a new question, with a link to the rule in full and the check that fails when the line is broken; the first four are AGENTS.md's invariants, word for word.
 
 1. An agent's word is never evidence. Only check results are. ([Verdicts](#verdicts), `verdict proofs`)
 2. Nothing missing or unrun passes. It's `BLOCKED`, `INVALID` or `INCONCLUSIVE`, never `PASS`. ([Verdicts](#verdicts), `scripts/proof.mjs`)
 3. Agents can't change checks or decisions. ([The edit guard](#built-to-be-hard-to-get-wrong), `scripts/proof-guard.mjs`)
-4. A person sees only what needs a person, and never the same question twice. ([Asks](#an-ask-and-your-answer-getting-back), `scripts/ask-sources-guard.mjs`)
-5. Agents and plug-ins write data, not code, and every document is checked as data before it shows ([Rules every primitive follows](#prim-rules), `canvas kit`).
-6. A mistake is refused with its fix and never only warned about ([Checked before it shows](#prim-rules), `scripts/repo-rules.mjs`).
-7. The same input gives the same bytes on every machine ([Seeded and replayable](#prim-rules), `scripts/canvas-lint.mjs`).
-8. A check reads one form, written by one writer, on one clock ([Checks read only the lowered form](#prim-rules), `scripts/record-reader-guard.mjs`).
-9. A test counts only if it fails on a wrong program ([Wrong programs](#built-to-be-hard-to-get-wrong), `scripts/proof-runs.mjs`).
-10. Every wait has a budget a test holds, and a test waits for its event, never for time ([Repo guards](#built-to-be-hard-to-get-wrong), `scripts/wait-ratchet.mjs`).
-11. The core stays small, and everything else fills a registry or a slot with its kit ([Composition](#composition), `scripts/slots-check.mjs`).
-12. A decision, like a closed list, is written with what would reopen it ([Decided](#decided), `scripts/canvas-closures.mjs`).
+4. A person sees only what needs a person, and never the same question twice. ([Asks](#an-ask-and-your-answer-getting-back), `unit`)
+5. Every document is checked as data before it shows, and each failure comes back with its fix ([Checked before it shows](#prim-rules), `canvas kit`).
+6. Anything a check reads gives the same bytes on every machine ([Seeded and replayable](#prim-rules), `scripts/canvas-lint.mjs`).
+7. Every published kind is versioned, and a break lands only with a new major or a reviewed break file ([Typed, versioned, addressed by ID](#prim-rules), `contracts`).
+8. A test counts only if it fails on a wrong program ([Wrong programs](#built-to-be-hard-to-get-wrong), `scripts/proof-runs.mjs`).
+9. A test waits for the event it needs, never for time to pass ([Repo guards](#built-to-be-hard-to-get-wrong), `scripts/wait-ratchet.mjs`).
+10. Everything outside the core fills a slot, and each slot has its interface and its kit ([Composition](#composition), `scripts/slots-check.mjs`).
+11. A closed list is written with its reason and what would reopen it ([Registries and closed lists](./canvas-primitives.md#registries-and-closed-lists), `scripts/canvas-closures.mjs`).
 
 <a id="scope"></a>
 

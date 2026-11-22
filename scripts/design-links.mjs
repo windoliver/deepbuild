@@ -4,6 +4,7 @@
 // with the open issue that plans it. It reads the open issues the catalogue drift lane fetched; without them it is
 // INCONCLUSIVE, never PASS. It also reads the design's Principles section (#2339): see principles() below.
 import { existsSync, readFileSync, statSync } from 'node:fs';
+import { posix } from 'node:path';
 import { DOCS, anchors, prose, resolve, targets } from './doc-links.mjs';
 import { checks } from './lanes.mjs';
 import { openIssues } from './open-issues.mjs';
@@ -48,7 +49,7 @@ for (const doc of DOCS) check(doc, doc, readFileSync(doc, 'utf8'));
 // The Principles section (#2339): `## Principles`, right before "What version 0 builds, and what waits", holds 8 to 12
 // list lines. Lines 1 to 4 start with AGENTS.md's four invariants, word for word; every other line is one sentence.
 // Each line is at most 160 characters as rendered, links into the design, and names a check that exists: a
-// `scripts/…` file or a lane of scripts/lanes.mjs's checks, in code. And the canvas reference's "Conventions every
+// `scripts/…` file, in code or by link, or a lane of scripts/lanes.mjs's checks, in code. And the canvas reference's "Conventions every
 // primitive uses" opens with a link to the section.
 const TD = 'docs/technical-design.md';
 const CANVAS = 'docs/canvas-primitives.md';
@@ -56,46 +57,67 @@ const CONVENTIONS = 'Conventions every primitive uses';
 const LANES = new Set(checks.map(({ name }) => name));
 // A line as GitHub renders it: links by their label, code spans by their text, without tags, emphasis or extra space.
 const rendered = (text) => text.replace(/(`+)(.+?)\1|!?\[([^\]]*)\]\([^)]*\)|<[^>]*>|\*+|__+/g, (_, tick, code, label) => code ?? label ?? '').replace(/\s+/g, ' ').trim();
-// The list items under a heading until the next heading, each with its line number and its continuation lines joined.
-function items(lines, from) {
+// The sentence ends of a line as rendered, code spans left out: a . ! or ? with any closing quote or bracket, then space.
+const sentences = (text) => (rendered(text.replace(/(`+).+?\1/g, '')).match(/[.!?]["'’”)\]]*(?=\s|$)/g) ?? []).length;
+const HEADING = /^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$/;
+// A section of a doc: the headings before its heading, the heading after it, and its list items, each with its line
+// number and its continuation lines joined, as GitHub joins an indented or lazy one. Lines in fenced code are skipped.
+function section(file, title) {
+  const lines = [...prose(readFileSync(file, 'utf8'))];
+  const at = lines.findIndex(({ line }) => line.match(HEADING)?.[2].toLowerCase() === title.toLowerCase());
+  if (at < 0) return null;
+  const before = lines.slice(0, at).filter(({ line }) => HEADING.test(line));
   const found = [];
-  for (let i = from; i < lines.length && !/^ {0,3}#{1,6}\s/.test(lines[i]); i++) {
-    const item = lines[i].match(/^ {0,3}(?:[-*+]|\d+[.)])\s+(.*)$/);
-    if (item) found.push({ number: i + 1, text: item[1] });
-    else if (found.length && /^\s+\S/.test(lines[i])) found.at(-1).text += ` ${lines[i].trim()}`;
+  let open = false;
+  let next;
+  for (const { number, line } of lines.slice(at + 1)) {
+    if (HEADING.test(line)) {
+      next = line;
+      break;
+    }
+    const item = line.match(/^ {0,3}(?:[-*+]|\d{1,9}[.)])\s+(.*)$/);
+    if (item) found.push({ number, text: item[1] });
+    else if (found.length && line.trim() && (open || /^\s+\S/.test(line))) found.at(-1).text += ` ${line.trim()}`;
+    open = item ? true : open && Boolean(line.trim());
   }
-  return found;
+  return { before, next, found };
+}
+const REPO = 'https://github.com/windoliver/deepbuild/blob/main/';
+// The scripts a line names: a code span whose first word is a path under scripts/, or a link to one.
+function scriptsOf(text) {
+  const spans = [...text.matchAll(/(`+)(.+?)\1/g)].map((m) => m[2].trim().split(/\s/)[0]);
+  const links = targets(text).map((target) => target.replace(/[?#].*$/, '')).map((path) => (path.startsWith(REPO) ? path.slice(REPO.length) : /^[a-z][\w+.-]*:/i.test(path) ? '' : posix.join(posix.dirname(TD), path)));
+  return [...new Set([...spans, ...links].filter((path) => path.startsWith('scripts/')))];
 }
 function principles() {
   const problems = [];
-  const lines = readFileSync(TD, 'utf8').split(/\r?\n/);
-  const heading = lines.findIndex((line) => /^##\s+Principles\s*$/.test(line));
-  const next = lines.findIndex((line, i) => i > heading && /^ {0,3}#{1,6}\s/.test(line));
-  if (heading < 0) return [`${TD} has no \`## Principles\` section before "What version 0 builds, and what waits"`];
-  if (!/^##\s+What version 0 builds, and what waits\s*$/.test(lines[next] ?? '')) problems.push(`${TD}:${heading + 1} Principles isn't right before "What version 0 builds, and what waits"`);
-  const section = items(lines, heading + 1);
-  if (section.length < 8 || section.length > 12) problems.push(`${TD}:${heading + 1} Principles holds ${section.length} lines, not 8 to 12`);
-  const agents = readFileSync('AGENTS.md', 'utf8').split(/\r?\n/);
-  const invariants = items(agents, agents.findIndex((line) => /^##\s+The four invariants\s*$/.test(line)) + 1);
-  for (const [i, { number, text }] of section.entries()) {
+  const principled = section(TD, 'Principles');
+  if (!principled) return [`${TD} has no \`## Principles\` section before "What version 0 builds, and what waits"`];
+  const { before, next, found } = principled;
+  if (before.length !== 1 || !/^# /.test(before[0].line)) problems.push(`${TD}:${before.at(-1)?.number ?? 1} Principles doesn't follow the doc's title alone`);
+  if (!/^##\s+What version 0 builds, and what waits\s*$/.test(next ?? '')) problems.push(`${TD} Principles isn't right before "What version 0 builds, and what waits"`);
+  if (found.length < 8 || found.length > 12) problems.push(`${TD} Principles holds ${found.length} lines, not 8 to 12`);
+  const invariants = section('AGENTS.md', 'The four invariants')?.found ?? [];
+  for (const [i, { number, text }] of found.entries()) {
     const at = `${TD}:${number} (Principles line ${i + 1})`;
     const plain = rendered(text);
     if ([...plain].length > 160) problems.push(`${at} is ${[...plain].length} characters, over 160`);
     const invariant = i < 4 ? invariants[i] : undefined;
     if (i < 4 && !invariant) problems.push(`${at} has no invariant ${i + 1} in AGENTS.md to match`);
     else if (invariant && !plain.startsWith(rendered(invariant.text))) problems.push(`${at} doesn't start with invariant ${i + 1} as AGENTS.md:${invariant.number} has it: "${rendered(invariant.text)}"`);
-    const ends = text.replace(/(`+).+?\1/g, '').match(/[.!?]["')\]]*(?=\s|$)/g) ?? [];
-    if (!invariant && ends.length > 1) problems.push(`${at} is ${ends.length} sentences, not one`);
-    if (!targets(text).some((target) => resolve(target, TD)?.id)) problems.push(`${at} has no link into the design`);
-    const named = [...text.matchAll(/(`+)(.+?)\1/g)].map((m) => m[2].trim());
-    const scripts = named.map((code) => code.split(/\s/)[0]).filter((code) => code.startsWith('scripts/'));
+    // An invariant's own sentences stand as AGENTS.md has them; anything else on a line is one sentence at most.
+    const extra = sentences(text) - (invariant ? sentences(invariant.text) : 0);
+    if (extra > (invariant ? 0 : 1)) problems.push(`${at} is ${sentences(text)} sentences, not ${invariant ? `invariant ${i + 1}'s ${sentences(invariant.text)}` : 'one'}`);
+    if (!targets(text).some((target) => { const link = resolve(target, TD); return link?.id && DOCS.includes(link.file); })) problems.push(`${at} has no link into the design`);
+    const scripts = scriptsOf(text);
     for (const script of scripts) if (!existsSync(script) || !statSync(script).isFile()) problems.push(`${at} names ${script}, which isn't a file`);
-    if (!scripts.length && !named.some((code) => LANES.has(code))) problems.push(`${at} names no check: a \`scripts/…\` file or a lane of scripts/lanes.mjs, in code`);
+    const lanes = [...text.matchAll(/(`+)(.+?)\1/g)].map((m) => m[2].trim()).filter((code) => LANES.has(code));
+    if (!scripts.length && !lanes.length) problems.push(`${at} names no check: a \`scripts/…\` file or a lane of scripts/lanes.mjs, in code`);
   }
   const canvas = readFileSync(CANVAS, 'utf8').split(/\r?\n/);
   const conventions = canvas.findIndex((line) => line === `## ${CONVENTIONS}`);
   const opening = canvas.slice(conventions + 1).find((line) => line.trim() && !/^\s*<a\s[^>]*>(?:\s*<\/a>)?\s*$/i.test(line));
-  const lands = (opening ?? '').match(/^ {0,3}#/) ? [] : targets(opening ?? '').map((target) => resolve(target, CANVAS)).filter((link) => link?.file === TD && anchors(TD).get(link.id) === 'principles');
+  const lands = HEADING.test(opening ?? '') ? [] : targets(opening ?? '').map((target) => resolve(target, CANVAS)).filter((link) => link?.file === TD && anchors(TD).get(link.id) === 'principles');
   if (conventions < 0 || lands.length !== 1) problems.push(`${CANVAS}:${conventions + 1} "${CONVENTIONS}" doesn't open with one link to ${TD}#principles`);
   return problems;
 }
