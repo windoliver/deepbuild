@@ -4,10 +4,9 @@ The issue's proof is the two commands' own runs.
 
 - `size-ratchet-base-b6317234f.txt`: `node scripts/size-ratchet.mjs` at the base, b6317234f.
   It has 81 findings: 46 outside `tests/acceptance/` (the issue's Nov 22 list; `scripts/lanes.mjs` and `crates/deep-show/src/sandbox.rs` had grown a few lines since) and 35 inside it.
-- `size-ratchet-head.txt`: the same command on this branch after merging main (5fcfb690b).
+- `size-ratchet-head.txt`: the same command on this branch, with main c5df09056 merged.
   It has 35 findings, every one under `tests/acceptance/`, which #3139 holds.
-  None is outside it, including `crates/deep-physics-rapier/src/runner.rs`, which main's #2035 grew to 1,501 lines after the base.
-- `fmt-unformatted-base-b6317234f.txt` and `fmt-unformatted-head.txt`: the files `cargo fmt --all -- --check -l` names, 36 at the base and 28 on the branch.
-  The 8 that dropped off are files this branch touched, now formatted.
-  None of the 82 Rust files this branch changes or adds is still named, and no file is named that wasn't at the base.
-  `cargo fmt --check` exits 0 once #2149 formats the remaining 28.
+  None is outside it. That includes two files main pushed over 1,500 lines after the base: `crates/deep-physics-rapier/src/runner.rs` (#2035, 1,501) and `crates/deep-gpu-layer/src/main.rs` (#2149's format, 1,504).
+- `fmt-unformatted-base-b6317234f.txt`: the 36 files `cargo fmt --all -- --check -l` named at the base.
+- `fmt-unformatted-head.txt`: the same command on this branch. It names no file and exits 0, since #2149's format has landed.
+  This branch formats every Rust file it changes or adds.
