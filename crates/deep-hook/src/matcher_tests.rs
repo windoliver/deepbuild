@@ -1039,6 +1039,33 @@ fn a_profiles_account_is_read_only_from_a_config_every_reader_splits_alike() {
         );
         assert_eq!(aws_account(&config, "dev"), None, "{quoted}");
     }
+    // The CLI keeps the last section that names a profile, by its header's words, and reads its keys in any case.
+    for (config, wanted) in [
+        (
+            "[profile prod]\nsso_account_id = 111\n[profile  prod]\nsso_account_id = 222\n",
+            Some("222"),
+        ),
+        (
+            "[profile prod]\nsso_account_id = 111\n[profilex prod]\nregion = x\n",
+            None,
+        ),
+        (
+            "[default]\nsso_account_id = 111\n[profile default]\nsso_account_id = 222\n",
+            Some("222"),
+        ),
+        ("[profile prod]\nSSO_Account_ID: 222\n", Some("222")),
+        (
+            "[profile prod]\nsso_account_id = 111\n[profile dev]\nsso_account_id = 222\n",
+            Some("111"),
+        ),
+        ("[profile prod x]\nsso_account_id = 111\n", None),
+    ] {
+        assert_eq!(
+            aws_account(config, "prod").or(aws_account(config, "default")),
+            wanted,
+            "{config}"
+        );
+    }
     let indented = "[profile dev]\nregion = x\n  sso_account_id = 111\nsso_account_id = 222\n";
     assert_eq!(aws_account(indented, "dev"), None);
     assert_eq!(

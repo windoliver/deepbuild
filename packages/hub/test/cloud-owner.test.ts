@@ -59,6 +59,24 @@ describe("a cloud create's owner (#2134)", () => {
     }
   });
 
+  it("is the account of the last section naming the profile, by its header's words, its key in any case", () => {
+    const other = mkdtempSync(join(tmpdir(), 'hub2134-'));
+    mkdirSync(join(other, '.aws'));
+    try {
+      for (const [config, wanted] of [
+        ['[profile prod]\nsso_account_id = 111111111111\n[profile  prod]\nsso_account_id = 222222222222\n', 'aws:222222222222'],
+        ['[profile prod]\nsso_account_id = 111111111111\n[profilex prod]\nregion = x\n', 'aws-profile:prod'],
+        ['[profile prod]\nSSO_Account_ID: 222222222222\n', 'aws:222222222222'],
+      ] as const) {
+        writeFileSync(join(other, '.aws', 'config'), config);
+        const note = 'It creates a cloud resource under the AWS profile prod: aws kms create-key --profile prod';
+        expect(aboutCall(['cloud-resource'], 'aws kms create-key --profile prod', { 'no-unnamed-cloud-resource': note }, other)?.subject.target.owner, config).toBe(wanted);
+      }
+    } finally {
+      rmSync(other, { recursive: true, force: true });
+    }
+  });
+
   it('is the line alone when the note names no owner: several creating runs, AWS settings the line sets, an unread run, or no note', () => {
     for (const [line, note] of [
       ['aws kms create-key --profile dev && aws kms create-key --profile prod', 'It runs 2 commands that create cloud resources: aws kms create-key --profile dev; aws kms create-key --profile prod'],

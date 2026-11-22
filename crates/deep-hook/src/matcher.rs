@@ -945,7 +945,9 @@ pub fn aws_account<'a>(config: &'a str, profile: &str) -> Option<&'a str> {
     {
         return None;
     }
-    let mut section = "";
+    // The CLI's profile is its last section to name it, read whole: one header's words are `profile <name>`, after
+    // any word that starts with profile, or `default`.
+    let (mut section, mut account) = (None, None);
     for line in config.lines().map(str::trim) {
         // A header is read as the CLI's parser reads it: up to its last `]`, whatever follows.
         if let Some(head) = line
@@ -953,25 +955,27 @@ pub fn aws_account<'a>(config: &'a str, profile: &str) -> Option<&'a str> {
             .and_then(|l| l.rfind(']').map(|k| &l[..k]))
             .filter(|h| !h.is_empty())
         {
-            // The CLI reads a named profile from `[profile <name>]` alone, and the default from `[default]`.
-            section = match head.strip_prefix("profile") {
-                Some(name) if name.starts_with(char::is_whitespace) => name.trim(),
-                _ if head == "default" => head,
-                _ => "",
+            let words: Vec<&str> = head.split_whitespace().collect();
+            section = match words[..] {
+                _ if head == "default" => Some("default"),
+                [first, name] if first.starts_with("profile") => Some(name),
+                _ => None,
             };
-        } else if !section.is_empty() && section == profile {
-            if let Some((key, value)) = line.split_once('=') {
-                let value = value.trim();
-                if key.trim() == "sso_account_id"
-                    && !value.is_empty()
-                    && !value.contains(char::is_whitespace)
-                {
-                    return Some(value);
+            if section == Some(profile) {
+                account = None;
+            }
+        } else if section == Some(profile) {
+            // A key ends at its first `=` or `:`, in any case.
+            if let Some(k) = line.find(['=', ':']) {
+                let value = line[k + 1..].trim();
+                if line[..k].trim().eq_ignore_ascii_case("sso_account_id") {
+                    account =
+                        Some(value).filter(|v| !v.is_empty() && !v.contains(char::is_whitespace));
                 }
             }
         }
     }
-    None
+    account
 }
 
 /// Whether a run beside the one a standing rule covers only reads: one of READ_ONLY, or an aws run that lists,

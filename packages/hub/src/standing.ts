@@ -46,20 +46,28 @@ function accountOf(home: string, profile: string): string | undefined {
   // deep-hook's among them, the CLI reads an indented line as going on with the value above it, and a header's quotes
   // and escapes away: a file holding any is read as naming no account.
   if (/[^\t\n -~]/.test(text.replace(/\r\n/g, '\n')) || /^[ \t]/m.test(text) || /['"\\]/.test(text)) return undefined;
-  let section = '';
+  // The CLI's profile is its last section to name it, read whole: one header's words are `profile <name>`, after any
+  // word that starts with profile, or `default` (#2134).
+  let section: string | undefined;
+  let account: string | undefined;
   for (const raw of text.split('\n')) {
     const line = raw.trim();
-    // The CLI reads a named profile from `[profile <name>]` alone, and the default from `[default]` (#2134).
     // A header is read as the CLI's parser reads it: up to its last `]`, whatever follows.
     const header = /^\[(.+)\]/.exec(line)?.[1];
-    const head = header === undefined ? undefined : /^(?:profile\s+(.+)|(default))$/.exec(header);
-    if (header !== undefined) section = head ? (head[1] ?? head[2]!).trim() : '';
-    else if (section !== '' && section === profile) {
-      const kv = /^sso_account_id\s*=\s*(\S+)$/.exec(line);
-      if (kv) return kv[1];
+    if (header !== undefined) {
+      const words = header.split(/\s+/).filter((w) => w !== '');
+      section = header === 'default' ? 'default' : words.length === 2 && words[0]!.startsWith('profile') ? words[1] : undefined;
+      if (section === profile) account = undefined;
+    } else if (section === profile) {
+      // A key ends at its first `=` or `:`, in any case.
+      const kv = /^([^=:]*)[=:](.*)$/.exec(line);
+      if (kv && kv[1]!.trim().toLowerCase() === 'sso_account_id') {
+        const value = kv[2]!.trim();
+        account = value !== '' && !/\s/.test(value) ? value : undefined;
+      }
     }
   }
-  return undefined;
+  return account;
 }
 
 /**
