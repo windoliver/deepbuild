@@ -6,6 +6,8 @@ This is the field-level companion to the tech design's "The primitives, defined"
 
 ## Conventions every primitive uses
 
+These conventions follow the design's [Principles](./technical-design.md#principles).
+
 ### Time and the flick
 
 - **The unit.** One flick is 1/705,600,000 of a second. Time is stored as an `i64` count of flicks, which lasts about 414 years. Frames, audio samples, and physics and logic steps are all whole numbers of flicks, so a picture, a sound and a simulation can't drift apart.
