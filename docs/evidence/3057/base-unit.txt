@@ -1,0 +1,1061 @@
+   Compiling serde_core v1.0.229
+   Compiling yoke v0.8.3
+   Compiling zerovec v0.11.8
+   Compiling tinystr v0.8.4
+   Compiling litemap v0.8.3
+   Compiling icu_locale_core v2.3.0
+   Compiling serde v1.0.229
+   Compiling log v0.4.34
+   Compiling smallvec v1.16.3
+   Compiling hashbrown v0.17.1
+   Compiling bitflags v2.13.2
+   Compiling arrayvec v0.7.8
+   Compiling rustix v1.1.6
+   Compiling indexmap v2.14.2
+   Compiling serde_json v1.0.154
+   Compiling potential_utf v0.1.6
+   Compiling zerotrie v0.2.5
+   Compiling tracing v0.1.44
+   Compiling icu_provider v2.3.1
+   Compiling icu_collections v2.3.0
+   Compiling icu_properties v2.3.0
+   Compiling icu_normalizer v2.3.0
+   Compiling polycool v0.4.0
+   Compiling kurbo v0.13.1
+   Compiling num-complex v0.4.6
+   Compiling blake3 v1.5.5
+   Compiling parking_lot_core v0.9.12
+   Compiling parking_lot v0.12.5
+   Compiling deep-canvas v0.0.0 (<checkout>/crates/deep-canvas)
+   Compiling either v1.19.0
+   Compiling icu_locale_fallback v2.3.0
+   Compiling mio v1.2.4
+   Compiling icu_segmenter v2.3.0
+   Compiling rustc-hash v1.1.0
+   Compiling flate2 v1.1.10
+   Compiling tokio v1.54.1
+   Compiling polling v3.11.0
+   Compiling spirv v0.4.0+sdk-1.4.341.0
+   Compiling uuid v1.28.0
+   Compiling peniko v0.6.1
+   Compiling wayland-sys v0.31.11
+   Compiling vello_common v0.3.0
+   Compiling deep-canvas-seams v0.0.0 (<checkout>/crates/deep-canvas-seams)
+   Compiling idna_adapter v1.2.2
+   Compiling fontique v0.12.0
+   Compiling idna v1.1.0
+   Compiling zvariant_utils v4.2.0
+   Compiling async-io v2.6.0
+   Compiling glifo v0.4.0
+   Compiling enumflags2 v0.7.12
+   Compiling harfrust v0.12.0
+   Compiling parley_data v0.12.0
+   Compiling zcheapstr v1.1.0
+   Compiling serde_bytes v0.11.19
+   Compiling quickjs-jit-core v0.12.11 (https://github.com/longbridge/quickjs-jit?rev=96593cd7a54440ac060a391b8baea7e9a3cf1393#96593cd7)
+   Compiling gpu-allocator v0.28.0
+   Compiling parley_engine v0.12.0
+   Compiling zvariant v5.15.1
+   Compiling url v2.5.8
+   Compiling bumpalo v3.20.3
+   Compiling zbus_names v4.3.5
+   Compiling async-signal v0.2.14
+   Compiling parley v0.12.0
+   Compiling vello_cpu v0.3.0
+   Compiling pulp v0.22.3
+   Compiling deep-text v0.0.0 (<checkout>/crates/deep-text)
+   Compiling async-process v2.5.0
+   Compiling quickjs-jit v0.12.11 (https://github.com/longbridge/quickjs-jit?rev=96593cd7a54440ac060a391b8baea7e9a3cf1393#96593cd7)
+   Compiling deep-canvas-drawn v0.0.0 (<checkout>/crates/deep-canvas-drawn)
+   Compiling taffy v0.14.0
+   Compiling exr v1.74.2
+   Compiling tiff v0.11.3
+   Compiling wayland-backend v0.3.17
+   Compiling deep-canvas-marks v0.0.0 (<checkout>/crates/deep-canvas-marks)
+   Compiling rquickjs v0.12.9 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling ttf-parser v0.25.1
+   Compiling png v0.18.1
+   Compiling zbus v5.19.0
+   Compiling image v0.25.10
+   Compiling llrt_utils v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling wayland-client v0.31.15
+   Compiling lyon_geom v1.0.19
+   Compiling accesskit v0.24.1
+   Compiling lyon_path v1.0.19
+   Compiling fontdb v0.23.0
+   Compiling rustybuzz v0.20.1
+   Compiling wasmtime-internal-core v49.0.5
+   Compiling png v0.17.16
+   Compiling serde_urlencoded v0.7.1
+   Compiling tempfile v3.27.0
+   Compiling svgtypes v0.16.1
+   Compiling simplecss v0.2.2
+   Compiling smol_str v0.3.6
+   Compiling usvg v0.46.0
+   Compiling lyon_tessellation v1.0.22
+   Compiling schemars v1.2.3
+   Compiling chrono v0.4.45
+   Compiling rusty-fork v0.3.1
+   Compiling gpui-pre-ztracing v0.3.9
+   Compiling tiny-skia v0.11.4
+   Compiling lyon_algorithms v1.0.21
+   Compiling gpui-pre-util v0.3.9
+   Compiling hashbrown v0.14.5
+   Compiling postage v0.5.0
+   Compiling proptest v1.12.0
+   Compiling naga v29.0.4
+   Compiling resvg v0.46.0
+   Compiling postcard v1.1.3
+   Compiling gpui-pre-collections v0.3.9
+   Compiling lyon v1.0.19
+   Compiling gpui-pre-sum-tree v0.3.9
+   Compiling gpui-pre-scheduler v0.3.9
+   Compiling gpui-pre-shared-string v0.3.9
+   Compiling gpui-pre-http-client v0.3.9
+   Compiling cranelift-bitset v0.136.5
+   Compiling futures-concurrency v7.7.1
+   Compiling wayland-protocols v0.32.13
+   Compiling zbus_xml v5.2.1
+   Compiling wgpu-types v29.0.4
+   Compiling naga-types v30.0.1
+   Compiling taffy v0.13.0
+   Compiling gpu-descriptor-types v0.2.0
+   Compiling semver v1.0.28
+   Compiling gpui-pre v0.3.9 (<checkout>/vendor/gpui-pre)
+   Compiling gpu-descriptor v0.3.2
+   Compiling naga v30.0.1
+   Compiling wgpu-hal v29.0.4
+   Compiling wgpu-naga-bridge v29.0.4
+   Compiling zbus-lockstep v0.5.2
+   Compiling markup5ever v0.12.1
+   Compiling ignore v0.4.33
+   Compiling pulley-interpreter v49.0.5
+   Compiling zbus-lockstep-macros v0.5.2
+   Compiling crunchy v0.2.4
+   Compiling khronos-egl v6.0.0
+   Compiling block-buffer v0.12.1
+   Compiling crypto-common v0.2.2
+   Compiling deep-canvas-motion v0.0.0 (<checkout>/crates/deep-canvas-motion)
+   Compiling clang-sys v1.9.1
+   Compiling arc-swap v1.9.3
+   Compiling llrt_build v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling pathfinder_simd v0.5.6
+   Compiling yeslogic-fontconfig-sys v6.0.1
+   Compiling freetype-sys v0.20.1
+   Compiling block-padding v0.4.2
+   Compiling phf_shared v0.13.1
+   Compiling digest v0.10.7
+   Compiling block-padding v0.3.3
+   Compiling font-types v0.11.3
+   Compiling cranelift-codegen-shared v0.136.5
+   Compiling glow v0.17.0
+   Compiling mime v0.3.17
+   Compiling httparse v1.10.1
+   Compiling utf-8 v0.7.6
+   Compiling const-oid v0.10.2
+   Compiling cranelift-isle v0.116.1
+   Compiling prettyplease v0.2.37
+   Compiling leb128fmt v0.1.0
+   Compiling simdutf8 v0.1.5
+   Compiling encoding_rs v0.8.42
+   Compiling digest v0.11.3
+   Compiling ring v0.17.14
+   Compiling tendril v0.4.3
+   Compiling cranelift-codegen-meta v0.136.5
+   Compiling read-fonts v0.37.0
+   Compiling inout v0.1.4
+   Compiling phf_generator v0.13.1
+   Compiling inout v0.2.5
+   Compiling tiny-keccak v2.0.2
+   Compiling atspi-common v0.13.0
+   Compiling globwalk v0.8.1
+   Compiling cranelift-isle v0.136.5
+   Compiling group v0.14.0
+   Compiling wgpu-types v30.0.1
+   Compiling cranelift-entity v0.136.5
+   Compiling cranelift-assembler-x64 v0.136.5
+   Compiling mime_guess v2.0.5
+   Compiling dirs-sys v0.5.0
+   Compiling async-fs v2.2.0
+   Compiling string_cache v0.8.9
+   Compiling phf v0.11.3
+   Compiling signature v3.0.0
+   Compiling toml_datetime v0.6.11
+   Compiling serde_spanned v0.6.9
+   Compiling wgpu-hal v30.0.1
+   Compiling wgpu-core v29.0.4
+   Compiling gimli v0.33.0
+   Compiling winnow v0.7.15
+   Compiling lexical-util v1.0.7
+   Compiling unicode-linebreak v0.1.5
+   Compiling toml_write v0.1.2
+   Compiling base16ct v1.0.0
+   Compiling cranelift-codegen-shared v0.116.1
+   Compiling arraydeque v0.5.1
+   Compiling granit-parser v1.3.0
+   Compiling rustls v0.23.46
+   Compiling cranelift-codegen-meta v0.116.1
+   Compiling sec1 v0.8.1
+   Compiling toml_edit v0.22.27
+   Compiling wgpu-naga-bridge v30.0.1
+   Compiling dirs v6.0.0
+   Compiling cranelift-bforest v0.136.5
+   Compiling cranelift-codegen v0.136.5
+   Compiling const-random-macro v0.1.16
+   Compiling phf_macros v0.13.1
+   Compiling cipher v0.4.4
+   Compiling wgpu-core-deps-windows-linux-android v29.0.4
+   Compiling rustls-webpki v0.103.16
+   Compiling sha2 v0.11.1
+   Compiling encoding_rs_io v0.1.8
+   Compiling wasmparser v0.258.3
+   Compiling hkdf v0.13.0
+   Compiling ashpd v0.13.13
+   Compiling llrt_hooking v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling dirs-sys v0.4.1
+   Compiling num-iter v0.1.46
+   Compiling async-net v2.0.0
+   Compiling itertools v0.14.0
+   Compiling wgpu v29.0.4
+   Compiling bincode v1.3.3
+   Compiling cranelift-bitset v0.116.1
+   Compiling zstd-sys v2.1.2+zstd.1.5.7
+   Compiling hmac v0.12.1
+   Compiling phf_shared v0.14.0
+   Compiling ahash v0.8.12
+   Compiling float-cmp v0.10.0
+   Compiling html5ever v0.27.0
+   Compiling zeno v0.3.3
+   Compiling inotify-sys v0.1.8
+   Compiling stable_deref_trait v1.2.1
+   Compiling minimal-lexical v0.2.1
+   Compiling bit-vec v0.8.0
+   Compiling num-bigint-dig v0.9.1
+   Compiling yazi v0.2.1
+   Compiling as-raw-xcb-connection v1.0.1
+   Compiling xim-parser v0.2.2
+   Compiling zed-font-kit v0.14.1-zed
+   Compiling base62 v2.2.6
+   Compiling nohash-hasher v0.2.0
+   Compiling xcursor v0.3.11
+   Compiling serde-saphyr v1.3.0
+   Compiling swash v0.2.10
+   Compiling bit-set v0.8.0
+   Compiling nom v7.1.3
+   Compiling triomphe v0.1.17
+   Compiling phf_generator v0.14.0
+   Compiling phf v0.13.1
+   Compiling cranelift-entity v0.116.1
+   Compiling smol v2.0.2
+   Compiling dirs v5.0.1
+   Compiling elliptic-curve v0.14.1
+   Compiling cranelift-codegen v0.116.1
+   Compiling rust-embed-utils v8.13.0
+   Compiling pathfinder_geometry v0.5.1
+   Compiling const-random v0.1.18
+   Compiling shellexpand v3.1.2
+   Compiling toml v0.8.23
+   Compiling atspi-proxies v0.13.0
+   Compiling cipher v0.5.2
+   Compiling skrifa v0.40.0
+   Compiling harfrust v0.5.2
+   Compiling primefield v0.14.0
+   Compiling accesskit_consumer v0.38.0
+   Compiling llrt_context v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling cranelift-control v0.136.5
+   Compiling globset v0.4.20
+   Compiling regalloc2 v0.15.2
+   Compiling itertools v0.11.0
+   Compiling wgpu-core v30.0.1
+   Compiling gethostname v1.1.0
+   Compiling keccak v0.1.6
+   Compiling is-docker v0.2.0
+   Compiling self_cell v1.3.0
+   Compiling vsimd v0.8.0
+   Compiling x11rb-protocol v0.13.2
+   Compiling rangemap v1.8.0
+   Compiling normpath v1.5.2
+   Compiling float-ord v0.3.2
+   Compiling gpui-kit-assets v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling term v1.2.1
+   Compiling outref v0.5.2
+   Compiling sys-locale v0.3.2
+   Compiling cosmic-text v0.19.0
+   Compiling ascii-canvas v4.0.0
+   Compiling rust-i18n-support v4.2.4
+   Compiling is-wsl v0.4.0
+   Compiling sha3 v0.10.9
+   Compiling x11rb v0.13.2
+   Compiling llrt_timers v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling accesskit_atspi_common v0.19.1
+   Compiling wnaf v0.14.1
+   Compiling atspi v0.29.0
+   Compiling wgpu-core-deps-windows-linux-android v30.0.1
+   Compiling rust-embed-impl v8.13.0
+   Compiling cranelift-bforest v0.116.1
+   Compiling phf_macros v0.14.0
+   Compiling cexpr v0.6.0
+   Compiling fancy-regex v0.16.2
+   Compiling pbkdf2 v0.12.2
+   Compiling hkdf v0.12.4
+   Compiling wasm-encoder v0.258.3
+   Compiling num v0.4.3
+   Compiling xim-ctext v0.3.0
+   Compiling llrt_async_hooks v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling cbc v0.1.2
+   Compiling aes v0.8.4
+   Compiling xml5ever v0.18.1
+   Compiling lexical-write-integer v1.0.6
+   Compiling lexical-parse-integer v1.0.6
+   Compiling rust-i18n v4.2.4
+   Compiling llrt_encoding v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling deep-canvas-scene3d v0.0.0 (<checkout>/crates/deep-canvas-scene3d)
+   Compiling rfc6979 v0.6.0
+   Compiling llrt_exceptions v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_events v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling cranelift-control v0.116.1
+   Compiling regalloc2 v0.11.2
+   Compiling petgraph v0.7.1
+   Compiling fluent-uri v0.1.4
+   Compiling calloop v0.14.5
+   Compiling itertools v0.13.0
+   Compiling lalrpop-util v0.22.2
+   Compiling curve25519-dalek v5.0.0
+   Compiling wgpu v30.0.1
+   Compiling gimli v0.31.1
+   Compiling ena v0.14.4
+   Compiling md-5 v0.10.6
+   Compiling unicode-id v0.3.7
+   Compiling termcolor v1.4.1
+   Compiling zstd-safe v7.4.0
+   Compiling str_indices v0.4.4
+   Compiling alloc-no-stdlib v2.0.4
+   Compiling xkeysym v0.2.1
+   Compiling shlex v1.3.0
+   Compiling openssl-probe v0.2.1
+   Compiling rustls-native-certs v0.8.5
+   Compiling xkbcommon v0.8.0
+   Compiling alloc-stdlib v0.2.4
+   Compiling ropey v2.0.0-beta.1
+   Compiling wasmprinter v0.258.3
+   Compiling markdown v1.0.0
+   Compiling oo7 v0.6.0
+   Compiling lalrpop v0.22.2
+   Compiling calloop-wayland-source v0.4.1
+   Compiling lsp-types v0.97.0
+   Compiling llrt_abort v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling ecdsa v0.17.0
+   Compiling lexical-parse-float v1.0.6
+   Compiling lexical-write-float v1.0.6
+   Compiling markup5ever_rcdom v0.3.0
+   Compiling zed-xim v0.4.0-zed
+   Compiling syntect v5.3.0
+   Compiling inotify v0.11.5
+   Compiling phf v0.14.0
+   Compiling gpui-pre-wgpu v0.3.9
+   Compiling rust-embed v8.13.0
+   Compiling accesskit_unix v0.22.1
+   Compiling primeorder v0.14.0
+   Compiling open v5.4.4
+   Compiling rust-i18n-macro v4.2.4
+   Compiling hex-simd v0.8.0
+   Compiling base64-simd v0.8.0
+   Compiling wayland-cursor v0.31.14
+   Compiling wayland-protocols-plasma v0.3.12
+   Compiling wayland-protocols-wlr v0.3.12
+   Compiling webpki-roots v1.0.10
+   Compiling filedescriptor v0.8.3
+   Compiling notify-rust v4.18.2
+   Compiling half v2.7.1
+   Compiling tokio-util v0.7.20
+   Compiling universal-hash v0.6.1
+   Compiling logos-codegen v0.16.1
+   Compiling object v0.40.0
+   Compiling notify-types v2.1.0
+   Compiling halfbrown v0.4.0
+   Compiling approx v0.5.1
+   Compiling matrixmultiply v0.3.11
+   Compiling instant v0.1.13
+   Compiling wasmtime-internal-versioned-export-macros v49.0.5
+   Compiling enum-iterator-derive v1.5.0
+   Compiling gpui-component v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling io-lifetimes v2.0.4
+   Compiling try-lock v0.2.5
+   Compiling wasmtime-internal-unwinder v49.0.5
+   Compiling wasmtime-internal-component-util v49.0.5
+   Compiling io-lifetimes v3.0.1
+   Compiling wasmtime-environ v49.0.5
+   Compiling want v0.3.2
+   Compiling enum-iterator v2.3.0
+   Compiling gpui-base v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling value-trait v0.12.2
+   Compiling notify v8.2.0
+   Compiling logos-derive v0.16.1
+   Compiling polyval v0.7.3
+   Compiling h2 v0.4.20
+   Compiling gpui-pre-linux v0.3.9
+   Compiling webpki-roots v0.26.11
+   Compiling two-face v0.4.5
+   Compiling lexical-core v1.0.6
+   Compiling llrt_stream_web v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling wgsl-parse v0.4.0
+   Compiling brotli-decompressor v5.0.3
+   Compiling llrt_json v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling crc32c v0.6.8
+   Compiling similar v2.7.0
+   Compiling gpui-component-macros v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling sha1 v0.10.7
+   Compiling wide v1.7.1
+   Compiling wasmtime-internal-cranelift v49.0.5
+   Compiling data-encoding v2.11.1
+   Compiling rawpointer v0.2.1
+   Compiling tower-service v0.3.3
+   Compiling object v0.36.7
+   Compiling io-extras v0.19.0
+   Compiling tungstenite v0.29.0
+   Compiling simba v0.10.2
+   Compiling brotli v8.0.4
+   Compiling llrt_buffer v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling lexical v7.0.5
+   Compiling zstd v0.13.4
+   Compiling gpui-pre-platform v0.3.9
+   Compiling hyper v1.12.0
+   Compiling ghash v0.6.0
+   Compiling logos v0.16.1
+   Compiling simd-json v0.18.1
+   Compiling wasmtime v49.0.5
+   Compiling glam v0.33.12
+   Compiling wgsl-types v0.4.0
+   Compiling cranelift-frontend v0.136.5
+   Compiling cranelift-native v0.136.5
+   Compiling ctr v0.10.1
+   Compiling aes v0.9.3
+   Compiling ed25519 v3.0.0
+   Compiling aead v0.6.1
+   Compiling wasm-encoder v0.263.0
+   Compiling crypto-primes v0.7.2
+   Compiling pkcs1 v0.8.0
+   Compiling derive_more v2.1.1
+   Compiling nalgebra-macros v0.3.0
+   Compiling deep-gpu v0.0.0 (<checkout>/crates/deep-gpu)
+   Compiling ipnet v2.12.2
+   Compiling cap-primitives v4.0.3
+   Compiling nalgebra v0.35.0
+   Compiling rsa v0.10.0
+   Compiling wast v263.0.0
+   Compiling aes-gcm v0.11.1
+   Compiling ed25519-dalek v3.0.0
+   Compiling aes-kw v0.3.1
+   Compiling fs-set-times v0.20.3
+   Compiling hyper-util v0.1.21
+   Compiling gpui-kit v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling llrt_compression v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling x25519-dalek v3.0.0
+   Compiling p256 v0.14.0
+   Compiling p521 v0.14.0
+   Compiling p384 v0.14.0
+   Compiling cranelift-module v0.116.1
+   Compiling cbc v0.2.1
+   Compiling tokio-rustls v0.26.6
+   Compiling wesl-macros v0.4.0
+   Compiling addr2line v0.26.1
+   Compiling wasmtime-internal-jit-icache-coherence v49.0.5
+   Compiling symphonia-core v0.6.1
+   Compiling quickjs-jit-runtime v0.12.11 (<checkout>/vendor/quickjs-jit-runtime)
+   Compiling sha1 v0.11.0
+   Compiling md-5 v0.11.0
+   Compiling pbkdf2 v0.13.0
+   Compiling rustix-linux-procfs v0.1.1
+   Compiling memfd v0.6.6
+   Compiling sync_wrapper v1.0.2
+   Compiling unsafe-libyaml v0.2.11
+   Compiling bindgen v0.71.1
+   Compiling ambient-authority v0.0.2
+   Compiling maybe-owned v0.3.4
+   Compiling tower-layer v0.3.3
+   Compiling cap-std v4.0.3
+   Compiling heapless v0.8.0
+   Compiling tower v0.5.3
+   Compiling serde_yaml v0.9.34+deprecated
+   Compiling llrt_crypto v0.9.0-beta (<checkout>/vendor/llrt_crypto)
+   Compiling wesl v0.4.0
+   Compiling hyper-rustls v0.27.10
+   Compiling cranelift-object v0.116.1
+   Compiling llrt_zlib v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling wat v1.263.0
+   Compiling glamx v0.3.1
+   Compiling cranelift-native v0.116.1
+   Compiling cranelift-frontend v0.116.1
+   Compiling deep-canvas-effects v0.0.0 (<checkout>/crates/deep-canvas-effects)
+   Compiling deep-canvas-sandbox v0.0.0 (<checkout>/crates/deep-canvas-sandbox)
+   Compiling rustls-pemfile v2.2.0
+   Compiling llrt_url v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_path v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling deep-images v0.0.0 (<checkout>/crates/deep-images)
+   Compiling tokio-socks v0.5.3
+   Compiling http-body-util v0.1.5
+   Compiling deep-canvas-cells v0.0.0 (<checkout>/crates/deep-canvas-cells)
+   Compiling deep-catalog v0.0.0 (<checkout>/crates/deep-catalog)
+   Compiling serde_arrays v0.2.0
+   Compiling sysinfo v0.37.2
+   Compiling filetime v0.2.29
+   Compiling num-derive v0.5.1
+   Compiling regex-lite v0.1.9
+   Compiling bindgen v0.72.1
+   Compiling downcast-rs v2.0.2
+   Compiling symphonia-metadata v0.6.1
+   Compiling tar v0.4.46
+   Compiling gpui-fps v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling gpui-pre-reqwest v0.12.15
+   Compiling quickjs-jit-stdlib v0.12.7 (https://github.com/longbridge/quickjs-jit?rev=605da483611a3548edb8c33fdff602e3f5f42076#605da483)
+   Compiling deep-sandbox-wasmtime v0.0.0 (<checkout>/crates/deep-sandbox-wasmtime)
+warning: unused variable: `diagnostic_key`
+    --> vendor/quickjs-jit-runtime/src/compiler/optimized.rs:8795:5
+     |
+8795 |     diagnostic_key: Option<crate::runtime::FunctionKey>,
+     |     ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_diagnostic_key`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+   Compiling vello_gpu_shaders v0.3.0
+warning: function `apply_stress_gc_after_validation` is never used
+    --> vendor/quickjs-jit-runtime/src/lib.rs:1387:4
+     |
+1387 | fn apply_stress_gc_after_validation(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `machine_disassembly` is never read
+    --> vendor/quickjs-jit-runtime/src/compiler/baseline.rs:1985:5
+     |
+1974 | pub struct RelocatableCode {
+     |            --------------- field in this struct
+...
+1985 |     machine_disassembly: Option<String>,
+     |     ^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `RelocatableCode` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: `quickjs-jit-runtime` (lib) generated 3 warnings (run `cargo fix --lib -p quickjs-jit-runtime` to apply 1 suggestion)
+   Compiling deep-marks-vello v0.0.0 (<checkout>/crates/deep-marks-vello)
+   Compiling meshopt v0.7.0
+   Compiling fs2 v0.4.3
+   Compiling robust v1.2.0
+   Compiling spade v2.15.1
+   Compiling gpui-shell v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling thorvg-sys v0.4.0+thorvg-1.1.2
+   Compiling deep-marks-raster v0.0.0 (<checkout>/crates/deep-marks-raster)
+   Compiling rstar v0.13.1
+   Compiling deep-logic v0.0.0 (<checkout>/crates/deep-logic)
+   Compiling symphonia-common v0.6.1
+   Compiling deep-marks-gpui v0.0.0 (<checkout>/crates/deep-marks-gpui)
+   Compiling deep-text-gpui v0.0.0 (<checkout>/crates/deep-text-gpui)
+   Compiling deep-app v0.0.0 (<checkout>/crates/deep-app)
+warning: unused import: `gpui_kit`
+  --> crates/deep-app/src/gpu_view.rs:12:5
+   |
+12 | use gpui_kit::*;
+   |     ^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: static `GLYPHS` is never used
+  --> crates/deep-app/src/footprint.rs:15:8
+   |
+15 | static GLYPHS: Gauge = Gauge::new(
+   |        ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: static `SPRITES` is never used
+  --> crates/deep-app/src/footprint.rs:22:8
+   |
+22 | static SPRITES: Gauge = Gauge::new(
+   |        ^^^^^^^
+
+warning: static `TARGETS` is never used
+  --> crates/deep-app/src/footprint.rs:29:8
+   |
+29 | static TARGETS: Gauge = Gauge::new(
+   |        ^^^^^^^
+
+warning: static `INSTANCES` is never used
+  --> crates/deep-app/src/footprint.rs:36:8
+   |
+36 | static INSTANCES: Gauge = Gauge::new(
+   |        ^^^^^^^^^
+
+warning: static `DRAWABLES` is never used
+  --> crates/deep-app/src/footprint.rs:43:8
+   |
+43 | static DRAWABLES: Gauge = Gauge::new("CAMetalLayer::drawables", Place::Device, 48, 1_024_000_000);
+   |        ^^^^^^^^^
+
+warning: `deep-app` (lib) generated 6 warnings
+   Compiling basisu_c_sys v0.9.1
+   Compiling parry3d v0.31.1
+   Compiling parry2d v0.31.1
+   Compiling wgpu-profiler v0.28.0
+   Compiling deep-canvas-media v0.0.0 (<checkout>/crates/deep-canvas-media)
+   Compiling deep-canvas-input v0.0.0 (<checkout>/crates/deep-canvas-input)
+   Compiling deep-canvas-vector v0.0.0 (<checkout>/crates/deep-canvas-vector)
+   Compiling deep-physics-rapier v0.0.0 (<checkout>/crates/deep-physics-rapier)
+   Compiling deep-replica v0.0.0 (<checkout>/crates/deep-replica)
+warning: unused import: `Fail`
+  --> crates/deep-replica/src/drive/memory.rs:11:13
+   |
+11 | use super::{Fail, Plant};
+   |             ^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `pasted` is never read
+   --> crates/deep-replica/src/drive/mod.rs:217:5
+    |
+196 | struct Replica {
+    |        ------- field in this struct
+...
+217 |     pasted: Option<String>,
+    |     ^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+   Compiling deep-scene3d-render v0.0.0 (<checkout>/crates/deep-scene3d-render)
+warning: `deep-replica` (lib) generated 2 warnings (run `cargo fix --lib -p deep-replica` to apply 1 suggestion)
+   Compiling rapier2d v0.36.1
+   Compiling rapier3d v0.36.1
+   Compiling vello_gpu v0.3.0
+   Compiling symphonia-codec-vorbis v0.6.1 (<checkout>/vendor/symphonia-codec-vorbis)
+   Compiling symphonia-codec-alac v0.6.1
+   Compiling symphonia-bundle-mp3 v0.6.1
+   Compiling deep-relay v0.0.0 (<checkout>/crates/deep-relay)
+   Compiling sha2 v0.10.9
+   Compiling deep-canvas-physics v0.0.0 (<checkout>/crates/deep-canvas-physics)
+   Compiling deep-canvas-graph v0.0.0 (<checkout>/crates/deep-canvas-graph)
+   Compiling miniz_oxide v0.9.1
+   Compiling spin v0.12.3
+   Compiling deep-show v0.0.0 (<checkout>/crates/deep-show)
+   Compiling deep-marks-render v0.0.0 (<checkout>/crates/deep-marks-render)
+warning: fields `t`, `view`, `record`, `frames`, and `look` are never read
+   --> crates/deep-marks-render/src/lib.rs:103:5
+    |
+101 | struct Step {
+    |        ---- fields in this struct
+102 |     doc: Option<Map<String, Value>>,
+103 |     t: i64,
+    |     ^
+104 |     view: Option<View>,
+    |     ^^^^
+105 |     record: Option<Record>,
+    |     ^^^^^^
+106 |     frames: u32,
+    |     ^^^^^^
+107 |     /// #417: the look the session is shown in from this step on.
+108 |     look: Option<Look>,
+    |     ^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: multiple fields are never read
+   --> crates/deep-marks-render/src/lib.rs:113:9
+    |
+112 |     Frames {
+    |     ------ fields in this variant
+113 |         doc: Map<String, Value>,
+    |         ^^^
+114 |         look: Look,
+    |         ^^^^
+115 |         view: View,
+    |         ^^^^
+116 |         record: Record,
+    |         ^^^^^^
+117 |         hz: i64,
+    |         ^^
+118 |         vsyncs: u32,
+    |         ^^^^^^
+119 |         store: Option<PathBuf>,
+    |         ^^^^^
+120 |         /// The host time of vsync 0.
+121 |         start: i64,
+    |         ^^^^^
+122 |         /// In a replay, the record time vsync 0 maps to.
+123 |         replay: Option<i64>,
+    |         ^^^^^^
+124 |         /// Each vsync whose frame on screen is written as a PNG, and where.
+125 |         captures: Vec<(u32, String)>,
+    |         ^^^^^^^^
+126 |         /// #392 AC3's wrong program: a frame clock that arms only on readings.
+127 |         arms_only_on_readings: bool,
+    |         ^^^^^^^^^^^^^^^^^^^^^
+128 |         /// #1485's wrong program on the images' decode or upload.
+129 |         image_plant: asset::Plant,
+    |         ^^^^^^^^^^^
+
+warning: fields `look`, `steps`, `store`, and `switch_rebuilds` are never read
+   --> crates/deep-marks-render/src/lib.rs:132:9
+    |
+131 |     Session {
+    |     ------- fields in this variant
+132 |         look: Look,
+    |         ^^^^
+133 |         steps: Vec<Step>,
+    |         ^^^^^
+134 |         store: Option<PathBuf>,
+    |         ^^^^^
+135 |         /// #417 AC2's wrong program: a look switch that empties every node cache.
+136 |         switch_rebuilds: bool,
+    |         ^^^^^^^^^^^^^^^
+
+warning: multiple fields are never read
+   --> crates/deep-marks-render/src/lib.rs:140:9
+    |
+139 |     Idle {
+    |     ---- fields in this variant
+140 |         doc: Map<String, Value>,
+    |         ^^^
+141 |         look: Look,
+    |         ^^^^
+142 |         view: View,
+    |         ^^^^
+143 |         record: Record,
+    |         ^^^^^^
+144 |         seconds: u64,
+    |         ^^^^^^^
+145 |         /// The wrong program: a frame clock that arms a frame each vsync.
+146 |         arms_each_vsync: bool,
+    |         ^^^^^^^^^^^^^^^
+...
+149 |         region: Option<([f64; 4], bool)>,
+    |         ^^^^^^
+...
+152 |         store: Option<PathBuf>,
+    |         ^^^^^
+153 |         pans: Vec<(f64, [f64; 4])>,
+    |         ^^^^
+
+warning: field `0` is never read
+   --> crates/deep-marks-render/src/lib.rs:156:10
+    |
+156 |     Live(Box<Live>),
+    |     ---- ^^^^^^^^^
+    |     |
+    |     field in this variant
+    |
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+    |
+156 -     Live(Box<Live>),
+156 +     Live(()),
+    |
+
+warning: multiple fields are never read
+   --> crates/deep-marks-render/src/lib.rs:158:9
+    |
+157 |     Render {
+    |     ------ fields in this variant
+158 |         out: String,
+    |         ^^^
+159 |         doc: Map<String, Value>,
+    |         ^^^
+160 |         look: Look,
+    |         ^^^^
+161 |         view: View,
+    |         ^^^^
+162 |         t: i64,
+    |         ^
+163 |         record: Record,
+    |         ^^^^^^
+164 |         /// The AC6 wrong build: gradients through GPUI's own OKLab option.
+165 |         gpui_oklab: bool,
+    |         ^^^^^^^^^^
+166 |         /// #1479 AC1's wrong program: each text's second grapheme left out, silently.
+167 |         drops_glyph: bool,
+    |         ^^^^^^^^^^^
+168 |         store: Option<PathBuf>,
+    |         ^^^^^
+169 |         /// #499 AC14's wrong program: GPUI's stock surface fragment, full-range BT.601.
+170 |         stock_fragment: bool,
+    |         ^^^^^^^^^^^^^^
+171 |         /// #1485's wrong program on the images' cap.
+172 |         image_plant: asset::Plant,
+    |         ^^^^^^^^^^^
+
+warning: fields `0` and `1` are never read
+   --> crates/deep-marks-render/src/lib.rs:179:9
+    |
+179 |     One(Option<u32>, String),
+    |     --- ^^^^^^^^^^^  ^^^^^^
+    |     |
+    |     fields in this variant
+    |
+help: consider changing the fields to be of unit type to suppress this warning while preserving the field numbering, or remove the fields
+    |
+179 -     One(Option<u32>, String),
+179 +     One((), ()),
+    |
+
+warning: field `0` is never read
+   --> crates/deep-marks-render/src/lib.rs:180:11
+    |
+180 |     Every(PathBuf),
+    |     ----- ^^^^^^^
+    |     |
+    |     field in this variant
+    |
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+    |
+180 -     Every(PathBuf),
+180 +     Every(()),
+    |
+
+warning: multiple fields are never read
+   --> crates/deep-marks-render/src/lib.rs:185:5
+    |
+184 | struct Live {
+    |        ---- fields in this struct
+185 |     doc: Map<String, Value>,
+    |     ^^^
+186 |     look: Look,
+    |     ^^^^
+187 |     view: View,
+    |     ^^^^
+188 |     rect: [f64; 4],
+    |     ^^^^
+189 |     store: Option<PathBuf>,
+    |     ^^^^^
+190 |     /// Each move-phase frame: the view's origin and the document time, flicks.
+191 |     moves: Vec<([f64; 2], i64)>,
+    |     ^^^^^
+192 |     settle_ms: f64,
+    |     ^^^^^^^^^
+193 |     redraws: u32,
+    |     ^^^^^^^
+194 |     budget: Option<u64>,
+    |     ^^^^^^
+195 |     /// Each phase's shots, by phase: open, move, settle, redraw.
+196 |     shots: [Vec<Shot>; 4],
+    |     ^^^^^
+197 |     plant: asset::Plant,
+    |     ^^^^^
+
+warning: `deep-marks-render` (lib) generated 9 warnings
+   Compiling deep-net v0.0.0 (<checkout>/crates/deep-net)
+   Compiling symphonia v0.6.1
+   Compiling thorvg v0.6.0
+   Compiling deep-effects-render v0.0.0 (<checkout>/crates/deep-effects-render)
+   Compiling opus-rs v0.1.42
+   Compiling rusty_aac v2.0.1
+   Compiling deep-codecs v0.0.0 (<checkout>/crates/deep-codecs)
+warning: unused import: `std::cell::RefCell`
+  --> crates/deep-codecs/src/export.rs:12:5
+   |
+12 | use std::cell::RefCell;
+   |     ^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `std::rc::Rc`
+  --> crates/deep-codecs/src/export.rs:16:5
+   |
+16 | use std::rc::Rc;
+   |     ^^^^^^^^^^^
+
+warning: unused import: `std::collections::BTreeMap`
+ --> crates/deep-codecs/src/stream.rs:8:5
+  |
+8 | use std::collections::BTreeMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `track_color`
+  --> crates/deep-codecs/src/stream.rs:17:56
+   |
+17 | use crate::{codec, mp4, over_caps, points_at, refused, track_color, Caps, Format, Job, Planted};
+   |                                                        ^^^^^^^^^^^
+
+warning: unused variable: `key`
+   --> crates/deep-codecs/src/export.rs:625:13
+    |
+625 |         let key = head["key"].as_bool() == Some(true);
+    |             ^^^ help: if this is intentional, prefix it with an underscore: `_key`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `quality` is never used
+   --> crates/deep-codecs/src/export.rs:111:4
+    |
+111 | fn quality(tier: &str, grain: bool) -> Result<f64, Value> {
+    |    ^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `STARVED` is never used
+   --> crates/deep-codecs/src/export.rs:126:7
+    |
+126 | const STARVED: u32 = 64_000;
+    |       ^^^^^^^
+
+warning: function `hash_file` is never used
+   --> crates/deep-codecs/src/export.rs:436:4
+    |
+436 | fn hash_file(path: &Path) -> std::io::Result<String> {
+    |    ^^^^^^^^^
+
+warning: function `flatten` is never used
+   --> crates/deep-codecs/src/export.rs:908:4
+    |
+908 | fn flatten(plane: &mut [u8], w: usize, h: usize, parts: usize, n: usize) {
+    |    ^^^^^^^
+
+warning: function `without_sei` is never used
+   --> crates/deep-codecs/src/export.rs:950:4
+    |
+950 | fn without_sei(sample: &[u8], length: usize) -> Vec<u8> {
+    |    ^^^^^^^^^^^
+
+warning: function `planted_timescale` is never used
+   --> crates/deep-codecs/src/mov.rs:143:15
+    |
+143 | pub(crate) fn planted_timescale(p: u32, q: u32, planted: &Planted) -> (u32, u32) {
+    |               ^^^^^^^^^^^^^^^^^
+
+warning: fields `bgra`, `matrix`, `range`, and `blocked` are never read
+   --> crates/deep-codecs/src/stream.rs:174:5
+    |
+171 | struct Out<'p, R, W> {
+    |        --- fields in this struct
+...
+174 |     bgra: bool,
+    |     ^^^^
+175 |     /// The file's tagged (or assumed) matrix and range, for BGRA.
+176 |     matrix: String,
+    |     ^^^^^^
+177 |     range: String,
+    |     ^^^^^
+178 |     /// The time spent handing the head and frames to the pipe: a slow reader's, not decoding.
+179 |     blocked: Duration,
+    |     ^^^^^^^
+
+warning: method `frame` is never used
+   --> crates/deep-codecs/src/stream.rs:196:8
+    |
+182 | impl<R: BufRead, W: Write> Out<'_, R, W> {
+    | ---------------------------------------- method in this implementation
+...
+196 |     fn frame(&mut self, k: usize, bytes: &[u8], range: &str) -> bool {
+    |        ^^^^^
+
+warning: `deep-codecs` (lib) generated 13 warnings (run `cargo fix --lib -p deep-codecs` to apply 5 suggestions)
+   Compiling deep-groups-render v0.0.0 (<checkout>/crates/deep-groups-render)
+   Compiling deep-lottie-reader v0.0.0 (<checkout>/crates/deep-lottie-reader)
+   Compiling deep-play v0.0.0 (<checkout>/crates/deep-play)
+   Compiling deep-canvas-loop v0.0.0 (<checkout>/crates/deep-canvas-loop)
+   Compiling deep-canvas-export v0.0.0 (<checkout>/crates/deep-canvas-export)
+   Compiling deep-pptx-reader v0.0.0 (<checkout>/crates/deep-pptx-reader)
+   Compiling deep-canvas-sheet v0.0.0 (<checkout>/crates/deep-canvas-sheet)
+   Compiling deep-canvas-record v0.0.0 (<checkout>/crates/deep-canvas-record)
+warning: field `before_hash` is never read
+  --> crates/deep-show/src/export/program.rs:44:9
+   |
+38 | pub(crate) struct Planted {
+   |                   ------- field in this struct
+...
+44 |     pub before_hash: bool,
+   |         ^^^^^^^^^^^
+   |
+   = note: `Planted` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `surface` is never read
+  --> crates/deep-show/src/export/tools.rs:38:9
+   |
+27 | pub struct Tool {
+   |            ---- field in this struct
+...
+38 |     pub surface: bool,
+   |         ^^^^^^^
+   |
+   = note: `Tool` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: method `window_prompt` is never used
+   --> crates/deep-show/src/net/live.rs:347:19
+    |
+119 | impl Hub<'_> {
+    | ------------ method in this implementation
+...
+347 |     pub(crate) fn window_prompt(
+    |                   ^^^^^^^^^^^^^
+
+warning: method `window_drawn` is never used
+   --> crates/deep-show/src/picks.rs:804:19
+    |
+433 | impl Hub<'_> {
+    | ------------ method in this implementation
+...
+804 |     pub(crate) fn window_drawn(
+    |                   ^^^^^^^^^^^^
+
+warning: method `behind` is never used
+   --> crates/deep-show/src/stepped.rs:159:12
+    |
+ 93 | impl Worlds {
+    | ----------- method in this implementation
+...
+159 |     pub fn behind(&self, t: i64) -> bool {
+    |            ^^^^^^
+
+warning: constant `TARGET` is never used
+  --> crates/deep-show/src/device.rs:16:7
+   |
+16 | const TARGET: usize = 2048;
+   |       ^^^^^^
+
+warning: constant `CHUNK` is never used
+  --> crates/deep-show/src/device.rs:18:7
+   |
+18 | const CHUNK: usize = 256;
+   |       ^^^^^
+
+warning: constant `LIVE` is never used
+   --> crates/deep-show/src/device.rs:128:7
+    |
+128 | const LIVE: usize = 512;
+    |       ^^^^
+
+warning: constant `LIVE_BUFFER` is never used
+   --> crates/deep-show/src/device.rs:129:7
+    |
+129 | const LIVE_BUFFER: u32 = 256;
+    |       ^^^^^^^^^^^
+
+warning: constant `BLOCK` is never used
+   --> crates/deep-show/src/device.rs:131:7
+    |
+131 | const BLOCK: usize = 128;
+    |       ^^^^^
+
+warning: `deep-show` (bin "deep-show" test) generated 10 warnings
+    Finished `test` profile [unoptimized] target(s) in 10m 06s
+     Running unittests src/main.rs (target/debug/deps/deep_show-c70df1bd84b95797)
+
+running 1 test
+test kinds::tests::every_structured_field_prints_forms_that_take_its_own_values ... FAILED
+
+failures:
+
+---- kinds::tests::every_structured_field_prints_forms_that_take_its_own_values stdout ----
+
+thread 'kinds::tests::every_structured_field_prints_forms_that_take_its_own_values' (1170088) panicked at crates/deep-show/src/kinds.rs:1471:9:
+cut.words@1.recording: `asset name` doesn't read: `asset name` is no type the form language names
+cut.words@1.keep: `[word index | [first, last]]` doesn't read: `word index` is no type the form language names
+"cut.words@1"."recording": prints no form
+"cut.words@1"."keep": prints no form
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    kinds::tests::every_structured_field_prints_forms_that_take_its_own_values
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 55 filtered out; finished in 0.22s
+
+error: test failed, to rerun pass `-p deep-show --bin deep-show`
+unit exit 101

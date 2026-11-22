@@ -773,8 +773,14 @@ pub(crate) fn register(r: &mut deep_canvas::registry::Registrar) {
         operator: "",
     };
     let fields = [
-        ("recording", "asset name", Value::Null),
-        ("keep", "[word index | [first, last]]", json!([])),
+        // In the form language's own words (#3057): an `assets` entry's name is an `asset ID`, and
+        // a word is an `index` into the words record.
+        ("recording", "asset ID", Value::Null),
+        (
+            "keep",
+            "[index (a word, from 0 in the words record) | [first, last] (inclusive)]",
+            json!([]),
+        ),
         ("search", "ms", json!(200)),
         (
             "crossfade",

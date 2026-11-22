@@ -1,0 +1,8 @@
+129 | const LIVE_BUFFER: u32 = 256;
+131 | const BLOCK: usize = 128;
+    Finished `test` profile [unoptimized] target(s) in 48.44s
+     Running unittests src/main.rs (target/debug/deps/deep_show-c70df1bd84b95797)
+running 1 test
+test kinds::tests::every_structured_field_prints_forms_that_take_its_own_values ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 55 filtered out; finished in 0.21s
+unit exit 0

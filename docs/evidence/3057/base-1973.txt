@@ -1,0 +1,64 @@
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1973
+
+ ❯ one-form.test.ts (2 tests | 2 failed) 26432ms
+   ❯ AC1 op: field gives each json field's accepted forms, and slab@1.size's form, fed back, passes the document check (2)
+     × AC1 for every field typed json in the full build's dump, op: field gives at least one accepted form, and each form printed for slab@1.size, fed back with every number set to 1, passes the document check 12941ms
+     × AC1 a planted line that prints json alone for slab@1.size fails, naming the field 12242ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  one-form.test.ts > AC1 op: field gives each json field's accepted forms, and slab@1.size's form, fed back, passes the document check > AC1 for every field typed json in the full build's dump, op: field gives at least one accepted form, and each form printed for slab@1.size, fed back with every number set to 1, passes the document check
+AssertionError: op: field over the 631 fields typed json, and slab@1.size's forms fed back:
+  cut.words@1.recording (kind cut.words@1, field recording): its line gives no accepted form, only type "json": {"name":"recording","type":"json","unit":null,"range":null,"list":false,"default":null,"grammar":"form","forms":[],"path":"cut.words@1.recording","module":"media","stability":"stable"}
+  cut.words@1.keep (kind cut.words@1, field keep): its line gives no accepted form, only type "json": {"name":"keep","type":"json","unit":null,"range":null,"list":true,"default":[],"grammar":"form","forms":[],"path":"cut.words@1.keep","module":"media","stability":"stable"}: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "cut.words@1.recording (kind cut.words@1, field recording): its line gives no accepted form, only type \"json\": {\"name\":\"recording\",\"type\":\"json\",\"unit\":null,\"range\":null,\"list\":false,\"default\":null,\"grammar\":\"form\",\"forms\":[],\"path\":\"cut.words@1.recording\",\"module\":\"media\",\"stability\":\"stable\"}",
++   "cut.words@1.keep (kind cut.words@1, field keep): its line gives no accepted form, only type \"json\": {\"name\":\"keep\",\"type\":\"json\",\"unit\":null,\"range\":null,\"list\":true,\"default\":[],\"grammar\":\"form\",\"forms\":[],\"path\":\"cut.words@1.keep\",\"module\":\"media\",\"stability\":\"stable\"}",
++ ]
+
+ ❯ none helpers.ts:44:60
+     42| /** No failures; the message lists them. */
+     43| export function none(failures: readonly string[], what: string): void {
+     44|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     45| }
+     46| /** At least one failure, and one that names every one of `names` toge…
+ ❯ one-form.test.ts:51:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  one-form.test.ts > AC1 op: field gives each json field's accepted forms, and slab@1.size's form, fed back, passes the document check > AC1 a planted line that prints json alone for slab@1.size fails, naming the field
+AssertionError: the plant changes that one line and nothing else: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "cut.words@1.recording (kind cut.words@1, field recording): its line gives no accepted form, only type \"json\": {\"name\":\"recording\",\"type\":\"json\",\"unit\":null,\"range\":null,\"list\":false,\"default\":null,\"grammar\":\"form\",\"forms\":[],\"path\":\"cut.words@1.recording\",\"module\":\"media\",\"stability\":\"stable\"}",
++   "cut.words@1.keep (kind cut.words@1, field keep): its line gives no accepted form, only type \"json\": {\"name\":\"keep\",\"type\":\"json\",\"unit\":null,\"range\":null,\"list\":true,\"default\":[],\"grammar\":\"form\",\"forms\":[],\"path\":\"cut.words@1.keep\",\"module\":\"media\",\"stability\":\"stable\"}",
++ ]
+
+ ❯ one-form.test.ts:57:120
+     55|     const { failures } = walk(build(), PLANT_JSON_ALONE);
+     56|     failsNaming(failures, [SIZE_PATH, 'no accepted form'], 'the line t…
+     57|     expect(failures.filter((f) => !f.startsWith(`${SIZE_PATH} `)), 'th…
+       |                                                                                                                        ^
+     58|   }, 3_600_000);
+     59| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  03:02:33
+   Duration  26.56s (tests 100%)
+
+1973 exit 1

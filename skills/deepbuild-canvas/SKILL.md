@@ -1,6 +1,6 @@
 ---
 name: deepbuild-canvas
-description: Teaches writing DeepBuild canvas documents (figures, films, boards and pieces) as JSON, and the craft rules their checks hold them to. Use it to draw in DeepBuild. Generated from DeepBuild 0.0.0's kinds' schemas, module set bb0741260c1e1fee93f7e3e8e7708c9ebc7e5a3d48d73668c99c09fbdc89d526; never edit by hand.
+description: Teaches writing DeepBuild canvas documents (figures, films, boards and pieces) as JSON, and the craft rules their checks hold them to. Use it to draw in DeepBuild. Generated from DeepBuild 0.0.0's kinds' schemas, module set 16596c64b27699307b027bba36f3ffb6964955673f26213710c76f8ed4522734; never edit by hand.
 version: 0.0.0
 ---
 
@@ -119,7 +119,7 @@ A film's brief names the checks it wants; each runs only when named and never pa
 }
 ```
 
-## Kinds (module set bb0741260c1e1fee93f7e3e8e7708c9ebc7e5a3d48d73668c99c09fbdc89d526)
+## Kinds (module set 16596c64b27699307b027bba36f3ffb6964955673f26213710c76f8ed4522734)
 
 Each entry as name@major, with its origin when not first party and its stability when not stable; then its fields as name: type, unit, [min, max] and = default, each left out when it has none. Entries with no fields share one line.
 
@@ -149,7 +149,7 @@ Each entry as name@major, with its origin when not first party and its stability
 - logic@1: program: asset ID; debug: asset ID; step_rate: Hz; clock: fixed | on_input; due: name; open: name; finish: name; reads: [control ID | reading ID | path]; writes: {name → {type, count?: u32, interpolate?, unit?}}; emits: {kind → {fields, max_per_step?: u16, always_visible?: bool}}; fires: {world → [input ID]}; budget: {fuel?: integer, memory?: number, stack?: number}; checkpoint: {every?: integer, budget?: bytes}; assets: [asset ID | {gen: <pack>.<provider>, params}]; links: [{name, asset: asset ID}]; saves: {slots?: integer, request?: name, ends?: name, migrate?}; carry: {request: name, out: [name]}; carry_in: {arrays: {name → {type, count?: u32}}, accepts: [sha256]}; profile: {arrays: {name → {type, count?: u32}}, request: name}; preview: {reads?: [control ID | path], writes?: {name → {type, count?: u32}}}; services: {service@major → {max_per_step: u16}}; mirrors: [{array: path, at: name}]; fog: {grid: <logic>.<name> (i32, two bits a player), size: [cols, rows], origin?: [x, z], cell?: m}; pages: {max: u32, slots: u16, moves?: u8, lead?: u8, init?: zero | {asset: asset ID} | {gen: <pack>.<provider>, params}, written_max?: integer, web_max?: integer}; process: {kinds: [name]}; wasm: text (the program's bytes, which the hub inlines)
 - look.finish@1: tone_map: none | filmic | agx | neutral | {agx} (agx: {white: f32, contrast: f32}) = "none"; exposure: EV100; grade: {white_balance, slope: [r, g, b], offset: [r, g, b], power: [r, g, b], saturation: f32} (white_balance: {temperature: K, tint}) = {}; deband: string = "none"; deband_lsb: 0..2 (8-bit steps) = 1; ao: none | {radius, strength, samples, resolution, multi_bounce, specular} (radius: m, samples: 8 | 16, resolution: half | full) = "none"; bloom: none | {intensity, radius, threshold, tint, dirt} (threshold: EV100 | none, tint: linear RGB, dirt: {texture: sha256 | seeded, intensity}) = "none"
 - media.strip@1: track: u16; src: sha256 | {asset?: sha256, synth?, score?: item ID}; start: flick | time; in: flick | time; out: flick | time; rate: number | [p, q] | <p>/<q> | {ramp: {to, over, shape?: linear | exp}}; offset: flick | time; span: flick | time; loop: bool; gain: dB | text (-inf) | {keys: [{t: flick, value: dB | text, interp?}]}; pitch: st | expr; pan: -1..1; bus: bus ID; enabled: bool | {keys: [{t: flick, value: bool, interp?}]}; fade_in: {length: flick, curve?: linear | equal_power | exp}; fade_out: {length: flick, curve?: linear | equal_power | exp}; align: {onset?: strongest | first, to: flick | time}; at_stage: play | wait; tags: [text]
-- cut.words@1: recording; keep = []; search: ms = 200; crossfade: {min?: ms, max?: ms} = {"max":40,"min":5}
+- cut.words@1: recording: asset ID; keep: [index (a word, from 0 in the words record) | [first, last] (inclusive)] = []; search: ms = 200; crossfade: {min?: ms, max?: ms} = {"max":40,"min":5}
 - arrange@1: items: [item ID] = []; relations: [{a: ID, rel: on | inside | next_to | against | facing | near | apart, b: ID, d?: m}] = []; broken_out: [item ID] = []
 - cues@1: cues: [{id?, when?, gap?, span?, ease?, lag?, order?, targets?, set?, kind?, params?}] ≤ 512 = []; words: {text?, sub?, data?} = {}
 - net@1: relay: text (one https URL) = ""; players: 2 to 8 | {min: 1 to 8, max: 2 to 8} = 2; step_rate: number Hz [1, 240] = 60; delay: number [0, 30] = 2; window: number [0, 16] = 8; hash_every: number [1, 100000] = 60; timeout: number s [0.05, 3600] = 5; draw_after: [control ID] = []

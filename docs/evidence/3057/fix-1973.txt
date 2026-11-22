@@ -1,0 +1,14 @@
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1973
+
+ ✓ one-form.test.ts (2 tests) 25013ms
+   ✓ AC1 op: field gives each json field's accepted forms, and slab@1.size's form, fed back, passes the document check (2)
+     ✓ AC1 for every field typed json in the full build's dump, op: field gives at least one accepted form, and each form printed for slab@1.size, fed back with every number set to 1, passes the document check 12492ms
+     ✓ AC1 a planted line that prints json alone for slab@1.size fails, naming the field 12018ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  03:05:51
+   Duration  25.11s (tests 100%)
+
+1973 exit 0
