@@ -1472,3 +1472,42 @@ fn the_mcp_servers_facts_name_a_tools_path_arguments_only_for_a_server_loaded_as
     );
     let _ = std::fs::remove_dir_all(&home);
 }
+
+#[test]
+fn a_session_start_reports_whether_each_route_variable_is_set_never_its_value() {
+    // #1886: the route to the agent's model is read from what SessionStart reports set, as billing keys are.
+    let home =
+        fresh_home(std::env::temp_dir().join(format!("dh1886-route-{}", std::process::id())));
+    let url = "http://127.0.0.1:9/dh1886-bridge";
+    let mut child = Command::new(env!("CARGO_BIN_EXE_deep-hook"))
+        .args(["claude-code", "SessionStart"])
+        .env_clear()
+        .env("HOME", &home)
+        .env("ANTHROPIC_BASE_URL", url)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    feed(
+        &mut child,
+        br#"{"session_id":"s","hook_event_name":"SessionStart","source":"startup"}"#,
+    );
+    let exited = exit_within(&mut child, std::time::Instant::now(), SECOND);
+    let spooled =
+        std::fs::read_to_string(home.join(".deepbuild/spool/spool.jsonl")).unwrap_or_default();
+    std::fs::remove_dir_all(&home).unwrap();
+    assert_eq!(
+        exited.and_then(|s| s.code()),
+        Some(0),
+        "the hook is allowed"
+    );
+    assert!(
+        spooled.contains(r#""route":{"ANTHROPIC_BASE_URL":true,"OPENAI_BASE_URL":false}"#),
+        "the SessionStart says which route variables are set: {spooled:?}"
+    );
+    assert!(
+        !spooled.contains("127.0.0.1:9") && !spooled.contains("dh1886-bridge"),
+        "the request holds no value: {spooled:?}"
+    );
+}

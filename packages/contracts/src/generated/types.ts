@@ -7639,6 +7639,7 @@ export interface HookRequestV3 {
   payload: unknown;
   late?: boolean;
   billing?: { [key: string]: boolean };
+  route?: { [key: string]: boolean };
 }
 
 /** hook.template@1 */
@@ -10457,6 +10458,7 @@ export interface SessionStartV3 {
     branch: string | null;
     thread: string;
     billing?: { [key: string]: boolean };
+    route?: { [key: string]: boolean };
     loads: Array<{
       kind: "instructions" | "skill" | "hooks" | "mcp";
       name: string;
@@ -10491,6 +10493,7 @@ export interface SessionStartV4 {
     branch: string | null;
     thread: string;
     billing?: { [key: string]: boolean };
+    route?: { [key: string]: boolean };
     loads: Array<{
       kind: "instructions" | "skill" | "hooks" | "mcp";
       name: string;

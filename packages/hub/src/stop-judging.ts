@@ -18,6 +18,7 @@ import { scrubText, type EvidenceStore } from '@deepbuild/evidence';
 import { type ExtensionHost, type ProjectTrust } from '@deepbuild/extension-host';
 import { type RecordStore } from '@deepbuild/record';
 import { endsEmpty, freshCount, gitEnv, judgeStop, leftOpen, priceDefinition, toldToRun, unitless, validityGate, type PaidKind, type SessionLog, type StallRule } from '@deepbuild/gate';
+import type { SessionRoute } from '@deepbuild/adapters';
 import { type LeaseTable } from '@deepbuild/leases';
 import { type Runner, type WindowReport } from '@deepbuild/runner';
 import { type Grant, type Host } from '@deepbuild/supervisor';
@@ -981,6 +982,14 @@ export class StopJudging {
   }
 
   /** The pull request a session opened, as its readings record it: the newest. */
+  /** The route the session's adapter read at its latest start (#1886), as its session.start keeps it; none recorded reads as the agent's own. */
+  private async routeOf(session: string | null): Promise<SessionRoute> {
+    if (!session) return {};
+    const [row] = (await this.options.services.record.raw(`SELECT json_extract(data, '$.route') AS route FROM events WHERE session_id = ? AND kind = 'session.start' ORDER BY log_pos DESC LIMIT 1`, [session])) as { route: string | null }[];
+    const route: unknown = row?.route ? JSON.parse(row.route) : {};
+    return typeof route === 'object' && route !== null ? Object.fromEntries(Object.entries(route).filter(([, set]) => typeof set === 'boolean')) : {};
+  }
+
   async prOf(session: string | null): Promise<string | undefined> {
     if (!session) return undefined;
     const [row] = (await this.options.services.record.raw(`SELECT json_extract(data, '$.reading') AS reading FROM events WHERE session_id = ? AND kind = 'session.reading' AND json_extract(data, '$.reading') LIKE 'Opened pull request %' ORDER BY log_pos DESC LIMIT 1`, [session])) as { reading: string }[];
@@ -1099,7 +1108,7 @@ export class StopJudging {
       // The checks of the other kinds the hub holds (#1537), each run through its kind: a drafted check whose bytes name
       // a work kind; the review on every claim that opens or updates a PR, its second model through the runner under
       // your reserve (#87); the numbers check on every claim whose words state a number or a speed with the check behind it (#1863).
-      const of: ReviewOf = { claim: r.claim, task: r.task, agent: this.options.state().live.get(r.session)?.agent ?? 'claude-code', transcript: this.options.state().sessions.get(r.session)?.transcript, pr: await this.prOf(r.session) };
+      const of: ReviewOf = { claim: r.claim, task: r.task, agent: this.options.state().live.get(r.session)?.agent ?? 'claude-code', transcript: this.options.state().sessions.get(r.session)?.transcript, pr: await this.prOf(r.session), route: await this.routeOf(r.session) };
       const kinded = new Map<string, { spec: CheckSpec; of: ReviewOf }>();
       const docs = this.options.services.canvasSide.docChecksOf(r.cwd);
       for (const c of checks) {

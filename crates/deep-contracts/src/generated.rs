@@ -57438,11 +57438,12 @@ pub struct HookRequestV3 {
     pub payload: deep_contracts::Value,
     pub late: Option<bool>,
     pub billing: Option<std::collections::BTreeMap<String, bool>>,
+    pub route: Option<std::collections::BTreeMap<String, bool>>,
 }
 
 impl Contract for HookRequestV3 {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        let members = deep_contracts::members(value, at, &["v", "agent", "event", "seq", "id", "pid", "ppid", "matched", "notes", "stage", "heavy", "payload", "late", "billing"])?;
+        let members = deep_contracts::members(value, at, &["v", "agent", "event", "seq", "id", "pid", "ppid", "matched", "notes", "stage", "heavy", "payload", "late", "billing", "route"])?;
         deep_contracts::check_member(members, at, "agent", &RULE_3)?;
         deep_contracts::check_member(members, at, "event", &RULE_3)?;
         deep_contracts::check_member(members, at, "id", &RULE_0)?;
@@ -57452,6 +57453,7 @@ impl Contract for HookRequestV3 {
         deep_contracts::check_member(members, at, "notes", &RULE_226)?;
         deep_contracts::check_member(members, at, "stage", &RULE_229)?;
         deep_contracts::check_member(members, at, "billing", &RULE_224)?;
+        deep_contracts::check_member(members, at, "route", &RULE_224)?;
         Ok(Self {
             v: deep_contracts::required(members, at, "v")?,
             agent: deep_contracts::required(members, at, "agent")?,
@@ -57467,6 +57469,7 @@ impl Contract for HookRequestV3 {
             payload: deep_contracts::required(members, at, "payload")?,
             late: deep_contracts::optional(members, at, "late")?,
             billing: deep_contracts::optional(members, at, "billing")?,
+            route: deep_contracts::optional(members, at, "route")?,
         })
     }
     fn to_json(&self) -> Value {
@@ -57494,6 +57497,9 @@ impl Contract for HookRequestV3 {
         }
         if let Some(value) = &self.billing {
             members.push(("billing".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.route {
+            members.push(("route".to_string(), value.to_json()));
         }
         Value::Object(members)
     }
@@ -79607,24 +79613,27 @@ pub struct SessionStartV3Data {
     pub branch: Option<String>,
     pub thread: String,
     pub billing: Option<std::collections::BTreeMap<String, bool>>,
+    pub route: Option<std::collections::BTreeMap<String, bool>>,
     pub loads: Vec<SessionStartV3DataLoadsItem>,
     pub toolLoad: Option<SessionStartV3DataToolLoad>,
 }
 
 impl Contract for SessionStartV3Data {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        let members = deep_contracts::members(value, at, &["agent", "worktree", "branch", "thread", "billing", "loads", "toolLoad"])?;
+        let members = deep_contracts::members(value, at, &["agent", "worktree", "branch", "thread", "billing", "route", "loads", "toolLoad"])?;
         deep_contracts::check_member(members, at, "agent", &RULE_6)?;
         deep_contracts::check_member(members, at, "worktree", &RULE_6)?;
         deep_contracts::check_member(members, at, "branch", &RULE_16)?;
         deep_contracts::check_member(members, at, "thread", &RULE_6)?;
         deep_contracts::check_member(members, at, "billing", &RULE_224)?;
+        deep_contracts::check_member(members, at, "route", &RULE_45)?;
         Ok(Self {
             agent: deep_contracts::required(members, at, "agent")?,
             worktree: deep_contracts::required(members, at, "worktree")?,
             branch: deep_contracts::required(members, at, "branch")?,
             thread: deep_contracts::required(members, at, "thread")?,
             billing: deep_contracts::optional(members, at, "billing")?,
+            route: deep_contracts::optional(members, at, "route")?,
             loads: deep_contracts::required(members, at, "loads")?,
             toolLoad: deep_contracts::optional(members, at, "toolLoad")?,
         })
@@ -79637,6 +79646,9 @@ impl Contract for SessionStartV3Data {
         members.push(("thread".to_string(), self.thread.to_json()));
         if let Some(value) = &self.billing {
             members.push(("billing".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.route {
+            members.push(("route".to_string(), value.to_json()));
         }
         members.push(("loads".to_string(), self.loads.to_json()));
         if let Some(value) = &self.toolLoad {
@@ -79873,6 +79885,7 @@ pub struct SessionStartV4Data {
     pub branch: Option<String>,
     pub thread: String,
     pub billing: Option<std::collections::BTreeMap<String, bool>>,
+    pub route: Option<std::collections::BTreeMap<String, bool>>,
     pub loads: Vec<SessionStartV4DataLoadsItem>,
     pub parent: Option<String>,
     pub toolLoad: Option<SessionStartV4DataToolLoad>,
@@ -79880,12 +79893,13 @@ pub struct SessionStartV4Data {
 
 impl Contract for SessionStartV4Data {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        let members = deep_contracts::members(value, at, &["agent", "worktree", "branch", "thread", "billing", "loads", "parent", "toolLoad"])?;
+        let members = deep_contracts::members(value, at, &["agent", "worktree", "branch", "thread", "billing", "route", "loads", "parent", "toolLoad"])?;
         deep_contracts::check_member(members, at, "agent", &RULE_6)?;
         deep_contracts::check_member(members, at, "worktree", &RULE_6)?;
         deep_contracts::check_member(members, at, "branch", &RULE_16)?;
         deep_contracts::check_member(members, at, "thread", &RULE_6)?;
         deep_contracts::check_member(members, at, "billing", &RULE_224)?;
+        deep_contracts::check_member(members, at, "route", &RULE_45)?;
         deep_contracts::check_member(members, at, "parent", &RULE_6)?;
         Ok(Self {
             agent: deep_contracts::required(members, at, "agent")?,
@@ -79893,6 +79907,7 @@ impl Contract for SessionStartV4Data {
             branch: deep_contracts::required(members, at, "branch")?,
             thread: deep_contracts::required(members, at, "thread")?,
             billing: deep_contracts::optional(members, at, "billing")?,
+            route: deep_contracts::optional(members, at, "route")?,
             loads: deep_contracts::required(members, at, "loads")?,
             parent: deep_contracts::optional(members, at, "parent")?,
             toolLoad: deep_contracts::optional(members, at, "toolLoad")?,
@@ -79906,6 +79921,9 @@ impl Contract for SessionStartV4Data {
         members.push(("thread".to_string(), self.thread.to_json()));
         if let Some(value) = &self.billing {
             members.push(("billing".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.route {
+            members.push(("route".to_string(), value.to_json()));
         }
         members.push(("loads".to_string(), self.loads.to_json()));
         if let Some(value) = &self.parent {

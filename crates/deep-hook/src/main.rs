@@ -43,6 +43,11 @@ const BILLING_KEYS: &[&str] = &[
     "OPENAI_API_KEY",
 ];
 
+/// The environment variables that move the route to an agent's model off its own, beside the billing keys that do
+/// (#1886): SessionStart reports whether each is set, never its value, and the agent's adapter reads the route from
+/// both.
+const ROUTE_KEYS: &[&str] = &["ANTHROPIC_BASE_URL", "OPENAI_BASE_URL"];
+
 // A release build refuses the planted programs' feature (#1408).
 #[cfg(all(feature = "env-plants", not(debug_assertions)))]
 compile_error!("the env-plants feature is for test builds only, never a release build");
@@ -1304,7 +1309,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             )
         })
         .unwrap_or_default();
-    // At SessionStart, whether each billing key is set in the environment the agent gave this process.
+    // At SessionStart, whether each billing and route key is set in the environment the agent gave this process.
     let billing = if event == "SessionStart" {
         let keys = BILLING_KEYS
             .iter()
@@ -1320,7 +1325,17 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             })
             .collect::<Vec<_>>()
             .join(",");
-        format!(",\"billing\":{{{keys}}}")
+        let route = ROUTE_KEYS
+            .iter()
+            .map(|key| {
+                format!(
+                    "\"{key}\":{}",
+                    env::var_os(key).is_some_and(|v| !v.is_empty())
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        format!(",\"billing\":{{{keys}}},\"route\":{{{route}}}")
     } else {
         String::new()
     };
