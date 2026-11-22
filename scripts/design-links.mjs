@@ -3,7 +3,7 @@
 // `deep` command and agent tool an open issue names in code is in a design doc's code, or in scripts/planned-names.txt
 // with the open issue that plans it. It reads the open issues the catalogue drift lane fetched; without them it is
 // INCONCLUSIVE, never PASS. It also reads the design's Principles section (#2339): see principles() below.
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { posix } from 'node:path';
 import { DOCS, REPO, anchors, headingText, prose, resolve, targets } from './doc-links.mjs';
 import { checks } from './lanes.mjs';
@@ -130,7 +130,8 @@ function principles() {
     if (extra > (invariant ? 0 : 1)) problems.push(`${at} is ${sentences(text)} sentences, not ${invariant ? `invariant ${i + 1}'s ${sentences(invariant.text)}` : 'one'}`);
     if (!targets(text).some((target) => { const link = resolve(target, TD); return link?.id && DOCS.includes(link.file); })) problems.push(`${at} has no link into the design`);
     const scripts = scriptsOf(text);
-    for (const script of scripts) if (!script.startsWith('scripts/') || !existsSync(script) || !statSync(script).isFile()) problems.push(`${at} names ${script}, which isn't a file under scripts/`);
+    // Its name as the folder lists it, so a mis-cased name fails on a disk that ignores case, as it does on GitHub.
+    for (const script of scripts) if (!script.startsWith('scripts/') || !existsSync(script) || !statSync(script).isFile() || !readdirSync(posix.dirname(script)).includes(posix.basename(script))) problems.push(`${at} names ${script}, which isn't a file under scripts/`);
     const lanes = [...text.matchAll(/(`+)(.+?)\1/g)].map((m) => m[2].trim()).filter((code) => LANES.has(code));
     if (!scripts.length && !lanes.length) problems.push(`${at} names no check: a \`scripts/…\` file or a lane of scripts/lanes.mjs, in code`);
   }
