@@ -30,14 +30,21 @@ not added to `tests/`, and #806's test runs unchanged.
 
 ## The fix in #2896
 
-`packages/hub/src/reply-fit.ts`: an error's cap keeps a fifth spare under its characters (the 9,000 drafted from the
-11,000 an error keeps, AC3) and under its tokens, whose count a cut can miss by a token or two. It holds bytes at the
-facts' figure itself, because bytes are counted exactly as `deep mcp` sends them and an error is never paged. A
-result's page keeps its fifth under every figure, as drafted.
+`packages/hub/src/reply-fit.ts`, `0a5cab54f`: an error's cap keeps a fifth spare under its characters (the 9,000
+drafted from the 11,000 an error keeps, AC5) and its tokens, whose count a cut can miss by a token or two. It holds bytes
+at the facts' figure itself. A result's page keeps its fifth under every figure, as drafted.
 
-- An unknown client's error cap is now 8,800 characters, 8,000 tokens and 10,000 bytes.
-- The 8,471-byte refusal reaches it uncut, so it equals the stand-in's.
-- Claude Code's and Codex's caps are unchanged: neither gives a byte figure for the versions #2896 names.
+- An unknown client's error cap is now 8,800 characters, 8,000 tokens and 10,000 bytes. So is Codex 0.144.0's, and that
+  of any Codex version the facts don't list, which takes the smallest of Codex's entries.
+- The 8,471-byte refusal reaches the unknown client uncut, so it equals the stand-in's.
+- Claude Code's caps, and those of the Codex versions #2896 names, are unchanged: their entries give no byte figure.
+
+Review round 6 found that `0a5cab54f` counted an error's bytes as `deep mcp` sends them, not as Codex receives them. An
+error carries no `structuredContent`, so Codex's body is the content array JSON-encoded, with the refusal escaped once
+more, after a "Wall time" header (codex-rs 0.144.0). A quote-dense, non-ASCII refusal held to 10,000 sent bytes reached
+Codex 0.144.0 at 14,273, past its cut at 12,000. The next commit counts an error's bytes as Codex receives them, held
+to the facts' 10,000, with Codex's own fifth more as the spare. `packages/hub/test/reply-fit.test.ts` holds that case;
+its failing-first run is `../unit-fails-first-round6.txt`.
 
 On the fix, the first draft and both of the redraft's tests pass, each file run alone (`passes-after-fix.txt`, load
 100 to 127). An earlier run of the same files together, at load 13, got `unavailable` from the hub (it did not answer in time)

@@ -148,7 +148,7 @@
         },
         "limit": {
           "type": "object",
-          "description": "The reply limit DeepBuild's own server held this client to (#2896): the client as its initialize names it, the facts that gave its limits, and the caps a fifth under them.",
+          "description": "The reply limit DeepBuild's own server held this client to (#2896): the client as its initialize names it, the facts that gave its limits, and the caps it held replies and refusals to.",
           "properties": {
             "client": {
               "type": [
@@ -249,7 +249,7 @@
             },
             "error_cap": {
               "type": "object",
-              "description": "The refusal cap applied: a fifth under the error limits.",
+              "description": "The refusal cap applied: a fifth under the error limits' characters and tokens, and at their bytes, counted as Codex receives an error.",
               "properties": {
                 "chars": {
                   "type": "integer",

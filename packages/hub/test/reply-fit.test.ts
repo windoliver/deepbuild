@@ -52,8 +52,22 @@ describe('refusalFits', () => {
     const { countTokens } = await import('gpt-tokenizer/encoding/o200k_base');
     const whole = countTokens(JSON.stringify({ text }));
     const rooms: number[] = [];
-    await fitted({ tokens: whole - 1 }, () => ({ tokens: whole - 1 }), true, async (room) => { rooms.push(room); return rooms.length === 1 ? { text } : {}; });
+    await fitted({ cap: { tokens: whole - 1 }, error_cap: {} }, () => false, true, async (room) => { rooms.push(room); return rooms.length === 1 ? { text } : {}; });
     expect(rooms.length).toBe(2);
+  });
+});
+
+describe('an error as Codex receives it', () => {
+  // Codex 0.144.0 (codex-rs/protocol/src/models.rs, core/src/tools/context.rs): an error carries no structuredContent, so
+  // its body is the content array JSON-encoded, the refusal's text escaped once more, after a "Wall time" header.
+  const codexBytes = (refusal: object) =>
+    Buffer.byteLength(`Wall time: 0.1 seconds\nOutput:\n${JSON.stringify([{ type: 'text', text: JSON.stringify(refusal) }])}`);
+
+  it("holds a quote-dense, non-ASCII refusal to Codex 0.144.0's 10,000 bytes as Codex counts them", async () => {
+    const limit = limitOf({ name: 'codex-mcp-client', version: '0.144.0' });
+    const refusal = { code: 'type', path: '/params/arguments/label', remediation: 'Give label a string.', actual: '"—"'.repeat(5_000) };
+    const out = await refusalFits(refusal, limit.error_cap);
+    expect(codexBytes(out)).toBeLessThanOrEqual(limit.error.bytes!);
   });
 });
 
@@ -68,7 +82,7 @@ describe('limitOf', () => {
 describe('fitted', () => {
   it('asks a call that may change something once, with a tighter first room', async () => {
     const rooms: number[] = [];
-    await fitted({ tokens: 8_000 }, () => ({ tokens: 8_000 }), false, async (room) => {
+    await fitted({ cap: { tokens: 8_000 }, error_cap: {} }, () => false, false, async (room) => {
       rooms.push(room);
       return { rows: 'y'.repeat(100_000) };
     });
@@ -77,7 +91,7 @@ describe('fitted', () => {
 
   it('asks a read again with less room while it is over', async () => {
     const rooms: number[] = [];
-    await fitted({ chars: 10_000 }, () => ({ chars: 10_000 }), true, async (room) => {
+    await fitted({ cap: { chars: 10_000 }, error_cap: {} }, () => false, true, async (room) => {
       rooms.push(room);
       return { rows: 'y'.repeat(Math.floor(room * 1.2)) };
     });

@@ -129,7 +129,7 @@ export class McpOperations {
     const tool = String(params.tool);
     // No MCP call starts a session, whatever it claims (#1330): refused before its arguments are read.
     if (tool === 'deep_start') return this.options.services.sessionStarts.refuseMcp(context.session);
-    // What the client deep mcp names keeps of one tool result, which every reply and refusal stays a fifth under (#2896).
+    // What the client deep mcp names keeps of one tool result, which every paging reply stays a fifth under, and every refusal under its error figures as reply-fit counts them (#2896).
     let limit: Limit | undefined;
     try {
       limit = this.limitFor(params.client);
@@ -216,7 +216,7 @@ export class McpOperations {
     const plant = this.options.settings.plant;
     if (plant === 'reply-cap-64kb' || (plant === 'unknown-client-64kb' && limit.from === UNKNOWN)) return ask(undefined);
     // A reply sent as the tool's refusal reaches the client as an error, so it is held to the error cap.
-    const reply = await fitted(limit.cap, (r) => (answersAsRefusal(r) ? limit.error_cap : limit.cap), reads, ask);
+    const reply = await fitted(limit, answersAsRefusal, reads, ask);
     if (plant === 'pager-drops-edge-row' && typeof reply.next === 'string' && /^\d+$/.test(reply.next)) reply.next = String(Number(reply.next) + 1);
     return reply;
   }

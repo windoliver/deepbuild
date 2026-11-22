@@ -42,11 +42,17 @@ function smallest(list: Figures[]): Figures {
 const fifthUnder = (f: Figures): Figures => Object.fromEntries(UNITS.filter((u) => f[u] !== undefined).map((u) => [u, Math.floor(f[u]! * 0.8)])) as Figures;
 /**
  * An error's cap: a fifth under its characters (the 9,000 drafted from the 11,000 an error keeps) and its tokens, whose count
- * a cut can miss by a token or two, but its bytes whole: they are counted exactly as deep mcp sends them, and an error is
- * never paged, so a spare would only cut a refusal every client keeps whole (#806's replay of #393 AC9: 8,471 bytes under
- * Codex 0.144.0's 10,000).
+ * a cut can miss by a token or two, but its bytes at the facts' figure, since `over` counts an error's bytes as Codex
+ * receives it (`codexBytes`), and Codex cuts only past a fifth more than its figure. A fifth under that too would cut a
+ * refusal every client keeps whole (#806's replay of #393 AC9).
  */
 const errorCapOf = (f: Figures): Figures => ({ ...fifthUnder(f), ...(f.bytes === undefined ? {} : { bytes: f.bytes }) });
+/**
+ * An error's bytes as Codex receives it (codex-rs 0.144.0: protocol/src/models.rs, core/src/tools/context.rs). An error
+ * carries no structuredContent, so Codex's body is the content array JSON-encoded, the text escaped once more, after a
+ * "Wall time: N seconds\nOutput:\n" header, given 64 bytes here.
+ */
+const codexBytes = (text: string): number => 64 + Buffer.byteLength(JSON.stringify([{ type: 'text', text }]));
 
 /** Every toolResult entry of every shipped facts file. */
 const allEntries = (): Entry[] => factsFiles().flatMap(entriesOf);
@@ -98,11 +104,14 @@ async function tokensOf(text: string): Promise<number> {
   for (let at = 0; at < text.length; at += 2_048) n += counter(text.slice(at, at + 2_048)) + (at > 0 ? 2 : 0);
   return n;
 }
-/** How far `text` passes each figure of `cap`: the largest ratio of size to figure, at most 1 when it fits. */
-async function over(text: string, cap: Figures): Promise<number> {
+/**
+ * How far `text` passes each figure of `cap`: the largest ratio of size to figure, at most 1 when it fits. An error's bytes
+ * are counted as Codex receives it; a result's are the text's own, as Codex reads its structuredContent.
+ */
+async function over(text: string, cap: Figures, error = false): Promise<number> {
   let worst = 0;
   if (cap.chars) worst = Math.max(worst, text.length / cap.chars);
-  if (cap.bytes) worst = Math.max(worst, Buffer.byteLength(text) / cap.bytes);
+  if (cap.bytes) worst = Math.max(worst, (error ? codexBytes(text) : Buffer.byteLength(text)) / cap.bytes);
   // A token holds at least one byte, so text of no more bytes than the token figure is under it uncounted.
   if (cap.tokens && Buffer.byteLength(text) > cap.tokens) worst = Math.max(worst, (await tokensOf(text)) / cap.tokens);
   return worst;
@@ -116,18 +125,19 @@ async function over(text: string, cap: Figures): Promise<number> {
 const roomOf = (cap: Figures, retry: boolean): number => Math.min(cap.chars ?? Infinity, cap.bytes ?? Infinity, (cap.tokens ?? Infinity) * (retry ? 2 : 1.5));
 
 /**
- * A reply that fits its cap as its client receives it (the value's JSON, the text deep mcp sends): `capOf` names the cap
- * the reply is held to (a reply sent as a refusal is held to the error cap). Asked with the room `roomOf` gives the
- * result cap, then, while it is over, again with less in proportion to how far it passed. A call that isn't a pure read
- * (`retry` false) is asked once, and the asking stops once a reply stops getting shorter: it doesn't page.
+ * A reply that fits its cap as its client receives it (the value's JSON, the text deep mcp sends): `isError` says whether
+ * the reply is sent as a refusal, which is held to the error cap and counted as an error. Asked with the room `roomOf`
+ * gives the result cap, then, while it is over, again with less in proportion to how far it passed. A call that isn't a
+ * pure read (`retry` false) is asked once, and the asking stops once a reply stops getting shorter: it doesn't page.
  */
-export async function fitted(cap: Figures, capOf: (reply: Obj) => Figures, retry: boolean, ask: (room: number) => Promise<Obj>): Promise<Obj> {
-  let room = Math.floor(roomOf(cap, retry));
+export async function fitted(limit: Pick<Limit, 'cap' | 'error_cap'>, isError: (reply: Obj) => boolean, retry: boolean, ask: (room: number) => Promise<Obj>): Promise<Obj> {
+  let room = Math.floor(roomOf(limit.cap, retry));
   let last = Infinity;
   for (let tries = 0; ; tries++) {
     const reply = await ask(room);
     const text = JSON.stringify(reply);
-    const by = await over(text, capOf(reply));
+    const error = isError(reply);
+    const by = await over(text, error ? limit.error_cap : limit.cap, error);
     if (by <= 1 || !retry || tries >= 6 || room <= 1024 || text.length >= last) return reply;
     last = text.length;
     room = Math.max(1024, Math.floor((Math.min(room, Buffer.byteLength(text)) / by) * 0.95));
@@ -142,7 +152,7 @@ const WHOLE = " schema is the tool's input schema.";
  * saying how many it shows; then its value at the path is cut to what fits.
  */
 export async function refusalFits(refusal: Partial<Refusal> & Obj, cap: Figures): Promise<Partial<Refusal> & Obj> {
-  if ((await over(JSON.stringify(refusal), cap)) <= 1) return refusal;
+  if ((await over(JSON.stringify(refusal), cap, true)) <= 1) return refusal;
   const out: Obj = { ...refusal };
   const schema = out.schema as { properties?: Obj } | undefined;
   if (schema && typeof schema === 'object') {
@@ -163,13 +173,13 @@ export async function refusalFits(refusal: Partial<Refusal> & Obj, cap: Figures)
       return n;
     }, {});
     let shown = all.length;
-    for (let by = await over(JSON.stringify(out), cap); by > 1 && shown > 0; by = await over(JSON.stringify(out), cap)) {
+    for (let by = await over(JSON.stringify(out), cap, true); by > 1 && shown > 0; by = await over(JSON.stringify(out), cap, true)) {
       shown = Math.min(shown - 1, Math.floor((shown / by) * 0.95));
       out.issues = all.slice(0, shown);
       out.truncated = { ...was, shown, total, by_code: byCode };
     }
   }
-  for (let by = await over(JSON.stringify(out), cap); by > 1 && typeof out.actual === 'string' && out.actual.length; by = await over(JSON.stringify(out), cap)) {
+  for (let by = await over(JSON.stringify(out), cap, true); by > 1 && typeof out.actual === 'string' && out.actual.length; by = await over(JSON.stringify(out), cap, true)) {
     out.actual = out.actual.slice(0, Math.floor((out.actual.length / by) * 0.9));
   }
   return out as Partial<Refusal> & Obj;
