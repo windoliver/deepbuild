@@ -43,7 +43,7 @@ interface HoldOptions {
   /** A session.reading on the session's row. */
   reading(session: string, agent: string, reading: string): Promise<void>;
   /** Copies the session's transcript into the record, so a target it read is placed as read. */
-  archived(session: string): Promise<void>;
+  archived(session: string, transcript: string): Promise<void>;
 }
 
 /**
@@ -342,7 +342,7 @@ export class Holds {
       : `Run \`${call.label}\`? It replies in your name to a reviewer's thread on the pull request, a send that needs your authority.`;
     const targets = classes.includes('push') ? pushTargets(call.label) : [];
     // A failed or late copy leaves a target the session read as unknown, which asks you all the same.
-    if (targets.length) await Promise.race([this.o.archived(meta.session).catch(() => undefined), sleep(ARCHIVE_WAIT_MS)]);
+    if (targets.length) await Promise.race([this.o.archived(meta.session, meta.transcript).catch(() => undefined), sleep(ARCHIVE_WAIT_MS)]);
     return this.raise(meta.session, meta.agent, meta.cwd, source, k, question, ANSWERS[classes[0]!]!, planFor(source, `Run \`${call.label}\`, which ${classes.map((c) => DOES[c]).join(' and ')}`, [call.label], targets));
   }
 
