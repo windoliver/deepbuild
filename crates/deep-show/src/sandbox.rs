@@ -97,6 +97,33 @@ fn refusals_what(r: &[Refusal]) -> String {
         .join("; ")
 }
 
+/// What a passed pack check gave the host it ran in, kept for the next host of this process.
+#[derive(Clone)]
+struct Vetted {
+    rows: Vec<Value>,
+    programs: Vec<((String, String), Value)>,
+    rewritten: Vec<((String, String), Result<Rewritten, Vec<Refusal>>)>,
+    outputs: Vec<(String, Made)>,
+    entries: Vec<SealedEntry>,
+    vetted: Vec<String>,
+}
+
+/// A pack version, its manifest's hash, the planted programs, and the folders its runs write to.
+type VetKey = (String, String, String, PathBuf, Option<PathBuf>);
+
+thread_local! {
+    /// #1172: each pack version this process's pack check passed, by what it depends on.
+    static VETTED: std::cell::RefCell<std::collections::HashMap<VetKey, Vetted>> = Default::default();
+}
+
+/// The entries of `map` whose keys `had` lacks.
+fn added<K: Clone + Ord, V: Clone>(map: &BTreeMap<K, V>, had: &[K]) -> Vec<(K, V)> {
+    map.iter()
+        .filter(|(k, _)| !had.contains(k))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect()
+}
+
 impl Host {
     pub fn new(startup: &crate::hub::Startup, scenario: &crate::hub::Scenario) -> Host {
         Host {
@@ -170,7 +197,51 @@ impl Host {
     /// The half of a pack's check that runs its programs, after the core's half admitted it: each
     /// layout's validator on each of its twins, which it must refuse, and each program entry's
     /// rewrite. Returns the layouts' rows and the issues that refuse the pack.
+    ///
+    /// #1172: a version this process passed is not run again; a new host is given what the
+    /// check gave the first (the canvas side builds a host for every call).
     pub fn vet(
+        &mut self,
+        manifest: &Value,
+        pack: &Pack,
+        sealed: &Sealed,
+    ) -> (Vec<Value>, Vec<Issue>) {
+        let key = (
+            pack.id.text(),
+            hash(manifest.to_string().as_bytes()),
+            format!("{:?} {:?}", self.planted, self.key_planted),
+            self.evidence.clone(),
+            self.cache.clone(),
+        );
+        if let Some(v) = VETTED.with(|c| c.borrow().get(&key).cloned()) {
+            self.packs.insert(pack.id.text(), manifest.clone());
+            self.programs.extend(v.programs);
+            self.rewritten.extend(v.rewritten);
+            self.outputs.extend(v.outputs);
+            self.layout_entries.extend(v.entries);
+            self.vetted.extend(v.vetted);
+            return (v.rows, Vec::new());
+        }
+        let programs: Vec<_> = self.programs.keys().cloned().collect();
+        let rewritten: Vec<_> = self.rewritten.keys().cloned().collect();
+        let outputs: Vec<_> = self.outputs.keys().cloned().collect();
+        let (entries, vetted) = (self.layout_entries.len(), self.vetted.clone());
+        let (rows, issues) = self.vet_fresh(manifest, pack, sealed);
+        if issues.is_empty() {
+            let v = Vetted {
+                rows: rows.clone(),
+                programs: added(&self.programs, &programs),
+                rewritten: added(&self.rewritten, &rewritten),
+                outputs: added(&self.outputs, &outputs),
+                entries: self.layout_entries[entries..].to_vec(),
+                vetted: self.vetted.difference(&vetted).cloned().collect(),
+            };
+            VETTED.with(|c| c.borrow_mut().insert(key, v));
+        }
+        (rows, issues)
+    }
+
+    fn vet_fresh(
         &mut self,
         manifest: &Value,
         pack: &Pack,

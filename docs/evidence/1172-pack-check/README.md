@@ -33,18 +33,20 @@ Checked alone on the head's build, every pack takes under 1.3 s but `foley`, at 
 (27 or more 2 s renders apiece) one after another. The sweep now runs a chunk of presets per core, up to 8, through
 `deep_canvas::document::each_index` (the canvas crate's reviewed thread use, inline on one core, so the wasm lane
 still passes), and reads the refusals back in the presets' order; `sweep-checks.txt` has the order test, its
-wrong-order run and the wasm lane. Stack samples of the canvas core during the check show eight threads in
-`Voice::render_part` under `presets_field_with`.
+wrong-order run and the wasm lane's exit code and last lines (its full output was not kept), taken at 19a859a0d,
+before main's merge; the full preflight reruns the lane. Stack samples taken during the check showed eight threads in
+`Voice::render_part` under `presets_field_with`; the samples were not kept.
 
-On the Spark its gain could not be read: `spark-foley-parallel.txt` (`foley-alone.mjs`) was taken at load 130 to
+Its gain alone is not measured: the Mac's foley timings below compare main, which has neither change, with the
+head, which has both. On the Spark it could not be read: `spark-foley-parallel.txt` (`foley-alone.mjs`) was taken at load 130 to
 146 on 20 cores, where it reads 4.8 s with every core and 11 to 28 s pinned to one. `cargo test -p deep-canvas-media
 synth`: 10 passed.
 
 ## The Mac round at 2541c2b71 (`mac-2541c2b71/`)
 
 Base is main 89df55943, the merge base; both clones were built and run one after the other on the same Mac
-(`exits.txt` has each step's load, power and exit code). Load was 73 to 77 at the base's suites and 18 to 27 at the
-head's suites and at every timing, so the suites' two sides did not run under the same load, and the times stay
+(`exits.txt` has each step's load, power and exit code). Load fell from 97 to 73 across the base's suites and
+from 60 to 19 across the head's, and was 18 to 20 at every timing, so the suites' two sides did not run under the same load, and the times stay
 INCONCLUSIVE as absolute numbers. A chat app was in front during the head's steps, not a bare desktop Space.
 
 | | base 89df55943 | head 2541c2b71 |
@@ -61,5 +63,17 @@ question on the main window's pixels, and two of the three rows draw cut short (
 The row's cut is not part of this change; this round does not show whether main's app draws the same, since main
 never got that far.
 
-Left open: the canvas core still checks every installed pack at every call (1.6 s a call here); the design says once
-per version.
+## A version vetted once per process
+
+The Mac round on 2026-11-22 failed both suites in setup again at load 47 to 99, so the margin was not enough. The
+canvas core's `install` admitted a known version once per process (`ADMITTED`), but still ran the sandbox's half of
+its check, `Host::vet`, on every call: lanes' libraries compiled and their fixtures run again, about 0.65 s of each
+call on the Mac. `Host::vet` now keeps what a passed check gave its host, per process, keyed by the pack, its
+manifest's hash, the planted programs and the folders its runs write to, and gives it to the next host.
+
+`crates/deep-show/tests/pack_vet_once.rs` reads it as cost, since the library check counts in none of the sandbox's
+counters: a later `packs` call must take under a quarter of the first. Without the fix it fails, a later call at
+1.015 s against the first's 1.047 s (`vet-once-fails-first.txt`); with it, it passes (`vet-once-passes.txt`).
+
+`spark-vet-once.txt`, the head on the Spark at load 19 (INCONCLUSIVE as times): later calls with all packs 142 to
+146 ms, from 1,640 ms; the first call in a new process is still 6.9 s here and the shipped check 7.8 s.
