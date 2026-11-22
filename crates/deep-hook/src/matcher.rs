@@ -706,7 +706,7 @@ impl Call {
                 "--profile" => Some(words.get(k + 1).copied().unwrap_or("")),
                 _ => w.strip_prefix("--profile="),
             })
-            .last();
+            .next_back();
         let env = || {
             run.env
                 .iter()
