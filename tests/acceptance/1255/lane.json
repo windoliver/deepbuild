@@ -1,0 +1,1 @@
+{ "alone": true, "why": "each file builds deep-logic and #416's assembler with cargo; ac5-hosts builds deep-logic in Docker and starts headless Chrome" }

@@ -320,6 +320,9 @@ pub fn serve() -> ExitCode {
     let data = parse(DATA).expect("actions.json is JSON");
     let tools = list(member(&data, "tools")).to_vec();
     let codes = list(member(&data, "codes")).to_vec();
+    let instructions = member(&data, "instructions")
+        .cloned()
+        .expect("actions.json holds instructions");
     let (pid, start) = parent();
     let folder = std::env::current_dir().unwrap_or_default();
     // A worktree `deep hub use --root` sent to a dev hub reaches that hub, as the session's hooks do.
@@ -398,6 +401,8 @@ pub fn serve() -> ExitCode {
                             ("protocolVersion", Value::String(version)),
                             ("capabilities", capabilities),
                             ("serverInfo", info),
+                            // #2897: what a client that loads tools by search reads at the start.
+                            ("instructions", instructions.clone()),
                         ]),
                     );
                 }

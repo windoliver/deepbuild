@@ -1,0 +1,627 @@
+{
+  "name": "narrow",
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "afd5a3d9f39dc875ecd7202fb175ff5542eaeaec8370d4c4a59b257ffff14dd8",
+      "writes": {
+        "fix_count": {
+          "type": "i32",
+          "count": 3
+        },
+        "fix_ref": {
+          "type": "i32",
+          "count": 24
+        },
+        "fix_pos": {
+          "type": "vec3",
+          "count": 24
+        },
+        "fix_speed": {
+          "type": "f64",
+          "count": 24
+        },
+        "fix_time": {
+          "type": "f64",
+          "count": 24
+        },
+        "delay_s": {
+          "type": "f64",
+          "count": 3
+        },
+        "delay_fix": {
+          "type": "i32",
+          "count": 3
+        },
+        "win_count": {
+          "type": "i32"
+        },
+        "win_a": {
+          "type": "i32",
+          "count": 64
+        },
+        "win_b": {
+          "type": "i32",
+          "count": 64
+        },
+        "win_from": {
+          "type": "f64",
+          "count": 64
+        },
+        "win_to": {
+          "type": "f64",
+          "count": 64
+        },
+        "win_min": {
+          "type": "f64",
+          "count": 64
+        },
+        "win_row": {
+          "type": "i32",
+          "count": 64
+        },
+        "win_basis": {
+          "type": "i32",
+          "count": 64
+        },
+        "closest_a": {
+          "type": "i32"
+        },
+        "closest_b": {
+          "type": "i32"
+        },
+        "closest_dist": {
+          "type": "f64"
+        },
+        "closest_time": {
+          "type": "f64"
+        },
+        "refused_kind": {
+          "type": "i32"
+        },
+        "refused_mover": {
+          "type": "i32"
+        },
+        "refused_from": {
+          "type": "i32"
+        },
+        "refused_to": {
+          "type": "i32"
+        },
+        "refused_value": {
+          "type": "f64"
+        },
+        "refused_why": {
+          "type": "i32"
+        },
+        "refused_ret": {
+          "type": "i32"
+        },
+        "refused_did": {
+          "type": "i32"
+        },
+        "stretch_kind": {
+          "type": "i32"
+        },
+        "stretch_mover": {
+          "type": "i32"
+        },
+        "stretch_from": {
+          "type": "i32"
+        },
+        "stretch_to": {
+          "type": "i32"
+        },
+        "stretch_value": {
+          "type": "f64"
+        },
+        "stretch_why": {
+          "type": "i32"
+        },
+        "stretch_ret": {
+          "type": "i32"
+        },
+        "stretch_did": {
+          "type": "i32"
+        },
+        "hold_kind": {
+          "type": "i32"
+        },
+        "hold_mover": {
+          "type": "i32"
+        },
+        "hold_from": {
+          "type": "i32"
+        },
+        "hold_to": {
+          "type": "i32"
+        },
+        "hold_value": {
+          "type": "f64"
+        },
+        "hold_why": {
+          "type": "i32"
+        },
+        "hold_ret": {
+          "type": "i32"
+        },
+        "hold_did": {
+          "type": "i32"
+        }
+      },
+      "separation": {
+        "movers": [
+          {
+            "id": "leader",
+            "class": "heavy",
+            "route": [
+              {
+                "fix": "entry",
+                "at": [
+                  -40000,
+                  900,
+                  0
+                ]
+              },
+              {
+                "fix": "gate",
+                "at": [
+                  -20000,
+                  900,
+                  0
+                ]
+              },
+              {
+                "fix": "threshold",
+                "at": [
+                  0,
+                  900,
+                  0
+                ]
+              }
+            ],
+            "speed": [
+              {
+                "from_fix": "entry",
+                "speed": 80
+              },
+              {
+                "from_fix": "gate",
+                "speed": 80
+              }
+            ],
+            "band": [
+              {
+                "fix": "entry",
+                "min": 50,
+                "max": 90
+              },
+              {
+                "fix": "gate",
+                "min": 50,
+                "max": 90
+              },
+              {
+                "fix": "threshold",
+                "min": 50,
+                "max": 90
+              }
+            ],
+            "start": 0
+          },
+          {
+            "id": "follower",
+            "class": "light",
+            "route": [
+              {
+                "fix": "entry",
+                "at": [
+                  -40000,
+                  900,
+                  0
+                ]
+              },
+              {
+                "fix": "gate",
+                "at": [
+                  -20000,
+                  900,
+                  0
+                ]
+              },
+              {
+                "fix": "threshold",
+                "at": [
+                  0,
+                  900,
+                  0
+                ]
+              }
+            ],
+            "speed": [
+              {
+                "from_fix": "entry",
+                "speed": 80
+              },
+              {
+                "from_fix": "gate",
+                "speed": 80
+              }
+            ],
+            "band": [
+              {
+                "fix": "entry",
+                "min": 75,
+                "max": 90
+              },
+              {
+                "fix": "gate",
+                "min": 75,
+                "max": 90
+              },
+              {
+                "fix": "threshold",
+                "min": 75,
+                "max": 90
+              }
+            ],
+            "start": 100
+          },
+          {
+            "id": "departure",
+            "class": "light",
+            "route": [
+              {
+                "fix": "runway",
+                "at": [
+                  0,
+                  900,
+                  40000
+                ]
+              },
+              {
+                "fix": "exit",
+                "at": [
+                  8000,
+                  900,
+                  40000
+                ]
+              }
+            ],
+            "speed": [
+              {
+                "from_fix": "runway",
+                "speed": 80
+              }
+            ],
+            "band": [
+              {
+                "fix": "runway",
+                "min": 75,
+                "max": 90
+              },
+              {
+                "fix": "exit",
+                "min": 75,
+                "max": 90
+              }
+            ],
+            "start": 300
+          }
+        ],
+        "minima": {
+          "lateral": 5556,
+          "vertical": 300,
+          "by_pair": [
+            {
+              "leader": "heavy",
+              "follower": "light",
+              "min": 10000,
+              "at": "threshold",
+              "basis": {
+                "cited": {
+                  "source": "packs/separation-1.0.0/LAYOUT.md",
+                  "section": "The fixtures' rule sheet"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "track": [],
+  "steps": 2,
+  "expect": {
+    "arrays": {
+      "0": {
+        "refused_kind": [
+          0
+        ],
+        "refused_mover": [
+          1
+        ],
+        "refused_from": [
+          1
+        ],
+        "refused_to": [
+          -1
+        ],
+        "refused_value": [
+          66.66666666666667
+        ],
+        "refused_why": [
+          1
+        ],
+        "refused_ret": [
+          0
+        ],
+        "refused_did": [
+          0
+        ],
+        "stretch_kind": [
+          2
+        ],
+        "stretch_mover": [
+          1
+        ],
+        "stretch_from": [
+          0
+        ],
+        "stretch_to": [
+          1
+        ],
+        "stretch_value": [
+          6633.2495807108
+        ],
+        "stretch_why": [
+          0
+        ],
+        "stretch_ret": [
+          2
+        ],
+        "stretch_did": [
+          0
+        ],
+        "hold_kind": [
+          3
+        ],
+        "hold_mover": [
+          2
+        ],
+        "hold_from": [
+          -1
+        ],
+        "hold_to": [
+          -1
+        ],
+        "hold_value": [
+          50
+        ],
+        "hold_why": [
+          0
+        ],
+        "hold_ret": [
+          3
+        ],
+        "hold_did": [
+          0
+        ],
+        "fix_count": [
+          3,
+          3,
+          2
+        ]
+      },
+      "1": {
+        "stretch_did": [
+          1
+        ],
+        "hold_did": [
+          1
+        ],
+        "fix_count": [
+          3,
+          4,
+          2
+        ],
+        "fix_ref": [
+          0,
+          1,
+          2,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          0,
+          -1,
+          1,
+          2,
+          -1,
+          -1,
+          -1,
+          -1,
+          0,
+          1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1
+        ],
+        "fix_pos": [
+          [
+            -40000,
+            900,
+            0
+          ],
+          [
+            -20000,
+            900,
+            0
+          ],
+          [
+            0,
+            900,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            -40000,
+            900,
+            0
+          ],
+          [
+            -30000,
+            900,
+            -6633.2495807108
+          ],
+          [
+            -20000,
+            900,
+            0
+          ],
+          [
+            0,
+            900,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            900,
+            40000
+          ],
+          [
+            8000,
+            900,
+            40000
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        "fix_time": [
+          0,
+          250,
+          500,
+          0,
+          0,
+          0,
+          0,
+          0,
+          100,
+          250,
+          400,
+          650,
+          0,
+          0,
+          0,
+          0,
+          350,
+          450,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "delay_s": [
+          0,
+          50,
+          50
+        ],
+        "delay_fix": [
+          -1,
+          1,
+          1
+        ]
+      }
+    },
+    "tolerance": {
+      "abs": 0.000001
+    }
+  },
+  "rules": {
+    "separation.clear": {
+      "span": [
+        0,
+        800
+      ]
+    }
+  },
+  "answer": "The approach with a departure, the follower's band 75 to 90 m/s: a delay of 50 s over entry to gate needs 66.67 m/s, under it. Asked at 200 s, the follower has left entry and only gate to threshold is left: no speed (the band), no stretch (the last leg), no hold (it has started), so a refusal naming the band at the gate, with the speed it would need. Asked at time 0, entry to gate isn't its last leg: a stretch, the midpoint moved ½√(24,000² − 20,000²) = 6,633.2496 m to the left of travel, both halves 12,000 m at 80 m/s: (−30,000, 900, −6,633.2496) at 250 s, the gate at 400 s, the threshold at 650 s. The departure, not yet started, on its one leg: a hold of 50 s, flying 350 s to 450 s. Applied at step 1, each gives its 50 s at fix 1 with every speed in its band, and nothing is under a minimum over [0, 800] s. A library that gives the speed whatever the band answers 66.67 m/s three times."
+}
