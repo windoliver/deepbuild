@@ -106,6 +106,22 @@ on an earlier build is recorded again once, by the owner's decision.
 Seeking equals playing for a body whose contacts are found by how far it has moved: the edge's world, with a
 checkpoint every 7 steps, restored from each of its 17 checkpoints, steps on to the same hashes as the straight run.
 
+## Pictures
+
+Each world drawn from this change's own bake, a body a mark posed at the bake's states by `deep-gpu`'s `view3d`
+(`pictures/`). The small worlds are drawn at 100 times their size, the camera moved to match.
+
+| File | What it shows |
+|---|---|
+| `turntable-strobe.png` | the box every 2/3 s from 2.67 s to 6 s, sand at 6 s, on the middle 4.6 m of the disc; the dotted ring is 1 m from the axis and the dark line turns with the disc. Left, this change: the box stays on the ring and on the line. Right, `wrapper_leaves_contact_reuse_on`: it spirals out to 3.957 m and falls behind the line |
+| `turntable.mp4`, `film-sheet.png` | the 6 s at their own speed, both programs side by side; the sheet is the film at 0 s, 2 s, 4 s and 6 s |
+| `edge.png` | the 1 cm cube every 6 steps to step 78. Above, this change: it tips and drops as it leaves the table. Below, `wrapper_leaves_contact_reuse_on`: it stays level in the air past the edge |
+| `stack.png` | the five 1 cm cubes at 3 s. Left, this change: standing. Right, `wrapper_turns_contact_reuse_off`: fallen |
+
+Checked against the bakes: in each of the film's 181 frames the drawn box's centre is within 1.29 px of where its baked
+position projects on this change. Under the planted wrapper it is within 7.03 px: that box is drawn far from the middle
+of the picture, where the centre of its visible faces sits off its own centre.
+
 ## The suites beside it
 
 Each file once, on the tree merged with main (`678622403`): 32 files, 84 tests, all passing. #2308's six files (15
