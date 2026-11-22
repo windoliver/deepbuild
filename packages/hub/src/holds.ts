@@ -42,7 +42,10 @@ interface HoldOptions {
   pin(cwd: string, question: string): Promise<Obj>;
   /** A session.reading on the session's row. */
   reading(session: string, agent: string, reading: string): Promise<void>;
-  /** Copies the session's transcript into the record, so a target it read is placed as read. */
+  /**
+   * Copies the session's transcript into the record, so a target it read is placed as read: from `transcript`, the
+   * hook's transcript_path ('' when it named none), which the archive reads only where its facts put that session.
+   */
   archived(session: string, transcript: string): Promise<void>;
 }
 

@@ -66,6 +66,24 @@ describe('Archive.session with the path its agent named', () => {
     }
   }, 60_000);
 
+  it('never follows a named folder that is a link, as the walk follows none', async () => {
+    const w = await openWorld();
+    try {
+      const other = claudeTranscript(w.env, [{ uuid: 'm1', role: 'user', text: 'beside the linked folder' }]);
+      const id = '0b5e2a1c-2222-4222-8333-944455556666';
+      const elsewhere = join(w.dir, 'elsewhere-folder');
+      mkdirSync(elsewhere, { recursive: true });
+      writeFileSync(join(elsewhere, `${id}.jsonl`), `${JSON.stringify({ type: 'user', sessionId: id, message: { role: 'user', content: 'reached through a linked folder' } })}\n`);
+      const linked = join(dirname(dirname(other.path)), '-linked-project');
+      symlinkSync(elsewhere, linked);
+      const archive = await openArchiveOn(w);
+      await archive.session(id, join(linked, `${id}.jsonl`));
+      expect(await copied(w)).toEqual([]);
+    } finally {
+      await w.close();
+    }
+  }, 60_000);
+
   it("never copies another session's transcript from a path named for this one", async () => {
     const w = await openWorld();
     try {

@@ -9,6 +9,8 @@ import { describe, expect, it } from 'vitest';
 import { hookLine, reply, send, session, withHub } from './hub.js';
 
 const QUESTION = 'Shall I push the fix to main?';
+/** The hub's archive reads Claude Code's folder under HOME only when CLAUDE_CONFIG_DIR is unset: '' makes it skip that. */
+const HOME_ONLY = { CLAUDE_CONFIG_DIR: '' };
 const handle = (id: string) => `session:${id.replace(/-/g, '')}`;
 
 /** Runs `body` with `home`'s Claude Code projects folder unlistable, its mode put back after. */
@@ -45,7 +47,7 @@ describe('the hub copies a session from the path its hook named', () => {
         for (const until = Date.now() + 15_000; Date.now() < until && !copied(root).length; await new Promise((r) => setTimeout(r, 100)));
         expect(copied(root), "the session's end copied the transcript at its hook's transcript_path").toEqual([handle(id)]);
       });
-    });
+    }, HOME_ONLY);
   }, 60_000);
 
   it('before a push held in a proceed turn raises its ask', async () => {
@@ -69,6 +71,6 @@ describe('the hub copies a session from the path its hook named', () => {
         expect(`${held.exit} ${held.stdout}${held.stderr}`, 'the push is held by an authority ask').toMatch(/^2 .*waits for ask:/s);
         expect(copied(root), "the held push copied the transcript at its hook's transcript_path before its ask").toEqual([handle(id)]);
       });
-    }, { DEEP_HUB_TEST_SORTER: sorter }); } finally { rmSync(sorter, { force: true }); }
+    }, { ...HOME_ONLY, DEEP_HUB_TEST_SORTER: sorter }); } finally { rmSync(sorter, { force: true }); }
   }, 60_000);
 });
