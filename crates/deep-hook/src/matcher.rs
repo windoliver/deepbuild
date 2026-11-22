@@ -688,7 +688,7 @@ impl Call {
                 words.iter().any(shortened) || words.contains(&"--")
             })
             // What the shell would expand, split or decode, the reader may read otherwise than it runs.
-            || line.contains(['$', '`', '\\'])
+            || line.contains(['$', '`', '\\', '~'])
             || unquoted.contains(['*', '?', '['])
             || run.env.iter().any(|(n, _)| n != "AWS_PROFILE")
             // The only AWS_ setting it reads is the creating run's own AWS_PROFILE.
