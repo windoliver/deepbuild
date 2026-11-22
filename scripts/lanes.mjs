@@ -1734,18 +1734,25 @@ export function crates(cwd) {
   });
 }
 
+/** Each target of the workspace by the name cargo test's Running or Doc-tests line gives it, as the arguments that rerun it. */
+const rerunTargets = (workspace) => new Map(workspace.flatMap((crate) => crate.targets.flatMap((target) => [[target.key, target.rerun], ...(target.doc ? [[`doc ${target.doc}`, `-p ${crate.name} --doc`]] : [])])));
+
+/** The target a line of cargo test's output starts, by its Running or Doc-tests line; undefined for any other line. */
+function cargoTarget(line, targets) {
+  const running = line.match(/^\s*Running (?:unittests )?(.+?) \(.*?deps\/(\w+)-[0-9a-f]+\)\s*$/);
+  const doc = line.match(/^\s*Doc-tests (\w+)\s*$/);
+  if (!running && !doc) return undefined;
+  const key = running ? `${running[2]} ${running[1]}` : `doc ${doc[1]}`;
+  return targets.get(key) ?? key;
+}
+
 /** The results in cargo test's output, each test by the target that reruns it, and a target that failed in no test. */
 export function cargoResults(output, status, workspace) {
-  const targets = new Map(workspace.flatMap((crate) => crate.targets.flatMap((target) => [[target.key, target.rerun], ...(target.doc ? [[`doc ${target.doc}`, `-p ${crate.name} --doc`]] : [])])));
+  const targets = rerunTargets(workspace);
   const failures = [], passed = [], skips = [], failed = new Set();
   let target = null;
   for (const line of output.split('\n')) {
-    const running = line.match(/^\s*Running (?:unittests )?(.+?) \(.*?deps\/(\w+)-[0-9a-f]+\)\s*$/);
-    const doc = line.match(/^\s*Doc-tests (\w+)\s*$/);
-    if (running || doc) {
-      const key = running ? `${running[2]} ${running[1]}` : `doc ${doc[1]}`;
-      target = targets.get(key) ?? key;
-    }
+    target = cargoTarget(line, targets) ?? target;
     const test = line.match(/^test (.+?) \.\.\. (ok|FAILED|BLOCKED|INVALID|INCONCLUSIVE)$/);
     if (test && test[2] === 'ok') passed.push(`cargo ${target} › ${test[1]}`);
     if (test && test[2] !== 'ok') failures.push({ id: `cargo ${target} › ${test[1]}`, state: test[2] === 'FAILED' ? 'FAIL' : test[2], message: '' }), failed.add(target);
@@ -1760,6 +1767,103 @@ export function cargoResults(output, status, workspace) {
   }
   if (status !== 0 && !failed.size) failures.push({ id: 'cargo test', state: 'FAIL', message: output.split('\n').find((line) => /^error/.test(line)) ?? `exited ${status}` });
   return { failures, passed, ...(skips.length && { skips }) };
+}
+
+/** The tests `cargo test -- --list` names, per target, each target by the arguments that rerun it as a test's ID has it. */
+function cargoList(output, workspace) {
+  const targets = rerunTargets(workspace);
+  const list = {};
+  let target = null;
+  for (const line of output.split('\n')) {
+    target = cargoTarget(line, targets) ?? target;
+    const test = line.match(/^(.+): test$/);
+    if (test) (list[target] ??= []).push(test[1]);
+  }
+  return list;
+}
+
+const lanesFolder = () => join(homedir(), '.deepbuild', 'lanes');
+
+/**
+ * The Mac's reference list of a lane on a tree, among this machine's lane records: the `list` of the Mac's own record,
+ * or the `reference` a run here carried over from it when its record took that file's place. Undefined without one.
+ */
+function macList(lane, tree) {
+  const folder = lanesFolder();
+  for (const name of existsSync(folder) ? readdirSync(folder) : []) {
+    if (!name.startsWith(`${tree}-`) || !name.endsWith('.json')) continue;
+    let record;
+    try { record = JSON.parse(readFileSync(join(folder, name), 'utf8')); } catch { continue; }
+    const list = String(record?.platform).startsWith('darwin') ? record.list : record?.reference;
+    if (record?.lane === lane && record.tree === tree && list && typeof list === 'object' && Object.values(list).every(Array.isArray)) return list;
+  }
+  return undefined;
+}
+
+/**
+ * What a lane's cargo tests prove of the platform (docs/parallel-proof.md, section 3). On the Mac, the tests they list
+ * are the reference a run elsewhere is compared against, the record's `list`. Elsewhere, each test of the Mac's list
+ * that this run doesn't list is absent by platform, and the run is never PASS: its pass says nothing of the macOS
+ * branch. The Mac's list is read from its evidence record of the same lane on the same tree, in this machine's lanes
+ * folder (T7 fetches it there); without it, or with no list of this run's own, the absent tests are unknown, and the
+ * run says so.
+ */
+function cargoPlatform(list, { lane, tree, platform }) {
+  if (platform.startsWith('darwin')) return { list, unsure: [] };
+  const reference = list && macList(lane, tree);
+  if (!list) return { unsure: [{ id: 'cargo test', state: 'INCONCLUSIVE', message: `ran on ${platform}, not the Mac's platform, so it says nothing of the macOS branch` }] };
+  if (!reference) return { unsure: [{ id: 'cargo test', state: 'INCONCLUSIVE', message: `ran on ${platform} with no Mac reference list of the ${lane} lane on tree ${tree} in ${lanesFolder()}, so the tests absent on this platform are unknown` }] };
+  const absent = Object.entries(reference).flatMap(([target, names]) => names.filter((name) => !list[target]?.includes(name)).map((name) => `cargo ${target} › ${name}`));
+  return { reference, absent, unsure: absent.length
+    ? absent.map((id) => ({ id, state: 'INCONCLUSIVE', message: `absent on this platform (${platform}): in the Mac's reference list` }))
+    : [{ id: 'cargo test', state: 'INCONCLUSIVE', message: `ran on ${platform}, not the Mac's platform, so it says nothing of the macOS branch` }] };
+}
+
+/**
+ * The cargo test arguments that select only the libtest targets a command runs: a `harness = false` test target ignores
+ * `--list` and runs its whole test, so it is left out, and its tests reach the list from the run's own results.
+ * Null when the workspace can't be read.
+ */
+function libtestTargets(args, cwd) {
+  const meta = spawnSync('cargo', ['metadata', '--no-deps', '--format-version', '1', '--offline'], { cwd, encoding: 'utf8', maxBuffer: 1 << 28 });
+  if (meta.status !== 0) return null;
+  const picked = args.filter((_, i) => args[i - 1] === '-p');
+  const tests = [], kinds = new Set(), customs = new Set();
+  for (const { name, manifest_path: manifest, targets = [] } of JSON.parse(meta.stdout).packages) {
+    if (picked.length && !picked.includes(name)) continue;
+    let text = '';
+    try { text = readFileSync(manifest, 'utf8'); } catch {}
+    const custom = new Set(text.split(/^\[\[test\]\]/m).slice(1).filter((block) => /^harness\s*=\s*false/m.test(block.split(/^\[/m)[0]))
+      .map((block) => block.match(/^name\s*=\s*"([^"]+)"/m)?.[1]));
+    for (const { kind } of targets) kind.forEach((k) => kinds.add(k));
+    custom.forEach((target) => customs.add(target));
+    tests.push(...targets.filter(({ kind }) => kind.includes('test')).map(({ name: target }) => target));
+  }
+  const lib = [...kinds].some((kind) => kind.endsWith('lib') || kind === 'proc-macro');
+  // `--test <name>` picks that name in every package, so a name any package gives a custom harness is left out whole.
+  return [...lib ? ['--lib'] : [], ...kinds.has('bin') ? ['--bins'] : [], ...[...new Set(tests)].filter((target) => !customs.has(target)).flatMap((target) => ['--test', target])];
+}
+
+/** A cargo test command that runs its packages whole: it picks no target of its own and filters no test. */
+const wholeRun = (args) => !args.some((arg) => arg === '--' || /^--(?:lib|bins?|tests?|doc|examples?|bench(?:es)?|all-targets)$/.test(arg));
+
+/** What a whole cargo test command lists with `-- --list`, by cargoList, under the throttle; null when the listing fails. */
+function cargoListed(args, cwd, env) {
+  const targets = libtestTargets(args, cwd);
+  if (!targets) return null;
+  const directory = mkdtempSync(join(tmpdir(), 'deep-cargo-list-')), log = join(directory, 'output');
+  try {
+    const descriptor = openSync(log, 'w', 0o600);
+    let result;
+    try {
+      result = spawnSync(process.execPath, [throttle, 'build', '--wait', '30', '--', leaseScript, 'cargo', ...args, ...targets, '--', '--list'], { cwd, env, stdio: ['ignore', descriptor, descriptor] });
+    } finally {
+      closeSync(descriptor);
+    }
+    return result.status === 0 ? cargoList(readFileSync(log, 'utf8'), crates(cwd)) : null;
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
 
 const READING_ONLY = 'INCONCLUSIVE (reading only';
@@ -1889,7 +1993,7 @@ export function mergeRecords(tree) {
 /** A lane's evidence record, which T7 and T8 read: its state, where it ran, on what tree, and each test's state. */
 export function writeRecord(lane, state, tree, tests, more = {}) {
   if (!tree) throw new Error("git can't write this checkout's tree");
-  const folder = join(homedir(), '.deepbuild', 'lanes');
+  const folder = lanesFolder();
   mkdirSync(folder, { recursive: true, mode: 0o700 });
   const file = join(folder, `${tree}-${lane.replace(/\W+/g, '-')}.json`);
   writeFileSync(file, `${JSON.stringify({ lane, state, host: hostname(), platform: `${process.platform}-${process.arch}`, tree, tests, ...more }, null, 2)}\n`);
@@ -1933,6 +2037,8 @@ export function runLanes(lanes, { cwd = root } = {}) {
       console.log(`RUN ${lane.name}`);
       let failure = lane.commands.length ? undefined : { state: 'BLOCKED', error: 'No check was run' };
       const tree = exactTree(cwd), tests = [], unproven = [], listedTests = [];
+      // The tests the lane's whole cargo test commands list, or null once a listing failed; whether any cargo test ran.
+      let listedCargo, cargoRan = false;
       for (const [command, ...args] of lane.commands) {
         let directory, descriptor, result, results, output = '';
         try {
@@ -1988,6 +2094,36 @@ export function runLanes(lanes, { cwd = root } = {}) {
           found = { state: state ?? (result.error ? 'BLOCKED' : 'FAIL'), error: rest ?? error };
         }
         if (stands(found, failure)) failure = found;
+        if (command === 'cargo' && args[0] === 'test') {
+          cargoRan = true;
+          const listing = wholeRun(args) && listedCargo !== null ? cargoListed(args, cwd, environment) : undefined;
+          if (listing) {
+            listedCargo ??= {};
+            for (const [target, names] of Object.entries(listing)) listedCargo[target] = [...new Set([...listedCargo[target] ?? [], ...names])];
+            // A doc-test and a `harness = false` target's tests are known only from the run: `--list` never names them.
+            for (const [, target, name] of run.tests.map(({ id }) => id.match(/^cargo (.+?) › (.+)$/)).filter(Boolean)) if (!Object.hasOwn(listing, target)) (listedCargo[target] ??= []).push(name);
+          } else if (listing === null) listedCargo = null;
+        }
+      }
+      // The Mac's cargo tests are the reference list; a run elsewhere lists the tests it lacks and is never PASS (#1121).
+      const more = {}, absentIds = new Set(), mac = process.platform === 'darwin';
+      let platformRead = [];
+      // The Mac's own tests stand without their list: a run elsewhere then finds no reference, and says so.
+      if (listedCargo === null && mac) console.log(`NOTE ${lane.name}: cargo could not list the tests, so its record holds no reference list`);
+      else if (listedCargo === null) platformRead = [{ id: 'cargo test -- --list', state: 'BLOCKED', message: 'cargo could not list the tests, so this platform\'s list is unknown' }];
+      else if (cargoRan) {
+        const read = cargoPlatform(listedCargo, { lane: lane.name, tree, platform: `${process.platform}-${process.arch}` });
+        if (read.list) more.list = read.list;
+        // Carried over, since this record takes the place of the Mac's when T7 fetched that to this lane's file.
+        if (read.reference) more.reference = read.reference;
+        for (const id of read.absent ?? []) absentIds.add(id);
+        platformRead = read.unsure;
+      }
+      if (platformRead.length) {
+        unproven.push(...platformRead);
+        tests.push(...platformRead.map(({ id, state, message }) => ({ id, state, note: message, ...(absentIds.has(id) && { skipped: true }) })));
+        const found = { state: worst(platformRead.map(({ state }) => state)), error: absentIds.size ? `${absentIds.size} of the Mac's cargo tests are absent on this platform` : platformRead[0].message };
+        if (stands(found, failure)) failure = found;
       }
       const elapsed = ((performance.now() - started) / 1000).toFixed(2);
       for (const { id, note, reason } of listedTests) console.log(`LISTED ${id}${note ? `: ${note}` : ''} (${reason})`);
@@ -1996,7 +2132,7 @@ export function runLanes(lanes, { cwd = root } = {}) {
       if (failure) failures.push(`${failure.state} ${lane.name}${platform}: ${failure.error}\n${lines}  Fix: ${lane.fix}\n  Elapsed: ${elapsed} s`);
       else console.log(`PASS ${lane.name} (${elapsed} s)`);
       try {
-        if (tree !== null) writeRecord(lane.name, failure?.state ?? 'PASS', tree, tests);
+        if (tree !== null) writeRecord(lane.name, failure?.state ?? 'PASS', tree, tests, more);
       } catch (error) {
         // A lane that FAILed, or read INVALID or BLOCKED, keeps its one verdict: the missing record outranks only less.
         if (failure && failure.state !== 'INCONCLUSIVE') console.log(`NOTE ${lane.name}: no evidence record: ${error.message}`);
