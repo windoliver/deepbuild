@@ -1363,6 +1363,7 @@ const EFFICIENCY = {
   'canvas-water-flow': { flow_sheet_gpu_ms: (r) => r.flow_sheet_gpu_ms },
   'canvas-water-rings': { rings_pond_gpu_ms: (r) => r.rings_pond_gpu_ms },
   'canvas-atlas-draw': { draw_rows_frame_ms: (r) => r.draw_rows_frame_ms },
+  'canvas-fx-pack': Object.fromEntries(['pack_check_ms', 'operator_compile_ms', 'still_dispatches'].map((k) => [k, (r) => r[k]])),
   'canvas-local-tone-map': { local_1080p_gpu_ms: (r) => r.local_1080p_gpu_ms, local_2160p_gpu_ms: (r) => r.local_2160p_gpu_ms },
   'canvas-ground': {
     bevel_ms: (r) => r.bevel_ms, subdivide_ms: (r) => r.subdivide_ms, distribute_ms: (r) => r.distribute_ms, arc_length_ms: (r) => r.arc_length_ms,
@@ -2072,6 +2073,8 @@ workloads['between-steps'] = async () => (await import('./between-steps.mjs')).b
 workloads['world-pages'] = async () => (await import('./world-pages.mjs')).worldPages({ root, release, once, runs });
 workloads['water-rings'] = async () => (await import('./water-rings.mjs')).waterRings({ root, release, once, runs });
 workloads['atlas-draw'] = async () => (await import('./atlas-draw.mjs')).atlasDraw({ release, once, runs });
+// #161's budgets: the fx@1 pack's own check, each operator's compile and a still canvas's dispatches (benchmarks/fx-pack.mjs).
+workloads['fx-pack'] = async () => (await import('./fx-pack.mjs')).fxPack({ root, release, once, runs });
 // #184's budgets: the maze's 40 runs and replays on two replicas with no work added to a piece played without the
 // plug-in, and 20 runs of the 2-minute maze on four replicas as a multiple of real time (benchmarks/playtest.mjs).
 for (const task of ['playtest-maze', 'playtest-throughput', 'playtest-crawler']) workloads[task] = async () => (await import('./playtest.mjs')).playtest({ root, release, task, planted: planted() });

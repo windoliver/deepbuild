@@ -1372,6 +1372,9 @@ alone.push('tests/acceptance/953/', 'tests/acceptance/953-oracle/');
 alone.push('tests/acceptance/2738/');
 slow.push('tests/acceptance/2738/ac1-linux-build.test.ts');
 
+// #161's suite times its measured costs and its two budgets on the reference Mac.
+timed.push('tests/acceptance/161/ac4-measured.test.ts', 'tests/acceptance/161/ac6-timed.test.ts');
+
 // #265's files (blind) build deep-gpu (ac4 deep-show), draw on the GPU and play a match; ac6 times eight movers' frame CPU.
 alone.push('tests/acceptance/265/');
 timed.push('tests/acceptance/265/ac6-budgets.test.ts');
@@ -1408,6 +1411,11 @@ byHand.push('tests/acceptance/980/ac09-budget.test.ts');
 
 // #689's blind redraft: AC2 builds and tests the whole workspace on 1.99.1; AC4 builds deep-app's hub_client test.
 slow.push('tests/acceptance/689-redraft-2047/ac2-checks.test.mjs', 'tests/acceptance/689-redraft-2047/ac4-app-in-unit-lane.test.mjs');
+
+// #1500's files (blind) each build deep-show and play hundreds of frames of a game whose revisions land mid-play;
+// ac08-join-time.test.ts judges a join's time on the reference Mac. The Oracle lane plays upstream's pile.
+alone.push('tests/acceptance/1500/', 'tests/acceptance/1500-oracle/');
+timed.push('tests/acceptance/1500/ac08-join-time.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
