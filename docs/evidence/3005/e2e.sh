@@ -1,6 +1,6 @@
 #!/bin/bash
 # Hand e2e for #3005: a real `deep hub run` from this checkout's build, its home under $TMPDIR, then
-# `deep install` of packages/jobs/score, import and typeset. Usage: TMPDIR=<dir> e2e.sh <label>
+# `deep install` of packages/jobs/score, import and typeset. Usage: TMPDIR=<dir> bash e2e.sh <label>
 # Run once with a TMPDIR that runs through a symlink (/tmp/... on macOS) and once with its real path.
 set -u
 WT=$(/usr/bin/git -C "$(dirname "$0")" rev-parse --show-toplevel)
@@ -21,6 +21,7 @@ node packages/cli/dist/main.js hub run > "$H/hub.out" 2> "$H/hub.err" &
 HUB=$!
 for i in $(seq 1 120); do grep -q '"ready"' "$H/hub.out" 2>/dev/null && break; sleep 1; done
 echo "-- hub ready: $(grep -c '"ready":true' "$H/hub.out")"
+grep -q '"ready":true' "$H/hub.out" || { echo "the hub never said it was ready" >&2; kill "$HUB"; exit 2; }
 for p in score import typeset; do
   echo "\$ deep install packages/jobs/$p"
   (cd "$H" && node "$WT/packages/cli/dist/main.js" install "$WT/packages/jobs/$p" 2>&1); echo "exit $?"
