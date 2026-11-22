@@ -158,14 +158,21 @@ export const codexParts: AdapterParts = {
   doctor: () => notChecked('codex'),
   readUsage: readCodexUsage,
   // Codex's model provider, from its config.toml, and OPENAI_BASE_URL: each other than the default moves its route.
+  // The provider is a top-level key, before the first table; a profile or a provider table may name another, and a
+  // base URL key moves OpenAI's own, so a config with any of them reads as moved, never as the default (#1886).
   routeAtStart: (env) => {
-    let provider: string | undefined;
+    let moved = false;
     try {
+      const config = readFileSync(join(env.CODEX_HOME ?? join(env.HOME ?? '', '.codex'), 'config.toml'), 'utf8');
+      const top = config.split(/^\s*\[/m)[0]!;
       // A bare or quoted key, and a basic or a literal TOML string.
-      const named = /^\s*(?:model_provider|"model_provider"|'model_provider')\s*=\s*(?:"([^"]*)"|'([^']*)')/m.exec(readFileSync(join(env.CODEX_HOME ?? join(env.HOME ?? '', '.codex'), 'config.toml'), 'utf8'));
-      provider = named ? named[1] ?? named[2] : undefined;
+      const named = /^\s*(?:model_provider|"model_provider"|'model_provider')\s*=\s*(?:"([^"]*)"|'([^']*)')/m.exec(top);
+      const provider = named ? named[1] ?? named[2] : undefined;
+      moved = (provider !== undefined && provider !== 'openai')
+        || /^\s*["']?(?:profile|profiles|model_providers|openai_base_url)["']?\s*[.=]/m.test(top)
+        || /^\s*\[{1,2}\s*["']?(?:profiles|model_providers)["']?\s*[.\]]/m.test(config);
     } catch { /* no config: the default provider */ }
-    return { OPENAI_BASE_URL: !!env.OPENAI_BASE_URL, model_provider: provider !== undefined && provider !== 'openai' };
+    return { OPENAI_BASE_URL: !!env.OPENAI_BASE_URL, model_provider: moved };
   },
   // The PermissionRequest hook's output, by Codex's rules: only allow or deny for this one call, a deny with its
   // message and an allow with nothing else. Allow comes from the answer's decision alone; deny or none denies, with
