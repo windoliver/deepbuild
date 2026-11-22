@@ -491,6 +491,10 @@ timed.push('tests/acceptance/1939/ac2-budget.test.ts');
 // deep-show for release there).
 alone.push('tests/acceptance/2513/');
 timed.push('tests/acceptance/2513/ac2-budget.test.ts');
+// #2513's blind redraft for #2513.296f5cfc runs #1939's suite and #1938's machines.test.ts, which build deep-show and
+// draw on the GPU, and #1939's ac2-budget judges a timing on the reference Mac.
+alone.push('tests/acceptance/2513-redraft-2047/');
+timed.push('tests/acceptance/2513-redraft-2047/unchanged.test.ts');
 // #3017's files each build deep-show and draw on the GPU; budget.test.ts times the table on a reference Mac (building
 // deep-show for release there); suites.test.ts runs other suites' files that build and draw.
 alone.push('tests/acceptance/3017/');
