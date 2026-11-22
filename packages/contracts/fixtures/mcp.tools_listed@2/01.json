@@ -1,0 +1,31 @@
+{
+  "v": 2,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "mcp.tools_listed",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "server": "deep",
+    "scope": "user",
+    "version": null,
+    "tools": [
+      {
+        "name": "deep_query",
+        "digest": "5c3bd4f0a8d0e6a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6071829",
+        "hints": {}
+      }
+    ],
+    "limit": {
+      "client": "codex-mcp-client",
+      "client_version": "0.166.0-alpha.5.1",
+      "from": "codex 0.166.0-alpha.5.1 (adapters/codex.facts.json toolResult)",
+      "result": { "tokens": 10000 },
+      "error": { "tokens": 10000 },
+      "cap": { "tokens": 8000 },
+      "error_cap": { "tokens": 8000, "chars": 8800 }
+    }
+  },
+  "subject": "session:01K74FKZVK8Q2X5R7M3N9P4T6W"
+}

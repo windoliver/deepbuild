@@ -1,0 +1,19 @@
+// #2651 AC4's writing package: handed a tool.before, it notes the value as it was handed, then tries to change one
+// field of it, data.call, to a mark of its own. Its read action `seen` reports what it was handed, before its change,
+// and whether the change took. A host that gives it a value it can't change makes the attempt throw, and that is caught.
+const held: unknown[] = [];
+const object = (properties: Record<string, unknown>) => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
+const MARK = 'changed-by-t2651/__NAME__';
+
+export default function (deep: any): void {
+  deep.on('tool.before', (event: any) => {
+    const handed = structuredClone(event);
+    let took = false;
+    try {
+      event.data.call = MARK;
+      took = event.data.call === MARK;
+    } catch { /* a value it can't change */ }
+    held.push({ handed, took });
+  });
+  deep.registerAction('ext.__NAME__.seen', { declares: 'read', input: object({}), output: object({ seen: { type: 'string' } }) }, async () => ({ seen: JSON.stringify(held) }));
+}

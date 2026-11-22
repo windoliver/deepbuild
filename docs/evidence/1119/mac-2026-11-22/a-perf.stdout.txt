@@ -1,0 +1,2 @@
+2026-11-22T12:32:54Z INCONCLUSIVE no grant: no timed grant came within 60 min, so perf did not run
+2026-11-22T12:32:54Z   Fix: Wait for the other sessions' builds and proofs on this machine, then run perf again.

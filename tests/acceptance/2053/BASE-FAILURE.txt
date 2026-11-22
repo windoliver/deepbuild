@@ -1,0 +1,64 @@
+#2053 acceptance suite at the base, 5f5791e2d (Merge pull request #3068), before any implementation.
+
+Run by the blind job that wrote the suite, on this Mac (macOS arm64, Metal), one file at a time, with deep-gpu and
+deep-canvas-render built at the base (cargo build --locked, 14 min 47 s under a load near 140):
+  PATH=$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    scripts/lease node node_modules/vitest/vitest.mjs run --root tests/acceptance/2053 --no-file-parallelism \
+    --testTimeout=1800000 ac1 ac2 ac3 ac4 ac5 ac7
+scripts/lease reported "The hub isn't answering … runs with no lease", so the run was unleased.
+15 tests, 15 failed, each at a named assertion for missing behavior or at a missing surface (the frame calls' store, a
+planted name refused as bad_input); none failed to load or crashed. Wall time 61 s.
+ac4-refusals.test.ts's second test was corrected after that run (the base's check raises `unknown_kind` on every
+image@1, so a notice is now counted as what the page adds) and that one file was run again at the base; its lines
+below are from the second run.
+ac6-unpaged.test.ts was not run at the base: there the merge base is the base, so it would compare the base with
+itself, after a second cold build of both binaries from the exported tree.
+
+ac1-leaning.test.ts
+  × the centre pixel reads 206 with the light toward the top edge and 84 toward the bottom, and every pixel is within 1 code of the CPU f64 form
+      window2d of leaning-up was answered, not refused: {"ok":false,"code":"asset_missing","path":"items/wall/params/asset: da1cbcc0…"}
+  × a planted flipped green channel reads 84 and 206 and fails, naming the pixel
+      deep-gpu run --planted normal_flipped_green exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+
+ac2-flat.test.ts
+  × a flat page is within 1 code of the frame with no normal at every pixel, and its centre reads 177 under the first light
+      window2d of flat-up was answered, not refused: {"ok":false,"code":"asset_missing","path":"items/wall/params/asset: da1cbcc0…"}
+  × a planted pass that multiplies by N·L alone reads 151 at the centre and fails, naming the pixel
+      deep-gpu run --planted normal_dot_alone exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+
+ac3-turned.test.ts
+  × the image turned 180° reads 84 at its centre under the light toward the top of the frame
+      window2d of turned-up was answered, not refused: {"ok":false,"code":"asset_missing","path":"items/wall/params/asset: da1cbcc0…"}
+  × a planted pass that leaves the normals unturned reads 206 and fails, naming the image
+      deep-gpu run --planted normal_unturned exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+
+ac4-refusals.test.ts (second run)
+  × a 32 × 32 page is refused naming both sizes, and a light with height 0 is refused naming the light
+      a 32 × 32 page on the 64 × 64 image: the check answers ok true, not a refusal
+      a 32 × 32 page on the 64 × 64 image: no error names both sizes; errors: none
+      a light with height 0: no error names the light items/lamps/params/light/lights/0; errors: none
+      (the 64 × 64 page under a light of height 100 passed its no-error assertion before these)
+  × an image with a normal in a group with no light raises one notice naming the image, and none in a lit group
+      the page outside a lit group adds one notice naming wall; notices: [{"code":"unknown_kind",…,"ids":["backdrop"],…},
+      {"code":"unknown_kind",…,"ids":["lamps"],…}, {"code":"unknown_kind",…,"ids":["wall"],"path":"items/wall/kind",
+      "actual":"image@1","what":"kind `image@1` is not registered in this build; the item is skipped"}]: expected +0 to be 1
+      (first run, before the correction: one notice named wall outside a lit group, the base's unknown_kind, and the
+      same image in the lit group raised it too: "the same image in a lit group raises no notice naming it")
+  × an image with a normal in a group with no light draws a frame byte-identical to the same image without the page
+      window2d of page-unlit was answered, not refused: {"ok":false,"code":"asset_missing","path":"items/wall/params/asset: da1cbcc0…"}
+  × a planted check that accepts the smaller page fails
+      check takes the line with planted normal_accepts_smaller_page: {"ok":false,"code":"bad_input"}
+
+ac5-seek-play.test.ts
+  × the evaluated light at 1 s, 2 s and 3 s is the same by seeking and by playing, and its at and height follow their channels
+      frame 0: lights[0].height, the evaluated height is a number, got undefined
+  × a planted evaluator that keeps the frame before's height differs after the seek and fails, naming the frame
+      path answers the lit group's frames under light_stale_height, not a refusal: {"ok":false,"code":"bad_input"}
+  × the frames at 1 s, 2 s and 3 s have the same pixel hash by seeking and by playing
+      film2d of drift-height from frame 0 was answered, not refused: {"ok":false,"code":"asset_missing","path":"items/wall/params/asset: da1cbcc0…"}
+  × a planted evaluator that keeps the frame before's height draws a seek unlike the play and fails, naming the frame
+      deep-gpu run --planted light_stale_height exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+
+ac7-budget.test.ts
+  × 16 lights over a 1920 × 1080 paged image cost under 1.5 ms of GPU time a frame, on the reference Mac
+      film2d of paged-budget from frame 0 was answered, not refused: {"ok":false,"code":"asset_missing","path":"items/wall/params/asset: afa82a2a…"}

@@ -1,0 +1,59 @@
+# #3005 acceptance suite at base 512d194bb (origin/main), macOS arm64, Node 24.22.0; checkout path shown as <repo>
+16:14  up 1 day, 20:40, 3 users, load averages: 47.72 63.38 62.87
+
+ RUN  v5.0.5 <repo>
+
+ ❯ tests/acceptance/3005/symlinked.test.ts (2 tests | 2 failed) 3594ms
+   ❯ a hub whose home runs through a symlink (2)
+     × #3005.a1f4670f deep install packages/jobs/import installs deepbuild/import@1.0.0 and exits 0 2211ms
+     × #3005.ae03f3f2 deep install packages/jobs/typeset installs deepbuild/typeset@1.0.0 and exits 0 458ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/3005/symlinked.test.ts > a hub whose home runs through a symlink > #3005.a1f4670f deep install packages/jobs/import installs deepbuild/import@1.0.0 and exits 0
+AssertionError: deep install packages/jobs/import exits 0: exit 1, stdout "Source: <repo>/packages/jobs/import\n  deepbuild/import@1.0.0, digest d1:8fb7886bb7379869e52b92cf43fdc0a33c984675ae074a2b8457bb6eeeff8cc9, unsigned\nPermissions:\n  access: none\n  notices: none\n  actions: none\n  check kinds: import.document, import.colors_mapped, import.no_expression\n  provides: none\n  uses: none\n  replaces: none\n  conflicts with: none\n  runs on: none\n  hosts: none\n", stderr "REFUSED: deepbuild/import's tool lottie-import@1.0.0 fails import's qualification at the fixture loader: lottie-import@1.0.0 wrote no {outputs}, each output's bytes in base64, so deepbuild/import@1.0.0 isn't installed\n": expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ expectInstalled tests/acceptance/3005/helpers.ts:112:65
+    110| /** The install printed that `id@version` is installed and exited 0, a…
+    111| export function expectInstalled(r: Ran, folder: string, ref: string): …
+    112|   expect(r.code, `deep install ${folder} exits 0: ${shown(r)}`).toBe(0…
+       |                                                                 ^
+    113|   expect(`${r.stdout}\n${r.stderr}`, `deep install ${folder} prints th…
+    114| }
+ ❯ tests/acceptance/3005/symlinked.test.ts:11:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/3005/symlinked.test.ts > a hub whose home runs through a symlink > #3005.ae03f3f2 deep install packages/jobs/typeset installs deepbuild/typeset@1.0.0 and exits 0
+AssertionError: deep install packages/jobs/typeset exits 0: exit 1, stdout "Source: <repo>/packages/jobs/typeset\n  deepbuild/typeset@1.0.0, digest d1:76517463e9549758fc78967e7a8d8ea1494672464db017c89821238a40ac3dfb, unsigned\nPermissions:\n  access: none\n  notices: none\n  actions: none\n  check kinds: typeset.unknown_command, typeset.parts_apart, typeset.outlines\n  provides: none\n  uses: none\n  replaces: none\n  conflicts with: none\n  runs on: none\n  hosts: none\n", stderr "REFUSED: deepbuild/typeset's tool typst-mitex@1.0.0 fails typeset's qualification at the fixture pythagoras: typst-mitex@1.0.0 wrote no {outputs}, each output's bytes in base64, so deepbuild/typeset@1.0.0 isn't installed\n": expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ expectInstalled tests/acceptance/3005/helpers.ts:112:65
+    110| /** The install printed that `id@version` is installed and exited 0, a…
+    111| export function expectInstalled(r: Ran, folder: string, ref: string): …
+    112|   expect(r.code, `deep install ${folder} exits 0: ${shown(r)}`).toBe(0…
+       |                                                                 ^
+    113|   expect(`${r.stdout}\n${r.stderr}`, `deep install ${folder} prints th…
+    114| }
+ ❯ tests/acceptance/3005/symlinked.test.ts:15:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  2 failed | 2 passed (4)
+   Start at  16:14:03
+   Duration  4.92s (tests 99%, transform 1%)
+
+exit 1

@@ -152,6 +152,11 @@ export interface Runner {
   list(): Promise<JobRecord[]>;
   /** The jobs held in memory, newest last: every live one and the newest 64 ended. What the hook path reads (#2650). */
   recent(): Promise<JobRecord[]>;
+  /**
+   * Of the jobs held in memory, newest last, only those whose session ID is `session` or whose folder is `cwd` or holds
+   * it: what a hook's whose reads, with no copy of the other jobs (#2651).
+   */
+  near(session: string | undefined, cwd: string | undefined): Promise<JobRecord[]>;
   /** Stops its group; resolves with the job as it reads then. */
   cancel(job: string): Promise<JobRecord>;
   /** Its stdout, as the runner read it: '' for an ended job whose output is no longer kept (#2650). */

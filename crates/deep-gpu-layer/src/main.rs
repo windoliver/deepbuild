@@ -573,6 +573,11 @@ pub enum Planted {
     ShadowInsideOutline,
     ShadowRemovesAmbient,
     ShadowEdgeAliased,
+    /// #2053's wrong programs (tests/acceptance/2053/README.md: Planted programs).
+    NormalFlippedGreen,
+    NormalDotAlone,
+    NormalUnturned,
+    LightStaleHeight,
 }
 
 impl Planted {
@@ -601,6 +606,10 @@ impl Planted {
             Planted::ShadowInsideOutline => P::ShadowInsideOutline,
             Planted::ShadowRemovesAmbient => P::ShadowRemovesAmbient,
             Planted::ShadowEdgeAliased => P::ShadowEdgeAliased,
+            Planted::NormalFlippedGreen => P::NormalFlippedGreen,
+            Planted::NormalDotAlone => P::NormalDotAlone,
+            Planted::NormalUnturned => P::NormalUnturned,
+            Planted::LightStaleHeight => P::LightStaleHeight,
             _ => return None,
         })
     }
@@ -646,6 +655,10 @@ impl Planted {
             "shadow_inside_outline" => Planted::ShadowInsideOutline,
             "shadow_removes_ambient" => Planted::ShadowRemovesAmbient,
             "shadow_edge_aliased" => Planted::ShadowEdgeAliased,
+            "normal_flipped_green" => Planted::NormalFlippedGreen,
+            "normal_dot_alone" => Planted::NormalDotAlone,
+            "normal_unturned" => Planted::NormalUnturned,
+            "light_stale_height" => Planted::LightStaleHeight,
             "vivid_light_as_linear_light" => Planted::VividLightAsLinearLight,
             "dissolve_reads_playback" => Planted::DissolveReadsPlayback,
             "pass_linear_in_2d" => Planted::PassLinearIn2d,

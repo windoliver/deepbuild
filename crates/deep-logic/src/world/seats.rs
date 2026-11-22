@@ -9,7 +9,7 @@ pub const READ: &str = "net.seats";
 /// Seat entries one step's read region holds at most, as a control's slot holds its entries.
 pub const PER_STEP: usize = crate::piece::PER_STEP;
 /// The read region's size, a control's slot: a u32 count, 4 zero bytes, then each entry as `u32
-/// player, u32 state (1 left, 2 absent, 3 back), u32 step, 4 zero bytes`, the step the item
+/// player, u32 state (1 left, 2 absent, 3 back, 4 joined), u32 step, 4 zero bytes`, the step the item
 /// takes it at.
 pub const SIZE: u32 = crate::piece::SLOT;
 
