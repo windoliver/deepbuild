@@ -237,7 +237,7 @@ const TOOLS = [['node', ['--version']], ['npm', ['--version']], ['rustc', ['-vV'
   ...(process.platform === 'darwin' ? [['swiftc', ['--version']], ['xcrun', ['--show-sdk-version']]] : [['ldd', ['--version']]])];
 // The environment a build reads besides its files: cargo's and rustc's, the C toolchain's as the cc, bindgen and
 // pkg-config crates read it (per target too), and node's and npm's.
-const BUILD_ENV = /^(?:CARGO_.*|RUSTC.*|RUSTFLAGS|RUSTDOCFLAGS|RUSTUP_TOOLCHAIN|(?:CC|CXX|AR|CFLAGS|CXXFLAGS|CPPFLAGS|LDFLAGS)(?:_.+)?|(?:TARGET|HOST)_.+|CRATE_CC_NO_DEFAULTS|PKG_CONFIG.*|LIBCLANG_PATH|CLANG_PATH|LLVM_CONFIG_PATH|BINDGEN_.+|.+_SYS_.+|SDKROOT|MACOSX_DEPLOYMENT_TARGET|DEVELOPER_DIR|NODE_OPTIONS|NODE_ENV|NODE_PATH|[Nn][Pp][Mm]_[Cc][Oo][Nn][Ff][Ii][Gg]_.+)$/;
+const BUILD_ENV = /^(?:CARGO_.*|RUSTC.*|RUSTFLAGS|RUSTDOCFLAGS|RUSTUP_TOOLCHAIN|(?:CC|CXX|AR|CFLAGS|CXXFLAGS|CPPFLAGS|LDFLAGS)(?:_.+)?|(?:TARGET|HOST)_.+|CRATE_CC_NO_DEFAULTS|PKG_CONFIG.*|LIBCLANG_PATH|CLANG_PATH|LLVM_CONFIG_PATH|BINDGEN_.+|.+_SYS_.+|CPATH|C_INCLUDE_PATH|CPLUS_INCLUDE_PATH|OBJC_INCLUDE_PATH|LIBRARY_PATH|TOOLCHAINS|SDKROOT|MACOSX_DEPLOYMENT_TARGET|DEVELOPER_DIR|NODE_OPTIONS|NODE_ENV|NODE_PATH|[Nn][Pp][Mm]_[Cc][Oo][Nn][Ff][Ii][Gg]_.+)$/;
 const LOCKS = ['package-lock.json', 'npm-shrinkwrap.json', 'Cargo.lock'];
 const DAY = 24 * 60 * 60_000;
 
@@ -273,17 +273,31 @@ function buildInputs(bay) {
   const tools = { platform: process.platform, arch: process.arch, os: osRelease() };
   for (const [name, args] of TOOLS) tools[name] = report(name, args, bay);
   // A compiler the environment names is reported too, since the build runs it and not cc.
-  for (const variable of ['CC', 'CXX']) if (process.env[variable]) tools[variable] = report(process.env[variable].trim().split(/\s+/)[0], ['--version'], bay);
+  // A wrapper such as `ccache clang` passes --version on to the compiler it names.
+  for (const variable of ['CC', 'CXX']) if (process.env[variable]?.trim()) {
+    const [command, ...rest] = process.env[variable].trim().split(/\s+/);
+    tools[variable] = report(command, [...rest, '--version'], bay);
+  }
   const locks = Object.fromEntries(LOCKS.map((lock) => [lock, hashOf(join(bay, lock))]));
   // The machine's settings a build reads from outside the bay: cargo's config in CARGO_HOME and every folder above the
   // bay, as rustflags there change every crate, and npm's.
   const cargoHome = process.env.CARGO_HOME || join(homedir(), '.cargo');
+  // npm's global config lies under the prefix of the node that runs it. A package node or tsc can find in a
+  // node_modules folder above the bay counts by its name.
   const settings = [join(cargoHome, 'config.toml'), join(cargoHome, 'config'), join(homedir(), '.npmrc')];
+  const above = {};
   for (let folder = dirname(bay); ; folder = dirname(folder)) {
     settings.push(join(folder, '.cargo', 'config.toml'), join(folder, '.cargo', 'config'));
+    try {
+      above[folder] = readdirSync(join(folder, 'node_modules')).sort();
+    } catch {}
     if (dirname(folder) === folder) break;
   }
-  const configs = Object.fromEntries(settings.map((path) => [path, hashOf(path)]));
+  // By its bytes alone: the node's own path is the toolchain's, which the tools report.
+  const configs = { ...Object.fromEntries(settings.map((path) => [path, hashOf(path)])), 'global npmrc': hashOf(join(dirname(dirname(process.execPath)), 'etc', 'npmrc')) };
+  // What node_modules was installed from: the lock's hash npm ci last finished with, which a twin's lock laid later doesn't change.
+  const marker = join(bay, 'node_modules/.deep-bay-installed');
+  const installed = existsSync(marker) ? readFileSync(marker, 'utf8') : null;
   // And the variables a crate's build script says it reads.
   const declared = new Set();
   for (const folder of ['crates', 'vendor']) {
@@ -299,14 +313,14 @@ function buildInputs(bay) {
   // A variable that names a file stands for that file's bytes too, as DEEP_KIT_LEDGER does for deep-show's ledger.
   const env = Object.entries(process.env).filter(([name]) => (BUILD_ENV.test(name) || declared.has(name)) && !['CARGO_TARGET_DIR', 'CARGO_BUILD_TARGET_DIR'].includes(name))
     .sort(([a], [b]) => (a < b ? -1 : 1)).map(([name, value]) => [name, value, isAbsolute(value) ? hashOf(value) : null]);
-  return { lanes: LANE_CODE, tools, locks, configs, env };
+  return { lanes: LANE_CODE, tools, locks, installed, configs, above, env };
 }
 
 // The lane code that runs a bay's builds: a change that edits how a build runs never gets a build the old code made.
 const LANE_CODE = (() => {
   const here = dirname(fileURLToPath(import.meta.url));
   const hash = createHash('sha256');
-  for (const name of readdirSync(here).filter((file) => /^(?:bays|proof[^/]*)\.mjs$/.test(file)).sort()) hash.update(`${name}\0`).update(readFileSync(join(here, name))).update('\0');
+  for (const name of readdirSync(here).filter((file) => /^(?:(?:bays|proof[^/]*)\.mjs|lease)$/.test(file)).sort()) hash.update(`${name}\0`).update(readFileSync(join(here, name))).update('\0');
   return hash.digest('hex');
 })();
 
@@ -389,11 +403,16 @@ function take(key, into) {
     return { why: `the kept build ${key} can't be read (${error.code ?? error.message})`, broken: true };
   }
   const staged = [];
+  let laying = false;
   try {
     if (entry?.key !== key || !Array.isArray(entry.files) || !Array.isArray(entry.deleted)) throw broken('it is not one this key stored');
     for (const file of entry.files) {
       if (!sound(file?.path)) throw broken(`its path ${JSON.stringify(file?.path)} is not one a build writes`);
       const target = join(into, file.path);
+      // Where the nearest folder that exists really is shows a link out of the bay before anything is made.
+      let existing = dirname(target);
+      while (!existsSync(existing)) existing = dirname(existing);
+      if (!within(real(into), real(existing))) throw broken(`${file.path} leads out of ${into}`);
       mkdirSync(dirname(target), { recursive: true });
       if (!within(real(into), real(dirname(target)))) throw broken(`${file.path} leads out of ${into}`);
       const fresh = `${target}.deep-build-${process.pid}`;
@@ -412,6 +431,7 @@ function take(key, into) {
       chmodSync(fresh, file.mode);
     }
     if (!entry.deleted.every(sound)) throw broken('a path it deletes is not one a build deletes');
+    laying = true;
     while (staged.length) {
       const { fresh, target } = staged[0];
       rmSync(target, { recursive: true, force: true });
@@ -422,7 +442,8 @@ function take(key, into) {
     return { laid: entry.files.length };
   } catch (error) {
     for (const { fresh } of staged) rmSync(fresh, { force: true });
-    return { why: `the kept build ${key} was not used: ${error.message}`, broken: Boolean(error.broken) };
+    // A lay stopped halfway leaves some of the entry in the bay: the entry goes, and the build that follows isn't kept.
+    return { why: `the kept build ${key} was not used: ${error.message}`, broken: Boolean(error.broken) || laying, dirty: laying };
   }
 }
 
@@ -761,10 +782,14 @@ class Pair {
   build(role, run) {
     const state = this.roles[role];
     const line = { index: this.index, role, use: state.use, tree: state.tree.tree };
-    let key = null, taken, before = null;
+    let key = null, taken, before = null, unkept = null;
     try {
-      key = sha(JSON.stringify({ bay: state.bay, files: state.overlaid, ...buildInputs(state.bay) }));
+      const inputs = buildInputs(state.bay);
+      key = sha(JSON.stringify({ bay: state.bay, files: state.overlaid, ...inputs }));
       taken = reach(key, state.bay);
+      // A tool stopped before it answered makes a key no later use has; a lay stopped halfway left part of an entry here.
+      if (Object.values(inputs.tools).some((text) => text.startsWith('stopped: '))) unkept = 'a tool was stopped before it said what it is';
+      if (taken.dirty) unkept = 'a kept build was laid in part before it failed';
       if (taken.laid === undefined) before = stamps(state.bay);
     } catch (error) {
       key = null;
@@ -777,9 +802,13 @@ class Pair {
     }
     const failed = run();
     if (failed) state.built = null;
-    const kept = failed ? { failed: true } : before ? this.keep(key, () => {
+    const kept = failed ? { failed: true } : unkept ? { kept: false, notKept: unkept } : before ? this.keep(key, () => {
       const after = stamps(state.bay);
-      return { from: state.bay, paths: [...after].filter(([path, text]) => before.get(path) !== text).map(([path]) => path), deleted: [...before.keys()].filter((path) => !after.has(path)) };
+      const paths = [...after].filter(([path, text]) => before.get(path) !== text).map(([path]) => path), deleted = [...before.keys()].filter((path) => !after.has(path));
+      // A workspace build writes in its packages; a file elsewhere that changed meanwhile is another process's, such as
+      // a hub a test left running, and no later use may get it laid back.
+      const stray = [...paths, ...deleted].find((path) => !/^packages\/[^/]+\/./.test(path));
+      return stray ? { refused: `${stray} changed outside the workspace packages while the bay built` } : { from: state.bay, paths, deleted };
     }) : { kept: false };
     this.print(`BUILD ${JSON.stringify({ ...line, key, reused: false, why: taken.why, ...kept })}`);
     return failed;
@@ -816,7 +845,8 @@ class Pair {
   keep(key, what) {
     try {
       if (ceiling() === 0) return { kept: false, notKept: 'no cache: DEEP_BUILD_CACHE_BYTES is 0', evicted: evict() };
-      const { from, paths, deleted } = what();
+      const { from, paths, deleted, refused } = what();
+      if (refused) return { kept: false, notKept: refused, evicted: evict() };
       const { bytes, why } = keep(key, from, paths, deleted);
       return { kept: !why, bytes, ...(why ? { notKept: why } : {}), evicted: evict() };
     } catch (error) {
