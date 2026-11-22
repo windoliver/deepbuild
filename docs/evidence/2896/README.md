@@ -53,6 +53,11 @@ Paths are redacted (`~`, `<scratch>`).
     2,748 tokens.
   - Each client received `deep_drive`'s `missing_field` whole, at 7,907 characters.
   - A separate agent read the screenshot and found no error and no personal data.
+- `e2e-terminal-merge.png`: the same e2e on `0f89e79e8`, after merging main `a2d1ebbd1` (#2897), passed in 344 s with the
+  same pages and sizes. The window title, which names the Mac's user, is cropped off. A separate agent read it against the
+  run's report and found no error.
+- On `b815868fe` (the merge), the suite ran serially and passed 11 of 11 with a release `deep-show`. A first run on a
+  debug-only rebuild of `target/` BLOCKED 7, since the debug canvas core missed the opening draw's 55 s wait.
 - On `0a5cab54f`, `pages.test.ts` and `walk.test.ts` were rerun alone and passed 5 of 5, at load about 100. A run beside
   other files at load 72 to 138 had BLOCKED 3 of them, when the opening draw answered `unavailable`.
 
