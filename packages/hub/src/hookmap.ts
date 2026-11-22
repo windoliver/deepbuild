@@ -2,7 +2,6 @@
 // held to hook.request@3, mapped through its agent's adapter to its event, and kept to that kind's catalogue
 // fields, its text scrubbed of every value the hub holds. Runs in the parser workers, off the event loop.
 import { closeSync, openSync, readSync, fstatSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { ADAPTERS, readFacts, type HookRequestLine, type JsonObject } from '@deepbuild/adapters';
 import { scrubText } from '@deepbuild/evidence';
 import { adapterOf, coveredBy, registry } from './adapter-facts.js';
@@ -493,12 +492,13 @@ function errorLine(error: string): string {
 /**
  * A session's route as its adapter reads it at its start (#1886): from the route and billing keys its SessionStart
  * reported set, true or false and never a value, and, for Codex's model provider, the config in its home, the folder
- * its rollout sits under; undefined for an adapter that reads none.
+ * its rollout sits under, none read as moved; undefined for an adapter that reads none.
  */
 function routeAt(name: string, route: Record<string, boolean>, billing: Record<string, boolean>, transcript: string): Record<string, boolean> | undefined {
   const read = registry().get(name).routeAtStart;
   if (!read) return undefined;
-  const env: Record<string, string | undefined> = { HOME: homedir() };
+  // No HOME: the hub's own is no word for the agent's, so only the home its rollout sits under is read.
+  const env: Record<string, string | undefined> = {};
   for (const [key, set] of Object.entries({ ...billing, ...route })) env[key] = set ? '1' : undefined;
   const at = transcript.lastIndexOf('/sessions/');
   if (at > 0) env.CODEX_HOME = transcript.slice(0, at);

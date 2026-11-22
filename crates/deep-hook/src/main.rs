@@ -46,7 +46,13 @@ const BILLING_KEYS: &[&str] = &[
 /// The environment variables that move the route to an agent's model off its own, beside the billing keys that do
 /// (#1886): SessionStart reports whether each is set, never its value, and the agent's adapter reads the route from
 /// both.
-const ROUTE_KEYS: &[&str] = &["ANTHROPIC_BASE_URL", "OPENAI_BASE_URL"];
+const ROUTE_KEYS: &[&str] = &[
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_BEDROCK_BASE_URL",
+    "ANTHROPIC_VERTEX_BASE_URL",
+    "ANTHROPIC_FOUNDRY_BASE_URL",
+    "OPENAI_BASE_URL",
+];
 
 // A release build refuses the planted programs' feature (#1408).
 #[cfg(all(feature = "env-plants", not(debug_assertions)))]

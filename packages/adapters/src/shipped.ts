@@ -111,8 +111,12 @@ export const claudeParts: AdapterParts = {
   unsupported: TERMINAL_ONLY,
   doctor: () => notChecked('claude'),
   readUsage: readClaudeUsage,
-  // Behind a base URL of its own the transcript's model is the proxy's word; Bedrock and Vertex name their own models.
-  routeAtStart: (env) => Object.fromEntries(['ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX'].map((k) => [k, !!env[k]])),
+  // Behind a base URL of its own the transcript's model is the proxy's word: Anthropic's, or a gateway's in front of
+  // Bedrock, Vertex or Foundry, each read as ANTHROPIC_BASE_URL. Bedrock and Vertex reached directly name their own models.
+  routeAtStart: (env) => ({
+    ...Object.fromEntries(['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX'].map((k) => [k, !!env[k]])),
+    ANTHROPIC_BASE_URL: ['ANTHROPIC_BASE_URL', 'ANTHROPIC_BEDROCK_BASE_URL', 'ANTHROPIC_VERTEX_BASE_URL', 'ANTHROPIC_FOUNDRY_BASE_URL'].some((k) => !!env[k]),
+  }),
   // The PermissionRequest hook's output: allow only when the answer's decision is allow; deny or none denies, with
   // your words as the message; cancel gives no decision, so Claude Code's own dialog asks. An option's label and the
   // words never allow. An allow for the session takes the agent's own suggestions for the session alone; none ever
@@ -160,11 +164,14 @@ export const codexParts: AdapterParts = {
   // Codex's model provider, from its config.toml, and OPENAI_BASE_URL: each other than the default moves its route.
   // The file is read whole, never parsed (#1886): any provider other than OpenAI's, a profile, a profiles or provider
   // table, or a base URL or OSS provider key, wherever it stands, reads as moved, so a config this misreads errs toward
-  // a moved route. Command-line overrides and config layers other than this home's are not seen.
+  // a moved route. Command-line overrides and config layers other than this home's are not seen, and with no home
+  // named there's no config to read, so the route reads moved.
   routeAtStart: (env) => {
+    const home = env.CODEX_HOME ?? (env.HOME ? join(env.HOME, '.codex') : undefined);
+    if (!home) return { OPENAI_BASE_URL: !!env.OPENAI_BASE_URL, model_provider: true };
     let moved = false;
     try {
-      const config = readFileSync(join(env.CODEX_HOME ?? join(env.HOME ?? '', '.codex'), 'config.toml'), 'utf8');
+      const config = readFileSync(join(home, 'config.toml'), 'utf8');
       // A bare or quoted key, and a basic or a literal TOML string.
       const providers = [...config.matchAll(/^\s*(?:model_provider|"model_provider"|'model_provider')\s*=\s*(?:"([^"]*)"|'([^']*)')/gm)].map((m) => m[1] ?? m[2]);
       moved = providers.some((p) => p !== 'openai')

@@ -22,6 +22,8 @@ const TYPICAL = '01a15756-1886-7910-90bb-db79d3fddb82';
 const MOVED = ['chatgpt_base_url = "http://127.0.0.1:9"\n', 'oss_provider = "ollama"\n', 'model_provider = "openai"\nmodel_provider = "ollama"\n', '[tui]\nmodel_provider = "ollama"\n', 'profile = "work"\n', '[profiles.work]\nmodel = "o3"\n', 'openai_base_url = "http://127.0.0.1:9/v1"\n', 'model_providers.local.base_url = "http://127.0.0.1:9/v1"\n'].map((config, i) => ({ id: `01a15756-1886-7910-90bb-db79d3fddc${String(i).padStart(2, '0')}`, config }));
 const UNREADABLE = '01a15756-1886-7910-90bb-db79d3fddb83';
 const UNREPORTED = '3b9f1c2e-1886-4222-8333-44445555cccc';
+const GATEWAY = '3b9f1c2e-1886-4222-8333-44445555dddd';
+const NO_ROLLOUT = '01a15756-1886-7910-90bb-db79d3fddb84';
 
 describe('the route a session started on', () => {
   it('is recorded on its session.start from what its SessionStart reports set, through its adapter', async () => {
@@ -36,12 +38,15 @@ describe('the route a session started on', () => {
       };
       await start(PROXIED, { ANTHROPIC_BASE_URL: true, OPENAI_BASE_URL: false });
       await start(OWN, { ANTHROPIC_BASE_URL: false, OPENAI_BASE_URL: false });
+      // A gateway in front of Bedrock: its base URL is the proxy's word as Anthropic's own is.
+      await start(GATEWAY, { ANTHROPIC_BASE_URL: false, ANTHROPIC_BEDROCK_BASE_URL: true, OPENAI_BASE_URL: false });
       // Codex sessions whose home, the folder its rollout sits under, sets a model provider other than OpenAI's, in a
       // basic and in a literal TOML string, and under a quoted key.
-      const codex = async (id: string, folder: string, config: string | null) => {
+      const codex = async (id: string, folder: string, config: string | null, rolloutAt?: string) => {
         const codexHome = join(home, folder);
-        const day = join(codexHome, 'sessions', '2026', '11', '22');
+        const day = rolloutAt ?? join(codexHome, 'sessions', '2026', '11', '22');
         mkdirSync(day, { recursive: true });
+        mkdirSync(codexHome, { recursive: true });
         if (config !== null) writeFileSync(join(codexHome, 'config.toml'), `model = "gpt-5-codex"\n${config}`);
         const rollout = join(day, `rollout-2026-11-22T02-00-00-${id}.jsonl`);
         writeFileSync(rollout, '');
@@ -68,6 +73,9 @@ describe('the route a session started on', () => {
       // A config that can't be read is no word for the default provider.
       mkdirSync(join(home, '.codex-unreadable', 'config.toml'), { recursive: true });
       await codex(UNREADABLE, '.codex-unreadable', null);
+      // A start whose rollout names no Codex home: the hub's own home, on OpenAI's provider here, is no word for the
+      // agent's, which may sit elsewhere.
+      await codex(NO_ROLLOUT, '.codex', 'model_provider = "openai"\n', join(home, 'elsewhere'));
       // An ordinary config on OpenAI's provider: its tables move nothing.
       await codex(TYPICAL, '.codex-typical', 'approval_policy = "on-request"\nsandbox_mode = "workspace-write"\n\n[tui]\nnotifications = true\n\n[mcp_servers.docs]\ncommand = "npx"\nargs = ["-y", "docs-mcp"]\n\n[projects."/work"]\ntrust_level = "trusted"\n\n[history]\npersistence = "save-all"\n');
       // A start whose line reports no route, as an older deep-hook sends it: the record keeps none, never "own route".
@@ -89,6 +97,8 @@ describe('the route a session started on', () => {
         for (const m of MOVED) expect(routeOf(m.id), `Codex's route under ${JSON.stringify(m.config)}`).toEqual({ OPENAI_BASE_URL: false, model_provider: true });
         expect(routeOf(UNREADABLE), 'Codex\'s route on a config it can\'t read').toEqual({ OPENAI_BASE_URL: false, model_provider: true });
         expect(routeOf(TYPICAL), 'Codex\'s own route under an ordinary config').toEqual({ OPENAI_BASE_URL: false, model_provider: false });
+        expect(routeOf(NO_ROLLOUT), 'Codex\'s route with no home its rollout names').toEqual({ OPENAI_BASE_URL: false, model_provider: true });
+        expect(routeOf(GATEWAY), 'Claude Code\'s route behind a Bedrock gateway').toEqual({ ANTHROPIC_BASE_URL: true, ANTHROPIC_AUTH_TOKEN: false, CLAUDE_CODE_USE_BEDROCK: false, CLAUDE_CODE_USE_VERTEX: false });
         expect(routeOf(UNREPORTED), 'a start that reported no route').toBeUndefined();
         expect(routeOf(OWN), 'Claude Code\'s own route').toEqual({ ANTHROPIC_BASE_URL: false, ANTHROPIC_AUTH_TOKEN: false, CLAUDE_CODE_USE_BEDROCK: false, CLAUDE_CODE_USE_VERTEX: false });
       } finally {
