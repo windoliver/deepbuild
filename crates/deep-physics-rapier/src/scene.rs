@@ -4,16 +4,19 @@
 //! `medium` and a spring's `point`) is an item path the scene's channels and drivers write,
 //! evaluated by the motion module at each step's own time, inside the step (Phase). A read that
 //! depends on a physics pose, through a driver reading what the world's outputs write or its
-//! lists and readings, is a cycle, refused at check.
+//! lists and readings, is a cycle, refused at check. #2288: an instancer a world's `<body>#*`
+//! output writes takes its columns in its own frame, its world transform at t = 0; one a channel
+//! moves, or an item it's parented to, is refused at check.
 
 use std::collections::BTreeSet;
 
 use deep_canvas_motion::doc::DriverInput;
 use deep_canvas_motion::eval::Validity;
-use deep_canvas_motion::program::Program;
+use deep_canvas_motion::program::{Program, TRANSFORM};
 use deep_canvas_physics::backend::Targets;
+use deep_canvas_physics::check::MOVED_INSTANCER;
 use deep_canvas_physics::doc::{ForceKind, Refusal, World};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 /// What a read sets.
 enum Sets {
@@ -35,6 +38,9 @@ pub struct Scene {
     reads: Vec<Read>,
     /// The world's step, flicks.
     step: i64,
+    /// #2288: each instancer a `<body>#*` output writes that is moved or turned, with its world
+    /// `pos` and `rot` (a quaternion) at t = 0: the frame its columns hold each body's pose in.
+    pub frames: Map<String, Value>,
 }
 
 fn refusal(code: &'static str, path: String, actual: Value, what: String) -> Refusal {
@@ -105,6 +111,7 @@ impl Scene {
         }
         let outputs: Vec<&str> = w.outputs.values().filter_map(|o| o.to.as_deref()).collect();
         let mut out = Vec::new();
+        let frames = frames(&program, w, &mut out);
         let mut reads = Vec::new();
         for (sets, path, field, width) in wanted {
             let slots = slots(&program, &path, width);
@@ -129,6 +136,7 @@ impl Scene {
             program,
             reads,
             step,
+            frames,
         })
     }
 
@@ -175,6 +183,56 @@ impl Scene {
         let values: Vec<Vec<Vec<f64>>> = (0..=steps).map(|k| self.values(k)).collect();
         json!({"paths": paths, "values": values})
     }
+}
+
+/// #2288: each instancer world `w`'s `<body>#*` outputs write, moved or turned at t = 0, with its
+/// world `pos` and `rot`; into `out`, the refusal of each channel that moves one of them, on it or
+/// on an item it's parented to, naming the instancer and the channel.
+fn frames(program: &Program, w: &World, out: &mut Vec<Refusal>) -> Map<String, Value> {
+    let mut state = program.state();
+    program.evaluate(0, Validity::Full, &mut state);
+    let mut frames = Map::new();
+    for (oid, o) in &w.outputs {
+        let item = o.to.as_deref().and_then(|t| t.strip_prefix("items/"));
+        let (Some(_), Some(item)) = (o.from.strip_suffix("#*"), item) else {
+            continue;
+        };
+        let mut placed = vec![item];
+        while let Some((_, up)) = program
+            .motion
+            .parents
+            .iter()
+            .find(|(c, _)| placed.last() == Some(&c.as_str()))
+        {
+            if placed.contains(&up.as_str()) {
+                break;
+            }
+            placed.push(up);
+        }
+        let moving = program.motion.channels.iter().filter(|c| {
+            placed.contains(&c.target.owner.as_str())
+                && c.target.field.first().is_some_and(|f| f == "at")
+        });
+        for c in moving {
+            let path = format!("items/{}/{}", c.target.owner, c.target.field.join("/"));
+            let what = format!("output {oid} writes {item}'s columns in {item}'s frame at t = 0, and channel {} moves it ({path}); a world can't write the columns of an instancer a channel moves", c.id);
+            out.push(refusal(
+                MOVED_INSTANCER,
+                format!("outputs/{oid}/to"),
+                json!(c.id),
+                what,
+            ));
+        }
+        let Some(i) = program.items.iter().position(|x| x == item) else {
+            continue;
+        };
+        let t = &state.slots[i * TRANSFORM..i * TRANSFORM + 6];
+        if t.iter().any(|x| *x != 0.0) {
+            let frame = json!({"pos": t[0..3], "rot": crate::bound::quat(&t[3..6])});
+            frames.insert(item.to_string(), frame);
+        }
+    }
+    frames
 }
 
 /// The slots of an item field `items/<id>/<field…>` that is `width` numbers wide: a vector field

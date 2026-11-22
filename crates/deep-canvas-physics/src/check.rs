@@ -13,7 +13,7 @@ use crate::roles::{self, Row};
 pub const BACKEND_CAP: &str = "physics.backend_cap";
 
 /// The codes this module adds to the check catalog: each with its meaning and fix.
-pub const CODES: [(&str, &str, &str); 11] = [
+pub const CODES: [(&str, &str, &str); 12] = [
     (BACKEND_CAP, "The backend this build pins can't run the field as written; the issue names the field and the backend.", "Set the field to what the backend runs (most often 0), or use a construct the backend has."),
     ("physics.unsupported", "The field is in physics.world@1 but this backend interface doesn't run it yet; the issue names the issue that brings it.", "Remove the field until that issue lands."),
     ("physics.missing_field", "A required world field is missing.", "Add the field."),
@@ -21,6 +21,7 @@ pub const CODES: [(&str, &str, &str); 11] = [
     ("physics.no_group", "A shape is a member of no collision group, so physics.pairs can't place it in the matrix.", "Name at least one group in the shape's member, or give it a role."),
     (crate::doc::OPEN_MESH, "A soft volume's source mesh isn't closed: some edge isn't on exactly two triangles; the issue names the first such edge by its two particles.", "Close the source mesh (or build the volume from a closed item), or draw it as cloth instead."),
     (SCALED, "A body is bound to an item, or built per element of an instancer, whose world transform scales it; a body's shapes carry sizes in metres and its pose has no scale.", "Size the shape in metres instead (double a box's half extents rather than scale its item) and draw the item at scale 1."),
+    (MOVED_INSTANCER, "A world's <body>#* output writes an instancer's columns in the instancer's frame at t = 0, and a channel moves that instancer, or an item it's parented to; the issue names the instancer and the channel.", "Move the instancer's elements by physics instead, or drop the channel on its transform."),
     (crate::fast::FAST_BODY, "A body's fastest point (its move in a step plus its turn times its farthest extent from its centre of mass) moves farther in one step than half its thinnest extent where the backend's sweep doesn't hold it: a dynamic body with ccd off; a kinematic body, which starts no sweep (kind kinematic, with its own fix); or two bodies whose swept bounds meet where neither a sweep nor a body's contact prediction holds them and ccd on the fast one can't settle it (kind pair, with its own fix). The issue names the body or both, the step, the move and that half.", "Turn the body's ccd on, or slow it."),
     (MASS_RATIO, "A joint's two dynamic bodies' masses, declared or density × volume, differ by more than 10:1, so the chain jitters or blows apart.", "Bring the two masses within 10:1: declare the lighter body's mass, raise its density, or make the joint articulated."),
     (ARTICULATION_TREE, "The articulated joints of a world form trees: this one makes a body the b of two of them, or closes a loop of them; the issue names it.", "Leave the joint the issue names separate: a loop is closed by a separate joint."),
@@ -68,6 +69,9 @@ pub fn mass_ratios(
 
 /// The code of a body whose item or element is drawn scaled (#1921).
 pub const SCALED: &str = "physics.scaled";
+
+/// #2288: the code of an instancer a channel moves while a world writes its columns.
+pub const MOVED_INSTANCER: &str = "physics.moved_instancer";
 
 /// The one-line fix of `code`: this module's, else the core's.
 pub fn fix(code: &str) -> String {
