@@ -1,0 +1,159 @@
+The runs at the base, 512d194bb (origin/main), 2026-11-21, on the Mac at load average 57-122 (another session's big
+run going), Node 24.22.0. The checkout's built packages were older than its sources (its packages/*/dist predate
+HEAD), so every run below is in a copy of HEAD under /tmp (`git archive HEAD`, then `npm run build --workspaces`
+there), with the suite copied in, the checkout's target/ cloned in, and the merge base read through the checkout's
+git dir. The copy's path is <copy>; temp homes are /tmp/dh2695-XXXX.
+
+== 1. The whole suite at the base: node node_modules/vitest/vitest.mjs run --root tests/acceptance/2695 --no-file-parallelism
+11 tests: 5 fail at their assertions (AC1, AC2 instructions, AC4 install, AC5 doctor x2); 6 pass (AC2 opens, AC3 x2,
+AC4 matching, AC5 hook x2), each criterion's "as today" or "as the merge base does" part, proven by the twins in 2-4.
+(This run had AC2's opens test with an lsof attribution since removed; its rerun after the removal passed again,
+"Tests 1 passed | 1 skipped".)
+
+
+ RUN  v5.0.5 <copy>/tests/acceptance/2695
+
+ ❯ missing.test.ts (4 tests | 2 failed) 15141ms
+   × #2695.f70c83fe with proofs.json missing, deep doctor shows one item naming it 551ms
+   × #2695.f70c83fe with proofs.json unreadable, deep doctor shows one item naming it 567ms
+ ❯ setup.test.ts (1 test | 1 failed) 18359ms
+   × #2695.5cc60b5e after deep setup, rules.json holds no proof and proofs.json holds all 31, each equal to the merge base's 16996ms
+stdout | hook.test.ts > #2695.7026a58e a forwarded PreToolUse for a Read retires at least 0.3 M fewer instructions than on the merge base, over 15 alternated rounds
+AC2 instructions, release builds, 15 rounds (0 skipped for unlike paths): 1 (base first): base 24242618, change 23771913; 2 (change first): base 25716666, change 24541341; 3 (base first): base 23959998, change 23973445; 4 (change first): base 23890897, change 23991233; 5 (base first): base 23839179, change 23927725; 6 (change first): base 24072958, change 25219781; 7 (base first): base 23819538, change 23801133; 8 (change first): base 23781826, change 23892394; 9 (base first): base 23909001, change 24813697; 10 (change first): base 24468009, change 23750082; 11 (base first): base 24078119, change 23742342; 12 (change first): base 24778177, change 23729259; 13 (base first): base 23744507, change 23724176; 14 (change first): base 23915924, change 23855506; 15 (base first): base 23917349, change 23867185; median fewer 20331
+
+ ❯ hook.test.ts (2 tests | 1 failed) 8192ms
+   × #2695.7026a58e a forwarded PreToolUse for a Read retires at least 0.3 M fewer instructions than on the merge base, over 15 alternated rounds 3342ms
+ ❯ older.test.ts (2 tests | 1 failed) 5993ms
+   × #2695.af072e8f after the next install, the proofs are in proofs.json, none lost, and rules.json holds none 1151ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  hook.test.ts > #2695.7026a58e a forwarded PreToolUse for a Read retires at least 0.3 M fewer instructions than on the merge base, over 15 alternated rounds
+AssertionError: over 15 alternated rounds a forwarded PreToolUse for a Read must retire at least 300,000 fewer instructions than the merge base's deep-hook (the median of each round's base minus change); it retires 20,331 fewer. Rounds: 1 (base first): base 24242618, change 23771913; 2 (change first): base 25716666, change 24541341; 3 (base first): base 23959998, change 23973445; 4 (change first): base 23890897, change 23991233; 5 (base first): base 23839179, change 23927725; 6 (change first): base 24072958, change 25219781; 7 (base first): base 23819538, change 23801133; 8 (change first): base 23781826, change 23892394; 9 (base first): base 23909001, change 24813697; 10 (change first): base 24468009, change 23750082; 11 (base first): base 24078119, change 23742342; 12 (change first): base 24778177, change 23729259; 13 (base first): base 23744507, change 23724176; 14 (change first): base 23915924, change 23855506; 15 (base first): base 23917349, change 23867185: expected 20331 to be greater than or equal to 300000
+ ❯ hook.test.ts:78:312
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  missing.test.ts > #2695.f70c83fe with proofs.json missing, deep doctor shows one item naming it
+AssertionError: with ~/.deepbuild/proofs.json missing, deep doctor --json must show one item naming proofs.json; its items: hub.socket (fail), hub.disk (ok), hub.service (fail), hub.ports (ok), claude.hooks (ok), timing.stop_hold (ok), timing.waiter (ok), timing.deep_ask (ok), timing.stop_continuations (ok), timing.asks_and_batches (ok), claude.mcp (ok), claude.statusline (ok), codex.binary (fail), codex.sign_in (ok), codex.billing (ok), claude.binary (ok), claude.jobs_binary (ok), claude.sign_in (fail), claude.token (skip), claude.billing (ok), claude.mods (ok), claude.prompt (skip), canvas.gpu (fail), canvas.headless (fail), canvas.verdict (fail), app.footprint (skip), otlp.telemetry (skip): expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ missing.test.ts:49:253
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  missing.test.ts > #2695.f70c83fe with proofs.json unreadable, deep doctor shows one item naming it
+AssertionError: with ~/.deepbuild/proofs.json unreadable, deep doctor --json must show one item naming proofs.json; its items: hub.socket (fail), hub.disk (ok), hub.service (fail), hub.ports (ok), claude.hooks (ok), timing.stop_hold (ok), timing.waiter (ok), timing.deep_ask (ok), timing.stop_continuations (ok), timing.asks_and_batches (ok), claude.mcp (ok), claude.statusline (ok), codex.binary (fail), codex.sign_in (ok), codex.billing (ok), claude.binary (ok), claude.jobs_binary (ok), claude.sign_in (fail), claude.token (skip), claude.billing (ok), claude.mods (ok), claude.prompt (skip), canvas.gpu (fail), canvas.headless (fail), canvas.verdict (fail), app.footprint (skip), otlp.telemetry (skip): expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ missing.test.ts:49:253
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  older.test.ts > #2695.af072e8f after the next install, the proofs are in proofs.json, none lost, and rules.json holds none
+AssertionError: after the next install, rules.json must hold no proof: no `proofs` key and no planted call or twin (the keys holding one): expected [ 'proofs' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "proofs",
++ ]
+
+ ❯ older.test.ts:33:153
+     31|   const rules = readJson(rulesPath(h));
+     32|   expect(rules, 'after the install, rules.json must be JSON').toBeDefi…
+     33|   expect(proofKeys(rules), 'after the next install, rules.json must ho…
+       |                                                                                                                                                         ^
+     34|   expect([...Object.keys(baseRules().entries), name].filter((n) => !(n…
+     35|   const file = readJson(proofsPath(h));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  setup.test.ts > #2695.5cc60b5e after deep setup, rules.json holds no proof and proofs.json holds all 31, each equal to the merge base's
+AssertionError: after deep setup, rules.json must hold no proof: no `proofs` key and no planted call or twin (the keys holding one): expected [ 'proofs' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "proofs",
++ ]
+
+ ❯ setup.test.ts:29:147
+     27|   const rules = readJson(rulesPath(h));
+     28|   expect(rules, 'after deep setup, ~/.deepbuild/rules.json must be JSO…
+     29|   expect(proofKeys(rules), 'after deep setup, rules.json must hold no …
+       |                                                                                                                                                   ^
+     30|   const file = readJson(proofsPath(h));
+     31|   expect(file, `after deep setup, ~/.deepbuild/${PROOFS} must be JSON …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  4 failed | 1 passed (5)
+      Tests  5 failed | 6 passed (11)
+   Start at  16:44:33
+   Duration  51.81s (tests 99%)
+
+exit 1
+
+== 2. twins/guards-off-without-proofs laid over the base (crates/deep-hook/src/main.rs; cargo build --locked -p deep-hook)
+   -t "opens|matches every planted" missing.test.ts hook.test.ts; the opens test's line is from its rerun after the lsof removal
+ ❯ missing.test.ts (4 tests | 2 failed | 2 skipped) 12651ms
+   × #2695.f70c83fe with proofs.json missing, deep-hook matches every planted call and twin as before 5914ms
+   × #2695.f70c83fe with proofs.json unreadable, deep-hook matches every planted call and twin as before 5827ms
+ ❯ hook.test.ts (2 tests | 1 failed | 1 skipped) 8241ms
+   × #2695.7026a58e a forwarded PreToolUse opens proofs.json zero times, counted by the test 6586ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  hook.test.ts > #2695.7026a58e a forwarded PreToolUse opens proofs.json zero times, counted by the test
+AssertionError: 15 forwarded PreToolUse calls (a Read and `git status`, in turn) must open ~/.deepbuild/proofs.json zero times; it was opened 15 times: expected 15 to be +0 // Object.is equality
+ ❯ hook.test.ts:41:205
+ FAIL  missing.test.ts > #2695.f70c83fe with proofs.json missing, deep-hook matches every planted call and twin as before
+AssertionError: with ~/.deepbuild/proofs.json missing and no hub answering, every guard must still hold: deep-hook must decide and match each planted call and twin as the merge base's deep-hook does on this home (the calls that differ): expected [ …(48) ] to deeply equal []
++   "no-kill-by-name's planted `pkill -f node`: {\"decision\":\"allow\",\"matched\":[]}, where the merge base's deep-hook gives {\"decision\":\"deny\",\"matched\":[\"no-kill-by-name\"]}",
+ ❯ missing.test.ts:42:258
+ FAIL  missing.test.ts > #2695.f70c83fe with proofs.json unreadable, deep-hook matches every planted call and twin as before
+AssertionError: with ~/.deepbuild/proofs.json unreadable and no hub answering, every guard must still hold: deep-hook must decide and match each planted call and twin as the merge base's deep-hook does on this home (the calls that differ): expected [ …(48) ] to deeply equal []
++   "no-kill-by-name's planted `pkill -f node`: {\"decision\":\"allow\",\"matched\":[]}, where the merge base's deep-hook gives {\"decision\":\"deny\",\"matched\":[\"no-kill-by-name\"]}",
+ ❯ missing.test.ts:42:258
+      Tests  3 failed | 3 skipped (6)
+
+== 3. twins/old-rules-refused laid over the base: -t "matches every planted" older.test.ts
+ ❯ older.test.ts (2 tests | 1 failed | 1 skipped) 4437ms
+   × #2695.af072e8f a home whose rules.json still holds the proofs matches every planted call and twin as the merge base's deep-hook does 3546ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  older.test.ts > #2695.af072e8f a home whose rules.json still holds the proofs matches every planted call and twin as the merge base's deep-hook does
+AssertionError: with rules.json as the merge base wrote it (proofs in it) and no hub answering, deep-hook must decide and match each of the 102 planted calls and twins as the merge base's deep-hook does (the calls that differ): expected [ …(102) ] to deeply equal []
++   "no-kill-by-name's planted `pkill -f node`: {\"decision\":\"deny\",\"matched\":[]}, where the merge base's deep-hook gives {\"decision\":\"deny\",\"matched\":[\"no-kill-by-name\"]}",
++   "no-kill-by-name's twin `echo 'pkill -f node'`: {\"decision\":\"deny\",\"matched\":[]}, where the merge base's deep-hook gives {\"decision\":\"allow\",\"matched\":[]}",
+ ❯ older.test.ts:21:260
+      Tests  1 failed | 1 skipped (2)
+
+== 4. twins/installs-without-proofs laid over the base (packages/hub/src/guards.ts; tsc -p packages/hub/tsconfig.json): install.test.ts
+ ❯ install.test.ts (2 tests | 2 failed) 2724ms
+   × #2695.d791b61b installing an entry with no planted call is refused, naming the entry 1812ms
+   × #2695.d791b61b installing an entry whose twin it denies is refused, naming the entry 130ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  install.test.ts > #2695.d791b61b installing an entry with no planted call is refused, naming the entry
+AssertionError: deep guard add of frob-2695-no-planted, which ships a twin and no planted call, must be refused (exit 1): exit 0 after 116 ms, stdout "Added frob-2695-no-planted to your rules\n", stderr "": expected +0 to be 1 // Object.is equality
+ ❯ install.test.ts:33:126
+ FAIL  install.test.ts > #2695.d791b61b installing an entry whose twin it denies is refused, naming the entry
+AssertionError: deep guard add of frob-2695-twin-denied, whose twin `frob2695b --dry-run` its match run:frob2695b denies, must be refused (exit 1): exit 0 after 128 ms, stdout "Added frob-2695-twin-denied to your rules\n", stderr "": expected +0 to be 1 // Object.is equality
+ ❯ install.test.ts:42:153
+      Tests  2 failed (2)
