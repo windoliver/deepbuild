@@ -9,7 +9,7 @@ import { aboutCall } from '../src/standing.js';
 
 const home = mkdtempSync(join(tmpdir(), 'hub2134-'));
 mkdirSync(join(home, '.aws'));
-writeFileSync(join(home, '.aws', 'config'), '[profile dev]\nsso_account_id = 111111111111\n[profile prod]\nsso_account_id = 222222222222\n[default]\nsso_account_id = 111111111111\n');
+writeFileSync(join(home, '.aws', 'config'), '[dev]\nsso_account_id = 999999999999\n[profile dev]\nsso_account_id = 111111111111\n[profile prod]\nsso_account_id = 222222222222\n[default]\nsso_account_id = 111111111111\n');
 afterAll(() => rmSync(home, { recursive: true, force: true }));
 
 const owner = (command: string, note?: string) => aboutCall(['cloud-resource'], command, note ? { 'no-unnamed-cloud-resource': note } : undefined, home)?.subject.target.owner;
@@ -18,6 +18,8 @@ describe("a cloud create's owner (#2134)", () => {
   it("is the account of the profile deep-hook's note names for the one creating run, else its tool", () => {
     expect(owner('aws s3 ls --profile dev; aws kms create-key --profile prod', 'It creates a cloud resource under the AWS profile prod: aws kms create-key --profile prod')).toBe('aws:222222222222');
     expect(owner('aws kms create-key --description "it\'s --profile dev" --profile prod', "It creates a cloud resource under the AWS profile prod: aws kms create-key --description 'it'\\''s --profile dev' --profile prod")).toBe('aws:222222222222');
+    // A bare [dev] section is no profile to the CLI: dev's account is its [profile dev]'s.
+    expect(owner('aws kms create-key --profile dev', 'It creates a cloud resource under the AWS profile dev: aws kms create-key --profile dev')).toBe('aws:111111111111');
     expect(owner('aws --profile staging kms create-key', 'It creates a cloud resource under the AWS profile staging: aws kms create-key')).toBe('aws-profile:staging');
     expect(owner('pulumi -C infra up', 'It creates a cloud resource: pulumi -C infra up')).toBe('pulumi');
   });

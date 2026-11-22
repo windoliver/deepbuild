@@ -673,10 +673,10 @@ impl Call {
             || run.args.iter().any(|a| a.text.is_none() || a.glob)
             || words.iter().any(shortened)
             || words.contains(&"--")
-            || run
-                .env
-                .iter()
-                .any(|(n, _)| n == "HOME" || (n.starts_with("AWS_") && n != "AWS_PROFILE"))
+            // What the shell would expand, split or decode, the reader may read otherwise than it runs.
+            || line.contains(['$', '`', '\\'])
+            || unquoted.contains(['*', '?', '['])
+            || run.env.iter().any(|(n, _)| n != "AWS_PROFILE")
             // The only AWS_ setting it reads is the creating run's own AWS_PROFILE.
             || aws_words > usize::from(own_profile)
             || (aws_words == 1 && bare.matches("AWS_PROFILE=").count() != 1)
@@ -691,7 +691,7 @@ impl Call {
             || self
                 .runs
                 .iter()
-                .any(|r| !std::ptr::eq(r, *run) && !READ_ONLY.iter().any(|p| r.is(p)))
+                .any(|r| !std::ptr::eq(r, *run) && !reads_only(r))
             // What the line writes is named whole, in folders it knows, so none of it can be the account's files.
             || self.writes.iter().any(|w| !w.is_absolute() || pattern(w))
             || self.runs.iter().any(|r| r.cwd.as_deref().is_none_or(pattern))
@@ -900,11 +900,22 @@ fn command_of(run: &Run) -> String {
     line.join(" ")
 }
 
+/// Whether a run beside the one a standing rule covers only reads: one of READ_ONLY, or an aws run that lists,
+/// describes or says who you are (#2134).
+fn reads_only(run: &Run) -> bool {
+    if run.is("aws") {
+        let [service, op] = first_two(&run.words(), AWS_VALUED);
+        return op == "ls"
+            || op.starts_with("list-")
+            || op.starts_with("describe-")
+            || (service == "sts" && op == "get-caller-identity");
+    }
+    READ_ONLY.iter().any(|p| run.is(p))
+}
+
 /// The programs a line may run beside the one aws run a standing rule covers: none changes the account that run
-/// signs in with (#2134). `aws configure` is held apart by its word.
-const READ_ONLY: &[&str] = &[
-    "aws", "echo", "printf", "cd", "pwd", "true", "ls", "sleep", "date",
-];
+/// signs in with (#2134).
+const READ_ONLY: &[&str] = &["echo", "cd", "pwd", "true", "ls", "sleep", "date"];
 
 /// The words that change what a run is given or who runs it: a wrapper that changes its user, its environment or its
 /// words, and the aws command that rewrites a profile.

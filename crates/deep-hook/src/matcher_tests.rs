@@ -490,6 +490,38 @@ fn an_options_value_is_not_read_as_the_subcommand() {
         ("aws kms create-key --profile dev *", None),
         ("a?s kms create-key --profile dev", None),
         (
+            "P='--profile prod'; aws kms create-key --profile dev $P",
+            None,
+        ),
+        (
+            "printf '%s\\n' dev prod | \"$X\"s -n1 aws kms create-key --profile",
+            None,
+        ),
+        (
+            "aws $'configure' set x 2; aws kms create-key --profile dev",
+            None,
+        ),
+        (
+            "aws s3api get-object --bucket b --key k cfg; aws kms create-key --profile dev",
+            None,
+        ),
+        (
+            "cd /tmp && aws s3 sync s3://bucket . ; aws kms create-key --profile dev",
+            None,
+        ),
+        (
+            "printf -v HOME /tmp/fake; aws kms create-key --profile dev",
+            None,
+        ),
+        (
+            "PATH=/tmp/evil:/usr/bin aws kms create-key --profile dev",
+            None,
+        ),
+        (
+            "aws sts get-caller-identity --profile prod && aws kms create-key --profile dev",
+            named("dev"),
+        ),
+        (
             "aws() { command aws \"$@\" --profile prod; }; aws kms create-key --profile dev",
             None,
         ),
