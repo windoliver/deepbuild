@@ -310,7 +310,7 @@ try {
     const established = base?.tasks?.find(({ id }) => id === budget.id);
     let judged;
     try {
-      judged = judgeTask(budget, established, root, archive);
+      judged = judgeTask(budget, established, root, archive, fingerprint);
     } catch (error) {
       verdicts.push(['BLOCKED', `${budget.id}: ${error.message}`, 'Build the measured command; the check lanes build it.']);
       continue;

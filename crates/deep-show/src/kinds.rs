@@ -22,12 +22,15 @@ use serde_json::{json, Map, Value};
 
 use crate::hub::Hub;
 
-/// No reply passes this many bytes of JSON without a cursor.
-pub const REPLY_CAP: usize = 65_536;
-/// What a page's own content may take, leaving room for the fields every reply carries.
-const PAGE_BUDGET: usize = REPLY_CAP - 8_192;
-/// A page of a guide, in bytes of its text, so its reply stays under the cap.
-const GUIDE_PAGE: usize = 32_768;
+/// What a page's own content may take: the reply's cap (the call's room, #2896), leaving room for
+/// the fields every reply carries.
+fn page_budget() -> usize {
+    crate::query::reply_cap() - crate::query::margin()
+}
+/// A page of a guide or of the sheet, in bytes of its text, so its reply stays under the cap.
+fn text_page() -> usize {
+    page_budget().min(32_768)
+}
 /// The sheet's cap.
 pub const SHEET_CAP: usize = 32_768;
 
@@ -72,6 +75,7 @@ pub enum Planted {
     DefaultsSkipJson,
     /// #548: the bindings generator orders each region's fields by name before laying them out.
     BindingsByName,
+    VehicleReaderOtherDefaults, // #2717: the world reader takes other defaults for a vehicle body.
 }
 
 impl Planted {
@@ -97,7 +101,7 @@ impl Planted {
             "defaults_compared_with_dump_only" => Planted::DefaultsComparedWithDumpOnly,
             "defaults_skip_json" => Planted::DefaultsSkipJson,
             "bindings_fields_by_name" => Planted::BindingsByName,
-            _ => return None,
+            _ => return crate::physics::defaults::planted(name),
         })
     }
 }
@@ -165,6 +169,9 @@ const INSTALLED: &[(&str, &str)] = &[
         "logic-counter.wat",
         include_str!("../gallery/logic-counter.wat"),
     ),
+    // #550: net@1's example, a two-player piece, and its program's source.
+    ("net-rally.json", include_str!("../gallery/net-rally.json")),
+    ("net-rally.wat", include_str!("../gallery/net-rally.wat")),
     // #508: the figure the canvas skill embeds, its example of a 3D figure.
     ("figure.json", include_str!("../gallery/figure.json")),
 ];
@@ -818,6 +825,26 @@ pub(crate) fn kind_rows(sealed: &Sealed, planted: Option<Planted>) -> Vec<KindRo
             row.example = text;
         }
     }
+    // #550: net@1 with its check kinds and its gallery example, a two-player piece; listed
+    // unavailable, naming why, in a build without the net module.
+    let net_text = INSTALLED.iter().find(|(f, _)| *f == "net-rally.json");
+    let net_text = net_text.map(|(_, t)| t.to_string());
+    let checks = deep_net::feel::check_kinds();
+    if let Some(row) = out.iter_mut().find(|r| r.entry["name"] == json!("net@1")) {
+        row.entry["check_kinds"] = checks;
+        row.entry["example"] = json!(net_text.as_deref().map(|t| sha256_hex(t.as_bytes())));
+        row.example = net_text;
+    } else if !named.iter().any(|n| n == "net@1") {
+        named.push("net@1".into());
+        push("net@1".into(), "net".into(), None, &mut out);
+        if let Some(e) = out.last_mut().map(|r| &mut r.entry) {
+            e["available"] = json!(false);
+            e["code"] = json!("module_missing");
+            e["check_kinds"] = checks;
+            e["kit"] =
+                json!({"verdict": "BLOCKED", "rules": [{"rule": "sealed", "verdict": "BLOCKED"}]});
+        }
+    }
     if drawn_by("scene3d") {
         let more = deep_canvas_scene3d::scene::KINDS
             .iter()
@@ -1012,7 +1039,7 @@ fn paged(all: &[Value], cursor: Option<&str>) -> (Vec<Value>, Option<String>) {
     let mut page = Vec::new();
     for (i, v) in all.iter().enumerate().skip(from) {
         let n = v.to_string().len() + 1;
-        if size + n > PAGE_BUDGET && !page.is_empty() {
+        if size + n > page_budget() && !page.is_empty() {
             return (page, Some(i.to_string()));
         }
         size += n;

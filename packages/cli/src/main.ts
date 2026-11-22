@@ -130,12 +130,13 @@ async function telemetryItems() {
 // (#34's slice of #19's bundle).
 async function debugBundle(): Promise<number> {
   const { scrubText } = await import('@deepbuild/evidence');
+  const { activePlant, rootOf, rootToken } = await import('@deepbuild/hub');
   const root = join(homedir(), '.deepbuild');
-  const token = existsSync(join(root, 'control.token')) ? readFileSync(join(root, 'control.token'), 'utf8').trim() : '';
+  let token = '';
+  try { token = rootToken(rootOf(root)); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   // The values the hub holds by handle, as a test names them (DEEP_HUB_TEST_HELD), are scrubbed here too.
   const held = [token, ...(process.env.DEEP_HUB_TEST_HELD && existsSync(process.env.DEEP_HUB_TEST_HELD) ? readFileSync(process.env.DEEP_HUB_TEST_HELD, 'utf8').split('\n').map((v) => v.trim()) : [])].filter(Boolean);
   // The planted wrong program copies the logs as they are.
-  const { activePlant } = await import('@deepbuild/hub');
   const scrubLogs = process.env.DEEP_CLI_PLANT === 'bundle-raw-logs' || activePlant() === 'bundle-raw-logs' ? (text: string) => text : (text: string) => scrubText(text, { held });
   const scrub = (text: string) => scrubText(text, { held });
   const files = (dir: string): string[] => (existsSync(dir) ? readdirSync(dir).flatMap((name) => {
@@ -206,9 +207,9 @@ const usage = [
   'deep kinds --dump <folder> | --diff <a> <b>   the canvas core\'s whole listing as canonical JSON named by its module-set digest, or two such dumps diffed',
   'deep inbox [--json]   your open asks, each question first and its handle last',
   'deep open <address>   ask/<id>, session/<id>, project/<id> or page/<name> opened in the app, which opens and changes nothing',
-  'deep inbox answer <ask> <option>   answer one, once the OS confirms you',
+  'deep inbox answer <ask> [--] <option>   answer one, once the OS confirms you, with an option as deep inbox printed it',
   'deep race <issue>   its sessions race: they settle on the first PASS and raise no "keep which?" ask',
-  'deep inbox undo <ask>   open a defaulted ask again, once the OS confirms you',
+  'deep inbox undo <ask>   open a defaulted ask again, or withdraw your yes while its step that can\'t be undone waits out its hold, once the OS confirms you',
   'deep start approve --repo <path> --issues <n,...> --agents <agent,...> [--home <agent>=<folder> ...] [--mode <agent>=<mode> ...] --at-once <n> --plan-share <percent> [--until <ISO time>] [--host <host> ...] [--json]   ask to approve a run of sessions started without your Send',
   'deep start --repo <path> --issue <n> --agent <agent> [--mode <mode>] --prompt <words> [--json]   start one under it, in its own worktree',
   'deep gate rules [--json]   the rulesets that make only the gate\'s status count on your repo, for you to apply',

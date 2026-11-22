@@ -305,7 +305,8 @@ fn template_numbers(doc: &Value, texts: &Texts<'_>, id: &str, t: &str, issues: &
             Part::Words(_) => {}
             Part::Slot(slot)
                 if template::value_in(doc, id, slot).is_none()
-                    && !template::reads_anchor(doc, slot) =>
+                    && !template::reads_anchor(doc, slot)
+                    && !template::reads_output(doc, id, slot) =>
             {
                 issues.push(Issue::error(
                     "ref_unresolved",
@@ -325,7 +326,7 @@ fn template_numbers(doc: &Value, texts: &Texts<'_>, id: &str, t: &str, issues: &
 
 /// Each story number a template shows where it is shown inside a document that binds a status
 /// or a reading: unsourced there.
-pub fn story_issues(doc: &Value, id: &str, t: &str, issues: &mut Vec<Issue>) {
+pub fn story_issues(doc: &Map<String, Value>, id: &str, t: &str, issues: &mut Vec<Issue>) {
     for (slot, _) in template::story_numbers(doc, t) {
         issues.push(Issue::error(
             "number_unsourced",
@@ -342,7 +343,10 @@ pub fn story_issues(doc: &Value, id: &str, t: &str, issues: &mut Vec<Issue>) {
 /// or a reading itself raised them in its own check, so they aren't raised twice.
 pub fn shown_inside(doc: &Value) -> Vec<Issue> {
     let mut issues = Vec::new();
-    let Some(items) = member(doc, "items").and_then(Value::as_object) else {
+    let Some(whole) = doc.as_object() else {
+        return issues;
+    };
+    let Some(items) = whole.get("items").and_then(Value::as_object) else {
         return issues;
     };
     if Texts::of(doc).binds_status_or_reading {
@@ -357,7 +361,7 @@ pub fn shown_inside(doc: &Value) -> Vec<Issue> {
             named,
             template,
         ) {
-            story_issues(doc, id, t, &mut issues);
+            story_issues(whole, id, t, &mut issues);
         }
     }
     issues

@@ -154,6 +154,7 @@ impl Session {
                 samples: None,
                 writer: Writer::You,
                 serial: Some(serial),
+                player: None,
             });
         }
         Ok(json!({"appended": written.len(), "dropped": dropped}))

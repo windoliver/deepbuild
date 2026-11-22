@@ -352,6 +352,16 @@ pub struct Decoration {
     pub grapheme: usize,
 }
 
+/// #297: one grapheme of a text as its faces draw it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Drawn {
+    pub grapheme: String,
+    /// A face lacks one of its glyphs, and it isn't white space or default-ignorable alone.
+    pub missing: bool,
+    /// One of its glyphs draws ink.
+    pub ink: bool,
+}
+
 /// A shaped text: its glyphs and the box they take.
 #[derive(Clone, Debug, Default)]
 pub struct Shaped {
@@ -871,7 +881,11 @@ impl Shaper {
     /// `text` laid out in the spec's style, whole (no line limit applied): from the run cache, or
     /// laid out now and kept there: from its paragraphs, or (#1215) set in columns.
     fn run(&mut self, spec: &Spec<'_>, text: &str) -> Arc<Shaped> {
-        let key = Key::of(spec, text, false);
+        self.run_keyed(spec, text, Key::of(spec, text, false))
+    }
+
+    /// [`Self::run`] under `key`, the run's key already built.
+    fn run_keyed(&mut self, spec: &Spec<'_>, text: &str, key: Key) -> Arc<Shaped> {
         if let Some(run) = cache::get(&key) {
             return run;
         }
@@ -912,19 +926,22 @@ impl Shaper {
     /// again. Text that overflows its box or line limit is cut to fit with an ellipsis; a bound
     /// value or masked text never is, and is drawn whole.
     pub fn shape(&mut self, spec: &Spec<'_>) -> Arc<Shaped> {
-        let fitted = Key::of(spec, spec.text, true);
-        if let Some(run) = cache::get(&fitted) {
+        let key = Key::of(spec, spec.text, true);
+        if let Some(run) = cache::get(&key) {
             return run;
         }
-        let whole = self.run(spec, spec.text);
+        // The whole run's key is the fitted one's, so a text that fits builds one (#2660).
+        let whole = self.run_keyed(spec, spec.text, key.whole());
         if fits(spec, &whole) || spec.bound || spec.mask {
             return whole;
         }
+        let fitted = Key::of(spec, spec.text, true);
         let reshaping = cache::planted() == Some(Planted::ReshapingFit);
-        // The longest prefix, by character, whose run with an ellipsis fits. Each candidate's
-        // run comes through the cache, so no prefix is shaped twice; a candidate that fits its
-        // line limit has no line past it, so its whole run is the one drawn.
-        let chars: Vec<(usize, char)> = spec.text.char_indices().collect();
+        // The longest prefix, by grapheme (#297: a cut never splits one), whose run with an
+        // ellipsis fits. Each candidate's run comes through the cache, so no prefix is shaped
+        // twice; a candidate that fits its line limit has no line past it, so its whole run is
+        // the one drawn.
+        let chars: Vec<usize> = grapheme_starts(spec.text);
         let (mut low, mut high) = (0usize, chars.len());
         let mut best: Option<Arc<Shaped>> = None;
         while low < high {
@@ -932,7 +949,7 @@ impl Shaper {
                 self.shape_again(spec, spec.text);
             }
             let mid = (low + high).div_ceil(2);
-            let end = chars.get(mid).map_or(spec.text.len(), |(i, _)| *i);
+            let end = chars.get(mid).copied().unwrap_or(spec.text.len());
             let candidate = format!("{}…", spec.text[..end].trim_end());
             let shaped = self.run(spec, &candidate);
             if fits(spec, &shaped) {
@@ -982,6 +999,43 @@ impl Shaper {
                 .any(|c| !c.is_whitespace() && !is_default_ignorable(c));
             if needs_glyph && seen.insert(grapheme) {
                 out.push(grapheme.to_string());
+            }
+        }
+        out
+    }
+
+    /// #297: each grapheme of `text` as the spec's family and fallbacks draw it, in order:
+    /// whether a face lacks one of its glyphs (as [`Shaper::missing`] finds), and whether any of
+    /// its glyphs draws ink (an outline with a command, or a glyph its face holds no outline for,
+    /// which only the atlas draws).
+    pub fn drawn(&mut self, spec: &Spec<'_>, text: &str) -> Vec<Drawn> {
+        let run = self.run(spec, text);
+        let starts = grapheme_starts(text);
+        let mut out: Vec<Drawn> = starts
+            .iter()
+            .enumerate()
+            .map(|(k, &a)| {
+                let b = starts.get(k + 1).copied().unwrap_or(text.len());
+                Drawn {
+                    grapheme: text[a..b].to_string(),
+                    missing: false,
+                    ink: false,
+                }
+            })
+            .collect();
+        for g in &run.glyphs {
+            let Some(d) = out.get_mut(g.grapheme) else {
+                continue;
+            };
+            if g.id == 0 {
+                d.missing |= d
+                    .grapheme
+                    .chars()
+                    .any(|c| !c.is_whitespace() && !is_default_ignorable(c));
+                continue;
+            }
+            if !d.ink {
+                d.ink = crate::outlines::outline_of(g).is_none_or(|cmds| !cmds.is_empty());
             }
         }
         out

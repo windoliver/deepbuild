@@ -13,6 +13,8 @@ use deep_effects_render::runner::{Frame, LINEAR};
 use deep_gpu::device::Device;
 use serde_json::{json, Map, Value};
 
+use deep_groups_render::read::{f32_bytes, read_texture};
+
 use crate::effects::{operator_hooks, operator_plants};
 use crate::view3d::{png, write_named};
 use crate::{refused, App};
@@ -26,18 +28,6 @@ pub fn wants(call: &Value) -> bool {
 
 fn words(path: &str) -> Result<Vec<u8>, Value> {
     std::fs::read(path).map_err(|e| refused("bad_input", format!("data {path}: {e}")))
-}
-
-fn f16(bits: u16) -> f32 {
-    let sign = if bits & 0x8000 != 0 { -1.0 } else { 1.0 };
-    let exp = i32::from((bits >> 10) & 0x1f);
-    let frac = f32::from(bits & 0x3ff);
-    sign * match exp {
-        0 => frac * 2f32.powi(-24),
-        31 if frac == 0.0 => f32::INFINITY,
-        31 => f32::NAN,
-        e => (1.0 + frac / 1024.0) * 2f32.powi(e - 15),
-    }
 }
 
 fn to_f16(x: f32) -> u16 {
@@ -69,99 +59,6 @@ fn to_f16(x: f32) -> u16 {
     sign | (((e + 15) as u16) << 10) | m as u16
 }
 
-/// Level `level` of `tex` read back as f32 RGBA, rows top-down, slices in z order.
-pub(crate) fn read_texture(
-    device: &Device,
-    tex: &wgpu::Texture,
-    level: u32,
-) -> ([u32; 3], Vec<f32>) {
-    let d = &device.device;
-    let w = (tex.width() >> level).max(1);
-    let h = (tex.height() >> level).max(1);
-    let depth = if tex.dimension() == wgpu::TextureDimension::D3 {
-        (tex.depth_or_array_layers() >> level).max(1)
-    } else {
-        1
-    };
-    let texel = match tex.format() {
-        wgpu::TextureFormat::Rgba16Float => 8,
-        wgpu::TextureFormat::Rgba32Float => 16,
-        _ => 4,
-    };
-    let row = (w * texel).div_ceil(256) * 256;
-    let size = u64::from(row) * u64::from(h) * u64::from(depth);
-    let back = d.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("check_operator read back"),
-        size,
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-        mapped_at_creation: false,
-    });
-    let mut enc = d.create_command_encoder(&Default::default());
-    enc.copy_texture_to_buffer(
-        wgpu::TexelCopyTextureInfo {
-            texture: tex,
-            mip_level: level,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        wgpu::TexelCopyBufferInfo {
-            buffer: &back,
-            layout: wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(row),
-                rows_per_image: Some(h),
-            },
-        },
-        wgpu::Extent3d {
-            width: w,
-            height: h,
-            depth_or_array_layers: depth,
-        },
-    );
-    device.queue.submit([enc.finish()]);
-    back.slice(..).map_async(wgpu::MapMode::Read, |_| {});
-    let _ = d.poll(wgpu::PollType::wait_indefinitely());
-    let bytes = back
-        .slice(..)
-        .get_mapped_range()
-        .map(|v| v.to_vec())
-        .unwrap_or_default();
-    let mut out = Vec::with_capacity((w * h * depth * 4) as usize);
-    for z in 0..depth {
-        for y in 0..h {
-            let at = ((z * h + y) * row) as usize;
-            let line = &bytes[at..at + (w * texel) as usize];
-            for x in 0..w as usize {
-                let t = &line[x * texel as usize..(x + 1) * texel as usize];
-                let px: [f32; 4] = match tex.format() {
-                    wgpu::TextureFormat::Rgba16Float => {
-                        let h16 = |k: usize| f16(u16::from_le_bytes([t[2 * k], t[2 * k + 1]]));
-                        [h16(0), h16(1), h16(2), h16(3)]
-                    }
-                    wgpu::TextureFormat::Rgba8Unorm => {
-                        [0, 1, 2, 3].map(|k| f32::from(t[k]) / 255.0)
-                    }
-                    wgpu::TextureFormat::Rgba32Float => [0, 1, 2, 3].map(|k| {
-                        f32::from_le_bytes([t[4 * k], t[4 * k + 1], t[4 * k + 2], t[4 * k + 3]])
-                    }),
-                    wgpu::TextureFormat::R32Float => {
-                        [f32::from_le_bytes([t[0], t[1], t[2], t[3]]), 0.0, 0.0, 1.0]
-                    }
-                    _ => [
-                        u32::from_le_bytes([t[0], t[1], t[2], t[3]]) as f32,
-                        0.0,
-                        0.0,
-                        1.0,
-                    ],
-                };
-                out.extend_from_slice(&px);
-            }
-        }
-    }
-    back.unmap();
-    ([w, h, depth], out)
-}
-
 fn read_buffer(device: &Device, b: &wgpu::Buffer, words: u64) -> Vec<u8> {
     let d = &device.device;
     let size = (words * 4).min(b.size()).max(4);
@@ -183,10 +80,6 @@ fn read_buffer(device: &Device, b: &wgpu::Buffer, words: u64) -> Vec<u8> {
         .unwrap_or_default();
     back.unmap();
     v
-}
-
-pub(crate) fn f32_bytes(px: &[f32]) -> Vec<u8> {
-    px.iter().flat_map(|x| x.to_le_bytes()).collect()
 }
 
 /// A pass's color as the final target encodes it: sRGB, 8 bits a channel, unpremultiplied

@@ -1,0 +1,5 @@
+# 778a011ef (the e0c90a5a5 export with the fix's one changed file, crates/deep-contracts/src/generated.rs, written from 778a011ef, so the tree is 778a011ef's), 2026-11-20T08:53:48.833Z, load 152
+$ cargo check --locked -p deep-contracts
+    Checking deep-contracts v0.0.0 (<export>/crates/deep-contracts)
+    Finished `dev` profile [unoptimized] target(s) in 8.46s
+# exit 0 in 8.5 s

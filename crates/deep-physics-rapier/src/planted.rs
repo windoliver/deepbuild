@@ -8,7 +8,7 @@ use rapier3d::prelude::*;
 use crate::Rapier;
 
 /// The planted wrong programs, by name.
-pub const PLANTED: [&str; 24] = [
+pub const PLANTED: [&str; 28] = [
     "caps_allow_restitution_threshold",
     "caps_allow_rolling_resistance",
     "caps_allow_dynamic_gear",
@@ -33,7 +33,17 @@ pub const PLANTED: [&str; 24] = [
     "solve_cap_reports_success",
     "mass_ratio_declared_only",
     "volume_without_constraint",
+    "world_2d_built_on_rapier3d",
+    "wind_noise_from_platform_sin",
+    "inertia_ignored",
+    "set_applies_both",
 ];
+
+/// #2098's planted wind noise: the platform's sin of the place and the seed, where the shipped
+/// wind reads the closed function list's `noise`, gradient noise on the integer lattice hash.
+pub(crate) fn noise_from_sin(p: &[f64], seed: u32) -> f64 {
+    (p.iter().sum::<f64>() + f64::from(seed)).sin()
+}
 
 /// What a planted restore leaves out of the checkpoint it loads.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -48,6 +58,8 @@ pub enum Restore {
     NoWarmStart,
     /// The whole world but each breakable joint's steps past `breaks_at`, set to zero.
     NoBreakCount,
+    /// #2310: the whole world but its articulated joints' coordinates, which stay as built.
+    NoCoordinates,
 }
 
 impl Rapier {
@@ -78,6 +90,11 @@ impl Rapier {
                             crate::joints::packed(0, crate::joints::turns(j.data.user_data));
                     }
                 }
+            }
+            Restore::NoCoordinates => {
+                let fresh: PhysicsWorld =
+                    bincode::deserialize(&built.state).expect("the built world loads back");
+                self.world.multibody_joints = fresh.multibody_joints;
             }
         }
     }

@@ -297,6 +297,16 @@ describe('#1018 kept keys read again after a restart, review findings', () => {
     await many.claim('s1', 1);
     expect(many.finished[0]!.key.plain).toBe(false);
   });
+
+  // run.finished can't say that no test tool counted a run (#1861): read back, a typecheck would read as a test run.
+  it('a kept run no test tool counted, such as a typecheck\'s, is never read again; one a test tool counted is', async () => {
+    const typecheck = world({ records: () => ({ tested: false }) });
+    await typecheck.claim('s1', 1);
+    expect(typecheck.finished[0]!.key.plain).toBe(false);
+    const counted = world({ records: () => ({ ...tested(), tested: true }) });
+    await counted.claim('s1', 1);
+    expect(counted.finished[0]!.key.plain).toBe(true);
+  });
 });
 
 describe('#1018 review findings on carrying', () => {

@@ -18,7 +18,7 @@ import { availableParallelism, homedir, loadavg, totalmem } from 'node:os';
 import type { Caller, Lease, LeaseTable, Mode, Resource } from '@deepbuild/leases';
 import { call, failure, type Reply } from './client.js';
 import { DISK_FLOOR, freeBytes } from './disk.js';
-import { deepHook, hubAddress, installedRoot, rootOf } from './paths.js';
+import { controlToken, deepHook, hubAddress } from './paths.js';
 import { startOf } from './wire.js';
 
 type Obj = Record<string, unknown>;
@@ -245,6 +245,8 @@ export interface HeavyOptions {
   pressure?: () => Pressure;
   /** Free bytes on the volume holding a folder; statfs unless a test says. */
   free?: (path: string) => number;
+  /** A command joined the queue: the beat that ticks it starts again if it had stopped (#2648). */
+  wake?: () => void;
 }
 
 const alive = (pid: number): boolean => { try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === 'EPERM'; } };
@@ -280,6 +282,7 @@ export class HeavyQueue {
         command: String(params.command ?? '').slice(0, 2000), cwd: String(params.cwd ?? ''), needs, jobs: jobsOf(params.jobs), peer, queued: now, seen: now, waits: {},
       };
       this.waiting.push(w);
+      this.o.wake?.();
     }
     w.seen = now;
     const reason = await this.attempt(w);
@@ -481,10 +484,15 @@ export class HeavyQueue {
       this.held.set(h.ticket, h);
       if (!proc) await this.end(h);
     }
+    // With no leased command running, nothing holds a token: the pipe starts at its full count, whatever the last hub left in it.
+    if (!this.held.size) this.o.pool?.refill();
   }
 
-  /** Each tick: a waiter gone loses its place; a command whose group has ended, or that never started, gives its leases back. */
-  async tick(): Promise<void> {
+  /**
+   * Each tick: a waiter gone loses its place; a command whose group has ended, or that never started, gives its leases
+   * back. True while it has more to do: a command waits or runs, or the pool holds tokens back (#2648).
+   */
+  async tick(): Promise<boolean> {
     this.expire();
     for (const h of [...this.held.values()]) {
       const over = h.group !== undefined ? !groupAlive(h.group) : !alive(h.peer.pid);
@@ -492,10 +500,11 @@ export class HeavyQueue {
     }
     // While builds run, or while it holds tokens back, the pool follows the machine's memory pressure (#1411).
     if (this.o.pool && (this.held.size || this.o.pool.want)) this.follow(await this.level());
-    // With no leased command running, nothing holds a token, so the pipe goes back to its full count, less those held
-    // back; while one runs, no token is added beyond those given back on proof. The planted wrong program for #1016's
-    // AC3 tops it up all the same.
-    if (this.o.pool && (!this.held.size || this.o.plant === 'refills-while-running')) this.o.pool.refill();
+    // While a leased command runs, no token is added beyond those given back on proof; the pipe goes back to its full
+    // count when the last one ends (`end`), not on every tick with none running (#2648). The planted wrong program for
+    // #1016's AC3 tops it up all the same.
+    if (this.o.pool && this.o.plant === 'refills-while-running') this.o.pool.refill();
+    return this.waiting.length > 0 || this.held.size > 0 || Boolean(this.o.pool?.want);
   }
   private async end(h: Held, early = false): Promise<void> {
     if (!this.held.delete(h.ticket)) return;
@@ -577,9 +586,9 @@ export async function leaseCommand(args: readonly string[]): Promise<number> {
     return 2;
   }
   if (process.env.DEEP_LEASED) return runGroup(argv, {}, () => undefined);
-  let token: string;
-  try { token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim(); } catch (error) { return unleased(argv, await failure(error)); }
   const socket = hubAddress().path;
+  let token: string;
+  try { token = controlToken(socket); } catch (error) { return unleased(argv, await failure(error)); }
   // Its own start is read while deep-hook heavy finds the command's entry: neither needs the other's result (#2328).
   const start = startOf(process.pid);
   const { jobs, flag } = jobsFor(argv);

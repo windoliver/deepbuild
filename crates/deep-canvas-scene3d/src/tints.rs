@@ -17,6 +17,8 @@ use serde_json::{json, Map, Value};
 use crate::look::Look3;
 use crate::scene::Refused;
 
+/// #552's planted overlay, which reads player 1's bits on every copy.
+pub const PLAYER_ONE: &str = "fog_overlay_reads_player_one";
 /// The most overlays a plate holds.
 pub const MAX_OVERLAYS: usize = 2;
 /// The most roles an overlay indexes.
@@ -26,8 +28,12 @@ pub const UNTINTED: u8 = 255;
 /// The warning a value past an overlay's roles raises, at the step its excursion begins.
 pub const RANGE: &str = "terrain.overlay_range";
 const FIX: &str = "Write values that index the overlay's roles, or add the roles they index.";
-/// An overlay's fields.
-const KEYS: [&str; 6] = ["grid", "size", "origin", "cell", "roles", "opacity"];
+/// An overlay's fields. #552: `player: "match.me"` reads a fog grid's two bits a player
+/// (unseen, radar, seen) through this copy's player, each a role's index.
+const KEYS: [&str; 7] = [
+    "grid", "size", "origin", "cell", "roles", "opacity", "player",
+];
+use deep_canvas::columns::fog_state;
 /// An overlay's opacity where it's left out.
 const OPACITY: f64 = 1.0;
 
@@ -83,6 +89,8 @@ struct Overlay<'a> {
     cell: f64,
     roles: Vec<Option<&'a str>>,
     opacity: f64,
+    /// #552: it reads a fog grid through `match.me`.
+    player: bool,
 }
 
 /// A refusal: its code, its path and what it refused there.
@@ -211,6 +219,11 @@ fn overlay<'a>(
             None => return Err(refuse("out_of_range")),
         }
     }
+    let player = match field("player") {
+        None => false,
+        Some(v) if v == "match.me" => true,
+        Some(_) => return Err(bad("player")),
+    };
     let grid = field("grid")
         .and_then(Value::as_str)
         .ok_or_else(|| bad("grid"))?;
@@ -245,6 +258,7 @@ fn overlay<'a>(
         cell,
         roles,
         opacity,
+        player,
     })
 }
 
@@ -297,7 +311,12 @@ fn excursions(o: &Overlay<'_>) -> Vec<(i64, usize, f64)> {
         };
         for row in rows {
             let v = raw[row];
-            let is_past = !(v >= 0.0 && v < roles);
+            // A fog grid's value is two bits a player, each indexing a role.
+            let is_past = if o.player {
+                !(v >= 0.0 && (1..=8).all(|p| f64::from(fog_state(v as i64, Some(p))) < roles))
+            } else {
+                !(v >= 0.0 && v < roles)
+            };
             if is_past && !past[row] {
                 out.push((step, row, v));
             }
@@ -361,6 +380,12 @@ pub fn raised_at(form: &Value, t: i64) -> Vec<Issue> {
 /// each plate's overlays in order; refused as the check refuses it.
 pub fn tints(map: &Map<String, Value>, look: &Look3, t: i64) -> Result<Vec<Tint>, Refused> {
     let arrays = map.get("arrays").unwrap_or(&Value::Null);
+    // #552: this copy's player, a view value the host gives the frame's document; the planted
+    // overlay reads player 1's bits on every copy.
+    let me = match map.get("planted").and_then(Value::as_str) {
+        Some(PLAYER_ONE) => Some(1),
+        _ => deep_canvas::columns::match_me(map.get("match.me").unwrap_or(&Value::Null)),
+    };
     let mut out = Vec::new();
     for (id, params) in plates(map.get("items")) {
         let list = read(id, params, arrays).map_err(|f| Refused {
@@ -378,6 +403,11 @@ pub fn tints(map: &Map<String, Value>, look: &Look3, t: i64) -> Result<Vec<Tint>
                 .iter()
                 .zip(&m.hidden)
                 .map(|(&v, &hidden)| {
+                    let v = if o.player {
+                        f64::from(fog_state(v as i64, me))
+                    } else {
+                        v
+                    };
                     if !hidden && v >= 0.0 && v < n {
                         v as u8
                     } else {

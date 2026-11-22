@@ -11,6 +11,7 @@
 //! times that surface's handoff frame by frame; `vello_gpu` answers the gate.
 
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -65,6 +66,8 @@ struct Evaluated {
     packs: Arc<Vec<Named>>,
     /// #149: where the frame's pixels land on its look's paper.
     page: Option<Arc<Page>>,
+    /// The content-addressed store the call's images and normal pages are read from (#2053).
+    store: Option<PathBuf>,
 }
 
 /// The named operators of the packs a call installs, a folder or `{id, dir}` each.
@@ -168,10 +171,13 @@ fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
     };
     let planted = match app.planted {
         Some(Planted::SectorsSourceOver) => scene::Planted::SectorsSourceOver,
-        p => crate::lightfx::scene_plant(p).unwrap_or(scene::Planted::None),
+        _ => crate::lightfx::scene_plant(app.composed()).unwrap_or(scene::Planted::None),
     };
-    let frame = scene::frame_planted(&flat_doc, &flat, (&palette, &ty), &record, 1.0, planted)
+    let mut frame = scene::frame_planted(&flat_doc, &flat, (&palette, &ty), &record, 1.0, planted)
         .map_err(|r| refused(r.code, r.path))?;
+    // #2053: each lit image's normal page, read from the call's store as stored.
+    let store = call["store"].as_str().map(PathBuf::from);
+    gpu::pages(&mut frame, store.as_deref())?;
     let layers = frame
         .layers
         .iter()
@@ -226,6 +232,7 @@ fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
         gpu,
         roles: Arc::new(roles),
         page,
+        store,
     })
 }
 
@@ -352,7 +359,7 @@ fn vello_picture(
             canonical: true,
             base: base.as_ref(),
             keep,
-            planted,
+            planted: planted.and_then(Planted::composed),
             guard: guard.as_ref(),
             other: other.as_ref(),
             page: page.as_deref(),
@@ -423,22 +430,32 @@ fn draw2(
             if let Some(item) = layer::gpui_lacks(marks.iter().map(|m| &**m)) {
                 return Err(missing(&item));
             }
-            gpui2(app, marks, size)
+            gpui2(app, marks, size, ev.store.as_deref())
         }
     }
 }
 
 #[cfg(target_os = "macos")]
-fn gpui2(app: &mut App, marks: &[Arc<Drawn>], size: [u32; 2]) -> Result<image::RgbaImage, Value> {
+fn gpui2(
+    app: &mut App,
+    marks: &[Arc<Drawn>],
+    size: [u32; 2],
+    store: Option<&std::path::Path>,
+) -> Result<image::RgbaImage, Value> {
     let planted = layer::Planted {
         shifts_glyphs: app.planted == Some(Planted::ShiftsGlyphQuads),
         paths_apart: app.planted == Some(Planted::SectorsSourceOver),
     };
-    layer::gpui(&mut app.cx, marks, size, planted)
+    layer::gpui(&mut app.cx, marks, size, planted, store)
 }
 
 #[cfg(not(target_os = "macos"))]
-fn gpui2(_: &mut App, _: &[Arc<Drawn>], _: [u32; 2]) -> Result<image::RgbaImage, Value> {
+fn gpui2(
+    _: &mut App,
+    _: &[Arc<Drawn>],
+    _: [u32; 2],
+    _: Option<&std::path::Path>,
+) -> Result<image::RgbaImage, Value> {
     Err(refused(
         "unsupported_platform",
         "GPUI draws a 2D writer layer on its Metal renderer, on macOS",
@@ -772,6 +789,8 @@ pub(crate) struct Frame2 {
     pub indexed: Option<Arc<crate::indexed::IndexFrame>>,
     /// #462: the other looks this frame mixes with its own, through its shot's look regions.
     pub mix: Option<Arc<Mix2>>,
+    /// #2053: the store its images are read from, if the call names one.
+    pub store: Option<PathBuf>,
 }
 
 /// #462: a 2D frame's look regions: each other look's frame, in the mix's key order after this
@@ -840,6 +859,13 @@ impl Painter {
         taps: crate::print2d::Taps,
     ) -> Draw {
         let vello = vello.clone();
+        // #2053: images read from the call's store; with one, a frame ends once it is drawn.
+        let store = frame.store.clone();
+        let ends = store.is_some();
+        vello
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .set_store(store);
         let (dev, queue) = (device.device.clone(), device.queue.clone());
         // A composited group's passes record ahead of the frame, on their own command buffers.
         let on_paper = frame
@@ -863,7 +889,7 @@ impl Painter {
                 canonical: false,
                 base: None,
                 keep: false,
-                planted,
+                planted: planted.and_then(Planted::composed),
                 guard: frame.guard.as_ref(),
                 other: None,
                 page: frame.page.as_deref(),
@@ -952,6 +978,12 @@ impl Painter {
                     *taps.linear.lock().unwrap_or_else(|e| e.into_inner()) =
                         Some((t.clone(), size));
                 }
+            }
+            if ends {
+                vello
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .frame_ended();
             }
             drawn
         })
@@ -1239,13 +1271,14 @@ pub fn window2d(app: &mut App, out: &str, call: &Value) -> Value {
             print: None,
             indexed: None,
             mix: None,
+            store: ev.store.clone(),
         };
         for l in &ev.layers {
             let path = path_of(app, l);
             paths.push(json!({"layer": l.id, "path": path}));
             match path.as_str() {
                 Some("gpui") => {
-                    let picture = picture_of(&gpui2(app, &l.marks, ev.size)?);
+                    let picture = picture_of(&gpui2(app, &l.marks, ev.size, ev.store.as_deref())?);
                     if surface.is_some() {
                         &mut over
                     } else {
@@ -1435,6 +1468,7 @@ pub fn spike2d(app: &mut App, out: &str, call: &Value) -> Value {
             print: None,
             indexed: None,
             mix: None,
+            store: ev.store.clone(),
         };
         let (ui, error) = open2(
             app,

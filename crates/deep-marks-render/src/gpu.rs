@@ -268,6 +268,9 @@ impl Glyphs for Gpu<'_> {
     }
 }
 
+/// #2053: each lit image's normal page read from a store, as the GPU layer's light pass reads it.
+pub use crate::asset::{paged, pages};
+
 /// The first mark of `marks` Vello GPU can't draw yet, as the live view's refusal naming its
 /// item: one inside an alpha or luminance mask, until Vello GPU's mask layers draw.
 pub fn refusal<'a>(marks: impl IntoIterator<Item = &'a Drawn>) -> Option<Value> {
@@ -293,7 +296,7 @@ pub fn live_refusal<'a>(marks: impl IntoIterator<Item = &'a Drawn> + Clone) -> O
                 item,
                 effect: Some(e),
                 ..
-            } if e.light.is_some() => item.strip_suffix("#light"),
+            } if e.light.is_some() => deep_canvas_marks::light::group_of(item),
             _ => None,
         });
     let lit = lit.map(|g| refused("module_missing", &format!("items/{g}/params/light")));

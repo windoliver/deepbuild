@@ -21,7 +21,7 @@ use crate::{
     answer::Answer,
     arming::{Machine, Outcome, Press, Slot, Source, State},
     confirm, copy,
-    kinds::Model,
+    kinds::{self, Hold, Model},
     states,
 };
 
@@ -240,6 +240,17 @@ struct Receipt {
     says: String,
     /// The other open asks the answer also answered, as the record stood then: handle and question.
     also: Vec<(String, String)>,
+    /// A yes to steps that can't be undone, which the hub holds before they start (#1101).
+    held: Option<Held>,
+}
+
+/// The hub's hold on a yes, as the receipt counts it down (#1101): the asks whose steps wait, when they start, and
+/// whether they did. Once they ran the receipt has no Undo.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Held {
+    asks: Vec<String>,
+    until: u64,
+    ran: bool,
 }
 
 /// An answer through Send from an input that isn't hardware, waiting for the OS.
@@ -278,7 +289,11 @@ pub struct Controller {
     switch_first: bool,
     receipt: Option<Receipt>,
     answers: Vec<Value>,
+    /// The `ask.undo` params written since last taken: Undo inside the hub's hold (#1101).
+    undos: Vec<Value>,
     usage: Vec<Value>,
+    /// The clock as the shell last gave it: what a hold's countdown reads (#1101).
+    now: u64,
 }
 
 impl Controller {
@@ -291,7 +306,12 @@ impl Controller {
         slot: Slot,
         faults: Faults,
     ) -> Option<Controller> {
-        if !states::is_open(events, ask) {
+        // An answered yes whose steps the hub still holds shows its receipt, counting down with Undo (#1101).
+        let held = match kinds::hold(events, ask) {
+            Some(Hold::Waiting(until)) if !states::is_open(events, ask) => Some(until),
+            _ => None,
+        };
+        if !states::is_open(events, ask) && held.is_none() {
             return None;
         }
         let model = Model::read(events, ask, now)?;
@@ -314,10 +334,24 @@ impl Controller {
             switch_first: false,
             receipt: None,
             answers: Vec::new(),
+            undos: Vec::new(),
             usage: Vec::new(),
+            now,
         };
         controller.machine.hold(controller.held(), now);
         controller.record("presented", now);
+        if let Some(until) = held {
+            controller.machine.answered();
+            controller.receipt = Some(Receipt {
+                says: String::new(),
+                also: Vec::new(),
+                held: Some(Held {
+                    asks: vec![ask.to_owned()],
+                    until,
+                    ran: false,
+                }),
+            });
+        }
         Some(controller)
     }
 
@@ -350,12 +384,25 @@ impl Controller {
     /// Time passed to `now`: the card arms once its interval ran, and stops saying to hold still. Whether that
     /// changed what the card shows (#1482): a tick that arms nothing draws nothing.
     pub fn tick(&mut self, now: u64) -> bool {
-        let (state, holding) = (self.machine.state(), self.holding);
+        let (state, holding, counted) = (self.machine.state(), self.holding, self.counted());
+        self.now = now;
         self.machine.tick(now);
         if matches!(self.machine.state(), State::Armed { .. }) {
             self.holding = None;
         }
-        (self.machine.state(), self.holding) != (state, holding)
+        (self.machine.state(), self.holding, self.counted()) != (state, holding, counted)
+    }
+
+    /// The whole seconds before a held yes's steps start, as the receipt says them (#1101); `None` with no hold
+    /// counting down.
+    fn counted(&self) -> Option<u64> {
+        let held = self
+            .receipt
+            .as_ref()?
+            .held
+            .as_ref()
+            .filter(|held| !held.ran)?;
+        Some(held.until.saturating_sub(self.now).div_ceil(1000))
     }
 
     /// How many options are folded behind their count: those past the ninth, until it's pressed (#1808).
@@ -404,6 +451,7 @@ impl Controller {
     /// finishing, a batch member closing, the plan landing): the card shows it, each member still in the batch
     /// keeping its switch, and, as any change to what it shows, is presented again unarmed.
     pub fn record_changed(&mut self, events: &[Value], now: u64) {
+        self.hold_changed(events, now);
         // Answered on another device, decided for you or defaulted: the core refuses any answer now.
         if !states::is_open(events, &self.model.ask) {
             self.machine.withdrawn();
@@ -457,6 +505,41 @@ impl Controller {
         }
     }
 
+    /// Whether the receipt counts down a yes the hub holds, whose end the record will say (#1101).
+    pub fn counting_down(&self) -> bool {
+        self.counted().is_some()
+    }
+
+    /// The hub's hold, as the core recorded it (#1101): when the steps start, that they did, or that the yes was
+    /// withdrawn (Undo on another device, or the hub starting again during it), when the ask is open here again.
+    pub fn hold_changed(&mut self, events: &[Value], now: u64) {
+        self.now = now;
+        if let Some(held) = self
+            .receipt
+            .as_mut()
+            .and_then(|receipt| receipt.held.as_mut())
+        {
+            let holds: Vec<Option<Hold>> = held
+                .asks
+                .iter()
+                .map(|ask| kinds::hold(events, ask))
+                .collect();
+            if holds.contains(&Some(Hold::Withdrawn)) {
+                self.receipt = None;
+                self.machine.undo(now);
+                self.record("undone", now);
+            } else {
+                if let Some(until) = holds.iter().find_map(|hold| match hold {
+                    Some(Hold::Waiting(until)) => Some(*until),
+                    _ => None,
+                }) {
+                    held.until = until;
+                }
+                held.ran = held.ran || holds.iter().all(|hold| *hold == Some(Hold::Ran));
+            }
+        }
+    }
+
     /// The card as drawn measured `size` points: what its slot must hold to arm, never less than [`CARD_SIZE`].
     pub fn measured(&mut self, size: [i64; 2], now: u64) {
         let size = [size[0].max(CARD_SIZE[0]), size[1].max(CARD_SIZE[1])];
@@ -472,6 +555,12 @@ impl Controller {
     /// The `ask.answer` params written since last taken, in order, for the shell to sign and send.
     pub fn take_answers(&mut self) -> Vec<Value> {
         std::mem::take(&mut self.answers)
+    }
+
+    /// The `ask.undo` params written since last taken, for the shell to sign and send: Undo inside the hub's hold
+    /// reaches the hub's undo, the one `deep inbox undo` calls (#1101).
+    pub fn take_undos(&mut self) -> Vec<Value> {
+        std::mem::take(&mut self.undos)
     }
 
     /// The usage rows written since last taken, in order.
@@ -499,8 +588,24 @@ impl Controller {
             rows.push(Row::Text(crate::plain::PLANTED_PR_LINE.to_owned()));
         }
         if let Some(receipt) = &self.receipt {
-            rows.push(Row::Text(copy::fill("question.answered", &[&receipt.says])));
-            rows.push(Row::Undo);
+            // A yes the hub holds counts down with Undo; once its steps ran, they can't be taken back (#1101).
+            match (&receipt.held, self.counted()) {
+                (Some(held), _) if held.ran => {
+                    rows.push(Row::Text(copy::text("question.ran_for_good").to_owned()));
+                    // #1101's planted receipt still offers Undo once its steps ran.
+                    if crate::plain::planted("receipt-keeps-undo") {
+                        rows.push(Row::Undo);
+                    }
+                }
+                (Some(_), Some(seconds)) => {
+                    rows.push(Row::Text(copy::count("question.starts_in", seconds, &[])));
+                    rows.push(Row::Undo);
+                }
+                _ => {
+                    rows.push(Row::Text(copy::fill("question.answered", &[&receipt.says])));
+                    rows.push(Row::Undo);
+                }
+            }
             for (_, question) in &receipt.also {
                 rows.push(Row::Text(copy::fill("question.also_answered", &[question])));
             }
@@ -576,11 +681,16 @@ impl Controller {
                 let state = if step.on { " · on" } else { " · off" }; // copy-exception: planted
                 label.push_str(state);
             }
-            rows.push(Row::Step {
-                index,
-                label,
-                on: step.on,
-            });
+            // One step has no switch (#1101): Allow is its switch. #1101's planted card keeps it.
+            if self.model.steps.len() == 1 && !crate::plain::planted("single-step-switch") {
+                rows.push(Row::Text(label));
+            } else {
+                rows.push(Row::Step {
+                    index,
+                    label,
+                    on: step.on,
+                });
+            }
         }
         if let Some(label) = self.model.approve_label() {
             rows.push(Row::Text(label));
@@ -870,7 +980,7 @@ impl Controller {
             // The receipt's Undo and a step's switch change what the card does next: hardware works them, and any
             // other press once the OS confirms you, as an option's does (#1462).
             Target::Undo => {
-                if phase != Phase::Up || self.receipt.is_none() {
+                if phase != Phase::Up || !self.undoable() {
                     return Did::Nothing;
                 }
                 if !source.trusted() {
@@ -981,7 +1091,7 @@ impl Controller {
                     self.toggle_step(index);
                     Did::Switched
                 }
-                (true, SwitchWaiting::Undo) if self.receipt.is_some() => self.undo_answer(now, now),
+                (true, SwitchWaiting::Undo) if self.undoable() => self.undo_answer(now, now),
                 (true, SwitchWaiting::Undo) => Did::Nothing,
             };
         }
@@ -1009,8 +1119,23 @@ impl Controller {
         Did::Nothing
     }
 
-    /// Takes back the answer the receipt shows.
+    /// Whether the receipt offers Undo: it shows, and no step it held has started (#1101).
+    fn undoable(&self) -> bool {
+        self.receipt.as_ref().is_some_and(|receipt| {
+            !receipt.held.as_ref().is_some_and(|held| held.ran)
+                || crate::plain::planted("receipt-keeps-undo")
+        })
+    }
+
+    /// Takes back the answer the receipt shows. Inside the hub's hold it asks the hub to withdraw the yes (#1101).
     fn undo_answer(&mut self, t: u64, now: u64) -> Did {
+        if self
+            .receipt
+            .as_ref()
+            .is_some_and(|receipt| receipt.held.is_some())
+        {
+            self.undos.push(json!({ "ask": self.model.ask }));
+        }
         self.receipt = None;
         self.send_waiting = None;
         self.machine.undo(t);
@@ -1119,7 +1244,38 @@ impl Controller {
                 }
             }
         }
-        self.receipt = Some(Receipt { says: label, also });
+        // The steps a yes runs that can't be undone wait out the hub's hold first (#1101).
+        let held = allow
+            .then(|| self.held_by_yes())
+            .filter(|asks| !asks.is_empty());
+        self.receipt = Some(Receipt {
+            says: label,
+            also,
+            held: held.map(|asks| Held {
+                asks,
+                until: now + crate::kinds::HOLD_MS,
+                ran: false,
+            }),
+        });
+    }
+
+    /// The asks a yes on this card runs whose plans hold a public step that can't be undone, which the hub holds
+    /// before it starts (#1101), as the asks core decides.
+    fn held_by_yes(&self) -> Vec<String> {
+        let runs = if self.model.batch.len() > 1 {
+            self.model.runs()
+        } else {
+            vec![self.model.own_member]
+        };
+        runs.into_iter()
+            .filter(|member| {
+                self.model
+                    .steps
+                    .iter()
+                    .any(|step| step.member == *member && !step.undoable && step.public)
+            })
+            .filter_map(|member| self.model.batch.get(member).map(|(ask, _)| ask.clone()))
+            .collect()
     }
 
     /// The answer through Send with no option: your words and image alone, this ask's only, never a decision
@@ -1171,6 +1327,7 @@ impl Controller {
         self.receipt = Some(Receipt {
             says,
             also: Vec::new(),
+            held: None,
         });
     }
 

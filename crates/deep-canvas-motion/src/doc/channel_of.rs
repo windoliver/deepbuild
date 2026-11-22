@@ -843,6 +843,7 @@ pub fn read_with(
         control_defaults.push((id.clone(), default));
         control_defaults.extend(crate::hover::defaults(id, c));
     }
+    control_defaults.extend(crate::view::defaults(doc));
     let mut limits = Vec::new();
     let mut constraints = Vec::new();
     for (id, c) in section(doc, "constraints")? {

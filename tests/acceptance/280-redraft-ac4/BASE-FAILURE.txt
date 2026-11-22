@@ -1,0 +1,74 @@
+The redraft of #280's criterion 4, run once at the base e575a47af (main, "Merge pull request #2953") on 2026-11-21, on a
+reference Mac (Mac17,10, Apple M5 Max, 64 GiB) at a 1-minute load of about 3 to 5, Node 24, the pinned Rust 1.99.1, the
+dev build of deep-show (`full`), with:
+
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 sh scripts/lease \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/280-redraft-ac4 ac4-depth.test.ts --testTimeout=600000 --hookTimeout=180000
+
+The lease printed that no hub answered, so the file ran unleased. Both tests fail, each at an assertion for the reason
+the README gives, and neither passes. net.feel isn't a check kind at the base: `match` with `check: "net.feel"` answers
+{"code": "bad_input", "path": "check"}. The planted name is refused: the planted run answers {"ok": false, "code":
+"bad_input"}.
+
+=== tests/acceptance/280-redraft-ac4/ac4-depth.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/280-redraft-ac4 ac4-depth.test.ts --testTimeout=600000 --hookTimeout=180000` runs with no lease.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/280-redraft-ac4
+
+ ❯ ac4-depth.test.ts (2 tests | 2 failed) 93794ms
+   ❯ AC4 #280.3cddbab4 net.feel's rollback depth at a fixed 80 ms (2)
+     × AC4 #280.3cddbab4 with a fixed 80 ms one-way latency, no jitter, delay 2 at 60 Hz and every player's input changing every step, each rollback a copy makes before its last step is within one step of 3, those from its last step no deeper, and net.feel reads depth 3 within one step 78977ms
+     × AC4 #280.3cddbab4 a planted meter that counts depth from the step the late message arrived on reads 0 and fails, naming the copy 2507ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac4-depth.test.ts > AC4 #280.3cddbab4 net.feel's rollback depth at a fixed 80 ms > AC4 #280.3cddbab4 with a fixed 80 ms one-way latency, no jitter, delay 2 at 60 Hz and every player's input changing every step, each rollback a copy makes before its last step is within one step of 3, those from its last step no deeper, and net.feel reads depth 3 within one step
+AssertionError: AC4 80 ms: the match call answers, not refuses: {"code":"bad_input","path":"check","core":"core@0.0.0","set_digest":"c7f10aee3c745e72ae9cfdcbd2cd0214eb716aa0496967d1994a8acfeab6e9e7"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ copiesOf ../551/helpers.ts:109:87
+    107| export function copiesOf(reply: JsonObject | undefined, n: number, wha…
+    108|   const m = obj(reply, what);
+    109|   expect(m['code'], `${what}: the match call answers, not refuses: ${s…
+       |                                                                                       ^
+    110|   const copies = arr(m['copies'], `${what}: copies`).map((c, i) => cop…
+    111|   expect(copies.map((c) => c.player), `${what}: one copy a player, 1 t…
+ ❯ playFeel ../280/helpers.ts:120:20
+ ❯ ac4-depth.test.ts:60:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac4-depth.test.ts > AC4 #280.3cddbab4 net.feel's rollback depth at a fixed 80 ms > AC4 #280.3cddbab4 a planted meter that counts depth from the step the late message arrived on reads 0 and fails, naming the copy
+AssertionError: AC4 planted (planted net_feel_depth_from_arrival): deep-show run answers the scenario ok (it takes the planted net_feel_depth_from_arrival); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../549/helpers.ts:281:174
+    279|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    280|   const out = obj(parsed, `${tag}: the answer`);
+    281|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok${ty…
+       |                                                                                                                                                                              ^
+    282|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    283|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ playFeel ../280/helpers.ts:117:13
+ ❯ ac4-depth.test.ts:65:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  09:37:37
+   Duration  97.87s (tests 97%, transform 3%)
+
+
+[exited with code 1]

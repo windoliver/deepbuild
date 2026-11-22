@@ -17,15 +17,15 @@ import { promisify } from 'node:util';
 import { readFacts } from '@deepbuild/adapters';
 import { draftAskSettings } from '@deepbuild/asks';
 import { keepOriginal, noteWritten, putBack, saveRecord, setupRecord, strictObject, target, writeThrough } from './agent-files.js';
-import { confirmed } from './authority.js';
+import { stopAsYou } from './authority.js';
 import { Confirmer } from './confirm.js';
 import { claudeCommand, claudeSettings, installedRecord, longestDeadline, ourGroups, relations, withHooks, withoutOurs, writeJson } from './claude-settings.js';
 import { codexConfig, codexHooks, codexRelations, fixedHook, forgetEntries, recordedHome, recordedServer, recordEntries, withEntries, withoutEntries, withoutServer, withServer } from './codex-settings.js';
 import { call } from './client.js';
 import { installShipped } from './installer.js';
-import { deepHook, hubAddress, installedPrograms, installedRoot, lastingNode, rootOf } from './paths.js';
+import { deepHook, hubControl, installedPrograms, installedRoot, lastingNode, rootOf } from './paths.js';
 import { activePlant as plant } from './plant.js';
-import { removeService, startHub, stopIfRunning } from './service.js';
+import { removeService, startHub } from './service.js';
 import { changes, doing, installers, key, lands, onPath, planned as plannedRows, saying, setUpLine, type Row } from './setup-steps.js';
 import { Devices } from './trusted.js';
 import { shellQuote as q } from './shell.js';
@@ -201,7 +201,8 @@ export function buildFailure(error: unknown): string {
 /** The record's `setup.step` events (#1100): one per step setup took, through the hub, which appends them. */
 async function report(done: readonly Row[], tell: (text: string) => void): Promise<void> {
   try {
-    const reply = await call(hubAddress().path, readFileSync(rootOf(installedRoot()).token, 'utf8').trim(), 'setup.report', { steps: done.map((r) => ({ step: r.step, agent: r.agent ?? null })) });
+    const { path: socket, token } = hubControl();
+    const reply = await call(socket, token, 'setup.report', { steps: done.map((r) => ({ step: r.step, agent: r.agent ?? null })) });
     if ('error' in reply) tell(`deep setup: the record didn't keep setup's steps: ${reply.error.remediation}\n`);
   } catch (error) {
     tell(`deep setup: the record didn't keep setup's steps: ${error instanceof Error ? error.message : String(error)}\n`);
@@ -225,8 +226,8 @@ const version = (cli: string): string => (JSON.parse(readFileSync(join(dirname(c
  */
 async function readHistory(quiet: boolean, tell: (text: string) => void): Promise<number> {
   try {
-    const root = installedRoot();
-    const reply = await call(hubAddress().path, readFileSync(rootOf(root).token, 'utf8').trim(), 'wiki.build', {});
+    const { path: socket, token } = hubControl();
+    const reply = await call(socket, token, 'wiki.build', {});
     if ('error' in reply) {
       tell(`deep setup: the wiki wasn't built: ${reply.error.remediation}\n`);
       return 3;
@@ -376,12 +377,13 @@ function installRules(root: string): number {
 }
 
 /**
- * `deep setup --undo`, once the OS confirms you: the login service and the hub stop first, so no watch puts an entry
+ * `deep setup --undo`, once the OS confirms you: the hub and the login service stop first, so no watch puts an entry
  * back; then each file setup wrote gets its original bytes back where you haven't edited it since, and only our parts
  * taken out where you have; the skill goes. ~/.deepbuild stays, with the record, evidence and wiki.
  */
 async function undo(): Promise<number> {
-  const why = await confirmed('deep setup --undo');
+  // The hub's stop is the confirmation (#1865): it asks the OS inside the hub, once, and stops only then.
+  const why = await stopAsYou('deep setup --undo');
   if (why) {
     process.stderr.write(`${why}\n`);
     return 3;
@@ -389,8 +391,6 @@ async function undo(): Promise<number> {
   const root = installedRoot();
   const record = setupRecord(root);
   if (plant() !== 'undo-keeps-login-service') removeService();
-  const stopped = await stopIfRunning(root);
-  if (stopped !== 0) return stopped;
   const settingsFile = claudeSettings();
   const userFile = claudeJson();
   let yours: string | undefined;
@@ -607,8 +607,8 @@ export async function waiterCommand(): Promise<number> {
   for (;;) {
     try { process.kill(parent, 0); } catch { return 0; }
     try {
-      const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
-      const reply = await call(hubAddress().path, token, 'session.wait', { session, poll: true });
+      const { path: socket, token } = hubControl();
+      const reply = await call(socket, token, 'session.wait', { session, poll: true });
       if ('result' in reply && typeof reply.result.text === 'string') {
         process.stderr.write(`${reply.result.text}\n`);
         return 2;

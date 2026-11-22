@@ -4,7 +4,7 @@
 //! the light crosses an occluding outline, and a pixel inside an occluding outline is not
 //! shadowed by that outline. A sun's light runs along its angle, so its segment runs against the
 //! angle with no end. This is the segment test both renderers take: the CPU reference here in
-//! f64, and the GPU layer's light pass (`deep-gpu-layer`'s `lightfx`) in f32 over the same bins.
+//! f64, and the GPU layer's light pass (`deep-groups-render`'s `lightfx`) in f32 over the same bins.
 
 use std::fmt;
 
@@ -653,6 +653,7 @@ mod tests {
             energy: 1.0,
             color: [1.0; 3],
             sun: None,
+            height: range / 4.0,
         };
         let sun = |deg: f64| {
             let (sin, cos) = crate::turn::sin_cos(deg);

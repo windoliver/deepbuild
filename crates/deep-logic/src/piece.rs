@@ -102,7 +102,7 @@ pub fn listing() -> Value {
 }
 
 /// One field of a logic item this task doesn't build yet: refused by name, never ignored.
-const LATER: [&str; 2] = ["pages", "parallel"];
+const LATER: [&str; 1] = ["parallel"];
 /// A row's own columns: no declared field can take one of these names, so a reader can name each
 /// field beside them.
 const ROW_COLUMNS: [&str; 5] = ["step", "t", "kind", "a", "b"];
@@ -273,6 +273,13 @@ pub enum Read {
     World,
     /// Mirror j's range list (Logic: mirror reads).
     Mirror(usize),
+    /// #552: `net.draws`, the draws the input track's reveals complete by the step.
+    Draws,
+    /// #189: the carry record's entry (Logic: carry records); #276: the profile record's.
+    Carry,
+    Profile,
+    /// #277: `net.seats`, the seat entries stamped since the item's last step.
+    Seats,
     /// A write entry.
     None,
 }
@@ -326,6 +333,9 @@ pub struct Write {
     pub count: u32,
     /// `interpolate: linear`: drawing reads it one step late, blended (Logic: interpolated writes).
     pub linear: bool,
+    /// #2035: `cut`, the bool write of the same count whose true elements a frame shows with no
+    /// blend on their step.
+    pub cut: Option<String>,
 }
 
 /// A kind of occurrence an item emits (Logic: occurrences): its numeric fields in declaration
@@ -571,10 +581,24 @@ pub struct Item {
     /// Its mirrors of other items' arrays, in declaration order (Logic: mirror reads).
     pub mirrors: Vec<crate::mirrors::Mirror>,
     pub preview: Option<Preview>,
+    /// The lane graph its `lanes` names, built at check from the piece's floor paths, whose bytes
+    /// are its asset 0 (#981).
+    pub lanes: Option<std::sync::Arc<crate::lanes::Graph>>,
+    /// process@1's kind names its `process` gives, by kind index (#980).
+    pub process: Option<Vec<String>>,
+    /// The table its `separation` declares, its movers and minima checked, whose bytes are its
+    /// asset 0 (#1255).
+    pub separation: Option<std::sync::Arc<crate::separation::Table>>,
     /// What the item's bake key covers of it: its rewritten program, its fields as given and
     /// its assets' hashes (Logic: checkpoints and bake).
     pub content: String,
     pub saves: Option<Saves>,
+    /// Its world pages (Logic: world pages; #211).
+    pub pages: Option<crate::pages::Pages>,
+    /// #189: the record it gives and the record it takes (Logic: carry records); #276: its profile.
+    pub carry: Option<crate::carry::Carry>,
+    pub carry_in: Option<crate::carry::CarryIn>,
+    pub profile: Option<crate::profile::Profile>,
 }
 
 /// A logic item's saves (Logic: saves): its slots, where its `request` and `ends` arrays sit in
@@ -1004,32 +1028,6 @@ pub(crate) fn align8(n: u32) -> u32 {
 /// entries from.
 pub type History = BTreeMap<String, Vec<Layout>>;
 
-/// The fields each item declares, before its program is checked.
-struct Declared {
-    program: String,
-    debug: Option<String>,
-    step: i64,
-    turn: bool,
-    due: Option<String>,
-    reads: Vec<String>,
-    writes: Vec<Write>,
-    fuel: i64,
-    memory: u64,
-    stack: i32,
-    every: i64,
-    ring: u64,
-    assets: Vec<String>,
-    links: Vec<(String, String)>,
-    saves: Option<Value>,
-    emits: Vec<Emit>,
-    fires: Vec<fires::Fire>,
-    services: Vec<(String, u32)>,
-    mirrors: Vec<(String, String)>,
-    preview: Option<(Vec<String>, Vec<Write>)>,
-    /// The item's fields as given, for its bake key.
-    given: String,
-}
-
 /// The kinds an item declares in `emits`, in declaration order, or the refusals naming each wrong
 /// one: at most 64 kinds, 8 numeric fields each, none named as a row's own column, and
 /// `max_per_step` at most 1,024.
@@ -1056,7 +1054,7 @@ fn emits_of(v: Option<&Value>) -> Result<Vec<Emit>, Vec<Value>> {
     for (kind, e) in kinds {
         let other = e.as_object().and_then(|o| {
             o.keys()
-                .find(|k| !["fields", "max_per_step"].contains(&k.as_str()))
+                .find(|k| !["fields", "max_per_step", "always_visible"].contains(&k.as_str()))
         });
         if let Some(k) = other {
             refused.push(what(

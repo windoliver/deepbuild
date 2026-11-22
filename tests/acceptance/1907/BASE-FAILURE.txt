@@ -1,0 +1,44 @@
+# tests/acceptance/1907 at base ee05e7257cc7c7b90b1ca6ba965d21ec36da4e05 (sources unchanged), macOS arm64, Node v24.22.0
+# load at start: 64.85 60.65 94.68
+
+ RUN  v5.0.5 <repo>
+
+ × tests/acceptance/1907/reads.test.ts > #1907.ee5abddf no field of the result type a driver run hands back is written and never read 4713ms
+   → fields of the result type written and never read: expected [ …(5) ] to deeply equal []
+ ✓ tests/acceptance/1907/reads.test.ts > the reading names a written field nothing reads, and not one read directly or through a parameter type 1300ms
+ ✓ tests/acceptance/1907/result.test.ts > #1907.0d8e070f for the recorded journeys in its suites, the package's result is byte for byte the merge base's, less the deleted fields 49893ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1907/reads.test.ts > #1907.ee5abddf no field of the result type a driver run hands back is written and never read
+AssertionError: fields of the result type written and never read: expected [ …(5) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "DriverRun.artifacts.kind (packages/checks-journey/src/run.ts:43)",
++   "DriverRun.artifacts.sha256 (packages/checks-journey/src/run.ts:43)",
++   "DriverRun.artifacts.size (packages/checks-journey/src/run.ts:43)",
++   "DriverRun.out (packages/checks-journey/src/run.ts:44)",
++   "DriverRun.wallMs (packages/checks-journey/src/run.ts:44)",
++ ]
+
+ ❯ tests/acceptance/1907/reads.test.ts:167:79
+    165|   expect(fields, 'packages/checks-journey/src/run.ts declares `drive`,…
+    166|   expect(fields!.filter((f) => f.written).length, 'the sources write s…
+    167|   expect(unread(fields!), 'fields of the result type written and never…
+       |                                                                               ^
+    168| }, 120_000);
+    169|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 2 passed (3)
+   Start at  18:50:24
+   Duration  51.62s (tests 97%, import 1%, transform 1%)
+
+# exit 1

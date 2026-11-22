@@ -1,0 +1,213 @@
+Issue: #2149 (reopened by the closed-issue sweep, #2047)
+Base: b6317234f38883115f7894b91d61d044be0da798 (main), this worktree's HEAD; the suite uncommitted beside it.
+Acceptance tests: blind draft from the issue, the design and the base.
+Machine: macOS 27.2 on Apple silicon (Mac17,10, 18 cores), shared, one-minute load 275 to 340 through every run below.
+Tools: Node v24.22.2; git 2.56.0; rustup 1.29.3 (Homebrew, /opt/homebrew/opt/rustup/bin, which the tests put first on
+       PATH); at the root, rust-toolchain.toml's rustc 1.99.1 (58cf8f9c3 2026-10-13) and rustfmt 1.10.0-stable
+       (58cf8f9c35 2026-10-13). Every cargo ran under scripts/lease at nice 10; the lease ran it unleased ("no deep on
+       PATH and no built CLI at packages/cli/dist"). Downloads were off for every cargo (RUSTUP_AUTO_INSTALL=0, rustup's
+       servers at a closed local port).
+IDs: criterionId of scripts/proof-change.mjs over the issue body's two criterion lines: 715a06c4 and 976fa716, as the
+     sweep's comment gives them.
+Judging: each run's results came from scripts/proof-reporter.mjs beside the spec reporter, each failure judged by a
+         throwaway copy of frames, asserted and atAssertion from scripts/proof-runs.mjs (the before lane's rule: node's
+         AssertionError whose innermost frame is under the test paths).
+Paths: <checkout> is this worktree, <stand-in> the scratch repository below, <tmp> a temporary folder.
+
+== Before the tests: the issue's command at the base
+
+  nice -n 10 scripts/lease cargo fmt --all -- --check      (at the root; 116 s)
+  exit 1; 177 "Diff in" hunks in 36 files; nothing on stderr but the lease's line.
+  The same command on a copy of only the base's *.rs and *.toml files (git archive HEAD -- '*.rs' '*.toml'; 141 s)
+  printed the same 2,631 lines, byte for byte once each folder's path is cut: AC2's copy of a parent holds all cargo fmt
+  reads. Of the 177 hunks, 91 change more than white space (trailing commas, braces, `;`), each with a line break moved.
+
+== The base, once: the suite as committed but for one move (below)
+
+  node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout \
+    --test-reporter=scripts/proof-reporter.mjs --test-reporter-destination=<tmp>/base.jsonl \
+    tests/acceptance/2149/ac1-fmt-check.test.mjs tests/acceptance/2149/ac2-commit-diff.test.mjs
+  exit 1 after 62.4 s.
+  AC1 fails at its assertion in 61.5 s: cargo fmt --all -- --check exits 1, 177 hunks in 36 files.
+  AC2 fails at its assertion in 0.3 s: no commit since b6317234f has a subject naming #2149 and `cargo fmt --all`. (Two
+      commits before the base have such a subject; the test never reads them, and this job didn't either.)
+
+  After this run each criterion's tag constant moved from helpers.mjs into its own test file (the same text), so the
+  lanes' spans() can read each test's full name; the stacks below point 3 lines higher than the committed files.
+  AC2 run again at the base after the move: fails at its assertion in 0.1 s, the same message, at
+  ac2-commit-diff.test.mjs:50. AC1 wasn't run again (its test changed only where its tag constant is bound).
+
+✖ AC1 #2149.715a06c4 `cargo fmt --all -- --check` exits 0 at the checkout's root (61548.883375ms)
+✖ AC2 #2149.976fa716 each file the newest commit since this suite's base whose subject names #2149 and `cargo fmt --all` changes is, under `git diff -w --ignore-blank-lines`, what `cargo fmt --all` makes of its parent's (279.85575ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 62285.154375
+
+✖ failing tests:
+
+test at tests/acceptance/2149/ac1-fmt-check.test.mjs:12:1
+✖ AC1 #2149.715a06c4 `cargo fmt --all -- --check` exits 0 at the checkout's root (61548.883375ms)
+  AssertionError [ERR_ASSERTION]: cargo fmt --all -- --check fails at the checkout's root: 177 hunks in 36 files, crates/deep-app/src/card.rs, crates/deep-app/src/list.rs, crates/deep-app/src/question.rs, crates/deep-app/src/record.rs, crates/deep-app/src/states.rs, crates/deep-canvas/src/horizon.rs, crates/deep-canvas/src/registry/fields.rs, crates/deep-canvas-marks/src/modules.rs, crates/deep-canvas-marks/src/scene.rs, crates/deep-canvas-scene3d/src/contributed.rs, crates/deep-canvas-scene3d/src/horizon.rs, crates/deep-canvas-scene3d/src/lib.rs, crates/deep-canvas-scene3d/src/light.rs, crates/deep-gpu-layer/src/lod.rs, crates/deep-logic/src/carry.rs, crates/deep-logic/src/lib.rs, crates/deep-logic/src/module.rs, crates/deep-logic/src/piece/checks.rs, crates/deep-logic/src/process.rs, crates/deep-logic/src/shell/focus.rs, crates/deep-logic/src/shell/journey.rs, crates/deep-logic/src/shell/rules.rs, crates/deep-logic/src/shell/run.rs, crates/deep-logic/src/shell.rs, crates/deep-logic/src/track.rs, crates/deep-logic/src/world.rs, crates/deep-physics-rapier/src/lib.rs, crates/deep-replica/src/drive/arms.rs, crates/deep-replica/src/drive/counts.rs, crates/deep-replica/src/drive/frames.rs, crates/deep-replica/src/drive/game_shell.rs, crates/deep-scene3d-render/src/lib.rs, crates/deep-scene3d-render/src/shadow.rs, crates/deep-show/src/packs.rs, crates/deep-show/src/sandbox.rs, crates/deep-show/tests/canvas_packs.rs. exit 1 after 61.2 s; output:
+  …    self.counts.lists_bytes = self.fill.bytes(&self.cluster_buffer);
+           let [w, h] = self.internal();
+           let px = f64::from(w) * f64::from(h);
+  -        self.counts.light_estimate =
+  -            fill::estimate(scene, px, self.fill.walked, self.fill.listed);
+  +        self.counts.light_estimate = fill::estimate(scene, px, self.fill.walked, self.fill.listed);
+           if remade {
+               self.clusters = None;
+               self.rebind_lights(device);
+  Diff in crates/deep-scene3d-render/src/shadow.rs:323:
+               // centered on the far rim when that already holds the near one.
+               let zc = (0.5 * (f + n) * (1.0 + k2)).min(f);
+               let r = ((f - zc) * (f - zc) + f * f * k2).sqrt();
+  -            let span = if none {
+  -                2.0 * r
+  -            } else {
+  -                zhi - zlo
+  -            };
+  +            let span = if none { 2.0 * r } else { zhi - zlo };
+               let r = r + reach(soft, r, span, size);
+               let center = [
+                   cam.eye[0] + cam.forward[0] * zc,
+  Diff in crates/deep-show/src/packs.rs:338:
+       for (id, item) in items.iter().filter(|(_, i)| i["kind"] == "cut.words@1") {
+           let _ = deep_canvas_media::cut::lower(doc, id, item, reads);
+       }
+  -    out.insert("cut_ms".into(), json!(started.elapsed().as_secs_f64() * 1000.0));
+  +    out.insert(
+  +        "cut_ms".into(),
+  +        json!(started.elapsed().as_secs_f64() * 1000.0),
+  +    );
+       // #222: each cue list's expansion at check, the expander's own time.
+       let entries = deep_canvas::document::expands::Entries::new(sealed, &resolved);
+       let verbs = |n: &str| {
+  Diff in crates/deep-show/src/sandbox.rs:1386:
+                           });
+                           let outside = (0..n.min(count)).find_map(|i| {
+                               let at = (12 + i * (4 + layouts::PAGE)) as usize;
+  -                            let page = u64::from(u32::from_le_bytes(b.get(at..at + 4)?.try_into().ok()?));
+  +                            let page =
+  +                                u64::from(u32::from_le_bytes(b.get(at..at + 4)?.try_into().ok()?));
+                               (!(first..first + count).contains(&page)).then_some(page)
+                           });
+                           if let Some(page) = outside {
+  Diff in crates/deep-show/src/sandbox.rs:1393:
+                               return failed(
+                                   "out",
+  -                                format!("page {page} is outside its range, {first} to {}", first + count),
+  +                                format!(
+  +                                    "page {page} is outside its range, {first} to {}",
+  +                                    first + count
+  +                                ),
+                               );
+                           }
+                           ("pages@1".to_string(), b)
+  Diff in crates/deep-show/tests/canvas_packs.rs:59:
+           "items": {"back": {"id": "back", "kind": "rect@1", "name": "Backdrop", "order": "a0",
+                              "params": {"box": [0, 0, 320, 200], "paint": {"fill": {"role": "ground"}}}}}});
+       for doc in DOCS {
+  -        let (shown, took) = ask(json!({"call": {"call": "deep_show", "session": "sess-alpha", "doc": doc, "document": board, "include": ["issues"]}}));
+  +        let (shown, took) = ask(
+  +            json!({"call": {"call": "deep_show", "session": "sess-alpha", "doc": doc, "document": board, "include": ["issues"]}}),
+  +        );
+           assert_eq!(shown["reply"]["outcome"], json!("presented"), "{shown}");
+           assert!(
+               took <= first / 5.0,
+  
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2149/ac1-fmt-check.test.mjs:19:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2149/ac2-commit-diff.test.mjs:38:1
+✖ AC2 #2149.976fa716 each file the newest commit since this suite's base whose subject names #2149 and `cargo fmt --all` changes is, under `git diff -w --ignore-blank-lines`, what `cargo fmt --all` makes of its parent's (279.85575ms)
+  AssertionError [ERR_ASSERTION]: no commit HEAD holds since this suite's base b6317234f, other than a merge, has a subject naming #2149 and `cargo fmt --all`, so there is no formatting commit whose diff could be judged
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2149/ac2-commit-diff.test.mjs:47:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+== A stand-in fix, in a scratch repository (never this worktree's history)
+
+  Built by a node script in this job's scratch folder: git archive of the base's *.rs and *.toml files and
+  scripts/lease into a new folder; git init there, its objects read from this repository through
+  .git/objects/info/alternates (never written there), HEAD at b6317234f, the index read from it; then two commits:
+    086fe6c3e  acceptance(#2149): blind redraft of both criteria for the closed-issue sweep (#2047)   (this folder)
+    f37baff8f  fmt(#2149): cargo fmt --all                                                           (36 files)
+  The second is what `cargo fmt --all` made of the first, run until `cargo fmt --all -- --check` exited 0: run 1
+  (77 s) left the check failing on one hunk of crates/deep-logic/src/shell.rs:538, which run 2 (76 s) changed again;
+  after it the check passed. (A first stand-in, made with one run, failed AC1 at its assertion on that hunk. So a
+  commit that passes AC1 holds run 2's version of shell.rs, which is why AC2 takes every run's version until rustfmt
+  settles.)
+
+  The stand-in, both files:                                  exit 0 after 332 s
+    ✔ AC1 (87.4 s)
+    ✔ AC2 (243.3 s)  judged f37baff8f, parent 086fe6c3e: 36 files changed, 36 read from the checkout, 0 from the
+                     commit; two versions from cargo fmt --all, and a third run changed none.
+
+  Twins, each laid over the stand-in as the before lane lays one (its file copied to its path), then put back from HEAD:
+  edit-in-format, both files:                                exit 1 after 335 s
+    ✔ AC1 (98.5 s): the twin's file is formatted.
+    ✖ AC2 (235.1 s) at its assertion:
+      f37baff8f... ("fmt(#2149): cargo fmt --all") changes 1 of its 36 files in more than rustfmt moves: ...
+      diff --git a/rustfmt/crates/deep-canvas/src/horizon.rs b/commit/crates/deep-canvas/src/horizon.rs
+      @@ -14,7 +14,7 @@ fn surface(h: &[f64], cols: usize, c: usize, r: usize, u: f64, v: f64) -> f64 {
+           let at = |c: usize, r: usize| h[r * cols + c];
+           let (fu, fv) = (
+               (u - c as f64).clamp(0.0, 1.0),
+      -        (v - r as f64).clamp(0.0, 1.0),
+      +        (v - c as f64).clamp(0.0, 1.0),
+           );
+  file-left-out, AC1:                                        exit 1 after 59.5 s
+    ✖ AC1 (59.0 s) at its assertion: cargo fmt --all -- --check fails at the checkout's root: 1 hunks in 1 files,
+      crates/deep-logic/src/track.rs ... Diff in crates/deep-logic/src/track.rs:150:
+      -            Given::Rewind(_) | Given::Draw(_) | Given::Carry { .. } | Given::Profile { .. } => Vec::new(),
+      +            Given::Rewind(_) | Given::Draw(_) | Given::Carry { .. } | Given::Profile { .. } => {
+      +                Vec::new()
+      +            }
+
+  The proof lanes' merge base side, as prepare() makes it: HEAD still f37baff8f, the files as the merge base holds
+  them, but those under the test paths as the change holds them. Laid: the parent's version of the 35 files the commit
+  changes outside the test paths; crates/deep-show/tests/canvas_packs.rs kept as the commit left it.
+  AC2:                                                       exit 1 after 173 s
+    ✖ AC2 (172.0 s) at its assertion: f37baff8f... changes 35 of its 36 files in more than rustfmt moves (read from the
+      checkout: 35 of these), naming each of the 35, crates/deep-app/src/card.rs to crates/deep-show/src/sandbox.rs.
+
+  Every run ended with the stand-in's files put back and no file differing from its HEAD. The stand-in ran the suite
+  as it stood before the tag constants moved; the move changes no behaviour.
+
+== Not run
+
+  - scripts/proof.mjs or any of its lanes, so no lane has laid these twins or built its own checkouts here; the runs
+    above stand in for the before lane's change, merge base and twin sides.
+  - spans() and tagsWithImports() of scripts/proof-change.mjs on these files: this worktree has no node_modules
+    (spans() needs typescript). Each test's name is a template of a const string bound in its own file, the form
+    spans() reads.
+  - AC2 on file-left-out (it reads track.rs from the checkout, the base's, and would fail too), AC1 on the merge base
+    side (the base itself fails it, above), and either test on a commit made with another rustfmt release.
+  - cargo-mutants over the stand-in's added lines.

@@ -400,7 +400,7 @@ impl Host {
         // interface's planted library failing one of its fixtures. A library whose fixtures
         // haven't run never links.
         if manifest.get("libs").is_some() || manifest.get("interfaces").is_some() {
-            match self.vet_libs(manifest, sealed) {
+            match self.vet_libs(manifest, sealed, &version) {
                 Ok(made) => entries.extend(made),
                 Err(refusals) => {
                     issues.push(Issue::envelope(
@@ -503,7 +503,12 @@ impl Host {
     /// #416), every asset of the pack at hand to it and kept in the evidence store, where a logic
     /// item's link reads it. Returns each interface as a `lib.interface@1` entry, its kit read from
     /// what the pack check judged of its planted libraries.
-    fn vet_libs(&mut self, manifest: &Value, sealed: &Sealed) -> Result<Vec<SealedEntry>, Value> {
+    fn vet_libs(
+        &mut self,
+        manifest: &Value,
+        sealed: &Sealed,
+        version: &str,
+    ) -> Result<Vec<SealedEntry>, Value> {
         let mut assets = Map::new();
         for a in manifest["assets"].as_array().into_iter().flatten() {
             let Some(sha) = a["sha256"].as_str() else {
@@ -521,11 +526,13 @@ impl Host {
         } else {
             "installed"
         };
-        let pack = json!({"name": manifest["name"], "version": manifest["version"], "origin": origin,
-                          "libs": manifest.get("libs").cloned().unwrap_or(json!({})),
-                          "interfaces": manifest.get("interfaces").cloned().unwrap_or(json!({}))});
-        let reply = deep_logic::Logic::new(Default::default())
-            .handle(&json!({"call": "pack_check", "pack": pack, "assets": assets}));
+        let reply = crate::packs::lib_check(version, || {
+            let pack = json!({"name": manifest["name"], "version": manifest["version"], "origin": origin,
+                              "libs": manifest.get("libs").cloned().unwrap_or(json!({})),
+                              "interfaces": manifest.get("interfaces").cloned().unwrap_or(json!({}))});
+            deep_logic::Logic::new(Default::default())
+                .handle(&json!({"call": "pack_check", "pack": pack, "assets": assets}))
+        });
         if reply["ok"].as_bool() != Some(true) {
             return Err(reply.get("refusals").cloned().unwrap_or(reply));
         }
@@ -1068,6 +1075,8 @@ impl Host {
                 .flat_map(|p| p.values_mut());
             let values = params.flat_map(|v| match v {
                 Value::Array(a) => a.iter_mut().collect::<Vec<_>>(),
+                // #211: a logic item's world pages from a provider's `out: pages`.
+                v if v.pointer("/init/gen").is_some() => vec![&mut v["init"]],
                 v => vec![v],
             });
             for value in values {
@@ -1369,7 +1378,29 @@ impl Host {
                     .unwrap_or(0)
                     .min(layouts::PAGES_CAP);
                 match out_bytes(&ran, 12 + count * (4 + layouts::PAGE)) {
-                    Ok(b) => ("pages@1".to_string(), b),
+                    Ok(b) => {
+                        // #211: its pages lie in its range, `first` to `first + count`.
+                        let first = p.get("first").and_then(Value::as_u64).unwrap_or(0);
+                        let n = b.get(8..12).map_or(0, |h| {
+                            u32::from_le_bytes(h.try_into().expect("4 bytes")) as u64
+                        });
+                        let outside = (0..n.min(count)).find_map(|i| {
+                            let at = (12 + i * (4 + layouts::PAGE)) as usize;
+                            let page =
+                                u64::from(u32::from_le_bytes(b.get(at..at + 4)?.try_into().ok()?));
+                            (!(first..first + count).contains(&page)).then_some(page)
+                        });
+                        if let Some(page) = outside {
+                            return failed(
+                                "out",
+                                format!(
+                                    "page {page} is outside its range, {first} to {}",
+                                    first + count
+                                ),
+                            );
+                        }
+                        ("pages@1".to_string(), b)
+                    }
                     Err(e) => return failed("over_cap", e),
                 }
             }

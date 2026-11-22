@@ -9,7 +9,7 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ADAPTERS } from '@deepbuild/adapters';
-import { openAsks, signInSignature, type Asks } from '@deepbuild/asks';
+import { HOLD_PLANTS, openAsks, signInSignature, type Asks, type AsksPlant } from '@deepbuild/asks';
 import { openLedger, type Ledger } from '@deepbuild/budget';
 import { canonicalize, contextBoundFor, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type EvidenceStore } from '@deepbuild/evidence';
@@ -27,6 +27,7 @@ import { openSupervisor, openUnder, type Host, type Supervisor } from '@deepbuil
 
 import { ClaudeSettings, readJson, STOP_HOLD_MS, words } from './claude-settings.js';
 import { statKey } from './agent-files.js';
+import { Beats } from './beat.js';
 import { Confirmer } from './confirm.js';
 import { keychain } from './keychain.js';
 import { recordedHome, saveTrust } from './codex-settings.js';
@@ -46,10 +47,12 @@ import { Questions } from './questions.js';
 
 import { Staging } from './staging.js';
 import { CAN_RUN, CANT_RUN, describe, RUN_BY, unrunnable } from './hook-programs.js';
-import { SLASH_COMMAND, adapterOf, coveredBy, loopFact, registry, toolClasses, versionOf } from './hookmap.js';
+import { coverage, coveredBy } from './adapter-facts.js';
+import { SLASH_COMMAND, adapterOf, loopFact, registry, toolClasses, versionOf } from './hookmap.js';
 import { continueLine, fit, type Part } from './context-fit.js';
 
 import { briefing, headOf, loadsOf } from './session-facts.js';
+import { toolLoad } from './tool-load.js';
 
 import { GateRunner, type KeptRow } from './gate-runner.js';
 import { Siblings } from './siblings.js';
@@ -96,11 +99,12 @@ import { Jobs } from './jobs.js';
 import { Libraries } from './libraries.js';
 
 import { excerpt, historyKey, type Restored } from './waits.js';
-import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, loginPlan, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
+import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
 import { disk, testVfs, writeAtomic, type Durable } from './vfs.js';
-import { CHROME, EXTENSION_HOOK_MS, derivedId, refuse, signature, ulid, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Scope, SCREEN_TOOLS } from './wire.js';
+import { EXTENSION_HOOK_MS, derivedId, refuse, signature, ulid, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Scope, SCREEN_TOOLS } from './wire.js';
 import type { CallContext, Session, Live, Cursor, Counter, Routes } from './session-types.js';
-import { CODEX_BINARY, CLAUDE_BINARY, HOUR, ARCHIVED_THREADS_MS, DRIFT_MS, DAY, sql, letters, ghToken, GITHUB_PASS_MS, HOOK_CHECK_MS, CALL_GRACE, SLEPT, said, TURN_ENTRIES, PROMPT_PLACE_MS, CORES, machineLoad, FOREIGN, HOLDS_NO_PROMPT, signInCommands, type Obj, isObj, watching, waitingOn, READS, AUTOMATIC_QUEUED, effectEntries, callOf, MODS_MS, sendKey, OWN_TURN, holdsTurns, childPrompt, readsLogged, streamed, crashing, receipting, TYPED_RULE } from "./hub-shared.js";
+import { CODEX_BINARY, CLAUDE_BINARY, HOUR, ARCHIVED_THREADS_MS, DRIFT_MS, DAY, sql, letters, ghToken, GITHUB_PASS_MS, HOOK_CHECK_MS, CALL_GRACE, SLEPT, said, TURN_ENTRIES, PROMPT_PLACE_MS, CORES, machineLoad, FOREIGN, HOLDS_NO_PROMPT, signInCommands, type Obj, isObj, watching, waitingOn, READS, AUTOMATIC_QUEUED, effectEntries, callOf, MODS_MS, sendKey, OWN_TURN, holdsTurns, childPrompt, readsLogged, streamed, crashing, receipting, counted, TYPED_RULE, wakeable, planOf, hubConfig } from "./hub-shared.js";
+import { leasesScreen, offScreen } from './screen-gate.js';
 
 import { HubCanvas } from './hub-canvas.js';
 import { TranscriptReader } from './transcript-reader.js';
@@ -153,7 +157,7 @@ export class Core {
     const readstopping = () => this.stopping;
     const readabandoned = () => this.abandoned;
     const readoverrides = () => this.overrides;
-    this.judging = new StopJudging({ settings: this.options, doneSpec: this.doneSpec, services: lazyServices({ tasks: () => this.tasks, openItems: () => this.openItems, now: () => this.now, asks: () => this.asks, agents: () => this.agents, box: () => this.box, ledger: () => this.ledger, record: () => this.record, gate: () => this.gate, raw: () => this.raw, leases: () => this.leases, extensions: () => this.extensions, sizing: () => this.sizing, root: () => this.root, holds: () => this.holds, questions: () => this.questions, runner: () => this.runner, checkKinds: () => this.checkKinds, reviewRounds: () => this.reviewRounds, store: () => this.store, trust: () => this.trust, heavy: () => this.heavy, host: () => this.host, runs: () => this.runs, stacks: () => this.stacks, canvasSide: () => this.canvasSide }), state: () => this.state, mcp: () => this.mcp, delivery: () => this.delivery, transcripts: () => this.transcripts, control: () => this.control, flags: () => this.flags, events: { appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), connection: (writer, extra) => this.connection(writer, extra), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get stopping() { return readstopping(); }, get overrides() { return readoverrides(); }, get blocked() { return readblocked(); } }, schedule: { askingSoon: () => this.askingSoon(), queue: (work, starting) => this.queue(work, starting), get abandoned() { return readabandoned(); }, wakeable: (waits, key, ms) => this.wakeable(waits, key, ms), askingNow: () => this.askingNow() } });
+    this.judging = new StopJudging({ settings: this.options, doneSpec: this.doneSpec, services: lazyServices({ tasks: () => this.tasks, openItems: () => this.openItems, now: () => this.now, asks: () => this.asks, agents: () => this.agents, box: () => this.box, ledger: () => this.ledger, record: () => this.record, gate: () => this.gate, raw: () => this.raw, leases: () => this.leases, extensions: () => this.extensions, sizing: () => this.sizing, root: () => this.root, holds: () => this.holds, questions: () => this.questions, runner: () => this.runner, checkKinds: () => this.checkKinds, reviewRounds: () => this.reviewRounds, store: () => this.store, trust: () => this.trust, heavy: () => this.heavy, host: () => this.host, runs: () => this.runs, stacks: () => this.stacks, canvasSide: () => this.canvasSide }), state: () => this.state, mcp: () => this.mcp, delivery: () => this.delivery, transcripts: () => this.transcripts, control: () => this.control, flags: () => this.flags, events: { appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), connection: (writer, extra) => this.connection(writer, extra), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get stopping() { return readstopping(); }, get overrides() { return readoverrides(); }, get blocked() { return readblocked(); } }, schedule: { askingSoon: () => this.askingSoon(), queue: (work, starting) => this.queue(work, starting), get abandoned() { return readabandoned(); }, wakeable, askingNow: () => this.askingNow() } });
   }
   private wireSessionMemory(): void {
     this.memory = new SessionMemory({ decisions: this.providers.decisions, cwdOf: this.providers.knowledge.cwdOf, removal: this.providers.knowledge.removal, settings: this.options, services: lazyServices({ record: () => this.record, now: () => this.now, asks: () => this.asks, raw: () => this.raw, root: () => this.root, store: () => this.store, wikiBuild: () => this.wikiBuild, confirmer: () => this.confirmer, runner: () => this.runner, durable: () => this.durable }), delivery: () => this.delivery, mcp: () => this.mcp, state: () => this.state, events: { connection: (writer, extra) => this.connection(writer, extra), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { config: () => this.config() } });
@@ -171,7 +175,7 @@ export class Core {
     const readreplaying = () => this.replaying;
     const readblocked = () => this.blocked;
     const readstopping = () => this.stopping;
-    this.mcp = new McpOperations({ settings: this.options, doneSpec: this.doneSpec, services: lazyServices({ sessionStarts: () => this.sessionStarts, hosts: () => this.hosts, canvasSide: () => this.canvasSide, replicas: () => this.replicas, extensions: () => this.extensions, holds: () => this.holds, record: () => this.record, numbers: () => this.numbers, root: () => this.root, asks: () => this.asks, now: () => this.now, raw: () => this.raw, runs: () => this.runs, stacks: () => this.stacks, checkouts: () => this.checkouts }), control: () => this.control, state: () => this.state, judging: () => this.judging, delivery: () => this.delivery, events: { connection: (writer, extra) => this.connection(writer, extra), appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get blocked() { return readblocked(); }, get stopping() { return readstopping(); } }, schedule: { get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting), askingNow: () => this.askingNow(), wakeable: (waits, key, ms) => this.wakeable(waits, key, ms) } });
+    this.mcp = new McpOperations({ settings: this.options, doneSpec: this.doneSpec, services: lazyServices({ sessionStarts: () => this.sessionStarts, hosts: () => this.hosts, canvasSide: () => this.canvasSide, replicas: () => this.replicas, extensions: () => this.extensions, holds: () => this.holds, record: () => this.record, numbers: () => this.numbers, root: () => this.root, asks: () => this.asks, now: () => this.now, raw: () => this.raw, runs: () => this.runs, stacks: () => this.stacks, checkouts: () => this.checkouts }), control: () => this.control, state: () => this.state, judging: () => this.judging, delivery: () => this.delivery, events: { connection: (writer, extra) => this.connection(writer, extra), appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get blocked() { return readblocked(); }, get stopping() { return readstopping(); } }, schedule: { get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting), askingNow: () => this.askingNow(), wakeable } });
   }
   private wireHubControl(): void {
     const readready = () => this.ready;
@@ -191,7 +195,7 @@ export class Core {
   /** The record's raw reads, as the helpers that take them call them: parameters bound. */
   private readonly raw: RecordStore['raw'] = (sql, params) => this.record.raw(sql, params);
   /** The log's pages, read-ahead and stream; a read waits for the appends in flight, and the owner's stream reads what the owner may see (#1337). */
-  private readonly log = new LogReads({ raw: this.raw, settled: () => Promise.allSettled([...this.inflight.keys()]), ownerSeen: () => this.state.seenBy(OWNER), emit: (sub, json, caught) => this.emit(sub, json, caught) });
+  private readonly log = new LogReads({ raw: this.raw, settled: () => Promise.allSettled([...this.inflight.keys()]), ownerSeen: () => this.state.seenBy(OWNER), emit: (sub, json, caught) => this.emit(sub, json, caught), plant: () => this.options.plant });
   private asks!: Asks;
   /** Online model libraries (#1731): which are on, your standing rules, searches and fetches. */
   private libraries?: Libraries;
@@ -207,6 +211,8 @@ export class Core {
   private archiveSession?: (session: string) => Promise<void>;
   /** The sessions whose transcripts their agents moved to an archived folder; unset until the archive opens. */
   private archivedSessions?: () => Promise<Set<string>>;
+  /** The archive pass under way, if one is: a stop waits for it before the record closes (#2573). */
+  private archiving: () => Promise<void> | undefined = () => undefined;
   /** Ask-tasks in the kernel (#303): a task for each prompt you typed that asks for a change, and its definition locked by hash. */
   private tasks!: AskTasks;
   private sizing!: SizeScope;
@@ -301,6 +307,8 @@ export class Core {
    */
   private readonly inflight = new Map<Promise<unknown>, string>();
   private readonly timers: NodeJS.Timeout[] = [];
+  /** The background jobs whose beat stops while they have nothing to do, and an event wakes (#2648). */
+  private readonly beats = new Beats((name, job) => this.run(name, job), (name) => this.jobs.set(name, null));
   /**
    * Each background job's failures in a row, when the first of them was and the last one's error, cleared by its
    * next clean run (#909): one blip reads apart from a job that has failed for an hour.
@@ -356,7 +364,7 @@ export class Core {
   private wireHookServices(): void {
     const options = this.options;
     this.transcriptReader = new TranscriptReader({ plant: options.plant, now: () => this.now() });
-    this.flags = new SessionFlags({ services: lazyServices({ record: () => this.record, now: () => this.now, asks: () => this.asks, agents: () => this.agents, root: () => this.root, siblings: () => this.siblings, transcriptReader: () => this.transcriptReader }), state: () => this.state, mcp: () => this.mcp, events: { append: (connection, input, backfill) => this.append(connection, input, backfill), connection: (writer, extra) => this.connection(writer, extra) }, schedule: { queue: (work, starting) => this.queue(work, starting) }, readCodexTrust: (cwd) => this.readCodexTrust(cwd) });
+    this.flags = new SessionFlags({ services: lazyServices({ record: () => this.record, now: () => this.now, asks: () => this.asks, agents: () => this.agents, root: () => this.root, siblings: () => this.siblings, transcriptReader: () => this.transcriptReader }), state: () => this.state, mcp: () => this.mcp, events: { append: (connection, input, backfill) => this.append(connection, input, backfill), connection: (writer, extra) => this.connection(writer, extra) }, schedule: { queue: (work, starting) => this.queue(work, starting) }, readCodexTrust: (cwd) => this.readCodexTrust(cwd), wake: (job) => this.beats.wake(job) });
     this.canvasSide = new HubCanvas({
       root: rootOf(options.root), now: () => this.now(), plant: options.plant, doneSpec: this.doneSpec,
       record: () => this.record, store: () => this.store, libraries: () => this.libraries, sessions: () => this.state.sessions, extensions: () => this.extensions,
@@ -585,7 +593,7 @@ export class Core {
     });
     // Check implementations load for a claim or a kinds listing, never for the first session or tool hook.
     this.reviewRounds = new ReviewRounds({ outcomes: this.providers.checks.reviewOutcomes, raw: this.raw, appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), objects: join(this.root.dir, 'objects') });
-    this.checkKinds = this.providers.checks.kinds({ host: () => this.host, supervisor: () => this.supervisor, checkouts: () => this.checkouts, store: join(this.root.dir, 'objects'), submit: (spec) => this.runner.submit(spec), wait: (job) => this.runner.wait(job), cancel: (job) => this.runner.cancel(job), plant: options.plant, extensions: () => this.extensions, evidence: this.root.evidence });
+    this.checkKinds = this.providers.checks.kinds({ host: () => this.host, supervisor: () => this.supervisor, checkouts: () => this.checkouts, store: join(this.root.dir, 'objects'), submit: (spec) => (spec.kind === 'work' ? Promise.reject(Error('a work job runs only under an approved job that repeats (#1527), never for a check')) : this.runner.submit(spec)), wait: (job) => this.runner.wait(job), cancel: (job) => this.runner.cancel(job), plant: options.plant, extensions: () => this.extensions, evidence: this.root.evidence });
     this.replicas = new Replicas({ folder: join(this.root.dir, 'replicas'), now: this.now, leases: () => this.leases, plant: options.plant });
     this.numbers = new Numbers({
       raw: this.raw, now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
@@ -621,7 +629,8 @@ export class Core {
     const storage = this.durable.backend();
     // Each event its own commit: the durable write points a run makes depend only on the events it appends,
     // never on how many arrived together, so a cut at any one can be replayed.
-    this.record = receipting(await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}), ...(this.options.plant === 'turn-closes-at-child-stop' ? { plant: this.options.plant } : {}) }));
+    // Each read counted against the call it runs for, where one counts its queries (#1576).
+    this.record = counted(receipting(await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}), ...(this.options.plant === 'turn-closes-at-child-stop' ? { plant: this.options.plant } : {}) })));
     if (process.env.DEEP_HUB_TEST_CRASH) this.record = crashing(this.record, process.env.DEEP_HUB_TEST_CRASH);
     if (process.env.DEEP_HUB_TEST_READS) this.record = readsLogged(this.record, process.env.DEEP_HUB_TEST_READS);
     // Every append reaches the stream, whoever appends it: the hub, the asks core, the supervisor or the leases.
@@ -629,6 +638,7 @@ export class Core {
       const { kind, subject, data } = input;
       this.canvasSide.appended(input);
       this.log.stream();
+      this.flags.appended(kind, connection.session);
       if (kind !== 'session.state' && kind !== 'row.set') {
         // The next state pass reads the sessions appended to since the last; an event of no session, every session.
         if (this.state.touched !== 'all') { if (connection.session) this.state.touched.add(connection.session); else this.state.touched = 'all'; }
@@ -676,7 +686,8 @@ export class Core {
       // Each open sign-in task's probe, on the recorded login PATH (#1349).
       signIn: signInCheck(() => this.agents.loginPath(), (agent) => this.runner?.account(agent as Agent) ?? null, this.now),
       // The hub's own adapters answer, so the facts it maps hooks by are the facts that decide a continue.
-      errorTurnHook: (agent) => adapterOf(agent)?.caps.errorTurnHook === true, ...(this.options.plant === 'asks-without-tool-before' ? { plant: this.options.plant } : {}),
+      // The asks core plays its own planted programs: #2646's, and #1101's of the hold.
+      errorTurnHook: (agent) => adapterOf(agent)?.caps.errorTurnHook === true, ...(this.options.plant === 'asks-without-tool-before' || (HOLD_PLANTS as readonly string[]).includes(this.options.plant ?? '') ? { plant: this.options.plant as AsksPlant } : {}),
     });
     await this.delivery.continues();
     this.askingSoon();
@@ -699,6 +710,9 @@ export class Core {
     const due = async (): Promise<boolean> => {
       const pos = await landed();
       if (pos > ticked) { ticked = pos; return true; }
+      // A held yes starts its step once its hold is over (#1101).
+      const held = asks.heldUntil();
+      if (held !== null && held <= this.now()) return true;
       if (this.now() - looked >= 60_000 && (await this.record.raw(`SELECT 1 FROM asks WHERE status = 'open' AND batch_id IS NULL LIMIT 1`)).length) { looked = this.now(); return true; }
       return (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND (deadline <= ? OR kind = 'unblock') LIMIT 1`, [this.now()])).length > 0;
     };
@@ -746,7 +760,7 @@ export class Core {
     // One compile job pool per host (#1016): every build deep lease runs joins it.
     this.pool = new JobPool(join(this.root.dir, 'jobserver'), poolTokens(CORES));
     this.heavy = new HeavyQueue({
-      table: leases, slow: SLOW_SLOT, now: this.now, pool: this.pool, ...(this.options.plant ? { plant: this.options.plant } : {}),
+      table: leases, slow: SLOW_SLOT, now: this.now, pool: this.pool, ...(this.options.plant ? { plant: this.options.plant } : {}), wake: () => this.beats.wake('heavy'),
       append: async (kind, v, data, subject, session) => {
         const ts = this.now();
         const id = ulid(ts);
@@ -759,7 +773,7 @@ export class Core {
     });
     await this.heavy.recover(this.raw);
     await this.heavy.tick();
-    this.every('heavy', 500, () => this.heavy.tick());
+    this.beats.start('heavy', 500, () => this.heavy.tick());
     this.every('gone', 1000, () => this.state.goneSessions());
     // Each session's state as last recorded, then any change since; a session goes quiet after a day with no hook.
     for (const row of (await this.record.raw("SELECT session_id, json_extract(data, '$.state') AS state, json_extract(data, '$.cause') AS cause FROM events WHERE kind = 'session.state' AND session_id IS NOT NULL ORDER BY log_pos")) as { session_id: string; state: string; cause: string }[]) this.state.states.set(row.session_id, `${row.state}/${row.cause}`);
@@ -774,8 +788,8 @@ export class Core {
     this.every('states', 60_000, async () => this.state.minutePassed());
     this.every('unpushed', 60_000, () => this.flags.unpushedAgain());
     void this.run('unpushed', () => this.flags.unpushedAgain());
-    this.every('gates', 1000, () => this.flags.gatesWatched());
-    this.every('agents-reach', 1000, () => this.flags.agentsReached());
+    this.beats.start('gates', 1000, () => this.flags.gatesWatched());
+    this.beats.start('agents-reach', 1000, () => this.flags.agentsReached());
     // A live session's transcript is read between its hooks too: an agent retrying a model call fires none (#2019).
     this.every('transcripts', 2000, () => this.flags.transcriptsRead());
     // A background command whose process group has ended no longer holds its session's slow checks (#907); one that
@@ -896,10 +910,10 @@ export class Core {
       sendBack: (r) => this.delivery.landingSendBack(r),
       appendCore: (kind, data, extra) => this.appendCore(kind, data, extra),
     });
-    // #1922's planted hosts build a tool's digest wrongly, #2650's keep what they finished, and #2402's never clears a
-    // handler's failures: the host's plants, selected with the hub's variable.
+    // #1922's planted hosts build a tool's digest wrongly, #2650's keep what they finished, #2402's never clears a
+    // handler's failures and #2648's reads notices once: the host's plants, selected with the hub's variable.
     const plant = this.options.plant?.startsWith('job-build-') ? { plant: this.options.plant as 'job-build-entry-only' }
-      : this.options.plant === 'churn-keeps-every-answer' || this.options.plant === 'churn-keeps-every-result' || this.options.plant === 'churn-keeps-every-name-set' || this.options.plant === 'failures-never-cleared' ? { plant: this.options.plant } : {};
+      : this.options.plant === 'churn-keeps-every-answer' || this.options.plant === 'churn-keeps-every-result' || this.options.plant === 'churn-keeps-every-name-set' || this.options.plant === 'failures-never-cleared' || this.options.plant === 'reads-files-at-start-only' ? { plant: this.options.plant } : {};
     // No package is in the hub's own release yet; a test may hand it one, which then loads in the hub (#2402).
     const release = this.options.release ? (JSON.parse(readFileSync(this.options.release, 'utf8')) as ReleaseEntry[]) : [];
     const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release, now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite'),
@@ -1000,6 +1014,7 @@ export class Core {
       return archiving;
     };
     archivePass();
+    this.archiving = () => archiving;
     this.archiveSession = (session) => archive.session(session);
     this.archivedSessions = () => archive.archived();
     this.every('archived-threads', ARCHIVED_THREADS_MS, () => this.state.archivedThreads());
@@ -1073,22 +1088,7 @@ export class Core {
     try { slot = (JSON.parse(readFileSync(join(this.root.dir, 'config.json'), 'utf8')) as { stack?: { slot?: unknown } }).stack?.slot; } catch { /* none yet */ }
     return typeof slot === 'number' && Number.isInteger(slot) && slot > 0 ? slot : 4;
   }
-  /** What setup wrote to <root>/config.json for the runner: the login shell's PATH and the plan's reserve. */
-  private config(): { loginPath: string; reservePct: number; rules: { margin: number; windowMs: number }; acceptance: { slots: number; gateKey: string | null } } {
-    let c: Obj = {};
-    try { c = JSON.parse(readFileSync(join(this.root.dir, 'config.json'), 'utf8')) as Obj; } catch { /* none yet: no binary resolves, so every job is refused saying so */ }
-    const runner = isObj(c.runner) ? c.runner : {};
-    const plan = isObj(c.plan) ? c.plan : {};
-    // Standing rules are judged at this margin over this window (#23): the design's 1.5 and 30 days unless you set them.
-    const rules = isObj(c.rules) ? c.rules : {};
-    return {
-      loginPath: typeof runner.login_path === 'string' ? runner.login_path : '',
-      reservePct: typeof plan.reserve_pct === 'number' ? plan.reserve_pct : 10,
-      rules: { margin: typeof rules.margin === 'number' ? rules.margin : 1.5, windowMs: (typeof rules.window_days === 'number' ? rules.window_days : 30) * DAY },
-      // The issues that run at once, and the gate identity's key (#1325): with none, a swap goes to you.
-      acceptance: { slots: isObj(c.acceptance) && typeof c.acceptance.slots === 'number' ? c.acceptance.slots : 1, gateKey: isObj(c.gate) && typeof c.gate.key === 'string' ? c.gate.key : null },
-    };
-  }
+  private config(): ReturnType<typeof hubConfig> { return hubConfig(this.root.dir); }
 
   private writeState(state: 'running' | 'stopped'): void {
     writeAtomic(this.root.state, Buffer.from(`${state}\n`));
@@ -1166,7 +1166,9 @@ export class Core {
     if (this.now() < this.hookCheckDue) return;
     this.hookCheckDue = this.now() + HOOK_CHECK_MS;
     const found = unrunnable(this.root.dir);
+    const before = this.cantRun.join(' ');
     this.cantRun = [...new Set(found.flatMap((u) => RUN_BY[u.agent]))].sort();
+    if (this.cantRun.join(' ') !== before) this.flags.reachSoon();
     this.askingSoon();
     for (const [owner, agents] of Object.entries(RUN_BY)) {
       const problem = found.filter((u) => u.agent === owner).map(describe).join('; ');
@@ -1416,7 +1418,7 @@ export class Core {
     const unread = Boolean(meta.watchOnly && meta.session && !this.state.versioned.has(meta.session));
     if (unread) {
       this.state.versioned.add(meta.session);
-      await this.appendReading(meta.session, meta.agent, meta.paseo?.lacks ?? `This session runs ${meta.agent} ${meta.version}, past the versions its facts cover: it is recorded unverified, and its holds and every block but the floor are watch-only until the live smoke test widens the range to ${meta.version}. The floor still holds: its fail_closed guard entries deny as they do with the hub stopped.`).catch(() => undefined);
+      await this.appendReading(meta.session, meta.agent, meta.paseo?.lacks ?? `This session runs ${meta.agent} ${meta.version}, not a version its facts cover (${coverage(meta.agent).join(', ')}): it is recorded unverified, and its holds and every block but the floor are watch-only until the live smoke test adds ${meta.version} to its facts. The floor still holds: its fail_closed guard entries deny as they do with the hub stopped.`).catch(() => undefined);
     }
     await this.flags.versionRead(meta, unread);
     const session = this.state.sessions.get(meta.session);
@@ -1431,7 +1433,7 @@ export class Core {
     const call = session && verified && drafts.length ? meta.toolUse : undefined;
     if (session && call) session.pending.set(call, (session.pending.get(call) ?? 0) + 1);
     // A switch to a leased screen counts once it ran: Claude Code sends PostToolUse only for a call that succeeded (#332).
-    if (session && verified && meta.event === 'PostToolUse' && meta.call && /(^|_)switch_display$/.test(meta.call.tool) && SCREEN_TOOLS.some((prefix) => meta.call!.tool.startsWith(prefix))) await this.switched(session.id, String(meta.call.input.display ?? ''));
+    if (session && verified && meta.event === 'PostToolUse' && meta.call && /(^|_)switch_display$/.test(meta.call.tool) && SCREEN_TOOLS.some((prefix) => meta.call!.tool.startsWith(prefix))) { const display = String(meta.call.input.display ?? ''); if (leasesScreen(await this.leases.leases(), session.id, display)) this.state.onScreen.set(session.id, display); }
     if (session && verified) {
       await this.transcriptReader.readTranscript(session, this.flags.modelCalled(session));
       if (meta.event === 'SessionEnd') this.transcriptReader.endTurn(session);
@@ -1727,21 +1729,6 @@ export class Core {
     return read;
   }
   /**
-   * The login plan of a Claude Code home (#1033), read again only after MODS_MS or once a file a sign-in rewrites
-   * changes: each read starts claude, about 175 ms of CPU, on every Claude Code session's start.
-   */
-  private planOf(home: string): Promise<unknown> {
-    const claude = claudeOnPath(process.env);
-    if (!claude) return Promise.resolve(undefined);
-    const files = [join(home, '.credentials.json'), join(home, '..', '.claude.json'), join(home, '.claude.json')];
-    const key = JSON.stringify([claude, ...files.map(statKey)]);
-    const seen = this.plansSeen.get(home);
-    if (seen && seen.key === key && this.now() - seen.at < MODS_MS) return seen.plan;
-    const plan = loginPlan(claude, { ...process.env, ...(home ? { CLAUDE_CONFIG_DIR: home } : {}) });
-    this.plansSeen.set(home, { key, at: this.now(), plan });
-    return plan;
-  }
-  /**
    * A denied call that ran anyway (#1033): guard.overridden with what denied it and the home's mods that could have
    * approved it, one line on the session's row, its claims judged again, and for a send, which may already have left,
    * one ask naming it.
@@ -1773,7 +1760,7 @@ export class Core {
   private async modsReading(meta: HookMeta): Promise<void> {
     const read = await this.sessionMods(meta);
     if (!read.home) return;
-    const held = await denyHolds({ ...process.env, ...(read.home ? { CLAUDE_CONFIG_DIR: read.home } : {}) }, claudeOnPath(process.env), () => this.planOf(read.home));
+    const held = await denyHolds({ ...process.env, ...(read.home ? { CLAUDE_CONFIG_DIR: read.home } : {}) }, claudeOnPath(process.env), () => planOf(this.plansSeen, this.now, read.home));
     const risky = held || !('mods' in read) ? [] : read.mods.filter((m) => m.overrides);
     let reading: string | undefined;
     if ('unread' in read && !held) reading = `${MODS_WATCH} (${read.home}) loads mods DeepBuild couldn't read (${read.unread}), so whether one can approve a call past the guard is not checked: its holds and blocks may be watch-only.`;
@@ -1820,6 +1807,8 @@ export class Core {
       if (draft.kind === 'tool.after') await this.delivery.prAfter(meta, data.command);
       if (draft.kind === 'session.start') {
         data.loads = await loadsOf(meta.cwd, live.agent ?? meta.agent).catch(() => []);
+        const load = toolLoad(live.agent ?? meta.agent, data.loads as { kind: string; name: string }[], meta.version);
+        if (load) data.toolLoad = load;
         if (!foreign) void this.control.enteredProject(meta.session, meta.cwd);
         // Each server's tool list, read off this hook's path: recorded after the start, its changes held for you.
         if (!foreign && session) void this.holds.listed(meta.session, live.agent, meta.cwd).catch((error: unknown) => process.stderr.write(`deep hub: tool lists for ${meta.session} not recorded: ${error instanceof Error ? error.message : String(error)}\n`));
@@ -2214,7 +2203,7 @@ export class Core {
     }
     // Computer use stays on what the session leases (#332), so your own screen and browser are never touched.
     if (call.screen && meta.call) {
-      const deny = await this.offScreen(meta.session, meta.call.tool, meta.call.input);
+      const deny = offScreen(await this.leases.leases(), meta.session, this.state.onScreen.get(meta.session), meta.call.tool, meta.call.input);
       if (deny) return { deny };
     }
     // A send the cut-off turn started with no recorded end isn't made again (#85): denied with the earlier result. The
@@ -2242,44 +2231,6 @@ export class Core {
     // A dependency or a cloud resource the plan doesn't name: answered by your standing rule, or asked (#23); a dependency
     // with its registry's reading, and a package run straight from one isn't asked once it's a week old (#1509).
     return decide({ holds: this.holds, covered: (s, a) => this.delivery.covered(s, a), now: () => this.now(), reading: (s, a, t) => this.appendReading(s, a, t), registry: this.options.registry, plant: this.options.plant }, meta, call);
-  }
-  /** The session is on `display` once its switch ran, if that is a screen it leases. */
-  private async switched(session: string, display: string): Promise<void> {
-    const leased = (await this.leases.leases()).some((v) => v.lease.holder === `mcp:${session}` && v.lease.resource.kind === 'screen' && v.lease.resource.key === display);
-    if (leased) this.state.onScreen.set(session, display);
-  }
-  /**
-   * Why a computer-use or Chrome step is denied, or nothing when it acts on what its session leases (#332): a switch
-   * to a screen it leases, an app whose window it leases, and any other step on the leased screen it last switched
-   * to. Claude in Chrome, a session that leases no screen, a step naming another, and one before any switch are
-   * denied, so your own screen, your browser and their windows are never touched.
-   */
-  private async offScreen(session: string, action: string, input: Record<string, unknown>): Promise<string | undefined> {
-    const holder = `mcp:${session}`;
-    const mine = (await this.leases.leases()).filter((v) => v.lease.holder === holder && v.lease.resource.host === 'local');
-    const keys = (kind: string) => mine.filter((v) => v.lease.resource.kind === kind).map((v) => v.lease.resource.key);
-    const screens = keys('screen');
-    const windows = keys('window');
-    const leased = screens.length ? `it leases ${screens.join(', ')}` : 'it leases no screen; deep env up leases one when the environment names a screen pool';
-    const why = (what: string) => `DeepBuild blocked this: computer use acts only on a screen and windows its session leases, so your own are never touched. This step ${what}, and ${leased}${windows.length ? ` and the windows of ${windows.join(', ')}` : ''}.`;
-    // Claude in Chrome acts in your own Chrome profile, with your sign-ins, which no window lease covers.
-    if (action.startsWith(CHROME)) return why('acts in your own Chrome, which no lease covers');
-    if (/(^|_)switch_display$/.test(action)) {
-      const display = String(input.display ?? '');
-      // The screen counts as the session's once the switch has run (`switched`), never on the asking alone.
-      return screens.includes(display) ? undefined : why(`switches to ${display || 'a screen it doesn\'t name'}`);
-    }
-    const current = this.state.onScreen.get(session);
-    if (current === undefined || !screens.includes(current)) return why('acts on the screen the session is on, which it hasn\'t switched to a leased one');
-    // Your clipboard is yours whichever screen a session is on.
-    if (/clipboard/.test(action) || input.clipboardRead || input.clipboardWrite) return why('acts on your clipboard, which no lease covers');
-    if (input.systemKeyCombos) return why('asks for key combos that act on your whole machine');
-    // Any step naming apps, granting, teaching or opening them, names only apps whose windows it leases.
-    const apps = [...(input.app === undefined ? [] : [input.app]), ...(Array.isArray(input.apps) ? input.apps : [])];
-    if (!apps.length && /(^|_)(open_application|request_access|request_teach_access)$/.test(action)) return why('names no app');
-    const off = apps.find((app) => typeof app !== 'string' || !windows.includes(app));
-    if (off !== undefined) return why(`acts on the window of ${typeof off === 'string' ? off : JSON.stringify(off)}, which it doesn't lease`);
-    return undefined;
   }
   /**
    * What the hub says back to a hook it holds: a session's start gets its briefing and the answers of its thread; a
@@ -2551,26 +2502,6 @@ export class Core {
     void this.state.quietDue().catch(() => undefined);
     return { now: this.now() };
   }
-  /**
-   * A wait on `key`, woken by whoever wakes `waits` for it, by the hub stopping or after `ms`. It counts from the
-   * call, so a wake that comes while the caller still reads what it waits on isn't missed; `cancel` ends it.
-   */
-  private wakeable(waits: Map<string, Set<() => void>>, key: string, ms: number): { woken: Promise<void>; cancel: () => void } {
-    const set = waits.get(key) ?? new Set();
-    waits.set(key, set);
-    let wake = (): void => undefined;
-    const woken = new Promise<void>((done) => {
-      wake = () => {
-        clearTimeout(timer);
-        set.delete(wake);
-        if (!set.size && waits.get(key) === set) waits.delete(key);
-        done();
-      };
-    });
-    const timer = setTimeout(wake, Math.max(0, ms));
-    set.add(wake);
-    return { woken, cancel: wake };
-  }
 
   /** The hook kinds some loaded extension handles, read once the extensions have started. */
   hooks(): string[] {
@@ -2632,6 +2563,8 @@ export class Core {
     this.stopping = true;
     plantedStop();
     for (const timer of this.timers) clearInterval(timer);
+    this.beats.stop();
+    this.flags.close();
     this.siblings.stop();
     this.work?.close();
     // The pool's pipe goes with the hub, as its socket does: left in the root with no writer, any read of it blocks.
@@ -2645,6 +2578,14 @@ export class Core {
     } catch {
       return;
     }
+    // A stop that came while the core was starting cleared the timers before the start armed its own and opened the
+    // work runs (#2573): those go now, and the archive's pass under way ends before the record closes. Up to 5 s: a
+    // pass can take minutes, and the hub gives its whole stop 20 s. One that runs longer reads a closed record, as before.
+    for (const timer of this.timers) clearInterval(timer);
+    this.work?.close();
+    let bound: NodeJS.Timeout | undefined;
+    await Promise.race([this.archiving(), new Promise<void>((done) => { bound = setTimeout(done, 5000); })]);
+    clearTimeout(bound);
     await this.replaying;
     await Promise.all(this.promptItems.pending);
     for (const session of [...this.unplaced.keys()]) await this.queue(() => this.placeHeld(session)).catch(() => undefined);

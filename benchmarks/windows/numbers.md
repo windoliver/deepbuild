@@ -1,0 +1,25 @@
+# The numbers table
+
+One line for each row of [Numbers version 0 has to hold](../../docs/technical-design.md#numbers-version-0-has-to-hold), read from main by the scheduled budget windows of [parallel proof 12a](../../docs/parallel-proof.md#12a-budget-windows-owner-decision-2026-11-02) on a reference Mac. Each folder beside this file is one window: its own record (`window.json`: its grant, start and end, the machine, the commits it measured, the tasks it ran and didn't reach, its longest task), one record per commit it measured (`<commit>.json`: each task's state, and for each task and each side its p50, p95, peak bytes and instructions retired per round, with the load at each run's start and end) and its throttle log's `window-open` and `window-close` lines (`throttle.log`).
+
+On the reference Mac, after its windows, `node scripts/budget-table.mjs collect` copies each new window here and rewrites the table from the records. `node scripts/budget-table.mjs check`, in the lint lane, fails a line the records don't give.
+
+A line's Result is a result, PASS, FAIL, INCONCLUSIVE or BLOCKED, only from a window's records on a reference Mac, for the tasks whose own limit or target judges the row, none of them timing a debug build. A reading from another machine, from before the windows or from a debug build says so. A row no task judges whole reads `unmeasured`, naming what is missing, and is never PASS.
+
+<!-- table: node scripts/budget-table.mjs write -->
+| Budget | Measured by | Result | Reading | Date | Machine | macOS build | Load | Method | Record |
+|---|---|---|---|---|---|---|---|---|---|
+| Hook overhead | deep-hook-overhead (a reading), deep-hook-day-overhead (a reading) | unmeasured: no task carries the 10 ms p95; the overhead tasks print overheadP95Ms with no limit, and tests/acceptance/315/budgets-overhead-redraft.test.ts, which judges it, runs outside the window | overheadP95Ms 0.83 to 0.89 ms (before the windows) | 2026-10-29 | Mac15,12 | 23H723 | 41 to 48 on 8 cores | docs/spikes/21/record.json: hyperfine 1.19 over 1,000 release deep-hook calls, five runs |  |
+| Fail-open time | deep-hook-fail-open (a reading), deep-hook-day-fail-open (a reading) | unmeasured: no task carries the 50 ms; the fail-open tasks print failOpenP95Ms with no limit, and tests/acceptance/315/budgets.test.ts judges it outside the window | failOpenP95Ms 27.48 to 27.61 ms (before the windows) | 2026-10-29 | Mac15,12 | 23H723 | 11 to 26 on 8 cores | docs/spikes/21/record.json: hyperfine 1.19 over 1,000 release deep-hook calls, five runs |  |
+| Event intake | record-append-20k (a reading) | unmeasured: no task carries 5,000 events a second; tests/acceptance/14/budgets.test.ts judges it outside the window |  |  |  |  |  |  |  |
+| The app | deep-inbox-30d (a reading) | unmeasured: no task launches the app's first screen; tests/acceptance/2026/load.test.ts judges the 1 s outside the window |  |  |  |  |  |  |  |
+| Chrome frames | app-select-700 (a reading) | unmeasured: no task runs a release replica journey or records views repainted, CPU or GPU a frame; tests/acceptance/1482/bench.test.ts judges it outside the window |  |  |  |  |  |  |  |
+| Concurrent runs | lease-grant (a reading) | unmeasured: no task measures how many checks run at once; tests/acceptance/29/budgets.test.ts judges it outside the window |  |  |  |  |  |  |  |
+| Stop holds | nothing | unmeasured: nothing measures hold durations over a week; the 10 s is a proposal until the dogfood week |  |  |  |  |  |  |  |
+| Record size | archive-month (a reading) | unmeasured: no task measures the record's size; tests/acceptance/14/privacy.test.ts judges it outside the window |  |  |  |  |  |  |  |
+| Release gates | deep-hook-overhead (a reading), hub-idle (a reading) | unmeasured: the margin over the last release is judged only by the release budgets lane, which needs a last release |  |  |  |  |  |  |  |
+| Hot path | hub-round-trip (a reading), deep-hook-during-backup (a reading) | unmeasured: no task judges the hub's event loop; tests/acceptance/16's hot-path tests do, outside the window |  |  |  |  |  |  |  |
+| Memory | `hook-startup`, hub-idle (a reading) | unmeasured: no window has measured hook-startup on main yet; only deep-hook's 10 MB has a window limit; the hub's 150 MB and 0.5%, the app's 300 MB and 1% and the waiter's 5 MB have none |  |  |  |  |  |  |  |
+| The app's footprint | hub-idle (a reading) | unmeasured: no task starts the app or records its footprint, gauges or unaccounted; hub-idle reads the hub's |  |  |  |  |  |  |  |
+| The canvas | `canvas-look-frames`, `canvas-many-lamps`, `canvas-idle`, `canvas-patch-settled`, `canvas-drawn-frames`, `canvas-art-frames`, canvas-class-core-view (a reading), canvas-class-showpiece (a reading) | unmeasured: no window has measured canvas-look-frames, canvas-many-lamps, canvas-idle, canvas-patch-settled, canvas-drawn-frames, canvas-art-frames on main yet; the class tasks time debug builds with no targets, and no task carries GPU memory, heap allocations a frame, UI-thread time, drag within 2 frames or deep_show within 2 s |  |  |  |  |  |  |  |
+<!-- end of table -->

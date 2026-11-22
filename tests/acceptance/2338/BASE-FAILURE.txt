@@ -1,0 +1,143 @@
+Acceptance tests for #2338 on the base 58d3e19ee3e956709c1570b87c098350e285a19a ("Merge pull request #2914 …", main,
+no implementation), run on 2026-11-20 by the blind test job in its git worktree of that commit, on macOS (arm64),
+Node v24.22.0, nothing built and no node_modules:
+
+  node --test 'tests/acceptance/2338/*.test.mjs'
+
+Exit 1: all eleven tests fail at a node:assert assertion under the test paths, before any planted program runs: the
+base has no scripts/design-section.mjs, no scripts/doc-ceilings.mjs and no scripts/reading-rule.mjs (helpers.mjs's
+runIn, or the test's own first assertion). Trimmed: node's own stack frames and the assertion's actual and expected
+fields are dropped. Local paths are redacted as <checkout>. Timings on this shared machine are not evidence.
+
+✖ #2338.c7574234 AC1 the script prints the sections for a heading anchor, an explicit <a id> anchor and a repeated heading's -1 anchor, each byte-equal to its expected file; planted scripts that stop at a heading of any level or read a fenced # line as a heading fail, naming the anchor (153.389375ms)
+✖ #2338.19700c5a AC2 an anchor no heading or <a id> of the file has exits non-zero, naming the file and the anchor, and prints no section; a planted script that exits 0 fails (137.847667ms)
+✖ #2338.64ab4593 AC3 an issue linking three sections in four links prints the three once each in first-linked order; a planted script that prints a section once per link prints four and fails, naming the count (151.442166ms)
+✖ #2338.64ab4593 AC3 with no fetched issues the script prints BLOCKED naming what is missing, exits non-zero and prints no section; a planted script that prints nothing and exits 0 fails (85.191417ms)
+✖ #2338.1a6db6b6 AC4 on the commit under test the ceilings file holds exactly the headings whose own text is over 16,384 bytes, with their sizes, and the lint lane's check passes with one line: the headings read, how many are over, and the largest with its anchor (2.255ms)
+✖ #2338.1a6db6b6 AC4 a planted doc adding 1 KB to a listed heading's own text fails, naming the anchor, its size and its ceiling; at the merge base the planted docs pass (682.496625ms)
+✖ #2338.1a6db6b6 AC4 a planted heading new over the limit fails, naming it (607.641542ms)
+✖ #2338.1a6db6b6 AC4 a planted ceiling raised above the merge base's fails, naming it; a planted check that never reads the merge base passes it and fails this test (445.161292ms)
+✖ #2338.1a6db6b6 AC4 a heading whose own text shrank, with its ceiling lowered in the same change, passes (427.220375ms)
+✖ #2338.a3eb5a70 AC5 AGENTS.md's first rule is the reading rule, CONTRIBUTING.md states it in the same words, and the lint lane's text check passes on this checkout (1.236916ms)
+✖ #2338.a3eb5a70 AC5 the text check fails when AGENTS.md or CONTRIBUTING.md is edited alone, naming both lines, and passes when both are; a planted check that reads AGENTS.md alone fails this test (0.270417ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 0
+ℹ fail 11
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2290.549542
+
+✖ failing tests:
+
+test at tests/acceptance/2338/ac1-sections.test.mjs:13:1
+✖ #2338.c7574234 AC1 the script prints the sections for a heading anchor, an explicit <a id> anchor and a repeated heading's -1 anchor, each byte-equal to its expected file; planted scripts that stop at a heading of any level or read a fenced # line as a heading fail, naming the anchor (153.389375ms)
+  AssertionError [ERR_ASSERTION]: scripts/design-section.mjs does not exist: the script #2338 asks for isn't in this checkout
+      at runIn (<checkout>/tests/acceptance/2338/helpers.mjs:78:24)
+      at print (<checkout>/tests/acceptance/2338/ac1-sections.test.mjs:11:42)
+      at <checkout>/tests/acceptance/2338/ac1-sections.test.mjs:15:40
+      at Array.map (<anonymous>)
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/2338/ac1-sections.test.mjs:15:24)
+
+test at tests/acceptance/2338/ac2-unknown-anchor.test.mjs:10:1
+✖ #2338.19700c5a AC2 an anchor no heading or <a id> of the file has exits non-zero, naming the file and the anchor, and prints no section; a planted script that exits 0 fails (137.847667ms)
+  AssertionError [ERR_ASSERTION]: scripts/design-section.mjs does not exist: the script #2338 asks for isn't in this checkout
+      at runIn (<checkout>/tests/acceptance/2338/helpers.mjs:78:24)
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/2338/ac2-unknown-anchor.test.mjs:12:15)
+
+test at tests/acceptance/2338/ac3-issue.test.mjs:12:1
+✖ #2338.64ab4593 AC3 an issue linking three sections in four links prints the three once each in first-linked order; a planted script that prints a section once per link prints four and fails, naming the count (151.442166ms)
+  AssertionError [ERR_ASSERTION]: scripts/design-section.mjs does not exist: the script #2338 asks for isn't in this checkout
+      at runIn (<checkout>/tests/acceptance/2338/helpers.mjs:78:24)
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/2338/ac3-issue.test.mjs:15:15)
+
+test at tests/acceptance/2338/ac3-issue.test.mjs:26:1
+✖ #2338.64ab4593 AC3 with no fetched issues the script prints BLOCKED naming what is missing, exits non-zero and prints no section; a planted script that prints nothing and exits 0 fails (85.191417ms)
+  AssertionError [ERR_ASSERTION]: scripts/design-section.mjs does not exist: the script #2338 asks for isn't in this checkout
+      at runIn (<checkout>/tests/acceptance/2338/helpers.mjs:78:24)
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/2338/ac3-issue.test.mjs:29:15)
+
+test at tests/acceptance/2338/ac4-ceilings.test.mjs:15:1
+✖ #2338.1a6db6b6 AC4 on the commit under test the ceilings file holds exactly the headings whose own text is over 16,384 bytes, with their sizes, and the lint lane's check passes with one line: the headings read, how many are over, and the largest with its anchor (2.255ms)
+  AssertionError [ERR_ASSERTION]: scripts/doc-ceilings.mjs does not exist: the check #2338 asks for isn't in this checkout
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/2338/ac4-ceilings.test.mjs:16:10)
+
+test at tests/acceptance/2338/ac4-ceilings.test.mjs:32:1
+✖ #2338.1a6db6b6 AC4 a planted doc adding 1 KB to a listed heading's own text fails, naming the anchor, its size and its ceiling; at the merge base the planted docs pass (682.496625ms)
+  AssertionError [ERR_ASSERTION]: scripts/doc-ceilings.mjs does not exist: the script #2338 asks for isn't in this checkout
+      at runIn (<checkout>/tests/acceptance/2338/helpers.mjs:78:24)
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/2338/ac4-ceilings.test.mjs:34:17)
+
+test at tests/acceptance/2338/ac4-ceilings.test.mjs:44:1
+✖ #2338.1a6db6b6 AC4 a planted heading new over the limit fails, naming it (607.641542ms)
+  AssertionError [ERR_ASSERTION]: scripts/doc-ceilings.mjs does not exist: the script #2338 asks for isn't in this checkout
+      at runIn (<checkout>/tests/acceptance/2338/helpers.mjs:78:24)
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/2338/ac4-ceilings.test.mjs:46:15)
+
+test at tests/acceptance/2338/ac4-ceilings.test.mjs:51:1
+✖ #2338.1a6db6b6 AC4 a planted ceiling raised above the merge base's fails, naming it; a planted check that never reads the merge base passes it and fails this test (445.161292ms)
+  AssertionError [ERR_ASSERTION]: scripts/doc-ceilings.mjs does not exist: the script #2338 asks for isn't in this checkout
+      at runIn (<checkout>/tests/acceptance/2338/helpers.mjs:78:24)
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/2338/ac4-ceilings.test.mjs:55:15)
+
+test at tests/acceptance/2338/ac4-ceilings.test.mjs:66:1
+✖ #2338.1a6db6b6 AC4 a heading whose own text shrank, with its ceiling lowered in the same change, passes (427.220375ms)
+  AssertionError [ERR_ASSERTION]: scripts/doc-ceilings.mjs does not exist: the script #2338 asks for isn't in this checkout
+      at runIn (<checkout>/tests/acceptance/2338/helpers.mjs:78:24)
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/2338/ac4-ceilings.test.mjs:69:15)
+
+test at tests/acceptance/2338/ac5-reading-rule.test.mjs:11:1
+✖ #2338.a3eb5a70 AC5 AGENTS.md's first rule is the reading rule, CONTRIBUTING.md states it in the same words, and the lint lane's text check passes on this checkout (1.236916ms)
+  AssertionError [ERR_ASSERTION]: scripts/reading-rule.mjs does not exist: the text check #2338 asks for isn't in this checkout
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/2338/ac5-reading-rule.test.mjs:12:10)
+
+test at tests/acceptance/2338/ac5-reading-rule.test.mjs:26:1
+✖ #2338.a3eb5a70 AC5 the text check fails when AGENTS.md or CONTRIBUTING.md is edited alone, naming both lines, and passes when both are; a planted check that reads AGENTS.md alone fails this test (0.270417ms)
+  AssertionError [ERR_ASSERTION]: scripts/reading-rule.mjs does not exist: the text check #2338 asks for isn't in this checkout
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/2338/ac5-reading-rule.test.mjs:27:10)
+exit 1
+
+Self-check, not the base: the same command, run from <copy>, a scratch copy of the base outside this checkout (under
+the OS temp folder, no .git) holding its root files, scripts/, the two real design docs and this folder, where:
+  - scripts/design-section.mjs is `import { main } from './design-section-twin.mjs'; main();` beside copies of
+    planted/section-twin.mjs (as design-section-twin.mjs) and planted/doc-links-copy.mjs;
+  - scripts/doc-ceilings.mjs and scripts/reading-rule.mjs run planted/ceilings-twin.mjs and planted/rule-twin.mjs
+    the same way, with no fault;
+  - scripts/doc-ceilings.json is the oracle's list for the base's docs: 20 headings (15 of the technical design, 5 of
+    the canvas reference), and the twin's line there is
+    "PASS doc-ceilings: 682 headings read, 20 over the limit of 16,384 bytes; the largest is docs/technical-design.md#decided, 69,359 bytes";
+  - the lint lane in scripts/lanes.mjs runs both new checks, after scripts/size-ratchet.mjs;
+  - AGENTS.md's first sentence and CONTRIBUTING.md's "Read the linked sections of [docs/](docs/) first." are both
+    "Read the design sections your issue links before edits."
+Exit 0: all eleven pass, and each diagnostic (ℹ) shows a planted program failing its criterion's judgement, naming
+what the issue says. It shows the tests can pass and that each planted program fails them; it is not a run of any
+implementation, and no twin was left in the checkout.
+
+✔ #2338.c7574234 AC1 the script prints the sections for a heading anchor, an explicit <a id> anchor and a repeated heading's -1 anchor, each byte-equal to its expected file; planted scripts that stop at a heading of any level or read a fenced # line as a heading fail, naming the anchor (852.188125ms)
+ℹ planted stops-at-any-heading.mjs fails: docs/technical-design.md#alpha: printed 29 bytes, not the 245 bytes of fixture/alpha.md; they differ from byte 29: printed "", expected "### Alpha one\n\nAlpha one's text, then a fenced block whose s"
+ℹ planted fenced-hash-as-heading.mjs fails: docs/technical-design.md#alpha: printed 138 bytes, not the 245 bytes of fixture/alpha.md; they differ from byte 138: printed "", expected "# a shell comment, not a heading\n```\n\nAlpha one's text after"
+✔ #2338.19700c5a AC2 an anchor no heading or <a id> of the file has exits non-zero, naming the file and the anchor, and prints no section; a planted script that exits 0 fails (503.339917ms)
+ℹ planted unknown-exits-zero.mjs fails: the planted unknown-exits-zero.mjs exited 0 for docs/technical-design.md#no-such-section, which no heading or <a id> of the file has; its output doesn't name both the file docs/technical-design.md and the anchor no-such-section
+✔ #2338.64ab4593 AC3 an issue linking three sections in four links prints the three once each in first-linked order; a planted script that prints a section once per link prints four and fails, naming the count (527.033292ms)
+ℹ planted once-per-link.mjs fails: printed 4 sections, not 3: #9338 links 3 sections in 4 links, and each prints once (docs/technical-design.md#alpha, docs/technical-design.md#the-plan, docs/technical-design.md#alpha, docs/technical-design.md#notes-1); section 3 is docs/technical-design.md#alpha, not docs/technical-design.md#notes-1: the sections print in the order the issue first links them
+✔ #2338.64ab4593 AC3 with no fetched issues the script prints BLOCKED naming what is missing, exits non-zero and prints no section; a planted script that prints nothing and exits 0 fails (380.791708ms)
+ℹ planted blocked-prints-nothing.mjs fails: the planted blocked-prints-nothing.mjs exited 0 though no open issues were fetched; no line starting BLOCKED names what is missing, #9338 and the open issues (BLOCKED lines: none)
+✔ #2338.1a6db6b6 AC4 on the commit under test the ceilings file holds exactly the headings whose own text is over 16,384 bytes, with their sizes, and the lint lane's check passes with one line: the headings read, how many are over, and the largest with its anchor (744.136667ms)
+✔ #2338.1a6db6b6 AC4 a planted doc adding 1 KB to a listed heading's own text fails, naming the anchor, its size and its ceiling; at the merge base the planted docs pass (2269.073917ms)
+✔ #2338.1a6db6b6 AC4 a planted heading new over the limit fails, naming it (1167.879125ms)
+✔ #2338.1a6db6b6 AC4 a planted ceiling raised above the merge base's fails, naming it; a planted check that never reads the merge base passes it and fails this test (1340.717709ms)
+ℹ planted no-merge-base.mjs fails: the planted no-merge-base.mjs exited 0; no line starting FAIL names docs/technical-design.md#big-section and 18024 and 17000
+✔ #2338.1a6db6b6 AC4 a heading whose own text shrank, with its ceiling lowered in the same change, passes (977.110208ms)
+✔ #2338.a3eb5a70 AC5 AGENTS.md's first rule is the reading rule, CONTRIBUTING.md states it in the same words, and the lint lane's text check passes on this checkout (191.237334ms)
+✔ #2338.a3eb5a70 AC5 the text check fails when AGENTS.md or CONTRIBUTING.md is edited alone, naming both lines, and passes when both are; a planted check that reads AGENTS.md alone fails this test (854.882458ms)
+ℹ planted agents-only.mjs fails: the planted agents-only.mjs exited 0 though the reading rule's words differ between the two files; the planted agents-only.mjs printed no line starting FAIL; its output doesn't name CONTRIBUTING.md:13
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6722.59925
+exit 0

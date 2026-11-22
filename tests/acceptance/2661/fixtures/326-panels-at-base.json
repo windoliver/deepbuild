@@ -1,0 +1,13 @@
+{
+  "base": "b6b99ad8c",
+  "acceptance_326_panels": {
+    "git_dependency_refused_at_install_and_never_fetched": "ok",
+    "four_faults_refused_each_with_its_own_message": "ok",
+    "the_card_is_drawn_at_its_rect": "ok",
+    "nothing_covers_the_card": "ok",
+    "needs_you_and_session_page_share_each_log_pos": "FAILED at tests/acceptance/326/panels/panels.rs:109:17: assertion `left == right` failed: after the frame at log_pos 1, Needs you lists 0 open asks and the session's page counts 1: the two views show different log positions"
+  },
+  "acceptance_326_panels_redraft": {
+    "needs_you_and_session_page_share_each_log_pos": "FAILED at tests/acceptance/326/panels/redraft/panels_redraft.rs:161:17: assertion `left == right` failed: after the frame at log_pos 7, Needs you shows 6 open asks and the session's page counts 5: the two views show different log positions; open in the record and not shown: []"
+  }
+}

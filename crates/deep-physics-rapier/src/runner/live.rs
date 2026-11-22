@@ -82,6 +82,7 @@ impl Run {
             leave_ccd_off: self.leave_ccd_off,
             lint: self.lint,
             ccd_on_kinematic: self.ccd_on_kinematic,
+            set_applies_both: self.set_applies_both,
             views: std::cell::RefCell::default(),
         }
     }
@@ -192,7 +193,7 @@ impl Session {
         let world = call.get("world").ok_or_else(bad)?.clone();
         let span_s = call.get("span").and_then(Value::as_f64).ok_or_else(bad)?;
         let (w, b) = run.build(&world)?;
-        let track = Track::read(&w, call)?;
+        let track = run.track(&w, call)?;
         let span = (span_s * w.step_rate).round() as u64;
         let rate = rate(&json!({}))?;
         let store = call.get("store").and_then(Value::as_str).map(String::from);
@@ -271,7 +272,7 @@ impl Session {
                 acts.fork_at = Some(stamp);
             }
             let mut entries = self.track.entries.clone();
-            entries.push(e);
+            track::join(&mut entries, e);
             self.track = Track::of(entries);
             self.resimulate(stamp, &mut acts)?;
         }
@@ -509,7 +510,8 @@ impl Session {
 
 /// What a stored bake holds before step `from`, as a run that re-simulates from its checkpoint
 /// there takes it up: the step hashes and positions of states 0 … `from` − 1, the occurrences
-/// written through `from`, and the checkpoints it kept through `from`.
+/// written through `from`, the checkpoints it kept through `from`, and (#2035) the cuts through
+/// `from`, whose steps the run never takes again.
 fn prefix(record: &Value, w: &World, from: u64, drops_oldest: bool) -> Trace {
     let n = from as usize;
     let step_hashes = record["step_hashes"].as_array().map_or(Vec::new(), |h| {
@@ -534,6 +536,18 @@ fn prefix(record: &Value, w: &World, from: u64, drops_oldest: bool) -> Trace {
                 ])
             });
         positions.insert(id.clone(), p.collect());
+    }
+    // #2248: and each valued output's values after those states' steps.
+    let mut values = BTreeMap::new();
+    for (id, series) in record["values"].as_object().into_iter().flatten() {
+        let kept = series.as_array().into_iter().flatten().take(n);
+        let v = kept.map(|v| {
+            v.as_array()
+                .into_iter()
+                .flatten()
+                .map(|x| x.as_f64().unwrap_or(f64::NAN))
+        });
+        values.insert(id.clone(), v.map(Iterator::collect).collect());
     }
     let occurrences = record["occurrences"]
         .as_array()
@@ -561,9 +575,11 @@ fn prefix(record: &Value, w: &World, from: u64, drops_oldest: bool) -> Trace {
     Trace {
         step_hashes,
         positions,
+        values,
         occurrences,
         peak: ring.bytes(),
         ring,
+        cuts: deep_canvas_physics::cut::read(&record["outputs"], from),
         ..Trace::default()
     }
 }

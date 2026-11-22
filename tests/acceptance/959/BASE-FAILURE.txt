@@ -1,0 +1,71 @@
+Base run, criteria 1 to 5, at the base bba03bffe (main at 3f02bf52b with #552's branch merged in) with only this job's
+files added (no implementation of #959 exists). Run on macOS arm64 under a build grant, 2026-11-21, the six files in
+one vitest run, once:
+
+  PATH="$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH" NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node scripts/throttle.mjs build --wait 180 -- sh scripts/lease node node_modules/vitest/vitest.mjs run \
+    --root tests/acceptance/959 --no-file-parallelism --testTimeout=600000 \
+    ac1-ridge.test.ts ac2-radar-jammer.test.ts ac3-cloak-ghost.test.ts ac4-budget.test.ts ac4-copies.test.ts ac5-taste.test.ts
+
+(`scripts/lease` ran it unleased: no `deep` on PATH. The builds were the ones made for this job: `deep-logic`, and
+`deep-show` with `full`; the suites' own cargo calls found them.)
+
+ Test Files  6 failed (6)
+      Tests  11 failed (11)
+
+Every test fails at an assertion in its own file, the one that reads `first_party`: the base lists three first-party
+packs and none declares sense.lib@1. No test passes at the base, none fails at an import, in a helper or at a timeout.
+Criterion 1's first test passes its checks of the reference before that line (the closed form at every cell; the
+wrong reference failing it; seen and unseen cells on both sides of the ridge).
+
+The one failing assertion, the same in all eleven:
+
+AssertionError: first_party lists a first-party pack that declares sense.lib@1 with its reference library (the packs are interfaces@1.0.0, lanes@1.0.0, modslib@1.0.0): expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "no first-party pack declares sense.lib@1: first_party lists interfaces@1.0.0, lanes@1.0.0, modslib@1.0.0",
++ ]
+
+Each test, and the line it fails at:
+
+ × ac1-ridge.test.ts > AC1 #959.cff22b0c sight that a ridge blocks, cell for cell against a brute-force ray march > AC1 #959.cff22b0c a sensor 300 m in front of a 40 m ridge marks the cells behind it unseen, every cell matching the brute-force f64 ray march from the eye to its centre
+     ❯ ac1-ridge.test.ts:75:160
+ × ac1-ridge.test.ts > … > AC1 #959.cff22b0c a planted library that ignores the heights sees behind the ridge and fails, naming the cell
+     ❯ ac1-ridge.test.ts:85:160
+ × ac2-radar-jammer.test.ts > AC2 #959.9f68d843 radar that an enemy jammer clears, and only an enemy's > AC2 #959.9f68d843 a unit inside a radar's range and an enemy jammer's stays unseen on the radar side's grid, and becomes radar the step after the jammer dies
+     ❯ ac2-radar-jammer.test.ts:35:160
+ × ac2-radar-jammer.test.ts > … > AC2 #959.9f68d843 a planted jammer that clears its own side's radar fails, naming the cell and the side
+     ❯ ac2-radar-jammer.test.ts:53:160
+ × ac3-cloak-ghost.test.ts > AC3 #959.7485f12b a cloak a detect sensor lifts, and a last-seen ghost > AC3 #959.7485f12b a cloaked unit stays unseen until a detect sensor comes within its decloak radius of 4 cells and is seen at that step; a structure seen at step 100 and out of sight from step 200 stays a ghost at its place until its cell is seen again at step 400
+     ❯ present ac3-cloak-ghost.test.ts:39:158
+     ❯ ac3-cloak-ghost.test.ts:44:5
+ × ac3-cloak-ghost.test.ts > … > AC3 #959.7485f12b a planted cloak that ignores the decloak radius stays unseen at that step and fails, naming the unit and the step
+     ❯ present ac3-cloak-ghost.test.ts:39:158
+     ❯ ac3-cloak-ghost.test.ts:68:5
+ × ac3-cloak-ghost.test.ts > … > AC3 #959.7485f12b a planted ghost that clears when a radar cell covers it fails, naming the row
+     ❯ present ac3-cloak-ghost.test.ts:39:158
+     ❯ ac3-cloak-ghost.test.ts:78:5
+ × ac4-budget.test.ts > AC4 #959.5f8a3deb 300 eyes rebuilt over 3 steps within the step ceiling on the app and on the web > AC4 #959.5f8a3deb 300 units with eye sensors on a 1,025² plate, rebuilt over 3 steps at 30 Hz, pass logic.budget on [app, web] at every step
+     ❯ present ac4-budget.test.ts:41:158
+     ❯ ac4-budget.test.ts:48:5
+ × ac4-budget.test.ts > … > AC4 #959.5f8a3deb a planted rebuild over 1 step fails logic.budget on the web, naming the step and the ceiling
+     ❯ present ac4-budget.test.ts:41:158
+     ❯ ac4-budget.test.ts:67:5
+ × ac4-copies.test.ts > AC4 #959.5f8a3deb two copies of the fleet agree on every grid and every seen bit > AC4 #959.5f8a3deb two copies agree on every grid and every seen bit at each hash interval
+     ❯ ac4-copies.test.ts:35:160
+ × ac5-taste.test.ts > AC5 #959.3faaa651 the check run's pictures of the strategy map, and the one taste call on them > AC5 #959.3faaa651 the check run takes the screenshots and the recording from the canvas's own frames, and the recorded call on exactly those pictures says they look right; with none the run is INCONCLUSIVE, never PASS
+     ❯ ac5-taste.test.ts:51:160
+
+Beside that run, temporary test files and scripts (deleted) held this suite's own library, by the rule and with each
+twin's flag, to the base's `deep-logic` and `deep-show`: what a right library would meet past the failing line (README:
+Checked before the base run, with each number). In short: the rule's library has no miss on any fixture and each twin
+misses as its test expects; logic.budget on the fleet reads BLOCKED on the web alone with no failure for the rule's
+library and FAIL with a web `ceiling` failure at step 0 (ceiling 7,672,634, fuel 9,082,478) for the one-step twin;
+both documents are presented and their matches play on the reference's state; copy 1's views are drawn.
+
+Not run at the base: nothing. Not reached, since no reference library exists: every assertion after the failing line,
+and so the pictures (`docs/evidence/959/` isn't written) and the taste call.

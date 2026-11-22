@@ -71,19 +71,21 @@ pub fn label(id: &str, label: Label, color: Hsla, widest: Option<&str>) -> Canva
                 .map(Font::name);
             record(
                 &id,
-                json!({
-                    "text": label.text,
-                    "role": role,
-                    "bound": label.bound,
-                    "widest": widest,
-                    "at": [f32::from(bounds.origin.x), f32::from(bounds.origin.y)],
-                    "box": [width, f32::from(height)],
-                    "width": shaped.width,
-                    "lines": shaped.lines,
-                    "ellipsized": shaped.ellipsized,
-                    "sprites": painted.sprites,
-                    "pages": painted.pages.iter().map(|(page, _)| *page).collect::<Vec<_>>(),
-                }),
+                || {
+                    json!({
+                        "text": label.text,
+                        "role": role,
+                        "bound": label.bound,
+                        "widest": widest,
+                        "at": [f32::from(bounds.origin.x), f32::from(bounds.origin.y)],
+                        "box": [width, f32::from(height)],
+                        "width": shaped.width,
+                        "lines": shaped.lines,
+                        "ellipsized": shaped.ellipsized,
+                        "sprites": painted.sprites,
+                        "pages": painted.pages.iter().map(|(page, _)| *page).collect::<Vec<_>>(),
+                    })
+                },
                 bounds,
             );
         },

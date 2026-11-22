@@ -504,7 +504,7 @@ impl Scope {
                     k.text(if e.dancing { "dancing" } else { "still" });
                     for p in &e.passes {
                         k.text(&p.op).number(p.grow.unwrap_or(-1.0));
-                        k.text(&Value::Object(p.params.clone()).to_string());
+                        k.text(&serde_json::to_string(&p.params).unwrap_or_default());
                         k.text(&p.item.as_ref().map_or(String::new(), Value::to_string));
                     }
                     if let Some(m) = &e.medium {
@@ -3858,8 +3858,8 @@ pub fn status_marks(
 }
 
 /// A mark in its layer's draw order: its item's rank (#160: z, then the tree by band, order key
-/// and ID), its row, its item's ID.
-type Ordered<'a> = (Rank, usize, &'a str, &'a Arc<Drawn>, ContentKey);
+/// and ID), borrowed from the item (#2660), its row, its item's ID.
+type Ordered<'a> = (Cow<'a, Rank>, usize, &'a str, &'a Arc<Drawn>, ContentKey);
 
 /// A fill drawn as one outline: its verbs where it draws, with nothing else (no stroke, no soft
 /// paint below opacity 1) that a coverage target would change.
@@ -4030,9 +4030,9 @@ pub(crate) fn laid_out<'a>(
     if !items.keys().any(|id| lays_out(id)) {
         return Ok(Cow::Borrowed(items));
     }
-    let input = json!({"items": items, "bound_values": doc.get("bound_values")});
+    let bound = doc.get("bound_values");
     let boxes = LAYOUT_SHAPER
-        .with(|s| crate::layout::solve(&input, &mut s.borrow_mut()))
+        .with(|s| crate::layout::solve_items(items, bound, &mut s.borrow_mut()))
         .map_err(|r| Refused {
             code: r.code,
             path: format!("items/{}", r.item),
@@ -4215,6 +4215,13 @@ pub enum Planted {
     LightDefaultAmbientZero,
     LightEveryChild,
     LightStaleList,
+    /// #2053's twins: a normal page's green read the other way up; a paged pixel's term
+    /// multiplied by max(0, N·L) alone; a page's normals left unturned when its image turns.
+    NormalFlippedGreen,
+    NormalDotAlone,
+    NormalUnturned,
+    /// #2053's `path` twin: each light's height kept from the frame before.
+    LightStaleHeight,
 }
 
 /// The draw list for evaluated `items` of `doc`, in `palette`, at `zoom` (which picks each path's
@@ -4893,8 +4900,8 @@ pub(crate) fn shaped_text(spec: &TextSpec) -> Option<Arc<deep_text::Shaped>> {
 
 mod placed;
 mod scopes;
-use scopes::{ancestor_scope, is_under, scopes_of};
 use placed::*;
+use scopes::{ancestor_scope, is_under, scopes_of};
 
 /// #467: an item's marks with what its paint builds from their coverage (Paint: drop; Paint:
 /// shade, `kind: inner`; Paint: glow, bevel and satin). A drop without blur is the item's own
@@ -5384,12 +5391,13 @@ fn build(
                 drawn.key(bucket)
             };
             // A generated row keeps its set's place, in row order.
-            slot.2.push((placed.rank.clone(), k, id, drawn, key));
+            slot.2
+                .push((Cow::Borrowed(&placed.rank), k, id, drawn, key));
         }
         let later = placed.rank.after_children();
         for (k, drawn) in placed.after.iter().enumerate() {
             slot.2.push((
-                later.clone(),
+                Cow::Owned(later.clone()),
                 placed.drawn.len() + k,
                 id,
                 drawn,
@@ -5408,9 +5416,11 @@ fn build(
             crate::light::gather(&mut marks, |m| &**m.3);
             for (k, m) in marks.iter().enumerate() {
                 let Some(places) = at.as_mut() else { break };
-                let e = places
-                    .entry(m.2.to_string())
-                    .or_insert((li as u32, k as u32, 0));
+                // An item's ID is copied once, at its first mark, not at each.
+                if !places.contains_key(m.2) {
+                    places.insert(m.2.to_string(), (li as u32, k as u32, 0));
+                }
+                let e = places.get_mut(m.2).expect("inserted above");
                 // An item whose marks sit apart (two items under one order key) can't be
                 // replaced in place: the next frame builds them all.
                 if e.1 + e.2 != k as u32 {
