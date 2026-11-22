@@ -60,6 +60,7 @@ mod reference;
 mod regions;
 mod relation;
 mod scene;
+mod sea;
 mod seam;
 mod session3;
 mod simplify;
@@ -248,6 +249,11 @@ pub enum Planted {
     WaterRingsAtRainHash,
     /// #2760: a ring started when a drawn frame first passes its occurrence, kept as state.
     WaterRingsStartOnDrawnFrame,
+    /// #3033's wrong seas (tests/acceptance/3033/README.md: Planted programs): every amplitude
+    /// of the table halved; every row at the longest wave's speed; only its four longest kept.
+    WaterSeaAmplitudesHalved,
+    WaterSeaSpeedOfLongest,
+    WaterSeaDrawsFourLongest,
     /// #971: the local tone map's base brought back up with a range weight of 1 at every tap.
     LocalBaseIgnoresEdges,
     /// #971: the local tone map's pyramid has the look's `levels` at every output size.
@@ -707,6 +713,9 @@ impl Planted {
             "water_flow_single_phase" => Planted::WaterFlowSinglePhase,
             "water_rings_at_rain_hash" => Planted::WaterRingsAtRainHash,
             "water_rings_start_on_drawn_frame" => Planted::WaterRingsStartOnDrawnFrame,
+            "water_sea_amplitudes_halved" => Planted::WaterSeaAmplitudesHalved,
+            "water_sea_speed_of_longest" => Planted::WaterSeaSpeedOfLongest,
+            "water_sea_draws_four_longest" => Planted::WaterSeaDrawsFourLongest,
             "local_base_ignores_edges" => Planted::LocalBaseIgnoresEdges,
             "local_pyramid_fixed_levels" => Planted::LocalPyramidFixedLevels,
             "compiles_on_first_frame" => Planted::CompilesOnFirstFrame,

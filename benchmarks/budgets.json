@@ -1180,6 +1180,23 @@
       ]
     },
     {
+      "id": "canvas-water-sea",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "water-sea"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "sea_gpu_ms": 0.6
+      },
+      "initialReason": "Issue #3033 first measurement: the merge base has no sea on water and no such task. A release deep-gpu draws a 1 km x 1 km plate of 256 x 256 cells, seen by a level camera 12 m up and 60 m in from its near edge so the water fills the lower half of a 1080p frame, as a sea of 64 waves from a 10 m/s wind against the same plate with that wind's four waves, 300 frames a side, five runs after a warm-up one, each a fresh process; the difference of the sides' median GPU time is what the sea adds. canvas.mjs judge holds the time on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#3033.49bf9e99"
+      ]
+    },
+    {
       "id": "canvas-local-tone-map",
       "command": [
         "node",

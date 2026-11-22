@@ -678,6 +678,13 @@ fn run_view(
                     Some((w.material.clone(), f))
                 })
                 .flatten();
+            // #3033: the planted sea, then the water's wave table as the receipt lists it.
+            crate::sea::plant(&mut scene, app.planted);
+            if n == args.from {
+                if let Some(table) = crate::sea::table(&scene) {
+                    receipt["water"] = table;
+                }
+            }
             // #2760: the planted rings, then the rings the frame draws, as it lists them.
             crate::touches::plant(&mut scene, app.planted, t, &mut touched);
             let rings = (args.rings).then(|| crate::touches::rows(&scene));
@@ -918,11 +925,13 @@ fn run_view(
                 app.planted == Some(Planted::EdgesSkipDepth),
                 edge_plant,
             );
+            let sea_plant = app.planted;
             let at_time = |tk: i64, labels: &mut Labels| -> Result<Scene, Value> {
                 let mut sc = evaluate_sourced(&composed, tk, &args.look, labels, &read, outlines)?;
                 if drops_dispersion {
                     sc.plant_drops_dispersion();
                 }
+                crate::sea::plant(&mut sc, sea_plant);
                 sc.texels.clone_from(&scene.texels);
                 sc.ground = scene.ground;
                 sc.set_cutaway(scene.cutaway.clone());
