@@ -1,0 +1,19 @@
+{
+  "#298.febe6b8e": [
+    "clamp_each_axis",
+    "clamp_unmirrored_behind"
+  ],
+  "#298.ef87b0b5": [
+    "clamp_to_frame"
+  ],
+  "#298.85119906": [
+    "edge_from_previous_frame"
+  ],
+  "#298.fd687640": [
+    "export_keeps_live_hover_at"
+  ],
+  "#298.1903184f": [
+    "leader_draws_while_clamped"
+  ],
+  "#298.4ae89dd7": []
+}
