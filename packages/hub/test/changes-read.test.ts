@@ -25,7 +25,7 @@ const temp = (): string => { const d = mkdtempSync(join(tmpdir(), 'changes-read-
 
 /**
  * A claim on a repo whose base holds `base` and whose worktree then holds `head`, staged, stopped with a git first on PATH
- * that runs `stub` (shell, `$PIDS` the file to log its sleeps' PIDs in) before the real git. Its one approved check
+ * that runs `stub` (shell, `$PIDS` the file to log its sleeps' PIDs in, `$GIT` the real git) before the real git. Its one approved check
  * read `read` and passed; returns the verdict and how long the stop took.
  */
 async function claimed(o: { base: Record<string, string>; head: Record<string, string>; stub: string; read: string[]; hold_ms?: number }) {
@@ -45,7 +45,7 @@ async function claimed(o: { base: Record<string, string>; head: Record<string, s
   writeFileSync(log, '');
   pids.push(log);
   const real = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
-  writeFileSync(join(bin, 'git'), `#!/bin/sh\nPIDS='${log}'\n${o.stub}\nexec '${real}' "$@"\n`);
+  writeFileSync(join(bin, 'git'), `#!/bin/sh\nPIDS='${log}'\nGIT='${real}'\n${o.stub}\nexec '${real}' "$@"\n`);
   chmodSync(join(bin, 'git'), 0o755);
   process.env.PATH = `${bin}:${path}`;
   let gate: GateRunner;
@@ -71,8 +71,9 @@ const TEST = { 'test/price.test.js': 'one\n' };
 
 describe('the read of what a claim changed (#1869)', () => {
   it('takes a git diff listing past 64 MB: the edited test file makes its approved check the agent\'s own', async () => {
-    // `diff --name-only` lists 75 MB of other paths before the real ones: a very large repo's diff.
-    const { v } = await claimed({ base: TEST, head: { 'test/price.test.js': 'two\n' }, read: ['test/price.test.js'], stub: 'case " $* " in *" diff --name-only "*) yes other/path.txt | head -n 5000000 ;; esac' });
+    // The diff of names lists 75 MB of other paths after the real ones, with or without -z: a very large repo's diff.
+    const stub = 'case " $* " in *" diff "*"--name-only "*) "$GIT" "$@"; yes other/path.txt | head -n 5000000; exit 0 ;; esac';
+    const { v } = await claimed({ base: TEST, head: { 'test/price.test.js': 'two\n' }, read: ['test/price.test.js'], stub });
     expect(v?.outcome, `the claim edited price-approved's test file, yet reads ${JSON.stringify(v)}`).not.toBe('PASS');
     expect(v?.reasons, 'price-approved counts as the agent\'s own for the file it edited, read whole').toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: the claim changed test\/price\.test\.js/));
   }, 60_000);
