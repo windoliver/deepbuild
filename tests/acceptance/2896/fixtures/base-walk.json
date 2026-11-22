@@ -1,0 +1,7 @@
+{
+  "commit": "6a2b68d44",
+  "how": "The walk document (helpers.ts walkDocument) drawn as one whole revision and read by deep_query {what: rows, cap: 10000} from no cursor, following next: through deep mcp from the Claude Code stand-in for its first 9,000 rows (25 pages, 360 rows each), then, after deep mcp's 55 s wait ran out on page 26 at a load of 200, the whole walk again through `deep-show run` (the same canvas core's deep_query): 28 pages, next 360, 720 … 9720, then none. Each row is [id, parent, kind, children_total], one per line, hashed with SHA-256; the first 9,000 rows through deep mcp hash to the first 9,000 of the same.",
+  "rows": 10000,
+  "pages": 28,
+  "sha256": "9913f78ea1c7ec2832261b2b65a7a413a70145b8546fa1537f900342d87a9665"
+}
