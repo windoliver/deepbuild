@@ -936,12 +936,14 @@ fn command_of(run: &Run) -> String {
     line.join(" ")
 }
 
-/// The account a profile signs into by an ~/.aws/config's text: its section's `sso_account_id`, else none (#2134). A
+/// The account a profile signs into by an ~/.aws/config's text and ~/.aws/credentials': its section's `sso_account_id`, else none (#2134). A
 /// config holding anything but printable ASCII, tabs and line ends, an indented line, or a quote or backslash, is read
 /// as naming no account:
 /// readers split such text into lines and words differently, the hub's and the CLI's among them.
-pub fn aws_account<'a>(config: &'a str, profile: &str) -> Option<&'a str> {
-    if !config
+pub fn aws_account<'a>(config: &'a str, credentials: &str, profile: &str) -> Option<&'a str> {
+    // The CLI lays ~/.aws/credentials over the config, an account named there over the config's.
+    if credentials.to_ascii_lowercase().contains("sso_account_id")
+        || !config
         .replace("\r\n", "\n")
         .chars()
         .all(|c| c == '\t' || c == '\n' || (' '..='~').contains(&c))

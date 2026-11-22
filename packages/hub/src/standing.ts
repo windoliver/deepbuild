@@ -42,6 +42,14 @@ function accountOf(home: string, profile: string): string | undefined {
   } catch {
     return undefined;
   }
+  // The CLI lays ~/.aws/credentials over the config, an account named there over the config's.
+  let credentials = '';
+  try {
+    credentials = readFileSync(join(home, '.aws', 'credentials'), 'utf8');
+  } catch {
+    // No credentials file lays nothing over the config.
+  }
+  if (credentials.toLowerCase().includes('sso_account_id')) return undefined;
   // Readers split anything but printable ASCII, tabs and line ends into lines and words differently, the CLI's and
   // deep-hook's among them, the CLI reads an indented line as going on with the value above it, and a header's quotes
   // and escapes away: a file holding any is read as naming no account.

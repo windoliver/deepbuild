@@ -1034,19 +1034,28 @@ fn a_delete_past_its_worktree_is_unrestorable_and_one_inside_it_is_free() {
 fn a_profiles_account_is_read_only_from_a_config_every_reader_splits_alike() {
     // #2134: the hub reads the same text the same way (packages/hub/test/cloud-owner.test.ts).
     let config = "[dev]\nsso_account_id = 999\n[profile dev]\nsso_account_id = 111\n[profile old] # retired\nsso_account_id = 333\n[default]\nsso_account_id = 444\n";
-    assert_eq!(aws_account(config, "dev"), Some("111"));
-    assert_eq!(aws_account(config, "old"), Some("333"));
-    assert_eq!(aws_account(config, "default"), Some("444"));
-    assert_eq!(aws_account(config, "prod"), None);
+    assert_eq!(aws_account(config, "", "dev"), Some("111"));
+    assert_eq!(aws_account(config, "", "old"), Some("333"));
+    assert_eq!(aws_account(config, "", "default"), Some("444"));
+    assert_eq!(aws_account(config, "", "prod"), None);
+    // The CLI lays ~/.aws/credentials over the config.
     assert_eq!(
-        aws_account(&config.replace('\n', "\r\n"), "dev"),
+        aws_account(config, "[dev]\nSSO_ACCOUNT_ID = 222\n", "dev"),
+        None
+    );
+    assert_eq!(
+        aws_account(config, "[dev]\naws_access_key_id = x\n", "dev"),
+        Some("111")
+    );
+    assert_eq!(
+        aws_account(&config.replace('\n', "\r\n"), "", "dev"),
         Some("111")
     );
     for quoted in ["\"dev\"", "'dev'", "d\\ev"] {
         let config = format!(
             "[profile dev]\nsso_account_id = 111\n[profile {quoted}]\nsso_account_id = 222\n"
         );
-        assert_eq!(aws_account(&config, "dev"), None, "{quoted}");
+        assert_eq!(aws_account(&config, "", "dev"), None, "{quoted}");
     }
     // The CLI keeps the last section that names a profile, by its header's words, and reads its keys in any case.
     for (config, wanted) in [
@@ -1087,22 +1096,22 @@ fn a_profiles_account_is_read_only_from_a_config_every_reader_splits_alike() {
         ),
     ] {
         assert_eq!(
-            aws_account(config, "prod").or(aws_account(config, "default")),
+            aws_account(config, "", "prod").or(aws_account(config, "", "default")),
             wanted,
             "{config}"
         );
     }
     let indented = "[profile dev]\nregion = x\n  sso_account_id = 111\nsso_account_id = 222\n";
-    assert_eq!(aws_account(indented, "dev"), None);
+    assert_eq!(aws_account(indented, "", "dev"), None);
     assert_eq!(
-        aws_account("[profile a]\n\tsso_account_id = 1\n", "a"),
+        aws_account("[profile a]\n\tsso_account_id = 1\n", "", "a"),
         None
     );
     for odd in [
         "\u{feff}", "\u{2028}", "\u{85}", "\r", "\u{b}", "\u{c}", "é",
     ] {
         let config = format!("[profile prod]\n[profile other{odd}x]\nsso_account_id = 222\n[profile{odd}dev]\nsso_account_id = 111\n");
-        assert_eq!(aws_account(&config, "prod"), None, "{odd:?}");
-        assert_eq!(aws_account(&config, "dev"), None, "{odd:?}");
+        assert_eq!(aws_account(&config, "", "prod"), None, "{odd:?}");
+        assert_eq!(aws_account(&config, "", "dev"), None, "{odd:?}");
     }
 }

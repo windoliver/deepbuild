@@ -284,11 +284,10 @@ fn standing(value: Option<&Value>) -> Vec<String> {
 /// The cloud owner an AWS profile creates its resource under, as the hub names it: the profile's `sso_account_id` in
 /// ~/.aws/config (`aws:<account>`), else the profile (`aws-profile:<name>`).
 fn cloud_owner(profile: &str) -> String {
-    let config = fs::read_to_string(
-        PathBuf::from(env::var_os("HOME").unwrap_or_default()).join(".aws/config"),
-    )
-    .unwrap_or_default();
-    match matcher::aws_account(&config, profile) {
+    let aws = PathBuf::from(env::var_os("HOME").unwrap_or_default()).join(".aws");
+    let config = fs::read_to_string(aws.join("config")).unwrap_or_default();
+    let credentials = fs::read_to_string(aws.join("credentials")).unwrap_or_default();
+    match matcher::aws_account(&config, &credentials, profile) {
         Some(account) => format!("aws:{account}"),
         None => format!("aws-profile:{profile}"),
     }
