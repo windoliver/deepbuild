@@ -1,7 +1,7 @@
 // One session's copy from the path its agent named (#2316): a held push hands `archive.session` the hook's
 // `transcript_path`, so the copy needn't list every transcript folder. A named path is only a hint: the archive reads
 // it only where its facts would have found that session's transcript, never a file elsewhere or through a link.
-import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { allEvents, claudeTranscript, dataOf, expectArchived, openArchiveOn, openWorld, removeTemps } from '../../../tests/acceptance/20/helpers.ts';
@@ -13,6 +13,25 @@ const copied = async (w: Awaited<ReturnType<typeof openWorld>>): Promise<unknown
   (await allEvents(w.record, ['transcript.archived'])).map((e) => dataOf(e).session);
 
 describe('Archive.session with the path its agent named', () => {
+  it('copies from that path without listing the folders: one it can pass through but not read still yields the copy', async () => {
+    const w = await openWorld();
+    const projects = dirname(dirname(claudeTranscript(w.env, []).path));
+    try {
+      const wanted = claudeTranscript(w.env, [{ uuid: 'm1', role: 'user', text: 'the one asked about' }]);
+      const archive = await openArchiveOn(w);
+      chmodSync(projects, 0o311);
+      // Control: with no path the walk must list projects/, which it now can't, so nothing is copied.
+      await archive.session(wanted.id);
+      if ((await copied(w)).length) throw Error('BLOCKED: the walk still listed an unreadable projects folder, so this test cannot tell the named path from the walk');
+      await archive.session(wanted.id, wanted.path);
+      expect(await copied(w)).toEqual([handleOf(wanted.id)]);
+      await expectArchived(w, wanted, 'the copy is read from the named path');
+    } finally {
+      chmodSync(projects, 0o755);
+      await w.close();
+    }
+  }, 60_000);
+
   it('never reads a named file outside the transcript folders, and finds the session where the facts put it', async () => {
     const w = await openWorld();
     try {
