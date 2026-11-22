@@ -633,9 +633,13 @@ impl Call {
         let [run] = creates.as_slice() else {
             return None;
         };
+        // The CLI takes a long option by any prefix of it, so a shortened valued one hides its value from `first_two`.
         let shortened = |w: &&str| {
             let name = w.split('=').next().unwrap_or_default();
-            name.len() > 2 && name != "--profile" && "--profile".starts_with(name)
+            name.len() > 2
+                && name.starts_with("--")
+                && !AWS_VALUED.contains(&name)
+                && AWS_VALUED.iter().any(|o| o.starts_with(name))
         };
         let words = run.words();
         let line = self.command.as_deref().unwrap_or_default();
@@ -679,8 +683,10 @@ impl Call {
         if !run.is("aws")
             || run.glob
             || run.args.iter().any(|a| a.text.is_none() || a.glob)
-            || words.iter().any(shortened)
-            || words.contains(&"--")
+            || self.runs.iter().filter(|r| r.is("aws")).any(|r| {
+                let words = r.words();
+                words.iter().any(shortened) || words.contains(&"--")
+            })
             // What the shell would expand, split or decode, the reader may read otherwise than it runs.
             || line.contains(['$', '`', '\\'])
             || unquoted.contains(['*', '?', '['])

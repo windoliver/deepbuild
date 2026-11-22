@@ -423,6 +423,15 @@ fn an_options_value_is_not_read_as_the_subcommand() {
         ),
         ("AWS_PROFILE=dev exec -c aws kms create-key", None),
         (
+            "aws s3 mb s3://a --profile dev; aws s3 --qu ls mb s3://b --profile prod",
+            None,
+        ),
+        (
+            "aws kms create-key --profile dev; aws ec2 --qu=x describe-x",
+            None,
+        ),
+        ("aws kms create-key --prof prod --profile dev", None),
+        (
             "aws kms create-key --profile prod --description x\r--profile=dev",
             None,
         ),
