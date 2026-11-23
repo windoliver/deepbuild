@@ -1138,10 +1138,6 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     .into_iter()
     .filter_map(|(d, f)| Some((d, f?)))
     .collect();
-    let seeds = entries(input, "docs", |d| Some(d.get("document").cloned()))?
-        .into_iter()
-        .filter_map(|(id, seed)| Some((id, seed?)))
-        .collect();
     let quotas = entries(input, "quotas", |q| {
         let cap = |k: &str| match q.get(k) {
             None => Some(None),
@@ -1810,7 +1806,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         logic_planted,
         calls,
         at,
-        seeds,
+        seeds: shared::seeds(input)?,
+        recorded: Default::default(),
         state: optional(input.get("state"), |s| Some(PathBuf::from(s.as_str()?)))?,
         quotas,
         clock,
