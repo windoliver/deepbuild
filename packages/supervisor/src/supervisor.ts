@@ -1119,8 +1119,8 @@ class LocalSupervisor implements Supervisor {
     await r.egress?.close();
     delete r.egress;
     // A run that left a process still refuses: its closing event waits for the recheck that finds them gone. One
-    // that left only a key unclean refuses nothing more.
-    if (!this.lingering.has(r)) await this.closeRefusals(r);
+    // that left only a key unclean refuses nothing more. A closing event the record didn't take is the recheck's too.
+    if (!this.lingering.has(r)) await this.closeRefusals(r).catch(() => { this.lingering.add(r); this.scanSoon(); });
     if (r.watched !== undefined && this.watchedRuns.get(r.watched) === r) this.watchedRuns.delete(r.watched);
     await this.append('run.cleaned', { run, outcome, left, stopped: [...stopped] }, run);
     r.state = 'cleaned';

@@ -1,7 +1,8 @@
 // A run's refusals have a ceiling and a target a bounded length on every path that records them (#2420). The egress
 // filter's path is proven by tests/acceptance/2420; this is the Linux sandbox parent's, whose refusals come on a pipe
-// and are never dropped, so the counts are exact. The macOS log reader shares the same code but its stream may drop
-// reports under load, so no count can be asserted there.
+// and are never dropped, so the events while it lives are exactly 256 and the closing one exactly one; the closing
+// count is a floor, since the shell may be refused something of its own. The macOS log reader shares the same code
+// but its stream may drop reports under load, so no count can be asserted there.
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { openAsks } from '@deepbuild/asks';
