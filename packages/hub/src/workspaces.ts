@@ -261,7 +261,7 @@ export class Workspaces {
     const known = this.sessions.get(t.session);
     const topic = t.item?.title ?? t.text;
     const at = known ? this.named(known).folder : this.ownFolder(topic);
-    // Said before any git runs, so the prompt's own reply carries it: the session isn't in the folder its work belongs in.
+    // Said before any git runs, so the prompt's own reply carries it, or if the task lands after that reply the next prompt that reaches the model (#2669): the session isn't in the folder its work belongs in.
     if (!known) this.o.told(t.session, t.cwd, `DeepBuild: this session is outside any repo, so this task's home is the workspace at ${at}. Keep what you build there, as code where you can; your work there is committed for you at each stop.`);
     const space = known ? this.named(known) : await this.make(topic, undefined, t.task_ref, at);
     this.sessions.set(t.session, space.id);
