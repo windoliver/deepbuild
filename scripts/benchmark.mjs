@@ -5,7 +5,9 @@ import { availableParallelism, homedir, loadavg, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { readApprovals } from './proof-approvals.mjs';
+// The guard's approvals, beside this script in a checkout. A copy of perf and this script alone, as a test's fixture
+// holds, reads none, so a budget's raise there is refused, as it is without an approval.
+const approvals = existsSync(new URL('./proof-approvals.mjs', import.meta.url)) ? await import('./proof-approvals.mjs') : null;
 
 const metrics = ['p50Ms', 'p95Ms', 'peakBytes'];
 
@@ -523,7 +525,7 @@ export function validateBudgets(current, base, approved = []) {
 /** The items of the approvals on the commits from `base` to `head` (#1326), which may hold a budget's proposal. */
 export function approvedItems(root, base, head) {
   const commits = execFileSync('git', ['rev-list', `${base}..${head}`], { cwd: root, encoding: 'utf8' }).split('\n').filter(Boolean).map((sha) => ({ sha }));
-  return [...readApprovals(root, { base, commits }, null).values()].flat();
+  return approvals ? [...approvals.readApprovals(root, { base, commits }, null).values()].flat() : [];
 }
 
 // p95 has only absolute caps: between identical binaries on a shared machine, the tail of 20
