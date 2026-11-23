@@ -1,0 +1,106 @@
+{
+  "name": "lamp_own",
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "eb1213d078e43c4c64675cafbd6d838575e94302000261f4c1544e507858f59e",
+      "step_rate": 1000,
+      "writes": {
+        "v": {
+          "type": "f64",
+          "count": 2
+        },
+        "i_rms": {
+          "type": "f64",
+          "count": 2
+        },
+        "i": {
+          "type": "f64",
+          "count": 2
+        },
+        "p": {
+          "type": "f64",
+          "count": 2
+        },
+        "r": {
+          "type": "f64",
+          "count": 2
+        },
+        "on": {
+          "type": "i32",
+          "count": 2
+        },
+        "energy": {
+          "type": "f64",
+          "count": 2
+        },
+        "kwh": {
+          "type": "f64",
+          "count": 2
+        },
+        "drift": {
+          "type": "f64",
+          "count": 2
+        },
+        "drift_x": {
+          "type": "f64",
+          "count": 2
+        }
+      },
+      "circuit": {
+        "nodes": [
+          "neutral",
+          "live"
+        ],
+        "parts": [
+          {
+            "id": "mains",
+            "kind": "source_ac",
+            "from": "neutral",
+            "to": "live",
+            "v_rms": 230,
+            "f": 50
+          },
+          {
+            "id": "lamp",
+            "kind": "load",
+            "from": "live",
+            "to": "neutral",
+            "p_rated": 4.6,
+            "v_rated": 230
+          }
+        ]
+      },
+      "budget": {
+        "fuel": 10000000
+      },
+      "links": [
+        {
+          "name": "circuit_ref@1.0.0",
+          "asset": "eb0d2e910874a5ab415a8f797742724603f0b9452a8b66381c018e03a4cb5a18"
+        }
+      ]
+    }
+  },
+  "track": [],
+  "steps": 1,
+  "expect": {
+    "arrays": {
+      "0": {
+        "i": [
+          0,
+          0
+        ],
+        "on": [
+          1,
+          1
+        ]
+      }
+    },
+    "tolerance": {
+      "abs": 1e-15,
+      "rel": 1e-9
+    }
+  },
+  "answer": "circuit@1's lamp straight on the mains, importing circuit_ref by its own name: both parts conduct, and at t = 0 the sine and so each current is 0. A library's own fixture is compared exactly, so it holds only values that are exact."
+}

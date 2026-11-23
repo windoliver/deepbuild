@@ -12,7 +12,10 @@ use crate::ops::{atan, cos, sin, TAU};
 /// (c, r), each cell split along its (c, r + 1)–(c + 1, r) diagonal as the plate is.
 fn surface(h: &[f64], cols: usize, c: usize, r: usize, u: f64, v: f64) -> f64 {
     let at = |c: usize, r: usize| h[r * cols + c];
-    let (fu, fv) = ((u - c as f64).clamp(0.0, 1.0), (v - r as f64).clamp(0.0, 1.0));
+    let (fu, fv) = (
+        (u - c as f64).clamp(0.0, 1.0),
+        (v - r as f64).clamp(0.0, 1.0),
+    );
     let (h00, h10, h01, h11) = (at(c, r), at(c + 1, r), at(c, r + 1), at(c + 1, r + 1));
     if fu + fv <= 1.0 {
         h00 + fu * (h10 - h00) + fv * (h01 - h00)
@@ -172,7 +175,10 @@ pub fn angles(
             let v = j as f64 * (rows - 1) as f64 / (tr - 1) as f64;
             let (c, r) = ((u as usize).min(cols - 2), (v as usize).min(rows - 2));
             let h0 = surface(h, cols, c, r, u, v);
-            out.extend(dirs.iter().map(|d| trace(h, cols, rows, &p, [u, v], h0, *d, nudge)));
+            out.extend(
+                dirs.iter()
+                    .map(|d| trace(h, cols, rows, &p, [u, v], h0, *d, nudge)),
+            );
         }
     }
     out

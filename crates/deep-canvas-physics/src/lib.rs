@@ -7,6 +7,7 @@ pub mod backend;
 pub mod bake;
 pub mod caps;
 pub mod check;
+pub mod cut;
 pub mod doc;
 pub mod fast;
 pub mod golden;
