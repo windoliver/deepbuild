@@ -1,7 +1,8 @@
-// The pixel judges, on drawn pictures: no app, no criterion tag, runnable at the base on any platform. Each judge AC4
-// leans on must pass a right picture and fail the wrong ones, so a failure on the real app is the app's, not the judge's.
+// The pixel judges, on drawn pictures and read lines: no app, no criterion tag, runnable at the base on any platform. Each
+// judge AC1, AC2, AC4 and AC5 lean on must pass a right reading and fail the wrong ones, so a failure on the real app is
+// the app's, not the judge's.
 import { describe, expect, it } from 'vitest';
-import { gridLaw, groundAndInk, hex, type Picture, type Rgb } from './helpers.ts';
+import { drawsRow, gridLaw, groundAndInk, hex, type Line, type Picture, type Rgb } from './helpers.ts';
 
 const GROUND: Rgb = [255, 255, 255];
 const FIVE: Rgb = [216, 27, 154];
@@ -42,5 +43,27 @@ describe('#1172 (judges) ground and ink', () => {
     const { ground, ink: read } = groundAndInk(picture(strokes), [10, 20, 200, 40]);
     expect(hex(ground)).toBe('#ffffff');
     expect(hex(read)).toBe(hex(ink));
+  });
+});
+
+describe('#1172 (judges) a list row drawn on the pixels', () => {
+  const question = 'Which header colour on the login page?';
+  const lines = (...texts: string[]): Line[] => texts.map((text) => ({ text, box: [0, 0, 1, 1] }));
+  it.each([
+    ['the whole question', 'Which header colour on the login page? How it looks'],
+    ['the title cut by an ellipsis, then the state word (the disputed Mac run\'s reading)', 'Which header co... How it looks'],
+    ['the title cut by a single-glyph ellipsis', 'Which header colour on…  2m'],
+  ])('control: %s passes', (_, text) => {
+    expect(drawsRow(lines('Needs you 3', text), question)).toBe(true);
+  });
+  it.each([
+    ['the ask\'s handle', 'ask:01MCBHM300GP83QANM5WDCWNNP How it looks'],
+    ['the ask\'s kind alone', 'How it looks'],
+    ['another ask\'s question, cut', 'Which font for th... How it looks'],
+    ['the title clipped at the edge with no ellipsis', 'Which header colour on the lo'],
+    ['fewer than the first 10 letters and digits before the ellipsis', 'Which hea... How it looks'],
+    ['an ellipsis after text that isn\'t the question\'s start', 'Header colour on the login... How it looks'],
+  ])('wrong program: %s fails', (_, text) => {
+    expect(drawsRow(lines('Needs you 3', text), question)).toBe(false);
   });
 });

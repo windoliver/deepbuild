@@ -10,18 +10,18 @@
 // and reads again: what the selected ask gains is its card's share, and every other ask has no card (AC3's judge: no other
 // ask's options). A card is told by its own two options as `AXButton`s (README, Pinned item 2; AC3's judge). After the
 // pop-out, an ask may keep on the main window only its open card's share, and nothing once its card is gone, so a row
-// that stays fails whatever card is open. Before the press the same reading finds the heading and every row with its
-// whole question (AC3: "each Needs you row shows its ask's question"), so a reading that sees nothing can't pass, and the
-// new window must hold and draw them the same way, so a view that merely disappears can't either.
+// that stays fails whatever card is open. Before the press the same reading finds the heading and every row: on the tree
+// a node named with its whole question (AC3: "each Needs you row shows its ask's question"; README item 2), on the pixels
+// the question as a row under the design draws it, whole or cut by an ellipsis after at least its first ROW_START letters
+// and digits (`drawsRow`, REDRAFT.md's third redraft). So a reading that sees nothing can't pass, and the new window must
+// hold and draw them the same way, so a view that merely disappears can't either.
 import { describe, expect, it } from 'vitest';
-import { App, appBinary, blocked, captureWindow, makeWorld, nodes, ocr, reads, settled, sees, sleep, tempDir, useCleanup, type Ask, type Line, type Node, type Win } from './helpers.ts';
+import { App, appBinary, blocked, captureWindow, drawsRow, makeWorld, nodes, ocr, reads, ROW_START, settled, sees, sleep, tempDir, useCleanup, type Ask, type Line, type Node, type Win } from './helpers.ts';
 
 useCleanup();
 const MINUTES = 60_000;
 export const POP_OUT = 'Pop out Needs you';
 const HEADING = 'Needs you';
-/** Letters and digits of a question's start whose drawing still counts as the ask drawn: leaving is judged strictly. */
-const START = 10;
 
 const squash = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 /** The nodes whose name holds `text`, without the ones inside such a node: a row and the label within it are one row. */
@@ -38,32 +38,32 @@ interface Seen {
   headingLines: number;
   /** Per ask: outermost tree nodes holding its whole question. */
   rows: Map<Ask, number>;
-  /** Per ask: whether one pixel line holds its whole question. */
-  whole: Map<Ask, boolean>;
-  /** Per ask: pixel lines holding its question's first START letters and digits. */
+  /** Per ask: whether one pixel line draws its row's question, whole or cut by an ellipsis after its first ROW_START letters and digits. */
+  drawn: Map<Ask, boolean>;
+  /** Per ask: pixel lines holding its question's first ROW_START letters and digits, the least a drawn row shows. */
   starts: Map<Ask, number>;
   lines: Line[];
 }
 function seen(tree: Node, lines: Line[], asks: readonly Ask[]): Seen {
-  const start = (a: Ask): string => squash(a.question).slice(0, START);
+  const start = (a: Ask): string => squash(a.question).slice(0, ROW_START);
   return {
     tree,
     headingNodes: nodes(tree).filter((n) => n.name === HEADING).length,
     headingLines: lines.filter((l) => /^needsyou\d*$/.test(squash(l.text))).length,
     rows: new Map(asks.map((a) => [a, outermost(tree, a.question).length])),
-    whole: new Map(asks.map((a) => [a, reads(lines, a.question)])),
+    drawn: new Map(asks.map((a) => [a, drawsRow(lines, a.question)])),
     starts: new Map(asks.map((a) => [a, lines.filter((l) => squash(l.text).includes(start(a))).length])),
     lines,
   };
 }
-/** Everything the window lacks of the list: its heading and every ask's row with its whole question, on its tree and its pixels. */
+/** Everything the window lacks of the list: its heading and every ask's row, named with its whole question on the tree and drawn on the pixels. */
 function lacks(where: string, s: Seen, asks: readonly Ask[]): string[] {
   const out: string[] = [];
   if (!s.headingNodes) out.push(`${where}'s tree has no node named "${HEADING}"`);
   if (!s.headingLines) out.push(`${where}'s pixels don't draw the "${HEADING}" heading: they read ${sees(s.lines)}`);
   for (const a of asks) {
     if (!s.rows.get(a)) out.push(`${where}'s tree has no row for ${a.handle} ("${a.question}")`);
-    if (!s.whole.get(a)) out.push(`${where}'s pixels don't draw ${a.handle}'s row with its whole question "${a.question}": they read ${sees(s.lines)}`);
+    if (!s.drawn.get(a)) out.push(`${where}'s pixels don't draw ${a.handle}'s row with its question "${a.question}", whole or cut by an ellipsis after its first ${ROW_START} letters and digits: they read ${sees(s.lines)}`);
   }
   return out;
 }

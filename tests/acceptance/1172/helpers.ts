@@ -109,6 +109,23 @@ const squash = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 /** The pixels read as text hold `text`, whatever spacing or punctuation the reading gives it. */
 export const reads = (lines: readonly Line[], text: string): boolean => lines.some((l) => squash(l.text).includes(squash(text)));
 export const sees = (lines: readonly Line[]): string => JSON.stringify(lines.map((l) => l.text)).slice(0, 1500);
+/** Letters and digits of a question's start that a list row cut short must still draw, and whose drawing counts as the row drawn. */
+export const ROW_START = 10;
+/**
+ * A list row draws its ask's question (REDRAFT.md, Third redraft): one pixel line holds the whole question, or its start,
+ * at least ROW_START letters and digits, cut there by an ellipsis. The design's row is one line of fixed slots (mark,
+ * title, then state word and time at the right edge), and "text cut from the screen stays in the accessible name", so a
+ * title past the row's width ends in an ellipsis and only the tree holds it whole.
+ */
+export function drawsRow(lines: readonly Line[], question: string): boolean {
+  if (reads(lines, question)) return true;
+  const q = squash(question);
+  return lines.some((l) => [...l.text.matchAll(/…|\.{2,}/g)].some((m) => {
+    const before = squash(l.text.slice(0, m.index));
+    for (let k = q.length - 1; k >= ROW_START; k--) if (before.endsWith(q.slice(0, k))) return true;
+    return false;
+  }));
+}
 
 export interface Launch { home: string; binary: string; args?: string[]; env?: Record<string, string> }
 export class App {
@@ -460,7 +477,7 @@ export async function shellFailures(world: World, app: App, want: { rows: readon
     const rows = tree.windows.flatMap((w) => outermost(w.tree, ask.question));
     const wanted = want.rows.includes(ask) ? 1 : 0;
     if (rows.length !== wanted) out.push(`Needs you should show ${wanted} row for ${ask.handle} ("${ask.question}"); it has ${rows.length}`);
-    if (reads(lines, ask.question) !== (wanted === 1)) out.push(`the window's pixels ${wanted ? 'lack' : 'still draw'} ${ask.handle}'s question: they read ${sees(lines)}`);
+    if (drawsRow(lines, ask.question) !== (wanted === 1)) out.push(`the window's pixels ${wanted ? 'lack' : 'still draw'} ${ask.handle}'s row with its question, whole or cut by an ellipsis after its first ${ROW_START} letters and digits: they read ${sees(lines)}`);
   }
   const counted = lines.flatMap((l) => [...l.text.matchAll(/\b(\d+)\s+asks?\s+needs?\s+you\b/gi)]).map((m) => Number(m[1]));
   for (const n of counted) if (n !== want.count) out.push(`the window's count reads ${n}, not ${want.count}`);
