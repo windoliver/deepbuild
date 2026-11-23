@@ -1246,11 +1246,9 @@ mod tests {
             assert!(refused.contains("pipe.js"), "{refused}");
             drop(socket);
         }
-        assert!(
-            write(&[("main.js", ""), ("evil.j\u{17f}", kit)])
-                .unwrap_err()
-                .contains("past ASCII")
-        );
+        assert!(write(&[("main.js", ""), ("evil.j\u{17f}", kit)])
+            .unwrap_err()
+            .contains("past ASCII"));
         // A byte-order mark is no code.
         let marked = "\u{feff}import { View } from \"@deepbuild/panel\";\n";
         assert_eq!(write(&[("main.js", marked)]), Ok(()));
@@ -1279,13 +1277,11 @@ mod tests {
         .unwrap_err();
         assert!(refused.contains(".deepbuild-page.js:1"), "{refused}");
         let served = "export * from \"gpui-kit\";";
-        assert!(
-            write(&[
-                ("main.js", "import \"./@deepbuild/panel.js\";"),
-                (SERVED, served)
-            ])
-            .is_err()
-        );
+        assert!(write(&[
+            ("main.js", "import \"./@deepbuild/panel.js\";"),
+            (SERVED, served)
+        ])
+        .is_err());
         assert_eq!(
             write(&[
                 ("main.js", "import { View } from \"@deepbuild/panel\";"),
