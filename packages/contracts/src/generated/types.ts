@@ -4972,6 +4972,51 @@ export interface AskAnsweredV6 {
   evidence?: Array<string>;
 }
 
+export type AskAnsweredV7PinnedTo = {
+  kind: "commit";
+  ref: string;
+} | {
+  kind: "doc_revision";
+  ref: string;
+} | {
+  kind: "evidence";
+  ref: string;
+};
+
+/** ask.answered@7 */
+export interface AskAnsweredV7 {
+  v: 7;
+  id: string;
+  kind: "ask.answered";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    answer: string;
+    plan_hash: string | null;
+    decision: "allow" | "deny" | "none";
+    via: "card" | "inbox" | "session" | "channel";
+    verified: boolean;
+    on: AskAnsweredV7PinnedTo;
+    token: string | null;
+    steps?: Array<number>;
+    words: string | null;
+    image: string | null;
+    option: string | null;
+    pictures?: Array<{
+      sha256: string;
+      shown: boolean;
+      scale: number;
+      ms: number;
+    }>;
+  };
+  evidence?: Array<string>;
+}
+
 /** ask.batched@1 */
 export interface AskBatched {
   v: 1;
@@ -5773,6 +5818,35 @@ export interface AskMootV2 {
     because: "signed_in";
     agent: string;
     account: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+export type AskMovedPinnedTo = {
+  kind: "commit";
+  ref: string;
+} | {
+  kind: "doc_revision";
+  ref: string;
+} | {
+  kind: "evidence";
+  ref: string;
+};
+
+/** ask.moved@1 */
+export interface AskMoved {
+  v: 1;
+  id: string;
+  kind: "ask.moved";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    pinned_to: AskMovedPinnedTo;
   };
   evidence?: Array<string>;
 }
