@@ -1,0 +1,324 @@
+# #3238 acceptance tests on the base f8c6cff82 (macOS, 18 cores, 1-minute load 100 to 130), 2026-11-23.
+# Each file run once: nice -n 10 node --test --test-concurrency=1 --test-reporter=spec <file>, with no machine grant
+# (a preflight held the machine's exclusive timed grant all day; these four build nothing and each test uses a table
+# of its own inside node --test). Paths redacted: the user's home and each test's own HOME as ~, temp folders as <tmp>.
+#
+# Expected reason: the base's scripts/lease runs its command with no throttle grant (no deep on PATH and no built CLI:
+# "runs unleased"), and section 6 of docs/parallel-proof.md never names scripts/lease. Every failure is at an assertion
+# in the test's own file:
+#   serial.test.mjs    #3238.52168c75  both commands ran at once; the failure names the second (build-one)
+#   inherited.test.mjs #3238.664c776d  the job started, but the log shows no passed entry through the run's grant
+#   no-grant.test.mjs  #3238.4febe21a  the command started with no build grant
+#   design.test.mjs    #3238.b9ec371a  section 6 never names scripts/lease
+#
+# NOT RUN YET: cli.test.mjs (#3238.f2323033) and hub.test.ts (#3238.8320a246). Both need the packages built
+# (npm ci, npm run build --workspaces; hub.test.ts also deep-hook), and no build grant came on this Mac that day.
+#
+# After the base runs: each twin once against its test (the file named), all failing at their first assertion. A
+# throwaway reference script (the twins' source with no planted line, never committed) passed serial, inherited and
+# no-grant once each in the same session (2.3 s, 1.2 s and 1.6 s).
+
+=== nice -n 10 node --test --test-concurrency=1 --test-reporter=spec tests/acceptance/3238/serial.test.mjs
+=== scripts/lease: base (a58f542237aa); 2026-11-23T19:04:47Z; load { 117.90 115.57 119.81 }
+✖ #3238.52168c75 two scripts/lease commands started together with build at 1, no hub and no built CLI run one after the other, each under a top-level build grant in the log (456.871916ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 548.662042
+
+✖ failing tests:
+
+test at tests/acceptance/3238/serial.test.mjs:11:1
+✖ #3238.52168c75 two scripts/lease commands started together with build at 1, no hub and no built CLI run one after the other, each under a top-level build grant in the log (456.871916ms)
+  AssertionError [ERR_ASSERTION]: the second command, `node stub.mjs build-one`, started while the first, `build-two`, still ran: two scripts/lease commands ran at once on a table with build at 1
+  events:
+  {"name":"build-two","event":"start","at":1795460687809,"pid":40604,"ppid":40576,"throttle":null}
+  {"name":"build-one","event":"start","at":1795460687818,"pid":40603,"ppid":40576,"throttle":null}
+  table: null
+  the throttle's log:
+  
+  build-one (`<tmp>/checkout/scripts/lease node <tmp>/stub.mjs build-one`, pid 40603): still running
+  started build-one
+  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node <tmp>/stub.mjs build-one` runs unleased
+  
+  build-two (`<tmp>/checkout/scripts/lease node <tmp>/stub.mjs build-two`, pid 40604): still running
+  started build-two
+  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node <tmp>/stub.mjs build-two` runs unleased
+  
+      at TestContext.<anonymous> (file://~/dev/claude-worktrees/github-issue-3238-49d52c/agent-ab62da87a7954a21e/tests/acceptance/3238/serial.test.mjs:30:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+=== exit 1
+
+=== nice -n 10 node --test --test-concurrency=1 --test-reporter=spec tests/acceptance/3238/inherited.test.mjs
+=== scripts/lease: base (a58f542237aa); 2026-11-23T19:04:47Z; load { 117.90 115.57 119.81 }
+✖ #3238.664c776d a command scripts/lease runs under an ancestor's test grant starts at once, the log showing passed for it and no build request (1418.255125ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1518.9075
+
+✖ failing tests:
+
+test at tests/acceptance/3238/inherited.test.mjs:14:1
+✖ #3238.664c776d a command scripts/lease runs under an ancestor's test grant starts at once, the log showing passed for it and no build request (1418.255125ms)
+  AssertionError [ERR_ASSERTION]: the log shows no passed entry through the run's grant test:a6ebebc0ecf993a7 for the job `repo-rules-lint`
+  events:
+  {"name":"holder-1","event":"start","at":1795460688781,"pid":40800,"ppid":40735,"throttle":"build:97c09c2ff2647cef"}
+  {"name":"repo-rules-lint","event":"start","at":1795460689430,"pid":40845,"ppid":40829,"throttle":"test:a6ebebc0ecf993a7"}
+  table: {"grants":[{"id":"97c09c2ff2647cef","class":"build","pid":40735,"start":"Mon Nov 23 19:04:48 2026","nested":false,"window":false,"index":1,"at":1795460688648},{"id":"a6ebebc0ecf993a7","class":"test","pid":40829,"start":"Mon Nov 23 19:04:48 2026","nested":false,"window":false,"index":1,"at":1795460689121}],"requests":[],"seq":2}
+  the throttle's log:
+  {"at":"2026-11-23T19:04:48.648Z","event":"granted","class":"build","grant":"top-level","id":"97c09c2ff2647cef","pid":40735,"index":1,"load":117.90380859375,"cores":18,"wait":1}
+  {"at":"2026-11-23T19:04:49.131Z","event":"granted","class":"test","grant":"top-level","id":"a6ebebc0ecf993a7","pid":40829,"index":1,"load":117.90380859375,"cores":18,"wait":1,"readings":{"memory":1099511627776,"load":1000,"cores":1}}
+  run (`/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node <tmp>/checkout/scripts/throttle.mjs test --wait 1 -- <tmp>/checkout/scripts/lease node <tmp>/stub.mjs repo-rules-lint`, pid 40829): still running
+  started repo-rules-lint
+  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node <tmp>/stub.mjs repo-rules-lint` runs unleased
+  
+      at TestContext.<anonymous> (file://~/dev/claude-worktrees/github-issue-3238-49d52c/agent-ab62da87a7954a21e/tests/acceptance/3238/inherited.test.mjs:39:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+=== exit 1
+
+=== nice -n 10 node --test --test-concurrency=1 --test-reporter=spec tests/acceptance/3238/no-grant.test.mjs
+=== scripts/lease: base (a58f542237aa); 2026-11-23T19:04:49Z; load { 117.90 115.57 119.81 }
+✖ #3238.4febe21a with every build slot held and DEEP_LEASE_WAIT=0, scripts/lease prints INCONCLUSIVE no grant, exits non-zero and never starts its command (956.89325ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1067.372375
+
+✖ failing tests:
+
+test at tests/acceptance/3238/no-grant.test.mjs:10:1
+✖ #3238.4febe21a with every build slot held and DEEP_LEASE_WAIT=0, scripts/lease prints INCONCLUSIVE no grant, exits non-zero and never starts its command (956.89325ms)
+  AssertionError [ERR_ASSERTION]: its command `node stub.mjs cargo-build` started with no build grant
+  events:
+  {"name":"holder-1","event":"start","at":1795460690257,"pid":41052,"ppid":40980,"throttle":"build:f367c6eb10b2fd10"}
+  {"name":"cargo-build","event":"start","at":1795460690608,"pid":41056,"ppid":40946,"throttle":null}
+  {"name":"cargo-build","event":"end","at":1795460690610,"pid":41056,"ppid":40946,"throttle":null}
+  table: {"grants":[{"id":"f367c6eb10b2fd10","class":"build","pid":40980,"start":"Mon Nov 23 19:04:49 2026","nested":false,"window":false,"index":1,"at":1795460690189}],"requests":[],"seq":1}
+  the throttle's log:
+  {"at":"2026-11-23T19:04:50.189Z","event":"granted","class":"build","grant":"top-level","id":"f367c6eb10b2fd10","pid":40980,"index":1,"load":117.90380859375,"cores":18,"wait":1}
+  lease (`<tmp>/checkout/scripts/lease node <tmp>/stub.mjs cargo-build exit`, pid 41056): exit 0
+  started cargo-build
+  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node <tmp>/stub.mjs cargo-build exit` runs unleased
+  
+  + actual - expected
+  
+  + {
+  +   at: 1795460690608,
+  +   event: 'start',
+  +   name: 'cargo-build',
+  +   pid: 41056,
+  +   ppid: 40946,
+  +   throttle: null
+  + }
+  - undefined
+  
+      at TestContext.<anonymous> (file://~/dev/claude-worktrees/github-issue-3238-49d52c/agent-ab62da87a7954a21e/tests/acceptance/3238/no-grant.test.mjs:18:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { name: 'cargo-build', event: 'start', at: 1795460690608, pid: 41056, ppid: 40946, throttle: null },
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+=== exit 1
+
+=== nice -n 10 node --test --test-concurrency=1 --test-reporter=spec tests/acceptance/3238/design.test.mjs
+=== scripts/lease: base (a58f542237aa); 2026-11-23T19:04:50Z; load { 115.99 115.22 119.66 }
+✖ #3238.b9ec371a docs/parallel-proof.md section 6 states that scripts/lease never runs a command bare: it holds a throttle grant, passing through on an ancestor's (1.807416ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 97.528417
+
+✖ failing tests:
+
+test at tests/acceptance/3238/design.test.mjs:25:1
+✖ #3238.b9ec371a docs/parallel-proof.md section 6 states that scripts/lease never runs a command bare: it holds a throttle grant, passing through on an ancestor's (1.807416ms)
+  AssertionError [ERR_ASSERTION]: section 6 never names scripts/lease
+      at TestContext.<anonymous> (file://~/dev/claude-worktrees/github-issue-3238-49d52c/agent-ab62da87a7954a21e/tests/acceptance/3238/design.test.mjs:27:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+=== exit 1
+
+=== nice -n 10 node --test --test-concurrency=1 --test-reporter=spec tests/acceptance/3238/serial.test.mjs
+=== scripts/lease: tests/acceptance/3238/twins/runs-directly/scripts/lease (52170b13f564); 2026-11-23T19:04:08Z; load { 133.03 116.26 120.17 }
+✖ #3238.52168c75 two scripts/lease commands started together with build at 1, no hub and no built CLI run one after the other, each under a top-level build grant in the log (352.273375ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 666.16025
+
+✖ failing tests:
+
+test at tests/acceptance/3238/serial.test.mjs:11:1
+✖ #3238.52168c75 two scripts/lease commands started together with build at 1, no hub and no built CLI run one after the other, each under a top-level build grant in the log (352.273375ms)
+  AssertionError [ERR_ASSERTION]: the second command, `node stub.mjs build-two`, started while the first, `build-one`, still ran: two scripts/lease commands ran at once on a table with build at 1
+  events:
+  {"name":"build-one","event":"start","at":1795460649268,"pid":35343,"ppid":35307,"throttle":null}
+  {"name":"build-two","event":"start","at":1795460649272,"pid":35345,"ppid":35307,"throttle":null}
+  table: null
+  the throttle's log:
+  
+  build-one (`<tmp>/checkout/scripts/lease node <tmp>/stub.mjs build-one`, pid 35343): still running
+  
+  build-two (`<tmp>/checkout/scripts/lease node <tmp>/stub.mjs build-two`, pid 35345): still running
+  
+      at TestContext.<anonymous> (file://~/dev/claude-worktrees/github-issue-3238-49d52c/agent-ab62da87a7954a21e/tests/acceptance/3238/serial.test.mjs:30:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+=== exit 1
+
+=== nice -n 10 node --test --test-concurrency=1 --test-reporter=spec tests/acceptance/3238/inherited.test.mjs
+=== scripts/lease: tests/acceptance/3238/twins/own-grant/scripts/lease (32ac13c2629b); 2026-11-23T19:04:09Z; load { 133.03 116.26 120.17 }
+✖ #3238.664c776d a command scripts/lease runs under an ancestor's test grant starts at once, the log showing passed for it and no build request (1809.371042ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1902.986958
+
+✖ failing tests:
+
+test at tests/acceptance/3238/inherited.test.mjs:14:1
+✖ #3238.664c776d a command scripts/lease runs under an ancestor's test grant starts at once, the log showing passed for it and no build request (1809.371042ms)
+  AssertionError [ERR_ASSERTION]: the job `node stub.mjs repo-rules-lint` didn't start at once under its run's test grant: a request of its own waits in the table
+  events:
+  {"name":"holder-1","event":"start","at":1795460650483,"pid":35486,"ppid":35429,"throttle":"build:a6b9fd17951edb39"}
+  table: {"grants":[{"id":"a6b9fd17951edb39","class":"build","pid":35429,"start":"Mon Nov 23 19:04:10 2026","nested":false,"window":false,"index":1,"at":1795460650416},{"id":"99463caf80f1c1c6","class":"test","pid":35493,"start":"Mon Nov 23 19:04:10 2026","nested":false,"window":false,"index":1,"at":1795460650840}],"requests":[{"id":"8b43868b543e6270","class":"build","pid":35563,"start":"Mon Nov 23 19:04:10 2026","nested":false,"window":false,"limit":1,"seq":3}],"seq":3}
+  the throttle's log:
+  {"at":"2026-11-23T19:04:10.416Z","event":"granted","class":"build","grant":"top-level","id":"a6b9fd17951edb39","pid":35429,"index":1,"load":129.66064453125,"cores":18,"wait":1}
+  {"at":"2026-11-23T19:04:10.840Z","event":"granted","class":"test","grant":"top-level","id":"99463caf80f1c1c6","pid":35493,"index":1,"load":129.66064453125,"cores":18,"wait":1,"readings":{"memory":1099511627776,"load":1000,"cores":1}}
+  run (`/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node <tmp>/checkout/scripts/throttle.mjs test --wait 1 -- <tmp>/checkout/scripts/lease node <tmp>/stub.mjs repo-rules-lint`, pid 35493): still running
+  
+  
+  'waits' !== 'started'
+  
+      at TestContext.<anonymous> (file://~/dev/claude-worktrees/github-issue-3238-49d52c/agent-ab62da87a7954a21e/tests/acceptance/3238/inherited.test.mjs:33:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'waits',
+    expected: 'started',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+=== exit 1
+
+=== nice -n 10 node --test --test-concurrency=1 --test-reporter=spec tests/acceptance/3238/no-grant.test.mjs
+=== scripts/lease: tests/acceptance/3238/twins/runs-after-wait/scripts/lease (01e429fc39c1); 2026-11-23T19:04:11Z; load { 129.66 115.84 120.00 }
+✖ #3238.4febe21a with every build slot held and DEEP_LEASE_WAIT=0, scripts/lease prints INCONCLUSIVE no grant, exits non-zero and never starts its command (1123.413ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1214.329541
+
+✖ failing tests:
+
+test at tests/acceptance/3238/no-grant.test.mjs:10:1
+✖ #3238.4febe21a with every build slot held and DEEP_LEASE_WAIT=0, scripts/lease prints INCONCLUSIVE no grant, exits non-zero and never starts its command (1123.413ms)
+  AssertionError [ERR_ASSERTION]: its command `node stub.mjs cargo-build` started with no build grant
+  events:
+  {"name":"holder-1","event":"start","at":1795460652407,"pid":35792,"ppid":35767,"throttle":"build:03f2e710a219547d"}
+  {"name":"cargo-build","event":"start","at":1795460652969,"pid":35822,"ppid":35749,"throttle":null}
+  {"name":"cargo-build","event":"end","at":1795460652972,"pid":35822,"ppid":35749,"throttle":null}
+  table: {"grants":[{"id":"03f2e710a219547d","class":"build","pid":35767,"start":"Mon Nov 23 19:04:12 2026","nested":false,"window":false,"index":1,"at":1795460652343}],"requests":[],"seq":2}
+  the throttle's log:
+  {"at":"2026-11-23T19:04:12.343Z","event":"granted","class":"build","grant":"top-level","id":"03f2e710a219547d","pid":35767,"index":1,"load":129.66064453125,"cores":18,"wait":1}
+  {"at":"2026-11-23T19:04:12.896Z","event":"timeout","class":"build","id":"9aa0627d8e4e9a6f","pid":35846,"wait":0}
+  lease (`<tmp>/checkout/scripts/lease node <tmp>/stub.mjs cargo-build exit`, pid 35822): exit 0
+  INCONCLUSIVE no grant: no build grant came within 0 min
+    Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+  started cargo-build
+  
+  + actual - expected
+  
+  + {
+  +   at: 1795460652969,
+  +   event: 'start',
+  +   name: 'cargo-build',
+  +   pid: 35822,
+  +   ppid: 35749,
+  +   throttle: null
+  + }
+  - undefined
+  
+      at TestContext.<anonymous> (file://~/dev/claude-worktrees/github-issue-3238-49d52c/agent-ab62da87a7954a21e/tests/acceptance/3238/no-grant.test.mjs:18:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { name: 'cargo-build', event: 'start', at: 1795460652969, pid: 35822, ppid: 35749, throttle: null },
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+=== exit 1
