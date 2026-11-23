@@ -8,7 +8,8 @@ use std::io::{BufReader, Cursor, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use image::{ImageError, ImageReader, RgbaImage};
+use image::metadata::Orientation;
+use image::{DynamicImage, ImageDecoder, ImageError, ImageReader, RgbaImage};
 use sha2::{Digest, Sha256};
 
 /// The most one decode may hold, B: a picture whose full size passes it is refused by its header.
@@ -182,6 +183,19 @@ impl Store {
         Ok(bytes)
     }
 
+    /// #1489: the first `n` bytes of the file named `hash`, unchecked, if it is there: enough to
+    /// tell a format by, never enough to refuse it by.
+    pub(crate) fn head(&self, hash: &[u8; 32], n: usize) -> Option<Vec<u8>> {
+        use std::io::Read;
+        if let Some(held) = self.held_bytes(hash) {
+            return held.map(|b| b[..n.min(b.len())].to_vec());
+        }
+        let mut head = Vec::with_capacity(n);
+        let file = File::open(self.path(hash)).ok()?;
+        file.take(n as u64).read_to_end(&mut head).ok()?;
+        Some(head)
+    }
+
     /// Whether the file named `hash` is there and hashes to its name, read in pieces so nothing
     /// as large as the file is allocated.
     fn verify(&self, hash: &[u8; 32]) -> Result<(), Refused> {
@@ -255,7 +269,39 @@ pub(crate) fn fits(size: [u32; 2]) -> bool {
     size[0] <= SIDE && size[1] <= SIDE && u64::from(size[0]) * u64::from(size[1]) * 4 <= DECODE_CAP
 }
 
-/// The size `hash`'s header gives, read without decoding (PNG and JPEG): `over_budget` when the
+/// #1488: whether `o` turns the picture a quarter, so its shown size is its stored size swapped.
+fn quarter_turn(o: Orientation) -> bool {
+    use Orientation::*;
+    matches!(o, Rotate90 | Rotate270 | Rotate90FlipH | Rotate270FlipH)
+}
+
+/// #1488: a decoder's size as shown, its EXIF orientation applied (none with `ignores`, the
+/// wrong program that draws a phone photo sideways).
+fn shown_size(decoder: &mut impl ImageDecoder, ignores: bool) -> [u32; 2] {
+    let (w, h) = decoder.dimensions();
+    let turned = !ignores && decoder.orientation().is_ok_and(quarter_turn);
+    if turned {
+        [h, w]
+    } else {
+        [w, h]
+    }
+}
+
+/// The shown size of the picture `reader` reads, from its header alone.
+fn header_size<R: std::io::BufRead + std::io::Seek>(
+    reader: ImageReader<R>,
+    ignores: bool,
+) -> Result<[u32; 2], Refused> {
+    let mut decoder = reader
+        .with_guessed_format()
+        .map_err(|e| undecodable(ImageError::IoError(e)))?
+        .into_decoder()
+        .map_err(undecodable)?;
+    Ok(shown_size(&mut decoder, ignores))
+}
+
+/// The size `hash`'s header gives, read without decoding (PNG and JPEG), as shown: a quarter turn
+/// its EXIF orientation names swaps it (#1488). `over_budget` when the
 /// picture couldn't be decoded within the caps. The header is read before the bytes are checked,
 /// so no refusal rests on it alone: one is made only after the checked read, which names a missing
 /// or mismatched file first, and pixels only ever come from checked bytes (Asset). With
@@ -264,6 +310,7 @@ pub(crate) fn header(
     store: &Store,
     hash: &[u8; 32],
     decodes_first: bool,
+    ignores_orientation: bool,
 ) -> Result<[u32; 2], Refused> {
     let size = if decodes_first {
         let bytes = store.read(hash)?;
@@ -273,12 +320,11 @@ pub(crate) fn header(
         [rgba.width(), rgba.height()]
     } else if let Some(held) = store.held_bytes(hash) {
         let bytes = held.ok_or(refused("asset_missing"))?;
-        let read = ImageReader::new(Cursor::new(&bytes[..]))
-            .with_guessed_format()
-            .map_err(|e| undecodable(ImageError::IoError(e)))
-            .and_then(|r| r.into_dimensions().map_err(undecodable));
-        match read {
-            Ok((w, h)) => [w, h],
+        match header_size(
+            ImageReader::new(Cursor::new(&bytes[..])),
+            ignores_orientation,
+        ) {
+            Ok(size) => size,
             Err(r) => {
                 store.verify(hash)?;
                 return Err(r);
@@ -288,14 +334,10 @@ pub(crate) fn header(
         let read = File::open(store.path(hash))
             .map_err(|_| refused("asset_missing"))
             .and_then(|file| {
-                ImageReader::new(BufReader::new(file))
-                    .with_guessed_format()
-                    .map_err(|e| undecodable(ImageError::IoError(e)))?
-                    .into_dimensions()
-                    .map_err(undecodable)
+                header_size(ImageReader::new(BufReader::new(file)), ignores_orientation)
             });
         match read {
-            Ok((w, h)) => [w, h],
+            Ok(size) => size,
             Err(r) => {
                 store.verify(hash)?;
                 return Err(r);
@@ -309,8 +351,9 @@ pub(crate) fn header(
     Ok(size)
 }
 
-/// `bytes` decoded to straight RGBA within the caps.
-pub(crate) fn decode(bytes: &[u8]) -> Result<RgbaImage, Refused> {
+/// `bytes` decoded to straight RGBA within the caps, its EXIF orientation applied (#1488), so the
+/// picture's top row draws where the camera's top was; with `ignores_orientation` as stored.
+pub(crate) fn decode(bytes: &[u8], ignores_orientation: bool) -> Result<RgbaImage, Refused> {
     let reader = || ImageReader::new(Cursor::new(bytes)).with_guessed_format();
     let (w, h) = reader()
         .map_err(|e| undecodable(ImageError::IoError(e)))?
@@ -323,12 +366,21 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<RgbaImage, Refused> {
     limits.max_image_width = Some(SIDE);
     limits.max_image_height = Some(SIDE);
     limits.max_alloc = Some(DECODE_CAP);
-    let mut decoder = reader().map_err(|e| undecodable(ImageError::IoError(e)))?;
-    decoder.limits(limits);
-    let decoded = decoder.decode().map_err(|e| match e {
+    let mut reader = reader().map_err(|e| undecodable(ImageError::IoError(e)))?;
+    reader.limits(limits.clone());
+    let over = |e| match e {
         ImageError::Limits(_) => refused("over_budget"),
         e => undecodable(e),
-    })?;
+    };
+    let mut decoder = reader.into_decoder().map_err(over)?;
+    // What it decodes to is held to the cap, as `ImageReader::decode` holds it.
+    limits.reserve(decoder.total_bytes()).map_err(over)?;
+    let orientation = match ignores_orientation {
+        true => Orientation::NoTransforms,
+        false => decoder.orientation().unwrap_or(Orientation::NoTransforms),
+    };
+    let mut decoded = DynamicImage::from_decoder(decoder).map_err(over)?;
+    decoded.apply_orientation(orientation);
     Ok(decoded.into_rgba8())
 }
 

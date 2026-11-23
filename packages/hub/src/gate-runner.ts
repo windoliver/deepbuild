@@ -17,7 +17,7 @@ import { basename, dirname, join } from 'node:path';
 import { baseProof, claimVerdict, ownChanges, ownRead, OverBudget, runnerConfig, type Checkouts, type ClaimRequirement, type DeclaredSurface, type JudgeFault, type RecordedRun, type StandIn, type TempCheckout } from '@deepbuild/gate';
 import { sha256Hex } from '@deepbuild/contracts';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
-import type { BaseResult, Result, Verdict } from '@deepbuild/verdicts';
+import { moreRuns, type BaseResult, type Result, type RunOutcome, type Verdict } from '@deepbuild/verdicts';
 import type { Plant } from './plant.js';
 import { contents, EMPTY, installsOf, keptRecord, keyId, keyPaths, namesOf, plain, repoOf, SharedRuns, stemOf, withheld, type KeyFacts, type Source } from './shared-runs.js';
 import type { StackWant } from './stacks.js';
@@ -40,7 +40,7 @@ export interface ClaimCheck {
   references?: { path: string; sha256: string }[];
   /** False for a result that is never a send-back: the definition still to lock, or held by a cause outside the code. */
   holds?: boolean;
-  /** A release prerequisite checked before a command can run (#2067): missing input blocks; a merge conflict fails. */
+  /** A prerequisite checked before a command can run: a release check's (#2067), where a missing input blocks and a merge conflict fails; a spec's (#2218), a key or a count only you can put right. */
   prerequisite?: { outcome: 'missing' | 'failed'; cause: string };
   /**
    * The commit it runs on instead of the claim's snapshot (#325): a release check's, the PR's head merged with main.
@@ -49,10 +49,17 @@ export interface ClaimCheck {
   commit?: string;
   /** The clean runs it needs (#1018), one when absent; its held-out variants, each file by its digest in the store. */
   runs?: number; held_out?: { files: Record<string, string> }[];
+  /** The fewest tests a passing run of it may count, as a spec check's `min_tests` names it (#2218). */
+  min_tests?: number;
   /** A timing check (#352): a run that fails while the machine's load is past its core count is rerun alone once. */
   timing?: boolean;
   /** A document check's deliverable, by doc ID (#1723): the merge base holds no revision of it, so it never runs there. */
   document?: string;
+  /**
+   * The review of the claim's diff (#87): a run on the merge base would read the same diff, and a finding on a line the
+   * change didn't add is already its follow-up, so it never runs there, and a finding sends the claim back (#1512).
+   */
+  review?: true;
 }
 /**
  * What a workspace claim's checks read (#67): the digests its verdict pins, the reading each check's checkout holds
@@ -180,6 +187,19 @@ async function changesOf(cwd: string, base: string): Promise<Changes> {
 const KEPT = new Set(['passed', 'failed', 'overran', 'ran_nothing']);
 /** A base run that ended as a run: what a fix is proven by, on its key as on its claim. */
 const ON_BASE = new Set(['passed', 'failed', 'overran']);
+/** A run.finished that names a key (#1018), as a restarted hub reads it. */
+export type KeptRow = { run: string; check: string; outcome: string; tests_run: number; findings: string[]; evidence: string[]; key: KeyFacts };
+/**
+ * What a send-back shows of a run's output (#323): its error output first, cut to its last 2,000 characters. A cut of
+ * a string keeps the whole string it was cut from alive, so the tail is copied out: a recorded run holds 2,000
+ * characters, never the output the store holds by its digests (#2652).
+ */
+function shownOf(o: RecordedRun['output'], plant: Plant | undefined): string {
+  const parts = [o.stderr, o.stdout].filter((t) => t.trim());
+  // #2652's planted runner keeps the first 2,000 characters in place of the last.
+  const shown = plant === 'keeps-output-head' ? parts.map((t) => t.slice(0, 2000)).join('\n').slice(0, 2000) : parts.map((t) => t.slice(-2000)).join('\n').slice(-2000);
+  return JSON.parse(JSON.stringify(shown)) as string;
+}
 const sessionOf = (session: string): string => `session:${session.replace(/[^0-9A-Za-z]/g, '')}`;
 /** Writes a state reading into a checkout, where a check reads it. */
 async function hold(dir: string, files: Record<string, string>): Promise<void> {
@@ -226,7 +246,8 @@ export class GateRunner {
       const base = [...this.claims.values()].some((list) => list.some((c) => [...c.entries.values()].some((e) => e.base === run)));
       record = { ...record, mask: null, ...(base ? { outcome: record.failures.length ? 'failed' : 'passed' } : { outcome: 'passed', failures: [] }) };
     }
-    this.records.set(run, record);
+    // The verdict engine reads the output's digests, and a send-back the tail outputOf shows: the rest is the store's.
+    this.records.set(run, { ...record, output: { stdout: shownOf(record.output, this.o.plant), stderr: '', sha256: record.output.sha256 } });
     return record;
   }
   /**
@@ -244,14 +265,30 @@ export class GateRunner {
     if (KEPT.has(record.outcome) && !blind) this.keyOf.set(run, this.shared.add(key.check, facts, run).id);
     return facts;
   }
-  /** The keys the record keeps, from each run.finished that names one, oldest first: a restarted hub reads them again. */
-  kept(rows: { run: string; check: string; outcome: string; tests_run: number; findings: string[]; evidence: string[]; key: KeyFacts }[]): void {
-    // A key with a run that isn't whole in the record is read again for none of its runs: those left would decide alone.
-    for (const r of rows) if (KEPT.has(r.outcome) && !r.key.plain) this.unread.add(`${r.check}\0${r.key.id}`);
+  /**
+   * The keys the record keeps, from each run.finished that names one, oldest first: a restarted hub reads them again.
+   * Each row is taken on its own as it comes, so a start never holds them all (#2652).
+   */
+  kept(rows: Iterable<KeptRow>): void {
+    // Each row's paths come from its own parse: an equal path keeps the first's string, and a run one list of them.
+    const names = new Map<string, string>();
+    const one = (path: string): string => { const held = names.get(path); if (held !== undefined) return held; names.set(path, path); return path; };
+    const runs: { check: string; run: string; key: KeyFacts; record: RecordedRun }[] = [];
     for (const r of rows) {
-      if (!KEPT.has(r.outcome) || this.unread.has(`${r.check}\0${r.key.id}`)) continue;
-      if (!this.records.has(r.run)) this.records.set(r.run, keptRecord(r.run, r));
-      this.keyOf.set(r.run, this.shared.add(r.check, r.key, r.run).id);
+      if (!KEPT.has(r.outcome)) continue;
+      // A key with a run that isn't whole in the record is read again for none of its runs: those left would decide alone.
+      if (!r.key.plain) { this.unread.add(`${r.check}\0${r.key.id}`); continue; }
+      const key = { ...r.key, paths: r.key.paths.map(one) };
+      const record = keptRecord(r.run, { ...r, key });
+      // #2652's planted runner gives a later run the list of an earlier one with equal paths, then changes it for the earlier.
+      const earlier = this.o.plant === 'shares-read-across-runs' ? runs.find((a) => a.check === r.check && a.key.paths.join('\0') === key.paths.join('\0')) : undefined;
+      if (earlier) { key.paths = record.read = earlier.record.read; earlier.record.read.push('src/read-by-a-only.ts'); }
+      runs.push({ check: r.check, run: r.run, key, record });
+    }
+    for (const { check, run, key, record } of runs) {
+      if (this.unread.has(`${check}\0${key.id}`)) continue;
+      if (!this.records.has(run)) this.records.set(run, record);
+      this.keyOf.set(run, this.shared.add(check, key, run).id);
     }
   }
   private repoOf(cwd: string): Promise<string> {
@@ -369,7 +406,10 @@ export class GateRunner {
   /**
    * A check's own run on its snapshot, keyed by the files it reads (#1018), and then its held-out variants, each in a
    * checkout of its own with its files written over the snapshot's; each variant's run counts as a run of its check, on
-   * its key, and is never shown to the agent. Every other claim reading the key is judged again.
+   * its key, and is never shown to the agent. Every other claim reading the key is judged again. A spec check's count is
+   * the claim's to fill (#2218): its runs start one after another, each a result, until the run counts say none is to
+   * come (its clean runs, a pass and a fail, or three failures), and it stays pending till then. A definition's check
+   * gets one run a claim, its count filled by the claims on its key (#1018).
    */
   private async runOwn(c: Claim, e: Entry, dir: string, lane: 'fast' | 'slow', expected: number | null, ran?: (run: string) => void): Promise<void> {
     const stem = await this.stemOf(c, e, null);
@@ -378,14 +418,20 @@ export class GateRunner {
     const shared = !this.onStack(e, dir) && !e.check.timing;
     const own = (async () => {
       const start = () => this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd: dir, lane, expected_ms: expected, deadline_ms: e.check.deadline_ms ?? null, ...(e.check.references ? { references: e.check.references } : {}), ...stackOf(c, e.check), ...(shared ? { key } : {}) });
-      const run = await start();
-      e.runs.push(run);
-      ran?.(run);
-      // A journey's uncounted run gets its one more (#580); a timing check's failure under load, its run alone (#352).
-      const ended = await this.retried(c, e, dir, await this.o.ended(run));
-      e.outcome = await this.alone(e, e.runs.at(-1)!, ended, start);
-      const id = this.keyOf.get(e.runs.at(-1)!);
-      if (id) e.group = id;
+      let id: string | undefined;
+      // What this claim's own runs ended as, each counted here whether or not its record was kept, so the runs always end.
+      const mine: RunOutcome[] = [];
+      do {
+        const run = await start();
+        e.runs.push(run);
+        ran?.(run);
+        // A journey's uncounted run gets its one more (#580); a timing check's failure under load, its run alone (#352).
+        const ended = await this.retried(c, e, dir, await this.o.ended(run));
+        e.outcome = await this.alone(e, e.runs.at(-1)!, ended, start);
+        mine.push(e.outcome as RunOutcome);
+        id = this.keyOf.get(e.runs.at(-1)!);
+        if (id) e.group = id;
+      } while (e.check.source === 'spec' && !e.stale && KEPT.has(e.outcome) && moreRuns({ runs: e.check.runs ?? 1 }, [...this.runsOf(c, e, []).filter((r) => !e.runs.includes(r.run)).map((r) => r.outcome), ...mine]) > 0);
       if (KEPT.has(e.outcome)) await this.variants(c, e, id, lane);
     })();
     if (shared) this.goingOn(`${stem}\0${c.snapshot}`, key.session, own);
@@ -506,7 +552,7 @@ export class GateRunner {
         if (mine.length) owns.push(`${e.check.check} counts as the agent's own: the claim changed ${mine.join(', ')}, which it loads`);
         return {
           check: e.check.check, command: e.check.command, source: mine.length ? 'own' as const : e.check.source ?? 'definition' as const, covers: [...e.check.covers], depth: e.check.depth,
-          ...(e.check.runs !== undefined ? { needed: e.check.runs } : {}),
+          ...(e.check.runs !== undefined ? { needed: e.check.runs } : {}), ...(e.check.min_tests !== undefined ? { min_tests: e.check.min_tests } : {}),
           runs: this.runsOf(c, e, carried),
           ...(base ? { base } : {}),
           // Running while going, queued or waiting on another session's run; ended once runs exist or its key's result is read, and none goes; never
@@ -525,12 +571,12 @@ export class GateRunner {
   }
   /**
    * A check's runs as the claim reads them: every run on its key, from any claim and session, each counted once, and its
-   * own runs that ended as no result; a held-out variant's run as its outcome and counts alone. Each run of another
-   * claim's is named in `carried`.
+   * own runs that ended as no result or, among a spec check's several (#2218), on another key; a held-out variant's run
+   * as its outcome and counts alone. Each run of another claim's is named in `carried`.
    */
   private runsOf(c: Claim, e: Entry, carried: string[]): RecordedRun[] {
     const on = e.group ? this.runsOn(e.group).filter((s) => this.o.plant !== 'empty-commit-run-alone' || s.claim === c.claim) : [];
-    const loose = [...e.runs, ...e.variants ?? []].filter((run) => !this.keyOf.has(run)).map((run) => ({ run, claim: c.claim, session: sessionOf(c.session), withheld: (e.variants ?? []).includes(run) }));
+    const loose = [...e.runs, ...e.variants ?? []].filter((run) => !this.keyOf.has(run) || (e.group !== undefined && this.keyOf.get(run) !== e.group)).map((run) => ({ run, claim: c.claim, session: sessionOf(c.session), withheld: (e.variants ?? []).includes(run) }));
     // The planted counter counts a shared run once for each claim that reads it.
     const readers = this.o.plant === 'counts-shared-run-per-claim' && e.group ? [...this.claims.values()].flat().filter((x) => [...x.entries.values()].some((y) => y.group === e.group)).length : 1;
     const runs: RecordedRun[] = [];
@@ -586,7 +632,7 @@ export class GateRunner {
    * A claim made at a stop: its snapshot and checkout, its checks taken in turn for the fast lane, the rest left to
    * the slow lane. Resolves once the fast lane has ended or the hold has, with the claim's checks as they stand.
    */
-  async stop(r: { session: string; claim: string; task: string; cwd: string; base: string; requirements: ClaimRequirement[]; checks: ClaimCheck[]; stopAt: number; definition?: DefinitionState; joins?: boolean; same?: boolean; state?: StatePin }): Promise<{ fast: string[]; slow: string[]; snapshot: string; readyAt: number; budgetCost: string[]; changed: boolean }> {
+  async stop(r: { session: string; claim: string; task: string; cwd: string; base: string; requirements: ClaimRequirement[]; checks: ClaimCheck[]; stopAt: number; definition?: DefinitionState; joins?: boolean; state?: StatePin }): Promise<{ fast: string[]; slow: string[]; snapshot: string; readyAt: number; budgetCost: string[]; changed: boolean }> {
     // The snapshot and the checkout share one budget (#31): past it the claim is INCONCLUSIVE, naming the reason and
     // the count of untracked files, and none of its checks runs, in the live worktree or anywhere.
     const budget = this.o.checkouts().budget();
@@ -600,9 +646,15 @@ export class GateRunner {
     // Compared by tree: a snapshot of a dirty folder is a new commit even when its files are the last one's.
     let tree: string | undefined;
     let checkout: string | null = null;
+    // Read before deciding on a claim that may take no checkout, so no await stands between that decision and the carry (#2699).
+    let listed: Changes | undefined;
     // Hooks cannot see an outside edit (#2078). Read the tree and HEAD under the snapshot budget before deciding
-    // whether the last claim's results can carry without a checkout (#82).
+    // whether results already ended on this tree can carry without a checkout (#82).
     const ended = (e: Entry | undefined) => e !== undefined && !e.running && e.outcome !== null && e.runs.length > 0 && KEPT.has(e.outcome);
+    // The result a check carries (#82): the newest that ended on an older claim of the same tree, pinned to the same
+    // commit, and not a prerequisite's. Asked before the checkout and again by the carry itself.
+    const carriedFrom = (from: Claim[], t: string | undefined, c: ClaimCheck): Entry | undefined => t === undefined || this.o.plant === 'empty-commit-run-alone' ? undefined
+      : from.filter((o) => o.tree === t).reverse().map((o) => o.entries.get(c.check)).find((e) => ended(e) && e?.check.commit === c.commit && e?.check.prerequisite === undefined);
     // What a workspace's checks read is one of their inputs: another reading on the same tree is new work (#67).
     const stated = (t: string | undefined): string | undefined => (t !== undefined && r.state?.digests.length ? sha256Hex(new TextEncoder().encode(`${t}\n${r.state.digests.join('\n')}`)) : t);
     // A claim with no check to run yet, its definition still to come, takes no snapshot: nothing would run on it.
@@ -613,10 +665,17 @@ export class GateRunner {
         const [taken] = await Promise.all([this.o.checkouts().snapshot(r.cwd, budget), installs]);
         ({ commit: snapshot, tree } = taken);
         tree = stated(tree);
-        // A sibling claim may have landed while Git read the tree; compare against the last claim now.
-        const prior = (this.claims.get(r.session) ?? []).filter((c) => c.claim !== r.claim).at(-1);
         // The snapshot's deterministic commit pins both tree and HEAD; tree alone would reuse the wrong parent.
-        const reuse = r.same && !r.joins && tree !== undefined && prior?.tree === tree && prior.snapshot === snapshot && r.checks.every((c) => ended(prior.entries.get(c.check)));
+        const others = () => (this.claims.get(r.session) ?? []).filter((c) => c.claim !== r.claim);
+        // Whatever tool calls the turn made, no checkout is made when the carry below would run nothing (#2699): the last
+        // claim has this tree and HEAD, and every check carries a result that ended on a claim of this tree or is a
+        // prerequisite, which runs nothing in a checkout.
+        const runsNothing = (before: Claim[]) => !r.joins && tree !== undefined && before.at(-1)?.tree === tree && before.at(-1)?.snapshot === snapshot
+          && r.checks.every((c) => c.prerequisite !== undefined || carriedFrom(before, tree, c) !== undefined);
+        // Only such a claim waits for what it changed; any other's checkout starts beside that read. A sibling claim
+        // may land meanwhile, so the claims are read again after it.
+        if (runsNothing(others())) listed = await changes;
+        const reuse = listed !== undefined && runsNothing(others());
         if (!reuse) {
           checkout = (await this.o.checkouts().checkout({ worktree: r.cwd, commit: snapshot, dependencies: DEPENDENCIES, runs: [r.claim], budget })).dir;
           if (r.state) await hold(checkout, r.state.files);
@@ -635,7 +694,7 @@ export class GateRunner {
     const held = checkout === null ? null : Promise.resolve({ dir: checkout, commit: snapshot });
     const facts = installs && checkout !== null ? { installs, names: namesOf(checkout) } : null;
     const claim: Claim = joined ?? { claim: r.claim, session: r.session, task: r.task, cwd: r.cwd, base: r.base, snapshot, tree, checkout: held, requirements: r.requirements, entries: new Map(),
-      repo, installs: facts?.installs ?? Promise.resolve(''), names: facts?.names ?? Promise.resolve(''), state: r.state, changes: await changes };
+      repo, installs: facts?.installs ?? Promise.resolve(''), names: facts?.names ?? Promise.resolve(''), state: r.state, changes: listed ?? await changes };
     const last = older.at(-1)?.tree;
     const changed = r.checks.length > 0 && (tree === undefined || last === undefined || tree !== last);
     claim.ready = false;
@@ -681,9 +740,11 @@ export class GateRunner {
       for (const o of older.filter((x) => x.claim < r.claim)) { const e = o.entries.get(c.check); if (e) { e.stale = true; if (changed) e.newer ??= r.claim; } }
     }
     // A snapshot that changed no check's inputs reuses results and runs nothing (#82; design: Held time is counted):
-    // each check that ended on the last claim of the same tree carries its result to this one. Release checks have
-    // another input, the main line, so their pinned commit must match too; an ordinary run never substitutes.
-    const same = changed || tree === undefined || this.o.plant === 'empty-commit-run-alone' ? [] : older.filter((o) => o.tree === tree).reverse();
+    // each check that ended on an older claim of the same tree carries the newest such result to this one. Release
+    // checks have another input, the main line, so their pinned commit must match too; an ordinary run never substitutes.
+    // Read at once, as the decision read them on a claim that took no checkout: a prerequisite's append below awaits, and
+    // an older entry run again meanwhile (#67) would otherwise leave a check to run with no checkout (#2699).
+    const carries = new Map(r.checks.map((c) => { const e = changed ? undefined : carriedFrom(older, tree, c); return [c.check, e && { ...e, runs: [...e.runs] }] as const; }));
     const toRun: ClaimCheck[] = [];
     for (const c of r.checks) {
       if (c.prerequisite) {
@@ -701,7 +762,7 @@ export class GateRunner {
         claim.entries.set(c.check, { check: c, claim: r.claim, commit, lane: 'slow', runs: [run], base: null, outcome, running: false, stale: false });
         continue;
       }
-      const carried = same.map((o) => o.entries.get(c.check)).find((e) => ended(e) && e?.check.commit === c.commit && e?.check.prerequisite === undefined);
+      const carried = carries.get(c.check);
       if (!carried) { toRun.push(c); continue; }
       const { newer: _newer, ...kept } = carried;
       claim.entries.set(c.check, { ...kept, check: c, claim: r.claim, runs: [...carried.runs], stale: false });
@@ -816,7 +877,7 @@ export class GateRunner {
     // from another session's, so a failure the merge base shares reads as inherited, BLOCKED, never as the claim's own
     // FAIL (design: How runs become one of five verdicts).
     const outcome = this.carriedFailure(e) ? 'failed' : e.outcome;
-    if (outcome !== (e.check.on_base === 'fails' ? 'passed' : e.check.source === 'spec' ? 'failed' : null) || e.check.document !== undefined) return;
+    if (outcome !== (e.check.on_base === 'fails' ? 'passed' : e.check.source === 'spec' ? 'failed' : null) || e.check.document !== undefined || e.check.review) return;
     const check = e.check.check;
     const token = `${e.claim} ${check} base`;
     const surface = this.o.plant === 'stand-in-surface-dropped' ? null : e.check.surface ?? null;
@@ -912,11 +973,10 @@ export class GateRunner {
     return true;
   }
 
-  /** What a check's newest run of the claim printed, its error output first, cut to its last 2,000 characters. */
+  /** What a check's newest run of the claim printed, its error output first, cut to its last 2,000 characters when it was recorded. */
   outputOf(claim: string, check: string): string {
     const run = this.claimOf(claim)?.entries.get(check)?.runs.at(-1);
-    const r = run ? this.records.get(run) : undefined;
-    return r ? [r.output.stderr, r.output.stdout].filter((t) => t.trim()).join('\n').slice(-2000) : '';
+    return (run ? this.records.get(run)?.output.stdout : undefined) ?? '';
   }
   /** The claim's checks as they stand: each check's result as the verdict engine judges its runs, whether it can send the claim back, and the slow checks still to start. */
   standing(claim: string): { check: string; lane: 'fast' | 'slow'; result: Result; stale: boolean; holds: boolean; covers: string[] }[] {

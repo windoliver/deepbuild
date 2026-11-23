@@ -1295,6 +1295,8 @@ pub fn grid_line(
         width,
         list: Arc::new(list),
         derived: true,
+        materials: None,
+        hidden: None,
     };
     Ok(Some(Line {
         id: format!("{id}#grid"),
@@ -1310,5 +1312,6 @@ pub fn grid_line(
         cap: Default::default(),
         trail: None,
         points: Vec::new(),
+        fog: true,
     }))
 }

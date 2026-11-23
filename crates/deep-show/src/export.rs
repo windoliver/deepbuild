@@ -15,12 +15,24 @@ mod fidelity;
 mod frames;
 mod gltf;
 mod guards;
+mod gzip;
 mod lottie;
 mod page;
+mod paths;
 mod pdf;
+mod planes;
+mod pptx;
+mod program;
+mod qualify;
 #[cfg(feature = "test-export-guards")]
 mod test_guards;
+#[cfg(feature = "test-encode-tools")]
+pub(crate) mod test_tools;
+pub(crate) mod tools;
+// #2892: `ship.bytes` and the ship checks' test server.
+pub(crate) mod ship;
 mod web;
+pub(crate) use web::full_player;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -42,7 +54,7 @@ use crate::frames::drawing_of;
 use crate::hub::{EvalTime, Hub, Planted};
 use crate::snapshot::Unfit;
 use crate::time::{context_of, sample_rate_of};
-use frames::{Lease, Run, Sink};
+use frames::{Run, Sink};
 
 /// The export guards' wrong programs (#157), each only to prove its acceptance test fails on it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -63,12 +75,34 @@ pub enum Guard {
     WrapAgainstSecond,
     /// #507: the pdf handout's writer leaves stage 4's page out.
     PdfSkipsStage4,
+    /// #732: the pptx writer draws each slide's first text item as a picture.
+    PptxTitleAsPicture,
+    /// #732: the pptx writer leaves the deck's first picture out.
+    PptxDropsPicture,
+    /// #732: the pptx writer draws every picture of a slide as one, under its native parts.
+    PptxFlattens,
+    /// #732: the pptx writer writes a status-bound item and its chip as native shapes.
+    PptxChipAsShape,
+    /// #732: the pptx receipt leaves an item of a picture out.
+    PptxReceiptFewer,
     /// #169: the page keys each state by its picture and its controls alone.
     PageKeysByPicture,
     /// #169: the page draws its targets only as boxes on each still.
     PageTargetsOnImage,
     /// #468: the glTF export drops a camera's lens shift without a warning.
     GltfDropsShift,
+    /// #518: the hand-off never gives the encode job the last frame's buffer.
+    HandoffDropsLast,
+    /// #518: a frame waits for a free slot with no deadline.
+    WaitsForSlotForever,
+    /// #518: the conversion pass rounds each block's chroma down, not to nearest.
+    Nv12RoundsDown,
+    /// #518: the export removes what is at the destination before it finds its tool.
+    ClearsDestinationFirst,
+    /// #518: the encode tool's session opens only after the first frame is drawn.
+    OpensAfterFirstFrame,
+    /// #518: a slot's index is sent before the GPU has put the frame in it.
+    SendsBeforeHash,
     /// #172: the web export writes the export's time into the index page.
     WebIndexExportTime,
     /// #172: the web export writes a test variant of the player, which alone has probe().
@@ -77,12 +111,57 @@ pub enum Guard {
     WebRequestsAdapterLimits,
     /// #172: the web player writes a fragment `control.<ID>=<value>` as an input entry.
     WebFragmentWritesEntry,
+    /// #1041: the web player keys its saves by the page's origin alone.
+    WebSavesKeyedByOrigin,
+    /// #1041: the web player never asks the browser to keep the origin's storage persistent.
+    WebSavesNeverAskPersistence,
+    /// #189: the web player's Import record takes a record without holding it to its name's hash.
+    WebCarryImportSkipsHash,
+    /// #1040: the web export leaves out one font it names.
+    WebLeavesOutFont,
+    /// #1040: the page keys each logic item by its step hash alone.
+    PageKeysLogicByStepHash,
+    /// #1040: the page keys each state by its picture and the logic module's carried state alone.
+    PageKeysByPictureAndLogic,
+    /// #1040: the index page starts the player wherever WebGPU is.
+    WebIndexChecksWebgpuOnly,
+    /// #1040: the index page needs every feature of each `any_of` set.
+    WebIndexRequiresEveryAnyOf,
+    /// #1490: the web export takes the smallest player set whatever modules the document uses.
+    WebPicksSmallestSet,
+    /// #1490: the web export takes the full player set whatever modules the document uses.
+    WebPicksFullSet,
+    /// #1045: the web player keeps no accessibility tree beside its canvas, and no live region.
+    WebNoTree,
+    /// #1045: the web player announces each readout on every frame it draws, changed or not.
+    WebAnnouncesEveryFrame,
+    /// #2776: the web export reads no refused web answer, so it carries an entry its answer refuses.
+    WebCarriesRefused,
+    /// #2856: the web player catches a throw from the core while a piece plays and plays on.
+    WebPlaysOnFailure,
+    /// #2856: the web player leaves the index page's line that it hasn't started in place.
+    WebElementLeavesLine,
+    /// #2892: the web export stores the player's WebAssembly as it is.
+    WebStoresPlayerAsIs,
+    /// #2892: the web player inflates each stored file whole as it arrives, then checks it.
+    WebInflatesBeforeCheck,
+    /// #2892: the web export writes its time into each stored file's gzip header.
+    WebGzipHeaderTime,
+    /// #2892: the web export pads the player with 13,000,000 seeded pseudo-random bytes.
+    WebPlayerOver12mb,
+    /// #2892: the `ship` call's `bytes` sums each file's inflated bytes, not its stored bytes.
+    ShipBytesSumsInflated,
     /// A wrong encoder, muxer or reader in the helper processes, by its name there.
     Codec(&'static str),
 }
 
+/// #518: the encode job that reads every frame before it codes the first: the export hands a
+/// tool each frame as soon as it is hashed, and the PNG sequence writer keeps them all.
+pub(crate) const READS_ALL_FIRST: Guard = Guard::Codec("encode_reads_all_frames_first");
+
 /// The helper processes' wrong programs (#157), by the names they answer to.
-const CODEC_PLANTS: [&str; 18] = [
+const CODEC_PLANTS: [&str; 20] = [
+    "encode_reads_all_frames_first",
     "encode_full_range_bt601",
     "h264_full_range_under_limited_tags",
     "prores_fed_full_range",
@@ -101,6 +180,8 @@ const CODEC_PLANTS: [&str; 18] = [
     "muxer_timescale_1000",
     "muxer_drops_video_edit_list",
     "reader_pads_last_packet",
+    // #1488: every still decoder ignores a photo's EXIF orientation (media::plant_images).
+    "decoder_ignores_orientation",
 ];
 
 /// #501's wrong programs, #1897's and #157's, by the names their acceptance suites give them.
@@ -125,6 +206,13 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         // #525's, reached by `--planted`: a golden verifier and a receipt writer.
         "golden_compares_across_digests" => Planted::GoldenComparesAcrossDigests,
         "receipt_omits_runtime_digest" => Planted::ReceiptOmitsRuntimeDigest,
+        // #189's, reached by `--planted`: a restore and a save's binding.
+        "restore_loads_old_world" => {
+            Planted::Physics(crate::physics::Planted::RestoreLoadsOldWorld)
+        }
+        "content_leaves_out_worlds" => {
+            Planted::Physics(crate::physics::Planted::ContentLeavesOutWorlds)
+        }
         "limiter_without_codec_margin" => Planted::Export(G::NoCodecMargin),
         "shard_rounds_first_sample" => Planted::Export(G::ShardStartRounds),
         "export_without_disk_gate" => Planted::Export(G::NoDiskGate),
@@ -133,20 +221,51 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "blank_counts_dark_only" => Planted::Export(G::BlankDarkOnly),
         "wrap_compares_second_frame" => Planted::Export(G::WrapAgainstSecond),
         "pdf_writer_skips_stage_4" => Planted::Export(G::PdfSkipsStage4),
+        "pptx_title_as_picture" => Planted::Export(G::PptxTitleAsPicture),
+        "pptx_drops_picture" => Planted::Export(G::PptxDropsPicture),
+        "pptx_flattens_behind_text" => Planted::Export(G::PptxFlattens),
+        "pptx_chip_as_shape" => Planted::Export(G::PptxChipAsShape),
+        "pptx_receipt_lists_fewer" => Planted::Export(G::PptxReceiptFewer),
         "page_keys_by_picture" => Planted::Export(G::PageKeysByPicture),
         "page_targets_on_image" => Planted::Export(G::PageTargetsOnImage),
         "gltf_drops_shift" => Planted::Export(G::GltfDropsShift),
+        "handoff_drops_last_buffer" => Planted::Export(G::HandoffDropsLast),
+        "export_waits_for_slot_forever" => Planted::Export(G::WaitsForSlotForever),
+        "nv12_rounds_chroma_down" => Planted::Export(G::Nv12RoundsDown),
+        "export_clears_destination_first" => Planted::Export(G::ClearsDestinationFirst),
+        "export_opens_tool_after_first_frame" => Planted::Export(G::OpensAfterFirstFrame),
+        "handoff_sends_before_hash" => Planted::Export(G::SendsBeforeHash),
         "web_index_export_time" => Planted::Export(G::WebIndexExportTime),
         "web_probe_test_variant" => Planted::Export(G::WebProbeTestVariant),
         "web_requests_adapter_limits" => Planted::Export(G::WebRequestsAdapterLimits),
         "web_fragment_writes_entry" => Planted::Export(G::WebFragmentWritesEntry),
+        "web_saves_keyed_by_origin" => Planted::Export(G::WebSavesKeyedByOrigin),
+        "web_saves_never_ask_persistence" => Planted::Export(G::WebSavesNeverAskPersistence),
+        "web_carry_import_skips_hash" => Planted::Export(G::WebCarryImportSkipsHash),
+        "web_leaves_out_font" => Planted::Export(G::WebLeavesOutFont),
+        "page_keys_logic_by_step_hash" => Planted::Export(G::PageKeysLogicByStepHash),
+        "page_keys_by_picture_and_logic" => Planted::Export(G::PageKeysByPictureAndLogic),
+        "web_index_checks_webgpu_only" => Planted::Export(G::WebIndexChecksWebgpuOnly),
+        "web_index_requires_every_any_of" => Planted::Export(G::WebIndexRequiresEveryAnyOf),
+        "web_picks_smallest_set" => Planted::Export(G::WebPicksSmallestSet),
+        "web_picks_full_set" => Planted::Export(G::WebPicksFullSet),
+        "web_no_tree" => Planted::Export(G::WebNoTree),
+        "web_announces_every_frame" => Planted::Export(G::WebAnnouncesEveryFrame),
+        "web_export_carries_refused" => Planted::Export(G::WebCarriesRefused),
+        "web_plays_on_failure" => Planted::Export(G::WebPlaysOnFailure),
+        "web_element_leaves_line" => Planted::Export(G::WebElementLeavesLine),
+        "web_stores_player_as_is" => Planted::Export(G::WebStoresPlayerAsIs),
+        "web_inflates_before_check" => Planted::Export(G::WebInflatesBeforeCheck),
+        "web_gzip_header_time" => Planted::Export(G::WebGzipHeaderTime),
+        "web_player_over_12mb" => Planted::Export(G::WebPlayerOver12mb),
+        "ship_bytes_sums_inflated" => Planted::Export(G::ShipBytesSumsInflated),
         other => Planted::Export(G::Codec(CODEC_PLANTS.iter().find(|p| **p == other)?)),
     })
 }
 
 impl Hub<'_> {
     /// Whether #157's wrong program `g` is planted.
-    fn guard_planted(&self, g: Guard) -> bool {
+    pub(crate) fn guard_planted(&self, g: Guard) -> bool {
         self.scenario.planted == Some(Planted::Export(g))
     }
 }
@@ -172,7 +291,7 @@ impl Hub<'_> {
         session.frame(sched, t, &default_view(doc));
         let (block, pictures) = self.videos_at(doc, t, true);
         // #157: a video the decode worker couldn't decode at this frame stops the frame.
-        if let Some(id) = undecoded(doc, &block) {
+        if let Some(id) = undecoded(doc, &block, t) {
             return Err(Unfit {
                 code: "decode_error",
                 path: format!("items/{id}"),
@@ -321,6 +440,9 @@ pub struct Job {
     pub readback: bool,
     /// #544: the input track the document's logic items read.
     pub track: Vec<Value>,
+    /// #552: the side the export draws, `match.me` (1 to 8, or "none" for every side): a recorded
+    /// match's own player unless the call names another, and a piece played alone's 1.
+    pub me: Value,
     /// #502: `captions: {profile, files, mode}` and `loudness_profile`.
     pub captions: Captions,
     pub loudness_profile: Option<String>,
@@ -338,11 +460,19 @@ pub struct Job {
     pub lottie: Value,
     /// #507: `pdf {notes}`: the handout prints each stage's notes under its still.
     pub notes: bool,
+    /// #732: `pptx: {slide, notes, fonts}` (or `video.pptx`), the pptx target's options.
+    pub pptx: Value,
     /// #169: `page: {sample, orbit, still}` (or `video.page`), the playable page's options.
     pub page: Value,
     /// #169: the page's own clips are tagged with their pixels' transfer, sRGB, so a browser
     /// draws them as it draws the page's stills; never read from a request.
     pub srgb: bool,
+    /// #518: `tool: name@version`, the encode tool that encodes in place of the first qualified
+    /// one for the codec, and `brief: {tools}`, the tools the brief pins.
+    pub tool: Option<String>,
+    pub pins: Vec<String>,
+    /// #1250: `gif: {scale}` (or `video.gif`), an indexed look's GIF's options.
+    pub gif: Value,
 }
 
 impl Default for Job {
@@ -363,6 +493,7 @@ impl Default for Job {
             software: false,
             readback: false,
             track: Vec::new(),
+            me: Value::Null,
             captions: Captions::default(),
             loudness_profile: None,
             quality: "standard".into(),
@@ -372,8 +503,12 @@ impl Default for Job {
             session: None,
             lottie: Value::Null,
             notes: false,
+            pptx: Value::Null,
             page: Value::Null,
             srgb: false,
+            tool: None,
+            pins: Vec::new(),
+            gif: Value::Null,
         }
     }
 }
@@ -392,18 +527,6 @@ impl Default for Captions {
             profile: None,
             files: vec!["srt".into()],
             mode: "open".into(),
-        }
-    }
-}
-
-impl Job {
-    /// The export.target@1 entry that writes the job's codec: `video` for the movie codecs,
-    /// `png` for a PNG sequence, otherwise the target the codec names.
-    pub fn target(&self) -> &str {
-        match self.codec.as_str() {
-            "h264" | "hevc" | "hevc_alpha" | "prores_4444" | "gif" => "video",
-            "png_seq" => "png",
-            other => other,
         }
     }
 }
@@ -494,9 +617,19 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
             Some(a) => a.as_str()? == "software",
         },
         readback: c.get("readback").and_then(Value::as_bool).unwrap_or(false),
-        track: c
-            .get("track")
-            .map_or(Some(Vec::new()), |t| t.as_array().cloned())?,
+        // #552: a recorded match's merged track, which the export draws in place of the
+        // document's.
+        track: match (c.get("track"), c.get("record")) {
+            (Some(t), _) => t.as_array().cloned()?,
+            (None, Some(r)) => r.get("track")?.as_array().cloned()?,
+            (None, None) => Vec::new(),
+        },
+        me: match (c.get("me"), c.get("record")) {
+            (Some(Value::String(s)), _) if s == "none" => json!("none"),
+            (Some(m), _) => json!(m.as_u64().filter(|p| (1..=8).contains(p))?),
+            (None, Some(r)) => r.get("player").cloned().unwrap_or(Value::Null),
+            (None, None) => Value::Null,
+        },
         captions: {
             let cap = c.get("captions");
             Captions {
@@ -537,12 +670,31 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
             .and_then(|p| p.get("notes"))
             .and_then(Value::as_bool)
             .unwrap_or(false),
+        pptx: c
+            .get("pptx")
+            .or_else(|| video.and_then(|v| v.get("pptx")))
+            .cloned()
+            .unwrap_or(Value::Null),
         page: c
             .get("page")
             .or_else(|| video.and_then(|v| v.get("page")))
             .cloned()
             .unwrap_or(Value::Null),
         srgb: false,
+        tool: crate::optional(c.get("tool"), |t| Some(t.as_str()?.to_string()))?,
+        pins: c
+            .get("brief")
+            .and_then(|b| b.get("tools"))
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|t| t.as_str().map(str::to_string))
+            .collect(),
+        gif: c
+            .get("gif")
+            .or_else(|| video.and_then(|v| v.get("gif")))
+            .cloned()
+            .unwrap_or(Value::Null),
     })
 }
 
@@ -893,8 +1045,8 @@ fn round_start(k: i64, frame: i64, hz: u32) -> i64 {
     ((x + f / 2) / f) as i64
 }
 
-/// The first video item at a frame whose picture the decode worker couldn't give.
-fn undecoded(doc: &Value, block: &Map<String, Value>) -> Option<String> {
+/// The first video item shown at a frame whose picture the decode worker couldn't give.
+fn undecoded(doc: &Value, block: &Map<String, Value>, t: i64) -> Option<String> {
     doc["items"]
         .as_object()?
         .iter()
@@ -904,6 +1056,6 @@ fn undecoded(doc: &Value, block: &Map<String, Value>) -> Option<String> {
                 && i["params"]["asset"].is_string()
         })
         .map(|(id, _)| id)
-        .find(|id| !block.contains_key(*id))
+        .find(|id| !block.contains_key(*id) && !crate::video::hidden_at(doc, id, t))
         .cloned()
 }

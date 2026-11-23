@@ -1,0 +1,36 @@
+{
+  "axes3d@1": {
+    "section": "Marks in 3D: axes `axes3d@1`",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "vector_field@1": {
+    "section": "Vector field `vector_field@1`",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  }
+}

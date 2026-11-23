@@ -1,0 +1,53 @@
+{
+  "gpu.compute@1": {
+    "section": "GPU operator",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "gpu.material@1": {
+    "section": "GPU operator",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#2773"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#2762"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "gpu.pass@1": {
+    "section": "GPU operator",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  }
+}

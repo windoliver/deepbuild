@@ -7,6 +7,8 @@ use std::sync::OnceLock;
 
 use serde_json::Value;
 
+use crate::copy;
+
 /// How many times a claim is sent back before it becomes one ask (Stalled claims).
 pub const SEND_BACKS: u64 = 3;
 
@@ -44,14 +46,14 @@ pub enum State {
 /// list's rows carry (#1463); running is a running job's row (#1925).
 pub const TABLE: [(&str, &str, &[&str]); 15] = [
     ("queued", "idle", &[]),
-    ("working", "running", &["in progress"]),
-    ("says done", "running", &["done"]),
+    ("working", "running", &["in progress"]), // copy-exception: a state code
+    ("says done", "running", &["done"]),      // copy-exception: a state code
     ("PASS", "pass", &["proven", "passed"]),
-    ("sent back", "fail", &["failed"]),
+    ("sent back", "fail", &["failed"]), // copy-exception: a state code
     ("BLOCKED", "blocked", &[]),
     ("INVALID", "invalid", &[]),
     ("INCONCLUSIVE", "inconclusive", &[]),
-    ("needs you", "needs_you", &["waiting on you"]),
+    ("needs you", "needs_you", &["waiting on you"]), // copy-exception: a state code
     ("stale", "stale", &["pass", "passed", "proven"]),
     ("quiet", "idle", &[]),
     ("stuck", "blocked", &[]),
@@ -59,6 +61,49 @@ pub const TABLE: [(&str, &str, &[&str]); 15] = [
     ("finished", "idle", &[]),
     ("running", "running", &[]),
 ];
+
+/// A state word the hub sends (#2403), drawn in the language shown: every word of [`TABLE`] but the five verdict words,
+/// which stay as written, as does a word the table doesn't hold. The word itself stays the state's code: nothing
+/// decides a state by the words drawn.
+pub fn shown(word: &str) -> &str {
+    match word {
+        "queued" => copy::text("states.queued"),
+        "working" => copy::text("states.working"),
+        "says done" => copy::text("states.says_done"),
+        "sent back" => copy::text("states.sent_back"),
+        "needs you" => copy::text("states.needs_you"),
+        "stale" => copy::text("states.stale"),
+        "quiet" => copy::text("states.quiet"),
+        "stuck" => copy::text("states.stuck"),
+        "flagged" => copy::text("states.flagged"),
+        "finished" => copy::text("states.finished"),
+        "running" => copy::text("states.running"),
+        other => other,
+    }
+}
+
+/// Which table a state's words come from: the language shown, or English for what DeepBuild sends to an agent (#2403).
+#[derive(Clone, Copy)]
+enum Said {
+    Shown,
+    English,
+}
+
+impl Said {
+    fn fill(self, key: &'static str, args: &[&dyn std::fmt::Display]) -> String {
+        match self {
+            Said::Shown => copy::fill(key, args),
+            Said::English => copy::english(key, args),
+        }
+    }
+
+    fn word(self, word: &'static str) -> String {
+        match self {
+            Said::Shown => shown(word).to_owned(),
+            Said::English => word.to_owned(),
+        }
+    }
+}
 
 impl State {
     pub fn word(&self) -> &'static str {
@@ -86,23 +131,27 @@ impl State {
         }
     }
 
-    /// The word with its extra, as every surface writes it.
+    /// The word with its extra, as every surface writes it, in the language shown (#2403).
     pub fn text(&self, now: u64) -> String {
+        self.said(now, Said::Shown)
+    }
+
+    fn said(&self, now: u64, said: Said) -> String {
         match self {
-            State::SentBack { round } => format!("sent back {round} of {SEND_BACKS}"),
+            State::SentBack { round } => said.fill("states.sent_back_round", &[round, &SEND_BACKS]),
             State::SaysDone {
                 expected_ms: Some(ms),
-            } => format!("says done · checks take {}", span(*ms)),
+            } => said.fill("states.says_done_checks", &[&span_in(*ms, said)]),
             State::Quiet { last_seen } => {
                 let age = now.saturating_sub(*last_seen);
                 changes_after(changes_in(age));
                 // #1458's planted row reads its time the way no surface may, in a test build only.
                 if crate::plain::planted("row-says-ago") {
-                    return "quiet · last seen 2 min ago".to_owned();
+                    return "quiet · last seen 2 min ago".to_owned(); // copy-exception: planted
                 }
-                format!("quiet · last seen {}", span(age))
+                said.fill("states.quiet_last_seen", &[&span_in(age, said)])
             }
-            other => other.word().to_owned(),
+            other => said.word(other.word()),
         }
     }
 }
@@ -111,16 +160,38 @@ impl State {
 /// day its weekday, "Mon 16:40". An ask's row, its card and its notification say when its default applies in these
 /// words.
 pub fn moment(at: u64, now: u64) -> String {
-    use chrono::{Local, TimeZone as _};
+    use chrono::{Datelike as _, Local, TimeZone as _};
     let local = |ms: u64| Local.timestamp_millis_opt(ms as i64).unwrap();
     let (at, today) = (local(at), local(now).date_naive());
     let time = at.format("%H:%M");
     match (at.date_naive() - today).num_days() {
         0 => time.to_string(),
-        1 => format!("tomorrow {time}"),
-        _ => format!("{} {time}", at.format("%a")),
+        1 => copy::fill("states.tomorrow_at", &[&time]),
+        _ => copy::fill(
+            ON_WEEKDAY[at.weekday().num_days_from_monday() as usize],
+            &[&time],
+        ),
     }
 }
+
+/// A moment on another day by its weekday, Monday first (#2403): the table's words, never the platform's.
+const ON_WEEKDAY: [&str; 7] = [
+    "states.on_mon",
+    "states.on_tue",
+    "states.on_wed",
+    "states.on_thu",
+    "states.on_fri",
+    "states.on_sat",
+    "states.on_sun",
+];
+
+/// The table's lengths of time, longest unit first: what [`span`] writes and [`time_at_end`] finds.
+const SPANS: [&str; 4] = [
+    "states.span_d",
+    "states.span_h",
+    "states.span_min",
+    "states.span_s",
+];
 
 thread_local! {
     /// In ms from the `now` it was written at, when the soonest age a state's text showed since [`ages_written`]
@@ -132,6 +203,18 @@ thread_local! {
 /// `None` when no text written since showed an age. A view draws its texts, then takes this to set its next tick.
 pub fn ages_written() -> Option<u64> {
     AGE_CHANGES.with(std::cell::Cell::take)
+}
+
+/// What `write` returns, with the soonest change of what it wrote, in ms from now (#1482). What it wrote still counts
+/// for the view drawing now, so a view can keep what `write` gave it until then and draw with no tick missed.
+pub fn written_in<R>(write: impl FnOnce() -> R) -> (R, Option<u64>) {
+    let before = ages_written();
+    let written = write();
+    let during = ages_written();
+    for wait in [before, during].into_iter().flatten() {
+        changes_after(wait);
+    }
+    (written, during)
 }
 
 /// Notes that something just written from the clock reads differently `wait` ms from now.
@@ -155,17 +238,26 @@ pub fn changes_in(ms: u64) -> u64 {
 /// `words` and the length [`span`] wrote at their end, if one is: a row draws that length in a slot of its own at
 /// its right edge, so a ticking time moves nothing else in the row (#1458).
 pub fn time_at_end(words: &str) -> (&str, Option<&str>) {
-    let mut parts = words.rsplitn(3, ' ');
-    match (parts.next(), parts.next(), parts.next()) {
-        (Some(unit), Some(n), Some(rest))
-            if ["s", "min", "h", "d"].contains(&unit)
-                && !n.is_empty()
-                && n.bytes().all(|b| b.is_ascii_digit()) =>
-        {
-            (rest, Some(&words[rest.len() + 1..]))
+    for key in SPANS {
+        // The length as the language shown writes it: its words before and after the number (#2403).
+        let Some((before, after)) = copy::text(key).split_once("{0}") else {
+            continue;
+        };
+        let Some(head) = words.strip_suffix(after) else {
+            continue;
+        };
+        let digits = head.len() - head.trim_end_matches(|c: char| c.is_ascii_digit()).len();
+        let Some(rest) = head[..head.len() - digits]
+            .strip_suffix(before)
+            .and_then(|rest| rest.strip_suffix(' '))
+        else {
+            continue;
+        };
+        if digits > 0 {
+            return (rest, Some(&words[rest.len() + 1..]));
         }
-        _ => (words, None),
     }
+    (words, None)
 }
 
 /// A running job's row words after its kind (#1925): its count from its tool's own counter with its time left, as the
@@ -178,10 +270,13 @@ pub fn job_words(row: &Value, now: u64) -> String {
         None => {
             let ran = now.saturating_sub(row["since"].as_u64().unwrap_or(now));
             // A job's own word, such as a new project's working (#1342); running for one that names none.
-            format!(
-                "{title} · {} {}",
-                row["word"].as_str().unwrap_or("running"),
-                span(ran)
+            copy::fill(
+                "states.job_ran",
+                &[
+                    &title,
+                    &shown(row["word"].as_str().unwrap_or("running")),
+                    &span(ran),
+                ],
             )
         }
     }
@@ -190,11 +285,15 @@ pub fn job_words(row: &Value, now: u64) -> String {
 /// A length of time as every surface writes it (#1458): "40 s", "12 min", "3 h" or "2 d", with a space and no "ago",
 /// since the slot it's in says it's since.
 pub fn span(ms: u64) -> String {
+    span_in(ms, Said::Shown)
+}
+
+fn span_in(ms: u64, said: Said) -> String {
     match ms / 1000 {
-        s if s >= 86_400 => format!("{} d", s / 86_400),
-        s if s >= 3600 => format!("{} h", s / 3600),
-        s if s >= 60 => format!("{} min", s / 60),
-        s => format!("{s} s"),
+        s if s >= 86_400 => said.fill(SPANS[0], &[&(s / 86_400)]),
+        s if s >= 3600 => said.fill(SPANS[1], &[&(s / 3600)]),
+        s if s >= 60 => said.fill(SPANS[2], &[&(s / 60)]),
+        s => said.fill(SPANS[3], &[&s]),
     }
 }
 
@@ -221,7 +320,7 @@ pub fn color(entry: &str) -> u32 {
 
 /// A state as a status mark and its words: "✓ PASS".
 pub fn mark(state: &State, now: u64) -> String {
-    format!("{} {}", glyph(state.entry()), state.text(now))
+    copy::fill("states.mark", &[&glyph(state.entry()), &state.text(now)])
 }
 
 /// The kinds that close an ask: each move of the contract's ask.machine@1 into a final state, so the app keeps no
@@ -327,6 +426,13 @@ impl Reading {
             && event["subject"] == handle
         {
             self.deadline = event["data"]["deadline"].as_u64().or(self.deadline);
+        } else if self.closed == Some("ask.answered")
+            && event["kind"] == "approval.withdrawn"
+            && event["writer"] == "core"
+            && event["subject"] == handle
+        {
+            // Your yes withdrawn inside the hub's hold, before its steps started (#1101): the ask is open again.
+            self.closed = None;
         } else if self.closed == Some("ask.defaulted")
             && event["kind"] == "default.undone"
             && event["writer"] == "core"
@@ -386,6 +492,10 @@ pub struct Table {
     titles: HashMap<String, Option<String>>,
     /// Every ask an event is about, read as the core reads it.
     readings: HashMap<String, Reading>,
+    /// Each taste call raised, by handle: its session and its question (#3234).
+    tastes: HashMap<String, (String, String)>,
+    /// Each session's taste calls answered where none of their pictures was drawn, by question (#3234).
+    unseen: HashMap<String, Vec<String>>,
     /// The ask.created events, in log order, of every ask some event could still leave open.
     asks: Vec<Value>,
     /// Each reading's newest value and the time it is as of, in ms (#1172).
@@ -467,6 +577,40 @@ struct Session {
 }
 
 impl Table {
+    /// Whether folding `event` in would leave the table as it is (#1482): the hub writing a row it already wrote, or
+    /// the core reading a session's state again as it already holds it. Nothing else is judged a no-op.
+    pub fn is_noop(&self, event: &Value) -> bool {
+        let data = &event["data"];
+        match event["kind"].as_str().unwrap_or_default() {
+            "row.set" => {
+                let Some(id) = data["id"].as_str() else {
+                    return false;
+                };
+                let held = self.rows.get(id);
+                self.listed
+                    && match data["listed"] == true {
+                        true => held.is_some_and(|(order, row)| {
+                            order.as_str() == data["order"].as_str().unwrap_or_default()
+                                && row == data
+                        }),
+                        false => held.is_none(),
+                    }
+            }
+            "session.state" => {
+                let Some(session) = event["session"].as_str() else {
+                    return false;
+                };
+                let word = |key: &str| data[key].as_str().unwrap_or_default().to_owned();
+                event["writer"] == "core"
+                    && self
+                        .sessions
+                        .get(session)
+                        .is_some_and(|held| held.listed == Some((word("state"), word("cause"))))
+            }
+            _ => false,
+        }
+    }
+
     /// Folds one event in, the next in log order.
     pub fn apply(&mut self, event: &Value) {
         if cfg!(feature = "plant-drops-close") && event["kind"] == "ask.moot" {
@@ -492,6 +636,29 @@ impl Table {
         let kind = event["kind"].as_str().unwrap_or_default();
         if kind == "ask.created" && !self.readings.get(&handle(event)).is_some_and(Reading::done) {
             self.asks.push(event.clone());
+        }
+        // A taste call answered where none of the pictures it judges was drawn reads so beside it (#3234).
+        if kind == "ask.created" && event["data"]["kind"] == "taste" {
+            if let Some(session) = event["session"].as_str() {
+                let question = event["data"]["question"].as_str().unwrap_or_default();
+                self.tastes
+                    .insert(handle(event), (session.to_owned(), question.to_owned()));
+            }
+        }
+        if kind == "ask.answered" && event["writer"] == "core" {
+            let pictures = event["data"]["pictures"].as_array();
+            let unseen = pictures.is_some_and(|pictures| {
+                !pictures.is_empty() && pictures.iter().all(|picture| picture["shown"] != true)
+            });
+            let taste = event["subject"]
+                .as_str()
+                .and_then(|ask| self.tastes.get(ask));
+            if let (true, Some((session, question))) = (unseen, taste) {
+                self.unseen
+                    .entry(session.clone())
+                    .or_default()
+                    .push(question.clone());
+            }
         }
         if kind == "reading.recorded" {
             let data = &event["data"];
@@ -622,7 +789,10 @@ impl Table {
                 })
                 .count();
         }
-        self.open_asks(Some(session)).len()
+        self.asks
+            .iter()
+            .filter(|ask| self.open_of(ask, Some(session)))
+            .count()
     }
 
     /// The list's order key of the row with this ID.
@@ -682,7 +852,7 @@ impl Table {
     /// A session's state.
     pub fn state(&self, session: &str) -> State {
         // An ask the session raised, still open, leaves it needing you.
-        if !self.open_asks(Some(session)).is_empty() {
+        if self.asks_you(session) {
             return State::NeedsYou;
         }
         self.sessions
@@ -690,31 +860,32 @@ impl Table {
             .map_or(State::Queued, Session::state)
     }
 
-    /// The sidebar row's words after the session's title, and the status-map entry its mark draws (#992): the state
-    /// the core last recorded for the session as `session.state`, so the sidebar and `deep status` name it the same,
-    /// with "process gone mid-turn" for a process gone; then a claim's state, if the session's newest stop made one.
-    /// A session with no `session.state` yet reads as [`Table::state`] does, but for its stop's claim, which it keeps.
+    /// The sidebar row's words after the session's title, in the language shown (#2403), and the status-map entry its
+    /// mark draws (#992): the state the core last recorded for the session as `session.state`, so the sidebar and
+    /// `deep status` name it the same, with "process gone mid-turn" for a process gone; then a claim's state, if the
+    /// session's newest stop made one. A session with no `session.state` yet reads as [`Table::state`] does, but for its
+    /// stop's claim, which it keeps.
     pub fn row(&self, session: &str, now: u64) -> (String, &'static str) {
         // The hub's row (#1463), the one reading of the session (#2018): its word and its entry, read no second way.
         if let Some(row) = self.row_of(&format!("session:{session}")) {
             let word = row["word"].as_str().unwrap_or_default();
             // The planted app reads a session waiting on you as working, in a build with the env-plants feature only.
             if crate::plain::planted("waiting-as-working") && word == "needs you" {
-                return ("working".to_owned(), "running");
+                return (shown("working").to_owned(), "running");
             }
             return (
-                word.to_owned(),
+                shown(word).to_owned(),
                 entry_of(row["entry"].as_str().unwrap_or_default()),
             );
         }
         // The claim the row adds is its stop's, which only later work hides.
-        let shown = match self.sessions.get(session) {
-            Some(own) if self.open_asks(Some(session)).is_empty() => own.read(own.work),
+        let claim = match self.sessions.get(session) {
+            Some(own) if !self.asks_you(session) => own.read(own.work),
             _ => self.state(session),
         };
         let Some((listed, cause)) = self.sessions.get(session).and_then(|s| s.listed.as_ref())
         else {
-            return (shown.text(now), shown.entry());
+            return (claim.text(now), claim.entry());
         };
         // The planted app reads a session waiting on you as working, in a build with the env-plants feature only.
         let planted = crate::plain::planted("waiting-as-working");
@@ -723,7 +894,7 @@ impl Table {
         if let Some((word, entry, _)) = TABLE.iter().find(|(word, ..)| {
             *word == listed
                 && ![
-                    "needs you",
+                    "needs you", // copy-exception: a state code
                     "stuck",
                     "flagged",
                     "working",
@@ -732,15 +903,15 @@ impl Table {
                 ]
                 .contains(word)
         }) {
-            return ((*word).to_owned(), entry);
+            return (shown(word).to_owned(), entry);
         }
         let (word, entry) = match listed.as_str() {
-            _ if planted && cause == "waiting" => ("working".to_owned(), "running"),
-            "needs you" => ("needs you".to_owned(), "needs_you"),
-            "stuck" => ("stuck".to_owned(), "blocked"),
-            "flagged" if cause == "gone" => ("flagged · process gone mid-turn".to_owned(), "fail"),
-            "flagged" => ("flagged".to_owned(), "fail"),
-            "finished" => ("finished".to_owned(), "idle"),
+            _ if planted && cause == "waiting" => (shown("working").to_owned(), "running"),
+            "needs you" => (shown(listed).to_owned(), "needs_you"),
+            "stuck" => (shown("stuck").to_owned(), "blocked"),
+            "flagged" if cause == "gone" => (copy::text("states.flagged_gone").to_owned(), "fail"),
+            "flagged" => (shown("flagged").to_owned(), "fail"),
+            "finished" => (shown("finished").to_owned(), "idle"),
             "quiet" => {
                 let last_seen = self
                     .sessions
@@ -749,18 +920,26 @@ impl Table {
                     .unwrap_or(0);
                 (State::Quiet { last_seen }.text(now), "idle")
             }
-            _ => ("working".to_owned(), "running"),
+            _ => (shown("working").to_owned(), "running"),
         };
-        match shown {
+        match claim {
             State::SaysDone { .. }
             | State::Pass
             | State::SentBack { .. }
             | State::Blocked
             | State::Invalid
             | State::Inconclusive
-            | State::Stale => (format!("{word} · {}", shown.text(now)), shown.entry()),
+            | State::Stale => (
+                copy::fill("states.word_claim", &[&word, &claim.text(now)]),
+                claim.entry(),
+            ),
             _ => (word, entry),
         }
+    }
+
+    /// The session's taste calls answered where none of their pictures was drawn, by question (#3234).
+    pub fn unseen(&self, session: &str) -> &[String] {
+        self.unseen.get(session).map_or(&[], Vec::as_slice)
     }
 
     /// A session's newest readings, oldest first, at most [`READINGS`].
@@ -789,9 +968,19 @@ impl Table {
     pub fn open_asks(&self, session: Option<&str>) -> Vec<&Value> {
         self.asks
             .iter()
-            .filter(|ask| session.is_none_or(|session| ask["session"] == session))
-            .filter(|ask| self.is_open(&handle(ask)))
+            .filter(|ask| self.open_of(ask, session))
             .collect()
+    }
+
+    /// Whether `ask` is open, and of `session` when it names one: a count or a test of the open asks reads each through
+    /// this and builds no list (#2661).
+    fn open_of(&self, ask: &Value, session: Option<&str>) -> bool {
+        session.is_none_or(|session| ask["session"] == session) && self.is_open(&handle(ask))
+    }
+
+    /// Whether `session` has an ask open.
+    fn asks_you(&self, session: &str) -> bool {
+        self.asks.iter().any(|ask| self.open_of(ask, Some(session)))
     }
 
     /// How many asks a decision applied for you closed: #2026's planted count adds them back.
@@ -837,7 +1026,7 @@ impl Table {
         let row = self.row_of(&format!("session:{session}"));
         let core = row
             .and_then(|row| row["why"].as_str())
-            .unwrap_or("its turn ended failed");
+            .unwrap_or_else(|| copy::text("states.turn_ended_failed"));
         Some((cause, core.to_owned()))
     }
 
@@ -862,10 +1051,18 @@ impl Table {
         else {
             return Vec::new();
         };
-        let mut names = vec![format!("Session {session}")];
-        names.extend(start.issue.map(|issue| format!("Issue #{issue}")));
-        names.extend((!start.branch.is_empty()).then(|| format!("Branch {}", start.branch)));
-        names.extend((!start.repo.is_empty()).then(|| format!("Repo {}", start.repo)));
+        let mut names = vec![copy::fill("states.name_session", &[&session])];
+        names.extend(
+            start
+                .issue
+                .map(|issue| copy::fill("states.name_issue", &[&issue])),
+        );
+        names.extend(
+            (!start.branch.is_empty()).then(|| copy::fill("states.name_branch", &[&start.branch])),
+        );
+        names.extend(
+            (!start.repo.is_empty()).then(|| copy::fill("states.name_repo", &[&start.repo])),
+        );
         names
     }
 
@@ -1091,14 +1288,17 @@ fn took(
 
 /// A session's title when no task names it.
 fn untitled(session: &str) -> String {
-    format!("Session {}", &session[..session.len().min(8)])
+    copy::fill("states.untitled", &[&&session[..session.len().min(8)]])
 }
 
-/// The verdict line the app sends to the session's chat.
+/// The verdict line the app sends to the session's chat. What DeepBuild sends to an agent stays in English (#2403),
+/// whatever language the app draws in.
 pub fn verdict_line(table: &Table, session: &str, now: u64) -> String {
+    let state = table.state(session);
     format!(
-        "DeepBuild {} · {}",
-        mark(&table.state(session), now),
+        "DeepBuild {} {} · {}", // copy-exception: sent to the agent, in English
+        glyph(state.entry()),
+        state.said(now, Said::English),
         table.title(session)
     )
 }
@@ -1139,10 +1339,13 @@ pub fn menu(table: &Table, now: u64) -> Vec<String> {
             .map(|row| {
                 let text = |key: &str| row[key].as_str().unwrap_or_default();
                 let title = crate::question::visible(text("title"));
-                format!(
-                    "{title} · {} {}",
-                    glyph(entry_of(text("entry"))),
-                    text("word")
+                copy::fill(
+                    "states.menu_row",
+                    &[
+                        &title,
+                        &glyph(entry_of(text("entry"))),
+                        &shown(text("word")),
+                    ],
                 )
             })
             .collect();
@@ -1150,351 +1353,11 @@ pub fn menu(table: &Table, now: u64) -> Vec<String> {
     table
         .every_session()
         .into_iter()
-        .map(|(_, title, state)| format!("{title} · {}", mark(&state, now)))
+        .map(|(_, title, state)| {
+            copy::fill("states.menu_row_marked", &[&title, &mark(&state, now)])
+        })
         .collect()
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    /// #1925: a running job's row shows its tool's count as the hub wrote it; with no counter, the word running and
-    /// how long it has run, in the row's time slot, never a count it wasn't given.
-    #[test]
-    fn a_job_row_counts_only_from_its_tools_counter() {
-        let counted =
-            json!({"title": "test.encode", "progress": "300 of 600 · 40 s left", "since": 0});
-        assert_eq!(
-            job_words(&counted, 45_000),
-            "test.encode · 300 of 600 · 40 s left"
-        );
-        let bare = json!({"title": "test.encode", "since": 1_000});
-        let words = job_words(&bare, 41_000);
-        assert_eq!(words, "test.encode · running 40 s");
-        assert_eq!(time_at_end(&words), ("test.encode · running", Some("40 s")));
-    }
-
-    /// #1546: an age's next tick is the first ms its span reads differently, never later, never earlier.
-    #[test]
-    fn an_age_changes_exactly_when_its_span_next_reads_differently() {
-        let ages = (0..200_000).step_by(997).chain([
-            59_999,
-            60_000,
-            90_000,
-            3_599_999,
-            3_600_000,
-            7_300_123,
-            86_399_999,
-            86_400_000,
-            200_000_000,
-        ]);
-        for age in ages {
-            let wait = changes_in(age);
-            assert!(wait > 0, "{age}");
-            assert_eq!(
-                span(age + wait - 1),
-                span(age),
-                "{age} reads the same until {wait} ms on"
-            );
-            assert_ne!(
-                span(age + wait),
-                span(age),
-                "{age} reads differently {wait} ms on"
-            );
-        }
-    }
-
-    fn table(events: &[Value]) -> Table {
-        let mut table = Table::default();
-        for event in events {
-            table.apply(event);
-        }
-        table
-    }
-
-    fn ask(id: &str) -> Value {
-        json!({"v": 4, "id": id, "kind": "ask.created", "session": "s1", "data": {"question": "Push?"}})
-    }
-
-    #[test]
-    fn the_menu_bar_shows_a_titles_controls_and_direction_marks() {
-        // #1738: the menu bar lists every session by its task's title, which the agent chose.
-        let events = vec![
-            json!({"kind": "task.created", "writer": "core", "log_pos": 1, "ts": 1,
-                   "data": {"thread": "s1", "title": "Fix\u{202e}txt\x1b[2K\rok\nship"}}),
-            json!({"kind": "session.start", "writer": "hook", "session": "s1", "log_pos": 2, "ts": 1, "data": {}}),
-        ];
-        let menu = menu(&table(&events), 1);
-        assert!(
-            menu[0].starts_with("Fix\\u{202e}txt\\x1b[2K\\rok\\nship · "),
-            "{menu:?}"
-        );
-    }
-
-    #[test]
-    fn a_sessions_readings_show_beside_it_and_move_nothing() {
-        // #990: a terminal program's status readings are signal only: the row keeps the newest three, and the
-        // session's state and row words are what they were without them.
-        let before = vec![
-            json!({"kind": "permission.request", "writer": "hook", "session": "s1", "log_pos": 1, "ts": 1, "data": {}}),
-        ];
-        let mut events = before.clone();
-        for (i, word) in ["started", "working", "blocked", "done"].iter().enumerate() {
-            events.push(json!({"kind": "session.reading", "writer": "core", "session": "s1", "log_pos": 2 + i,
-                               "ts": 1_000_000 + i, "data": {"reading": format!("its terminal's program reports {word}")}}));
-        }
-        let (with, without) = (table(&events), table(&before));
-        assert_eq!(
-            with.readings("s1"),
-            ["working", "blocked", "done"].map(|w| format!("its terminal's program reports {w}"))
-        );
-        assert_eq!(with.state("s1"), without.state("s1"));
-        assert_eq!(with.row("s1", 2_000_000), without.row("s1", 2_000_000));
-    }
-
-    #[test]
-    fn every_hooks_attention_is_attention_as_the_whole_list_read_has_it() {
-        // #1141's equivalence: the fold reads a session as the record's whole-list reading does, so a hook's finished
-        // after the core read the session quiet is attention too, and the session works.
-        let events = vec![
-            json!({"kind": "session.attention", "writer": "core", "session": "s1", "log_pos": 1, "ts": 1,
-                   "data": {"state": "unknown"}}),
-            json!({"kind": "session.attention", "writer": "hook", "session": "s1", "log_pos": 2, "ts": 2,
-                   "data": {"state": "finished"}}),
-        ];
-        assert_eq!(table(&events).state("s1"), State::Working);
-    }
-
-    #[test]
-    fn a_hooks_word_that_the_session_works_again_is_its_attention() {
-        // A hook's working after the core read the session quiet is the session at work again, as the record's
-        // whole-list reading has it (#1141).
-        let events = vec![
-            json!({"kind": "session.attention", "writer": "core", "session": "s1", "log_pos": 1, "ts": 1,
-                   "data": {"state": "unknown"}}),
-            json!({"kind": "session.attention", "writer": "hook", "session": "s1", "log_pos": 2, "ts": 2,
-                   "data": {"state": "working"}}),
-        ];
-        assert_eq!(table(&events).state("s1"), State::Working);
-    }
-
-    #[test]
-    fn the_sidebar_row_keeps_its_stops_claim_past_the_turns_end_and_the_idle_prompt() {
-        // A turn's claim at its stop, the turn's end the core records again after it, then the idle prompt's
-        // Notification a minute later (#992), as the hub's record has them: the sidebar names the state the core
-        // recorded, and the stop's claim, which neither the turn's end nor the idle prompt hides.
-        let events = vec![
-            json!({"kind": "tool.before", "writer": "hook", "session": "s1", "log_pos": 1, "ts": 1, "data": {}}),
-            json!({"kind": "claim.made", "writer": "core", "session": "s1", "id": "c1", "log_pos": 2, "ts": 2, "data": {}}),
-            json!({"kind": "session.attention", "writer": "core", "session": "s1", "log_pos": 3, "ts": 3,
-                   "data": {"state": "finished"}}),
-            json!({"kind": "session.state", "writer": "core", "session": "s1", "log_pos": 4, "ts": 4,
-                   "data": {"state": "finished", "cause": "finished"}}),
-            json!({"kind": "session.attention", "writer": "hook", "session": "s1", "log_pos": 5, "ts": 60_000,
-                   "data": {"state": "finished"}}),
-        ];
-        let (words, entry) = table(&events).row("s1", 60_000);
-        assert_eq!((words.as_str(), entry), ("finished · says done", "running"));
-        // Later work hides it: a tool call after the stop.
-        let mut later = events.clone();
-        later.push(json!({"kind": "tool.before", "writer": "hook", "session": "s1", "log_pos": 6, "ts": 61_000, "data": {}}));
-        assert_eq!(
-            table(&later).row("s1", 61_000),
-            ("finished".to_owned(), "idle")
-        );
-    }
-
-    #[test]
-    fn a_decision_the_core_applied_closes_the_ask_it_names() {
-        let events = vec![
-            ask("a1"),
-            ask("a2"),
-            json!({"kind": "decision.applied", "writer": "core", "subject": "ask:a1",
-                   "data": {"decision": "d1", "ask": "ask:a2"}}),
-        ];
-        let open: Vec<&str> = open_asks(&events, None)
-            .iter()
-            .map(|ask| ask["id"].as_str().unwrap())
-            .collect();
-        assert_eq!(open, ["a1"]);
-    }
-
-    #[test]
-    fn the_cores_undo_of_a_default_opens_the_ask_again_with_its_new_deadline() {
-        let undo = |id: &str, writer: &str| json!({"kind": "default.undone", "writer": writer, "subject": format!("ask:{id}"), "data": {"deadline": 9}});
-        let events = vec![
-            ask("a1"),
-            ask("a2"),
-            ask("a3"),
-            ask("a4"),
-            json!({"kind": "ask.defaulted", "writer": "core", "subject": "ask:a1", "data": {}}),
-            json!({"kind": "ask.defaulted", "writer": "core", "subject": "ask:a2", "data": {}}),
-            json!({"kind": "ask.answered", "writer": "core", "subject": "ask:a3", "data": {}}),
-            json!({"kind": "ask.defaulted", "writer": "core", "subject": "ask:a4", "data": {}}),
-            // A close after the first changes nothing: the core still undoes the default.
-            json!({"kind": "ask.cancelled", "writer": "core", "subject": "ask:a1", "data": {}}),
-            undo("a1", "core"),
-            undo("a2", "mcp:agent"),
-            undo("a3", "core"),
-            undo("a4", "core"),
-            json!({"kind": "ask.answered", "writer": "core", "subject": "ask:a4", "data": {}}),
-        ];
-        let open: Vec<&str> = open_asks(&events, None)
-            .iter()
-            .map(|ask| ask["id"].as_str().unwrap())
-            .collect();
-        assert_eq!(open, ["a1"]);
-        assert_eq!(deadline(&events, &events[0]), Some(9));
-        let mut own = ask("a5");
-        own["data"]["deadline"] = json!(5);
-        assert_eq!(deadline(&[own.clone()], &own), Some(5));
-    }
-
-    #[test]
-    fn a_session_whose_asks_all_closed_no_longer_needs_you() {
-        let events = vec![
-            ask("a1"),
-            json!({"kind": "tool.before", "session": "s1", "writer": "hook", "log_pos": 2, "data": {}}),
-            json!({"kind": "ask.answered", "writer": "core", "subject": "ask:a1", "data": {}}),
-        ];
-        assert_eq!(table(&events).state("s1"), State::Working);
-        assert_eq!(table(&events[..2]).state("s1"), State::NeedsYou);
-        assert_eq!(table(&events).every_session()[0].2, State::Working);
-    }
-
-    #[test]
-    fn no_agent_closes_an_ask() {
-        let events = vec![
-            ask("a1"),
-            ask("a2"),
-            ask("a3"),
-            json!({"kind": "ask.answered", "writer": "hook", "subject": "ask:a1", "data": {}}),
-            json!({"kind": "ask.cancelled", "writer": "mcp:agent", "subject": "ask:a2", "data": {}}),
-            json!({"kind": "ask.cancelled", "writer": "core", "subject": "ask:a3", "data": {}}),
-        ];
-        let open: Vec<&str> = open_asks(&events, None)
-            .iter()
-            .map(|ask| ask["id"].as_str().unwrap())
-            .collect();
-        assert_eq!(open, ["a1", "a2"]);
-    }
-
-    /// A record of asks and the events that move them, drawn from `seed`: closes of every kind by every writer,
-    /// decisions applied that name an ask in their data, undone defaults, moved deadlines and events about no ask.
-    fn drawn(seed: u64) -> Vec<Value> {
-        let mut state = seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1;
-        let mut next = |n: u64| {
-            state ^= state << 13;
-            state ^= state >> 7;
-            state ^= state << 17;
-            state % n
-        };
-        let kinds = [
-            "ask.created",
-            "ask.answered",
-            "ask.defaulted",
-            "ask.escalated",
-            "ask.cancelled",
-            "ask.superseded",
-            "ask.moot",
-            "decision.applied",
-            "default.undone",
-            "deadline.moved",
-            "tool.before",
-            "agent.stop",
-            "session.attention",
-            "claim.made",
-            "verdict.made",
-            "verdict.stale",
-            "claim.sent_back",
-            "task.created",
-            "run.started",
-            "run.finished",
-        ];
-        let writers = ["core", "hook", "mcp:agent", "app"];
-        let outcomes = ["PASS", "FAIL", "BLOCKED", "INVALID", "INCONCLUSIVE"];
-        let attention = ["unknown", "waiting", "finished"];
-        let finished = ["passed", "failed"];
-        (0..next(60) + 1)
-            .map(|i| {
-                let kind = kinds[next(kinds.len() as u64) as usize];
-                let about = format!("ask:a{}", next(6));
-                let other = format!("ask:a{}", next(6));
-                let writer = writers[next(writers.len() as u64) as usize];
-                let session = format!("s{}", next(3));
-                let claim = format!("claim:c{}", next(3));
-                let pos = i + 1;
-                match kind {
-                    "ask.created" => json!({"kind": kind, "id": about[4..], "session": session, "writer": "core", "log_pos": pos,
-                                            "data": {"deadline": next(9)}}),
-                    "decision.applied" => json!({"kind": kind, "id": format!("e{i}"), "writer": writer, "subject": about, "log_pos": pos,
-                                                 "data": {"ask": other}}),
-                    "default.undone" | "deadline.moved" => json!({"kind": kind, "id": format!("e{i}"), "writer": writer, "log_pos": pos,
-                                                           "subject": about, "data": {"deadline": next(9)}}),
-                    "tool.before" | "agent.stop" => json!({"kind": kind, "id": format!("e{i}"), "writer": writer, "session": session,
-                                                    "log_pos": pos, "ts": next(1000), "subject": format!("session:{session}"), "data": {}}),
-                    "session.attention" => json!({"kind": kind, "id": format!("e{i}"), "writer": "hook", "session": session, "log_pos": pos,
-                                                  "ts": next(1000), "data": {"state": attention[next(3) as usize]}}),
-                    "claim.made" => json!({"kind": kind, "id": claim[6..], "writer": "mcp:agent", "session": session, "log_pos": pos, "data": {}}),
-                    "verdict.made" => json!({"kind": kind, "id": format!("v{}", next(3)), "writer": "core", "session": session, "log_pos": pos,
-                                             "data": {"claim": claim, "verdict": format!("verdict:v{}", next(3)), "outcome": outcomes[next(5) as usize]}}),
-                    "verdict.stale" => json!({"kind": kind, "id": format!("e{i}"), "writer": "core", "session": session, "log_pos": pos,
-                                              "data": {"verdict": format!("verdict:v{}", next(3))}}),
-                    "claim.sent_back" => json!({"kind": kind, "id": format!("e{i}"), "writer": "core", "session": session, "log_pos": pos,
-                                                "data": {"claim": claim, "round": next(4)}}),
-                    "task.created" => json!({"kind": kind, "id": format!("e{i}"), "writer": "core", "log_pos": pos,
-                                             "data": {"thread": format!("s{}", next(3)), "title": format!("task {}", next(3))}}),
-                    "run.started" => json!({"kind": kind, "id": format!("e{i}"), "writer": "core", "session": session, "log_pos": pos, "ts": next(1000),
-                                            "data": {"claim": claim, "check": format!("k{}", next(2)), "run": format!("r{}", next(4))}}),
-                    "run.finished" => json!({"kind": kind, "id": format!("e{i}"), "writer": "core", "session": session, "log_pos": pos, "ts": next(2000),
-                                             "data": {"run": format!("r{}", next(4)), "outcome": finished[next(2) as usize]}}),
-                    _ => json!({"kind": kind, "id": format!("e{i}"), "writer": writer, "subject": about, "log_pos": pos, "data": {}}),
-                }
-            })
-            .collect()
-    }
-
-    #[test]
-    fn the_open_asks_read_in_one_pass_and_folded_are_those_each_asks_own_reading_leaves_open() {
-        // The reference: each ask read alone over every event, as the core reads it.
-        for seed in 0..2_000 {
-            let events = drawn(seed);
-            let folded = table(&events);
-            for session in [None, Some("s0"), Some("s1")] {
-                let want: Vec<&Value> = events
-                    .iter()
-                    .filter(|event| event["kind"] == "ask.created")
-                    .filter(|ask| session.is_none_or(|session| ask["session"] == session))
-                    .filter(|ask| is_open(&events, &handle(ask)))
-                    .collect();
-                assert_eq!(
-                    open_asks(&events, session),
-                    want,
-                    "seed {seed}, session {session:?}: {events:#?}"
-                );
-                assert_eq!(
-                    folded.open_asks(session),
-                    want,
-                    "folded, seed {seed}, session {session:?}: {events:#?}"
-                );
-            }
-            // Every ask the events name, created in them or not, reads open folded exactly when it reads open alone,
-            // with the same deadline.
-            for n in 0..7 {
-                let handle = format!("ask:a{n}");
-                assert_eq!(
-                    folded.is_open(&handle),
-                    is_open(&events, &handle),
-                    "seed {seed}, {handle}: {events:#?}"
-                );
-                let ask = json!({"id": format!("a{n}"), "data": {"deadline": 99}});
-                assert_eq!(
-                    folded.deadline(&ask),
-                    deadline(&events, &ask),
-                    "seed {seed}, {handle}: {events:#?}"
-                );
-            }
-        }
-    }
-}
+mod tests;

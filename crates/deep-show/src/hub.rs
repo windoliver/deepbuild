@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use deep_canvas::document::{
-    canonical_in, check_costed, check_packed, Expansion, Issue, Notice, PackPlanted, Packs,
+    canonical_in, check_costed, check_sized, Expansion, Issue, Notice, PackPlanted, Packs,
 };
 use deep_canvas::grammar::{Time, TimeContext};
 use deep_canvas::registry::{core_name, Sealed};
@@ -46,6 +46,18 @@ const SETTLE_TIMEOUT: Duration = Duration::from_secs(2);
 /// The criteria's wrong programs, each reachable only through the scenario's `planted`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Planted {
+    /// #1415: a patch whose ops change nothing is committed as a new revision.
+    NoOpCommits,
+    /// #1415: a create of an ID the document holds replaces the item that holds it.
+    CreateOverwrites,
+    /// #1801: a refusal of a removal lists only the first row that names the removed item.
+    RefusalNamesFirstRef,
+    /// #1801: `refs_to` walks only items' parents.
+    RefsParentsOnly,
+    /// #1801: `refs_to` reads the caller's layer alone and answers as if it read the document.
+    RefsReadOneLayer,
+    /// #1801: `cost` leaves out the assets, which items share by their hash.
+    CostWithoutSharedAssets,
     /// #544: a start_on run on a logic item's occurrences starts at the first frame its session
     /// evaluates at or after the occurrence.
     StartOnAtFirstFrame,
@@ -183,6 +195,8 @@ pub enum Planted {
     ProbeFromDepth,
     /// #1401: a probe that meets nothing answers the item drawn nearest its pixel.
     ProbeNearestItem,
+    /// #1722: a render-back of a 3D revision drops its 3D writer layers and draws its 2D marks.
+    RenderBack2dOnly,
     /// #1729: a 3D frame skips a `mesh.asset@1` whose file isn't in the store, with no issue.
     SkipsMissingMeshAsset,
     /// #403: a verdict's key names each deliverable by doc ID alone, with no revision.
@@ -209,8 +223,12 @@ pub enum Planted {
     Audit(crate::geometry_audit::Planted),
     /// #1921's: a world's outputs' wrong programs, which the physics host names.
     Physics(crate::physics::Planted),
+    /// #1500's: a run carried on across a revision.
+    Join(crate::joins::Planted),
     /// #525's live worlds' wrong programs.
     Ahead(crate::stepped::Planted),
+    /// #1250's planted clips.
+    Clip(crate::clip::write::Plant),
     /// #202: a kind_rules requirement counts the working agent's own pack rule as its cover.
     OwnRuleCountsAsCover,
     /// #202: the kind_rules check evaluates a pack kind's recipe rules a second time.
@@ -219,6 +237,8 @@ pub enum Planted {
     KitDefaultsOnly,
     /// #202: the expander walks an instance's inputs in a hash map's order.
     ExpandsInHashOrder,
+    /// #458: a recipe's expansion drops one derived item's stroke.
+    ExpansionDropsStroke,
     /// #1956: the pack check of a kind's migration stops at its first fault.
     MigrationFirstFault,
     /// #1959: the loader takes one saved major for the whole document.
@@ -231,6 +251,10 @@ pub enum Planted {
     MigrationRewritesChannelTargetsOnly,
     /// #1960: a writer's patch stores its items' migrated params under the major they were saved at.
     StoreMigratedParamsUnderSavedMajor,
+    /// #1962: the load drops every instance of a kind its pack's version moved.
+    LoaderDropsMovedInstances,
+    /// #1962: the load's move rewrites the kind and runs the target's steps, and carries no path.
+    MoveRewritesKindOnly,
     /// #306: a derived item's seed comes from a counter over expansion order.
     SeedsByExpansionOrder,
     /// #2015: a repeat over elements seeds each derived item with the part's element count too.
@@ -404,6 +428,16 @@ pub enum Planted {
     DropFrameEveryTenthMinute,
     /// #499: a canonical seek decodes its frame from the asset's short-GOP proxy.
     SeekReadsProxy,
+    /// #210: a port sends the steps a seek plays again.
+    PortSendsOnSeek,
+    /// #210: a mute silences the plug-in's output and leaves a sound port's out side sending.
+    MuteLeavesPortSending,
+    /// #210: the gate trusts the document's sound flag over the plug-in's port.
+    GateTrustsDocumentSound,
+    /// #210: the web export writes a port into its bundle.
+    WebExportKeepsPort,
+    /// #211: the web export compares only an init asset's size with `web_max`, never `written_max`.
+    WebExportChecksInitOnly,
     /// #498: the gate trusts a shipped panel: its own request to play sounds.
     ShippedPanelsUngated,
     /// #498: the reserved-sound comparer refuses only an asset whose hash is a reserved sound's.
@@ -678,14 +712,12 @@ pub enum Body {
     Undo { patch: String, of: String },
 }
 
-pub struct PatchCall {
-    pub via: Via,
-    pub doc: String,
-    pub body: Body,
-}
-
 mod call;
+mod planted;
+mod presented;
 pub use call::*;
+use planted::read_programs;
+pub(crate) use planted::{clock_noise, export_noise};
 
 /// A background job (#857): a playtest batch's replicas of a document's session, or a bake of
 /// one, each evaluated frame after frame at the background priority.
@@ -742,6 +774,8 @@ pub struct Hub<'a> {
     pub forms: BTreeMap<String, Value>,
     /// Each document's session.
     pub sessions: BTreeMap<String, DocSession>,
+    /// #1250: each piece's live play as the app keeps it for clips, and each panel's cards.
+    pub(crate) clips: crate::clip::Clips,
     /// Panels a `panel` call showed or hid.
     pub panels_shown: BTreeMap<String, bool>,
     /// The GPU 3D revisions draw on (#378): unopened until the first, `None` inside where there
@@ -761,6 +795,10 @@ pub struct Hub<'a> {
     pub ring: crate::ring::Ring,
     /// When each revision of a document that isn't shared became current, by doc ID.
     pub shown_at: BTreeMap<String, Vec<(i64, u64)>>,
+    /// #1415: the documents whose session `close` closed.
+    pub closed: BTreeSet<String>,
+    /// #1415: the documents whose newest revision sent was refused, the last good one current.
+    pub refused: BTreeSet<String>,
     /// The messages each session was sent from an ask box, by session ID (#384).
     pub asks: BTreeMap<String, Vec<crate::ask::Asked>>,
     /// The verdicts made on each claim, in the order made, each as recorded (#403).
@@ -782,6 +820,8 @@ pub struct Hub<'a> {
     pub expansion_cache: BTreeMap<String, Expansion>,
     /// #544's planted start_on: each session's first evaluated time since its revision loaded.
     pub first_frames: BTreeMap<String, i64>,
+    /// #1500's planted capture: each step a carried-on run ran, by document, as the logic call's row.
+    pub carried_rows: BTreeMap<String, BTreeMap<i64, Value>>,
     /// #538's planted lookup: each copy table's key order in its document's first revision.
     pub first_orders: BTreeMap<String, Vec<String>>,
     /// The displays, the windows on them and the card's placement (#400).
@@ -794,6 +834,8 @@ pub struct Hub<'a> {
     pub media: crate::media::Media,
     /// The device gate's owners and their voices (#498).
     pub gate: crate::gate::Gate,
+    /// #210: the plug-ins' ports, their state and the pieces playing under them.
+    pub ports: crate::ports::Ports,
     /// The card's `rearm_on` changes the scenario reported, each when (#327).
     pub card_rearms: Vec<i64>,
     /// A press down the card holds until its release: its platform stamp and its option (#327).
@@ -801,8 +843,8 @@ pub struct Hub<'a> {
     /// Who sent each document's last whole revision: a revision that arrives at a frame's latch
     /// comes from them (#856).
     pub vias: BTreeMap<String, Via>,
-    /// The times the shaper shaped each run's key in this process (#856).
-    pub shapings: HashMap<Arc<deep_text::cache::Key>, u32>,
+    /// The times the shaper shaped each paragraph's key in this process (#856, #1430).
+    pub shapings: HashMap<Arc<deep_text::cache::ShapeKey>, u32>,
     /// What answered the card: the option and the release's platform stamp (#327).
     pub card_answer: Option<(String, i64)>,
     /// #507: present mode, while it runs and after Esc ended it.
@@ -814,8 +856,8 @@ pub struct Hub<'a> {
 /// A document's item count, and its mode visible table as first seen at that count.
 pub type ModeIds = (usize, Vec<(String, [f64; 4])>);
 
-/// A snapshot's straight RGBA, its size and each item's box in its pixels.
-pub type Raster = (Vec<u8>, [u16; 2], Vec<(String, [f64; 4])>);
+/// A 3D snapshot's straight RGBA, its size and its visible table (#3017).
+pub type Raster = (Vec<u8>, [u16; 2], crate::scene3d::Shown);
 
 /// Which half of a press, or a key repeat (#327).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -826,7 +868,7 @@ pub enum PressPhase {
 }
 
 /// The planted check's coefficients for `machine` (the hub's, or this one's): the reference
-/// Mac's on a reference Mac, and scaled by its own speed anywhere else.
+/// Mac's on a Mac of `reference-macs.json`, `scripts/benchmark.mjs`'s list, and scaled anywhere else.
 fn machine_factor(machine: Option<&Map<String, Value>>) -> f64 {
     let model = match machine.and_then(|m| m.get("model")).and_then(Value::as_str) {
         Some(m) => m.to_string(),
@@ -836,11 +878,9 @@ fn machine_factor(machine: Option<&Map<String, Value>>) -> f64 {
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .unwrap_or_default(),
     };
-    if ["Mac15,7", "Mac15,12"].contains(&model.as_str()) {
-        1.0
-    } else {
-        1.6
-    }
+    let macs = include_str!("../reference-macs.json");
+    let macs: Vec<String> = serde_json::from_str(macs).expect("the reference Macs' list parses");
+    [1.6, 1.0][usize::from(macs.contains(&model))]
 }
 
 /// The look render-back draws in: the shipped clean look, light.
@@ -869,6 +909,8 @@ fn schedule_options(scenario: &Scenario, startup: &Startup) -> Options {
         steps_by_name: startup.steps_by_name,
         key_without_params: scenario.planted == Some(Planted::KeyWithoutParams),
         checkpoint_nearest: scenario.planted == Some(Planted::CheckpointNearestInDistance),
+        ring_drops_start: false,
+        ring_newest_only: false,
         merge_by_finish: scenario.planted == Some(Planted::MergesInFinishOrder),
         admits_frame_json: startup.admits_frame_json,
         runs_every_node: scenario.planted == Some(Planted::RunsEveryNode),
@@ -896,6 +938,7 @@ impl<'a> Hub<'a> {
         }
         let pack_planted = PackPlanted {
             seed_by_order: scenario.planted == Some(Planted::SeedsByExpansionOrder),
+            drops_stroke: scenario.planted == Some(Planted::ExpansionDropsStroke),
             overwrite_broken_out: scenario.planted == Some(Planted::ReexpansionOverwritesBrokenOut),
             skip_requires_modules: scenario.planted == Some(Planted::PackCheckSkipsRequiresModules),
             key_by_name: matches!(
@@ -911,9 +954,13 @@ impl<'a> Hub<'a> {
             migration_first_fault: scenario.planted == Some(Planted::MigrationFirstFault),
             migrate_one_major: scenario.planted == Some(Planted::MigrationOneMajor),
             migrate_zero_as_absent: scenario.planted == Some(Planted::MigrationZeroAsLeftOut),
-            migrate_params_only: scenario.planted == Some(Planted::MigrationRenamesParamsOnly),
+            migrate_params_only: matches!(
+                scenario.planted,
+                Some(Planted::MigrationRenamesParamsOnly | Planted::MoveRewritesKindOnly)
+            ),
             migrate_channels_only: scenario.planted
                 == Some(Planted::MigrationRewritesChannelTargetsOnly),
+            drops_moved: scenario.planted == Some(Planted::LoaderDropsMovedInstances),
             walk_inputs: (scenario.planted == Some(Planted::ExpandsInHashOrder))
                 .then_some(walk_in_hash_order as deep_canvas::document::packs::WalkInputs),
             // #222: the planted cue-list expander.
@@ -945,6 +992,7 @@ impl<'a> Hub<'a> {
             ),
             sched,
             sessions: BTreeMap::new(),
+            clips: Default::default(),
             background: Vec::new(),
             panels_shown: BTreeMap::new(),
             gpu3: None,
@@ -961,6 +1009,8 @@ impl<'a> Hub<'a> {
                 ring
             },
             shown_at: BTreeMap::new(),
+            closed: BTreeSet::new(),
+            refused: BTreeSet::new(),
             asks: BTreeMap::new(),
             verdicts_made: BTreeMap::new(),
             audit_asks: BTreeMap::new(),
@@ -972,6 +1022,7 @@ impl<'a> Hub<'a> {
             expansions: BTreeMap::new(),
             expansion_cache: BTreeMap::new(),
             first_frames: BTreeMap::new(),
+            carried_rows: BTreeMap::new(),
             first_orders: BTreeMap::new(),
             placement: Placement::open(
                 scenario.displays.clone(),
@@ -990,11 +1041,12 @@ impl<'a> Hub<'a> {
             ),
             media: crate::media::Media::default(),
             gate: crate::gate::Gate::default(),
+            ports: crate::ports::Ports::default(),
             card_rearms: Vec::new(),
             card_down: None,
             card_answer: None,
             present: None,
-            sandbox: crate::sandbox::Host::planted(startup.layouts),
+            sandbox: crate::sandbox::Host::new(startup, scenario),
             vias: BTreeMap::new(),
             shapings: HashMap::new(),
         };
@@ -1161,9 +1213,10 @@ impl<'a> Hub<'a> {
             snapshot::px([0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(1.0)))
         });
         // #493: a shot writes the camera's pose the 3D frame is drawn through; #1729: its assets
-        // and maps from the evidence store; #506: its insets' pictures drawn in (over3d.rs).
-        self.painted3d(doc, t, size)
-            .map(|(rgba, scene)| (rgba, size, scene.boxes()))
+        // and maps from the evidence store; #506: its insets' pictures drawn in (over3d.rs);
+        // #3017: its visible table from the object-ID pass it drew.
+        self.shown3d(doc, t, size)
+            .map(|(rgba, shown, _)| (rgba, size, shown))
     }
 
     /// Whether a panel is on screen: as the scenario set it, or as a `panel` call left it.
@@ -1256,10 +1309,10 @@ impl<'a> Hub<'a> {
         }
     }
 
-    /// Each `logic@1` item's program, inlined from the evidence store by its hash as
-    /// `params.wasm` (base64), which the logic module's steps run (#533), as the web player inlines
-    /// the bundle's (#172).
+    /// Each provider's output by its hash (#192), then each `logic@1` item's program inlined from
+    /// the evidence store as `params.wasm` (base64) for the logic module's steps (#533, #172).
     pub(crate) fn inline_programs(&self, form: &mut Value) {
+        self.sandbox.fill(&self.startup.sealed, form);
         let root = &self.scenario.evidence;
         deep_play::logic::inline_programs(form, &|sha| {
             std::fs::read(root.join(&sha[..2]).join(&sha[2..])).ok()
@@ -1328,7 +1381,7 @@ impl<'a> Hub<'a> {
     /// The record as one frame reads it: every object's state and reading.
     pub fn record(&self) -> Record {
         let mut record = Record::default();
-        for (handle, o) in &self.scenario.record {
+        for (handle, o) in self.scenario.record.iter() {
             if let Some(state) = &o.state {
                 record.states.insert(handle.clone(), state.clone());
             }
@@ -1457,11 +1510,24 @@ impl<'a> Hub<'a> {
                 deep_text::cache::scope(std::hash::Hasher::finish(&h) | 1);
             }
         }
+        // #1415: a session call its state's cell refuses is answered with the cell's code.
+        let called = crate::states::session_call(call).map(|(d, c)| (d.to_string(), c));
+        if let Some(mut refused) = called
+            .as_ref()
+            .and_then(|(d, c)| self.refused_by_state(d, *c))
+        {
+            self.stamp(&mut refused);
+            return refused;
+        }
+        let frozen = called.as_ref().map(|(d, _)| self.session_state(d));
+        let frozen = frozen == Some(crate::states::State::Frozen);
         if let Call::Show(show) = call {
             self.vias.insert(show.doc.clone(), show.via.clone());
         }
         let mut reply = match call {
             Call::Show(show) => self.show_call(show),
+            Call::Close(doc) => self.close(doc),
+            Call::SessionTable => crate::states::table(),
             Call::Mode(show, args) => {
                 self.vias.insert(show.doc.clone(), show.via.clone());
                 self.mode_show(show, args)
@@ -1539,6 +1605,14 @@ impl<'a> Hub<'a> {
             Call::Migrate(to) => self.migrate(*to),
             Call::Keys { doc, runs } => self.keys(doc, *runs),
             Call::Fingerprint => self.fingerprint_reply(),
+            Call::Ship { bundle, chrome } => crate::export::ship::measure(
+                std::path::Path::new(bundle),
+                std::path::Path::new(chrome),
+                self.planted(Planted::Export(crate::export::Guard::ShipBytesSumsInflated)),
+            ),
+            Call::Footprint => {
+                json!({"reading": deep_gpu::footprint::read(deep_gpu::footprint::SYSTEM).json()})
+            }
             Call::Draw { doc, t, output } => self.draw_reply(doc, t, output),
             Call::PaddedKey { fields, seeds } => self.padded_key_reply(*fields, *seeds),
             Call::Fixtures => self.fixtures_reply(),
@@ -1550,6 +1624,8 @@ impl<'a> Hub<'a> {
             Call::ExportRun(job) => self.export_run(job),
             Call::Session { doc, set } => self.session_reply(doc, set.as_ref()),
             Call::FrameHash { frames, software } => self.frame_hash(frames, *software),
+            Call::FramePlanes { frames, software } => self.frame_planes(frames, *software),
+            Call::EncodeQualify(tool) => self.encode_qualify(tool),
             Call::CrossMachine(wavs) => self.cross_machine(wavs),
             Call::PixelHash(frames) => self.pixel_hash(frames),
             Call::Play {
@@ -1560,6 +1636,7 @@ impl<'a> Hub<'a> {
             } => self.play(doc, *display_hz, *to, *presented),
             Call::Determinism(d) => self.determinism(d),
             Call::Frames(f) => self.frames(f),
+            Call::PlayFrames(p) => self.play_frames(p),
             Call::ShapedRuns(text) => self.shaped_runs(text),
             Call::Settle(s) => self.settle_patches(s),
             Call::Query(q) => self.query(q),
@@ -1605,17 +1682,23 @@ impl<'a> Hub<'a> {
                 event,
                 t,
                 gesture,
-            } => match self.ring_input(panel, event) {
+            } => match self.join_or_press(panel, event, gesture) {
                 Some(reply) => reply,
-                None => self
-                    .live_press(panel, event, *t)
-                    .err()
-                    .unwrap_or_else(|| self.input(panel, event, gesture)),
+                None => match self.ring_input(panel, event) {
+                    Some(reply) => reply,
+                    None => self
+                        .live_press(panel, event, *t)
+                        .err()
+                        .unwrap_or_else(|| self.input(panel, event, gesture)),
+                },
             },
             Call::World { doc, world } => self.world_call(doc, world),
-            Call::Match { doc, steps } => self.match_call(doc, *steps),
+            Call::Net(c) => self.net_call(c),
             Call::Scope(panel) => self.scope_reply(panel),
             Call::Presented(panel) => self.presented(panel),
+            Call::PresentedIndices(panel, from) => self.presented_indices(panel, *from),
+            Call::Clip { panel, action } => self.player_action(panel, action),
+            Call::Clips(panel) => self.clips_reply(panel),
             Call::PopOut {
                 panel,
                 display,
@@ -1705,82 +1788,20 @@ impl<'a> Hub<'a> {
             Call::Gate(g) => self.gate_call(g),
             Call::Present(p) => self.present_call(p),
             Call::Mix(m) => self.mix_call(m),
-            Call::Audio(a) => self.audio_call(a),
+            Call::Audio(a) => match self.piece_audio(a) {
+                Some(reply) => reply,
+                None => self.audio_call(a),
+            },
+            Call::Ports(p) => self.ports_call(p),
             Call::RuntimeGolden(g) => self.golden_call(g),
             Call::Term(t) => self.term_call(t),
         };
+        self.after_session_call(called, frozen, &reply);
         for shaping in deep_text::cache::take_log() {
             *self.shapings.entry(shaping.key).or_default() += 1;
         }
         self.stamp(&mut reply);
         reply
-    }
-
-    /// #806: a document's current revision as the hub records it once presented: its writer, the
-    /// layer the connection stamped and its canonical document, kept in the evidence store by the
-    /// hash it names; and every layer on screen on its panel, back to front, as the app draws them.
-    pub fn presented_revision(&self, doc: &str) -> Option<Value> {
-        let row = self.current(doc)?;
-        let canonical = canonical_in(&row.doc, &self.startup.sealed.kinds()).ok()?;
-        let hash = evidence::put(&self.scenario.evidence, canonical.bytes.as_bytes()).ok()?;
-        let items: Vec<&String> = row.doc["items"].as_object()?.keys().collect();
-        let panel = self.scenario.docs.get(doc)?;
-        let rect = self.slot(panel)?;
-        let size = snapshot::px([rect[2], rect[3]]);
-        let record = self.record();
-        let layers: Vec<Value> = self
-            .bands()
-            .iter()
-            .filter(|b| {
-                b.doc
-                    .as_deref()
-                    .is_some_and(|d| self.scenario.docs.get(d) == Some(panel))
-            })
-            .map(|b| {
-                let mut out = b.to_json();
-                let current = b.doc.as_deref().and_then(|d| self.current(d));
-                // The presented document's items this layer draws; another document's layer on the
-                // panel draws none of them.
-                let drawn: Vec<String> = current
-                    .filter(|_| b.doc.as_deref() == Some(doc))
-                    .and_then(|r| r.doc["items"].as_object())
-                    .map(|m| m.keys().cloned().collect())
-                    .unwrap_or_default();
-                // The layer's picture in its panel, with no ground, as the compositor rasterizes it:
-                // kept in the evidence store for the app to draw, by its hash.
-                let picture = current.and_then(|r| {
-                    let doc = r.doc.as_object()?;
-                    let mut renderer = Renderer::new();
-                    let d = renderer
-                        .prepare(
-                            doc,
-                            0,
-                            &self.look.light,
-                            self.look.status.as_ref(),
-                            &record,
-                            &self.scenario.evidence,
-                        )
-                        .ok()?;
-                    let png = snapshot::png(renderer.raster(&d, size, None), size);
-                    evidence::put(&self.scenario.evidence, &png).ok()
-                });
-                out["doc"] = json!(b.doc);
-                out["items"] = json!(drawn);
-                out["picture"] = json!(picture);
-                out
-            })
-            .collect();
-        Some(json!({
-            "doc": doc,
-            "rev": row.rev,
-            "hash": hash,
-            "writer": row.writer.to_json(),
-            "layer": row.writer.layer_id(),
-            "items": items,
-            "panel": panel,
-            "rect": rect,
-            "layers": layers,
-        }))
     }
 
     /// Every canvas reply carries the core's version and the module-set digest (#305;
@@ -1930,6 +1951,8 @@ impl<'a> Hub<'a> {
                 if self.scenario.planted == Some(Planted::ReadsWasmBytes) {
                     read_programs(&doc, &self.scenario.evidence);
                 }
+                // #1801: the meter holds each asset's bytes on the device and a mesh's vertices.
+                let sizes = self.asset_sizes(&doc);
                 let started = Instant::now();
                 let result = match self.scenario.planted {
                     Some(Planted::EstimatesOnThisMachine) => {
@@ -1940,7 +1963,7 @@ impl<'a> Hub<'a> {
                             .scaled(machine_factor(self.scenario.machine.as_ref()));
                         check_costed(&doc, &self.startup.sealed, &coefficients)
                     }
-                    _ => check_packed(&doc, &self.startup.sealed, &self.packs),
+                    _ => check_sized(&doc, &self.startup.sealed, &self.packs, &sizes),
                 };
                 let check_ms = started.elapsed().as_secs_f64() * 1000.0;
                 let timing = show.include.iter().any(|i| matches!(i, Include::Timing));
@@ -1953,6 +1976,7 @@ impl<'a> Hub<'a> {
                 blocked = self.blocked_in_claim(show, &result.notices);
                 let mut issues = crate::mixdown::score_plan::library_issues(&doc, result.issues);
                 issues.append(&mut probe_issues);
+                self.plant_axis_titles(&doc, &mut issues);
                 blocked.extend(self.missing_in_claim(show, &mut issues, &mut skipped));
                 // #488's planted check takes every sample rate from 8 to 192 kHz and refuses
                 // the rest.
@@ -2003,6 +2027,24 @@ impl<'a> Hub<'a> {
                         None
                     }
                 };
+                // #1801: an item the revision leaves out that rows still name: its refusal lists
+                // every one of them.
+                let removed: Vec<&str> = current_doc
+                    .as_ref()
+                    .and_then(|c| c.get("items")?.as_object())
+                    .into_iter()
+                    .flat_map(|items| items.keys())
+                    .filter(|id| doc["items"].get(id.as_str()).is_none())
+                    .map(String::as_str)
+                    .collect();
+                let planted = self.scenario.planted;
+                crate::shared::name_referrers(
+                    &mut issues,
+                    &doc,
+                    &removed,
+                    &self.startup.sealed,
+                    planted,
+                );
                 (Some(doc), issues, diff)
             }
         };
@@ -2369,22 +2411,16 @@ impl<'a> Hub<'a> {
                         }
                     }
                     let pixels = match drawn3d {
-                        Some(drawn3d) => drawn3d.ok().map(|(mut rgba, size, boxes)| {
+                        Some(drawn3d) => drawn3d.ok().map(|(mut rgba, size, mut shown)| {
                             // The 2D items over the 3D frame, with no ground of their own.
-                            let mut boxes = boxes;
                             if let Some(d) = drawn {
                                 let (over, drew) =
                                     self.renderer.raster_batched(d, size, None, &instanced);
                                 batches = drew;
                                 snapshot::over(&mut rgba, &over);
-                                let scale = d.scale(size);
-                                boxes.extend(
-                                    d.boxes()
-                                        .into_iter()
-                                        .map(|(id, b)| (id, b.map(|v| v * scale))),
-                                );
+                                shown.over(d.boxes(), d.scale(size), size);
                             }
-                            (rgba, size, boxes)
+                            (rgba, size, shown)
                         }),
                         None => {
                             let drawn = drawn.expect("a revision with no error was drawn");
@@ -2394,10 +2430,10 @@ impl<'a> Hub<'a> {
                                 self.renderer
                                     .raster_batched(drawn, size, Some(ground), &instanced);
                             batches = drew;
-                            Some((rgba, size, Vec::new()))
+                            Some((rgba, size, Default::default()))
                         }
                     };
-                    let Some((mut rgba, size, boxes3d)) = pixels else {
+                    let Some((mut rgba, size, shown)) = pixels else {
                         reply.insert("outcome".into(), json!("not_presented"));
                         reply.insert("reason".into(), json!("timeout"));
                         if show.check {
@@ -2423,10 +2459,13 @@ impl<'a> Hub<'a> {
                                     e
                                 }
                             };
-                            let rows = match drawn.filter(|_| !three) {
-                                Some(d) => snapshot::visible(d.boxes(), d.scale(size), size),
-                                None => snapshot::visible(boxes3d, 1.0, size),
-                            };
+                            match drawn.filter(|_| !three) {
+                                Some(d) => {
+                                    let rows = snapshot::visible(d.boxes(), d.scale(size), size);
+                                    reply.insert("visible".into(), rows);
+                                }
+                                None => shown.put(&mut reply),
+                            }
                             // #464: a 2D print look adds this machine's GPU snapshot, display
                             // only, beside the Vello CPU one.
                             let gpu = match drawn.filter(|_| !three) {
@@ -2437,7 +2476,6 @@ impl<'a> Hub<'a> {
                                 "snapshots".into(),
                                 json!([entry].into_iter().chain(gpu).collect::<Vec<_>>()),
                             );
-                            reply.insert("visible".into(), rows);
                             // The instanced batches the 2D draw made: none for a 3D frame, which
                             // scene3d draws and reports on its own (#378).
                             reply.insert("batches".into(), crate::packs::batches(&batches));
@@ -2526,59 +2564,6 @@ impl<'a> Hub<'a> {
                 Some(claim) if claim.deliverables.contains(&show.doc) => "PASS",
                 Some(_) => "INCONCLUSIVE",
             },
-        }
-    }
-}
-
-/// The planted renderer's grain: a few pixels' red nudged by a xorshift seeded from the clock's
-/// nanoseconds, what an honest render-back never reads (Channel and key: it can never read the
-/// clock), so two runs draw two pictures (#670).
-pub(crate) fn clock_noise(rgba: &mut [u8]) {
-    seeded_noise(rgba, now_nanos());
-}
-
-/// #1163's [`clock_noise`] in an export, seeded from the clock once per process and by the
-/// frame's time: another process draws another picture, and a frame drawn again in the same
-/// export draws the same one, as #157's redraw holds every frame to.
-pub(crate) fn export_noise(rgba: &mut [u8], t: i64) {
-    static SEED: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
-    seeded_noise(rgba, *SEED.get_or_init(now_nanos) ^ t as u64);
-}
-
-fn now_nanos() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_nanos() as u64)
-}
-
-fn seeded_noise(rgba: &mut [u8], seed: u64) {
-    let mut x = seed | 1;
-    let pixels = (rgba.len() / 4) as u64;
-    for _ in 0..64 {
-        x ^= x << 13;
-        x ^= x >> 7;
-        x ^= x << 17;
-        let i = (x % pixels) as usize * 4;
-        rgba[i] = rgba[i].wrapping_add((x >> 56) as u8 | 1);
-    }
-}
-
-/// The planted check that opens a logic program's bytes from the evidence store by its hash
-/// before the document is refused: what the honest check never does (#305).
-fn read_programs(doc: &Value, evidence: &std::path::Path) {
-    let Some(items) = doc.get("items").and_then(Value::as_object) else {
-        return;
-    };
-    for item in items.values() {
-        let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
-        let program = item
-            .get("params")
-            .and_then(|p| p.get("program"))
-            .and_then(Value::as_str);
-        if let (true, Some(sha)) = (kind.starts_with("logic@"), program) {
-            if sha.len() == 64 && sha.bytes().all(|b| b.is_ascii_hexdigit()) {
-                let _ = std::fs::read(evidence.join(&sha[..2]).join(&sha[2..]));
-            }
         }
     }
 }

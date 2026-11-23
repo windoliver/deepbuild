@@ -50,7 +50,7 @@ fn atlas_rasterizes_each_glyph_once() {
     let shaped = shaper.shape(&Spec::label("Hello, 390"));
     let mut placed = Vec::new();
     for glyph in &shaped.glyphs {
-        placed.push(atlas.glyph(&glyph.font, glyph.id, glyph.size * 2.));
+        placed.push(atlas.glyph(&glyph.font, glyph.id, &glyph.coords, glyph.size * 2.));
     }
     let drawn = placed.iter().flatten().count();
     assert_eq!(drawn, 9, "a space is blank; the rest are drawn: {placed:?}");
@@ -60,7 +60,7 @@ fn atlas_rasterizes_each_glyph_once() {
         "nine distinct glyphs, the space and the second l among them"
     );
     for glyph in &shaped.glyphs {
-        atlas.glyph(&glyph.font, glyph.id, glyph.size * 2.);
+        atlas.glyph(&glyph.font, glyph.id, &glyph.coords, glyph.size * 2.);
     }
     assert_eq!(
         atlas.rasterized(),
@@ -85,7 +85,10 @@ fn a_full_atlas_starts_over_at_a_new_generation() {
     let mut size = 200.;
     'fill: loop {
         for glyph in &shaped.glyphs {
-            if atlas.glyph(&glyph.font, glyph.id, size).is_none() {
+            if atlas
+                .glyph(&glyph.font, glyph.id, &glyph.coords, size)
+                .is_none()
+            {
                 break 'fill;
             }
         }
@@ -94,7 +97,9 @@ fn a_full_atlas_starts_over_at_a_new_generation() {
     }
     assert_eq!(atlas.pages().len(), PAGES, "no page beyond the cap");
     assert!(
-        atlas.glyph(&glyph.font, glyph.id, size + 1.).is_none(),
+        atlas
+            .glyph(&glyph.font, glyph.id, &glyph.coords, size + 1.)
+            .is_none(),
         "still no room, and the refusal is not remembered as a blank glyph"
     );
     let before = atlas
@@ -105,7 +110,9 @@ fn a_full_atlas_starts_over_at_a_new_generation() {
         .unwrap();
     assert!(atlas.make_room(), "{PAGES} pages are full");
     assert_eq!(atlas.pages().len(), 0);
-    let placed = atlas.glyph(&glyph.font, glyph.id, size + 1.).unwrap();
+    let placed = atlas
+        .glyph(&glyph.font, glyph.id, &glyph.coords, size + 1.)
+        .unwrap();
     assert_eq!(
         (placed.page, placed.x, placed.y),
         (0, 1, 1),
@@ -129,7 +136,7 @@ fn a_ticking_atlas_evicts_the_page_least_recently_drawn_from() {
         shaped
             .glyphs
             .iter()
-            .map(|g| atlas.glyph(&g.font, g.id, size))
+            .map(|g| atlas.glyph(&g.font, g.id, &g.coords, size))
             .collect::<Vec<_>>()
     };
     while atlas.pages().len() < PAGES {

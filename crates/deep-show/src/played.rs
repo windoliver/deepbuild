@@ -135,10 +135,19 @@ impl Hub<'_> {
     /// `form` played: its track inlined, and each view-class control's value from the
     /// document's session state written as that control's default.
     pub(crate) fn played(&self, doc: &str, form: &Value) -> Value {
+        // #860: an entry a rewind closed stays on the track and draws nothing, so a frame folds the
+        // current branch (the logic's run lists those under `branch.off`).
+        let off = form.pointer("/branch/off").and_then(Value::as_array);
+        let closed = |e: &Value| {
+            off.is_some_and(|off| {
+                off.iter()
+                    .any(|o| o[0] == e["t"] && o[1] == e["control"] && o[2] == e["seq"])
+            })
+        };
         let entries: Vec<Value> = self
             .track_json(doc)
             .into_iter()
-            .filter(|e| reads(form, e))
+            .filter(|e| reads(form, e) && !closed(e))
             .collect();
         let mut out = with_track(form, &entries);
         // #903: where no one gives input, the document's tour plays.
@@ -251,6 +260,21 @@ impl Hub<'_> {
         if !crate::fields::admits(c, &value) {
             return Err(json!({"code": "out_of_range", "control": control, "value": value}));
         }
+        // #297: and a text an entry text shows, only what its faces draw (Text `text@1`: entries).
+        if let Some(r) = value
+            .as_str()
+            .and_then(|v| self.entry_refused(form, control, v))
+        {
+            return Err(crate::entries::refusal_json(control, &value, &r));
+        }
+        // Planted (#297): an entry an entry text shows, normalized to NFC on the track.
+        let value = match value.as_str() {
+            Some(v) if self.normalizes_entries(form, control) => {
+                use unicode_normalization::UnicodeNormalization;
+                json!(v.nfc().collect::<String>())
+            }
+            _ => value,
+        };
         let options = variants::option_names(form, c);
         if value.is_string()
             && !options.is_empty()
@@ -269,6 +293,7 @@ impl Hub<'_> {
                     samples: None,
                     writer: Writer::You,
                     serial: Some(serial as u32),
+                    player: None,
                 };
                 appended = Some(entry.to_json());
                 self.tracks

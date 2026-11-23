@@ -214,6 +214,17 @@ In R1 · preview · `d1:d746974fa9afd5e951f76f9af38954b0ad7f436f2120dc974da65e5e
 
 Answers an ask with an option and the decision that covers it. The core applies the answer only when that decision is active and of the ask's kind and scope; otherwise the ask reaches you.
 
+### `deep.registerPort`
+
+In R1 · preview · `d1:c1a0515e41f2a3869341f5cb779d2ce7e1098964f8aa4a1f1645968f95b4538c`
+
+A plug-in's side of a piece's port: `entries` and `rows`, the entries and occurrence rows it takes, and `sources`, the sources it gives for readings in, each one the plug-in registers. The piece must list each of them, and the port carries what the piece lists, which may be more. `sound` says whether its gear makes sound, which makes the plug-in a device gate owner whatever the document says. Registering opens nothing: a port opens only after a person clicks Connect on the app's prompt, and sends only while the piece plays live and forward, never on a seek, a replay or an export.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `name` | string, `^[a-z][a-z0-9_.-]*$` | yes |
+| `port` | object | yes |
+
 ### `deep.registerEnvironment`
 
 In R1 · preview · `d1:1e34ef8a97474d44b1cbff77e9b435e5e6b18ac4123956b0d29066f1a990dd5a`
@@ -382,6 +393,16 @@ Reads the latest item under every key of the plug-in's own store.
 |---|---|---|
 | `kind` | string, `^ext\.[a-z0-9_-]+\.[a-z][a-z0-9_]*$` | yes |
 
+### `deep.schedule.read`
+
+In R1 · preview · `d1:05a2343b28cd68859192ba8971bcbac01e101886005a29242a5fd1c2cc72e493`
+
+Reads a source the job declared among its readings, for the run under way: a job calls it as its context's `read`, and outside a run it is refused. Listing `deep.schedule` in `requires.preview` covers it.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `source` | string, `^[a-z][a-z0-9_.-]*$` | yes |
+
 ### `deep.runner.run`
 
 In R1 · preview · `d1:867ba9b60a91e097afdb8ecb28794259d5f1bfa59f66065c0ede01b825b56ea0`
@@ -507,6 +528,17 @@ For a check runner: a piece played headless in a replica on its virtual clock, a
 | `doc` | string | yes |
 | `run` | object | yes |
 
+### `deep.source.ask`
+
+Arrives in R6 · preview · `d1:d0835533deaa7af647e1972af79858f1e2f367ea8118be8b50466f1db38390cb`
+
+A plug-in asks a model source its manifest lists for a reply to a prompt. The hub makes the call, from a recording when replaying, and the plug-in gets the answer's status and body, or no answer and why; it never reaches the network itself.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `name` | string | yes |
+| `request` | object | yes |
+
 ## Slots
 
 Each kind of thing a package registers fills a slot: its interface with a frozen digest, how many pieces may fill it, its kit in the conformance package and the planted wrong fills that kit must fail. A second fill of a slot that takes one is refused at install unless its manifest says it replaces the first.
@@ -529,3 +561,4 @@ Each kind of thing a package registers fills a slot: its interface with a frozen
 | `deep.registerJobTool` | - | `job.kind@1` | many per kind | `job.kind@1` | `lowercases-last-letter` | R6 |
 | `deep.registerChannel` | - | `channel@1` | many | `channel@1` | `delivered-without-ack`, `signed-without-signature` | R2 |
 | `deep.registerStateSource` | - | `state-source@1` | many | `state-source@1` | `undo-fails`, `first-read-kept`, `compare-sees-nothing` | R2 |
+| `deep.registerPort` | - | `port@1` | many, at most 8 on a document | `port@1` | `sends-on-seek` | R6 |

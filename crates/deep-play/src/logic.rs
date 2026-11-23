@@ -1,17 +1,24 @@
 //! #544, #535, #533: a document's logic items as the app and the web player both bake them (#172):
 //! baked on an input track over the transport's span, each one's occurrence list written into the
 //! form its readers read and its arrays into `arrays`, which the core's column view reads, and each
-//! program inlined for the logic module's steps.
+//! program inlined for the logic module's steps. The core's column view over the form is here
+//! too, which a set without logic (#1490) runs as well.
 
+#[cfg(feature = "logic")]
 use std::rc::Rc;
 
 use deep_canvas::document::Issue;
 use deep_canvas::registry::Sealed;
+#[cfg(feature = "logic")]
 use deep_logic::piece::{check_in, History, Piece};
+#[cfg(feature = "logic")]
 use deep_logic::world::{track_of, Entry, Record, World};
-use serde_json::{json, Map, Value};
+#[cfg(any(feature = "logic", feature = "cells"))]
+use serde_json::json;
+use serde_json::{Map, Value};
 
 /// A refusal of the logic module as the revision's issue, on the item it names.
+#[cfg(feature = "logic")]
 pub fn refused(r: Value) -> Issue {
     let item = r
         .get("item")
@@ -35,6 +42,7 @@ pub fn refused(r: Value) -> Issue {
 /// Each `logic@1` item's program, read by `read` by its hash and inlined as `params.wasm`
 /// (base64), which the logic module's steps run (#533). A program `read` doesn't hold stays out,
 /// and the logic module's step names it `asset_missing`.
+#[cfg(feature = "logic")]
 pub fn inline_programs(form: &mut Value, read: &dyn Fn(&str) -> Option<Vec<u8>>) {
     let Some(items) = form.get_mut("items").and_then(Value::as_object_mut) else {
         return;
@@ -60,6 +68,49 @@ pub fn inline_programs(form: &mut Value, read: &dyn Fn(&str) -> Option<Vec<u8>>)
             );
         }
     }
+    // #192: each logic item's data assets and linked libraries by their hash, with the pinned
+    // packs' libraries the hub listed, which the logic module's steps read as a piece's assets;
+    // #211: and its world's init pages, an asset or a provider's output by hash.
+    let shas: Vec<String> = items
+        .values()
+        .filter(|i| i["kind"] == deep_logic::module::INTERFACE)
+        .flat_map(|i| {
+            let assets = i
+                .pointer("/params/assets")
+                .and_then(Value::as_array)
+                .cloned();
+            let links = i
+                .pointer("/params/links")
+                .and_then(Value::as_array)
+                .cloned();
+            let links = links.into_iter().flatten().map(|l| l["asset"].clone());
+            let init = i
+                .pointer("/params/pages/init")
+                .map(|v| match v.get("asset") {
+                    Some(a) => a.clone(),
+                    None => v.clone(),
+                });
+            assets
+                .into_iter()
+                .flatten()
+                .chain(links)
+                .chain(init)
+                .collect::<Vec<_>>()
+        })
+        .filter_map(|v| v.as_str().map(str::to_string))
+        .collect();
+    let inlined: serde_json::Map<String, Value> = shas
+        .into_iter()
+        .filter_map(|sha| {
+            Some((
+                sha.clone(),
+                Value::String(deep_canvas::base64::encode(&read(&sha)?)),
+            ))
+        })
+        .collect();
+    if !inlined.is_empty() {
+        form["inlined"] = Value::Object(inlined);
+    }
 }
 
 /// Mark set columns that read a column source, resolved and narrowed by the core's column
@@ -68,13 +119,26 @@ pub fn inline_programs(form: &mut Value, read: &dyn Fn(&str) -> Option<Vec<u8>>)
 pub fn column_view(sealed: &Sealed, form: &mut Value, t: i64) -> Vec<Issue> {
     let entries = sealed.registry(deep_canvas::columns::REGISTRY);
     let entries = entries.map_or(&[][..], |r| r.entries.as_slice());
-    let mut issues = deep_canvas_scene3d::arrays::check(form, entries);
-    issues.extend(deep_canvas_scene3d::tints::check(form));
+    let mut issues = Vec::new();
+    #[cfg(feature = "scene3d")]
+    {
+        issues.extend(deep_canvas_scene3d::arrays::check(form, entries));
+        issues.extend(deep_canvas_scene3d::tints::check(form));
+    }
     issues.extend(deep_canvas::columns::view(form, entries, t));
     // #538: the logic grid, keyed copy and flip by array, each through the same view.
-    issues.extend(deep_canvas_cells::logic_grid::check(form, entries));
-    issues.extend(grid_glyphs(form));
+    #[cfg(feature = "cells")]
+    {
+        issues.extend(deep_canvas_cells::logic_grid::check(form, entries));
+        issues.extend(grid_glyphs(form));
+    }
     issues.extend(readers(form, entries));
+    // #269: each grid image's grid, and every cell of it past its roles.
+    issues.extend(deep_canvas_marks::grid_image::check(form, entries));
+    // #297: entry texts' controls and players, and their fit.
+    if let Some(map) = form.as_object() {
+        issues.extend(deep_canvas_marks::entries::check_issues(map));
+    }
     if issues.iter().all(|i| i.code != "module_missing") {
         let locale = form
             .get("locale")
@@ -89,6 +153,7 @@ pub fn column_view(sealed: &Sealed, form: &mut Value, t: i64) -> Vec<Issue> {
 /// Each logic item of `piece` (`form`'s, checked) stepped on `track` over the transport's span,
 /// and its rows written to `occurrences.<logic ID>.occurrences`:
 /// `{t, step, kind, a, b}` and its declared fields by name, as Spawn and motion read a row.
+#[cfg(feature = "logic")]
 pub fn inline_logic(
     form: &mut Value,
     piece: Option<Piece>,
@@ -111,10 +176,14 @@ pub fn inline_logic(
     let span = deep_canvas_media::doc::time(form, form.pointer("/transport/span"))
         .unwrap_or(0)
         .max(0);
+    // A play that waits runs on the clock past the transport's span, the answers it takes
+    // arriving there: the bake reaches as far as the last entry's clock past the span (#1040).
+    let last = entries.iter().map(|e| e.t).max().unwrap_or(0);
+    let reach = if last > span { span + last } else { span };
     let steps = piece
         .items
         .iter()
-        .map(|i| (span + i.step - 1) / i.step.max(1))
+        .map(|i| (reach + i.step - 1) / i.step.max(1))
         .max()
         .unwrap_or(0);
     let piece = Rc::new(piece);
@@ -129,9 +198,42 @@ pub fn inline_logic(
     )
     .map_err(refused)?;
     world.run(steps, &mut rec, &mut |_, _| {});
+    // #860: what draws reads the current branch: no rewind, and none of the entries one closed.
+    if let Some(list) = form.get_mut("track").and_then(Value::as_array_mut) {
+        let off: Vec<(i64, &str, u32)> = world
+            .branches
+            .off
+            .iter()
+            .map(|e| (e.t, e.control.as_str(), e.seq))
+            .collect();
+        list.retain(|e| {
+            let at = (
+                e["t"].as_i64().unwrap_or(0),
+                e["control"].as_str().unwrap_or(""),
+            );
+            let seq = e["seq"].as_u64().unwrap_or(0) as u32;
+            e.get("rewind").is_none() && !off.contains(&(at.0, at.1, seq))
+        });
+    }
     let Some(doc) = form.as_object_mut() else {
         return Ok(());
     };
+    // And for a host whose own track the form takes later, the entries closed; for the canvas's
+    // logic module, which steps the current branch afresh, the seen values it carries in.
+    let b = &world.branches;
+    if b.off.is_empty() && b.carry.is_empty() {
+        doc.remove("branch");
+    } else {
+        let off: Vec<Value> = b
+            .off
+            .iter()
+            .map(|e| json!([e.t, e.control, e.seq]))
+            .collect();
+        doc.insert(
+            "branch".into(),
+            json!({"off": off, "carry": b.carry_json()}),
+        );
+    }
     let lists = doc.entry("occurrences").or_insert_with(|| json!({}));
     for (id, rows) in rec.occurrences(&piece) {
         let flat: Vec<Value> = rows
@@ -195,13 +297,34 @@ pub fn inline_logic(
     {
         all.extend(arrays);
     }
+    gate_fog(doc);
     Ok(())
+}
+
+/// #552: the occurrences this copy's player doesn't see (its `match.me`, 1 for a piece played
+/// alone), taken out of every gated list; the planted burst that ignores the gate still reads
+/// them, from `fogged`.
+#[cfg(feature = "logic")]
+fn gate_fog(doc: &mut serde_json::Map<String, Value>) {
+    let (items, me) = (doc.get("items").cloned(), doc.get("match.me").cloned());
+    let arrays = doc.get("arrays").and_then(Value::as_object).cloned();
+    let (Some(items), Some(arrays)) = (items, arrays) else {
+        return;
+    };
+    let Some(Value::Object(lists)) = doc.get_mut("occurrences") else {
+        return;
+    };
+    let fogged = deep_logic::fog::gate(&items, &arrays, lists, &me.unwrap_or(Value::Null));
+    if !fogged.is_empty() {
+        doc.insert("fogged".into(), Value::Object(fogged));
+    }
 }
 
 /// `form`'s logic items as one piece with its seed and controls, checked by the logic module,
 /// each program read by `read`, with the between-step services this build binds
 /// answering on `form`'s worlds and the core input track `track` (#213); none when it has no
 /// logic item.
+#[cfg(feature = "logic")]
 pub fn logic_piece(
     sealed: &Sealed,
     form: &Value,
@@ -209,12 +332,27 @@ pub fn logic_piece(
     read: &dyn Fn(&str) -> Option<Vec<u8>>,
     cast_late: bool,
 ) -> Result<Option<Piece>, Box<Issue>> {
-    let Some(piece) = piece_json(form) else {
+    logic_piece_with(sealed, form, track, read, cast_late, &Default::default())
+}
+
+/// As `logic_piece`, checked with `planted`'s twins (#551: a page tracker a match's ring plants).
+#[cfg(feature = "logic")]
+pub fn logic_piece_with(
+    sealed: &Sealed,
+    form: &Value,
+    track: &[Value],
+    read: &dyn Fn(&str) -> Option<Vec<u8>>,
+    cast_late: bool,
+    planted: &deep_logic::Planted,
+) -> Result<Option<Piece>, Box<Issue>> {
+    let Some(mut piece) = piece_json(form) else {
         return Ok(None);
     };
+    // #194: each fired input's number fields, from the world that declares it.
+    crate::fires::expand(form, &mut piece)?;
     let piece = check_in(
         &piece,
-        &Default::default(),
+        planted,
         &mut History::new(),
         read,
         &crate::cast::services(sealed, form, track, cast_late),
@@ -225,6 +363,7 @@ pub fn logic_piece(
 
 /// `form`'s logic items as one piece, as the logic module checks one: its seed, controls and
 /// items; none when it has no logic item.
+#[cfg(feature = "logic")]
 pub fn piece_json(form: &Value) -> Option<Value> {
     // Without the program the hub inlined as `wasm` for the module's steps (#533): the check
     // reads it from the store by `program`. The core's reads judge as figure, as they did before
@@ -249,6 +388,16 @@ fn readers(form: &Value, entries: &[deep_canvas::registry::lists::SealedEntry]) 
         let mut paths: Vec<(String, String)> = Vec::new();
         if let Some(a) = item.pointer("/params/flip/array").and_then(Value::as_str) {
             paths.push(("flip/array".into(), a.into()));
+        }
+        // #297: an entry text's player read from a logic array.
+        if let Some(Ok(e)) = item
+            .pointer("/params/text")
+            .filter(|t| deep_canvas_marks::entries::is_entry(t))
+            .map(deep_canvas_marks::entries::spec)
+        {
+            if let deep_canvas_marks::entries::Player::Path(p) = e.player {
+                paths.push(("text/player".into(), p.into()));
+            }
         }
         for (field, v) in deep_canvas_marks::copy::lookups_of(item) {
             let Ok(l) = deep_canvas_marks::copy::lookup(&v) else {
@@ -280,6 +429,7 @@ fn readers(form: &Value, entries: &[deep_canvas::registry::lists::SealedEntry]) 
 
 /// #538: each grapheme a logic grid lists that the face it draws in can't draw: a grid draws
 /// every row in the mono role's face, so a glyph that face lacks is refused at check, naming it.
+#[cfg(feature = "cells")]
 fn grid_glyphs(form: &Value) -> Vec<Issue> {
     let mut shaper: Option<deep_text::Shaper> = None;
     let mut out = Vec::new();
@@ -321,11 +471,18 @@ fn grid_glyphs(form: &Value) -> Vec<Issue> {
 pub fn raised_at(form: &Value, t: Option<i64>, locale: &str) -> Vec<Issue> {
     let empty = Map::new();
     let map = form.as_object().unwrap_or(&empty);
+    #[cfg(feature = "cells")]
     let mut out = t.map_or_else(Vec::new, |t| {
         deep_canvas_cells::logic_grid::raised_at(form, t)
     });
+    #[cfg(not(feature = "cells"))]
+    let mut out = Vec::new();
+    if let Some(t) = t {
+        out.extend(deep_canvas_marks::grid_image::raised_at(form, t));
+    }
     out.extend(deep_canvas_motion::held::unmapped(form, t));
     out.extend(deep_canvas_marks::copy::raised_at(map, t, locale));
     out.extend(deep_canvas_marks::copy::column_missing(map, t, locale));
+    out.extend(deep_canvas_marks::entries::raised_at(map, t));
     out
 }

@@ -64,18 +64,20 @@ pub struct Face {
     bytes: &'static [u8],
 }
 
-/// A face's bytes in this build: compiled in.
+/// A face's bytes in this build: compiled in. Each face names its file in its own literal
+/// `include_bytes!`, so the canvas lint reads that the file is the crate's.
 #[cfg(not(target_arch = "wasm32"))]
 macro_rules! face_bytes {
-    ($file:literal) => {
-        include_bytes!(concat!("../fonts/", $file))
+    ($bytes:expr) => {
+        $bytes
     };
 }
 
-/// In the web player, none compiled in: the bundle's file arrives through [`provide`].
+/// In the web player, none compiled in: the `include_bytes!` is never expanded, and the bundle's
+/// file arrives through [`provide`].
 #[cfg(target_arch = "wasm32")]
 macro_rules! face_bytes {
-    ($file:literal) => {
+    ($bytes:expr) => {
         &[]
     };
 }
@@ -98,9 +100,9 @@ pub fn provide(file: &str, bytes: Vec<u8>) {
 }
 
 /// Each bundled face's license file by name, with its text: what travels beside a face that
-/// leaves the app, such as a web player's bundle (#172).
-#[cfg(not(target_arch = "wasm32"))]
-pub static LICENSES: &[(&str, &str)] = &[
+/// leaves the app, such as a web player's bundle (#172). A constant, so a build that never reads
+/// it, as the web player's, holds none of its text.
+pub const LICENSES: &[(&str, &str)] = &[
     (
         "LICENSE-Caveat.txt",
         include_str!("../fonts/LICENSE-Caveat.txt"),
@@ -157,7 +159,7 @@ pub static FACES: &[Face] = &[
         file: "Inter-Regular.ttf",
         license: "OFL-1.1",
         license_file: "LICENSE-Inter.txt",
-        bytes: face_bytes!("Inter-Regular.ttf"),
+        bytes: face_bytes!(include_bytes!("../fonts/Inter-Regular.ttf")),
     },
     Face {
         family: "Inter",
@@ -165,7 +167,7 @@ pub static FACES: &[Face] = &[
         file: "Inter-Medium.ttf",
         license: "OFL-1.1",
         license_file: "LICENSE-Inter.txt",
-        bytes: face_bytes!("Inter-Medium.ttf"),
+        bytes: face_bytes!(include_bytes!("../fonts/Inter-Medium.ttf")),
     },
     Face {
         family: "Inter",
@@ -173,17 +175,18 @@ pub static FACES: &[Face] = &[
         file: "Inter-SemiBold.ttf",
         license: "OFL-1.1",
         license_file: "LICENSE-Inter.txt",
-        bytes: face_bytes!("Inter-SemiBold.ttf"),
+        bytes: face_bytes!(include_bytes!("../fonts/Inter-SemiBold.ttf")),
     },
-    // #496: the variable face, a weight axis from 100 to 900, for text whose weight a channel
-    // drives; every weight it takes is shaped from these bytes, never snapped to a static face.
+    // #496, #1484: the variable face, an optical size axis from 14 to 32 and a weight axis from
+    // 100 to 900, which every text in Inter is set on (`shaped_in`); the static faces above stay
+    // the files a look names its role by.
     Face {
         family: "Inter Variable",
         weight: 400,
         file: "InterVariable.ttf",
         license: "OFL-1.1",
         license_file: "LICENSE-Inter.txt",
-        bytes: face_bytes!("InterVariable.ttf"),
+        bytes: face_bytes!(include_bytes!("../fonts/InterVariable.ttf")),
     },
     Face {
         family: "JetBrains Mono",
@@ -191,7 +194,7 @@ pub static FACES: &[Face] = &[
         file: "JetBrainsMono-Regular.ttf",
         license: "OFL-1.1",
         license_file: "LICENSE-JetBrainsMono.txt",
-        bytes: face_bytes!("JetBrainsMono-Regular.ttf"),
+        bytes: face_bytes!(include_bytes!("../fonts/JetBrainsMono-Regular.ttf")),
     },
     Face {
         family: "JetBrains Mono",
@@ -199,7 +202,7 @@ pub static FACES: &[Face] = &[
         file: "JetBrainsMono-Medium.ttf",
         license: "OFL-1.1",
         license_file: "LICENSE-JetBrainsMono.txt",
-        bytes: face_bytes!("JetBrainsMono-Medium.ttf"),
+        bytes: face_bytes!(include_bytes!("../fonts/JetBrainsMono-Medium.ttf")),
     },
     Face {
         family: "STIX Two Math",
@@ -207,7 +210,7 @@ pub static FACES: &[Face] = &[
         file: "STIXTwoMath-Regular.ttf",
         license: "OFL-1.1",
         license_file: "LICENSE-STIXTwoMath.txt",
-        bytes: face_bytes!("STIXTwoMath-Regular.ttf"),
+        bytes: face_bytes!(include_bytes!("../fonts/STIXTwoMath-Regular.ttf")),
     },
     Face {
         family: "Caveat",
@@ -215,7 +218,7 @@ pub static FACES: &[Face] = &[
         file: "Caveat-Regular.ttf",
         license: "OFL-1.1",
         license_file: "LICENSE-Caveat.txt",
-        bytes: face_bytes!("Caveat-Regular.ttf"),
+        bytes: face_bytes!(include_bytes!("../fonts/Caveat-Regular.ttf")),
     },
     Face {
         family: "Noto Sans SC",
@@ -223,7 +226,7 @@ pub static FACES: &[Face] = &[
         file: "NotoSansSC-Regular.otf",
         license: "OFL-1.1",
         license_file: "LICENSE-NotoSansSC.txt",
-        bytes: face_bytes!("NotoSansSC-Regular.otf"),
+        bytes: face_bytes!(include_bytes!("../fonts/NotoSansSC-Regular.otf")),
     },
     Face {
         family: "Noto Sans Arabic",
@@ -231,7 +234,7 @@ pub static FACES: &[Face] = &[
         file: "NotoSansArabic-Regular.ttf",
         license: "OFL-1.1",
         license_file: "LICENSE-NotoSansArabic.txt",
-        bytes: face_bytes!("NotoSansArabic-Regular.ttf"),
+        bytes: face_bytes!(include_bytes!("../fonts/NotoSansArabic-Regular.ttf")),
     },
     Face {
         family: "Noto Emoji",
@@ -239,34 +242,29 @@ pub static FACES: &[Face] = &[
         file: "NotoEmoji-Regular.ttf",
         license: "OFL-1.1",
         license_file: "LICENSE-NotoEmoji.txt",
-        bytes: face_bytes!("NotoEmoji-Regular.ttf"),
+        bytes: face_bytes!(include_bytes!("../fonts/NotoEmoji-Regular.ttf")),
     },
 ];
 
-/// #496: the family a text at `weight` is set in: `family` itself when it has a face at that
-/// weight or no variable twin, else its variable twin, so a weight between or past the static
-/// faces is drawn at that weight on the variable face's axis, never snapped to the nearest static.
-pub fn family_at(family: &'static str, weight: u16) -> &'static str {
-    let twin = match family {
+/// #1484: the family a text set in `family` is shaped in: its variable twin when the bundled
+/// faces hold one, so its optical size follows its size and every weight draws as asked (#496:
+/// never snapped to a static face), else `family` itself.
+pub fn shaped_in(family: &str) -> &str {
+    match family {
         "Inter" => "Inter Variable",
-        _ => return family,
-    };
-    if FACES
-        .iter()
-        .any(|f| f.family == family && f.weight == weight)
-    {
-        family
-    } else {
-        twin
+        _ => family,
     }
 }
 
-/// The static family a variable twin stands in for (#496's planted snapping build).
-pub fn static_of(family: &'static str) -> &'static str {
-    match family {
-        "Inter Variable" => "Inter",
-        _ => family,
-    }
+/// #496's planted snapping build: the weight of `family`'s static face nearest `weight`, the
+/// lighter on a tie; `weight` itself for a family with no static face.
+pub fn static_weight(family: &str, weight: u16) -> u16 {
+    FACES
+        .iter()
+        .filter(|f| f.family == family)
+        .map(|f| f.weight)
+        .min_by_key(|w| (w.abs_diff(weight), *w))
+        .unwrap_or(weight)
 }
 
 /// A face's bytes as the blob the font collection and the rasterizer share.

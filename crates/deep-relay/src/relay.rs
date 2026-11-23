@@ -1,6 +1,12 @@
 //! The relay DeepBuild ships, for you to run on one of your own hosts: it keeps only each match's
 //! open connections and forwards each frame to that match's other copies, and keeps nothing once a
-//! match's last copy leaves. DeepBuild runs no relay and no service.
+//! match's last copy leaves. DeepBuild runs no relay and no service. It speaks relay@1, and relay@2
+//! (#277) to a copy that asks for it by the WebSocket subprotocol: then it also hands a copy's
+//! `holds`, `seat` and `catch_up` on to its match's other copies, naming the sender. A match
+//! whose opening join names `min` is a room (#278): the relay tells its copies who is seated,
+//! starts it on the first player's `begin` with whoever is there, hands a Join that comes after
+//! the start to the copies (`knock`) and seats it once one says the lobby is open (`admit`), and
+//! after a copy says the match `finished` starts the next on the same connections.
 
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
@@ -13,6 +19,7 @@ use std::time::{Duration, Instant};
 
 use rustls::{ServerConfig, ServerConnection, StreamOwned};
 use serde_json::{json, Value};
+use tungstenite::handshake::server::{Callback, ErrorResponse, Request, Response};
 use tungstenite::Message;
 
 use crate::wire::{self, MatchId};
@@ -45,6 +52,43 @@ struct Held {
     players: u8,
     seats: Vec<Option<Sender<Message>>>,
     forwarded: bool,
+    /// #278: a room's `min`, the copies its match needs before the first player's Start.
+    min: Option<u8>,
+    /// The match ID its frames carry: the room's, or the one its last `begin` drew.
+    game: MatchId,
+    /// The seats its running match started with; empty in the lobby. And the seats whose copies
+    /// said that match finished.
+    started: Vec<u8>,
+    finished: Vec<u8>,
+    /// Joins made after the start, each waiting for a copy's word on the lobby, by seat, with
+    /// its connection's number.
+    knocking: BTreeMap<u8, (u64, Sender<Message>)>,
+}
+
+impl Held {
+    fn taken(&self) -> Vec<u8> {
+        let seats = self.seats.iter().enumerate();
+        seats
+            .filter_map(|(p, s)| s.as_ref().map(|_| p as u8))
+            .collect()
+    }
+
+    fn tell(&self, message: &Value) {
+        for tx in self.seats.iter().flatten() {
+            let _ = tx.send(Message::text(message.to_string()));
+        }
+    }
+
+    /// The match starts with the seats taken now; a room's start names them and its match ID.
+    fn start(&mut self) {
+        self.started = self.taken();
+        let mut start = json!({"players": self.players});
+        if self.min.is_some() {
+            start["seats"] = json!(self.started);
+            start["match"] = json!(wire::hex(&self.game));
+        }
+        self.tell(&json!({ "start": start }));
+    }
 }
 
 #[derive(Default)]
@@ -74,8 +118,12 @@ pub fn serve(listener: TcpListener, tls: ServerConfig, planted: Option<Planted>)
     }
 }
 
-fn hello(planted: Option<Planted>) -> Value {
+fn hello(planted: Option<Planted>, two: bool) -> Value {
     let (protocol, digest) = match planted {
+        _ if two => (
+            wire::PROTOCOL2.to_string(),
+            wire::digest_of(wire::PROTOCOL2),
+        ),
         Some(Planted::HelloOtherProtocol) => ("relay@2".to_string(), wire::digest()),
         Some(Planted::HelloOtherDigest) => (
             "relay@1".to_string(),
@@ -120,6 +168,27 @@ impl Rate {
     }
 }
 
+/// #277: the handshake's answer to a copy that offers relay@2's WebSocket subprotocol: the
+/// subprotocol, and `true` in the flag it holds.
+struct Asked<'a>(&'a mut bool);
+
+impl Callback for Asked<'_> {
+    fn on_request(self, req: &Request, mut res: Response) -> Result<Response, ErrorResponse> {
+        let offered = req.headers().get_all("Sec-WebSocket-Protocol");
+        let offers = offered.iter().filter_map(|v| v.to_str().ok());
+        if offers
+            .flat_map(|v| v.split(','))
+            .any(|p| p.trim() == wire::SUBPROTOCOL2)
+        {
+            if let Ok(v) = wire::SUBPROTOCOL2.parse() {
+                res.headers_mut().insert("Sec-WebSocket-Protocol", v);
+                *self.0 = true;
+            }
+        }
+        Ok(res)
+    }
+}
+
 fn connection(stream: TcpStream, tls: Arc<ServerConfig>, state: &State) {
     let n = state.connections.fetch_add(1, Ordering::Relaxed);
     let _ = stream.set_read_timeout(Some(HANDSHAKE));
@@ -127,11 +196,14 @@ fn connection(stream: TcpStream, tls: Arc<ServerConfig>, state: &State) {
     let Ok(tls) = ServerConnection::new(tls) else {
         return;
     };
-    let Ok(mut ws) = tungstenite::accept(StreamOwned::new(tls, stream)) else {
+    // #277: a copy that asks for relay@2 by the WebSocket subprotocol gets it.
+    let mut two = false;
+    let asked = Asked(&mut two);
+    let Ok(mut ws) = tungstenite::accept_hdr(StreamOwned::new(tls, stream), asked) else {
         return;
     };
     if ws
-        .send(Message::text(hello(state.planted).to_string()))
+        .send(Message::text(hello(state.planted, two).to_string()))
         .is_err()
         || ws.get_ref().sock.set_read_timeout(Some(POLL)).is_err()
     {
@@ -139,13 +211,15 @@ fn connection(stream: TcpStream, tls: Arc<ServerConfig>, state: &State) {
     }
     let (outbox, inbox) = channel();
     let mut seat: Option<(MatchId, u8)> = None;
+    // #278: the room this connection knocked at, until a copy admits or refuses it.
+    let mut knocked: Option<MatchId> = None;
     let mut rate = Rate::default();
     let reason = 'conn: loop {
         match ws.read() {
             Ok(Message::Text(text)) => {
                 log(state, n, &text, text.as_bytes());
                 if let Ok(message) = serde_json::from_str::<Value>(&text) {
-                    control(state, &message, &outbox, &mut seat);
+                    control(state, &message, (n, &outbox), &mut seat, &mut knocked, two);
                 }
             }
             Ok(Message::Binary(frame)) => {
@@ -167,11 +241,22 @@ fn connection(stream: TcpStream, tls: Arc<ServerConfig>, state: &State) {
             Err(_) => break "left",
         }
         while let Ok(message) = inbox.try_recv() {
+            answered(&message, &mut seat, &mut knocked);
             if ws.send(message).is_err() {
                 break 'conn "left";
             }
         }
     };
+    // A knock answered as its connection ended still took, or freed, its seat.
+    while let Ok(message) = inbox.try_recv() {
+        answered(&message, &mut seat, &mut knocked);
+    }
+    if let Some(game) = knocked {
+        let mut matches = state.matches.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(held) = matches.get_mut(&game) {
+            held.knocking.retain(|_, (conn, _)| *conn != n);
+        }
+    }
     if let Some((game, player)) = seat {
         leave(state, game, player, reason);
     }
@@ -181,6 +266,23 @@ fn connection(stream: TcpStream, tls: Arc<ServerConfig>, state: &State) {
         let _ = ws.close(None);
     }
     let _ = ws.flush();
+}
+
+/// #278: the relay's answer to a knock, as it goes out: `joined` seats the connection, `refused`
+/// ends the knock.
+fn answered(message: &Message, seat: &mut Option<(MatchId, u8)>, knocked: &mut Option<MatchId>) {
+    let (Some(game), Message::Text(text)) = (*knocked, message) else {
+        return;
+    };
+    let Ok(m) = serde_json::from_str::<Value>(text) else {
+        return;
+    };
+    if let Some(player) = m.pointer("/joined/player").and_then(Value::as_u64) {
+        *seat = Some((game, player as u8));
+        *knocked = None;
+    } else if m.get("refused").is_some() {
+        *knocked = None;
+    }
 }
 
 /// With --planted, one stdout line per message received: its name and bytes.
@@ -201,16 +303,23 @@ fn log(state: &State, n: u64, text: &str, bytes: &[u8]) {
 fn control(
     state: &State,
     message: &Value,
-    outbox: &Sender<Message>,
+    (conn, outbox): (u64, &Sender<Message>),
     seat: &mut Option<(MatchId, u8)>,
+    knocked: &mut Option<MatchId>,
+    two: bool,
 ) {
     let text = |v: Value| Message::text(v.to_string());
     if let Some(join) = message.get("join") {
         let game = join["match"].as_str().and_then(wire::match_id);
         let players = join["players"].as_u64().filter(|p| (2..=8).contains(p));
-        let (Some(game), Some(players), None) = (game, players, *seat) else {
+        let (Some(game), Some(players), None, None) = (game, players, *seat, *knocked) else {
             return;
         };
+        // #278: a room's opening join names `min`, on relay@2 alone.
+        let min = join["min"]
+            .as_u64()
+            .filter(|m| two && (1..=players).contains(m))
+            .map(|m| m as u8);
         let mut matches = state.matches.lock().unwrap_or_else(|e| e.into_inner());
         let held = match matches.entry(game) {
             Entry::Occupied(held) => held.into_mut(),
@@ -222,20 +331,124 @@ fn control(
                 players: players as u8,
                 seats: (0..players).map(|_| None).collect(),
                 forwarded: false,
+                min,
+                game,
+                started: Vec::new(),
+                finished: Vec::new(),
+                knocking: BTreeMap::new(),
             }),
         };
-        let free = held.seats.iter().position(Option::is_none);
-        let (Some(player), false) = (free, held.forwarded) else {
-            let why = if held.forwarded { "started" } else { "full" };
-            let _ = outbox.send(text(json!({"refused": why})));
-            return;
+        let free = (0..held.players)
+            .find(|p| held.seats[*p as usize].is_none() && !held.knocking.contains_key(p));
+        let running = match held.min {
+            Some(_) => !held.started.is_empty(),
+            None => held.forwarded,
+        };
+        let player = match (free, running) {
+            (Some(player), false) => player as usize,
+            // #278: a Join to a room's running match waits for a copy's word on its lobby.
+            (Some(player), true) if two && held.min.is_some() => {
+                held.knocking.insert(player, (conn, outbox.clone()));
+                *knocked = Some(game);
+                let knock = json!({"knock": {"match": wire::hex(&held.game), "player": player}});
+                held.tell(&knock);
+                return;
+            }
+            _ => {
+                let why = if running { "started" } else { "full" };
+                let _ = outbox.send(text(json!({"refused": why})));
+                return;
+            }
         };
         held.seats[player] = Some(outbox.clone());
         *seat = Some((game, player as u8));
         let _ = outbox.send(text(json!({"joined": {"player": player}})));
-        if held.seats.iter().all(Option::is_some) {
-            for tx in held.seats.iter().flatten() {
-                let _ = tx.send(text(json!({"start": {"players": held.players}})));
+        match held.min {
+            // A room tells its copies who is seated; one of a single count starts when full.
+            Some(min) => {
+                held.tell(&json!({"seated": {"match": wire::hex(&game), "seats": held.taken()}}));
+                if min == held.players && held.seats.iter().all(Option::is_some) {
+                    held.start();
+                }
+            }
+            None if held.seats.iter().all(Option::is_some) => held.start(),
+            None => {}
+        }
+    } else if let (true, Some((game, from)), Some(room)) = (
+        two,
+        *seat,
+        ["begin", "admit", "finished"]
+            .into_iter()
+            .find(|k| message.get(*k).is_some()),
+    ) {
+        let mut matches = state.matches.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(held) = matches.get_mut(&game).filter(|h| h.min.is_some()) else {
+            return;
+        };
+        let m = &message[room];
+        match room {
+            // #278: the first player's Start: the match starts with the seats taken, under the
+            // match ID that copy drew for it.
+            "begin" => {
+                let first = held.taken().first() == Some(&from);
+                let enough = held.taken().len() >= held.min.unwrap_or(held.players) as usize;
+                if first && enough && held.started.is_empty() {
+                    if let Some(next) = m["next"].as_str().and_then(wire::match_id) {
+                        held.game = next;
+                    }
+                    held.start();
+                }
+            }
+            // A copy's word on a knock: the lobby is open, and the Join takes its seat and the
+            // running match's start, or it is refused as a Join after the start is.
+            "admit" => {
+                let player = m["player"].as_u64().unwrap_or(u64::MAX) as u8;
+                let Some((_, tx)) = held.knocking.remove(&player) else {
+                    return;
+                };
+                if m["open"] != Value::Bool(true) {
+                    let _ = tx.send(text(json!({"refused": "started"})));
+                    return;
+                }
+                let _ = tx.send(text(json!({"joined": {"player": player}})));
+                let start = json!({"players": held.players, "seats": held.started,
+                                   "match": wire::hex(&held.game), "late": true, "at": m["at"]});
+                let _ = tx.send(text(json!({ "start": start })));
+                held.seats[player as usize] = Some(tx);
+            }
+            // The match finished: once every copy still seated says so, the room is a lobby
+            // again, on the same connections, and forwards no more of that match's frames.
+            _ => {
+                if m["match"].as_str() != Some(&wire::hex(&held.game)) || held.started.is_empty() {
+                    return;
+                }
+                held.finished.push(from);
+                if held.taken().iter().all(|p| held.finished.contains(p)) {
+                    held.started.clear();
+                    held.finished.clear();
+                    let seated = json!({"match": wire::hex(&game), "seats": held.taken()});
+                    held.tell(&json!({ "seated": seated }));
+                }
+            }
+        }
+    } else if let (true, Some((game, from)), Some(key)) = (
+        two,
+        *seat,
+        ["holds", "seat", "catch_up"]
+            .into_iter()
+            .find(|k| message.get(*k).is_some()),
+    ) {
+        // #277: relay@2's messages go to the match's other copies, naming the sender, and
+        // nowhere else.
+        let mut handed = message[key].clone();
+        handed["sender"] = json!(from);
+        let text = json!({ key: handed }).to_string();
+        let matches = state.matches.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(held) = matches.get(&game) {
+            for (player, tx) in held.seats.iter().enumerate() {
+                if let (Some(tx), true) = (tx, player != from as usize) {
+                    let _ = tx.send(Message::text(text.clone()));
+                }
             }
         }
     } else if let (Some(signal), Some((game, from))) = (message.get("signal"), *seat) {
@@ -254,11 +467,14 @@ fn control(
 
 /// A frame of the sender's match goes to that match's other copies, and nowhere else.
 fn forward(state: &State, game: MatchId, from: u8, frame: &[u8]) {
-    if frame.len() < wire::HEADER || frame[..16] != game {
+    if frame.len() < wire::HEADER {
         return;
     }
     let mut matches = state.matches.lock().unwrap_or_else(|e| e.into_inner());
-    let Some(held) = matches.get_mut(&game) else {
+    // #278: a room's frames carry the ID of the match it plays now, and none crosses its lobby.
+    let running = |h: &Held| h.min.is_none() || !h.started.is_empty();
+    let Some(held) = (matches.get_mut(&game)).filter(|h| frame[..16] == h.game && running(h))
+    else {
         return;
     };
     held.forwarded = true;
@@ -290,8 +506,10 @@ fn leave(state: &State, game: MatchId, player: u8, reason: &str) {
     };
     held.seats[player as usize] = None;
     let closed = json!({"closed": {"match": wire::hex(&game), "player": player, "reason": reason}});
-    for tx in held.seats.iter().flatten() {
-        let _ = tx.send(Message::text(closed.to_string()));
+    held.tell(&closed);
+    // #278: a room's lobby hears who is still seated.
+    if held.min.is_some() && held.started.is_empty() {
+        held.tell(&json!({"seated": {"match": wire::hex(&game), "seats": held.taken()}}));
     }
     if held.seats.iter().all(Option::is_none) {
         matches.remove(&game);

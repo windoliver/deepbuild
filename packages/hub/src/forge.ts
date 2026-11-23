@@ -1,7 +1,8 @@
 // The forge, read for the receipt (#83): a pull request's state (open, checks running, merged, released) and the
 // next unblocked issue in an epic. Read when the receipt is read, through the forge's REST API (GitHub's shape),
 // with the token given; a forge that doesn't answer within the receipt's budget leaves the state unknown, never a guess.
-import { isRecord as isObj } from '@deepbuild/contracts/runtime';
+import { isRecord as isObj } from '@deepbuild/contracts/json';
+import { forgeFetch } from '@deepbuild/github';
 
 type Obj = Record<string, unknown>;
 /** How long one receipt may spend on the forge in all, in ms. */
@@ -108,9 +109,7 @@ export class Forge {
   private async page(path: string): Promise<{ body: unknown; next: string | undefined }> {
     const left = this.deadline - Date.now();
     if (left <= 0) throw Error('the receipt\'s forge budget is spent');
-    const headers: Record<string, string> = { accept: 'application/vnd.github+json' };
-    if (this.token) headers.authorization = `Bearer ${this.token}`;
-    const res = await fetch(path.startsWith('https://') || path.startsWith('http://') ? path : `${this.api}${path}`, { headers, signal: AbortSignal.timeout(left) });
+    const res = await forgeFetch(this.api, path, { token: this.token, signal: AbortSignal.timeout(left) });
     if (!res.ok) throw Error(`the forge answered ${res.status} for ${path}`);
     const next = /<([^>]+)>;\s*rel="next"/.exec(res.headers.get('link') ?? '')?.[1];
     return { body: await res.json(), next };
@@ -183,12 +182,19 @@ export class Forge {
     }
     return false;
   }
-  /** Whether the head's check runs, or a commit status it has, are still pending: a head with no status at all is not pending. */
+  /**
+   * Whether the head's check runs, on any page of them, or a commit status it has, are still pending: a head with no
+   * status at all is not pending. The forge pages the runs (GitHub 30 to a page), so its next link is followed, as
+   * far as the first page with a run still going.
+   */
   private async checksRunning(pr: Pr, head: string): Promise<boolean> {
     try {
-      const checks = await this.get(`/repos/${pr.owner}/${pr.repo}/commits/${head}/check-runs`);
-      const runs = isObj(checks) && Array.isArray(checks.check_runs) ? checks.check_runs : [];
-      if (runs.some((r) => isObj(r) && r.status !== 'completed')) return true;
+      for (let next: string | undefined = `/repos/${pr.owner}/${pr.repo}/commits/${head}/check-runs`; next;) {
+        const page = await this.page(next);
+        const runs = isObj(page.body) && Array.isArray(page.body.check_runs) ? page.body.check_runs : [];
+        if (runs.some((r) => isObj(r) && r.status !== 'completed')) return true;
+        next = page.next;
+      }
       const status = await this.get(`/repos/${pr.owner}/${pr.repo}/commits/${head}/status`);
       return isObj(status) && status.state === 'pending' && Array.isArray(status.statuses) && status.statuses.length > 0;
     } catch { return false; }

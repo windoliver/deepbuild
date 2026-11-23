@@ -41,13 +41,14 @@ fn refused<T>(code: &'static str, path: impl Into<String>) -> Result<T, Refused>
 }
 
 /// The scene3d kinds this subset draws, `family.name@major`.
-pub const KINDS: [&str; 6] = [
+pub const KINDS: [&str; 7] = [
     "mark.box@1",
     "mark.cylinder@1",
     "mark.sphere@1",
     "mark.line@1",
     "mark.point@1",
     "mark.text@1",
+    "mark.image@1",
 ];
 
 /// The 2D overlay a 3D writer layer's anchor places, drawn by scene3d too.
@@ -284,6 +285,15 @@ impl Solid {
             None => corners(&self.model),
         }
     }
+
+    /// Whether it hides what lies behind it (#457's occluded share; #1782's spans): not glass,
+    /// blended or additive, and not drawn below full coverage.
+    pub fn opaque(&self) -> bool {
+        let m = self.material.as_ref();
+        !(self.alpha < 1.0
+            || self.per_pixel
+            || m.is_some_and(|m| m.alpha_mode.see_through() || m.lobes.transmission > 0.0))
+    }
 }
 
 /// An object's outline: its silhouette drawn `width` device px wide in `color`, which a status
@@ -331,6 +341,8 @@ pub struct Line {
     /// #468: a `mark.line@1`'s written points in the world at t, an `ID#anchor` point at its
     /// anchor; empty for a line drawn from anything else.
     pub points: Vec<Vec3>,
+    /// Whether the sky's fog applies to it (Marks in 3D; #1992).
+    pub fog: bool,
 }
 
 /// A mesh-edge line's mesh, its kind, the matrix that places the mesh, and the edges it draws.
@@ -344,6 +356,21 @@ pub struct EdgesOf {
     pub list: Arc<Vec<[crate::geom::V3; 2]>>,
     /// Whether this evaluation derived `list` rather than reusing a crease set (#1640).
     pub derived: bool,
+    /// Each of the mesh's triangles' material on its item, for a crease kind that picks by it
+    /// (#1782).
+    pub materials: Option<Arc<Vec<u32>>>,
+    /// Its hidden style (#1782), with one.
+    pub hidden: Option<Hidden>,
+}
+
+/// A mesh-edge line's `hidden` (#1782): the paint and the dash, in the line's size space, that
+/// each stretch of an edge behind opaque geometry draws in ([`crate::spans`]).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Hidden {
+    pub color: [u8; 3],
+    pub dash: [f64; 2],
+    /// The planted wrong program its spans come from, reachable only through `--planted`.
+    pub planted: Option<crate::spans::Planted>,
 }
 
 impl EdgesOf {
@@ -387,6 +414,8 @@ pub struct Point {
     pub color: [u8; 3],
     /// Its set from a depth video (#503), whose points the GPU writes: the point is its item.
     pub cloud: Option<Arc<crate::cloud::Cloud>>,
+    /// Whether the sky's fog applies to it (Marks in 3D; #1992).
+    pub fog: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -415,6 +444,26 @@ pub struct Label {
     /// The item's own axes, for `facing: fixed`: its rotation applied to +X and +Y.
     pub axes: [Vec3; 2],
     pub color: [u8; 3],
+    /// Whether the sky's fog applies to it (Marks in 3D; #1992): a label's color is its own
+    /// unless it says so.
+    pub fog: bool,
+}
+
+/// A picture on one quad (#1992; Marks in 3D), placed and turned as a label is.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Image {
+    pub id: String,
+    /// Its picture's SHA-256: the host makes its texels ready, as a material's maps (the
+    /// scene's `texels`).
+    pub asset: String,
+    pub pos: Vec3,
+    /// Its width and height, in m with `world`, else in px.
+    pub size: [f64; 2],
+    pub world: bool,
+    pub facing: Facing,
+    /// The item's own axes, for `facing: fixed`.
+    pub axes: [Vec3; 2],
+    pub fog: bool,
 }
 
 /// A 3D writer layer's marks, each family in item order.
@@ -425,6 +474,7 @@ pub struct Layer3 {
     pub lines: Vec<Line>,
     pub points: Vec<Point>,
     pub labels: Vec<Label>,
+    pub images: Vec<Image>,
     /// The opacity of each line and label a module's kind draws below full, by its ID (#226): a
     /// tick entering or leaving its axis's domain.
     pub fades: BTreeMap<String, f64>,
@@ -435,6 +485,8 @@ pub struct Layer3 {
     /// #1636: what its solids draw, by item and shape: the item whose mesh it is (an element's
     /// prototype) and its material's ID ("" for none), as a draw's report names them.
     pub draw_names: BTreeMap<(String, Shape), (String, String)>,
+    /// #290: the hidden view of each item whose solids draw here with one above opacity 0.
+    pub hidden: BTreeMap<String, crate::hidden::HiddenView>,
 }
 
 /// A soft cloud sprite at t (#422; Puff `puff@1`): where it is in world m, its size, and how the
@@ -465,6 +517,7 @@ impl Layer3 {
         out.extend(self.lines.iter().map(|s| s.id.clone()));
         out.extend(self.points.iter().map(|s| s.id.clone()));
         out.extend(self.labels.iter().map(|s| s.id.clone()));
+        out.extend(self.images.iter().map(|s| s.id.clone()));
         out.extend(self.puffs.iter().map(|s| s.id.clone()));
         out
     }
@@ -494,6 +547,8 @@ pub struct Overlay {
     pub shapes: Vec<Shape2>,
     /// #468: its leader to the part it names, when it has one.
     pub leader: Option<Leader>,
+    /// #298: its `edge` and `edge_angle`, when its `hide` is `clamp`.
+    pub edge: Option<Edge>,
 }
 
 /// An overlay's leader at t (#468; Overlay: `leader`): its line from the overlay's side nearest its
@@ -757,7 +812,8 @@ fn cascades(params: &Value, path: &str) -> Result<Cascades, Refused> {
         None => {}
         Some(Value::String(s)) if s == "auto" => {}
         Some(v) => {
-            c.far = Some(num(Some(v)).filter(|f| *f > 0.0).ok_or_else(|| Refused {
+            // #1381: 0 sets the cascades to zero range, so past them the horizon alone shades.
+            c.far = Some(num(Some(v)).filter(|f| *f >= 0.0).ok_or_else(|| Refused {
                 code: "out_of_range",
                 path: format!("{path}/shadow_far"),
             })?)
@@ -963,15 +1019,26 @@ impl Scene {
     /// read from the unwelded mesh, or drawn over what is in front of them; and #1640's
     /// (`crease_below_angle`, `edges_derive_every_frame`, `edges_dash_other_space`).
     pub fn plant_edges(&mut self, unwelded: bool, over: bool, planted: Option<&str>) {
+        let spans = planted.and_then(crate::spans::Planted::named);
         for line in self.layers.iter_mut().flat_map(|l| &mut l.lines) {
-            let Some(edges) = line.edges.clone() else {
+            let Some(mut edges) = line.edges.clone() else {
                 continue;
             };
-            if let (crate::geom::EdgeKind::Crease { angle, border }, Some(name)) =
+            // #1782's: a line with a hidden style reads its spans from the planted program.
+            if spans.is_some() && edges.hidden.is_some() {
+                if let Some(h) = Arc::make_mut(&mut edges).hidden.as_mut() {
+                    h.planted = spans;
+                }
+                line.edges = Some(edges.clone());
+            }
+            if let (crate::geom::EdgeKind::Crease { angle, border, .. }, Some(name)) =
                 (edges.kind, planted)
             {
-                if matches!(name, "crease_below_angle" | "edges_derive_every_frame") {
-                    let (list, derived) = edges.mesh.crease_set(angle, border, planted);
+                if matches!(name, "crease_below_angle" | "edges_derive_every_frame")
+                    || name == crate::geom::PLANTED_SHARED
+                {
+                    let materials = edges.materials.as_deref().map(Vec::as_slice);
+                    let (list, derived) = edges.mesh.crease_set(angle, border, materials, planted);
                     let source = EdgesOf {
                         list,
                         derived,
@@ -1209,7 +1276,7 @@ impl<'a> Items<'a> {
     }
 
     /// The items in document order. `written` holds some of them in that order too.
-    fn iter(&self) -> impl Iterator<Item = (&'a String, &'a Value)> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (&'a String, &'a Value)> {
         let mut written = self.written.iter().peekable();
         self.doc
             .iter()
@@ -1651,6 +1718,8 @@ pub fn evaluate_with(
     evaluate_any(doc, t, look, labels, Some(assets), Outlines::default())
 }
 
+mod clamp;
+pub use clamp::{bound, view_values, Edge};
 mod scattered;
 pub use scattered::*;
 
@@ -1698,6 +1767,12 @@ pub(crate) fn evaluate_compiled(
         None => eval::written(map, program, &state),
     };
     let mut items = Items::new(doc_items, &written, &state, program);
+    // #265: the places trails and wakes read at earlier times, kept across frames by the
+    // document and program they were read from.
+    let memo = std::cell::RefCell::new(std::mem::take(&mut labels.places));
+    if crate::trail::samples(doc_items) {
+        memo.borrow_mut().of(map, program);
+    }
     // #2013: a frame draws each rested item where its rest puts it; the check reports a rest
     // that finds no support.
     rest(
@@ -1764,6 +1839,8 @@ pub(crate) fn evaluate_compiled(
     let mut puffs = 0u64;
     let mut others = Vec::new();
     let mut curves = BTreeMap::new();
+    // #2450: the images a module's marks picture 2D items on, whose pictures wait for the camera.
+    let mut pictured = Vec::new();
     // #226: what a module's deforms and kinds read.
     let lookup = |k: &str| items.get(k);
     let ask = crate::contributed::Ask {
@@ -1937,7 +2014,7 @@ pub(crate) fn evaluate_compiled(
                 {
                     let read = assets.expect("matched above");
                     let model = world(&items, id);
-                    let (solids, file_lights) = asset_scene(read, id, params, &model, look)?;
+                    let (solids, file_lights) = asset_scene(read, id, params, item, &model, look)?;
                     for s in solids {
                         bounds.extend(corners_of(&s));
                         layer.solids.push(s);
@@ -2030,7 +2107,7 @@ pub(crate) fn evaluate_compiled(
                     || k == "fixture.skin@1" =>
                 {
                     let (mesh, shared) = match (k, assets) {
-                        ("mesh.asset@1", Some(read)) => asset_mesh(read, id, params)?,
+                        ("mesh.asset@1", Some(read)) => asset_mesh(read, id, params, item)?,
                         // #419's stand-ins: a pre-skin per time, and a sequence's frame at t.
                         ("fixture.skin@1", _) => (crate::fixtures::skin(params, &path)?, None),
                         ("mesh.sequence@1", Some(read)) => {
@@ -2091,6 +2168,7 @@ pub(crate) fn evaluate_compiled(
                                     mesh: crate::geom::Mesh,
                                     hash: u64|
                      -> Result<Option<Solid>, Refused> {
+                        let mesh = Arc::new(mesh);
                         let mut material = light::material(holder, |m| items.get(m), look, id)?;
                         // #224: a surface is two-sided unless it says not.
                         if k == "surface@1" && params.get("two_sided") != Some(&Value::Bool(false))
@@ -2124,7 +2202,7 @@ pub(crate) fn evaluate_compiled(
                                 &path,
                             )?,
                             lod: lod_of(item, &path, mesh.bounds(), Some((&mesh, hash)), map)?,
-                            mesh: Some(Arc::new(mesh)),
+                            mesh: Some(mesh),
                             mask: None,
                             cast_only: false,
                             receiver_sets: 0,
@@ -2202,6 +2280,7 @@ pub(crate) fn evaluate_compiled(
                                     extent: 1.0,
                                     lod_px,
                                     proxy: None,
+                                    proxy_source: None,
                                     proxy_mesh: None,
                                     tile: Some(t.at),
                                 }));
@@ -2229,8 +2308,7 @@ pub(crate) fn evaluate_compiled(
                         Some(tr) => {
                             let at = |times: &[i64]| {
                                 crate::trail::path_at(
-                                    map,
-                                    program,
+                                    (map, program, &memo),
                                     &items,
                                     &tr.of,
                                     times,
@@ -2261,6 +2339,7 @@ pub(crate) fn evaluate_compiled(
                                 paint(look, params, &path)?,
                                 world,
                                 cap,
+                                fog(params, true),
                             )
                         }
                         None => line(&items, id, params, look, (map, t))?,
@@ -2285,6 +2364,11 @@ pub(crate) fn evaluate_compiled(
                     let l = label(id, params, &path, &world(&items, id), look, labels)?;
                     bounds.push(l.pos);
                     layer.labels.push(l);
+                }
+                "mark.image@1" => {
+                    let image = image(id, params, &path, &world(&items, id))?;
+                    bounds.push(image.pos);
+                    layer.images.push(image);
                 }
                 OVERLAY => overlay_items.push((layer_id.to_string(), id.clone())),
                 // #506: read once every solid is placed, below.
@@ -2335,7 +2419,7 @@ pub(crate) fn evaluate_compiled(
                 "sky@1" if sky.is_none() => {
                     sky = Some(crate::sky::parse(id, params, look, assets)?);
                 }
-                "light.sun@1" | "light.point@1" | "light.spot@1" | "light.area@1" => {
+                k if light::KINDS.contains(&k) => {
                     let m = world(&items, id);
                     let dir = normalize(turn(&m, [0.0, 0.0, -1.0]));
                     let flicker = flicker(program, &state, params, &path)?;
@@ -2413,6 +2497,7 @@ pub(crate) fn evaluate_compiled(
                     crate::contributed::Out {
                         layer: &mut layer,
                         bounds: &mut bounds,
+                        pictured: &mut pictured,
                     },
                 )?,
                 _ => others.push(Other {
@@ -2597,6 +2682,7 @@ pub(crate) fn evaluate_compiled(
             }
         }
     }
+    crate::hidden::read(look, &items, &mut layers, (map, t))?;
     // The class's GPU memory, at 16 B a fragment (Object: see-through order).
     let budget = Value::Object(
         map.get("budget")
@@ -2646,7 +2732,7 @@ pub(crate) fn evaluate_compiled(
     // #506: the insets: their windows join the layers; their pictures, views and casts, the scene.
     let get = |k: &str| items.get(k);
     let world_of = |k: &str| world(&items, k);
-    let insets = crate::inset::evaluate(
+    let mut insets = crate::inset::evaluate(
         &crate::inset::Ctx {
             doc: map,
             get: &get,
@@ -2658,6 +2744,9 @@ pub(crate) fn evaluate_compiled(
         look,
         &mut layers,
     )?;
+    insets
+        .pictures
+        .extend(crate::contributed::pictures(pictured, &camera, &mut layers));
 
     // A readout sits in the view's top-left corner, its text the template's (#419), filled from
     // the values that move the parts at t; a figure's card stacks its lines below (#504).
@@ -2708,6 +2797,7 @@ pub(crate) fn evaluate_compiled(
                 .role("stone")
                 .or(look.role("ink"))
                 .unwrap_or([255, 255, 255]),
+            fog: false,
         });
         top += quad[1] + 4.0;
     }
@@ -2735,7 +2825,8 @@ pub(crate) fn evaluate_compiled(
     let mut overlays = Vec::new();
     for (layer, id) in overlay_items {
         let safe = map.get("safe").and_then(Value::as_f64).unwrap_or(24.0);
-        overlays.push(overlay(&items, &layer, &id, (&camera, safe), look)?);
+        let view = (&camera, safe);
+        overlays.push(overlay(&items, &layer, &id, view, look, outlines.planted)?);
     }
     // Puffs past the document's cap are refused, never dropped (#422).
     let cap = map
@@ -2747,6 +2838,16 @@ pub(crate) fn evaluate_compiled(
         return refused("out_of_range", "budget/puffs");
     }
     crate::sets::compile(map, &mut lights, &mut layers)?;
+    // #1634: a document holds its class's `fill_shaded` fill lights at most, and a light that
+    // names no range ends where the shot's exposure cuts it.
+    let class = deep_canvas::budget::of(&budget).map(|(class, _)| class);
+    if lights.iter().filter(|l| l.fill).count() > light::fill_shaded(class) {
+        return refused("out_of_range", "budget/fill_shaded");
+    }
+    // The planted wrong program keeps the fixed 0.05 lx.
+    if outlines.planted != Some("auto_range_fixed_cut") {
+        light::follow_exposure(&mut lights, exposure.unwrap_or(look.exposure));
+    }
     let probes = probes(map, probe_items, &lights, &layers, sky.as_ref())?;
     // #149: a drawing look lights its marks from its own light, with no Light item.
     if let (None, true, Some(l)) = (&sun, lights.is_empty(), drawn_light(look)) {
@@ -2812,14 +2913,15 @@ pub(crate) fn evaluate_compiled(
     scene.set_cutaway(cutaway);
     scene.mirror = crate::mirror::find(&scene.layers, scene.camera.eye, |id| items.get(id))?;
     // #166: the water, its wake's path, and its own mirror unless a material names one.
-    let seed = map.get("seed").and_then(Value::as_u64).unwrap_or(0) as u32;
-    if let Some(mut w) = crate::water::find(&scene.layers, |id| items.get(id), seed, seconds)? {
+    let found = crate::water::find(&scene.layers, |id| items.get(id), map, program, t);
+    if let Some(mut w) = found.map_err(|f| f.kept(outlines.memo))? {
         if let Some(wake) = &mut w.wake {
             let step = frame_interval(map);
             wake.step = step as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
             let times = crate::water::wake_times(t, step, wake.span);
             let path = format!("items/{}/params/water/wake/item", w.material);
-            let at = crate::trail::path_at(map, program, &items, &wake.item, &times, &path)?;
+            let at =
+                crate::trail::path_at((map, program, &memo), &items, &wake.item, &times, &path)?;
             wake.path = at.iter().map(|p| [p[0], p[2]]).collect();
         }
         // #268: the shore's field, baked once per key.
@@ -2845,6 +2947,7 @@ pub(crate) fn evaluate_compiled(
         }
         scene.water = Some(Arc::new(w));
     }
+    labels.places = memo.into_inner();
     Ok(scene)
 }
 
@@ -3056,6 +3159,7 @@ fn overlay(
     id: &str,
     (camera, safe): (&Camera, f64),
     look: &Look3,
+    planted: Option<&str>,
 ) -> Result<Overlay, Refused> {
     let path = format!("items/{id}/params");
     let params = &items[id]["params"];
@@ -3074,6 +3178,7 @@ fn overlay(
     let (fw, fh) = (size(2), size(3));
     let offset = xy(params.get("offset")).unwrap_or([0.0; 2]);
     let anchor = params.get("anchor");
+    let mut view = None;
     let mut origin = match anchor {
         Some(Value::String(edge)) => {
             if !["n", "e", "s", "w", "ne", "nw", "se", "sw"].contains(&edge.as_str()) {
@@ -3104,11 +3209,20 @@ fn overlay(
             }
             let local_point = vec3(anchor.and_then(|a| a.get("point"))).unwrap_or([0.0; 3]);
             let point = apply(&world(items, target), local_point);
-            camera
-                .project(point)
-                .map(|p| [p[0] + offset[0], p[1] + offset[1]])
+            // #298: on the safe frame's edge while the point is outside it or behind the eye.
+            let within = (camera, safe);
+            match clamp::placed((params, path.as_str()), within, [fw, fh], point, planted)? {
+                Some((at, e)) => {
+                    view = Some(e);
+                    Some(at)
+                }
+                None => camera
+                    .project(point)
+                    .map(|p| [p[0] + offset[0], p[1] + offset[1]]),
+            }
         }
     };
+    let clamped = view.is_some_and(|e: Edge| e.clamped) && planted != Some(clamp::LEADER_DRAWS);
     let leader = match params.get("leader").filter(|l| !l.is_null()) {
         None => None,
         Some(l) => {
@@ -3131,7 +3245,7 @@ fn overlay(
             });
             let hides = match params.get("hide").and_then(Value::as_str) {
                 None | Some("off_frame") => true,
-                Some("never") => false,
+                Some("never" | "clamp") => false,
                 Some(_) => return refused("out_of_range", format!("{path}/hide")),
             };
             if hides && !inside {
@@ -3154,8 +3268,8 @@ fn overlay(
             })?;
             let gap = num(l.get("gap")).unwrap_or(4.0);
             // From the overlay's side nearest the target, less the gap; with `elbow: horizontal`
-            // it leaves the label level and turns once toward the part.
-            let points = origin.zip(end).map(|(o, to)| {
+            // it leaves the label level and turns once toward the part. #298: none while clamped.
+            let points = origin.zip(end).filter(|_| !clamped).map(|(o, to)| {
                 let c = [o[0] + fw / 2.0, o[1] + fh / 2.0];
                 let d = [to[0] - c[0], to[1] - c[1]];
                 let half = [fw / 2.0 + gap, fh / 2.0 + gap];
@@ -3229,24 +3343,13 @@ fn overlay(
         origin,
         shapes,
         leader,
+        edge: view,
     })
 }
 
 /// A label's quad axes on screen: right and up, in world space, as its facing turns it.
 pub fn label_axes(label: &Label, camera: &Camera) -> [Vec3; 2] {
-    match label.facing {
-        Facing::Camera => [camera.right, camera.up],
-        Facing::Upright => {
-            let r = [camera.right[0], 0.0, camera.right[2]];
-            let r = if dot(r, r) > 1e-12 {
-                normalize(r)
-            } else {
-                [1.0, 0.0, 0.0]
-            };
-            [r, [0.0, 1.0, 0.0]]
-        }
-        Facing::Fixed => label.axes,
-    }
+    quad_axes(label.facing, label.axes, camera)
 }
 
 impl Scene {
@@ -3353,189 +3456,4 @@ pub fn has_3d(doc: &Value) -> bool {
 mod stroke_tests;
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// #2013's garden: the vase rests on the table's top, the scatter keeps its distance and its
-    /// margin and stays off the table, no two elements' bounds pass into each other, and the
-    /// same garden with its items listed the other way round scatters the same.
-    #[test]
-    fn the_scattered_garden_rests_its_vase_and_prunes_its_shrubs() {
-        let doc = crate::module::garden();
-        let placed = placed_at(&doc, 0).unwrap();
-        let vase = placed.iter().find(|(id, _, _)| id == "vase").unwrap();
-        assert!(
-            (vase.2[1][3] - 0.75).abs() < 1e-8 && vase.2[0][3] == 0.2,
-            "{:?}",
-            vase.2
-        );
-        let rows = elements_at(&doc, 0, "shrubs", None).unwrap().unwrap();
-        assert!(rows.len() > 40, "{}", rows.len());
-        // An element's bounds on the ground: its prototype's square, turned by its yaw.
-        let half = |r: &crate::distribute::Row| {
-            let (c, s) = (cos(rad(r.yaw)).abs(), sin(rad(r.yaw)).abs());
-            (if r.proto == 0 { 0.45 } else { 0.1 }) * (c + s)
-        };
-        assert!(rows.iter().any(|r| r.proto == 0) && rows.iter().any(|r| r.proto == 1));
-        for (i, a) in rows.iter().enumerate() {
-            assert!(
-                a.pos[0].abs() <= 4.5 && a.pos[2].abs() <= 4.5 && a.pos[1] == 0.0,
-                "{:?}",
-                a.pos
-            );
-            assert!(
-                a.pos[0].abs() > 0.6 || a.pos[2].abs() > 0.4,
-                "in the table: {:?}",
-                a.pos
-            );
-            for b in &rows[i + 1..] {
-                let d = [(a.pos[0] - b.pos[0]).abs(), (a.pos[2] - b.pos[2]).abs()];
-                assert!(d[0] * d[0] + d[1] * d[1] >= 0.25);
-                let clear = half(a) + half(b) - 1e-9;
-                assert!(
-                    d[0] >= clear || d[1] >= clear,
-                    "{} and {} pass into each other",
-                    a.id,
-                    b.id
-                );
-            }
-        }
-        let mut reversed = doc.clone();
-        let items: Vec<(String, Value)> = doc["items"]
-            .as_object()
-            .unwrap()
-            .iter()
-            .rev()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
-        reversed["items"] = Value::Object(items.into_iter().collect());
-        assert_eq!(
-            elements_at(&reversed, 0, "shrubs", None).unwrap().unwrap(),
-            rows
-        );
-        // A rest with nothing under it reports no support and leaves its owner where it was.
-        let mut lost = doc.clone();
-        lost["items"]["vase"]["at"]["pos"] = serde_json::json!([4.0, 2.0, 4.0]);
-        let (rested, problems) = rested_at(&lost, 0, Rests::All).unwrap();
-        assert!(rested.is_empty());
-        assert_eq!(
-            problems,
-            vec![Refused {
-                code: "no_support",
-                path: "constraints/rest".into()
-            }]
-        );
-        // On a collection it rests on the first surface of any member; on the ground, on y 0.
-        lost["collections"] = serde_json::json!({"floor": {"members": ["ground", "table"]}});
-        lost["constraints"]["rest"]["on"] = serde_json::json!("floor");
-        assert_eq!(
-            rested_at(&lost, 0, Rests::All).unwrap().0["vase"].0,
-            [4.0, 0.0, 4.0]
-        );
-        lost["constraints"]["rest"]["on"] = serde_json::json!("ground");
-        lost["constraints"]["rest"]["offset"] = serde_json::json!(0.25);
-        assert_eq!(
-            rested_at(&lost, 0, Rests::All).unwrap().0["vase"].0,
-            [4.0, 0.25, 4.0]
-        );
-        // In an assembly turned a quarter about +Z (#504), down is the owner's own −x: a box
-        // written at the world's (0.2, 2, 0.1) rests on the table's top, 0.1 m under its centre.
-        let mut turned = doc.clone();
-        turned["assemblies"] = serde_json::json!({"tray": {"at": {"rot": [0, 0, 90]}}});
-        turned["items"]["vase"] = serde_json::json!({"id": "vase", "kind": "mark.box@1", "name": "Vase", "order": "a3",
-            "parent": "tray", "params": {"size": [0.2, 0.3, 0.2]}, "at": {"pos": [2.0, -0.2, 0.1]}});
-        let at = rested_at(&turned, 0, Rests::All).unwrap().0["vase"].0;
-        assert!(
-            (at[0] - 0.85).abs() < 1e-6 && (at[1] + 0.2).abs() < 1e-6 && (at[2] - 0.1).abs() < 1e-6,
-            "{at:?}"
-        );
-        // A channel on the owner's position is refused as a second writer, naming both.
-        lost["channels"] = serde_json::json!({"lift": {"target": "items/vase/at/pos/1", "type": "f32",
-            "keys": {"k0": {"t": "0s", "value": 2, "interp": "linear"}, "k1": {"t": "1s", "value": 3, "interp": "linear"}}}});
-        let refusal = rested_at(&lost, 0, Rests::All).unwrap_err();
-        assert_eq!(
-            (refusal.code, refusal.path.as_str()),
-            ("second_writer", "channels/lift and constraints/rest")
-        );
-    }
-    use serde_json::json;
-
-    /// #1653: a 2D paint's bevel or shade on a 3D item is refused, naming the field; the
-    /// builders' own `bevel` and `shade` params are not paint and draw.
-    #[test]
-    fn a_bevel_or_a_shade_on_a_3d_item_is_refused() {
-        let look = Look3::read(&json!({"roles": {"block": "#808080", "ground": "#ffffff"}}))
-            .expect("the look reads");
-        let doc = |paint: Value| {
-            json!({
-                "format": 1, "profile": "scene", "title": "T", "description": "D", "size": [64, 64],
-                "camera": "cam", "layers": {"main": {"writer": "agent-a", "title": "Main", "order": "a0"}},
-                "items": {
-                    "cam": {"id": "cam", "kind": "camera@1", "layer": "main", "name": "C", "order": "a0",
-                        "params": {"projection": "perspective", "target": [0, 0, 0], "position": [0, 0, 20], "fov": 40}},
-                    "b": {"id": "b", "kind": "mark.box@1", "layer": "main", "name": "B", "order": "a1",
-                        "params": {"size": [1, 1, 1], "paint": paint}},
-                }
-            })
-        };
-        let fill = json!({"role": "block"});
-        for field in ["bevel", "shade"] {
-            let mut paint = json!({"fill": fill});
-            paint[field] = json!({"size": 4});
-            let refused = evaluate(&doc(paint), 0, &look, &mut Labels::new()).expect_err("refused");
-            assert_eq!(
-                (refused.code, refused.path.as_str()),
-                (
-                    "paint_2d_only",
-                    format!("items/b/params/paint/{field}").as_str()
-                )
-            );
-        }
-        assert!(evaluate(&doc(json!({"fill": fill})), 0, &look, &mut Labels::new()).is_ok());
-    }
-
-    #[test]
-    fn a_child_box_rides_its_parent_once() {
-        let look = Look3::read(&json!({"roles": {"block": "#808080", "ground": "#ffffff"}}))
-            .expect("the look reads");
-        let solid = |id: &str, pos: [f64; 3]| {
-            json!({"id": id, "kind": "mark.box@1", "layer": "main", "name": id, "order": "a1",
-                "params": {"size": [1, 1, 1], "paint": {"fill": {"role": "block"}}}, "at": {"pos": pos}})
-        };
-        let mut child = solid("child", [1.0, 0.0, 0.0]);
-        child["parent"] = json!("parent");
-        let doc = json!({
-            "format": 1, "profile": "scene", "title": "T", "description": "D", "size": [64, 64],
-            "camera": "cam", "layers": {"main": {"writer": "agent-a", "title": "Main", "order": "a0"}},
-            "items": {
-                "cam": {"id": "cam", "kind": "camera@1", "layer": "main", "name": "C", "order": "a0",
-                    "params": {"projection": "perspective", "target": [0, 0, 0], "position": [0, 0, 20], "fov": 40}},
-                "parent": solid("parent", [5.0, 0.0, 0.0]),
-                "child": child,
-            }
-        });
-        let child_at = |doc: &Value| {
-            let scene = evaluate(doc, 0, &look, &mut Labels::new()).expect("the scene evaluates");
-            let placed = scene
-                .layers
-                .iter()
-                .flat_map(|l| &l.solids)
-                .find(|s| s.id == "child")
-                .expect("the child is drawn")
-                .model;
-            origin(&placed)
-        };
-        // Adding the parent twice puts the child at x = 11.
-        assert_eq!(child_at(&doc), [6.0, 0.0, 0.0]);
-        // A parent turned a quarter about y carries the child's offset round with it, in 3D:
-        // the child is 1 m from the parent along z, not along x as a turn about z alone leaves it.
-        let mut turned = doc.clone();
-        turned["items"]["parent"]["at"]["rot"] = json!([0, 90, 0]);
-        let [x, y, z] = child_at(&turned);
-        assert!(
-            (x - 5.0).abs() < 1e-9 && y.abs() < 1e-9 && (z.abs() - 1.0).abs() < 1e-9,
-            "the child at {:?}",
-            [x, y, z]
-        );
-    }
-}
+mod tests;

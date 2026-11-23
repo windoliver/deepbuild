@@ -38,39 +38,6 @@ use crate::story;
 use deep_canvas::schedule::{Key, KeyTree};
 use deep_canvas::template;
 
-/// The kinds [`frame`] reads: every other kind is one the marks module doesn't know.
-pub const KINDS: &[&str] = &[
-    "rect@1",
-    "circle@1",
-    "path@1",
-    "text@1",
-    "image@1",
-    "marks@1",
-    "axis@1",
-    "scale@1",
-    "mask@1",
-    "group@1",
-    "star@1",
-    "frame@1",
-    "series@1",
-    "matte@1",
-    "axes3d@1",
-    "vector_field@1",
-];
-
-/// The kinds of [`KINDS`] the data module owns: R1's mark sets, scales and axes, which marks2d
-/// draws for it (the data module's manifest). A build without the data module lacks them.
-pub const DATA_KINDS: &[&str] = &["marks@1", "axis@1", "scale@1", "axes3d@1", "vector_field@1"];
-
-/// The canvas module that owns one of [`KINDS`]: the data module's, or marks2d's.
-pub fn module_of(kind: &str) -> &'static str {
-    if DATA_KINDS.contains(&kind) {
-        "data"
-    } else {
-        "marks2d"
-    }
-}
-
 /// An sRGB-encoded color, 0–255 per channel, as the look's roles resolve for a 2D writer layer.
 pub type Rgb = [u8; 3];
 
@@ -283,6 +250,8 @@ pub struct Effect {
     pub medium: Option<Arc<deep_canvas_drawn::medium::Medium>>,
     /// #467: the marks inside are an item's coverage, and this is the layer built from it.
     pub paint: Option<Arc<crate::fx::Part>>,
+    /// #2031: the marks inside are a lit group's lit children, lit by its lights at each pixel.
+    pub light: Option<Arc<crate::light::Light>>,
 }
 
 /// A group's blend (Frame and group: blend modes): the 16 W3C modes and add, which Vello draws,
@@ -445,6 +414,7 @@ impl Effect {
             dancing,
             medium: None,
             paint: None,
+            light: None,
         }))
     }
 }
@@ -501,7 +471,7 @@ impl Scope {
                     k.text(if e.dancing { "dancing" } else { "still" });
                     for p in &e.passes {
                         k.text(&p.op).number(p.grow.unwrap_or(-1.0));
-                        k.text(&Value::Object(p.params.clone()).to_string());
+                        k.text(&serde_json::to_string(&p.params).unwrap_or_default());
                         k.text(&p.item.as_ref().map_or(String::new(), Value::to_string));
                     }
                     if let Some(m) = &e.medium {
@@ -509,6 +479,9 @@ impl Scope {
                     }
                     if let Some(p) = &e.paint {
                         k.text(&format!("{p:?}"));
+                    }
+                    if let Some(l) = &e.light {
+                        k.text(&format!("{l:?}"));
                     }
                 }
             }
@@ -626,8 +599,7 @@ impl ImageFit {
     }
 }
 
-/// How an image's pixels are sampled when it is drawn at another size (Image `image@1`:
-/// `sampling`).
+/// How an image's pixels are sampled when drawn at another size (Image `image@1`: `sampling`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum ImageSampling {
     #[default]
@@ -706,15 +678,13 @@ fn text_runs(
 
 /// #1964: a text's `runs` as styled spans of its one shaped run (`[{from, to, role, font, weight,
 /// style, size, tracking, shift, underline, strike}] ≤ 1,024`), each field held at the run's
-/// path: a run's font names a font of the look, and a run's weight sets its font (the item's
-/// `family` when it names none) as the item's weight does, on its variable twin where no static
-/// face has it. A run's role is resolved where it paints ([`text_runs`]); one naming a status role
+/// path: a run's font names a font of the look, and a run's weight draws exactly, as the item's
+/// does (#1484). A run's role is resolved where it paints ([`text_runs`]); one naming a status role
 /// is the document check's `status_color_unbound`, as any paint's is.
 pub fn text_spans(
     params: &Map<String, Value>,
     path: &str,
     ty: &Type,
-    (item_family, weight): (Option<&'static str>, u16),
 ) -> Result<Vec<deep_text::Span>, Refused> {
     const FIELDS: [&str; 11] = [
         "from",
@@ -773,14 +743,13 @@ pub fn text_spans(
             Some(_) => return refuse("out_of_range", format!("{at}/weight")),
         };
         let family = match fields.get("font") {
-            None => item_family.filter(|_| run_weight.is_some()),
+            None => None,
             Some(Value::String(font)) => match ty.family(font) {
                 Some(f) => Some(f),
                 None => return refuse("ref_unresolved", format!("{at}/font: {font}")),
             },
             Some(_) => return bad("font"),
-        }
-        .map(|f| deep_text::fonts::family_at(f, run_weight.unwrap_or(weight)));
+        };
         let italic = match fields.get("style").map(Value::as_str) {
             None => None,
             Some(Some("normal")) => Some(false),
@@ -855,6 +824,11 @@ pub struct TextSpec {
     /// lines start.
     pub gap: f64,
     pub indent: f64,
+    /// #1215: `flow`: lines across, or columns top to bottom with its `upright`,
+    /// `combine_upright` and the box's height as the column's length.
+    pub flow: deep_text::Flow,
+    /// #1215: `line_height`, the space between a vertical text's columns.
+    pub line_height: Option<f64>,
 }
 
 impl TextSpec {
@@ -891,6 +865,13 @@ impl TextSpec {
         }
         if self.gap > 0.0 || self.indent > 0.0 {
             k.text("list").number(self.gap).number(self.indent);
+        }
+        if let deep_text::Flow::Vertical(c) = self.flow {
+            k.text(if c.rl { "vertical_rl" } else { "vertical_lr" })
+                .int(i64::from(c.upright))
+                .int(i64::from(c.combine))
+                .number(c.height.map_or(-1.0, f64::from))
+                .number(self.line_height.unwrap_or(-1.0));
         }
         k.finish()
     }
@@ -950,8 +931,8 @@ fn text_spec_of(
         Some(Value::String(lang)) => Some(lang.clone()),
         Some(_) => return refuse("bad_doc", format!("{path}/params/lang")),
     };
-    // #496: a weight a channel or driver writes arrives as a number, rounded to a whole unit;
-    // a weight no static face of the family has is set on its variable twin.
+    // #496: a weight a channel or driver writes arrives as a number, rounded to a whole unit,
+    // which the shaper draws exactly (#1484).
     let weight = params
         .get("weight")
         .and_then(Value::as_f64)
@@ -961,14 +942,22 @@ fn text_spec_of(
     let size = num(params.get("size")).unwrap_or(13.0);
     // #1966: a list's items start `indent` in from its box's edge, `gap` apart.
     let list = crate::lines::list(params, size, &path)?;
+    let flow = flow_of(params, &path)?;
+    let line_height = match params.get("line_height") {
+        None => None,
+        Some(v) => match v.as_f64().filter(|h| h.is_finite() && *h > 0.0) {
+            Some(h) => Some(h),
+            None => return refuse("bad_doc", format!("{path}/params/line_height")),
+        },
+    };
     Ok(TextSpec {
+        flow,
+        line_height,
         gap: list.map_or(0.0, |l| l.gap),
         indent: list.map_or(0.0, |l| l.indent),
-        spans: text_spans(params, &path, ty, (ty.family(&font), weight))?,
+        spans: text_spans(params, &path, ty)?,
         text,
-        family: ty
-            .family(&font)
-            .map(|f| deep_text::fonts::family_at(f, weight)),
+        family: ty.family(&font),
         fallback: ty.fallback.clone(),
         lang,
         font,
@@ -1010,7 +999,7 @@ impl TextSpec {
             lang: self.lang.as_deref(),
             size: self.size as f32,
             weight: self.weight,
-            line_height: None,
+            line_height: self.columns_line_height(),
             width: self.width.map(|w| w as f32),
             max_lines: self.max_lines,
             align: match self.align {
@@ -1024,8 +1013,51 @@ impl TextSpec {
             spans: &self.spans,
             gap: self.gap as f32,
             indent: self.indent as f32,
+            flow: self.flow,
         })
     }
+
+    /// #1215: the line height a vertical text's columns are spaced by; a horizontal text keeps
+    /// the shaper's default, as it draws today.
+    pub fn columns_line_height(&self) -> Option<f32> {
+        match self.flow {
+            deep_text::Flow::Vertical(_) => self.line_height.map(|h| h as f32),
+            deep_text::Flow::Horizontal => None,
+        }
+    }
+}
+
+/// #1215: a text's `flow`, `upright` and `combine_upright` (canvas primitives: Text `text@1`):
+/// columns are the box's height long; `upright` and `combine_upright` are read in vertical flow
+/// only, and a `combine_upright` above 4, which would set a run wider than its column, is refused.
+fn flow_of(params: &Map<String, Value>, path: &str) -> Result<deep_text::Flow, Refused> {
+    let rl = match params.get("flow") {
+        None => return Ok(deep_text::Flow::Horizontal),
+        Some(Value::String(f)) if f == "horizontal" => return Ok(deep_text::Flow::Horizontal),
+        Some(Value::String(f)) if f == "vertical_rl" => true,
+        Some(Value::String(f)) if f == "vertical_lr" => false,
+        Some(_) => return refuse("bad_doc", format!("{path}/params/flow")),
+    };
+    let upright = match params.get("upright") {
+        None => false,
+        Some(Value::String(u)) if u == "auto" => false,
+        Some(Value::String(u)) if u == "all" => true,
+        Some(_) => return refuse("bad_doc", format!("{path}/params/upright")),
+    };
+    let combine = match params.get("combine_upright") {
+        None => 2,
+        Some(n) => match n.as_u64().filter(|n| *n <= 4) {
+            Some(n) => n as u8,
+            None => return refuse("bad_doc", format!("{path}/params/combine_upright")),
+        },
+    };
+    let height = params.get("box").and_then(|b| num(b.get("h")));
+    Ok(deep_text::Flow::Vertical(deep_text::Columns {
+        rl,
+        upright,
+        combine,
+        height: height.map(|h| h as f32),
+    }))
 }
 
 /// One mark to draw, in logical u at zoom 1.
@@ -1087,12 +1119,13 @@ pub enum Mark {
         tile: Option<AtlasCell>,
         /// #535: degrees it turns about the centre of `bounds`, x toward y.
         turn: f64,
+        /// #269: a grid image's grid at the frame's step, drawn in place of an asset's pixels.
+        grid: Option<Arc<crate::grid_image::Drawn>>,
     },
 }
 
 /// A stroke as drawn (Paint: stroke): its width in u, its paint, its opacity (the paint's times the
-/// stroke's), and the dashes each sub-path holds (`dash: {count}`), equal dashes and gaps from
-/// the sub-path's start.
+/// stroke's), and each sub-path's dashes (`dash: {count}`), equal dashes and gaps from its start.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Line {
     pub width: f64,
@@ -1520,7 +1553,7 @@ pub(crate) fn num(v: Option<&Value>) -> Option<f64> {
     v.and_then(Value::as_f64).filter(|n| n.is_finite())
 }
 
-fn pair(v: Option<&Value>) -> Option<[f64; 2]> {
+pub(crate) fn pair(v: Option<&Value>) -> Option<[f64; 2]> {
     match v {
         Some(Value::Array(a)) if a.len() >= 2 => Some([num(a.first())?, num(a.get(1))?]),
         _ => None,
@@ -2672,7 +2705,7 @@ pub fn path_report(
     } else {
         None
     };
-    let scopes = scopes_of(doc, items, palette, &BTreeMap::new())?;
+    let scopes = scopes_of(doc, items, palette, &BTreeMap::new(), planted)?;
     let paints = Paints {
         doc,
         items,
@@ -2905,10 +2938,17 @@ fn text_boxes(frame: &Frame, items: &Map<String, Value>, out: &mut BTreeMap<Stri
             (Align::End, Some(box_w)) => box_w - w,
             _ => 0.0,
         };
-        out.insert(
-            item.clone(),
-            [origin[0] + at, origin[1], w, f64::from(shaped.height)],
-        );
+        let placed = match shaped.columns_box() {
+            // #1215: a vertical run's columns, where its glyphs draw.
+            Some([x, y, w, h]) => [
+                origin[0] + f64::from(x),
+                origin[1] + f64::from(y),
+                f64::from(w),
+                f64::from(h),
+            ],
+            None => [origin[0] + at, origin[1], w, f64::from(shaped.height)],
+        };
+        out.insert(item.clone(), placed);
         let params = object_or_empty(items.get(item).and_then(|i| i.get("params")));
         for part in parts.get(item.as_str()).into_iter().flatten() {
             if let Some(b) = crate::lines::anchor_box(params, &shaped, part) {
@@ -3785,322 +3825,8 @@ pub fn status_marks(
 }
 
 /// A mark in its layer's draw order: its item's rank (#160: z, then the tree by band, order key
-/// and ID), its row, its item's ID.
-type Ordered<'a> = (Rank, usize, &'a str, &'a Arc<Drawn>, ContentKey);
-
-/// The most masks that may clip one item (Mask: "nest deeper than 4" it can never).
-const MASK_DEPTH: usize = 4;
-
-/// A mask's scope over the items it applies to: a scissor for a shape mask, coverage from its own
-/// paint for an alpha or luminance one, and for a feathered one its rect's coverage ramped over the
-/// feather (#385); a path ID's shape clips by that path's outline where it draws (#1175: an SVG's
-/// `<clipPath>`). A rounded rect, a soft path, a shape naming no path, inverted and combined
-/// masks wait.
-fn mask_scope(
-    id: &str,
-    item: &Value,
-    items: &Map<String, Value>,
-    palette: &Palette,
-) -> Result<Scope, Refused> {
-    let path = format!("items/{id}/params");
-    let p = object_or_empty(item.get("params"));
-    match p.get("shape").and_then(Value::as_str).unwrap_or("rect") {
-        "rect" => {}
-        "rounded rect" => return refuse("mask_r2", format!("{path}/shape")),
-        shape => {
-            let plain = p.get("mode").is_none_or(|m| m == "shape")
-                && ["feather", "expand"]
-                    .iter()
-                    .all(|k| num(p.get(*k)).unwrap_or(0.0) == 0.0)
-                && p.get("invert").is_none_or(|v| v == &Value::Bool(false))
-                && p.get("combine").is_none_or(|c| c == "add");
-            if !plain {
-                return refuse("mask_r2", path);
-            }
-            let is_path = items.get(shape).and_then(|i| i.get("kind")) == Some(&json!("path@1"));
-            let Some(verbs) = item_outline(items, shape).filter(|_| is_path) else {
-                return refuse("mask_r2", format!("{path}/shape"));
-            };
-            return Ok(Scope::Shape {
-                item: id.to_string(),
-                verbs: Arc::new(verbs),
-            });
-        }
-    }
-    let feather = num(p.get("feather")).unwrap_or(0.0);
-    if feather < 0.0 {
-        return refuse("bad_doc", format!("{path}/feather"));
-    }
-    let soft = p.get("invert") == Some(&Value::Bool(true))
-        || p.get("combine")
-            .and_then(Value::as_str)
-            .is_some_and(|c| c != "add");
-    if soft {
-        return refuse("mask_r2", path);
-    }
-    let b: Option<Vec<f64>> = p
-        .get("box")
-        .and_then(Value::as_array)
-        .map(|b| b.iter().map(|v| num(Some(v))).collect())
-        .unwrap_or(None);
-    let Some([x, y, w, h]) = b.as_deref().and_then(|b| <[f64; 4]>::try_from(b).ok()) else {
-        return refuse("bad_doc", format!("{path}/box"));
-    };
-    let e = num(p.get("expand")).unwrap_or(0.0);
-    let rect = Place::of(item).rect([x - e, y - e, w + 2.0 * e, h + 2.0 * e]);
-    let luminance = match p.get("mode").and_then(Value::as_str) {
-        None | Some("shape") if feather > 0.0 => {
-            return Ok(Scope::Mask {
-                item: id.to_string(),
-                rect,
-                luminance: false,
-                fill: Fill::Solid([255, 255, 255]),
-                feather,
-            })
-        }
-        None | Some("shape") => {
-            return Ok(Scope::Clip {
-                item: id.to_string(),
-                rect,
-                radius: 0.0,
-            })
-        }
-        Some("alpha") => false,
-        Some("luminance") => true,
-        Some(_) => return refuse("bad_doc", format!("{path}/mode")),
-    };
-    // Alpha and luminance take coverage from the mask's own paint.
-    let Some(fill) = p
-        .get("paint")
-        .and_then(|pt| pt.get("fill"))
-        .and_then(Value::as_object)
-    else {
-        return refuse("bad_paint", format!("{path}/paint/fill"));
-    };
-    Ok(Scope::Mask {
-        item: id.to_string(),
-        fill: fill_of(palette, fill, &format!("{path}/paint/fill"), rect)?,
-        rect,
-        luminance,
-        feather,
-    })
-}
-
-/// The scope an ancestor puts its children in: a mask's, a frame's overflow scissor, or a group's
-/// opacity (one offscreen pass, which GPUI's per-primitive opacity can't do).
-fn ancestor_scope(
-    id: &str,
-    item: &Value,
-    items: &Map<String, Value>,
-    palette: &Palette,
-) -> Result<Option<Scope>, Refused> {
-    let p = item.get("params");
-    let get = |k: &str| p.and_then(|p| p.get(k));
-    Ok(match item.get("kind").and_then(Value::as_str) {
-        Some("mask@1") => match get("applies_to").and_then(Value::as_str) {
-            None | Some("children") => Some(mask_scope(id, item, items, palette)?),
-            Some(_) => None,
-        },
-        Some("frame@1") if get("overflow").and_then(Value::as_str) != Some("show") => {
-            Some(Scope::Clip {
-                item: id.to_string(),
-                rect: Place::of(item).rect(frame_box(id, item)?),
-                radius: num(get("radius")).unwrap_or(0.0).max(0.0),
-            })
-        }
-        Some("group@1") => {
-            let alpha = num(get("opacity")).unwrap_or(1.0).clamp(0.0, 1.0);
-            let blend = Blend::read(id, get("blend"))?;
-            let effect = Effect::read(id, p, blend, items)?;
-            let isolated =
-                get("isolate") == Some(&Value::Bool(true)) || blend.is_some() || effect.is_some();
-            (alpha < 1.0 || isolated).then(|| Scope::Opacity {
-                item: id.to_string(),
-                alpha,
-                blend,
-                effect: effect.map(Arc::new),
-            })
-        }
-        _ => None,
-    })
-}
-
-/// Whether `id` is `root` or has it among its ancestors.
-fn is_under(items: &Map<String, Value>, id: &str, root: &str) -> bool {
-    let mut at = Some(id);
-    for _ in 0..=items.len() {
-        match at {
-            Some(a) if a == root => return true,
-            Some(a) => {
-                at = items
-                    .get(a)
-                    .and_then(|i| i.get("parent"))
-                    .and_then(Value::as_str)
-            }
-            None => return false,
-        }
-    }
-    false
-}
-
-/// Each item's scopes, outermost first: its ancestors' (a mask's children are the items whose
-/// `parent` it is, at any depth), then the masks whose collection holds it. A mask never reaches
-/// another writer's items, and a fifth mask over one item is refused, naming that mask.
-fn scopes_of(
-    doc: &Map<String, Value>,
-    items: &Map<String, Value>,
-    palette: &Palette,
-    mattes: &BTreeMap<String, Arc<Vec<Drawn>>>,
-) -> Result<BTreeMap<String, Vec<Scope>>, Refused> {
-    // #504: a parent that names an assembly ends the chain of item scopes; the motion module
-    // composes the assembly's transform.
-    let assembly = |id: &str| doc.get("assemblies").and_then(|a| a.get(id)).is_some();
-    let parent = |id: &str| {
-        items
-            .get(id)
-            .and_then(|i| i.get("parent"))
-            .and_then(Value::as_str)
-            .filter(|p| !assembly(p))
-            .map(str::to_string)
-    };
-    let shown =
-        |id: &str| items.get(id).and_then(|i| i.get("visible")) != Some(&Value::Bool(false));
-    let mut collection_masks: Vec<(String, BTreeSet<String>)> = Vec::new();
-    for (id, item) in items {
-        if item.get("kind").and_then(Value::as_str) != Some("mask@1") || !shown(id) {
-            continue;
-        }
-        // Every mask is held to what this build draws, whether or not anything is under it.
-        mask_scope(id, item, items, palette)?;
-        let applies = item.get("params").and_then(|p| p.get("applies_to"));
-        let collection = match applies {
-            None => continue,
-            Some(Value::String(c)) if c == "children" => continue,
-            Some(Value::String(c)) => c,
-            Some(_) => return refuse("bad_doc", format!("items/{id}/params/applies_to")),
-        };
-        let Some(Value::Array(m)) = doc
-            .get("collections")
-            .and_then(|c| c.get(collection))
-            .and_then(|c| c.get("members"))
-        else {
-            return refuse("ref_unresolved", format!("items/{id}/params/applies_to"));
-        };
-        let members = m
-            .iter()
-            .filter_map(|v| v.as_str().map(str::to_string))
-            .collect();
-        collection_masks.push((id.clone(), members));
-    }
-    // Each matte with what it applies to: an item and everything under it, or a collection.
-    let mut matte_of: Vec<(&str, Scope, Option<BTreeSet<String>>, &str)> = Vec::new();
-    for (id, item) in items {
-        if item.get("kind").and_then(Value::as_str) != Some("matte@1") || !shown(id) {
-            continue;
-        }
-        let p = object_or_empty(item.get("params"));
-        let mode = MatteMode::read(id, p.get("mode"))?;
-        let encoded = match p.get("luma").and_then(Value::as_str) {
-            None | Some("linear") => false,
-            Some("encoded") => true,
-            Some(_) => return refuse("bad_doc", format!("items/{id}/params/luma")),
-        };
-        if p.get("resolution")
-            .and_then(Value::as_str)
-            .is_some_and(|r| r != "full")
-        {
-            return refuse("module_missing", format!("items/{id}/params/resolution"));
-        }
-        let Some(Value::String(target)) = p.get("applies_to") else {
-            return refuse("bad_doc", format!("items/{id}/params/applies_to"));
-        };
-        let members = match items.get(target) {
-            Some(_) => None,
-            None => {
-                let Some(Value::Array(m)) = doc
-                    .get("collections")
-                    .and_then(|c| c.get(target))
-                    .and_then(|c| c.get("members"))
-                else {
-                    return refuse("ref_unresolved", format!("items/{id}/params/applies_to"));
-                };
-                Some(
-                    m.iter()
-                        .filter_map(|v| v.as_str().map(str::to_string))
-                        .collect(),
-                )
-            }
-        };
-        let source = mattes.get(id).cloned().unwrap_or_default();
-        matte_of.push((
-            id,
-            Scope::Matte {
-                item: id.clone(),
-                source,
-                mode,
-                encoded,
-            },
-            members,
-            target,
-        ));
-    }
-    let mut out = BTreeMap::new();
-    for (id, item) in items {
-        // The ancestors, innermost first, bounded so a cycle the check refuses can't spin.
-        let mut chain = Vec::new();
-        let mut at = parent(id);
-        while let Some(p) = at {
-            if chain.len() > items.len() || &p == id {
-                break;
-            }
-            at = parent(&p);
-            chain.push(p);
-        }
-        let mut scopes = Vec::new();
-        let mut masks: Vec<&str> = Vec::new();
-        // (ancestor, true) for a parent's scope; (mask, false) for a collection's mask.
-        let ancestors = chain.iter().rev().map(|a| (a.as_str(), true));
-        let collected = collection_masks
-            .iter()
-            .filter(|(_, members)| members.contains(id))
-            .map(|(m, _)| (m.as_str(), false));
-        for (a, by_parent) in ancestors.chain(collected) {
-            let Some(ancestor) = items.get(a) else {
-                return refuse("ref_unresolved", format!("items/{id}/parent"));
-            };
-            if !shown(a) && ancestor.get("kind").and_then(Value::as_str) == Some("mask@1") {
-                continue;
-            }
-            let scope = if by_parent {
-                ancestor_scope(a, ancestor, items, palette)?
-            } else {
-                Some(mask_scope(a, ancestor, items, palette)?)
-            };
-            let Some(scope) = scope else { continue };
-            if ancestor.get("kind").and_then(Value::as_str) == Some("mask@1") {
-                if ancestor.get("layer") != item.get("layer") {
-                    return refuse("mask_writer", format!("items/{a}: {id}"));
-                }
-                masks.push(a);
-                if masks.len() > MASK_DEPTH {
-                    return refuse("mask_depth", format!("items/{a}"));
-                }
-            }
-            scopes.push(scope);
-        }
-        for (_, scope, members, target) in &matte_of {
-            let under = match members {
-                Some(m) => m.contains(id),
-                None => id == target || chain.iter().any(|a| a == target),
-            };
-            if under {
-                scopes.push(scope.clone());
-            }
-        }
-        out.insert(id.clone(), scopes);
-    }
-    Ok(out)
-}
+/// and ID), borrowed from the item (#2660), its row, its item's ID.
+type Ordered<'a> = (Cow<'a, Rank>, usize, &'a str, &'a Arc<Drawn>, ContentKey);
 
 /// A fill drawn as one outline: its verbs where it draws, with nothing else (no stroke, no soft
 /// paint below opacity 1) that a coverage target would change.
@@ -4271,9 +3997,9 @@ pub(crate) fn laid_out<'a>(
     if !items.keys().any(|id| lays_out(id)) {
         return Ok(Cow::Borrowed(items));
     }
-    let input = json!({"items": items, "bound_values": doc.get("bound_values")});
+    let bound = doc.get("bound_values");
     let boxes = LAYOUT_SHAPER
-        .with(|s| crate::layout::solve(&input, &mut s.borrow_mut()))
+        .with(|s| crate::layout::solve_items(items, bound, &mut s.borrow_mut()))
         .map_err(|r| Refused {
             code: r.code,
             path: format!("items/{}", r.item),
@@ -4448,6 +4174,21 @@ pub enum Planted {
     /// stream table by the `vector_field@1` kind rather than by its data layout.
     WarpAnchorsOnly,
     WarpFlowByKind,
+    /// #2031's twins: a light that falls off linearly; lights summed in encoded space; a lit
+    /// group's default ambient 0; a pass that lights every child of a lit group, unlit and status
+    /// ones too; and (the `path` surface's) a lit group's light list kept from the frame before.
+    LightLinearFalloff,
+    LightEncodedSum,
+    LightDefaultAmbientZero,
+    LightEveryChild,
+    LightStaleList,
+    /// #2053's twins: a normal page's green read the other way up; a paged pixel's term
+    /// multiplied by max(0, N·L) alone; a page's normals left unturned when its image turns.
+    NormalFlippedGreen,
+    NormalDotAlone,
+    NormalUnturned,
+    /// #2053's `path` twin: each light's height kept from the frame before.
+    LightStaleHeight,
 }
 
 /// The draw list for evaluated `items` of `doc`, in `palette`, at `zoom` (which picks each path's
@@ -5124,8 +4865,12 @@ pub(crate) fn shaped_text(spec: &TextSpec) -> Option<Arc<deep_text::Shaped>> {
     Some(LAYOUT_SHAPER.with(|shaper| shaper.borrow_mut().shape(&s)))
 }
 
+mod kinds;
 mod placed;
+mod scopes;
+pub use kinds::{module_of, DATA_KINDS, KINDS};
 use placed::*;
+use scopes::{ancestor_scope, is_under, scopes_of};
 
 /// #467: an item's marks with what its paint builds from their coverage (Paint: drop; Paint:
 /// shade, `kind: inner`; Paint: glow, bevel and satin). A drop without blur is the item's own
@@ -5561,7 +5306,7 @@ fn build(
             Arc::new(marks.into_iter().map(|m| (*m.3).clone()).collect()),
         );
     }
-    let scopes = scopes_of(doc, items, palette, &sources)?;
+    let scopes = scopes_of(doc, items, palette, &sources, planted)?;
     // Each layer as (order, ID, its marks as (order, ID, mark)), sorted below.
     let mut layers: Vec<(String, String, Vec<Ordered>)> = Vec::new();
     if let Some(Value::Object(ls)) = doc.get("layers") {
@@ -5615,12 +5360,13 @@ fn build(
                 drawn.key(bucket)
             };
             // A generated row keeps its set's place, in row order.
-            slot.2.push((placed.rank.clone(), k, id, drawn, key));
+            slot.2
+                .push((Cow::Borrowed(&placed.rank), k, id, drawn, key));
         }
         let later = placed.rank.after_children();
         for (k, drawn) in placed.after.iter().enumerate() {
             slot.2.push((
-                later.clone(),
+                Cow::Owned(later.clone()),
                 placed.drawn.len() + k,
                 id,
                 drawn,
@@ -5636,11 +5382,14 @@ fn build(
         .enumerate()
         .map(|(li, (_, id, mut marks))| {
             marks.sort_by(|a, b| (&a.0, a.1, a.2).cmp(&(&b.0, b.1, b.2)));
+            crate::light::gather(&mut marks, |m| &**m.3);
             for (k, m) in marks.iter().enumerate() {
                 let Some(places) = at.as_mut() else { break };
-                let e = places
-                    .entry(m.2.to_string())
-                    .or_insert((li as u32, k as u32, 0));
+                // An item's ID is copied once, at its first mark, not at each.
+                if !places.contains_key(m.2) {
+                    places.insert(m.2.to_string(), (li as u32, k as u32, 0));
+                }
+                let e = places.get_mut(m.2).expect("inserted above");
                 // An item whose marks sit apart (two items under one order key) can't be
                 // replaced in place: the next frame builds them all.
                 if e.1 + e.2 != k as u32 {
@@ -5669,475 +5418,4 @@ fn build(
 }
 
 #[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::*;
-
-    #[test]
-    fn a_reading_groups_its_thousands() {
-        let show = |n| Format::default().show(Some(n));
-        assert_eq!(show(1234.0), "1,234");
-        assert_eq!(show(98765.0), "98,765");
-        assert_eq!(show(12.0), "12");
-        assert_eq!(show(0.5), "0.5");
-    }
-
-    #[test]
-    fn a_format_sets_precision_notation_sign_unit_and_grouping() {
-        let f = |v: Value| Format::read(Some(&v), None, "f").unwrap();
-        assert_eq!(f(json!({"precision": 2})).show(Some(1234.5)), "1,234.50");
-        assert_eq!(
-            f(json!({"notation": "percent", "precision": 1})).show(Some(0.256)),
-            "25.6%"
-        );
-        assert_eq!(
-            f(json!({"sign": "always", "unit": "ms"})).show(Some(12.0)),
-            "+12 ms"
-        );
-        assert_eq!(f(json!({"group": "none"})).show(Some(-98765.0)), "−98765");
-        assert_eq!(f(json!({})).show(None), "—");
-        let compact = f(json!({"notation": "compact"}));
-        assert_eq!(compact.show(Some(950.0)), "950");
-        assert_eq!(compact.show(Some(1234.0)), "1.2K");
-        assert_eq!(compact.show(Some(-3_456_789.0)), "−3.5M");
-        assert_eq!(compact.show(Some(999_950.0)), "1.0M");
-        let duration = f(json!({"notation": "duration"}));
-        assert_eq!(duration.show(Some(0.45)), "450 ms");
-        assert_eq!(duration.show(Some(3.5)), "3.5 s");
-        assert_eq!(duration.show(Some(2.0)), "2 s");
-        assert_eq!(duration.show(Some(125.0)), "2 min 05 s");
-        assert_eq!(duration.show(Some(3720.0)), "1 h 02 min");
-        assert_eq!(
-            f(json!({"notation": "duration", "unit": "ms"})).show(Some(1500.0)),
-            "1.5 s"
-        );
-        assert_eq!(
-            Format::read(None, Some(&json!("hide")), "f")
-                .unwrap()
-                .show(None),
-            ""
-        );
-        assert_eq!(
-            Format::read(Some(&json!({"notation": "engineering"})), None, "f")
-                .unwrap_err()
-                .code,
-            "format_notation"
-        );
-    }
-
-    #[test]
-    fn a_counter_formats_its_bound_value_s_reading_with_tabular_figures() {
-        let doc = json!({
-            "size": [100, 40],
-            "layers": {"main": {"order": "a0"}},
-            "items": {"n": {"id": "n", "kind": "text@1", "layer": "main",
-                "params": {"text": {"counter": {"source": "passed", "format": {"notation": "percent"}}}}}},
-            "bound_values": {"passed": {"target": "items/other/params/text", "source": "reading:01JB0000000000000000000001"}},
-        });
-        let doc = doc.as_object().unwrap();
-        let items = doc["items"].as_object().unwrap();
-        let record = Record {
-            readings: [("reading:01JB0000000000000000000001".to_string(), 0.75)].into(),
-            ..Record::default()
-        };
-        let f = frame(doc, items, &palette(), &record, 1.0).unwrap();
-        let Mark::Text { spec, .. } = &f.layers[0].marks[0].mark else {
-            panic!("a text mark")
-        };
-        assert_eq!(spec.text, "75%");
-        assert!(spec.bound, "a counter shapes with tabular figures");
-    }
-
-    /// #466's build, as a frame draws it: a path of four strokes at progress 0.3 draws its first
-    /// strokes only, and at 0 none, as `<item>.build` times them (found by #155's demo film).
-    #[test]
-    fn a_frame_draws_only_the_strokes_its_build_has_reached() {
-        let moves = |progress: f64| {
-            let doc = json!({
-                "size": [100, 100],
-                "layers": {"main": {"order": "a0"}},
-                "items": {"p": {"id": "p", "kind": "path@1", "layer": "main", "params": {
-                    "d": "M 0 10 L 90 10 M 0 30 L 90 30 M 0 50 L 90 50 M 0 70 L 90 70",
-                    "build": {"progress": progress}, "paint": {"stroke": {"role": "ink", "width": 2}}}}},
-            });
-            let doc = doc.as_object().unwrap();
-            let f = frame(
-                doc,
-                doc["items"].as_object().unwrap(),
-                &palette(),
-                &Record::default(),
-                1.0,
-            )
-            .unwrap();
-            f.layers
-                .iter()
-                .flat_map(|l| &l.marks)
-                .map(|m| match &m.mark {
-                    Mark::Shape { verbs, .. } => {
-                        verbs.iter().filter(|v| matches!(v, Verb::Move(_))).count()
-                    }
-                    Mark::Path { d, .. } => d.matches('M').count(),
-                    _ => 0,
-                })
-                .sum::<usize>()
-        };
-        assert_eq!(moves(1.0), 4);
-        assert_eq!(moves(0.3), 2, "stroke 0 whole and stroke 1 a fifth drawn");
-        assert_eq!(moves(0.0), 0);
-    }
-
-    fn board(items: Value) -> Value {
-        json!({
-            "size": [200, 100],
-            "layers": {"main": {"order": "a0"}, "other": {"order": "a1"}},
-            "items": items,
-            "collections": {"clipped": {"members": ["b"]}},
-        })
-    }
-
-    fn palette() -> Palette {
-        [
-            ("ground".to_string(), [255, 255, 255]),
-            ("ink".to_string(), [0, 0, 0]),
-        ]
-        .into()
-    }
-
-    fn draw(doc: &Value) -> Result<Frame, Refused> {
-        let doc = doc.as_object().unwrap();
-        frame(
-            doc,
-            doc["items"].as_object().unwrap(),
-            &palette(),
-            &Record::default(),
-            1.0,
-        )
-    }
-
-    fn clip_of(f: &Frame, item: &str) -> Option<[f64; 4]> {
-        f.layers
-            .iter()
-            .flat_map(|l| &l.marks)
-            .find(|d| d.mark.item() == item)
-            .and_then(|d| d.clip)
-    }
-
-    #[test]
-    fn a_rect_mask_clips_its_children_and_a_collection_to_its_box() {
-        let doc = board(json!({
-            "m": {"kind": "mask@1", "layer": "main", "params": {"box": [10, 10, 50, 50], "applies_to": "children"}},
-            "inner": {"kind": "mask@1", "layer": "main", "parent": "m", "params": {"box": [30, 0, 100, 100], "applies_to": "children"}},
-            "a": {"kind": "rect@1", "layer": "main", "parent": "inner", "params": {"box": [0, 0, 200, 100], "paint": {"fill": {"role": "ink"}}}},
-            "b": {"kind": "rect@1", "layer": "main", "params": {"box": [0, 0, 200, 100], "paint": {"fill": {"role": "ink"}}}},
-            "c": {"kind": "rect@1", "layer": "main", "params": {"box": [0, 0, 200, 100], "paint": {"fill": {"role": "ink"}}}},
-            "n": {"kind": "mask@1", "layer": "main", "params": {"box": [0, 0, 20, 20], "applies_to": "clipped"}},
-        }));
-        let f = draw(&doc).unwrap();
-        // a is under both masks: their intersection.
-        assert_eq!(clip_of(&f, "a"), Some([30.0, 10.0, 30.0, 50.0]));
-        assert_eq!(clip_of(&f, "b"), Some([0.0, 0.0, 20.0, 20.0]));
-        assert_eq!(clip_of(&f, "c"), None);
-        // A mask draws nothing itself.
-        assert!(f
-            .layers
-            .iter()
-            .flat_map(|l| &l.marks)
-            .all(|d| !d.mark.item().starts_with('m')));
-    }
-
-    #[test]
-    fn a_mask_never_clips_another_writer_s_items_and_nests_at_most_four_deep() {
-        let doc = board(json!({
-            "m": {"kind": "mask@1", "layer": "main", "params": {"box": [0, 0, 10, 10]}},
-            "x": {"kind": "rect@1", "layer": "other", "parent": "m", "params": {"box": [0, 0, 5, 5], "paint": {"fill": {"role": "ink"}}}},
-        }));
-        assert_eq!(draw(&doc).unwrap_err().code, "mask_writer");
-        let mut items = Map::new();
-        for k in 0..5 {
-            let mut m =
-                json!({"kind": "mask@1", "layer": "main", "params": {"box": [0, 0, 100, 100]}});
-            if k > 0 {
-                m["parent"] = json!(format!("m{}", k - 1));
-            }
-            items.insert(format!("m{k}"), m);
-        }
-        items.insert("deep".into(), json!({"kind": "rect@1", "layer": "main", "parent": "m4", "params": {"box": [0, 0, 1, 1], "paint": {"fill": {"role": "ink"}}}}));
-        assert_eq!(
-            draw(&board(Value::Object(items))).unwrap_err().code,
-            "mask_depth"
-        );
-        // #385 draws a feathered mask; an inverted one still waits.
-        let inverted = board(
-            json!({"m": {"kind": "mask@1", "layer": "main", "params": {"box": [0, 0, 1, 1], "invert": true}}}),
-        );
-        assert_eq!(draw(&inverted).unwrap_err().code, "mask_r2");
-    }
-
-    fn mark_of<'a>(f: &'a Frame, item: &str) -> &'a Mark {
-        &f.layers
-            .iter()
-            .flat_map(|l| &l.marks)
-            .find(|d| d.mark.item() == item)
-            .expect("the item draws")
-            .mark
-    }
-
-    fn solid(f: &Frame, item: &str) -> Rgb {
-        match mark_of(f, item) {
-            Mark::Rect {
-                fill: Fill::Solid(c),
-                ..
-            } => *c,
-            other => panic!("{item} is not a solid rect: {other:?}"),
-        }
-    }
-
-    /// Three 10 u squares under `g` at x 0, 50 and 100, ordered c, b, a, each stepped by `steps`.
-    fn stepped(steps: Value) -> Frame {
-        let sq = |x: i32, order: &str| {
-            json!({"kind": "rect@1", "layer": "main", "parent": "g", "order": order,
-                "params": {"box": [x, 0, 10, 10], "paint": {"fill": {"steps": steps.clone()}}}})
-        };
-        let mut doc = board(json!({
-            "g": {"kind": "group@1", "layer": "main", "params": {}},
-            "a": sq(0, "a2"), "b": sq(50, "a1"), "c": sq(100, "a0"),
-        }));
-        doc["collections"]["ends"] = json!({"members": ["a", "c"]});
-        draw(&doc).unwrap()
-    }
-
-    #[test]
-    fn steps_place_a_member_by_its_box_or_its_rank_among_a_collection_s_members() {
-        let stops = json!([{"at": 0, "role": "ink"}, {"at": 1, "role": "ground"}]);
-        let (ink, ground) = ([0, 0, 0], [255, 255, 255]);
-        // By order, a ranks last of the three; by x it stands first.
-        let f = stepped(json!({"over": "children", "stops": stops, "by": "order"}));
-        assert_eq!((solid(&f, "a"), solid(&f, "c")), (ground, ink));
-        let f = stepped(json!({"over": "children", "stops": stops, "by": "x"}));
-        assert_eq!((solid(&f, "a"), solid(&f, "c")), (ink, ground));
-        let mid = solid(&f, "b");
-        assert!(mid != ink && mid != ground && mid[0] == mid[1] && mid[1] == mid[2]);
-        // By distance from a's center, 100 u out reaches the last stop.
-        let by = json!({"distance": {"from": [5, 5], "radius": 100}});
-        let f = stepped(json!({"over": "children", "stops": stops, "by": by}));
-        assert_eq!(
-            (solid(&f, "a"), solid(&f, "b"), solid(&f, "c")),
-            (ink, mid, ground)
-        );
-        // Over a collection of two, c ranks first and a last; b isn't a member.
-        let ends = json!({"over": "ends", "stops": stops, "by": "order"});
-        let mut doc = board(json!({
-            "a": {"kind": "rect@1", "layer": "main", "order": "a1", "params": {"box": [0, 0, 10, 10], "paint": {"fill": {"steps": ends}}}},
-            "c": {"kind": "rect@1", "layer": "main", "order": "a0", "params": {"box": [100, 0, 10, 10], "paint": {"fill": {"steps": ends}}}},
-            "b": {"kind": "rect@1", "layer": "main", "params": {"box": [50, 0, 10, 10], "paint": {"fill": {"steps": ends}}}},
-        }));
-        doc["collections"]["ends"] = json!({"members": ["a", "c"]});
-        let r = draw(&doc).unwrap_err();
-        assert_eq!(
-            (r.code, r.path.as_str()),
-            ("bad_paint", "items/b/params/paint/fill/steps/over")
-        );
-        doc["items"].as_object_mut().unwrap().remove("b");
-        let f = draw(&doc).unwrap();
-        assert_eq!((solid(&f, "a"), solid(&f, "c")), (ground, ink));
-    }
-
-    #[test]
-    fn a_gradient_spans_another_item_s_box_and_runs_along_strokes_alone() {
-        let gradient = |span: &str| json!({"gradient": {"span": span, "stops": [{"at": 0, "role": "ink"}, {"at": 1, "role": "ground"}]}});
-        let doc = board(json!({
-            "g": {"kind": "group@1", "layer": "main", "params": {}},
-            "p": {"kind": "rect@1", "layer": "main", "parent": "g", "params": {"box": [20, 10, 30, 30]}},
-            "q": {"kind": "rect@1", "layer": "main", "parent": "g", "params": {"box": [120, 30, 40, 30]}},
-            "r": {"kind": "rect@1", "layer": "main", "params": {"box": [0, 0, 10, 10], "paint": {"fill": gradient("g")}}},
-        }));
-        // p and q draw nothing, yet the group's box is theirs: x 20 to 160, y 10 to 60.
-        let doc = {
-            let mut d = doc;
-            for k in ["p", "q"] {
-                d["items"][k]["params"]["paint"] = json!({"fill": {"role": "ink"}});
-            }
-            d
-        };
-        let f = draw(&doc).unwrap();
-        let Mark::Rect {
-            fill: Fill::Ramp(r),
-            ..
-        } = mark_of(&f, "r")
-        else {
-            panic!("r's fill is a ramp")
-        };
-        assert_eq!(
-            r.geometry,
-            paint::Geometry::Linear {
-                from: [20.0, 35.0],
-                to: [160.0, 35.0]
-            }
-        );
-        let mut missing = doc.clone();
-        missing["items"]["r"]["params"]["paint"] = json!({"fill": gradient("nowhere")});
-        assert_eq!(draw(&missing).unwrap_err().code, "ref_unresolved");
-        let mut fill_along = doc.clone();
-        fill_along["items"]["r"]["params"]["paint"]["fill"]["gradient"]["kind"] = json!("along");
-        assert_eq!(draw(&fill_along).unwrap_err().code, "gradient_kind");
-    }
-
-    #[test]
-    fn a_path_draws_at_most_10_000_dashes() {
-        let dashed = |count: u64| {
-            board(json!({"o": {"kind": "circle@1", "layer": "main",
-                "params": {"center": [50, 50], "r": 40, "paint": {"stroke": {"role": "ink", "dash": {"count": count}}}}}}))
-        };
-        let most = draw(&dashed(10_000)).unwrap();
-        let Mark::Shape {
-            stroke: Some(line), ..
-        } = mark_of(&most, "o")
-        else {
-            panic!("a stroked circle is an outline")
-        };
-        assert_eq!(line.dashes, Some(10_000));
-        let r = draw(&dashed(10_001)).unwrap_err();
-        assert_eq!(
-            (r.code, r.path.as_str()),
-            ("out_of_range", "items/o/params/paint/stroke/dash/count")
-        );
-    }
-
-    #[test]
-    fn a_document_s_mark_sets_hold_at_most_16m_rows_together() {
-        let set = |k: usize| {
-            (
-                format!("s{k:02}"),
-                json!({"kind": "marks@1", "layer": "main", "params": {"mark": "point", "n": 1_000_000}}),
-            )
-        };
-        let items: Map<_, _> = (0..17).map(set).collect();
-        let r = draw(&board(Value::Object(items))).unwrap_err();
-        assert_eq!(
-            (r.code, r.path.as_str()),
-            ("out_of_range", "items/s16/params/n")
-        );
-    }
-
-    #[test]
-    fn an_image_is_named_by_its_hash_and_needs_its_alt_text() {
-        let hash = "ab".repeat(32);
-        let ok = board(json!({"shot": {"kind": "image@1", "layer": "main",
-            "params": {"asset": hash, "box": [0, 0, 100, 50], "fit": "cover", "alt": "The failing step"}}}));
-        let f = draw(&ok).unwrap();
-        let Mark::Image { asset, fit, .. } = &f.layers[0].marks[0].mark else {
-            panic!("an image")
-        };
-        assert_eq!((asset.as_str(), *fit), (hash.as_str(), ImageFit::Cover));
-        let mut no_alt = ok.clone();
-        no_alt["items"]["shot"]["params"]["alt"] = json!("");
-        assert_eq!(draw(&no_alt).unwrap_err().code, "alt_missing");
-        let mut by_path = ok.clone();
-        by_path["items"]["shot"]["params"]["asset"] = json!("/tmp/shot.png");
-        assert_eq!(draw(&by_path).unwrap_err().code, "bad_asset");
-    }
-    /// The non-zero winding of `verbs` about `p`, from its sub-paths flattened at 64 points a
-    /// segment.
-    fn winding(verbs: &[Verb], p: [f64; 2]) -> i32 {
-        let mut w = 0;
-        for sub in pathops::subs_of(verbs) {
-            let mut pts: Vec<[f64; 2]> = Vec::new();
-            for seg in &sub.segs {
-                for i in 0..64 {
-                    pts.push(seg.at(i as f64 / 64.0));
-                }
-            }
-            let n = pts.len();
-            for i in 0..n {
-                let (a, b) = (pts[i], pts[(i + 1) % n]);
-                if a[1] <= p[1] {
-                    if b[1] > p[1] && (b[0] - a[0]) * (p[1] - a[1]) > (p[0] - a[0]) * (b[1] - a[1])
-                    {
-                        w += 1;
-                    }
-                } else if b[1] <= p[1]
-                    && (b[0] - a[0]) * (p[1] - a[1]) < (p[0] - a[0]) * (b[1] - a[1])
-                {
-                    w -= 1;
-                }
-            }
-        }
-        w
-    }
-
-    #[test]
-    fn a_crescent_shade_sits_on_the_far_side_and_its_highlight_on_the_near_side() {
-        // #160, Paint: shade: a 40 u circle lit from the left (light 180°) shaded by 8 u with a
-        // 10 u highlight. The shade covers a point near the right edge and none near the left
-        // edge; the highlight the other way round; the middle keeps the fill.
-        let doc = board(json!({
-            "ball": {"kind": "circle@1", "layer": "main", "order": "a0", "params": {
-                "center": [100, 50], "r": 40,
-                "paint": {"fill": {"role": "ink"}, "shade": {"kind": "crescent", "role": "ink", "offset": 8, "light": 180,
-                    "highlight": {"role": "ground", "offset": 10}}}}},
-        }));
-        let f = draw(&doc).unwrap();
-        let verbs_of = |item: &str| -> Vec<Verb> {
-            f.layers[0]
-                .marks
-                .iter()
-                .find_map(|m| match &m.mark {
-                    Mark::Shape { item: i, verbs, .. } if i == item => Some(verbs.clone()),
-                    _ => None,
-                })
-                .unwrap_or_else(|| panic!("{item} is drawn"))
-        };
-        let (shade, highlight) = (verbs_of("ball#shade"), verbs_of("ball#highlight"));
-        let (far, near, middle) = ([136.0, 50.0], [64.0, 50.0], [100.0, 50.0]);
-        assert_ne!(winding(&shade, far), 0, "the shade covers the far side");
-        assert_eq!(winding(&shade, near), 0, "the shade leaves the near side");
-        assert_eq!(winding(&shade, middle), 0, "the shade leaves the middle");
-        assert_ne!(
-            winding(&highlight, near),
-            0,
-            "the highlight covers the near side"
-        );
-        assert_eq!(
-            winding(&highlight, far),
-            0,
-            "the highlight leaves the far side"
-        );
-        assert_eq!(
-            winding(&highlight, middle),
-            0,
-            "the highlight leaves the middle"
-        );
-    }
-
-    #[test]
-    fn marks_draw_by_z_then_by_the_tree_not_by_flat_order_keys() {
-        // #160: a group's child draws with its group, after an earlier top-level item, whatever
-        // its own order key says; a z above lifts it over everything in the layer.
-        let doc = |z: f64| {
-            board(json!({
-                "r": {"kind": "rect@1", "layer": "main", "order": "a3", "params": {"box": [0, 0, 10, 10], "paint": {"fill": {"role": "ink"}}}},
-                "g": {"kind": "group@1", "layer": "main", "order": "a5", "params": {}},
-                "c": {"kind": "rect@1", "layer": "main", "order": "a0", "parent": "g", "params": {"box": [5, 5, 10, 10], "z": z, "paint": {"fill": {"role": "ink"}}}},
-                "d": {"kind": "rect@1", "layer": "main", "order": "a1", "params": {"box": [50, 50, 10, 10], "z": -1, "paint": {"fill": {"role": "ink"}}}},
-            }))
-        };
-        let order = |z: f64| -> Vec<String> {
-            draw(&doc(z)).unwrap().layers[0]
-                .marks
-                .iter()
-                .map(|m| m.mark.item().to_string())
-                .collect()
-        };
-        assert_eq!(order(0.0), ["d", "r", "c"]);
-        assert_eq!(order(1.0), ["d", "r", "c"]);
-        let mut below = doc(0.0);
-        below["items"]["r"]["params"]["z"] = json!(2);
-        let marks: Vec<String> = draw(&below).unwrap().layers[0]
-            .marks
-            .iter()
-            .map(|m| m.mark.item().to_string())
-            .collect();
-        assert_eq!(marks, ["d", "c", "r"]);
-    }
-}
+mod tests;

@@ -12,20 +12,30 @@
 //! read once, before any input, over a connection closed straight after. `DEEP_DRIVE_PLANT` lifts one guard at a
 //! time, for the checks that must catch it.
 
+mod arms;
 mod check;
+mod clocks;
+mod core;
+mod counts;
 mod frames;
+mod game_shell;
 pub mod glyphs;
 mod hubcopy;
 mod locate;
+mod memory;
 mod motion;
 mod plant;
 mod play;
+mod see;
 
 use std::{
     cell::{Cell, RefCell},
     path::{Path, PathBuf},
     rc::Rc,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -89,6 +99,8 @@ pub struct Drive {
     plant: Option<Plant>,
     replica: Option<Replica>,
     launches: u64,
+    /// #1431: the planted memory the process holds.
+    memory: memory::Memory,
 }
 
 impl Drive {
@@ -98,13 +110,19 @@ impl Drive {
             plant,
             replica: None,
             launches: 0,
+            memory: memory::Memory::new(plant),
         }
     }
 
     /// One call's reply: `ok`, `t`, and the call's fields or its error.
     pub fn call(&mut self, call: &Value) -> Value {
         let name = call["call"].as_str().unwrap_or_default().to_owned();
+        self.memory.leak();
         let result = match (name.as_str(), self.replica.as_mut()) {
+            // #1431: the process's reading, with or without a replica.
+            ("footprint", _) => Ok(self.memory.footprint()),
+            #[cfg(feature = "env-plants")]
+            ("texture", _) => self.memory.texture(call),
             ("launch", Some(replica)) => Err(fail(
                 "refused",
                 format!(
@@ -118,6 +136,7 @@ impl Drive {
                 let out = self.out.join(format!("{}", self.launches));
                 Replica::launch(id, out, self.plant, &call["launch"]).map(|(replica, reply)| {
                     self.replica = Some(replica);
+                    self.memory.launched();
                     reply
                 })
             }
@@ -137,6 +156,7 @@ impl Drive {
         let t = self.replica.as_ref().map_or(0, |r| r.clock.t);
         if name == "close" && result.is_ok() {
             self.replica = None;
+            self.memory.closed();
         }
         match result {
             Ok(Value::Object(mut fields)) => {
@@ -217,8 +237,14 @@ struct Replica {
     script: Option<Entity<gpui_shell::ScriptView>>,
     /// Issue #1546: in `launch.frames: "dirty"`, the frames GPUI drew on request and each step's comparison.
     dirty: Option<frames::Dirty>,
+    /// Issue #1482: in that mode, what each frame asked for and drew.
+    counts: Option<counts::Counts>,
     /// Issue #1462: the replica's copy of the hub, which every call the app makes of its hub reaches.
     hub_copy: Arc<hubcopy::HubCopy>,
+    /// #1498: the app's canvas panel, which the copy of the canvas core presents to, and the replica's clock as the
+    /// core reads it.
+    canvas: Entity<deep_app::show::CanvasPanel>,
+    shared_clock: Arc<AtomicU64>,
 }
 
 impl Replica {
@@ -282,6 +308,38 @@ impl Replica {
         // #1546: "every" draws every view each frame; "dirty" only the frames GPUI says the window needs.
         let frames = word("frames", &["every", "dirty"], "every")?;
         let dirty = frames == "dirty";
+        // #1482: which window, whether each drawn frame is read back, and whether accessibility is active: each needs the
+        // mode that draws only the frames GPUI says the window needs.
+        let arm = word("arm", &["app", "blank", "lists", "picture"], "app")?;
+        // #1489: the picture the `picture` arm's image element shows, by its path.
+        let picture = match (&args["picture"], arm.as_str()) {
+            (Value::String(path), "picture") => Some(PathBuf::from(path)),
+            (Value::Null, "picture") => {
+                return Err(fail(
+                    "refused",
+                    "launch.arm \"picture\" names a picture by its path",
+                ))
+            }
+            (Value::Null, _) => None,
+            (_, _) => return Err(fail("refused", "launch.picture goes with arm \"picture\"")),
+        };
+        let read_back = word("read_back", &["tiles", "off"], "tiles")?;
+        let accessibility = match &args["accessibility"] {
+            Value::Null => false,
+            Value::Bool(on) => *on,
+            other => {
+                return Err(fail(
+                    "refused",
+                    format!("launch.accessibility is true or false, not {other}"),
+                ))
+            }
+        };
+        if !dirty && (arm != "app" || !args["read_back"].is_null() || accessibility) {
+            return Err(fail(
+                "refused",
+                "launch.arm, read_back and accessibility need frames: \"dirty\"",
+            ));
+        }
         let scale = match &args["scale"] {
             Value::Null => 2.,
             v if v == 2 => 2.,
@@ -310,7 +368,8 @@ impl Replica {
                 ))
             }
         };
-        // Nothing the app draws is localized yet, so every locale draws the same; the reply says which one ran.
+        // #2403: the locale stands for the system's preferred language: the app draws in the first table it has for it,
+        // English when it has none, and the reply says which ran.
         let locale = match &args["locale"] {
             Value::Null => "en-US".to_owned(),
             Value::String(tag)
@@ -404,6 +463,7 @@ impl Replica {
         };
         std::fs::create_dir_all(&out)
             .map_err(|e| fail("refused", format!("{}: {e}", out.display())))?;
+        deep_app::copy::show(deep_app::copy::choose([locale.as_str()]));
 
         // Your record is read once, before the replica exists; the connection closes when the reader drops.
         let mut hub = None;
@@ -499,11 +559,29 @@ impl Replica {
         let failing = view.as_ref().map(|view| view.name.clone());
         // Every call the app makes of its hub reaches the replica's copy of it.
         let kept_pointer = Rc::new(Cell::new(point(px(-1.), px(-1.))));
-        let hub_copy = hubcopy::HubCopy::new(&events);
+        // #1498: the copy of the hub's canvas core, drawing into the replica's own evidence folder.
+        let shared_clock = Arc::new(AtomicU64::new(0));
+        let evidence = out.join("evidence");
+        let core = core::Core::new(
+            evidence.clone(),
+            deep_canvas_marks::select::Planted {
+                drawn_order: plant == Some(Plant::CopiesDrawnOrder),
+                draw_order: plant == Some(Plant::CopiesDrawOrder),
+            },
+            shared_clock.clone(),
+        );
+        let hub_copy = hubcopy::HubCopy::new(&events, core);
         let taker = hub_copy.clone();
         deep_app::hub::set_local(Some(Arc::new(move |method, params| {
             taker.take(method, params)
         })));
+        // #1498: the app's canvas panel on a session's page, as the app makes it at launch, set before the window's first
+        // frame reads it: a replica launched after another in one process (ui_check's renders) would read the last one's.
+        let canvas = cx.update(|cx| {
+            let panel = cx.new(|_| deep_app::show::CanvasPanel::new(evidence));
+            deep_app::views::set_canvas(panel.clone());
+            panel
+        });
         let reduced = args["reduced_motion"].as_bool().unwrap_or(false);
         let window = cx.update(|cx| {
             gpui_kit::init(cx);
@@ -544,9 +622,23 @@ impl Replica {
                 },
                 ..crate::shell::window_options()
             };
+            if arm != "app" {
+                return arms::open(
+                    &arm,
+                    options,
+                    (
+                        plant == Some(Plant::WheelNotifiesEveryEvent),
+                        plant == Some(Plant::PictureFrameEachVsync),
+                    ),
+                    picture.clone(),
+                    cx,
+                );
+            }
             // The window opens where the app opens, unless the launch names a page (#1461). A panel with no area goes in
-            // the list's slot, as before; one registered to an area goes there; one replacing Needs you fills the list's
-            // first section.
+            // the list's slot, as before, but in a window too narrow for the list and the page together, where the list
+            // hides (#1461) and the window shows the page (#1808), it is the first page, as the app mounts one; one
+            // registered to an area goes there; one replacing Needs you fills the list's first section.
+            let narrow = deep_app::chrome::list_width(px(0.), px(size.0)).is_none();
             let base = Layout::shipped("needs-you");
             let mut layout = if center == NEEDS_YOU {
                 base
@@ -562,7 +654,12 @@ impl Replica {
                 layout.active = 0;
             }
             if panel.is_some() && area.is_none() && replaces.is_empty() {
-                layout.sidebar = deep_app::views::EXTENSION.into();
+                if narrow {
+                    layout.center.insert(0, deep_app::views::EXTENSION.into());
+                    layout.active = 0;
+                } else {
+                    layout.sidebar = deep_app::views::EXTENSION.into();
+                }
             }
             if !replaces.is_empty() {
                 layout.needs_you = format!("shell:deepbuild-panel/{replaces}");
@@ -614,10 +711,14 @@ impl Replica {
                         });
                         *into.borrow_mut() = match (loaded, failing) {
                             (Err(why), Some(name)) => {
-                                deep_app::open::place_extension(
-                                    deep_app::views::shipped(Kind::Sidebar, cx),
-                                    cx,
-                                );
+                                // Its slot shows the shipped list, as before; in a narrow window that slot is a page,
+                                // and the list's own slot already holds the list.
+                                if !narrow {
+                                    deep_app::open::place_extension(
+                                        deep_app::views::shipped(Kind::Sidebar, cx),
+                                        cx,
+                                    );
+                                }
                                 deep_app::installed::failed(&name, &why, cx);
                                 Ok(None)
                             }
@@ -724,21 +825,37 @@ impl Replica {
             reduced,
             script,
             dirty: None,
+            counts: None,
             hub_copy,
             pointer: kept_pointer,
+            canvas,
+            shared_clock,
         };
+        // #1482: an assistive client connects before the window draws, so its first frame builds the tree.
+        if accessibility && !gpui_kit::activate_accessibility() {
+            return Err(fail("blocked", "the window took no accessibility adapter"));
+        }
+        #[cfg(feature = "env-plants")]
+        gpui_kit::frame_counts::reuse_plainly(plant == Some(Plant::ReuseDropsAccessibility));
         replica.draw();
         replica.draw();
         if dirty {
             replica.cx.draw_on_request();
             replica.dirty = Some(frames::Dirty::new(replica.live_tree()));
+            let read = if read_back == "off" { "off" } else { "tiles" };
+            replica.start_counts(arm.clone(), read, accessibility);
         }
-        let reply = json!({
+        let mut reply = json!({
             "replica": replica.id,
             "window": {"size": [size.0 as u32, size.1 as u32], "scale": scale as u32},
             "locale": locale,
             "frames": frames,
         });
+        if dirty {
+            reply["arm"] = json!(arm);
+            reply["read_back"] = json!(read_back);
+            reply["accessibility"] = json!(accessibility);
+        }
         replica
             .trace
             .push(json!({"call": "launch", "launch": args, "reply": reply}));
@@ -750,8 +867,10 @@ impl Replica {
         let index = self.steps.len() + 1;
         let acts = name == "act";
         let before = acts.then(|| self.snapshot_file());
-        self.begin_step();
+        self.begin_step(index);
         let result = match name {
+            "refresh" => self.refresh(),
+            "accessibility" => self.accessibility(),
             "act" => self.act(call),
             "hub" => self.hub(call),
             "feed" => self.feed(call),
@@ -766,10 +885,15 @@ impl Replica {
             "motion" => self.motion(&call["motion"]),
             "expect" => self.expect(call, index),
             "menus" => Ok(self.menus()),
+            // #1498: the replica's copy of the hub's canvas core and its own clipboard, for checks.
+            "show" => self.show(call),
+            "terminal" => self.terminal(call),
+            "clipboard" => Ok(self.clipboard(call)),
+            "stored" => Ok(self.stored()),
             "close" => return Ok(self.close()),
             other => Err(fail(
                 "refused",
-                format!("{other:?} is no call; the calls are launch, act, open, notification, wait_for, see, probe, screenshot, record, motion, expect, feed, resize, menus, close, ui_check and motion_check"),
+                format!("{other:?} is no call; the calls are launch, act, open, notification, wait_for, see, probe, screenshot, record, motion, expect, feed, resize, menus, show, terminal, clipboard, stored, close, ui_check and motion_check"),
             )),
         };
         let mut digested = call.clone();
@@ -842,6 +966,7 @@ impl Replica {
         };
         let before = nanos(self.clock.t);
         self.clock.t += step;
+        self.shared_clock.store(self.clock.t, Ordering::Relaxed);
         // The views' clock follows the replica's in every mode, so an age a row writes ticks as the clock runs (#1458).
         self.move_views_clock();
         self.cx
@@ -877,9 +1002,33 @@ impl Replica {
             return dirty.drawn().1;
         }
         let glyphs = self.glyphs.clone();
-        self.cx
+        let mut frame = self
+            .cx
             .update_window(self.window, |_, window, _| Frame::read(window, &glyphs))
-            .expect("the replica's window is open")
+            .expect("the replica's window is open");
+        // #1498: the carets of the text a session's page draws, where its panel was drawn last.
+        if let Some(placed) = deep_app::show::placed() {
+            let (rect, at, scale) = (placed.rect, placed.at, frame.scale);
+            let k = f32::from(at.size.width) / rect[2].max(1.);
+            let device = |v: f32| (v * scale).round() as i64;
+            frame.carets = self
+                .hub_copy
+                .core(|core| core.carets(&placed.session))
+                .into_iter()
+                .map(|(item, carets)| {
+                    let boxes = carets
+                        .into_iter()
+                        .map(|[x, top, h]| {
+                            let x = f32::from(at.origin.x) + (x as f32 - rect[0]) * k;
+                            let top = f32::from(at.origin.y) + (top as f32 - rect[1]) * k;
+                            [device(x), device(top), 1, device(h as f32 * k)]
+                        })
+                        .collect();
+                    (item, boxes)
+                })
+                .collect();
+        }
+        frame
     }
 
     fn scale(&mut self) -> f32 {
@@ -973,12 +1122,24 @@ impl Replica {
         }
         // In the dirty mode the window draws what the input changed at its next frame, as a real one does (#1546).
         let forced = self.dirty.is_none();
+        // #1482's planted replica notifies the window's root with each pointer move it delivers.
+        if self.plant == Some(Plant::NotifiesRootPerMove)
+            && matches!(event, PlatformInput::MouseMove(_))
+        {
+            let _ = self
+                .cx
+                .update_window(self.window, |root, _, cx| cx.notify(root.entity_id()));
+        }
+        let mark = clocks::Mark::now();
         let _ = self.cx.update_window(self.window, |_, window, cx| {
             window.dispatch_event(event, cx);
             if forced {
                 window.render_frame(cx);
             }
         });
+        if let Some(counts) = &mut self.counts {
+            counts.input_cost(mark.since());
+        }
     }
 
     fn act(&mut self, call: &Value) -> Result<Value, Fail> {
@@ -1000,12 +1161,50 @@ impl Replica {
         let timeout_ms = Self::timeout(call);
         let scale = self.scale();
         let at = |p: [i64; 2]| point(px(p[0] as f32 / scale), px(p[1] as f32 / scale));
-        // A press where the pointer is, at a point in device pixels: no locator, no wait for stillness (#1461).
-        if kind == "click" && locator.is_null() {
-            if let Some(p) = act["point"].as_array().filter(|p| p.len() == 2) {
-                let p = [p[0].as_i64().unwrap_or(0), p[1].as_i64().unwrap_or(0)];
+        // #1498: `source: "hid"` stands for your hardware input, which the app's router gives a gesture serial; with
+        // none the act is the replica's synthetic input, as before. Modifiers are held through a pointer action.
+        let _hid = match act["source"].as_str() {
+            None | Some("synthetic") => None,
+            Some("hid") => Some(Hid::on()),
+            Some(other) => {
+                return Err(fail(
+                    "refused",
+                    format!("act.source is hid or synthetic, not {other:?}"),
+                ))
+            }
+        };
+        let modifiers = modifiers(&act["mods"])?;
+        let xy = |p: &Value| {
+            let p = p.as_array().filter(|p| p.len() == 2)?;
+            Some([p[0].as_i64().unwrap_or(0), p[1].as_i64().unwrap_or(0)])
+        };
+        // A pointer action at a point in device pixels: no locator, no wait for stillness and no hit test (#1461, #1482,
+        // #1498).
+        if locator.is_null() && matches!(kind.as_str(), "click" | "double_click" | "drag" | "hover")
+        {
+            if let Some(p) = xy(&act["point"]) {
                 self.input_at(self.clock.t);
-                self.click(at(p), 1);
+                match kind.as_str() {
+                    "click" => self.click(at(p), 1, modifiers),
+                    "double_click" => self.click(at(p), 2, modifiers),
+                    "hover" => self.input(
+                        MouseMoveEvent {
+                            position: at(p),
+                            pressed_button: None,
+                            modifiers,
+                        }
+                        .to_platform_input(),
+                    ),
+                    _ => {
+                        let Some(to) = xy(&act["to_point"]) else {
+                            return Err(fail(
+                                "refused",
+                                "act drag from a point needs to_point ([x, y] in device pixels)",
+                            ));
+                        };
+                        self.drag_points(at(p), at(to), modifiers);
+                    }
+                }
                 self.tick();
                 self.tick();
                 return Ok(json!({"point": p, "result": "delivered"}));
@@ -1055,6 +1254,44 @@ impl Replica {
             _ => self.actionable(locator, timeout_ms)?,
         };
         let center = target.center();
+        // `events` wheel events of `dy` points each at the target's centre, one a frame (#1482): the list under the
+        // centre takes them, whichever of its rows is there.
+        if kind == "wheel" {
+            let (dy, events) = (
+                act["dy"].as_f64().unwrap_or(0.) as f32,
+                act["events"].as_u64().unwrap_or(1),
+            );
+            let position = at(center);
+            self.input_at(self.clock.t);
+            if self.pointer.get() != position {
+                self.input(
+                    MouseMoveEvent {
+                        position,
+                        pressed_button: None,
+                        modifiers: Modifiers::default(),
+                    }
+                    .to_platform_input(),
+                );
+            }
+            for _ in 0..events {
+                let delta = ScrollDelta::Pixels(point(px(0.), px(-dy)));
+                self.input(
+                    ScrollWheelEvent {
+                        position,
+                        delta,
+                        ..Default::default()
+                    }
+                    .to_platform_input(),
+                );
+                self.tick();
+            }
+            self.focus = Some(target.clone());
+            self.tick();
+            self.tick();
+            return Ok(
+                json!({"point": center, "box": target.bounds, "waited_ms": waited * 1000 / FLICKS, "result": "delivered"}),
+            );
+        }
         // A pointer action asks the frame what the event would reach before anything is sent.
         let pointer = kind != "press" && !locator.is_null();
         if pointer && self.plant != Some(Plant::NoHitTest) {
@@ -1078,7 +1315,7 @@ impl Replica {
         match kind.as_str() {
             "click" | "double_click" => {
                 let count = if kind == "click" { 1 } else { 2 };
-                self.click(at(center), count);
+                self.click(at(center), count, modifiers);
             }
             "hover" => self.input(MouseMoveEvent { position: at(center), pressed_button: None, modifiers: Modifiers::default() }.to_platform_input()),
             // A secondary click (#1462): the right button down and up where the locator is.
@@ -1093,7 +1330,7 @@ impl Replica {
                     return Err(fail("refused", "act type needs its text"));
                 };
                 if !locator.is_null() && self.focus.as_ref() != Some(&target) {
-                    self.click(at(center), 1);
+                    self.click(at(center), 1, Modifiers::default());
                 }
                 let text = text.to_owned();
                 let _ = self.cx.update_window(self.window, |_, window, cx| window.input(&text, cx));
@@ -1126,19 +1363,18 @@ impl Replica {
                     (Value::Null, _) => return Err(fail("refused", "act drag needs to (a locator) or to_point ([x, y] in device pixels)")),
                     (to, _) => self.actionable(to, timeout_ms)?.0.center(),
                 };
-                let (from, to) = (at(center), at(to));
-                let _ = self.cx.update_window(self.window, |_, window, cx| window.drag(from, to, cx));
+                self.drag_points(at(center), at(to), modifiers);
             }
             "set" => {
                 let value = act["value"].as_str().unwrap_or_default().to_owned();
                 match target.role.as_str() {
                     "check_box" | "switch" | "radio_button" => {
                         if target.checked != Some(value == "true") {
-                            self.click(at(center), 1);
+                            self.click(at(center), 1, Modifiers::default());
                         }
                     }
                     role if role.ends_with("input") => {
-                        self.click(at(center), 1);
+                        self.click(at(center), 1, Modifiers::default());
                         let _ = self.cx.update_window(self.window, |_, window, cx| {
                             window.press("cmd-a", cx);
                             window.input(&value, cx);
@@ -1222,8 +1458,7 @@ impl Replica {
         )
     }
 
-    fn click(&mut self, position: Point<Pixels>, count: usize) {
-        let modifiers = Modifiers::default();
+    fn click(&mut self, position: Point<Pixels>, count: usize, modifiers: Modifiers) {
         self.input(
             MouseMoveEvent {
                 position,
@@ -1254,6 +1489,129 @@ impl Replica {
                 .to_platform_input(),
             );
         }
+    }
+
+    /// #1498: a drag from `from` to `to` with `modifiers` held through it, as the platform reports keys held: they go
+    /// down before the press and up after the release, which ends eight moves along the way.
+    fn drag_points(&mut self, from: Point<Pixels>, to: Point<Pixels>, modifiers: Modifiers) {
+        const STEPS: u16 = 8;
+        let held = |modifiers| {
+            ModifiersChangedEvent {
+                modifiers,
+                capslock: Capslock::default(),
+            }
+            .to_platform_input()
+        };
+        let button = MouseButton::Left;
+        if modifiers != Modifiers::default() {
+            self.input(held(modifiers));
+        }
+        self.input(
+            MouseMoveEvent {
+                position: from,
+                pressed_button: None,
+                modifiers,
+            }
+            .to_platform_input(),
+        );
+        self.input(
+            MouseDownEvent {
+                button,
+                position: from,
+                modifiers,
+                click_count: 1,
+                first_mouse: false,
+            }
+            .to_platform_input(),
+        );
+        for step in 1..=STEPS {
+            let k = f32::from(step) / f32::from(STEPS);
+            let position = point(from.x + (to.x - from.x) * k, from.y + (to.y - from.y) * k);
+            self.input(
+                MouseMoveEvent {
+                    position,
+                    pressed_button: Some(button),
+                    modifiers,
+                }
+                .to_platform_input(),
+            );
+        }
+        self.input(
+            MouseUpEvent {
+                button,
+                position: to,
+                modifiers,
+                click_count: 1,
+            }
+            .to_platform_input(),
+        );
+        if modifiers != Modifiers::default() {
+            self.input(held(Modifiers::default()));
+        }
+    }
+
+    /// #1498 `show`: a document as a session's `deep_show`, through the copy of the hub's canvas core, presented on the
+    /// session's page; then one frame.
+    fn show(&mut self, call: &Value) -> Result<Value, Fail> {
+        let args = &call["show"];
+        let Some(session) = args["session"].as_str() else {
+            return Err(fail("refused", "show needs its session"));
+        };
+        if !args["document"].is_object() {
+            return Err(fail("refused", "show needs its document, an object"));
+        }
+        let shown = self
+            .hub_copy
+            .core(|core| core.show(session, args["document"].clone()));
+        let (reply, presented) = shown.map_err(|e| {
+            fail(e["code"].as_str().unwrap_or("refused"), e.to_string()).with("issues", e)
+        })?;
+        if let Some(p) = deep_app::show::Presented::from_json(&presented) {
+            let canvas = self.canvas.clone();
+            self.cx
+                .update(|cx| canvas.update(cx, |panel, cx| panel.present(p, cx)));
+        }
+        self.tick();
+        Ok(reply)
+    }
+
+    /// #1498 `terminal`: the terminal the copy of the hub hosts for a session, opened at `size` on the first call and
+    /// fed `output`; what it has sent its program. Then one frame.
+    fn terminal(&mut self, call: &Value) -> Result<Value, Fail> {
+        let args = &call["terminal"];
+        let Some(session) = args["session"].as_str() else {
+            return Err(fail("refused", "terminal needs its session"));
+        };
+        let size = args["size"].as_array().and_then(|s| {
+            let n = |i: usize| u16::try_from(s.get(i)?.as_u64()?).ok();
+            Some([n(0)?, n(1)?])
+        });
+        let output = args["output"].as_str().unwrap_or_default();
+        let reply = self
+            .hub_copy
+            .core(|core| core.terminal(session, size, output))
+            .map_err(|e| fail(e["code"].as_str().unwrap_or("refused"), e.to_string()))?;
+        self.tick();
+        Ok(reply)
+    }
+
+    /// #1498 `clipboard`: what the replica's own clipboard holds, after `write` put text there as another app's copy
+    /// would. No input, no frame.
+    fn clipboard(&mut self, call: &Value) -> Value {
+        if let Some(text) = call["clipboard"]["write"].as_str() {
+            let item = ClipboardItem::new_string(text.to_owned());
+            self.cx.update(|cx| cx.write_to_clipboard(item));
+        }
+        let text = self
+            .cx
+            .update(|cx| cx.read_from_clipboard())
+            .and_then(|item| item.text());
+        json!({"clipboard": {"text": text}})
+    }
+
+    /// #1498 `stored`: the replica's record, every event in log order, and each document the copy of the hub presents.
+    fn stored(&mut self) -> Value {
+        json!({"events": self.events, "documents": self.hub_copy.core(|core| core.stored())})
     }
 
     fn whole_window(&mut self, scale: f32) -> Target {
@@ -1322,344 +1680,6 @@ impl Replica {
             }
             _ => {}
         }
-    }
-
-    // ---- Waiting, seeing and asserting.
-
-    fn wait_for(&mut self, call: &Value) -> Result<Value, Fail> {
-        let wait = &call["wait_for"];
-        let timeout_ms = Self::timeout(call);
-        let deadline = self.clock.t + timeout_ms * FLICKS / 1000;
-        if let Some(t) = wait["t"].as_u64() {
-            // With step_ms the virtual clock runs a frame each step_ms, the last shorter, so hours take thousands of
-            // frames, not a frame each 60th (#2028).
-            let step = match &wait["step_ms"] {
-                Value::Null => None,
-                ms => match ms.as_u64() {
-                    Some(ms) if ms > 0 && self.clock.real.is_none() && self.motion.is_none() => Some(ms * FLICKS / 1000),
-                    Some(ms) if ms > 0 => return Err(fail("refused", "step_ms runs the virtual clock, and this replica's clock is real or recording motion")),
-                    _ => return Err(fail("refused", format!("step_ms is a whole number of ms above 0, not {ms}"))),
-                },
-            };
-            while self.clock.t < t {
-                if self.clock.t >= deadline {
-                    return Err(fail(
-                        "timeout",
-                        format!("t {t} is past the {timeout_ms} ms timeout"),
-                    )
-                    .with("timeout_ms", json!(timeout_ms)));
-                }
-                self.tick_by(step.map(|step| step.min(t - self.clock.t)));
-            }
-            return Ok(if step.is_some() {
-                json!({"step_ms": wait["step_ms"]})
-            } else {
-                json!({})
-            });
-        }
-        let state = wait["state"].as_str().map(str::to_owned);
-        let event = wait["event"].as_str().map(str::to_owned);
-        let locator = call["locator"].clone();
-        let mut previous: Option<Vec<Target>> = None;
-        loop {
-            let frame = self.frame();
-            let done = match (state.as_deref(), &event) {
-                (_, Some(kind)) => self.events.iter().any(|e| e["kind"] == kind.as_str()),
-                (Some("settled"), _) => {
-                    let now = frame.elements.clone();
-                    let still = previous.as_ref() == Some(&now);
-                    previous = Some(now);
-                    still
-                }
-                (Some(state @ ("visible" | "hidden" | "enabled" | "text" | "value")), _) => {
-                    let found = frame.all(&locator).map_err(|why| fail("refused", why))?;
-                    match state {
-                        "hidden" => found.is_empty(),
-                        _ if found.len() > 1 => return Err(ambiguous(&locator, found)),
-                        "visible" => found.len() == 1,
-                        "enabled" => found.first().is_some_and(|t| t.enabled),
-                        "text" => found.first().is_some_and(|t| Some(text_of(&frame, t)) == wait["value"].as_str().map(str::to_owned)),
-                        _ => found.first().is_some_and(|t| Some(value_of(&frame, t)) == wait["value"].as_str().map(str::to_owned)),
-                    }
-                }
-                (other, None) => {
-                    return Err(fail(
-                        "refused",
-                        format!("wait_for takes a state (visible, hidden, enabled, text, value, settled), an event or a t, not {other:?}"),
-                    ))
-                }
-            };
-            if done {
-                return Ok(json!({}));
-            }
-            if self.clock.t >= deadline {
-                return Err(fail(
-                    "timeout",
-                    format!("{wait} didn't come within {timeout_ms} ms"),
-                )
-                .with("timeout_ms", json!(timeout_ms)));
-            }
-            self.tick();
-        }
-    }
-
-    fn expect(&mut self, call: &Value, index: usize) -> Result<Value, Fail> {
-        let expect = &call["expect"];
-        let name = expect["name"]
-            .as_str()
-            .map_or_else(|| format!("step {index}"), str::to_owned);
-        let assert = expect["assert"].as_str().unwrap_or_default().to_owned();
-        let locator = &call["locator"];
-        let expected = match assert.as_str() {
-            "visible" => json!(true),
-            "count" => expect["count"].clone(),
-            "state" => expect["state"].clone(),
-            "text" | "value" => expect["value"].clone(),
-            other => {
-                return Err(fail(
-                    "refused",
-                    format!("expect asserts visible, text, value, count or state, not {other:?}"),
-                ))
-            }
-        };
-        let timeout_ms = Self::timeout(call);
-        let deadline = self.clock.t + timeout_ms * FLICKS / 1000;
-        // An assertion waits for what it expects, up to the timeout, as an action waits for its target.
-        let (passed, actual) = loop {
-            let frame = self.frame();
-            let found = frame.all(locator).map_err(|why| fail("refused", why))?;
-            let actual = match (assert.as_str(), found.as_slice()) {
-                ("count", _) => json!(found.len()),
-                (_, []) => json!("nothing matches"),
-                (_, [target]) => match assert.as_str() {
-                    "visible" => json!(target.visible),
-                    "text" => json!(text_of(&frame, target)),
-                    "value" => json!(value_of(&frame, target)),
-                    _ => json!(state_of(target, expected.as_str().unwrap_or_default())),
-                },
-                (_, many) => json!(format!("{} matches", many.len())),
-            };
-            let passed = actual == expected;
-            if passed || self.clock.t >= deadline {
-                break (passed, actual);
-            }
-            self.tick();
-        };
-        self.assertions += 1;
-        if !passed {
-            let message = format!("expected {expected}, got {actual}");
-            self.failures.push(json!({
-                "test": name, "message": message, "cause": name, "frames": [], "covers": [],
-                "case": format!("{name}: {message}"),
-            }));
-        }
-        Ok(
-            json!({"assertion": {"name": name, "assert": assert, "passed": passed, "expected": expected, "actual": actual}}),
-        )
-    }
-
-    /// The text snapshot, in #338's one shape (#1459): roles, names, values, ids and bounds of every element with a
-    /// role, the strings drawn that no element already names, and the canvas items with their values.
-    fn tree(&mut self) -> (Value, Frame) {
-        match &self.dirty {
-            Some(dirty) => dirty.drawn(),
-            None => self.live_tree(),
-        }
-    }
-
-    /// The snapshot of what the window holds now.
-    fn live_tree(&mut self) -> (Value, Frame) {
-        let glyphs = self.glyphs.clone();
-        let frame = self
-            .cx
-            .update_window(self.window, |_, window, _| Frame::read(window, &glyphs))
-            .expect("the replica's window is open");
-        let mut snapshot = self
-            .cx
-            .update_window(self.window, |_, window, _| from_observed(window))
-            .expect("the replica's window is open");
-        for run in frame.runs.iter().filter(|r| r.visible) {
-            add_text(&mut snapshot.tree, run.text.clone(), run.bounds);
-        }
-        let mut json = snapshot.to_json();
-        // The status item's menu under the count (#1462): a line per session, as the real app's status item lists them.
-        json["menu_bar"]["items"] = json!(deep_app::record::with_view(|view| {
-            deep_app::states::menu(&view.table(), deep_app::views::now())
-        })
-        .unwrap_or_default());
-        // #1458: each string drawn with its size and face, and where each shipped view was laid out.
-        json["runs"] = frame
-            .runs
-            .iter()
-            .filter(|r| r.visible)
-            .map(|r| json!({"text": r.text, "bounds": r.bounds, "size": r.size, "face": r.face, "cut": r.cut, "weight": r.weight}))
-            .collect();
-        let scale = frame.scale;
-        let device = |v: gpui_kit::Pixels| (f32::from(v) * scale).round() as i64;
-        json["views"] = deep_app::views::drawn_views()
-            .into_iter()
-            .map(|(name, b)| {
-                let bounds = [b.origin.x, b.origin.y, b.size.width, b.size.height].map(device);
-                json!({"name": name, "bounds": bounds})
-            })
-            .collect();
-        (json, frame)
-    }
-
-    /// `menus` (#1462): the menu bar the app set, as it sets it on the real app, in order, separators left out, each
-    /// item with its key as the macOS menu bar draws it, in the table's form.
-    fn menus(&mut self) -> Value {
-        fn items(list: &[OwnedMenuItem], cx: &App) -> Vec<Value> {
-            list.iter()
-                .filter_map(|item| match item {
-                    OwnedMenuItem::Separator => None,
-                    OwnedMenuItem::Submenu(menu) => Some(json!({
-                        "name": menu.name.to_string(), "key": null, "enabled": !menu.disabled,
-                        "items": items(&menu.items, cx),
-                    })),
-                    OwnedMenuItem::SystemMenu(menu) => {
-                        Some(json!({"name": menu.name.to_string(), "key": null, "enabled": true}))
-                    }
-                    OwnedMenuItem::Action {
-                        name,
-                        action,
-                        disabled,
-                        ..
-                    } => Some(json!({
-                        "name": name, "key": deep_app::actions::menu_key(action.as_ref(), cx),
-                        "enabled": !disabled,
-                    })),
-                })
-                .collect()
-        }
-        let menus: Vec<Value> = self.cx.update(|cx| {
-            cx.get_menus()
-                .unwrap_or_default()
-                .iter()
-                .map(|menu| json!({"name": menu.name.to_string(), "items": items(&menu.items, cx)}))
-                .collect()
-        });
-        json!({"menus": menus})
-    }
-
-    /// The menu bar as `see` gives it (#1461): each menu's title and its items', in order, separators left out.
-    fn see_menus(&mut self) -> Vec<Value> {
-        self.cx.update(|cx| {
-            cx.get_menus()
-                .unwrap_or_default()
-                .iter()
-                .map(|menu| {
-                    let items: Vec<Value> = menu
-                        .items
-                        .iter()
-                        .filter_map(|item| match item {
-                            OwnedMenuItem::Action { name, disabled, .. } => {
-                                Some(json!({"title": name, "enabled": !disabled}))
-                            }
-                            OwnedMenuItem::Submenu(sub) => Some(
-                                json!({"title": sub.name.to_string(), "enabled": !sub.disabled}),
-                            ),
-                            _ => None,
-                        })
-                        .collect();
-                    json!({"title": menu.name.to_string(), "items": items})
-                })
-                .collect()
-        })
-    }
-
-    fn see(&mut self, call: &Value) -> Result<Value, Fail> {
-        let see = &call["see"];
-        let include: Vec<&str> = match see["include"].as_array() {
-            Some(list) => list.iter().filter_map(Value::as_str).collect(),
-            None => vec!["roles", "names", "values", "bounds", "items"],
-        };
-        let (mut snapshot, frame) = self.tree();
-        let scope = see["scope"].as_str().unwrap_or("window");
-        let root = match scope {
-            "window" => None,
-            "panel" => Some(json!({
-                "role": "pane", "name": null, "value": null, "id": null,
-                "bounds": panel_bounds(frame.scale)?,
-            })),
-            "locator" => match frame.one(&call["locator"]) {
-                Ok(t) => Some(json!({
-                    "role": t.role, "name": t.name, "value": t.value,
-                    "id": crate::snapshot::author_id(&t.path), "bounds": t.bounds,
-                })),
-                Err(Miss::Bad(why)) => return Err(fail("refused", why)),
-                Err(Miss::None) => {
-                    return Err(fail(
-                        "locate.none",
-                        format!("nothing matches {}", call["locator"]),
-                    ))
-                }
-                Err(Miss::Ambiguous(all)) => return Err(ambiguous(&call["locator"], all)),
-            },
-            other => {
-                return Err(fail(
-                    "refused",
-                    format!("see.scope is window, panel or locator, not {other:?}"),
-                ))
-            }
-        };
-        if let Some(mut root) = root {
-            let bounds = bounds_of(&root["bounds"]);
-            let mut inside = Vec::new();
-            collect_inside(&snapshot["tree"], bounds, &mut inside);
-            // The located node is the root: what it holds stays, under the root (#1460).
-            let inside: Vec<Value> = inside
-                .into_iter()
-                .flat_map(|n| {
-                    if n["role"] == root["role"]
-                        && n["name"] == root["name"]
-                        && n["bounds"] == root["bounds"]
-                    {
-                        n["children"].as_array().cloned().unwrap_or_default()
-                    } else {
-                        vec![n]
-                    }
-                })
-                .collect();
-            root["children"] = Value::Array(inside);
-            snapshot["tree"] = root;
-        }
-        if !include.contains(&"items") {
-            snapshot["items"] = json!([]);
-        }
-        keep(&mut snapshot["tree"], &include);
-        let hash = sha256(snapshot.to_string().as_bytes());
-        // The list's rows the window draws (#1463), in its order, and the record position they were built at: what
-        // deep status --json holds at that log_pos.
-        let (log_pos, rows) = deep_app::record::with_view(|view| {
-            let rows: Vec<Value> = view
-                .table()
-                .list()
-                .into_iter()
-                .map(|row| {
-                    let mut row = row.clone();
-                    if let Some(fields) = row.as_object_mut() {
-                        fields.remove("listed");
-                        fields.remove("order");
-                    }
-                    row
-                })
-                .collect();
-            (view.log_pos, rows)
-        })
-        .unwrap_or_default();
-        // The address the window shows (#1460), beside the snapshot so stored snapshots keep their bytes.
-        let address = self
-            .cx
-            .update(|cx| deep_app::open::current(cx).map(|address| address.to_string()));
-        // What the app sent its hub since launch, which the replica's copy of the hub took (#1462), and the menu bar
-        // as the app set it (#1461).
-        let hub = self.hub_copy.calls();
-        let menus = self.see_menus();
-        Ok(
-            json!({"snapshot": snapshot, "sha256": hash, "rows": rows, "log_pos": log_pos, "address": address, "hub": hub, "menus": menus,
-                "notifications": {"setting": self.notifier.reach(false).setting.name()}}),
-        )
     }
 
     /// `hub`: how the hub the app reads answers from now on, `answering`, `stopped` or `slow` (#1461); then a frame.
@@ -1897,14 +1917,50 @@ impl Replica {
             },
             "trace": {"sha256": hash, "path": path},
         });
-        if let Some(dirty) = &self.dirty {
-            closed["frames"] = dirty.report();
+        if self.dirty.is_some() {
+            closed["frames"] = self.frames_report();
         }
         closed
     }
 }
 
 /// ⌘K's recency list in a replica (#366): it starts empty, and never reads the live app's; only the planted ranker does.
+/// #1498: while an act with `source: "hid"` is delivered, the app takes its input as your hardware's.
+struct Hid;
+
+impl Hid {
+    fn on() -> Hid {
+        deep_app::trusted_input::replica_hid(true);
+        Hid
+    }
+}
+
+impl Drop for Hid {
+    fn drop(&mut self) {
+        deep_app::trusted_input::replica_hid(false);
+    }
+}
+
+/// #1498: `act.mods`, the modifier keys held through a pointer action.
+fn modifiers(mods: &Value) -> Result<Modifiers, Fail> {
+    let mut held = Modifiers::default();
+    for key in mods.as_array().into_iter().flatten() {
+        match key.as_str() {
+            Some("alt") => held.alt = true,
+            Some("shift") => held.shift = true,
+            Some("cmd") => held.platform = true,
+            Some("ctrl") => held.control = true,
+            _ => {
+                return Err(fail(
+                    "refused",
+                    format!("act.mods holds alt, shift, cmd or ctrl, not {key}"),
+                ))
+            }
+        }
+    }
+    Ok(held)
+}
+
 fn recency(plant: Option<Plant>) -> Vec<String> {
     if plant == Some(Plant::RanksByLiveRecency) {
         deep_app::commands::read_recency(&deep_app::commands::recency_file())
@@ -2006,32 +2062,6 @@ fn value_of(frame: &Frame, target: &Target) -> String {
         .value
         .clone()
         .unwrap_or_else(|| frame.text_inside(target.bounds))
-}
-
-/// The word `state` names, if the target is in it; else the state it is in.
-fn state_of(target: &Target, state: &str) -> String {
-    let holds = match state {
-        "enabled" => Some(target.enabled),
-        "disabled" => Some(!target.enabled),
-        "visible" => Some(target.visible),
-        "hidden" => Some(!target.visible),
-        "checked" => target.checked,
-        "unchecked" => target.checked.map(|c| !c),
-        _ => None,
-    };
-    match holds {
-        Some(true) => state.to_owned(),
-        Some(false) => match state {
-            "enabled" => "disabled",
-            "disabled" => "enabled",
-            "visible" => "hidden",
-            "hidden" => "visible",
-            "checked" => "unchecked",
-            _ => "checked",
-        }
-        .to_owned(),
-        None => format!("unknown: a replica reads enabled, disabled, visible, hidden, checked and unchecked, not {state:?}"),
-    }
 }
 
 /// A drawn string goes under the deepest node holding it, unless that node already names it.
@@ -2200,7 +2230,8 @@ fn copy_record(socket: &Path, token: &str) -> Result<Vec<Value>, String> {
             .call("events.read", json!({"after": after, "limit": PAGE}))
             .map_err(|e| format!("{e:?}"))?;
         let read = page["events"].as_array().cloned().unwrap_or_default();
-        let full = read.len() == PAGE;
+        // A page the hub's byte cap ended says `more` however few events it holds (#1576).
+        let full = read.len() == PAGE || page["more"] == true;
         events.extend(read.into_iter().map(redact));
         after = page["log_pos"].as_u64().unwrap_or(after);
         if !full {
@@ -2256,42 +2287,4 @@ fn redact(value: Value) -> Value {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::path::PathBuf;
-
-    use image::{AnimationDecoder as _, RgbaImage};
-
-    use super::{animated_png, write_png};
-
-    #[test]
-    fn a_recording_plays_its_frames_in_order_at_its_rate() {
-        let dir = std::env::temp_dir().join(format!("deep-drive-apng-{}", std::process::id()));
-        let frames: Vec<PathBuf> = [[255, 0, 0, 255], [0, 0, 255, 255]]
-            .iter()
-            .enumerate()
-            .map(|(i, color)| {
-                let path = dir.join(format!("{i}.png"));
-                write_png(&path, &RgbaImage::from_pixel(3, 2, image::Rgba(*color))).ok();
-                path
-            })
-            .collect();
-        let bytes = animated_png(&frames, 30).expect("the frames assemble");
-        let decoder = image::codecs::png::PngDecoder::new(std::io::Cursor::new(bytes))
-            .and_then(|d| d.apng())
-            .expect("an animated PNG");
-        let played: Vec<_> = decoder
-            .into_frames()
-            .collect_frames()
-            .expect("its frames decode");
-        let _ = std::fs::remove_dir_all(&dir);
-        assert_eq!(played.len(), 2);
-        assert_eq!(played[0].buffer().get_pixel(0, 0).0, [255, 0, 0, 255]);
-        assert_eq!(played[1].buffer().get_pixel(2, 1).0, [0, 0, 255, 255]);
-        let (ms, per) = played[1].delay().numer_denom_ms();
-        assert_eq!(
-            ms * 30,
-            per * 1000,
-            "each frame shows for a 30th of a second"
-        );
-    }
-}
+mod tests;

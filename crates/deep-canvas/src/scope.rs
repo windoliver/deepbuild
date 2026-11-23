@@ -15,6 +15,13 @@
 //! playhead; the caller hands it the revision the view shows and the one compared against. A
 //! shift-click toggles an item in the selection, and a point and ask reads what the pointer is
 //! on (issue #384). All of it is session state: the document is never written.
+//!
+//! Issue #1498: text selects too. A view where a drag pans keeps its drag and double-click: a click on a text item
+//! selects its whole text, and ⌥-drag selects part of it, its two carets anywhere on the text items the host shapes
+//! ([`Texts`]), crossing items in reading order. ⌘C asks the host for the selection's text, which only a press with a
+//! gesture serial may write to the clipboard. Text a control picks never selects.
+
+use std::sync::Arc;
 
 use serde_json::{json, Map, Value};
 
@@ -22,6 +29,9 @@ use crate::area::{held, within, Area};
 use crate::camera::{Offsets, Pivot, Pose, Projector, Refused, Rig, Spec};
 use crate::document::member;
 use crate::kinds::with_defaults;
+
+mod picks;
+pub use picks::{pick_targets, PickTarget};
 
 /// The verb the full-screen button is bound to (Control: `verb`).
 pub const FULL_SCREEN: &str = "canvas.full_screen";
@@ -32,6 +42,8 @@ const DOUBLE_FLICKS: i64 = 352_800_000;
 const DOUBLE_PX: f64 = 4.0;
 /// A press turns into a drag once the pointer has moved this many px from where it went down.
 const DRAG_PX: f64 = 3.0;
+/// #1498: how far from text a press may land and still select it, px (Selection: `hit.margin`).
+const TEXT_MARGIN: f64 = 3.0;
 /// A flown-to item spans this share of the view's limiting side.
 const FILL: f64 = 1.0 / 1.2;
 /// The full-screen button's size and its inset from the canvas's top right, px.
@@ -53,6 +65,8 @@ pub struct Planted {
     pub esc_to_root: bool,
     /// #504: a click on a control's target also selects the item and opens its panel.
     pub pick_selects: bool,
+    /// #2660: a hover keeps the targets it first built, whatever the document becomes.
+    pub keeps_targets: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -70,6 +84,8 @@ pub enum Event {
     Down {
         pos: [f64; 2],
         toggle: bool,
+        /// #1498: ⌥ held: on text the drag selects it and never pans.
+        alt: bool,
     },
     Up([f64; 2]),
     Move([f64; 2]),
@@ -214,88 +230,25 @@ pub struct Done {
     pub commits: Vec<u64>,
     /// #504: the option or stage a click, or Enter on a focused target, picked.
     pub pick: Option<PickTarget>,
+    /// #1498: ⌘C with a text selection: the host copies its text, when the press has a gesture serial.
+    pub copy: bool,
 }
 
-/// One item a control picks in the scene (Control: `targets`): the control, the option or stage
-/// it picks, the item, and the label a screen reader names its button by.
+/// #1498: the text a host draws, which the scope can't shape (Selection: "Text selects too").
+pub trait Texts {
+    /// The text item nearest page point `c`, the topmost of those under it, and the caret there: with `within`, only
+    /// an item that far from `c` or nearer, in page units.
+    fn at(&self, c: [f64; 2], within: Option<f64>) -> Option<(String, usize)>;
+    /// The graphemes of a text item's source: the caret after its last.
+    fn len(&self, item: &str) -> Option<usize>;
+}
+
+/// #1498: a text selection, from its anchor's caret to its focus's, each a text item and a grapheme offset of its
+/// source. Session state, like the rest of the selection.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PickTarget {
-    pub control: String,
-    pub option: String,
-    pub item: String,
-    pub label: String,
-}
-
-/// Every control's targets on items that draw (an item with `visible: false` or that `hidden`
-/// names is never picked or announced), controls in document order and each control's targets
-/// in reading order: the item's `order`, then its ID (Control: targets join the Tab order after
-/// the control's own UI, in reading order).
-pub fn pick_targets(doc: &Value, hidden: &[String]) -> Vec<PickTarget> {
-    let items = member(doc, "items").and_then(Value::as_object);
-    let mut out = Vec::new();
-    for (control, c) in member(doc, "controls")
-        .and_then(Value::as_object)
-        .into_iter()
-        .flatten()
-    {
-        let Some(targets) = member(c, "targets").and_then(Value::as_object) else {
-            continue;
-        };
-        let mut mine: Vec<(String, PickTarget)> = targets
-            .iter()
-            .filter_map(|(option, item)| {
-                let item = item.as_str()?;
-                let drawn = items?.get(item)?;
-                if member(drawn, "visible") == Some(&Value::Bool(false))
-                    || hidden.iter().any(|h| h == item)
-                {
-                    return None;
-                }
-                let order = member(drawn, "order")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")
-                    .to_string();
-                let label = label_of(doc, c, option);
-                let t = PickTarget {
-                    control: control.clone(),
-                    option: option.clone(),
-                    item: item.into(),
-                    label,
-                };
-                Some((format!("{order}\u{0}{item}"), t))
-            })
-            .collect();
-        mine.sort_by(|a, b| a.0.cmp(&b.0));
-        out.extend(mine.into_iter().map(|(_, t)| t));
-    }
-    out
-}
-
-/// The label a target's button is named by: its stage's, its variant option's or its option's
-/// `label`, else the option's ID.
-fn label_of(doc: &Value, control: &Value, option: &str) -> String {
-    fn named<'a>(list: Option<&'a Value>, option: &str) -> Option<&'a str> {
-        list?
-            .as_array()?
-            .iter()
-            .find(|o| {
-                member(o, "name")
-                    .or_else(|| member(o, "id"))
-                    .and_then(Value::as_str)
-                    == Some(option)
-            })
-            .and_then(|o| member(o, "label")?.as_str())
-    }
-    let set = member(control, "variant").and_then(Value::as_str);
-    member(control, "stages")
-        .and_then(|s| member(s, option))
-        .and_then(|s| member(s, "label")?.as_str())
-        .or_else(|| {
-            set.and_then(|set| named(member(doc, "variants")?.get(set)?.get("options"), option))
-        })
-        .or_else(|| named(member(control, "options"), option))
-        .unwrap_or(option)
-        .to_string()
+pub struct TextRange {
+    pub anchor: (String, usize),
+    pub focus: (String, usize),
 }
 
 /// Where an item sits: a rect in page u (`[x, y, w, h]`), or a 3D box by its centre and half
@@ -363,13 +316,25 @@ fn path_depth(view: &Projector, points: &[[f64; 3]], at: [f64; 2]) -> Option<f64
 
 /// An item the scope can hit: where it sits, its parent and where it stacks.
 struct Target {
-    id: String,
+    /// #2660: shared with the hover that rests on it.
+    id: Arc<str>,
     name: String,
     parent: Option<String>,
     order: String,
     bounds: Bounds,
     /// #536: a flat target's exact hit area inside its rect, which the host may hand in.
     area: Area,
+}
+
+/// #2660: the targets a hover reads, kept while what they were built from holds: the view's
+/// kind and filter, and the document's items and layers, the members a target or the filter
+/// reads.
+struct Kept {
+    flat: bool,
+    filter: (Vec<String>, Vec<String>, Option<String>),
+    items: Option<Value>,
+    layers: Option<Value>,
+    targets: Vec<Target>,
 }
 
 /// What a press landed on.
@@ -392,6 +357,8 @@ struct Press {
     double: bool,
     /// Shift held: the click toggles what it hits in the selection.
     toggle: bool,
+    /// #1498: ⌥ held on text: the drag moves the text selection's focus and never pans.
+    text: bool,
 }
 
 /// A level flown into: its item, and the offsets Esc gives back.
@@ -410,7 +377,7 @@ pub struct Scope {
     full_screen: bool,
     selection: Vec<String>,
     details: Option<String>,
-    hover: Option<String>,
+    hover: Option<Arc<str>>,
     levels: Vec<Level>,
     palette: Option<String>,
     press: Option<Press>,
@@ -418,8 +385,12 @@ pub struct Scope {
     last_click: Option<(i64, [f64; 2], Hit)>,
     view: View,
     planted: Planted,
+    /// #2660: the targets a hover between gestures reads.
+    kept: Option<Kept>,
     /// #504: the Tab stop with focus: a control's own UI, or one of its targets by option.
     pub focus: Option<(String, Option<String>)>,
+    /// #1498: the text selection.
+    text: Option<TextRange>,
 }
 
 fn distance(a: [f64; 2], b: [f64; 2]) -> f64 {
@@ -499,7 +470,7 @@ fn targets(doc: &Value, flat: bool) -> Vec<Target> {
             };
             let text = |k: &str| member(item, k).and_then(Value::as_str).map(str::to_string);
             Some(Target {
-                id: id.clone(),
+                id: id.as_str().into(),
                 name: text("name").unwrap_or_else(|| id.clone()),
                 parent: text("parent"),
                 order: text("order").unwrap_or_default(),
@@ -605,8 +576,15 @@ impl Scope {
             last_click: None,
             view: View::default(),
             planted,
+            kept: None,
             focus: None,
+            text: None,
         })
+    }
+
+    /// #1498: the text selection, which the host copies on ⌘C and outlines.
+    pub fn text_selection(&self) -> Option<&TextRange> {
+        self.text.as_ref()
     }
 
     /// The record's time the view shows, flicks, or `None` while it's live: which revision the
@@ -667,7 +645,7 @@ impl Scope {
             ("image@1", Some(c)) => {
                 let bounds = targets(doc, true)
                     .into_iter()
-                    .find(|t| t.id == id)
+                    .find(|t| *t.id == *id)
                     .and_then(|t| match t.bounds {
                         Bounds::Rect(r) => Some(r),
                         _ => None,
@@ -818,7 +796,7 @@ impl Scope {
     fn shown_targets(&self, doc: &Value) -> Vec<Target> {
         let hidden = self.hidden(doc);
         let mut all = targets(doc, self.rig.flat);
-        all.retain(|t| hidden.binary_search(&t.id).is_err());
+        all.retain(|t| hidden.binary_search_by(|h| h.as_str().cmp(&t.id)).is_err());
         all
     }
 
@@ -1009,18 +987,24 @@ impl Scope {
             return Hit::Empty;
         }
         let all = self.shown_targets(doc);
+        self.target_at(&all, p)
+            .map_or(Hit::Empty, |t| Hit::Item(t.id.to_string()))
+    }
+
+    /// The topmost of `all` under `p`, inside the canvas: in a flat view the last-stacked box
+    /// that holds it, in 3D the box whose face under it is nearest.
+    fn target_at<'t>(&self, all: &'t [Target], p: [f64; 2]) -> Option<&'t Target> {
         if self.rig.flat {
             let c = self.content(p, &self.offsets);
             return all
-                .into_iter()
+                .iter()
                 .rev()
-                .find(|t| matches!(t.bounds, Bounds::Rect(r) if within(r, c) && held(&t.area, c)))
-                .map_or(Hit::Empty, |t| Hit::Item(t.id));
+                .find(|t| matches!(t.bounds, Bounds::Rect(r) if within(r, c) && held(&t.area, c)));
         }
         let r = self.rect();
         let view = Projector::new(&self.pose(), [r[2], r[3]], [r[2], r[3]]);
         let at = [p[0] - r[0], p[1] - r[1]];
-        let mut best: Option<(f64, String)> = None;
+        let mut best: Option<(f64, &Target)> = None;
         for t in all.iter().rev() {
             let depth = match &t.bounds {
                 Bounds::Box { centre, half } => face_depth(&view, *centre, *half, at),
@@ -1028,12 +1012,45 @@ impl Scope {
                 Bounds::Rect(_) => None,
             };
             if let Some(depth) = depth {
-                if best.as_ref().is_none_or(|(d, _)| depth < *d) {
-                    best = Some((depth, t.id.clone()));
+                if best.is_none_or(|(d, _)| depth < d) {
+                    best = Some((depth, t));
                 }
             }
         }
-        best.map_or(Hit::Empty, |(_, id)| Hit::Item(id))
+        best.map(|(_, t)| t)
+    }
+
+    /// #2660: the pointer rests over what it hits, read from the kept targets, which are built
+    /// again only when the view's kind or filter, or the document's items or layers, changed:
+    /// a hover over a document that holds copies nothing.
+    fn hover_at(&mut self, doc: &Value, p: [f64; 2]) {
+        if self.button().is_some_and(|b| within(b, p)) || !within(self.rect(), p) {
+            self.hover = None;
+            return;
+        }
+        let v = &self.view;
+        let (items, layers) = (member(doc, "items"), member(doc, "layers"));
+        let holds = |k: &Kept| {
+            k.flat == self.rig.flat
+                && (k.filter.0 == v.kinds && k.filter.1 == v.writers && k.filter.2 == v.isolate)
+                && k.items.as_ref() == items
+                && k.layers.as_ref() == layers
+        };
+        let kept = match self.kept.take() {
+            Some(k) if self.planted.keeps_targets || holds(&k) => k,
+            _ => Kept {
+                flat: self.rig.flat,
+                filter: (v.kinds.clone(), v.writers.clone(), v.isolate.clone()),
+                items: items.cloned(),
+                layers: layers.cloned(),
+                targets: self.shown_targets(doc),
+            },
+        };
+        let hit = self.target_at(&kept.targets, p).map(|t| &t.id);
+        if self.hover.as_ref() != hit {
+            self.hover = hit.cloned();
+        }
+        self.kept = Some(kept);
     }
 
     /// Flies to `id`: the levels down to it, its nesting path, and in a flat view the camera that
@@ -1043,7 +1060,7 @@ impl Scope {
         let mut path = vec![id.to_string()];
         while let Some(parent) = all
             .iter()
-            .find(|t| &t.id == path.last().expect("not empty"))
+            .find(|t| *t.id == **path.last().expect("not empty"))
             .and_then(|t| t.parent.clone())
             .filter(|p| !path.contains(p))
         {
@@ -1062,7 +1079,7 @@ impl Scope {
                 id: step.clone(),
                 back: self.offsets,
             });
-            if let Some(t) = all.iter().find(|t| &t.id == step) {
+            if let Some(t) = all.iter().find(|t| *t.id == **step) {
                 self.frame(&t.bounds);
             }
         }
@@ -1131,7 +1148,15 @@ impl Scope {
     /// A click on what the press hit: the button toggles full screen; an item is selected and
     /// its panel opens; empty space clears both. With `toggle` an item joins the selection, or
     /// leaves it, and empty space keeps it. The camera never moves.
-    fn click(&mut self, hit: &Hit, toggle: bool) {
+    fn click(&mut self, hit: &Hit, toggle: bool, texts: Option<&dyn Texts>) {
+        // #1498: a click on a text item selects its whole text; on anything else, nothing of any text.
+        self.text = match hit {
+            Hit::Item(id) => texts.and_then(|t| t.len(id)).map(|n| TextRange {
+                anchor: (id.clone(), 0),
+                focus: (id.clone(), n),
+            }),
+            _ => None,
+        };
         match hit {
             Hit::Button => self.full_screen = !self.full_screen,
             Hit::Item(id) if toggle => {
@@ -1170,16 +1195,60 @@ impl Scope {
         self.offsets.elevation = elevation.clamp(user.pitch[0], user.pitch[1]) - self.rig.elevation;
     }
 
+    /// #1498: a text drag's focus moved to the caret nearest `p`, on whichever text item it is nearest.
+    fn select_to(&mut self, p: [f64; 2], texts: Option<&dyn Texts>) {
+        let c = self.content(p, &self.offsets);
+        if let (Some(range), Some(focus)) = (self.text.as_mut(), texts.and_then(|t| t.at(c, None)))
+        {
+            range.focus = focus;
+        }
+    }
+
+    /// #1217: the press under way ends with no click: a viewer tool took it.
+    pub fn release(&mut self) {
+        self.press = None;
+    }
+
     /// One input at `t` (flicks) with the router's `serial`, against the current revision `doc`.
     pub fn input(&mut self, doc: &Value, t: i64, serial: u64, event: &Event) -> Done {
+        self.input_with(doc, t, serial, event, None)
+    }
+
+    /// #1498: [`Self::input`] with the text the host draws, which a text selection reads.
+    pub fn input_with(
+        &mut self,
+        doc: &Value,
+        t: i64,
+        serial: u64,
+        event: &Event,
+        texts: Option<&dyn Texts>,
+    ) -> Done {
         let mut done = Done::default();
         let commit = |done: &mut Done| done.commits.push(serial);
         match event {
-            Event::Down { pos: p, toggle } => {
+            Event::Down {
+                pos: p,
+                toggle,
+                alt,
+            } => {
                 let hit = self.hit(doc, *p);
                 done.picks = 1;
+                // ⌥ on text a control doesn't pick: a text selection starts at the caret under the press, within the
+                // hit margin.
+                let margin = TEXT_MARGIN * self.u_per_px(&self.offsets);
+                let caret = texts
+                    .filter(|_| *alt && self.rig.flat)
+                    .and_then(|t| t.at(self.content(*p, &self.offsets), Some(margin)))
+                    .filter(|(item, _)| self.target_hit(doc, &Hit::Item(item.clone())).is_none());
+                let text = caret.is_some();
+                if let Some(caret) = caret {
+                    self.text = Some(TextRange {
+                        anchor: caret.clone(),
+                        focus: caret,
+                    });
+                }
                 self.hover = match &hit {
-                    Hit::Item(id) => Some(id.clone()),
+                    Hit::Item(id) => Some(id.as_str().into()),
                     _ => None,
                 };
                 let double = matches!(hit, Hit::Item(_))
@@ -1196,8 +1265,9 @@ impl Scope {
                     from: self.offsets,
                     hit,
                     dragging: false,
-                    double,
+                    double: double && !text,
                     toggle: *toggle,
+                    text,
                 });
             }
             Event::Move(p) => match self.press.as_mut() {
@@ -1205,13 +1275,15 @@ impl Scope {
                     if distance(press.at, *p) >= DRAG_PX {
                         press.dragging = true;
                     }
-                    if press.dragging {
+                    if press.text {
+                        self.select_to(*p, texts);
+                    } else if press.dragging {
                         self.drag(*p);
                     }
                     if self.planted.pick_mid_gesture {
                         done.picks = 1;
                         self.hover = match self.hit(doc, *p) {
-                            Hit::Item(id) => Some(id),
+                            Hit::Item(id) => Some(id.into()),
                             _ => None,
                         };
                     }
@@ -1222,24 +1294,23 @@ impl Scope {
                 None => {
                     // A hover between gestures: the pointer rests over what it hits.
                     done.picks = 1;
-                    self.hover = match self.hit(doc, *p) {
-                        Hit::Item(id) => Some(id),
-                        _ => None,
-                    };
+                    self.hover_at(doc, *p);
                 }
             },
             Event::Up(p) => {
-                if self.press.as_ref().is_some_and(|press| press.dragging) {
+                if self.press.as_ref().is_some_and(|press| press.text) {
+                    self.select_to(*p, texts);
+                } else if self.press.as_ref().is_some_and(|press| press.dragging) {
                     self.drag(*p);
                 }
                 if let Some(press) = self.press.take() {
-                    if press.dragging {
+                    if press.dragging || press.text {
                         self.last_click = None;
                     } else if let Some(pick) = self.target_hit(doc, &press.hit) {
                         // A click on a target picks its option or stage and never selects the
                         // item or opens its panel (Control: targets).
                         if self.planted.pick_selects {
-                            self.click(&press.hit, press.toggle);
+                            self.click(&press.hit, press.toggle, texts);
                         }
                         self.focus = Some((pick.control.clone(), Some(pick.option.clone())));
                         done.pick = Some(pick);
@@ -1250,7 +1321,7 @@ impl Scope {
                         }
                         self.last_click = None;
                     } else {
-                        self.click(&press.hit, press.toggle);
+                        self.click(&press.hit, press.toggle, texts);
                         self.last_click = Some((t, *p, press.hit));
                     }
                 }
@@ -1286,6 +1357,7 @@ impl Scope {
                     }
                     ("Escape", _) => self.back(),
                     ("k", true) => self.palette = Some(String::new()),
+                    ("c", true) => done.copy = self.text.is_some(),
                     ("Return", _) => {
                         if let Some(query) = self.palette.take() {
                             let all = self.shown_targets(doc);
@@ -1293,7 +1365,7 @@ impl Scope {
                                 .iter()
                                 .find(|t| t.name == query)
                                 .or_else(|| all.iter().find(|t| t.name.starts_with(&query)))
-                                .map(|t| t.id.clone());
+                                .map(|t| t.id.to_string());
                             if let Some(id) = found {
                                 self.fly(doc, &id);
                             }
@@ -1386,7 +1458,7 @@ impl Scope {
                     .map_or(Value::Null, |t| json!(t.item)),
                 None => json!(control),
             }),
-            "hover": self.hover,
+            "hover": self.hover.as_deref(),
             "level": self.levels.iter().map(|l| &l.id).collect::<Vec<_>>(),
             "palette": {
                 "open": self.palette.is_some(),

@@ -3,14 +3,28 @@
 //! touches only its instance record. Every vertex carries its normal, two texture coordinates and
 //! a tangent with its handedness in w (glTF's TANGENT), which a material's maps read (#423).
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
+use deep_canvas::gauge::{Gauge, Place};
 use deep_canvas_scene3d::scene::Shape;
 use deep_gpu::device::Device;
+
+/// #1431: the renderer's uploaded meshes (`Renderer::meshes`), which a revision or a frame that
+/// builds a mesh adds one to: past either bound, the meshes no turn drew for longest go first.
+pub static MESHES: Gauge = Gauge::new("Renderer::meshes", Place::Device, 64, 256_000_000);
 
 #[derive(Clone)]
 pub struct Mesh {
     pub vertices: wgpu::Buffer,
     pub indices: wgpu::Buffer,
     pub count: u32,
+}
+
+impl Mesh {
+    /// The bytes its buffers hold on the device.
+    pub fn bytes(&self) -> u64 {
+        self.vertices.size() + self.indices.size()
+    }
 }
 
 const SEGMENTS: u32 = 48;
@@ -135,6 +149,15 @@ pub(crate) fn geometry(shape: Shape) -> (Vec<f32>, Vec<u32>) {
     (v, i)
 }
 
+/// #2657: the vertices whose tangents [`vertices`] derived, process-wide.
+static TANGENTS_DERIVED: AtomicU64 = AtomicU64::new(0);
+
+/// How many vertices' tangents this process's renderers derived from texture coordinates while
+/// building a mesh's vertices (#2657); a mesh's own tangents copied over don't count.
+pub fn tangents_derived() -> u64 {
+    TANGENTS_DERIVED.load(Ordering::Relaxed)
+}
+
 /// A built mesh's vertices: its uv0 and uv1 (uv1 falls back to uv0, both to 0 without one), and
 /// its own tangents or ones made from uv0 by each triangle's texture-space derivatives, weighted
 /// by its area, with the handedness of its bitangent.
@@ -153,6 +176,7 @@ pub fn vertices(m: &deep_canvas_scene3d::geom::Mesh) -> Vec<f32> {
         .map(|t| t.map(|x| x as f32))
         .collect::<Vec<_>>();
     if tangents.len() != count {
+        TANGENTS_DERIVED.fetch_add(count as u64, Ordering::Relaxed);
         let (mut ts, mut bs) = (vec![[0f32; 3]; count], vec![[0f32; 3]; count]);
         for tri in m.indices.as_chunks::<3>().0 {
             let [a, b, c] = [tri[0] as usize, tri[1] as usize, tri[2] as usize];

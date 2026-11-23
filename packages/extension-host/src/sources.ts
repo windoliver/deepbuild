@@ -29,6 +29,8 @@ interface HostSourcesOptions {
   record: RecordStore; now(): number; files: HostFiles;
   exts: ReadonlyMap<string, Ext>;
   ask(ext: Ext, ms: number, what: string, method: string, params: unknown): Promise<unknown>;
+  /** #2648's planted host, which reads notices.json once, at its start. */
+  plant?: 'reads-files-at-start-only';
 }
 /** Loaded source calls, cursor and visibility state belong to this host's source service. */
 export class HostSources {
@@ -42,7 +44,11 @@ export class HostSources {
   /** The work-source calls under way, by the call ID their context's fetch names (#66). */
   private readonly workCalls = new Map<string, { ext: Ext; source: string; work: Omit<WorkDecl, 'delivers'>; library?: LibraryDecl; noAnswer: boolean }>();
   private workCount = 0;
-  constructor(private readonly options: HostSourcesOptions, private readonly sources: Sources, private readonly series: SeriesStore | undefined) {}
+  /** The notices #2648's planted host read at its start, which it reads no more. */
+  private readonly noticesAtStart: Readonly<Record<string, SavedNotice>> | undefined;
+  constructor(private readonly options: HostSourcesOptions, private readonly sources: Sources, private readonly series: SeriesStore | undefined) {
+    if (options.plant) this.noticesAtStart = options.files.read<SavedNotice>('notices.json');
+  }
   workExt(source: string): Ext | undefined {
     return [...this.options.exts.values()].find((e) => e.live && e.ask && e.mode === 'loaded' && (e.sources.get(source) as { work?: unknown } | undefined)?.work);
   }
@@ -194,13 +200,14 @@ export class HostSources {
    */
   async shownTick(): Promise<void> {
     const now = this.options.now();
-    const standIn = new Map<string, number>();
-    for (const n of Object.values(this.options.files.read<SavedNotice>('notices.json'))) if (n.every !== null) standIn.set(n.source, Math.min(standIn.get(n.source) ?? Infinity, n.every));
+    // A notice stands in only for a shown source: with none shown notices.json isn't looked at, and with one shown it
+    // is read again only once it changed (#2648).
+    let standIn: Map<string, number> | undefined;
     for (const ext of [...this.options.exts.values()].filter((e) => e.live)) {
       for (const source of ext.sources.values()) {
         if (source.variant !== 'polled' || !source.whileShown) continue;
         const every = source.whileShown.every;
-        if (!this.sourceShown(source.name, now) || (standIn.get(source.name) ?? Infinity) <= every) {
+        if (!this.sourceShown(source.name, now) || ((standIn ??= this.standIns()).get(source.name) ?? Infinity) <= every) {
           this.shownNext.delete(source.name);
           continue;
         }
@@ -210,6 +217,13 @@ export class HostSources {
         await this.readPolled(ext, source.name);
       }
     }
+  }
+
+  /** The shortest schedule a saved notice gives each source's checking job, which stands in for its while-shown cadence. */
+  private standIns(): Map<string, number> {
+    const by = new Map<string, number>();
+    for (const n of Object.values(this.noticesAtStart ?? this.options.files.kept<SavedNotice>('notices.json'))) if (n.every !== null) by.set(n.source, Math.min(by.get(n.source) ?? Infinity, n.every));
+    return by;
   }
 
   /** Whether a view that binds the source is shown: the app reported it in the last 10 s, visible, not minimized, on an awake display, unlocked, and not a replica's. */
@@ -603,6 +617,12 @@ export const openBrowser = (url: string): Promise<void> => new Promise((done, fa
 type Outcome = HttpAnswer | { error: string };
 /** What the record keeps of a source's calls and readings, appended as the core. */
 type Append = (kind: 'source.called' | 'reading.recorded', data: Record<string, unknown>) => Promise<void>;
+/**
+ * A recording's bound (#2650): this many calls, and this many bytes of their answers' bodies, a library file's bytes
+ * staying in the file its call names. Past either, the recording keeps what it holds and no later call.
+ */
+const RECORDED_CALLS = 10_000;
+const RECORDED_BYTES = 64 * 1024 * 1024;
 
 /** The hub's side of every source: its calls, cache, quotas, back-off, recording and the secret values it holds to scrub. */
 export class Sources {
@@ -611,6 +631,8 @@ export class Sources {
   private readonly spent = new Map<string, number[]>();
   private readonly backoff = new Map<string, { until: number; gap: number }>();
   private readonly recorded: RecordedCall[] = [];
+  /** The bytes of the answers `recorded` holds. */
+  private recordedBytes = 0;
   private readonly binary = new Map<number, { file: string; offset: number; size: number; sha256: string }>();
   private readonly replayed = new Set<number>();
   /** Every secret value the hub read or was given: each is scrubbed from what a package gets and from the recording. */
@@ -618,6 +640,8 @@ export class Sources {
 
   constructor(private readonly options: {
     now: () => number; http: HttpClient; secrets: SecretStore; append: Append; replay?: Recording;
+    /** False: no call's answer is kept, and the recording stays empty (#2650). `every`: #2650's planted host, past any bound. */
+    recording?: boolean | 'every';
     /** A series call's values, landed as one batch (#262). */
     land?: (source: Polled, asOf: number, values: Map<string, number>) => Promise<Batch>;
   }) {}
@@ -911,7 +935,11 @@ export class Sources {
       const answer = replay.calls[at]!.answer;
       return 'error' in answer ? { error: describe(answer.error, source) } : this.scrubAnswer(answer);
     }
-    const signal = AbortSignal.timeout(source.timeout);
+    // The call's own timer, cleared once it has an answer: a finished call leaves no timer behind for its whole
+    // timeout, as AbortSignal.timeout would (#2650).
+    const stop = new AbortController();
+    const timer = setTimeout(() => stop.abort(new DOMException(`timeout after ${source.timeout} ms`, 'TimeoutError')), source.timeout).unref();
+    const signal = stop.signal;
     const aborted = new Promise<never>((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
     const started = performance.now();
     let answer: RecordedCall['answer'];
@@ -923,17 +951,32 @@ export class Sources {
       answer = this.scrubAnswer(got);
     } catch {
       answer = { error: signal.aborted ? 'timeout' : 'unreachable' };
+    } finally {
+      clearTimeout(timer);
     }
-    if (request.recording && !('error' in answer)) {
-      const bytes = Buffer.from(answer.body, 'base64');
-      this.binary.set(this.recorded.length, { ...request.recording, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') });
-      this.recorded.push({ source: source.name, request: stripped, answer: { ...answer, body: '' } });
-    } else this.recorded.push({ source: source.name, request: stripped, answer: structuredClone(answer) });
+    this.keep(source, stripped, request, answer);
     await this.options.append('source.called', {
       source: source.name, host: new URL(request.url).host, outcome: 'error' in answer ? answer.error : answer.partial ? 'unreachable' : 'answered',
       ...('error' in answer || request.method === 'CONNECT' ? {} : { status: answer.status }), ms: Math.round(performance.now() - started), bytes,
     });
     return 'error' in answer ? { error: describe(answer.error, source) } : answer;
+  }
+
+  /**
+   * A call into the recording (#2650): only while this host records, and only within its bound. A library file's bytes
+   * stay in the file its call names, read back and checked when the recording is taken.
+   */
+  private keep(source: Polled, stripped: HttpRequest, request: HttpRequest, answer: RecordedCall['answer']): void {
+    if (this.options.recording === false) return;
+    const binary = request.recording && !('error' in answer);
+    const bytes = 'error' in answer || binary ? 0 : Buffer.byteLength(answer.body);
+    if (this.options.recording !== 'every' && (this.recorded.length >= RECORDED_CALLS || this.recordedBytes + bytes > RECORDED_BYTES)) return;
+    this.recordedBytes += bytes;
+    if (binary) {
+      const file = Buffer.from(answer.body, 'base64');
+      this.binary.set(this.recorded.length, { ...request.recording!, size: file.length, sha256: createHash('sha256').update(file).digest('hex') });
+      this.recorded.push({ source: source.name, request: stripped, answer: { ...answer, body: '' } });
+    } else this.recorded.push({ source: source.name, request: stripped, answer: structuredClone(answer) });
   }
 
   private scrub(text: string): string {

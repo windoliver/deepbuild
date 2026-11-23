@@ -1,0 +1,89 @@
+#3016 acceptance tests at the merge base b6b99ad8c, on a Mac17,10 (Metal), 2026-11-21. Build: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo test --locked -p deep-scene3d-render --test <name> (pinned 1.99.1). Every test that can run at the base fails at its assertion, for the reason its criterion names; views.rs doesn't compile, naming the surfaces the base lacks. Criterion 5's comparisons take the base as their reference, so they pass there.
+
+== noop.rs (criteria 1, 6, 9): 3 failed, 1 ignored (ac8_device_bytes_reading, which query.test.ts runs) ==
+---- ac1_a_mirror_and_two_view_insets_upload_the_scene_once stdout ----
+
+thread 'ac1_a_mirror_and_two_view_insets_upload_the_scene_once'  panicked at tests/acceptance/3016/noop.rs:80:5:
+AC1 #3016.f4add153:
+  Mirror uploads 215625048 B (205.6 MiB), 2.00 × the plain scene's 107812716 B (102.8 MiB); the limit is 1.05 ×
+  MirrorInsets uploads 646888896 B (616.9 MiB), 6.00 × the plain scene's 107812716 B (102.8 MiB); the limit is 1.05 ×
+
+---- ac6_a_view_inset_keeping_two_of_ten_items_holds_no_mesh_or_map_of_its_own stdout ----
+
+thread 'ac6_a_view_inset_keeping_two_of_ten_items_holds_no_mesh_or_map_of_its_own'  panicked at tests/acceptance/3016/noop.rs:155:5:
+AC6 #3016.bac3f522:
+  with the inset the device holds 15 meshes (165528 B), the view draws 13: 2 more
+  with the inset the device holds 12 maps (4194288 B, 4.00 MiB), the view draws 10: 2 more
+
+---- ac9_the_cost_lines_say_what_a_second_view_holds stdout ----
+
+thread 'ac9_the_cost_lines_say_what_a_second_view_holds'  panicked at tests/acceptance/3016/noop.rs:223:5:
+AC9 #3016.b66dee2c:
+  #### Material: mirror: its Cost line doesn't say what a second view holds (its own targets, the scene's resources once): **Cost:** One extra scene pass at half the internal size plus a blur, roughly a quarter of the scene's frame time (estimate); counted in the class. Budget class: work product, showpiece, export.
+  #### Inset: its Cost line doesn't say what a second view holds (its own targets, the scene's resources once): **Cost:** One offscreen render per changed inset, O(content); texture w × h × 4 B; a view inset costs a second camera pass
+  #### Look `look@1`: regions and edges: its Cost line doesn't say what a second view holds (its own targets, the scene's resources once): **Cost:** About 2× the frame while an edge is in view: each look renders its side offscreen, then one composite pass. Budget class: showpiece, export.
+
+
+failures:
+(The design links and names lane, node scripts/design-links.mjs, exited 0 at the base; only the Cost lines fail.)
+
+== heap.rs (criterion 4): 1 failed ==
+---- ac4_a_mirror_and_a_view_inset_copy_no_scene stdout ----
+
+thread 'ac4_a_mirror_and_a_view_inset_copy_no_scene'  panicked at tests/acceptance/3016/heap.rs:113:5:
+AC4 #3016.151aa36c: a whole prepare with a mirror and a view inset allocates 103887867 B, 88441839 B (84.34 MiB) more than the scene with neither (15446028 B); the limit is 1 MiB
+
+== metal.rs (criteria 3, 7, and criterion 5's inset frame): 2 failed, 1 passed ==
+AC3 #3016.127ccb4d: the third scene holds 1092255744 B (1041.7 MiB) on the device; the plain one 176.9 MiB, plus each extra view's own mirror at 160×120 px: 64.9 MiB, inset pip_a at 304×184 px: 66.6 MiB, inset pip_a mirror at 152×92 px: 64.6 MiB, inset pip_b at 304×184 px: 66.6 MiB, inset pip_b mirror at 152×92 px: 64.6 MiB and 4 MiB, allows 508.2 MiB: 533.5 MiB more (6.25 copies of the plain scene's 85.3 MiB of maps)
+AC7 #3016.a8b1d957:
+  Mirror: the estimate is 147213584 B (140.4 MiB), the device's peak 364773376 B (347.9 MiB): off by -60%
+  EyeInset: the estimate holds 0.0 MiB for view inset portal, the device 175.3 MiB
+  EyeInset: the estimate is 74989552 B (71.5 MiB), the device's peak 367656960 B (350.6 MiB): off by -80%
+  MirrorInsets: the estimate holds 0.0 MiB for view inset pip_a, pip_b, the device 693.7 MiB
+  MirrorInsets: the estimate is 147214448 B (140.4 MiB), the device's peak 1092190208 B (1041.6 MiB): off by -87%
+(AC3's message has since been reworded to '533.5 MiB more, 6.25 times the plain scene's 85.3 MiB of maps'; the excess is five more copies of the maps, the meshes and the environment's cubes.)
+ac5_a_view_insets_frame_hashes_as_on_the_merge_base: passed. Frame 0 of inset_cascades hashed 92b801a7aaeeec21 in two runs (recorded in fixtures/inset-cascades.json); its guard (the frame without the far boxes hashes otherwise) holds.
+
+== views.rs (criterion 2, and the plants of criteria 2, 5, 6, 7): doesn't compile at the base, naming each missing surface ==
+error[E0425]: cannot find function `of_planted` in module `deep_scene3d_render::held`
+   --> tests/acceptance/3016/views.rs:246:57
+error[E0599]: no method named `made` found for struct `Log` in the current scope
+  --> tests/acceptance/3016/views.rs:35:86
+error[E0599]: no method named `second_views` found for struct `Renderer` in the current scope
+    --> tests/acceptance/3016/views.rs:36:18
+error[E0599]: no method named `second_views` found for struct `Renderer` in the current scope
+    --> tests/acceptance/3016/views.rs:43:19
+error[E0599]: no method named `made` found for reference `&&Log` in the current scope
+  --> tests/acceptance/3016/views.rs:47:27
+error[E0599]: no method named `second_views` found for struct `Renderer` in the current scope
+    --> tests/acceptance/3016/views.rs:107:40
+error[E0560]: struct `deep_scene3d_render::Planted` has no field named `mirror_compiles_own`
+   --> tests/acceptance/3016/views.rs:123:29
+error[E0560]: struct `deep_scene3d_render::Planted` has no field named `mirror_takes_view_cull`
+   --> tests/acceptance/3016/views.rs:157:47
+error[E0560]: struct `deep_scene3d_render::Planted` has no field named `inset_takes_view_cascades`
+   --> tests/acceptance/3016/views.rs:166:60
+error[E0599]: no method named `second_views` found for struct `Renderer` in the current scope
+    --> tests/acceptance/3016/views.rs:200:36
+error[E0560]: struct `deep_scene3d_render::Planted` has no field named `frees_by_last_turn`
+   --> tests/acceptance/3016/views.rs:231:46
+error[E0560]: struct `deep_scene3d_render::Planted` has no field named `estimate_maps_per_view`
+   --> tests/acceptance/3016/views.rs:245:29
+error: could not compile `deep-scene3d-render` (test "acceptance_3016_views") due to 12 previous errors
+The scenes views.rs draws were checked at the base through a scratch test (not committed): in mirror_cull, odd changes 440 px of the frame with the mirror and 0 px without it, so it shows only through the mirror; the seventy-item scene holds 73 meshes, its inset keeps 79 items (not item69; the floor among them), and its second and third frames build no mesh and upload 0 B. Not checked: that the rest of views.rs type-checks once the surfaces exist (rustc stops at the errors above).
+
+== query.test.ts (criterion 8): 1 failed ==
+AC8 #3016.102eb480: device reading {"criterion":"AC8 #3016.102eb480","meshes":{"entries":34,"bytes":101461584},"maps":{"entries":24,"bytes":536870880},"per_mesh":25365396,"per_map":134217720,"mirror":true}:
+  mesh ec3cf8140ced0856d07f440e5f05342d77714ec9fbf3dd6dc6fcc817503906d5: the reply names 2814432 B (2.7 MiB), the device holds 25365396 B (24.2 MiB) for it: 9.01 ×
+  mesh e1eef4f0ac72dc98b9a257bbe2d95270075474da5248986796ada187044cccb7: the reply names 2814432 B (2.7 MiB), the device holds 25365396 B (24.2 MiB) for it: 9.01 ×
+  mesh 662295d6704ff44a97bbf37a5c3a110728af628edee4778d838ea1994c03ea95: the reply names 2814432 B (2.7 MiB), the device holds 25365396 B (24.2 MiB) for it: 9.01 ×
+  mesh 934e8f4d64e7e5070d5fc00e6b167e16f92a74cd18e83ba3388ab716ecd0e92b: the reply names 2814432 B (2.7 MiB), the device holds 25365396 B (24.2 MiB) for it: 9.01 ×
+  map df74c8154536143cc1b312427d70321eed817915da238d7a2bf5b6036323e8f1: the reply names 22369621 B (21.3 MiB), the device holds 134217720 B (128.0 MiB) for it: 6.00 ×
+  map b98d66f1eec972a7b6f34bc16578997e3ccc6dcd1009d0bd6675c8becc667baf: the reply names 22369621 B (21.3 MiB), the device holds 134217720 B (128.0 MiB) for it: 6.00 ×
+  map c3a0dcaf3f5f044a50cb01bfc4c7dd4d56f214731a5c4d758dff0a576e17ed64: the reply names 22369621 B (21.3 MiB), the device holds 134217720 B (128.0 MiB) for it: 6.00 ×
+  map 0e36629b642eb2bfda68fbcb9a4f8f955284f1340b710c4eaf0b590f94add274: the reply names 22369621 B (21.3 MiB), the device holds 134217720 B (128.0 MiB) for it: 6.00 ×: expected [ …(8) ] to deeply equal []
+The maps: 6.00 x, one copy for each of the six renderers. The meshes: 9.01 x = 6 copies x 1.50, since a vertex takes 60 B on the device (15 floats, mesh.rs) and deep-show's sizes.rs counts 32 B. One copy is 1.50 x the reply's figure, so the change must also bring the reply's mesh bytes to the device's (or the device's to the reply's) for this criterion to pass.
+
+== frames.test.ts (criterion 5): the base against itself ==
+frames/record-base.sh wrote fixtures/base-frames (465: 12,065 frames in 15 children; 506: 353 in 17; 462: 1,064 in 24; 166: 4,363 in 14). The suites' own results in that run, which aren't this suite's to judge: 465 4 failed of 15 (three timings, one taste call), 506 2 of 15 (a card key test, a taste call), 462 1 of 15 (a taste call), 166 4 of 16 (two timings, a wake check, a taste call).
+A second run, frames.test.ts at the base: 465, 506 and 462 passed (every frame hashed as recorded); 166 failed on 602 frames, every one drawn under the suite's own --planted water_foam_keeps_state, a wrong program that draws other frames from run to run. So frames.test.ts leaves the suites' planted children out (465: 8,954 frames compared, 506: 347, 462: 863, 166: 3,159); the base matched itself on every one of those. The comparison wasn't run again after that edit (15 minutes of Metal). Running the suites rewrites docs/evidence/506/lamp-card.png; it was restored before the commit.

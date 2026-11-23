@@ -1,0 +1,69 @@
+# #860's acceptance tests on the base, 7d5000134 ("Merge pull request #2739 …"), on macOS. Home paths redacted.
+#
+# One run of the five files, after npm ci and npm run build --workspaces, with deep-logic, deep-drive and deep-show built:
+#   PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 sh scripts/lease \
+#     node node_modules/vitest/vitest.mjs run --root tests/acceptance/860 --no-file-parallelism --testTimeout=600000 --hookTimeout=180000
+# Every test fails at the first thing a rewind needs, after each fixture check before it has passed:
+# - ac01, ac02, ac04: the fresh plays bake and show the lines and skips the README lists; a bake of a track holding a rewind
+#   entry answers bad_input (the base's entries are controls' and readings' only); an unknown planted name exits 2.
+# - ac03: the 8-move and 3-move sessions give the model's boards and two full-state hashes; appending a rewind answers
+#   bad_input, not rewind.past_depth; the app refuses the document's top-level rewind (unknown_field).
+# - ac05: the base's playtest of 20 runs passes, every run replaying to the same hashes, but the bot never rewinds (a policy
+#   reads only keys and pick); the app refuses the document's rewind.
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/860
+
+ ❯ ac05-determinism-web.test.ts (2 tests | 2 failed) 18822ms
+     × #860.08c1702c logic.determinism passes on 20 seeded playtest runs whose bots rewind at random stops, each replaying from its track alone to the same hashes 13350ms
+     × #860.08c1702c a rewind in the app equals the same rewind in the web player by full-state hash 2303ms
+ ❯ ac03-puzzle-undo.test.ts (2 tests | 2 failed) 4820ms
+     × #860.af17db8f the puzzle undoes 5 moves and reaches the full-state hash of playing the first moves alone; rewinding past depth is refused, naming the depth 92ms
+     × #860.af17db8f a match refuses a rewind entry, naming the match 2297ms
+ ❯ ac01-story-rewind.test.ts (2 tests | 2 failed) 1888ms
+     × #860.6adcae15 read to line 30, rewound 12 stops to line 18 and continued with the other option, the story shows at every later line the full-state hash of a fresh play of the entries up to line 18 followed by that option 97ms
+     × #860.6adcae15 a planted rewind that restores only the logic arrays and not the read position (rewind_restores_arrays_only) shows a different line and fails, naming the stop 95ms
+ ❯ ac02-seen.test.ts (2 tests | 2 failed) 1762ms
+     × #860.e18a3535 lines read on the closed branch stay in seen after the rewind, so skip-read skips them on the new branch and stops at the first unread line 95ms
+     × #860.e18a3535 a planted rewind that clears seen (rewind_clears_seen) fails, naming the line 102ms
+ ❯ ac04-save.test.ts (1 test | 1 failed) 1570ms
+     × #860.5892cccc the save loads with its current branch, its closed branches within depth and seen, and rewinding after the load reaches the state rewinding before the save reached 52ms
+
+ FAIL  ac01-story-rewind.test.ts > … > #860.6adcae15 read to line 30, rewound 12 stops to line 18 and continued with the other option, …
+AssertionError: the story read to line 30, rewound 12 stops at step 180 and continued with option 2 baked the piece (ok: true): {"ok":false,"code":"bad_input","what":"track"}: expected false to be true // Object.is equality
+ ❯ ac01-story-rewind.test.ts:41:32
+
+ FAIL  ac01-story-rewind.test.ts > … > #860.6adcae15 a planted rewind that restores only the logic arrays and not the read position (rewind_restores_arrays_only) …
+AssertionError: deep-logic --planted rewind_restores_arrays_only exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+ ❯ ac01-story-rewind.test.ts:57:32
+
+ FAIL  ac02-seen.test.ts > … > #860.e18a3535 lines read on the closed branch stay in seen after the rewind, …
+AssertionError: the story read to line 30, rewound 12 stops, option 2 and skip-read baked the piece (ok: true): {"ok":false,"code":"bad_input","what":"track"}: expected false to be true // Object.is equality
+ ❯ ac02-seen.test.ts:33:19
+
+ FAIL  ac02-seen.test.ts > … > #860.e18a3535 a planted rewind that clears seen (rewind_clears_seen) fails, naming the line
+AssertionError: deep-logic --planted rewind_clears_seen exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+ ❯ ac02-seen.test.ts:45:19
+
+ FAIL  ac03-puzzle-undo.test.ts > … > #860.af17db8f the puzzle undoes 5 moves and reaches the full-state hash of playing the first moves alone; …
+AssertionError: a rewind of 6 stops, past the depth of 5 is refused with rewind.past_depth: {"ok":false,"code":"bad_input","what":"entry"}: expected [ false, 'bad_input' ] to deeply equal [ false, 'rewind.past_depth' ]
+ ❯ ac03-puzzle-undo.test.ts:51:7
+
+ FAIL  ac03-puzzle-undo.test.ts > … > #860.af17db8f a match refuses a rewind entry, naming the match
+AssertionError: the puzzle for two, declaring its rewind beside its net@1 item is presented: {"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"rewind","actual":{"stops":"puzzle.stop","depth":5},"what":"not a field of the document envelope","fix":"Remove the field, or require the kind's minor that defines it."}], … "outcome":"refused", …}: expected 'refused' to be 'presented' // Object.is equality
+ ❯ ac03-puzzle-undo.test.ts:80:5
+
+ FAIL  ac04-save.test.ts > … > #860.5892cccc the save loads with its current branch, its closed branches within depth and seen, …
+AssertionError: the story saved after a rewind and rewound again, never stopped baked the piece (ok: true): {"ok":false,"code":"bad_input","what":"track"}: expected false to be true // Object.is equality
+ ❯ ac04-save.test.ts:28:17
+
+ FAIL  ac05-determinism-web.test.ts > … > #860.08c1702c logic.determinism passes on 20 seeded playtest runs whose bots rewind at random stops, …
+AssertionError: run 0 (seed 5231560948839327): its bot rewound at least once: expected 0 to be greater than 0
+ ❯ ac05-determinism-web.test.ts:51:92
+
+ FAIL  ac05-determinism-web.test.ts > … > #860.08c1702c a rewind in the app equals the same rewind in the web player by full-state hash
+AssertionError: the puzzle, declaring its rewind is presented: {"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"rewind","actual":{"stops":"puzzle.stop","depth":5},"what":"not a field of the document envelope","fix":"Remove the field, or require the kind's minor that defines it."}], … "outcome":"refused", …}: expected 'refused' to be 'presented' // Object.is equality
+ ❯ ac05-determinism-web.test.ts:89:5
+
+ Test Files  5 failed (5)
+      Tests  9 failed (9)
+   Duration  29.65s (tests 99%, import 1%)

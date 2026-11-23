@@ -32,6 +32,9 @@ pub struct Object<'a> {
     pub label: &'a str,
     pub bytes: &'a [u8],
     pub exports: &'a [String],
+    /// The interfaces it implements, `name@major`: an import `lib:<name>@<major>.<function>`
+    /// resolves to it as one by its own name does (#416).
+    pub implements: &'a [String],
 }
 
 /// The merged program, and each library function's index in it with its library and its name.
@@ -323,6 +326,35 @@ fn parse(o: &Object) -> Result<Parsed, Refusal> {
     Ok(p)
 }
 
+/// An exported function's parameter types and result types.
+pub type Signature = (Vec<String>, Vec<String>);
+
+/// A library object's exported functions, by the names its pack lists, each with its parameter
+/// and result types as `i32`, `i64`, `f32` or `f64` (#416: an interface's exports are signatures).
+pub fn signatures(o: &Object) -> Result<BTreeMap<String, Signature>, Box<Refusal>> {
+    let p = parse(o).map_err(Box::new)?;
+    let ty = |t: &wasmparser::ValType| t.to_string();
+    Ok(p.exports
+        .iter()
+        .filter(|e| e.1 == ExternalKind::Func)
+        .filter_map(|(name, _, i)| {
+            let i = *i as usize;
+            let t = match i.checked_sub(p.imports.len()) {
+                None => p.imports[i].2,
+                Some(d) => *p.funcs.get(d)?,
+            };
+            let f = p.types.get(t as usize)?;
+            Some((
+                name.clone(),
+                (
+                    f.params().iter().map(ty).collect(),
+                    f.results().iter().map(ty).collect(),
+                ),
+            ))
+        })
+        .collect())
+}
+
 fn who(o: &Object) -> String {
     if o.name.is_empty() {
         "the program".into()
@@ -351,12 +383,14 @@ pub fn link(program: &[u8], libs: &[Object], stub_hosts: bool) -> Result<Linked,
         label: "",
         bytes: program,
         exports: &[],
+        implements: &[],
     }];
     objects.extend(libs.iter().map(|l| Object {
         name: l.name,
         label: l.label,
         bytes: l.bytes,
         exports: l.exports,
+        implements: l.implements,
     }));
     let parsed: Vec<Parsed> = objects
         .iter()
@@ -383,7 +417,10 @@ pub fn link(program: &[u8], libs: &[Object], stub_hosts: bool) -> Result<Linked,
         for (module, name, ty) in &p.imports {
             let lib = module.strip_prefix("lib:").unwrap_or("");
             let spelled = format!("{module}.{name}");
-            let target = (1..objects.len()).find(|&li| objects[li].name == lib && !lib.is_empty());
+            let target = (1..objects.len()).find(|&li| {
+                !lib.is_empty()
+                    && (objects[li].name == lib || objects[li].implements.iter().any(|i| i == lib))
+            });
             let export = target.and_then(|li| {
                 parsed[li]
                     .exports

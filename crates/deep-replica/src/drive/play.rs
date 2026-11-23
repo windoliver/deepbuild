@@ -73,6 +73,14 @@ impl Stored {
     }
 }
 
+/// #552's planted lone piece's bits: 64 from the platform's secure random source.
+fn secure_u64() -> u64 {
+    use std::io::Read as _;
+    let mut b = [0u8; 8];
+    let _ = std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut b));
+    u64::from_le_bytes(b)
+}
+
 /// A refusal from the play mode as the drive's failure, with what it names: an undeclared
 /// control, a play interface's missing name (#555) or an action it doesn't declare.
 fn refusal(e: Value) -> Fail {
@@ -95,6 +103,10 @@ fn refusal(e: Value) -> Fail {
 
 pub fn run(call: &Value, plant: Option<Plant>, out: &Path) -> Result<Value, Fail> {
     background();
+    // #851: a play of a game shell document plays one of its journeys (Check input: shell journeys).
+    if call.get("shell").is_some_and(|s| !s.is_null()) {
+        return super::game_shell::run(call, plant, out).map_err(refusal);
+    }
     let s = Stored::of(call)?;
     let (piece, stored) = (&s.piece, |sha: &str| s.get(sha));
     // #1048: a play with `probe` plays the run's track once and tests entries in throwaway copies
@@ -112,6 +124,10 @@ pub fn run(call: &Value, plant: Option<Plant>, out: &Path) -> Result<Value, Fail
         drops_first_bot_entry: plant == Some(Plant::DropsFirstBotEntry),
         entry_on_change: plant == Some(Plant::EntryOnChange),
         ignores_links: plant == Some(Plant::IgnoresLinks),
+        keeps_document_seed: plant == Some(Plant::KeepsDocumentSeed),
+        alone_secure: (plant == Some(Plant::AloneBitsFromSecure))
+            .then_some(secure_u64 as fn() -> u64),
+        draw_hashes_step: plant == Some(Plant::DrawHashesStep),
     };
     let asked: Vec<i64> = call
         .get("frames")

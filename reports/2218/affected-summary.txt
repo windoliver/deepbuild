@@ -1,0 +1,42 @@
+node scripts/affected.mjs (no paths: the worktree against its merge base b9131dbd), on the change, 2026-11-14 23:42 to 2026-11-15 03:52 PST.
+The 1-minute load was 200 to 800 on 18 cores for most of the run. Its last line:
+
+FAIL affected: 609 new, 3 already failing on main, 850 inconclusive or blocked, 21 listed skips, 2177 passed, in 15011 s at load 3; logs in <tmp>
+
+WIDE lines: none.
+INCONCLUSIVE lines it printed for unrun lanes:
+INCONCLUSIVE 72 timed files were not run; --timed runs them under a timed grant: tests/acceptance/1018/budgets
+INCONCLUSIVE 34 slow files were not run; --slow runs them: packages/hub/test/loop-starters.test.ts packages/hu
+
+This change's own files in that run (vitest's report):
+  tests/acceptance/2218: accept 1 pass, min-tests 1 pass, runs 1 pass, twin 1 pass, unread 2 pass
+  packages/hub/test/spec-checks.test.ts 3 pass; packages/hub/test/gate-runner.test.ts 6 pass (as it then stood)
+
+What the 609 NEW FAIL lines say, most frequent first:
+   105 test | Test timed out in <n>ms.
+    74 test | the hub wasn't ready within 10 s
+    54 test | Hook timed out in <n>ms.
+    47 test | expected false to be true // Object.is equality
+    19 test | no deep-hook is built under <path> run cargo build -p deep-hook first
+     9 test | expected [ Array(1) ] to deeply equal []
+     9 lint | tests/acceptance/12/twins/build-without-cargo/package.json devDependenci
+     9 lint | tests/acceptance/12/twins/release-check-local/package.json devDependenci
+     8 test | expected true to be false // Object.is equality
+     8 test | expected undefined to be defined
+     7 test | the hub didn\'t start with D…'
+     4 test | timed out after 30000 ms waiting for the ask
+
+What the 689 BLOCKED and 163 INCONCLUSIVE lines say, most frequent first:
+   145 BLOCKED | the hub did not start: deep hub: the core stopped: Error: no deep-hook is built unde
+   136 INCONCLUSIVE | skipped with no note
+    84 BLOCKED | the hub didn't start: deep hub: the core stopped: Error: no deep-hook is built under
+    45 BLOCKED | no deep-hook under target/debug; run cargo build --locked -p deep-hook first
+    32 BLOCKED | deep-hook (cargo build --locked -p deep-hook) is not built at <path>
+    31 BLOCKED | the hub didn't start (deep hub run): exit {"code":1,"signal":null}; stderr: deep hub
+    26 BLOCKED | no real pi: set DEEP_PI_CLI to dist/cli.js of @earendil-works/pi-coding-agent 1.4.0 
+    26 BLOCKED | DEEP_CLAUDE_BIN must name the claude command to run (README, Run them); it is unset
+    26 BLOCKED | the deep-drive binary can't be built (cargo build --locked -p deep-replica --bin dee
+    22 BLOCKED | the hub didn't start (deep hub run):  deep hub: the core stopped: Error: no deep-hoo
+
+Lint findings (NEW FAIL lines that name no test), against the blind job's affected run on the unchanged base:
+  143 on the base, 80 on the change, 71 on both. The 9 on the change alone: 7 from the environment@1 slot kit (lsof failed), 1 canvas-closures drift line, 1 vitest spawn ENOENT. None names a file this change touches.

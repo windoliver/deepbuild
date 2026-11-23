@@ -280,21 +280,24 @@ pub fn clip(s: &mut Scene, plane: (Vec3, f64), id: String) {
 /// window.
 pub fn seen(scene: &Scene, v: &View) -> Scene {
     let mut s = scene.clone();
-    if let Some(sources) = &scene.sources {
-        s.layers = sources.as_ref().clone();
-    }
-    s.sources = None;
-    let windows: BTreeSet<&str> = scene.views.iter().map(|w| w.id.as_str()).collect();
-    let keeps = |id: &str| {
-        !windows.contains(owner(id)) && v.keep.as_ref().is_none_or(|k| k.contains(owner(id)))
+    seen_into(&mut s, scene, v);
+    s
+}
+
+/// [`seen`] written into `s`, the view the frame before drew (#3016): what holds is kept where
+/// it is, so a frame copies nothing new for the inset.
+pub fn seen_into(s: &mut Scene, scene: &Scene, v: &View) {
+    crate::refresh::shared(s, scene);
+    let window = |id: &str| scene.views.iter().any(|w| w.id == owner(id));
+    let keeps = |id: &str| !window(id) && v.keep.as_ref().is_none_or(|k| k.contains(owner(id)));
+    let keeps = crate::refresh::Keeps {
+        solid: &keeps,
+        item: &keeps,
+        labels: true,
     };
-    for layer in &mut s.layers {
-        layer.solids.retain(|x| keeps(&x.id));
-        layer.lines.retain(|x| keeps(&x.id));
-        layer.points.retain(|x| keeps(&x.id));
-        layer.labels.retain(|x| keeps(&x.id));
-        layer.puffs.retain(|x| keeps(&x.id));
-    }
+    let layers = scene.sources.as_deref().unwrap_or(&scene.layers);
+    crate::refresh::layers(&mut s.layers, layers, &keeps);
+    s.sources = None;
     // An eye inset's view follows the viewing camera as it is now, at the frame's own size.
     let (camera, size) = match &v.eye {
         Some(e) => (moved(&scene.camera, &e.by), scene.size),
@@ -303,21 +306,22 @@ pub fn seen(scene: &Scene, v: &View) -> Scene {
     let k = f64::from(size[0]) / f64::from(scene.size[0].max(1));
     s.camera = camera;
     s.size = size;
-    s.jitter = [s.jitter[0] * k, s.jitter[1] * k];
+    s.jitter = [scene.jitter[0] * k, scene.jitter[1] * k];
     s.views.clear();
     s.light_cut = None;
     s.overlays.clear();
     s.readouts.clear();
     s.motion = None;
     s.velocity = None;
+    crate::refresh::same(&mut s.mirror, &scene.mirror);
     s.flare = None;
     s.read_reflection = false;
     s.read_foam = false;
     s.read_normal = false;
+    crate::refresh::same(&mut s.cutaway, &scene.cutaway);
     if let Some(e) = &v.eye {
-        clip(&mut s, e.plane, format!("{}#window", v.id));
+        clip(s, e.plane, format!("{}#window", v.id));
     }
-    s
 }
 
 #[cfg(test)]

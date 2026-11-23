@@ -1,5 +1,5 @@
 {
-  "schema": "adapter.facts@6",
+  "schema": "adapter.facts@9",
   "versions": ["2.1.299", "2.1.304", "2.1.308"],
   "agent": "claude",
   "hookTimeouts": {
@@ -65,13 +65,13 @@
     }
   },
   "sandbox": {
-    "readBy": "a session DeepBuild starts runs inside the agent's own sandbox (#1330): per version, the settings that turn it on, the walls they hold, and how the agent's way out is turned off. {credentials} is the folders no command may read, {hosts} the hosts the approval names, {sockets} the hub's socket. A wall not named here is not held, and a version not listed starts with no sandbox and says so. Checked on 2.1.308 (spikes/1330): its hooks run outside the sandbox and reach the hub",
+    "readBy": "a session DeepBuild starts runs inside the agent's own sandbox (#1330): per version, the settings that turn it on, the walls they hold, and how the agent's way out is turned off. {credentials} is the folders no command may read, {hosts} the hosts the approval names, {sockets} the hub's socket. {gitWrites} is what a commit on the session's own branch writes outside its worktree (#1666): the worktree's git folder and the repo's shared objects, refs, packed refs and ref logs. {gitClosed} is the rest of the repo's git folder as it stands at the start, each entry with its lock (the checkout's own index, HEAD, config, hooks and HEAD log among them), and every other worktree's git folder by name, since denyWrite takes * but no character class. A wall not named here is not held, and a version not listed starts with no sandbox and says so. Checked on 2.1.308 (spikes/1330): its hooks run outside the sandbox and reach the hub",
     "conformance": "claude/sandbox/walls",
     "versions": {
       "2.1.308": {
-        "settings": "{\"sandbox\":{\"enabled\":true,\"failIfUnavailable\":true,\"autoAllowBashIfSandboxed\":true,\"allowUnsandboxedCommands\":false,\"filesystem\":{\"denyRead\":\"{credentials}\"},\"network\":{\"allowedDomains\":\"{hosts}\",\"allowUnixSockets\":\"{sockets}\"}}}",
+        "settings": "{\"sandbox\":{\"enabled\":true,\"failIfUnavailable\":true,\"autoAllowBashIfSandboxed\":true,\"allowUnsandboxedCommands\":false,\"filesystem\":{\"denyRead\":\"{credentials}\",\"allowWrite\":\"{gitWrites}\",\"denyWrite\":\"{gitClosed}\"},\"network\":{\"allowedDomains\":\"{hosts}\",\"allowUnixSockets\":\"{sockets}\"}}}",
         "walls": {
-          "writes": "a command writes only its worktree and the temp folders",
+          "writes": "a command writes only its worktree, the temp folders and what a commit on its branch writes, its worktree's git folder and the repo's shared objects, refs and ref logs: sandbox.filesystem.allowWrite. The checkout's files, its own index, HEAD, config and hooks, and every other worktree's git folder stay closed: 2.1.308 opens the repo's whole .git but config and hooks, so sandbox.filesystem.denyWrite, which holds over allowWrite, names the rest as it stands at the start; a name made later stays open",
           "credentials": "a command can't read the credential folders: sandbox.filesystem.denyRead",
           "network": "a command reaches only the hosts the approval names: sandbox.network.allowedDomains; the agent's own API calls run outside its sandbox"
         },
@@ -94,7 +94,7 @@
     "conformance": "claude/usage/counting",
     "cost": "reported",
     "costFrom": "the status line's cost.total_cost_usd in a session, the result event's total_cost_usd in a job",
-    "tokens": "assistant entries' message.usage, once per message.id, since each content block repeats it; input is input_tokens plus cache_creation_input_tokens, cached is cache_read_input_tokens"
+    "tokens": "assistant entries' message.usage, once per message.id, since each content block repeats it; input is input_tokens plus cache_creation_input_tokens, cached is cache_read_input_tokens; the cache writes' split by lifetime is message.usage.cache_creation's ephemeral_5m_input_tokens and ephemeral_1h_input_tokens, and a record without it gives the total alone"
   },
   "questionTools": {
     "readBy": "which tool calls are questions to the person, so each one is caught as a permission request of kind question",
@@ -967,6 +967,70 @@
       "data": { "state": "=working" }
     }
   },
+  "toolResult": {
+    "readBy": "a deep_* reply's cap (#2896): deep mcp names its client, and a reply in the text that client receives stays a fifth under each figure here, the rest by next; a refusal a fifth under the error figures' characters and tokens, and within their bytes as Codex receives an error. DeepBuild never raises the figure with a tool's _meta anthropic/maxResultSizeChars or MAX_MCP_OUTPUT_TOKENS, and doesn't read a MAX_MCP_OUTPUT_TOKENS a person set lower",
+    "conformance": "claude-code/toolResult/per-version",
+    "tokenizer": { "name": "o200k_base", "package": "gpt-tokenizer", "version": "4.0.0", "readBy": "what a reply's tokens are counted in: Claude Code counts its own tokens with a tokenizer it doesn't publish, so DeepBuild counts in Codex's pinned one and keeps the fifth spare; the counter is the one packages/hub/src/reply-fit.ts imports, pinned in packages/hub/package.json, so a change here changes that import and pin with it" },
+    "entries": [
+      {
+        "versions": ["2.1.299", "2.1.304", "2.1.308"],
+        "result": { "chars": 50000, "tokens": 25000, "past": "saved to a file in the session's tool-results folder; the agent gets a line naming the file's path in its place" },
+        "error": { "chars": 11000, "past": "cut: its first 5,000 and last 5,000 characters kept, with a marker between giving the count removed" },
+        "source": "Claude Code's MCP page, code.claude.com/docs/en/mcp (MCP output limits: a text result over 50,000 characters is saved to a file whatever its token count; MAX_MCP_OUTPUT_TOKENS defaults to 25,000; an error past about 11,000 characters keeps its first and last 5,000), read Nov 19 2026; it names no version where the figures changed"
+      }
+    ]
+  },
+  "ruleLoad": {
+    "readBy": "which rule lines reach a Claude Code session by Claude Code's own loading (#1514): the rules page marks a line it says won't, naming Claude Code and the cause, deep doctor reports the same as rules.not_loaded with the file and the first line lost, the start slice sends such a rule by DeepBuild's own route, and the session facts digest the files it says a session loads; a load the agent reports itself outranks it",
+    "conformance": "rules/load-entry",
+    "entries": [
+      {
+        "versions": ["2.1.299", "2.1.304", "2.1.308"],
+        "source": "code.claude.com/docs/en/memory (How CLAUDE.md files load; AGENTS.md: When Claude Code reads AGENTS.md, Choose which instruction files load; Auto memory: How it works) and code.claude.com/docs/en/hooks (InstructionsLoaded), read Nov 18 2026 against 2.1.309. They hold from 2.1.285 on, before these versions: AGENTS.md is read directly from 2.1.277, the setting's plugin ID cc-plugin-agents-md@builtin is read from 2.1.285, and the memory index is measured past its front matter from 2.1.211; the size limit on files loaded on demand starts at 2.1.309, after them",
+        "home": { "dir": "~/.claude", "env": "CLAUDE_CONFIG_DIR" },
+        "walk": { "from": "root" },
+        "sets": [
+          { "name": "claude", "files": ["CLAUDE.md", ".claude/CLAUDE.md", "CLAUDE.local.md"], "pick": "all" },
+          { "name": "agents", "files": ["AGENTS.md", ".claude/AGENTS.md"], "pick": "all" },
+          { "name": "rules", "files": [".claude/rules/*.md"], "pick": "all" }
+        ],
+        "user": { "name": "user", "files": ["~/.claude/CLAUDE.md", "~/.claude/rules/*.md"], "pick": "all" },
+        "setting": {
+          "name": "instructionFiles",
+          "file": "~/.claude/settings.json",
+          "keys": ["pluginConfigs.cc-plugin-agents-md@builtin.options.instructionFiles", "pluginConfigs.agents-md@builtin.options.instructionFiles"],
+          "default": "claude-md-or-agents-md"
+        },
+        "modes": {
+          "claude-md-or-agents-md": { "sets": ["claude", "agents", "rules"], "shadows": { "agents": "claude" }, "user": true },
+          "claude-md-and-agents-md": { "sets": ["claude", "agents", "rules"], "user": true },
+          "claude-md": { "sets": ["claude", "rules"], "user": true },
+          "managed-only": { "sets": [], "user": false }
+        },
+        "cap": { "maxBytes": 4194304, "per": "file", "past": "skipped" },
+        "memoryIndex": { "file": "~/.claude/projects/<project>/memory/MEMORY.md", "maxLines": 200, "maxBytes": 25000 },
+        "stops": [],
+        "loadEvent": { "hook": "InstructionsLoaded", "file": "file_path", "reason": "load_reason", "silent": ["agents"] }
+      }
+    ]
+  },
+  "toolLoading": {
+    "readBy": "what a session holds of DeepBuild's MCP servers at its start is counted the way its client loads them (#2897): by search, the tools' names, the servers' instructions, the tools marked to load up front and the skill's description; whole, every tool and the skill. The start of a session whose config loads deepbuild records both counts and the way; a server entry's own alwaysLoad, which deep setup never writes, isn't read",
+    "conformance": "claude/toolLoading/by-search",
+    "entries": [
+      {
+        "versions": ["2.1.299", "2.1.304", "2.1.308"],
+        "way": "search",
+        "instructionsCutChars": 4096,
+        "mark": {
+          "field": "_meta",
+          "key": "anthropic/alwaysLoad",
+          "value": true
+        },
+        "source": "code.claude.com/docs/en/mcp, read Nov 19, 2026: \"Tool search is enabled by default\", \"Only tool names and server instructions load at session start\"; instructions and an up-front tool's description cut at 4,096 characters since 2.1.296 (2,048 before), a tool a search loads at 16,384; `_meta` \"anthropic/alwaysLoad\": true loads one tool up front, and a server entry's own \"alwaysLoad\" overrides it. The corpus agrees: 2.1.299, 2.1.304 and 2.1.308 sessions call ToolSearch before an MCP tool (2.1.308 elicitation-answered selects mcp__corpus__ask_name first)"
+      }
+    ]
+  },
   "retries": {
     "readBy": "a row reads retrying from these records alone (#2019): each entry the match names is the agent retrying a model call the provider refused, one model.call event by its own uuid and timestamp, with its attempt, its most and the cause its error names; the next assistant entry is the model's reply, which ends them",
     "conformance": "claude/retries/records",
@@ -1039,8 +1103,8 @@
     }
   },
   "toolKinds": {
-    "readBy": "a tool call's kind (shell, read, edit, write, search, fetch, mcp or unknown, which guards treat as change), by tool name or name prefix",
-    "conformance": "claude/toolKinds/unknown-otherwise",
+    "readBy": "a tool call's kind (shell, read, edit, write, search, fetch, mcp or unknown, which guards treat as change), by tool name, then by name prefix; deep_query changes nothing, so it is a read (#1801)",
+    "conformance": "facts/reads-count-as-read",
     "tools": {
       "Bash": "shell",
       "Read": "read",
@@ -1051,7 +1115,8 @@
       "Glob": "search",
       "Grep": "search",
       "WebFetch": "fetch",
-      "WebSearch": "fetch"
+      "WebSearch": "fetch",
+      "mcp__deep__deep_query": "read"
     },
     "prefixes": { "mcp__": "mcp" },
     "otherwise": "unknown"
@@ -1128,5 +1193,32 @@
       "write": "~/.claude/skills",
       "readFrom": ["~/.claude/skills"]
     }
+  },
+  "mcpHandshake": {
+    "readBy": "DeepBuild's MCP servers (deep mcp, deep mcp actions, deep-hook's mcp actions, the reading tools) hold the handshake revisions mcp.handshake@1 lists and answer any other with the newest (#2854); each version's client opens with the revision here, read from its recorded initialize request. Recorded by claude -p under a scratch HOME with an invalid OAuth token (no model call), --strict-mcp-config naming one stdio server that kept each line it was sent; the client's npm build (@anthropic-ai/claude-code), Nov 22, 2026",
+    "conformance": "claude/mcpHandshake/held",
+    "entries": [
+      {
+        "versions": [
+          "2.1.299"
+        ],
+        "revision": "2025-11-25",
+        "request": "adapters/corpus/claude-code/2.1.299/mcp-initialize.json"
+      },
+      {
+        "versions": [
+          "2.1.304"
+        ],
+        "revision": "2025-11-25",
+        "request": "adapters/corpus/claude-code/2.1.304/mcp-initialize.json"
+      },
+      {
+        "versions": [
+          "2.1.308"
+        ],
+        "revision": "2025-11-25",
+        "request": "adapters/corpus/claude-code/2.1.308/mcp-initialize.json"
+      }
+    ]
   }
 }

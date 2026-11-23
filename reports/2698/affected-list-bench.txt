@@ -1,0 +1,7 @@
+alone node: tests/acceptance/2698/ac1-wakeups-cpu-instructions.test.mjs tests/acceptance/2698/ac2-footprint.test.mjs tests/acceptance/2698/ac3-children.test.mjs tests/acceptance/2698/ac4-missing.test.mjs tests/acceptance/2698/ac5-hub-idle.test.mjs tests/acceptance/2698/ac6-commands.test.mjs
+NOTE benchmarks/hub.mjs reaches no test
+NOTE benchmarks/mcp.mjs reaches no test
+NOTE benchmarks/status.mjs reaches no test
+NOTE benchmarks/process-reader.c reaches no test
+NOTE benchmarks/loaded-modules.mjs reaches no test
+NOTE benchmarks/read-instructions.c reaches no test

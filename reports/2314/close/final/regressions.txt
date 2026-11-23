@@ -1,0 +1,38 @@
+$ node node_modules/vitest/vitest.mjs run --reporter=verbose --no-file-parallelism packages/checks-work/test/probe-host.test.ts packages/supervisor/src/check-host.test.ts packages/checks-numbers/test/stated.test.ts packages/checks-work/test/document.test.ts packages/checks-work/test/service.test.ts
+Mon Nov 16 20:31:31 UTC 2026
+12:31  up 2 days, 22:40, 20 users, load averages: 286.61 206.28 181.36
+
+ RUN  v5.0.5 <change>
+
+ ✓ packages/supervisor/src/check-host.test.ts > closing a check cancels its held start before the occupied lease is released 10520ms
+ ✓ packages/supervisor/src/check-host.test.ts > a rejected duplicate run never becomes this check's cleanup target 10497ms
+ ✓ packages/checks-work/test/probe-host.test.ts > hosted report retains its outcome, assertion classification and output 10454ms
+ ✓ packages/checks-work/test/probe-host.test.ts > hosted crash retains its outcome, assertion classification and output 92ms
+ ✓ packages/checks-work/test/probe-host.test.ts > hosted malformed retains its outcome, assertion classification and output 99ms
+ ✓ packages/checks-work/test/probe-host.test.ts > a refused host start is missing and never falls back to local execution 1ms
+ ✓ packages/checks-work/test/probe-host.test.ts > a supervised service reaches its declared loopback endpoint 151ms
+ ✓ packages/checks-numbers/test/stated.test.ts > a stated number > is no number as "", so the run stops before its assertion 101ms
+ ✓ packages/checks-numbers/test/stated.test.ts > a stated number > is no number as " ", so the run stops before its assertion 55ms
+ ✓ packages/checks-numbers/test/stated.test.ts > a stated number > is no number as "0x10", so the run stops before its assertion 56ms
+ ✓ packages/checks-numbers/test/stated.test.ts > a stated number > is no number as "1e3", so the run stops before its assertion 62ms
+ ✓ packages/checks-numbers/test/stated.test.ts > a stated number > holds as 1,500 for 1500 50ms
+ ✓ packages/checks-numbers/test/stated.test.ts > a stated number > holds as -3.25 for -3.25 44ms
+ ✓ packages/checks-numbers/test/stated.test.ts > a stated number > holds as 1.8 for 1.79 47ms
+ ✓ packages/checks-numbers/test/stated.test.ts > a stated number > holds as 0 for 0 47ms
+ ✓ packages/checks-work/test/service.test.ts > a service check with no requests to send > ran nothing at requests: 0 60ms
+ ✓ packages/checks-work/test/service.test.ts > a service check with no requests to send > ran nothing at requests: -1 56ms
+ ✓ packages/checks-work/test/service.test.ts > a service check whose floor lacks a number > ran nothing at floor: {}, though the endpoint answers 64ms
+ ✓ packages/checks-work/test/service.test.ts > a service check whose floor lacks a number > ran nothing at floor: {"latency_ms":1000}, though the endpoint answers 65ms
+ ✓ packages/checks-work/test/service.test.ts > a service check whose floor lacks a number > ran nothing at floor: {"latency":200,"throughput_rps":0}, though the endpoint answers 63ms
+ ✓ packages/checks-work/test/document.test.ts > a claim whose citation names nothing > fails at the check's assertion: Sales grew fast [source](sources/missing.json#/revenue). 67ms
+ ✓ packages/checks-work/test/document.test.ts > a claim whose citation names nothing > fails at the check's assertion: Sales grew fast [source](sources/q3.json#/revenue/east). 59ms
+ ✓ packages/checks-work/test/document.test.ts > a claim whose citation names nothing > passes when what it cites is there 180ms
+
+ Test Files  5 passed (5)
+      Tests  23 passed (23)
+   Start at  12:31:31
+   Duration  34.36s (tests 99%, transform 1%)
+
+exit=0
+Mon Nov 16 20:32:06 UTC 2026
+12:32  up 2 days, 22:41, 20 users, load averages: 243.79 204.20 181.59

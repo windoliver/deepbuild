@@ -14,7 +14,7 @@
 
 use std::borrow::Cow;
 use std::cell::RefCell;
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -31,6 +31,12 @@ pub const CALLS: [&str; 3] = ["inbox.read", "stream.subscribe", "events.read"];
 
 /// The events one refetch asks for at a time.
 const PAGE: usize = 1000;
+
+/// Whether the log goes on past an `events.read` page of `read` events: a full page may, and one the hub's byte cap
+/// ended says so with `more` (#1576), however few events it holds.
+fn more(page: &Value, read: usize) -> bool {
+    read == PAGE || page["more"] == true
+}
 /// The newest events a view keeps.
 const TAIL: usize = 256;
 /// While the hub doesn't answer the app tries it this often, and after [`SLOW_AFTER`] [`SLOWLY`].
@@ -100,6 +106,9 @@ pub struct View {
     pub start: String,
     /// The `log_pos` the view reflects.
     pub log_pos: u64,
+    /// How many events changed what the record shows (#1482): an event that says what the table holds already, the hub
+    /// writing a row again or the core reading a state again, moves the `log_pos` and not this.
+    pub rev: u64,
     /// The inbox read's rows, with a row for each ask created since and each close applied.
     pub inbox: Vec<Value>,
     /// The events applied since the reads, folded: what the views and the notifier read, through [`View::table`].
@@ -155,15 +164,16 @@ impl View {
         let mut after = 0;
         while after < self.log_pos {
             let page = client.call("events.read", json!({ "after": after, "limit": PAGE }))?;
-            let events = page["events"].as_array().cloned().unwrap_or_default();
-            for event in &events {
+            // The page's events are read where they are (#2661).
+            let events = page["events"].as_array().map_or(&[][..], Vec::as_slice);
+            for event in events {
                 after = event["log_pos"].as_u64().unwrap_or(after);
                 if after > self.log_pos {
                     return Ok(());
                 }
                 self.table.apply(event);
             }
-            if events.len() < PAGE {
+            if !more(&page, events.len()) {
                 break;
             }
         }
@@ -174,6 +184,10 @@ impl View {
     pub fn apply(&mut self, event: Value) {
         self.log_pos = event["log_pos"].as_u64().unwrap_or(self.log_pos);
         let kind = event["kind"].as_str().unwrap_or_default();
+        if !self.table.is_noop(&event) {
+            self.rev += 1;
+            touched(&event);
+        }
         if kind == "ask.created" {
             let ask = format!("ask:{}", event["id"].as_str().unwrap_or_default());
             if !self.inbox.iter().any(|row| row["ask"] == ask.as_str()) {
@@ -459,7 +473,7 @@ impl RecordReader {
     fn refetch(&mut self) -> Result<(), HubError> {
         loop {
             let client = self.client.as_mut().expect("connected");
-            let page = client.call(
+            let mut page = client.call(
                 "events.read",
                 json!({ "after": self.view.log_pos, "limit": PAGE }),
             )?;
@@ -469,8 +483,8 @@ impl RecordReader {
                 self.client = None;
                 return self.connect();
             }
-            let events = page["events"].as_array().cloned().unwrap_or_default();
-            let full = events.len() == PAGE;
+            let events = taken(&mut page);
+            let full = more(&page, events.len());
             for event in events {
                 if event["log_pos"].as_u64().unwrap_or(0) > self.view.log_pos {
                     self.view.apply(event);
@@ -491,9 +505,9 @@ impl RecordReader {
         let client = self.client.as_mut().expect("connected");
         let (mut events, mut after) = (Vec::new(), 0);
         loop {
-            let page = client.call("events.read", json!({ "after": after, "limit": PAGE }))?;
-            let read = page["events"].as_array().cloned().unwrap_or_default();
-            let full = read.len() == PAGE;
+            let mut page = client.call("events.read", json!({ "after": after, "limit": PAGE }))?;
+            let read = taken(&mut page);
+            let full = more(&page, read.len());
             for event in read {
                 after = event["log_pos"].as_u64().unwrap_or(after);
                 if after > self.view.log_pos {
@@ -505,6 +519,14 @@ impl RecordReader {
                 return Ok(events);
             }
         }
+    }
+}
+
+/// A page's events, taken out of it rather than copied (#2661).
+fn taken(page: &mut Value) -> Vec<Value> {
+    match page.get_mut("events").map(Value::take) {
+        Some(Value::Array(events)) => events,
+        _ => Vec::new(),
     }
 }
 
@@ -525,6 +547,32 @@ pub enum LocalHub {
     Slow,
 }
 
+thread_local! {
+    /// The sessions the events applied since the last [`sync`] changed, and whether one of them names no session (#1482).
+    static TOUCHED: RefCell<(HashSet<String>, bool)> = RefCell::new((HashSet::new(), false));
+}
+
+/// An event that changed the record was applied: its session, if it names one.
+fn touched(event: &Value) {
+    TOUCHED.with(|touched| {
+        let mut touched = touched.borrow_mut();
+        match event["session"].as_str() {
+            Some(session) => {
+                touched.0.insert(session.to_owned());
+            }
+            None => touched.1 = true,
+        }
+    });
+}
+
+/// The sessions the events since the last call changed; `None` when one named no session.
+fn take_touched() -> Option<HashSet<String>> {
+    TOUCHED.with(|touched| {
+        let (sessions, unnamed) = std::mem::take(&mut *touched.borrow_mut());
+        (!unnamed).then_some(sessions)
+    })
+}
+
 /// How often the app's one reader reads the hub: the reader's tick (#1546).
 pub const TICK: Duration = Duration::from_millis(250);
 
@@ -533,6 +581,8 @@ pub const TICK: Duration = Duration::from_millis(250);
 /// every view that observes it, and marks its window dirty with no input.
 pub struct Shown {
     at: (String, u64, u64, bool),
+    /// The sessions the newest move changed, when events alone moved the record (#1482); `None` when it moved otherwise.
+    touched: Option<HashSet<String>>,
 }
 
 struct Live(gpui_kit::Entity<Shown>);
@@ -542,8 +592,8 @@ impl gpui_kit::Global for Live {}
 /// The app's start ID, `log_pos` and bound values' revision, as the reader holds them now, and whether it has folded
 /// the record before its reads (#2026), which moves no `log_pos`.
 fn standing() -> (String, u64, u64, bool) {
-    let (start, log_pos) = with_view(|view| (view.start.clone(), view.log_pos)).unwrap_or_default();
-    (start, log_pos, crate::bound::revision(), folded())
+    let (start, rev) = with_view(|view| (view.start.clone(), view.rev)).unwrap_or_default();
+    (start, rev, crate::bound::revision(), folded())
 }
 
 /// Whether the one reader has folded the record before its newest read (#2026): until then the views draw the rows
@@ -560,7 +610,10 @@ fn live(cx: &mut gpui_kit::App) -> gpui_kit::Entity<Shown> {
     if let Some(live) = cx.try_global::<Live>() {
         return live.0.clone();
     }
-    let live = cx.new(|_| Shown { at: standing() });
+    let live = cx.new(|_| Shown {
+        at: standing(),
+        touched: None,
+    });
     cx.set_global(Live(live.clone()));
     live
 }
@@ -595,9 +648,14 @@ pub fn sync(cx: &mut gpui_kit::App) {
         return;
     }
     let at = standing();
+    let touched = take_touched();
     let moved = live(cx).update(cx, |shown, cx| {
         let moved = shown.at != at;
         if moved {
+            // Events alone moved it, if the start, the bound values and the fold stand as they stood.
+            let events =
+                (shown.at.0.as_str(), shown.at.2, shown.at.3) == (at.0.as_str(), at.2, at.3);
+            shown.touched = touched.filter(|_| events);
             shown.at = at;
             cx.notify();
         }
@@ -607,6 +665,17 @@ pub fn sync(cx: &mut gpui_kit::App) {
     if moved {
         crate::refresh_panels(cx);
     }
+}
+
+/// Whether the record's newest move could change what `session` shows: no, when only other sessions' events moved it
+/// (#1482), so a session's page draws again for its own session's events and for nothing else's.
+pub fn moved_for(session: &str, cx: &gpui_kit::App) -> bool {
+    cx.try_global::<Live>().is_none_or(|live| {
+        let touched = &live.0.read(cx).touched;
+        touched
+            .as_ref()
+            .is_none_or(|sessions| sessions.contains(session))
+    })
 }
 
 /// Tells the views something they draw beside the record moved, such as what the app can reach (#994).
@@ -645,6 +714,10 @@ pub fn install_local(events: impl IntoIterator<Item = Value>) {
     for event in &record {
         view.apply(event.clone());
     }
+    // What the views draw first is all of it, so the events that built it are no move to compare (#1482), and the list
+    // reads it afresh, never an earlier record's reading at the same `log_pos` (#3100).
+    let _ = take_touched();
+    crate::list::forget_reading();
     READER.with(|cell| {
         *cell.borrow_mut() = Some(Source::Local(Box::new(view), record, LocalHub::Answers))
     });
@@ -739,6 +812,10 @@ pub fn take_unseen() -> Vec<Value> {
 
 /// One call to the hub on the one reader's connection; `None` when no hub is connected or it refused.
 pub fn call(method: &str, params: Value) -> Option<Value> {
+    // #1498: a replica's copy of the hub hosts the canvas core a session's page reads, in place of a socket.
+    if let Some(local) = crate::hub::local().filter(|_| method == "canvas.user") {
+        return local(method, &params).ok();
+    }
     READER.with(|cell| match cell.borrow_mut().as_mut() {
         Some(Source::Hub(reader)) => reader.client.as_mut()?.call(method, params).ok(),
         _ => None,

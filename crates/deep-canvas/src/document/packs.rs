@@ -26,6 +26,7 @@ use crate::ops;
 use crate::registry::{self, Range, Sealed, Semver};
 use crate::schedule::{canonical, Hasher};
 pub(super) use inputs::input_fault;
+pub(super) use moved::{moved_notice, moved_to, removals, removed};
 
 mod aliases;
 pub mod census;
@@ -33,10 +34,12 @@ pub mod deps;
 mod entries;
 mod inputs;
 pub mod module_fields;
+mod moved;
 mod parts;
 mod place;
 mod refused;
 pub mod retired;
+mod tokens;
 
 /// The most derived items one repeat makes (Recipe: cost).
 pub const MAX_REPEAT: u64 = 1024;
@@ -53,6 +56,8 @@ pub struct Planted {
     pub walk_inputs: Option<WalkInputs>,
     /// Seeds derived items by expansion order, not by `(instance, step, index)`.
     pub seed_by_order: bool,
+    /// #458: an expansion makes one stroked derived item without its stroke.
+    pub drops_stroke: bool,
     /// A re-expansion writes over a broken-out item.
     pub overwrite_broken_out: bool,
     /// The pack check admits a pack without reading `requires.modules`.
@@ -73,6 +78,8 @@ pub struct Planted {
     pub migrate_params_only: bool,
     /// #1960: the migrator carries channel targets, and no other path that names a param.
     pub migrate_channels_only: bool,
+    /// #1962: the load drops every instance of a kind its pack's version moved.
+    pub drops_moved: bool,
     /// #1961: a load under a version that no longer derives a broken-out ID drops the item.
     pub orphan_drops: bool,
     /// #1961: that load hands the broken-out ID to the new expansion, which writes it.
@@ -290,6 +297,10 @@ pub struct Pack {
     pub census: Vec<census::Row>,
     /// Its kinds backed by recipes, by `<pack>.<name>@<major>`, each with its kit's result (#202).
     pub kinds: BTreeMap<String, super::pack_kinds::PackKind>,
+    /// The kinds it moved, each to the kind it became, `<pack>.<name>@<major>`, and those it
+    /// removed, each with its reason (#1962).
+    pub moved: BTreeMap<String, String>,
+    pub removed: BTreeMap<String, String>,
 }
 
 /// The step ops this slice expands: a mark or an item of a kind the build registers.
@@ -537,6 +548,7 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         None => Vec::new(),
         Some(c) => census::read(c, &aliases, &mut issues),
     };
+    let (moved, removed) = moved::read(fields, &id.name, &requires_packs, &mut issues);
     for key in fields.keys().filter(|k| !PACK_KEYS.contains(&k.as_str())) {
         issues.extend(module_fields::check(sealed, manifest, key));
     }
@@ -553,6 +565,8 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         aliases,
         census,
         kinds,
+        moved,
+        removed,
     })
 }
 
@@ -730,8 +744,12 @@ const PACK_KEYS: &[&str] = &[
     "assets",
     "providers",
     "layouts",
+    "libs",
+    "interfaces",
     "kinds",
     "corpus",
+    "moved",
+    "removed",
 ];
 
 /// The canvas module that admits and runs a pack's programs (#238).
@@ -1561,6 +1579,8 @@ pub struct Packs {
     /// The versions uninstalled while something names them: kept, and taking no new instance.
     retired: BTreeSet<String>,
     pub planted: Planted,
+    /// The host's reader of assets and records, for a module's expansion (#1518).
+    pub reads: Option<super::expands::Reader>,
 }
 
 impl Packs {
@@ -1611,6 +1631,8 @@ impl Packs {
         // checks documents of the pack beside the versions it requires.
         let checked = check_pack(manifest, sealed, self.planted).and_then(|mut pack| {
             deps::cycle(self, &pack)?;
+            // Each move followed to a kind that exists, and no kind dropped silently (#1962).
+            moved::check(self, &pack)?;
             if !pack.kinds.is_empty() || !pack.census.is_empty() {
                 let mut alone = deps::store(self, &pack);
                 // A pack's kit checks its kinds as shipped: a planted cue-list expander (#142) or
@@ -1620,6 +1642,7 @@ impl Packs {
                 alone.planted.migrate_zero_as_absent = false;
                 alone.planted.migrate_params_only = false;
                 alone.planted.migrate_channels_only = false;
+                alone.planted.drops_moved = false;
                 // #1493: a parameter a pack's census maps must reach the frame, so each meets
                 // field.effect on its recipe as a kind's field does.
                 super::pack_kinds::alias_effect(&pack, sealed, &alone)?;
@@ -1854,6 +1877,8 @@ pub struct Expansion {
     pub sections: Map<String, Value>,
     /// The items it placed by relation or parent, in order: its parts (#233).
     pub placed: Vec<String>,
+    /// What a module kind's expansion reports beside what it wrote (#1518).
+    pub report: Map<String, Value>,
 }
 
 impl Expansion {
@@ -1873,8 +1898,8 @@ impl Expansion {
             "broken_out": self.broken_out,
             "channels": self.channels,
         });
-        // A module kind's expansion lists its sections beside its derived items (#222).
-        for (section, entries) in &self.sections {
+        // A module kind's expansion lists its sections and report beside its derived items (#222).
+        for (section, entries) in self.sections.iter().chain(&self.report) {
             row[section.as_str()] = entries.clone();
         }
         row
@@ -2872,50 +2897,6 @@ impl Tokens {
             chars: text.chars().collect(),
             i: 0,
         }
-    }
-}
-
-impl Iterator for Tokens {
-    type Item = Result<String, String>;
-
-    fn next(&mut self) -> Option<Result<String, String>> {
-        let chars = &self.chars;
-        let mut i = self.i;
-        while chars.get(i).is_some_and(|c| c.is_whitespace()) {
-            i += 1;
-        }
-        let c = *chars.get(i)?;
-        let next = chars.get(i + 1).copied();
-        let start = i;
-        let t = if c.is_ascii_digit() || (c == '.' && next.is_some_and(|d| d.is_ascii_digit())) {
-            while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == '.') {
-                i += 1;
-            }
-            // A word that starts with a digit, such as `3d` or `0.5s`, is one token (#142).
-            while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '_') {
-                i += 1;
-            }
-            Ok(chars[start..i].iter().collect())
-        } else if c.is_ascii_alphabetic() || c == '_' {
-            while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '_') {
-                i += 1;
-            }
-            Ok(chars[start..i].iter().collect())
-        } else if let Some(two) = next
-            .map(|d| format!("{c}{d}"))
-            .filter(|t| ["==", "!=", "<=", ">=", "&&", "||"].contains(&t.as_str()))
-        {
-            i += 2;
-            Ok(two)
-        } else if "+-*/%(),[].?:<>!".contains(c) {
-            i += 1;
-            Ok(c.to_string())
-        } else {
-            i = chars.len();
-            Err(format!("unexpected `{c}`"))
-        };
-        self.i = i;
-        Some(t)
     }
 }
 

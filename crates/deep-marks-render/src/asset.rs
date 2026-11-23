@@ -10,8 +10,9 @@ use std::sync::Arc;
 use deep_canvas_marks::key::sha256_hex;
 use deep_canvas_marks::paint::Adjust;
 use deep_canvas_marks::scene::{AtlasCell, ImageFit};
+use deep_images::animated::Animation;
 use deep_images::{Images, Key, Refused, Store};
-use serde_json::{Map, Value};
+use serde_json::{json, Map, Value};
 use vello_cpu::Pixmap;
 
 use crate::refused;
@@ -178,6 +179,7 @@ pub fn ask(
         crop: cut,
         flip,
         level: 0,
+        frame: 0,
     };
     let shown = key.shown();
     let to = fit.fitted(bounds, shown);
@@ -190,9 +192,257 @@ pub fn ask(
     })
 }
 
+/// #2053: each lit image's normal page in `frame`, read from `store` (see [`paged`]).
+pub fn pages(
+    frame: &mut deep_canvas_marks::scene::Frame,
+    store: Option<&Path>,
+) -> Result<(), Value> {
+    for layer in &mut frame.layers {
+        for i in 0..layer.marks.len() {
+            if let Some(d) = paged(&layer.marks[i], store)? {
+                layer.marks.set(i, Arc::new(d));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// #2053: `d` with its normal page read, when it is a lit image whose run's light names one: read
+/// from `store` as stored at its full size and placed where the image draws. A page the store
+/// lacks is refused naming the image's `normal`, and one whose size isn't its image's naming both
+/// sizes, as the check refuses it.
+pub fn paged(
+    d: &deep_canvas_marks::scene::Drawn,
+    store: Option<&Path>,
+) -> Result<Option<deep_canvas_marks::scene::Drawn>, Value> {
+    use deep_canvas_marks::light::Normals;
+    use deep_canvas_marks::scene::{Mark, Scope};
+    let Mark::Image {
+        item,
+        asset,
+        bounds,
+        fit,
+        crop,
+        turn,
+        ..
+    } = &d.mark
+    else {
+        return Ok(None);
+    };
+    let light_at = |s: &Scope| match s {
+        Scope::Opacity {
+            effect: Some(e), ..
+        } => e.light.clone(),
+        _ => None,
+    };
+    let unread = d.scopes.iter().position(|s| {
+        light_at(s).is_some_and(|l| l.page.as_ref().is_some_and(|p| p.normals.is_none()))
+    });
+    let Some(at) = unread else {
+        return Ok(None);
+    };
+    let light = light_at(&d.scopes[at]).expect("found above");
+    let page = light.page.as_ref().expect("found above");
+    let store = store_of(store);
+    let field = format!("items/{item}/params/normal");
+    let missing = || refused("asset_missing", &format!("{field}: {}", page.asset));
+    let image = deep_images::hash_of(asset).ok_or_else(|| refusal_missing(asset, item))?;
+    let image = images()
+        .size(&store, &image)
+        .map_err(|r| refusal(r, asset, item, false))?;
+    let hash = deep_images::hash_of(&page.asset).ok_or_else(missing)?;
+    let size = images().size(&store, &hash).map_err(|r| match r.code {
+        "asset_missing" | "asset_mismatch" => missing(),
+        code => refused(code, &field),
+    })?;
+    if size != image {
+        return Err(refused(
+            "out_of_range",
+            &format!("{field}: {}", sizes(size, image)),
+        ));
+    }
+    let key = Key {
+        hash,
+        crop: [0, 0, size[0], size[1]],
+        flip: 0,
+        level: 0,
+        frame: 0,
+    };
+    let level = images().wait(&store, key).map_err(|_| missing())?;
+    // Where the image draws: its crop fitted in its box, turned about the box's centre.
+    let cut = deep_images::crop_px(*crop, image)
+        .ok_or_else(|| refused("out_of_range", &format!("items/{item}/params/crop")))?;
+    let to = fit.fitted(*bounds, [cut[2], cut[3]]);
+    let [a, b, c, dd, e, f] = deep_canvas_marks::turn::turn_of(*bounds, *turn);
+    let det = a * dd - b * c;
+    let inv = [
+        dd / det,
+        -b / det,
+        -c / det,
+        a / det,
+        (c * f - dd * e) / det,
+        (b * e - a * f) / det,
+    ];
+    // The frame's u to the image's px, which are the page's texels.
+    let k = [f64::from(cut[2]) / to[2], f64::from(cut[3]) / to[3]];
+    let back = [
+        k[0] * inv[0],
+        k[1] * inv[1],
+        k[0] * inv[2],
+        k[1] * inv[3],
+        f64::from(cut[0]) + k[0] * (inv[4] - to[0]),
+        f64::from(cut[1]) + k[1] * (inv[5] - to[1]),
+    ];
+    let (sin, cos) = deep_canvas_marks::turn::sin_cos(*turn);
+    let normals = Normals {
+        size,
+        texels: level.rgba.clone(),
+        back,
+        turn: [sin, cos],
+    };
+    let mut lit = (*light).clone();
+    if let Some(p) = lit.page.as_mut() {
+        p.normals = Some(Arc::new(normals));
+    }
+    let mut out = d.clone();
+    if let Scope::Opacity {
+        effect: Some(effect),
+        ..
+    } = &mut out.scopes[at]
+    {
+        let mut e = (**effect).clone();
+        e.light = Some(Arc::new(lit));
+        *effect = Arc::new(e);
+    }
+    Ok(Some(out))
+}
+
+/// An image whose asset isn't a sha256, refused as a missing one.
+fn refusal_missing(asset: &str, item: &str) -> Value {
+    let r = Refused {
+        code: "asset_missing",
+        on_crop: false,
+    };
+    refusal(r, asset, item, false)
+}
+
+/// #2053: each image of `doc` whose `normal` page's pixel size isn't its own, refused naming both
+/// sizes. A page or an image the store can't read is left to the drawing, which refuses it.
+pub fn page_issues(
+    doc: &Map<String, Value>,
+    store: Option<&Path>,
+) -> Vec<deep_canvas::document::Issue> {
+    let store = store_of(store);
+    let size = |asset: &str| images().size(&store, &deep_images::hash_of(asset)?).ok();
+    let items = doc
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten();
+    let mut out = Vec::new();
+    for (id, item) in items {
+        let Some(page) = deep_canvas_marks::light::normal_of(item) else {
+            continue;
+        };
+        let image = item.pointer("/params/asset").and_then(Value::as_str);
+        let (Some(page), Some(image)) = (size(page), image.and_then(size)) else {
+            continue;
+        };
+        if page != image {
+            out.push(deep_canvas::document::Issue::error(
+                "normal_page_size",
+                id,
+                format!("items/{id}/params/normal"),
+                json!({"page": page, "image": image}),
+                &sizes(page, image),
+            ));
+        }
+    }
+    out
+}
+
+/// #2053: a page's size and its image's, as a refusal names them.
+pub fn sizes(page: [u32; 2], image: [u32; 2]) -> String {
+    format!(
+        "the page is {} × {} px and its image {} × {} px",
+        page[0], page[1], image[0], image[1]
+    )
+}
+
 /// The store a request names, as the service reads it; with none, a store that holds nothing.
 pub fn store_of(store: Option<&Path>) -> Arc<Store> {
     Arc::new(Store::flat(store.unwrap_or(Path::new("/dev/null"))))
+}
+
+/// #1489: an image item's `frames` over an animation, read as a video's are (Image `image@1`:
+/// video frames): start, in and rate on the document's clock, and whether it loops or, past its
+/// end, holds its first frame.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Timing {
+    start: i64,
+    r#in: i64,
+    rate: (i64, i64),
+    looped: bool,
+    hold_first: bool,
+}
+
+impl Timing {
+    pub fn of(doc: &Value, frames: &Value) -> Timing {
+        use deep_canvas_media::doc::{rate, time};
+        Timing {
+            start: time(doc, frames.get("start")).unwrap_or(0),
+            r#in: time(doc, frames.get("in")).unwrap_or(0),
+            rate: rate(frames.get("rate")).unwrap_or((1, 1)),
+            looped: frames.get("loop").and_then(Value::as_bool).unwrap_or(false),
+            hold_first: frames.get("hold").and_then(Value::as_str) == Some("first"),
+        }
+    }
+
+    /// The frame `animation` shows at `t`, the one its delays put at source time in + (t − start)
+    /// × rate (the first before start), and the document time the next frame starts at, if one
+    /// ever does.
+    pub fn frame(&self, animation: &Animation, t: i64) -> (u32, Option<i64>) {
+        let (start, r#in, (p, q)) = (self.start, self.r#in, self.rate);
+        let src = deep_canvas_media::frames::source_time(t.max(start), start, r#in, (p, q));
+        let k = animation.frame_at(src, self.looped, self.hold_first);
+        // Back in document time: start + (src − in) ÷ rate, rounded up.
+        let next = (animation.next_change(src, self.looped, self.hold_first)).map(|n| {
+            let rel = i128::from(n - r#in) * i128::from(q);
+            let p = i128::from(p.max(1));
+            (i128::from(start) + (rel + p - 1).div_euclid(p)) as i64
+        });
+        (k as u32, next)
+    }
+}
+
+/// #1489: an animated image item: its asset's hash, the animation's probe and the item's timing.
+pub type Animated = ([u8; 32], Arc<Animation>, Timing);
+
+/// #1489: each image item of `doc` with `frames` whose asset is an animation, by its ID. An asset
+/// the service can't read or decode is refused, naming it.
+pub fn animated_items(doc: &Value, store: &Store) -> Result<BTreeMap<String, Animated>, Value> {
+    let mut out = BTreeMap::new();
+    for (id, item) in doc
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
+        let (Some(frames), Some(asset)) = (
+            item.pointer("/params/frames"),
+            item.pointer("/params/asset").and_then(Value::as_str),
+        ) else {
+            continue;
+        };
+        let Some(hash) = deep_images::hash_of(asset).filter(|_| item["kind"] == "image@1") else {
+            continue;
+        };
+        let probed = images().animation(store, &hash);
+        if let Some(animation) = probed.map_err(|r| refusal(r, asset, id, false))? {
+            out.insert(id.clone(), (hash, animation, Timing::of(doc, frames)));
+        }
+    }
+    Ok(out)
 }
 
 /// What one painter draws of the service's levels: each level's premultiplied pixmap at an
@@ -206,6 +456,8 @@ pub struct Kept {
     store: Option<(Option<PathBuf>, Arc<Store>)>,
     /// #1486: the level each image item this frame drew was drawn at.
     pub levels: BTreeMap<String, u8>,
+    /// #1489: the frame each animated image item shows in the frame drawn, by its ID.
+    pub frames: HashMap<String, u32>,
     /// #1485's wrong program on the decode or the cap, if planted.
     pub plant: Plant,
 }
@@ -237,7 +489,8 @@ impl Kept {
         item: &str,
     ) -> Result<Drawn, Value> {
         let store = self.store(store);
-        let ask = ask(&store, asset, (crop, tile), (bounds, fit), scale, item)?;
+        let mut ask = ask(&store, asset, (crop, tile), (bounds, fit), scale, item)?;
+        ask.key.frame = self.frames.get(item).copied().unwrap_or(0);
         self.levels.insert(item.to_string(), ask.key.level);
         if self.drawn.insert(ask.key) {
             if self.plant != Plant::CapCountsCopiesOnly && self.drawn_bytes + ask.bytes > CAP {
@@ -276,6 +529,22 @@ impl Kept {
         self.made
             .insert(ask.key, (opacity, adjust.clone(), pixmap.clone()));
         Ok((pixmap, level.size, ask.to))
+    }
+
+    /// A frame starts: the request's wrong program, and (#1489) the frame each animated image item
+    /// of `doc` shows at `t` (none when an asset can't be read: drawing it refuses it).
+    pub fn start(
+        &mut self,
+        plant: Plant,
+        (doc, store, t): (&Map<String, Value>, Option<&Path>, i64),
+    ) {
+        self.plant = plant;
+        self.frames.clear();
+        let store = self.store(store);
+        let animated = animated_items(&Value::Object(doc.clone()), &store).unwrap_or_default();
+        for (id, (_, animation, timing)) in animated {
+            self.frames.insert(id, timing.frame(&animation, t).0);
+        }
     }
 
     /// A frame is drawn: every pixmap it didn't draw is let go, and the next frame's budget starts

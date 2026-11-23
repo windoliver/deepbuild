@@ -1,0 +1,11 @@
+21:52  up  2:18, 3 users, load averages: 57.94 129.11 132.34
+[base] first claim: claim:01M7VR6ND0WN7HCQ5ME0YDACR6: verdicts [{"outcome":"PASS","commit":"05958461454cc0d5b5436bad4399efb08d76419d","reasons":[".deepbuild/checks/cart-discount.sh: PASS on 1 clean run"]}]; runs [{"run":"run:01M7VR6PB19RKKSXN811A70TD6","check":".deepbuild/checks/cart-discount.sh","commit":"05958461454cc0d5b5436bad4399efb08d76419d","outcome":"passed"},{"run":"run:01M7VR710Y2H378RY0H9VA19KW","check":".deepbuild/checks/cart-discount.sh","commit":"ad75d5d12baf499d4fcccee4573674c367b168dd","outcome":"failed"}]
+[base] Bash calls allowed: git status true, ls src true
+[base] git status --porcelain in the worktree: " M src/cart.ts\n"
+[base] second claim claim:01M7VR77E3JR9XREK414RJSSPK: verdicts [{"outcome":"PASS","commit":"05958461454cc0d5b5436bad4399efb08d76419d","reasons":[".deepbuild/checks/cart-discount.sh: PASS on 1 clean run",".deepbuild/checks/cart-discount.sh carried run:01M7VR6PB19RKKSXN811A70TD6 from claim:01M7VR6ND0WN7HCQ5ME0YDACR6 in session:09e46ac5f7ae4f63bbdc9c2af2fa0443",".deepbuild/checks/cart-discount.sh carried its base run run:01M7VR710Y2H378RY0H9VA19KW from claim:01M7VR6ND0WN7HCQ5ME0YDACR6 in session:09e46ac5f7ae4f63bbdc9c2af2fa0443"]}]
+[base] first claim verdict: PASS on 05958461454cc0d5b5436bad4399efb08d76419d
+[base] runs started after the second stop: []
+[base] checkouts folder /private/tmp/dh875-uX3aE1/h/.deepbuild/checkouts (watched: true, entries before: []): entries made during the second stop (watched): ["c-AqjW90"]; files written: 1095; new entries still there: []
+[base] events after the second stop: tool.before, tool.after, tool.before, tool.after, agent.stop, turn.usage, claim.made, session.state, row.set, verdict.made, claim.progress, stop.held, session.state, row.set
+ Test Files  1 passed (1)
+exit 0

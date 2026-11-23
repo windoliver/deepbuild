@@ -14,11 +14,18 @@ use deep_canvas_physics::roles::TABLE;
 use deep_canvas_physics::written;
 use deep_physics_rapier::runner::Run;
 use serde_json::{json, Map, Value};
+use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 /// Bakes each world `doc` lists, with its track from `tracks` (#251), into the arrays its
 /// `<body>#*` outputs and skins write and the channels its outputs to item paths write; a world
-/// the physics module refuses refuses the call.
-pub(crate) fn bake(doc: &mut Value, tracks: &Value) -> Result<(), Value> {
+/// the physics module refuses refuses the call. `assets` are the call's files by hash, which a
+/// soft volume built from a mesh asset is read from (#2457).
+pub(crate) fn bake(
+    doc: &mut Value,
+    tracks: &Value,
+    assets: &BTreeMap<String, PathBuf>,
+) -> Result<(), Value> {
     let Some(worlds) = doc.get("worlds").and_then(Value::as_object).cloned() else {
         return Ok(());
     };
@@ -34,15 +41,17 @@ pub(crate) fn bake(doc: &mut Value, tracks: &Value) -> Result<(), Value> {
     let (mut arrays, mut channels) = (Map::new(), Map::new());
     // #449: each world's occurrence list, as the column view reads it, for particles' bursts.
     let mut lists = Map::new();
+    let read = |sha: &str| std::fs::read(assets.get(sha)?).ok();
+    let scene = deep_physics_rapier::source::sourced(doc, &read);
     for (id, world) in &worlds {
-        let w = deep_physics_rapier::bound::expand(Some(doc), world)
+        let w = deep_physics_rapier::bound::expand(Some(&scene), world)
             .and_then(|d| check(&d, &RAPIER3D, &TABLE))
             .map_err(|e| {
                 let issues: Vec<Value> = e.iter().map(|r| json!({"code": r.code, "path": r.path, "what": r.what})).collect();
                 json!({"code": "physics_refused", "reason": format!("worlds/{id}"), "issues": issues})
             })?;
         let step = step_flicks(&w);
-        let mut call = json!({"call": "bake", "scene": doc, "world": id, "steps": (span + step - 1) / step, "frame_rate": rate});
+        let mut call = json!({"call": "bake", "scene": &*scene, "world": id, "steps": (span + step - 1) / step, "frame_rate": rate});
         if let Some(track) = tracks.get(id) {
             call["track"] = track.clone();
         }
@@ -52,7 +61,7 @@ pub(crate) fn bake(doc: &mut Value, tracks: &Value) -> Result<(), Value> {
                 json!({"code": "physics_refused", "reason": format!("worlds/{id}"), "bake": reply}),
             );
         }
-        arrays.extend(written::arrays(id, &w, doc, &reply["bodies"]));
+        arrays.extend(written::arrays(id, &w, doc, &reply));
         // #524: an output to an item path draws as the channels deep_show writes for it.
         let frame = deep_canvas_physics::bake::frame_rate(&rate).map_or(step, |(_, f)| f);
         let frames: Vec<i64> = (0..)
@@ -62,7 +71,7 @@ pub(crate) fn bake(doc: &mut Value, tracks: &Value) -> Result<(), Value> {
         deep_physics_rapier::channels::output_channels(
             id,
             &w,
-            &deep_physics_rapier::channels::states(&reply),
+            &reply,
             &frames,
             false,
             &mut channels,

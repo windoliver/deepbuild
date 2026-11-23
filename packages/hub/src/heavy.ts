@@ -9,16 +9,17 @@
 // form; the hub's reply rewrites a matched call into it, or denies it once with it where the adapter can't rewrite
 // (heavyDenial, which deep-hook words the same when the hub is late). A call that ran while the hub was away reads
 // "ran unleased" in its session's row.
-import { execFileSync, spawn } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { shellQuote } from './shell.js';
 import { randomBytes } from 'node:crypto';
 import { closeSync, constants, lstatSync, openSync, readFileSync, readSync, rmSync, writeSync } from 'node:fs';
+import { Socket } from 'node:net';
 import { availableParallelism, homedir, loadavg, totalmem } from 'node:os';
 import type { Caller, Lease, LeaseTable, Mode, Resource } from '@deepbuild/leases';
-import { call, type Reply } from './client.js';
+import { call, failure, type Reply } from './client.js';
 import { DISK_FLOOR, freeBytes } from './disk.js';
-import { deepHook, hubAddress, installedRoot, rootOf } from './paths.js';
-import { startOf } from './wire.js';
+import { controlToken, deepHook, hubAddress } from './paths.js';
+import { startOf, ulidTime } from './wire.js';
 
 type Obj = Record<string, unknown>;
 
@@ -35,9 +36,13 @@ export type Pressure = 'normal' | 'warn' | 'critical';
  * or Linux's pressure stall information (/proc/pressure/memory: full stalls over 10% of the last 10 s are critical,
  * some over 10% a warning). DEEP_TEST_MEMORY_PRESSURE_FILE names a file holding the level instead (tests only).
  */
-/** macOS's own reading, kept a second: every waiting `deep lease` asks four times a second, and each read is a process the core waits on. */
+/**
+ * macOS's own reading, kept a second: the hub's tick reads it while builds run (#1411) and every waiting `deep lease`
+ * asks four times a second, so at most one sysctl runs a second, and the core never waits on its process.
+ */
 let macRead: { at: number; level: Pressure } | undefined;
-function memoryPressure(): Pressure {
+let macReading: Promise<Pressure> | undefined;
+async function memoryPressure(): Promise<Pressure> {
   const file = process.env.DEEP_TEST_MEMORY_PRESSURE_FILE;
   if (file) {
     try {
@@ -48,9 +53,14 @@ function memoryPressure(): Pressure {
   try {
     if (process.platform === 'darwin') {
       if (macRead && Date.now() - macRead.at < 1000) return macRead.level;
-      const level = Number(execFileSync('/usr/sbin/sysctl', ['-n', 'kern.memorystatus_vm_pressure_level'], { encoding: 'utf8', timeout: 2000 }).trim());
-      macRead = { at: Date.now(), level: level >= 4 ? 'critical' : level >= 2 ? 'warn' : 'normal' };
-      return macRead.level;
+      macReading ??= new Promise<Pressure>((resolve) => execFile('/usr/sbin/sysctl', ['-n', 'kern.memorystatus_vm_pressure_level'], { encoding: 'utf8', timeout: 2000 }, (error, out) => {
+        macReading = undefined;
+        const level = Number(out.trim());
+        if (error || !level) return resolve('normal'); // no reading: nothing to wait for
+        macRead = { at: Date.now(), level: level >= 4 ? 'critical' : level >= 2 ? 'warn' : 'normal' };
+        resolve(macRead.level);
+      }));
+      return await macReading;
     }
     if (process.platform === 'linux') {
       const psi = readFileSync('/proc/pressure/memory', 'utf8');
@@ -84,6 +94,7 @@ export function draftedPools(cores = availableParallelism(), memoryGb = totalmem
  */
 export class JobPool {
   private readonly fd: number;
+  private closed = false;
   constructor(readonly path: string, readonly tokens: number) {
     let fifo = false;
     try { fifo = lstatSync(path).isFIFO(); } catch { /* none yet */ }
@@ -98,6 +109,7 @@ export class JobPool {
   get makeflags(): string { return `-j${this.tokens} --jobserver-auth=fifo:${this.path}`; }
   /** Takes up to `max` free tokens from the pipe without waiting; how many it took. */
   take(max: number): number {
+    if (this.closed) return 0;
     let got = 0;
     const buf = Buffer.alloc(Math.max(1, max));
     while (got < max) {
@@ -109,13 +121,61 @@ export class JobPool {
     }
     return got;
   }
-  give(n: number): void { if (n > 0) writeSync(this.fd, Buffer.alloc(n, '+')); }
-  /** The pipe filled to its count again, whatever was lost in it; only while no leased command runs. */
+  give(n: number): void { if (n > 0 && !this.closed) writeSync(this.fd, Buffer.alloc(n, '+')); }
+  /** The tokens the hub holds back for memory pressure (#1411): out of the pipe, and never one a job holds. */
+  private held = 0;
+  /** How many it means to hold back; it reads the rest as jobs give them back. */
+  want = 0;
+  /**
+   * A reader the pipe's writes wake, open while the pool holds back fewer than it means to: a build's reader reads
+   * again as soon as one of its jobs ends, so only a reader already waiting gets a token a job gives back.
+   */
+  private reader?: Socket;
+  /** Holds back `n` tokens in all: those free now at once, the rest as jobs give theirs back; any over `n` go back now. */
+  holdBack(n: number): void {
+    if (this.closed) return;
+    this.want = n;
+    if (n > this.held) this.held += this.take(n - this.held);
+    else if (n < this.held) {
+      this.give(this.held - n);
+      this.held = n;
+    }
+    if (this.held >= this.want) {
+      this.reader?.pause();
+      return;
+    }
+    this.reader ??= new Socket({
+      fd: openSync(this.path, constants.O_RDONLY | constants.O_NONBLOCK), readable: true, writable: false,
+      onread: {
+        buffer: () => Buffer.alloc(Math.max(1, this.want - this.held)),
+        callback: (n: number) => {
+          this.held += n;
+          if (this.held > this.want) {
+            this.give(this.held - this.want);
+            this.held = this.want;
+          }
+          return this.held < this.want;
+        },
+      },
+    }).on('error', () => undefined).unref();
+    this.reader.resume();
+  }
+  /** The pipe filled to its count again, less those held back, whatever was lost in it; only while no leased command runs. */
   refill(): void {
     this.take(this.tokens * 4 + 64);
-    this.give(this.tokens);
+    this.held = this.want;
+    this.reader?.pause();
+    this.give(this.tokens - this.held);
   }
+  /**
+   * Once only, and nothing read, written or opened after: a hub's stop may reach it twice, and a build's release or a
+   * heavy tick may come after it (#2732); a second `closeSync`, a read or a write would reach whatever file has since
+   * reused the fd's number.
+   */
   close(remove = false): void {
+    if (this.closed) return;
+    this.closed = true;
+    this.reader?.destroy();
     try { closeSync(this.fd); } catch { /* closed */ }
     if (remove) rmSync(this.path, { force: true });
   }
@@ -124,13 +184,24 @@ export class JobPool {
 /** The pool's count on a host of `cores`: one token per core, less one for the app and the hub. */
 export const poolTokens = (cores: number): number => Math.max(1, cores - 1);
 
-/** How a command takes jobs, from its heavy.command@1 entry: from the pool, as a worker count `deep lease` sets, or none. */
-type Jobs = 'jobserver' | 'n' | 'none';
+/** The tokens a pool of `tokens` holds back at a pressure level: half at warn, all but one at critical (#1411). */
+const heldBack = (level: Pressure, tokens: number): number => (level === 'critical' ? tokens - 1 : level === 'warn' ? Math.floor(tokens / 2) : 0);
+/** How long a lower level must hold before the pool gives tokens back, so a flapping level moves it once (#1411). */
+const PRESSURE_WINDOW_MS = 30_000;
+
+/**
+ * How a command takes jobs, from its heavy.command@1 entry: from the pool, as a worker count `deep lease` sets, none,
+ * or a fixed count of its own, which the pool never reaches (#1411).
+ */
+type Jobs = 'jobserver' | 'n' | 'none' | number;
 
 // ---- The hub's queue.
 
-/** One kind a `deep lease` names: its lease kind and mode, `gpu:exclusive` for an export or a timing check. */
-interface Need { kind: string; mode: Mode }
+/**
+ * One kind a `deep lease` names: its lease kind and mode, `gpu:exclusive` for an export or a timing check, and on a pool
+ * the units the hub reads for it (#3218), never the call's.
+ */
+interface Need { kind: string; mode: Mode; units?: number }
 const KIND = /^([a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)*)(?::(shared|exclusive))?$/;
 function needsOf(kinds: unknown): Need[] {
   if (!Array.isArray(kinds)) throw Error('name the kinds as a list');
@@ -141,11 +212,12 @@ function needsOf(kinds: unknown): Need[] {
     return { kind: m[1]!, mode: (m[2] ?? (m[1] === 'gpu' ? 'shared' : 'exclusive')) as Mode };
   });
 }
-/** A `deep lease`'s jobs: `jobserver` (the default), `n` or `none`. */
+/** A `deep lease`'s jobs: `jobserver` (the default), `n`, `none` or a fixed count. */
 function jobsOf(jobs: unknown): Jobs {
   if (jobs === undefined) return 'jobserver';
   if (jobs === 'jobserver' || jobs === 'n' || jobs === 'none') return jobs;
-  throw Error(`${String(jobs)} names no jobs: name jobserver, n or none`);
+  if (Number.isInteger(jobs) && (jobs as number) >= 1 && (jobs as number) <= 9999) return jobs as number;
+  throw Error(`${String(jobs)} names no jobs: name jobserver, n, none or a count`);
 }
 /** Every lease of a kind a `deep lease` takes is on one key, so its modes decide who runs beside whom. */
 const resourceOf = (kind: string, slow: string): Resource => (kind === 'cpu.slot' ? { host: 'local', kind, key: slow } : { host: 'local', kind, key: kind });
@@ -155,11 +227,17 @@ interface Waiter {
   peer: { pid: number; start: string }; queued: number; seen: number; blockedOn?: string;
   /** How long it waited for each reason, in ms, and when it last read one. */
   waits: Record<string, number>; last?: { reason: string; at: number };
+  /** A process that holds the GPU lease itself while it draws (`lease.gpu`, #3219). */
+  draws?: boolean;
 }
 interface Held {
   ticket: string; secret: string; holder: string; session?: string; command: string; cwd: string; run: string; leases: Lease[]; granted: number; peer: { pid: number; start: string }; group?: number; leader?: number; started?: number; load?: number; waits: Record<string, number>;
+  /** A drawing process's lease (#3219): when it asked, which its reply and an export's receipt name. */
+  draws?: boolean; asked?: number;
   /** The pool's tokens the hub took on its behalf, given back once its group is proven gone; and the pool it joined. */
   tokens: number; pool?: JobPool; workers?: number;
+  /** A command's own fixed job count, which the pool never holds back (#1411). */
+  fixed?: number;
 }
 
 export interface HeavyOptions {
@@ -176,13 +254,22 @@ export interface HeavyOptions {
   /** The host's job pool (#1016), which every build `deep lease` runs joins. */
   pool?: JobPool;
   /**
-   * The planted wrong programs: `ignores-memory-pressure`, `exclusive-beside-shared`, `releases-on-parent-exit`, and
-   * #1016's `jobserver-per-build`, `refills-while-running` and `share-ignores-running-build`.
+   * The planted wrong programs: `ignores-memory-pressure`, `exclusive-beside-shared`, `releases-on-parent-exit`;
+   * #1016's `jobserver-per-build`, `refills-while-running` and `share-ignores-running-build`; #1411's
+   * `restores-only-when-idle`, `no-hysteresis`, `holds-back-every-token` and `pool-holds-fixed-count`; #3218's
+   * `serves-whichever-fits`; and #3219's `shared-passes-waiting-exclusive` and `serves-most-asks`.
    */
   plant?: string;
   pressure?: () => Pressure;
   /** Free bytes on the volume holding a folder; statfs unless a test says. */
   free?: (path: string) => number;
+  /** A command joined the queue: the beat that ticks it starts again if it had stopped (#2648). */
+  wake?: () => void;
+  /**
+   * The units of a pool kind a queued command takes, read by the hub (its heavy.command@1 entry or a reading, #3220),
+   * never from the call's params; undefined, or no `unitsOf`, is 1. Asked as it joins, for each kind it names (#3218).
+   */
+  unitsOf?: (need: { kind: string; command: string; cwd: string }) => number | undefined;
 }
 
 const alive = (pid: number): boolean => { try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === 'EPERM'; } };
@@ -212,13 +299,23 @@ export class HeavyQueue {
       if (typeof params.ticket === 'string') throw Error('this deep lease lost its place in the queue; run it again');
       if (!peer) throw Error('deep lease names no process, so whose session it runs for is unknown; run the deep command itself');
       const id = await session();
-      const needs = [{ kind: 'cpu.slot', mode: 'exclusive' as Mode }, ...needsOf(params.kinds ?? [])];
+      const [command, cwd] = [String(params.command ?? '').slice(0, 2000), String(params.cwd ?? '')];
+      const needs: Need[] = [{ kind: 'cpu.slot', mode: 'exclusive' }, ...needsOf(params.kinds ?? []).map((n) => {
+        const units = this.o.unitsOf?.({ kind: n.kind, command, cwd });
+        return units === undefined ? n : { ...n, units };
+      })];
       w = {
         ticket: `lease-wait:${randomBytes(6).toString('hex')}`, secret: randomBytes(16).toString('hex'), holder: id ? `session:${letters(id)}` : 'cli', ...(id ? { session: id } : {}),
-        command: String(params.command ?? '').slice(0, 2000), cwd: String(params.cwd ?? ''), needs, jobs: jobsOf(params.jobs), peer, queued: now, seen: now, waits: {},
+        command, cwd, needs, jobs: jobsOf(params.jobs), peer, queued: now, seen: now, waits: {},
       };
       this.waiting.push(w);
+      this.o.wake?.();
     }
+    return this.poll(w, now);
+  }
+
+  /** One try of a waiter's place: granted, or still waiting with the line to show. */
+  private async poll(w: Waiter, now: number): Promise<Obj> {
     w.seen = now;
     const reason = await this.attempt(w);
     if (reason === undefined) return this.grant(this.held.get(w.ticket)!);
@@ -227,11 +324,66 @@ export class HeavyQueue {
     return { status: 'waiting', ticket: w.ticket, secret: w.secret, line: reason.line };
   }
 
+  /**
+   * `lease.gpu` (#3219): a place in the same queue for a process that holds the `gpu` lease itself while it draws,
+   * deep-show's kit and render-back shared, its export and timing reading exclusive. It takes no cpu.slot and no job
+   * token, and waits for no memory or disk: it draws, it doesn't build. A process under a `deep lease` whose command
+   * holds the GPU draws under that lease, in the mode the command asked for, since it can never take one beside its own
+   * command's; that is read here from the process table and the queue, never from its environment. One under a command
+   * that holds no GPU lease asks like any other.
+   */
+  async gpu(params: Obj, peer: { pid: number; start: string } | undefined, session: () => Promise<string | undefined>, ancestors: () => Promise<number[]>): Promise<Obj> {
+    const now = this.o.now();
+    this.expire();
+    if (typeof params.ticket === 'string') {
+      const granted = this.held.get(params.ticket);
+      if (granted && granted.secret === params.secret) return this.grant(granted);
+      const w = this.waiting.find((x) => x.ticket === params.ticket && x.secret === params.secret);
+      if (!w) throw Error('this GPU lease lost its place in the queue; ask again');
+      return this.poll(w, now);
+    }
+    if (params.mode !== 'shared' && params.mode !== 'exclusive') throw Error(`${String(params.mode)} is no mode of the gpu lease: name shared or exclusive`);
+    if (!peer) throw Error('lease.gpu names no process, so whose session draws is unknown');
+    const mode: Mode = params.mode;
+    const above = await this.above(ancestors);
+    const gpu = above?.leases.find((l) => l.resource.kind === 'gpu');
+    if (above && gpu) {
+      return { status: 'granted', lease: { id: gpu.id, resource: gpu.resource, mode: gpu.mode, holder: gpu.holder, granted: ulidTime(gpu.id.slice('lease:'.length)) }, above: { run: above.run, command: above.command } };
+    }
+    const id = await session();
+    const w: Waiter = {
+      ticket: `lease-wait:${randomBytes(6).toString('hex')}`, secret: randomBytes(16).toString('hex'), holder: id ? `session:${letters(id)}` : 'cli', ...(id ? { session: id } : {}),
+      command: String(params.what ?? 'deep-show').slice(0, 2000), cwd: String(params.cwd ?? ''), needs: [{ kind: 'gpu', mode }], jobs: 'none', peer, queued: now, seen: now, waits: {},
+      draws: true,
+    };
+    this.waiting.push(w);
+    this.o.wake?.();
+    return this.poll(w, now);
+  }
+  /** The held `deep lease` command nearest above the caller in the process table, or none; the table is read only when one runs. */
+  private async above(ancestors: () => Promise<number[]>): Promise<Held | undefined> {
+    const commands = [...this.held.values()].filter((h) => !h.draws);
+    if (!commands.length) return undefined;
+    for (const pid of await ancestors()) {
+      const h = commands.find((c) => c.leader === pid || c.peer.pid === pid);
+      if (h) return h;
+    }
+    return undefined;
+  }
+
   /** A granted command's reply: its run and leases, and how it takes jobs from the pool. */
   private grant(h: Held): Obj {
+    const pool = this.o.pool;
+    // A drawing process's lease: its ID and its times as the table holds them, the grant being its lease.acquired's.
+    if (h.draws) {
+      const l = h.leases[0]!;
+      return { status: 'granted', ticket: h.ticket, secret: h.secret, lease: { id: l.id, resource: l.resource, mode: l.mode, holder: l.holder, asked: h.asked, granted: ulidTime(l.id.slice('lease:'.length)) } };
+    }
     return {
       status: 'granted', ticket: h.ticket, secret: h.secret, run: h.run, leases: h.leases.map((l) => l.id),
       ...(h.pool ? { makeflags: h.pool.makeflags } : {}), ...(h.workers !== undefined ? { workers: h.workers } : {}),
+      // A command with a fixed job count runs as it is while the pool holds back for memory pressure, and says so.
+      ...(h.fixed !== undefined && pool?.want ? { line: `deep lease: the job pool holds back ${pool.want} of its ${pool.tokens} tokens for ${this.followed} memory pressure; \`${h.command}\` runs its own ${h.fixed} jobs, outside the pool, so it runs as it is` } : {}),
     };
   }
 
@@ -243,22 +395,32 @@ export class HeavyQueue {
   /** Tries the waiter's leases, all or none; undefined once they are its, else what it waits for. */
   private async attempt(w: Waiter): Promise<{ kind: string; line: string } | undefined> {
     const before = this.waiting.slice(0, this.waiting.indexOf(w));
-    const pressure = (this.o.pressure ?? memoryPressure)();
-    if (pressure === 'critical' && this.o.plant !== 'ignores-memory-pressure') {
+    const pressure = await this.level();
+    // The pool holds back for the level before a build joins it, so a build granted at warn finds half the pool.
+    this.follow(pressure);
+    if (pressure === 'critical' && this.o.plant !== 'ignores-memory-pressure' && !w.draws) {
       w.blockedOn = 'memory';
       return { kind: 'memory', line: `deep lease: waiting for memory: the system reports critical memory pressure, so \`${w.command}\` starts once it eases` };
     }
     // One disk floor per machine (#1017): no leased build starts while the volume it runs on is under it.
     let free = Infinity;
-    try { free = (this.o.free ?? freeBytes)(w.cwd || homedir()); } catch { /* no reading: nothing to wait for */ }
+    try { if (!w.draws) free = (this.o.free ?? freeBytes)(w.cwd || homedir()); } catch { /* no reading: nothing to wait for */ }
     if (free < DISK_FLOOR) {
       w.blockedOn = 'disk';
       return { kind: 'disk', line: `deep lease: waiting for disk: the volume has ${(free / 1e9).toFixed(1)} GB free, under the ${(DISK_FLOOR / 1e9).toFixed(1)} GB disk floor, so \`${w.command}\` starts once there is room` };
     }
-    // A freed slot or kind goes to the first in line that waits for it.
-    const ahead = before.find((x) => x.blockedOn === 'memory' || x.blockedOn === 'disk' || w.needs.some((n) => n.kind === x.blockedOn) || (x.blockedOn === 'jobs' && w.jobs !== 'none'));
-    if (ahead?.blockedOn) {
-      const kind = ahead.blockedOn;
+    // A freed slot or kind goes to the first in line that waits for it, however little a later one needs of it (#3218).
+    // The GPU goes in the order its waiters asked, whatever each waits for (#3219): a later shared request never passes an
+    // exclusive one, nor the other way. The planted wrong programs: #3218's AC8 serves whichever fits; #3219's AC3 keeps no
+    // order, so a freed GPU goes to whichever waiter asks first once it is free, and its AC2 lets a later shared request
+    // pass a waiting exclusive one.
+    const gpu = (x: Waiter) => x.needs.some((n) => n.kind === 'gpu');
+    const fits = this.o.plant === 'serves-whichever-fits';
+    const passes = fits || this.o.plant === 'serves-most-asks' || (this.o.plant === 'shared-passes-waiting-exclusive' && w.needs.some((n) => n.kind === 'gpu' && n.mode === 'shared'));
+    const inOrder = gpu(w) && !passes ? before.find(gpu) : undefined;
+    const ahead = inOrder ?? (w.draws || fits ? undefined : before.find((x) => x.blockedOn === 'memory' || x.blockedOn === 'disk' || w.needs.some((n) => n.kind === x.blockedOn) || (x.blockedOn === 'jobs' && this.takes(w))));
+    if (ahead && (inOrder || ahead.blockedOn)) {
+      const kind = inOrder ? 'gpu' : ahead.blockedOn!;
       w.blockedOn = kind;
       const holders = kind === 'memory' || kind === 'disk' ? [] : kind === 'jobs' ? [...this.held.values()].filter((h) => h.tokens > 0).map((h) => h.holder) : (await this.o.table.leases()).filter((v) => v.lease.resource.kind === kind).map((v) => v.lease.holder);
       const by = [...new Set(holders.map((h) => this.who(h)))].join(', ');
@@ -266,20 +428,28 @@ export class HeavyQueue {
     }
     const run = `${RUN_PREFIX}${letters(w.ticket.slice('lease-wait:'.length)).toUpperCase()}${Date.now().toString(36).toUpperCase()}`;
     const agent = w.session ? this.o.agentOf(w.session) : undefined;
-    const caller: Caller = { holder: w.holder, run, ...(agent ? { agent } : {}) };
-    const got: Lease[] = [];
-    for (const n of w.needs) {
+    const caller: Caller = { holder: w.holder, run, asked: w.queued, ...(agent ? { agent } : {}) };
+    // Every kind in one ask, granted whole or refused whole, so a refusal appends nothing (#3218).
+    const asks = w.needs.map((n) => ({
+      resource: resourceOf(n.kind, this.o.slow),
       // The planted wrong program for AC6 grants an exclusive GPU lease beside shared ones.
-      const mode: Mode = this.o.plant === 'exclusive-beside-shared' && n.kind === 'gpu' ? 'shared' : n.mode;
-      const r = await this.o.table.lease(caller, resourceOf(n.kind, this.o.slow), mode).catch((e: Error) => ({ status: 'error' as const, message: e.message }));
-      if (r.status === 'granted') { got.push(r.lease); continue; }
-      for (const l of got) await this.o.table.release(l.id, []).catch(() => undefined);
-      if (r.status === 'error') throw Error(`deep lease can't lease ${n.kind}: ${r.message}`);
-      w.blockedOn = n.kind;
-      const holders = 'holders' in r ? r.holders : [];
-      const by = [...new Set(holders.map((l) => this.who(l.holder)))].join(', ');
-      return { kind: n.kind === 'cpu.slot' ? 'slot' : n.kind, line: await this.line(w, n.kind, by ? `held by ${by}` : r.message) };
+      mode: this.o.plant === 'exclusive-beside-shared' && n.kind === 'gpu' ? 'shared' as Mode : n.mode,
+      ...(n.units !== undefined ? { units: n.units } : {}),
+    }));
+    const r = await this.o.table.ask(caller, asks).catch((e: Error) => ({ status: 'error' as const, message: e.message }));
+    // An ask past its pool's size never fits, so it never waits: it loses its place and says why.
+    if (r.status === 'error' || (r.status === 'BLOCKED' && r.reason === 'size')) {
+      const at = this.waiting.indexOf(w);
+      if (at >= 0) this.waiting.splice(at, 1);
+      throw Error(`deep lease can't lease ${w.needs.map((n) => n.kind).join(', ')}: ${r.message}`);
     }
+    if (r.status !== 'granted') {
+      const kind = r.resource.kind;
+      w.blockedOn = kind;
+      const by = [...new Set(r.holders.map((l) => this.who(l.holder)))].join(', ');
+      return { kind: kind === 'cpu.slot' ? 'slot' : kind, line: await this.line(w, kind, by ? `held by ${by}` : r.message) };
+    }
+    const got = r.leases;
     // The pool's tokens: one backing a build's first job, or a runner's share of those free as its worker count.
     const jobs = this.jobs(w, run);
     if (!jobs) {
@@ -293,15 +463,53 @@ export class HeavyQueue {
     const now = this.o.now();
     const waits = { ...w.waits };
     if (w.last) waits[w.last.reason] = (waits[w.last.reason] ?? 0) + (now - w.last.at);
-    this.held.set(w.ticket, { ticket: w.ticket, secret: w.secret, holder: w.holder, ...(w.session ? { session: w.session } : {}), command: w.command, cwd: w.cwd, run, leases: got, granted: now, peer: w.peer, waits, ...jobs });
+    this.held.set(w.ticket, { ticket: w.ticket, secret: w.secret, holder: w.holder, ...(w.session ? { session: w.session } : {}), command: w.command, cwd: w.cwd, run, leases: got, granted: now, peer: w.peer, waits, ...jobs, ...(w.draws ? { draws: true, asked: w.queued } : {}) });
     return undefined;
   }
-  /** The tokens a granted command takes from the pool, or undefined while none is free for it. */
-  private jobs(w: Waiter, run: string): Pick<Held, 'tokens' | 'pool' | 'workers'> | undefined {
+  private level(): Promise<Pressure> {
+    return this.o.pressure ? Promise.resolve(this.o.pressure()) : memoryPressure();
+  }
+  /** When the pool last read each level above normal, and the level it follows (#1411). */
+  private readonly lastRead: Partial<Record<Pressure, number>> = {};
+  private followed: Pressure = 'normal';
+  /**
+   * The pool follows the highest level read within the window (#1411): it holds back more as soon as the level rises,
+   * taking tokens as they come back, never one a job in flight holds, and gives them back only once a lower level has
+   * held for the whole window. Each change is a line on the hub's stderr, naming the commands outside the pool.
+   */
+  private follow(level: Pressure): void {
     const pool = this.o.pool;
-    if (!pool || w.jobs === 'none') return { tokens: 0 };
-    if (w.jobs === 'jobserver') {
-      // The planted wrong program for AC2 gives each build a jobserver of its own, as full as the host's.
+    if (!pool) return;
+    const now = this.o.now();
+    if (level !== 'normal') this.lastRead[level] = now;
+    // The planted wrong programs: for AC2 a pool that follows each reading at once, or gives back only once no leased
+    // command runs; for AC3 one that holds back the last token too.
+    this.followed = this.o.plant === 'no-hysteresis' ? level : (['critical', 'warn'] as const).find((l) => now - (this.lastRead[l] ?? -Infinity) < PRESSURE_WINDOW_MS) ?? 'normal';
+    let want = this.followed === 'critical' && this.o.plant === 'holds-back-every-token' ? pool.tokens : heldBack(this.followed, pool.tokens);
+    if (this.o.plant === 'restores-only-when-idle' && this.held.size) want = Math.max(want, pool.want);
+    if (want !== pool.want) {
+      const fixed = [...this.held.values()].filter((h) => h.fixed !== undefined).map((h) => `\`${h.command}\` (${h.fixed} jobs)`);
+      const how = want > pool.want ? 'each as a job gives it back' : `giving ${pool.want - want} back`;
+      const outside = fixed.length ? `; outside the pool, with a fixed job count of its own, ${fixed.join(', ')} ${fixed.length > 1 ? 'run as they are' : 'runs as it is'}` : '';
+      process.stderr.write(want
+        ? `deep hub: the job pool holds back ${want} of its ${pool.tokens} tokens for ${this.followed} memory pressure, ${how}${outside}\n`
+        : `deep hub: memory pressure is normal again, so the job pool gives back the ${pool.want} tokens it held back\n`);
+    }
+    pool.holdBack(want);
+  }
+  /** Whether a waiter takes tokens from the pool: a build, or a runner whose worker count is its share. */
+  private takes(w: Waiter): boolean {
+    return w.jobs === 'jobserver' || w.jobs === 'n' || (typeof w.jobs === 'number' && this.o.plant === 'pool-holds-fixed-count');
+  }
+  /** The tokens a granted command takes from the pool, or undefined while none is free for it. */
+  private jobs(w: Waiter, run: string): Pick<Held, 'tokens' | 'pool' | 'workers' | 'fixed'> | undefined {
+    const pool = this.o.pool;
+    // A fixed job count is the command's own: it takes no token, so the pool never holds it back. The planted wrong
+    // program for #1411's AC4 joins it to the pool as a build.
+    if (typeof w.jobs === 'number' && !this.takes(w)) return { tokens: 0, fixed: w.jobs };
+    if (!pool || !this.takes(w)) return { tokens: 0 };
+    if (w.jobs !== 'n') {
+      // The planted wrong program for #1016's AC2 gives each build a jobserver of its own, as full as the host's.
       if (this.o.plant === 'jobserver-per-build') {
         const own = new JobPool(`${pool.path}-${letters(run)}`, pool.tokens);
         own.give(pool.tokens);
@@ -311,7 +519,7 @@ export class HeavyQueue {
     }
     const free = pool.take(pool.tokens);
     if (!free) return undefined;
-    // The planted wrong program for AC4 sets the worker count to the whole pool, whatever the builds beside it hold.
+    // The planted wrong program for #1016's AC4 sets the worker count to the whole pool, whatever the builds beside it hold.
     return { tokens: free, workers: this.o.plant === 'share-ignores-running-build' ? pool.tokens : free };
   }
   private who(holder: string): string {
@@ -320,8 +528,9 @@ export class HeavyQueue {
     return `${holder}${wt ? ` (${wt.split('/').filter(Boolean).at(-1)})` : ''}`;
   }
   private async line(w: Waiter, kind: string, who: string): Promise<string> {
-    const what = kind === 'cpu.slot' ? 'a cpu.slot (slow work holds all but the slot kept for a held stop\'s quick checks)' : kind === 'jobs' ? `a job token (the pool holds ${this.o.pool?.tokens ?? 0})` : `the ${kind} lease`;
-    return `deep lease: waiting ${span(this.o.now() - w.queued)} for ${what}: ${who}`;
+    const back = this.o.pool?.want ? `, ${this.o.pool.want} of them held back for ${this.followed} memory pressure` : '';
+    const what = kind === 'cpu.slot' ? 'a cpu.slot (slow work holds all but the slot kept for a held stop\'s quick checks)' : kind === 'jobs' ? `a job token (the pool holds ${this.o.pool?.tokens ?? 0}${back})` : `the ${kind} lease`;
+    return `${w.draws ? 'deep-show' : 'deep lease'}: waiting ${span(this.o.now() - w.queued)} for ${what}: ${who}`;
   }
 
   /** `lease.started`: the command's process group, which holds its leases until every process in it has ended. */
@@ -337,16 +546,27 @@ export class HeavyQueue {
     await this.o.append('process.tracked', 1, { run: h.run, pid, start, pgid: h.group, cwd: typeof params.cwd === 'string' && params.cwd ? params.cwd : h.cwd || '/', token: null }, h.run, h.session);
     return { tracked: true };
   }
-  /** Gives back the leases of a command that never started (#1017: an entry build the supervisor couldn't start). */
-  async release(params: Obj): Promise<void> {
-    await this.end(this.mine(params), true);
+  /**
+   * Gives back the leases of a command that never started (#1017: an entry build the supervisor couldn't start), and
+   * `lease.release`, a drawing process's (#3219): its lease once it is done drawing, with the time the table released it,
+   * or its place in the queue when it stops waiting.
+   */
+  async release(params: Obj): Promise<Obj> {
+    const at = this.waiting.findIndex((w) => w.ticket === params.ticket && w.secret === params.secret);
+    if (at >= 0) {
+      this.waiting.splice(at, 1);
+      return { left: true };
+    }
+    const released = await this.end(this.mine(params), true);
+    return released === undefined ? {} : { released };
   }
   /** `lease.exited`: the command's first process exited; its group may run on, and holds its leases while it does. */
   async exited(params: Obj): Promise<Obj> {
     const h = this.mine(params);
     // The planted wrong program for AC4 releases on the parent's exit, whatever its group still runs.
     if (this.o.plant === 'releases-on-parent-exit') await this.end(h, true);
-    // Told again once the whole group has ended: proven gone, it gives its leases and tokens back before deep lease exits.
+    // A group that ended with its first process, proven gone, gives its leases and tokens back now; one that runs on keeps
+    // them until the tick finds it gone (#1558).
     else if (h.group !== undefined && !groupAlive(h.group)) await this.end(h);
     return { ok: true };
   }
@@ -374,34 +594,50 @@ export class HeavyQueue {
       this.held.set(h.ticket, h);
       if (!proc) await this.end(h);
     }
+    // With no leased command running, nothing holds a token: the pipe starts at its full count, whatever the last hub left in it.
+    if (!this.commands()) this.o.pool?.refill();
   }
 
-  /** Each tick: a waiter gone loses its place; a command whose group has ended, or that never started, gives its leases back. */
-  async tick(): Promise<void> {
+  /**
+   * Each tick: a waiter gone loses its place; a command whose group has ended, or that never started, gives its leases
+   * back. True while it has more to do: a command waits or runs, or the pool holds tokens back (#2648).
+   */
+  async tick(): Promise<boolean> {
     this.expire();
     for (const h of [...this.held.values()]) {
       const over = h.group !== undefined ? !groupAlive(h.group) : !alive(h.peer.pid);
       if (over) await this.end(h);
     }
-    // With no leased command running, nothing holds a token, so the pipe goes back to its full count; while one runs,
-    // no token is added beyond those given back on proof. The planted wrong program for AC3 tops it up all the same.
-    if (this.o.pool && (!this.held.size || this.o.plant === 'refills-while-running')) this.o.pool.refill();
+    // While builds run, or while it holds tokens back, the pool follows the machine's memory pressure (#1411).
+    if (this.o.pool && (this.held.size || this.o.pool.want)) this.follow(await this.level());
+    // While a leased command runs, no token is added beyond those given back on proof; the pipe goes back to its full
+    // count when the last one ends (`end`), not on every tick with none running (#2648). The planted wrong program for
+    // #1016's AC3 tops it up all the same.
+    if (this.o.pool && this.o.plant === 'refills-while-running') this.o.pool.refill();
+    return this.waiting.length > 0 || this.held.size > 0 || Boolean(this.o.pool?.want);
   }
-  private async end(h: Held, early = false): Promise<void> {
-    if (!this.held.delete(h.ticket)) return;
+  /** Ends a held command or drawing process: its leases released, and the last release's time, as the table holds it. */
+  private async end(h: Held, early = false): Promise<number | undefined> {
+    if (!this.held.delete(h.ticket)) return undefined;
     const proof: string[] = [];
     if (h.leader !== undefined) proof.push(await this.o.append('process.ended', 1, { run: h.run, pid: h.leader }, h.run, h.session));
-    for (const l of h.leases) await this.o.table.release(l.id, early ? [] : proof).catch(() => undefined);
+    let released: number | undefined;
+    for (const l of h.leases) released = (await this.o.table.release(l.id, early ? [] : proof).catch(() => undefined)) ?? released;
     // The tokens the hub took for it go back on the same proof; a planted pool of its own goes with it.
     if (h.pool && h.pool !== this.o.pool) h.pool.close(true);
     else this.o.pool?.give(h.tokens);
-    if (!this.held.size) this.o.pool?.refill();
+    if (!this.commands()) this.o.pool?.refill();
     // The command's reading: how long it waited, by reason, how long it ran, and the load when it started.
     if (h.session && h.started !== undefined) {
       const waited = Object.entries(h.waits).filter(([, ms]) => ms > 0).map(([why, ms]) => `${span(ms)} for ${why}`).join(', ');
       const reading = `deep lease ran \`${h.command}\` for ${span(this.o.now() - h.started)}${waited ? ` after waiting ${waited}` : ' with no wait'}; load ${(h.load ?? 0).toFixed(1)} on ${availableParallelism()} cores when it started`;
       await this.o.append('session.reading', 1, { reading }, undefined, h.session).catch(() => undefined);
     }
+    return released;
+  }
+  /** The leased commands held now: a drawing process holds no job token, so it never keeps the pipe from its count. */
+  private commands(): number {
+    return [...this.held.values()].filter((h) => !h.draws).length;
   }
 }
 
@@ -414,12 +650,13 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 
 /** Runs the command as it is when no hub can lease it, saying so. */
 function unleased(argv: string[], why: string): Promise<number> {
-  process.stderr.write(`deep lease: ${why}, so \`${argv.join(' ')}\` runs unleased\n`);
-  return runGroup(argv, {}, () => undefined, () => undefined);
+  process.stderr.write(`${why} \`${argv.join(' ')}\` runs with no lease.\n`);
+  return runGroup(argv, {}, () => undefined);
 }
 /**
  * How the command takes jobs, from the heavy.command@1 entry deep-hook's matcher finds for it here (#1016): `jobserver`
- * when none does, so a build typed by hand joins the pool; a fixed count is the runner's own, as `none` is.
+ * when none does, so a build typed by hand joins the pool; a fixed count is the runner's own, outside the pool as `none`
+ * is, and the hub hears it, to name the command while the pool holds back (#1411).
  */
 function jobsFor(argv: string[]): { jobs: Jobs; flag?: string } {
   const line = argv.map((w) => (/^[\w./=:,+@%^-]+$/.test(w) ? w : shellQuote(w))).join(' ');
@@ -431,11 +668,16 @@ function jobsFor(argv: string[]): { jobs: Jobs; flag?: string } {
   if (!entry) return { jobs: 'jobserver' };
   if (entry.jobs === 'jobserver') return { jobs: 'jobserver' };
   if (entry.jobs === 'n' && entry.jobs_flag) return { jobs: 'n', flag: entry.jobs_flag };
+  if (/^[1-9][0-9]{0,3}$/.test(entry.jobs ?? '')) return { jobs: Number(entry.jobs) };
   return { jobs: 'none' };
 }
 
-/** The command in a process group of its own at nice 10; resolves with its status once the whole group has ended. */
-function runGroup(argv: string[], env: NodeJS.ProcessEnv, started: (pid: number) => void, exited: () => void, ended: () => Promise<unknown> = async () => undefined): Promise<number> {
+/**
+ * The command in a process group of its own at nice 10; resolves with its first process's status once that process has
+ * ended and `exited` has told the hub, as a shell would. A child it leaves in the group runs on and keeps the command's
+ * leases, which the hub's tick ends once the whole group has gone, but never keeps the caller waiting (#1558).
+ */
+function runGroup(argv: string[], env: NodeJS.ProcessEnv, started: (pid: number) => void, exited: () => Promise<unknown> = async () => undefined): Promise<number> {
   return new Promise((resolve) => {
     // A `deep lease` inside a leased command runs under its lease: it takes no slot of its own, so nested leases never wait on each other.
     const child = spawn('/usr/bin/nice', ['-n', '10', ...argv], { stdio: 'inherit', detached: true, env: { ...process.env, ...env, DEEP_LEASED: '1' } });
@@ -445,13 +687,8 @@ function runGroup(argv: string[], env: NodeJS.ProcessEnv, started: (pid: number)
     if (child.pid) started(child.pid);
     child.on('error', (error) => { process.stderr.write(`deep lease: ${argv[0]}: ${error.message}\n`); resolve(127); });
     child.on('exit', async (code, signal) => {
-      // The leases hold while any process of the group runs; the command's status is its first process's. The hub hears
-      // of the first process's exit only while its group runs on: a group that ended with it is told once, below (#2328).
-      if (groupAlive(child.pid!)) {
-        exited();
-        while (groupAlive(child.pid!)) await sleep(100);
-      }
-      await ended();
+      // The hub hears of the first process's exit once (#2328); the command's status is that process's.
+      await exited();
       resolve(code ?? 128 + (signal ? ({ SIGHUP: 1, SIGINT: 2, SIGKILL: 9, SIGTERM: 15 } as Record<string, number>)[signal] ?? 1 : 1));
     });
   });
@@ -465,17 +702,17 @@ export async function leaseCommand(args: readonly string[]): Promise<number> {
     process.stderr.write(`${USAGE}\n`);
     return 2;
   }
-  if (process.env.DEEP_LEASED) return runGroup(argv, {}, () => undefined, () => undefined);
-  let token: string;
-  try { token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim(); } catch { return unleased(argv, 'DeepBuild isn\'t set up here (no hub token)'); }
+  if (process.env.DEEP_LEASED) return runGroup(argv, {}, () => undefined);
   const socket = hubAddress().path;
+  let token: string;
+  try { token = controlToken(socket); } catch (error) { return unleased(argv, await failure(error)); }
   // Its own start is read while deep-hook heavy finds the command's entry: neither needs the other's result (#2328).
   const start = startOf(process.pid);
   const { jobs, flag } = jobsFor(argv);
   const peer = { pid: process.pid, start: (await start) ?? '' };
   const ask = async (method: string, params: Obj): Promise<Reply> => call(socket, token, method, params, peer);
   let reply: Reply;
-  try { reply = await ask('lease.wait', { kinds, command: argv.join(' '), cwd: process.cwd(), jobs }); } catch (error) { return unleased(argv, `the hub can't be reached (${error instanceof Error ? error.message : String(error)})`); }
+  try { reply = await ask('lease.wait', { kinds, command: argv.join(' '), cwd: process.cwd(), jobs }); } catch (error) { return unleased(argv, await failure(error, socket)); }
   let shown = -Infinity;
   for (;;) {
     if ('error' in reply) {
@@ -495,11 +732,12 @@ export async function leaseCommand(args: readonly string[]): Promise<number> {
     }
   }
   const granted = (reply as { result: Obj }).result;
+  if (typeof granted.line === 'string') process.stderr.write(`${granted.line}\n`);
   const own = { ticket: granted.ticket, secret: granted.secret };
   const tell = (method: string, extra: Obj = {}) => ask(method, { ...own, ...extra }).catch(() => undefined);
   let told: Promise<unknown> = Promise.resolve();
   // A build joins the host's job pool; a runner starts with its share of the pool's free tokens as its worker count.
   const env: NodeJS.ProcessEnv = typeof granted.makeflags === 'string' ? { MAKEFLAGS: granted.makeflags, CARGO_MAKEFLAGS: granted.makeflags } : {};
   const run = flag && typeof granted.workers === 'number' ? [...argv, `${flag}=${granted.workers}`] : argv;
-  return runGroup(run, env, (pid) => { told = tell('lease.started', { pid, pgid: pid, cwd: process.cwd() }); }, () => { void told.then(() => tell('lease.exited')); }, () => told.then(() => tell('lease.exited')));
+  return runGroup(run, env, (pid) => { told = tell('lease.started', { pid, pgid: pid, cwd: process.cwd() }); }, () => told.then(() => tell('lease.exited')));
 }

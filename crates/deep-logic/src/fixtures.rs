@@ -17,9 +17,11 @@ fn bad(what: &str) -> Value {
     json!({"ok": false, "code": "bad_input", "what": what})
 }
 
-/// The bytes a piece carries as asset `sha`.
+/// The bytes a piece carries as asset `sha`, or the build's first-party packs do (#416).
 fn stored(piece_v: &Value, sha: &str) -> Option<Vec<u8>> {
-    B64.decode(piece_v.get("assets")?.get(sha)?.as_str()?).ok()
+    let held = piece_v.get("assets").and_then(|a| a.get(sha));
+    B64.decode(held.or(crate::first_party::assets().get(sha))?.as_str()?)
+        .ok()
 }
 
 /// Two array elements equal by value: numbers by their f64, so an expected `1` matches an f64
@@ -91,11 +93,18 @@ impl Logic {
     pub(crate) fn fixtures(&mut self, piece_v: &Value, piece: &mut Piece) -> Result<(), Value> {
         for item in &mut piece.items {
             for l in 0..item.libraries.len() {
-                let records = self.verify(piece_v, &item.libraries[l]).map_err(|refusals| {
-                    json!({"ok": false, "code": "link_refused", "item": item.id, "refusals": refusals})
-                })?;
-                item.fixtures
-                    .insert(item.libraries[l].hash.clone(), records);
+                let lib = &item.libraries[l];
+                // An interface's fixture runs on the library under test (#416).
+                if self.under_test.as_deref() == Some(lib.hash.as_str()) {
+                    continue;
+                }
+                let refused = |refusals| json!({"ok": false, "code": "link_refused", "item": item.id, "refusals": refusals});
+                // Its interfaces' fixtures first: they run on it as the library under test, so its
+                // own fixtures' runs find them done.
+                let interfaces = self.verify_interfaces(piece_v, lib).map_err(refused)?;
+                let records = self.verify(piece_v, lib).map_err(refused)?;
+                item.fixtures.insert(lib.hash.clone(), records);
+                item.interfaces.insert(lib.hash.clone(), interfaces);
             }
         }
         Ok(())
@@ -161,7 +170,16 @@ impl Logic {
     /// Runs `lib`'s fixtures, or refuses: with `true` when a fixture's own run failed, `false`
     /// when the piece didn't let it run.
     fn run_fixtures(&mut self, piece_v: &Value, lib: &Lib) -> Result<Value, (Vec<Value>, bool)> {
-        let assets = piece_v.get("assets").cloned().unwrap_or(json!({}));
+        // The piece's assets, and the first-party packs' it doesn't carry (#416, #981).
+        let mut assets = crate::first_party::assets().clone();
+        assets.extend(
+            piece_v
+                .get("assets")
+                .and_then(Value::as_object)
+                .cloned()
+                .unwrap_or_default(),
+        );
+        let assets = Value::Object(assets);
         let mut records = Vec::new();
         for id in &lib.fixtures {
             let missing = || {
@@ -176,8 +194,18 @@ impl Logic {
                 .filter(|b| deep_canvas_sandbox::rewrite::hash(b) == *id)
                 .and_then(|b| serde_json::from_slice(&b).ok())
                 .ok_or_else(|| (missing(), false))?;
+            // The fixture's other items beside its own, such as a lane graph's floor paths (#981).
+            let mut items = fixture
+                .get("items")
+                .and_then(Value::as_object)
+                .cloned()
+                .unwrap_or_default();
+            items.insert(
+                "fixture".into(),
+                fixture.get("item").cloned().unwrap_or(Value::Null),
+            );
             let piece = json!({"seed": 0, "packs": piece_v.get("packs").cloned().unwrap_or(json!([])),
-                "items": {"fixture": fixture.get("item").cloned().unwrap_or(Value::Null)}, "assets": assets});
+                "items": items, "assets": assets});
             let started = std::time::Instant::now();
             let line = json!({"call": "bake", "piece": piece, "track": fixture.get("track").cloned().unwrap_or(json!([])),
                 "steps": fixture.get("steps").cloned().unwrap_or(json!(1))});
@@ -284,6 +312,20 @@ impl Logic {
         if !subset.is_empty() {
             return Err(refused(subset));
         }
+        // #416: each interface keeps its digest, ships fixtures and a planted library, and each
+        // planted library fails one of its fixtures, before any library claims it.
+        let mut interfaces = Vec::new();
+        for iface in pack.interfaces.values() {
+            let judged = self
+                .judge_interface(&piece_v, iface, pack.agent)
+                .map_err(refused)?;
+            let mut entry = json!({"name": iface.name, "label": iface.label, "digest": iface.digest, "judged": judged});
+            // #1255: its kind kit, each planted twin raising the rule it names.
+            if !iface.twins.is_empty() {
+                entry["kit"] = self.kit(&piece_v, iface, pack.agent).map_err(refused)?;
+            }
+            interfaces.push(entry);
+        }
         let mut libraries = Vec::new();
         for (label, e) in &pack.libs {
             let lib = links::resolve(
@@ -296,12 +338,15 @@ impl Logic {
             .into_iter()
             .find(|l| l.label == *label)
             .ok_or_else(|| bad("pack"))?;
+            let implemented = self.verify_interfaces(&piece_v, &lib).map_err(refused)?;
             let records = self.verify(&piece_v, &lib).map_err(refused)?;
             libraries.push(
-                json!({"name": label, "hash": lib.hash, "pack": pack.id, "fixtures": records}),
+                json!({"name": label, "hash": lib.hash, "pack": pack.id, "fixtures": records, "interfaces": implemented}),
             );
         }
-        Ok(json!({"ok": true, "pack": pack.id, "installed": true, "libraries": libraries}))
+        Ok(
+            json!({"ok": true, "pack": pack.id, "installed": true, "libraries": libraries, "interfaces": interfaces}),
+        )
     }
 
     /// The claim that a library is right, decided from its fixtures: an agent's own pack binds
@@ -330,6 +375,11 @@ impl Logic {
         .into_iter()
         .find(|l| l.label == label)
         .ok_or_else(|| bad("library"))?;
+        // #416: the claim that the library implements an interface rests on that interface.
+        if let Some(name) = line.get("interface") {
+            let name = name.as_str().ok_or_else(|| bad("interface"))?;
+            return Ok(self.claim_interface(piece_v, &packs, &lib, name));
+        }
         Ok(match self.verify(piece_v, &lib) {
             Err(r) => json!({"ok": true, "verdict": "FAIL", "asks": [], "refusals": r}),
             Ok(_) if lib.agent => {

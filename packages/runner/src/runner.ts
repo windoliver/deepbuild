@@ -19,7 +19,7 @@ import { readSince, ulid, type Connection, type Event, type EventInput } from '@
 import { after, alive as pidAlive, badDeadline, groupCpu, groupMembers, type Grant, type Launch } from '@deepbuild/supervisor';
 import { openForwarder, type Forwarder } from './egress.js';
 import { AGENTS, codexRefused, programRoot, shownVersion, type AgentParts } from './agents.js';
-import type { Agent, Blocked, EvaluationWork, JobRecord, JobSpec, Runner, RunnerOptions, StopCause, WindowReport } from './types.js';
+import type { Agent, Blocked, EvaluationWork, JobInput, JobRecord, JobSpec, Runner, RunnerOptions, StopCause, WindowReport } from './types.js';
 
 // Keep the existing internal test surface; the package's public entry still exposes only the runner.
 export { codexLogRefused, codexReach, codexRefused, codexSignIn, codexWindows, programRoot, shownVersion } from './agents.js';
@@ -37,13 +37,30 @@ const NO_READING_ASK_MS = 30 * MINUTE;
 /** What "run without a reading" allows per account per day. */
 const NO_READING_PER_DAY = 10;
 const POLL_MS = 100;
+/**
+ * The ended jobs kept in memory (#2650): the newest, and of them the outputs up to OUTPUT_BYTES counting from the
+ * newest, whose own is kept whole. An older one's row is read from the record; its output from nowhere: ''.
+ */
+const ENDED_KEPT = 64;
+const OUTPUT_BYTES = 8 * 1024 * 1024;
+/** The read cap of an event's text field: a result recorded past it is cut there. */
+const TEXT_CAP = 8192;
 /** A result's own subtype that names its stop. */
 const RESULT_CAUSES: Record<string, StopCause> = { error_max_turns: 'max_turns' };
-const KINDS = new Set(['draft', 'review', 'read', 'smoke', 'acceptance', 'eval']);
+const KINDS = new Set(['draft', 'review', 'read', 'smoke', 'acceptance', 'eval', 'work']);
 /** All a blind job may read (#1328): nothing of a branch, a transcript or a session has a handle here. */
 const INPUTS = new Set(['issue', 'design', 'base', 'criterion']);
-/** What refuses a kind's spec before anything of it is recorded: only an acceptance job writes, and only its issue's folder. */
+/**
+ * What refuses a kind's spec before anything of it is recorded: an acceptance job writes only its issue's folder, a
+ * work job only its workspace, and every other kind is read-only.
+ */
 function badWrites(spec: JobSpec): string | undefined {
+  if (spec.kind === 'work') {
+    if (spec.writes !== undefined || spec.inputs !== undefined || spec.checkout) return 'work job writes only its workspace, and names no inputs or checkout';
+    const folder = spec.workspace ?? '';
+    return isAbsolute(folder) && existsSync(folder) && statSync(folder).isDirectory() ? undefined : `work job runs in a folder the hub made for it, an absolute path, not ${JSON.stringify(folder)}`;
+  }
+  if (spec.workspace !== undefined) return `${spec.kind} job has no workspace`;
   if (spec.kind !== 'acceptance') return spec.writes === undefined && spec.inputs === undefined ? undefined : `${spec.kind} job is read-only and names no inputs`;
   if (!spec.checkout) return 'acceptance job runs on a checkout of its base';
   if (!/^tests\/acceptance\/\d+$/.test(spec.writes ?? '')) return `acceptance job writes only tests/acceptance/<issue>, not ${String(spec.writes)}`;
@@ -61,12 +78,6 @@ const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
 const sha256 = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
-const compare = (a: string, b: string): number => {
-  const x = a.split('.').map(Number);
-  const y = b.split('.').map(Number);
-  for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0);
-  return 0;
-};
 
 interface Facts { agent: string; versions: string[]; launch: { readOnlyJob: { args: string[] } }; billing: { apiKeyVariables: string[] }; errorTexts: { causes?: Record<string, string> }; stop: { cause: { errors: { field: string; values: Record<string, string> } } } }
 /** A binary as it was verified: where the PATH named it, the file it is, its bytes' digest, its version and its file's identity. */
@@ -77,6 +88,8 @@ interface Job {
   rec: JobRecord;
   spec: JobSpec;
   stdout: string;
+  /** The bytes `stdout` was read from. */
+  outBytes: number;
   pending: string;
   decoder: StringDecoder;
   since: number;
@@ -123,7 +136,10 @@ interface Account { windows: Map<string, { used: number; resets: number | null; 
 interface Asked { handle: string; answer?: string }
 
 class LocalRunner implements Runner {
+  /** Every live job, and the newest ENDED_KEPT ended ones (#2650). */
   private readonly jobs = new Map<string, Job>();
+  /** The ended jobs `jobs` holds, oldest first. */
+  private readonly endedIds: string[] = [];
   private readonly accounts = new Map<string, Account>();
   /** The one unblock ask per account with no window reading, and its answer. */
   private readonly windowAsks = new Map<string, Asked>();
@@ -132,7 +148,7 @@ class LocalRunner implements Runner {
   /** The starts each account took without a reading, by the clock, for its daily limit. */
   private readonly unread = new Map<string, number[]>();
   private readonly verified = new Map<Agent, Verified>();
-  /** Versions a planted runner widened the range to; tests only. */
+  /** Versions a planted runner added to what its facts cover; tests only. */
   private readonly widened = new Set<string>();
   private chain: Promise<unknown> = Promise.resolve();
   private cursor = 0;
@@ -151,7 +167,8 @@ class LocalRunner implements Runner {
 
   private append(kind: string, data: Obj, subject?: string): Promise<void> {
     const ts = this.o.now();
-    const event: EventInput = { v: 1, id: ulid(ts), kind, ts, data: data as JsonValue, ...(subject ? { subject } : {}) };
+    // job.ended@2 also holds what a row read from the record needs (#2650).
+    const event: EventInput = { v: kind === 'job.ended' ? 2 : 1, id: ulid(ts), kind, ts, data: data as JsonValue, ...(subject ? { subject } : {}) };
     return this.o.record.append(CORE, event).then(() => undefined);
   }
   /**
@@ -173,7 +190,7 @@ class LocalRunner implements Runner {
       switch (e.kind as Folded) {
         case 'job.recorded': {
           if (!opening || this.jobs.has(String(d.job))) break;
-          const rec: JobRecord = { job: String(d.job), kind: d.kind as JobRecord['kind'], agent: d.agent as Agent, account: (d.account as string | null) ?? null, state: 'waiting', folder: String(d.folder) };
+          const rec = recorded(d);
           this.jobs.set(rec.job, this.make(rec, { kind: rec.kind, agent: rec.agent, prompt: '' }));
           break;
         }
@@ -182,6 +199,8 @@ class LocalRunner implements Runner {
           if (!opening || !job) break;
           Object.assign(job.rec, ended(d));
           job.end(job.rec);
+          // Read as it is, past the newest ended ones a hub keeps (#2650).
+          this.letGo(job);
           break;
         }
         case 'process.starting':
@@ -245,6 +264,7 @@ class LocalRunner implements Runner {
       Object.assign(job.rec, state === 'stopped' ? { state, stop: { cause: 'unknown' } } : { state, refused: end.refused });
       job.end(job.rec);
       scrap(job.rec.job);
+      this.letGo(job);
     }
   }
   private readonly keys = new Map<string, string>();
@@ -261,14 +281,14 @@ class LocalRunner implements Runner {
   private make(rec: JobRecord, spec: JobSpec): Job {
     let end!: (rec: JobRecord) => void;
     const done = new Promise<JobRecord>((resolve) => { end = resolve; });
-    return { rec, spec, stdout: '', pending: '', decoder: new StringDecoder('utf8'), since: this.o.now(), seen: new Set(), outputAt: Date.now(), reserved: false, noReading: false, ended: done, end: (r) => end({ ...r }), timers: [] };
+    return { rec, spec, stdout: '', outBytes: 0, pending: '', decoder: new StringDecoder('utf8'), since: this.o.now(), seen: new Set(), outputAt: Date.now(), reserved: false, noReading: false, ended: done, end: (r) => end({ ...r }), timers: [] };
   }
 
   // ---- Jobs.
 
   async submit(spec: JobSpec, evaluate?: EvaluationWork): Promise<JobRecord> {
     if (this.closed) throw Error('the runner is closed');
-    if (!isObj(spec) || !KINDS.has(spec.kind)) throw Error(`a job's kind is draft, review, read, smoke, acceptance or eval, not ${String(isObj(spec) ? spec.kind : spec)}`);
+    if (!isObj(spec) || !KINDS.has(spec.kind)) throw Error(`a job's kind is draft, review, read, smoke, acceptance, eval or work, not ${String(isObj(spec) ? spec.kind : spec)}`);
     if ((spec.kind === 'eval') !== (typeof evaluate === 'function')) throw Error('an eval needs its trusted evaluator, never an agent prompt alone');
     if (typeof spec.prompt !== 'string') throw Error('a job has a prompt');
     const bad = badWrites(spec);
@@ -280,8 +300,9 @@ class LocalRunner implements Runner {
     const id = `run:${ulid(this.o.now())}`;
     const jobs = join(this.o.root, 'jobs');
     mkdirSync(jobs, { recursive: true, mode: 0o700 });
-    const folder = join(realpathSync(jobs), id.slice(4));
-    mkdirSync(folder, { mode: 0o700 });
+    // A work job's folder is its workspace; any other job's is a folder of its own under <root>/jobs/.
+    const folder = spec.workspace ? realpathSync(spec.workspace) : join(realpathSync(jobs), id.slice(4));
+    if (!spec.workspace) mkdirSync(folder, { mode: 0o700 });
     const parts = AGENTS[spec.agent];
     const home = this.o.env.HOME ?? '';
     const account = spec.account ?? (parts && home ? parts.account(home, this.o.env) : null);
@@ -297,7 +318,7 @@ class LocalRunner implements Runner {
     }, id);
     if (evaluate) await this.o.record.sync();
     if (!parts) return this.refuse(job, `no agent ${String(spec.agent)}`);
-    if (spec.writes && !parts.writing) return this.refuse(job, `${spec.agent} has no job that writes yet`);
+    if ((spec.writes || spec.workspace) && !parts.writing) return this.refuse(job, `${spec.agent} has no job that writes yet`);
     if (spec.checkout) {
       const failed = await this.checkout(folder, spec.checkout).catch((error: unknown) => (error instanceof Error ? error.message : String(error)));
       job.preparing = false;
@@ -324,28 +345,62 @@ class LocalRunner implements Runner {
   }
 
   async wait(id: string): Promise<JobRecord> {
-    return this.find(id).ended;
+    return this.jobs.get(id)?.ended ?? this.fromRecord(id);
   }
   async run(spec: JobSpec): Promise<JobRecord> {
     return this.wait((await this.submit(spec)).job);
   }
   async status(id: string): Promise<JobRecord> {
-    return { ...this.find(id).rec };
+    const job = this.jobs.get(id);
+    return job ? { ...job.rec } : this.fromRecord(id);
   }
   async list(): Promise<JobRecord[]> {
+    // The ones in memory as they read now, every other as the record holds it (#2650).
+    const rows = await this.recorded();
+    const listed = new Set(rows.map((r) => r.job));
+    return [...rows.map((r) => this.jobs.get(r.job)?.rec ?? r), ...[...this.jobs.values()].filter((j) => !listed.has(j.rec.job)).map((j) => j.rec)].map((r) => ({ ...r }));
+  }
+  async recent(): Promise<JobRecord[]> {
     return [...this.jobs.values()].map((j) => ({ ...j.rec }));
   }
-  async output(id: string): Promise<string> {
-    return this.find(id).stdout;
+  async near(session: string | undefined, cwd: string | undefined): Promise<JobRecord[]> {
+    // A job's folder is a real path with no trailing slash, so a folder under it, resolved, starts with it and a slash.
+    const at = cwd ? resolve(cwd) : undefined;
+    const near: JobRecord[] = [];
+    for (const { rec } of this.jobs.values()) {
+      if ((session && rec.session === session) || (cwd && (cwd === rec.folder || at!.startsWith(`${rec.folder}/`)))) near.push({ ...rec });
+    }
+    return near;
   }
-  private find(id: string): Job {
+  async output(id: string): Promise<string> {
     const job = this.jobs.get(id);
-    if (!job) throw Error(`${id} is no job of this runner's`);
-    return job;
+    if (job) return this.o.plant === 'empty-output-inside-bound' && job.finished ? '' : job.stdout;
+    // Past the ended jobs kept: the record never held a job's output (#2650).
+    await this.fromRecord(id);
+    return '';
+  }
+  /** Every job's row as its job.recorded and job.ended give it, in the order they were recorded (#2650). */
+  private async recorded(job?: string): Promise<JobRecord[]> {
+    const rows = (await this.o.record.raw(`SELECT kind, data FROM events WHERE kind IN ('job.recorded', 'job.ended')${job ? ' AND subject = ?' : ''} ORDER BY log_pos`, job ? [job] : [])) as { kind: string; data: string }[];
+    const recs = new Map<string, JobRecord>();
+    for (const row of rows) {
+      const d = JSON.parse(row.data) as Obj;
+      if (row.kind === 'job.recorded') recs.set(String(d.job), recorded(d));
+      else if (recs.has(String(d.job))) Object.assign(recs.get(String(d.job))!, ended(d));
+    }
+    return [...recs.values()];
+  }
+  /** A job this runner no longer holds in memory, as the record holds it. */
+  private async fromRecord(id: string): Promise<JobRecord> {
+    const [rec] = await this.recorded(id);
+    if (!rec) throw Error(`${id} is no job of this runner's`);
+    return rec;
   }
 
   async cancel(id: string): Promise<JobRecord> {
-    const job = this.find(id);
+    const job = this.jobs.get(id);
+    // One no longer in memory has ended: there is nothing to stop.
+    if (!job) return this.fromRecord(id);
     job.cancelled = true;
     if (job.evaluation?.running) {
       job.evaluation.stop.abort();
@@ -620,9 +675,9 @@ class LocalRunner implements Runner {
     const facts = this.facts(job.spec.agent);
     const binary = await this.binary(job, facts);
     if ('refused' in binary) return binary;
-    const covered = AGENTS[job.spec.agent]!.exactVersions ? facts.versions.includes(binary.version) : this.covers(facts, binary.version);
+    const covered = this.covers(facts, binary.version);
     if (!covered && job.spec.kind !== 'smoke') {
-      return { refused: `${facts.agent} ${binary.version} at ${binary.path} is outside what its facts cover, ${facts.versions[0]} to ${facts.versions[facts.versions.length - 1]}` };
+      return { refused: `${facts.agent} ${binary.version} at ${binary.path} is outside what its facts cover: ${facts.versions.join(', ')}` };
     }
     if (!covered) {
       // A smoke test of a version its facts don't cover runs under the one standing approval you gave for that agent.
@@ -656,10 +711,9 @@ class LocalRunner implements Runner {
     if (!facts) this.factsCache.set(agent, (facts = readFacts<Facts>(AGENTS[agent]!.facts)));
     return facts;
   }
+  /** The versions the facts list, and no other: the hub holds any other version's session watch-only. */
   private covers(facts: Facts, version: string): boolean {
-    if (this.widened.has(version)) return true;
-    const range = facts.versions;
-    return range.length > 0 && compare(version, range[0]!) >= 0 && compare(version, range[range.length - 1]!) <= 0;
+    return this.widened.has(version) || facts.versions.includes(version);
   }
 
   /** The agent's binary on the login shell's PATH, resolved once, its bytes and version verified again whenever its file changes. */
@@ -689,7 +743,7 @@ class LocalRunner implements Runner {
       const shown = await this.step([path, '--version'], job.rec.folder, { read: [...this.programs(real, AGENTS[agent]), ...(AGENTS[agent]?.packaged ? job.spec.grant?.read ?? [] : [])] }, { PATH: this.o.loginPath, HOME: this.o.env.HOME ?? '' });
       const after = existsSync(real) ? identity(statSync(real)) : '';
       if (realpathSync(path) !== real || after !== before || (await fileDigest(real)) !== digest) continue;
-      const version = shownVersion(shown.stdout.toString('utf8'), AGENTS[agent]!.exactVersions === true);
+      const version = shownVersion(shown.stdout.toString('utf8'));
       if (shown.code !== 0 || !version) return { refused: `${path} --version exited ${String(shown.code)} and printed no version: ${shown.stderr.trim().slice(0, 500)}` };
       const verified: Verified = { path, real, digest, version, id: before };
       this.verified.set(agent, verified);
@@ -939,8 +993,8 @@ class LocalRunner implements Runner {
     const billsKey = facts.billing.apiKeyVariables.some((name) => typeof this.o.env[name] === 'string' && this.o.env[name]);
     const token = billsKey || !home || !this.o.keychain ? undefined : await parts.token(home, this.o.keychain, this.o.env).catch(() => undefined);
     const env = { ...this.env(job.spec.agent), ...parts.reach({ temp, proxy: `http://127.0.0.1:${port}`, home, env: this.o.env, ...(token ? { token } : {}) }) };
-    // An acceptance job's one folder, there before the sandbox names it.
-    const writes = job.spec.writes ? join(job.rec.folder, job.spec.writes) : undefined;
+    // An acceptance job's one folder, there before the sandbox names it; a work job's is its workspace.
+    const writes = job.spec.writes ? join(job.rec.folder, job.spec.writes) : job.spec.workspace ? job.rec.folder : undefined;
     if (writes) mkdirSync(writes, { recursive: true });
     const grant: Grant = {
       read: [...this.programs(binary.real, parts), ...(home ? parts.signIn(home, this.o.env) : []), ...(job.spec.grant?.read ?? [])], write: [temp, ...(writes ? [writes] : [])], hosts: [`127.0.0.1:${port}`],
@@ -948,7 +1002,7 @@ class LocalRunner implements Runner {
     };
     // A launch that ends in `-`, the prompt on stdin, keeps it last.
     const stdin = args.at(-1) === '-' ? args.splice(-1) : [];
-    const argv = [binary.path, ...args, ...parts.confine(job.spec.mcp ?? {}, job.spec.subagents ?? {}, job.spec.writes), ...stdin];
+    const argv = [binary.path, ...args, ...parts.confine(job.spec.mcp ?? {}, job.spec.subagents ?? {}, job.spec.writes ?? (job.spec.workspace ? '.' : undefined)), ...stdin];
     // The bytes it verified, or none: a file changed since is refused here and checked again next time.
     if (!this.unchanged(binary)) {
       this.verified.delete(job.spec.agent);
@@ -1003,6 +1057,7 @@ class LocalRunner implements Runner {
   private read(job: Job, chunk: Buffer): void {
     const text = job.decoder.write(chunk);
     job.stdout += text;
+    job.outBytes += chunk.length;
     job.outputAt = Date.now();
     const lines = (job.pending + text).split('\n');
     job.pending = lines.pop()!;
@@ -1216,9 +1271,33 @@ class LocalRunner implements Runner {
       job: r.job, state: r.state, ...(r.refused ? { refused: r.refused } : {}), ...(r.stop ? { cause: r.stop.cause } : {}), ...(r.session ? { session: r.session } : {}),
       ...(r.model ? { model: r.model } : {}), ...(r.binary ? { binary: r.binary } : {}), ...(r.usage ? { usage: r.usage } : {}), ...(r.cost_usd !== undefined ? { cost_usd: r.cost_usd } : {}),
       ...(r.lingered ? { lingered: r.lingered } : {}), ...(r.ran ? { from: r.ran.from, ...(r.ran.to ? { to: r.ran.to } : {}) } : {}),
+      ...(r.pid !== undefined ? { pid: r.pid } : {}), ...(r.pgid !== undefined ? { pgid: r.pgid } : {}), ...(r.start ? { start: r.start } : {}),
+      ...(r.result !== undefined ? { result: [...r.result].slice(0, TEXT_CAP).join('') } : {}),
     }, r.job).catch(() => undefined);
     job.end(r);
     scrap(job.rec.job, job.temp);
+    this.letGo(job);
+  }
+  /**
+   * An ended job, past the newest ENDED_KEPT, leaves memory, and the row it ended with is read from the record; the
+   * outputs kept stop at OUTPUT_BYTES counting from the newest, whose own is kept whole (#2650). Its prompt goes now:
+   * nothing reads it once it has ended.
+   */
+  private letGo(job: Job): void {
+    if (this.o.plant === 'churn-keeps-every-output') return;
+    job.spec = { kind: job.spec.kind, agent: job.spec.agent, prompt: '' };
+    this.endedIds.push(job.rec.job);
+    let bytes = 0;
+    for (let i = this.endedIds.length - 1; i >= 0; i--) {
+      const kept = this.jobs.get(this.endedIds[i]!);
+      if (!kept) continue;
+      bytes += kept.outBytes;
+      if (i === this.endedIds.length - 1 || bytes <= OUTPUT_BYTES) continue;
+      bytes -= kept.outBytes;
+      kept.stdout = '';
+      kept.outBytes = 0;
+    }
+    while (this.endedIds.length > ENDED_KEPT) this.jobs.delete(this.endedIds.shift()!);
   }
 
   // ---- Windows.
@@ -1329,10 +1408,21 @@ function scrap(job: string, temp?: string): void {
   }
 }
 
-/** job.ended's data as the job's record fields. */
+/** job.recorded's data as the job's record as it starts. */
+function recorded(d: Obj): JobRecord {
+  return {
+    job: String(d.job), kind: d.kind as JobRecord['kind'], agent: d.agent as Agent, account: (d.account as string | null) ?? null, state: 'waiting', folder: String(d.folder),
+    ...(Array.isArray(d.inputs) ? { inputs: d.inputs as unknown as JobInput[] } : {}),
+  };
+}
+/** job.ended's data as the job's record fields: @2's also its process and its result (#2650). */
 function ended(d: Obj): Partial<JobRecord> {
   return {
     state: d.state as JobRecord['state'],
+    ...(typeof d.pid === 'number' ? { pid: d.pid } : {}),
+    ...(typeof d.pgid === 'number' ? { pgid: d.pgid } : {}),
+    ...(typeof d.start === 'string' ? { start: d.start } : {}),
+    ...(typeof d.result === 'string' ? { result: d.result } : {}),
     ...(typeof d.refused === 'string' ? { refused: d.refused } : {}),
     ...(typeof d.cause === 'string' ? { stop: { cause: d.cause as StopCause } } : {}),
     ...(typeof d.session === 'string' ? { session: d.session } : {}),

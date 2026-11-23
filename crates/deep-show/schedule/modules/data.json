@@ -30,6 +30,21 @@
         "per": "item"
       },
       {
+        "operator": "data.grid_image",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "t",
+          "refs"
+        ],
+        "writes": [
+          "data.grid",
+          "data.grid_mapped"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "data.vector_field",
         "module": "data",
         "version": "1.0.0",
@@ -71,6 +86,7 @@
   "contributions": {
     "core.fields": [
       "data.columns",
+      "data.grid",
       "data.vector_field"
     ],
     "core.transform": [

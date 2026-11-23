@@ -518,9 +518,9 @@ pub fn pass_graph(
             _ => return Err("operator_kind_rule"),
         }
     } else if let Some(n) = packs.iter().find(|n| n.name == op) {
-        (n.graph.clone(), n.grow as f64)
+        (crate::fx::baked(&n.graph, params), n.grow as f64)
     } else if let Some(n) = crate::fx::library().into_iter().find(|n| n.name == op) {
-        (n.graph, n.grow as f64)
+        (crate::fx::baked(&n.graph, params), n.grow as f64)
     } else if crate::shipped::all().iter().any(|g| g["id"] == op) {
         return Err("operator_kind_rule");
     } else {
@@ -534,6 +534,95 @@ pub fn pass_graph(
     } else {
         Err("operator_kind_rule")
     }
+}
+
+/// A document's groups' passes against its class's operator GPU time (Operator budgets by class;
+/// Frame and group: passes, "each pass's declared cost × the group's pixels"): past it, the
+/// `over_budget` issue, its `ids` the three costliest operators, the costliest first.
+pub fn passes_over_budget(doc: &Value) -> Option<Value> {
+    let class = doc["budget"]["class"].as_str().unwrap_or("figure");
+    let cap_ms = match class {
+        "core_view" => 0.2,
+        "data_view" => 0.5,
+        "figure" | "work_product" => 1.0,
+        "showpiece" => 4.0,
+        _ => return None,
+    };
+    let items = doc["items"].as_object()?;
+    let frame = [0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(0.0));
+    let fx = crate::fx::library();
+    let declared = |op: &str| -> f64 {
+        let cost = match (op, items.get(op), fx.iter().find(|n| n.name == op)) {
+            ("blur@1", ..) => {
+                return crate::shipped::BLUR_MEASURED_NS_PER_PX
+                    .iter()
+                    .map(|b| b.1)
+                    .sum()
+            }
+            (_, Some(item), _) => &item["params"]["cost"],
+            (_, None, Some(n)) => &n.graph["cost"],
+            _ => return 0.0,
+        };
+        cost["ns_per_px"].as_f64().unwrap_or(0.0)
+    };
+    let under = |item: &Value, group: &str| {
+        let mut at = item["parent"].as_str();
+        for _ in 0..items.len() {
+            match at {
+                Some(p) if p == group => return true,
+                Some(p) => at = items.get(p).and_then(|i| i["parent"].as_str()),
+                None => break,
+            }
+        }
+        false
+    };
+    let mut by_op = std::collections::BTreeMap::<String, f64>::new();
+    for (id, group) in items.iter().filter(|(_, i)| i["kind"] == "group@1") {
+        let passes = group["params"]["passes"]
+            .as_array()
+            .map_or(&[][..], Vec::as_slice);
+        if passes.is_empty() {
+            continue;
+        }
+        // Its pixels: its children's boxes together, or the frame when one draws by no box.
+        let boxes: Option<Vec<[f64; 4]>> = items
+            .values()
+            .filter(|i| i["kind"] != "group@1" && under(i, id))
+            .map(|i| {
+                let b = i["params"]["box"].as_array()?;
+                let b: Vec<f64> = b.iter().filter_map(Value::as_f64).collect();
+                (b.len() == 4).then(|| [b[0], b[1], b[0] + b[2], b[1] + b[3]])
+            })
+            .collect();
+        let all = boxes.into_iter().flatten().reduce(|a, b| {
+            [
+                a[0].min(b[0]),
+                a[1].min(b[1]),
+                a[2].max(b[2]),
+                a[3].max(b[3]),
+            ]
+        });
+        let whole = frame[0] * frame[1];
+        let px = all.map_or(whole, |b| ((b[2] - b[0]) * (b[3] - b[1])).min(whole));
+        for op in passes.iter().filter_map(|p| p["op"].as_str()) {
+            *by_op.entry(op.to_string()).or_default() += declared(op) * px / 1e6;
+        }
+    }
+    let total: f64 = by_op.values().sum();
+    if total <= cap_ms {
+        return None;
+    }
+    let mut costliest: Vec<(&String, &f64)> = by_op.iter().collect();
+    costliest.sort_by(|a, b| b.1.total_cmp(a.1).then_with(|| a.0.cmp(b.0)));
+    let ids: Vec<&String> = costliest.iter().take(3).map(|(op, _)| *op).collect();
+    Some(json!({
+        "code": "over_budget", "severity": "error", "ids": ids, "path": "budget",
+        "actual": {"operator_ms": total, "cap_ms": cap_ms, "operators": by_op},
+        "what": format!(
+            "the groups' passes cost {total:.2} ms a frame by their declarations, past the {class} class's {cap_ms} ms of operator GPU time; the costliest are {}",
+            ids.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+        ),
+    }))
 }
 
 /// Whether `item` is a kind only a 3D writer layer's scene draws.
@@ -681,10 +770,21 @@ fn pack_operators(manifest: &Value) -> Vec<(String, String)> {
             .collect::<Vec<_>>()
             .join("; ")
     };
+    let shipped = crate::shipped::library(true);
     operators
         .iter()
         .filter_map(|(name, entry)| {
-            let refused = if entry.get("graph").is_some() {
+            // A pack's operator never takes a shipped operator's name (Pack: fx@1 named operators).
+            let taken = name == "blur@1"
+                || shipped.iter().any(|s| s.name == name)
+                || shipped
+                    .iter()
+                    .any(|s| s.stages.iter().any(|g| g["id"] == name.as_str()));
+            let refused = if taken {
+                Some(format!(
+                    "{name} is a shipped operator's name, which no pack's operator takes"
+                ))
+            } else if entry.get("graph").is_some() {
                 crate::chrome_fx::read_entry(name, entry, &functions)
                     .err()
                     .map(|r| r["detail"].as_str().unwrap_or_default().to_string())
@@ -746,6 +846,8 @@ fn register_with(r: &mut Registrar, rule: deep_canvas::registry::Rule) {
             .described("A GPU operator as data: typed inputs, steps from the closed list, typed outputs, checked, costed and classed before it runs.");
         r.rule(&kind[..kind.len() - 2], rule);
     }
+    // #2776: a GPU operator draws into the 3D frame, and says what each path does with it.
+    r.in_3d(include_str!("paths.json"));
     r.rule("group", group_rule);
     // #449: a particles@1 item's count against its budget class's cap, wherever the check runs.
     r.rule("particles", particles_rule);

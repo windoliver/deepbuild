@@ -1,0 +1,20 @@
+== base supervisor.ts (ee05e7257), second run
+-- macOS 27.2.1 (26B7131), load 107.65 89.73 71.23
+-- build: HEAD 5c051e034, packages/supervisor/src changed:  M packages/supervisor/src/supervisor.test.ts
+ M packages/supervisor/src/supervisor.ts
+-- dist/supervisor.js warms filters at once: 0
+-- hub (pid 11712) ready: 1
+-- its log stream children at ready:
+   subsystem == "com.apple.sandbox.reporting" AND sender == "Sandbox" AND eventMessage CONTAINS "dev.deepbuild.run:"
+$ deep install packages/jobs/score
+Installed deepbuild/score@1.0.0
+   took 10748 ms
+$ deep install packages/jobs/import
+Installed deepbuild/import@1.0.0
+   took 1002 ms
+-- its log stream children after:
+   process == "kernel" AND sender == "Sandbox" AND eventMessage CONTAINS "dev.deepbuild.run:"
+-- hub stderr:
+   (node:11712) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+   (Use `node --trace-warnings ...` to show where the warning was created)
+-- hub 11712 stopped

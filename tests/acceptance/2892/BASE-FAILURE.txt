@@ -1,0 +1,64 @@
+#2892: where each test fails at the base 5f5791e2d ("Merge pull request #3068").
+
+Run: only decision.test.ts (it builds nothing). Every other leg is read from the base's code, not run: each needs a
+build of deep-show and headless Chrome on a Mac at load 100-200, and the surface plainly doesn't exist at the base.
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/2892/tsconfig.json (exit 0).
+vitest list --root tests/acceptance/2892 collects 15 tests.
+
+What the base does, read from code:
+- crates/deep-show/src/export/web.rs writes every bundle file as it is: the full set's player_bg.wasm (37,274,227 B; the
+  lab names scene3d, which only `full` holds, sets.json) as <sha>.wasm, its glue player.js (128,501 B) as <sha>.js, the
+  element's script (46,609 B) and the rest. The receipt's files are {path, sha256, bytes} with no `inflated`, and
+  `player.hash` is the WebAssembly file's SHA-256.
+- crates/deep-player/web/element.js #load fetches every file of bundle.files (the glue among them) as bytes through
+  #fetch, then imports the glue through the import map: the glue goes on the wire twice.
+- probe() returns no `load`.
+- deep-show answers {"ok":false,"code":"bad_input"} to any `planted` name it doesn't know (main.rs) and to a call it
+  doesn't know (`ship`).
+- benchmarks/budgets.json names no task for #2892.
+
+decision.test.ts
+  AC1 #2892.8cdf43e0 the issue records the decision ... — RUN: PASSES at the base. The issue's comment of
+  2026-11-20T01:05:30Z reads "**Decision (2026-11-19): gzip." and no commit lies between the merge base and HEAD
+  (0 commits since 5f5791e2d). Its twins fail as they should (no decision; a code commit a day before; Brotli without
+  the inflater's numbers). The criterion is met by the issue's record, as the coordinator said.
+
+wire.test.ts (read from code)
+  AC2 #2892.bce8437b ... puts at most 11976000 B of player on the wire (gzip) — the export, the disk check, the import
+  map and a first visit all work at the base (where Chrome gives WebGPU). It fails at
+  `expect(bytes).toBeLessThanOrEqual(PLAYER_ON_WIRE)`: the player's files counted once each are 37,274,227 B of
+  WebAssembly and 128,501 B of glue, 37,402,728 B (the issue's base reading), against 11,976,000 B.
+  AC4 #2892.667e03e0 ... differs by under 2% — both visits work at the base; it fails at
+  `none(apart(...))`, "the two servers put the bundle on the wire within 2% of each other": the server that sends as
+  stored sends the 37 MB WebAssembly whole, the one that compresses sends it gzipped (or Brotli 5), far more than 2%
+  apart.
+  AC4 #2892.667e03e0 the planted web_stores_player_as_is ... — fails at exportLab's `deep-show run takes the scenario
+  (planted web_stores_player_as_is)`: bad_input.
+  AC5 #2892.79918bc3 ship.bytes ... equals ... — fails at `none(storedPlayerFailures(...))`, "the bundle stores the
+  player compressed, as the decision says": "the player <sha>.wasm is stored as it is (37274227 B): the receipt gives
+  it no inflated bytes". (Past it, the `ship` call would answer bad_input.)
+  AC5 #2892.79918bc3 the planted ship_bytes_sums_inflated ... — fails at the same storedPlayerFailures assertion.
+
+stops.test.ts (read from code)
+  AC6 #2892.f22eb452 one byte changed ... — fails in theLab() at `none(storedPlayerFailures(...))`, the player stored as
+  it is. (Past it, the one-byte copy would stop naming the file, as today.)
+  AC6 #2892.f22eb452 1 GiB ... — fails at the same assertion.
+  AC6 #2892.f22eb452 the planted web_inflates_before_check ... — fails at exportLab's `deep-show run takes the
+  scenario (planted web_inflates_before_check)`: bad_input.
+
+same.test.ts (read from code)
+  AC7 #2892.95bb7e98 step hashes ... equal the merge base's — fails after the export at `none(storedPlayerFailures(...))`,
+  before the merge base's build (at the base the two would be one program).
+  AC7 #2892.95bb7e98 two exports ... on this Mac ... planted web_gzip_header_time — on this Mac (macOS arm64) the first
+  clean export works; it fails at `none(storedPlayerFailures(a.out, ...))`. (Past it, the plant would answer bad_input.)
+  AC7 #2892.95bb7e98 two machines ... — BLOCKED first: DEEP_LINUX_AARCH64 and DEEP_LINUX_AARCH64_DIR are unset on this
+  Mac. With them set it would fail at the Mac export's storedPlayerFailures.
+
+first-frame.test.ts (read from code)
+  AC8 #2892.d7212061 the record gives the time spent inflating ... — fails at `none(storedPlayerFailures(...))`. (Past
+  it, probe() has no `load`, so "the record gives the time spent inflating" would fail.)
+  AC8 #2892.d7212061 the perf lane has a task naming #2892.d7212061 — fails at "benchmarks/budgets.json has a task
+  naming #2892.d7212061".
+  AC8 #2892.d7212061 on the reference Mac ... — this Mac is a reference Mac (Mac17,10, 64 GiB). Off mains power, in Low
+  Power Mode or not nominal it reads INCONCLUSIVE; in a fit state it exports and fails at
+  `none(storedPlayerFailures(...))`.

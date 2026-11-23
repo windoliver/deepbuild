@@ -1,0 +1,184 @@
+# #1527 acceptance suite on the base
+# base: b4a2049e808c05a4ad0f727bb09c422b545cbb36
+# date: 2026-11-20T06:20:06Z
+# node: v24.22.0
+# load: { 150.27 139.66 92.07 }
+# command: node node_modules/vitest/vitest.mjs run --root tests/acceptance/1527 --no-file-parallelism --testTimeout=600000
+
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/issue-1527-repeat-job-cost-441636/tests/acceptance/1527
+
+ ❯ monthly.test.ts (2 tests | 2 failed) 133617ms
+   × #1527.cd627fd5 The card shows a cost per run and per month. A card without them fails, and a run past its per-run line stops before its next model turn 11991ms
+   × #1527.6377853f A monthly report's second run, with the same columns and new numbers, makes no model turn and still passes its data check. With a column renamed, it wakes the model once 121478ms
+ ❯ refusals.test.ts (3 tests | 3 failed) 54555ms
+   × #1527.ad1741ab At approval, a wake test that stays quiet on the planted change is refused, naming it, and so is one that wakes on the twin 17815ms
+   × #1527.3e630e3d A card for an hourly job with no wake test is refused, naming the job 10947ms
+   × #1527.cd627fd5 The card shows a cost per run and per month. A card without them fails, and a run past its per-run line stops before its next model turn 21416ms
+ ❯ spend.test.ts (1 test | 1 failed) 259402ms
+   × #1527.cd627fd5 The card shows a cost per run and per month. A card without them fails, and a run past its per-run line stops before its next model turn 133711ms
+ ❯ failing.test.ts (1 test | 1 failed) 132810ms
+   × #1527.a2d33481 A wake test that exits non-zero gives a FAIL on the claim, spaced as #365 states. A program that reads the failure as nothing new fails, naming the run 132608ms
+ ❯ feed.test.ts (1 test | 1 failed) 133981ms
+   × #1527.0d2627bf On a controlled clock, an hourly job over a fixture feed that changes once in 24 hours makes one model turn and 23 uncounted no-ops, with no plan usage on those 23. A planted program that wakes the model on each fire fails, naming the fire 133305ms
+ ❯ edited.test.ts (1 test | 1 failed) 135563ms
+   × #1527.d17d4e44 A session that edits an approved wake test changes nothing: the next fire is BLOCKED on the digest, naming the file 135399ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  edited.test.ts > #1527.d17d4e44 A session that edits an approved wake test changes nothing: the next fire is BLOCKED on the digest, naming the file
+AssertionError: your yes starts the job and its first run, the session that edits the wake test, ends: expected undefined to be defined
+ ❯ edited.test.ts:22:113
+     20|   expect(workspace, 'your yes makes the job\'s workspace').toBeDefined…
+     21|   const first = await j.firstRun(key, pos);
+     22|   expect(first?.ended, 'your yes starts the job and its first run, the…
+       |                                                                                                                 ^
+     23|   const onDisk = await j.file(workspace!.folder, WAKE_FILE);
+     24|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  failing.test.ts > #1527.a2d33481 A wake test that exits non-zero gives a FAIL on the claim, spaced as #365 states. A program that reads the failure as nothing new fails, naming the run
+AssertionError: your yes starts the job and its first run ends: a schedule.run of it within 2 minutes: expected undefined to be defined
+ ❯ failing.test.ts:25:113
+     23|   expect(ran.code, `your yes to ${card!.ask} is taken (${shown(ran)})`…
+     24|   const first = await j.firstRun(key, pos);
+     25|   expect(first?.ended, 'your yes starts the job and its first run ends…
+       |                                                                                                                 ^
+     26|
+     27|   // Two fires with nothing new: the job runs hourly.
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  feed.test.ts > #1527.0d2627bf On a controlled clock, an hourly job over a fixture feed that changes once in 24 hours makes one model turn and 23 uncounted no-ops, with no plan usage on those 23. A planted program that wakes the model on each fire fails, naming the fire
+AssertionError: your yes starts the job: a schedule.run of it (its schedule naming the brief's key) within 2 minutes: expected undefined to be defined
+ ❯ feed.test.ts:23:122
+     21|   expect(ran.code, `your yes to ${card!.ask} is taken (${shown(ran)})`…
+     22|   const first = await j.firstRun(key, pos);
+     23|   expect(first, 'your yes starts the job: a schedule.run of it (its sc…
+       |                                                                                                                          ^
+     24|   expect(first!.ended, `the first run ends: ${runLine(first!)}`).toBeD…
+     25|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  monthly.test.ts > #1527.cd627fd5 The card shows a cost per run and per month. A card without them fails, and a run past its per-run line stops before its next model turn
+AssertionError: the card's brief carries what one run may spend: {}: expected 'undefined' to be 'number' // Object.is equality
+
+Expected: "number"
+Received: "undefined"
+
+ ❯ monthly.test.ts:44:107
+     42|   expect(s.card, `the monthly report reaches its card (deep: ${s.sent.…
+     43|   const cost = costOf(s.card!);
+     44|   expect(typeof cost.run_usd, `the card's brief carries what one run m…
+       |                                                                                                           ^
+     45|   expect(typeof cost.month_usd, `the card's brief carries what a month…
+     46|   expect(cost.run_usd!, `what one run may spend comes from the dry run…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  monthly.test.ts > #1527.6377853f A monthly report's second run, with the same columns and new numbers, makes no model turn and still passes its data check. With a column renamed, it wakes the model once
+AssertionError: your yes starts the job and its first run, with the model, ends: expected undefined to be defined
+ ❯ monthly.test.ts:69:91
+     67|   expect(workspace, 'your yes makes the report\'s workspace').toBeDefi…
+     68|   const first = await j.firstRun(key, pos);
+     69|   expect(first?.ended, 'your yes starts the job and its first run, wit…
+       |                                                                                           ^
+     70|   expect(await j.file(workspace!.folder, JOB_FILE), `the first finishe…
+     71|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  refusals.test.ts > #1527.ad1741ab At approval, a wake test that stays quiet on the planted change is refused, naming it, and so is one that wakes on the twin
+AssertionError: a wake test that stays quiet on the planted change: refused, so no workspace is made: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"v\":1,\"id\":\"01M7VSXZG12S1J1YENPV1GTNHS\",\"kind\":\"workspace.created\",\"writer\":\"core\",\"actor\":\"you\",\"scope\":\"you\",\"ts\":1795155754497,\"log_pos\":27,\"data\":{\"workspace\":\"everyhourcheckthedesignfeedforneadf13383\",\"folder\":\"/private/tmp/dh1342-2HC5K7/h/.deepbuild/workspaces/everyhourcheckthedesignfeedforne",
++ ]
+
+ ❯ nothingMade refusals.test.ts:26:107
+     24| }
+     25| const nothingMade = (r: { made: unknown[]; runs: Run[] }, what: string…
+     26|   expect(r.made.map((e) => JSON.stringify(e).slice(0, 300)), `${what}:…
+       |                                                                                                           ^
+     27|   expect(r.runs.map((x) => x.run), `${what}: refused, so the job never…
+     28| };
+ ❯ refusals.test.ts:36:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  refusals.test.ts > #1527.3e630e3d A card for an hourly job with no wake test is refused, naming the job
+AssertionError: an hourly job with no wake test: refused, so no workspace is made: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"v\":1,\"id\":\"01M7VSY6DQ5VT12RERK9H6QGG8\",\"kind\":\"workspace.created\",\"writer\":\"core\",\"actor\":\"you\",\"scope\":\"you\",\"ts\":1795155761591,\"log_pos\":62,\"data\":{\"workspace\":\"everyhourcheckthereleasefeedforn0d4fa823\",\"folder\":\"/private/tmp/dh1342-2HC5K7/h/.deepbuild/workspaces/everyhourcheckthereleasefeedforn",
++ ]
+
+ ❯ nothingMade refusals.test.ts:26:107
+     24| }
+     25| const nothingMade = (r: { made: unknown[]; runs: Run[] }, what: string…
+     26|   expect(r.made.map((e) => JSON.stringify(e).slice(0, 300)), `${what}:…
+       |                                                                                                           ^
+     27|   expect(r.runs.map((x) => x.run), `${what}: refused, so the job never…
+     28| };
+ ❯ refusals.test.ts:56:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+ FAIL  refusals.test.ts > #1527.cd627fd5 The card shows a cost per run and per month. A card without them fails, and a run past its per-run line stops before its next model turn
+AssertionError: a card without its cost per run and per month: refused, so no workspace is made: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"v\":1,\"id\":\"01M7VSYY8YE28YS5RTXH4D4EDG\",\"kind\":\"workspace.created\",\"writer\":\"core\",\"actor\":\"you\",\"scope\":\"you\",\"ts\":1795155786014,\"log_pos\":151,\"data\":{\"workspace\":\"everymonthwritetheticketsreportfd6f8e377\",\"folder\":\"/private/tmp/dh1342-2HC5K7/h/.deepbuild/workspaces/everymonthwritetheticketsreport",
++ ]
+
+ ❯ nothingMade refusals.test.ts:26:107
+     24| }
+     25| const nothingMade = (r: { made: unknown[]; runs: Run[] }, what: string…
+     26|   expect(r.made.map((e) => JSON.stringify(e).slice(0, 300)), `${what}:…
+       |                                                                                                           ^
+     27|   expect(r.runs.map((x) => x.run), `${what}: refused, so the job never…
+     28| };
+ ❯ refusals.test.ts:65:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/9]⎯
+
+ FAIL  spend.test.ts > #1527.cd627fd5 The card shows a cost per run and per month. A card without them fails, and a run past its per-run line stops before its next model turn
+AssertionError: the card says what one run may spend: expected 'undefined' to be 'number' // Object.is equality
+
+Expected: "number"
+Received: "undefined"
+
+ ❯ spend.test.ts:38:68
+     36|
+     37|   const past = await firstRunOf(j, 'costs', PAST_USD);
+     38|   expect(typeof past.line, 'the card says what one run may spend').toB…
+       |                                                                    ^
+     39|   expect(past.line!, `the per-run line, from a ${DRY_USD} dry run, is …
+     40|   expect(past.run?.ended, 'your yes starts the job and its first run e…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
+
+
+ Test Files  6 failed (6)
+      Tests  9 failed (9)
+   Start at  22:20:07
+   Duration  853.68s (tests 100%)
+
+# vitest exit: 1
+
+# tsc -p tests/acceptance/1527/tsconfig.json
+# tsc exit: 0

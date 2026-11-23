@@ -87,6 +87,14 @@ pub fn png_reads_itself() -> Module {
 const READER: &str = "decode_worker";
 
 fn register(r: &mut Registrar, restore: fn(&Value) -> Value, png_reader: &str) {
+    // #2777: foley's tables, the lists of words a film sets for its sounds.
+    r.word_list(
+        "foley.material",
+        "foley",
+        "material",
+        &crate::foley::MATERIALS,
+    )
+    .word_list("foley.action", "foley", "action", &crate::foley::ACTIONS);
     // #204: the synth presets packs fill, read from a pack's `presets`.
     r.registry(crate::synth::registry());
     r.pack_field("presets", crate::synth::presets_field);
@@ -130,6 +138,8 @@ fn register(r: &mut Registrar, restore: fn(&Value) -> Value, png_reader: &str) {
     r.kind(strip_kind(), &[], "");
     r.rule("image", av_link);
     r.rule("media.strip", av_link_strip);
+    // #1518: a recording cut by its words, expanded at check into strips.
+    crate::cut::register(r);
 }
 
 /// The spectrum entry's kit fixture, from the bake's own math: a 1 kHz sine of amplitude 0.5 from
@@ -255,7 +265,15 @@ fn linked_fields() -> &'static [&'static str] {
     }
 }
 
-/// av_unlinked from a strip item's side: against each picture of its asset.
+/// Whether a picture's `frames` and a strip agree on every linked field.
+fn agree(doc: &Value, frames: &Value, strip: &Value) -> bool {
+    linked_fields()
+        .iter()
+        .all(|f| crate::doc::link_value(doc, frames, f) == crate::doc::link_value(doc, strip, f))
+}
+
+/// av_unlinked from a strip item's side: against each picture of its asset, unless one agrees
+/// with it (#1518: a cut recording's pictures each keep their own strip's clock).
 fn av_link_strip(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
     let Some(asset) = crate::doc::strip_asset(&item["params"]) else {
         return Vec::new();
@@ -263,17 +281,21 @@ fn av_link_strip(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
     if item.pointer("/params/offset").is_some() {
         return Vec::new();
     }
+    let pictures: Vec<(&String, &Value)> = (doc["items"].as_object().into_iter().flatten())
+        .filter_map(|(pid, pic)| {
+            let frames = pic.pointer("/params/frames")?;
+            (pic.pointer("/params/asset").and_then(Value::as_str) == Some(asset))
+                .then_some((pid, frames))
+        })
+        .collect();
+    if pictures
+        .iter()
+        .any(|(_, frames)| agree(doc, frames, &item["params"]))
+    {
+        return Vec::new();
+    }
     let mut out = Vec::new();
-    for (pid, pic) in doc["items"].as_object().into_iter().flatten() {
-        let (Some(frames), Some(a)) = (
-            pic.pointer("/params/frames"),
-            pic.pointer("/params/asset").and_then(Value::as_str),
-        ) else {
-            continue;
-        };
-        if a != asset {
-            continue;
-        }
+    for (pid, frames) in pictures {
         for f in linked_fields() {
             if crate::doc::link_value(doc, frames, f)
                 != crate::doc::link_value(doc, &item["params"], f)
@@ -329,7 +351,7 @@ fn restore_without_tail(cp: &Value) -> Value {
 }
 
 /// `av_unlinked`: a picture of a video asset and a sound strip of the same asset agree on start,
-/// in and rate unless the strip declares an `offset`.
+/// in and rate unless the strip declares an `offset`; with several strips, one agreeing links it.
 fn av_link(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
     let Some(frames) = item.pointer("/params/frames") else {
         return Vec::new();
@@ -337,11 +359,16 @@ fn av_link(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
     let Some(asset) = item.pointer("/params/asset").and_then(Value::as_str) else {
         return Vec::new();
     };
+    let strips: Vec<(String, &Value)> = strips_of(doc, asset)
+        .into_iter()
+        .filter(|(_, s)| s.get("offset").is_none())
+        .collect();
+    // #1518: linked when some strip of its asset agrees with it.
+    if strips.iter().any(|(_, s)| agree(doc, frames, s)) {
+        return Vec::new();
+    }
     let mut out = Vec::new();
-    for (at, strip) in strips_of(doc, asset) {
-        if strip.get("offset").is_some() {
-            continue;
-        }
+    for (at, strip) in strips {
         for f in linked_fields() {
             if crate::doc::link_value(doc, frames, f) != crate::doc::link_value(doc, strip, f) {
                 out.push(Raised {

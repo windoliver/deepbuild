@@ -75,6 +75,11 @@ function call(facts, payload) {
     if (paths.length > 0 || denied || patch.tools.includes(tool)) return { kind: 'edit', detail: { paths, ...(denied ? { denied } : {}) }, rule: pointer('patch') };
   }
   const prefix = Object.keys(kinds.prefixes ?? {}).find((start) => typeof tool === 'string' && tool.startsWith(start));
+  // A tool the table names exactly is that kind, before any prefix: deep_query is a read though every MCP tool is mcp (#1801).
+  if (prefix && Object.hasOwn(kinds.tools, tool)) {
+    const [server, ...name] = tool.slice(prefix.length).split('__');
+    return { kind: kinds.tools[tool], detail: { server, [facts.toolDetail?.mcp?.tool ?? 'name']: name.join('__') }, rule: pointer('toolKinds', 'tools', tool) };
+  }
   if (prefix) {
     const [server, ...name] = tool.slice(prefix.length).split('__');
     // The MCP tool's own name goes under the field the facts' toolDetail.mcp names; `name` by default.
@@ -190,7 +195,9 @@ function map(facts, payload, transcript) {
   const common = fill(facts.mapping.common, payload);
   const event = { kind: rule.kind, data: { ...common, ...fill(rule.data, payload) }, rule: pointer('mapping', hook) };
   if (rule.origin) {
-    const found = origin(rule.origin, payload, transcript);
+    // A prompt whose payload names a subagent (the common template's `subagent`) is a child's, which its parent wrote:
+    // never yours, as the core reads a Codex child's prompt (#39).
+    const found = common.subagent ? { from: 'subagent', rule: pointer('mapping', 'common', 'subagent') } : origin(rule.origin, payload, transcript);
     Object.assign(event, { data: { ...common, from: found.from, ...fill(rule.data, payload) }, rule: found.rule });
   }
   if (rule.call) {
@@ -235,9 +242,10 @@ export function mapHook({ facts, version, payload, transcript = [], turns = new 
   const schemas = facts?.events?.versions?.[version];
   const hook = payload?.hook_event_name;
   if (!schemas) return { events: [], verified: false, readings: [{ code: 'version_not_covered', field: 'version', version }] };
-  if (typeof hook !== 'string' || !Object.hasOwn(schemas, hook) || !Object.hasOwn(facts.mapping, hook)) return { events: [], verified: false, readings: [{ code: 'unknown_event', field: 'hook_event_name', version }] };
+  if (typeof hook !== 'string' || !Object.hasOwn(schemas, hook)) return { events: [], verified: false, readings: [{ code: 'unknown_event', field: 'hook_event_name', version }] };
   const { verified, readings } = verify(schemas[hook], payload, version);
-  const events = map(facts, payload, transcript);
+  // A hook the version lists that no mapping entry names, such as Claude Code's FileChanged (#120), maps to no event.
+  const events = Object.hasOwn(facts.mapping, hook) ? map(facts, payload, transcript) : [];
   const turnRule = facts.turnWithoutPrompt;
   const turn = turnRule && payload[turnRule.payloadField];
   if (turnRule && turn !== undefined && !turns.has(turn)) {

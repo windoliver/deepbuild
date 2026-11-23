@@ -1,9 +1,8 @@
 // `deep undo staged:<id>` (#347): a destructive command's run undone from the copy-on-write copy staged before it
 // ran, through the hub's socket as the cli role, until the copy is let go at its set time. `deep undo sync:<id>`
 // (#148): an Agents page sync undone, each file put back where you haven't edited it since.
-import { readFileSync } from 'node:fs';
-import { call, type Reply } from './client.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { call, notAnswered, type Reply } from './client.js';
+import { hubControl } from './paths.js';
 
 const USAGE = 'Usage: deep undo staged:<id> | sync:<id>';
 
@@ -15,12 +14,11 @@ export async function undoCommand(args: readonly string[]): Promise<number> {
   }
   let reply: Reply;
   try {
-    const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
+    const { path: socket, token } = hubControl();
     const sync = args[0]!.startsWith('sync:');
-    reply = await call(hubAddress().path, token, sync ? 'agents.undo' : 'staged.undo', sync ? { sync: args[0] } : { staged: args[0] });
+    reply = await call(socket, token, sync ? 'agents.undo' : 'staged.undo', sync ? { sync: args[0] } : { staged: args[0] });
   } catch (error) {
-    process.stderr.write(`BLOCKED: ${error instanceof Error ? error.message : String(error)}; nothing was undone\n`);
-    return 3;
+    return notAnswered(error);
   }
   if ('error' in reply) {
     process.stderr.write(`${reply.error.remediation}\n`);

@@ -1,0 +1,25 @@
+$ PATH=<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin:$PATH env NO_COLOR=1 node node_modules/vitest/vitest.mjs run --configLoader runner --config repair-evidence/round2/base-export.config.ts
+node: v24.22.0 (<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin/node)
+started: 2026-11-18T01:21:54Z; load averages: 106.47 102.68 82.85
+-----
+
+ RUN  v5.0.5 <home>/doneright-2365-repair/repair-evidence/round2
+
+stdout | base-export.proof.ts > round 2, Defect 2: what the merge base's build steps leave in its export > lists the export's dist files
+merge base ed03dc60d51abe3d96cf61b766ecf92057a780eb, exported under <export>
+<export>/packages/evidence/dist/patterns.json: 52194 bytes, sha256 cca22d098cfcf92d9ac89f59aa14f2032bda97ce3036ad2a707bdcbef4777551; this checkout's packages/evidence/dist/patterns.json: sha256 cca22d098cfcf92d9ac89f59aa14f2032bda97ce3036ad2a707bdcbef4777551
+<export>/packages/record/dist/versions.json: 4495 bytes, sha256 aca169c15db1d534df3b13e82403d3c744b00cb3a9c8c766e925da6e70766157; this checkout's packages/record/dist/versions.json: sha256 aca169c15db1d534df3b13e82403d3c744b00cb3a9c8c766e925da6e70766157
+<export>/node_modules/@deepbuild/contracts is <export>/packages/contracts
+<export>/packages/contracts/dist does not exist (the build steps ran from the merge base's sources)
+
+ ✓ base-export.proof.ts (1 test) 2431ms
+   ✓ round 2, Defect 2: what the merge base's build steps leave in its export (1)
+     ✓ lists the export's dist files 2042ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  17:21:55
+   Duration  2.85s (tests 89%, transform 9%, import 2%)
+
+-----
+EXIT 0; ended: 2026-11-18T01:21:57Z; load averages: 106.43 102.74 82.99

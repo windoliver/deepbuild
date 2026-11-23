@@ -108,7 +108,7 @@ impl Hub<'_> {
     }
 
     /// A page point (u) of panel point `pos` (px), through the scope's flat camera.
-    fn page_point(&self, panel: &str, pos: [f64; 2]) -> Option<[f64; 2]> {
+    pub(crate) fn page_point(&self, panel: &str, pos: [f64; 2]) -> Option<[f64; 2]> {
         let s = &self.scopes.get(panel)?.scope;
         let (pose, rect) = (s.pose(), s.rect());
         let k = pose.view_width / rect[2];
@@ -229,6 +229,16 @@ impl Hub<'_> {
             .and_then(|d| self.tracks.get(&d)?.last_at(id, self.now))
             .and_then(|e| e.value.as_str().map(str::to_string))
             .unwrap_or_default();
+        // #297: what an entry text's range takes of typed or pasted text, judged before the field.
+        let before = self
+            .scopes
+            .get(panel)
+            .and_then(|s| s.fields.fields.get(id))
+            .map_or(last.clone(), |f| f.text.clone());
+        let ranged = match event {
+            Event::Text(t) | Event::Paste(t) => Some(self.typed_refused(doc, id, &before, t)),
+            _ => None,
+        };
         let Some(s) = self.scopes.get_mut(panel) else {
             return Ok((false, Vec::new()));
         };
@@ -238,11 +248,17 @@ impl Hub<'_> {
             .fields
             .entry(id.to_string())
             .or_insert_with(|| Field::committed(&last));
-        let (took, did) = match event {
-            Event::Text(t) => (true, field.typed(spec, t)),
-            Event::Paste(t) => (true, field.paste(spec, t)),
-            Event::Ime(m) => (true, field.compose(m)),
-            Event::Key { key, cmd, .. } => match key.as_str() {
+        let mut refused = None;
+        let (took, did) = match (event, ranged) {
+            // Typed or pasted text the range refuses is refused whole.
+            (Event::Text(_) | Event::Paste(_), Some(Some(r))) => {
+                refused = Some(r);
+                (true, Did::Edited)
+            }
+            (Event::Text(t), _) => (true, field.typed(spec, t)),
+            (Event::Paste(t), _) => (true, field.paste(spec, t)),
+            (Event::Ime(m), _) => (true, field.compose(m)),
+            (Event::Key { key, cmd, .. }, _) => match key.as_str() {
                 // Tab commits and moves: the scope moves the focus.
                 "Tab" => (false, field.leave(spec)),
                 "Escape" => (true, field.escape()),
@@ -253,7 +269,7 @@ impl Hub<'_> {
                 _ => (true, Did::Edited),
             },
             // A press off the field leaves it, which commits an edit; the scope takes the press.
-            Event::Down { .. } if !on_field => {
+            (Event::Down { .. }, _) if !on_field => {
                 let did = field.leave(spec);
                 s.scope.blur();
                 (false, did)
@@ -261,6 +277,27 @@ impl Hub<'_> {
             _ => (false, Did::Edited),
         };
         let mut appended = Vec::new();
+        // #297: a commit the range refuses (a blank name among them) writes nothing.
+        let did = match did {
+            Did::Commit(text) => match self.entry_refused(doc, id, &text) {
+                Some(r) => {
+                    refused = Some(r);
+                    Did::Edited
+                }
+                None => Did::Commit(text),
+            },
+            other => other,
+        };
+        if let Some(r) = refused {
+            let t = self.now;
+            let mut notice = json!({"t": t, "id": id, "text": r.notice(id), "reason": r.reason()});
+            for (k, v) in r.named().as_object().into_iter().flatten() {
+                notice[k] = v.clone();
+            }
+            if let Some(s) = self.scopes.get_mut(panel) {
+                s.picks.said.push(notice);
+            }
+        }
         match did {
             Did::Commit(text) => {
                 // Planted: the commit normalizes the field's text to NFC.

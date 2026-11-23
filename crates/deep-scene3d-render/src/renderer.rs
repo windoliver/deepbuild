@@ -14,6 +14,7 @@ pub struct Renderer {
     pub core: targets::Core,
     pub(super) velocity_frame: Option<motion::TargetFrame>,
     pub(super) emission_frame: Option<targets::EmissionFrame>,
+    pub(super) normal_frame: Option<targets::NormalFrame>,
     pub(super) epoch: u64,
     /// The material maps' textures and bind groups (#423), and the look's default taps.
     pub(super) maps: maps::Store,
@@ -60,6 +61,9 @@ pub struct Renderer {
     /// The light grid this frame, and the buffer its cells are in (#446).
     pub(super) clusters: Option<clusters::Grid>,
     pub(super) cluster_buffer: wgpu::Buffer,
+    /// The fill lights' pass, whose lights and lists follow the grid's cells in its buffer
+    /// (#1634).
+    pub(super) fill: fill::Fill,
     /// The environment's prefilter and cubes (#422).
     pub(super) env: EnvState,
     /// Whether this frame has a sky, which draws first; its pipeline once compiled (#422); the
@@ -79,6 +83,8 @@ pub struct Renderer {
     pub(super) clear_pipelines: [Option<wgpu::RenderPipeline>; 6],
     /// Blend and add over the glass, which draws after the resolve (#428, #1173).
     pub(super) late_pipelines: [Option<wgpu::RenderPipeline>; 2],
+    /// #290: the hidden views' pipelines and targets, made when a frame first draws one.
+    pub(super) hidden: Option<hidden::Hidden>,
     /// This frame's adjust table (#424), each distinct adjust once, entry k + 1 at k.
     pub(super) adjust_buffer: wgpu::Buffer,
     pub(super) adjusts: Vec<AdjustEntry>,
@@ -159,6 +165,19 @@ pub struct Renderer {
     /// #506: each view inset's own renderer, by the inset's ID, drawn whole before this view's
     /// geometry, one level deep.
     pub(super) views: BTreeMap<String, Box<Renderer>>,
+    /// #3016: another view of a scene (a mirror's, a view inset's, a look region's), drawing
+    /// from what the renderer holding the scene's resources lends it: it starts and ends no turn
+    /// of their caches, and sets no inset picture of theirs.
+    pub lent: bool,
+    /// #3016: the scene it draws as a mirror's or a view inset's view, kept from frame to frame.
+    pub(super) seen: Option<Box<deep_canvas_scene3d::scene::Scene>>,
+    /// #3016: the shared resources its lights' group binds, bound again when they change; and,
+    /// under the planted mirror_takes_view_cull or inset_takes_view_cascades, the camera of the
+    /// view that lends it them and that camera's clip.
+    pub(super) bound: lend::Bound,
+    pub(super) planted_view: Option<(deep_canvas_scene3d::scene::Camera, [f64; 16])>,
+    /// #3016: the frame's casters and their corners, kept from frame to frame.
+    pub(super) casters: Vec<shadow::Caster>,
     /// #465: the flare's passes, made when a frame first has a flare, and whether this frame has.
     pub(super) flarer: Option<Box<flare::Flarer>>,
     pub(super) flaring: bool,
@@ -166,9 +185,22 @@ pub struct Renderer {
     /// frame has.
     pub(super) doffer: Option<Box<dof::Dofer>>,
     pub(super) dofing: bool,
+    /// #971: the look's local tone map, made when a frame first has one; whether this frame
+    /// has; and the output pass's bind group over the image it resolves, with that image and
+    /// the covered mask it binds.
+    pub(super) toner: Option<Box<local_tone::Toner>>,
+    pub(super) toning: bool,
+    pub(super) toned_bind: Option<(wgpu::TextureView, wgpu::TextureView, wgpu::BindGroup)>,
+    /// #971: another view reads this one's linear picture (a mirror's view, a view inset's), so
+    /// it resolves no local tone map of its own.
+    pub(super) pictured: bool,
     /// #166: the water's pass, made when a frame first has water, and whether this frame has.
     pub(super) waterer: Option<Box<water::Waterer>>,
     pub(super) watering: bool,
+    /// #2657: the last whole prepare's scene with its levels of detail resolved, and the one
+    /// without the water's parts, each kept while the scene it was made from holds.
+    pub(super) leveled: Option<Box<kept::Kept>>,
+    pub(super) dry: Option<Box<kept::Kept>>,
     /// #166: view3d's `reflection` target while a frame asks for it: each mirror part's lookup.
     pub(super) reflection: Option<(wgpu::Texture, wgpu::TextureView, [u32; 2])>,
     /// #268: view3d's `foam` target while a frame asks for it: the water's foam share.
@@ -197,7 +229,9 @@ pub struct Renderer {
     pub(super) glass_kit: Option<glass::Kit>,
     /// Whether a mask-alpha part casts this frame: its sets draw into shadow maps only then.
     pub(super) mask_casts: bool,
-    pub(super) meshes: BTreeMap<Shape, Mesh>,
+    /// #1431: the meshes uploaded, by shape, held to [`MESHES`]' bounds.
+    // cache: entries 64, bytes 256_000_000
+    pub(super) meshes: Kept<Shape, Mesh>,
     /// The swaying meshes' rest vertices, weights and params (#2016).
     pub(super) sways: sway::Sways,
     pub(super) batches: BTreeMap<String, Batch>,
@@ -206,6 +240,9 @@ pub struct Renderer {
     pub(super) mask: (wgpu::BindGroupLayout, wgpu::Sampler),
     pub(super) picks: BTreeMap<String, u32>,
     pub(super) next_generation: u64,
+    /// The hidden-style lines' spans it holds from frame to frame (#1782), so a still view
+    /// works none out again.
+    pub(super) spans: deep_canvas_scene3d::spans::Kept,
     pub(super) targets: Option<Targets>,
     /// The batches this frame draws, in layer order.
     pub(super) order: Vec<String>,
@@ -248,6 +285,8 @@ pub struct Renderer {
     /// The linear image this frame's output pass reads when passes between geometry and output
     /// wrote one (#418's `pre_tone`); `None`, the linear target.
     pub(super) pre_tone: Option<wgpu::TextureView>,
+    /// #458: the origin the last scene it prepared was moved by.
+    pub(super) origin: [f64; 3],
     /// The output pass's bind group over a post module's own target, with that target and the
     /// covered mask it binds.
     pub(super) post_bind: Option<(wgpu::TextureView, wgpu::TextureView, wgpu::BindGroup)>,

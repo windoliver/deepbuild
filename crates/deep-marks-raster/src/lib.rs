@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use deep_canvas_marks::animated;
 use deep_canvas_marks::modules::{self as modules, Run, StatusDrawing};
 use deep_canvas_marks::noise_fill::{self, NoiseFill};
 use deep_canvas_marks::path;
@@ -25,6 +26,8 @@ use vello_cpu::{
     color::{AlphaColor, Srgb},
     Image, ImageSource, Pixmap, RasterizerSettings, RenderContext, RenderSettings, Resources,
 };
+
+mod written;
 
 /// Why a revision can't be drawn: the issue code and the path it names.
 #[derive(Clone, Debug, PartialEq)]
@@ -53,10 +56,10 @@ pub struct Drawn {
     /// reads; the level is the one the drawing's scale takes.
     pictures: Arc<Pictures>,
     /// Each text's run as the text module shaped it (#387), drawn as it is when its spec is the
-    /// mark's.
-    runs: BTreeMap<String, Arc<Run>>,
-    /// Each animated text's units as `[lift, opacity]`, one per glyph.
-    animated: BTreeMap<String, Vec<[f64; 2]>>,
+    /// mark's; shared with the drawing, never copied (#2660).
+    runs: Arc<BTreeMap<String, Arc<Run>>>,
+    /// Each animated text's units ([`animated::Unit`]), one per glyph.
+    animated: Arc<BTreeMap<String, Vec<animated::Unit>>>,
     /// #493: a 2D film's camera, from the document's units to its own pixels, where a shot
     /// moves it; the legend stays where it is.
     pub view: Option<Affine>,
@@ -146,10 +149,9 @@ impl Drawn {
                 .iter()
                 .enumerate()
                 .map(|(k, g)| {
-                    let [lift, opacity] =
-                        units.and_then(|u| u.get(k)).copied().unwrap_or([0.0, 1.0]);
-                    json!({"x": origin[0] + f64::from(g.x), "y": origin[1] + f64::from(g.y) + lift,
-                           "opacity": opacity.clamp(0.0, 1.0)})
+                    let unit = units.and_then(|u| u.get(k)).copied().unwrap_or(animated::UNIT);
+                    json!({"x": origin[0] + f64::from(g.x), "y": origin[1] + f64::from(g.y) + unit[0],
+                           "opacity": animated::faded(unit).clamp(0.0, 1.0)})
                 })
                 .collect();
             out.insert(item.clone(), Value::Array(glyphs));
@@ -509,6 +511,7 @@ fn decode_all(
     let mut drawn = std::collections::HashSet::new();
     let mut held = 0;
     for d in frame.layers.iter().flat_map(|l| &l.marks) {
+        // #269: a grid image draws its grid, no stored picture.
         let Mark::Image {
             item,
             asset,
@@ -516,6 +519,7 @@ fn decode_all(
             fit,
             crop,
             tile,
+            grid: None,
             ..
         } = &d.mark
         else {
@@ -555,6 +559,7 @@ fn decode_all(
             crop: cut,
             flip,
             level: 0,
+            frame: 0,
         };
         let to = fit.fitted(*bounds, key.shown());
         key.level = deep_images::level_for(key.shown(), [to[2], to[3]]);
@@ -686,8 +691,8 @@ impl Renderer {
             status,
             images,
             pictures,
-            runs: BTreeMap::new(),
-            animated: BTreeMap::new(),
+            runs: Arc::default(),
+            animated: Arc::default(),
             view: None,
             noise,
         })
@@ -712,8 +717,8 @@ impl Renderer {
                 status,
                 images: BTreeMap::new(),
                 pictures: Arc::default(),
-                runs: BTreeMap::new(),
-                animated: BTreeMap::new(),
+                runs: Arc::default(),
+                animated: Arc::default(),
                 view: None,
                 noise: BTreeMap::new(),
             });
@@ -1026,7 +1031,7 @@ impl Renderer {
                 ..
             } => {
                 // The text module's run, shaped once for its spec, as the scheduler keeps it;
-                // an animated text's units each lifted and faded.
+                // an animated text's units each lifted, faded and written.
                 if let Some(run) = drawn.runs.get(item).filter(|r| r.spec == *spec) {
                     let units = drawn.animated.get(item).map(Vec::as_slice);
                     self.glyphs(ctx, &run.shaped, *origin, (*c, runs), at, units);
@@ -1047,7 +1052,7 @@ impl Renderer {
                     lang: None,
                     size: spec.size as f32,
                     weight: spec.weight,
-                    line_height: None,
+                    line_height: spec.columns_line_height(),
                     width: spec.width.map(|w| w as f32),
                     max_lines: None,
                     align,
@@ -1057,6 +1062,7 @@ impl Renderer {
                     spans: &spec.spans,
                     gap: spec.gap as f32,
                     indent: spec.indent as f32,
+                    flow: spec.flow,
                 });
                 self.glyphs(ctx, &shaped, *origin, (*c, runs), at, None);
             }
@@ -1071,7 +1077,11 @@ impl Renderer {
                 crop,
                 tile,
                 turn,
+                grid,
             } => {
+                if let Some(g) = grid {
+                    return deep_marks_vello::grid(ctx, item, g, *bounds, scales(at).0);
+                }
                 // #1486: a still picture draws the level the drawing's scale takes, cut as its
                 // request is; a video's frame draws whole, cut by its crop.
                 let still = drawn
@@ -1174,7 +1184,7 @@ impl Renderer {
     }
 
     /// A shaped run's glyphs at `origin` (its top left), each in its run's color or the text's;
-    /// with `units`, each glyph lifted and faded by its unit's `[lift, opacity]`.
+    /// with `units`, each glyph lifted, faded and written by its unit ([`animated::Unit`]).
     fn glyphs(
         &mut self,
         ctx: &mut RenderContext,
@@ -1182,16 +1192,24 @@ impl Renderer {
         origin: [f64; 2],
         (c, runs): (Rgb, &[scene::TextRun]),
         at: Affine,
-        units: Option<&[[f64; 2]]>,
+        units: Option<&[animated::Unit]>,
     ) {
         let paint = |g: &deep_text::Glyph| scene::run_paint(runs, g.grapheme, None, c).1;
         // #1966: a dimmed code line's glyphs at its run's opacity.
         let alpha_of = |g: &deep_text::Glyph| scene::run_opacity(runs, g.grapheme);
         if let Some(units) = units {
             for (g, unit) in shaped.glyphs.iter().zip(units) {
-                let [lift, opacity] = *unit;
+                let [lift, opacity, _, filled] = *unit;
                 let c = paint(g);
                 let opacity = opacity * alpha_of(g);
+                if filled < 1.0 {
+                    let pen = [
+                        origin[0] + f64::from(g.x),
+                        origin[1] + lift + f64::from(g.y),
+                    ];
+                    written::glyph(ctx, &mut self.resources, g, (c, opacity), (at, pen), *unit);
+                    continue;
+                }
                 let alpha = (opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
                 ctx.set_paint(AlphaColor::from_rgba8(c[0], c[1], c[2], alpha));
                 ctx.set_transform(at * Affine::translate((origin[0], origin[1] + lift)));
@@ -1204,7 +1222,8 @@ impl Renderer {
                     .glyph_run(&mut self.resources, &g.font)
                     .font_size(g.size)
                     .hint(false)
-                    .glyph_transform(deep_text::atlas::slant(g.skew))
+                    .glyph_transform(deep_text::atlas::glyph_transform(g.skew, g.turn))
+                    .normalized_coords(&g.coords)
                     .fill_glyphs(one);
             }
             ctx.set_transform(at);
@@ -1221,6 +1240,8 @@ impl Renderer {
                         && g.font.index == first.font.index
                         && g.size == first.size
                         && g.skew == first.skew
+                        && g.turn == first.turn
+                        && g.coords == first.coords
                         && paint(g) == paint(first)
                         && alpha_of(g) == alpha_of(first)
                 })
@@ -1237,7 +1258,8 @@ impl Renderer {
                 .glyph_run(&mut self.resources, &first.font)
                 .font_size(first.size)
                 .hint(false)
-                .glyph_transform(deep_text::atlas::slant(first.skew))
+                .glyph_transform(deep_text::atlas::glyph_transform(first.skew, first.turn))
+                .normalized_coords(&first.coords)
                 .fill_glyphs(glyphs);
             start += run;
         }

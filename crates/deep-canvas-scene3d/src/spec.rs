@@ -97,11 +97,13 @@ pub(crate) const POINTS: &str =
     "[[x, y, z] | ID] | {array: <logic>.<name>, rows: [from, to] | all}";
 /// A line of a mesh's edges (`geom::EdgeKind::read`).
 pub(crate) const EDGES: &str =
-    "{of: ID (or ID#part), kind: all | quads | cage | crease {angle: deg}, border: bool}";
+    "{of: ID (or ID#part), kind: all | quads | cage | crease {angle: deg}, border: bool, material: bool}";
+/// A mesh-edge line's hidden style (`scene::edge_line`; #1782).
+pub(crate) const HIDDEN: &str = "{dash: [px] ≤ 2, paint}";
 /// A line's ends, as Path `path@1` takes them; scene3d doesn't draw them yet.
 pub(crate) const ENDS: &str = "{start | end: none | arrow | open | stealth | dot | ring | square | diamond | bar, size: f32, width: f32}";
 /// A line's trail (`deep_canvas_motion::trail::read`).
-const TRAIL: &str = "{of: ID, span: s, segments: 1 to 64, width: px, taper: f32, fade: f32, space: world | local, window: span | since {on, until, keep: 1 to 8} | whole {from}, rate: Hz, max_points: u32}";
+pub(crate) const TRAIL: &str = "{of: ID, span: s, segments: 1 to 64, width: px, taper: f32, fade: f32, space: world | local, window: span | since {on, until, keep: 1 to 8} | whole {from}, rate: Hz, max_points: u32}";
 
 fn paint() -> P {
     p(
@@ -143,6 +145,19 @@ fn flicker() -> P {
         S,
         json!(1),
         json!(0.5),
+    )
+}
+
+/// A mark in 3D's `fog` (Marks in 3D; #1992): whether the sky's fog applies to it.
+pub(crate) fn fog(default: bool) -> P {
+    p(
+        "fog",
+        "bool",
+        "",
+        json!(default),
+        S,
+        Value::Null,
+        Value::Null,
     )
 }
 
@@ -248,135 +263,8 @@ fn of_scene3d(kind: &str) -> Option<Spec> {
     Some(spec)
 }
 
-/// The builder params beyond each kind's first ones (Builder: the ten trusted builders).
-fn extras(kind: &str) -> Vec<P> {
-    match kind {
-        "slab@1" => vec![
-            ranged(
-                p("bevel", "m", "m", json!(0), G, json!(0), json!(0.05)),
-                0.0,
-                100.0,
-            ),
-            p(
-                "groove",
-                "{depth, width}",
-                "m",
-                Value::Null,
-                G,
-                json!({"depth": 0.05, "width": 0.2}),
-                json!({"depth": 0.08, "width": 0.3}),
-            )
-            .takes("{depth: m, width: m}"),
-            p(
-                "along",
-                "{path, from, to}",
-                "",
-                Value::Null,
-                G,
-                json!({"path": [[0, 0, 0], [2, 0, 0]]}),
-                json!({"path": [[0, 0, 0], [2, 0, 1]], "from": 0.25}),
-            )
-            .takes("{path: [vec3] | curve ID, from: 0..1, to: 0..1}"),
-        ],
-        "lathe@1" => vec![
-            p(
-                "ribs",
-                "{count, depth, span}",
-                "m",
-                Value::Null,
-                G,
-                json!({"count": 8, "depth": 0.02, "span": 0.5}),
-                json!({"count": 6, "depth": 0.03, "span": 0.25}),
-            )
-            .takes("{count: integer, depth: m, span: 0..1}"),
-            p(
-                "bands",
-                "[{y0, y1, material}]",
-                "m",
-                json!([]),
-                G,
-                json!([]),
-                json!([{"y0": 0, "y1": 0.5, "material": "wood"}]),
-            )
-            .takes("[{y0: m, y1: m, material}]"),
-            p(
-                "thread",
-                "{pitch, depth}",
-                "m",
-                Value::Null,
-                G,
-                json!({"pitch": 0.1, "depth": 0.01}),
-                json!({"pitch": 0.2, "depth": 0.02}),
-            )
-            .takes("{pitch: m, depth: m}"),
-            p(
-                "rim",
-                "polygon",
-                "",
-                Value::Null,
-                G,
-                json!([[1, 0], [0, 1], [-1, 0], [0, -1]]),
-                json!([[1, 0], [0.3, 0.95], [-0.8, 0.6], [-0.8, -0.6], [0.3, -0.95]]),
-            ),
-        ],
-        "extrude@1" => vec![ranged(
-            p("bevel", "m", "m", json!(0), G, json!(0), json!(0.05)),
-            0.0,
-            100.0,
-        )],
-        "tube@1" => vec![
-            ranged(
-                p("bend", "m", "m", json!(0), G, json!(0), json!(0.2)),
-                0.0,
-                100.0,
-            ),
-            p(
-                "normal",
-                "vec3",
-                "",
-                Value::Null,
-                G,
-                json!([1, 0, 0]),
-                json!([0, 0, 1]),
-            ),
-        ],
-        "plate@1" => vec![
-            p(
-                "height",
-                "field, m",
-                "m",
-                Value::Null,
-                G,
-                json!(0),
-                json!({"wave": {"amplitude": 0.1, "wavelength": 1}}),
-            )
-            .takes("m | {wave: {amplitude: m, wavelength: m, direction?: deg}} | {noise: {amplitude: m, scale: m, seed?: u64}}"),
-            // #2014: a terrain plate's height field, size and spacing (Builder plate: terrain).
-            p(
-                "terrain",
-                "terrain",
-                "m",
-                Value::Null,
-                G,
-                json!({"height": 0, "size": [4, 4]}),
-                json!({"height": "position.x * 0.25", "size": [4, 4], "spacing": 0.5}),
-            )
-            .takes("{height: m | expr | {wave} | {noise}, size: [m, m], spacing?: m, tile?: m, lod_levels?: u8 ≤ 6}"),
-            // #537: a terrain plate's overlays tint its cover and rebuild nothing (Builder plate: terrain overlays).
-            p(
-                "overlays",
-                "[overlay] ≤ 2",
-                "",
-                Value::Null,
-                S,
-                Value::Null,
-                json!([]),
-            )
-            .takes("[{grid: <logic>.<name>, size: [cols, rows: u16], origin?: [m, m], cell?: m, roles: [role | none] ≤ 16, opacity?: 0..1}] ≤ 2"),
-        ],
-        _ => Vec::new(),
-    }
-}
+mod extras;
+use extras::extras;
 
 /// `mesh.asset@1 {sha256 (glTF), node}`: a glTF node's mesh from the asset store, one mesh for
 /// every item naming the same asset and node.
@@ -387,7 +275,8 @@ fn mesh_asset() -> Spec {
         kind: "mesh.asset@1",
         module: "scene3d",
         params: vec![
-            p("sha256", "sha256", "", Value::Null, G, json!(a), json!(b)),
+            p("sha256", "sha256", "", Value::Null, G, json!(a), json!(b))
+                .takes("sha256 | {gen: <pack>.<provider>, params}"),
             p("node", "index | name", "", json!(0), G, json!(0), json!(1))
                 .takes("index | name | {scene: index}"),
             shade(),
@@ -498,6 +387,18 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 json!([6, 2]),
             )
             .takes("[px] ≤ 2"),
+            // #1782: the style a mesh-edge line's spans behind opaque geometry draw in; the sweep
+            // leaves it unset, as it does `edges`.
+            p(
+                "hidden",
+                "{dash, paint}",
+                "",
+                Value::Null,
+                S,
+                json!(null),
+                json!(null),
+            )
+            .takes(HIDDEN),
             p(
                 "ends",
                 "{start, end}",
@@ -587,9 +488,51 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 json!("camera"),
                 json!("upright"),
             ),
+            fog(false),
         ]),
         reads: None,
         fixture: json!({"it": item("mark.text@1", json!({"text": "Block", "size": 13, "paint": {"fill": {"role": "ink"}}}))}),
+    };
+    // A picture on one quad (Marks in 3D; #1992), by hash as Image `image@1` names one.
+    let image = || {
+        let (a, b) = ("a".repeat(64), "b".repeat(64));
+        Spec {
+            kind: "mark.image@1",
+            module: "scene3d",
+            params: common(vec![
+                p("asset", "sha256", "", Value::Null, S, json!(a), json!(b)),
+                p(
+                    "alt",
+                    "text",
+                    "",
+                    json!(""),
+                    "text",
+                    json!("A picture"),
+                    json!("A plan"),
+                ),
+                p(
+                    "size",
+                    "[w, h]",
+                    "px",
+                    Value::Null,
+                    G,
+                    json!([64, 64]),
+                    json!([96, 64]),
+                ),
+                p(
+                    "facing",
+                    "camera | upright | fixed",
+                    "",
+                    json!("camera"),
+                    G,
+                    json!("camera"),
+                    json!("upright"),
+                ),
+                fog(true),
+            ]),
+            reads: None,
+            fixture: json!({"it": item("mark.image@1", json!({"asset": a, "alt": "A picture", "size": [64, 64]}))}),
+        }
     };
     let sun = || Spec {
         kind: "light.sun@1",
@@ -753,6 +696,18 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 json!(90),
             ),
         ];
+        if kind != "light.area@1" {
+            // #1634: a fill light, which its clusters shade and which casts no shadow.
+            params.push(p(
+                "fill",
+                "bool",
+                "",
+                json!(false),
+                S,
+                json!(false),
+                json!(true),
+            ));
+        }
         if kind == "light.area@1" {
             params.push(p(
                 "shape",
@@ -900,8 +855,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 .takes("{strength: 0..1, blur: px, plane: named part}"),
             // #166: water on a plate's part; the sweep leaves it unset, as it does the mirror.
             // `water::parse` also takes a wind's fields bare, in place of `{wind: {..}}`.
-            p("water", "{waves: wind {speed, direction} | [{direction, length, amplitude, steepness}], ripples: {scale, strength}, rain, absorption: {color, depth}, distort: px, foam: {threshold, speed}, flow: {along, speed, cycle} | none, wake: {item, span} | none}", "m", Value::Null, S, Value::Null, Value::Null)
-                .takes("{waves: wind {speed, direction} | {speed, direction} | [{direction, length, amplitude, steepness}] ≤ 4, ripples, rain: f32, absorption, distort: px, foam: {threshold, speed: m/s | none}, flow: {along: curve ID | field {x, z}, speed: m/s, cycle: s} | none, wake: {item, span} | none, shore}"),
+            p("water", "{waves: wind {speed, direction} | [{direction, length, amplitude, steepness}], ripples: {scale, strength}, rain, absorption: {color, depth}, distort: px, foam: {threshold, speed}, flow: {along, speed, cycle} | none, wake: {item, span} | none, rings: {on, speed, span, strength} | none}", "m", Value::Null, S, Value::Null, Value::Null)
+                .takes("{waves: wind {speed, direction} | {speed, direction} | [{direction, length, amplitude, steepness}] ≤ 4, ripples, rain: f32, absorption, distort: px, foam: {threshold, speed: m/s | none}, flow: {along: curve ID | field {x, z}, speed: m/s, cycle: s} | none, wake: {item, span} | none, rings: {on: occurrence list | {list: occurrence list} (filtered by kind, tags and where, as Spawn takes it), speed: m/s, span: s, strength: 0..1} | none, shore}"),
             p(
                 "pattern",
                 "none | plaster | stone_courses | roof_tiles | wood | rock | grass | cobbles | glass_curtain | concrete | asphalt",
@@ -981,6 +936,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
         "mark.line@1" => edged(),
         "mark.point@1" => crate::cloud::spec(),
         "mark.text@1" => text(),
+        "mark.image@1" => image(),
         "light.sun@1" => sun(),
         "light.point@1" => local("light.point@1", false),
         "light.spot@1" => local("light.spot@1", true),
@@ -1095,7 +1051,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 ),
                 p(
                     "fog_curve",
-                    "exp | exp2",
+                    "exp | exp2 | linear {near: m, far: m}",
                     "",
                     json!("exp2"),
                     S,
@@ -1165,6 +1121,15 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     json!("sky"),
                 )
                 .takes("auto | sky | environment | video {asset: sha256, frames}"),
+                p(
+                    "background_intensity",
+                    "f32",
+                    "",
+                    json!(1),
+                    S,
+                    json!(1),
+                    json!(0.25),
+                ),
                 ranged(
                     p(
                         "background_blur",
@@ -1849,6 +1814,25 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             reads: None,
             fixture: json!({"it": item("plate@1", json!({"grid": [4, 3], "size": [2, 1.5], "paint": {"fill": {"role": "accent"}}}))}),
         },
+        crate::attrs::FIXTURE => Spec {
+            kind: crate::attrs::FIXTURE,
+            module: "scene3d",
+            params: vec![
+                p(
+                    "attributes",
+                    "[{name, domain, type, values}]",
+                    "",
+                    json!([]),
+                    G,
+                    json!([]),
+                    json!([{"name": "tag", "domain": "face", "type": "u32", "values": [1, 2, 3, 4, 5, 6]}]),
+                ),
+                shade(),
+                paint(),
+            ],
+            reads: None,
+            fixture: json!({"it": item(crate::attrs::FIXTURE, json!({"paint": {"fill": {"role": "accent"}}}))}),
+        },
         "hull@1" => Spec {
             kind: "hull@1",
             module: "scene3d",
@@ -2103,13 +2087,14 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
 }
 
 /// scene3d's kinds, in the order the `kinds` call lists them.
-pub const SCENE3D: [&str; 28] = [
+pub const SCENE3D: [&str; 29] = [
     "mark.box@1",
     "mark.cylinder@1",
     "mark.sphere@1",
     "mark.line@1",
     "mark.point@1",
     "mark.text@1",
+    "mark.image@1",
     "light.sun@1",
     "light.point@1",
     "light.spot@1",

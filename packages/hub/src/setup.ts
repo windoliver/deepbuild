@@ -17,19 +17,21 @@ import { promisify } from 'node:util';
 import { readFacts } from '@deepbuild/adapters';
 import { draftAskSettings } from '@deepbuild/asks';
 import { keepOriginal, noteWritten, putBack, saveRecord, setupRecord, strictObject, target, writeThrough } from './agent-files.js';
-import { confirmed } from './authority.js';
+import { stopAsYou } from './authority.js';
 import { Confirmer } from './confirm.js';
 import { claudeCommand, claudeSettings, installedRecord, longestDeadline, ourGroups, relations, withHooks, withoutOurs, writeJson } from './claude-settings.js';
 import { codexConfig, codexHooks, codexRelations, fixedHook, forgetEntries, recordedHome, recordedServer, recordEntries, withEntries, withoutEntries, withoutServer, withServer } from './codex-settings.js';
 import { call } from './client.js';
 import { installShipped } from './installer.js';
-import { deepHook, hubAddress, installedPrograms, installedRoot, lastingNode, rootOf } from './paths.js';
+import { deepHook, hubControl, installedPrograms, installedRoot, lastingNode, rootOf } from './paths.js';
 import { activePlant as plant } from './plant.js';
-import { removeService, startHub, stopIfRunning } from './service.js';
+import { removeService, startHub } from './service.js';
 import { changes, doing, installers, key, lands, onPath, planned as plannedRows, saying, setUpLine, type Row } from './setup-steps.js';
+import { restoreShipped, shippedRules } from './guards.js';
 import { Devices } from './trusted.js';
 import { shellQuote as q } from './shell.js';
 import { isRecord as isObj } from '@deepbuild/contracts';
+import type { DoctorItem } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
 const REPO = fileURLToPath(new URL('../../../', import.meta.url));
@@ -75,7 +77,7 @@ interface Said { code: number; line: string | undefined; later: string[] }
 
 /**
  * Runs the rows of the one list (setup-steps.ts) that apply here. Exit 0 once everything is in place; 1 when a file of
- * yours refused it, with nothing written; 3 when the hub didn't start; 4 when the wiki wasn't built. `quiet` keeps
+ * yours refused it, with nothing written; 3 when the hub didn't start or the wiki wasn't built (#1812). `quiet` keeps
  * stdout empty and holds every failure after the hooks for the caller to say after its one line.
  */
 async function install(cli: string, quiet = false): Promise<Said> {
@@ -175,7 +177,7 @@ async function install(cli: string, quiet = false): Promise<Said> {
   if (!quiet) console.log(`Its hooks and status line forwarder are in ${settingsFile}, beside yours; its MCP server in ${userFile}; its skill at ${skillDir()}; its safety rules at ${join(root, 'rules.json')}.`);
   // Only a relation that doesn't hold needs you; deep doctor lists them all.
   if (!quiet) for (const r of relations(root)) if (!r.holds) console.log(`BROKEN ${r.text}`);
-  const started = await startHub({ cli });
+  const started = await startHub({ cli, quiet: true });
   if (started !== 0) {
     tell('deep setup: the hub didn\'t start through its login service; deep doctor names what is missing.\n');
     return said(stopped(root, 3, 'the hub didn\'t start through its login service', 'Run deep doctor, which names what is missing, then Set up again.', done));
@@ -200,7 +202,8 @@ export function buildFailure(error: unknown): string {
 /** The record's `setup.step` events (#1100): one per step setup took, through the hub, which appends them. */
 async function report(done: readonly Row[], tell: (text: string) => void): Promise<void> {
   try {
-    const reply = await call(hubAddress().path, readFileSync(rootOf(installedRoot()).token, 'utf8').trim(), 'setup.report', { steps: done.map((r) => ({ step: r.step, agent: r.agent ?? null })) });
+    const { path: socket, token } = hubControl();
+    const reply = await call(socket, token, 'setup.report', { steps: done.map((r) => ({ step: r.step, agent: r.agent ?? null })) });
     if ('error' in reply) tell(`deep setup: the record didn't keep setup's steps: ${reply.error.remediation}\n`);
   } catch (error) {
     tell(`deep setup: the record didn't keep setup's steps: ${error instanceof Error ? error.message : String(error)}\n`);
@@ -220,21 +223,21 @@ const version = (cli: string): string => (JSON.parse(readFileSync(join(dirname(c
  * Once the hub is up, it reads your Claude Code and Codex history into the wiki (#356): pattern matching written first,
  * then each reading job finished or waiting on the plan reserve. Each wiki page that changed gets a line, unless quiet.
  * The reading is the hub's; the agent's own session and settings are already in place, so a failure here is told and
- * setup still stands: 4 only when the hub couldn't be asked.
+ * setup still stands: 3, not checked, when it wasn't read.
  */
 async function readHistory(quiet: boolean, tell: (text: string) => void): Promise<number> {
   try {
-    const root = installedRoot();
-    const reply = await call(hubAddress().path, readFileSync(rootOf(root).token, 'utf8').trim(), 'wiki.build', {});
+    const { path: socket, token } = hubControl();
+    const reply = await call(socket, token, 'wiki.build', {});
     if ('error' in reply) {
       tell(`deep setup: the wiki wasn't built: ${reply.error.remediation}\n`);
-      return 4;
+      return 3;
     }
     if (!quiet) for (const page of (reply.result.changed as string[] | undefined) ?? []) console.log(`Wiki: ${page}`);
     return 0;
   } catch (error) {
     tell(`deep setup: the wiki wasn't built: ${error instanceof Error ? error.message : String(error)}\n`);
-    return 4;
+    return 3;
   }
 }
 /**
@@ -360,27 +363,33 @@ function recordLoginPath(root: string, also: readonly string[] = []): void {
  */
 function installRules(root: string): number {
   const file = join(root, 'rules.json');
-  const shipped = JSON.parse(readFileSync(join(REPO, 'crates', 'deep-hook', 'default-rules.json'), 'utf8')) as { v: number; entries: Obj };
+  const shipped = shippedRules();
+  delete shipped.proofs;
   const blocking = Object.values(shipped.entries).filter((entry) => isObj(entry) && entry.mode === 'block').length;
   if (!existsSync(file)) {
+    // The entries' planted calls and twins go in a file of their own, which only the hub reads (#2695), written first.
+    restoreShipped(root, {}, writeJson);
     writeJson(file, shipped);
     return blocking;
   }
   let current: unknown;
   try { current = JSON.parse(readFileSync(file, 'utf8')); } catch { return blocking; /* unreadable: deep-hook names it */ }
   if (!isObj(current) || !isObj(current.entries)) return blocking;
+  // Every shipped entry gets its proof back where none is held (#2695), as after proofs.json was removed.
+  restoreShipped(root, current, writeJson);
   const missing = Object.keys(shipped.entries).filter((name) => !(name in (current.entries as Obj)));
   if (missing.length) writeJson(file, { ...current, entries: { ...current.entries, ...Object.fromEntries(missing.map((n) => [n, shipped.entries[n]])) } });
   return blocking;
 }
 
 /**
- * `deep setup --undo`, once the OS confirms you: the login service and the hub stop first, so no watch puts an entry
+ * `deep setup --undo`, once the OS confirms you: the hub and the login service stop first, so no watch puts an entry
  * back; then each file setup wrote gets its original bytes back where you haven't edited it since, and only our parts
  * taken out where you have; the skill goes. ~/.deepbuild stays, with the record, evidence and wiki.
  */
 async function undo(): Promise<number> {
-  const why = await confirmed('deep setup --undo');
+  // The hub's stop is the confirmation (#1865): it asks the OS inside the hub, once, and stops only then.
+  const why = await stopAsYou('deep setup --undo');
   if (why) {
     process.stderr.write(`${why}\n`);
     return 3;
@@ -388,8 +397,6 @@ async function undo(): Promise<number> {
   const root = installedRoot();
   const record = setupRecord(root);
   if (plant() !== 'undo-keeps-login-service') removeService();
-  const stopped = await stopIfRunning(root);
-  if (stopped !== 0) return stopped;
   const settingsFile = claudeSettings();
   const userFile = claudeJson();
   let yours: string | undefined;
@@ -575,11 +582,11 @@ function editedCodex(file: string, without: (text: string) => string, what: stri
 }
 
 /** deep doctor's item for each timing relation our entries keep, with both values: broken is a failed item. */
-export function relationItems(): { item: string; agent: string; code: string; level: 'ok' | 'fail'; evidence: string; fix: string }[] {
+export function relationItems(): { item: string; agent: string; code: DoctorItem['code']; level: 'ok' | 'fail'; evidence: string; fix: string }[] {
   const codex = codexRelations(installedRoot()).map((r) => ({
     item: `timing.codex_${r.name.replaceAll(' ', '_')}`,
     agent: 'codex',
-    code: r.holds ? 'healthy' : 'timing_relation_broken',
+    code: r.holds ? 'healthy' as const : 'timing_relation_broken' as const,
     level: r.holds ? 'ok' as const : 'fail' as const,
     evidence: r.text,
     fix: r.holds ? 'Nothing to do.' : `Put the value back as the reading says; setup never changes it, since Codex asks for trust again when an entry's timeout changes.`,
@@ -587,7 +594,7 @@ export function relationItems(): { item: string; agent: string; code: string; le
   return [...codex, ...relations(installedRoot()).map((r) => ({
     item: `timing.${r.name.replaceAll(' ', '_')}`,
     agent: 'claude-code',
-    code: r.holds ? 'healthy' : 'timing_relation_broken',
+    code: r.holds ? 'healthy' as const : 'timing_relation_broken' as const,
     level: r.holds ? 'ok' as const : 'fail' as const,
     evidence: r.text,
     fix: r.holds ? 'Nothing to do.' : `Run deep setup, which writes the entry's timeout again, or raise it in ${claudeSettings()}.`,
@@ -606,8 +613,8 @@ export async function waiterCommand(): Promise<number> {
   for (;;) {
     try { process.kill(parent, 0); } catch { return 0; }
     try {
-      const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
-      const reply = await call(hubAddress().path, token, 'session.wait', { session, poll: true });
+      const { path: socket, token } = hubControl();
+      const reply = await call(socket, token, 'session.wait', { session, poll: true });
       if ('result' in reply && typeof reply.result.text === 'string') {
         process.stderr.write(`${reply.result.text}\n`);
         return 2;

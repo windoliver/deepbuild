@@ -1,0 +1,1300 @@
+{
+  "checks": [
+    "camera.framing",
+    "document.budget",
+    "document.determinism",
+    "document.frame_time",
+    "document.layout",
+    "document.validate",
+    "effects.audit",
+    "export",
+    "film.audit",
+    "film.flicker",
+    "film.layout",
+    "geometry.attributes",
+    "geometry.audit",
+    "geometry.shading",
+    "geometry.shape",
+    "honest_numbers",
+    "kind_rules",
+    "logic.budget",
+    "logic.determinism",
+    "logic.tuning",
+    "mix.balance",
+    "net.budget",
+    "net.desync",
+    "net.feel",
+    "net.rollback",
+    "render.contrast",
+    "render.exposure",
+    "render.noise",
+    "render.review",
+    "scene.scale",
+    "sound_lock"
+  ],
+  "fixtures": [
+    "building/house",
+    "cells/grid",
+    "core/board",
+    "data/columns",
+    "data/decimated",
+    "data/points",
+    "data/race",
+    "effects/audit-unread",
+    "effects/composed-in-core-view",
+    "effects/live-only-material",
+    "effects/same-machine-check",
+    "effects/scattered-write",
+    "effects/shadowed-box",
+    "effects/tint-cost-understated",
+    "effects/tint-operator-cycle",
+    "effects/tint-operator-limit",
+    "effects/tint-operator-source",
+    "effects/tint-operator-status-color",
+    "effects/tint-operator-type",
+    "effects/tint-operator-unbounded",
+    "effects/tint-operator-unknown-op",
+    "export/export-glow",
+    "export/export-spring",
+    "export/export-status",
+    "graph/layered",
+    "graph/over_budget",
+    "graph/tie",
+    "logic/counter",
+    "logic/logic-budget",
+    "logic/logic-determinism",
+    "logic/logic-tuning",
+    "logic/readers",
+    "look/finish",
+    "look/roles",
+    "loop/loop-contrast-clean",
+    "loop/loop-contrast-muted",
+    "loop/loop-exposure-clean",
+    "loop/loop-exposure-clipped",
+    "loop/loop-framing-clean",
+    "loop/loop-framing-horizon",
+    "loop/loop-noise-clean",
+    "loop/loop-noise-reseeds",
+    "loop/loop-scale-door",
+    "loop/loop-scale-door-clean",
+    "loop/shading-degenerate",
+    "loop/shading-flipped",
+    "loop/shading-inconsistent",
+    "loop/shading-inward",
+    "loop/shading-quad-ratio",
+    "loop/shading-unreadable",
+    "loop/shading-uv",
+    "marks2d/board",
+    "marks2d/relations",
+    "media/bell",
+    "media/reverb",
+    "motion/score-bad-duration",
+    "motion/score-bad-loop",
+    "motion/score-bad-pitch",
+    "motion/score-check-unread",
+    "motion/score-note-too-long",
+    "motion/score-pad-too-low",
+    "motion/score-time-unresolved",
+    "motion/score-unknown-instrument",
+    "motion/score-unknown-preset",
+    "motion/score-unknown-source",
+    "motion/slide",
+    "motion/sound-lock-off-palette",
+    "net/net-budget",
+    "net/net-desync",
+    "net/net-feel",
+    "net/net-rollback",
+    "physics/character-course",
+    "physics/late-joint",
+    "physics/vehicle-lap",
+    "record/level",
+    "scene3d/arrangement",
+    "scene3d/figure",
+    "scene3d/garden",
+    "scene3d/lights",
+    "scene3d/moving-garden",
+    "scene3d/rest-no-support",
+    "scene3d/stack",
+    "sheet/variants",
+    "text/counter",
+    "text/status",
+    "vector/formula",
+    "vector/paint",
+    "vector/stored-paint"
+  ],
+  "entries": [
+    {
+      "entry": "arch.guard_rail@1",
+      "registry": "kind@1",
+      "module": "building",
+      "section": "Building module",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "arch.level@1",
+      "registry": "kind@1",
+      "module": "building",
+      "section": "Building module",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "arch.opening@1",
+      "registry": "kind@1",
+      "module": "building",
+      "section": "Building module",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "arch.roof@1",
+      "registry": "kind@1",
+      "module": "building",
+      "section": "Building module",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "arch.slab@1",
+      "registry": "kind@1",
+      "module": "building",
+      "section": "Building module",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "arch.stair@1",
+      "registry": "kind@1",
+      "module": "building",
+      "section": "Building module",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "arch.wall@1",
+      "registry": "kind@1",
+      "module": "building",
+      "section": "Building module",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "arch.zone@1",
+      "registry": "kind@1",
+      "module": "building",
+      "section": "Building module",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "axes3d@1",
+      "registry": "kind@1",
+      "module": "data",
+      "section": "Marks in 3D: axes `axes3d@1`",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "ball@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Builder",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "coil@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Builder",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "curve@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Curve `curve@1`",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "cutaway@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Cutaway `cutaway@1`",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "display@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Builder",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "effect@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Effect",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "extrude@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Builder",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "fixture.world@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "World and backend `physics.world@1`",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "gpu.compute@1",
+      "registry": "kind@1",
+      "module": "effects",
+      "section": "GPU operator",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "gpu.material@1",
+      "registry": "kind@1",
+      "module": "effects",
+      "section": "GPU operator",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#2773"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#2762"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "gpu.pass@1",
+      "registry": "kind@1",
+      "module": "effects",
+      "section": "GPU operator",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "hull@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Builder",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "instance@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Instance `instance@1`",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#2772"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#2772"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "lathe@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Builder",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "light.area@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Light and the light policy",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "light.point@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Light and the light policy",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "light.probe@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Light probe `light.probe@1`",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "light.spot@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Light and the light policy",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "light.sun@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Light and the light policy",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "mark.box@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Marks in 3D",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "mark.cylinder@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Marks in 3D",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "mark.image@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Marks in 3D",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "mark.line@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Marks in 3D: lines",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "mark.point@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Marks in 3D",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "mark.point@1",
+      "registry": "kind@1",
+      "field": "from",
+      "module": "scene3d",
+      "section": "Marks in 3D",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "refused",
+          "code": "web.video_points"
+        }
+      }
+    },
+    {
+      "entry": "mark.sphere@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Marks in 3D",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "mark.text@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Marks in 3D",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "material@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Material",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#2773"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#2773"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "material@1",
+      "registry": "kind@1",
+      "field": "catch",
+      "module": "scene3d",
+      "section": "Material: shadow catcher",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#2774"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "material@1",
+      "registry": "kind@1",
+      "field": "mirror",
+      "module": "scene3d",
+      "section": "Material: mirror",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#2772"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#2772"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "material@1",
+      "registry": "kind@1",
+      "field": "subsurface",
+      "module": "scene3d",
+      "section": "Material: subsurface",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "material@1",
+      "registry": "kind@1",
+      "field": "translucency",
+      "module": "scene3d",
+      "section": "Material",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#2773"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#2759"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "material@1",
+      "registry": "kind@1",
+      "field": "water",
+      "module": "scene3d",
+      "section": "Material: water",
+      "paths": {
+        "rays": {
+          "answer": "stand_in",
+          "draws": "the shadow map, which the light keeps for this caster since rays can't honor its waves",
+          "receipt": "the light that kept its map"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#2761"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "mesh.asset@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Asset: meshes",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "mesh.sequence@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Mesh sequence `mesh.sequence@1`",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "plate@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Builder",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "plate@1",
+      "registry": "kind@1",
+      "field": "terrain",
+      "module": "scene3d",
+      "section": "Builder plate: terrain",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#2772"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#2772"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "puff@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Puff `puff@1`",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "sky@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Sky `sky@1`",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#2775"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "slab@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Builder",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "surface@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Builder",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "tree@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Builder",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "tube@1",
+      "registry": "kind@1",
+      "module": "scene3d",
+      "section": "Builder",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "vector_field@1",
+      "registry": "kind@1",
+      "module": "data",
+      "section": "Vector field `vector_field@1`",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    }
+  ]
+}

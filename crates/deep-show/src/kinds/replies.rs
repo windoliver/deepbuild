@@ -113,13 +113,15 @@ impl Hub<'_> {
                 "search" => &["query", "cursor"],
                 "read" => &["example", "guide", "offset"],
                 "gallery" => &["cursor"],
-                "sheet" | "step_ceilings" => &[],
+                "sheet" => &["offset"],
+                "step_ceilings" => &[],
                 "field" => &["path"],
+                "closure" => &["list"],
                 "bindings" => &["doc", "item", "language"],
                 _ => return refused(
                     "enum",
                     "/op",
-                    "Give op as one of list, word, search, read, gallery, sheet, step_ceilings, field or bindings.",
+                    "Give op as one of list, word, search, read, gallery, sheet, step_ceilings, field, closure or bindings.",
                     op,
                 ),
             };
@@ -183,12 +185,30 @@ impl Hub<'_> {
                     "",
                 ),
             },
+            // #2777: one field list as the sealed listing carries it, with its closure.
+            "closure" => match text("list") {
+                Some(name) => match self.startup.sealed.field_list(name) {
+                    Some(l) => l.to_json(),
+                    None => refused(
+                        "not_found",
+                        "/list",
+                        "Give a field list's name as the sealed listing's field_lists names it, such as camera@1.projection.",
+                        name,
+                    ),
+                },
+                None => refused(
+                    "required",
+                    "/list",
+                    "Give list, a field list's name, such as camera@1.projection.",
+                    "",
+                ),
+            },
             "bindings" => self.kinds_bindings(text("doc"), text("item"), text("language")),
             // The logic module's step ceilings (Logic: work across steps, #546).
             "step_ceilings" => json!({"step_ceilings": deep_logic::budget::ceilings(
                 self.kinds_planted() == Some(Planted::StepCeilingsCap)
             )}),
-            _ => self.kinds_sheet(),
+            _ => self.kinds_sheet(c.get("offset").and_then(Value::as_u64).unwrap_or(0) as usize),
         }
     }
 
@@ -352,14 +372,14 @@ impl Hub<'_> {
             let from = if i == row0 { entry0 } else { 0 };
             let mut kept: Vec<Value> = Vec::new();
             let head_size = head.to_string().len() + 16;
-            if size + head_size > PAGE_BUDGET && !page.is_empty() {
+            if size + head_size > page_budget() && !page.is_empty() {
                 next = Some(format!("{i}.{from}"));
                 break;
             }
             size += head_size;
             for (j, e) in entries.iter().enumerate().skip(from) {
                 let n = e.to_string().len() + 1;
-                if size + n > PAGE_BUDGET && !(page.is_empty() && kept.is_empty()) {
+                if size + n > page_budget() && !(page.is_empty() && kept.is_empty()) {
                     if row.get("entries").is_some() {
                         head["entries"] = json!(kept);
                     }
@@ -401,8 +421,11 @@ impl Hub<'_> {
                     .collect();
                 // #1958: a retired version stays listed, as retired.
                 let state = if self.packs.is_retired(&p.id.text()) { "retired" } else { "installed" };
+                // #192: its gen@1 providers, each with its params and output.
+                let providers = self.sandbox.providers_listed(&p.id.text());
                 json!({"pack": p.id.id, "version": p.id.version.to_string(), "state": state,
-                       "origin": self.pack_origin(&p.id.text()), "recipes": recipes, "aliases": aliases})
+                       "origin": self.pack_origin(&p.id.text()), "recipes": recipes, "aliases": aliases,
+                       "providers": providers})
             })
             .collect();
         Value::Array(packs)
@@ -544,10 +567,7 @@ impl Hub<'_> {
                 &offset.to_string(),
             );
         }
-        let mut end = (offset + GUIDE_PAGE).min(text.len());
-        while !text.is_char_boundary(end) {
-            end -= 1;
-        }
+        let end = text_end(&text, offset);
         let truncated = end < text.len();
         let mut out = json!({"guide": name, "offset": offset, "text": &text[offset..end], "truncated": truncated});
         if truncated {
@@ -596,10 +616,47 @@ impl Hub<'_> {
         out
     }
 
-    pub(super) fn kinds_sheet(&self) -> Value {
+    /// The sheet, whole when it fits the call's room; past it, in pages of whole lines from
+    /// `offset`, each saying where the next starts (#2896).
+    pub(super) fn kinds_sheet(&self, offset: usize) -> Value {
         let l = self.kinds_listing();
         let drop_packs = self.kinds_planted() == Some(Planted::SheetWithoutPackEntries);
         let text = sheet_text(&sheet_lines(&l.rows, drop_packs));
-        json!({"module_set": self.startup.sealed.set_digest, "bytes": text.len(), "text": text})
+        let mut out = json!({"module_set": self.startup.sealed.set_digest, "bytes": text.len()});
+        if offset == 0 && text.len() <= text_page() {
+            out["text"] = json!(text);
+            return out;
+        }
+        if offset > text.len() || !text.is_char_boundary(offset) {
+            return refused(
+                "range",
+                "/offset",
+                "Give 0 or the next offset a page gave.",
+                &offset.to_string(),
+            );
+        }
+        let mut end = text_end(&text, offset);
+        // A page ends at a line's end, unless one line is longer than the page.
+        if end < text.len() {
+            if let Some(nl) = text[offset..end].rfind('\n') {
+                end = offset + nl + 1;
+            }
+        }
+        out["offset"] = json!(offset);
+        out["text"] = json!(&text[offset..end]);
+        out["truncated"] = json!(end < text.len());
+        if end < text.len() {
+            out["next"] = json!(end);
+        }
+        out
     }
+}
+
+/// Where a page of `text` from `offset` ends: a text page's bytes of it, at a char boundary.
+fn text_end(text: &str, offset: usize) -> usize {
+    let mut end = (offset + text_page()).min(text.len());
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    end
 }

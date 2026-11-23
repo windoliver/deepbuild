@@ -1,0 +1,14 @@
+#68's suite by its README command on the final merge, at a 1-minute load below the core count (18), under a test grant.
+Fixed before the window: the counted run starts only below 18, runs once and stands. The pairs after it are a reading beside it.
+
+Counted run, the change (255e1a1de; its packages are 6ea56bb6e's): exit=0, Tests 21 passed (21), load 17.97 at its start and 17.48 at its end (5-minute 90.18, 15-minute 168.35).
+
+Pairs, the merge base (b4df8a2dd) and the change in turn, the side that goes first alternating; load = 1 minute, at the run's end:
+pair 1 base exit=0 load=17.16  Tests 21 passed (21)
+pair 1 change exit=0 load=17.52  Tests 21 passed (21)
+pair 2 change exit=0 load=16.95  Tests 21 passed (21)
+pair 2 base exit=0 load=16.98  Tests 21 passed (21)
+pair 3 base exit=0 load=15.81  Tests 21 passed (21)
+pair 3 change exit=0 load=14.32  Tests 21 passed (21)
+pair 4 change exit=0 load=21.80  Tests 21 passed (21)
+pair 4 base exit=0 load=21.62  Tests 21 passed (21)

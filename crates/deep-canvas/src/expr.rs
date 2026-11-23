@@ -84,6 +84,9 @@ pub struct Refusal {
     pub why: String,
     /// The canvas module the build lacks that the call needs, when that is why.
     pub missing: Option<String>,
+    /// Where it takes more nodes than its cap: its nodes once its sums expand, or, where the
+    /// parse stopped first, the nodes written by then.
+    pub size: Option<usize>,
 }
 
 impl std::fmt::Display for Refusal {
@@ -167,57 +170,6 @@ pub struct Scope {
 pub struct PackRefusal {
     pub name: String,
     pub refusal: crate::table::Refusal,
-}
-
-impl Scope {
-    /// The tables and ease@1 entries of `packs`, each `{name, tables?: {name: table}, entries?:
-    /// {"ease@1": [{name, x, y, mode, overshoot}]}}` as a pinned pack's `pack.json` holds them,
-    /// each checked once; the first broken one is refused, naming it.
-    pub fn of_packs(packs: &[serde_json::Value]) -> Result<Scope, Box<PackRefusal>> {
-        let mut out = Scope::default();
-        for p in packs {
-            let pack = p
-                .get("name")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("");
-            if let Some(tables) = p.get("tables").and_then(serde_json::Value::as_object) {
-                for (name, t) in tables {
-                    let full = format!("{pack}.{name}");
-                    let table = Table::parse(t).map_err(|refusal| {
-                        Box::new(PackRefusal {
-                            name: full.clone(),
-                            refusal,
-                        })
-                    })?;
-                    out.tables.insert(full, table);
-                }
-            }
-            for e in p
-                .pointer("/entries/ease@1")
-                .and_then(serde_json::Value::as_array)
-                .into_iter()
-                .flatten()
-            {
-                let name = e
-                    .get("name")
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or("");
-                let full = if name.contains('.') {
-                    name.to_string()
-                } else {
-                    format!("{pack}.{name}")
-                };
-                let table = EaseTable::parse(e).map_err(|refusal| {
-                    Box::new(PackRefusal {
-                        name: full.clone(),
-                        refusal,
-                    })
-                })?;
-                out.eases.insert(full, table);
-            }
-        }
-        Ok(out)
-    }
 }
 
 impl Resolve for Scope {
@@ -552,6 +504,7 @@ impl Lexer<'_> {
                 call: s.clone(),
                 why: "is not a number".into(),
                 missing: None,
+                size: None,
             })?;
             return Ok(Some((Tok::Num(n), start)));
         }
@@ -602,6 +555,7 @@ impl Lexer<'_> {
                     call: self.text.into(),
                     why: format!("unexpected `{c}`"),
                     missing: None,
+                    size: None,
                 })
             }
         };
@@ -676,6 +630,7 @@ impl Parser<'_> {
             call: self.text.into(),
             why: why.into(),
             missing: None,
+            size: None,
         }
     }
 
@@ -706,10 +661,13 @@ impl Parser<'_> {
     fn count(&mut self) -> Result<(), Refusal> {
         self.nodes += 1;
         if self.nodes > self.max_nodes {
-            return Err(self.fail(format!(
-                "takes more than {} nodes as written, twice the cap of {}",
-                self.max_nodes, self.cap
-            )));
+            return Err(Refusal {
+                size: Some(self.nodes),
+                ..self.fail(format!(
+                    "takes more than {} nodes as written, twice the cap of {}",
+                    self.max_nodes, self.cap
+                ))
+            });
         }
         Ok(())
     }
@@ -930,6 +888,7 @@ fn refuse(call: &str, why: impl Into<String>) -> Refusal {
         call: call.into(),
         why: why.into(),
         missing: None,
+        size: None,
     }
 }
 
@@ -1250,10 +1209,13 @@ impl Expr {
             return Err(refuse(text, format!("nests sums past {MAX_DEPTH} deep")));
         }
         if size > cap {
-            return Err(refuse(
-                text,
-                format!("takes {size} nodes once its sums expand, past the cap of {cap}"),
-            ));
+            return Err(Refusal {
+                size: Some(size),
+                ..refuse(
+                    text,
+                    format!("takes {size} nodes once its sums expand, past the cap of {cap}"),
+                )
+            });
         }
         Ok(Expr {
             root,
@@ -1262,6 +1224,29 @@ impl Expr {
             text: text.into(),
             planted: resolve.planted(),
         })
+    }
+
+    /// Whether it divides or takes a log, a root or a power: where a field needs its fallback
+    /// (Attribute and field).
+    pub fn partial(&self) -> bool {
+        fn any(n: &Node) -> bool {
+            match n {
+                Node::Num(_) | Node::Var(_) | Node::Index(_) => false,
+                Node::Bin(op, a, b) => matches!(op, Op::Div | Op::Pow) || any(a) || any(b),
+                Node::Call(f, args) => {
+                    let partial = matches!(
+                        f,
+                        Fun::Sqrt | Fun::Pow | Fun::Log | Fun::Log2 | Fun::Log10 | Fun::Log1p
+                    );
+                    partial || args.iter().any(any)
+                }
+                Node::If(c, a, b) => any(c) || any(a) || any(b),
+                Node::Sum { a, b, term, .. } => any(a) || any(b) || any(term),
+                Node::Neg(a) | Node::Not(a) | Node::Swizzle(a, _) => any(a),
+                Node::Table(_, a) | Node::Ease(_, a) => any(a),
+            }
+        }
+        any(&self.root)
     }
 
     /// The value with `vars` (one per [`Expr::vars`]).
@@ -2314,6 +2299,8 @@ fn bseed(v: Option<&B>) -> Option<u32> {
 /// range covers, by the cell's formula in interval arithmetic, or, past 64 cells, the bound every
 /// cell holds.
 pub mod noise;
+
+mod scope_packs;
 
 #[cfg(test)]
 mod tests;

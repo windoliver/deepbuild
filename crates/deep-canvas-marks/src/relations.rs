@@ -1169,6 +1169,25 @@ pub fn entries(planted: Planted) -> Vec<(&'static str, Value)> {
         .collect()
 }
 
+/// #221: the module's entries in the core's `constraint@1`. #2363: and `board` with its caption
+/// placed by relation and its line under a time-bound warp, so each has a node at 0 s.
+pub(crate) fn register(
+    r: &mut deep_canvas::registry::Registrar,
+    planted: Planted,
+    mut placed: Value,
+) {
+    for (name, value) in entries(planted) {
+        r.entry("constraint@1", name, value, "R2");
+    }
+    placed["items"]["cap"]["at"] = json!({"place": {"beside": "box", "side": "s", "gap": 8}});
+    placed["items"]["warp"] = json!({"id": "warp", "kind": "group@1", "name": "Warp", "order": "a5",
+        "params": {"warp": {"map": {"x": "x", "y": "y + u"}, "vars": {"u": "time"}}}});
+    placed["items"]["line"]["parent"] = json!("warp");
+    r.fixture("relations", placed, None).sidecar(json!({
+        "checks": [{"kind": "document.validate"}], "oracles": ["analytic"], "codes": ["unknown_kind"],
+    }));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

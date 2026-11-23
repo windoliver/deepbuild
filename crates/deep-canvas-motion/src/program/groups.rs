@@ -455,10 +455,26 @@ impl Program {
             }
             inputs_of.push((f.name.as_str(), CoreInput::Occurrence(Arc::new(read))));
         }
+        // #298: `hover_at(<item>)`, the pointer's place over an item's bounds, as two vars.
+        let (text, hovers) = crate::view::rewrite(&text).map_err(|why| refused("bad_doc", why))?;
+        for h in &hovers {
+            if doc.get("items").and_then(|i| i.get(&h.item)).is_none() {
+                let why = format!("hover_at({}) names no item", h.item);
+                return Err(refused("ref_unresolved", why));
+            }
+            let read = crate::view::hover(&self.motion.control_defaults, h);
+            inputs_of.push((h.name.as_str(), read));
+        }
         for (name, input) in &driver.inputs {
             let input = match input {
                 doc::DriverInput::List(_) => continue,
                 doc::DriverInput::Array(array) => {
+                    // #298: an overlay's `edge` or `edge_angle`, bound by its frame.
+                    let bound = &self.motion.control_defaults;
+                    if let Some(read) = crate::view::edge(doc, bound, array) {
+                        inputs_of.push((name.as_str(), read));
+                        continue;
+                    }
                     // #497: a stepping module's array has no steps after t yet, as the input
                     // track has no entries after t, so a lag or smooth that looks ahead through it
                     // is refused; motion reads a logic output its host baked (#1183) and, of the
@@ -472,6 +488,12 @@ impl Program {
                         .and_then(|a| crate::array::Read::of_var(a, array))
                     {
                         inputs_of.push((name.as_str(), CoreInput::Array(Arc::new(read))));
+                        continue;
+                    }
+                    // #290: this copy's player, a view value (Net: this copy's player).
+                    if array == crate::me::VAR {
+                        let me = crate::me::read(&self.motion.control_defaults);
+                        inputs_of.push((name.as_str(), me));
                         continue;
                     }
                     let why = "motion's drivers read only a logic item's scalar f64 output or one element of an i32 or f64 one, baked into the document, or a spectrum's bands";
@@ -1178,10 +1200,17 @@ impl Program {
             Kind::Reach2 { bend, cartoon, .. } => {
                 let [lower, end] = c.chain.map(|i| pose(slots, i * TRANSFORM));
                 let length = |p: &cs::Pose| deep_canvas::ops::hypot(p.pos[0], p.pos[1]);
+                // #2500: a text's line or token, its box's centre where the text is now.
+                let target = match (c.aim, c.other) {
+                    (Some(aim), Some((i, None))) => {
+                        crate::anchored::through(&self.world(slots, i), aim)
+                    }
+                    _ => [other.pos[0], other.pos[1]],
+                };
                 let r = cs::reach2(
                     [own.pos[0], own.pos[1]],
                     [length(&lower), length(&end)],
-                    [other.pos[0], other.pos[1]],
+                    target,
                     *bend,
                     *cartoon,
                     &mut ops,

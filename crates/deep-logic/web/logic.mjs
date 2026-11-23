@@ -28,6 +28,127 @@ async function stepSeed(doc, id, k) {
   return BigInt.asIntN(64, h.value);
 }
 
+// #211: world pages, as crates/deep-logic/src/pages.rs keeps them: the requests and the slot table on
+// the page region's first 64 KiB at pages_at, then one memory page per slot; moves queued after a step
+// for step k + lead and run before it, ahead of the read region fill; the page map by hash with its
+// root; the written cap; and the store in memory, up to web_max.
+const NONE = 0xFFFFFFFF;
+const MOVE_FUEL = 65536;
+const sha = async (bytes) => new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+const slotAt = (p, j) => p.at + PAGE * (1 + j);
+const tableAt = (p) => p.at + 8 * p.moves;
+const slotOf = (p, page) => { const first = p.at / PAGE + 1; return page >= first && page < first + p.slots ? page - first : null; };
+async function pagesOf(item) {
+  const p = item.world_pages;
+  if (!p || p.ready) return p;
+  p.store = new Map();
+  p.first = new Map();
+  for (const [page, b64] of p.init) {
+    const b = bytesOf(b64);
+    const h = await sha(b);
+    p.store.set(hex(h), b);
+    p.first.set(page, { hash: h, key: hex(h), written: false });
+  }
+  p.ready = true;
+  return p;
+}
+function freshPaged(p) {
+  return { map: new Map(p.first), slots: Array.from({ length: p.slots }, () => [NONE, 0]), dirty: new Set(), queue: [], changed: new Map(), moved: 0, late: 0, moves: 0 };
+}
+const copyPaged = (st) => ({ map: new Map(st.map), slots: st.slots.map((x) => x.slice()), dirty: new Set(st.dirty), queue: st.queue.map((m) => ({ ...m })), changed: new Map(st.changed), moved: 0, late: st.late, moves: st.moves });
+async function root(map) {
+  return sha(concat([...map].sort((a, b) => a[0] - b[0]).flatMap(([page, e]) => [le(32, page), e.hash])));
+}
+async function pagedHashed(st) {
+  const parts = [await root(st.map)];
+  for (const m of st.queue) parts.push(le(64, m.step), le(32, m.page), le(32, m.slot));
+  for (const [page, fresh] of st.slots) parts.push(le(32, page), le(32, fresh));
+  for (const s of [...st.dirty].sort((a, b) => a - b)) parts.push(le(32, s));
+  return concat(parts);
+}
+const keptBytes = (k) => 36 * k.map.size + 8 * k.slots.length + 16 * k.queue.length + 4 * k.dirty.size;
+function kept(st, whole) { return { whole, map: new Map(whole ? st.map : st.changed), slots: st.slots.map((x) => x.slice()), dirty: new Set(st.dirty), queue: st.queue.map((m) => ({ ...m })) }; }
+function mergeKept(earlier, later) {
+  if (!earlier) return later;
+  if (!later) return earlier;
+  if (later.whole) return later;
+  return { ...later, whole: earlier.whole, map: new Map([...earlier.map, ...later.map]) };
+}
+// The moves queued for step k, in queue order, each writing back its slot's page when a step wrote it
+// since it loaded and loading the requested page as the map gives it; the memory pages it wrote.
+async function movesBefore(l, k) {
+  const p = l.item.world_pages;
+  const st = l.paged;
+  st.moved = 0;
+  let n = 0;
+  while (n < st.queue.length && st.queue[n].step <= k) n++;
+  if (n === 0) return [];
+  const m = memoryOf(l);
+  const touched = [p.at / PAGE];
+  for (const mv of st.queue.splice(0, n)) {
+    const at = slotAt(p, mv.slot);
+    const [old] = st.slots[mv.slot];
+    if (old !== NONE && st.dirty.has(mv.slot)) {
+      const bytes = m.slice(at, at + PAGE);
+      const h = await sha(bytes);
+      const key = hex(h);
+      if (!p.store.has(key)) p.store.set(key, bytes);
+      const e = { hash: h, key, written: true };
+      st.map.set(old, e);
+      st.changed.set(old, e);
+    }
+    const e = st.map.get(mv.page);
+    let fresh = 0;
+    if (e) m.set(p.store.get(e.key), at); else { m.fill(0, at, at + PAGE); fresh = 1; }
+    st.slots[mv.slot] = [mv.page, fresh];
+    st.dirty.delete(mv.slot);
+    st.moved++;
+    st.moves++;
+    touched.push(at / PAGE);
+  }
+  const d = new DataView(m.buffer);
+  st.slots.forEach(([page, fresh], j) => { d.setUint32(tableAt(p) + 8 * j, page, true); d.setUint32(tableAt(p) + 8 * j + 4, fresh, true); });
+  return touched;
+}
+// After a step that wrote memory pages `written`: the slots it wrote, the written cap, then the web
+// store, in memory up to web_max; a trap's kind and fields, or null.
+function afterStep(l, written) {
+  const p = l.item.world_pages;
+  const st = l.paged;
+  for (const w of written) { const s = slotOf(p, w); if (s !== null && st.slots[s][0] !== NONE) st.dirty.add(s); }
+  const pages = new Set();
+  for (const [page, e] of st.map) if (e.written) pages.add(page);
+  for (const s of st.dirty) pages.add(st.slots[s][0]);
+  if (pages.size > p.written_max) return ['pages_full', { written: pages.size, written_max: p.written_max }];
+  if (p.web_max != null && pages.size * PAGE > p.web_max) return ['pages_store', { written: pages.size, web_max: p.web_max }];
+  return null;
+}
+// The requests after step k (−1: after init), queued for step k + lead (the program's: never written
+// here); a trap or null.
+function requests(l, k) {
+  const p = l.item.world_pages;
+  const st = l.paged;
+  const d = new DataView(memoryOf(l).buffer);
+  const asked = [];
+  const named = new Set();
+  for (let i = 0; i < p.moves; i++) {
+    const page = d.getUint32(p.at + 8 * i, true);
+    if (page === NONE) continue;
+    const slot = d.getUint32(p.at + 8 * i + 4, true);
+    let why = null;
+    if (page >= p.max) why = `page ${page} is at or past max ${p.max}`;
+    else if (slot >= p.slots) why = `slot ${slot} is at or past slots ${p.slots}`;
+    else if (st.slots.some(([q]) => q === page)) why = `page ${page} is already in a slot`;
+    else if (st.queue.some((m) => m.page === page) || asked.some((m) => m.page === page)) why = `page ${page} is already asked for`;
+    else if (named.has(slot)) why = `slot ${slot} is named twice`;
+    named.add(slot);
+    if (why) return ['pages', { request: { index: i, page, slot }, why }];
+    asked.push({ step: k + p.lead, page, slot });
+  }
+  st.queue.push(...asked);
+  return null;
+}
+
 const TAG = { i32: 1, i64: 2, f32: 3, f64: 4 };
 function encoded(live) {
   const parts = [];
@@ -50,12 +171,13 @@ const stepHash = async (live, rows) => (await h64(concat([encoded(live), live.ar
 async function deepHash(live) {
   let pending = 0;
   for (const q of live.pending.values()) pending += q.length;
-  return (await h64(concat([le(64, live.next), le(32, pending), encoded(live), live.arrays, memoryOf(live)]))).hex;
+  const paged = live.paged ? [await pagedHashed(live.paged)] : [];
+  return (await h64(concat([le(64, live.next), le(32, pending), encoded(live), live.arrays, memoryOf(live), ...paged]))).hex;
 }
 
-function call(live, exp, args) {
+function call(live, exp, args, fuel = live.item.fuel) {
   const ex = live.ex;
-  ex['sandbox.fuel'].value = BigInt(live.item.fuel);
+  ex['sandbox.fuel'].value = BigInt(Math.max(0, fuel));
   ex['sandbox.stack'].value = 0;
   ex['sandbox.stack_cap'].value = live.item.stack;
   ex['sandbox.trap'].value = 0;
@@ -188,7 +310,7 @@ async function instance(item) {
 
 // The ring past its byte budget: the spacing doubles, and each checkpoint off it is dropped, its pages
 // merged into the next one kept or, past the last, into the pages the next checkpoint takes.
-const storedBytes = (s) => (s.memory.whole ? s.memory.whole.length : s.memory.pages.length * PAGE) + s.arrays.length + 8 * s.globals.length;
+const storedBytes = (s) => (s.memory.whole ? s.memory.whole.length : s.memory.pages.length * PAGE) + s.arrays.length + 8 * s.globals.length + (s.paged ? keptBytes(s.paged) : 0);
 function merge(earlier, later) {
   if (!earlier || later.whole) return later;
   if (earlier.whole) { const m = earlier.whole; for (const [p, b] of later.pages) m.set(b, p * PAGE); return { whole: m }; }
@@ -199,16 +321,20 @@ function merge(earlier, later) {
 function thin(live) {
   while (live.stored.length > 1 && live.stored.reduce((n, s) => n + storedBytes(s), 0) > live.item.ring) {
     live.spacing *= 2;
-    const kept = [];
+    const keptList = [];
     let carry = null;
+    let carryMap = null;
     for (const s of live.stored) {
-      if (s.step % live.spacing !== 0) { carry = merge(carry, s.memory); continue; }
+      if (s.step % live.spacing !== 0) { carry = merge(carry, s.memory); carryMap = mergeKept(carryMap, s.paged); continue; }
       if (carry) { s.memory = merge(carry, s.memory); carry = null; }
-      kept.push(s);
+      s.paged = mergeKept(carryMap, s.paged);
+      carryMap = null;
+      keptList.push(s);
     }
-    live.stored = kept;
+    live.stored = keptList;
     if (carry?.whole) for (let p = 0; p < carry.whole.length / PAGE; p++) live.dirty.add(p);
     else if (carry) for (const [p] of carry.pages) live.dirty.add(p);
+    if (carryMap && live.paged) live.paged.changed = new Map([...carryMap.map, ...live.paged.changed]);
   }
 }
 
@@ -226,6 +352,14 @@ class World {
         const t = call(live, exp, args);
         if (t) { rec.traps.push({ item: item.id, step: null, t: null, ...t, inputs: [] }); live.failed = true; break; }
       }
+      // #211: the map from init, and the requests init wrote, for step lead − 1.
+      if (await pagesOf(item)) {
+        live.paged = freshPaged(item.world_pages);
+        if (!live.failed) {
+          const trap = requests(live, -1);
+          if (trap) { rec.traps.push({ item: item.id, step: null, t: null, kind: trap[0], function: null, offset: null, inputs: [], ...trap[1] }); live.failed = true; }
+        }
+      }
       w.lives.push(live);
     }
     w.published = w.lives.map((l) => l.arrays.slice());
@@ -241,11 +375,15 @@ class World {
     (rec.checkpoints[live.item.id] ??= []).push({ step: live.next, deep_hash: deep });
     if (!this.store) return;
     const m = memoryOf(live);
-    const memory = live.stored.length % 8 === 0
+    const whole = live.stored.length % 8 === 0;
+    const memory = whole
       ? { whole: m.slice() }
       : { pages: [...live.dirty].sort((a, b) => a - b).map((p) => [p, m.slice(p * PAGE, (p + 1) * PAGE)]) };
-    live.stored.push({ step: live.next, globals: live.item.globals.map(([n]) => live.ex[n].value), arrays: live.arrays.slice(), cursor: new Map(live.cursor), pending: new Map([...live.pending].map(([c, q]) => [c, q.slice()])), memory });
+    // #211: the page map whole in the ring's first checkpoint, else its changes.
+    const paged = live.paged ? kept(live.paged, live.stored.length === 0) : null;
+    live.stored.push({ step: live.next, globals: live.item.globals.map(([n]) => live.ex[n].value), arrays: live.arrays.slice(), cursor: new Map(live.cursor), pending: new Map([...live.pending].map(([c, q]) => [c, q.slice()])), memory, paged });
     live.dirty.clear();
+    if (live.paged) live.paged.changed.clear();
     thin(live);
   }
 
@@ -282,6 +420,8 @@ class World {
     const inputs = [...[...taken.entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).flatMap(([, v]) => v)];
     l.next = k + 1;
     if (l.failed) { rec.report(l, k, null, 0, []); return; }
+    // #211: the moves queued for this step, ahead of the read region fill: the module's own writes.
+    if (l.paged) for (const p of await movesBefore(l, k)) l.dirty.add(p);
     const size = item.reads_size;
     const region = new Uint8Array(size);
     const d = new DataView(region.buffer);
@@ -339,7 +479,7 @@ class World {
     let at = item.emits_at;
     for (const e of item.emits) { memoryOf(l).fill(0, at, at + 4); mark(Math.floor(at / PAGE)); at += e.size; }
     item.pages.forEach((n, i) => { l.ex[n].value = BigInt.asIntN(64, words[i]); });
-    const trap = call(l, 'step', [BigInt(k)]);
+    const trap = call(l, 'step', [BigInt(k)], item.fuel - (l.paged ? l.paged.moved * MOVE_FUEL : 0));
     const left = l.ex['sandbox.fuel'].value;
     const fuel = Number(BigInt(item.fuel) - left < 0n ? 0n : BigInt(item.fuel) - left > BigInt(item.fuel) ? BigInt(item.fuel) : BigInt(item.fuel) - left);
     const pages = [];
@@ -350,6 +490,16 @@ class World {
       rec.traps.push({ item: item.id, step: k, t, ...trap, inputs });
       rec.report(l, k, null, fuel, pages);
       return;
+    }
+    // #211: the slots it wrote and the written cap, then the requests it left, for step k + lead.
+    if (l.paged) {
+      const failed = afterStep(l, pages) ?? requests(l, k);
+      if (failed) {
+        l.failed = true;
+        rec.traps.push({ item: item.id, step: k, t, kind: failed[0], function: null, offset: null, inputs, ...failed[1] });
+        rec.report(l, k, null, fuel, pages);
+        return;
+      }
     }
     const out = emitted(item, memoryOf(l));
     if (out.over) {
@@ -382,6 +532,14 @@ class World {
       const s = l.stored[j];
       const live = await w.load(l.item, memory, s.globals);
       Object.assign(live, { next: c, spacing: l.spacing, arrays: s.arrays.slice(), cursor: new Map(s.cursor), pending: new Map([...s.pending].map(([x, q]) => [x, q.slice()])) });
+      // #211: the map from the last whole one at or before it and the changes after it.
+      if (l.paged) {
+        let from = j;
+        while (from > 0 && !l.stored[from].paged.whole) from--;
+        const map = new Map();
+        for (const x of l.stored.slice(from, j + 1)) for (const [page, e] of x.paged.map) map.set(page, e);
+        live.paged = { map, slots: s.paged.slots.map((x) => x.slice()), dirty: new Set(s.paged.dirty), queue: s.paged.queue.map((m) => ({ ...m })), changed: new Map(map), moved: 0, late: 0, moves: 0 };
+      }
       w.lives.push(live);
     }
     w.published = w.lives.map((l) => l.arrays.slice());
@@ -396,6 +554,7 @@ class World {
     for (const l of this.lives) {
       const live = await w.load(l.item, memoryOf(l).slice(), l.item.globals.map(([n]) => l.ex[n].value));
       Object.assign(live, { failed: l.failed, next: l.next, spacing: l.spacing, arrays: l.arrays.slice(), cursor: new Map(l.cursor), pending: new Map([...l.pending].map(([x, q]) => [x, q.slice()])) });
+      if (l.paged) live.paged = copyPaged(l.paged);
       w.lives.push(live);
     }
     w.published = this.published.map((a) => a.slice());

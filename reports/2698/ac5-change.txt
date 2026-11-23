@@ -1,0 +1,33 @@
+✖ #2698 AC5 hub-idle reports wakeups, instructions a second, CPU a second and footprint for the hub and for each child, and two runs on one build agree within 10% on instructions a second after 15 s to settle (40818.419667ms)
+ℹ first run: hub-idle exited 0 after 20.4 s
+last line: {"bench":"hub","mode":"idle","idleCpuPercent":0.6000000000000005,"rssBytes":108691456,"spanMs":5042.157249999998,"hub":{"pid":60187,"wakeups":200,"instructionsPerSecond":30633628.49304235,"cpuMsPerSecond":6.139997716255282,"footprintBytes":69822976},"children":[{"pid":67675,"wakeups":0,"instructionsPerSecond":74611383.64932989,"cpuMsPerSecond":23.315838672028733,"footprintBytes":3227960}]}
+stderr:
+
+ℹ second run: hub-idle exited 0 after 20.3 s
+last line: {"bench":"hub","mode":"idle","idleCpuPercent":0.20000000000000018,"rssBytes":110002176,"spanMs":5039.2839159999985,"hub":{"pid":73238,"wakeups":175,"instructionsPerSecond":6922048.168242166,"cpuMsPerSecond":2.7785364415653224,"footprintBytes":71641720},"children":[{"pid":79782,"wakeups":0,"instructionsPerSecond":72618537.09772205,"cpuMsPerSecond":19.1847942309905,"footprintBytes":3211624}]}
+stderr:
+
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 40895.340583
+
+✖ failing tests:
+
+test at tests/acceptance/2698/ac5-hub-idle.test.mjs:57:1
+✖ #2698 AC5 hub-idle reports wakeups, instructions a second, CPU a second and footprint for the hub and for each child, and two runs on one build agree within 10% on instructions a second after 15 s to settle (40818.419667ms)
+  AssertionError [ERR_ASSERTION]: AC5: the hub's instructions a second were 30633628.49304235 and 6922048.168242166 on two runs of one build, 342.6% apart; expected within 10%
+      at TestContext.<anonymous> (file://<worktree>/tests/acceptance/2698/ac5-hub-idle.test.mjs:67:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

@@ -9,8 +9,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use deep_canvas::scope::{self, Event, Phase, Scope};
+use deep_canvas::scope::{self, Event, Phase, Scope, Texts};
 use deep_canvas::show::{Writer, WriterKind};
+use deep_canvas_marks::select::{self, TextBox};
 use deep_canvas_motion::clock;
 use deep_canvas_motion::eval::Validity;
 use deep_canvas_motion::program::Program;
@@ -20,6 +21,8 @@ use crate::hub::{Hub, Planted};
 use crate::placement::Grid;
 use crate::refused;
 use crate::shared::FLICKS;
+
+pub(crate) mod measure;
 
 /// What a frame draws besides the revision: the camera, and the view controls that choose the
 /// revision and what it hides.
@@ -49,6 +52,26 @@ pub struct PanelScope {
     pub(crate) preview: Option<crate::preview::Previewer>,
     /// #542: its text fields and the scroll gesture under way.
     pub(crate) fields: crate::fields::Viewer,
+    /// #549: its Join prompt and the connections its match opened.
+    pub(crate) join: crate::net::Join,
+    /// #1498: the text its document draws, shaped as drawn, for its text selection: by the document and revision
+    /// it was shaped from.
+    pub(crate) texts: Option<((String, u64), Vec<TextBox>)>,
+    /// #1217: its measure tool, session state.
+    pub(crate) measure: measure::Viewer,
+}
+
+/// #1498: a panel's text, as its scope reads it.
+pub(crate) struct PanelTexts<'a>(pub(crate) &'a [TextBox]);
+
+impl Texts for PanelTexts<'_> {
+    fn at(&self, c: [f64; 2], within: Option<f64>) -> Option<(String, usize)> {
+        select::at(self.0, c, within)
+    }
+
+    fn len(&self, item: &str) -> Option<usize> {
+        self.0.iter().find(|t| t.item == item).map(TextBox::len)
+    }
 }
 
 pub fn point(v: &Value) -> Option<[f64; 2]> {
@@ -75,6 +98,7 @@ pub fn event(v: &Value) -> Option<Event> {
         "down" => Event::Down {
             pos: pos()?,
             toggle: mods()?.contains(&"shift"),
+            alt: mods()?.contains(&"alt"),
         },
         "up" => {
             mods()?;
@@ -200,6 +224,7 @@ impl Hub<'_> {
                 full_screen_only_3d: p == Some(Planted::FullScreenOnly3d),
                 esc_to_root: p == Some(Planted::EscToRoot),
                 pick_selects: p == Some(Planted::PickSelectsItem),
+                ..scope::Planted::default()
             };
             let scope = Scope::new(&doc, rect, display, planted)
                 .map_err(|r| json!({"code": r.code, "path": r.path}))?;
@@ -214,6 +239,9 @@ impl Hub<'_> {
                     points: Default::default(),
                     preview: None,
                     fields: Default::default(),
+                    join: Default::default(),
+                    texts: None,
+                    measure: Default::default(),
                 },
             );
             let first = self.seen(panel).ok_or_else(|| refused("not_presented"))?;
@@ -363,6 +391,12 @@ impl Hub<'_> {
         }
         let late = self.scenario.planted == Some(Planted::DragShowsOnRelease)
             && matches!(event, Event::Move(_));
+        // #1217: the measure tool takes its setting and, while it is on, its clicks and keys.
+        match self.measure_input(panel, &doc, event, g, serial) {
+            Ok(Some(reply)) => return reply,
+            Ok(None) => {}
+            Err(e) => return e,
+        }
         // #504: a value for one of the document's own controls goes to its input track or its
         // session state (Control), never to the scope's view.
         let doc_id = self.panel_doc(panel);
@@ -529,27 +563,42 @@ impl Hub<'_> {
                 .get(panel)
                 .and_then(|s| s.scope.time())
                 .unwrap_or(self.now);
+            let quads =
+                self.scenario.module_planted.as_deref() == Some(crate::spatial::HIT_READS_QUADS);
             for (row, b, hull) in drawn.map(|d| self.row_boxes(&d, t)).unwrap_or_default() {
                 let set = row.split('#').next().unwrap_or_default();
                 if picked.iter().any(|s| s == set) {
                     continue;
                 }
                 let order = &doc["items"][set]["order"];
-                let target = json!({"id": row, "order": order, "params": {"box": b, "hull": hull}});
+                let hull = hull.as_ref().filter(|_| !quads);
+                let target = crate::spatial::target(&row, order, b, hull);
                 if let Some(items) = doc["items"].as_object_mut() {
                     items.insert(row, target);
                 }
             }
         }
+        self.shape_texts(panel);
         let done = match self.scopes.get_mut(panel) {
             Some(s) => {
                 if matches!(event, Event::Down { .. }) {
                     s.pressed = now;
                 }
-                s.scope.input(&doc, now, serial, event)
+                let texts = s.texts.as_ref().map(|(_, t)| PanelTexts(t));
+                s.scope.input_with(
+                    &doc,
+                    now,
+                    serial,
+                    event,
+                    texts.as_ref().map(|t| t as &dyn Texts),
+                )
             }
             None => return refused("unknown_panel"),
         };
+        // #1498: ⌘C writes the text selection, as your gesture's clipboard write.
+        if let Some(text) = done.copy.then(|| self.selection_quote(panel)).flatten() {
+            self.ring.clipboard = Some(json!({"text": text, "panel": panel}));
+        }
         // #539: a key moves or picks on a pick control's rows once the scope has moved its stop.
         match event {
             Event::Key {
@@ -588,6 +637,61 @@ impl Hub<'_> {
         })
     }
 
+    /// #1498: the text the panel's document draws, shaped once a revision as render-back draws it.
+    fn shape_texts(&mut self, panel: &str) {
+        let (Some(doc), Some((shown, _))) = (self.panel_doc(panel), self.panel_document(panel))
+        else {
+            return;
+        };
+        let t = self
+            .scopes
+            .get(panel)
+            .and_then(|s| s.scope.time())
+            .unwrap_or(self.now);
+        let key = (doc.clone(), self.rev_at(&doc, t).unwrap_or(0));
+        if self
+            .scopes
+            .get(panel)
+            .and_then(|s| s.texts.as_ref())
+            .is_some_and(|(k, _)| *k == key)
+        {
+            return;
+        }
+        // A renderer of its own, so the frames' renderer keeps only what they decoded.
+        let record = self.record();
+        let texts = match shown.as_object() {
+            Some(d) => crate::snapshot::Renderer::new()
+                .prepare(
+                    d,
+                    0,
+                    &self.look.light,
+                    self.look.status.as_ref(),
+                    &record,
+                    &self.scenario.evidence,
+                )
+                .map(|drawn| select::texts(&drawn.frame, &mut deep_text::Shaper::new()))
+                .unwrap_or_default(),
+            None => Vec::new(),
+        };
+        if let Some(s) = self.scopes.get_mut(panel) {
+            s.texts = Some((key, texts));
+        }
+    }
+
+    /// #1498: the text of the panel's live text selection, in logical order and items in reading order.
+    pub(crate) fn selection_quote(&self, panel: &str) -> Option<String> {
+        let s = self.scopes.get(panel)?;
+        let range = s.scope.text_selection()?;
+        let (_, texts) = s.texts.as_ref()?;
+        let (a, f) = (&range.anchor, &range.focus);
+        Some(select::copy(
+            texts,
+            (&a.0, a.1),
+            (&f.0, f.1),
+            select::Planted::default(),
+        ))
+    }
+
     /// The panel's scope over the revisions it shows and compares against.
     fn state(&self, panel: &str) -> Value {
         match (self.scopes.get(panel), self.panel_document(panel)) {
@@ -599,6 +703,8 @@ impl Hub<'_> {
                 if let Some(row) = s.picks.focused() {
                     state["focus"] = json!(row);
                 }
+                s.measure
+                    .shown_in(&doc, self.scenario.module_planted.as_deref(), &mut state);
                 state
             }
             _ => Value::Null,
@@ -690,7 +796,18 @@ impl Hub<'_> {
         match self.panel_scope(panel) {
             Ok(_) => {
                 self.settle_focus(panel);
-                json!({"state": self.state(panel)})
+                let mut state = self.state(panel);
+                // #549: the app's own Join prompt, null where the piece declares no relay.
+                // #278: the app's own Start, for a piece whose match is a room's: null but for
+                // the first player once enough copies have joined.
+                let start = self.start_prompt(panel);
+                if let Some(s) = state.as_object_mut() {
+                    s.insert("join".into(), self.join_prompt(panel));
+                    if let Some(start) = start {
+                        s.insert("start".into(), start);
+                    }
+                }
+                json!({"state": state})
             }
             Err(e) => e,
         }
@@ -746,10 +863,25 @@ impl Hub<'_> {
             (None, None) => return refused("no_display"),
         };
         // A window's caps leave it only some of its display's vsyncs; a hidden one, none.
-        let (slots, unseen) = match &paced {
+        let (mut slots, unseen) = match &paced {
             Some((window, _, g)) => self.placement.slots(window, *g, clock.lead, self.now),
             None => (grid.vsyncs_through(self.now).collect(), Vec::new()),
         };
+        // #1250: a piece plays live from its presentation, so its start shows: the clock's vsync
+        // at the instant it was presented, when that lands on the grid before its next vsync.
+        if paced.is_none() {
+            let doc = self.panel_doc(panel);
+            let piece = (doc.as_deref())
+                .and_then(|d| self.current(d))
+                .is_some_and(|r| crate::clip::step_of(&r.doc).is_some());
+            let start =
+                (doc.as_deref()).and_then(|d| self.currents(d).iter().map(|(at, _)| *at).min());
+            if let (true, Some(at)) = (piece, start) {
+                if at >= 0 && at < grid.next_vsync && at.rem_euclid(grid.period) == 0 {
+                    slots.insert(0, at);
+                }
+            }
+        }
         let mut frames = match self.panel_frames(panel, grid, &slots, clock.lead) {
             Ok(f) => f,
             Err(e) => return e,
@@ -919,6 +1051,14 @@ impl Hub<'_> {
                     let meets = |id: &str| items.get(id).is_none_or(|i| clock::meets(i, &rect));
                     p.valid_until_in_view(&state, Validity::Full, meets)
                 });
+            // #1250: a piece plays live from its presentation: each step of its logic arms the
+            // next frame, as the motion it moves does.
+            let step = (motion.get(&rev).and_then(Option::as_ref))
+                .and_then(|(_, d)| crate::clip::step_of(d));
+            if let Some(step) = step {
+                let next = (shows.div_euclid(step) + 1) * step;
+                until = Some(until.map_or(next, |u| u.min(next)));
+            }
             // `t`: the document's time the frame shows (#1162: a readout reads its values there).
             let mut frame = json!({"vsync": vsync, "rev": rev, "t": shows, "camera": view.camera});
             if let Some(before) = view.compare {

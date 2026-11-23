@@ -263,6 +263,15 @@ pub(crate) fn paint(look: &Look3, params: &Value, path: &str) -> Result<[u8; 3],
     }
 }
 
+/// A mark in 3D's `fog` (Marks in 3D; #1992): whether the sky's fog applies to it, `default`
+/// where it doesn't say.
+pub(crate) fn fog(params: &Value, default: bool) -> bool {
+    params
+        .get("fog")
+        .and_then(Value::as_bool)
+        .unwrap_or(default)
+}
+
 /// A solid's `paint.stroke {role, width}`: an outline around a box or a built mesh (a recipe's
 /// parts among them, #173); a cylinder's or a sphere's isn't drawn yet, so it's refused rather
 /// than left out.
@@ -325,6 +334,79 @@ pub(super) fn point_of(
     Ok(apply(&crate::cut::inverse(model), p))
 }
 
+/// How a text or image mark turns (Marks in 3D: facing).
+fn facing(params: &Value, path: &str) -> Result<Facing, Refused> {
+    match params.get("facing").and_then(Value::as_str) {
+        None | Some("camera") => Ok(Facing::Camera),
+        Some("upright") => Ok(Facing::Upright),
+        Some("fixed") => Ok(Facing::Fixed),
+        Some(_) => refused("out_of_range", format!("{path}/facing")),
+    }
+}
+
+/// A label's or an image's quad axes on screen, as `facing` turns it from its `own`.
+pub fn quad_axes(facing: Facing, own: [Vec3; 2], camera: &Camera) -> [Vec3; 2] {
+    match facing {
+        Facing::Camera => [camera.right, camera.up],
+        Facing::Upright => {
+            let r = [camera.right[0], 0.0, camera.right[2]];
+            let r = if dot(r, r) > 1e-12 {
+                normalize(r)
+            } else {
+                [1.0, 0.0, 0.0]
+            };
+            [r, [0.0, 1.0, 0.0]]
+        }
+        Facing::Fixed => own,
+    }
+}
+
+/// A `mark.image@1` at the world `m` (#1992; Marks in 3D): its picture by hash, on one quad of
+/// `size` centred on the item.
+pub(super) fn image(id: &str, params: &Value, path: &str, m: &Affine3) -> Result<Image, Refused> {
+    let asset = match params.get("asset").and_then(Value::as_str) {
+        Some(s) if s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit()) => s,
+        _ => return refused("out_of_range", format!("{path}/asset")),
+    };
+    quad(id, asset, params, path, m)
+}
+
+/// One quad of `size` centred on the world `m`, placed and turned as a label is, for the picture
+/// `asset` names: an image mark's by hash, or a module's mark's by the key its picture takes
+/// once the camera is known (#2450).
+pub(crate) fn quad(
+    id: &str,
+    asset: &str,
+    params: &Value,
+    path: &str,
+    m: &Affine3,
+) -> Result<Image, Refused> {
+    let size = match params
+        .get("size")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+    {
+        Some([w, h]) => [num(Some(w)), num(Some(h))],
+        _ => [None; 2],
+    };
+    let [Some(w), Some(h)] = size.map(|s| s.filter(|s| *s > 0.0)) else {
+        return refused("out_of_range", format!("{path}/size"));
+    };
+    Ok(Image {
+        id: id.to_string(),
+        asset: asset.to_ascii_lowercase(),
+        pos: origin(m),
+        size: [w, h],
+        world: params.get("size_space").and_then(Value::as_str) == Some("world"),
+        facing: facing(params, path)?,
+        axes: [
+            normalize(turn(m, [1.0, 0.0, 0.0])),
+            normalize(turn(m, [0.0, 1.0, 0.0])),
+        ],
+        fog: fog(params, true),
+    })
+}
+
 /// A `mark.text@1`'s label at the world `m` (#226: a module's marks draw theirs through it too).
 pub(crate) fn label(
     id: &str,
@@ -339,12 +421,7 @@ pub(crate) fn label(
     let Some(role) = Role::parse(font) else {
         return refused("out_of_range", format!("{path}/font"));
     };
-    let facing = match params.get("facing").and_then(Value::as_str) {
-        None | Some("camera") => Facing::Camera,
-        Some("upright") => Facing::Upright,
-        Some("fixed") => Facing::Fixed,
-        Some(_) => return refused("out_of_range", format!("{path}/facing")),
-    };
+    let facing = facing(params, path)?;
     let world_space = params.get("size_space").and_then(Value::as_str) == Some("world");
     let size = num(params.get("size")).unwrap_or(if world_space { 0.25 } else { 13.0 });
     // A screen-size label's run is a 2D text's of that text, font and size.
@@ -372,6 +449,7 @@ pub(crate) fn label(
             normalize(turn(m, [0.0, 1.0, 0.0])),
         ],
         color: paint(look, params, path)?,
+        fog: fog(params, false),
     })
 }
 
@@ -469,6 +547,7 @@ pub(crate) fn line(
         cap: crate::points::cap(params, &path)?,
         trail: None,
         points: written_points,
+        fog: fog(params, true),
     })
 }
 
@@ -674,18 +753,33 @@ pub fn mesh_of(
     let built = if crate::building::KINDS.contains(&kind) {
         crate::building::build(doc, id, item)
     } else {
+        // #1929: a host that keeps a memo between its frames keeps each deform's bind there.
+        let memo = outlines.memo;
         let run = crate::stack::Run {
             outlines: outlines.outlines.to_vec(),
             fills: outlines.module.to_vec(),
             planted: outlines.planted.map(str::to_string),
+            kept: memo
+                .and_then(|m| m.borrow().binds.get(id).cloned())
+                .unwrap_or_default(),
             ..Default::default()
         };
-        crate::build::built(doc, id, item, &run, t).map(|b| b.mesh.unwrap_or_default())
+        crate::build::built(doc, id, item, &run, t).map(|b| {
+            if let Some(m) = memo.filter(|_| b.rows.iter().any(|r| r.bind.is_some())) {
+                let binds = b.rows.iter().map(|r| r.bind.clone()).collect();
+                m.borrow_mut().binds.insert(id.to_string(), binds);
+            }
+            b.mesh.unwrap_or_default()
+        })
     };
     built.map_err(|path| match path.split_once(crate::builders::CODED) {
         Some((code, at)) => Refused {
             code: crate::build::code_of(code),
-            path: at.to_string(),
+            // What a refusal found follows its path under the item (#1928).
+            path: match at.split_once(crate::builders::CODED) {
+                Some((at, _)) => format!("items/{id}/{at}"),
+                None => at.to_string(),
+            },
         },
         None => Refused {
             code: "out_of_range",
@@ -725,8 +819,8 @@ pub(super) fn edge_line(
         },
     };
     // Its dash and gap in its size space; one length dashes as long as it gaps.
-    let dash = match params.get("dash") {
-        None | Some(Value::Null) => [0.0; 2],
+    let dash_of = |of: &Value, path: &str| match of.get("dash") {
+        None | Some(Value::Null) => Ok([0.0; 2]),
         Some(v) => match v
             .as_array()
             .map(|a| a.iter().map(|x| num(Some(x))).collect())
@@ -734,17 +828,24 @@ pub(super) fn edge_line(
             Some(Some::<Vec<f64>>(d))
                 if d.iter().all(|x| *x >= 0.0) && matches!(d.len(), 1 | 2) =>
             {
-                [d[0], d[d.len() - 1]]
+                Ok([d[0], d[d.len() - 1]])
             }
-            _ => return refused("out_of_range", format!("{path}/dash")),
+            _ => refused("out_of_range", format!("{path}/dash")),
         },
     };
+    let dash = dash_of(params, &path)?;
     let mut mesh = match (item.get("kind").and_then(Value::as_str), assets) {
         // A glTF asset's mesh, read as its solid is (#1640).
         (Some("mesh.asset@1"), Some(read)) => {
-            asset_mesh(read, target, item.get("params").unwrap_or(&Value::Null))?.0
+            let params = item.get("params").unwrap_or(&Value::Null);
+            asset_mesh(read, target, params, item)?.0
         }
         _ => mesh_of(doc, target, item, seconds, outlines)?,
+    };
+    // #1782: each triangle's material on the item, where the crease kind picks by it.
+    let mut materials = match kind {
+        crate::geom::EdgeKind::Crease { material: true, .. } => mesh.material_ids(item),
+        _ => None,
     };
     if let Some((_, part)) = of.split_once('#') {
         let Some(tris) = mesh
@@ -760,6 +861,7 @@ pub(super) fn edge_line(
             normals: mesh.normals.clone(),
             ..Default::default()
         };
+        materials = materials.map(|m| tris.iter().map(|t| m[*t as usize]).collect());
         for t in tris {
             let k = 3 * t as usize;
             only.indices.extend(&mesh.indices[k..k + 3]);
@@ -768,8 +870,25 @@ pub(super) fn edge_line(
         mesh = only;
     }
     let (list, derived) = match kind {
-        crate::geom::EdgeKind::Crease { angle, border } => mesh.crease_set(angle, border, None),
-        _ => (Arc::new(mesh.edge_list(kind, None)), true),
+        crate::geom::EdgeKind::Crease { angle, border, .. } => {
+            mesh.crease_set(angle, border, materials.as_deref(), None)
+        }
+        _ => (Arc::new(mesh.edge_list(kind, None, None)), true),
+    };
+    let color = paint(look, params, &path)?;
+    // #1782: the style its spans behind opaque geometry draw in, the line's own paint unless it
+    // names one.
+    let hidden = match params.get("hidden") {
+        None | Some(Value::Null) => None,
+        Some(h) if h.is_object() => Some(Hidden {
+            dash: dash_of(h, &format!("{path}/hidden"))?,
+            color: match h.get("paint") {
+                None | Some(Value::Null) => color,
+                Some(_) => paint(look, h, &format!("{path}/hidden"))?,
+            },
+            planted: None,
+        }),
+        Some(_) => return refused("out_of_range", format!("{path}/hidden")),
     };
     let source = EdgesOf {
         mesh: Arc::new(mesh),
@@ -778,13 +897,15 @@ pub(super) fn edge_line(
         width,
         list,
         derived,
+        materials: materials.map(Arc::new),
+        hidden,
     };
     let world = params.get("size_space").and_then(Value::as_str) == Some("world");
     Ok(Line {
         id: id.to_string(),
         segments: source.segments(true),
         world,
-        color: paint(look, params, &path)?,
+        color,
         edges: Some(Arc::new(source)),
         over: false,
         joined: false,
@@ -793,6 +914,7 @@ pub(super) fn edge_line(
         cap: Default::default(),
         trail: None,
         points: Vec::new(),
+        fog: fog(params, true),
     })
 }
 

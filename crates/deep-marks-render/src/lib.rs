@@ -92,6 +92,8 @@ pub(crate) enum Theme {
 struct View {
     zoom: f64,
     theme: Theme,
+    /// #1489: reduced motion: an animated image holds the frame the view first showed.
+    reduced: bool,
 }
 
 /// One step of a document session: a whole revision (or the last one), the time of its first
@@ -379,6 +381,7 @@ fn view(value: Option<&Value>) -> Option<View> {
         return Some(View {
             zoom: 1.0,
             theme: Theme::Light,
+            reduced: false,
         });
     };
     let map = value.as_object()?;
@@ -393,7 +396,15 @@ fn view(value: Option<&Value>) -> Option<View> {
         Some("dark") => Theme::Dark,
         Some(_) => return None,
     };
-    Some(View { zoom, theme })
+    let reduced = match map.get("reduced_motion") {
+        None => false,
+        Some(r) => r.as_bool()?,
+    };
+    Some(View {
+        zoom,
+        theme,
+        reduced,
+    })
 }
 
 /// The content-addressed store an image is read from by its sha256: a directory whose files are
@@ -500,6 +511,8 @@ fn check(
     issues.extend(found);
     let (found, vectors) = deep_canvas_vector::check(doc, |sha| asset::bytes(store, sha), twin);
     issues.extend(found);
+    // #2053: a normal page the size of its image, read from the store.
+    issues.extend(asset::page_issues(doc, store));
     // #406: a quote's raw bytes against its source's, and a formula's numbers.
     issues.extend(deep_canvas_marks::check::quotes(doc, |sha| {
         asset::bytes(store, sha)
@@ -622,13 +635,16 @@ fn check(
     }
     let ok = !issues.iter().any(|i| i.severity == "error");
     let numbers = [deep_canvas_marks::check::numbers(doc).0, formula_numbers].concat();
+    // #2053: an image's normal page outside a lit group draws as it would without it.
+    let items = doc.get("items").and_then(Value::as_object);
+    let page_notices = deep_canvas_marks::light::unlit_pages(items.unwrap_or(&Map::new()));
     let answer = json!({
         "ok": ok,
         "issues": issues.iter().map(|i| i.to_json()).collect::<Vec<_>>(),
         // #397: every number a mark set or an axis shows, with what it traces to; #406: a
         // template's story numbers, a quote's quotation and a formula's numbers.
         "numbers": numbers,
-        "notices": result.notices.iter().map(|n| n.to_json()).chain(formula_notices).collect::<Vec<_>>(),
+        "notices": result.notices.iter().map(|n| n.to_json()).chain(formula_notices).chain(page_notices).collect::<Vec<_>>(),
         "curves": curves,
         "lowered": result.lowered,
         "expansions": expansions,
@@ -687,6 +703,36 @@ fn verdict(checked: &mut Value, accepted: &[(String, String)]) {
         (true, true) => "PASS",
     };
     checked["verdict"] = json!({"outcome": outcome, "open": open});
+}
+
+/// The issues a planted check lets through, by its name. #2031 AC6's accepts a 17th light on one
+/// group; #2032 AC6's two accept an open path that occludes, and a lit group's occluders past
+/// their cap; #2053 AC4's a normal page whose size isn't its image's.
+fn let_through(planted: Option<&str>) -> Option<fn(&Value) -> bool> {
+    Some(match planted? {
+        "light_accepts_seventeenth" => |i| {
+            i["code"] == "out_of_range"
+                && i["path"]
+                    .as_str()
+                    .is_some_and(|p| p.ends_with("/params/light/lights"))
+        },
+        "occlude_accepts_open_path" => |i| i["code"] == "occluder_open",
+        "occlude_accepts_past_cap" => {
+            |i| i["code"] == "out_of_range" && i["actual"]["segments"].is_number()
+        }
+        // #2053 AC4's: a normal page of another size than its image's.
+        "normal_accepts_smaller_page" => |i| i["code"] == "normal_page_size",
+        _ => return None,
+    })
+}
+
+/// The planted check's answer: the issues it lets `through` no longer refused.
+fn accepts(checked: &mut Value, through: fn(&Value) -> bool) {
+    if let Some(issues) = checked["issues"].as_array_mut() {
+        issues.retain(|i| !through(i));
+        let ok = !issues.iter().any(|i| i["severity"] == "error");
+        checked["ok"] = json!(ok);
+    }
 }
 
 /// #417 AC9's wrong program, which `check` and `raster` take: a status distance of 0.03.
@@ -849,8 +895,12 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
     // a square grid's sides (`check`).
     let parity = input.get("planted").and_then(Value::as_str) == Some("hex_shifts_other_parity");
     let sides = input.get("planted").and_then(Value::as_str) == Some("terrain_reads_square_sides");
+    // #2031 AC6's and #2032 AC6's wrong checks, each of which lets one refusal through.
+    let through =
+        let_through(input.get("planted").and_then(Value::as_str)).filter(|_| command == "check");
     if command == "check" || command == "geometry" {
         if input.get("planted").is_some()
+            && through.is_none()
             && skips == Twin::Honest
             && !near
             && !(unwrapped && command == "check")
@@ -872,6 +922,9 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
         let timing = input.get("timing") == Some(&Value::Bool(true));
         if command == "check" {
             let mut checked = checked;
+            if let Some(through) = through {
+                accepts(&mut checked, through);
+            }
             if timing {
                 match raster::rank_ms(&doc) {
                     Ok(rank_ms) => checked["timing"] = json!({"rank_ms": rank_ms}),
@@ -1025,10 +1078,13 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                     || p == "on_curve_left_edge"
                     || p == "roll_moves_every_grapheme"
                     || p == "weight_snaps_to_static"
+                    || p == "shaper_ignores_opsz"
                     || p == "stops_at_midpoint"
                     || p == "drops_cells_by_corner_signs"
                     || p == "decodes_before_header"
-                    || p == "cap_counts_copies_only" =>
+                    || p == "cap_counts_copies_only"
+                    || p == "decoder_ignores_orientation"
+                    || vertical_plant(p).is_some() =>
             {
                 (Planted::None, false, false)
             }
@@ -1105,8 +1161,20 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 .and_then(Value::as_str)
                 .and_then(asset::Plant::named)
                 .unwrap_or_default(),
+            hit: None,
         };
         let mut request = request;
+        // #1215: the line's planted vertical shaper, for this line alone; its runs are cached apart.
+        let plant = input.get("planted").and_then(Value::as_str);
+        deep_text::vertical::plant(plant.and_then(vertical_plant).unwrap_or_default());
+        request.hit = match input.get("hit") {
+            None => None,
+            Some(v) => Some(point(v)?),
+        };
+        // #1484 AC1's planted shaper, for this line alone.
+        let ignores_opsz =
+            input.get("planted").and_then(Value::as_str) == Some("shaper_ignores_opsz");
+        deep_text_gpui::plant_ignores_opsz(ignores_opsz);
         // #496: the runs this line shapes, its check included, counted from here.
         deep_text::cache::record();
         let _ = deep_text::cache::take_log();
@@ -1120,6 +1188,8 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
         );
         request.vectors = vectors;
         let mut answer = refused_by_check(&checked).unwrap_or_else(|| raster::answer(request));
+        deep_text::vertical::plant(deep_text::vertical::Planted::default());
+        deep_text_gpui::plant_ignores_opsz(false);
         if answer.get("ok") == Some(&Value::Bool(true)) {
             answer["shaped"] = json!(deep_text::cache::take_log().len());
         }
@@ -1137,7 +1207,12 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 Some(Value::String(p)) if p == "arms_only_on_readings" => {
                     (true, asset::Plant::None)
                 }
-                Some(Value::String(p)) if p == "decodes_per_draw" || p == "uploads_per_frame" => {
+                // #1489: an animation's decoder that decodes every frame up front and keeps them all.
+                Some(Value::String(p))
+                    if p == "decodes_per_draw"
+                        || p == "uploads_per_frame"
+                        || p == "decoder_holds_all_frames" =>
+                {
                     (false, asset::Plant::named(p)?)
                 }
                 Some(_) => return None,
@@ -1281,6 +1356,9 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 Some(Value::String(p)) if p == "drops_glyph" => (false, true, false),
                 Some(Value::String(p)) if p == "stock_bt601_fragment" => (false, false, true),
                 Some(Value::String(p)) if p == "cap_counts_copies_only" => (false, false, false),
+                Some(Value::String(p)) if p == "decoder_ignores_orientation" => {
+                    (false, false, false)
+                }
                 Some(_) => return None,
             };
             Request::Render {
@@ -1296,6 +1374,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 stock_fragment,
                 image_plant: match input.get("planted").and_then(Value::as_str) {
                     Some("cap_counts_copies_only") => asset::Plant::CapCountsCopiesOnly,
+                    Some("decoder_ignores_orientation") => asset::Plant::IgnoresOrientation,
                     _ => asset::Plant::None,
                 },
             }
@@ -1374,46 +1453,13 @@ pub fn main() {
     let _ = out.flush();
 }
 
-/// #499: the heap allocations the process has made, on every thread.
-pub static ALLOCATIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
-/// #1486: the allocations made while the image service's own code ran, on any thread.
-pub static SERVICE_ALLOCATIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
-fn counted() {
-    ALLOCATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    if deep_images::in_service() {
-        SERVICE_ALLOCATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    }
-}
-
-/// The system allocator, counting each allocation (the binary installs it as the global one).
-pub struct Counting;
-
-// SAFETY: every call goes to the system allocator unchanged; only a counter is added.
-unsafe impl std::alloc::GlobalAlloc for Counting {
-    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
-        counted();
-        unsafe { std::alloc::System.alloc(layout) }
-    }
-    unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {
-        counted();
-        unsafe { std::alloc::System.alloc_zeroed(layout) }
-    }
-    unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, size: usize) -> *mut u8 {
-        counted();
-        unsafe { std::alloc::System.realloc(ptr, layout, size) }
-    }
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
-        unsafe { std::alloc::System.dealloc(ptr, layout) }
-    }
-}
-
 mod arrays;
 mod asset;
+mod counting;
 mod formulas;
 pub mod gpu;
 mod graphs;
+pub mod grid_gpu;
 pub mod layer;
 #[cfg(target_os = "macos")]
 mod macos;
@@ -1423,3 +1469,32 @@ mod raster;
 mod status;
 #[cfg(target_os = "macos")]
 mod video;
+pub use counting::{Counting, ALLOCATIONS, SERVICE_ALLOCATIONS};
+
+/// #1215's wrong vertical shapers, by their `raster` `planted` names.
+fn vertical_plant(name: &str) -> Option<deep_text::vertical::Planted> {
+    let none = deep_text::vertical::Planted::default();
+    Some(match name {
+        "vertical_laid_horizontal" => deep_text::vertical::Planted {
+            horizontal: true,
+            ..none
+        },
+        "never_turns" => deep_text::vertical::Planted {
+            never_turns: true,
+            ..none
+        },
+        "skips_vert" => deep_text::vertical::Planted {
+            skips_vert: true,
+            ..none
+        },
+        _ => return None,
+    })
+}
+
+/// #1215: a page point `[x, y]` in document u.
+fn point(v: &Value) -> Option<[f64; 2]> {
+    let [x, y] = v.as_array()?.as_slice() else {
+        return None;
+    };
+    Some([x.as_f64()?, y.as_f64()?]).filter(|p| p.iter().all(|n| n.is_finite()))
+}

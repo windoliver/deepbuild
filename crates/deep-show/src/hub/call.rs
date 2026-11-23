@@ -1,5 +1,11 @@
 use super::*;
 
+pub struct PatchCall {
+    pub via: Via,
+    pub doc: String,
+    pub body: Body,
+}
+
 pub enum Call {
     /// #411: deep_query, and deep.canvas.read for a check plug-in.
     SceneQuery(Box<crate::query::Query>),
@@ -20,6 +26,13 @@ pub enum Call {
     },
     /// #1901: the machine fingerprint kept output is keyed by.
     Fingerprint,
+    /// #2892: `ship.bytes` for a web bundle and its test server's record, served to `chrome`.
+    Ship {
+        bundle: String,
+        chrome: String,
+    },
+    /// #1431: the process's footprint, its heap, every gauge and what's left unaccounted.
+    Footprint,
     /// #1901: a document's frame, capture or final at a time, through the kept-output cache.
     Draw {
         doc: String,
@@ -137,11 +150,22 @@ pub enum Call {
         doc: String,
         set: Option<Value>,
     },
+    /// #1415: a document's session closed, as you closing its panel.
+    Close(String),
+    /// #1415: what each state of a document session does with each call.
+    SessionTable,
     /// #501: the export's GPU hash pass on given BGRA8 frames.
     FrameHash {
         frames: Vec<([u32; 2], String)>,
         software: bool,
     },
+    /// #518: the export's GPU conversion pass on given BGRA8 frames.
+    FramePlanes {
+        frames: Vec<([u32; 2], String)>,
+        software: bool,
+    },
+    /// #518: the encode job kind's qualification run on one tool, by name@version.
+    EncodeQualify(String),
     /// #501: the cross-machine audio check on two float WAVs.
     CrossMachine([String; 2]),
     /// #1897: the GPU pixel hash on frames from the evidence store, beside its CPU twin.
@@ -158,6 +182,8 @@ pub enum Call {
     Determinism(crate::time::Determinism),
     /// `count` frames of a session from `from`, `step` apart, with the scheduler's own costs.
     Frames(Box<Frames>),
+    /// #1500: a document played live frame by frame, its revisions joining the run.
+    PlayFrames(Box<crate::joins::Play>),
     /// #856: the shaped-run cache's runs of a text, the times each was shaped and who draws it.
     ShapedRuns(String),
     /// #854: patches to a shared document, each timed from its arrival to the settled frame.
@@ -203,15 +229,22 @@ pub enum Call {
         doc: String,
         world: String,
     },
-    /// #540: every copy of a document's lockstep match.
-    Match {
-        doc: String,
-        steps: i64,
-    },
+    /// #540, #549: the net module's calls: every copy of a document's lockstep match over the
+    /// test relay, this copy's live match through the declared relay, and every connection one
+    /// opened.
+    Net(Box<crate::net::NetCall>),
     /// A panel's interaction scope, with no input (#383).
     Scope(String),
     /// The frames a panel presented up to now (#383).
     Presented(String),
+    /// #1250: those frames, each from `from` on with its index target as the live play drew it.
+    PresentedIndices(String, i64),
+    /// #1250: a player control run in a panel (Save clip, Save still), and a panel's cards.
+    Clip {
+        panel: String,
+        action: crate::clip::Action,
+    },
+    Clips(String),
     /// Your pop-out of a panel's view onto a display, with your input's serial (#400).
     PopOut {
         panel: String,
@@ -352,6 +385,8 @@ pub enum Call {
     Media(Box<crate::media::MediaCall>),
     /// The device gate: documents of strips, Play, the gate's fields, the device's output (#498).
     Gate(Box<crate::gate::GateCall>),
+    /// #210: a port's Connect, its state, the shell's mute and a play's seek.
+    Ports(Box<crate::ports::PortCall>),
     /// #507: present mode's state, the presenter view and the menu bar's count.
     Present(crate::present::PresentCall),
     /// #499: the media module's mix.
@@ -393,6 +428,8 @@ pub struct Eval {
     pub data_hash: bool,
     /// #507: each text item's drawn string beside the frame.
     pub texts: bool,
+    /// #297: each entry text's shown string beside the frame.
+    pub shown: bool,
     /// #169: the core's carried-state list as the frame leaves it.
     pub carried: bool,
     /// #903: the tour pointer as the frame draws it.
@@ -401,13 +438,18 @@ pub struct Eval {
 
 pub struct Scenario {
     pub evidence: PathBuf,
+    /// #210: the hours the shell holds quiet, `(from, to)` in flicks.
+    pub quiet_hours: Vec<(i64, i64)>,
     pub sessions: BTreeMap<String, Session>,
     pub processes: Vec<Process>,
     pub panels: BTreeMap<String, Panel>,
     pub docs: BTreeMap<String, String>,
     /// #504: the claim or ask each document was minted for (`docs.<id>.for`), where named.
     pub docs_for: BTreeMap<String, String>,
-    pub record: BTreeMap<String, RecordObject>,
+    /// #549: what the scenario gives a match: each document's link and the relay's authority.
+    pub net: crate::net::Given,
+    /// Shared (#1868): `canvas` reads its world's record once and plays every call on it.
+    pub record: std::sync::Arc<BTreeMap<String, RecordObject>>,
     /// #629: a replay's run record entries, each as a `run` call's reply gave it (`record` as a
     /// list).
     pub runs: Vec<Value>,
@@ -473,6 +515,8 @@ pub struct Scenario {
     pub delays: Vec<crate::stepped::Delay>,
     /// The packs installed in the store before the first call (#306), each `(owner/name, dir)`.
     pub packs: Vec<(String, PathBuf)>,
+    /// #518: the encode tools the hub holds from installed plug-ins, in registration order.
+    pub job_tools: Vec<crate::export::tools::Tool>,
     /// #1961: your notes the hub holds when the run starts, each `{note, doc, item, …}`.
     pub notes: Vec<Value>,
     /// #200: the hub's installed slot fills, each `{slot, fill, kit}` with the kit result the hub

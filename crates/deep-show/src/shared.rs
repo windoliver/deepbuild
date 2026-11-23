@@ -22,8 +22,8 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use deep_canvas::document::{
-    apply_ops, canonical_in, check_packed, pack_kinds, recheck_with, rollback, store_migrations,
-    touched_in, Issue, Notice, Packs, Patched, Referrers, Writing, ID_MAPS,
+    apply_ops, canonical_in, check_packed, check_sized, pack_kinds, recheck_with, rollback,
+    store_migrations, touched_in, Issue, Notice, Packs, Patched, Referrers, Writing, ID_MAPS,
 };
 use deep_canvas::grammar::{Path as FieldPath, Section};
 use deep_canvas::kinds::{lookup, registry, Lookup};
@@ -219,6 +219,8 @@ enum Outcome {
         ids: Vec<String>,
         writers: Vec<Writer>,
     },
+    /// #1415: its ops left every item's content key as it was, so it made no revision.
+    NoChange,
 }
 
 /// An applied patch's result.
@@ -252,22 +254,9 @@ pub fn writer_of_text(text: &str) -> Option<Writer> {
     })
 }
 
-/// Whether this build knows a kind: the marks module or scene3d draws it, or the kernel registers it.
-pub fn knows(kind: &str) -> bool {
-    deep_canvas_marks::scene::KINDS.contains(&kind)
-        || deep_canvas_scene3d::scene::is_3d(kind)
-        || kind == deep_canvas_scene3d::scene::OVERLAY
-        // A readout (#419), such as the overlay that discloses an exaggerated length (#1183).
-        || kind == "overlay.text@1"
-        // #506: an inset, and a view of the document from another camera in a rect of the frame.
-        || kind == deep_canvas_scene3d::inset::KIND
-        || kind == deep_canvas_scene3d::views::KIND
-        // The vector module's kind (#1162): an item the view draws, hears and points at.
-        || kind == "vector@1"
-        // A logic item (#544): baked at check into the occurrence lists its readers read; it draws nothing.
-        || kind == "logic@1"
-        || !matches!(lookup(&registry(), kind), Lookup::UnknownKind)
-}
+/// Whether this build knows a kind, and the items that draw: deep-play's (#1045), which the web
+/// player's accessibility tree reads as the app's does.
+pub use deep_play::access::{draws, knows};
 
 /// The layer whose `writer` is this writer's text, if the document has one.
 pub fn layer_of(doc: &Value, writer: &Writer) -> Option<String> {
@@ -277,38 +266,6 @@ pub fn layer_of(doc: &Value, writer: &Writer) -> Option<String> {
         .iter()
         .find(|(_, l)| l.get("writer").and_then(Value::as_str) == Some(text.as_str()))
         .map(|(id, _)| id.clone())
-}
-
-/// The items that draw: of a kind this build knows, visible, and every parent they name there.
-/// An item whose parent is gone hides, and only it and what hangs from it.
-pub fn draws(doc: &Value) -> Vec<String> {
-    let empty = Map::new();
-    let items = doc
-        .get("items")
-        .and_then(Value::as_object)
-        .unwrap_or(&empty);
-    let mut out: Vec<String> = items
-        .iter()
-        .filter(|(_, item)| {
-            item.get("kind").and_then(Value::as_str).is_some_and(knows)
-                && item.get("visible") != Some(&Value::Bool(false))
-        })
-        .filter(|(id, _)| {
-            let mut at = id.as_str();
-            for _ in 0..=items.len() {
-                match items[at].get("parent").and_then(Value::as_str) {
-                    None => return true,
-                    Some(p) if items.contains_key(p) => at = p,
-                    // #504: an item joins an assembly by naming it as its parent.
-                    Some(p) => return doc.get("assemblies").and_then(|a| a.get(p)).is_some(),
-                }
-            }
-            false
-        })
-        .map(|(id, _)| id.clone())
-        .collect();
-    out.sort();
-    out
 }
 
 /// The document as the marks module draws it: only the items that draw.
@@ -920,6 +877,43 @@ fn restore(
         }
         for (_, file) in newest.values() {
             take_layer(&mut shared.doc, &mut shared.owners, file);
+        }
+    }
+}
+
+/// #1801: each refusal that a removed item's dangling name raised (`ref_unresolved` at one of the
+/// fields naming it, or naming it as its value) gets as its `actual` every row that still names
+/// the item in `doc`, as `refs_to` lists them and in its order, so one refusal names them all.
+pub(crate) fn name_referrers(
+    refusals: &mut [Issue],
+    doc: &Value,
+    removed: &[&str],
+    sealed: &Sealed,
+    planted: Option<Planted>,
+) {
+    for id in removed {
+        let name = deep_canvas::refs::Name::Item(id.to_string());
+        let refs = deep_canvas::refs::refs_to(doc, sealed, &name);
+        if refs.is_empty() {
+            continue;
+        }
+        let mut rows: Vec<Value> = refs
+            .iter()
+            .map(|r| json!({"row": r.row, "path": r.path, "kind": r.kind}))
+            .collect();
+        if planted == Some(Planted::RefusalNamesFirstRef) {
+            rows.truncate(1);
+        }
+        for issue in refusals.iter_mut().filter(|i| i.code == "ref_unresolved") {
+            let at_field = refs
+                .iter()
+                .any(|r| issue.path == r.path || issue.path.starts_with(&format!("{}/", r.path)));
+            if at_field || issue.actual == json!(id) {
+                issue.actual = Value::Array(rows.clone());
+                if !issue.ids.iter().any(|x| x == id) {
+                    issue.ids.push(id.to_string());
+                }
+            }
         }
     }
 }

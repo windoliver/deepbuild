@@ -24,10 +24,32 @@ pub const DEFAULT_CAP: usize = 200;
 /// No reply passes this many bytes of JSON without a cursor (#412).
 const REPLY_CAP: usize = 65_536;
 
+/// The room the call being answered names, in bytes; 0 while it names none.
+static ROOM: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Takes the room a hub call names (#2896): the hub gives each call a fifth under what its
+/// client keeps of one tool result, so every page of its reply fits that client. None, the cap.
+pub fn set_room(room: Option<usize>) {
+    ROOM.store(room.unwrap_or(0), std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The bytes the reply being built may take: the call's room, never past the cap.
+pub fn reply_cap() -> usize {
+    match ROOM.load(std::sync::atomic::Ordering::Relaxed) {
+        0 => REPLY_CAP,
+        n => n.min(REPLY_CAP),
+    }
+}
+
+/// Room for the fields every reply carries: 8 KB of the 64 KB cap, an eighth of a smaller room.
+pub fn margin() -> usize {
+    (reply_cap() / 8).min(8_192)
+}
+
 /// The bytes a reply's list may take: the cap less the rest of the reply and room for the fields
 /// every reply carries.
 pub fn reply_room(reply: &Value) -> usize {
-    REPLY_CAP.saturating_sub(reply.to_string().len() + 8_192)
+    reply_cap().saturating_sub(reply.to_string().len() + margin())
 }
 
 /// The elements of `all` from `from` that fit in `room` bytes of JSON (at least one), and where
@@ -53,6 +75,10 @@ pub enum What {
     Why,
     /// #548: logic items' arrays, fuel and traps at steps from their bake, and their region maps.
     Logic,
+    /// #1801: the rows that name an item, a table row, a pack entry or an asset hash.
+    RefsTo,
+    /// #1801: the items and assets ranked by the meter's own terms.
+    Cost,
 }
 
 /// A check plug-in reading through `deep.canvas.read`: its package ID and the documents its
@@ -86,6 +112,10 @@ pub struct Query {
     pub track: Vec<Value>,
     /// #548: the steps a logic read answers for.
     pub steps: Vec<i64>,
+    /// #1801: what `refs_to` names.
+    pub named: Option<deep_canvas::refs::Name>,
+    /// #1801: the column `cost` ranks by.
+    pub by: Option<String>,
 }
 
 /// One revision as a query reads it: the document as written, the form that draws, and the
@@ -138,6 +168,22 @@ impl Hub<'_> {
                 None => return refused("no_session"),
             },
         };
+        // #1801: `refs_to` reads the document as written; `cost` checks it as a show does.
+        if matches!(q.what, What::RefsTo | What::Cost) {
+            let Some((rev, doc)) = self.query_doc(&q.doc, q.rev) else {
+                return refused("no_revision");
+            };
+            if q.plugin
+                .as_ref()
+                .is_some_and(|p| !p.docs.iter().any(|d| d.eq_ignore_ascii_case(&q.doc)))
+            {
+                return outside_grant(q, rev);
+            }
+            return match q.what {
+                What::RefsTo => self.refs_reply(q, rev, &doc),
+                _ => self.cost_reply(q, rev, &doc),
+            };
+        }
         let Some(revision) = self.query_revision(&q.doc, q.rev) else {
             return refused("no_revision");
         };
@@ -165,6 +211,7 @@ impl Hub<'_> {
                 }
             }
             What::Rows => self.rows_reply(q, &revision, &hidden),
+            What::RefsTo | What::Cost => refused("bad_input"),
             What::Logic => {
                 let items = q.items.clone().unwrap_or_default();
                 if let Some(id) = items.iter().find(|id| hidden.contains_key(id.as_str())) {
@@ -184,20 +231,7 @@ impl Hub<'_> {
 
     /// The document and drawn form of `doc` at `rev` (its current revision without one).
     pub(crate) fn query_revision(&self, doc: &str, rev: Option<u64>) -> Option<Revision> {
-        let (rev, document) = if let Some(shared) = self.shared.get(doc) {
-            let k = match rev {
-                Some(r) => shared.revs.iter().position(|x| x.rev == r)?,
-                None => shared.revs.len() - 1,
-            };
-            (shared.revs[k].rev, shared.at(k).0.into_owned())
-        } else {
-            let rows = self.revisions.get(doc)?;
-            let row = match rev {
-                Some(r) => rows.iter().find(|x| x.rev == r && x.state != "refused")?,
-                None => rows.iter().find(|x| x.state == "current")?,
-            };
-            (row.rev, row.doc.clone())
-        };
+        let (rev, document) = self.query_doc(doc, rev)?;
         let (drawn, expansions) = self.drawn_of(&document);
         Some(Revision {
             rev,
@@ -205,6 +239,179 @@ impl Hub<'_> {
             drawn,
             expansions,
         })
+    }
+
+    /// #1801: `refs_to`: every field of the revision that names what the call names, as the
+    /// core and the registries declare them, each with the row that holds it, its path and its
+    /// kind of reference, in path order, cut to the cap and to 64 KB a page (#412); the coverage
+    /// block says the whole document was read, and how many rows there were.
+    fn refs_reply(&self, q: &Query, rev: u64, doc: &Value) -> Value {
+        let Some(name) = &q.named else {
+            return refused("bad_input");
+        };
+        let mut all = deep_canvas::refs::refs_to(doc, &self.startup.sealed, name);
+        let items = doc.get("items").and_then(Value::as_object);
+        let total_items = items.map_or(0, Map::len);
+        let mut read = total_items;
+        match self.scenario.planted {
+            Some(Planted::RefsParentsOnly) => {
+                all.retain(|r| r.kind == deep_canvas::refs::kind::PARENT);
+            }
+            Some(Planted::RefsReadOneLayer) => {
+                // The caller's own layer's items alone, and nothing else the document holds.
+                let writer = self.writer(&q.via).map(|(w, _)| w.text());
+                let mine = doc
+                    .get("layers")
+                    .and_then(Value::as_object)
+                    .into_iter()
+                    .flatten()
+                    .find(|(_, l)| l.get("writer").and_then(Value::as_str) == writer.as_deref())
+                    .map(|(id, _)| id.clone());
+                let in_mine = |row: &str| {
+                    let id = row.strip_prefix("items/").unwrap_or("");
+                    let layer = items.and_then(|i| i.get(id)).and_then(|i| i.get("layer"));
+                    mine.is_some() && layer.and_then(Value::as_str) == mine.as_deref()
+                };
+                all.retain(|r| in_mine(&r.row));
+                read = items.map_or(0, |i| {
+                    i.keys()
+                        .filter(|id| in_mine(&format!("items/{id}")))
+                        .count()
+                });
+            }
+            _ => {}
+        }
+        let kept: Vec<Value> = all
+            .iter()
+            .skip(q.cursor)
+            .take(q.cap)
+            .map(|r| json!({"row": r.row, "path": r.path, "kind": r.kind}))
+            .collect();
+        // #412: rows past what fits under 64 KB come on the next page, from its cursor.
+        let (rows, next) = fitted(&kept, 0, reply_room(&json!({"rev": rev})));
+        let shown = rows.len();
+        let complete = q.cursor == 0 && shown == all.len();
+        // The rows hang from no parent: a cut is named at the top level, as #411's are.
+        let cut = if complete {
+            json!([])
+        } else {
+            json!([{"parent": null, "shown": shown, "total": all.len()}])
+        };
+        let mut reply = json!({
+            "rev": rev,
+            "rows": rows,
+            "coverage": {"complete": complete, "rows_total": all.len(), "rows_shown": shown,
+                         "cut": cut, "items_read": read, "items_total": total_items},
+        });
+        if let Some(n) = next {
+            reply["next"] = json!((q.cursor + n).to_string());
+        }
+        reply
+    }
+
+    /// #1801: `cost`: the revision checked as a show checks it, its assets sized, and the meter's
+    /// estimate for one frame split by item, by asset (each held once, however many items draw
+    /// it) and by pass (its work per pixel and its targets), each row with every column and its
+    /// share of each column's total, ranked by the column the call names, so the rows sum to the
+    /// totals the meter refuses on.
+    fn cost_reply(&mut self, q: &Query, rev: u64, doc: &Value) -> Value {
+        let sizes = self.asset_sizes(doc);
+        let sealed = &self.startup.sealed;
+        let checked = deep_canvas::document::check_sized(doc, sealed, &self.packs, &sizes);
+        let e = deep_canvas::cost::estimate_sized(&checked.lowered, sealed, &sealed.costs, &sizes);
+        let kinds = checked.lowered.get("items");
+        let share = |part: f64, total: f64| if total > 0.0 { part / total } else { 0.0 };
+        // Each row's columns, in ms and MB, with its share of each.
+        let columns = |cpu_ns: f64, gpu_ns: f64, bytes: f64, decoded: f64| {
+            let (cpu, gpu, mb, dec) = (cpu_ns / 1e6, gpu_ns / 1e6, bytes / 1e6, decoded / 1e6);
+            json!({
+                "cpu_ms": cpu, "gpu_ms": gpu, "gpu_mb": mb, "decoded_mb": dec,
+                "share": {"cpu_ms": share(cpu, e.cpu_ms), "gpu_ms": share(gpu, e.gpu_ms),
+                          "gpu_mb": share(mb, e.gpu_mb), "decoded_mb": share(dec, e.decoded_mb)},
+            })
+        };
+        let mut rows: Vec<Value> = Vec::new();
+        for c in &e.items {
+            let mut r = columns(c.cpu_ns, c.gpu_ns, c.bytes, 0.0);
+            r["id"] = json!(c.id);
+            r["kind"] = kinds
+                .and_then(|k| k.get(&c.id))
+                .and_then(|i| i.get("kind"))
+                .cloned()
+                .unwrap_or(Value::Null);
+            rows.push(r);
+        }
+        // The planted table leaves the assets out: items share them by hash, so no item's row
+        // holds their bytes.
+        if self.scenario.planted != Some(Planted::CostWithoutSharedAssets) {
+            for a in &e.assets {
+                let mut r = columns(0.0, 0.0, a.bytes, a.decoded);
+                r["asset"] = json!(a.sha256);
+                r["items"] = json!(a.items);
+                rows.push(r);
+            }
+        }
+        for p in &e.passes {
+            let mut r = columns(p.cpu_ns, p.gpu_ns, p.bytes, 0.0);
+            r["pass"] = json!(p.id);
+            rows.push(r);
+        }
+        let by = q.by.as_deref().unwrap_or("gpu_ms");
+        let key = |r: &Value| r[by].as_f64().unwrap_or(0.0);
+        let name = |r: &Value| {
+            ["id", "asset", "pass"]
+                .iter()
+                .find_map(|k| r[*k].as_str())
+                .unwrap_or("")
+                .to_string()
+        };
+        // Ranked by the column, the costliest first; ties by the row's name, by code point.
+        rows.sort_by(|a, b| {
+            key(b)
+                .total_cmp(&key(a))
+                .then_with(|| name(a).cmp(&name(b)))
+        });
+        let total = rows.len();
+        let kept: Vec<Value> = rows.into_iter().skip(q.cursor).take(q.cap).collect();
+        // #412: rows past what fits under 64 KB come on the next page, from its cursor.
+        let (shown, next) = fitted(&kept, 0, reply_room(&json!({"rev": rev})));
+        let n = shown.len();
+        let complete = q.cursor == 0 && n == total;
+        let cut = if complete {
+            json!([])
+        } else {
+            json!([{"parent": null, "shown": n, "total": total}])
+        };
+        let mut reply = json!({
+            "rev": rev,
+            "t": q.t,
+            "by": by,
+            "rows": shown,
+            "totals": {"cpu_ms": e.cpu_ms, "gpu_ms": e.gpu_ms, "gpu_mb": e.gpu_mb,
+                       "decoded_mb": e.decoded_mb},
+            "coverage": {"complete": complete, "rows_total": total, "rows_shown": n, "cut": cut},
+        });
+        if let Some(k) = next {
+            reply["next"] = json!((q.cursor + k).to_string());
+        }
+        reply
+    }
+
+    /// `doc` as written at `rev` (its current revision without one), with that revision's number.
+    pub(crate) fn query_doc(&self, doc: &str, rev: Option<u64>) -> Option<(u64, Value)> {
+        if let Some(shared) = self.shared.get(doc) {
+            let k = match rev {
+                Some(r) => shared.revs.iter().position(|x| x.rev == r)?,
+                None => shared.revs.len() - 1,
+            };
+            return Some((shared.revs[k].rev, shared.at(k).0.into_owned()));
+        }
+        let rows = self.revisions.get(doc)?;
+        let row = match rev {
+            Some(r) => rows.iter().find(|x| x.rev == r && x.state != "refused")?,
+            None => rows.iter().find(|x| x.state == "current")?,
+        };
+        Some((row.rev, row.doc.clone()))
     }
 
     /// What a document draws: its recipe instances expanded and kept, items of a kind this build
@@ -227,8 +434,10 @@ impl Hub<'_> {
     pub(crate) fn drawing_form(&self, document: &Value) -> (Value, Vec<Expansion>) {
         let result = check_packed(document, &self.startup.sealed, &self.packs);
         let skipped = crate::verdict::unknown_items(&result.notices);
-        let form =
+        let mut form =
             crate::verdict::without(&crate::packs::drawn(document, &result.expansions), &skipped);
+        // #192: each provider's output by its hash, never the provider.
+        self.sandbox.fill(&self.startup.sealed, &mut form);
         (form, result.expansions)
     }
 
@@ -631,37 +840,9 @@ impl Hub<'_> {
         }
     }
 
-    /// Every 2D item's evaluated box in an evaluated session (#1162): its fields at its world
-    /// transform, a relation's place applied, frames laid out; `[x, y, w, h]` by ID.
+    /// Every 2D item's evaluated box in an evaluated session: [`item_boxes`].
     fn boxes(&self, s: &DocSession) -> BTreeMap<String, [f64; 4]> {
-        let l = &self.sched;
-        let Some(doc) = s.document().and_then(Value::as_object) else {
-            return BTreeMap::new();
-        };
-        let mut items = Map::new();
-        for id in doc
-            .get("items")
-            .and_then(Value::as_object)
-            .into_iter()
-            .flatten()
-            .map(|(id, _)| id)
-        {
-            let Some((fields, _)) = s.read(l, "core.fields", Some(id)) else {
-                continue;
-            };
-            let Some(fields) = fields.as_typed::<Fields>() else {
-                continue;
-            };
-            let world = s
-                .read(l, "marks2d.at", Some(id))
-                .or_else(|| s.read(l, "core.world", Some(id)))
-                .and_then(|(w, _)| w.as_typed::<Transform>().map(|t| *t));
-            items.insert(
-                id.clone(),
-                deep_canvas_marks::modules::item_json(&fields, world.as_ref()),
-            );
-        }
-        deep_canvas_marks::scene::item_boxes(doc, &items).unwrap_or_default()
+        item_boxes(&self.sched, s)
     }
 
     /// `items/<id>/bounds`: the item's evaluated box as `[[x, y, 0], [x + w, y + h, 0]]`, in
@@ -905,4 +1086,40 @@ fn outside_grant(q: &Query, rev: u64) -> Value {
     json!({"rev": rev, "rows": [], "values": values, "keys": values.clone(),
            "unresolved": unresolved,
            "coverage": {"complete": false, "rows_total": 0, "rows_shown": 0, "cut": []}})
+}
+
+/// Every 2D item's evaluated box in an evaluated session (#1162): its fields at its world
+/// transform, a relation's place applied, frames laid out; `[x, y, w, h]` by ID. #732's deck
+/// places each text box at its item's.
+pub(crate) fn item_boxes(
+    l: &deep_canvas::schedule::Scheduler<'_>,
+    s: &DocSession,
+) -> BTreeMap<String, [f64; 4]> {
+    let Some(doc) = s.document().and_then(Value::as_object) else {
+        return BTreeMap::new();
+    };
+    let mut items = Map::new();
+    for id in doc
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .map(|(id, _)| id)
+    {
+        let Some((fields, _)) = s.read(l, "core.fields", Some(id)) else {
+            continue;
+        };
+        let Some(fields) = fields.as_typed::<Fields>() else {
+            continue;
+        };
+        let world = s
+            .read(l, "marks2d.at", Some(id))
+            .or_else(|| s.read(l, "core.world", Some(id)))
+            .and_then(|(w, _)| w.as_typed::<Transform>().map(|t| *t));
+        items.insert(
+            id.clone(),
+            deep_canvas_marks::modules::item_json(&fields, world.as_ref()),
+        );
+    }
+    deep_canvas_marks::scene::item_boxes(doc, &items).unwrap_or_default()
 }

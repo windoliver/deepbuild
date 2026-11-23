@@ -1,0 +1,120 @@
+{
+  "frames": 90,
+  "size": [
+    640,
+    360
+  ],
+  "fps": 30,
+  "bound_px": 1.5,
+  "items": {
+    "cube": {
+      "soft": "jelly",
+      "particles": 8,
+      "worst_px": 0.8263112861574768,
+      "at_rest_px": 81.24360679073519,
+      "pixels": [
+        8761,
+        9954
+      ],
+      "volume_m3": {
+        "built": 0.12499999999999997,
+        "settled": [
+          0.1491927101605156,
+          0.1491927101605156
+        ],
+        "after_hit": [
+          0.14894974564937474,
+          0.149195524658695
+        ],
+        "last": [
+          0.14919196733117776,
+          0.1491920631432307
+        ]
+      }
+    },
+    "tinted": {
+      "soft": "jam",
+      "particles": 8,
+      "worst_px": 0.8684832270616312,
+      "at_rest_px": 81.24360679073519,
+      "pixels": [
+        7878,
+        8868
+      ],
+      "volume_m3": {
+        "built": 0.125,
+        "settled": [
+          0.1491927304549035,
+          0.1491927304549035
+        ],
+        "after_hit": [
+          0.1491927304549035,
+          0.1491927304549035
+        ],
+        "last": [
+          0.1491927304549035,
+          0.1491927304549035
+        ]
+      }
+    },
+    "blob": {
+      "soft": "gum",
+      "particles": 42,
+      "worst_px": 0.8697551538811297,
+      "at_rest_px": 111.67166676612382,
+      "pixels": [
+        6950,
+        8062
+      ],
+      "volume_m3": {
+        "built": 0.09878522148555557,
+        "settled": [
+          0.11829774161668226,
+          0.11832476652601565
+        ],
+        "after_hit": [
+          0.11829774161668226,
+          0.11831356628229227
+        ],
+        "last": [
+          0.1183054233631175,
+          0.1183054233631175
+        ]
+      }
+    }
+  },
+  "hit": {
+    "dent_mm": 9.17877662100397,
+    "nearest_mm": -10.064220428466886,
+    "ball_speed_after": 0.11975547911636929
+  },
+  "blob": {
+    "height_m": {
+      "built": 0.6000000238418579,
+      "least": 0.40006842935690656,
+      "last": 0.5353608629084192
+    }
+  },
+  "files": {
+    "still-0_00s.png": "c719fbb04d091bf00b72722e33d3b3c035bc93990873871911af6a5708b8eda3",
+    "still-0_37s.png": "8aa0de9dcfa68153d053f4471e89a96dd374f10980ee4a1d5fdf84fbcf858041",
+    "still-1_53s.png": "3c772058061777a7d449cabfe5b9c665352152e9b5369f8116b5fab7b5791791",
+    "still-2_97s.png": "821a05a6ae564bdcfd0975a0f3682aa9f649b62259a18dd46071f737ced72ea9",
+    "stills.png": "46bb9bc2c888cd1e3850d36156690c672e2ec863dec123de68848f1d40157912",
+    "settle.apng": "986cea2f36692505eed91c694396bbca5898ee29b7477bdd03420ea2c9a0e620"
+  },
+  "verdict": "PASS",
+  "lines": [
+    "PASS cube: in all 90 frames its pixels' box is within 0.83 px of its 8 particles' (bound 1.5 px); it covers 8761 to 9954 px",
+    "PASS cube: held to the asset at rest, the same frames read 81.2 px off",
+    "PASS cube: its particles enclose 1.1935 to 1.1935 × its rest 0.125000 m³ over steps 120 to 150 and 1.1935 to 1.1935 × over steps 300 to 360; 1.2 × within 2% is 1.176 to 1.224 ×",
+    "PASS tinted: in all 90 frames its pixels' box is within 0.87 px of its 8 particles' (bound 1.5 px); it covers 7878 to 8868 px",
+    "PASS tinted: held to the asset at rest, the same frames read 81.2 px off",
+    "PASS tinted: its particles enclose 1.1935 to 1.1935 × its rest 0.125000 m³ over steps 120 to 150 and 1.1935 to 1.1935 × over steps 300 to 360; 1.2 × within 2% is 1.176 to 1.224 ×",
+    "PASS blob: in all 90 frames its pixels' box is within 0.87 px of its 42 particles' (bound 1.5 px); it covers 6950 to 8062 px",
+    "PASS blob: held to the asset at rest, the same frames read 111.7 px off",
+    "READ blob: its particles enclose 1.1975 to 1.1978 × its rest 0.098785 m³ over steps 120 to 150 and 1.1976 to 1.1976 × over steps 300 to 360",
+    "READ the hit: the cube's particles move at most 9.18 mm apart or together; the ball's surface comes within -10.06 mm of the face's plane and ends at 0.120 m/s",
+    "READ blob: 0.6 m tall as built, 0.400 m at its flattest (step 51), 0.535 m at the end"
+  ]
+}

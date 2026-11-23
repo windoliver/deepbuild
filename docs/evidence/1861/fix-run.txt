@@ -1,0 +1,10 @@
+
+ RUN  v5.0.5 <REPO>
+
+ ✓ tests/acceptance/1861/proof-label.test.ts (2 tests) 40046ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  00:54:12
+   Duration  40.75s (tests 99%, import 1%, transform 1%)
+

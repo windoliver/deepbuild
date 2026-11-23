@@ -1,0 +1,145 @@
+Base: f17fa347c (origin/main), worktree HEAD; no implementation changes.
+Platform: darwin arm64; Node v24.22.0; cargo 1.99.1. node_modules: a link to an installed checkout (typescript for scripts/proof-binaries.mjs).
+Command: node --test --test-concurrency=1 tests/acceptance/2817/*.test.mjs
+Temporary paths redacted to <tmp>, the home folder to ~, the worktree to <repo>.
+Result: 3 tests, 3 failures, each an AssertionError [ERR_ASSERTION] thrown in this folder's test files (see the "at TestContext" frames), for the expected reason: the before lane puts no deep-hook or deep-show under either side copy's target/debug/.
+
+load: load averages: 108.48 73.24 37.74
+✖ #2817.caef3798 a tagged test starting the checkout hub through hub run reaches its assertions on both sides (8789.119041ms)
+ℹ BAY claim {"index":1,"role":"base","use":"before","bay":"~/deepbuild-bays/1/base","base":"d58ef581e58c9bdace455b12e83e9acfa9f48eea","tree":"83eaca94337e2c91ef076d18324c5f63aa0ea6c8","bundle":null,"untracked":null,"overlay":{"files":1,"hash":"04a39bc8b09b55b103f433cac665de8d5f942c8fc1833b1a6078aac63bec79a8"},"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":false,"written":129,"deleted":0,"crates":["deep-hook","deep-show"]}
+BAY claim {"index":1,"role":"change","use":"before","bay":"~/deepbuild-bays/1/change","tree":"8173c599a5e2ea23485efd634139719075c3a0e2","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":null,"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":false,"written":130,"deleted":0,"crates":["deep-hook","deep-show"]}
+FAIL before: tests/acceptance/2817/hub.test.mjs › #2817.caef3798 hub run answers with the change programs: fails on the change (Error: BLOCKED: no deep-hook is built under target/)
+  Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+BAY release {"index":1,"role":"base","bay":"~/deepbuild-bays/1/base","status":null,"targetBytes":0,"touched":0}
+BAY release {"index":1,"role":"change","bay":"~/deepbuild-bays/1/change","status":null,"targetBytes":0,"touched":0}
+proof: wall time 6.9 s
+
+✖ #2817.e0f437e2 a tagged test naming neither the hub nor the CLI package finds no lane-built binaries (16151.053125ms)
+ℹ BAY claim {"index":1,"role":"base","use":"before","bay":"~/deepbuild-bays/1/base","base":"76077e078847736ed47f4afc9724039e7380219c","tree":"83eaca94337e2c91ef076d18324c5f63aa0ea6c8","bundle":null,"untracked":null,"overlay":{"files":1,"hash":"5b17cbeb8826da0cb91312d1f28621ab338b5e6f1f235a8c9f1be35006bf4c8b"},"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":false,"written":129,"deleted":0,"crates":["deep-hook","deep-show"]}
+BAY claim {"index":1,"role":"change","use":"before","bay":"~/deepbuild-bays/1/change","tree":"aa286cc9cbd551356f836dc6ffcb14b552eb9e5b","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":null,"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":false,"written":130,"deleted":0,"crates":["deep-hook","deep-show"]}
+FAIL before: tests/acceptance/2817/neither.test.mjs › #2817.e0f437e2 a test naming neither package finds no binaries: passed on the merge base
+  Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+BAY release {"index":1,"role":"base","bay":"~/deepbuild-bays/1/base","status":null,"targetBytes":0,"touched":0}
+BAY release {"index":1,"role":"change","bay":"~/deepbuild-bays/1/change","status":null,"targetBytes":0,"touched":0}
+proof: wall time 6.3 s
+
+ℹ BAY claim {"index":1,"role":"base","use":"before","bay":"~/deepbuild-bays/1/base","base":"47fe0c6fac3d19109b3600f8f2170864c3922e67","tree":"83eaca94337e2c91ef076d18324c5f63aa0ea6c8","bundle":null,"untracked":null,"overlay":{"files":1,"hash":"e59ce3fa3fa98782fc4a5404ec70999f39ff28779521f791120ceff888b2148b"},"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":false,"written":129,"deleted":0,"crates":["deep-hook","deep-show"]}
+BAY claim {"index":1,"role":"change","use":"before","bay":"~/deepbuild-bays/1/change","tree":"bcc6caedbb354557bcf994b72e5f511ecbff3041","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":null,"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":false,"written":130,"deleted":0,"crates":["deep-hook","deep-show"]}
+FAIL before: tests/acceptance/2817/control.test.mjs › #2817.e0f437e2 control: a test that names the CLI finds both binaries: fails on the change (AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:)
+  Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+BAY release {"index":1,"role":"base","bay":"~/deepbuild-bays/1/base","status":null,"targetBytes":0,"touched":0}
+BAY release {"index":1,"role":"change","bay":"~/deepbuild-bays/1/change","status":null,"targetBytes":0,"touched":0}
+proof: wall time 6.4 s
+
+✖ #2817.51a8f2a0 each side copy target/debug holds programs built from that side own sources (8168.4415ms)
+ℹ BAY claim {"index":1,"role":"base","use":"before","bay":"~/deepbuild-bays/1/base","base":"259909c92cad956a33a076e4bd6821f6a097ed5d","tree":"83eaca94337e2c91ef076d18324c5f63aa0ea6c8","bundle":null,"untracked":null,"overlay":{"files":1,"hash":"1f9a3964a10e8344a64371b31773a3362b5d7741a402696be89a17402ff511f1"},"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":false,"written":129,"deleted":0,"crates":["deep-hook","deep-show"]}
+BAY claim {"index":1,"role":"change","use":"before","bay":"~/deepbuild-bays/1/change","tree":"0d1afdbbf449b558cb60e11cc0526a72b2c66d3b","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":null,"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":false,"written":130,"deleted":0,"crates":["deep-hook","deep-show"]}
+FAIL before: tests/acceptance/2817/target.test.mjs › #2817.51a8f2a0 target/debug holds the change programs: fails on the change (AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:)
+  Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+BAY release {"index":1,"role":"base","bay":"~/deepbuild-bays/1/base","status":null,"targetBytes":0,"touched":0}
+BAY release {"index":1,"role":"change","bay":"~/deepbuild-bays/1/change","status":null,"targetBytes":0,"touched":0}
+proof: wall time 6.5 s
+
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 33369.376166
+
+✖ failing tests:
+
+test at tests/acceptance/2817/hub.test.mjs:7:1
+✖ #2817.caef3798 a tagged test starting the checkout hub through hub run reaches its assertions on both sides (8789.119041ms)
+  AssertionError [ERR_ASSERTION]: change side: the hub found no binary under its copy's target/ (BLOCKED: no deep-hook is built under target/)
+  exit 1
+  BAY claim {"index":1,"role":"base","use":"before","bay":"~/deepbuild-bays/1/base","base":"d58ef581e58c9bdace455b12e83e9acfa9f48eea","tree":"83eaca94337e2c91ef076d18324c5f63aa0ea6c8","bundle":null,"untracked":null,"overlay":{"files":1,"hash":"04a39bc8b09b55b103f433cac665de8d5f942c8fc1833b1a6078aac63bec79a8"},"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":false,"written":129,"deleted":0,"crates":["deep-hook","deep-show"]}
+  BAY claim {"index":1,"role":"change","use":"before","bay":"~/deepbuild-bays/1/change","tree":"8173c599a5e2ea23485efd634139719075c3a0e2","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":null,"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":false,"written":130,"deleted":0,"crates":["deep-hook","deep-show"]}
+  FAIL before: tests/acceptance/2817/hub.test.mjs › #2817.caef3798 hub run answers with the change programs: fails on the change (Error: BLOCKED: no deep-hook is built under target/)
+    Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  BAY release {"index":1,"role":"base","bay":"~/deepbuild-bays/1/base","status":null,"targetBytes":0,"touched":0}
+  BAY release {"index":1,"role":"change","bay":"~/deepbuild-bays/1/change","status":null,"targetBytes":0,"touched":0}
+  proof: wall time 6.9 s
+  
+  
+  
+  3 !== 0
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/2817/hub.test.mjs:12:49)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 3,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2817/neither.test.mjs:8:1
+✖ #2817.e0f437e2 a tagged test naming neither the hub nor the CLI package finds no lane-built binaries (16151.053125ms)
+  AssertionError [ERR_ASSERTION]: change side (control): a test naming packages/cli/ got no deep-hook and deep-show under its copy's target/debug
+  exit 1
+  BAY claim {"index":1,"role":"base","use":"before","bay":"~/deepbuild-bays/1/base","base":"47fe0c6fac3d19109b3600f8f2170864c3922e67","tree":"83eaca94337e2c91ef076d18324c5f63aa0ea6c8","bundle":null,"untracked":null,"overlay":{"files":1,"hash":"e59ce3fa3fa98782fc4a5404ec70999f39ff28779521f791120ceff888b2148b"},"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":false,"written":129,"deleted":0,"crates":["deep-hook","deep-show"]}
+  BAY claim {"index":1,"role":"change","use":"before","bay":"~/deepbuild-bays/1/change","tree":"bcc6caedbb354557bcf994b72e5f511ecbff3041","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":null,"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":false,"written":130,"deleted":0,"crates":["deep-hook","deep-show"]}
+  FAIL before: tests/acceptance/2817/control.test.mjs › #2817.e0f437e2 control: a test that names the CLI finds both binaries: fails on the change (AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:)
+    Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  BAY release {"index":1,"role":"base","bay":"~/deepbuild-bays/1/base","status":null,"targetBytes":0,"touched":0}
+  BAY release {"index":1,"role":"change","bay":"~/deepbuild-bays/1/change","status":null,"targetBytes":0,"touched":0}
+  proof: wall time 6.4 s
+  
+  
+  + actual - expected
+  
+  + []
+  - [
+  -   'deep-hook',
+  -   'deep-show'
+  - ]
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/2817/neither.test.mjs:21:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [ 'deep-hook', 'deep-show' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2817/sources.test.mjs:7:1
+✖ #2817.51a8f2a0 each side copy target/debug holds programs built from that side own sources (8168.4415ms)
+  AssertionError [ERR_ASSERTION]: change side: no runnable program at its copy's target/debug/deep-hook
+  exit 1
+  BAY claim {"index":1,"role":"base","use":"before","bay":"~/deepbuild-bays/1/base","base":"259909c92cad956a33a076e4bd6821f6a097ed5d","tree":"83eaca94337e2c91ef076d18324c5f63aa0ea6c8","bundle":null,"untracked":null,"overlay":{"files":1,"hash":"1f9a3964a10e8344a64371b31773a3362b5d7741a402696be89a17402ff511f1"},"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":false,"written":129,"deleted":0,"crates":["deep-hook","deep-show"]}
+  BAY claim {"index":1,"role":"change","use":"before","bay":"~/deepbuild-bays/1/change","tree":"0d1afdbbf449b558cb60e11cc0526a72b2c66d3b","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":null,"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":false,"written":130,"deleted":0,"crates":["deep-hook","deep-show"]}
+  FAIL before: tests/acceptance/2817/target.test.mjs › #2817.51a8f2a0 target/debug holds the change programs: fails on the change (AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:)
+    Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  BAY release {"index":1,"role":"base","bay":"~/deepbuild-bays/1/base","status":null,"targetBytes":0,"touched":0}
+  BAY release {"index":1,"role":"change","bay":"~/deepbuild-bays/1/change","status":null,"targetBytes":0,"touched":0}
+  proof: wall time 6.5 s
+  
+  
+  
+  null !== 0
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/2817/sources.test.mjs:14:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+EXIT: 1

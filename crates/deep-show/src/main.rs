@@ -13,11 +13,14 @@ mod audio;
 mod bake;
 mod caption_design;
 mod capture;
+mod clip;
 mod costs;
+mod counting;
 mod data_hash;
 mod defaults;
 mod determinism;
 mod efficiency;
+mod entries;
 mod evidence;
 mod export;
 mod extended;
@@ -42,6 +45,7 @@ mod host;
 mod hub;
 mod input;
 mod jobs;
+mod joins;
 mod kept;
 mod kinds;
 mod kinds_word;
@@ -49,6 +53,7 @@ mod kit;
 mod lengths;
 mod logic;
 mod maps;
+mod matched;
 mod math_twins;
 mod media;
 mod mixdown;
@@ -57,6 +62,7 @@ mod modes;
 mod momentum;
 mod narration;
 mod net;
+mod net_web;
 mod over3d;
 mod packs;
 mod physics;
@@ -67,6 +73,7 @@ mod placement;
 mod planted;
 mod played;
 mod points;
+mod ports;
 mod present;
 mod preview;
 mod print;
@@ -83,9 +90,11 @@ mod seams;
 mod serve;
 mod shaper;
 mod shared;
+mod sizes;
 mod snapshot;
 mod spatial;
 mod spawn;
+mod states;
 mod stepped;
 mod terminal;
 mod terrain;
@@ -112,58 +121,10 @@ mod track_call;
 mod twins;
 mod verdict;
 mod video;
+// #553: a match copy's media module, its voices and its audio thread.
+mod voiced;
 mod warps;
 mod workers;
-
-/// Every heap allocation the process makes while [`count_allocations`] runs, counted so the
-/// `frames` call can read how many the scheduler made in a frame (#387: "the scheduler
-/// allocates nothing per frame after warm-up"). Outside it nothing is counted, so the kit's
-/// threads, which allocate on every core at once, don't all contend for one counter.
-struct Counting;
-
-static COUNTING_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static ALLOCATIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
-fn count() {
-    if COUNTING_ON.load(std::sync::atomic::Ordering::Relaxed) {
-        ALLOCATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    }
-}
-
-// SAFETY: every call forwards to the system allocator unchanged; the counter is a relaxed atomic.
-unsafe impl std::alloc::GlobalAlloc for Counting {
-    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
-        count();
-        unsafe { std::alloc::System.alloc(layout) }
-    }
-
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
-        unsafe { std::alloc::System.dealloc(ptr, layout) }
-    }
-
-    unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {
-        count();
-        unsafe { std::alloc::System.alloc_zeroed(layout) }
-    }
-
-    unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, new_size: usize) -> *mut u8 {
-        count();
-        unsafe { std::alloc::System.realloc(ptr, layout, new_size) }
-    }
-}
-
-#[global_allocator]
-static COUNTING: Counting = Counting;
-
-/// What `f` returns and how many heap allocations the process made while it ran.
-pub fn count_allocations<T>(f: impl FnOnce() -> T) -> (T, u64) {
-    use std::sync::atomic::Ordering::Relaxed;
-    let before = ALLOCATIONS.load(Relaxed);
-    COUNTING_ON.store(true, Relaxed);
-    let out = f();
-    COUNTING_ON.store(false, Relaxed);
-    (out, ALLOCATIONS.load(Relaxed) - before)
-}
 
 use std::collections::BTreeMap;
 use std::io::{self, BufRead, Write};
@@ -175,6 +136,7 @@ use deep_canvas::registry::{BuildSet, Fault, Module, Registry, SealError};
 use deep_canvas::schedule::HashVersion;
 use serde_json::{json, Map, Value};
 
+pub use counting::count_allocations;
 use hub::{
     flicks, Body, Call, Card, Claim, Eval, Fault as HoldFault, Hold, Include, Panel, PatchCall,
     Planted, PressPhase, Process, RecordObject, Requirement, Scenario, Session, Show, Slot,
@@ -371,7 +333,15 @@ fn query_call(c: &Map<String, Value>) -> Option<query::Query> {
         Some(Some("summary")) => query::What::Summary,
         Some(Some("why")) => query::What::Why,
         Some(Some("logic")) => query::What::Logic,
+        Some(Some("refs_to")) => query::What::RefsTo,
+        Some(Some("cost")) => query::What::Cost,
         _ => return None,
+    };
+    // #1801: what `refs_to` names: an asset by its SHA-256, a keyed copy's table row as
+    // `<table>[<key>]`, a pack entry as `name@major`, else an item by its ID.
+    let named = match c.get("target") {
+        None => None,
+        Some(t) => Some(deep_canvas::refs::Name::of_target(t.as_str()?)),
     };
     let items = match c.get("items") {
         None => None,
@@ -422,6 +392,8 @@ fn query_call(c: &Map<String, Value>) -> Option<query::Query> {
             None => 0,
             Some(t) => flicks(t.as_str()?)?,
         },
+        named,
+        by: optional(c.get("by"), |b| Some(b.as_str()?.to_string()))?,
     })
 }
 
@@ -449,6 +421,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     if let Some(p) = present::parse_call(name, c) {
         return Some(Call::Present(p));
     }
+    if let Some(p) = ports::parse_call(name, c) {
+        return Some(Call::Ports(Box::new(p)));
+    }
     let doc = || Some(c.get("doc")?.as_str()?.to_string());
     let time = |key: &str, default: i64| -> Option<i64> {
         match c.get(key) {
@@ -474,19 +449,24 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 set: c.get("set").cloned().filter(Value::is_object),
             })
         }
-        "frame_hash" => {
+        "close" => return Some(Call::Close(doc()?)),
+        "session_table" => return Some(Call::SessionTable),
+        "encode_qualify" => return Some(Call::EncodeQualify(c.get("tool")?.as_str()?.to_string())),
+        "frame_hash" | "frame_planes" => {
             let frames = c.get("frames")?.as_array()?.iter().map(|f| {
                 let size = f.get("size")?.as_array().filter(|a| a.len() == 2)?;
                 let w = u32::try_from(size[0].as_u64()?).ok()?;
                 let h = u32::try_from(size[1].as_u64()?).ok()?;
                 Some(([w, h], f.get("bytes")?.as_str()?.to_string()))
             });
-            return Some(Call::FrameHash {
-                frames: frames.collect::<Option<_>>()?,
-                software: match c.get("adapter") {
-                    None => false,
-                    Some(a) => a.as_str()? == "software",
-                },
+            let frames = frames.collect::<Option<_>>()?;
+            let software = match c.get("adapter") {
+                None => false,
+                Some(a) => a.as_str()? == "software",
+            };
+            return Some(match name {
+                "frame_hash" => Call::FrameHash { frames, software },
+                _ => Call::FramePlanes { frames, software },
             });
         }
         "pixel_hash" => {
@@ -505,6 +485,20 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 a[0].as_str()?.to_string(),
                 a[1].as_str()?.to_string(),
             ]));
+        }
+        // #1250: ⌘⇧C, Save clip's default key, and the player controls as actions.
+        "input" if clip::action_of(c.get("event")?).is_some() => {
+            return Some(Call::Clip {
+                panel: c.get("panel")?.as_str()?.to_string(),
+                action: clip::action_of(c.get("event")?)??,
+            })
+        }
+        "clips" => return Some(Call::Clips(c.get("panel")?.as_str()?.to_string())),
+        "presented" if c.contains_key("indices") => {
+            return Some(Call::PresentedIndices(
+                c.get("panel")?.as_str()?.to_string(),
+                c.get("indices")?.get("from")?.as_i64()?,
+            ))
         }
         "input" => {
             return Some(Call::Input {
@@ -644,11 +638,11 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "geometry" => return geometry::parse(c).map(|g| Call::Geometry(Box::new(g))),
         "kinds" => return Some(Call::KindSchemas),
         "spatial" => return spatial::parse(c).map(|s| Call::Spatial(Box::new(s))),
-        "logic" => return picks::parse(c).map(|l| Call::Logic(Box::new(l))),
+        "logic" | "open_save" => return picks::parse(c).map(|l| Call::Logic(Box::new(l))),
         "terrain_rays" => return terrain::parse(c).map(|r| Call::TerrainRays(Box::new(r))),
         "physics_bake" => return physics::parse(c).map(|b| Call::PhysicsBake(Box::new(b))),
         "world" => return points::parse_world(c).map(|(doc, world)| Call::World { doc, world }),
-        "match" => return points::parse_match(c).map(|(doc, steps)| Call::Match { doc, steps }),
+        "match" | "play_match" | "lobby" | "sockets" | "replay" => return net::parse(name, c),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
             return Some(Call::InstallPack {
@@ -722,6 +716,13 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "migrate" => return Some(Call::Migrate(hash_named(c.get("to")?.as_str()?)?)),
         // #1901: the fingerprint kept output is keyed by, a kept draw, and the padded key input.
         "fingerprint" => return Some(Call::Fingerprint),
+        "ship" => {
+            return Some(Call::Ship {
+                bundle: c.get("bundle")?.as_str()?.to_string(),
+                chrome: c.get("chrome")?.as_str()?.to_string(),
+            })
+        }
+        "footprint" => return Some(Call::Footprint),
         "draw" => {
             let output = c.get("output")?.as_str()?;
             return Some(Call::Draw {
@@ -776,10 +777,12 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 track: optional(c.get("track"), |t| t.as_array().cloned())?,
                 data_hash: flag("data_hash")?,
                 texts: flag("texts")?,
+                shown: flag("shown")?,
                 carried: flag("carried")?,
                 tour_pointer: flag("tour_pointer")?,
             })));
         }
+        "play_frames" => return joins::parse(c).map(|p| Call::PlayFrames(Box::new(p))),
         "frames" => {
             // #856: a whole revision arriving at a frame's latch.
             let revise = match c.get("revise") {
@@ -1064,6 +1067,21 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     }
 }
 
+/// The record's objects by handle, as an input's `record` object gives them.
+fn record_objects(input: &Map<String, Value>) -> Option<BTreeMap<String, RecordObject>> {
+    entries(input, "record", |o| {
+        Some(RecordObject {
+            session: match o.get("session")? {
+                Value::Null => None,
+                v => Some(v.as_str()?.to_string()),
+            },
+            state: optional(o.get("state"), |s| Some(s.as_str()?.to_string()))?,
+            value: optional(o.get("value"), Value::as_f64)?,
+            as_of: optional(o.get("as_of"), Value::as_i64)?,
+        })
+    })
+}
+
 fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     let sessions = entries(input, "sessions", |s| {
         let p = s.get("process")?.as_object()?;
@@ -1203,20 +1221,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 .map(|e| runs::entry(e).map(|_| e.clone()))
                 .collect::<Option<Vec<_>>>()?,
         ),
-        _ => (
-            entries(input, "record", |o| {
-                Some(RecordObject {
-                    session: match o.get("session")? {
-                        Value::Null => None,
-                        v => Some(v.as_str()?.to_string()),
-                    },
-                    state: optional(o.get("state"), |s| Some(s.as_str()?.to_string()))?,
-                    value: optional(o.get("value"), Value::as_f64)?,
-                    as_of: optional(o.get("as_of"), Value::as_i64)?,
-                })
-            })?,
-            Vec::new(),
-        ),
+        _ => (record_objects(input)?, Vec::new()),
     };
     let claims = entries(input, "claims", |c| {
         let session = c.get("session")?.as_str()?.to_string();
@@ -1326,9 +1331,9 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_motion::module::PLANTED.contains(p)
                 || deep_canvas_motion::cues::planted(p)
                 || *p == deep_canvas_motion::lengths::ONE_VALUE
-                || deep_canvas_marks::arrays::PLANTED.contains(p)
-                // #1967's wrong programs live in the cells module's playback and conversion.
-                || deep_canvas_cells::recording::PLANTED.contains(p)
+                || deep_canvas_marks::arrays::PLANTED.contains(p) || deep_canvas_marks::atlas::PLANTED.contains(p) || *p == spatial::HIT_READS_QUADS || deep_canvas_marks::grid_image::PLANTED.contains(p)
+                // #1967's wrong programs live in the cells module's playback and conversion, #194's in the catalog job.
+                || deep_canvas_cells::recording::PLANTED.contains(p) || deep_codecs::catalog::PLANTED.contains(p)
                 || deep_canvas_export::lottie::PLANTED.contains(p)
                 || deep_canvas_input::rows::PLANTED.contains(p)
                 // #540's in the input module's point control and scene3d's pointer math.
@@ -1343,13 +1348,23 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || *p == deep_canvas_motion::held::FLIP_HOLDS_LAST
                 // #223's in the marks2d module's warp.
                 || deep_canvas_marks::warp::PLANTED.contains(p)
-                // #225's in the data module's integrator.
+                || deep_net::Planted::named(p).is_some()
+                // #297's in the text module's entry texts and the text control's range.
+                || deep_canvas_marks::entries::planted(Some(p)) != Default::default()
+                || *p == deep_canvas_marks::entries::FIT_SKIPS_ENTRIES
+                || entries::PLANTED.contains(p)
+                || deep_net::PLANTED.contains(p)
+                || *p == deep_canvas_effects::particles::bursts::IGNORES_FOG
+                // #265's trail that keeps the points a copy read from predicted steps.
+                || *p == net::TRAIL_KEEPS_PREDICTED
+                // #225's in the data module's integrator; #2450's in its reading of axis titles.
                 || *p == deep_canvas_marks::vector_field::PLANTED_EULER
+                || *p == deep_canvas_marks::axes3d::TAKES_ANY_KIND
                 // #548's deep_query region map that lays the reads out by name.
                 || *p == logic::MAP_READS_BY_NAME
                 // #466's boil and blur in deep-show's frames.
-                || films::PLANTED.contains(p)
-                || caption_design::PLANTED.contains(p)
+                || films::PLANTED.contains(p) || sandbox::PLANTED.contains(p) || *p == frames::VALIDATED_PER_FRAME
+                || caption_design::PLANTED.contains(p) || scene3d::PLANTED.contains(p) || kit::lease::PLANTED.contains(p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1359,6 +1374,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         .filter(|p| familiar::PLANTED.contains(p) || math_twins::PLANTED.contains(p))
         .map(str::to_string);
     let logic_planted = crate::logic::planted(input.get("planted"))?;
+    // #551: the planted rate rule is the net kind's own, read at every check this run makes.
+    deep_net::kind::plant_rate_rule(module_planted.as_deref() == Some("net_rate_faster_only"));
     let planted = match input.get("planted").map(Value::as_str) {
         None => None,
         Some(_) if logic_planted.is_some() => None,
@@ -1374,6 +1391,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             None if geometry_audit::planted(p).is_some() => geometry_audit::planted(p),
             None if physics::planted(p).is_some() => physics::planted(p),
             None if stepped::planted(p).is_some() => stepped::planted(p),
+            None if clip::planted(p).is_some() => clip::planted(p),
             None => Some(match p {
                 "presents_unnamed_removal" => Planted::PresentsUnnamedRemoval,
                 "diffs_items_only" => Planted::DiffsItemsOnly,
@@ -1452,6 +1470,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "resolver_closes_task" => Planted::ResolverClosesTask,
                 "probe_from_depth" => Planted::ProbeFromDepth,
                 "probe_nearest_item" => Planted::ProbeNearestItem,
+                "render_back_2d_only" => Planted::RenderBack2dOnly,
                 "skips_missing_mesh_asset" => Planted::SkipsMissingMeshAsset,
                 "verdict_keyed_by_doc" => Planted::VerdictKeyedByDoc,
                 "checks_skip_unknown_kind" => Planted::ChecksSkipUnknownKind,
@@ -1479,6 +1498,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "recipe_rules_twice" => Planted::RulesEvaluatedTwice,
                 "kit_tests_defaults_only" => Planted::KitDefaultsOnly,
                 "expander_hash_map_order" => Planted::ExpandsInHashOrder,
+                "expansion_drops_stroke" => Planted::ExpansionDropsStroke,
                 "migration_stops_at_first_fault" => Planted::MigrationFirstFault,
                 "migration_one_major_per_document" => Planted::MigrationOneMajor,
                 "migration_zero_as_left_out" => Planted::MigrationZeroAsLeftOut,
@@ -1489,6 +1509,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "store_migrated_params_under_saved_major" => {
                     Planted::StoreMigratedParamsUnderSavedMajor
                 }
+                "loader_drops_moved_instances" => Planted::LoaderDropsMovedInstances,
+                "move_rewrites_kind_only" => Planted::MoveRewritesKindOnly,
                 "checkpoint_nearest_in_distance" => Planted::CheckpointNearestInDistance,
                 "merges_in_finish_order" => Planted::MergesInFinishOrder,
                 "runs_every_node" => Planted::RunsEveryNode,
@@ -1503,6 +1525,12 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "why_names_operator_only" => Planted::WhyNamesOperatorOnly,
                 "why_names_key_only" => Planted::WhyNamesKeyOnly,
                 "cuts_by_row_order" => Planted::CutsByRowOrder,
+                "refusal_names_first_ref" => Planted::RefusalNamesFirstRef,
+                "no_op_commits" => Planted::NoOpCommits,
+                "create_overwrites" => Planted::CreateOverwrites,
+                "refs_parents_only" => Planted::RefsParentsOnly,
+                "refs_read_one_layer" => Planted::RefsReadOneLayer,
+                "cost_without_shared_assets" => Planted::CostWithoutSharedAssets,
                 "frame_index_i64_product" => Planted::FrameIndexI64Product,
                 "frame_index_truncating_division" => Planted::FrameIndexTruncatingDivision,
                 "panel_policy_open" => Planted::PanelPolicyOpen,
@@ -1546,6 +1574,12 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "assumes_bt601" => Planted::AssumesBt601,
                 "lookup_floors_frame_rate" => Planted::LookupFloorsFrameRate,
                 "seek_reads_proxy" => Planted::SeekReadsProxy,
+                // #210: a port's wrong programs.
+                "port_sends_on_seek" => Planted::PortSendsOnSeek,
+                "mute_leaves_port_sending" => Planted::MuteLeavesPortSending,
+                "gate_trusts_document_sound" => Planted::GateTrustsDocumentSound,
+                "web_export_keeps_port" => Planted::WebExportKeepsPort,
+                "web_export_checks_init_only" => Planted::WebExportChecksInitOnly,
                 "shipped_panels_ungated" => Planted::ShippedPanelsUngated,
                 "comparer_matches_hash" => Planted::ComparerMatchesHash,
                 "keeps_voices_on_switch" => Planted::KeepsVoicesOnSwitch,
@@ -1577,6 +1611,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             }),
         },
     };
+    media::plant_images(planted);
     let u32_field = |k: &str| match input.get(k) {
         None => Some(None),
         Some(n) => n.as_u64().and_then(|n| u32::try_from(n).ok()).map(Some),
@@ -1721,9 +1756,20 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             })
             .collect::<Option<_>>()?,
     };
+    // #210: the hours the shell holds quiet, each `{from, to}` in flicks.
+    let quiet_hours = match input.get("quiet_hours") {
+        None => Vec::new(),
+        Some(list) => list
+            .as_array()?
+            .iter()
+            .map(|h| Some((h.get("from")?.as_i64()?, h.get("to")?.as_i64()?)))
+            .collect::<Option<_>>()?,
+    };
     Some(Scenario {
+        quiet_hours,
         evidence: PathBuf::from(input.get("evidence")?.as_str()?),
         packs,
+        job_tools: export::tools::parse(input.get("job_tools"))?,
         notes,
         installed,
         plugin_entries,
@@ -1739,7 +1785,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         panels,
         docs,
         docs_for,
-        record,
+        net: net::given(input)?,
+        record: std::sync::Arc::new(record),
         runs,
         claims,
         window,
@@ -1802,118 +1849,7 @@ fn read_line(line: &str) -> Option<(Map<String, Value>, Scenario)> {
 
 mod answer;
 use answer::*;
-
-/// The virtual display clock `canvas` plays its calls on (#806): 120 Hz, the latch 2 ms before vsync,
-/// half a millisecond a check, and each call ten frames after the one before, so a patch is current
-/// at a latch before the next call arrives, as on the stand-in's clock (#384, #96).
-const CANVAS_CLOCK: (i64, i64, i64) = (120, 1_411_200, 352_800);
-const CANVAS_SPACING: i64 = 10 * (shared::FLICKS / 120);
-
-/// `deep-show canvas` (#806): the hub's canvas side, long-lived. Its world (a scenario's fields but
-/// `calls`, `clock` and `at`) is the hub's: the sessions it bound, the documents it minted, the
-/// record's objects, the claims, the window and card. Each call is played after every call before
-/// it, on the clock `canvas` keeps, and answered with its reply, so the replies are the stand-in's for
-/// the same calls in the same order. A fault holds only the call that sends it, not the earlier ones
-/// played again before it.
-struct CanvasSide {
-    world: Map<String, Value>,
-    calls: Vec<Value>,
-}
-
-impl CanvasSide {
-    fn scenario(&self, fault: bool) -> Option<Scenario> {
-        let mut input = self.world.clone();
-        if !fault {
-            input.remove("fault");
-        }
-        let (refresh_hz, lead, check) = CANVAS_CLOCK;
-        input.insert(
-            "clock".into(),
-            json!({"refresh_hz": refresh_hz, "lead": lead, "check": check}),
-        );
-        let calls: Vec<Value> = self
-            .calls
-            .iter()
-            .enumerate()
-            .map(|(i, c)| {
-                let mut c = c.clone();
-                let arrives = if ["deep_query", "geometry", "fn", "deep_kinds"]
-                    .iter()
-                    .any(|k| c["call"] == *k)
-                {
-                    "arrives"
-                } else {
-                    "at"
-                };
-                c[arrives] = json!((i as i64 + 1) * CANVAS_SPACING);
-                c
-            })
-            .collect();
-        input.insert("calls".into(), Value::Array(calls));
-        scenario(&input)
-    }
-
-    fn line(&mut self, startup: &Startup, line: &str) -> Value {
-        let Ok(Value::Object(input)) = serde_json::from_str::<Value>(line) else {
-            return bad_input();
-        };
-        if let Some(Value::Object(world)) = input.get("world") {
-            let before = std::mem::replace(&mut self.world, world.clone());
-            if self.scenario(false).is_none() {
-                self.world = before;
-                return bad_input();
-            }
-            return json!({"ok": true});
-        }
-        let Some(Value::Object(call)) = input.get("call") else {
-            return bad_input();
-        };
-        let mut call = call.clone();
-        let out = call.remove("out");
-        let doc = call.get("doc").and_then(Value::as_str).map(str::to_string);
-        self.calls.push(Value::Object(call));
-        let Some(scenario) = self.scenario(true) else {
-            self.calls.pop();
-            return bad_input();
-        };
-        match out.as_ref().and_then(Value::as_str) {
-            // The window as the calls leave it, drawn and written to `out`; the reply is the
-            // `screen` call's own, with the picture's size and each item's box beside it.
-            Some(out) if scenario.window.is_some() => {
-                let mut drawn = screen(&scenario, startup, out, 0, 1.0);
-                let Some(Value::Array(mut replies)) = drawn.get_mut("replies").map(Value::take)
-                else {
-                    return drawn;
-                };
-                let mut reply = replies.pop().unwrap_or(Value::Null);
-                for k in ["width", "height", "items"] {
-                    reply[k] = drawn[k].take();
-                }
-                json!({"ok": true, "reply": reply})
-            }
-            _ => {
-                let mut hub = hub::Hub::new(&scenario, startup);
-                let mut replies = hub.run_calls();
-                let reply = replies.pop().unwrap_or(Value::Null);
-                // #412: deep_kinds reads and changes nothing, so it leaves no call to replay.
-                if self.calls.last().and_then(|c| c.get("call")) == Some(&json!("deep_kinds")) {
-                    self.calls.pop();
-                }
-                let presented = match doc.as_deref() {
-                    Some(doc)
-                        if reply.get("rev").is_some()
-                            && reply["outcome"] != "refused"
-                            && reply["outcome"] != "applied" =>
-                    {
-                        hub.presented_revision(doc)
-                    }
-                    _ => None,
-                };
-                json!({"ok": true, "reply": reply, "presented": presented})
-            }
-        }
-    }
-}
+mod canvas_side;
 
 #[cfg(target_os = "macos")]
 fn screen(scenario: &Scenario, startup: &Startup, out: &str, t: i64, scale: f64) -> Value {
@@ -2023,6 +1959,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-scatter",
     feature = "test-tick",
     feature = "test-web-lacks",
+    feature = "test-paths",
     feature = "test-held",
     feature = "test-page-latch",
     feature = "test-frame-cache",
@@ -2046,6 +1983,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-threads",
     feature = "test-json",
     feature = "test-debug-digest",
+    feature = "test-boom",
 ));
 
 /// The canvas modules a build of `set` holds (Registry and seal: `build_set`): `core` is text and
@@ -2101,9 +2039,21 @@ fn modules(set: BuildSet) -> Vec<Module> {
         // items itself.
         #[cfg(feature = "test-scene3d-reads-vector")]
         out.push(twins::scene3d_reads_vector());
+        // Issue #1781: `test-attrs` holds scene3d with its fixture builder's kind registered.
+        #[cfg(feature = "test-attrs")]
+        out.push({
+            let mut m = deep_canvas_scene3d::module::module();
+            m.register = |r| {
+                let tie = deep_canvas_scene3d::light::Tie::Id;
+                deep_canvas_scene3d::module::register_with(r, tie);
+                deep_canvas_scene3d::attrs::register_fixture(r);
+            };
+            m
+        });
         #[cfg(not(any(
             feature = "test-scene3d-tie-by-order",
-            feature = "test-scene3d-reads-vector"
+            feature = "test-scene3d-reads-vector",
+            feature = "test-attrs"
         )))]
         out.push(deep_canvas_scene3d::module::module());
         // Issue #380: the shipped effects, whose passes go into scene3d's frame; #200's planted
@@ -2143,9 +2093,7 @@ fn modules(set: BuildSet) -> Vec<Module> {
             deep_canvas_input::module::module(),
             deep_canvas_export::module::module(),
         ]);
-        out.extend(physics::module());
-        // #540: the net module's `net@1`, as far as a lockstep match's point entries need it.
-        out.push(net::module());
+        out.extend(physics::module().into_iter().chain(net::module()));
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest
@@ -2162,7 +2110,7 @@ fn modules(set: BuildSet) -> Vec<Module> {
             m.manifest.implementation.equivalence = deep_canvas::registry::Equivalence::Measured;
             m
         } else {
-            deep_canvas_sandbox::module::module()
+            sandbox::shipped(deep_canvas_sandbox::module::module())
         });
     }
     // Issue #533: the logic module, on sandbox, its arrays column sources (#535); `test-logic-patch` seals a patch release of the
@@ -2176,7 +2124,7 @@ fn modules(set: BuildSet) -> Vec<Module> {
         } else if cfg!(feature = "test-logic-needs-physics") {
             logic_needs_physics()
         } else {
-            deep_logic::module::module()
+            sandbox::shipped(deep_logic::module::module())
         };
         // A build without physics refuses the logic items that need it (#533); one with it binds
         // physics.cast@1 for the items that ask it between steps (#213).
@@ -2287,6 +2235,10 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::tick());
     #[cfg(feature = "test-web-lacks")]
     out.push(deep_canvas_test_modules::native());
+    #[cfg(feature = "test-paths")]
+    out.push(deep_canvas_test_modules::paths(cfg!(
+        feature = "test-paths-no-final"
+    )));
     #[cfg(feature = "test-held")]
     out.push(deep_canvas_test_modules::held());
     #[cfg(feature = "test-page-latch")]
@@ -2317,6 +2269,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::label());
     #[cfg(feature = "test-export-guards")]
     out.push(deep_canvas_test_modules::guards());
+    #[cfg(feature = "test-boom")]
+    out.push(deep_canvas_test_modules::boom());
     // Issues #185 and #1920: test.sim@1's implementations and their variants, and test module c.
     #[cfg(feature = "test-sim")]
     out.extend(test_sim::modules());
@@ -2466,7 +2420,9 @@ fn declared(held: &[Module]) -> Vec<deep_canvas::registry::Interface> {
 /// The registry of a `set` build holding `held`: every interface it seals against, the seams'
 /// backends and its canvas modules.
 fn assemble(set: BuildSet, held: Vec<Module>) -> Registry {
-    let mut registry = Registry::new(set);
+    // #2777: the lists of words the fields the listing holds past kinds' params offer.
+    let lists = forms::lists(|m| held.iter().any(|h| h.manifest.name == m));
+    let mut registry = Registry::new(set).word_lists(lists);
     for interface in declared(&held) {
         registry = registry.declare(interface);
     }
@@ -2768,6 +2724,7 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         "census_accepts" => Ok(StartPlanted::Seal(Fault::CensusAccepted)),
         "census_skipped" => Ok(StartPlanted::Seal(Fault::CensusSkipped)),
         "census_pack_first" => Ok(StartPlanted::Seal(Fault::CensusPackFirst)),
+        "refusal_bad_value_only" => Ok(StartPlanted::Seal(Fault::RefusalBadValueOnly)),
         "pages_capped_at_64mib" => Ok(StartPlanted::Layouts(
             deep_canvas_sandbox::layouts::Planted {
                 pages_pack_cap: true,
@@ -2788,6 +2745,9 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
             Ok(StartPlanted::KitAdmitsAll(Box::leak(
                 name.to_string().into_boxed_str(),
             )))
+        }
+        _ if joins::planted(twin).is_some() => {
+            joins::planted(twin).map(StartPlanted::Run).ok_or(())
         }
         _ if export_planted(twin).is_some() => {
             export_planted(twin).map(StartPlanted::Run).ok_or(())
@@ -2862,6 +2822,9 @@ fn main() {
         "encode-tool" => {
             std::process::exit(deep_codecs::serve(deep_codecs::ENCODE_TOOL, &args[1..]))
         }
+        // #518: this binary's copy as a native test encode tool.
+        #[cfg(feature = "test-encode-tools")]
+        "test-encode-tool" => std::process::exit(export::test_tools::run(&args[1..])),
         // #162: this binary's copy as the Lottie export's reference reader.
         "lottie-reader" => std::process::exit(deep_lottie_reader::serve(&args[1..])),
         _ => {}
@@ -2938,15 +2901,23 @@ fn main() {
         }
     };
     let stdin = io::stdin();
-    let mut canvas = CanvasSide {
-        world: Map::new(),
-        calls: Vec::new(),
-    };
-    canvas.world.insert("evidence".into(), json!(""));
-    for line in stdin.lock().lines() {
+    let mut lines = stdin.lock().lines();
+    if command == "canvas" {
+        // A line that is not UTF-8 was read to its end: it is one that can't be read.
+        let next = || match lines.next()? {
+            Ok(line) => Some(Some(line)),
+            Err(e) if e.kind() == io::ErrorKind::InvalidData => Some(None),
+            Err(_) => None,
+        };
+        canvas_side::serve(startup, next, |reply| {
+            let _ = writeln!(out, "{reply}");
+            let _ = out.flush();
+        });
+        return;
+    }
+    for line in lines {
         let reply = match line {
             Ok(line) => match command.as_str() {
-                "canvas" => canvas.line(startup, &line),
                 "live" => live(startup, &line),
                 _ => answer(&command, startup, &line),
             },

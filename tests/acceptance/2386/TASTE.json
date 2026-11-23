@@ -1,0 +1,11 @@
+{
+  "issue": 2386,
+  "criterion": "#2386.e61634a0",
+  "verdict": "looks_right",
+  "who": "the owner, in session on 2026-11-21, shown both pictures (\"the pictures looks right\")",
+  "when": "2026-11-22T09:06:44Z",
+  "screenshots": {
+    "isometric-wall.png": "bcce369e497c64490ca09109ed52a2cf39cc771d734e2f840ddf5f2f21aa05c4",
+    "square-tree.png": "ebf2c1fc810dbc19d24731673f9e0bd7747706b5ee3596ac7489cfd615031920"
+  }
+}

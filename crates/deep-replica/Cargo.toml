@@ -22,6 +22,16 @@ deep-logic = { path = "../deep-logic" }
 # #1048: logic.edges puts each control kind's edge values, as its control@1 entry declares them.
 deep-canvas-input = { path = "../deep-canvas-input" }
 base64 = "0.22"
+# Issue #1498: the replica's copy of the hub's canvas core: the interaction scope, the marks module's text and its
+# selection, render-back's raster, the cells module's emulator and the shaper, as the hub's canvas core runs them.
+deep-canvas = { path = "../deep-canvas" }
+# Issue #1431: the process's footprint beside its gauges, and the planted GPU memory the suites must see in it.
+deep-gpu = { path = "../deep-gpu" }
+deep-canvas-marks = { path = "../deep-canvas-marks" }
+deep-canvas-cells = { path = "../deep-canvas-cells" }
+deep-marks-raster = { path = "../deep-marks-raster" }
+deep-text = { path = "../deep-text" }
+vello_cpu = { version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline", "u8_pipeline"] }
 
 # Issue #1408: the wrong programs a test selects with DEEP_DRIVE_PLANT and, through the app, DEEP_HUB_PLANT, read only in
 # a build with this feature. A release build refuses it. Issue #1662: #124's planted session rows come through it too,
@@ -33,6 +43,9 @@ chrome-fixture = ["deep-app/chrome-fixture"]
 # Issue #184 criterion 15's planted replica: every play renders a frame at every step and keeps only those asked. In no
 # shipped build; allowed in a release build, where the throughput budget is timed.
 test-renders-unkept-frames = []
+# Issue #1482: each frame's CPU, GPU and allocations in `deep-drive`'s frames report, and GPUI's profiler in the build. In
+# no shipped build; allowed in a release build, where the hover's cost is timed.
+frame-clocks = ["gpui-kit/profiler"]
 
 # The live capture asks AppKit for the window's accessibility children and their frames.
 [target.'cfg(target_os = "macos")'.dependencies]
@@ -158,10 +171,13 @@ path = "../../tests/acceptance/883/redraft-1458/ac3_tomorrow.rs"
 harness = false
 
 # Issue #992: the sidebar row the app draws for a record, which tests/acceptance/992 compares with `deep status`.
+# #3100: only those tests run it, by name with the cases they write in DH992_APP_CASES, so a workspace run leaves it.
+# #3172: its file is the blind redraft beside the suite, which states INCONCLUSIVE off macOS (#3172.f7060cf1).
 [[test]]
 name = "acceptance_992_app"
-path = "../../tests/acceptance/992/app.rs"
+path = "../../tests/acceptance/992-redraft-3172/app.rs"
 harness = false
+test = false
 
 # Issue #994: app notifications that survive a late hub, written blind in tests/acceptance/994. `acceptance_994_sound` holds
 # AC4 and uses no new surface, so it runs on the merge base; `acceptance_994_window` holds what the window says. The

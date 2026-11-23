@@ -1,0 +1,169 @@
+# #518 acceptance suite, each file once on the merged tree (merge of origin/main into feat/518-encode-job)
+# Run one file at a time under the machine throttle: node node_modules/vitest/vitest.mjs run --root tests/acceptance/518 <file> --testTimeout=600000
+
+== registered.test.ts
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+
+== av1.test.ts
+     × AC2 #518.3c98d3de on a machine whose decode worker can't decode AV1, the test AV1 tool doesn't qualify and the export is BLOCKED, naming the codec av1, and never delivered 4ms
+AssertionError: BLOCKED: this leg is judged on a machine whose decode worker can't decode AV1, and this one's decoded a frame of an AV1 file; this is not a pass
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+
+== trust.test.ts
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+
+== handoff.test.ts
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+
+== slots.test.ts
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+
+== planes.test.ts
+     × AC7 #518.c5c5c15e the 60 s fixture film's 1,440 frames and the 1080p ramp's ten convert to exactly the CPU reference's Y and CbCr planes, on the reference Mac and on the software adapter 27050ms
+AssertionError: BLOCKED: no software adapter can be opened here, so the criterion's software leg isn't judged: {"outcome":"refused","code":"software_adapter_unavailable","adapter":"software","why":"no software adapter opens in this build (#230); the frames draw and hash on the GPU only","core":"core@0.0.0","set_digest":"d29853678ee979b83de6eda48acaed9f8bc6a3610cbb19afc2a976e9b68361d9"}; this is not a pass
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+
+== budgets.test.ts
+     × AC8 #518.b0585e2f on the reference Mac a 10 s 1080p60 export as H.264 with AAC takes under 1.05 times the merge base's time (five pairs after a warm-up) 391ms
+AssertionError: BLOCKED: this criterion compares with the merge base, and deep-show at the merge base d8c46f0d58162ff0a4a483544149316aec960637 did not build (cargo build --locked --offline --bin deep-show --no-default-features --features full …, exit 101):
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+
+== blocked.test.ts
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+
+== open.test.ts
+AC10 #518.f259d9bf the 60 s fixture film: 16.41, 16.50, 16.61 s with the 2.0 s open, 15.41, 15.72, 15.51 s with the 0 s open; growth 1.00 s; the open timed at 2.15, 2.17, 2.14 s
+     × AC10 #518.f259d9bf with a stub tool whose open takes 2.0 s the 60 s fixture film's wall time grows by at most 0.2 s over a stub whose open takes 0 s, and the receipt times the open 114000ms
+AssertionError: INCONCLUSIVE: encoder open: the film's wall time grew by 1.00 s with a 2.0 s open, over 0.2 s (the 2.0 s stub: 16.41, 16.50, 16.61 s; the 0 s stub: 15.41, 15.72, 15.51 s); and the one-minute load is 30.6, above the 18 cores, so the clock readings don't count; this is not a pass
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+
+== taste.test.ts
+     × AC11 #518.2feca46b the recorded call on exactly the check run's two screenshots and its recording says they look right; with none the run is INCONCLUSIVE, never PASS 4ms
+AssertionError: INCONCLUSIVE: the check run's screenshots and recording are not in docs/evidence/518/: h264-aac.png, av1.png, both-films.mp4; this is not a pass
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+
+== memory.test.ts
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+
+== base.test.ts
+     × AC1 #518.7ecf15cf the 60 s fixture film exported as H.264 with AAC gives the same 1,440 frame hashes and 1,440 PCM hashes as on the merge base 17214ms
+AssertionError: BLOCKED: this criterion compares with the merge base, and deep-show at the merge base d8c46f0d58162ff0a4a483544149316aec960637 did not build (cargo build --locked --offline --bin deep-show --no-default-features --features full …, exit 101):
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+
+# Reruns after the first pass
+# base.test.ts: the first pass was BLOCKED because the suite's own offline build of the pinned base (d8c46f0d5) stopped resolving
+# once main's vendor/llrt_crypto came in with the merge. The base binary was then built from a clean checkout of that commit with
+# the helper's cargo arguments, into the folder the helper reuses (target/base-518/d8c46f0d5816/deep-show).
+
+== base.test.ts (rerun)
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+
+# taste.test.ts: rerun once tests/acceptance/518/TASTE.json held the delegated call.
+
+== taste.test.ts (rerun)
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+
+# Not run: the budgets.test.ts rerun and tests/acceptance/518-redraft-ac10/open.test.ts. Both waited hours for a grant at a
+# one-minute load above 800 on 18 cores; the machine's hourly disk cleanup then removed target/, and the base build with it.
+
+# Second merged tree (e5f5046a7: main merged again at 6f1dd3a7e, after it had moved 282 commits and conflicted in three files)
+# target/ was built from nothing: cargo build --locked --bin deep-show --no-default-features --features full,test-encode-tools (exit 0, 47m 31s)
+# and --features full (exit 0). Then each file once, one at a time under one build grant, 2026-11-17 01:14 to 02:15. The one-minute load ran
+# from 430 down to 170 on 18 cores. Not rerun here: open.test.ts (kept by hand; its blind redraft runs in its place).
+
+== registered.test.ts
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+
+== av1.test.ts
+     × AC2 #518.3c98d3de on a machine whose decode worker can't decode AV1, the test AV1 tool doesn't qualify and the export is BLOCKED, naming the codec av1, and never delivered 5ms
+AssertionError: BLOCKED: this leg is judged on a machine whose decode worker can't decode AV1, and this one's decoded a frame of an AV1 file; this is not a pass
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+
+== handoff.test.ts
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+
+== slots.test.ts
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+
+== trust.test.ts
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+
+== blocked.test.ts
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+
+== memory.test.ts
+AC12 #518.3e752f74 the encode job's peak resident memory: 41.1 MiB on the 60 s film, 18.9 MiB on its 6 s cut
+     × AC12 #518.3e752f74 the encode job's peak memory on the 60 s fixture film as a PNG sequence stays within 10% of its 6 s cut's at the same size 19464ms
+AssertionError: the encode job's peak memory: peak memory: the encode job's peak on the 60 s film is 41.1 MiB, more than 10% over the 6 s cut's 18.9 MiB (41882 $TMPDIR/deep-501-bins-roYmDj/deep-show-; 46324 (deep-show-full)): expected [ Array(1) ] to deeply equal []
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+
+== planes.test.ts
+     × AC7 #518.c5c5c15e the 60 s fixture film's 1,440 frames and the 1080p ramp's ten convert to exactly the CPU reference's Y and CbCr planes, on the reference Mac and on the software adapter 42195ms
+AssertionError: BLOCKED: no software adapter can be opened here, so the criterion's software leg isn't judged: {"outcome":"refused","code":"software_adapter_unavailable","adapter":"software","why":"no software adapter opens in this build (#230); the frames draw and hash on the GPU only","core":"core@0.0.0","set_digest":"c6bed156756e586416e70a08ffbf41807c5edb9ec0d5a6a8ac70e19907357494"}; this is not a pass
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+
+== taste.test.ts
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+
+== tests/acceptance/518-redraft-ac10/open.test.ts (its first run)
+AC10 #518.f259d9bf growth 1.70 s (between 1.50 and 6.86 s) over 3 pairs; the 2.0 s open: wall 3.83, 3.63, 3.72 s, first frame at 0.65, 0.23, 0.25 s, open timed at 2.14, 2.17, 2.12 s; the 0 s open: wall 7.10, 2.13, 1.93 s, first frame at 5.62, 0.29, 0.24 s, open timed at 0.16, 0.18, 0.12 s; the one-minute load is 219.9, above the 18 cores
+     × AC10 #518.f259d9bf with a stub tool whose open takes 2.0 s the fixture film's wall time grows by at most 0.2 s over a stub whose open takes 0 s, and the receipt times each open 22556ms
+AssertionError: INCONCLUSIVE: encoder open: the film's wall time grew by 1.70 s through the tool whose open takes 2.0 s, over 0.2 s, so the open isn't hidden behind the film's preparing (growth 1.70 s (between 1.50 and 6.86 s) over 3 pairs; the 2.0 s open: wall 3.83, 3.63, 3.72 s, first frame at 0.65, 0.23, 0.25 s, open timed at 2.14, 2.17, 2.12 s; the 0 s open: wall 7.10, 2.13, 1.93 s, first frame at 5.62, 0.29, 0.24 s, open timed at 0.16, 0.18, 0.12 s; the one-minute load is 219.9, above the 18 cores); and the one-minute load is 219.9, above the 18 cores, so the clock readings don't count; this is not a pass
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+
+# The pinned base again (target/ had been cleaned): built from a clean checkout of d8c46f0d5 with the helper's cargo arguments (exit 0, 1m 31s),
+# then base.test.ts and budgets.test.ts once each under one build grant, 2026-11-17 03:59 to 04:13. The one-minute load was 32 at the start of
+# base.test.ts and 22 at the start of budgets.test.ts, on 18 cores. budgets.test.ts ran under a build grant, not the timed grant its lane gives it.
+
+== base.test.ts (second merged tree)
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+
+== budgets.test.ts (second merged tree)
+AC8 #518.b0585e2f a 10 s 1080p60 export, this build over the merge base: 59.84 s over 58.87 s, 80.37 s over 63.03 s, 58.51 s over 57.57 s, 58.38 s over 57.65 s, 58.35 s over 57.65 s (ratios 1.016, 1.275, 1.016, 1.013, 1.012 against 1.05) on Mac17,10 macOS 26B8119: INCONCLUSIVE (the five runs are neither all within 1.05 nor all over it by more than the 25.1% margin)
+     × AC8 #518.b0585e2f on the reference Mac a 10 s 1080p60 export as H.264 with AAC takes under 1.05 times the merge base's time (five pairs after a warm-up) 731709ms
+AssertionError: INCONCLUSIVE: a 10 s 1080p60 export, this build over the merge base: 59.84 s over 58.87 s, 80.37 s over 63.03 s, 58.51 s over 57.57 s, 58.38 s over 57.65 s, 58.35 s over 57.65 s (ratios 1.016, 1.275, 1.016, 1.013, 1.012 against 1.05) on Mac17,10 macOS 26B8119: INCONCLUSIVE (the five runs are neither all within 1.05 nor all over it by more than the 25.1% margin); this is not a pass
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+
+# memory.test.ts once more on the second merged tree, as a diagnosis of the failed reading: the same file, unchanged, beside a sampler that
+# keeps every sample (ps -ax -o pid,ppid,rss,command, about five a second) of every process whose command names the test's deep-show binary.
+# 2026-11-17 10:21, one-minute load 196 on 18 cores, under a build grant, after target/ was built again (it had been cleaned).
+
+== memory.test.ts (second run on the second merged tree)
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+
+# What the sampler saw: each run of deep-show in the file's order, and the peak resident memory of each child it started.
+#   frame count leg (the suite's slow tool)   run 20671: decode-worker 22363, 22.0 MiB
+#   6 s cut as a PNG sequence                 run 22577: encode-tool 22618, 18.9 MiB; decode-worker 22765, 21.9 MiB
+#   60 s film as a PNG sequence               run 22821: encode-tool 22871, 19.0 MiB; decode-worker 24466, 22.1 MiB
+#   planted frame count leg                   run 24955: decode-worker 25624, 22.2 MiB
+#   planted 6 s cut                           run 25827: encode-tool 25874, 27.9 MiB; decode-worker 26051, 22.0 MiB
+#   planted 60 s film                         run 26111: encode-tool 26146, 109.3 MiB; decode-worker 28259, 22.1 MiB
+# The failed reading's 41.1 MiB equals the encode tool's 19.0 MiB and the decode worker's 22.1 MiB together. In this run the sampler caught
+# no process in the "(deep-show-full)" form that the failed reading's message lists, so that a decode worker takes that form is not shown.

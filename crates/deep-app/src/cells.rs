@@ -25,7 +25,7 @@ use crate::canvas::record;
 pub const CELL: [f32; 2] = [8., 16.];
 
 /// `cols` by `rows` cells, in points.
-fn grid(cols: f32, rows: f32) -> Size<Pixels> {
+pub(crate) fn grid(cols: f32, rows: f32) -> Size<Pixels> {
     size(px(CELL[0] * cols), px(CELL[1] * rows)) // size-literal-exception: a terminal cell, the mono face's advance and line at 13 pt (#1003); review 2027-04-30
 }
 
@@ -178,6 +178,19 @@ fn label(text: &str) -> Label {
     }
 }
 
+/// The terminal tab's grid's item ID.
+pub(crate) const TERMINAL: &str = "terminal";
+
+thread_local! {
+    /// Where the terminal tab's grid last drew, which your pointer on it is read against (#1498), in every build (#2661).
+    static TERMINAL_AT: std::cell::Cell<Option<Bounds<Pixels>>> = const { std::cell::Cell::new(None) };
+}
+
+/// Where the terminal tab's grid last drew, in window points.
+pub(crate) fn terminal_at() -> Option<Bounds<Pixels>> {
+    TERMINAL_AT.with(std::cell::Cell::get)
+}
+
 /// The grid as a canvas element: `screen` painted in its bounds from the top left.
 pub fn cells(id: &str, screen: Screen) -> Canvas<()> {
     let id = id.to_owned();
@@ -217,14 +230,19 @@ pub fn cells(id: &str, screen: Screen) -> Canvas<()> {
                 );
                 sprites += painted.sprites;
             }
+            if id == TERMINAL {
+                TERMINAL_AT.with(|at| at.set(Some(bounds)));
+            }
             record(
                 &id,
-                json!({
-                    "kind": "cells@1",
-                    "revision": screen.revision,
-                    "text": screen.rows.iter().map(|r| r.text.clone()).collect::<Vec<_>>(),
-                    "sprites": sprites,
-                }),
+                || {
+                    json!({
+                        "kind": "cells@1",
+                        "revision": screen.revision,
+                        "text": screen.rows.iter().map(|r| r.text.clone()).collect::<Vec<_>>(),
+                        "sprites": sprites,
+                    })
+                },
                 bounds,
             );
         },
@@ -245,12 +263,12 @@ pub fn look_colors(dark: bool) -> Screen {
         let name = if i < 8 {
             NAMES[i].to_owned()
         } else {
-            format!("bright {}", NAMES[i - 8])
+            format!("bright {}", NAMES[i - 8]) // copy-exception: a terminal's own sample text, drawn as its cells
         };
         let end = if i < 15 { "\r\n" } else { "" };
         term.feed(
             format!(
-                "\x1b[38;5;{i}m\u{2588}\u{2588} {i:>2} {name:<15} The quick brown fox\x1b[0m{end}"
+                "\x1b[38;5;{i}m\u{2588}\u{2588} {i:>2} {name:<15} The quick brown fox\x1b[0m{end}" // copy-exception: a terminal's own sample text, drawn as its cells
             )
             .as_bytes(),
         );
@@ -285,7 +303,7 @@ pub fn terminal(
         .key_context("Terminal")
         .track_focus(focus)
         .role(gpui_kit::Role::MultilineTextInput)
-        .aria_label("Terminal")
+        .aria_label(crate::copy::text("cells.terminal"))
         .a11y_synthetic_children(move |builder| lines_and_caret(builder, &lines, caret, y))
         .relative()
         // The whole tab in the grid's background, past the last column and row too.

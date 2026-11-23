@@ -146,13 +146,13 @@ fn ink(c: &crate::chrome::Chrome) -> Div {
             div()
                 .typed(sizes().body)
                 .text_color(c.ink_primary)
-                .child("Session 1436"),
+                .child("Session 1436"), // copy-exception: the chrome-fx gallery is drawn only by the replica's chrome-fixture build
         )
         .child(
             div()
                 .typed(sizes().small)
                 .text_color(c.ink_secondary)
-                .child("Three checks ran"),
+                .child("Three checks ran"), // copy-exception: the chrome-fx gallery is drawn only by the replica's chrome-fixture build
         )
 }
 
@@ -188,7 +188,7 @@ fn stage(operator: &'static str, c: &crate::chrome::Chrome) -> AnyElement {
                         div()
                             .typed(sizes().title)
                             .text_color(c.ink_primary)
-                            .child("Glow"),
+                            .child("Glow"), // copy-exception: the chrome-fx gallery is drawn only by the replica's chrome-fixture build
                     )
                     .children(last),
             )
@@ -248,7 +248,7 @@ impl Render for Gallery {
                             div()
                                 .typed(sizes().small)
                                 .text_color(c.ink_secondary)
-                                .child(format!("{} · {:.2} ms · still pose", t.class, t.cost_ms)),
+                                .child(format!("{} · {:.2} ms · still pose", t.class, t.cost_ms)), // copy-exception: the chrome-fx gallery is drawn only by the replica's chrome-fixture build
                         ),
                 )
         });

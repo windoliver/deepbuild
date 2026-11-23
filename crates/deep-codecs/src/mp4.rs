@@ -145,6 +145,8 @@ pub struct Sample {
 
 pub struct Track {
     pub kind: Kind,
+    /// #1488: the quarter turns clockwise its track header's matrix shows it at: 0, 90, 180 or 270.
+    pub rotation: u16,
     pub timescale: u32,
     pub duration: u64,
     pub edits: Vec<Edit>,
@@ -263,11 +265,30 @@ fn track(trak: &[u8], urls: &mut Vec<String>) -> Option<Track> {
     let samples = table(stbl).unwrap_or_default();
     Some(Track {
         kind,
+        rotation: child(trak, b"tkhd").and_then(rotation).unwrap_or(0),
         timescale,
         duration,
         edits,
         entry,
         samples,
+    })
+}
+
+/// #1488: the turn a track header's matrix `[a b u; c d v; x y w]` shows its frames at, clockwise,
+/// to the nearest quarter: `(0, 1, −1, 0)` in `a b c d` is a quarter turn, as a phone writes a
+/// portrait clip. A matrix that isn't a turn (a mirror, a shear) shows as stored.
+fn rotation(tkhd: &[u8]) -> Option<u16> {
+    let mut b = Bytes(tkhd, 0);
+    let v = b.u8()?;
+    b.take(3 + if v == 1 { 32 } else { 20 } + 16)?;
+    let (a, bb) = (b.u32()? as i32, b.u32()? as i32);
+    b.take(4)?;
+    let (c, d) = (b.u32()? as i32, b.u32()? as i32);
+    Some(match (a.signum(), bb.signum(), c.signum(), d.signum()) {
+        (0, 1, -1, 0) => 90,
+        (-1, 0, 0, -1) => 180,
+        (0, -1, 1, 0) => 270,
+        _ => 0,
     })
 }
 
@@ -319,7 +340,7 @@ fn stsd(body: &[u8], audio: bool) -> Option<Entry> {
         ..Entry::default()
     };
     let rest = match &e.kind {
-        b"avc1" | b"avc3" | b"hvc1" | b"hev1" | b"mp4v" | b"jpeg" | b"apcn" | b"ap4h" => {
+        b"avc1" | b"avc3" | b"hvc1" | b"hev1" | b"av01" | b"mp4v" | b"jpeg" | b"apcn" | b"ap4h" => {
             let mut b = Bytes(e.body, 24);
             entry.width = b.u16()?;
             entry.height = b.u16()?;
@@ -357,7 +378,7 @@ fn stsd(body: &[u8], audio: bool) -> Option<Entry> {
     for a in atoms(rest) {
         match &a.kind {
             // #503: ALAC's cookie, Opus's dOps and FLAC's dfLa too.
-            b"avcC" | b"hvcC" | b"esds" | b"alac" | b"dOps" | b"dfLa" => {
+            b"avcC" | b"hvcC" | b"av1C" | b"esds" | b"alac" | b"dOps" | b"dfLa" => {
                 entry.config = Some((a.kind, a.body.to_vec()))
             }
             b"wave" => {
@@ -613,6 +634,7 @@ mod tests {
     fn track(edits: Vec<Edit>) -> Track {
         Track {
             kind: Kind::Video,
+            rotation: 0,
             timescale: 1,
             duration: 0,
             edits,

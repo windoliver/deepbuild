@@ -18,7 +18,7 @@ import { AskRefused, type Asks, type PlanInput, type Target } from '@deepbuild/a
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { execFile } from 'node:child_process';
-import { countMcp, toolLists, type Listed } from './mcp-servers.js';
+import { countMcp, OWN_SERVERS, toolLists, type Listed } from './mcp-servers.js';
 import { namedIn, pushBranches, type Named } from './named.js';
 import { offerPlan, type Effect } from './questions.js';
 import type { About } from './standing.js';
@@ -42,17 +42,24 @@ interface HoldOptions {
   pin(cwd: string, question: string): Promise<Obj>;
   /** A session.reading on the session's row. */
   reading(session: string, agent: string, reading: string): Promise<void>;
-  /** Copies the session's transcript into the record, so a target it read is placed as read. */
-  archived(session: string): Promise<void>;
+  /**
+   * Copies the session's transcript into the record, so a target it read is placed as read: from `transcript`, the
+   * hook's transcript_path ('' when it named none), which the archive reads only where its facts put that session.
+   */
+  archived(session: string, transcript: string): Promise<void>;
 }
 
 /**
  * The plan an authority ask shows (#69): the one call it holds, what it changes, and its undo. A call the guards class
- * as a delete or a send, or a tool that can destroy, can't be undone from here; a push or a merge reverts.
+ * as a delete or a send, or a tool that can destroy, can't be undone from here, and neither can a push, which others
+ * may have fetched once it ran; a pull request or a merge reverts. A call of an authority effect class, or a delete
+ * that couldn't be staged, acts outside the session, so its step is public: one that can't be undone starts only after
+ * the hub's hold (#1101). A tool you let run, or a decision your standing rules answer, acts on your machine.
  */
 function planFor(source: string, does: string, changes: string[], targets: Target[] = []): PlanInput {
-  const undo = /^effect\.(push|pr|merge)$/.test(source) ? 'Revert it with a new commit' : null;
-  return { steps: [{ does: does.slice(0, 8192), changes: changes.length ? changes.map((c) => c.slice(0, 8192)) : ['what the call touches'], undo, public: undo !== null, cost: 0, ...(targets.length ? { targets } : {}) }], diff: key({ source, does, changes }) };
+  const undo = /^effect\.(pr|merge)$/.test(source) ? 'Revert it with a new commit' : null;
+  const outside = /^effect\.(push|pr|merge|dispatch|send|delete)$/.test(source) || source === 'command.unstageable';
+  return { steps: [{ does: does.slice(0, 8192), changes: changes.length ? changes.map((c) => c.slice(0, 8192)) : ['what the call touches'], undo, public: outside, cost: 0, ...(targets.length ? { targets } : {}) }], diff: key({ source, does, changes }) };
 }
 /**
  * A push's words up to the end of its command, each tool's own flags before its push skipped: git's, jj's, sl's, and
@@ -143,9 +150,13 @@ export class Holds {
     await this.raise(meta.session, meta.agent, meta.cwd, source, k, `The agent offers: "${question}" It needs your authority.`, yes, offerPlan(source, `Let the agent do what it offered: ${question}`));
   }
 
-  /** The proceed whose turn the session is in, or undefined: the newest of its proceeds, stops and prompts is a proceed. */
+  /**
+   * The proceed whose turn the session is in, or undefined: the newest of its proceeds, stops and prompts is a proceed.
+   * A subagent's stop, which names its child, ends no turn of the session's (#1836), as in the record's projections.
+   */
   private async proceeding(session: string): Promise<{ id: string; question: string; rule: string } | undefined> {
-    const [last] = (await this.o.raw(`SELECT id, kind, data FROM events WHERE session_id = ? AND kind IN ('question.proceeded', 'agent.stop', 'user.ask') ORDER BY log_pos DESC LIMIT 1`, [session])) as { id: string; kind: string; data: string }[];
+    const child = this.o.plant === 'proceed-ends-at-child-stop' ? '' : ` AND NOT (kind = 'agent.stop' AND json_extract(data, '$.child') IS NOT NULL)`;
+    const [last] = (await this.o.raw(`SELECT id, kind, data FROM events WHERE session_id = ? AND kind IN ('question.proceeded', 'agent.stop', 'user.ask')${child} ORDER BY log_pos DESC LIMIT 1`, [session])) as { id: string; kind: string; data: string }[];
     if (last?.kind !== 'question.proceeded') return undefined;
     const d = JSON.parse(last.data) as { question: string; rule: string };
     return { id: last.id, question: d.question, rule: d.rule };
@@ -154,6 +165,8 @@ export class Holds {
   /** The ask with this key, newest first: its handle, status and decision. */
   private async askOf(k: string): Promise<{ id: string; status: string; decision: string | null } | undefined> {
     const [row] = (await this.o.raw(`SELECT id, status, decision FROM asks WHERE key = ? ORDER BY created DESC LIMIT 1`, [k])) as { id: string; status: string; decision: string | null }[];
+    // Your yes to a step that can't be undone lets it run only once the hub's hold is over (#1101): until then it waits.
+    if (row?.decision === 'allow' && await this.o.asks().stepHeld(`ask:${row.id}`)) return { ...row, status: 'held', decision: null };
     return row;
   }
   /** Raises one authority ask from `source` (a choice that approves, for the hold-as-choice plant); its handle. */
@@ -190,6 +203,7 @@ export class Holds {
   /** Why a call held by `handle` doesn't run: still waiting, or you said no. */
   async waiting(handle: string, label: string): Promise<string> {
     const row = await this.askOf((await this.o.raw(`SELECT key FROM asks WHERE id = ?`, [handle.slice(4)]) as { key: string }[])[0]?.key ?? '');
+    if (row?.status === 'held') return `DeepBuild is holding this: you said yes to \`${label}\` (${handle}), and since it can't be undone it starts only once its 10 s hold is over, with Undo on its card until then. Run the same call again after that.`;
     return row && row.status !== 'open' && row.status !== 'later'
       ? `DeepBuild held this: you said no to \`${label}\` (${handle}, ${row.status}); it doesn't run.`
       : `DeepBuild is holding this: \`${label}\` needs your authority and waits for ${handle}. Once you say yes, run the same call again.`;
@@ -264,7 +278,7 @@ export class Holds {
       const asked = await this.askOf(k);
       if (asked?.decision !== 'allow') {
         const handle = asked ? `ask:${asked.id}` : await this.raise(meta.session, meta.agent, meta.cwd, source, k,
-          `Run \`${call.label}\`? It ${does}, and no request in this thread names that.`, ANSWERS[effect]!, planFor(source, `Run \`${call.label}\`, which ${does}`, [call.label], open.some((o) => o.effect === 'push') ? pushTargets(call.label) : []));
+          `Run \`${call.label}\`? It ${does}, and no request in this thread names that.`, ANSWERS[effect]!, planFor(source, `Run \`${call.label}\`, which ${does}`, [call.label], await this.placed(meta, open.some((o) => o.effect === 'push') ? pushTargets(call.label) : [])));
         return `DeepBuild denied this (guard ${rule}): no request you typed in this thread names it. ${await this.waiting(handle, call.label)}`;
       }
     }
@@ -314,6 +328,15 @@ export class Holds {
       return `DeepBuild held this: \`${call.label}\` needs your authority, and no ask could be raised for it (${error.message}).`;
     }
   }
+  /**
+   * `targets`, once the session's transcript is copied so the ask can place each where the session read it (#1098),
+   * waiting at most ARCHIVE_WAIT_MS. A failed or late copy leaves a target the session read as unknown, which asks
+   * you all the same.
+   */
+  private async placed(meta: HookMeta, targets: ReturnType<typeof pushTargets>): Promise<ReturnType<typeof pushTargets>> {
+    if (targets.length) await Promise.race([this.o.archived(meta.session, meta.transcript).catch(() => undefined), sleep(ARCHIVE_WAIT_MS)]);
+    return targets;
+  }
   /** The ask holding a call whose effect needs authority in the turn a proceed started, or undefined. */
   private async heldEffect(meta: HookMeta, call: Gated): Promise<string | undefined> {
     const classes = call.classes.filter((c) => AUTHORITY.has(c));
@@ -329,9 +352,7 @@ export class Holds {
     const question = turn
       ? `Run \`${call.label}\`? It ${classes.map((c) => DOES[c]).join(' and ')}, in the turn a "proceed" started for "${turn.question}" (rule ${turn.rule}); no proceed covers a call that needs your authority.`
       : `Run \`${call.label}\`? It replies in your name to a reviewer's thread on the pull request, a send that needs your authority.`;
-    const targets = classes.includes('push') ? pushTargets(call.label) : [];
-    // A failed or late copy leaves a target the session read as unknown, which asks you all the same.
-    if (targets.length) await Promise.race([this.o.archived(meta.session).catch(() => undefined), sleep(ARCHIVE_WAIT_MS)]);
+    const targets = await this.placed(meta, classes.includes('push') ? pushTargets(call.label) : []);
     return this.raise(meta.session, meta.agent, meta.cwd, source, k, question, ANSWERS[classes[0]!]!, planFor(source, `Run \`${call.label}\`, which ${classes.map((c) => DOES[c]).join(' and ')}`, [call.label], targets));
   }
 
@@ -425,6 +446,8 @@ export class Holds {
    * update's ask that holds it, or, with none (a tool no list shows, or an ask that couldn't be raised), on its own.
    */
   private async heldTool(meta: HookMeta, server: string, tool: string): Promise<string | undefined> {
+    // DeepBuild's own tools are never held; their list is on the record only for the reply limit it names (#2896).
+    if (OWN_SERVERS.includes(server)) return undefined;
     const lists = await this.lists(server);
     const latest = lists.at(-1);
     if (!latest) return undefined;

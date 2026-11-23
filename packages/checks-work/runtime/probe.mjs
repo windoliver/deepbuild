@@ -3,15 +3,17 @@
 // JSON: {outcome, testsRun, failures, read}. A failure at the check's assertion is the work not holding; anything
 // that stops the work itself (an error, a source that isn't JSON, a mailbox that isn't a Maildir) leaves this
 // process with its error on stderr, which the runner keeps as the crash's output.
-import { request } from 'node:http';
-import { request as requestTls } from 'node:https';
+import { request, Agent } from 'node:http';
+import { request as requestTls, Agent as TlsAgent } from 'node:https';
 import { isIPv4 } from 'node:net';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 const input = JSON.parse(readFileSync(0, 'utf8'));
-const { kind, spec, checkout } = input;
+const { kind, spec, checkout, port } = input;
+// A supervised service has one granted source port: reuse its connection across the measured requests.
+const agent = port === undefined ? false : new (spec.url.startsWith('https:') ? TlsAgent : Agent)({ keepAlive: true, maxSockets: 1, localPort: port });
 const failures = [];
 const read = [];
 const at = (test, file, line, message) => failures.push({ test, file, line, stack: null, assertion: true, message });
@@ -27,7 +29,7 @@ function get(url, from) {
     const u = new URL(url);
     const send = u.protocol === 'https:' ? requestTls : request;
     const started = performance.now();
-    const req = send(u, { method: 'GET', localAddress: from, family: isIPv4(from) ? 4 : 6, agent: false }, (res) => {
+    const req = send(u, { method: 'GET', localAddress: from, ...(port === undefined ? {} : { localPort: port }), family: isIPv4(from) ? 4 : 6, agent }, (res) => {
       let body = '';
       res.setEncoding('utf8');
       res.on('data', (d) => { body += d; });
@@ -65,7 +67,7 @@ async function service() {
     try { body = JSON.parse(a.body); } catch { shapes.push(`answered ${a.status} with a body that isn't JSON`); continue; }
     if (a.status < 200 || a.status > 299) shapes.push(`answered ${a.status}`);
     for (const [field, type] of Object.entries(spec.shape)) {
-      if (typeof body !== 'object' || body === null || !(field in body)) shapes.push(`the answer lacks ${field}`);
+      if (typeof body !== 'object' || body === null || !Object.hasOwn(body, field)) shapes.push(`the answer lacks ${field}`);
       else if (typeOf(body[field]) !== type) shapes.push(`${field} is ${typeOf(body[field])}, not ${type}`);
     }
   }
@@ -85,7 +87,7 @@ function data() {
   const db = new DatabaseSync(join(checkout, spec.database), { readOnly: true });
   const rows = db.prepare(spec.query).all();
   db.close();
-  const show = (r) => JSON.stringify(r);
+  const show = (r) => JSON.stringify(r, (_, v) => (typeof v === 'bigint' ? Number(v) : v));
   if (rows.length !== spec.rows.length) at('data: rows', spec.database, 1, `the query returned ${rows.length} rows, not ${spec.rows.length}: ${rows.map(show).join(', ')}`);
   for (let i = 0; i < Math.min(rows.length, spec.rows.length); i++) {
     const want = spec.rows[i];
@@ -106,7 +108,7 @@ function pointed(doc, pointer) {
   let v = doc;
   for (const raw of pointer.split('/').slice(1)) {
     const key = decodeURIComponent(raw).replace(/~1/g, '/').replace(/~0/g, '~');
-    if (typeof v !== 'object' || v === null || !(key in v)) return undefined;
+    if (typeof v !== 'object' || v === null || !Object.hasOwn(v, key)) return undefined;
     v = v[key];
   }
   return v;
@@ -199,4 +201,4 @@ function message() {
 
 const run = { service, data, document, message }[kind];
 if (!run) throw new Error(`no such kind: ${kind}`);
-await run();
+try { await run(); } finally { if (agent) agent.destroy(); }

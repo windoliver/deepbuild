@@ -376,6 +376,11 @@ fn fixer_rule_dangles(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
 
 mod fixer;
 use fixer::*;
+mod pointer;
+#[cfg(feature = "test-kit-pointer")]
+pub use pointer::pointer;
+#[cfg(feature = "test-kit-pointer-declared")]
+pub use pointer::pointer_declared;
 
 fn register_fixer(r: &mut Registrar) {
     fixer_with(r, fixer_rule, false);
@@ -1477,5 +1482,7 @@ pub fn built() -> Vec<Module> {
     with!("test-kit-loose", loose());
     with!("test-kit-selfish", selfish());
     with!("test-kit-selfish-analytic", selfish_analytic());
+    with!("test-kit-pointer", pointer());
+    with!("test-kit-pointer-declared", pointer_declared());
     out
 }

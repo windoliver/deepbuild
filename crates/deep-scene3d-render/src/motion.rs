@@ -55,9 +55,26 @@ struct Pipes {
 #[derive(Clone)]
 struct Draw {
     at: wgpu::Buffer,
-    sides: Option<(Mesh, Mesh)>,
+    sides: Option<(wgpu::Buffer, wgpu::Buffer)>,
     indices: wgpu::Buffer,
     count: u32,
+}
+
+/// A pre-skin's vertices as the velocity passes read them (#2657): its positions alone, each at a
+/// whole vertex's stride so its draw shares the mesh at t's pipelines and indices. Those passes
+/// read nothing else, so it derives no tangent and makes no index buffer.
+fn side(device: &Device, m: &deep_canvas_scene3d::geom::Mesh) -> wgpu::Buffer {
+    let mut v = vec![0f32; m.positions.len() * FLOATS];
+    for (out, p) in v.as_chunks_mut::<FLOATS>().0.iter_mut().zip(&m.positions) {
+        out[..3].copy_from_slice(&p.map(|x| x as f32));
+    }
+    device
+        .device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("scene3d.motion side"),
+            contents: bytemuck::cast_slice(&v),
+            usage: wgpu::BufferUsages::VERTEX,
+        })
 }
 
 /// A frame's velocity pass and resolve, ready to record.
@@ -272,21 +289,23 @@ fn draw_list(
     device: &Device,
     scene: &Scene,
     motion: &Motion,
-    meshes: &std::collections::BTreeMap<Shape, Mesh>,
+    meshes: &deep_canvas::gauge::Kept<Shape, Mesh>,
+    skip_elements: bool,
 ) -> (Vec<Draw>, Vec<Instance>) {
     let mut draws = Vec::new();
     let mut instances: Vec<Instance> = Vec::new();
     for s in scene.layers.iter().flat_map(|l| &l.solids) {
-        if s.cast_only || s.alpha <= 0.0 {
+        // #458's planted path: an instancer's elements, `<instancer>#<id>`, are left out.
+        if s.cast_only || s.alpha <= 0.0 || skip_elements && s.id.contains('#') {
             continue;
         }
-        let (Some(m), Some(at)) = (meshes.get(&s.shape), motion.solids.get(&s.id)) else {
+        let (Some(m), Some(at)) = (meshes.peek(&s.shape), motion.solids.get(&s.id)) else {
             continue;
         };
         let sides = at
             .meshes
             .as_ref()
-            .map(|(o, c)| (Mesh::of(device, o), Mesh::of(device, c)));
+            .map(|(o, c)| (side(device, o), side(device, c)));
         let (t, o, c) = (rows(&s.model), rows(&at.open), rows(&at.close));
         instances.push(Instance {
             rows: [t[0], t[1], t[2], o[0], o[1], o[2], c[0], c[1], c[2]],
@@ -433,8 +452,9 @@ impl MotionPass {
         device: &Device,
         scene: &Scene,
         wanted: bool,
-        meshes: &std::collections::BTreeMap<Shape, Mesh>,
+        meshes: &deep_canvas::gauge::Kept<Shape, Mesh>,
         size: [u32; 2],
+        skip_elements: bool,
     ) -> Option<TargetFrame> {
         if !wanted {
             self.travel = None;
@@ -513,7 +533,7 @@ impl MotionPass {
             self.compiled.push("scene3d.velocity");
         }
         let pipe = self.target.clone().expect("built above");
-        let (draws, instances) = draw_list(device, scene, motion, meshes);
+        let (draws, instances) = draw_list(device, scene, motion, meshes, skip_elements);
         let uniform = uniform_of(scene, motion, size, 1, size);
         let (held, bind) = self.travel.get_or_insert_with(|| {
             let held = Held::new(d, "scene3d.velocity uniform");
@@ -542,7 +562,7 @@ impl MotionPass {
         &mut self,
         device: &Device,
         scene: &Scene,
-        meshes: &std::collections::BTreeMap<Shape, Mesh>,
+        meshes: &deep_canvas::gauge::Kept<Shape, Mesh>,
         linear: &wgpu::TextureView,
         size: [u32; 2],
     ) -> Option<Frame> {
@@ -559,7 +579,7 @@ impl MotionPass {
             pipes.draw.clone(),
             [pipes.tile.clone(), pipes.near.clone(), pipes.gather.clone()],
         );
-        let (draws, instances) = draw_list(device, scene, motion, meshes);
+        let (draws, instances) = draw_list(device, scene, motion, meshes, false);
         let tile = motion.tile_px.max(1);
         let tiles = [size[0].div_ceil(tile), size[1].div_ceil(tile)];
         let uniform = uniform_of(scene, motion, size, tile, tiles);
@@ -724,7 +744,7 @@ impl TargetFrame {
         pass.set_vertex_buffer(3, self.instances.slice(..));
         for (k, dr) in self.draws.iter().enumerate() {
             let (o, c) = match &dr.sides {
-                Some((o, c)) => (&o.vertices, &c.vertices),
+                Some((o, c)) => (o, c),
                 None => (&dr.at, &dr.at),
             };
             pass.set_vertex_buffer(0, dr.at.slice(..));
@@ -785,7 +805,7 @@ impl Frame {
             pass.set_vertex_buffer(3, self.instances.slice(..));
             for (k, dr) in self.draws.iter().enumerate() {
                 let (o, c) = match &dr.sides {
-                    Some((o, c)) => (&o.vertices, &c.vertices),
+                    Some((o, c)) => (o, c),
                     None => (&dr.at, &dr.at),
                 };
                 pass.set_vertex_buffer(0, dr.at.slice(..));
@@ -798,6 +818,7 @@ impl Frame {
         end(encoder, q);
         let q = query(encoder);
         {
+            deep_gpu::counted::compute_pass();
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("scene3d.motion resolve"),
                 timestamp_writes: q.as_ref().and_then(|q| q.compute_pass_timestamp_writes()),

@@ -17,7 +17,6 @@ use vello_cpu::peniko::{self, BlendMode, Brush, FontData};
 use vello_cpu::{ImageSource, Mask, PaintType};
 use vello_gpu::{
     ClearSettings, RenderSize, RenderTargetConfig, Renderer, Resources, Scene, TargetInit,
-    TextureBindings,
 };
 
 use crate::asset::{Kept, Plant};
@@ -105,6 +104,10 @@ struct Gpu<'a> {
     per_draw: Option<Vec<vello_cpu::ImageId>>,
     /// #385 AC1's wrong program: every solid fill two codes redder.
     shifts_fill: bool,
+    /// #458's wrong program: a group whose blend is multiply composites as screen.
+    multiply_as_screen: bool,
+    /// #269: the grid images rebuilt on the device.
+    grids: &'a mut crate::grid_gpu::Grids,
 }
 
 /// A pixmap in Vello GPU's atlas: the pixmap it was made from, its ID there, and whether the frame
@@ -209,6 +212,12 @@ impl Canvas for Gpu<'_> {
         opacity: Option<f32>,
         _mask: Option<Mask>,
     ) {
+        let blend = blend.map(|mut b| {
+            if self.multiply_as_screen && b.mix == peniko::Mix::Multiply {
+                b.mix = peniko::Mix::Screen;
+            }
+            b
+        });
         // A mask never gets here: `refusal` turns its layer away first.
         self.scene.push_layer(clip, blend, opacity, None, None);
     }
@@ -218,6 +227,15 @@ impl Canvas for Gpu<'_> {
     fn set_aliasing_threshold(&mut self, threshold: Option<u8>) {
         self.scene.set_aliasing_threshold(threshold);
     }
+    fn grid_source(
+        &mut self,
+        item: &str,
+        grid: &deep_canvas_marks::grid_image::Drawn,
+        size: [u16; 2],
+    ) -> Option<ImageSource> {
+        let device = (self.device, &mut *self.encoder);
+        Some(self.grids.source(device, item, grid, size))
+    }
 }
 
 impl Glyphs for Gpu<'_> {
@@ -225,7 +243,7 @@ impl Glyphs for Gpu<'_> {
         &mut self,
         _: &mut vello_cpu::Resources,
         font: &FontData,
-        (size, skew): (f32, f32),
+        (size, skew, turn): (f32, f32, bool),
         coords: &[i16],
         glyphs: &[vello_cpu::Glyph],
     ) {
@@ -234,7 +252,7 @@ impl Glyphs for Gpu<'_> {
         let _ = run
             .font_size(size)
             .hint(false)
-            .glyph_transform(deep_text::atlas::slant(skew))
+            .glyph_transform(deep_text::atlas::glyph_transform(skew, turn))
             .normalized_coords(coords)
             .fill_glyphs(glyphs.iter().copied());
     }
@@ -243,7 +261,7 @@ impl Glyphs for Gpu<'_> {
         &mut self,
         _: &mut vello_cpu::Resources,
         font: &FontData,
-        (size, skew): (f32, f32),
+        (size, skew, turn): (f32, f32, bool),
         coords: &[i16],
         glyph: vello_cpu::Glyph,
         width: f64,
@@ -254,11 +272,14 @@ impl Glyphs for Gpu<'_> {
         let _ = run
             .font_size(size)
             .hint(false)
-            .glyph_transform(deep_text::atlas::slant(skew))
+            .glyph_transform(deep_text::atlas::glyph_transform(skew, turn))
             .normalized_coords(coords)
             .stroke_glyphs(std::iter::once(glyph));
     }
 }
+
+/// #2053: each lit image's normal page read from a store, as the GPU layer's light pass reads it.
+pub use crate::asset::{paged, pages};
 
 /// The first mark of `marks` Vello GPU can't draw yet, as the live view's refusal naming its
 /// item: one inside an alpha or luminance mask, until Vello GPU's mask layers draw.
@@ -273,6 +294,25 @@ pub fn refusal<'a>(marks: impl IntoIterator<Item = &'a Drawn>) -> Option<Value> 
     })
 }
 
+/// [`refusal`] for a live view drawn by Vello GPU alone, which lights nothing (#2031): a lit
+/// group is refused too, naming its light; the GPU layer draws it.
+pub fn live_refusal<'a>(marks: impl IntoIterator<Item = &'a Drawn> + Clone) -> Option<Value> {
+    let lit = marks
+        .clone()
+        .into_iter()
+        .flat_map(|d| &d.scopes)
+        .find_map(|s| match s {
+            Scope::Opacity {
+                item,
+                effect: Some(e),
+                ..
+            } if e.light.is_some() => deep_canvas_marks::light::group_of(item),
+            _ => None,
+        });
+    let lit = lit.map(|g| refused("module_missing", &format!("items/{g}/params/light")));
+    refusal(marks).or(lit)
+}
+
 /// What a drawing asks beyond its marks.
 #[derive(Clone, Copy, Debug)]
 pub struct Options {
@@ -280,8 +320,14 @@ pub struct Options {
     pub zoom: f64,
     /// #385 AC1's wrong program: every solid fill two codes redder.
     pub shifts_fill: bool,
+    /// #458's wrong program: a group whose blend is multiply composites as screen.
+    pub multiply_as_screen: bool,
     /// #1485's wrong program on the drawing's images.
     pub plant: Plant,
+    /// #269 AC5's wrong program: a grid image's pixels take their cell's role before the rebuild.
+    pub grid_picks_first: bool,
+    /// #269 AC3's wrong program: a played frame's grid image holds the step before its own.
+    pub grid_keeps_previous: bool,
 }
 
 impl Default for Options {
@@ -289,7 +335,10 @@ impl Default for Options {
         Options {
             zoom: 1.0,
             shifts_fill: false,
+            multiply_as_screen: false,
             plant: Plant::None,
+            grid_picks_first: false,
+            grid_keeps_previous: false,
         }
     }
 }
@@ -311,6 +360,9 @@ pub struct Vello2d {
     freeing: Vec<vello_cpu::ImageId>,
     uploads: u64,
     fills: u64,
+    /// #269: the grid images it has drawn, kept on the device, and what the last drawing's did.
+    grids: crate::grid_gpu::Grids,
+    grid_frame: crate::grid_gpu::GridFrame,
 }
 
 impl Vello2d {
@@ -334,6 +386,8 @@ impl Vello2d {
             freeing: Vec::new(),
             uploads: 0,
             fills: 0,
+            grids: Default::default(),
+            grid_frame: Default::default(),
         }
     }
 
@@ -354,6 +408,11 @@ impl Vello2d {
         });
     }
 
+    /// #1489: the frame each animated image item shows in the frames it draws next, by its ID.
+    pub fn frames(&mut self) -> &mut std::collections::HashMap<String, u32> {
+        &mut self.kept.get_mut().frames
+    }
+
     /// The pixmaps the renderer has uploaded to Vello GPU's atlas so far.
     pub fn uploads(&self) -> u64 {
         self.uploads
@@ -363,6 +422,16 @@ impl Vello2d {
     /// however many glyphs it holds).
     pub fn fills(&self) -> u64 {
         self.fills
+    }
+
+    /// #269: what the last drawing's grid images did: the rows each uploaded, and their times.
+    pub fn grid_frame(&mut self) -> crate::grid_gpu::GridFrame {
+        std::mem::take(&mut self.grid_frame)
+    }
+
+    /// #269: times each grid image's uploads and pass in the drawings from now on, or stops.
+    pub fn time_grids(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, on: bool) {
+        self.grids.time(device, queue, on);
     }
 
     /// The format it draws into.
@@ -397,6 +466,8 @@ impl Vello2d {
             self.depth = Some(([w, h], depth));
         }
         self.kept.get_mut().plant = options.plant;
+        self.grids.picks_first = options.grid_picks_first;
+        self.grids.keeps_previous = options.grid_keeps_previous;
         let gpu = Gpu {
             scene: Scene::new(w, h),
             transform: Affine::IDENTITY,
@@ -410,6 +481,8 @@ impl Vello2d {
             fills: &mut self.fills,
             per_draw: (options.plant == Plant::UploadsPerFrame).then(Vec::new),
             shifts_fill: options.shifts_fill,
+            multiply_as_screen: options.multiply_as_screen,
+            grids: &mut self.grids,
         };
         let mut p = Painter::on(gpu);
         p.zoom = options.zoom;
@@ -423,6 +496,7 @@ impl Vello2d {
             resources,
             encoder,
             per_draw,
+            grids,
             ..
         } = p.ctx;
         let depth = self.depth.as_ref().map(|(_, d)| d);
@@ -437,11 +511,12 @@ impl Vello2d {
                     &render_size,
                     view,
                     depth,
-                    &TextureBindings::new(),
+                    &grids.bindings,
                     TargetInit::Clear(ClearSettings::default()),
                 )
                 .map_err(|e| refused("not_drawn", &format!("vello_gpu: {e:?}")))
         });
+        self.grid_frame = grids.rendered(encoder);
         // Freed once the drawing has rendered, since a free's clear runs after the uploads land:
         // freed before, a new pixmap given the same place in the atlas would be cleared.
         for id in per_draw.into_iter().flatten().chain(self.freeing.drain(..)) {

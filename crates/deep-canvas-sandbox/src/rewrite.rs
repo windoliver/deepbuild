@@ -58,6 +58,8 @@ pub struct Faults {
     pub skip_copy_pages: bool,
     /// The page tracker leaves the pages a `memory.fill` writes unmarked (#547).
     pub skip_fill_pages: bool,
+    /// Copies every `i64.rotl` as `i64.rotr` (#458).
+    pub rotl_as_rotr: bool,
 }
 
 /// The exported global names a logic item's program gains (#531): each mutable global of the
@@ -153,6 +155,8 @@ pub fn rewrite_as(bytes: &[u8], faults: Faults, mode: Mode) -> Result<Rewritten,
     let mut exports = ExportSection::new();
     let mut start = None;
     let mut bodies: Vec<Body> = Vec::new();
+    // One function validator's buffers, handed from each function to the next (#2662).
+    let mut buffers = FuncValidatorAllocations::default();
     for payload in Parser::new(0).parse_all(bytes) {
         let payload = payload.map_err(err)?;
         let valid = validator.payload(&payload).map_err(err)?;
@@ -209,7 +213,7 @@ pub fn rewrite_as(bytes: &[u8], faults: Faults, mode: Mode) -> Result<Rewritten,
                 let ValidPayload::Func(to_validate, _) = valid else {
                     return Err("a function body the validator didn't hand back".into());
                 };
-                let mut fv = to_validate.into_validator(FuncValidatorAllocations::default());
+                let mut fv = to_validate.into_validator(std::mem::take(&mut buffers));
                 let mut reader = body.get_binary_reader();
                 fv.read_locals(&mut reader).map_err(err)?;
                 let mut locals = Vec::new();
@@ -235,6 +239,7 @@ pub fn rewrite_as(bytes: &[u8], faults: Faults, mode: Mode) -> Result<Rewritten,
                     at,
                     height,
                 });
+                buffers = fv.into_allocations();
             }
             Payload::End(_) | Payload::Version { .. } => {}
             _ => {
@@ -937,6 +942,7 @@ impl Body<'_> {
                         mark(&mut e, None);
                     }
                 }
+                Operator::I64Rotl if faults.rotl_as_rotr => e.op(I::I64Rotr),
                 _ if c.mark.is_some() && store(op).is_some() => {
                     // [addr, value]: the store, then its bytes marked.
                     let (offset, size, t) = store(op).expect("a store");

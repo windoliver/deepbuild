@@ -12,16 +12,16 @@ deep-relay --listen 0.0.0.0:443 --cert fullchain.pem --key privkey.pem
 
 ## Where new code goes
 
-- `src/wire.rs`: relay@1's committed digest, limits and frame layout. The shape itself is `packages/contracts/slots/relay@1.json`, frozen in `packages/contracts/digests.json`; a new shape is `relay@2` there, never an edit.
-- `src/relay.rs`: the shipped relay. `src/suite.rs`: the relay suite and its frame reader.
-- `src/macos.rs`: the macOS backend: its https connection, hello check and joining, and its session (relay@1's repeat rule) that the network seam's suite plays.
+- `src/wire.rs`: relay@1's committed digest, limits, hello check and frame layout; the one module a wasm32 build links, for the web player (#549). The shape itself is `packages/contracts/slots/relay@1.json`, frozen in `packages/contracts/digests.json`; a new shape is `relay@2` there, never an edit.
+- `src/relay.rs`: the shipped relay. `src/suite.rs`: the relay suite and its frame reader. Both speak relay@2 (#277, `packages/contracts/slots/relay@2.json`) beside relay@1: a copy asks for it by the WebSocket subprotocol `relay.2`, and the relay hands its `holds`, `seat` and `catch_up` to the match's other copies, naming the sender. A room (#278) is a relay@2 match whose opening join names `min`: the relay tells its copies who is seated (`seated`), starts it on the first player's `begin` with whoever is there, hands a join made after the start to the copies (`knock`) and seats it once one says the lobby is open (`admit`), and after every copy says the match `finished` starts the next on the same connections; the suite's `relay@2` check plays each.
+- `src/macos.rs`: the macOS backend: its https connection and joining, and its session (relay@1's repeat rule) that the network seam's suite plays. A Join's connection trusts the platform's own authorities beside the ones its caller hands it (#549).
+- `src/direct.rs`: the direct path between two copies in the app (#549): the lower-numbered copy listens where it reaches the relay from and says where through the relay's `signal`, with an offer drawn for that match.
 - `src/bin/`: the two binaries. Proofs: unit tests beside the code, and `tests/acceptance/309`. `scripts/relay-kit.mjs` (the lane `relay`) runs the relay suite on the shipped relay and the interop run against every relay implementation.
 
 ## What it may import
 
-deep-canvas-seams (the network seam's interface), rustls with ring, rustls-pki-types, tungstenite and serde_json. Not named deep-canvas*: it holds threads, sockets and clocks, which the canvas lint keeps out of the canvas crates.
+deep-canvas-seams (the network seam's interface), rustls with ring, rustls-pki-types, rustls-native-certs, tungstenite and serde_json; off wasm32, serde_json and deep-canvas-seams alone. Not named deep-canvas*: it holds threads, sockets and clocks, which the canvas lint keeps out of the canvas crates.
 
 ## Deviations
 
-- The macOS backend always goes through the relay: the relay hands `signal` messages on, but no direct path between copies opens yet.
-- The macOS backend trusts the certificate authorities its caller hands it; the platform's own roots come with the Join that uses it (#179).
+- A direct path opens only between copies that reach each other at the address each reaches the relay from, as on one network; it sets up no path through a NAT, and its frames cross it unencrypted, named by the match and the offer the relay's `signal` carried. Any other pair plays through the relay.

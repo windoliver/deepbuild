@@ -4,22 +4,27 @@
 //! (64 px) of scroll a frame, and prints one JSON line. `measure --out <file> [--arms a,b]` runs each arm in a process
 //! of its own and writes the record, which ends in its stop-or-build line. `offsets`, `remeasure` and `back` print one
 //! line each from GPUI's headless window; `sort --data <file>`, `soak` and `access` read one JSON command a line.
-//! An arm that can't draw in a real window (a locked screen, a hidden window) reads INCONCLUSIVE with the reason.
+//! An arm that can't draw in a real window (a locked screen, a hidden window) reads INCONCLUSIVE with the reason, and
+//! so does one whose window gets no frame for 10 s. No call outlives the process that started it (#2569).
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::RefCell;
 use std::io::{BufRead, Write};
 use std::rc::Rc;
-use std::sync::atomic::{AtomicU64, AtomicU8, Ordering::Relaxed};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering::Relaxed};
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
-use deep_app::table::view::{TableView, LINE, LINE_TOP, ROW};
-use deep_app::table::{Rows, Value};
+// The table this bench measures lives with it, out of the shipped crate (#1808): the list draws its own rows.
+#[path = "lists_1477/table/mod.rs"]
+mod table;
+
 use gpui_kit::component::table::{Column, DataTable, TableDelegate, TableState};
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::*;
 use serde_json::{json, Value as Json};
+use table::view::{TableView, LINE, LINE_TOP, ROW};
+use table::{Rows, Value};
 
 // ---------------------------------------------------------------------------------------------------------------
 // Counting: allocations on every thread, process CPU, the physical footprint, the load and the fingerprint.
@@ -53,6 +58,8 @@ fn allocations() -> u64 {
 extern "C" {
     fn clock_gettime(clock: u32, out: *mut [i64; 2]) -> i32;
     fn getloadavg(out: *mut f64, n: i32) -> i32;
+    fn getppid() -> i32;
+    fn _exit(code: i32) -> !;
 }
 #[cfg(target_os = "macos")]
 extern "C" {
@@ -101,6 +108,67 @@ fn fingerprint() -> Json {
     out.ok()
         .and_then(|o| serde_json::from_slice(&o.stdout).ok())
         .unwrap_or(Json::Null)
+}
+
+/// No call outlives the process that started it (#2569): a test run that dies can't stop its bench, so once its
+/// parent is gone the bench ends, and with a `measure` the arm it was waiting for, whose parent it was.
+fn end_with_parent() {
+    let parent = unsafe { getppid() };
+    std::thread::spawn(move || loop {
+        // A parent that died before the first look left the bench to launchd or init, PID 1.
+        if unsafe { getppid() } != parent || parent == 1 {
+            // Its pipes may be gone with it, so a failed write is nothing.
+            let _ = writeln!(
+                std::io::stderr(),
+                "lists_1477: the process that started it is gone, so it ends"
+            );
+            // The main thread may be mid-frame: no exit handlers.
+            unsafe { _exit(0) };
+        }
+        std::thread::sleep(Duration::from_millis(250));
+    });
+}
+
+/// An arm whose window gets no frame for this long reads INCONCLUSIVE and ends (#2569).
+const STALL_S: u64 = 10;
+/// The arm's frames so far.
+static FRAMES: AtomicU64 = AtomicU64::new(0);
+/// When its window opened, or its last frame started or ended, in ms on `now_ms`.
+static LAST_FRAME_MS: AtomicU64 = AtomicU64::new(0);
+/// Whether its one line is printed, or about to be.
+static SAID: AtomicBool = AtomicBool::new(false);
+
+fn now_ms() -> u64 {
+    static START: OnceLock<Instant> = OnceLock::new();
+    START.get_or_init(Instant::now).elapsed().as_millis() as u64
+}
+
+fn frame_seen() {
+    LAST_FRAME_MS.store(now_ms(), Relaxed);
+}
+
+/// From the window's opening on, an arm that has waited `STALL_S` for its next frame prints why and ends. It runs
+/// on a thread of its own: a covered window's app sits in its run loop, where nothing of the arm's runs.
+fn end_when_stalled(name: String, load_start: f64) {
+    frame_seen();
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_millis(250));
+        if now_ms().saturating_sub(LAST_FRAME_MS.load(Relaxed)) >= STALL_S * 1000 {
+            let frames = FRAMES.load(Relaxed);
+            say_and_exit(
+                json!({ "arm": name, "status": "INCONCLUSIVE", "reason": format!("the real window got no frame for {STALL_S} s, after {frames} frames; a covered or hidden window or a locked screen gets none") }),
+                load_start,
+            );
+        }
+    });
+}
+
+/// The real window `arm`, `access` and the driven calls open: 1,200 × 700 in the display's middle, on whole points.
+/// A visible frame of odd height centers it on a half point, and macOS then makes the window 701 pt tall.
+fn window_bounds(cx: &App) -> Option<WindowBounds> {
+    let mut bounds = Bounds::centered(None, size(px(WINDOW.0), px(WINDOW.1)), cx);
+    bounds.origin = bounds.origin.map(|at| at.floor());
+    Some(WindowBounds::Windowed(bounds))
 }
 
 fn repo() -> std::path::PathBuf {
@@ -323,6 +391,8 @@ impl Render for Bench {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let run = self.run.clone();
         let t0 = run.borrow_mut().applied.take().unwrap_or_else(Instant::now);
+        FRAMES.fetch_add(1, Relaxed);
+        frame_seen();
         {
             let mut r = run.borrow_mut();
             r.frame += 1;
@@ -416,6 +486,7 @@ impl Render for Bench {
         let end = canvas(
             |_, _, _| {},
             move |_, _, _, _| {
+                frame_seen();
                 if record {
                     run.borrow_mut()
                         .times
@@ -492,7 +563,7 @@ fn arm(name: &str) -> Json {
     let name_owned = name.to_string();
     let is_list = list_name.is_some();
     let list_name = list_name.map(str::to_string);
-    deep_app::table::view::ALLOCATIONS.set(allocations).ok();
+    table::view::ALLOCATIONS.set(allocations).ok();
     let made = RefCell::new(Some(made));
     let run2 = run.clone();
     let out2 = out.clone();
@@ -501,7 +572,7 @@ fn arm(name: &str) -> Json {
         deep_app::init(cx);
         cx.activate(true);
         let opts = WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size(px(WINDOW.0), px(WINDOW.1)), cx))),
+            window_bounds: window_bounds(cx),
             ..Default::default()
         };
         let run3 = run2.clone();
@@ -593,7 +664,8 @@ fn arm(name: &str) -> Json {
             *out2.borrow_mut() = Some(json!({ "status": "INCONCLUSIVE", "reason": "no window opened" }));
             cx.quit();
         }
-        // A window that never draws (a locked screen) is read after 30 s, never waited on forever.
+        end_when_stalled(name_owned.clone(), load_start);
+        // A window that draws too few frames to warm up is read after 30 s.
         let out5 = out2.clone();
         let run5 = run2.clone();
         let name5 = name_owned.clone();
@@ -619,16 +691,31 @@ fn arm(name: &str) -> Json {
 }
 
 fn print_and_exit(out: &Rc<RefCell<Option<Json>>>, load_start: f64) {
-    let mut json = out.borrow().clone().unwrap_or(
-        json!({ "status": "INCONCLUSIVE", "reason": "the arm ended without a reading" }),
+    say_and_exit(
+        out.borrow().clone().unwrap_or(
+            json!({ "status": "INCONCLUSIVE", "reason": "the arm ended without a reading" }),
+        ),
+        load_start,
     );
+}
+
+/// Prints an arm's one line and exits. Only the first caller prints: the arm's own end and its stall watch can't both.
+/// The stall watch calls from its own thread while the app's is in its run loop, so no exit handlers run.
+fn say_and_exit(mut json: Json, load_start: f64) -> ! {
+    if SAID.swap(true, Relaxed) {
+        loop {
+            std::thread::park();
+        }
+    }
     if json["status"] == "measured" || json["status"] == "missed" {
         json["fingerprint"] = fingerprint();
     }
     json["load"] = json!({ "start": load_start, "end": load() });
-    println!("{json}");
-    let _ = std::io::stdout().flush();
-    std::process::exit(0);
+    // A reader that closed the pipe gets no line, and the arm still ends.
+    let mut out = std::io::stdout().lock();
+    let _ = writeln!(out, "{json}");
+    let _ = out.flush();
+    unsafe { _exit(0) }
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -917,7 +1004,7 @@ fn drive(rows: Arc<dyn Rows>, script: Script) -> i32 {
         deep_app::init(cx);
         cx.activate(true);
         let opts = WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size(px(WINDOW.0), px(WINDOW.1)), cx))),
+            window_bounds: window_bounds(cx),
             ..Default::default()
         };
         let made = cx.open_window(opts, |_, cx| {
@@ -1228,14 +1315,14 @@ fn soak() -> i32 {
 }
 
 fn access() -> i32 {
-    deep_app::table::view::ALLOCATIONS.set(allocations).ok();
+    table::view::ALLOCATIONS.set(allocations).ok();
     application().run(|cx| {
         gpui_kit::init(cx);
         deep_app::init(cx);
         cx.activate(true);
         cx.bind_keys([]);
         let opts = WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size(px(WINDOW.0), px(WINDOW.1)), cx))),
+            window_bounds: window_bounds(cx),
             ..Default::default()
         };
         let grid: Arc<dyn Rows> = Arc::new(Grid::new(TABLE_ROWS));
@@ -1317,6 +1404,7 @@ fn main() {
             .and_then(|i| args.get(i + 1))
             .cloned()
     };
+    end_with_parent();
     let code = match args.first().map(String::as_str) {
         Some("arm") => {
             let name = args.get(1).cloned().unwrap_or_default();

@@ -27,6 +27,7 @@ pub mod goldens;
 mod gpu;
 pub(crate) mod instance;
 mod interface;
+pub mod lease;
 pub mod ledger;
 pub mod manifest;
 mod migration;
@@ -76,6 +77,10 @@ pub const CONTROL_PARTS: [&str; 5] = ["replay", "read_region", "keyboard", "inpu
 /// wrong entry that breaks it alone.
 pub const REGISTRY_PART: &str = "registries";
 
+/// The part a module whose fixtures hold its kinds' items runs (#1801): every field of those
+/// items that names another item or an asset is one its kind declares, so `refs_to` lists it.
+pub const REFERENCES_PART: &str = "references";
+
 /// The kit parts a canvas module's interface lists: every part, and `bit`; an interface with a
 /// behavior part lists it too.
 pub fn interface_parts() -> Vec<String> {
@@ -112,6 +117,9 @@ pub struct KitCall {
     pub ledger: Option<PathBuf>,
     /// #501: the registries whose own kit runs instead of the modules' (`export.target@1`).
     pub registries: Option<Vec<String>>,
+    /// #458: planted-fault twins, by fixture name, each `{path, value}`: the run judges only these
+    /// fixtures, each with its twin's value set at the path in its document.
+    pub twins: Map<String, Value>,
 }
 
 impl KitCall {
@@ -130,6 +138,7 @@ impl KitCall {
             "corpus",
             "ledger",
             "registries",
+            "twins",
         ];
         if c.keys().any(|k| !known.contains(&k.as_str())) {
             return None;
@@ -151,6 +160,7 @@ impl KitCall {
                 !PARTS.contains(&x.as_str())
                     && !INTERFACE_PARTS.contains(&x.as_str())
                     && x != REGISTRY_PART
+                    && x != REFERENCES_PART
                     && x != SANDBOX_PART
                     && !CONTROL_PARTS.contains(&x.as_str())
             })
@@ -191,6 +201,10 @@ impl KitCall {
             }),
             ledger: path("ledger")?,
             registries: list("registries")?,
+            twins: match c.get("twins") {
+                None => Map::new(),
+                Some(t) => t.as_object()?.clone(),
+            },
         })
     }
 
@@ -389,8 +403,18 @@ impl<'a> Hub<'a> {
             return self.registry_kit(registries);
         }
         let gpu = call.backends.iter().any(|b| b == "gpu");
-        let lease = gpu.then(goldens::GpuLease::take);
-        let manifest = manifest::Manifest::of(self);
+        let planted = self.scenario.module_planted.clone();
+        let lease = gpu.then(|| lease::kit(planted.as_deref()));
+        let mut manifest = manifest::Manifest::of(self);
+        if !call.twins.is_empty() {
+            manifest.fixtures.retain_mut(|f| {
+                let twin = call.twins.get(&f.name);
+                if let Some(doc) = twin.and_then(|t| fixtures::twinned(&f.document, t)) {
+                    f.document = doc;
+                }
+                twin.is_some()
+            });
+        }
         let mut modules = Vec::new();
         let mut corpus_files: Vec<String> = Vec::new();
         let mut criteria: BTreeMap<String, &'static str> = BTreeMap::new();
@@ -418,7 +442,7 @@ impl<'a> Hub<'a> {
             for part in PARTS
                 .into_iter()
                 .chain(INTERFACE_PARTS)
-                .chain([REGISTRY_PART, SANDBOX_PART])
+                .chain([REGISTRY_PART, REFERENCES_PART, SANDBOX_PART])
                 .chain(CONTROL_PARTS)
             {
                 if !call.runs(part) {
@@ -470,7 +494,7 @@ impl<'a> Hub<'a> {
             overall = Verdict::Invalid;
         }
         // Nor does a run over some parts only: its PASS would seal a module the others never ran on.
-        let whole = !modules.is_empty() && call.parts.is_none();
+        let whole = !modules.is_empty() && call.parts.is_none() && call.twins.is_empty();
         if let Some(path) = call.ledger.as_ref().filter(|_| whole) {
             if let Some(dir) = path.parent() {
                 let _ = std::fs::create_dir_all(dir);
@@ -483,12 +507,12 @@ impl<'a> Hub<'a> {
                 let _ = std::fs::write(path, text);
             }
         }
-        drop(lease);
+        // The lease is let go once the reply that names it is made.
         json!({
             "verdict": overall.name(),
             "seed": call.seed,
             "backends": call.backends,
-            "lease": {"gpu": gpu},
+            "lease": lease.as_ref().map_or(json!({"gpu": false}), lease::GpuLease::reply),
             "modules": modules,
             "corpus": corpus_files,
             "criteria": criteria,
@@ -515,6 +539,7 @@ impl<'a> Hub<'a> {
             "behavior" if ctx.module == "physics" => crate::physics::kit::behavior(ctx.module),
             "behavior" => interface::behavior(self, ctx),
             REGISTRY_PART => self.registries_part(ctx.module),
+            REFERENCES_PART => fixtures::references(self, ctx),
             SANDBOX_PART => sandbox_part(ctx.module),
             _ if CONTROL_PARTS.contains(&part) => self.control_part(part, ctx.module),
             _ => None,

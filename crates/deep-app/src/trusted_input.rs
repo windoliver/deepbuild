@@ -31,6 +31,30 @@ pub fn key_from_hardware() -> bool {
     false
 }
 
+/// No platform here names an event's source yet.
+#[cfg(not(target_os = "macos"))]
+pub fn event_from_hardware() -> bool {
+    false
+}
+
+thread_local! {
+    /// #1498: the replica's `act.source: "hid"`, while it delivers one.
+    static REPLICA_HID: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// #1498: what the replica delivers from now on stands for your hardware input, or no longer does: the replica's
+/// door, in no shipped build.
+#[cfg(feature = "fixtures")]
+pub fn replica_hid(on: bool) {
+    REPLICA_HID.with(|hid| hid.set(on));
+}
+
+/// #1498: whether the input being delivered is your hardware's, so the router gives it a gesture serial: what the HID
+/// system says of the event AppKit is delivering, or the replica's `hid` act.
+pub fn input_from_hardware() -> bool {
+    REPLICA_HID.with(std::cell::Cell::get) || event_from_hardware()
+}
+
 #[cfg(target_os = "macos")]
 mod macos {
     use objc2::MainThreadMarker;
@@ -89,6 +113,20 @@ mod macos {
         if event.r#type() != NSEventType::KeyDown {
             return false;
         }
+        let Some(cg) = event.CGEvent() else {
+            return false;
+        };
+        let field = |field| CGEvent::integer_value_field(Some(&cg), field);
+        field(CGEventField::EventSourceStateID) == CGEventSourceStateID::HIDSystemState.0 as i64
+            && field(CGEventField::EventSourceUnixProcessID) == 0
+    }
+
+    /// #1498: whether the event AppKit is delivering, a key or a press, came from the HID system, as
+    /// [`key_from_hardware`] judges a key.
+    pub fn event_from_hardware() -> bool {
+        let Some(event) = NSApplication::sharedApplication(main_thread()).currentEvent() else {
+            return false;
+        };
         let Some(cg) = event.CGEvent() else {
             return false;
         };

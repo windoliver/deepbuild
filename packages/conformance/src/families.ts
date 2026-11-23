@@ -3,7 +3,7 @@
 // enum lists judges INVALID, naming the raw code, never PASS.
 import { listSchemas } from '@deepbuild/contracts';
 import type { JsonValue, SchemaEntry } from '@deepbuild/contracts';
-import { getAt } from './pointer.js';
+import { getAt, segment } from './pointer.js';
 import { FAMILIES, isObject } from './types.js';
 import type { CodeFamily, FamilyName, Judgement, Verdict } from './types.js';
 
@@ -31,10 +31,36 @@ const MAPPING: Record<FamilyName, Record<string, Verdict>> = {
   doctor: {
     healthy: 'PASS', binary_missing: 'FAIL', version_uncovered: 'FAIL', hooks_missing: 'FAIL', hooks_disabled: 'FAIL', hooks_untrusted: 'FAIL', mcp_unregistered: 'FAIL',
     statusline_missing: 'FAIL', statusline_shadowed: 'INCONCLUSIVE', signed_out: 'BLOCKED', nested_session: 'FAIL', timing_relation_broken: 'FAIL', telemetry_unreadable: 'FAIL', not_checked: 'BLOCKED',
-    hub_unreachable: 'BLOCKED', disk_low: 'FAIL', ports_taken: 'FAIL', billing_api_key: 'FAIL', binary_differs: 'FAIL', token_expiring: 'BLOCKED', prompt_failed: 'FAIL', deprecated_used: 'FAIL', gpu_unsupported: 'FAIL', render_failed: 'FAIL', hook_program_missing: 'FAIL', job_failing: 'FAIL', notifications_off: 'FAIL', pack_refused: 'FAIL', service_unpromoted: 'FAIL', unknown: 'INCONCLUSIVE',
+    hub_unreachable: 'BLOCKED', disk_low: 'FAIL', ports_taken: 'FAIL', billing_api_key: 'FAIL', binary_differs: 'FAIL', token_expiring: 'BLOCKED', prompt_failed: 'FAIL', deprecated_used: 'FAIL', gpu_unsupported: 'FAIL', render_failed: 'FAIL', hook_program_missing: 'FAIL', job_failing: 'FAIL', notifications_off: 'FAIL', pack_refused: 'FAIL', service_unpromoted: 'FAIL', polkit_action_missing: 'FAIL', hooks_modified: 'FAIL', mod_overrides_guard: 'FAIL',
+    not_loaded: 'FAIL', handler_set_aside: 'FAIL', footprint_unknown: 'INCONCLUSIVE', proofs_unreadable: 'FAIL',
+    unknown: 'INCONCLUSIVE',
   },
   exit: { '0': 'PASS', '1': 'FAIL', '2': 'INVALID', '3': 'INCONCLUSIVE' },
 };
+
+/** The state words every version of the row model lists (design: States people see). */
+const ROW = ['queued', 'working', 'says done', 'sent back', 'needs you', 'stale', 'quiet', 'stuck', 'flagged', 'finished'];
+const WORD = '/properties/data/properties/word';
+/**
+ * The lists that hold PASS among words that are no verdicts, by schema and the JSON Pointer of the enum: a state's
+ * word or an attempt's cause, where PASS is the one success and a word such as `sent back` stands where FAIL would.
+ * Each may hold exactly the words here beside the verdicts, so this is an allowlist, not a mapping: a word added to
+ * one of these lists, one of these words on any other list, or any of them once its list holds FAIL, is named.
+ */
+const STATE_LISTS: Record<string, readonly string[]> = {
+  [`row.set@1 ${WORD}`]: ROW,
+  [`row.set@2 ${WORD}`]: [...ROW, 'running'],
+  [`row.set@3 ${WORD}`]: [...ROW, 'running'],
+  [`row.set@4 ${WORD}`]: [...ROW, 'running'],
+  'session.state@2 /properties/data/properties/state': ROW,
+  [`work.state@1 ${WORD}`]: ['queued', 'working', 'says done', 'sent back', 'needs you', 'stale', 'finished', 'closed', 'closed before the gate'],
+  // Attempt and plan's closed set of causes, the two a work run adds, and none for an attempt that hasn't ended.
+  'work.attempt@1 /properties/data/properties/cause': ['none', 'landed with the budget window open', 'gave up its slot', 'replaced by you', 'sent back past its rounds', 'stalled', 'context full', 'plan window or spend cap', 'crashed or interrupted'],
+  // The same, with the third a work run adds: landed while a call on you stays open (#1345).
+  'work.attempt@2 /properties/data/properties/cause': ['none', 'landed with the budget window open', 'landed with your call open', 'gave up its slot', 'replaced by you', 'sent back past its rounds', 'stalled', 'context full', 'plan window or spend cap', 'crashed or interrupted'],
+};
+/** The verdict lists (PASS and FAIL) that hold a word beside the verdicts: none for a landing step that reads no verdict. */
+const VERDICT_LISTS: Record<string, readonly string[]> = { 'landing.made@1 /properties/data/properties/outcome': ['none'] };
 
 const enumAt = (entries: readonly SchemaEntry[], schema: string, pointer: string): string[] => {
   const entry = entries.find((e) => e.name === schema);
@@ -52,31 +78,34 @@ export function codeFamilies(schemas?: readonly SchemaEntry[]): CodeFamily[] {
 let published: CodeFamily[] | undefined;
 
 /**
- * Enum values with no mapping to a verdict, and values of a verdict-shaped enum elsewhere (one listing PASS and
- * FAIL, as verdict records do) that verdict.outcome@1 doesn't list: the verdict family has one source, so a
- * record's own outcome list can't grow past it. `pending` is a record's state before its verdict, not one, and
- * `none` a step that reads no verdict. A list of state words (a row's word, a session's state, an attempt's cause)
- * holds PASS among words such as `sent back`, which stands where FAIL would: it is no verdict list.
+ * Enum values with no mapping to a verdict, and values of a verdict-shaped enum elsewhere (one listing PASS, as
+ * verdict records do) that verdict.outcome@1 doesn't list: the verdict family has one source, so a
+ * record's own outcome list can't grow past it. `pending` is a record's state before its verdict, not one. A list
+ * holding PASS and FAIL is a verdict list, which may also hold the words VERDICT_LISTS names for it; one holding PASS
+ * without FAIL is a list of state words, which may hold the words STATE_LISTS names for it.
  */
 export function unmappedCodes(schemas?: readonly SchemaEntry[]): { family: FamilyName; code: string }[] {
   const families = codeFamilies(schemas);
   const unmapped = families.flatMap((f) => f.codes.filter((code) => !Object.hasOwn(MAPPING[f.family], code)).map((code) => ({ family: f.family, code })));
-  const verdicts = new Set([...families.find((f) => f.family === 'verdict')!.codes, 'pending', 'none']);
-  const shaped = (values: readonly unknown[]): boolean => values.includes('PASS') && values.includes('FAIL');
+  const verdicts = new Set([...families.find((f) => f.family === 'verdict')!.codes, 'pending']);
   const outside = new Set<string>();
-  const walk = (node: JsonValue | undefined): void => {
-    if (Array.isArray(node)) return void node.forEach(walk);
+  const walk = (node: JsonValue | undefined, at: string): void => {
+    if (Array.isArray(node)) return void node.forEach((child, i) => walk(child, `${at}/${i}`));
     if (!isObject(node)) return;
-    if (Array.isArray(node.enum) && shaped(node.enum)) for (const v of node.enum) if (!verdicts.has(String(v))) outside.add(String(v));
+    if (Array.isArray(node.enum) && node.enum.includes('PASS')) {
+      const lists = node.enum.includes('FAIL') ? VERDICT_LISTS : STATE_LISTS;
+      const words = Object.hasOwn(lists, at) ? lists[at]! : [];
+      for (const v of node.enum) if (!verdicts.has(String(v)) && !words.includes(String(v))) outside.add(String(v));
+    }
     // A union tagged by verdicts, as verdict records are: its tags are a verdict list too.
     if (Array.isArray(node.oneOf)) {
       const tags = new Map<string, string[]>();
       for (const branch of node.oneOf) if (isObject(branch) && isObject(branch.properties)) for (const [key, p] of Object.entries(branch.properties)) if (isObject(p) && typeof p.const === 'string') tags.set(key, [...(tags.get(key) ?? []), p.const]);
-      for (const values of tags.values()) if (shaped(values)) for (const v of values) if (!verdicts.has(v)) outside.add(v);
+      for (const values of tags.values()) if (values.includes('PASS')) for (const v of values) if (!verdicts.has(v)) outside.add(v);
     }
-    for (const [key, child] of Object.entries(node)) if (key !== 'enum') walk(child);
+    for (const [key, child] of Object.entries(node)) if (key !== 'enum') walk(child, `${at}${segment(key)}`);
   };
-  for (const entry of schemas ?? listSchemas()) walk(entry.schema as JsonValue);
+  for (const entry of schemas ?? listSchemas()) walk(entry.schema as JsonValue, `${entry.name} `);
   return [...unmapped, ...[...outside].map((code) => ({ family: 'verdict' as const, code }))];
 }
 

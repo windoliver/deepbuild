@@ -17,9 +17,10 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use deep_contracts::{jcs, parse, Value};
+use deep_contracts::generated::McpHandshakeProtocolVersion;
+use deep_contracts::{jcs, parse, Contract, Value};
 
-use super::{address, home, member, quoted, read_line, setting, worktree_hub, Got, CWD};
+use super::{address, home, member, quoted, read_line, set_cwd, setting, worktree_hub, Got};
 
 /// The two tools and the codes' pages, as the hub lists them.
 const DATA: &str = include_str!("actions.json");
@@ -320,10 +321,13 @@ pub fn serve() -> ExitCode {
     let data = parse(DATA).expect("actions.json is JSON");
     let tools = list(member(&data, "tools")).to_vec();
     let codes = list(member(&data, "codes")).to_vec();
+    let instructions = member(&data, "instructions")
+        .cloned()
+        .expect("actions.json holds instructions");
     let (pid, start) = parent();
     let folder = std::env::current_dir().unwrap_or_default();
     // A worktree `deep hub use --root` sent to a dev hub reaches that hub, as the session's hooks do.
-    let _ = CWD.set(folder.clone());
+    set_cwd(folder.clone());
     let cwd = folder.to_string_lossy().into_owned();
     let hub = Hub {
         hello: format!(
@@ -380,23 +384,27 @@ pub fn serve() -> ExitCode {
             };
             match method.as_str() {
                 "initialize" => {
-                    let version = match member(params, "protocolVersion") {
-                        Some(Value::String(v)) => v.clone(),
-                        _ => "2025-06-18".into(),
-                    };
+                    // #2854: the client's revision when mcp.handshake@1 holds it, as a whole string; the newest otherwise.
+                    let version = member(params, "protocolVersion")
+                        .and_then(|v| McpHandshakeProtocolVersion::from_json(v, "/params/protocolVersion").ok())
+                        .unwrap_or(McpHandshakeProtocolVersion::ALL[McpHandshakeProtocolVersion::ALL.len() - 1])
+                        .to_json();
                     let capabilities =
                         object(vec![("tools", empty.clone()), ("resources", empty.clone())]);
                     let info = object(vec![
                         ("name", text("deep-actions")),
-                        ("version", text("0.0.0")),
+                        // #1495: the hook binary's version is its crate's, which a release moves.
+                        ("version", text(env!("CARGO_PKG_VERSION"))),
                     ]);
                     send(
                         &id,
                         "result",
                         object(vec![
-                            ("protocolVersion", Value::String(version)),
+                            ("protocolVersion", version),
                             ("capabilities", capabilities),
                             ("serverInfo", info),
+                            // #2897: what a client that loads tools by search reads at the start.
+                            ("instructions", instructions.clone()),
                         ]),
                     );
                 }

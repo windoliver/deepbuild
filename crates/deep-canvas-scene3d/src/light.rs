@@ -8,9 +8,21 @@ use std::f64::consts::PI;
 use serde_json::Value;
 
 use crate::look::Look3;
+use deep_canvas::budget::Class;
 use deep_canvas::camera::Vec3;
 
 use crate::scene::{num, Camera, Depth, Refused};
+
+mod shadowing;
+pub use shadowing::{Contact, Shadowing, Soft, MOST_POINTS, MOST_SPOTS};
+
+/// The light kinds (Light and the light policy: `kind`), the field list `light.kind` (#2777).
+pub const KINDS: [&str; 4] = [
+    "light.point@1",
+    "light.spot@1",
+    "light.sun@1",
+    "light.area@1",
+];
 
 /// A `material@1`'s numbers at t, its colors linear.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -257,6 +269,10 @@ pub fn map_uses(
             }
         }
     }
+    // An image mark's picture (#1992), color as a base color map is.
+    for i in scene.layers.iter().flat_map(|l| &l.images) {
+        out.entry(i.asset.clone()).or_default().insert("base_color");
+    }
     out
 }
 
@@ -275,15 +291,47 @@ pub fn map_role(uses: &std::collections::BTreeSet<&str>) -> &'static str {
     }
 }
 
+/// Every map the `material@1` items of `doc` name, by its hash, with the decode worker's role
+/// for the fields that name it ([`map_role`]): what a host makes ready before it draws, such as
+/// the web player at load (#1040).
+pub fn material_maps(doc: &Value) -> std::collections::BTreeMap<String, &'static str> {
+    let mut uses: std::collections::BTreeMap<String, std::collections::BTreeSet<&str>> =
+        Default::default();
+    let items = doc.get("items").and_then(Value::as_object).into_iter();
+    for (_, i) in items.flatten().filter(|(_, i)| i["kind"] == "material@1") {
+        let p = &i["params"];
+        let maps = ["base_color", "metallic_roughness", "emission", "occlusion"];
+        let fields = (maps.map(|f| (f, &p["maps"][f])).into_iter())
+            .chain([("normal_map", &p["normal_map"])]);
+        for (field, v) in fields {
+            if let Some(sha) = v.as_str().or_else(|| v.get("sha256")?.as_str()) {
+                uses.entry(sha.to_ascii_lowercase())
+                    .or_default()
+                    .insert(field);
+            }
+        }
+    }
+    (uses.into_iter())
+        .map(|(sha, u)| (sha, map_role(&u)))
+        .collect()
+}
+
 /// The first field of a `material@1` in `doc` that names map `sha`, as
 /// `items/<id>/params/maps/<map>` or `items/<id>/params/normal_map`: where a map whose image
 /// isn't in the store is answered (#1729).
 pub fn map_field(doc: &Value, sha: &str) -> Option<String> {
     let names = |v: &Value| v.as_str().or_else(|| v.get("sha256")?.as_str()) == Some(sha);
-    doc.get("items")?
-        .as_object()?
+    let kind = |i: &Value, k: &str| i.get("kind").and_then(Value::as_str) == Some(k);
+    let items = doc.get("items")?.as_object()?;
+    let image = items
         .iter()
-        .filter(|(_, i)| i.get("kind").and_then(Value::as_str) == Some("material@1"))
+        .find(|(_, i)| kind(i, "mark.image@1") && i.pointer("/params/asset").is_some_and(names));
+    if let Some((id, _)) = image {
+        return Some(format!("items/{id}/params/asset"));
+    }
+    items
+        .iter()
+        .filter(|(_, i)| kind(i, "material@1"))
         .find_map(|(id, i)| {
             let p = i.get("params")?;
             let maps = p.get("maps").and_then(Value::as_object);
@@ -500,6 +548,11 @@ pub struct Light {
     pub caster_bit: u32,
     /// Its IES distribution (Light: IES distribution).
     pub distribution: Option<LampTable>,
+    /// A fill light (#1634): a point or a spot with a finite range that casts no shadow, shaded
+    /// beside the key lights up to its class's `fill_shaded`.
+    pub fill: bool,
+    /// Whether it names no `range`, so its range follows the shot's exposure.
+    pub auto_range: bool,
 }
 
 /// A light's IES table: its layer in the scene's distributions, what its values are multiplied by
@@ -514,9 +567,34 @@ pub struct LampTable {
 
 /// The light policy's budget per view (Light and the light policy).
 pub const SHADED: usize = 32;
-const MARGIN: f64 = 0.1;
-/// The illuminance an auto range ends at.
+pub const MARGIN: f64 = 0.1;
+/// The illuminance an auto range ends at, at the exposure [`range_cut`] gives it back at.
 const THRESHOLD: f64 = 0.05;
+/// The most fill lights any class shades (#1634), and a cluster's most, `light_policy`'s
+/// `per_cluster` before a document names one.
+pub const MOST_FILL: usize = 2048;
+pub const PER_CLUSTER: usize = 64;
+
+/// A document's `fill_shaded` (#1634): its class's, and the most when it names none.
+pub fn fill_shaded(class: Option<Class>) -> usize {
+    class.map_or(MOST_FILL, Class::fill_shaded)
+}
+
+/// The illuminance an automatic range ends at under `exposure`, a linear scale (#1634): what
+/// lifts a white diffuse surface to 1/4,096 of linear 1.0 after exposure, under one 8-bit code.
+pub fn range_cut(exposure: f64) -> f64 {
+    PI / (4096.0 * exposure)
+}
+
+/// Gives each light that names no range the one the shot's exposure cuts it at.
+pub fn follow_exposure(lights: &mut [Light], exposure: f64) {
+    if exposure > 0.0 {
+        let k = (THRESHOLD / range_cut(exposure)).sqrt();
+        for l in lights.iter_mut().filter(|l| l.auto_range) {
+            l.range *= k;
+        }
+    }
+}
 
 fn color3(v: Option<&Value>) -> Option<Vec3> {
     let a = v?.as_array()?;
@@ -904,72 +982,9 @@ pub fn light(
         receiver_bit: 0,
         caster_bit: 0,
         distribution: None,
+        fill: params.get("fill").and_then(Value::as_bool).unwrap_or(false),
+        auto_range: kind != LightKind::Sun && num(params.get("range")).is_none(),
     })
-}
-
-/// PCSS or Castaño's filter (Light policy: soft shadows).
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Soft {
-    pub pcss: bool,
-    pub blocker_taps: u32,
-    pub filter_taps: u32,
-    /// The most a penumbra spreads, in shadow map texels.
-    pub max_penumbra: f64,
-}
-
-/// Screen-space contact shadows for the key light.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Contact {
-    pub length: f64,
-    pub samples: u32,
-}
-
-/// The light policy's shadow fields (Light policy: soft shadows, local shadows).
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Shadowing {
-    pub soft: Option<Soft>,
-    pub contact: Option<Contact>,
-    pub spots: usize,
-    /// Point lights and area lights with a shadow.
-    pub points: usize,
-    /// A spot's map's side and each cube face's, in texels.
-    pub local_map: u32,
-    /// `cache: static`: a map holds until its key changes.
-    pub cache: bool,
-}
-
-/// The most spots a policy may shadow; points take four, which the budget class never raises.
-pub const MOST_SPOTS: usize = 8;
-pub const MOST_POINTS: usize = 4;
-
-impl Default for Shadowing {
-    /// A document that names no `light_policy`: the key sun's tent alone, as before it had one.
-    fn default() -> Shadowing {
-        Shadowing {
-            soft: None,
-            contact: None,
-            spots: 0,
-            points: 0,
-            local_map: 512,
-            cache: true,
-        }
-    }
-}
-
-impl Shadowing {
-    /// A `light_policy`'s fields before it names any: PCSS and two shadowed spots.
-    pub fn named() -> Shadowing {
-        Shadowing {
-            soft: Some(Soft {
-                pcss: true,
-                blocker_taps: 16,
-                filter_taps: 16,
-                max_penumbra: 32.0,
-            }),
-            spots: 2,
-            ..Shadowing::default()
-        }
-    }
 }
 
 /// The shadows a view keeps: each light by its index with the share of its shadow the policy
@@ -991,6 +1006,11 @@ pub fn shadowed(lights: &[Light], policy: &Policy, budget: &Shadowing, scores: &
     for &(i, weight) in &policy.shaded {
         let l = &lights[i];
         if !l.shadow {
+            continue;
+        }
+        // Shadow tiles hold every shaded light's shadow (#2034).
+        if budget.tiles && l.kind != LightKind::Sun {
+            out.kept.push((i, 1.0));
             continue;
         }
         let (list, cap, group): (&mut Vec<usize>, usize, usize) = match l.kind {
@@ -1058,14 +1078,9 @@ pub fn policy_by(lights: &[Light], camera: &Camera, tie: Tie) -> Policy {
     }
     let mut scored: Vec<(i64, &str, usize, f64)> = Vec::new();
     for (i, score) in scores(lights, camera).into_iter().enumerate() {
-        if score > 0.0 {
-            // Eight buckets per stop: a light's rank moves only when its score does.
-            scored.push((
-                -(score.log2() * 8.0).floor() as i64,
-                &lights[i].id,
-                i,
-                score,
-            ));
+        // A fill light is no key light: its clusters shade it (#1634).
+        if score > 0.0 && !lights[i].fill {
+            scored.push((bucket(score), &lights[i].id, i, score));
         }
     }
     match tie {
@@ -1087,6 +1102,26 @@ pub fn policy_by(lights: &[Light], camera: &Camera, tie: Tie) -> Policy {
         .map(|s| s.1.to_string())
         .collect();
     Policy { shaded, left_out }
+}
+
+/// A score's bucket, eight per stop, the brightest first: a light's rank moves only when its
+/// score does.
+fn bucket(score: f64) -> i64 {
+    -(score.log2() * 8.0).floor() as i64
+}
+
+/// The fill lights a view shades (#1634), each with its score, by the policy's order: score
+/// bucket, then ID. One whose range misses the frustum isn't among them.
+pub fn fill_order(lights: &[Light], scores: &[f64]) -> Vec<(usize, f64)> {
+    let mut order: Vec<(i64, &str, usize, f64)> = lights
+        .iter()
+        .zip(scores)
+        .enumerate()
+        .filter(|(_, (l, score))| l.fill && **score > 0.0)
+        .map(|(i, (l, score))| (bucket(*score), l.id.as_str(), i, *score))
+        .collect();
+    order.sort_by(|a, b| (a.0, a.1).cmp(&(b.0, b.1)));
+    order.into_iter().map(|(_, _, i, s)| (i, s)).collect()
 }
 
 /// Each light's score at the view, in the lights' order (#425 reads them): its estimated
@@ -1361,5 +1396,94 @@ mod tests {
         // 12 lm: an auto range of 4.4 m, 10 m from the eye at the scene's centre.
         let p = policy(&[point("candle", [0.0, 0.0, 0.0], 12.0)], &camera());
         assert_eq!(p.shaded, vec![(0, 1.0)]);
+    }
+
+    #[test]
+    fn fill_lights_leave_the_key_lights_cut_alone_and_order_by_score_bucket_then_id() {
+        let cam = camera();
+        let fill = |id: &str, power: f64| {
+            let p = serde_json::json!({"power": power, "range": 6, "fill": true});
+            light(
+                id,
+                "light.point@1",
+                &p,
+                [0.0, 1.0, 0.0],
+                [0.0, -1.0, 0.0],
+                AXES,
+                1.0,
+            )
+            .expect("a fill light")
+        };
+        let keys: Vec<Light> = (0..40)
+            .map(|i| point(&format!("k{i:02}"), [0.0, 1.0, 0.0], 800.0))
+            .collect();
+        let alone = policy(&keys, &cam);
+        // Brighter than every key light, in one bucket apart from `dim`, and listed out of order.
+        let mut lights = keys.clone();
+        lights.extend([
+            fill("f-b", 9000.0),
+            fill("f-dim", 90.0),
+            fill("f-a", 9100.0),
+        ]);
+        let beside = policy(&lights, &cam);
+        assert_eq!(
+            (beside.shaded.len(), &beside.left_out),
+            (32, &alone.left_out)
+        );
+        assert!(beside.shaded.iter().all(|(i, _)| !lights[*i].fill));
+        let order = fill_order(&lights, &scores(&lights, &cam));
+        let ids: Vec<&str> = order.iter().map(|(i, _)| lights[*i].id.as_str()).collect();
+        assert_eq!(ids, ["f-a", "f-b", "f-dim"]);
+        // One whose range misses the view is in no list.
+        let far = light(
+            "far",
+            "light.point@1",
+            &serde_json::json!({"range": 6, "fill": true}),
+            [0.0, 1.0, 500.0],
+            [0.0, -1.0, 0.0],
+            AXES,
+            1.0,
+        )
+        .expect("a fill light");
+        let far = std::slice::from_ref(&far);
+        assert!(fill_order(far, &scores(far, &cam)).is_empty());
+    }
+
+    #[test]
+    fn an_automatic_range_ends_where_the_exposure_cuts_it_and_a_named_one_stays() {
+        // The exposure whose cut is today's 0.05 lx leaves today's ranges.
+        let today = PI / (4096.0 * THRESHOLD);
+        assert!((range_cut(today) - THRESHOLD).abs() < 1e-15);
+        let lamps = |power: f64| {
+            vec![
+                point("auto", [0.0; 3], power),
+                of(
+                    "light.point@1",
+                    serde_json::json!({"power": power, "range": 6}),
+                ),
+            ]
+        };
+        let mut bright = lamps(800.0);
+        follow_exposure(&mut bright, today);
+        assert!((bright[0].range - (800.0 / (4.0 * PI * THRESHOLD)).sqrt()).abs() < 1e-9);
+        // A hundredth of the power under a hundred times the exposure reaches as far.
+        let mut dim = lamps(8.0);
+        follow_exposure(&mut dim, today * 100.0);
+        assert!(
+            (dim[0].range - bright[0].range).abs() < 1e-9,
+            "{}",
+            dim[0].range
+        );
+        assert_eq!((bright[1].range, dim[1].range), (6.0, 6.0));
+    }
+
+    #[test]
+    fn each_budget_class_holds_its_fill_lights() {
+        let caps: Vec<usize> = deep_canvas::budget::CLASSES
+            .iter()
+            .map(|c| fill_shaded(Some(*c)))
+            .collect();
+        assert_eq!(caps, [32, 32, 32, 512, 2048, 2048]);
+        assert_eq!(fill_shaded(None), MOST_FILL);
     }
 }

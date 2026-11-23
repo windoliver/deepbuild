@@ -116,8 +116,11 @@ impl Cache {
                     .collect(),
             )
         };
+        let mut state = l.stored(Memory::Pages(BTreeMap::new()));
+        // #211: a keyframe holds its world pages' map whole.
+        state.paged = l.paged.as_ref().map(|p| p.kept(true));
         let mut k = Keyframe {
-            state: l.stored(Memory::Pages(BTreeMap::new())),
+            state,
             whole,
             pages: Vec::new(),
             file: self.dir.join(format!("{i}-{at}.keyframe")),

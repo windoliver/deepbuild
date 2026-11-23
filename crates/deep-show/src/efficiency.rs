@@ -10,7 +10,7 @@
 //! `deep_query` answers what an agent reads back: a summary of the current revision, sized for an
 //! agent's context, or one page of its items in document order, with a cursor to the next.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
 
 use deep_canvas_marks::modules::Drawing;
@@ -103,8 +103,15 @@ impl Hub<'_> {
                 .filter_map(|op| op["id"].as_str())
                 .collect();
             let session = self.sessions.get_mut(&s.doc).expect("made above");
-            let doc = &self.shared[&s.doc].doc;
-            if reloads || session.revise_items(&mut self.sched, doc, &ids).is_none() {
+            let shared = &self.shared[&s.doc];
+            let doc = &shared.doc;
+            let before = shared.current().envelope_before.as_ref();
+            let reached = reached(patch, before.map(|(fields, _)| fields), doc);
+            if reloads
+                || session
+                    .revise_items(&mut self.sched, doc, &ids, &reached)
+                    .is_none()
+            {
                 session.load(&mut self.sched, doc);
             }
             let revised = process_cpu_ns();
@@ -196,6 +203,14 @@ impl Hub<'_> {
                 json!({"doc": q.doc, "rows": rows, "next": next})
             }
         };
+        // #192: the provider and the content key behind each output the document takes.
+        let mut result = result;
+        if let Some(rows) = self.sandbox.provided.get(&q.doc).filter(|r| !r.is_empty()) {
+            result["provided"] = rows
+                .iter()
+                .map(|r| json!({"item": r["item"], "provider": r["provider"], "key": r["key"]}))
+                .collect();
+        }
         // What the agent is sent is the reply's text, made inside the time.
         std::hint::black_box(result.to_string());
         let ms = started.elapsed().as_secs_f64() * 1000.0;
@@ -839,12 +854,53 @@ mod gpu {
     }
 }
 
+/// The members besides `items` a patch reached in `doc`: those its ops' paths name (a strip's
+/// field), and every other member when its revision keeps the envelope `before` (a layer added,
+/// entries deleted, a pack named).
+fn reached<'a>(
+    patch: &'a Value,
+    before: Option<&'a Map<String, Value>>,
+    doc: &'a Value,
+) -> Vec<&'a str> {
+    let written = patch["ops"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|op| op["path"].as_str()?.split('/').next());
+    let whole = before
+        .into_iter()
+        .flat_map(|fields| {
+            fields
+                .keys()
+                .chain(doc.as_object().into_iter().flat_map(Map::keys))
+        })
+        .map(String::as_str);
+    let reached: BTreeSet<&str> = written.chain(whole).filter(|k| *k != "items").collect();
+    reached.into_iter().collect()
+}
+
 #[cfg(test)]
 mod tests {
     use deep_canvas::registry::{BuildSet, Registry};
     use deep_canvas::schedule::{default_view, Options, Planted, Scheduler, Session};
     use deep_canvas_marks::modules::{tokens, Drawing};
     use serde_json::{json, Value};
+
+    #[test]
+    fn a_patch_reaches_the_members_its_paths_name_and_all_when_its_envelope_changed() {
+        let doc = json!({"items": {}, "strips": {}, "data": {}});
+        let patch = json!({"ops": [
+            {"op": "set", "id": "a", "path": "items/a/params/n", "value": 1},
+            {"op": "set", "id": "a", "path": "strips/a/rate", "value": 2},
+            {"op": "delete", "id": "a"},
+        ]});
+        assert_eq!(super::reached(&patch, None, &doc), ["strips"]);
+        let before = json!({"layers": {}});
+        assert_eq!(
+            super::reached(&json!({"ops": []}), before.as_object(), &doc),
+            ["data", "layers", "strips"]
+        );
+    }
 
     fn board(n: usize) -> Value {
         let mut items = serde_json::Map::new();
@@ -891,7 +947,7 @@ mod tests {
         for k in 0..30usize {
             let id = format!("r{:04}", (k * 37) % 120);
             doc["items"][&id]["at"]["pos"] = json!([k * 3, 150 + k % 4, 0]);
-            assert!(live.revise_items(&mut s, &doc, &[&id]).is_some());
+            assert!(live.revise_items(&mut s, &doc, &[&id], &[]).is_some());
             live.frame(&mut s, 0, &default_view(&doc));
             view.draw(&drawing(&s, &live)).expect("drawn");
             assert_eq!(
@@ -938,7 +994,7 @@ mod tests {
                     json!([k * 3, 150, 0])
                 };
                 doc["items"][&id]["at"]["pos"] = pos;
-                assert!(live.revise_items(&mut s, &doc, &[&id]).is_some());
+                assert!(live.revise_items(&mut s, &doc, &[&id], &[]).is_some());
                 live.frame(&mut s, 0, &default_view(&doc));
                 let got = drawing(&s, &live);
                 let mut fresh_s = Scheduler::new(&sealed, Options::default());

@@ -1,13 +1,12 @@
 // `deep hub run | start | status | stop | use | promote` (#16, #19, #1334), an entry of its own (`@deepbuild/hub/hub`), so the
 // long-running hub loads the server's modules and none of the other commands'.
-import { resolve } from 'node:path';
-import { installedRoot } from './paths.js';
+import { installedRoot, real } from './paths.js';
 import { promoteCommand } from './promote.js';
-import { hubStatus, startHub, stopHub, stopIfRunning } from './service.js';
+import { hubStatus, startHub, stopHub } from './service.js';
 
 const USAGE = `Usage: deep hub run [--root <folder>] [--safe]
        deep hub start [--root <folder>]
-       deep hub status [--root <folder>]
+       deep hub status [--root <folder>]   the hub's health as one line of JSON, a developer's command
        deep hub stop [--root <folder>]
        deep hub use --root <folder>
        deep hub promote <build folder>`;
@@ -20,7 +19,8 @@ export async function hubCommand(args: readonly string[], cli: string): Promise<
   const safe = command === 'run' && given.includes('--safe');
   const rest = given.filter((a) => !(safe && a === '--safe'));
   let root: string | undefined;
-  if (rest.length === 2 && rest[0] === '--root' && rest[1]) root = rest[1];
+  // A flag where the folder goes is a usage error, not a folder named for it (#2581).
+  if (rest.length === 2 && rest[0] === '--root' && rest[1] && !rest[1].startsWith('-')) root = rest[1];
   else if (rest.length) {
     process.stderr.write(`${USAGE}\n`);
     return 2;
@@ -31,7 +31,7 @@ export async function hubCommand(args: readonly string[], cli: string): Promise<
     case 'status': return hubStatus(root ? { root } : {});
     case 'stop':
       // A dev hub stops when asked; the installed one only once the OS confirms you.
-      if (root && resolve(root) !== installedRoot()) return stopHub({ root });
+      if (root && real(root) !== real(installedRoot())) return stopHub({ root });
       return stopInstalled();
     case 'use':
       if (root) return (await import('./authority.js')).useCommand(root);
@@ -43,13 +43,12 @@ export async function hubCommand(args: readonly string[], cli: string): Promise<
 
 /** `deep hub stop` of the installed hub, once the OS confirms you. */
 async function stopInstalled(): Promise<number> {
-  const why = await (await import('./authority.js')).confirmed('deep hub stop');
+  // The stop itself asks the OS inside the hub (#1865): the token alone never stops the installed hub.
+  const why = await (await import('./authority.js')).stopAsYou('deep hub stop');
   if (why) {
     process.stderr.write(`${why}\n`);
     return 3;
   }
-  const stopped = await stopIfRunning(installedRoot());
-  if (stopped !== 0) return stopped;
   process.stdout.write('The hub stopped. It starts again at your next login, or with deep hub start.\n');
   return 0;
 }

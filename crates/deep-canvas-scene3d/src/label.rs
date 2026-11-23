@@ -68,6 +68,8 @@ pub struct Labels {
     /// #450: whole trails' samples, taken once at check and kept by their source chain's key for
     /// the session that evaluates the scene, so a frame never takes them again.
     pub(crate) trails: crate::trail::Held,
+    /// #265: the places trails and wakes read at earlier times, kept by their document.
+    pub(crate) places: crate::trail::Memo,
 }
 
 impl Default for Labels {
@@ -86,6 +88,7 @@ impl Labels {
             runs: BTreeMap::new(),
             fixed_em: false,
             trails: BTreeMap::new(),
+            places: Default::default(),
         }
     }
 
@@ -205,7 +208,9 @@ impl Labels {
                 let steps = pen.map(|v| (v * f32::from(PHASES)).round());
                 let whole = steps.map(|s| (s / f32::from(PHASES)).floor());
                 let phase = [0, 1].map(|i| (steps[i] - whole[i] * f32::from(PHASES)) as u8);
-                glyph.atlas = self.atlas.glyph_at(&g.font, g.id, raster, phase, g.skew);
+                glyph.atlas = self
+                    .atlas
+                    .glyph_at(&g.font, g.id, &g.coords, raster, phase, g.skew);
                 if let Some(p) = glyph.atlas {
                     glyph.rect = [
                         (whole[0] + p.left as f32) / size,
@@ -216,7 +221,7 @@ impl Labels {
                 }
                 continue;
             }
-            glyph.atlas = self.atlas.glyph(&g.font, g.id, raster);
+            glyph.atlas = self.atlas.glyph(&g.font, g.id, &g.coords, raster);
             if let Some(p) = glyph.atlas {
                 glyph.rect = [
                     (g.x + p.left as f32 * k - w / 2.0) / size,

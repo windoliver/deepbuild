@@ -15,10 +15,15 @@
       "types": "./src/runtime.ts",
       "development": "./src/runtime.ts",
       "default": "./dist/runtime.js"
+    },
+    "./json": {
+      "types": "./src/json.ts",
+      "development": "./src/json.ts",
+      "default": "./dist/json.js"
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node ../../scripts/built-escapes.mjs dist",
     "generate": "tsc -p tsconfig.json && node dist/generate.js"
   }
 }

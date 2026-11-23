@@ -67,7 +67,9 @@ pub fn only_loaded(c: &deep_canvas_effects::check::Checked, name: &str) -> bool 
                 .values()
                 .any(|a| matches!(a, Arg::Ref(r, _) if r == name))
                 || s.fields.get("tex").and_then(|v| v.as_str()) == Some(name);
-            (!names || s.op == "load@1") && s.body.as_ref().is_none_or(|b| reads(&b.steps, name))
+            // A store's `tex` is the output of that name, never this input (#1993).
+            (!names || s.op == "load@1" || s.op == "store@1")
+                && s.body.as_ref().is_none_or(|b| reads(&b.steps, name))
         })
     }
     reads(&c.op.steps, name)
@@ -455,6 +457,7 @@ impl Runner {
         let Pipeline::Compute(pipeline) = &self.pipeline else {
             unreachable!("a compute operator dispatches")
         };
+        deep_gpu::counted::compute_pass();
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some(&self.compiled.checked.op.id),
             timestamp_writes: timestamps,
@@ -480,6 +483,7 @@ impl Runner {
         let Pipeline::Compute(pipeline) = &self.pipeline else {
             unreachable!("a compute operator dispatches")
         };
+        deep_gpu::counted::compute_pass();
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some(&self.compiled.checked.op.id),
             timestamp_writes: timestamps,

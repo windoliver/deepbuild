@@ -1,0 +1,20 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6X",
+  "kind": "session.loaded",
+  "subject": "session:01K74G3A5C7E9G1J3M5P7R9T1V",
+  "writer": "hook",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "files": [
+      {
+        "path": "/srv/repo/AGENTS.md"
+      },
+      {
+        "path": "/srv/repo/packages/core/AGENTS.md"
+      }
+    ]
+  }
+}

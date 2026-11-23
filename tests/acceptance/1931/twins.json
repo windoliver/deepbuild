@@ -1,0 +1,18 @@
+{
+  "#1931.1a76985e": [
+    "inverse_square_one_over_r"
+  ],
+  "#1931.b13f64e3": [
+    "check_admits_force_substeps"
+  ],
+  "#1931.a7ffb5c9": [
+    "magnetic_force_held",
+    "magnetic_b_cross_v"
+  ],
+  "#1931.e8d79a14": [
+    "lennard_jones_no_factor_2",
+    "lennard_jones_no_cutoff"
+  ],
+  "#1931.02a6e7e5": [],
+  "#1931.f0905250": []
+}

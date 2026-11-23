@@ -1,0 +1,152 @@
+# #2694's acceptance tests at the base
+
+Base: 7a256fd4b (origin/main; its crates/deep-show, packages/hub and tests/acceptance/{806,393} are those of 3f02bf52b).
+Host: this job's Mac (macOS, Apple silicon), shared and loaded: load averages 130 to 170 through every run below.
+deep-show: the base's debug build (cargo build --locked --bin deep-show, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0),
+copied out of target/ and given as DEEP_BIN_DIR. Node 24.22, Vitest 5.0.5. Run November 20 to 21, 2026.
+
+  DEEP_BIN_DIR=<that copy> node node_modules/vitest/vitest.mjs run tests/acceptance/2694/<file> --no-file-parallelism --testTimeout=600000
+
+The twins: each twin's main.rs laid over the checkout's for its build only (into a copy of target/, the base's main.rs
+put back after with its own mtime; git diff empty), the binary copied out and given as DEEP_BIN_DIR.
+
+## Summary
+
+| File | Criterion | At the base | On its twin |
+|---|---|---|---|
+| ac1-held.test.ts | #2694.de4fbd51 | FAIL at its assertion: the first deep_show's answer gives no `held` | (none named) |
+| ac2-instructions.test.ts | #2694.00d72883 | FAIL at its assertion: the 100th read retires 1.075× the 10th's | (none named) |
+| ac3-clock.test.ts | #2694.5ca7dce2 | PASS (the base's reads move its clock) | reads_hold_the_clock: FAIL at its assertion, naming the row |
+| ac4-between-writes.test.ts | #2694.685bdd90 | PASS (the base keeps every write) | drops_kept_write: FAIL at its assertion, naming revision 1 |
+| ac5-memory.test.ts | #2694.b3f057c6 | FAIL at its assertion: 4.50 MB over after the 4,000th read | (none named) |
+| ac5-393.test.ts | #2694.b3f057c6 | FAIL at its assertion: one #393 test fails on main (below) | (none named) |
+| ac5-806.test.ts | #2694.b3f057c6 | see its section | (none named) |
+
+Criterion 1 says the base "holds 14,402, and the test fails, naming the count". The base gives no count to read (README:
+held), so the test fails at the first answer, naming the missing `held`; it can't name 14,402. What the base does hold
+is shown by its cost and memory (Readings 2 and 3): every call it was ever sent, each played again on every later call.
+
+## ac1-held.test.ts, ac2-instructions.test.ts, ac3-clock.test.ts, ac4-between-writes.test.ts at the base
+
+ ❯ tests/acceptance/2694/ac2-instructions.test.ts (1 test | 1 failed) 17873ms
+   ❯ #2694.00d72883 a read costs the same however many reads came before it (1)
+     × #2694.00d72883 the 10,000th cells read retires within 5% of the instructions of the 10th 17482ms
+ ❯ tests/acceptance/2694/ac1-held.test.ts (1 test | 1 failed) 3048ms
+   ❯ #2694.de4fbd51 the side keeps only the calls that change something (1)
+     × #2694.de4fbd51 after one deep_show, 14,400 cells reads and a second deep_show the side holds two calls, and the second show's reply and presented revision are the merge base's 2720ms
+ FAIL  tests/acceptance/2694/ac1-held.test.ts > ...
+AssertionError: the side's answer to the first deep_show doesn't say how many calls it holds (README: `held`, a whole number): `held` is undefined in {"ok":true,"reply":{"rev":1,"expansions":[],"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[],"changed":[],"unchanged":[],"created":["back","bar"],"removed":[],"outcome":"presented","backends":{"fonts":{"name":"fonts.bundled","version":"1
+ ❯ must tests/acceptance/2694/helpers.ts:46:18
+ ❯ heldOf tests/acceptance/2694/helpers.ts:182:3
+ ❯ tests/acceptance/2694/ac1-held.test.ts:22:5
+ FAIL  tests/acceptance/2694/ac2-instructions.test.ts > ...
+AssertionError: the 100th cells read retires 113,148,867 instructions, 1.075× the 105,300,689 of the 10th (each the median of 9 reads from it: 112940172, 112035773, 112021576, 114040577, 113240155, 112670668, 114827249, 113163537, 113148867 against 105417091, 105124700, 106036555, 105098182, 105300689, 105175736, 105232889, 105317050, 105611024); within 5% is 0.950× to 1.050×
+ ❯ must tests/acceptance/2694/helpers.ts:46:18
+ ❯ tests/acceptance/2694/ac2-instructions.test.ts:41:7
+ Test Files  2 failed | 2 passed (4)
+      Tests  2 failed | 2 passed (4)
+   Duration  74.46s (tests 96%, transform 1%, setup 1%, import 1%)
+
+(An earlier run of ac2, before the read deadline was added, failed the same way: 1.067×, 112,390,078 against
+105,284,512.)
+
+## ac3-clock.test.ts on twins/reads_hold_the_clock
+
+ ❯ tests/acceptance/2694/ac3-clock.test.ts (1 test | 1 failed) 34090ms
+     × #2694.5ca7dce2 a scripted terminal's row that arrives at 2 s shows from the first read at 2 s on the side's clock (the 23rd), and in no read before 33876ms
+AssertionError: no read of 35 shows the row "ROWS AT TWO SECONDS", which arrives at 2.000 s: the 23rd to the 35th read are at 2.000 s to 3.000 s on the side's clock when each call moves it
+ ❯ must tests/acceptance/2694/helpers.ts:46:18
+ ❯ tests/acceptance/2694/ac3-clock.test.ts:35:5
+
+## ac4-between-writes.test.ts on twins/drops_kept_write
+
+ ❯ tests/acceptance/2694/ac4-between-writes.test.ts (1 test | 1 failed) 3789ms
+     × #2694.685bdd90 the document's revisions read between two deep_shows hold the first show's revision, current, and not the second's 3351ms
+AssertionError: the read between the two writes doesn't see revision 1 of 01JB7D00000000000000002694, which the first deep_show made; it reads {"revisions":[],"core":"core@0.0.0","set_digest":"907a1dd44f56e3b4916ba199d2bb295151c50e4486c02b2351aa58e97c1d2281"}
+ ❯ must tests/acceptance/2694/helpers.ts:46:18
+ ❯ tests/acceptance/2694/ac4-between-writes.test.ts:22:5
+
+## ac5-memory.test.ts at the base
+
+ ❯ tests/acceptance/2694/ac5-memory.test.ts (1 test | 1 failed) 384164ms
+     × #2694.b3f057c6 the side's resident memory after 14,400 cells reads is within 4 MB of its value after the first show 384101ms
+AssertionError: the side's resident memory after the 4,000th cells read is 62.86 MB, 4.50 MB over the 58.36 MB after the first show; within 4 MB is at most 62.36 MB (read every 1,000: 1,000th: 59.19 MB, 2,000th: 61.13 MB, 3,000th: 59.44 MB, 4,000th: 62.86 MB)
+ ❯ must tests/acceptance/2694/helpers.ts:46:18
+ ❯ tests/acceptance/2694/ac5-memory.test.ts:32:7
+
+(An earlier draft read the resident set with ps instead; at the base it never went 4 MB over its value after the show
+before the test's 18 minutes ran out, which is why the file reads the footprint: Readings 3.)
+
+## ac5-806.test.ts at the base
+
+Run with ac5-393.test.ts, the environment as in README (Run them), after deep-show, deep-hook and deep-replica-canvas
+were built:
+
+ ❯ tests/acceptance/2694/ac5-806.test.ts (1 test | 1 failed) 1039560ms
+     × #2694.b3f057c6 tests/acceptance/806/ passes unchanged 1020242ms
+Error: INCONCLUSIVE: tests/acceptance/806/ didn't finish within 17 minutes
+ ❯ folderPasses tests/acceptance/2694/suites.ts:58:85
+ ❯ tests/acceptance/2694/ac5-806.test.ts:16:5
+
+#806's folder takes about 3 minutes in its own PROOF-RUN.txt; on this Mac, at load 160 with this job's base probes
+beside it, it was still running its hub tests at 17 minutes, twice. This job couldn't see it pass or fail at the base.
+An earlier run, before the file built deep-hook, failed 22 of its tests BLOCKED: "no deep-hook is built under
+<checkout>/target"; hence the build (README: The suites clause).
+
+## ac5-393.test.ts at the base
+
+ ❯ tests/acceptance/2694/ac5-393.test.ts (1 test | 1 failed) 307005ms
+     × #2694.b3f057c6 tests/acceptance/393/ passes unchanged 259432ms
+AssertionError: tests/acceptance/393/ doesn't pass: 1 of its tests didn't:
+  tests/acceptance/393/writer.test.ts › AC4 a `deep show` run from inside an agent's process tree draws in that agent's writer layer, stamped as that agent and never as you, and a deep_show call bound to no session is refused › AC4 a deep_show call bound to no session is refused: it draws nothing, makes no revision and attaches no evidence: failed: AssertionError: no evidence was attached: expected [ …(8) ] to deeply equal []
+ ❯ must tests/acceptance/2694/helpers.ts:46:18
+ ❯ folderPasses tests/acceptance/2694/suites.ts:81:3
+ ❯ tests/acceptance/2694/ac5-393.test.ts:15:5
+
+That test is main's own failure, not this issue's: `deep-show run` writes the fixtures' assets into the evidence store
+before every scenario since #2363 (answer.rs), so the store of a call that attached nothing holds 8 objects. It isn't
+in scripts/known-failures.json, so it counts here, at the base and on the change alike, until it is fixed or listed.
+The other tests of #393's folder pass at the base.
+
+## Readings
+
+1. The merge base's replies. At the base, a side sent the hub's world, the first deep_show, 50 `cells` reads and the
+   second deep_show answers the second show exactly as `deep-show run` answers the last call of the scenario
+   helpers.ts `baseScenario` builds for the same 52 calls (node:assert deepStrictEqual), and its last read likewise;
+   the second show's presented revision equals the one a fresh side presents for the two shows alone, and so does its
+   reply: neither names the time it was played at. Same with 40 reads. The second show's reply there:
+   {"rev":2,"expansions":[],"issues":[],"issues_evidence":"4f53cda1…","snapshots":[],"changed":["bar"],
+   "unchanged":["back"],"created":[],"removed":[],"outcome":"presented","backends":{…},"core":"core@0.0.0",
+   "set_digest":"907a1dd4…"}, presented {"doc":"01JB7D00000000000000002694","rev":2,"hash":"5e122f5e…",
+   "writer":{"kind":"agent","id":"thread-2694"},"layer":"agent-50fe6b26ff92","items":["back","bar"],"panel":"main",
+   "rect":[0,0,800,600],"layers":[{…,"picture":"588fbeb2…"}]}. A `cells` read with no hosted terminal answers
+   {"code":"not_hosted"} with the stamp.
+
+2. What a base read costs. Instructions retired by the side for one `cells` read after one deep_show (the medians
+   above): the 10th 105.3 million, the 100th 112.4 to 113.1 million, so about 79,000 more for each call held before it,
+   on top of about 104.5 million for playing the first deep_show again (no pixels: include ["issues"]). The base's
+   10,000th read would then retire about 105M + 10,000 × 79k ≈ 900 million, about 8.5 times the 10th, not the thousand
+   times the criterion drafts: here the deep_show played again on every read dominates the 10th. Wall time, debug build
+   under load: reads 1 to 14 took 6 to 8 ms each; the first deep_show 16 to 470 ms (cold).
+
+3. Base memory, after one deep_show and every 500 `cells` reads (a scratch probe; the resident set by ps, the
+   footprint by the benchmarks' reader):
+
+     after the show: resident set 121.94 MB, footprint 56.36 MB
+     read   500: resident set 71.41 MB, footprint 56.83 MB (+0.47 MB), 39 s
+     read 1,000: resident set 72.77 MB, footprint 57.66 MB (+1.30 MB), 100 s
+     read 1,500: resident set 74.36 MB, footprint 59.08 MB (+2.72 MB), 172 s
+     read 2,000: resident set 75.48 MB, footprint 59.95 MB (+3.59 MB), 246 s
+     read 2,500: resident set 77.39 MB, footprint 61.75 MB (+5.39 MB), 305 s
+     read 3,000: resident set 78.73 MB, footprint 63.03 MB (+6.67 MB), 373 s
+
+   The resident set falls 50 MB after the show as the kernel takes back what the show freed, then climbs with the
+   footprint; the footprint grows about 2.2 KB a read held. A first draft of ac5-memory.test.ts read the resident set
+   and ran out its 18 minutes at the base without going 4 MB over its inflated value after the show; the file reads the
+   footprint (README: Memory). The footprint also moves about 2 MB between readings (the test's own run: 61.13 MB at
+   the 2,000th, 59.44 MB at the 3,000th).
+
+4. The base's per-read wall time grows with the calls held: the 3,000 reads above took 373 s, the last 500 about
+   0.14 s each. ac1-held.test.ts, ac2-instructions.test.ts and ac5-memory.test.ts stop INCONCLUSIVE when their reads
+   haven't finished 14 minutes in (README: Memory).
+

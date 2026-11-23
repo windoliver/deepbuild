@@ -1,0 +1,44 @@
+#2456's acceptance tests, run once at the base, b4c099e2ebe11853bbc451983939e9f905e9d408 (main, "Merge pull request
+#2861 …"), on 2026-11-19 on the shared Mac, after `cargo build --locked --bin deep-show --no-default-features --features
+full` (CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0, through `scripts/throttle.mjs build`). Nothing failed, so this
+file is BASE-RUN.txt, not BASE-FAILURE.txt.
+
+Command, from the worktree root:
+
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node scripts/throttle.mjs test -- npx vitest run --root tests/acceptance/2456 --no-file-parallelism --testTimeout=3600000
+
+Output, whole:
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/silly-forging-russell/agent-a932fa070a1e8bd76/tests/acceptance/2456
+
+
+ Test Files  2 passed (2)
+      Tests  4 passed (4)
+   Start at  12:58:21
+   Duration  14.02s (tests 99%)
+
+exit 0
+
+The four tests, all passing:
+
+  keyed.test.ts    AC1 #2456.6a4fab33 the keyed text draws none of its graphemes at progress 0, each by its share at 0.5 and all at 1, in the frames deep-show draws
+  keyed.test.ts    AC1 #2456.6a4fab33 (planted) frames that draw the reveal as written, whole at every time, fail at progress 0 and 0.5
+  unkeyed.test.ts  AC2 #2456.3ee39994 reveals no channel keys draw at their written progress 0, 0.5 and 1 at every time, and a text with no reveal draws the same frame at every time
+  unkeyed.test.ts  AC2 #2456.3ee39994 (planted) frames drawn at another progress than the one written fail, at every time
+
+So at the base, AC1 passes: the issue's reproduction, written as these tests write it (no camera item, the channel
+written by hand, frames from `eval` with `pixels`), already draws its channel-driven reveal in its frames. AC2 passes,
+and each planted wrong program fails its judge, as it should.
+
+What the base draws, read outside the suite by a scratch script with the suite's own cut (the same films, calls and
+times; each stripe's ink over the plain text's, the space having no stripe), so the pass above is seen as numbers:
+
+  0.5 s keyed   progress 0:   0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000
+  1.5 s keyed   progress 0.5: 1.000 1.000 1.000 0.903 0.702 0.298 0.098 0.000 0.000 0.000
+  2.5 s keyed   progress 1:   1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000
+  0.5, 1.5 and 2.5 s, written (progress 1, no channel): 1.000 at every stripe
+
+The design's shares for "H e l l o t h e r e" at 0.5 are 1, 1, 1, 0.9, 0.7, 0.3, 0.1, 0, 0, 0. Before the run, one
+scratch probe drew the plain film once to see that its ink falls in 10 column runs (44–80, 87–117, 123–128, 136–142,
+148–178, 197–215, 220–248, 254–284, 290–305, 308–338 on a 640 × 360 frame, white ground, ink rows 158–205); no test or
+helper was changed after it or after the run (only the README's "At the base" section and this file were written).

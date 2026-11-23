@@ -69,13 +69,22 @@ pub(super) fn expand_one(
             continue;
         };
         if let Some(what) = input_fault(input, value) {
-            issues.push(Issue::error(
+            let mut issue = Issue::error(
                 "out_of_range",
                 id,
                 at(&format!("params/{name}")),
                 value.clone(),
                 &format!("{what}: {}'s input `{name}`", recipe.id),
-            ));
+            );
+            // An input held to one value, such as a falloff only the inverse square draws (#2054):
+            // its fix names that value.
+            if let Some(only) = input.min.filter(|m| input.max == Some(*m)) {
+                issue.fix = format!(
+                    "Write {only}, the one value {}'s `{name}` takes.",
+                    recipe.id
+                );
+            }
+            issues.push(issue);
             ok = false;
         }
     }
@@ -803,6 +812,16 @@ pub(super) fn expand_one(
             derived_items.insert(orphan, fields);
         }
     }
+    // Planted (#458): one derived item whose paint has a stroke is made without it.
+    if planted.drops_stroke {
+        if let Some(paint) = derived_items
+            .values_mut()
+            .filter_map(|fields| fields["params"]["paint"].as_object_mut())
+            .find(|paint| paint.contains_key("stroke"))
+        {
+            paint.remove("stroke");
+        }
+    }
     // Written only once the whole expansion went through: a refused instance writes nothing.
     for (derived_id, fields) in &derived_items {
         items.insert(derived_id.clone(), fields.clone());
@@ -821,5 +840,6 @@ pub(super) fn expand_one(
         channels,
         sections,
         placed,
+        report: Map::new(),
     })
 }

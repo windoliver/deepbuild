@@ -26,6 +26,8 @@ export interface CommandCheck {
 /** Full command evidence, not just the check.kind result: retries, seeds and clock movement remain observable. */
 export interface CommandRun extends CheckResult {
   run: string;
+  /** Whether a test tool's report counted the run's tests (#1861); the gate labels a check none of whose runs one counted a static check. */
+  tested?: boolean;
   exit: { code: number | null; signal: NodeJS.Signals | null; cause: 'exit' | 'deadline' | 'stop' | 'limit' } | null;
   output: { stdout: string; stderr: string; sha256: { stdout: string; stderr: string } };
   env: string[];
@@ -36,10 +38,16 @@ export interface CommandRun extends CheckResult {
   timing: { repeat: number; flushed: boolean }[] | null;
   clock: number;
 }
-export interface ReviewOf { claim: string; task: string; agent: string; transcript: string | undefined; pr?: string | undefined }
+export interface ReviewOf {
+  claim: string; task: string; agent: string; transcript: string | undefined; pr?: string | undefined;
+  /** How many of a PR's bugs a review pass found on a replay the record keeps under `key` for `model` (#2748); undefined when it keeps none. */
+  kept?: (key: string, model: string) => Promise<number | undefined>;
+}
 export interface ReviewItem { rule: string; sites: { file: string; line: number; quote: string }[] }
 /** A counted round keeps its sent items separate from earlier ones still open. */
 export interface ReviewRound { sent: ReviewItem[]; open: ReviewItem[] }
+/** What a counted run of a review pass leaves for the record (#2748), review.pass@1's data beside its claim and commit: the item sent back under the pass's ID, the pre-existing findings, and each replay. */
+export interface PassRan { pass: string; model: string; sent: ReviewItem[]; follow_ups: ReviewItem['sites']; replays: { pr: number; head: string; key: string; found: number; of: number; carried?: true }[] }
 /** What a speed's or added terms' run reads beyond its checkout (#1863): its run's handle, the session's worktree and the hub's stop. */
 export interface RepoOf { run: string; worktree: string; stop: AbortSignal }
 export interface KindsOptions {
@@ -55,6 +63,8 @@ export interface KindsOptions {
   plant?: string | undefined;
   /** The extension host a first-party plug-in's kind runs in (#184), once the hub opened it. */
   extensions(): ExtensionHost | undefined;
+  /** The evidence store's root, whose catalogs a catalog kind's spec carries (#194). */
+  evidence?: string;
 }
 export interface CheckKinds {
   list(): { kind: string; routes: string[] }[];
@@ -64,7 +74,7 @@ export interface CheckKinds {
   claimChecks(words: string, cwd: string, base: string, sample: string | null): Promise<{ check: ClaimCheck; spec: CheckSpec }[]>;
   uncited(words: string): string;
   reviewSpec(base: string, head: string, root: string): CheckSpec | undefined;
-  run(spec: CheckSpec, ctx: CheckContext, of: ReviewOf, repo?: RepoOf): Promise<CheckResult & { round?: ReviewRound; speed?: TimingReport }>;
+  run(spec: CheckSpec, ctx: CheckContext, of: ReviewOf, repo?: RepoOf): Promise<CheckResult & { round?: ReviewRound; speed?: TimingReport; pass?: PassRan }>;
 }
 export interface ChecksProvider {
   command(options: CommandCheck): Promise<CommandRun>;

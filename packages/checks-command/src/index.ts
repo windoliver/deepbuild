@@ -62,6 +62,8 @@ export interface ContractCount { output: string; size: number; compared: number 
 export interface TimedRepeat { repeat: number; flushed: boolean }
 export interface CommandRun extends CheckResult {
   run: string;
+  /** Whether a test tool's report counted the run's tests (#1861): false for a run whose exit status is its one result, such as a typecheck's. */
+  tested: boolean;
   exit: { code: number | null; signal: NodeJS.Signals | null; cause: 'exit' | 'deadline' | 'stop' | 'limit' } | null;
   /** Scrubbed by value, then digested. */
   output: { stdout: string; stderr: string; sha256: { stdout: string; stderr: string } };
@@ -237,7 +239,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
   const secrets = check.secrets ?? {};
   const empty = { stdout: '', stderr: '', sha256: { stdout: sha256(''), stderr: sha256('') } };
   const result = (outcome: RunOutcome, rest: Partial<CommandRun> = {}): CommandRun => ({
-    run, outcome, testsRun: 0, failures: [], evidence: [], read: [], mask: null, exit: null, output: empty, env: [], attempts: [], retries: null, seeded: [],
+    run, outcome, testsRun: 0, tested: false, failures: [], evidence: [], read: [], mask: null, exit: null, output: empty, env: [], attempts: [], retries: null, seeded: [],
     contract: check.contract ? check.contract.tolerances.map((t) => ({ output: t.output, size: t.size, compared: null, largest_error: null })) : null,
     timing: check.timing ? repeatsOf(check.timing.repeats, []) : null, clock, ...rest,
   });
@@ -357,8 +359,10 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
       failures: r.failures.map((f) => ({ ...f, test: scrub(f.test), message: scrub(f.message), stack: f.stack === null ? null : scrub(f.stack) })),
     });
     const done = (outcome: RunOutcome, rest: Partial<CommandRun>, ran: Ran[]): { run: CommandRun; ran: Ran[] } => ({ run: scrubbed(result(outcome, rest)), ran });
-    const stdout = scrub(Buffer.concat(chunks.stdout).toString('utf8'));
-    const stderr = scrub(Buffer.concat(chunks.stderr).toString('utf8'));
+    // Taken out of `chunks`, which the host's record of the run holds while it keeps the run answerable: the output
+    // stays with this run's record alone (#2652).
+    const stdout = scrub(Buffer.concat(chunks.stdout.splice(0)).toString('utf8'));
+    const stderr = scrub(Buffer.concat(chunks.stderr.splice(0)).toString('utf8'));
     const output = { stdout, stderr, sha256: { stdout: sha256(stdout), stderr: sha256(stderr) } };
     const limited = exit?.limit ? [`stopped at its ${exit.limit.limit} of ${exit.limit.max} MiB${exit.limit.reading === undefined ? '' : `, reading ${exit.limit.reading.toFixed(1)} MiB`}`] : [];
     const ended = { output, env: Object.keys(env).sort(), exit: exit ? { code: exit.code, signal: exit.signal, cause } : null, evidence: [`stdout ${output.sha256.stdout}`, `stderr ${output.sha256.stderr}`, ...limited] };
@@ -402,7 +406,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
         return { compared: compared.length ? compared.reduce((a, b) => a + b, 0) : null, largest_error: largest.length ? Math.max(...largest) : null };
       };
       const rest: Partial<CommandRun> = {
-        ...ended, testsRun: ran.length, failures, read: readSet, seeded: seededBy(checkout, readSet),
+        ...ended, testsRun: ran.length, tested: ran.length > 0, failures, read: readSet, seeded: seededBy(checkout, readSet),
         attempts: ran.flatMap((t) => t.attempts.map((outcome) => ({ test: t.test, outcome }))),
         contract: check.contract ? check.contract.tolerances.map((t) => ({ output: t.output, size: t.size, ...counts(t.output) })) : null,
         timing: check.timing ? repeatsOf(check.timing.repeats, ran) : null,

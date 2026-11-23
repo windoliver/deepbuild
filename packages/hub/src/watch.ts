@@ -25,7 +25,7 @@ const ORDER: readonly WatchCause[] = ['off', 'version', 'hooks', 'checks'];
 export function watchWords(w: Watch, agent: string | null): { why: string; short: string; fix: string } {
   switch (w.cause) {
     case 'off': return { why: '`deep off` turned holds off: no stop is held and no verdict blocks', short: 'deep off', fix: 'Run `deep on`.' };
-    case 'version': return { why: `it runs ${agent ?? 'its agent'}${w.version ? ` ${w.version}` : ''}, past the versions its facts cover`, short: `${w.version ?? 'its version'} past its facts`, fix: 'Install a version the facts cover, or update DeepBuild.' };
+    case 'version': return { why: `it runs ${agent ?? 'its agent'}${w.version ? ` ${w.version}` : ''}, not a version its facts cover`, short: `${w.version ?? 'its version'} not in its facts`, fix: 'Install a version the facts cover, or update DeepBuild.' };
     case 'hooks': return { why: "its hooks don't reach DeepBuild", short: "hooks don't reach DeepBuild", fix: 'Run `deep setup`, which writes them back beside yours.' };
     case 'checks': return { why: "this repo's checks aren't approved, so none of its claims holds or passes", short: 'checks not approved', fix: 'Trust the repo in Needs you, or in Claude Code or Codex.' };
   }

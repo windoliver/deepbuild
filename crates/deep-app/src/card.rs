@@ -247,11 +247,18 @@ impl Render for AskPage {
                 ];
                 PAGE.with(|page| page.set(Some(rect)));
                 if let Some(card) = placed.as_ref() {
-                    card.update(cx, |card, _| {
+                    card.update(cx, |card, cx| {
                         if let Some(controller) = card.controller.as_mut() {
                             // The window as it is now: a window made larger keeps the card armable.
                             let slot = crate::arming::Slot { rect, visible };
+                            let was = controller.state_name();
                             controller.placed(slot, crate::views::now());
+                            // A card this presented again draws as it now is, in the frame after (#1482): a notify
+                            // made while a frame draws is dropped, so it is made when the frame is done.
+                            if controller.state_name() != was {
+                                let card = cx.entity_id();
+                                cx.defer(move |cx| cx.notify(card));
+                            }
                         }
                     })
                     .ok();
@@ -261,8 +268,24 @@ impl Render for AskPage {
         )
         .absolute()
         .size_full();
+        // The card keeps to the lane and scrolls inside itself (#1808); a narrow window's page has a title row for the
+        // count, the way back to the list.
+        let title = crate::views::narrow()
+            .then(|| crate::views::page_title(div(), chrome).into_any_element());
+        // The pictures a taste call judges draw beside the card, in a column of their own (#3234).
+        let evidence = card
+            .as_ref()
+            .and_then(|card| card.update(cx, |card, cx| card.evidence(window, cx)));
+        let judged = evidence
+            .is_some()
+            .then(|| card.as_ref().map(Entity::downgrade))
+            .flatten();
         let lane = crate::views::in_lane(
+            None,
+            title,
             div()
+                .flex_1()
+                .min_h_0()
                 .flex()
                 .flex_col()
                 .pt(sizes().space(4))
@@ -270,6 +293,21 @@ impl Render for AskPage {
                 .children(card),
             true,
         );
+        let lane = match evidence {
+            Some(evidence) => div()
+                .size_full()
+                .flex()
+                .child(div().flex_1().min_w_0().h_full().child(evidence))
+                .child(
+                    div()
+                        .flex_none()
+                        .h_full()
+                        .w(sizes().lane + sizes().space(4) * 2.)
+                        .child(lane),
+                )
+                .into_any_element(),
+            None => lane.into_any_element(),
+        };
         let region = crate::open::page_of(crate::open::Region::Ask, cx);
         div()
             .id("ask-page")
@@ -278,6 +316,18 @@ impl Render for AskPage {
             .typed(sizes().body)
             .child(page)
             .child(crate::views::page_region(region, lane))
+            // Last, once every picture of the frame was laid out: what it drew, for the card to count (#3234).
+            .children(judged.map(|card| {
+                canvas(
+                    move |_, window, cx| {
+                        card.update(cx, |card, cx| card.frame_drawn(window, cx))
+                            .ok();
+                    },
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .size_full()
+            }))
     }
 }
 
@@ -306,8 +356,28 @@ pub fn tick(now: u64, cx: &mut App) {
     let Some((ask, shown)) = SHOWN.with(|cell| cell.borrow().clone()) else {
         return;
     };
+    // A yes the hub holds (#1101): the record says when its steps start, that they did, or that it was withdrawn.
+    let holding = shown
+        .read(cx)
+        .controller
+        .as_ref()
+        .is_some_and(Controller::counting_down);
+    if holding {
+        let events = crate::record::history();
+        shown.update(cx, |card, _| {
+            if let Some(controller) = card.controller.as_mut() {
+                controller.hold_changed(&events, now);
+            }
+        });
+    }
     let open = crate::record::with_view(|view| view.table().is_open(&ask)).unwrap_or(true);
-    if !open {
+    // Its receipt counts the hold down with Undo while the hub holds its steps, though the ask is answered (#1101).
+    let counting = shown
+        .read(cx)
+        .controller
+        .as_ref()
+        .is_some_and(Controller::counting_down);
+    if !open && !counting {
         // Answered here or anywhere: while its page shows, the next ask's page opens, and no row moves (#1461).
         leave(cx);
         let showing = crate::open::current(cx).is_some_and(|a| {
@@ -319,12 +389,22 @@ pub fn tick(now: u64, cx: &mut App) {
         return;
     }
     shown.update(cx, |card, cx| {
-        if let Some(controller) = card.controller_mut() {
-            controller.tick(now);
+        // The card draws again when its state differs from the one it drew: arming, or a move that presented it again
+        // after it drew (#1482). A tick that changes neither draws nothing.
+        let replaced = card.catch_up();
+        let moved = replaced
+            || card
+                .controller_mut()
+                .is_some_and(|controller| controller.tick(now));
+        let state = card.controller.as_ref().map(Controller::state_name);
+        if card.controller.is_some() && (moved || state != card.drawn) {
             cx.notify();
         }
     });
 }
+
+/// The pictures a frame laid out beside the card, each by its hash with its bounds (#3234).
+type Laid = std::rc::Rc<RefCell<Vec<(String, Bounds<Pixels>)>>>;
 
 pub struct Card {
     question: SharedString,
@@ -340,6 +420,19 @@ pub struct Card {
     page: bool,
     /// The control the keyboard is on (#1462).
     at: Option<Target>,
+    /// On its page, the rows above its last block scroll (#1808), and the last block's bounds say whether it's all in
+    /// view.
+    rows: ScrollHandle,
+    last: std::rc::Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
+    /// The state its controller was in when it last drew (#1482).
+    drawn: Option<&'static str>,
+    /// What its taste calls judge (#3234): the pictures beside it, which scroll, each as the frame drew it, the view
+    /// they scroll in, the ones opened at their size, and the record's place when it last looked for one replaced.
+    evidence: ScrollHandle,
+    pictures: Laid,
+    view: std::rc::Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
+    opened: std::collections::HashSet<String>,
+    moved_at: u64,
 }
 
 /// What a press edge says: its own time and whether the HID system made it.
@@ -381,6 +474,14 @@ impl Card {
             failed: None,
             page: false,
             at: None,
+            rows: ScrollHandle::new(),
+            last: Default::default(),
+            drawn: None,
+            evidence: ScrollHandle::new(),
+            pictures: Default::default(),
+            view: Default::default(),
+            opened: Default::default(),
+            moved_at: crate::record::with_view(|view| view.log_pos).unwrap_or(0),
         };
         card.focus_on(at);
         card
@@ -405,6 +506,7 @@ impl Card {
             Target::Undo => "card-undo".to_owned(),
             Target::SignIn => "card-sign-in".to_owned(),
             Target::Page => "card-price-page".to_owned(),
+            Target::Fold => "card-fold".to_owned(),
         })
     }
 
@@ -426,6 +528,7 @@ impl Card {
                         Row::Undo => Some(Target::Undo),
                         Row::SignIn => Some(Target::SignIn),
                         Row::Page(_) => Some(Target::Page),
+                        Row::Fold { .. } => Some(Target::Fold),
                         Row::Text(_) | Row::Call { .. } => None,
                     })
                     .collect()
@@ -479,6 +582,9 @@ impl Card {
                 let_go();
                 crate::views::focus_list(window, cx);
             }
+            // The rows above a long card's options scroll from the keyboard too, so its end can be shown (#1808).
+            "pagedown" | "end" => self.rows.scroll_to_bottom(),
+            "pageup" | "home" => self.rows.set_offset(Point::default()),
             "space" | "enter" if !event.is_held => {
                 if let Some(at) = self.at {
                     self.press_key(at, cx);
@@ -527,9 +633,10 @@ impl Card {
 
     /// The box's send control on the card's page and the lines above it (#1461).
     pub fn words_send(&self) -> (&'static str, Vec<&'static str>) {
-        self.controller
-            .as_ref()
-            .map_or(("Answer", Vec::new()), Controller::words_send)
+        self.controller.as_ref().map_or(
+            (crate::copy::text("card.answer"), Vec::new()),
+            Controller::words_send,
+        )
     }
 
     /// The down of a press on `target`.
@@ -641,7 +748,9 @@ impl Card {
             return;
         };
         let answers = controller.take_answers();
-        if answers.is_empty() {
+        // Undo inside the hub's hold reaches the hub's undo (#1101).
+        let undos = controller.take_undos();
+        if answers.is_empty() && undos.is_empty() {
             return;
         }
         self.failed = None;
@@ -650,7 +759,10 @@ impl Card {
                 .background_spawn(async move {
                     answers
                         .iter()
-                        .try_for_each(|params| crate::answer::send(params).map(|_| ()))
+                        .try_for_each(|params| crate::answer::send(params).map(|_| ()))?;
+                    undos
+                        .iter()
+                        .try_for_each(|params| crate::answer::undo(params).map(|_| ()))
                 })
                 .await;
             if let Err(error) = sent {
@@ -666,10 +778,19 @@ impl Card {
     fn row(&self, index: usize, row: &Row, chrome: &Chrome, cx: &mut Context<Self>) -> AnyElement {
         use crate::views::{control, Control};
         // A row of the batched taste card (#1345): one group per call, keyed by its ask, each line a label in it.
-        if let Row::Call { ask, lines, .. } = row {
+        if let Row::Call {
+            ask, lines, armed, ..
+        } = row
+        {
             let id = format!("card-row:{}", ask.trim_start_matches("ask:"));
+            // Armed once the card is and the pictures its own evidence lists were shown (#3234).
+            let state = match self.controller.as_ref().map(Controller::state_name) {
+                Some("armed") if !armed => "presented",
+                state => state.unwrap_or("hidden"),
+            };
             return crate::views::observed(ElementId::Name(id.into()))
                 .role(Role::Group)
+                .aria_value(state)
                 .aria_label(SharedString::from(
                     lines.first().cloned().unwrap_or_default(),
                 ))
@@ -704,6 +825,7 @@ impl Card {
             Row::Undo => (Some(Control::Plain), Some(Target::Undo)),
             Row::SignIn => (Some(Control::Main), Some(Target::SignIn)),
             Row::Page(_) => (Some(Control::Plain), Some(Target::Page)),
+            Row::Fold { .. } => (Some(Control::Plain), Some(Target::Fold)),
         };
         // Each control keyed by what it is, never its place (#1462); a line by its place.
         let id: ElementId = match target.and_then(|target| self.id_of(target)) {
@@ -737,14 +859,29 @@ impl Card {
                 .and_then(|c| c.model().options.get(*index).cloned()),
             _ => None,
         };
+        // An option's state is its own (#3234): the accepting option of a taste call waits for its pictures.
+        let state = match (row, self.controller.as_ref()) {
+            (Row::Option { index, .. }, Some(controller)) => Some(controller.option_state(*index)),
+            _ => None,
+        };
         if let Some(choice) = choice {
+            let left = match row {
+                Row::Option { index, .. } => self
+                    .controller
+                    .as_ref()
+                    .and_then(|c| c.picture_held(*index))
+                    .map(|(left, all)| crate::copy::fill(question::PICTURES_LEFT, &[&left, &all])),
+                _ => None,
+            };
             let beside: Vec<String> = choice
                 .recommended
-                .then(|| "recommended".to_owned())
+                .then(|| crate::copy::text("card.recommended").to_owned())
                 .into_iter()
                 .chain(choice.cost.clone())
+                .chain(left)
                 .collect();
             return control(id, kind, choice.label.clone(), chrome)
+                .when_some(state, |control, state| control.aria_value(state))
                 .border(sizes().ring)
                 .border_color(chrome.focus.opacity(if focused { 1. } else { 0. }))
                 .when(focused, |control| control.aria_active_descendant())
@@ -762,6 +899,7 @@ impl Card {
                 .into_any_element();
         }
         control(id, kind, label, chrome)
+            .when_some(state, |control, state| control.aria_value(state))
             .border(sizes().ring)
             .border_color(chrome.focus.opacity(if focused { 1. } else { 0. }))
             .when(focused, |control| control.aria_active_descendant())
@@ -790,6 +928,7 @@ impl Focusable for Card {
 
 impl Render for Card {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.drawn = self.controller.as_ref().map(Controller::state_name);
         // The card keeps the keyboard while it shows: focus anything else took, it takes back at its next frame, until
         // you move the keyboard off it yourself (#1462).
         if !self.focus.is_focused(window) && !LET_GO.with(std::cell::Cell::get) {
@@ -806,6 +945,11 @@ impl Render for Card {
             self.focus_on(at);
         }
         let chrome = crate::chrome::of(window);
+        // #1808's planted card grows past its page and never scrolls, as the merge base's did.
+        let grows = crate::plain::planted("card-grows-past-slot");
+        if self.page && !grows {
+            return self.page_card(chrome, cx);
+        }
         let rows: Vec<AnyElement> = match &self.controller {
             Some(controller) => {
                 let rows = if self.page {
@@ -904,7 +1048,7 @@ impl Render for Card {
                             card.child(
                                 crate::views::observed("card-words")
                                     .role(Role::TextInput)
-                                    .aria_label("Your words")
+                                    .aria_label("Your words") // copy-exception: planted wrong program
                                     .h(sizes().space(5))
                                     .w_full(),
                             )
@@ -958,6 +1102,356 @@ impl Render for Card {
                     .child(measure),
             )
             .into_any_element()
+    }
+}
+
+impl Card {
+    /// The card on its ask's page (#1808): the rows above its last block scroll inside the lane, and its last block (its
+    /// options and their count, its default, what it's saved as and what a press was told) stays in view under them, so
+    /// every card fits its page and can arm. It arms once its end was shown and every option was.
+    fn page_card(&mut self, chrome: &Chrome, cx: &mut Context<Self>) -> AnyElement {
+        let (above, last) = self
+            .controller
+            .as_ref()
+            .map(Controller::page_parts)
+            .unwrap_or_default();
+        let above: Vec<AnyElement> = above
+            .iter()
+            .enumerate()
+            .map(|(index, row)| self.row(index, row, chrome, cx))
+            .collect();
+        let after = above.len();
+        let mut last: Vec<AnyElement> = last
+            .iter()
+            .enumerate()
+            .map(|(index, row)| self.row(after + index, row, chrome, cx))
+            .collect();
+        last.extend(self.failed.clone().map(|line| {
+            crate::views::observed("card-failed")
+                .role(Role::Label)
+                .aria_label(line.clone())
+                .typed(sizes().small)
+                .child(line)
+                .into_any_element()
+        }));
+        let card = cx.entity().downgrade();
+        let (rows, held) = (self.rows.clone(), self.last.clone());
+        let measure = canvas(
+            move |bounds, _, cx| {
+                // The card and the box share the page (#1461); a last block cut off at the card's foot isn't all in
+                // view, so the card doesn't fit (#1808).
+                let below = BOX_TALL.with(std::cell::Cell::get);
+                let cut = held.get().is_some_and(|last| {
+                    f32::from(last.bottom()) > f32::from(bounds.bottom()) + 0.5
+                });
+                let size = [
+                    f32::from(bounds.size.width).ceil() as i64,
+                    if cut {
+                        i64::MAX / 4
+                    } else {
+                        f32::from(bounds.size.height).ceil() as i64 + below
+                    },
+                ];
+                // Its end is shown when its rows all fit, or are scrolled to their end.
+                let most = f32::from(rows.max_offset().y);
+                let shown = most <= 0.5 || -f32::from(rows.offset().y) >= most - 0.5;
+                let now = crate::views::now();
+                let changed = card
+                    .update(cx, |card, _| {
+                        let Some(controller) = card.controller.as_mut() else {
+                            return false;
+                        };
+                        let was = (controller.state_name(), controller.lines());
+                        controller.measured_on_page(size, now);
+                        controller.end_shown(shown, now);
+                        was != (controller.state_name(), controller.lines())
+                    })
+                    .unwrap_or(false);
+                // A frame can't redraw what it's drawing: the next one shows what changed.
+                if changed {
+                    let card = card.clone();
+                    cx.defer(move |cx| {
+                        card.update(cx, |_, cx| cx.notify()).ok();
+                    });
+                }
+            },
+            |_, _, _, _| {},
+        )
+        .absolute()
+        .size_full();
+        let held = self.last.clone();
+        div()
+            .relative()
+            .w_full()
+            .flex_initial()
+            .min_h_0()
+            .flex()
+            .flex_col()
+            .child(
+                // In the page's lane, as wide as it, drawn on the page with no fill or box of its own (#1453 rule 7).
+                crate::views::observed(CARD_ID)
+                    .role(Role::Group)
+                    .when_some(self.controller.as_ref(), |card, controller| {
+                        card.aria_value(controller.state_name())
+                    })
+                    .track_focus(&self.focus)
+                    .on_key_down(cx.listener(|card, event: &KeyDownEvent, window, cx| {
+                        card.key_down(event, window, cx)
+                    }))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|_, _, _, _| LET_GO.with(|l| l.set(false))),
+                    )
+                    .occlude()
+                    .w_full()
+                    .flex_initial()
+                    .min_h_0()
+                    .flex()
+                    .flex_col()
+                    .gap(sizes().space(0))
+                    .child(
+                        div()
+                            .id("card-rows")
+                            .w_full()
+                            .flex_initial()
+                            .min_h_0()
+                            .flex()
+                            .flex_col()
+                            .gap(sizes().space(0))
+                            .overflow_y_scroll()
+                            .track_scroll(&self.rows)
+                            .children(above),
+                    )
+                    .child(
+                        div()
+                            .relative()
+                            .w_full()
+                            .flex_none()
+                            .flex()
+                            .flex_col()
+                            .gap(sizes().space(0))
+                            .child(
+                                canvas(move |bounds, _, _| held.set(Some(bounds)), |_, _, _, _| {})
+                                    .absolute()
+                                    .size_full(),
+                            )
+                            .children(last),
+                    )
+                    // #1461's planted card draws a text field of its own above the box.
+                    .when(crate::plain::planted("card-field-and-box"), |card| {
+                        card.child(
+                            crate::views::observed("card-words")
+                                .role(Role::TextInput)
+                                .aria_label("Your words") // copy-exception: planted wrong program
+                                .h(sizes().space(5))
+                                .w_full(),
+                        )
+                    }),
+            )
+            .child(measure)
+            .into_any_element()
+    }
+}
+
+impl Card {
+    /// The pictures its taste calls judge, beside it (#3234): each at its own pixel size where the column holds it, one
+    /// wider as a thumbnail until a press opens it at the column's width; they scroll in their own column, so the card's
+    /// end and its options stay where they are. `None` on a card that judges none.
+    pub(crate) fn evidence(
+        &mut self,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let listed = self.controller.as_ref()?.listed();
+        if listed.is_empty() {
+            return None;
+        }
+        let ratio = window.scale_factor();
+        let column = self.view.get().map(|view| f32::from(view.size.width));
+        let s = sizes();
+        let count = listed.len();
+        let drawn = self.pictures.clone();
+        let pictures = listed
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, picture)| {
+                let image = crate::pictures::image(&picture.hash)?;
+                let own = [
+                    picture.size[0] as f32 / ratio,
+                    picture.size[1] as f32 / ratio,
+                ];
+                // The column's width less its padding, once a frame has laid it out.
+                let room = column.map(|w| (w - f32::from(s.space(3)) * 2.).max(1.))?;
+                let width = if own[0] <= room {
+                    own[0]
+                } else if self.opened.contains(&picture.hash) {
+                    room
+                } else {
+                    f32::from(s.space(5)) * 3.
+                };
+                let height = own[1] * width / own[0];
+                let (hash, kept) = (picture.hash.clone(), drawn.clone());
+                Some(
+                    crate::views::observed(ElementId::Name(
+                        format!("picture:{}", picture.hash).into(),
+                    ))
+                    .role(Role::Image)
+                    .aria_label(crate::copy::fill("card.picture", &[&(index + 1), &count]))
+                    .flex_none()
+                    .w(px(width))
+                    .h(px(height))
+                    .child(
+                        canvas(
+                            move |bounds, _, _| {
+                                kept.borrow_mut().push((hash, bounds));
+                                bounds
+                            },
+                            move |_, bounds, window, _| {
+                                let _ = window.paint_image(
+                                    bounds,
+                                    bounds,
+                                    Corners::default(),
+                                    image,
+                                    0,
+                                    false,
+                                );
+                            },
+                        )
+                        .size_full(),
+                    )
+                    .on_click(cx.listener({
+                        let hash = picture.hash.clone();
+                        move |card, _, _, cx| {
+                            if !card.opened.remove(&hash) {
+                                card.opened.insert(hash.clone());
+                            }
+                            cx.notify();
+                        }
+                    })),
+                )
+            });
+        let (view, card) = (self.view.clone(), cx.entity().downgrade());
+        Some(
+            div()
+                .relative()
+                .size_full()
+                .min_w_0()
+                .child(
+                    crate::views::observed("card-evidence")
+                        .role(Role::Group)
+                        .aria_label(crate::copy::text("card.evidence"))
+                        .size_full()
+                        .overflow_y_scroll()
+                        .track_scroll(&self.evidence)
+                        .child(
+                            div()
+                                .flex()
+                                .flex_wrap()
+                                .gap(s.space(1))
+                                .p(s.space(3))
+                                .children(pictures),
+                        ),
+                )
+                .child(
+                    // The column as laid out: where its pictures show, and how wide they may draw.
+                    canvas(
+                        move |bounds, _, cx| {
+                            let was = view.replace(Some(bounds));
+                            if was.map(|b| b.size.width) != Some(bounds.size.width) {
+                                let card = card.clone();
+                                cx.defer(move |cx| {
+                                    card.update(cx, |_, cx| cx.notify()).ok();
+                                });
+                            }
+                        },
+                        |_, _, _, _| {},
+                    )
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full(),
+                )
+                .into_any_element(),
+        )
+    }
+
+    /// What this frame drew of the pictures (#3234): each one's best draw, whole when it lies inside the window and the
+    /// column it scrolls in, at the scale of its drawn pixels over its own. The card hears it, and draws again in the
+    /// next frame when what it says changed.
+    pub(crate) fn frame_drawn(&mut self, window: &Window, cx: &mut Context<Self>) {
+        let drawn = std::mem::take(&mut *self.pictures.borrow_mut());
+        let Some(controller) = self.controller.as_mut() else {
+            return;
+        };
+        let listed = controller.listed();
+        let ratio = window.scale_factor();
+        let size = window.viewport_size();
+        let shown = Bounds::new(point(px(0.), px(0.)), size);
+        let shown = self.view.get().map_or(shown, |view| view.intersect(&shown));
+        let mut best: std::collections::HashMap<String, crate::pictures::Drawn> =
+            Default::default();
+        for (hash, bounds) in drawn {
+            let Some(picture) = listed.iter().find(|p| p.hash == hash) else {
+                continue;
+            };
+            let inside = |b: &Bounds<Pixels>| {
+                b.left() >= shown.left() - px(0.5)
+                    && b.top() >= shown.top() - px(0.5)
+                    && b.right() <= shown.right() + px(0.5)
+                    && b.bottom() <= shown.bottom() + px(0.5)
+            };
+            let d = crate::pictures::Drawn {
+                scale: f64::from(f32::from(bounds.size.width) * ratio) / f64::from(picture.size[0]),
+                whole: inside(&bounds),
+            };
+            let better = best
+                .get(&hash)
+                .is_none_or(|b| (d.whole, d.scale) > (b.whole, b.scale));
+            if better {
+                best.insert(hash, d);
+            }
+        }
+        if controller.drawn(&best, crate::views::now()) {
+            let card = cx.entity().downgrade();
+            cx.defer(move |cx| {
+                card.update(cx, |_, cx| cx.notify()).ok();
+            });
+        }
+    }
+
+    /// A picture the card judges was replaced while it shows (#3234): the document one of its asks is pinned to got a
+    /// new revision (`doc.patched`). The card reads its asks again, and a new hash counts as not shown. Whether it did.
+    fn catch_up(&mut self) -> bool {
+        let Some(controller) = self.controller.as_mut() else {
+            return false;
+        };
+        let since = self.moved_at;
+        let asks = controller.judged_asks();
+        let (at, moved) = crate::record::with_view(|view| {
+            let docs: Vec<&str> = view
+                .events
+                .iter()
+                .filter(|event| {
+                    event["kind"] == "ask.created"
+                        && asks.iter().any(|a| *a == crate::states::handle(event))
+                })
+                .filter_map(|event| crate::pictures::pinned_doc(&event["data"]["pinned_to"]))
+                .collect();
+            let moved = view.events.iter().any(|event| {
+                event["kind"] == "doc.patched"
+                    && event["log_pos"].as_u64().is_some_and(|pos| pos > since)
+                    && event["data"]["doc"]
+                        .as_str()
+                        .is_some_and(|doc| docs.contains(&doc))
+            });
+            (view.log_pos, moved)
+        })
+        .unwrap_or((since, false));
+        self.moved_at = at;
+        if moved {
+            controller.record_changed(&crate::record::history(), crate::views::now());
+        }
+        moved
     }
 }
 

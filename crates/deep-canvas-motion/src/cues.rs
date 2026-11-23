@@ -11,6 +11,7 @@ use std::collections::BTreeMap;
 
 use deep_canvas::document::expands::{Lowered, Refusal, Request};
 use deep_canvas::grammar::FLICKS_PER_SECOND;
+use deep_canvas::refs::{kind as names, Decl, Holds};
 use serde_json::{json, Map, Value};
 
 use crate::doc::{self, Ctx, Lag, Order};
@@ -924,7 +925,7 @@ fn default_of(field: &[String]) -> Option<Value> {
         ["at", "scale", _] => json!(1.0),
         ["at", _, _] => json!(0.0),
         ["adjust", "opacity" | "saturation" | "brightness" | "contrast" | "gamma"] => json!(1.0),
-        ["adjust", "hue" | "exposure"] => json!(0.0),
+        ["adjust", "hue" | "exposure"] | ["hidden_view", "opacity"] => json!(0.0),
         ["params", "reveal", "progress"] => json!(1.0),
         // A group warp's `mix: channel 0..1 = 1` (Frame and group: warp).
         ["params", "warp", "mix"] => json!(1.0),
@@ -1002,7 +1003,9 @@ pub(crate) fn register(r: &mut deep_canvas::registry::Registrar) {
         },
         &[],
         "",
-    );
+    )
+    // #1801: the items each cue moves.
+    .refs(&[Decl::new("params/cues/*/targets", Holds::Item, names::TARGET)]);
     let mut def = registry();
     def.moves = Some(kit::moves);
     r.registry(def);

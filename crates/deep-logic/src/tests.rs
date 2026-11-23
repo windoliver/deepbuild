@@ -14,8 +14,9 @@ fn a_tour_whose_keys_all_come_before_its_start_plays_once() {
             items: Vec::new(),
             machine: Vec::new(),
             document: String::new(),
+            rewind: None,
         };
-        let entries = track(&piece, &json!({}), 0).expect("a track");
+        let entries = track(&piece, &json!({}), 0, &Planted::default()).expect("a track");
         let played: Vec<(i64, world::Given)> =
             entries.iter().map(|e| (e.t, e.value.clone())).collect();
         tx.send(played).ok();

@@ -11,7 +11,7 @@ use serde_json::{Map, Value};
 
 use crate::ies::{self, Distribution};
 use crate::light::{
-    Contact, LampTable, Light, LightKind, Shadowing, Soft, MOST_POINTS, MOST_SPOTS,
+    Contact, LampTable, Light, LightKind, Shadowing, Soft, MOST_POINTS, MOST_SPOTS, PER_CLUSTER,
 };
 use crate::scene::{num, Assets, Layer3, Refused};
 
@@ -57,6 +57,14 @@ pub fn read_light(
 ) -> Result<(), Refused> {
     let Some(l) = light else { return Ok(()) };
     let field = |k: &str| format!("{path}/{k}");
+    // A fill light (#1634) is a point or a spot with a finite range that casts no shadow.
+    let local = matches!(l.kind, LightKind::Point | LightKind::Spot);
+    if l.fill && !(local && l.range.is_finite() && l.range > 0.0) {
+        return refused("out_of_range", field("fill"));
+    }
+    if l.fill && l.shadow {
+        return refused("out_of_range", field("shadow"));
+    }
     l.receivers = names(params.get("receivers"), &field("receivers"))?;
     l.casters = names(params.get("casters"), &field("casters"))?;
     let from_file = params.get("power").and_then(Value::as_str) == Some("from_file");
@@ -268,9 +276,77 @@ pub fn compile(
 /// The document's light policy (`light_policy`): its soft shadows, contact shadows and local
 /// shadows, each refused at its field.
 pub fn policy(doc: &Map<String, Value>) -> Result<Shadowing, Refused> {
-    let Some(p) = doc.get("light_policy") else {
-        return Ok(Shadowing::default());
+    let mut out = match doc.get("light_policy") {
+        None => Shadowing::default(),
+        Some(p) => named(doc, p)?,
     };
+    out.tiles = tiles(doc)?;
+    Ok(out)
+}
+
+/// Whether `doc` holds its local shadows in tiles (#2034): `shadowed.local: auto` in a work
+/// product or above, naming no `spots`, `points` or `local_map`, with more than 2 shadowed spots
+/// or any shadowed point or area light among its items. Decided once per document, never per frame.
+fn tiles(doc: &Map<String, Value>) -> Result<bool, Refused> {
+    let p = doc.get("light_policy");
+    let s = p.and_then(|p| p.get("shadowed"));
+    let fixed = match s.and_then(|s| s.get("local")) {
+        None => false,
+        Some(v) => match v.as_str() {
+            Some("auto") => false,
+            Some("fixed") => true,
+            _ => {
+                return Err(Refused {
+                    code: "out_of_range",
+                    path: "light_policy/shadowed/local".into(),
+                })
+            }
+        },
+    };
+    let names = |o: Option<&Value>, k: &str| o.and_then(|o| o.get(k)).is_some();
+    if fixed || names(s, "spots") || names(s, "points") || names(p, "local_map") {
+        return Ok(false);
+    }
+    if !locals_allowed(doc) {
+        return Ok(false);
+    }
+    let (mut spots, mut points) = (0, 0);
+    for item in doc
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .map(|(_, v)| v)
+    {
+        if item.pointer("/params/shadow").and_then(Value::as_bool) != Some(true) {
+            continue;
+        }
+        match item.get("kind").and_then(Value::as_str) {
+            Some("light.spot@1") => spots += 1,
+            Some("light.point@1" | "light.area@1") => points += 1,
+            _ => {}
+        }
+    }
+    Ok(spots > 2 || points > 0)
+}
+
+/// The budget class's word on local maps: from a work product up (Light policy: local shadows).
+fn locals_allowed(doc: &Map<String, Value>) -> bool {
+    !matches!(
+        class(doc),
+        Some(Class::CoreView | Class::DataView | Class::Figure)
+    )
+}
+
+fn class(doc: &Map<String, Value>) -> Option<Class> {
+    doc.get("budget")
+        .and_then(|b| b.get("class"))
+        .and_then(Value::as_str)
+        .and_then(Class::parse)
+}
+
+/// The fields of a `light_policy` `p` the document names.
+fn named(doc: &Map<String, Value>, p: &Value) -> Result<Shadowing, Refused> {
     let mut out = Shadowing::named();
     let bad = |k: &str| Refused {
         code: "out_of_range",
@@ -315,22 +391,15 @@ pub fn policy(doc: &Map<String, Value>) -> Result<Shadowing, Refused> {
     }
     // The classes the Cost lines name: soft shadows from a figure up, local maps from a work
     // product up. A class below them keeps the tent, and its shadows are reported as dropped.
-    let class = doc
-        .get("budget")
-        .and_then(|b| b.get("class"))
-        .and_then(Value::as_str)
-        .and_then(Class::parse);
-    if matches!(class, Some(Class::CoreView | Class::DataView)) {
+    if matches!(class(doc), Some(Class::CoreView | Class::DataView)) {
         out.soft = None;
         out.contact = None;
     }
-    if matches!(
-        class,
-        Some(Class::CoreView | Class::DataView | Class::Figure)
-    ) {
+    if !locals_allowed(doc) {
         out.spots = 0;
         out.points = 0;
     }
+    out.per_cluster = uint(p, "per_cluster", PER_CLUSTER as u64, 255)?.max(1) as usize;
     out.local_map = uint(p, "local_map", 512, 4096)?.max(16) as u32;
     out.cache = match p.get("cache").and_then(Value::as_str) {
         None | Some("static") => true,
@@ -419,6 +488,57 @@ mod tests {
             None,
         );
         assert_eq!(got.unwrap_err().path, "p/distribution");
+    }
+
+    #[test]
+    fn a_fill_light_is_a_point_or_a_spot_with_a_range_and_no_shadow() {
+        let read = |kind: &str, params: Value| {
+            let axes = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
+            let mut l =
+                crate::light::light("l", kind, &params, [0.0; 3], [0.0, -1.0, 0.0], axes, 1.0)
+                    .expect("a light");
+            let doc = Map::new();
+            read_light(
+                Some(&mut l),
+                &params,
+                "items/l/params",
+                &doc,
+                &mut Vec::new(),
+                None,
+            )
+            .map(|()| l.fill)
+            .map_err(|r| (r.code, r.path))
+        };
+        assert_eq!(
+            read("light.point@1", json!({"fill": true, "range": 6})),
+            Ok(true)
+        );
+        // An automatic range is a finite one.
+        assert_eq!(read("light.spot@1", json!({"fill": true})), Ok(true));
+        assert_eq!(read("light.point@1", json!({"range": 6})), Ok(false));
+        let at = |field: &str| Err(("out_of_range", format!("items/l/params/{field}")));
+        assert_eq!(
+            read("light.point@1", json!({"fill": true, "shadow": true})),
+            at("shadow")
+        );
+        assert_eq!(
+            read("light.point@1", json!({"fill": true, "range": 0})),
+            at("fill")
+        );
+        assert_eq!(read("light.sun@1", json!({"fill": true})), at("fill"));
+        assert_eq!(read("light.area@1", json!({"fill": true})), at("fill"));
+    }
+
+    #[test]
+    fn a_policy_names_the_fill_lights_a_cluster_shades_up_to_255() {
+        let of = |v: Value| policy(&map(json!({"light_policy": v}))).map(|p| p.per_cluster);
+        assert_eq!(policy(&Map::new()).map(|p| p.per_cluster), Ok(64));
+        assert_eq!(of(json!({})), Ok(64));
+        assert_eq!(of(json!({"per_cluster": 200})), Ok(200));
+        assert_eq!(
+            of(json!({"per_cluster": 256})).map_err(|r| r.path),
+            Err("light_policy/per_cluster".to_string())
+        );
     }
 
     #[test]

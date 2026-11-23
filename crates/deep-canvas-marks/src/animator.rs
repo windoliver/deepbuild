@@ -6,9 +6,11 @@
 //! text's shaped run into the glyphs a frame draws: each animator's props applied per unit, the
 //! run set along a path (`on_curve`), and a counter's changed graphemes rolling in their cells.
 
+mod noise;
+
 use std::sync::Arc;
 
-use deep_canvas::document::duration;
+use deep_canvas::document::duration_in;
 use deep_canvas::expr::{Expr, Resolve};
 use deep_text::{Glyph, Shaped};
 use serde_json::{Map, Value};
@@ -225,21 +227,6 @@ pub struct Noise {
     pub seed: u64,
 }
 
-impl Default for Noise {
-    fn default() -> Self {
-        Noise {
-            min: -1.0,
-            max: 1.0,
-            frequency: 2.0,
-            correlation: 0.5,
-            phase: 0.0,
-            spatial_phase: 0.0,
-            lock: false,
-            seed: 0,
-        }
-    }
-}
-
 /// A lattice value in −1..1 from a hash of (seed, channel, unit, step): no state, no clock.
 fn lattice(seed: u64, unit: i64, step: i64) -> f64 {
     let mut h = seed ^ 0x9E37_79B9_7F4A_7C15;
@@ -250,29 +237,6 @@ fn lattice(seed: u64, unit: i64, step: i64) -> f64 {
         h ^= h >> 31;
     }
     (h >> 11) as f64 / (1u64 << 52) as f64 - 1.0
-}
-
-/// Smooth value noise along time for one lattice row: cosine-free smoothstep between steps.
-fn row(seed: u64, unit: i64, x: f64) -> f64 {
-    let k = x.floor();
-    let f = x - k;
-    let w = f * f * (3.0 - 2.0 * f);
-    let k = k as i64;
-    lattice(seed, unit, k) * (1.0 - w) + lattice(seed, unit, k + 1) * w
-}
-
-impl Noise {
-    /// The amount for unit `i` at `t` seconds: a value shared by every unit, mixed by correlation
-    /// with each unit's own, mapped from −1..1 onto min..max. Pure in (i, t, seed).
-    pub fn amount(&self, i: usize, t: f64) -> f64 {
-        let x = t * self.frequency + self.phase + self.spatial_phase / 360.0 * i as f64;
-        let shared = row(self.seed, -1, x);
-        let own = row(self.seed, i as i64, x);
-        let c = self.correlation.clamp(0.0, 1.0);
-        let v = (c * shared + (1.0 - c) * own).clamp(-1.0, 1.0);
-        let v = if self.lock { shared } else { v };
-        self.min + (v + 1.0) / 2.0 * (self.max - self.min)
-    }
 }
 
 /// The wrong programs #496's acceptance suite plants, each a `raster` `planted` name.
@@ -476,6 +440,19 @@ pub fn head(
     let shown = (0..n)
         .take_while(|u| (r.progress - *u as f64 * lag * w) / w > 0.5)
         .count();
+    // #1215: in a vertical run, on its column's axis, at the top of the next cell.
+    if matches!(run.flow, deep_text::Flow::Vertical(_)) {
+        let caret = match shown {
+            0 => run.glyphs.first().map(|g| g.origin.map(f64::from)),
+            k => run
+                .glyphs
+                .iter()
+                .filter(|g| g.grapheme == k - 1)
+                .map(|g| [f64::from(g.origin[0]), f64::from(g.origin[1] + g.along)])
+                .reduce(|a, b| if b[1] > a[1] { b } else { a }),
+        };
+        return Ok(caret);
+    }
     let caret = match shown {
         0 => run.glyphs.first().map(|g| [f64::from(g.x), f64::from(g.y)]),
         k => run
@@ -1233,7 +1210,7 @@ fn held_keys(doc: &Map<String, Value>, target: &str) -> Option<Vec<(i64, f64)>> 
         .values()
         .find(|c| c.get("target").and_then(Value::as_str) == Some(target))?;
     let keys = ch.get("keys")?.as_object()?;
-    let wrap = Value::Object(doc.clone());
+    let transport = doc.get("transport");
     let mut out = Vec::new();
     for k in keys.values() {
         let interp = k.get("interp");
@@ -1244,7 +1221,7 @@ fn held_keys(doc: &Map<String, Value>, target: &str) -> Option<Vec<(i64, f64)>> 
         }
         let t = match k.get("t")? {
             Value::String(s) if s == "0s" || s == "0f" || s == "0" => 0,
-            v => duration(&wrap, v).ok()?,
+            v => duration_in(transport, v).ok()?,
         };
         out.push((t, num(k.get("value"))?));
     }
@@ -1261,10 +1238,9 @@ fn roll_at(
         return Ok(None);
     };
     let path = format!("items/{}/params/text/counter/roll", input.id);
-    let wrap = Value::Object(input.doc.clone());
     let span = roll
         .get("span")
-        .and_then(|s| duration(&wrap, s).ok())
+        .and_then(|s| duration_in(input.doc.get("transport"), s).ok())
         .ok_or_else(|| bad(format!("{path}/span")))?;
     let ease = match roll.get("interp") {
         None => deep_canvas::ease::named("in_out_cubic", None),
@@ -1391,12 +1367,20 @@ pub fn lay_out(input: &Input<'_>, host: &mut dyn Host) -> Result<Laid, Refused> 
             track[u + 1] = track[u] + amounts[u] * props.tracking;
         }
         let anchor = track[n] * props.tracking_anchor;
+        // #1215: in a vertical run tracking runs down the column, and line height spaces columns
+        // the way they run.
+        let (along, across, sign) = match run.flow {
+            deep_text::Flow::Vertical(c) => (1, 0, if c.rl { -1.0 } else { 1.0 }),
+            deep_text::Flow::Horizontal => (0, 1, 1.0),
+        };
         for (g, unit) in units.iter().enumerate() {
             let Some(u) = *unit else { continue };
             let w = amounts[u];
             let x = &mut acc[g];
-            x.d[0] += w * props.x + track[u] - anchor;
-            x.d[1] += w * props.y + w * props.line_height * line_of(run, g) as f64;
+            x.d[0] += w * props.x;
+            x.d[1] += w * props.y;
+            x.d[along] += track[u] - anchor;
+            x.d[across] += sign * w * props.line_height * line_of(run, g) as f64;
             x.rot += w * props.rotate;
             if let Some(r) = props.rotate3 {
                 for (o, r) in x.rot3.iter_mut().zip(r) {
@@ -1460,15 +1444,10 @@ pub fn lay_out(input: &Input<'_>, host: &mut dyn Host) -> Result<Laid, Refused> 
             let Some(u) = *unit else { continue };
             let x = &mut acc[g];
             let own = ((progress - u as f64 * lag * w) / w).clamp(0.0, 1.0);
-            if !write {
-                x.opacity *= own;
-            } else if own <= 0.0 {
-                x.opacity = 0.0;
-            } else if own < 1.0 {
-                // #1969: the outline draws over the first half of the unit's span, then its fill
-                // comes in while the outline turns into its own stroke (Text `text@1`).
-                x.paint.write = Some([(2.0 * own).min(1.0), (2.0 * own - 1.0).max(0.0)]);
-            }
+            // #1969: a write's outline draws first, then its fill (Text `text@1`).
+            let (kept, written) = crate::animated::revealed(own, write);
+            x.opacity *= kept;
+            x.paint.write = written.or(x.paint.write);
             if let Some(a) = afterglow.get(u) {
                 x.paint.brightness *= 1.0 + a;
             }
@@ -1533,7 +1512,12 @@ pub fn lay_out(input: &Input<'_>, host: &mut dyn Host) -> Result<Laid, Refused> 
             return I;
         }
         let adv = f64::from(g.advance);
-        let p = [adv / 2.0 + a.pivot[0], a.pivot[1]];
+        // #1215: a turned glyph's pivot turns with it, about the middle of its advance down.
+        let p = if g.turn {
+            [-a.pivot[1], adv / 2.0 + a.pivot[0]]
+        } else {
+            [adv / 2.0 + a.pivot[0], a.pivot[1]]
+        };
         let mut lin = rotate(a.rot.to_radians());
         if a.rot3 != [0.0; 3] {
             // R = Rz·Ry·Rx about the pivot, seen along z: its upper-left 2×2.
@@ -1751,9 +1735,14 @@ fn line_of(run: &Shaped, grapheme: usize) -> usize {
     let Some(g) = run.glyphs.iter().find(|g| g.grapheme == grapheme) else {
         return 0;
     };
-    let mut ys: Vec<f32> = run.glyphs.iter().map(|g| g.y).collect();
+    // #1215: a vertical run's lines are its columns, each about its own axis.
+    let line = |g: &Glyph| match run.flow {
+        deep_text::Flow::Vertical(_) => g.origin[0],
+        deep_text::Flow::Horizontal => g.y,
+    };
+    let mut ys: Vec<f32> = run.glyphs.iter().map(line).collect();
     ys.dedup();
-    ys.iter().position(|y| *y == g.y).unwrap_or(0)
+    ys.iter().position(|y| *y == line(g)).unwrap_or(0)
 }
 
 fn grapheme_text(text: &str, k: usize) -> String {

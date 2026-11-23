@@ -1,7 +1,7 @@
 // A plug-in's model jobs (#366): `deep.runner.run` goes to the runner R1 built, on your own agent, headless on your
 // plan. Here are the job's shape as the plug-in gives it, the prompt the agent reads and what its run answered. The
 // host checks each handle against the plug-in's grant before any of this, and filters what the answer cites after.
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, realpathSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
@@ -144,6 +144,8 @@ export interface JobListing { kind: string; plugin: string; descriptor: JobKind;
 
 interface JobToolsOptions {
   entries: Readonly<Record<string, Entry>>; supervisor: Supervisor; home: string; now(): number; files: HostFiles; plant: string | undefined;
+  /** The hub's canvas core (#518): a kind whose qualification names a core call is qualified there. */
+  canvas?: (call: Record<string, unknown>) => Promise<Record<string, unknown>>;
 }
 /** Qualified tool builds and their bounded process/host calls. */
 export class JobTools {
@@ -228,8 +230,12 @@ export class JobTools {
     const input = Buffer.from(JSON.stringify({ params, inputs: encodedInputs(inputs), ...(call ? { call } : {}) }));
     // A tool off the machine (#1924): one POST of the same object to its URL, answered the same way.
     if ('url' in tool.run) return outputsOf(tool.tool, await this.hostCall(tool.tool, new URL(tool.run.url), 'POST', input.toString('utf8')));
+    // A tool of the canvas core (#518) takes its input while an export draws: only an export runs it.
+    if ('core' in tool.run) throw Error(`${tool.tool} runs in the canvas core while an export draws, so no job runs it on its own`);
     const { supervisor } = this.options;
-    const dir = join(folder, tool.run.dir);
+    // By its real path (#3005): node gives a tool its own real path as import.meta.url but argv[1] as spelled, so a
+    // tool under a symlinked hub home that checks it is the main module would see two paths and never run.
+    const dir = realpathSync(join(folder, tool.run.dir));
     const run = `run:${ulid(this.options.now())}`;
     const out: Buffer[] = [];
     let size = 0;
@@ -269,6 +275,21 @@ export class JobTools {
     try { answer = JSON.parse(Buffer.concat(out).toString('utf8')); } catch { answer = undefined; }
     return outputsOf(tool.tool, answer);
   }
+  /**
+   * A tool's qualification by the canvas core (#518): the core's `call` on the tool by name, with a plug-in's program
+   * handed over as the host runs it. Nothing the tool says counts: the core reads its delivery back. Undefined when it
+   * qualifies, else why it doesn't.
+   */
+  private async coreQualifies(call: string, kind: string, tool: string, descriptor: JobTool, folder: string): Promise<string | undefined> {
+    if (!this.options.canvas) return 'this hub has no canvas core to qualify it on';
+    const d = descriptor as JobTool & { codecs?: unknown; containers?: unknown; hardware?: unknown; input?: unknown; frame_delay?: unknown };
+    const dir = 'dir' in d.run ? realpathSync(join(folder, d.run.dir)) : ''; // as runTool spawns it (#3005)
+    const program = 'dir' in d.run ? [{ kind, tool, codecs: d.codecs, containers: d.containers, hardware: d.hardware, input: d.input, frame_delay: d.frame_delay, argv: [process.execPath, join(dir, d.run.entry)], cwd: dir }] : [];
+    let reply: Record<string, unknown>;
+    try { reply = await this.options.canvas({ call, tool, job_tools: program }); } catch (e) { return message(e); }
+    if (reply.outcome === 'qualified') return undefined;
+    return `the canvas core answers ${JSON.stringify(reply).slice(0, 600)}`;
+  }
   async qualify(entry: Entry, manifest: Manifest, ext: Ext): Promise<HeldJobs> {
     const refuse = (why: string): never => { throw Error(`${why}, so ${entry.id}@${entry.version} isn't installed`); };
     const kinds: HeldJobs['kinds'] = {};
@@ -288,6 +309,11 @@ export class JobTools {
       const build = 'dir' in descriptor.run ? buildOf(join(entry.folder, descriptor.run.dir), descriptor.run.entry, this.options.plant) : null;
       const before = this.builds[`${tool} ${TRIPLE}`];
       if (build !== null && before !== undefined && before !== build) refuse(`${entry.id}'s tool ${tool} qualified on ${TRIPLE} as build ${before}, and these files are build ${build}: one name@version is one build, so the changed tool takes a new version`);
+      // #518: a kind whose input arrives while it runs is qualified by the canvas core, on the kind's fixture film.
+      if (held.qualification.core) {
+        const why = await this.coreQualifies(held.qualification.core, kind, tool, descriptor, entry.folder);
+        if (why) return refuse(`${entry.id}'s tool ${tool} fails ${kind}'s qualification: ${why}, and it doesn't join ${kind}`);
+      }
       for (const f of held.qualification.fixtures) {
         let wrote: Record<string, Uint8Array>;
         // A tool that calls a provider calls it here too (#1923), with a journal of its own that outlives nothing.

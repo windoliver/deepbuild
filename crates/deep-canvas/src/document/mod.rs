@@ -40,8 +40,9 @@ pub use apply::{
     Patched, Refused, Writing,
 };
 pub use check::{
-    check, check_costed, check_in, check_packed, check_with, duration, frame_of, frame_rate_of,
-    literal_forms, recheck, recheck_skipping_referrers, recheck_with, CheckResult, Referrers,
+    check, check_costed, check_in, check_packed, check_sized, check_with, duration, duration_in,
+    frame_of, frame_rate_of, literal_forms, recheck, recheck_skipping_referrers, recheck_with,
+    CheckResult, Referrers,
 };
 pub use close::{field_names, kind_names, owners, undeclared};
 pub use merge::{merge, Merged};
@@ -120,6 +121,12 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     "foley_materials",
     // #903: the input module's tour (Tour), its keys and its pointer.
     "tour",
+    // #860: the logic module's rewind, its stops, depth and carried seen array.
+    "rewind",
+    // #210: a piece's ports, each its declared way out to one plug-in and back (Port).
+    "ports",
+    // #1217: the tools the document offers its viewer (Selection: `viewer_tools.measure`).
+    "viewer_tools",
 ];
 
 /// An item's keys (Item and kind), in this slice.
@@ -171,7 +178,19 @@ pub const ITEM_KEYS: &[&str] = &[
     "tone",
     "halo",
     "relations",
+    // Object: hidden view (#290): `{opacity: channel = 0, color: role | base = base}`.
+    "hidden_view",
 ];
+
+/// Whether `<group>/<name>` is one of an item's own channels: a field of its `adjust`, or its
+/// hidden view's opacity (Object: hidden view).
+pub(crate) fn item_channel(group: &str, name: &str) -> bool {
+    match group {
+        "adjust" => ADJUST_FIELDS.contains(&name),
+        "hidden_view" => name == "opacity",
+        _ => false,
+    }
+}
 
 /// The item fields a path or an op may reach besides `params` and `at`.
 pub const ITEM_OWN_FIELDS: &[&str] = &[
@@ -249,6 +268,9 @@ pub struct Issue {
     /// On `unknown_kind` and `unknown_field`: at most three close names, a rename or retirement
     /// record's first (#412).
     pub close: Vec<Value>,
+    /// On a word its list lacks: `{list, reopens_if, instead}`, written beside the issue's own
+    /// fields (#2777).
+    pub list: Option<Value>,
 }
 
 impl Issue {
@@ -266,6 +288,7 @@ impl Issue {
             fix_ops: None,
             carried: false,
             close: Vec::new(),
+            list: None,
         }
     }
 
@@ -320,6 +343,9 @@ impl Issue {
         }
         if !self.close.is_empty() {
             out.insert("close".into(), json!(self.close));
+        }
+        if let Some(Value::Object(list)) = &self.list {
+            out.extend(list.iter().map(|(k, v)| (k.clone(), v.clone())));
         }
         // An operator's issue at one of its steps names the step (#431: `operator_kind_rule
         // {step, reason}`).
@@ -519,6 +545,9 @@ pub fn fix_for(code: &str) -> String {
         "bad_path" => "Write the path as <section>/<id>[#<sub>]/<field>[/<field>...].",
         "bad_handle" => "Write the handle as <scheme>:<id>[#<fragment>].",
         "bad_id" => "Write the ID as 1 to 8 segments of [a-z0-9][a-z0-9_-]{0,47} joined by `.`.",
+        "id_taken" => "Give the new item an ID the document doesn't hold, or set the fields of the one it holds.",
+        "session_frozen" => "Send a whole revision that doesn't panic to replace the frozen one, or close the session.",
+        "session_closed" => "Nothing reaches a closed session: draw the document in a new one.",
         "bad_time" => "Write the time as a span such as 2s or 120f.",
         "bad_rate" => "Use a rate whose frame or sample is a whole number of flicks: 60/1, 30000/1001 or 8/1 fps, 48000 or 44100 Hz.",
         "bound_typed_over" => "Leave a bound value's text empty; its reading shows there.",

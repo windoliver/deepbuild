@@ -23,8 +23,14 @@ use gpui_kit::{prelude::FluentBuilder as _, *};
 use serde_json::{json, Value};
 
 use crate::address::Address;
+use crate::agents::agents_page;
 use crate::chrome::{sizes, Typed as _};
-use crate::{bound, brand, canvas, cells, chrome, show::CanvasPanel, states, text};
+use crate::rows::{
+    bound_panel, bound_values, empty_line, empty_now, item_height, list_heading, list_row, marked,
+    needs_you_heading, now_ms, row_element, status,
+};
+pub(crate) use crate::rows::{in_lane, page_title, RowDrawn, Shape};
+use crate::{bound, brand, canvas, cells, chrome, copy, show::CanvasPanel, states, text};
 
 pub const SIDEBAR: &str = "deepbuild/sidebar";
 pub const HOME: &str = "deepbuild/home";
@@ -42,16 +48,13 @@ pub const SHIPPED_VIEWS: [&str; 3] = ["needs-you", "sidebar", "session"];
 
 /// How much of its text the row planted to cut off draws, short enough to fit in any sidebar.
 #[cfg(feature = "plant-row")]
-const CUT_TO: usize = 24;
+pub(crate) const CUT_TO: usize = 24;
 /// The panel the hub's canvas core knows a session's page by.
-const SESSION_PAGE: &str = "session-page";
+pub(crate) const SESSION_PAGE: &str = "session-page";
 /// How often an open terminal tab reads its grid again.
 const TERMINAL_TICK: Duration = Duration::from_millis(250);
 /// How often the Agents page reads the hub's model again.
 const AGENTS_TICK: Duration = Duration::from_secs(2);
-/// The diff lines the Agents page shows of each file, and the width a line is cut to, in points.
-const DIFF_LINES: usize = 8;
-const DIFF_WIDTH: f32 = 1060.;
 /// The list as last built, with the reading of the record it was built from.
 type Built = (
     std::rc::Rc<(Vec<crate::list::Ask>, Vec<crate::list::Session>)>,
@@ -140,7 +143,7 @@ pub enum RowPlant {
 
 #[cfg(feature = "plant-row")]
 thread_local! {
-    static ROW_PLANT: Cell<Option<RowPlant>> = const { Cell::new(None) };
+    pub(crate) static ROW_PLANT: Cell<Option<RowPlant>> = const { Cell::new(None) };
 }
 
 #[cfg(feature = "plant-row")]
@@ -204,13 +207,15 @@ fn placed(area: &str) -> Vec<AnyView> {
     })
 }
 
-/// What the tree names a view an agent wrote, so its words never pass as the app's (#1459): every node it draws sits
-/// under this one.
-pub const AGENT_WROTE: &str = "Written by an agent";
+/// The key of what the tree names a view an agent wrote, so its words never pass as the app's (#1459): every node it
+/// draws sits under this one.
+pub const AGENT_WROTE: &str = "views.agent_wrote";
 
-/// The node an agent's view draws under: a group named [`AGENT_WROTE`].
+/// The node an agent's view draws under: a group named with [`AGENT_WROTE`]'s words.
 fn agents(id: impl Into<ElementId>) -> ObservedElement<Stateful<Div>> {
-    observed(id).role(Role::Group).aria_label(AGENT_WROTE)
+    observed(id)
+        .role(Role::Group)
+        .aria_label(copy::text(AGENT_WROTE))
 }
 
 /// A box a placed view can't draw out of, the `index`th in its area.
@@ -232,7 +237,12 @@ struct TerminalTab {
     screen: Option<cells::Screen>,
     /// What the tab says when the hub hosts no terminal for the session.
     words: String,
-    _poll: Task<()>,
+    /// #1498: the cells the core's selection holds, each row's `[from, row, to]`, and whether your press is down.
+    outline: Vec<[u16; 3]>,
+    pressing: bool,
+    /// Whether its grid is polled now: only while it is shown (#2661).
+    polled: bool,
+    _poll: Option<Task<()>>,
 }
 
 /// One shipped view, drawn as a dock panel.
@@ -250,8 +260,10 @@ pub struct Shipped {
     /// Whether this is the view's own window, not its panel in the shell.
     popped: bool,
     /// The Agents page's model, as the hub last gave it (`agents.read`), and the sync whose diff it shows.
-    agents: Option<serde_json::Value>,
-    reviewing: Option<String>,
+    pub(crate) agents: Option<serde_json::Value>,
+    pub(crate) reviewing: Option<String>,
+    /// Whether the Agents page's model is polled now: only while the page is shown (#2661).
+    agents_polled: bool,
     _agents_poll: Option<Task<()>>,
     /// When the soonest age the view shows next reads differently, and the timer that draws it then (#1546).
     age_tick: Option<(u64, Task<()>)>,
@@ -264,10 +276,153 @@ pub struct Shipped {
     built: Option<Built>,
     /// What you typed in the list, and when the last key came: typing moves to the first row it starts (#1462).
     typed: (String, u64),
-    /// The first of the list's items drawn: the drawn rows follow the keyboard, so the row it's on is in view (#2021).
-    list_first: usize,
+    /// How far the list's rows are scrolled, and how tall their region last drew (#1808). A wheel scrolls them; the
+    /// keyboard's row stays in view (#2021).
+    list_top: Pixels,
+    list_room: std::rc::Rc<Cell<Option<Size<Pixels>>>>,
+    /// The wheel moved the rows since the list last drew.
+    wheeled: bool,
     /// The session whose name is being typed in its page's title (#2018), and the field.
     renaming: Option<Renaming>,
+    /// The list in view as last built, and each row in it as its own cached view (#1482).
+    list_model: Option<ListModel>,
+    row_views: HashMap<String, Entity<RowView>>,
+    /// What the view last read from the record, what it was read at, and until when it reads the same (#1482).
+    drawn_record: Option<(RecordAt, Option<u64>, std::rc::Rc<Record>)>,
+}
+
+#[cfg(feature = "fixtures")]
+thread_local! {
+    /// How many of the list's rows the sidebar built since a replica last took the count (#1482).
+    static ROWS_BUILT: Cell<u64> = const { Cell::new(0) };
+    /// Each shipped view's name, by its entity, for a replica's frame report.
+    static VIEW_NAMES: RefCell<HashMap<EntityId, &'static str>> = RefCell::new(HashMap::new());
+}
+
+/// The list's rows built since the last call, which a replica reads once a frame (#1482).
+#[cfg(feature = "fixtures")]
+pub fn take_rows_built() -> u64 {
+    ROWS_BUILT.with(|built| built.replace(0))
+}
+
+/// The name a shipped view registered under, once it has rendered.
+#[cfg(feature = "fixtures")]
+pub fn view_name(entity: EntityId) -> Option<&'static str> {
+    VIEW_NAMES.with(|names| names.borrow().get(&entity).copied())
+}
+
+/// The record's start ID and `log_pos`, whether the reader has folded it, and the session open (#1482).
+type RecordAt = ((String, u64), bool, Option<String>);
+
+/// The list in view as the sidebar last built it (#1482), with what it was built from.
+struct ListModel {
+    key: ListKey,
+    /// When the list as kept next changes with no new record: a row that left may go, a moved one takes a press.
+    next_change: Option<u64>,
+    view: InView,
+    /// The record's reading the list was built from, held so its address names it alone while the key does.
+    _read: Option<std::rc::Rc<(Vec<crate::list::Ask>, Vec<crate::list::Session>)>>,
+}
+
+/// What the list in view is built from, but the clock (#1482). `fresh` is the address of the record's reading.
+#[derive(Clone, Debug, PartialEq)]
+struct ListKey {
+    fresh: usize,
+    attended: bool,
+    keys: bool,
+    rows: SidebarRows,
+    typed: String,
+    popped: bool,
+    replaced: bool,
+    /// The rows' region as it last drew, how far they're scrolled, whether the wheel moved them, and the running jobs
+    /// after them (#1808).
+    area: Option<Size<Pixels>>,
+    top: Pixels,
+    wheeled: bool,
+    jobs: usize,
+    start: bool,
+}
+
+/// The list in view (#1482, #1808): the items it draws, Needs you's heading first when it stays at the top, where the
+/// rows that scroll start drawing from their region's top, and where their content ends, its top and its room.
+#[derive(Clone)]
+struct InView {
+    items: std::rc::Rc<Vec<crate::list::Item>>,
+    pinned: usize,
+    offset: Pixels,
+    end: Pixels,
+    top: Pixels,
+    room: Pixels,
+}
+
+/// One row of the list as a view of its own (#1482). It keeps what it draws and draws again only when the list
+/// hands it something different, or the pointer comes or goes, so a hover draws the rows it touched and no other.
+pub(crate) struct RowView {
+    drawn: RowDrawn,
+    row: String,
+    address: Address,
+    sidebar: WeakEntity<Shipped>,
+}
+
+impl Render for RowView {
+    fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        let chrome = chrome::of(window);
+        let id = self.row.clone();
+        let address = self.address.clone();
+        let actions = id.starts_with("session:") || id.starts_with("ask:");
+        let sidebar = self.sidebar.clone();
+        let pressed = sidebar.clone();
+        row_element(&self.drawn, chrome)
+            // #1482's planted row notifies the window's root as the pointer enters or leaves it.
+            .when(crate::plain::planted("hover-notifies-root"), |row| {
+                row.on_hover(|_, window, cx| {
+                    if let Some(root) = window.root_entity_id() {
+                        cx.notify(root);
+                    }
+                })
+            })
+            // #1462's planted row draws a control only while the pointer is over it.
+            .when(
+                cfg!(feature = "plant-hover-only-control") && id.starts_with("ask:"),
+                |row| {
+                    let over = HOVERED.with(|h| h.borrow().as_deref() == Some(id.as_str()));
+                    let control_id = ElementId::Name(format!("{id}:later").into());
+                    let hovered = id.clone();
+                    row.on_hover(move |on, window, _| {
+                        HOVERED.with(|h| *h.borrow_mut() = on.then(|| hovered.clone()));
+                        window.refresh();
+                    })
+                    .when(over, |row| {
+                        row.child(control(
+                            control_id,
+                            Control::Plain,
+                            copy::text("views.later"),
+                            chrome,
+                        ))
+                    })
+                },
+            )
+            // A secondary click opens the row's actions (#1462).
+            .when(actions, |row| {
+                let id = id.clone();
+                row.on_mouse_down(
+                    MouseButton::Right,
+                    move |event: &MouseDownEvent, window, cx| {
+                        open_context(id.clone(), event.position, window, cx)
+                    },
+                )
+            })
+            .on_mouse_down(MouseButton::Left, {
+                let id = id.clone();
+                move |_, _, cx| {
+                    let _ =
+                        pressed.update(cx, |this, _| this.pressed = Some((id.clone(), now_ms())));
+                }
+            })
+            .on_click(move |_, window, cx| {
+                let _ = sidebar.update(cx, |this, cx| this.click_row(&id, &address, window, cx));
+            })
+    }
 }
 
 /// A session's page's title while you rename it (#2018): the field holds the name, and Return saves it.
@@ -331,23 +486,21 @@ impl Shipped {
     }
 
     pub fn new(kind: Kind, cx: &mut Context<Self>) -> Self {
-        // The Agents page reads the hub's model while it is open.
-        let poll = (kind == Kind::Agents).then(|| {
-            cx.spawn(async move |this, cx| loop {
-                if this.update(cx, |this, cx| this.read_agents(cx)).is_err() {
-                    return;
-                }
-                cx.background_executor().timer(AGENTS_TICK).await;
-            })
-        });
         // The record and the bound values reach the view through the entity it observes (#1546).
-        crate::record::observe(cx);
+        crate::record::on_move(cx, |this: &mut Shipped, cx| this.record_moved(cx));
         if kind == Kind::Session {
             SESSION_VIEW.with(|view| *view.borrow_mut() = Some(cx.entity().downgrade()));
         }
+        let focus_handle = cx.focus_handle();
+        // The list's keys are the window's from the start, while a narrow window shows only the page too (#1808).
+        if kind == Kind::Sidebar {
+            LIST_KEYS.with(|keys| {
+                *keys.borrow_mut() = Some((focus_handle.clone(), cx.entity().downgrade()))
+            });
+        }
         Self {
             kind,
-            focus_handle: cx.focus_handle(),
+            focus_handle,
             welcome: Default::default(),
             rows: SidebarRows::default(),
             start: (kind == Kind::Sidebar).then(|| SIDEBAR_ROWS.with(std::cell::Cell::get)),
@@ -355,15 +508,21 @@ impl Shipped {
             popped: false,
             agents: None,
             reviewing: None,
-            _agents_poll: poll,
+            agents_polled: false,
+            _agents_poll: None,
             age_tick: None,
             kept: crate::list::Kept::default(),
             hovered: false,
             pressed: None,
             built: None,
             typed: (String::new(), 0),
-            list_first: 0,
+            list_top: px(0.),
+            list_room: Default::default(),
+            wheeled: false,
             renaming: None,
+            list_model: None,
+            row_views: HashMap::new(),
+            drawn_record: None,
         }
     }
 
@@ -385,7 +544,7 @@ impl Shipped {
                             crate::actions::hub_write(
                                 "session.rename",
                                 json!({ "session": renaming.session, "name": name }),
-                                "Rename".into(),
+                                copy::text("views.rename").into(),
                                 cx,
                             );
                         }
@@ -486,6 +645,375 @@ impl Shipped {
         self.age_tick = Some((due, timer));
     }
 
+    /// The list's items in view (#1482), built from the record, the one rule for when rows move (#1461) and the
+    /// keyboard, but built again only when one of those moved or a row that left is due to go: a frame that changes
+    /// nothing the list is built from, a hover's, costs what it draws, whatever the list's length.
+    fn list_in_view(
+        &mut self,
+        unfinished: bool,
+        jobs: usize,
+        now: u64,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> InView {
+        let attended = self.hovered || self.focus_handle.contains_focused(window, cx);
+        let key = self.list_built_from(unfinished, jobs, attended, now, window, cx);
+        if let Some(model) = (self.list_model.as_ref())
+            .filter(|model| model.key == key && model.next_change.is_none_or(|at| now < at))
+        {
+            let view = model.view.clone();
+            if let Some(at) = model.next_change {
+                states::changes_after(at - now);
+            }
+            if attended {
+                self.kept.attended(now);
+            }
+            return view;
+        }
+        let s = sizes();
+        // First launch draws an empty list (#1461); so does a record with no ask and no session. Before the
+        // record is read the list holds Needs you's heading alone, saying so.
+        let fresh = if unfinished {
+            Vec::new()
+        } else if !crate::record::read_yet() {
+            vec![crate::list::Item::Heading {
+                id: crate::list::HEADING.to_owned(),
+                title: copy::text("views.needs_you").to_owned(),
+                count: None,
+            }]
+        } else {
+            // The list is built once per reading of the record, not once per frame.
+            let read = crate::list::read_now(now);
+            match &self.built {
+                Some((at, items)) if std::rc::Rc::ptr_eq(at, &read) => items.clone(),
+                _ => {
+                    let items = crate::list::build(&read.0, &read.1);
+                    self.built = Some((read, items.clone()));
+                    items
+                }
+            }
+        };
+        // The row the list's keyboard is on leaves at once when it leaves its state, and the keyboard goes to
+        // the row now in its place (#1462); every other row that left keeps its slot while you're here (#1461).
+        if self.focus_handle.is_focused(window) {
+            if let Some(on) = self.rows.focused.clone() {
+                if !fresh.iter().any(|item| item.id() == on) {
+                    self.kept.release(&on);
+                }
+            }
+        }
+        let mut items = self.kept.settle(fresh, attended, now).to_vec();
+        let next_change = self.kept.next_change(now);
+        if let Some(at) = next_change {
+            states::changes_after(at - now);
+        }
+        // #1461's planted list draws each agent waiting for a first session as a row.
+        if crate::plain::planted("agent-as-row") && items.is_empty() {
+            items.push(crate::list::Item::Row(Box::new(crate::list::Row {
+                id: "session:claude-code".to_owned(),
+                address: Address::session("claude-code"),
+                title: "Claude Code".to_owned(), // copy-exception: planted wrong program
+                word: "queued".to_owned(),
+                value: "queued".to_owned(),
+                entry: "queued",
+                time: None,
+                loud: false,
+                left: false,
+                why: String::new(),
+                doing: None,
+                hooks: (0, None),
+                flag: None,
+            })));
+        }
+        let popped = crate::open::popped(cx) == Some(Kind::NeedsYou);
+        let replaced = NEEDS_YOU_VIEW.with(|view| view.borrow().clone());
+        let asks_row = |item: &crate::list::Item| item.id().starts_with("ask:");
+        let skip = |item: &crate::list::Item| {
+            (popped && (asks_row(item) || item.id() == crate::list::HEADING))
+                || (replaced.is_some() && asks_row(item))
+        };
+        // #1462's planted list hides the rows that don't match what you typed.
+        let typed = self.typed.0.clone();
+        let hidden = |item: &crate::list::Item| {
+            cfg!(feature = "plant-list-hides-row")
+                && !typed.is_empty()
+                && matches!(item, crate::list::Item::Row(row)
+                    if !row.title.to_lowercase().starts_with(&typed))
+        };
+        items.retain(|item| !skip(item) && !hidden(item));
+        // The rows the keyboard walks, in the list's order (#1462): each ask, then each project's heading and
+        // its rows, every one of them. #2021's planted list lets the keyboard onto the headings alone.
+        let rows: Vec<ListRow> = keyboard_rows(&items)
+            .into_iter()
+            .filter(|row| {
+                !crate::plain::planted("rows-take-no-focus") || row.id.starts_with("project:")
+            })
+            .collect();
+        if let Some((selected, focused)) = self.start.take() {
+            let id = |at: Option<usize>| {
+                at.and_then(|i| {
+                    rows.iter()
+                        .filter(|row| !row.id.starts_with("project:"))
+                        .nth(i)
+                        .map(|row| row.id.clone())
+                })
+            };
+            self.rows = SidebarRows {
+                selected: id(selected),
+                focused: id(focused),
+            };
+            if self.rows.focused.is_some() {
+                window.focus(&self.focus_handle, cx);
+            }
+        }
+        // Focus follows a row that leaves: to the row now in its place, else the last (#1462).
+        if let Some(on) = self.rows.focused.clone() {
+            if !rows.iter().any(|row| row.id == on) {
+                let at = LAST_ROWS.with(|last| last.borrow().iter().position(|id| *id == on));
+                self.rows.focused = at
+                    .and_then(|at| rows.get(at.min(rows.len().saturating_sub(1))))
+                    .or(rows.last())
+                    .map(|row| row.id.clone());
+            }
+        }
+        // The keys reached a list that wasn't drawn, as a narrow window's hidden list (#1808): they go to the open
+        // page's row, else the first, as Esc's do (#1462).
+        if self.rows.focused.is_none() && self.focus_handle.is_focused(window) {
+            let here = crate::open::current(cx);
+            self.rows.focused = rows
+                .iter()
+                .find(|row| Some(&row.address) == here.as_ref())
+                .or(rows.first())
+                .map(|row| row.id.clone());
+        }
+        // The list scrolls (#1808). Needs you's heading stays at its top, so its count is never scrolled off, and
+        // only the items in view under it are drawn, so a frame over 700 rows costs what it shows. The keyboard's
+        // row is always in view: it brings the rows either side of it into view too, so the next row an arrow goes
+        // to is in view (#2021), and a wheel that scrolls it out of view takes the keyboard to the nearest row in
+        // view.
+        let pinned = usize::from(
+            items
+                .first()
+                .is_some_and(|item| item.id() == crate::list::HEADING),
+        );
+        let scroll = crate::list::Scroll::new(
+            items[pinned..]
+                .iter()
+                .map(|item| f32::from(item_height(item))),
+        );
+        let end = px(scroll.end());
+        let content = end + (s.space(4) + s.small.line) * jobs as f32;
+        let room = self
+            .list_room
+            .get()
+            .map_or(window.viewport_size().height, |area| area.height);
+        let most = (content - room).max(px(0.));
+        let (room_at, mut top_at) = (
+            f32::from(room),
+            f32::from(self.list_top.clamp(px(0.), most)),
+        );
+        let wheeled = std::mem::take(&mut self.wheeled);
+        // #1808's planted list draws its rows from its top and cuts them at its foot, whatever moves.
+        let clips = crate::plain::planted("list-clips");
+        let on = self
+            .rows
+            .focused
+            .as_deref()
+            .and_then(|on| item_at(&items[pinned..], on))
+            .filter(|_| !clips);
+        if let Some(at) = on {
+            if !wheeled {
+                top_at = scroll.reveal(at, top_at, room_at);
+            } else if !scroll.shows(at, top_at, room_at) {
+                // Among the items drawn, those whole in view that the keyboard walks.
+                let mut shown = scroll
+                    .drawn(top_at, room_at)
+                    .filter(|i| scroll.shows(*i, top_at, room_at))
+                    .filter_map(|i| keyboard_id(&items[pinned + i]))
+                    .filter(|id| rows.iter().any(|row| row.id == *id));
+                let nearest = if scroll.span(at).0 >= top_at {
+                    shown.next_back()
+                } else {
+                    shown.next()
+                };
+                if nearest.is_some() {
+                    self.rows.focused = nearest;
+                }
+            }
+        }
+        let top = if clips {
+            px(0.)
+        } else {
+            px(top_at).clamp(px(0.), most)
+        };
+        self.list_top = top;
+        let drawn = scroll.drawn(f32::from(top), room_at);
+        let offset = px(scroll.top_of(drawn.start)) - top;
+        // #1482's planted list builds the row below the window's edge too.
+        let to =
+            (pinned + drawn.end + usize::from(crate::plain::planted("builds-row-out-of-view")))
+                .min(items.len());
+        let items: Vec<crate::list::Item> = items[..pinned]
+            .iter()
+            .chain(&items[pinned + drawn.start..to])
+            .cloned()
+            .collect();
+        LAST_ROWS.with(|last| *last.borrow_mut() = rows.iter().map(|row| row.id.clone()).collect());
+        LIST_ROWS.with(|list| *list.borrow_mut() = rows);
+        // A row out of view keeps no view.
+        self.row_views
+            .retain(|id, _| items.iter().any(|item| item.id() == id));
+        let view = InView {
+            items: std::rc::Rc::new(items),
+            pinned,
+            offset,
+            end,
+            top,
+            room,
+        };
+        self.list_model = Some(ListModel {
+            key: self.list_built_from(unfinished, jobs, attended, now, window, cx),
+            next_change,
+            view: view.clone(),
+            _read: self.built.as_ref().map(|(read, _)| read.clone()),
+        });
+        view
+    }
+
+    /// What the view draws from the record (#1482), read again only when the record moved, another session opened,
+    /// or something it read from the clock reads differently, so a frame the record didn't move reads none of it.
+    fn record_now(&mut self, opened: Option<&str>, now: u64) -> std::rc::Rc<Record> {
+        let at = crate::record::with_view(|view| (view.start.clone(), view.log_pos));
+        let key = (
+            at.unwrap_or_default(),
+            crate::record::folded(),
+            opened.map(str::to_owned),
+        );
+        if let Some((read, until, record)) = &self.drawn_record {
+            if *read == key && until.is_none_or(|until| now < until) {
+                if let Some(until) = until {
+                    states::changes_after(until - now);
+                }
+                return record.clone();
+            }
+        }
+        let (record, changes) = states::written_in(|| record(self.kind, opened));
+        let record = std::rc::Rc::new(record);
+        self.drawn_record = Some((key, changes.map(|wait| now + wait), record.clone()));
+        record
+    }
+
+    /// What the list in view is built from, but the clock (#1482).
+    fn list_built_from(
+        &self,
+        unfinished: bool,
+        jobs: usize,
+        attended: bool,
+        now: u64,
+        window: &Window,
+        cx: &App,
+    ) -> ListKey {
+        let fresh = if unfinished {
+            0
+        } else if !crate::record::read_yet() {
+            1
+        } else {
+            std::rc::Rc::as_ptr(&crate::list::read_now(now)) as usize
+        };
+        ListKey {
+            fresh,
+            attended,
+            keys: self.focus_handle.is_focused(window),
+            rows: self.rows.clone(),
+            typed: self.typed.0.clone(),
+            popped: crate::open::popped(cx) == Some(Kind::NeedsYou),
+            replaced: NEEDS_YOU_VIEW.with(|view| view.borrow().is_some()),
+            area: self.list_room.get(),
+            top: self.list_top,
+            wheeled: self.wheeled,
+            jobs,
+            start: self.start.is_some(),
+        }
+    }
+
+    /// The record moved: a view draws again, but a session's page for the events of its own session alone (#1482).
+    fn record_moved(&mut self, cx: &mut Context<Self>) {
+        if self.kind == Kind::Session && !crate::plain::planted("page-redraws-every-session") {
+            if let Some(session) = crate::open::opened_session(cx) {
+                if !crate::record::moved_for(&session, cx) {
+                    return;
+                }
+            }
+        }
+        cx.notify();
+    }
+
+    /// The list's row `row` as a cached view of its own (#1482), drawing `drawn`: a row that draws what it drew is
+    /// reused whole, and one that changed draws again in this frame, alone.
+    fn row_in_view(
+        &mut self,
+        row: &crate::list::Row,
+        drawn: RowDrawn,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let style = StyleRefinement::default().h(drawn.tall).flex_none();
+        #[cfg(feature = "fixtures")]
+        ROWS_BUILT.with(|built| built.set(built.get() + 1));
+        let view = match self.row_views.get(&row.id) {
+            Some(view) => {
+                if view.read(cx).drawn != drawn {
+                    view.update(cx, |view, _| view.drawn = drawn);
+                    window.redraw_in_frame(view.entity_id());
+                }
+                view.clone()
+            }
+            None => {
+                let sidebar = cx.entity().downgrade();
+                let view = cx.new(|_| RowView {
+                    drawn,
+                    row: row.id.clone(),
+                    address: row.address.clone(),
+                    sidebar,
+                });
+                self.row_views.insert(row.id.clone(), view.clone());
+                view
+            }
+        };
+        view.cached(style).into_any_element()
+    }
+
+    /// A click on the list's row `id` (#1461): a press that went down on a row that had just moved is dropped, never
+    /// passed to the row now under the pointer.
+    fn click_row(
+        &mut self,
+        id: &str,
+        address: &Address,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let at = match self.pressed.take() {
+            Some((on, at)) if on == id => at,
+            _ => now_ms(),
+        };
+        if !self.kept.takes_press(id, at) {
+            return;
+        }
+        self.rows = SidebarRows {
+            selected: Some(id.to_owned()),
+            focused: Some(id.to_owned()),
+        };
+        window.focus(&self.focus_handle, cx);
+        #[cfg(feature = "plant-row-skips-open")]
+        if let Some(session) = id.strip_prefix("session:") {
+            crate::open::skip_open(session, window, cx);
+            cx.notify();
+            return;
+        }
+        crate::open::open(address, window, cx).ok();
+        cx.notify();
+    }
+
     /// Reads the Agents page's model; a changed one draws.
     fn read_agents(&mut self, cx: &mut Context<Self>) {
         let page = crate::record::call("agents.read", json!({}));
@@ -504,13 +1032,7 @@ impl Shipped {
             .as_ref()
             .and_then(|tab| tab["drawn"][0]["text"].as_str())
             .filter(|_| page.is_some())
-            .map_or("No terminal in this session.".to_owned(), str::to_owned);
-        let poll = cx.spawn(async move |this, cx| loop {
-            cx.background_executor().timer(TERMINAL_TICK).await;
-            if this.update(cx, |this, cx| this.read_terminal(cx)).is_err() {
-                return;
-            }
-        });
+            .map_or(copy::text("views.no_terminal").to_owned(), str::to_owned);
         let focus = cx.focus_handle();
         TERMINAL_KEYS.with(|keys| *keys.borrow_mut() = Some(focus.clone()));
         self.terminal = Some(TerminalTab {
@@ -518,9 +1040,106 @@ impl Shipped {
             focus,
             screen: None,
             words,
-            _poll: poll,
+            outline: Vec::new(),
+            pressing: false,
+            polled: false,
+            _poll: None,
         });
         self.read_terminal(cx);
+        self.poll_terminal(false, cx);
+    }
+
+    /// Whether the view's page is drawn: in a window of its own, or as the shell's page region (#2661).
+    fn page_shown(&self, cx: &App) -> bool {
+        self.popped
+            || (crate::open::shown_region(cx) == Some(crate::open::Region::Shipped(self.kind))
+                && crate::open::popped(cx) != Some(self.kind))
+    }
+
+    /// Polls the Agents page's model while the page is shown (#2661): right after the frame that shows it, then each
+    /// [`AGENTS_TICK`], until the first tick it isn't shown. The next draw that shows it starts it again.
+    fn poll_agents(&mut self, cx: &mut Context<Self>) {
+        if self.kind != Kind::Agents || self.agents_polled || !self.page_shown(cx) {
+            return;
+        }
+        self.agents_polled = true;
+        self._agents_poll = Some(cx.spawn(async move |this, cx| loop {
+            let shown = this.update(cx, |this, cx| {
+                this.agents_polled = this.page_shown(cx);
+                if this.agents_polled {
+                    this.read_agents(cx);
+                }
+                this.agents_polled
+            });
+            if !matches!(shown, Ok(true)) {
+                return;
+            }
+            cx.background_executor().timer(AGENTS_TICK).await;
+        }));
+    }
+
+    /// Whether the open Terminal tab is drawn: its session's page is shown (#2661).
+    fn terminal_shown(&self, cx: &App) -> bool {
+        let session = crate::open::opened_session(cx);
+        self.page_shown(cx)
+            && self
+                .terminal
+                .as_ref()
+                .is_some_and(|tab| session.as_deref() == Some(tab.session.as_str()))
+    }
+
+    /// Polls the open Terminal tab's grid while it is shown (#2661), as [`Shipped::poll_agents`] polls: each
+    /// [`TERMINAL_TICK`], at once when `now`, after the frame that shows it.
+    fn poll_terminal(&mut self, now: bool, cx: &mut Context<Self>) {
+        let shown = self.terminal_shown(cx);
+        let Some(tab) = self.terminal.as_mut().filter(|tab| shown && !tab.polled) else {
+            return;
+        };
+        tab.polled = true;
+        tab._poll = Some(cx.spawn(async move |this, cx| {
+            if !now {
+                cx.background_executor().timer(TERMINAL_TICK).await;
+            }
+            loop {
+                let shown = this.update(cx, |this, cx| {
+                    let shown = this.terminal_shown(cx);
+                    if let Some(tab) = this.terminal.as_mut() {
+                        tab.polled = shown;
+                    }
+                    if shown {
+                        this.read_terminal(cx);
+                    }
+                    shown
+                });
+                if !matches!(shown, Ok(true)) {
+                    return;
+                }
+                cx.background_executor().timer(TERMINAL_TICK).await;
+            }
+        }));
+    }
+
+    /// #1498: your pointer on the terminal tab's grid, to the core ([`crate::select::grid`]).
+    fn grid_pointer(
+        &mut self,
+        kind: &str,
+        at: Point<Pixels>,
+        count: usize,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(tab) = self.terminal.as_mut() else {
+            return;
+        };
+        let Some(screen) = &tab.screen else {
+            return;
+        };
+        let size = (screen.cols, screen.rows.len());
+        if let Some(outline) =
+            crate::select::grid((kind, at, count), &tab.session, size, &mut tab.pressing)
+        {
+            tab.outline = outline;
+        }
+        cx.notify();
     }
 
     /// Reads the open tab's grid; a new revision draws.
@@ -552,11 +1171,7 @@ pub fn count_line() -> String {
 /// The one count sentence, which Home, the list and the menu bar say (#1455), in words that agree with the number
 /// (#2026).
 pub fn asks_need_you(count: usize) -> String {
-    match count {
-        0 => "Nothing needs you".to_owned(),
-        1 => "1 ask needs you".to_owned(),
-        count => format!("{count} asks need you"),
-    }
+    copy::count("views.asks_need_you", count as u64, &[])
 }
 
 /// Teaches the panel registry every shipped view, so a layout can name them.
@@ -679,7 +1294,7 @@ pub(crate) fn page_region(page: Option<crate::open::Page>, drawn: impl IntoEleme
     let claim = page.claim.map(|claim| {
         label(
             ElementId::Name(format!("claim:{claim}").into()),
-            format!("Claim {claim}"),
+            copy::fill("views.claim", &[&claim]),
         )
         .px(sizes().space(1))
     });
@@ -722,8 +1337,30 @@ fn drew(name: &'static str, bounds: Bounds<Pixels>) {
 }
 
 /// Forgets the views laid out in earlier frames; [`crate::canvas::clear_items`] calls it.
+#[cfg(feature = "fixtures")]
 pub(crate) fn forget_drawn() {
-    DRAWN.with(|drawn| drawn.borrow_mut().clear());
+    DRAWN.with(|drawn| {
+        LEFT.with(|left| *left.borrow_mut() = std::mem::take(&mut *drawn.borrow_mut()))
+    });
+}
+
+thread_local! {
+    /// What [`forget_drawn`] cleared: where the views laid out before it were (#1482).
+    static LEFT: RefCell<Vec<(&'static str, Bounds<Pixels>)>> = const { RefCell::new(Vec::new()) };
+}
+
+/// A cached view GPUI reused doesn't lay out again: the places it had stay, by name (#1482).
+pub fn keep_drawn(reused: &[&'static str]) {
+    LEFT.with(|left| {
+        DRAWN.with(|drawn| {
+            let mut drawn = drawn.borrow_mut();
+            for (name, bounds) in left.borrow().iter() {
+                if reused.contains(name) && !drawn.iter().any(|(n, _)| n == name) {
+                    drawn.push((name, *bounds));
+                }
+            }
+        });
+    });
 }
 
 /// Each shipped view laid out since the last frame began, by its panel name, with its bounds in window points (#1458).
@@ -767,6 +1404,14 @@ pub fn rename(session: &str, window: &mut Window, cx: &mut App) {
     };
     let session = session.to_owned();
     page.update(cx, |page, cx| page.start_rename(session, window, cx));
+}
+
+/// The session's page, notified: #1482's planted setter's notify, made without comparing.
+pub(crate) fn notify_session_page(cx: &mut App) {
+    let page = SESSION_VIEW.with(|view| view.borrow().as_ref().and_then(WeakEntity::upgrade));
+    if let Some(page) = page {
+        page.update(cx, |_, cx| cx.notify());
+    }
 }
 
 /// The page that is the box alone gives the box the keys when it next draws (#1461).
@@ -908,6 +1553,21 @@ fn keyboard_rows(items: &[crate::list::Item]) -> Vec<ListRow> {
     rows
 }
 
+/// The id the keyboard reaches `item` by: a row's own, a project's heading's `project:<project>` (#1462).
+fn keyboard_id(item: &crate::list::Item) -> Option<String> {
+    match item {
+        crate::list::Item::Row(row) => Some(row.id.clone()),
+        crate::list::Item::Heading { id, .. } if id != crate::list::HEADING => {
+            let name = id.strip_prefix("heading:")?;
+            Some(format!(
+                "project:{}",
+                crate::list::project_id((name != "none").then_some(name))
+            ))
+        }
+        crate::list::Item::Heading { .. } => None,
+    }
+}
+
 /// Where the list's keyboard row `on` is among `items`: a row by its id, a project's heading by `project:<project>`.
 fn item_at(items: &[crate::list::Item], on: &str) -> Option<usize> {
     items
@@ -967,6 +1627,8 @@ pub fn focus_list(window: &mut Window, cx: &mut App) {
     let Some((keys, list)) = LIST_KEYS.with(|keys| keys.borrow().clone()) else {
         return;
     };
+    // A narrow window shows the list it gives the keyboard to (#1808).
+    show_page_region(false, cx);
     let rows = list_rows(cx);
     let here = crate::open::current(cx).map(|address| address.to_string());
     if let Some(list) = list.upgrade() {
@@ -997,6 +1659,8 @@ pub fn next_area(window: &mut Window, cx: &mut App) {
     let on_page =
         crate::card::focused(window) || page.as_ref().is_some_and(|k| k.is_focused(window));
     if list_focused(window).is_some() {
+        // A narrow window shows the page it gives the keyboard to (#1808).
+        show_page_region(true, cx);
         if !crate::card::focus(window, cx) {
             match page {
                 Some(keys) => window.focus(&keys, cx),
@@ -1028,7 +1692,7 @@ fn open_context(row: String, at: Point<Pixels>, window: &mut Window, cx: &mut Ap
 fn context_items() -> Vec<&'static str> {
     let mut items = crate::actions::session_items();
     if cfg!(feature = "plant-context-only-action") {
-        items.push("Reveal in Finder");
+        items.push("Reveal in Finder"); // copy-exception: planted wrong program
     }
     items
 }
@@ -1040,7 +1704,7 @@ fn context_menu(window: &Window) -> Option<AnyElement> {
     Some(
         observed("context-menu")
             .role(Role::Menu)
-            .aria_label("Actions")
+            .aria_label(copy::text("views.actions"))
             .absolute()
             .left(at.x)
             .top(at.y)
@@ -1060,14 +1724,14 @@ fn context_menu(window: &Window) -> Option<AnyElement> {
             .children(context_items().into_iter().map(|name| {
                 observed(ElementId::Name(format!("context:{name}").into()))
                     .role(Role::MenuItem)
-                    .aria_label(name)
+                    .aria_label(crate::actions::label(name))
                     .px(sizes().space(1))
                     .h(sizes().space(4))
                     .flex()
                     .items_center()
                     .rounded(sizes().radius)
                     .hover(|style| style.bg(chrome.hover))
-                    .child(name)
+                    .child(crate::actions::label(name))
                     .on_click(move |_, window, cx| {
                         CONTEXT.with(|context| *context.borrow_mut() = None);
                         crate::actions::run(name, window, cx);
@@ -1093,17 +1757,43 @@ pub(crate) fn label(
         .child(text)
 }
 
-/// A page's title: the title role, so a page has one voice (#1458).
-fn title(
+/// #1498: a line of content, drawn as a label draws it, that the kit's selection selects, its selection outlined in
+/// `color`: a check's failure line. A label, a row or a button never selects.
+pub(crate) fn content(
+    id: impl Into<ElementId>,
+    text: impl Into<SharedString>,
+    color: Hsla,
+) -> ObservedElement<Stateful<Div>> {
+    let text = text.into();
+    observed(id)
+        .role(Role::Label)
+        .aria_label(text.clone())
+        .typed(sizes().body)
+        .h(sizes().body.line)
+        .flex()
+        .items_center()
+        .child(crate::select::Outlined::new("text", text, color))
+}
+
+/// A page's title: the title role, so a page has one voice (#1458). A title longer than its row wraps, whole, and the
+/// row grows with it (#1808).
+pub(crate) fn title(
     id: impl Into<ElementId>,
     text: impl Into<SharedString>,
 ) -> ObservedElement<Stateful<Div>> {
     let s = sizes();
-    label(id, text).typed(s.title).h(s.title.line + s.space(2))
+    // A title longer than its room ends in an ellipsis, its whole text in its accessible name, as a row's does: a page
+    // at 360 pt wide draws nothing past its frame (#2403).
+    label(id, text)
+        .typed(s.title)
+        .h_auto()
+        .min_h(s.title.line + s.space(2))
+        .min_w_0()
+        .truncate()
 }
 
 /// A list's heading: the body role at medium weight (#1458).
-fn heading(
+pub(crate) fn heading(
     id: impl Into<ElementId>,
     text: impl Into<SharedString>,
 ) -> ObservedElement<Stateful<Div>> {
@@ -1113,48 +1803,20 @@ fn heading(
 /// How long the kit's overlays take to fade in, by opacity alone: the one motion chrome makes (#1458).
 pub const OVERLAY_FADE: Duration = Duration::from_millis(120);
 
-/// How long the pointer rests on a row before its tooltip shows.
-const ROW_TIP_DELAY: Duration = Duration::from_millis(1500);
-
-/// A row's tooltip (#1458): the row's whole text in a node of the tooltip role, in the small role.
-struct RowTip(SharedString);
-
-impl Render for RowTip {
-    fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        let (chrome, s) = (chrome::of(window), sizes());
-        // #1458's planted tooltip keeps the kit's own text size.
-        let kit = crate::plain::planted("tooltip-kit-size");
-        observed("row-tip")
-            .role(Role::Tooltip)
-            .typed(s.small)
-            .when(kit, |tip| tip.text_size(px(14.))) // size-literal-exception: #1458's planted wrong program, in an env-plants build only; review 2027-04-30
-            .px(s.space(1))
-            .py(s.space(0))
-            .rounded(s.radius)
-            .bg(chrome.raised)
-            .border(s.hairline)
-            .border_color(chrome.divider)
-            .text_color(chrome.ink_primary)
-            .child(self.0.clone())
-            .with_animation(
-                "row-tip-fade",
-                Animation::new(OVERLAY_FADE),
-                |tip, shown| tip.opacity(shown),
-            )
-    }
-}
-
-/// A control's kind (#1458): the page's one main action, a plain action, or a switch, on or off.
+/// A control's kind (#1458): the page's one main action, a plain action, a switch, on or off, or (#1592) a plain action
+/// that shows only an icon of the set, at its place's size.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Control {
     Main,
     Plain,
     Switch(bool),
+    Icon(&'static str, crate::icons::Place),
 }
 
 /// The one control builder (#1458): a button or a switch, one accessibility node named by its label, in the body
 /// role at one height. A switch draws its state as a mark beside its label and carries it as the node's value,
-/// `on` or `off`, never as a word in the label. No view styles a control itself.
+/// `on` or `off`, never as a word in the label. A control that shows only an icon keeps its label as its name in the
+/// tree (#1592; #1453 rule 10). No view styles a control itself.
 pub(crate) fn control(
     id: impl Into<ElementId>,
     kind: Control,
@@ -1187,6 +1849,14 @@ pub(crate) fn control(
             .role(Role::Button)
             .hover(move |style| style.bg(hover))
             .child(words),
+        // A target as wide as it's tall, its icon centred, in the secondary ink.
+        Control::Icon(name, place) => control
+            .role(Role::Button)
+            .px_0()
+            .min_w(s.space(4))
+            .justify_center()
+            .hover(move |style| style.bg(hover))
+            .child(crate::icons::icon(name, place, chrome.ink_secondary)),
         Control::Switch(on) => control
             .role(Role::Switch)
             .aria_value(if on { "on" } else { "off" })
@@ -1429,638 +2099,29 @@ pub fn now() -> u64 {
         .map_or(0, |since| since.as_millis() as u64)
 }
 
-/// A session's status mark and words, one accessibility node named by what it shows: the mark's core, a square of
-/// the look's status color with square corners, then its glyph and the words in the text's color.
-fn status(
-    id: impl Into<ElementId>,
-    state: &states::State,
-    text: String,
-) -> ObservedElement<Stateful<Div>> {
-    marked(id, state.entry(), text)
-}
-
-/// A status mark for a status-map entry, and its words.
-fn marked(id: impl Into<ElementId>, entry: &str, text: String) -> ObservedElement<Stateful<Div>> {
-    let glyph = states::glyph(entry);
-    #[cfg(feature = "plant-row")]
-    let text = match ROW_PLANT.get() {
-        Some(RowPlant::CutOff) if text.chars().count() > CUT_TO => {
-            format!("{}…", text.chars().take(CUT_TO).collect::<String>())
-        }
-        _ => text,
-    };
-    let name = format!("{glyph} {text}");
-    // A length at the end of the words is the row's time, drawn in its own slot at the right edge (#1458): as wide as
-    // a step of space at least, so a time ticking a digit longer moves nothing else in the row.
-    let (said, time) = states::time_at_end(&text);
-    let (said, time) = (said.to_owned(), time.map(str::to_owned));
-    // #1458's planted row draws its time in the flow before the words, as wide as it reads, so a wider time pushes them.
-    let inline = crate::plain::planted("time-flows-inline");
-    let time = time.map(|time| {
-        let slot = div().flex_none().child(time);
-        if inline {
-            slot
-        } else {
-            slot.min_w(sizes().space(5)).flex().justify_end()
-        }
-    });
-    // Past the row's width the text ends in an ellipsis; the row's name keeps the whole of it.
-    let words = div().flex_1().min_w_0().truncate();
-    // #1458's planted row draws in the canvas's face, not the chrome's.
-    let words = if crate::plain::planted("row-label-canvas-face") {
-        words.font_family(deep_text_gpui::Role::Body.family())
-    } else {
-        words
-    };
-    #[cfg(feature = "plant-row")]
-    let words = if ROW_PLANT.get() == Some(RowPlant::PastFrame) {
-        div().flex_none()
-    } else {
-        words
-    };
-    // Its value is the state's status-map entry, a closed word an agent reads where the eye reads the glyph (#1459).
-    let row = observed(id)
-        .role(Role::Label)
-        .aria_label(name)
-        .aria_value(entry.to_owned())
-        .typed(sizes().body)
-        .h(sizes().body.line)
-        .flex()
-        .items_center()
-        .gap(sizes().space(0))
-        .child(
-            div()
-                .size(sizes().space(1))
-                .flex_none()
-                .bg(rgb(states::color(entry))),
-        )
-        .child(glyph);
-    if inline {
-        row.children(time).child(words.child(said))
-    } else {
-        row.child(words.child(said)).children(time)
-    }
-}
-
-/// The bound values on `surface`, one accessibility node each named by its surface, its ID and
-/// what it shows: its ID, the value, and where it comes from, muted, unless `titled` says the
-/// surface's title already names it (#1455). A missing value shows the dash and says it wasn't reported.
-fn bound_values(
-    surface: bound::Surface,
-    chrome: &chrome::Chrome,
-    titled: bool,
-) -> Vec<ObservedElement<Stateful<Div>>> {
-    bound::on(surface)
-        .into_iter()
-        .enumerate()
-        .map(|(index, b)| {
-            let id = ElementId::Name(format!("bound-{}-{index}", surface.name()).into());
-            let said = match &b.missing {
-                Some(_) => format!("{} · not reported", b.text),
-                None => b.text.clone(),
-            };
-            observed(id)
-                .role(Role::Label)
-                .aria_label(b.name())
-                .typed(sizes().body)
-                .h(sizes().body.line)
-                .flex()
-                .items_center()
-                .gap(sizes().space(1))
-                .pl(sizes().space(2))
-                .child(
-                    div()
-                        .w(relative(0.15))
-                        .text_color(chrome.ink_secondary)
-                        .child(b.id.clone()),
-                )
-                .child(text::label(
-                    &format!("bound-{}-{index}-value", surface.name()),
-                    text::Label {
-                        bound: true,
-                        ..text::Label::new(said)
-                    },
-                    chrome.ink_primary,
-                    None,
-                ))
-                .children((!titled).then(|| div().text_color(chrome.ink_secondary).child(b.from)))
-        })
-        .collect()
-}
-
-/// A panel in the window holding the bound values bound to it, when any are, titled by the one assertion they bind;
-/// values from more than one have no title (#1455).
-fn bound_panel(chrome: &chrome::Chrome) -> Option<Stateful<Div>> {
-    let bound = bound::on(bound::Surface::Panel);
-    let named = bound
-        .first()
-        .map(|b| b.from.clone())
-        .filter(|from| bound.iter().all(|b| &b.from == from));
-    let values = bound_values(bound::Surface::Panel, chrome, named.is_some());
-    (!values.is_empty()).then(|| {
-        div()
-            .id("bound-panel")
-            .mt(sizes().space(1))
-            .w_full()
-            .p(sizes().space(1))
-            .border(sizes().hairline)
-            .border_color(chrome.divider)
-            .flex()
-            .flex_col()
-            .children(named.map(|from| heading("bound-panel-title", from)))
-            .children(values)
-    })
-}
-
-/// A list row's time slot, as every surface writes it (#1458): how long in its state, or when an ask's default applies.
-fn time_of(time: crate::list::Time, now: u64) -> String {
-    match time {
-        crate::list::Time::Since(at) => {
-            let age = now.saturating_sub(at);
-            states::changes_after(states::changes_in(age));
-            states::span(age)
-        }
-        crate::list::Time::At(at) => states::moment(at, now),
-    }
-}
-
-/// One slot of a list row (#1461): a node of its own, `<row id>:<slot>`, with the slot's bounds.
-fn row_slot(row: &str, slot: &str, name: String) -> ObservedElement<Stateful<Div>> {
-    observed(ElementId::Name(format!("{row}:{slot}").into()))
-        .role(Role::Label)
-        .aria_label(name)
-}
-
-/// Where a working mark's core sits in its slot at each step, in steps of the look's smallest space: it moves one step
-/// for each event its session's hooks send, and holds still while none comes (#2021).
-const MARK_STEPS: [usize; 4] = [0, 1, 2, 1];
-
-/// One row of the list (#1461): one line, 32 tall, with fixed slots: the mark in 16 and 8 after it, the title, then
-/// the state word and a time at least 32 wide at the right edge. An unread or asking row's title is medium; a settled
-/// row's is regular in the secondary ink. Its name holds what's drawn and what's cut, and a working session's what its
-/// turn is doing now (#2021). Under reduce motion, `still`, a working mark holds still and its time says when its
-/// session's last event came.
-fn list_row(
-    row: &crate::list::Row,
-    selected: bool,
-    focused: bool,
-    still: bool,
-    now: u64,
-    chrome: &chrome::Chrome,
-) -> ObservedElement<Stateful<Div>> {
-    let s = sizes();
-    let ask = row.id.starts_with("ask:");
-    let working = row.entry == "running" && row.id.starts_with("session:");
-    let time = match row.hooks.1 {
-        Some(heard) if still && working => {
-            format!("{} ago", time_of(crate::list::Time::Since(heard), now))
-        }
-        _ => row.time.map(|t| time_of(t, now)).unwrap_or_default(),
-    };
-    // The working mark's step: one per event, or, in #2021's planted app, one each 300 ms whatever comes.
-    let step = if !working {
-        0
-    } else if crate::plain::planted("mark-on-timer") {
-        states::changes_after(300 - now % 300);
-        MARK_STEPS[(now / 300 % 4) as usize]
-    } else if still {
-        0
-    } else {
-        MARK_STEPS[(row.hooks.0 % 4) as usize]
-    };
-    let line = row.doing.as_ref().map(|doing| doing.line(now));
-    let reach = crate::notify::reach();
-    // An ask's row reads as its question, its handle nowhere drawn (#1172) and its id (#1459). The planted rows show
-    // the handle, or are keyed by their place.
-    let title = if ask && cfg!(feature = "plant-handle-rows") {
-        row.id.clone()
-    } else {
-        row.title.clone()
-    };
-    let name = if ask {
-        if reach.not_notified(&row.id) {
-            format!("{title} · not notified")
-        } else {
-            title.clone()
-        }
-    } else if cfg!(feature = "plant-row-title-only") {
-        title.clone()
-    } else if ["BLOCKED", "INVALID", "INCONCLUSIVE"].contains(&row.word.as_str())
-        && !row.why.is_empty()
-    {
-        // A verdict that isn't PASS or FAIL never reads as the bare word (#2018): the row is one line, so its name
-        // holds whom it waits for and the evidence it leaves open.
-        format!(
-            "{} {title} · {} · {}",
-            states::glyph(row.entry),
-            row.word,
-            row.why
-        )
-    } else if let Some(line) = &line {
-        format!(
-            "{} {title} · {} · {line}",
-            states::glyph(row.entry),
-            row.word
-        )
-    } else {
-        format!("{} {title} · {}", states::glyph(row.entry), row.word)
-    };
-    // Its one flag beside its word (#2019), with what it says: the row is one line, so its name holds the rest.
-    let name = match &row.flag {
-        Some(flag) => format!("{name} · {}: {}", flag.code, flag.text),
-        None => name,
-    };
-    let id = if ask && cfg!(feature = "plant-row-index-ids") {
-        format!("ask-{}", row.id.len())
-    } else {
-        row.id.clone()
-    };
-    let whole: SharedString = name.clone().into();
-    // A session's name with the short ID the hub added to tell it from a twin (#2018), apart.
-    let twin = row
-        .id
-        .strip_prefix("session:")
-        .map(|session| format!(" · {}", &session[..session.len().min(8)]))
-        .and_then(|short| {
-            let name = title.strip_suffix(short.as_str())?.to_owned();
-            Some((name, short))
-        });
-    let ring = if focused {
-        chrome.focus
-    } else {
-        chrome.focus.opacity(0.)
-    };
-    let ink = if row.loud {
-        chrome.ink_primary
-    } else {
-        chrome.ink_secondary
-    };
-    // A session waiting on you says so in its mark and its name: the heading Needs you carries the words (#1453 rule 9).
-    let drawn_word = if !ask && row.entry == "needs_you" {
-        String::new()
-    } else {
-        row.word.clone()
-    };
-    // An ask's time is when its default applies, the moment #1458 names `<ask>:applies` too.
-    let time_name = if ask {
-        format!("{id}:applies")
-    } else {
-        format!("{id}:time")
-    };
-    let time_slot = if ask {
-        row_slot(&id, "time", time.clone()).child(
-            observed(ElementId::Name(time_name.into()))
-                .role(Role::Label)
-                .aria_label(time.clone())
-                .child(time),
-        )
-    } else {
-        row_slot(&id, "time", time.clone()).child(time)
-    };
-    // #1461's planted row is 24 tall; #2021's selected row takes a second line, its session's line.
-    let second = (selected && crate::plain::planted("selected-second-line") && !ask)
-        .then(|| line.clone().unwrap_or_default());
-    let tall = if crate::plain::planted("row-24") {
-        s.space(4)
-    } else if second.is_some() {
-        s.space(5) * 2.
-    } else {
-        s.space(5)
-    };
-    observed(ElementId::Name(id.clone().into()))
-        .role(Role::Button)
-        .aria_label(name)
-        .aria_value(row.value.clone())
-        .when(focused, |row| row.aria_active_descendant())
-        .typed(s.body)
-        .h(tall)
-        .flex_none()
-        .flex()
-        .items_center()
-        .px(s.space(1))
-        .rounded(s.radius)
-        .relative()
-        .hover(|style| style.bg(chrome.hover))
-        .when(selected, |r| r.bg(chrome.selected))
-        // The focus ring over the row, taking no room of its own, so the slots sit where they sit focused or not.
-        .child(
-            div()
-                .absolute()
-                .inset_0()
-                .rounded(s.radius)
-                .border(s.ring)
-                .border_color(ring),
-        )
-        .tooltip(move |_, cx| cx.new(|_| RowTip(whole.clone())).into())
-        .tooltip_show_delay(ROW_TIP_DELAY)
-        // The mark: its core in the status color, in a slot of 16 with 8 after it.
-        .child(
-            row_slot(&id, "mark", states::glyph(row.entry).to_owned())
-                .aria_value(row.entry.to_owned())
-                .flex_none()
-                .w(s.space(3))
-                .h_full()
-                .mr(s.space(1))
-                .flex()
-                .items_center()
-                .child(
-                    div()
-                        .size(s.space(1))
-                        .ml(s.space(0) * step as f32)
-                        .bg(rgb(states::color(row.entry))),
-                ),
-        )
-        .child(
-            // Each slot the row's full height, so the slots read in the row's order, left to right.
-            row_slot(&id, "title", title.clone())
-                .flex_1()
-                .min_w_0()
-                .h_full()
-                .flex()
-                .items_center()
-                .text_color(ink)
-                // Unread or asking stands out by weight alone: the chrome's face has no medium of its own, so it
-                // takes the next weight it has (#1461).
-                .font_weight(if row.loud {
-                    FontWeight::SEMIBOLD
-                } else {
-                    FontWeight::NORMAL
-                })
-                .map(|slot| match twin {
-                    // The short ID that tells a session from its twin stays in view (#2018): a name too long for
-                    // the row is cut, its ID never.
-                    Some((name, short)) => slot
-                        .child(div().min_w_0().truncate().child(name))
-                        .child(div().flex_none().child(short)),
-                    None => slot.truncate().child(title),
-                }),
-        )
-        .child(
-            row_slot(&id, "word", row.word.clone())
-                .flex_none()
-                .h_full()
-                .flex()
-                .items_center()
-                .pl(s.space(1))
-                .text_color(chrome.ink_secondary)
-                .child(drawn_word),
-        )
-        // The flag, at most one, in the right slot beside the word (#2019): never a state, so in the word's ink.
-        .children(row.flag.as_ref().map(|flag| {
-            row_slot(&id, "flag", format!("{}: {}", flag.code, flag.text))
-                .flex_none()
-                .h_full()
-                .flex()
-                .items_center()
-                .pl(s.space(1))
-                .text_color(chrome.ink_secondary)
-                .child(flag.code.clone())
-        }))
-        .child(
-            time_slot
-                .flex_none()
-                .h_full()
-                .items_center()
-                .min_w(s.space(5))
-                .pl(s.space(1))
-                .flex()
-                .justify_end()
-                .text_color(chrome.ink_secondary),
-        )
-        .children(second.map(|line| {
-            div()
-                .absolute()
-                .bottom_0()
-                .left(s.space(4))
-                .text_color(chrome.ink_secondary)
-                .child(line)
-        }))
-}
-
-/// A heading of the list (#1461): 32 tall with 8 above it, its title in the body role at medium weight, its value the
-/// count it carries, if any.
-fn list_heading(id: &str, title: &str, value: Option<String>) -> ObservedElement<Stateful<Div>> {
-    let s = sizes();
-    heading(ElementId::Name(id.to_owned().into()), title.to_owned())
-        .when_some(value, |h, value| h.aria_value(value))
-        .h(s.space(5))
-        .mt(s.space(1))
-        .px(s.space(1))
-        .flex_none()
-}
-
 thread_local! {
     /// The view a layout put in the list's first section in place of the shipped Needs you (#1461): a replacement
     /// that passed `needs-you@1`.
     static NEEDS_YOU_VIEW: RefCell<Option<AnyView>> = const { RefCell::new(None) };
 }
 
-/// The time the views draw by: the virtual clock in a replica, else the system's.
-fn now_ms() -> u64 {
-    now()
-}
-
-/// Needs you's count as the heading carries it (#1461): its value, the number once read; its words, the one count
-/// sentence, "reading" before the record is read, or the hub not answering. Never 0 while it can't be read.
-fn needs_you_count(
-    count: usize,
-    empty: crate::empties::Empty,
-    now: u64,
-) -> (String, Option<String>, String) {
-    use crate::empties::Empty;
-    // #2026's planted count leaves out a decision's close: each ask a decision closed counts as open.
-    let count = if crate::plain::planted("home-skips-decision-close") {
-        count + crate::record::with_view(|view| view.table().decided()).unwrap_or(0)
-    } else {
-        count
-    };
-    // #2028's planted count adds the list's unread rows to the asks.
-    let count = if crate::plain::planted("list-adds-unread") {
-        count + crate::list::unread_rows()
-    } else {
-        count
-    };
-    match empty {
-        // Nothing needs you only once setup finished (#2026): until then, what setup says, and no number.
-        Empty::Nothing if count == 0 => match crate::setup::count() {
-            Some(setup) => (setup.to_owned(), None, String::new()),
-            None => ("Nothing needs you".to_owned(), None, "0".to_owned()),
-        },
-        // The planted count says "1 asks need you".
-        Empty::Nothing if crate::plain::planted("count-one-asks") => (
-            format!("{count} asks need you"),
-            Some(count.to_string()),
-            count.to_string(),
-        ),
-        Empty::Nothing => (
-            asks_need_you(count),
-            Some(count.to_string()),
-            count.to_string(),
-        ),
-        Empty::Reading => (
-            crate::empties::READING.to_owned(),
-            Some(crate::empties::READING.to_owned()),
-            String::new(),
-        ),
-        // Every count says the hub isn't answering and since when, in place of a number (#2026).
-        Empty::Unreachable { .. } => {
-            let words = empty.words("", now);
-            (words.clone(), Some(words), String::new())
-        }
-    }
-}
-
-/// Needs you's heading (#1461): its title and, at its right edge, the count drawn as its number, then the control that
-/// pops the section out, drawn on hover and in the tree at rest (#1453 rule 10).
-fn needs_you_heading(
-    count: usize,
-    empty: crate::empties::Empty,
-    now: u64,
-    popped: bool,
-    chrome: &chrome::Chrome,
-) -> ObservedElement<Stateful<Div>> {
-    let (name, drawn, value) = needs_you_count(count, empty, now);
-    let shown = chrome.ink_secondary;
-    list_heading(crate::list::HEADING, "Needs you", Some(value))
-        .justify_between()
-        .group("needs-you-heading")
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap(sizes().space(1))
-                .text_color(chrome.ink_secondary)
-                .font_weight(FontWeight::NORMAL)
-                .child(
-                    // As tall as the control beside it, so the two sit on one line in reading order.
-                    observed("sidebar-count")
-                        .role(Role::Label)
-                        .aria_label(name)
-                        .aria_value(empty.value())
-                        .min_h(sizes().space(4))
-                        .flex()
-                        .items_center()
-                        .children(drawn),
-                )
-                .children((!popped).then(|| {
-                    control("needs-you-pop-out", Control::Plain, "Pop out", chrome)
-                        .aria_label("Pop out Needs you")
-                        .text_color(transparent_black())
-                        .group_hover("needs-you-heading", move |style| style.text_color(shown))
-                        .on_click(|_, _, cx| {
-                            crate::open::pop_out(Address::page("needs-you"), Kind::NeedsYou, cx)
-                        })
-                })),
-        )
-}
-
-/// One of the three empties as a line (#1461), from one table: its mark, which only nothing here goes without, and its
-/// words. Its value is its mark's status-map entry; `idle`, the calm one, is nothing here's.
-fn empty_line(
-    id: &'static str,
-    nothing: &str,
-    empty: crate::empties::Empty,
-    now: u64,
-    chrome: &chrome::Chrome,
-) -> ObservedElement<Stateful<Div>> {
-    let s = sizes();
-    let words = empty.words(nothing, now);
-    observed(id)
-        .role(Role::Label)
-        .aria_label(words.clone())
-        .aria_value(empty.entry().unwrap_or("idle"))
-        .typed(s.body)
-        .h(s.space(5))
-        .flex_none()
-        .flex()
-        .items_center()
-        // In the list it sits in from the edge as a row does; on a page, on the lane's edge.
-        .when(id == "list-empty", |line| line.px(s.space(1)))
-        .text_color(chrome.ink_secondary)
-        // Its mark in a row's mark slot; nothing here has none, and its words keep the page's left edge.
-        .children(empty.entry().map(|entry| {
-            div()
-                .flex_none()
-                .w(s.space(3))
-                .mr(s.space(1))
-                .flex()
-                .items_center()
-                .child(div().size(s.space(1)).bg(rgb(states::color(entry))))
-        }))
-        .child(div().flex_1().min_w_0().truncate().child(words))
-}
-
-/// The empty a place is in now (#1461): the hub said down, the record not read yet, or read.
-fn empty_now() -> crate::empties::Empty {
-    let reach = crate::notify::reach();
-    let empty = crate::empties::Empty::of(reach.hub_down, reach.since, crate::record::read_yet());
-    // #1461's planted app draws not read yet as couldn't read.
-    if empty == crate::empties::Empty::Reading && crate::plain::planted("empties-alike") {
-        return crate::empties::Empty::Unreachable { since: None };
-    }
-    empty
-}
-
-/// A page's title (#1461): where every page has it, a node `page-title` around the page's own title.
-fn page_title(inner: impl IntoElement) -> ObservedElement<Stateful<Div>> {
-    observed("page-title")
-        .role(Role::Group)
-        .w_full()
-        .flex_none()
-        .child(inner)
-}
-
-/// The reading lane of a page (#1461): its content no wider than `min(720, page − 48)`, centred, so text keeps one left
-/// edge; and the box at its foot, but on the first-launch page.
-pub(crate) fn in_lane(content: impl IntoElement, with_box: bool) -> Div {
-    let s = sizes();
-    // #1461's planted page draws its content and its box the page's width.
-    let lane = if crate::plain::planted("page-no-lane") {
-        crate::chrome::sizes().window.0 * 4.
-    } else {
-        s.lane
-    };
-    div()
-        .size_full()
-        .flex()
-        .flex_col()
-        .items_center()
-        .px(s.space(4))
-        .child(
-            observed("lane")
-                .role(Role::Group)
-                .w_full()
-                .max_w(lane)
-                .flex_1()
-                .min_h_0()
-                .flex()
-                .flex_col()
-                // The page doesn't scroll yet (#1808): what's past the lane's foot is cut, as the list's rows are.
-                .overflow_hidden()
-                .child(content),
-        )
-        .children(with_box.then(words_box).flatten().map(|words| {
-            div()
-                .w_full()
-                .max_w(lane)
-                .flex_none()
-                .pb(s.space(2))
-                .child(words)
-        }))
-}
-
 impl Render for Shipped {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // The ages this frame writes, from here on, set the view's next tick (#1546).
         states::ages_written();
+        // A page shown again reads the hub once now, and polls it while it stays shown (#2661).
+        self.poll_agents(cx);
+        self.poll_terminal(true, cx);
         let chrome = chrome::of(window);
         // While setup hasn't finished, the count says so, never a number of asks (#1002).
         let unfinished = crate::setup::count();
         let opened = crate::open::opened_session(cx);
-        let record = record(self.kind, opened.as_deref());
-        let reach = crate::notify::reach();
         let now = now();
+        let record = self.record_now(opened.as_deref(), now);
+        let reach = crate::notify::reach();
         let name = self.kind.name();
+        #[cfg(feature = "fixtures")]
+        VIEW_NAMES.with(|names| names.borrow_mut().insert(cx.entity_id(), name));
         // A page in the center takes the keys F6 gives it (#1462): Esc gives them back to the list, and a printable key
         // goes to the box.
         let is_page = !matches!(self.kind, Kind::Sidebar | Kind::Line) && !self.popped;
@@ -2074,6 +2135,8 @@ impl Render for Shipped {
         }
         let page = div()
             .id(ElementId::Name(format!("view:{name}").into()))
+            // #1498: a press here, before a core surface takes it, leaves no core selection for ⌘C.
+            .capture_any_mouse_down(|_, _, _| crate::select::pressed_elsewhere())
             .when(is_page, |page| {
                 let keys = self.focus_handle.clone();
                 page.track_focus(&self.focus_handle).on_key_down(
@@ -2118,155 +2181,28 @@ impl Render for Shipped {
             Kind::Sidebar => {
                 let s = sizes();
                 let empty = empty_now();
-                // First launch draws an empty list (#1461); so does a record with no ask and no session. Before the
-                // record is read the list holds Needs you's heading alone, saying so.
-                let fresh = if unfinished.is_some() {
-                    Vec::new()
-                } else if !crate::record::read_yet() {
-                    vec![crate::list::Item::Heading {
-                        id: crate::list::HEADING.to_owned(),
-                        title: "Needs you".to_owned(),
-                        count: None,
-                    }]
-                } else {
-                    // The list is built once per reading of the record, not once per frame.
-                    let read = crate::list::read_now(now);
-                    match &self.built {
-                        Some((at, items)) if std::rc::Rc::ptr_eq(at, &read) => items.clone(),
-                        _ => {
-                            let items = crate::list::build(&read.0, &read.1);
-                            self.built = Some((read, items.clone()));
-                            items
-                        }
-                    }
-                };
-                let attended = self.hovered || self.focus_handle.contains_focused(window, cx);
-                // The row the list's keyboard is on leaves at once when it leaves its state, and the keyboard goes to
-                // the row now in its place (#1462); every other row that left keeps its slot while you're here (#1461).
-                if self.focus_handle.is_focused(window) {
-                    if let Some(on) = self.rows.focused.clone() {
-                        if !fresh.iter().any(|item| item.id() == on) {
-                            self.kept.release(&on);
-                        }
+                let view =
+                    self.list_in_view(unfinished.is_some(), record.jobs.len(), now, window, cx);
+                let (items, pinned, offset) = (view.items.clone(), view.pinned, view.offset);
+                let (end, top, room) = (view.end, view.top, view.room);
+                let job = s.space(4) + s.small.line;
+                // #1482's planted list asks for a frame each time it draws and draws the same value; its planted page
+                // draws with it.
+                if crate::plain::planted("animates-unchanged") {
+                    window.request_animation_frame();
+                }
+                if crate::plain::planted("page-redraws-with-list") {
+                    let page = SESSION_VIEW
+                        .with(|view| view.borrow().as_ref().and_then(WeakEntity::upgrade));
+                    if let Some(page) = page {
+                        page.update(cx, |_, cx| cx.notify());
                     }
                 }
-                let mut items = self.kept.settle(fresh, attended, now).to_vec();
-                if let Some(at) = self.kept.next_change(now) {
-                    states::changes_after(at - now);
-                }
-                // #1461's planted list draws each agent waiting for a first session as a row.
-                if crate::plain::planted("agent-as-row") && items.is_empty() {
-                    items.push(crate::list::Item::Row(Box::new(crate::list::Row {
-                        id: "session:claude-code".to_owned(),
-                        address: Address::session("claude-code"),
-                        title: "Claude Code".to_owned(),
-                        word: "queued".to_owned(),
-                        value: "queued".to_owned(),
-                        entry: "queued",
-                        time: None,
-                        loud: false,
-                        left: false,
-                        why: String::new(),
-                        doing: None,
-                        hooks: (0, None),
-                        flag: None,
-                    })));
-                }
-                let popped = crate::open::popped(cx) == Some(Kind::NeedsYou);
                 let replaced = NEEDS_YOU_VIEW.with(|view| view.borrow().clone());
-                let asks_row = |item: &crate::list::Item| item.id().starts_with("ask:");
-                let skip = |item: &crate::list::Item| {
-                    (popped && (asks_row(item) || item.id() == crate::list::HEADING))
-                        || (replaced.is_some() && asks_row(item))
-                };
-                // #1462's planted list hides the rows that don't match what you typed.
-                let typed = self.typed.0.clone();
-                let hidden = |item: &crate::list::Item| {
-                    cfg!(feature = "plant-list-hides-row")
-                        && !typed.is_empty()
-                        && matches!(item, crate::list::Item::Row(row)
-                            if !row.title.to_lowercase().starts_with(&typed))
-                };
-                items.retain(|item| !skip(item) && !hidden(item));
-                // The rows the keyboard walks, in the list's order (#1462): each ask, then each project's heading and
-                // its rows, every one of them. #2021's planted list lets the keyboard onto the headings alone.
-                let rows: Vec<ListRow> = keyboard_rows(&items)
-                    .into_iter()
-                    .filter(|row| {
-                        !crate::plain::planted("rows-take-no-focus")
-                            || row.id.starts_with("project:")
-                    })
-                    .collect();
-                // Only what fits in the window is drawn, so a frame over 700 rows costs what it shows, and what's
-                // drawn follows the keyboard: the row it's on is in view with the rows either side of it, so the next
-                // row an arrow goes to is in view too (#2021). The wheel's scrolling is #1808's.
-                let room = window.viewport_size().height;
-                let fits = |first: usize| {
-                    let mut top = s.space(1);
-                    items[first..]
-                        .iter()
-                        .take_while(|item| {
-                            top += match item {
-                                crate::list::Item::Heading { .. } => s.space(5) + s.space(1),
-                                crate::list::Item::Row(_) => s.space(5),
-                            };
-                            top <= room
-                        })
-                        .count()
-                };
-                let mut first = self.list_first.min(items.len());
-                if let Some(on) = self
-                    .rows
-                    .focused
-                    .as_deref()
-                    .and_then(|on| item_at(&items, on))
-                {
-                    let shown = (on + 1).min(items.len() - 1);
-                    first = first.min(on.saturating_sub(1));
-                    while shown >= first + fits(first).max(1) && first < on {
-                        first += 1;
-                    }
-                }
-                self.list_first = first;
-                let drawn_to = first + fits(first);
-                items.truncate(drawn_to);
-                items.drain(..first);
-                if let Some((selected, focused)) = self.start.take() {
-                    let id = |at: Option<usize>| {
-                        at.and_then(|i| {
-                            rows.iter()
-                                .filter(|row| !row.id.starts_with("project:"))
-                                .nth(i)
-                                .map(|row| row.id.clone())
-                        })
-                    };
-                    self.rows = SidebarRows {
-                        selected: id(selected),
-                        focused: id(focused),
-                    };
-                    if self.rows.focused.is_some() {
-                        window.focus(&self.focus_handle, cx);
-                    }
-                }
                 // The sidebar holds the keys for the whole list (#1462).
                 LIST_KEYS.with(|keys| {
                     *keys.borrow_mut() = Some((self.focus_handle.clone(), cx.entity().downgrade()))
                 });
-                // Focus follows a row that leaves: to the row now in its place, else the last (#1462).
-                if let Some(on) = self.rows.focused.clone() {
-                    if !rows.iter().any(|row| row.id == on) {
-                        let at =
-                            LAST_ROWS.with(|last| last.borrow().iter().position(|id| *id == on));
-                        self.rows.focused = at
-                            .and_then(|at| rows.get(at.min(rows.len().saturating_sub(1))))
-                            .or(rows.last())
-                            .map(|row| row.id.clone());
-                    }
-                }
-                LAST_ROWS.with(|last| {
-                    *last.borrow_mut() = rows.iter().map(|row| row.id.clone()).collect()
-                });
-                LIST_ROWS.with(|list| *list.borrow_mut() = rows);
                 // The ring shows only while keys reach the list, so it never points where they don't go.
                 let focused = (self.focus_handle.is_focused(window))
                     .then(|| self.rows.focused.clone())
@@ -2276,7 +2212,12 @@ impl Render for Shipped {
                 let planted_nothing = crate::plain::planted("hub-down-nothing-needs-you")
                     && matches!(empty, crate::empties::Empty::Unreachable { .. });
                 let mut drawn: Vec<AnyElement> = Vec::new();
-                for item in &items {
+                // What's drawn above the rows that scroll: Needs you's heading and what goes under it.
+                let mut heading_ends = None;
+                for (n, item) in items.iter().enumerate() {
+                    if n == pinned {
+                        heading_ends = Some(drawn.len());
+                    }
                     match item {
                         crate::list::Item::Heading { id, title, count } => {
                             if id == crate::list::HEADING {
@@ -2304,8 +2245,9 @@ impl Render for Shipped {
                                 );
                                 if matches!(empty, crate::empties::Empty::Unreachable { .. }) {
                                     // #2026's planted section says nothing needs you while the hub is down.
+                                    let planted = "Nothing needs you"; // copy-exception: planted wrong program
                                     let (nothing, empty) = if planted_nothing {
-                                        ("Nothing needs you", crate::empties::Empty::Nothing)
+                                        (planted, crate::empties::Empty::Nothing)
                                     } else {
                                         ("", empty)
                                     };
@@ -2353,127 +2295,64 @@ impl Render for Shipped {
                                 || (current.is_none()
                                     && self.rows.selected.as_ref() == Some(&row.id));
                             let ring = focused.as_ref() == Some(&row.id);
-                            let id = row.id.clone();
-                            let address = row.address.clone();
-                            let actions = id.starts_with("session:") || id.starts_with("ask:");
-                            drawn.push(
-                                list_row(row, selected, ring, cx.reduce_motion(), now, chrome)
-                                    // #1462's planted row draws a control only while the pointer is over it.
-                                    .when(
-                                        cfg!(feature = "plant-hover-only-control")
-                                            && id.starts_with("ask:"),
-                                        |row| {
-                                            let over = HOVERED.with(|h| {
-                                                h.borrow().as_deref() == Some(id.as_str())
-                                            });
-                                            let control_id =
-                                                ElementId::Name(format!("{id}:later").into());
-                                            let hovered = id.clone();
-                                            row.on_hover(move |on, window, _| {
-                                                HOVERED.with(|h| {
-                                                    *h.borrow_mut() = on.then(|| hovered.clone())
-                                                });
-                                                window.refresh();
-                                            })
-                                            .when(
-                                                over,
-                                                |row| {
-                                                    row.child(control(
-                                                        control_id,
-                                                        Control::Plain,
-                                                        "Later",
-                                                        chrome,
-                                                    ))
-                                                },
-                                            )
-                                        },
-                                    )
-                                    // A secondary click opens the row's actions (#1462).
-                                    .when(actions, |row| {
-                                        let id = id.clone();
-                                        row.on_mouse_down(
-                                            MouseButton::Right,
-                                            move |event: &MouseDownEvent, window, cx| {
-                                                open_context(id.clone(), event.position, window, cx)
-                                            },
-                                        )
-                                    })
-                                    .on_mouse_down(
-                                        MouseButton::Left,
-                                        cx.listener({
-                                            let id = id.clone();
-                                            move |this, _, _, _| {
-                                                this.pressed = Some((id.clone(), now_ms()))
-                                            }
-                                        }),
-                                    )
-                                    .on_click(cx.listener(move |this, _, window, cx| {
-                                        // A press that went down on a row that had just moved is dropped, never
-                                        // passed to the row now under the pointer (#1461).
-                                        let at = match this.pressed.take() {
-                                            Some((on, at)) if on == id => at,
-                                            _ => now_ms(),
-                                        };
-                                        if !this.kept.takes_press(&id, at) {
-                                            return;
-                                        }
-                                        this.rows = SidebarRows {
-                                            selected: Some(id.clone()),
-                                            focused: Some(id.clone()),
-                                        };
-                                        window.focus(&this.focus_handle, cx);
-                                        #[cfg(feature = "plant-row-skips-open")]
-                                        if let Some(session) = id.strip_prefix("session:") {
-                                            crate::open::skip_open(session, window, cx);
-                                            cx.notify();
-                                            return;
-                                        }
-                                        crate::open::open(&address, window, cx).ok();
-                                        cx.notify();
-                                    }))
-                                    .into_any_element(),
-                            );
+                            let shape = Shape {
+                                still: cx.reduce_motion(),
+                                width: self.list_room.get().map(|area| area.width),
+                            };
+                            let drawn_row = RowDrawn::of(row, selected, ring, shape, now, window);
+                            drawn.push(self.row_in_view(row, drawn_row, window, cx));
                         }
                     }
                 }
+                let mut rows_drawn = drawn.split_off(heading_ends.unwrap_or(drawn.len()));
                 // Each running job's row (#1925), after the sessions as the list orders it: its mark, its kind and
                 // its count from its tool's own counter, its time at the right edge, and why under it, quieter. A job
-                // has no page, so the row opens nothing.
-                drawn.extend(record.jobs.iter().enumerate().map(
-                    |(index, (id, words, why, entry))| {
-                        div()
-                            .flex()
-                            .flex_col()
-                            .flex_none()
-                            .child(
-                                marked(ElementId::Name(id.clone().into()), entry, words.clone())
+                // has no page, so the row opens nothing. Like the rows, only those in view are drawn.
+                rows_drawn.extend(
+                    record
+                        .jobs
+                        .iter()
+                        .enumerate()
+                        .filter(|(index, _)| end + job * (*index as f32) < top + room)
+                        .map(|(index, (id, words, why, entry))| {
+                            div()
+                                .flex()
+                                .flex_col()
+                                .flex_none()
+                                .child(
+                                    marked(
+                                        ElementId::Name(id.clone().into()),
+                                        entry,
+                                        words.clone(),
+                                    )
                                     .h(s.space(4))
                                     .pl(s.space(2))
                                     .pr(s.space(0)),
-                            )
-                            .child(
-                                label(("sidebar-job-why", index), why.clone())
-                                    .block()
-                                    .typed(s.small)
-                                    .h(s.small.line)
-                                    .pl(s.space(3))
-                                    .text_color(chrome.ink_secondary)
-                                    .truncate(),
-                            )
-                            .into_any_element()
-                    },
-                ));
+                                )
+                                .child(
+                                    label(("sidebar-job-why", index), why.clone())
+                                        .block()
+                                        .typed(s.small)
+                                        .h(s.small.line)
+                                        .pl(s.space(3))
+                                        .text_color(chrome.ink_secondary)
+                                        .truncate(),
+                                )
+                                .into_any_element()
+                        }),
+                );
                 // #1461's planted plug-in adds a section to the list, its own heading over it.
+                let mut after: Vec<AnyElement> = Vec::new();
                 if crate::plain::planted("sidebar-panel-in-list") {
                     for name in page_names() {
-                        drawn.push(
+                        after.push(
                             list_heading(&format!("heading:{name}"), &name, None)
                                 .into_any_element(),
                         );
-                        drawn.push(
+                        after.push(
                             label(
                                 ElementId::Name(format!("{name}:planted").into()),
-                                "Test panel",
+                                "Test panel", // copy-exception: planted wrong program
                             )
                             .into_any_element(),
                         );
@@ -2506,7 +2385,7 @@ impl Render for Shipped {
                         // The list's region keeps its accessible name, Tasks (#1348), and draws no title (#1461).
                         observed("list")
                             .role(Role::Group)
-                            .aria_label("Tasks")
+                            .aria_label(copy::text("views.tasks"))
                             .flex_1()
                             .min_h_0()
                             .w_full()
@@ -2517,9 +2396,62 @@ impl Render for Shipped {
                             // #1458's planted list draws an element wider than itself.
                             .when(crate::plain::planted("list-600pt-element"), |list| {
                                 let wide = px(600.); // size-literal-exception: #1458's planted wrong program, in an env-plants build only; review 2027-04-30
-                                list.child(label("planted-wide", "Planted").w(wide).flex_none())
+                                let named = "Planted"; // copy-exception: planted wrong program
+                                list.child(label("planted-wide", named).w(wide).flex_none())
                             })
                             .children(drawn)
+                            .child(
+                                // The rows that scroll, under Needs you's heading: the wheel moves them, and only those
+                                // in view are drawn, from where the first of them starts (#1808).
+                                div()
+                                    .id("list-rows")
+                                    .relative()
+                                    .flex_1()
+                                    .min_h_0()
+                                    .w_full()
+                                    .overflow_hidden()
+                                    .on_scroll_wheel(cx.listener(
+                                        |this, event: &ScrollWheelEvent, window, cx| {
+                                            let delta =
+                                                event.delta.pixel_delta(window.line_height());
+                                            if delta.y != px(0.) {
+                                                this.list_top -= delta.y;
+                                                this.wheeled = true;
+                                                cx.stop_propagation();
+                                                cx.notify();
+                                            }
+                                        },
+                                    ))
+                                    .child({
+                                        // How tall the rows' region is, which says how far the list scrolls.
+                                        let measured = self.list_room.clone();
+                                        let list = cx.entity().downgrade();
+                                        canvas(
+                                            move |bounds, _, cx| {
+                                                if measured.get() != Some(bounds.size) {
+                                                    measured.set(Some(bounds.size));
+                                                    cx.defer(move |cx| {
+                                                        list.update(cx, |_, cx| cx.notify()).ok();
+                                                    });
+                                                }
+                                            },
+                                            |_, _, _, _| {},
+                                        )
+                                        .absolute()
+                                        .inset_0()
+                                    })
+                                    .child(
+                                        div()
+                                            .absolute()
+                                            .left_0()
+                                            .right_0()
+                                            .top(offset)
+                                            .flex()
+                                            .flex_col()
+                                            .children(rows_drawn),
+                                    ),
+                            )
+                            .children(after)
                             .children(notice),
                     )
             }
@@ -2556,44 +2488,47 @@ impl Render for Shipped {
                     crate::empties::Empty::Nothing if !asks.is_empty() => {
                         label("home-needs-you", asks_need_you(asks.len())).into_any_element()
                     }
-                    _ => empty_line(
-                        "empty",
-                        crate::setup::count().unwrap_or("Nothing needs you"),
-                        empty,
-                        now,
-                        chrome,
-                    )
-                    .into_any_element(),
+                    _ => {
+                        let nothing = asks_need_you(0);
+                        empty_line(
+                            "empty",
+                            crate::setup::count().unwrap_or(&nothing),
+                            empty,
+                            now,
+                            chrome,
+                        )
+                        .into_any_element()
+                    }
                 };
                 let heading = project.clone().unwrap_or_else(|| {
                     if read {
-                        "New task".to_owned()
+                        copy::text("views.new_task").to_owned()
                     } else {
-                        "DeepBuild".to_owned()
+                        "DeepBuild".to_owned() // copy-exception: the product's name stays as written
                     }
                 });
                 // #1461's planted page right after Set up is the box alone.
                 let blank = project.is_none() && crate::plain::planted("blank-first-page");
-                let content =
-                    div()
-                        .flex()
-                        .flex_col()
-                        .pt(sizes().space(4))
-                        .when(!blank, |content| {
-                            content
-                                .child(page_title(title("home-title", heading)))
-                                .child(line)
-                                .children(
-                                    project
-                                        .is_some()
-                                        .then(|| {
-                                            placed("home").into_iter().enumerate().map(placed_box)
-                                        })
-                                        .into_iter()
-                                        .flatten(),
-                                )
-                        });
-                page.child(in_lane(content, true))
+                let heading = (!blank).then(|| {
+                    page_title(title("home-title", heading), chrome)
+                        .mt(sizes().space(4))
+                        .into_any_element()
+                });
+                let content = div().flex().flex_col().when(!blank, |content| {
+                    content.child(line).children(
+                        project
+                            .is_some()
+                            .then(|| placed("home").into_iter().enumerate().map(placed_box))
+                            .into_iter()
+                            .flatten(),
+                    )
+                });
+                page.child(in_lane(
+                    Some(format!("home:{}", project.as_deref().unwrap_or_default()).into()),
+                    heading,
+                    content,
+                    true,
+                ))
             }
             Kind::NeedsYou => {
                 // The list's first section on its own, as a window it popped out into shows it (#1461).
@@ -2602,7 +2537,13 @@ impl Render for Shipped {
                 let items = crate::list::build(&asks, &[]);
                 let empty = empty_now();
                 let current = crate::open::current(cx);
+                let shape = Shape {
+                    still: cx.reduce_motion(),
+                    width: None,
+                };
+                // Its rows scroll as the list's do (#1808).
                 page.p(s.space(1))
+                    .overflow_y_scroll()
                     .child(needs_you_heading(
                         asks.len(),
                         empty,
@@ -2622,9 +2563,10 @@ impl Render for Shipped {
                                     row,
                                     current.as_ref() == Some(&row.address),
                                     false,
-                                    cx.reduce_motion(),
+                                    shape,
                                     now,
                                     chrome,
+                                    window,
                                 )
                                 .on_click(move |_, window, cx| {
                                     crate::open::open(&address, window, cx).ok();
@@ -2656,9 +2598,9 @@ impl Render for Shipped {
                 // counts what its caption names (#1455).
                 let planted = crate::plain::planted("readout-counts-asks");
                 let (caption, counted) = if planted {
-                    ("Hours to each deadline", mine)
+                    ("Hours to each deadline", mine) // copy-exception: planted wrong program
                 } else {
-                    ("Asks with a deadline", hours.len())
+                    (copy::text("views.asks_with_a_deadline"), hours.len())
                 };
                 let caption = text::Label::new(caption);
                 let readout = text::Label {
@@ -2666,34 +2608,56 @@ impl Render for Shipped {
                     ..text::Label::new(counted.to_string())
                 };
                 // The line's name, from what it draws.
-                let line_name = format!(
-                    "Hours to each deadline: {}",
-                    hours
+                let line_name = copy::fill(
+                    "views.hours_to_each_deadline",
+                    &[&hours
                         .iter()
-                        .map(|h| format!("{h:.0} h"))
+                        .map(|h| copy::fill("views.hours", &[&format!("{h:.0}")]))
                         .collect::<Vec<_>>()
-                        .join(", ")
+                        .join(", ")],
                 );
                 // What a planted page draws beside the chart: the base's label, saying the caption again (#1459).
-                let beside = format!("{}: {} points", caption.text, hours.len());
+                let beside = format!("{}: {} points", caption.text, hours.len()); // copy-exception: planted wrong program
                 let terminal = self.terminal.as_ref().filter(|tab| tab.session == session);
                 let tab = (!session.is_empty()).then(|| {
                     let session = session.clone();
-                    control("session-terminal", Control::Plain, "Terminal", chrome)
-                        .self_start()
-                        .on_click(cx.listener(move |this, _, window, cx| {
-                            this.open_terminal(session.clone(), cx);
-                            if let Some(tab) = &this.terminal {
-                                window.focus(&tab.focus, cx);
-                            }
-                        }))
+                    control(
+                        "session-terminal",
+                        Control::Plain,
+                        copy::text("views.terminal"),
+                        chrome,
+                    )
+                    .self_start()
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.open_terminal(session.clone(), cx);
+                        if let Some(tab) = &this.terminal {
+                            window.focus(&tab.focus, cx);
+                        }
+                    }))
                 });
                 let grid = terminal.map(|tab| {
                     div()
                         .id("session-terminal-keys")
                         .key_context("Terminal")
                         .track_focus(&tab.focus)
+                        .relative()
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|this, e: &MouseDownEvent, _, cx| {
+                                this.grid_pointer("down", e.position, e.click_count, cx)
+                            }),
+                        )
+                        .on_mouse_move(cx.listener(|this, e: &MouseMoveEvent, _, cx| {
+                            this.grid_pointer("move", e.position, 0, cx)
+                        }))
+                        .on_mouse_up(
+                            MouseButton::Left,
+                            cx.listener(|this, e: &MouseUpEvent, _, cx| {
+                                this.grid_pointer("up", e.position, 0, cx)
+                            }),
+                        )
                         .child(terminal_view(tab, chrome))
+                        .children(crate::select::grid_outline(&tab.outline, chrome.focus))
                 });
                 // The session's canvas, in the place of its deadlines' line (#1454).
                 let figure = CANVAS
@@ -2703,25 +2667,25 @@ impl Render for Shipped {
                     panel.update(cx, |panel, _| panel.show_session(&session));
                 }
                 let chart = terminal.is_none() && figure.is_none() && !hours.is_empty();
-                // What the page shows by its real names, and the newest failure whole (#1348).
-                let details = record
-                    .details
-                    .iter()
-                    .enumerate()
-                    .map(|(n, line)| label(("session-detail", n), line.clone()).h_auto());
+                // What the page shows by its real names, and the newest failure whole (#1348): content, which the kit's
+                // selection selects (#1498).
+                let details = record.details.iter().enumerate().map(|(n, line)| {
+                    content(("session-detail", n), line.clone(), chrome.focus).h_auto()
+                });
                 // The page reads as its task's title, and to a screen reader as `Session <title>`. An untitled
                 // session's short name, `Session <ID>`, is only its accessible name: the title draws no ID (#1455).
                 let short = &session[..session.len().min(8)];
-                let untitled = task == format!("Session {short}");
+                // An untitled session's name is the one states.rs gives it, `Session <ID>` in the language shown.
+                let untitled = task == copy::fill("states.untitled", &[&short]);
                 let named = if untitled {
-                    task.clone()
+                    copy::fill("views.session_named", &[&short])
                 } else {
-                    format!("Session {task}")
+                    copy::fill("views.session_named", &[&task])
                 };
                 let shown = if crate::plain::planted("title-draws-id") {
                     short.to_owned()
                 } else if untitled {
-                    "Untitled task".to_owned()
+                    copy::text("views.untitled_task").to_owned()
                 } else {
                     task.clone()
                 };
@@ -2739,6 +2703,17 @@ impl Render for Shipped {
                     Option<crate::list::Doing>,
                     Option<String>,
                 );
+                // Its taste calls answered where none of their pictures was drawn (#3234), read beside the return card.
+                // #3234's planted card reads them as answers from the card.
+                let unseen: Vec<String> =
+                    crate::record::with_view(|view| view.table().unseen(&session).to_vec())
+                        .unwrap_or_default()
+                        .into_iter()
+                        .filter(|_| !crate::plain::planted("unseen-reads-as-card"))
+                        .map(|question| {
+                            copy::fill("views.call_unseen", &[&crate::question::visible(&question)])
+                        })
+                        .collect();
                 let (problem, readings, listed, doing, flagged): Read =
                     crate::record::with_view(|view| {
                         let table = view.table();
@@ -2772,18 +2747,23 @@ impl Render for Shipped {
                     })
                     .unwrap_or_default();
                 let reads = |id: &'static str, name: &str| match &listed {
-                    Some([word, entry, _]) => {
-                        marked(id, states::entry_of(entry), format!("{name} · {word}"))
-                    }
+                    Some([word, entry, _]) => marked(
+                        id,
+                        states::entry_of(entry),
+                        format!("{name} · {}", states::shown(word)),
+                    ),
                     None => status(id, &state, format!("{name} · {}", state.text(now))),
                 };
                 let why = listed
                     .as_ref()
                     .filter(|[_, _, why]| !why.is_empty())
-                    .map(|[word, _, why]| format!("{word}: {why}"));
+                    .map(|[word, _, why]| format!("{}: {}", states::shown(word), copy::hub(why)));
+                // The page fills its lane, so its canvas takes the height left under what's above it (#1498).
                 let content = div()
                     .flex()
                     .flex_col()
+                    .flex_1()
+                    .min_h_0()
                     .when(session.is_empty(), |content| content.invisible());
                 // While you rename it (#2018), the title is a field holding the name, with the caret in it.
                 let field = self
@@ -2791,8 +2771,8 @@ impl Render for Shipped {
                     .as_ref()
                     .filter(|renaming| renaming.session == session)
                     .map(|renaming| renaming.input.clone());
-                let content = content
-                    .child(page_title(match field {
+                let heading = page_title(
+                    match field {
                         Some(input) => observed("session-title")
                             .role(Role::TextInput)
                             .aria_label(named)
@@ -2802,7 +2782,13 @@ impl Render for Shipped {
                         None => title("session-title", shown.clone())
                             .aria_label(named)
                             .when(fourth, |title| title.text_size(px(17.))), // size-literal-exception: #1458's planted wrong program, in an env-plants build only; review 2027-04-30
-                    }))
+                    },
+                    chrome,
+                )
+                .when(session.is_empty(), |heading| heading.invisible())
+                // #1592's planted page chrome draws an icon at a size no role gives.
+                .children(crate::icons::planted_18(chrome.ink_secondary));
+                let content = content
                     .children(doing.map(|doing| label("session-doing", doing.line(now)).h_auto()))
                     .children(why.map(|line| {
                         label("session-why", crate::question::visible(&line))
@@ -2836,7 +2822,13 @@ impl Render for Shipped {
                         div()
                             .flex()
                             .flex_col()
-                            .child(reads("return-card", &shown))
+                            .child(reads(
+                                "return-card",
+                                &std::iter::once(shown.clone())
+                                    .chain(unseen)
+                                    .collect::<Vec<_>>()
+                                    .join(" · "),
+                            ))
                             .children(bound_values(bound::Surface::Card, chrome, false)),
                     )
                     .children(tab)
@@ -2901,29 +2893,40 @@ impl Render for Shipped {
                         })
                     })
                     .children(bound_panel(chrome));
-                page.child(in_lane(content, true))
+                page.child(in_lane(
+                    Some(format!("session:{session}").into()),
+                    Some(heading.into_any_element()),
+                    content,
+                    true,
+                ))
             }
             Kind::Welcome => page.child(crate::welcome::page(self, chrome, cx)),
             Kind::Agents => {
                 let inner =
                     agents_page(div().id("agents-page").flex().flex_col(), self, chrome, cx);
-                page.child(in_lane(inner, true))
+                let heading = page_title(title("agents-title", copy::text("views.agents")), chrome);
+                page.child(in_lane(
+                    Some("agents".into()),
+                    Some(heading.into_any_element()),
+                    inner,
+                    true,
+                ))
             }
             Kind::Rules => {
                 // The rules page (#344): each rule file with its total, then each rule with its scope, what enforces
                 // it and its size. A rule nothing enforces reads "text only": the list to shrink.
                 let files = crate::rules::read(&crate::hub::root().join("wiki").join("rules.md"));
                 let rules: Vec<&crate::rules::Rule> = files.iter().flat_map(|f| &f.rules).collect();
-                let text_only = rules.iter().filter(|r| r.enforcer == "text only").count();
+                let text_only = rules.iter().filter(|r| r.text_only()).count();
                 let mut row: usize = 0;
+                let heading = page_title(title("rules-title", copy::text("views.rules")), chrome);
                 let content = div()
                     .flex()
                     .flex_col()
-                    .child(page_title(title("rules-title", "Rules")))
                     .child(
                         label(
                             "rules-count",
-                            format!("{} rules · {text_only} text only", rules.len()),
+                            copy::fill("views.rules_count", &[&rules.len(), &text_only]),
                         )
                         .text_color(chrome.ink_secondary),
                     )
@@ -2940,10 +2943,19 @@ impl Render for Shipped {
                             .mt(sizes().space(1))
                             .text_color(chrome.ink_secondary)
                             .font_weight(FontWeight::MEDIUM)
-                            .child(div().flex_1().min_w_0().child("Rule"))
-                            .child(div().w(relative(0.18)).child("Scope"))
-                            .child(div().w(relative(0.2)).child("Enforced by"))
-                            .child(div().w(relative(0.1)).text_right().child("Tokens")),
+                            .child(div().flex_1().min_w_0().child(copy::text("views.rule")))
+                            .child(div().w(relative(0.18)).child(copy::text("views.scope")))
+                            .child(
+                                div()
+                                    .w(relative(0.2))
+                                    .child(copy::text("views.enforced_by")),
+                            )
+                            .child(
+                                div()
+                                    .w(relative(0.1))
+                                    .text_right()
+                                    .child(copy::text("views.tokens_head")),
+                            ),
                     )
                     .children(files.iter().enumerate().map(|(f, file)| {
                         div()
@@ -2953,21 +2965,26 @@ impl Render for Shipped {
                             .child(
                                 label(
                                     ("rules-file", f),
-                                    format!("{} · whole file {} tokens", file.file, file.tokens),
+                                    copy::fill("views.rules_file", &[&file.file, &file.tokens]),
                                 )
                                 .font_weight(FontWeight::MEDIUM),
                             )
                             .children(file.rules.iter().map(|rule| {
                                 row += 1;
-                                let mut said = format!(
-                                    "{} · {} · {} · {} tokens",
-                                    rule.text, rule.scope, rule.enforcer, rule.tokens
+                                let mut said = copy::fill(
+                                    "views.rule_said",
+                                    &[&rule.text, &rule.scope, &rule.enforcer, &rule.tokens],
                                 );
                                 if rule.yours {
-                                    said.push_str(" · typed by you");
+                                    said = copy::fill("views.rule_typed_by_you", &[&said]);
                                 }
                                 if rule.held {
-                                    said.push_str(" · held: an agent removed its line");
+                                    said = copy::fill("views.rule_held", &[&said]);
+                                }
+                                // The review's send-backs that named it (#1512): a reading, never a verdict.
+                                let sent = rule.sent_back_said();
+                                if let Some(sent) = &sent {
+                                    said = copy::fill("views.rule_sent_back", &[&said, sent]);
                                 }
                                 observed(("rules-row", row))
                                     .role(Role::Label)
@@ -2996,26 +3013,34 @@ impl Render for Shipped {
                                         div()
                                             .w(relative(0.2))
                                             .truncate()
-                                            .text_color(if rule.enforcer == "text only" {
+                                            .text_color(if rule.text_only() {
                                                 chrome.ink_secondary
                                             } else {
                                                 chrome.ink_primary
                                             })
-                                            .when(rule.enforcer != "text only", |e| {
+                                            .when(!rule.text_only(), |e| {
                                                 e.font_weight(FontWeight::MEDIUM)
                                             })
-                                            .child(rule.enforcer.clone()),
+                                            .child(match sent {
+                                                Some(sent) => format!("{} · {sent}", rule.enforcer),
+                                                None => rule.enforcer.clone(),
+                                            }),
                                     )
                                     .child(
                                         div()
                                             .w(relative(0.1))
                                             .text_right()
                                             .text_color(chrome.ink_secondary)
-                                            .child(format!("{} tokens", rule.tokens)),
+                                            .child(copy::fill("views.tokens", &[&rule.tokens])),
                                     )
                             }))
                     }));
-                page.child(in_lane(content, true))
+                page.child(in_lane(
+                    Some("rules".into()),
+                    Some(heading.into_any_element()),
+                    content,
+                    true,
+                ))
             }
             Kind::Line => {
                 // The session's line: from its task to where it stands now.
@@ -3048,420 +3073,6 @@ impl Render for Shipped {
     }
 }
 
-/// A path as the Agents page shows it: under your home as `~/...`.
-fn home_path(path: &str) -> String {
-    match std::env::var("HOME") {
-        Ok(home) if !home.is_empty() && path.starts_with(&format!("{home}/")) => {
-            format!("~{}", &path[home.len()..])
-        }
-        _ => path.to_owned(),
-    }
-}
-
-/// One row of the Agents page: its name, what it is, and where it went, one accessibility node named by all three.
-fn agents_row(
-    id: impl Into<ElementId>,
-    cells: [String; 3],
-    chrome: &chrome::Chrome,
-) -> ObservedElement<Stateful<Div>> {
-    let name = cells.join(" · ");
-    let [what, how, wh] = cells;
-    observed(id)
-        .role(Role::Label)
-        .aria_label(name)
-        .flex()
-        .gap(sizes().space(3))
-        .typed(sizes().body)
-        .h(sizes().body.line)
-        .items_center()
-        .child(
-            div()
-                .w(relative(0.25))
-                .truncate()
-                .font_weight(FontWeight::MEDIUM)
-                .child(what),
-        )
-        .child(
-            div()
-                .w(relative(0.35))
-                .truncate()
-                .text_color(chrome.ink_secondary)
-                .child(how),
-        )
-        .child(div().flex_1().min_w_0().truncate().child(wh))
-}
-
-/// The Agents page (#148): the agents installed, each MCP server and skill with the agents it is synced to, what each
-/// agent has that DeepBuild doesn't manage, and the syncs waiting for you; the one you review shows its diff per file,
-/// and Apply opens its ask, whose answer carries it out.
-fn agents_page(
-    page: Stateful<Div>,
-    view: &Shipped,
-    chrome: &chrome::Chrome,
-    cx: &mut Context<Shipped>,
-) -> Stateful<Div> {
-    let empty = json!({});
-    let model = view.agents.as_ref().unwrap_or(&empty);
-    let list = |key: &str| model[key].as_array().cloned().unwrap_or_default();
-    let agents = list("agents");
-    let name_of = |id: &str| {
-        agents
-            .iter()
-            .find(|a| a["id"] == id)
-            .and_then(|a| a["name"].as_str())
-            .unwrap_or(id)
-            .to_owned()
-    };
-    let names = |ids: &serde_json::Value| {
-        ids.as_array()
-            .map(|ids| {
-                ids.iter()
-                    .filter_map(|id| id.as_str())
-                    .map(&name_of)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            })
-            .unwrap_or_default()
-    };
-    let named = |installed: bool| {
-        agents
-            .iter()
-            .filter(|a| (a["installed"] == true) == installed)
-            .filter_map(|a| a["name"].as_str().map(str::to_owned))
-            .collect::<Vec<_>>()
-            .join(", ")
-    };
-    let section = |id: &'static str, text: &'static str| {
-        heading(id, text).mt(sizes().space(3)).mb(sizes().space(0))
-    };
-    let servers = list("servers").into_iter().enumerate().map(|(i, s)| {
-        let spec = &s["spec"];
-        let scope = spec["scope"]["repos"]
-            .as_array()
-            .filter(|r| !r.is_empty())
-            .map_or("every repo".to_owned(), |repos| {
-                let repos: Vec<String> = repos
-                    .iter()
-                    .filter_map(|r| r.as_str())
-                    .map(|r| r.rsplit('/').next().unwrap_or(r).to_owned())
-                    .collect();
-                format!("scoped to {}", repos.join(", "))
-            });
-        let secrets = spec["secrets"]
-            .as_array()
-            .filter(|v| !v.is_empty())
-            .map(|v| {
-                let v: Vec<&str> = v.iter().filter_map(|x| x.as_str()).collect();
-                format!(" · {} by handle", v.join(", "))
-            })
-            .unwrap_or_default();
-        let how = format!(
-            "{} · {scope}{secrets}",
-            spec["transport"].as_str().unwrap_or("stdio")
-        );
-        agents_row(
-            ("agents-server", i),
-            [
-                s["name"].as_str().unwrap_or_default().to_owned(),
-                how,
-                format!("Synced to {}", names(&s["agents"])),
-            ],
-            chrome,
-        )
-    });
-    let skills = list("skills").into_iter().enumerate().map(|(i, k)| {
-        let repo = k["repo"].as_str().unwrap_or_default();
-        let commit = k["commit"].as_str().unwrap_or_default();
-        let how = format!(
-            "{} at {} · {}",
-            repo.rsplit('/').next().unwrap_or(repo),
-            &commit[..commit.len().min(7)],
-            k["path"].as_str().unwrap_or_default()
-        );
-        let pin = if k["differs"] == true {
-            "differs from its pin: an update waits for you"
-        } else {
-            "matches its pin"
-        };
-        agents_row(
-            ("agents-skill", i),
-            [
-                k["name"].as_str().unwrap_or_default().to_owned(),
-                how,
-                format!("Synced to {} · {pin}", names(&k["agents"])),
-            ],
-            chrome,
-        )
-    });
-    let yours = agents
-        .iter()
-        .filter(|a| a["installed"] == true)
-        .enumerate()
-        .map(|(i, a)| {
-            let mine: Vec<&str> = a["yours"]
-                .as_array()
-                .map(|v| v.iter().filter_map(|x| x.as_str()).collect())
-                .unwrap_or_default();
-            agents_row(
-                ("agents-yours", i),
-                [
-                    a["name"].as_str().unwrap_or_default().to_owned(),
-                    if mine.is_empty() {
-                        "nothing of yours".to_owned()
-                    } else {
-                        mine.join(", ")
-                    },
-                    "Yours: DeepBuild leaves these alone".to_owned(),
-                ],
-                chrome,
-            )
-        })
-        .collect::<Vec<_>>();
-    let syncs = list("syncs");
-    let waiting: Vec<serde_json::Value> = syncs
-        .iter()
-        .filter(|s| s["status"] == "proposed")
-        .cloned()
-        .collect();
-    let rows = waiting
-        .iter()
-        .enumerate()
-        .map(|(i, s)| {
-            let id = s["id"].as_str().unwrap_or_default().to_owned();
-            let files = s["files"].as_array().map_or(0, Vec::len);
-            let reached: Vec<String> = s["files"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .flat_map(|f| f["agents"].as_array().cloned().unwrap_or_default())
-                .filter_map(|a| a.as_str().map(name_of))
-                .fold(Vec::new(), |mut all, a| {
-                    if !all.contains(&a) {
-                        all.push(a);
-                    }
-                    all
-                });
-            div()
-                .flex()
-                .items_center()
-                .gap(sizes().space(3))
-                .child(agents_row(
-                    ("agents-waiting", i),
-                    [
-                        format!(
-                            "{} {}",
-                            s["kind"].as_str().unwrap_or_default(),
-                            s["name"].as_str().unwrap_or_default()
-                        ),
-                        format!("{files} files · {}", reached.join(", ")),
-                        String::new(),
-                    ],
-                    chrome,
-                ))
-                .child(
-                    control(
-                        ("agents-review", i),
-                        Control::Plain,
-                        "Review the diff",
-                        chrome,
-                    )
-                    .aria_label(format!(
-                        "Review the diff of {}",
-                        s["name"].as_str().unwrap_or_default()
-                    ))
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.reviewing = Some(id.clone());
-                        cx.notify();
-                    })),
-                )
-        })
-        .collect::<Vec<_>>();
-    let review = view
-        .reviewing
-        .as_ref()
-        .and_then(|id| waiting.iter().find(|s| s["id"] == id.as_str()))
-        .map(|s| review_panel(s, &name_of, chrome, cx));
-    // Whether each agent's sessions reach DeepBuild, from its newest agent.reach (#2019): one waiting for its first
-    // session says so, and one whose sessions can't reach DeepBuild says why, with its fix.
-    let reach = crate::record::with_view(|view| view.table().agents().to_vec())
-        .unwrap_or_default()
-        .into_iter()
-        .map(|(agent, r)| {
-            let text = |key: &str| r[key].as_str().unwrap_or_default().to_owned();
-            let [how, fix] = match r["state"].as_str() {
-                Some("waiting") => ["Waits for its first session".to_owned(), String::new()],
-                Some("unreachable") => [
-                    format!("Its sessions can't reach DeepBuild: {}", text("why")),
-                    text("fix"),
-                ],
-                _ => ["Its sessions reach DeepBuild".to_owned(), String::new()],
-            };
-            let name = r["name"].as_str().unwrap_or(&agent).to_owned();
-            agents_row(
-                ElementId::Name(format!("agent:{agent}").into()),
-                [name, how, fix],
-                chrome,
-            )
-        })
-        .collect::<Vec<_>>();
-    let page = page
-        .overflow_y_scroll()
-        .child(page_title(title("agents-title", "Agents")));
-    // The planted wrong program draws the page's title alone.
-    if crate::plain::planted("agents-title-only") {
-        return page;
-    }
-    page.child(section(
-        "agents-reach-title",
-        "How each agent reaches DeepBuild",
-    ))
-    .children(reach)
-    .child(label(
-        "agents-installed",
-        format!("Installed: {}", named(true)),
-    ))
-    .child(
-        label(
-            "agents-missing",
-            format!("Not installed here: {}", named(false)),
-        )
-        .text_color(chrome.ink_secondary),
-    )
-    .child(section("agents-servers-title", "MCP servers"))
-    .children(servers)
-    .child(section("agents-skills-title", "Skills"))
-    .children(skills)
-    .child(section("agents-yours-title", "Already in each agent"))
-    .children(yours)
-    .child(section("agents-waiting-title", "Waiting for you"))
-    .children(rows)
-    .children(review)
-}
-
-/// One sync's diff, file by file, each with the agents that read it, then Apply, which opens its ask.
-fn review_panel(
-    sync: &serde_json::Value,
-    name_of: &dyn Fn(&str) -> String,
-    chrome: &chrome::Chrome,
-    cx: &mut Context<Shipped>,
-) -> Stateful<Div> {
-    let ask = sync["ask"].as_str().unwrap_or_default().to_owned();
-    let refused = sync["refused"].as_array().cloned().unwrap_or_default();
-    let files = sync["files"].as_array().cloned().unwrap_or_default();
-    // A diff line holds one row: a longer one ends in an ellipsis inside its block.
-    let mono = |text: &str| text::Label {
-        family: deep_text_gpui::Role::Mono.family(),
-        width: Some(DIFF_WIDTH),
-        max_lines: Some(1),
-        ..text::Label::new(text)
-    };
-    let blocks = files.iter().enumerate().map(|(i, f)| {
-        let readers: Vec<String> = f["agents"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|a| a.as_str().map(name_of))
-            .collect();
-        let read = match readers.len() {
-            0 => String::new(),
-            1 => format!("read by {}", readers[0]),
-            _ => format!("read by {}: one write reaches both", readers.join(" and ")),
-        };
-        let lines: Vec<String> = f["diff"]
-            .as_str()
-            .unwrap_or_default()
-            .lines()
-            .skip(2)
-            .take(DIFF_LINES)
-            .map(str::to_owned)
-            .collect();
-        div()
-            .flex()
-            .flex_col()
-            .mt(sizes().space(1))
-            .child(agents_row(
-                ("agents-file", i),
-                [
-                    home_path(f["path"].as_str().unwrap_or_default()),
-                    read,
-                    String::new(),
-                ],
-                chrome,
-            ))
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .p(sizes().space(1))
-                    .bg(chrome.raised)
-                    .border(sizes().hairline)
-                    .border_color(chrome.divider)
-                    .children(lines.iter().enumerate().map(|(n, line)| {
-                        let color = match line.chars().next() {
-                            Some('+') => chrome.ink_primary,
-                            _ => chrome.ink_secondary,
-                        };
-                        text::label(&format!("agents-diff-{i}-{n}"), mono(line), color, None)
-                    })),
-            )
-    });
-    let refusals = refused.iter().enumerate().map(|(i, r)| {
-        label(
-            ("agents-refused", i),
-            format!(
-                "Not for {}: it refuses the field {} ({})",
-                name_of(r["agent"].as_str().unwrap_or_default()),
-                r["field"].as_str().unwrap_or_default(),
-                r["reason"].as_str().unwrap_or_default()
-            ),
-        )
-        .text_color(chrome.ink_secondary)
-    });
-    div()
-        .id("agents-review-panel")
-        .mt(sizes().space(2))
-        .p(sizes().space(2))
-        .border(sizes().hairline)
-        .border_color(chrome.divider)
-        .rounded(sizes().radius)
-        .flex()
-        .flex_col()
-        // Apply and Close beside the title, so they show however long the diff runs.
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap(sizes().space(1))
-                .child(
-                    label(
-                        "agents-review-title",
-                        format!(
-                            "Approve the sync of {}: DeepBuild writes only its own entries, at user level",
-                            sync["name"].as_str().unwrap_or_default()
-                        ),
-                    )
-                    .flex_1()
-                    .font_weight(FontWeight::MEDIUM),
-                )
-                .child(
-                    control("agents-apply", Control::Main, "Apply", chrome)
-                        .aria_label("Apply the sync")
-                        .on_click(move |_, window, cx| {
-                            crate::open::open(&Address::ask(&ask), window, cx).ok();
-                        }),
-                )
-                .child(
-                    control("agents-close", Control::Plain, "Close", chrome)
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.reviewing = None;
-                            cx.notify();
-                        })),
-                ),
-        )
-        .children(refusals)
-        .children(blocks)
-}
-
 /// A session's Terminal tab: its rows through the cell grid, or the line saying where it runs.
 fn terminal_view(tab: &TerminalTab, chrome: &chrome::Chrome) -> AnyElement {
     let Some(screen) = tab.screen.clone() else {
@@ -3475,7 +3086,7 @@ fn terminal_view(tab: &TerminalTab, chrome: &chrome::Chrome) -> AnyElement {
             .children(screen.rows.into_iter().map(|row| div().child(row.text)))
             .into_any_element();
     }
-    cells::cells("terminal", screen)
+    cells::cells(cells::TERMINAL, screen)
         .flex_none()
         .into_any_element()
 }
@@ -3561,7 +3172,7 @@ impl Layout {
     /// The window's two regions: the list docked left, the pages beside it, and nothing docked anywhere else.
     pub fn state(&self) -> DockAreaState {
         let tabs = |names: &[String], active: usize| PanelState {
-            panel_name: "TabPanel".into(),
+            panel_name: "TabPanel".into(), // copy-exception: the dock's panel name, an identity
             children: names.iter().map(PanelState::new).collect(),
             info: PanelInfo::tabs(active),
         };
@@ -3591,6 +3202,48 @@ pub(crate) fn words_box() -> Option<Entity<crate::words::WordsBox>> {
 }
 
 /// The window's root (#1461): the list and the page, ⌘K over them once views give it entries (#366).
+/// The dock draws each group's displayed panel as a cached view (#1482): a panel draws again only when it's notified or
+/// the window refreshes, so a pointer over the list draws nothing on the page beside it.
+struct CachedPanels;
+
+impl gpui_kit::base::dock::DockAreaRenderer for CachedPanels {
+    fn tab_group_renderer(&self) -> std::rc::Rc<dyn gpui_kit::base::dock::TabGroupRenderer> {
+        std::rc::Rc::new(CachedPanels)
+    }
+}
+
+impl gpui_kit::base::dock::TabGroupRenderer for CachedPanels {
+    fn render_tab_bar(
+        &self,
+        _: &gpui_kit::base::dock::TabGroupContext,
+        _: &mut Window,
+        _: &mut App,
+    ) -> AnyElement {
+        Empty.into_any_element()
+    }
+
+    fn render_active_panel(
+        &self,
+        panel: AnyView,
+        _: &gpui_kit::base::dock::TabGroupContext,
+        _: &mut Window,
+        cx: &mut App,
+    ) -> AnyElement {
+        // The list draws each of its rows as a cached view, and GPUI draws a cached view's own cached views again
+        // whenever it draws that view, so the list itself is not cached: it draws when a row does, and reuses the rest.
+        let list = panel
+            .clone()
+            .downcast::<Shipped>()
+            .is_ok_and(|panel| panel.read(cx).kind == Kind::Sidebar);
+        if list {
+            return div().size_full().child(panel).into_any_element();
+        }
+        panel
+            .cached(StyleRefinement::default().size_full())
+            .into_any_element()
+    }
+}
+
 pub struct Shell {
     pub dock: Entity<DockArea>,
     commands: Option<Entity<crate::commands::Palette>>,
@@ -3602,12 +3255,48 @@ pub struct Shell {
     list_width: Pixels,
     /// Whether the list's edge is being dragged.
     resizing: bool,
+    /// A window too narrow for both regions shows one of them (#1808): the page while this is set, else the list.
+    hidden: bool,
+    /// Whether the window was that narrow when it last drew, once it has drawn.
+    was_narrow: Option<bool>,
+    /// The app's own window keeps its frame as it changes (#1808).
+    _frame: Option<Subscription>,
+}
+
+/// The window's root, which a narrow window's region is set on (#1808): the app's own, a global, so an app never
+/// reaches another's on the same thread, as a replica's second device would (#3100).
+struct ShellRoot(WeakEntity<Shell>);
+
+impl Global for ShellRoot {}
+
+thread_local! {
+    /// Whether the window is too narrow for both regions, as it last drew: its pages then carry the count (#1808).
+    static NARROW: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Whether the window is too narrow for the list and the page together, so it shows one at a time (#1808).
+pub fn narrow() -> bool {
+    NARROW.with(Cell::get)
+}
+
+/// A narrow window shows the page (`true`) or the list (#1808); a wide one shows both whatever this says.
+pub fn show_page_region(page: bool, cx: &mut App) {
+    let Some(shell) = cx
+        .try_global::<ShellRoot>()
+        .and_then(|root| root.0.upgrade())
+    else {
+        return;
+    };
+    shell.update(cx, |shell, cx| shell.set_hidden(page, cx));
 }
 
 impl Shell {
     pub fn new(layout: &Layout, window: &mut Window, cx: &mut Context<Self>) -> Self {
         chrome::follow(window, cx);
-        let dock = cx.new(|cx| DockArea::new("deepbuild", None, window, cx));
+        let dock = cx.new(|cx| {
+            DockArea::new("deepbuild", None, window, cx)
+                .with_renderer(std::rc::Rc::new(CachedPanels))
+        });
         dock.update(cx, |dock, cx| dock.load(layout.state(), window, cx))
             .expect("the layout loads");
         crate::open::set_shell(&dock, window.window_handle(), cx);
@@ -3644,6 +3333,8 @@ impl Shell {
         } else {
             crate::open::open_first(window, cx);
         }
+        let root = ShellRoot(cx.entity().downgrade());
+        cx.set_global(root);
         Self {
             dock,
             commands: None,
@@ -3651,6 +3342,35 @@ impl Shell {
             title_bar: false,
             list_width: sizes().sidebar,
             resizing: false,
+            hidden: true,
+            was_narrow: None,
+            _frame: None,
+        }
+    }
+
+    /// The app's own window comes back as you left it, and keeps itself from now on (#1808): the list's width and which
+    /// region a narrow window shows are `kept`'s, and each change to them or to the window's frame is kept.
+    pub fn keep(&mut self, kept: crate::frame::Kept, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(width) = kept.list {
+            self.list_width = px(width);
+        }
+        if let Some(hidden) = kept.hidden {
+            self.hidden = hidden;
+        }
+        crate::frame::start(kept);
+        crate::frame::keep_window(window, cx);
+        crate::frame::keep(|kept| kept.list = Some(f32::from(self.list_width)));
+        self._frame = Some(cx.observe_window_bounds(window, |_, window, cx| {
+            crate::frame::keep_window(window, cx)
+        }));
+    }
+
+    /// A narrow window shows the page, or the list, from now on.
+    fn set_hidden(&mut self, hidden: bool, cx: &mut Context<Self>) {
+        if self.hidden != hidden {
+            self.hidden = hidden;
+            crate::frame::keep(|kept| kept.hidden = Some(hidden));
+            cx.notify();
         }
     }
 
@@ -3727,6 +3447,20 @@ impl Render for Shell {
         let chrome = chrome::of(window);
         self.fit_list(window, cx);
         let s = sizes();
+        // Under the list's and the page's narrowest together, one region at a time (#1808): the page, its title row
+        // carrying the count as the way back, or the list alone. A window made that narrow shows the one the keyboard
+        // is in.
+        let narrow = chrome::list_width(self.list_width, window.viewport_size().width).is_none();
+        if narrow && self.was_narrow == Some(false) {
+            let hidden = !list_has_keys(window);
+            self.set_hidden(hidden, cx);
+        }
+        self.was_narrow = Some(narrow);
+        NARROW.with(|n| n.set(narrow));
+        let list = (narrow && !self.hidden)
+            .then(|| LIST_KEYS.with(|keys| keys.borrow().as_ref().map(|(_, list)| list.clone())))
+            .flatten()
+            .and_then(|list| list.upgrade());
         let edge = self
             .dock
             .read(cx)
@@ -3740,23 +3474,30 @@ impl Render for Shell {
             .track_focus(&self.focus_handle)
             .capture_any_mouse_down(|_, _, _| touched())
             .capture_key_down(|_, _, _| touched())
-            // Dragging the list's edge sets its width; letting go ends it.
-            .when(self.resizing, |root| {
-                root.on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, window, cx| {
-                    let wide = window.viewport_size().width;
-                    if let Some(width) = chrome::list_width(event.position.x, wide) {
-                        this.list_width = width;
-                        cx.notify();
+            // Dragging the list's edge sets its width; letting go ends it and keeps it (#1808). The listeners are always
+            // there, so a drag's first moves reach them before the frame its press asks for draws.
+            .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, window, cx| {
+                if !this.resizing {
+                    return;
+                }
+                let wide = window.viewport_size().width;
+                if let Some(width) = chrome::list_width(event.position.x, wide) {
+                    this.list_width = width;
+                    cx.notify();
+                }
+            }))
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(|this, _, _, cx| {
+                    if !this.resizing {
+                        return;
                     }
-                }))
-                .on_mouse_up(
-                    MouseButton::Left,
-                    cx.listener(|this, _, _, cx| {
-                        this.resizing = false;
-                        cx.notify();
-                    }),
-                )
-            })
+                    this.resizing = false;
+                    let width = f32::from(this.list_width);
+                    crate::frame::keep(|kept| kept.list = Some(width));
+                    cx.notify();
+                }),
+            )
             .flex()
             .flex_col()
             .bg(chrome.ground)
@@ -3771,7 +3512,10 @@ impl Render for Shell {
                     .min_h_0()
                     .w_full()
                     .relative()
-                    .child(self.dock.clone())
+                    .map(|region| match list {
+                        Some(list) => region.child(list),
+                        None => region.child(self.dock.clone()),
+                    })
                     // The list's edge takes a drag to resize the list, and a double-click sets it back.
                     .children(edge.map(|edge| {
                         div()
@@ -3793,6 +3537,8 @@ impl Render for Shell {
                                 if event.click_count() == 2 {
                                     this.list_width = sizes().sidebar;
                                     this.resizing = false;
+                                    let width = f32::from(this.list_width);
+                                    crate::frame::keep(|kept| kept.list = Some(width));
                                     cx.notify();
                                 }
                             }))
@@ -3854,79 +3600,4 @@ impl Render for Shell {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[std::prelude::v1::test]
-    fn the_sidebars_keys_move_the_ring_and_open_the_focused_session_which_keeps_its_row_as_rows_move(
-    ) {
-        let ids = |list: &[&str]| list.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-        let sessions = ids(&["a", "b", "c"]);
-        let mut rows = SidebarRows::default();
-        // Down from nothing focuses the first row; down again the second; up and down stop at the ends.
-        assert!(rows.key("down", &sessions));
-        assert!(rows.key("down", &sessions));
-        assert_eq!(rows.focused.as_deref(), Some("b"));
-        rows.key("down", &sessions);
-        assert!(!rows.key("down", &sessions), "the last row holds");
-        rows.key("up", &sessions);
-        rows.key("up", &sessions);
-        assert!(!rows.key("up", &sessions), "the first row holds");
-        // Return opens the focused session; focus moving on leaves it open, so selected and focused differ.
-        rows.key("down", &sessions);
-        assert!(rows.key("enter", &sessions));
-        rows.key("down", &sessions);
-        assert_eq!(
-            rows,
-            SidebarRows {
-                selected: Some("b".into()),
-                focused: Some("c".into())
-            }
-        );
-        // A new session shown first moves every row down a place; the same sessions stay selected and focused.
-        let moved = ids(&["z", "a", "b", "c"]);
-        rows.key("up", &moved);
-        assert_eq!(rows.focused.as_deref(), Some("b"));
-        assert_eq!(rows.selected.as_deref(), Some("b"));
-        // Keys on an empty sidebar change nothing; space opens as return does.
-        assert!(!SidebarRows::default().key("down", &[]));
-        assert!(rows.key("down", &moved) && rows.key("space", &moved));
-        assert_eq!(rows.selected.as_deref(), Some("c"));
-    }
-
-    #[std::prelude::v1::test]
-    fn the_window_has_two_regions_and_nothing_docked_below() {
-        let showing = |view| {
-            let layout = Layout::shipped(view);
-            layout.center[layout.active].clone()
-        };
-        assert_eq!(showing("needs-you"), HOME);
-        assert_eq!(showing("session"), SESSION);
-        assert_eq!(showing("sidebar"), HOME);
-        let state = Layout::app(false).state();
-        assert!(state.bottom_dock.is_none() && state.right_dock.is_none());
-        assert!(!Layout::app(false)
-            .center
-            .iter()
-            .any(|name| name == NEEDS_YOU || name == LINE));
-    }
-
-    #[std::prelude::v1::test]
-    #[should_panic(expected = "is not a shipped view")]
-    fn a_name_that_is_not_a_shipped_view_is_refused() {
-        Layout::shipped("needs_you");
-    }
-
-    #[std::prelude::v1::test]
-    fn a_needs_you_row_shows_a_direction_mark_as_the_card_does() {
-        // #1510: an override in the question would read the rest of the row backwards.
-        let mut view = crate::record::View::default();
-        view.apply(
-            serde_json::json!({"kind": "ask.created", "id": "a1", "session": "s1", "data": {
-            "question": "Open invoice\u{202e}txt.exe?", "default": "no", "deadline": 1_000,
-            "options": [{"id": "no", "label": "No"}]}}),
-        );
-        let open = read(&view, Kind::NeedsYou, None).open;
-        assert_eq!(open[0].2, "Open invoice\\u{202e}txt.exe?");
-    }
-}
+mod tests;

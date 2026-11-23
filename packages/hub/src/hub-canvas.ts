@@ -1,12 +1,14 @@
 
 import { readFileSync } from 'node:fs';
 import type { CheckResult } from '@deepbuild/conformance';
-import { canvasClaim, docCheckOf, docResult, revisionLine, shownResult, worst, type DocCheck, type DocSpec, type Revision } from './doc-checks.js';
+import { docChecksIn } from './spec-entries.js';
+import { canvasClaim, docResult, revisionLine, shownResult, worst, type DocCheck, type DocSpec, type Revision } from './doc-checks.js';
 
 import { join } from 'node:path';
 
 import { isRecord as isObj, type JsonValue } from '@deepbuild/contracts';
 import { type Evidence, type EvidenceStore, type PutResult } from '@deepbuild/evidence';
+import { type ExtensionHost } from '@deepbuild/extension-host';
 
 import { type Connection, type EventInput, type RecordStore } from '@deepbuild/record';
 
@@ -22,10 +24,16 @@ import { refuse, ulid } from './wire.js';
 
 import type { Session, CallContext } from './session-types.js';
 type Obj = Record<string, unknown>;
+/** A handle's ID, as the record's tables keep it. */
+const bare = (handle: string): string => handle.replace(/^[a-z_]+:/, '');
+/** Whether a document pins a pack, the only way it reaches what a pack fills. */
+const pinsPacks = (document: unknown): boolean => isObj(document) && Array.isArray(document.packs) && document.packs.length > 0;
 export interface HubCanvasOptions {
   doneSpec(cwd: string): unknown;
   root: Root; now: () => number; plant: Plant | undefined;
   record: () => RecordStore; store: () => EvidenceStore; libraries: () => Libraries | undefined;
+  /** The plug-ins' host, whose check kinds deep_kinds lists as the hub slot check.kind@1's fills (#1415). */
+  extensions: () => ExtensionHost | undefined;
   sessions: () => ReadonlyMap<string, Session>;
   evidence: { stored(put: PutResult, what: string): Promise<Evidence> };
   events: { append(connection: Connection, input: EventInput): Promise<void>; connection(writer: string, extra?: Partial<Connection>): Connection; agentConnection(session: string): Connection };
@@ -55,19 +63,90 @@ export class HubCanvas {
 
   private readonly appOpen = (): boolean => Date.now() - this.appSeen < 250;
 
+  /**
+   * The record's part of the world (#1868): each ask's state and each reading's latest value by name. It is built from
+   * the record at the first canvas call and kept up from the event stream after: an appended event marks what it
+   * changed, and the next canvas call reads only that, so a call with nothing new reads no event and no ask.
+   */
+  private readonly worldRecord: Obj = {};
+  /** Counts each change to `worldRecord`, so the canvas core is sent the world again only when it changed. */
+  private worldRev = 0;
+  /** The log position of the newest reading in `worldRecord`; undefined until the first build. */
+  private readingsAt: number | undefined;
+  private readingsBehind = false;
+  private readonly asksBehind = new Set<string>();
+  private catching: Promise<void> = Promise.resolve();
+
+  /** An event the record took: what it changes in the world is read at the next canvas call. */
+  appended(input: EventInput): void {
+    const { kind, data } = input;
+    if (kind === 'reading.recorded') this.readingsBehind = true;
+    else if (kind === 'ask.created') this.asksBehind.add(input.id);
+    else if (kind === 'ask.batched') { for (const a of isObj(data) && Array.isArray(data.asks) ? data.asks : []) if (isObj(a) && typeof a.ask === 'string') this.asksBehind.add(bare(a.ask)); }
+    else if (kind === 'decision.applied') { if (isObj(data) && typeof data.ask === 'string') this.asksBehind.add(bare(data.ask)); }
+    else if ((kind.startsWith('ask.') || kind === 'card.taken_over' || kind === 'default.undone' || kind === 'approval.withdrawn') && typeof input.subject === 'string') this.asksBehind.add(bare(input.subject));
+  }
+
+  /** One at a time, so two calls never read the same change twice out of order. */
+  private caughtUp(): Promise<void> {
+    this.catching = this.catching.then(() => this.catchUp(), () => this.catchUp());
+    return this.catching;
+  }
+  private async catchUp(): Promise<void> {
+    const state = (a: { session_id: string | null; status: string }) => ({ session: a.session_id, state: a.status === 'open' || a.status === 'later' ? 'needs_you' : 'done' });
+    const first = this.readingsAt === undefined;
+    // The planted world is built once: what the record gained since is never read (#1868's wrong program).
+    if (!first && this.options.plant === 'canvas-world-built-once') return;
+    // What is marked from here on is read by the next call: an event that lands during these reads is read twice at worst.
+    const asks = first ? undefined : [...this.asksBehind];
+    this.asksBehind.clear();
+    if (first || asks!.length) {
+      const rows = (first ? await this.options.record().raw('SELECT id, session_id, status FROM asks')
+        : await this.options.record().raw('SELECT id, session_id, status FROM asks WHERE id IN (SELECT value FROM json_each(?))', [JSON.stringify(asks)])
+          // A read that fails leaves its asks marked, for the next call.
+          .catch((error: unknown) => { for (const id of asks!) this.asksBehind.add(id); throw error; })) as { id: string; session_id: string | null; status: string }[];
+      for (const a of rows) {
+        // An event that leaves an ask as it read (shown again, put off) changes nothing the canvas core is sent.
+        const was = this.worldRecord[`ask:${a.id}`] as ReturnType<typeof state> | undefined;
+        const is = state(a);
+        if (was?.state === is.state && was.session === is.session) continue;
+        this.worldRecord[`ask:${a.id}`] = is;
+        this.worldRev++;
+      }
+    }
+    if (first || this.readingsBehind) {
+      this.readingsBehind = false;
+      const rows = (await this.options.record().raw("SELECT e.log_pos AS log_pos, e.session_id AS session, e.data AS data FROM events e WHERE e.kind = 'reading.recorded' AND e.log_pos > ? ORDER BY e.log_pos", [this.readingsAt ?? 0])
+        .catch((error: unknown) => { this.readingsBehind = true; throw error; })) as { log_pos: number | bigint; session: string | null; data: string }[];
+      for (const r of rows) {
+        const d = JSON.parse(r.data) as Obj;
+        if (typeof d.reading === 'string' && typeof d.value === 'number') this.worldRecord[d.reading] = { session: r.session, value: d.value, as_of: Number(d.as_of ?? 0) };
+      }
+      this.readingsAt = Number(rows.at(-1)?.log_pos ?? this.readingsAt ?? 0);
+      if (rows.length) this.worldRev++;
+    }
+  }
+
+  /**
+   * Whether a call has needed a pack (#3044): deep_kinds, or a document that pins one. Until then the canvas core holds
+   * no pack, so no call waits for the release's pack check, seconds of the core's time; a document that pins no pack
+   * reads nothing a pack fills (Registry: entries resolve per document through the pinned pack), so it answers the
+   * same with or without them.
+   */
+  private packsNeeded = false;
+
   /** The world the canvas core reads: the hub's live sessions, the record's asks and readings, and the world file. */
   private async canvasWorld(): Promise<CanvasWorld> {
-    const file = { ...this.worldFile.read(), packs: await this.options.libraries()?.packs.installed(this.canvas()) ?? [] };
+    const packs = this.packsNeeded ? await this.options.libraries()?.packs.installed(this.canvas()) : undefined;
+    const file: Obj = { ...this.worldFile.read(), packs: packs ?? [] };
+    // The hub slot check.kind@1's fills deep_kinds lists: each check kind a plug-in registered, with its kit at install (#1415).
+    const host = this.options.extensions();
+    const kits = (await host?.installed() ?? []).flatMap((p) => p.kits).filter((k) => k.slot === 'check.kind@1');
+    const fills = (await host?.checks() ?? []).map((c) => ({ slot: 'check.kind@1', fill: c.kind, kit: { verdict: kits.find((k) => k.fill === c.kind)?.verdict ?? null } }));
+    if (fills.length) file.installed = [...(Array.isArray(file.installed) ? file.installed : []), ...fills];
     const sessions = [...this.options.sessions().values()].filter((s) => !s.ended).map((s) => ({ id: s.id, thread: s.thread, name: nameOf(file, s.id, s.agent) }));
-    const record: Obj = {};
-    const asks = (await this.options.record().raw('SELECT id, session_id, status FROM asks')) as { id: string; session_id: string | null; status: string }[];
-    for (const a of asks) record[`ask:${a.id}`] = { session: a.session_id, state: a.status === 'open' || a.status === 'later' ? 'needs_you' : 'done' };
-    const readings = (await this.options.record().raw("SELECT e.session_id AS session, e.data AS data FROM events e WHERE e.kind = 'reading.recorded' ORDER BY e.log_pos")) as { session: string | null; data: string }[];
-    for (const r of readings) {
-      const d = JSON.parse(r.data) as Obj;
-      if (typeof d.reading === 'string' && typeof d.value === 'number') record[d.reading] = { session: r.session, value: d.value, as_of: Number(d.as_of ?? 0) };
-    }
-    return { sessions, record, file, docs: [...this.shownDocs] };
+    await this.caughtUp();
+    return { sessions, record: this.worldRecord, recordRev: this.worldRev, file, docs: [...this.shownDocs] };
   }
 
   private canvas(): Canvas {
@@ -131,11 +210,23 @@ export class HubCanvas {
   }
 
   /**
+   * A job kind's qualification of one tool by the canvas core (#518): the call, in a world that also holds the
+   * `job_tools` it names, the encode tools of the plug-in being installed, each as its host would run it.
+   */
+  async qualifyTool(call: Obj): Promise<Obj> {
+    const { job_tools: tools, ...rest } = call;
+    const world = await this.canvasWorld();
+    const file = Array.isArray(tools) && tools.length ? { ...world.file, job_tools: tools } : world.file;
+    return (await this.canvas().call({ ...world, file }, rest)).reply;
+  }
+
+  /**
    * deep_show for a session, or for none (the call binds to no session), or `deep show` from the CLI acting as the
    * session the peer check found, or as you: the writer is the binding's, never the payload's.
    */
   async show(as: { session: string | null } | { you: true }, call: Obj): Promise<Obj> {
     if (typeof call.doc === 'string') this.shownDocs.add(call.doc);
+    if (pinsPacks(call.document) || (call.patch !== undefined && JSON.stringify(call.patch).includes('packs'))) this.packsNeeded = true;
     // The planted hub stamps the writer the payload claims (#806's wrong program): a session whose thread it names.
     if (this.options.plant === 'deep-show-writer-from-payload' && 'session' in as && isObj(call.document) && typeof call.document.writer === 'string') {
       const claimed = [...this.options.sessions().values()].find((s) => `agent:${s.thread}` === (call.document as Obj).writer);
@@ -173,7 +264,10 @@ export class HubCanvas {
     const { reply: drawn, presented } = await this.canvas().call(world, { call: name, ...via, ...call });
     const reply = game.assets.length ? { ...drawn, assets: game.assets } : drawn;
     if (presented) await this.recordRevision(as, presented, reply);
-    if (call.check === true && typeof reply.result === 'string') {
+    // A claim the world file defines keeps the canvas core's verdict on its deliverables (#393 AC3, which #806's
+    // replay holds the hub to): that verdict is the check the core just ran, and no spec gives the claim a run (#3044).
+    const fixture = typeof call.claim === 'string';
+    if (call.check === true && typeof reply.result === 'string' && !fixture) {
       const hash = typeof presented?.hash === 'string' ? presented.hash : (await this.docRevision(String(call.doc)))?.hash;
       reply.result = worst([reply.result, hash ? await this.recordedResult(String(call.doc), hash, ofHub) : 'INCONCLUSIVE']);
     }
@@ -242,6 +336,7 @@ export class HubCanvas {
   async kinds(args: Obj): Promise<Obj> {
     // Asset search and fetch (#1731) span the enabled libraries, which the hub reads; the canvas core holds none.
     if (args.op === 'assets' || args.op === 'fetch') return this.assets(args);
+    this.packsNeeded = true;
     const call: Obj = { call: 'deep_kinds' };
     for (const [k, v] of Object.entries(args)) if (v !== null) call[k] = v;
     const reply = await this.canvasCall(call);
@@ -311,9 +406,7 @@ export class HubCanvas {
 
   /** The document checks a worktree's spec names (#1723). */
   docChecksOf(worktree: string): Map<string, DocCheck> {
-    const spec = this.options.doneSpec(worktree);
-    const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
-    return new Map(Object.entries(checks).flatMap(([name, c]) => { const d = docCheckOf(c); return d ? [[name, d] as const] : []; }));
+    return docChecksIn(this.options.doneSpec(worktree));
   }
   /** A document's newest recorded revision. */
   async docRevision(doc: string): Promise<Revision | undefined> {
@@ -359,7 +452,7 @@ export class HubCanvas {
     const libraries = this.options.libraries();
     if (!libraries) return { status: 'BLOCKED', outcome: 'refused', cause: 'The asset host is not ready.', snapshots: [] };
     // #1958: a pack version the store lacks doesn't refuse the document; the canvas core opens it, its instances kept and skipped.
-    await libraries.packs.shipped(this.canvas());
+    if (pinsPacks(document)) await libraries.packs.shipped(this.canvas());
     for (const { pack, asset } of libraries.packs.used(document)) {
       const fetched = await libraries.fetchPack(pack, asset.path);
       if (fetched.status !== 'fetched') return { ...fetched, outcome: 'refused', code: 'asset_blocked', issues: [{ severity: 'error', code: 'asset.blocked', ids: [asset.path], message: `BLOCKED: ${JSON.stringify(fetched)}` }], snapshots: [] };

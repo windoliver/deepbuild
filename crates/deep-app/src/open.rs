@@ -10,7 +10,7 @@ use gpui_kit::*;
 
 use crate::address::{Address, Place};
 use crate::views::{self, Kind, Shipped, Slot};
-use crate::{record, states};
+use crate::{copy, record, states};
 
 /// How many opened addresses back and forward walk.
 pub const HISTORY: usize = 50;
@@ -189,7 +189,7 @@ enum Target {
 }
 
 fn no_match(text: &str) -> String {
-    format!("No match for \"{text}\"")
+    copy::fill("open.no_match", &[&text])
 }
 
 /// The pages an address can name by a shipped name: every shipped page but the list, its first section, the line and
@@ -272,22 +272,36 @@ fn closed(events: &[serde_json::Value], handle: &str) -> Option<String> {
             use chrono::TimeZone as _;
             chrono::Local.timestamp_millis_opt(ms as i64).single()
         })
-        .map(|at| format!(" at {}", at.format("%H:%M")))
+        .map(|at| copy::fill("open.at", &[&at.format("%H:%M")]))
         .unwrap_or_default();
-    let through = match end["data"]["via"].as_str() {
-        Some("card") => " in the app".to_owned(),
-        Some("inbox") => " from deep inbox".to_owned(),
-        Some(via) => format!(" through {via}"),
-        None => String::new(),
+    // A taste call answered where none of the pictures it judges was drawn says so (#3234); #3234's planted page reads it
+    // as an answer from the card.
+    let unseen = end["data"]["pictures"].as_array().is_some_and(|pictures| {
+        !pictures.is_empty() && pictures.iter().all(|picture| picture["shown"] != true)
+    }) && !crate::plain::planted("unseen-reads-as-card");
+    let through = match (end["data"]["via"].as_str(), unseen) {
+        (Some("card"), false) => copy::text("open.in_the_app").to_owned(),
+        (Some("card"), true) => copy::text("open.in_the_app_unseen").to_owned(),
+        (Some("inbox"), false) => copy::text("open.from_inbox").to_owned(),
+        (Some("inbox"), true) => copy::text("open.from_inbox_unseen").to_owned(),
+        (Some(via), false) => copy::fill("open.through", &[&via]),
+        (Some(via), true) => copy::fill("open.through_unseen", &[&via]),
+        (None, _) => String::new(),
     };
     // What the approved step did once it ran, from its call's own records (#2029).
     let receipt = crate::codes::receipt(events, handle)
-        .map(|receipt| format!(" {receipt}."))
+        .map(|receipt| copy::fill("open.receipt", &[&receipt]))
         .unwrap_or_default();
-    Some(format!(
-        "{question} {how}{answer}{at}{through}.{receipt} Nothing is left to answer.",
-        how = crate::codes::outcome(outcome, &capital(how)),
-        answer = answer.unwrap_or_default(),
+    Some(copy::fill(
+        "open.closed",
+        &[
+            &question,
+            &crate::codes::outcome(outcome, &capital(how)),
+            &answer.unwrap_or_default(),
+            &at,
+            &through,
+            &receipt,
+        ],
     ))
 }
 
@@ -305,7 +319,7 @@ fn resolve(address: &Address, window: &mut Window, cx: &mut App) -> (Target, Add
     let mut full = address.clone();
     let target = match address.place {
         Place::Session => match session_of(&address.id) {
-            Some(id) if archived(&id) => Target::Gone(format!("{text} was archived")),
+            Some(id) if archived(&id) => Target::Gone(copy::fill("open.archived", &[&text])),
             Some(id) => {
                 full.id = id;
                 Target::Shipped(Kind::Session)
@@ -320,7 +334,13 @@ fn resolve(address: &Address, window: &mut Window, cx: &mut App) -> (Target, Add
                 .any(|event| event["kind"] == "ask.created" && states::handle(event) == handle);
             if !asked {
                 Target::Gone(no_match(&text))
-            } else if states::is_open(&events, &handle) {
+            } else if states::is_open(&events, &handle)
+                || matches!(
+                    crate::kinds::hold(&events, &handle),
+                    Some(crate::kinds::Hold::Waiting(_))
+                )
+            {
+                // An answered yes the hub still holds shows its card's receipt, counting down with Undo (#1101).
                 Target::Ask(handle)
             } else {
                 closed(&events, &handle)
@@ -439,6 +459,20 @@ fn show(address: &Address, window: &mut Window, cx: &mut App) -> Result<Address,
         }
     }
     let (target, full) = resolve(address, window, cx);
+    // An address the window already shows changes nothing: no page selected again, no refresh (#1482).
+    if let Target::Shipped(kind) = &target {
+        let shown = &selection(cx).shown;
+        if shown.address.as_ref() == Some(&full)
+            && shown.region == Some(Region::Shipped(*kind))
+            && shown.notice.is_none()
+        {
+            // #1482's planted setter notifies what the window shows without comparing it first.
+            if crate::plain::planted("setter-skips-compare") {
+                views::notify_session_page(cx);
+            }
+            return Ok(full);
+        }
+    }
     let (region, notice) = match target {
         Target::Shipped(kind) => {
             select(kind, window, cx);
@@ -489,7 +523,8 @@ fn hand_keys(region: Region, window: &mut Window, cx: &mut App) {
     let Region::Shipped(kind) = region else {
         return;
     };
-    if views::list_has_keys(window) || crate::words::focused(window) {
+    // A narrow window hides the list behind the page it opened, so the list's keys go to the page (#1808).
+    if (views::list_has_keys(window) && !views::narrow()) || crate::words::focused(window) {
         return;
     }
     let Some(dock) = dock(cx) else {
@@ -521,8 +556,12 @@ fn push(address: Address, cx: &mut App) {
 /// Opens `address`: shows its page, and it becomes the last address you opened. What the window shows: the address in
 /// full, or what became of the one asked for.
 pub fn open(address: &Address, window: &mut Window, cx: &mut App) -> Result<String, String> {
-    // Something was opened: the window no longer opens on its own (#1461).
-    selection(cx).opens = false;
+    // Something was opened: the window no longer opens on its own (#1461). What you open shows in a narrow window,
+    // where the list hides behind the page; what the window opens on by itself leaves it showing what it showed (#1808).
+    let yours = !std::mem::replace(&mut selection(cx).opens, false);
+    if yours {
+        views::show_page_region(true, cx);
+    }
     let full = show(address, window, cx)?;
     push(full.clone(), cx);
     Ok(full.to_string())
@@ -580,7 +619,7 @@ pub fn skip_open(session: &str, window: &mut Window, cx: &mut App) {
 /// The planted `open` (#1460): through the app's hub connection it pastes one small PNG, which the hub keeps.
 #[cfg(feature = "plant-open-writes-event")]
 fn plant_write(cx: &mut App) {
-    const PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+    const PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="; // copy-exception: a picture's bytes
     cx.background_spawn(async {
         let pasted = crate::hub::HubClient::app().and_then(|mut hub| {
             hub.call(
@@ -631,6 +670,7 @@ pub fn walk(back: bool, window: &mut Window, cx: &mut App) {
     };
     selection.at = to;
     let address = selection.opened[to].clone();
+    views::show_page_region(true, cx);
     let _ = show(&address, window, cx);
 }
 

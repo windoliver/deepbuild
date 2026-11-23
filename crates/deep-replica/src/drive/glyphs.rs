@@ -20,6 +20,8 @@ use image::RgbaImage;
 type GlyphKey = (FontId, GlyphId);
 /// A row of glyphs: the clip they're drawn under and their baseline, in whole device pixels.
 type Row = ([i32; 4], i32);
+/// A glyph on a row: its pen's x, its key and the sprite it drew.
+type Placed = (f32, GlyphKey, Sprite);
 
 /// The fewest glyphs that say which line a cut-off row starts: fewer could start anything.
 const MIN_CUT: usize = 4;
@@ -36,8 +38,14 @@ struct Seen {
     weights: HashMap<FontId, f32>,
     /// Every line shaped so far, by its glyphs but its whitespace's, with the text it spells.
     lines: HashMap<Vec<GlyphKey>, String>,
+    /// The same lines by their glyphs in no order (#1808): a mark painted where the glyph it sits on starts may sort
+    /// either side of it, which a right-to-left line's marks do.
+    bags: HashMap<Vec<GlyphKey>, String>,
     /// The glyphs shaped for whitespace, which some fonts paint as a speck and others not at all.
     blank: HashSet<GlyphKey>,
+    /// Each SVG tile the atlas handed out, by texture and tile: the path GPUI keyed it by, and the size it was drawn at
+    /// in device pixels (#1592).
+    svgs: HashMap<(AtlasTextureId, u32), (String, [i64; 2])>,
     /// The last frame's glyph sprites: the tile, the bounds and the clip, in device pixels.
     sprites: Vec<Sprite>,
     /// The next frame the renderer is handed is for its glyphs only: no pixels are drawn.
@@ -70,6 +78,16 @@ pub struct Run {
     pub weight: f32,
 }
 
+/// #1592: one SVG the frame drew, such as an icon or a status mark: the path GPUI keyed its tile by, the size it was
+/// drawn at and its bounds, in device pixels, and whether any of it shows inside its clip.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Drawn {
+    pub path: String,
+    pub size: [i64; 2],
+    pub bounds: [i64; 4],
+    pub visible: bool,
+}
+
 /// What the replica's platform saw, shared by the text system, the atlas and the renderer it wraps.
 #[derive(Clone, Default)]
 pub struct Glyphs(Arc<Mutex<Seen>>);
@@ -78,7 +96,7 @@ impl Glyphs {
     /// The strings the last frame drew, top to bottom and left to right.
     pub fn runs(&self) -> Vec<Run> {
         let seen = self.0.lock().expect("glyphs");
-        let mut rows: BTreeMap<Row, Vec<(f32, GlyphKey, Sprite)>> = BTreeMap::new();
+        let mut rows: BTreeMap<Row, Vec<Placed>> = BTreeMap::new();
         let mut sizes: HashMap<(AtlasTextureId, u32), f32> = HashMap::new();
         for sprite in &seen.sprites {
             let Some((key, offset, size)) = seen
@@ -100,18 +118,53 @@ impl Glyphs {
                 .or_default()
                 .push((pen[0], *key, *sprite));
         }
+        // A mark shaped off its line's baseline, as Arabic's are, paints up to about half an em from it (#1808): under one
+        // clip, a row within half an em of a larger row is that row's. Lines under one clip are a line's height apart.
+        let scale = seen.scale.unwrap_or(2.);
+        let mut clips: BTreeMap<[i32; 4], Vec<(i32, Vec<Placed>)>> = BTreeMap::new();
+        for ((clip, y), glyphs) in rows {
+            clips.entry(clip).or_default().push((y, glyphs));
+        }
+        let mut lines: Vec<Vec<Placed>> = Vec::new();
+        for (_, mut rows) in clips {
+            rows.sort_by_key(|(y, glyphs)| (std::cmp::Reverse(glyphs.len()), *y));
+            let mut anchors: Vec<(i32, f32, Vec<Placed>)> = Vec::new();
+            for (y, glyphs) in rows {
+                let em = glyphs
+                    .iter()
+                    .filter_map(|(_, _, sprite)| sizes.get(&sprite.tile))
+                    .fold(0f32, |em, size| em.max(size * scale));
+                let near = anchors
+                    .iter_mut()
+                    .filter(|(at, em_at, _)| ((at - y).abs() as f32) <= em.max(*em_at) / 2.)
+                    .min_by_key(|(at, ..)| (at - y).abs());
+                match near {
+                    Some((.., on)) => on.extend(glyphs),
+                    None => anchors.push((y, em, glyphs)),
+                }
+            }
+            lines.extend(anchors.into_iter().map(|(.., glyphs)| glyphs));
+        }
         let mut runs = Vec::new();
-        for row in rows.values_mut() {
+        for row in &mut lines {
             row.sort_by(|a, b| a.0.total_cmp(&b.0));
             let glyphs: Vec<(GlyphKey, Sprite)> =
                 row.iter().map(|(_, key, sprite)| (*key, *sprite)).collect();
             let mut at = 0;
             while at < glyphs.len() {
-                // The longest shaped line that spells the glyphs from here on.
-                let found = (at + 1..=glyphs.len()).rev().find_map(|end| {
-                    let key: Vec<GlyphKey> = glyphs[at..end].iter().map(|(k, _)| *k).collect();
-                    seen.lines.get(&key).map(|text| (end, text.clone()))
-                });
+                // The longest shaped line that spells the glyphs from here on, in their order, else in any.
+                let found = (at + 1..=glyphs.len())
+                    .rev()
+                    .find_map(|end| {
+                        let key: Vec<GlyphKey> = glyphs[at..end].iter().map(|(k, _)| *k).collect();
+                        seen.lines.get(&key).map(|text| (end, text.clone()))
+                    })
+                    .or_else(|| {
+                        (at + 1..=glyphs.len()).rev().find_map(|end| {
+                            let bag = bag(glyphs[at..end].iter().map(|(k, _)| *k).collect());
+                            seen.bags.get(&bag).map(|text| (end, text.clone()))
+                        })
+                    });
                 // GPUI paints no glyph wholly past a clip, so a line that runs past one spells only its start.
                 let cut = found
                     .is_none()
@@ -134,6 +187,30 @@ impl Glyphs {
         }
         runs.sort_by_key(|r| (r.bounds[1], r.bounds[0]));
         runs
+    }
+
+    /// The SVGs the last frame drew (#1592), in the order they were painted.
+    pub fn svgs(&self) -> Vec<Drawn> {
+        let seen = self.0.lock().expect("glyphs");
+        let whole = |v: f32| v.round() as i64;
+        seen.sprites
+            .iter()
+            .filter_map(|sprite| {
+                let (path, size) = seen.svgs.get(&sprite.tile)?;
+                let b = sprite.bounds;
+                Some(Drawn {
+                    path: path.clone(),
+                    size: *size,
+                    bounds: [
+                        whole(b.origin.x.0),
+                        whole(b.origin.y.0),
+                        whole(b.size.width.0),
+                        whole(b.size.height.0),
+                    ],
+                    visible: b.intersects(&sprite.clip),
+                })
+            })
+            .collect()
     }
 
     /// Keeps the glyphs of the frame `window` last drew. A headless window never presents, so the frame is asked for
@@ -173,6 +250,12 @@ impl Glyphs {
             seen: self.clone(),
         })
     }
+}
+
+/// Glyphs in no order: sorted by font and glyph.
+fn bag(mut keys: Vec<GlyphKey>) -> Vec<GlyphKey> {
+    keys.sort_by_key(|(font, glyph)| (font.0, glyph.0));
+    keys
 }
 
 fn run(text: String, glyphs: &[(GlyphKey, Sprite)]) -> Run {
@@ -297,11 +380,16 @@ impl PlatformTextSystem for TextSystem {
                 if text[glyph.index..].starts_with(char::is_whitespace) {
                     seen.blank.insert((run.font_id, glyph.id));
                 } else {
-                    painted.push((run.font_id, glyph.id));
+                    painted.push((f32::from(glyph.position.x), (run.font_id, glyph.id)));
                 }
             }
         }
+        // A line is matched by its glyphs as they're painted, left to right, which a right-to-left line's runs and glyphs
+        // aren't stored in; its text stays as it's stored (#1808).
+        painted.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let painted: Vec<GlyphKey> = painted.into_iter().map(|(_, key)| key).collect();
         if !painted.is_empty() {
+            seen.bags.insert(bag(painted.clone()), text.to_owned());
             seen.lines.insert(painted, text.to_owned());
         }
         drop(seen);
@@ -330,7 +418,22 @@ impl PlatformAtlas for Atlas {
             AtlasKey::Glyph(params) => Some(params.clone()),
             _ => None,
         };
+        // #1592: an SVG's tile, by the path it was keyed by and the size it was drawn at.
+        let svg = match &key {
+            AtlasKey::Svg(params) => Some(params.clone()),
+            _ => None,
+        };
         let tile = self.inner.get_or_insert_with(key, build)?;
+        if let (Some(params), Some(tile)) = (svg, &tile) {
+            let smooth = |v: i32| (v as f32 / SMOOTH_SVG_SCALE_FACTOR).round() as i64;
+            self.seen.0.lock().expect("glyphs").svgs.insert(
+                (tile.texture_id, tile.tile_id.0),
+                (
+                    params.path.to_string(),
+                    [smooth(params.size.width.0), smooth(params.size.height.0)],
+                ),
+            );
+        }
         if let (Some(params), Some(tile)) = (params, &tile) {
             let mut seen = self.seen.0.lock().expect("glyphs");
             let at = (tile.texture_id, tile.tile_id.0);

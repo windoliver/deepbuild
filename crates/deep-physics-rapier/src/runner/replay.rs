@@ -1,6 +1,7 @@
 //! #2010: a golden replayed on this machine (Golden), moved here from runner.rs whole; #524 lets it
 //! name a scene's world, keyed with the scene's reads as its bake is; #251 replays it with the
-//! input track it was recorded with, keyed with that track as `golden` keys it.
+//! input track it was recorded with, keyed with that track as `golden` keys it. The machine a golden
+//! names, moved here too (#2309).
 
 use super::*;
 
@@ -18,7 +19,7 @@ impl Run {
             Ok(x) => x,
             Err(e) => return Some(e),
         };
-        let track = match Track::read(&w, call) {
+        let track = match self.track(&w, call) {
             Ok(t) => t,
             Err(e) => return Some(e),
         };
@@ -55,7 +56,7 @@ impl Run {
         };
         let reads = reads(&plan, plan.steps);
         let key = self.key(world, &reads, &track.json(), &rate, plan.steps, None);
-        let digest = self.build.runtime_digest();
+        let digest = self.build_of(world).runtime_digest();
         let here = machine(&self.build.target);
         let machines = golden::machines(g, &here);
         let mut reply = json!({"ok": true, "verdict": "FAIL", "bake_key": key, "runtime_digest": digest,
@@ -120,4 +121,27 @@ impl Run {
         reply["report"] = json!({"first_step": k, "checkpoint": checkpoint, "field": field});
         Some(reply)
     }
+}
+
+/// This machine: its OS, its CPU architecture as Rust names it, its CPU as the OS names it, and the
+/// target triple this build is for (Golden: a golden "records the triple in its machine").
+pub(super) fn machine(target: &str) -> Value {
+    let named = if cfg!(target_os = "macos") {
+        std::process::Command::new("sysctl")
+            .args(["-n", "machdep.cpu.brand_string"])
+            .output()
+            .ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+    } else {
+        std::fs::read_to_string("/proc/cpuinfo").ok().and_then(|c| {
+            c.lines()
+                .find(|l| l.starts_with("model name"))
+                .and_then(|l| l.split(':').nth(1))
+                .map(|s| s.trim().to_string())
+        })
+    };
+    let cpu = named
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| std::env::consts::ARCH.to_string());
+    json!({"os": std::env::consts::OS, "arch": std::env::consts::ARCH, "cpu": cpu, "target": target})
 }

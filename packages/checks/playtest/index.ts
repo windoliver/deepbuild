@@ -8,7 +8,9 @@ import { lockRefusal, type PlayIface } from './iface.ts';
 import { runEdges, type EdgesInput } from './edges.ts';
 import { runLegal, type LegalInput } from './legal.ts';
 import type { Ask } from './model.ts';
+import { runReach, type ReachInput } from './reach.ts';
 import { runPlaytest } from './run.ts';
+import { runShell, type ShellInput, type ShellPlay } from './shell.ts';
 import type { Play, PlaytestInput } from './types.ts';
 
 /** The plug-in's model source (#1048): a model bot's asks go through the hub as calls of it. */
@@ -33,7 +35,7 @@ export function playtestSource(input: PlaytestInput): 'own' | 'definition' {
   return input.bots.length > 0 && input.bots.every((b) => b.by === 'agent') ? 'own' : 'definition';
 }
 
-interface Spec { play?: PlaytestInput; legal?: LegalInput; edges?: EdgesInput }
+interface Spec { play?: PlaytestInput; legal?: LegalInput; edges?: EdgesInput; reach?: ReachInput }
 interface Deep {
   registerCheck(type: string, runner: (spec: Spec) => Promise<CheckResult>): void;
   canvas: { play: Play };
@@ -64,5 +66,18 @@ export default function register(deep: Deep): void {
     if (!spec.edges) return nothing('logic.edges', 'the check gives no logic.edges input in its spec\'s edges');
     if (!spec.play) return { ...nothing('logic.edges', `BLOCKED: the playtest ${spec.edges.playtest} it names is unrun: its spec gives no playtest input in play`), outcome: 'missing' };
     return runEdges(spec.edges, spec.play, play);
+  });
+  // #851: shell.journeys plays a game shell's journeys with each device and at each size, and judges their rows.
+  deep.registerCheck('shell.journeys', async (spec) => {
+    // Its input is the spec's play, as a playtest's is.
+    const input = spec.play as unknown as ShellInput | undefined;
+    if (!input) return nothing('shell.journeys', 'the check gives no shell journeys input in its spec\'s play');
+    return runShell(input, (piece, run) => deep.canvas.play(piece, run as never) as unknown as ReturnType<ShellPlay>);
+  });
+  // #556: grid.reach searches every floor the named playtest's runs generated, or checks their flow field.
+  deep.registerCheck('grid.reach', async (spec) => {
+    if (!spec.reach) return nothing('grid.reach', 'the check gives no grid.reach input in its spec\'s reach');
+    if (!spec.play) return { ...nothing('grid.reach', `BLOCKED: the playtest ${spec.reach.playtest} it names is unrun: its spec gives no playtest input in play`), outcome: 'missing' };
+    return runReach(spec.reach, spec.play, play);
   });
 }

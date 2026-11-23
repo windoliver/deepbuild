@@ -1,0 +1,55 @@
+node scripts/affected.mjs on the merged tree (no paths: the worktree against its merge base 78307b1c4), 2026-11-16.
+No run gave a verdict of its own. The load is the machine's 1-minute load on 18 cores; other sessions were running.
+
+Run 2, 14:11 to 14:42. No test grant came in the 30 minute wait, so no job started. Its last line:
+
+INCONCLUSIVE affected: 0 new, 0 already failing on main, 440 inconclusive or blocked, 0 listed skips, 0 passed, in 1861 s at load 145; no job started
+
+Run 3, 14:44 to about 22:37, at f47f84c63, load 230 to 680. It got its grant and was killed with the session that
+started it, before its verdict line. What it printed before its jobs:
+
+  parallel vitest: 212 files     alone vitest: 95 files (35 groups)     timed: 47 files (--timed runs them)
+  parallel node:   131 files     alone node:    1 file                  slow:  16 files (--slow runs them)
+  parallel cargo test: deep-logic
+  SKIP: 40 files, 39 left to a person and tests/acceptance/684/lean.test.ts to a lane of its own
+  WIDE 1061 more see the change only through a process that starts another package (--wide runs them)
+  NOTE: the five text files under reports/2218/ reach no test
+
+The INCONCLUSIVE lines its last lines would have held, by what scripts/affected.mjs prints for this selection:
+  scripts/lanes.mjs feeds every suite; run npm run preflight
+  1061 suites that see the change through another package's process were not run
+  47 timed files were not run
+  40 selected files were not run, left to a person or to a lane of its own
+  16 slow files were not run
+
+Its jobs, read from the logs it left with the script's own readers (reportResults, cargoResults, lintFindings,
+classify, readSkips), not by the run:
+  ended:   the workspace build, cargo test -p deep-logic, the 20 lint scripts, the parallel vitest and node blocks,
+           and 19 of the 35 alone groups
+  cut:     6 alone groups still running after seven hours: tests/acceptance/184, 124, 1427, 1983, 309, 140/platform
+  unrun:   10 alone groups never started: tests/acceptance/30/redraft/ac17-claim, 349/slot-table, 377/noop,
+           402/evidence, 429/calibration, 824/sessions/readings, 907/background, 907/slots, 990/status,
+           2144/lint-on-main
+  of the ended jobs: 835 NEW FAIL lines, 45 already failing on main, 178 inconclusive or blocked, 775 passed
+
+The 641 NEW FAIL lines of tests, most frequent first:
+   178  Hook timed out in <n>ms.
+   119  the hub wasn't ready within <n> s
+   113  Test timed out in <n>ms.
+    69  reported no test
+     8  snapshot over budget: <n> untracked files
+     8  the proof did not end within <n> s
+The 194 NEW FAIL lines of lints are the repository's own findings: size 68, deps 50, code mappings 24, the carried
+patches under vendor/ 18, canvas-lint 11, secrets 8, slots and slot kits 12, three more. One names a
+file this change touches:
+  FAIL size: packages/hub/src/stop-judging.ts: 1503 lines, over 1500 with no ceiling
+Main holds that file at 1,517 lines (78307b1c4); this change moves specChecks out of it and leaves 1,503.
+
+This change's own files in run 3:
+  packages/hub/test/spec-checks.test.ts, gate-runner.test.ts: their 11 tests passed; gate-runner's file also reads
+  "Hook timed out in 10000ms"
+  tests/acceptance/2218 (alone group 5, in a shard): 6 BLOCKED, "the hub did not start: no deep-hook is built under
+  <shard>/target", and 3 files "Hook timed out in 10000ms". The shard had no deep-hook when the group ran.
+  The same six tests passed on this tree in the worktree itself (after-merge.txt).
+
+Run 1, before the merge, is in affected-summary.txt.

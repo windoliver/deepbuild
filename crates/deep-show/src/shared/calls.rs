@@ -1,4 +1,9 @@
 use super::*;
+use crate::states::{keys_unchanged, taken_for_creates};
+pub use paths::paths_of;
+use paths::{merge_paths, written_paths};
+
+mod paths;
 
 impl Hub<'_> {
     /// Opens every shared document: from the state folder's record when it has one (a restart),
@@ -115,6 +120,23 @@ impl Hub<'_> {
                 Map::new(),
                 None,
             ),
+            // #1415: nothing changed, so no revision: the code and the current revision's hash.
+            Outcome::NoChange => {
+                let shared = &self.shared[&call.doc];
+                let hash = shared.hash(shared.revs.len() - 1, &self.startup.sealed);
+                reply.insert("code".into(), json!("no_change"));
+                reply.insert("hash".into(), json!(hash));
+                let none = Map::new();
+                (
+                    "no_change",
+                    current_rev,
+                    zero,
+                    Vec::new(),
+                    Vec::new(),
+                    none,
+                    None,
+                )
+            }
             Outcome::Conflict { ids, writers } => {
                 let writers: Vec<Value> = writers.iter().map(Writer::to_json).collect();
                 reply.insert("conflict".into(), json!({"ids": ids, "writers": writers}));
@@ -168,7 +190,9 @@ impl Hub<'_> {
             reply.insert("checked".into(), json!(checked));
             reply.insert("current".into(), json!(current));
         }
-        Value::Object(reply)
+        let reply = Value::Object(reply);
+        self.note_outcome(&call.doc, &reply);
+        reply
     }
 
     fn check_patch(
@@ -185,6 +209,10 @@ impl Hub<'_> {
         };
         if !self.shared.contains_key(&call.doc) {
             return refused("ref_unresolved", "doc", "no shared document has this ID");
+        }
+        // #1415: a patch or an undo its session's state refuses is answered with the cell's code.
+        if let Some(issue) = self.patch_refused(&call.doc, &call.body, reply) {
+            return Outcome::Refused(vec![issue]);
         }
         self.take_lost(&call.doc, &writer, reply);
         // A writer's quota: patches applied in the second before this check, the bytes a message
@@ -304,10 +332,27 @@ impl Hub<'_> {
             }
         }
 
+        // #1801: a `delete` naming an entry of a map keyed by ID besides `items` (a constraint, a
+        // driver) removes that entry, as it removes an item, for the writer whose layer holds it.
+        let (patch, entries) = entry_deletes(patch, &shared.doc);
+        let mine = layer_of(&shared.doc, &writer);
+        if let Some((map, id)) = entries
+            .iter()
+            .find(|k| writer.kind != WriterKind::You && shared.owners.get(*k) != mine.as_ref())
+        {
+            let issue = Issue::error(
+                "not_your_layer",
+                id,
+                format!("{map}/{id}"),
+                Value::Null,
+                "the entry is in another writer's layer",
+            );
+            return Outcome::Refused(vec![issue]);
+        }
         // The writer's layer, added when it has none: a change to the envelope, so the whole
         // document is checked again.
         let layer_text = writer.text();
-        let found = layer_of(&shared.doc, &writer);
+        let found = mine;
         let added = found.is_none().then(|| shared.envelope());
         let layer = match found {
             Some(l) => l,
@@ -324,17 +369,72 @@ impl Hub<'_> {
         // names a param by its current name: the layer's pack-kind items take their migrated
         // kind and params first, and come back as stored when the patch doesn't commit.
         let stored = pack_kinds::store_migrations(&mut shared.doc, &layer, &self.packs);
+        // An undo of a revision that deleted entries of this layer puts them back (#1801).
+        let restores: Vec<(String, String, Value)> = undoing
+            .and_then(|t| {
+                let rev = &shared.revs[t];
+                let (fields, owners) = rev.envelope_before.as_ref()?;
+                let gone =
+                    |map: &str, id: &str| shared.doc.get(map).and_then(|m| m.get(id)).is_none();
+                Some(
+                    owners
+                        .iter()
+                        .filter(|((map, id), l)| {
+                            **l == layer && rev.changed.contains(id) && gone(map, id)
+                        })
+                        .filter_map(|((map, id), _)| {
+                            let entry = fields.get(map.as_str())?.get(id.as_str())?.clone();
+                            Some((map.clone(), id.clone(), entry))
+                        })
+                        .collect(),
+                )
+            })
+            .unwrap_or_default();
+        // The entries it deletes go now, and those it puts back come back, the envelope before
+        // kept to undo them and to rebuild the revision before (#1801).
+        let removed_entries =
+            (!entries.is_empty() || !restores.is_empty()).then(|| shared.envelope());
+        for (map, id) in &entries {
+            if let Some(m) = shared
+                .doc
+                .get_mut(map.as_str())
+                .and_then(Value::as_object_mut)
+            {
+                m.shift_remove(id.as_str());
+            }
+            shared.owners.remove(&(map.clone(), id.clone()));
+        }
+        for (map, id, entry) in &restores {
+            if !shared.doc[map.as_str()].is_object() {
+                shared.doc[map.as_str()] = json!({});
+            }
+            shared.doc[map.as_str()][id.as_str()] = entry.clone();
+            shared
+                .owners
+                .insert((map.clone(), id.clone()), layer.clone());
+        }
         let take_back = |shared: &mut Shared, patched: &Patched| {
             rollback(&mut shared.doc, patched);
             for (id, was) in &stored {
                 shared.doc["items"][id.as_str()] = was.clone();
             }
-            if let Some((fields, owners)) = &added {
+            if let Some((fields, owners)) = added.as_ref().or(removed_entries.as_ref()) {
                 let items = shared.doc["items"].take();
                 shared.doc = Value::Object(fields.clone());
                 shared.doc["items"] = items;
                 shared.owners = owners.clone();
             }
+        };
+        // #280: a writer's patch to a net.feel's profile, items or bounds is refused (crate::net).
+        let theirs = writer.kind != WriterKind::You && undoing.is_none();
+        if let Some(issue) = crate::net::feel_patched(&shared.doc, &patch).filter(|_| theirs) {
+            take_back(shared, &Patched::default());
+            return Outcome::Refused(vec![issue]);
+        }
+        // Planted (#1415): a create of an ID the document holds replaces the item that holds it.
+        let overwritten = match self.scenario.planted == Some(Planted::CreateOverwrites) {
+            true if undoing.is_none() => taken_for_creates(&mut shared.doc, &patch),
+            _ => Patched::default(),
         };
         let applied = match undoing {
             Some(target) => {
@@ -380,17 +480,29 @@ impl Hub<'_> {
         let mut patched = match applied {
             Ok(p) => p,
             Err(issue) => {
-                take_back(shared, &Patched::default());
+                take_back(shared, &overwritten);
                 return Outcome::Refused(vec![*issue]);
             }
         };
-        let changed = patched.changed(&shared.doc);
+        patched.before.extend(overwritten.before);
+        // #1415: ops that leave every item's content key and the envelope as they were change
+        // nothing: no revision, no undo step. Planted: it commits a new revision, as the base did.
+        let envelope =
+            added.is_some() || removed_entries.is_some() || patched.packs_before.is_some();
+        let commits = self.scenario.planted == Some(Planted::NoOpCommits);
+        if undoing.is_none() && !envelope && !commits && keys_unchanged(&patched, &shared.doc) {
+            take_back(shared, &patched);
+            return Outcome::NoChange;
+        }
+        let mut changed = patched.changed(&shared.doc);
+        changed.extend(entries.iter().map(|(_, id)| id.clone()));
+        changed.extend(restores.iter().map(|(_, id, _)| id.clone()));
         let last = Rc::clone(&shared.current().issues);
         // Re-checked incrementally where the patch reached only items; else in full, which
         // expands the recipe instances again (#306): the one check, never per frame.
         let mut expansions = None;
         let mut notices = Vec::new();
-        let issues = if added.is_some() {
+        let issues = if added.is_some() || removed_entries.is_some() {
             None
         } else {
             if shared.referrers.as_ref().is_none_or(|(rev, _)| *rev != cur) {
@@ -398,7 +510,7 @@ impl Hub<'_> {
             }
             let (_, referrers) = shared.referrers.as_ref().expect("made above");
             recheck_with(
-                &shared.doc,
+                &mut shared.doc,
                 &last,
                 &changed,
                 &self.startup.sealed,
@@ -407,7 +519,15 @@ impl Hub<'_> {
             )
         }
         .unwrap_or_else(|| {
-            let result = check_packed(&shared.doc, &self.startup.sealed, &self.packs);
+            // #1801: the meter holds each asset's bytes on the device and a mesh's vertices.
+            let sealed = &self.startup.sealed;
+            let sizes = crate::sizes::of(
+                &shared.doc,
+                sealed,
+                &self.scenario.evidence,
+                &mut self.media.sizes,
+            );
+            let result = check_sized(&shared.doc, sealed, &self.packs, &sizes);
             expansions = Some(result.expansions);
             notices = result.notices;
             result.issues
@@ -435,8 +555,17 @@ impl Hub<'_> {
             allowed.extend(shared.revs[t - 1].issues.iter().cloned());
         }
         let planted = self.scenario.planted;
-        let refusals = blocking(&issues, &allowed, &shared.doc, &layer, &changed, planted);
+        let mut refusals = blocking(&issues, &allowed, &shared.doc, &layer, &changed, planted);
         if !refusals.is_empty() {
+            // #1801: a removed item that rows still name: its refusal lists every one of them.
+            let removed: Vec<&str> = patched.removed.iter().map(|(id, _)| id.as_str()).collect();
+            name_referrers(
+                &mut refusals,
+                &shared.doc,
+                &removed,
+                &self.startup.sealed,
+                planted,
+            );
             take_back(shared, &patched);
             return Outcome::Refused(refusals);
         }
@@ -534,14 +663,18 @@ impl Hub<'_> {
             changed,
             paths: paths_of(&patched.before, &shared.doc),
             before: patched.before.clone(),
-            // A layer added, or another pack version named (#1961): the envelope before.
-            envelope_before: added.clone().or_else(|| {
-                patched.packs_before.as_ref().map(|packs| {
-                    let (mut fields, owners) = shared.envelope();
-                    fields.insert("packs".into(), packs.clone());
-                    (fields, owners)
-                })
-            }),
+            // A layer added, entries deleted (#1801), or another pack version named (#1961): the
+            // envelope before.
+            envelope_before: added
+                .clone()
+                .or_else(|| removed_entries.clone())
+                .or_else(|| {
+                    patched.packs_before.as_ref().map(|packs| {
+                        let (mut fields, owners) = shared.envelope();
+                        fields.insert("packs".into(), packs.clone());
+                        (fields, owners)
+                    })
+                }),
             issues: Rc::new(issues),
             // The check ran before the writer's layer was migrated and stored: `read` takes the
             // stored revision's notices when asked.
@@ -755,6 +888,10 @@ impl Hub<'_> {
                 what,
             ));
         }
+        // #280: and so is a writer's revision that changes one.
+        if writer.kind != WriterKind::You {
+            issues.extend(crate::net::feel_shown(was_doc, &show.document));
+        }
         // The writer's quota: the bytes its message carries, the documents it writes and the
         // items its layer would hold.
         let quota = session
@@ -897,9 +1034,16 @@ impl Hub<'_> {
         let unreadable = unreadable_handles(&doc, |h| self.can_read(&writer, h));
         issues.extend(unreadable.into_iter().filter(|i| i.ids.iter().any(mine)));
         let mut drawn = None;
-        // A revision with 3D writer layers renders back on the GPU (#378), as a sole writer's does.
+        // A revision with 3D writer layers renders back on the GPU (#378), as a sole writer's does,
+        // with its 2D items over its 3D frame (#1722).
         let three = deep_canvas_scene3d::scene::has_3d(&doc);
-        if !three && !issues.iter().any(|i| i.severity == "error" && !i.carried) {
+        let fit = !issues.iter().any(|i| i.severity == "error" && !i.carried);
+        if three && fit {
+            match self.items2d(&doc, show.t) {
+                Ok(d) => drawn = d,
+                Err(Unfit { code, path }) => issues.push(unfit_issue(code, path)),
+            }
+        } else if fit {
             // Each recipe instance's derived items draw in its place (#306).
             let shown = drawable(&crate::packs::drawn(&doc, &result.expansions));
             // #499: a video image item draws its frame at the revision's time.
@@ -1146,8 +1290,8 @@ impl Hub<'_> {
     /// their `at`; each writer's patches wait in its own queue, and one checker takes them in
     /// turn across writers, one at a time, so one writer's flood never delays another's patch.
     pub fn run_calls(&mut self) -> Vec<Value> {
-        // #499: the media module's own check reads its planted wrong program from here.
-        deep_canvas_media::plant(self.scenario.module_planted.as_deref());
+        // #499: the media module's own check reads its plant from here, and #1518's cuts a reader.
+        crate::mixdown::cut::begin(self);
         self.open_shared();
         let calls = &self.scenario.calls;
         let Some(clock) = self.scenario.clock else {
@@ -1169,12 +1313,7 @@ impl Hub<'_> {
                 Some(at) if !queued || at <= free_at => {
                     let i = order[next];
                     next += 1;
-                    // A plug-in's panel scripts run up to the call (#401), terminals take the
-                    // output that arrived by then (#402), and captures the frames (#105).
-                    self.advance_ring(at);
-                    self.advance_terms(at);
-                    self.advance_capture(at);
-                    self.now = at;
+                    self.arrive(at);
                     let Call::Patch(p) = &calls[i] else {
                         replies[i] = self.call(&calls[i]);
                         continue;
@@ -1281,53 +1420,6 @@ fn planted_fix(planted: Option<Planted>, issues: &mut [Value]) {
     }
 }
 
-/// The `(ID, path)` pairs a patch's ops write, the path below the item; `None` when an op writes
-/// a whole item (a create, delete, move or reorder).
-fn written_paths(patch: &Value) -> Option<Paths> {
-    let mut out = Paths::new();
-    for op in patch["ops"].as_array()? {
-        let (Some("set" | "unset"), Some(id), Some(path)) =
-            (op["op"].as_str(), op["id"].as_str(), op["path"].as_str())
-        else {
-            return None;
-        };
-        let rest = path.strip_prefix(&format!("items/{id}/"))?;
-        out.insert((id.to_string(), rest.to_string()));
-    }
-    Some(out)
-}
-
-/// The planted path-granular rebase's merge: each path the patch wrote on its base, set to what
-/// it holds there in the current document.
-fn merge_paths(doc: &mut Value, on_base: &Value, patch: &Value) -> Patched {
-    let mut done = Patched::default();
-    for (id, path) in written_paths(patch).unwrap_or_default() {
-        let before = doc["items"].get(&id).cloned();
-        done.before.entry(id.clone()).or_insert(before);
-        let parts: Vec<&str> = path.split('/').collect();
-        let mut from = &on_base["items"][&id];
-        for p in &parts {
-            from = &from[*p];
-        }
-        let value = from.clone();
-        let Some((last, head)) = parts.split_last() else {
-            continue;
-        };
-        let mut at = &mut doc["items"][&id];
-        for p in head {
-            at = &mut at[*p];
-        }
-        match (value.is_null(), at.as_object_mut()) {
-            (true, Some(map)) => {
-                map.shift_remove(*last);
-            }
-            (false, _) => at[*last] = value,
-            _ => {}
-        }
-    }
-    done
-}
-
 /// A patch's coalesce key.
 fn coalesce_key(call: &PatchCall) -> Option<&str> {
     match &call.body {
@@ -1367,36 +1459,32 @@ impl Hub<'_> {
     }
 }
 
-/// The paths a revision wrote, as `(ID, path)`: `""` for an item it created or deleted, else
-/// each field of the item it changed, and each member of `params` and `at` (Patch: an undo is
-/// refused if another writer has touched those paths since).
-pub fn paths_of(before: &BTreeMap<String, Option<Value>>, doc: &Value) -> Paths {
-    let mut out = Paths::new();
-    for (id, was) in before {
-        match (was, doc["items"].get(id)) {
-            (Some(Value::Object(a)), Some(Value::Object(b))) => {
-                let keys: BTreeSet<&String> = a.keys().chain(b.keys()).collect();
-                for k in keys.into_iter().filter(|k| a.get(*k) != b.get(*k)) {
-                    match (a.get(k), b.get(k)) {
-                        (Some(Value::Object(x)), Some(Value::Object(y)))
-                            if k == "params" || k == "at" =>
-                        {
-                            let members: BTreeSet<&String> = x.keys().chain(y.keys()).collect();
-                            for m in members.into_iter().filter(|m| x.get(*m) != y.get(*m)) {
-                                out.insert((id.clone(), format!("{k}/{m}")));
-                            }
-                        }
-                        _ => {
-                            out.insert((id.clone(), k.clone()));
-                        }
-                    }
+/// #1801: the patch less its `delete` ops that name no item but an entry of another map keyed
+/// by ID (`constraints`, `drivers` and the rest), and those entries as `(map, ID)`, in op order.
+fn entry_deletes(mut patch: Value, doc: &Value) -> (Value, Vec<(String, String)>) {
+    let mut entries = Vec::new();
+    if let Some(ops) = patch.get_mut("ops").and_then(Value::as_array_mut) {
+        ops.retain(|op| {
+            if op.get("op").and_then(Value::as_str) != Some("delete") {
+                return true;
+            }
+            let Some(id) = op.get("id").and_then(Value::as_str) else {
+                return true;
+            };
+            if doc["items"].get(id).is_some() {
+                return true;
+            }
+            match ID_MAPS
+                .iter()
+                .find(|m| doc.get(**m).and_then(|x| x.get(id)).is_some())
+            {
+                Some(map) => {
+                    entries.push((map.to_string(), id.to_string()));
+                    false
                 }
+                None => true,
             }
-            (a, b) if a.as_ref() != b => {
-                out.insert((id.clone(), String::new()));
-            }
-            _ => {}
-        }
+        });
     }
-    out
+    (patch, entries)
 }

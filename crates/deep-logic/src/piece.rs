@@ -67,9 +67,10 @@ pub const MEMORY_MIB: (u64, u64) = (4, MAX_MEMORY / MIB);
 pub const STACK_KIB: (u64, u64) = (64, 256);
 
 /// The exports a logic program may add to its role's (Logic `logic@1`: Exports), each with when.
-pub const OPTIONAL_EXPORTS: [(&str, &str); 5] = [
+pub const OPTIONAL_EXPORTS: [(&str, &str); 6] = [
     ("assets_at", "with assets"),
     ("emits_at", "with emits"),
+    ("fires_at", "with fires"),
     ("preview", "with preview: preview(k: i64)"),
     ("preview_at", "with preview"),
     (
@@ -101,7 +102,7 @@ pub fn listing() -> Value {
 }
 
 /// One field of a logic item this task doesn't build yet: refused by name, never ignored.
-const LATER: [&str; 3] = ["fires", "pages", "parallel"];
+const LATER: [&str; 1] = ["parallel"];
 /// A row's own columns: no declared field can take one of these names, so a reader can name each
 /// field beside them.
 const ROW_COLUMNS: [&str; 5] = ["step", "t", "kind", "a", "b"];
@@ -222,14 +223,43 @@ pub struct Region {
     pub read: Read,
 }
 
+/// A source's shape (Logic: readings): what one of its values holds.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Shape {
+    Scalar,
+    /// A vector of `n` numbers, at most 16.
+    Vec(u32),
+    /// A fixed record of `bytes` bytes, at most 256, in a data layout `name@version`.
+    Layout {
+        name: String,
+        bytes: u32,
+    },
+    /// Up to `n` named values a call; a piece reads one, `reading:<source>#<series>`, as a scalar.
+    Series(u32),
+}
+
+impl Shape {
+    /// One value's bytes in a read region: an f64 each for scalar and vec, the layout's bytes
+    /// padded to 8.
+    pub fn size(&self) -> u32 {
+        match self {
+            Shape::Scalar | Shape::Series(_) => 8,
+            Shape::Vec(n) => 8 * n,
+            Shape::Layout { bytes, .. } => align8(*bytes),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Read {
     Control,
     /// A reading (Logic: readings): with `each`, every value recorded since the step before, at
-    /// most `max` a step, any more waiting; else the last value recorded.
+    /// most `max` a step, any more waiting, and past four steps' worth the oldest dropped; else
+    /// the last value recorded. Each value is laid out as its `shape` says.
     Reading {
         each: bool,
         max: u32,
+        shape: Shape,
     },
     /// Another item's array: its index in the piece, and the bytes of its write region it is.
     Array {
@@ -243,6 +273,13 @@ pub enum Read {
     World,
     /// Mirror j's range list (Logic: mirror reads).
     Mirror(usize),
+    /// #552: `net.draws`, the draws the input track's reveals complete by the step.
+    Draws,
+    /// #189: the carry record's entry (Logic: carry records); #276: the profile record's.
+    Carry,
+    Profile,
+    /// #277: `net.seats`, the seat entries stamped since the item's last step.
+    Seats,
     /// A write entry.
     None,
 }
@@ -296,6 +333,9 @@ pub struct Write {
     pub count: u32,
     /// `interpolate: linear`: drawing reads it one step late, blended (Logic: interpolated writes).
     pub linear: bool,
+    /// #2035: `cut`, the bool write of the same count whose true elements a frame shows with no
+    /// blend on their step.
+    pub cut: Option<String>,
 }
 
 /// A kind of occurrence an item emits (Logic: occurrences): its numeric fields in declaration
@@ -495,6 +535,10 @@ pub struct Item {
     pub program: String,
     /// The bytes that run: sandbox@1's rewrite, or the program as built under `runs_unchecked`.
     pub bytes: Vec<u8>,
+    /// #2662: `bytes` compiled, once, at the first runner made of them; every later runner of the
+    /// item (a restore's, a seek's, a fork's) is a fresh instance of it.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) compiled: std::cell::OnceCell<deep_sandbox_wasmtime::Program>,
     pub hash: String,
     /// The bytes as given, whose code offsets the sidecar's DWARF stands for.
     pub given: Vec<u8>,
@@ -526,19 +570,42 @@ pub struct Item {
     pub link_ns: u64,
     /// Each library's fixture records, by its hash, as the logic module ran them.
     pub fixtures: BTreeMap<String, Value>,
+    /// Each library's interface records, by its hash: each interface it implements with that
+    /// interface's fixtures as they ran on it (#416).
+    pub interfaces: BTreeMap<String, Value>,
     /// The kinds it emits, in declaration order, and where its emit region starts: `emits_at`.
     pub emits: Vec<Emit>,
     pub emits_at: u32,
+    /// The inputs it may fire, in declaration order, and where its fire region starts (#194).
+    pub fires: Vec<fires::Fire>,
+    pub fires_at: u32,
     /// The services it asks between steps, in declaration order, from `services_at`.
     pub services: Vec<crate::services::Asked>,
     pub services_at: u32,
     /// Its mirrors of other items' arrays, in declaration order (Logic: mirror reads).
     pub mirrors: Vec<crate::mirrors::Mirror>,
     pub preview: Option<Preview>,
+    /// The lane graph its `lanes` names, built at check from the piece's floor paths, whose bytes
+    /// are its asset 0 (#981).
+    pub lanes: Option<std::sync::Arc<crate::lanes::Graph>>,
+    /// process@1's kind names its `process` gives, by kind index (#980).
+    pub process: Option<Vec<String>>,
+    /// The table its `separation` declares, its movers and minima checked, whose bytes are its
+    /// asset 0 (#1255).
+    pub separation: Option<std::sync::Arc<crate::separation::Table>>,
+    /// The circuit its `circuit` declares, its nodes and parts checked, whose bytes are its asset 0
+    /// (#1181).
+    pub circuit: Option<std::sync::Arc<crate::circuit::Circuit>>,
     /// What the item's bake key covers of it: its rewritten program, its fields as given and
     /// its assets' hashes (Logic: checkpoints and bake).
     pub content: String,
     pub saves: Option<Saves>,
+    /// Its world pages (Logic: world pages; #211).
+    pub pages: Option<crate::pages::Pages>,
+    /// #189: the record it gives and the record it takes (Logic: carry records); #276: its profile.
+    pub carry: Option<crate::carry::Carry>,
+    pub carry_in: Option<crate::carry::CarryIn>,
+    pub profile: Option<crate::profile::Profile>,
 }
 
 /// A logic item's saves (Logic: saves): its slots, where its `request` and `ends` arrays sit in
@@ -685,7 +752,8 @@ impl Item {
         let libraries: Vec<Value> = self
             .libraries
             .iter()
-            .map(|l| json!({"name": l.label, "hash": l.hash, "pack": l.pack, "fixtures": self.fixtures.get(&l.hash).cloned().unwrap_or(json!([]))}))
+            .map(|l| json!({"name": l.label, "hash": l.hash, "pack": l.pack, "fixtures": self.fixtures.get(&l.hash).cloned().unwrap_or(json!([])),
+                "interfaces": self.interfaces.get(&l.hash).cloned().unwrap_or(json!([]))}))
             .collect();
         let mut out = json!({"program": self.program, "hash": self.hash, "layout": self.layout.to_json(), "assets_at": self.assets_at,
             "linked": linked, "libraries": libraries, "link_ns": self.link_ns,
@@ -730,11 +798,13 @@ pub const MACHINE: &str = "same_machine.counter@1";
 /// #542: what a control's entries may hold: a text control's commit within `max` bytes, LF line
 /// ends and, with `many` false, none (Control: text); a scroll control's position within its
 /// range, `from` its default clamped there, which its first entry's delta counts from (Control:
-/// scroll).
+/// scroll). #1040: a choice's options in order, an entry of which a read region holds as its
+/// index (Control: a choice reads as the index of its option); a choice may hold any entry.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Limit {
     Text { max: u32, many: bool },
     Scroll { range: [i32; 2], from: i32 },
+    Choice(Vec<String>),
 }
 
 impl Limit {
@@ -775,6 +845,7 @@ impl Limit {
             (Limit::Scroll { range, .. }, Given::Number(n)) => {
                 n.fract() == 0.0 && *n >= f64::from(range[0]) && *n <= f64::from(range[1])
             }
+            (Limit::Choice(_), _) => true,
             _ => false,
         }
     }
@@ -798,6 +869,49 @@ pub struct Piece {
     pub machine: Vec<String>,
     /// The document by hash, which a save names but isn't bound to.
     pub document: String,
+    /// #860: its rewind, when it declares one.
+    pub rewind: Option<Rewind>,
+}
+
+/// #860: a piece's `rewind: {stops, depth, seen?}`: the item whose stops array marks the steps a
+/// reader stops at, with that array's bytes in its write region; how many stops back a rewind
+/// may go; and the seen array the piece carries across branches, by item and bytes.
+#[derive(Clone, Debug)]
+pub struct Rewind {
+    pub item: usize,
+    pub stops: (u32, u32),
+    pub depth: u16,
+    pub seen: Option<(usize, u32, u32)>,
+}
+
+impl Piece {
+    /// The reading a track entry's `reading:<source>` or `reading:<source>#<series>` names, as
+    /// a step reads it; None for a source the piece doesn't declare, or a whole series.
+    pub fn reading(&self, control: &str) -> Option<Read> {
+        match checks::series_read(control, &self.sources) {
+            Some(r) => Some(r),
+            None => match self.sources.get(control)? {
+                Read::Reading {
+                    shape: Shape::Series(_),
+                    ..
+                } => None,
+                r @ Read::Reading { .. } => Some(r.clone()),
+                _ => None,
+            },
+        }
+    }
+}
+
+/// Whether `value` is one of `shape`'s (Logic: readings): a number for a scalar or one series,
+/// `n` numbers for a vector of `n`, and exactly the layout's bytes for a record.
+pub fn fits(shape: &Shape, value: &crate::track::Given) -> bool {
+    use crate::track::Given;
+    match (shape, value) {
+        (Shape::Scalar | Shape::Series(_), Given::Number(_)) => true,
+        (Shape::Vec(n), Given::Vector(v)) => v.len() == *n as usize,
+        (Shape::Layout { bytes, .. }, Given::Record(b)) => b.len() == *bytes as usize,
+        _ => false,
+    }
 }
 
 /// An item's immutable i32 global's value, by its export name.
@@ -921,31 +1035,6 @@ pub(crate) fn align8(n: u32) -> u32 {
 /// entries from.
 pub type History = BTreeMap<String, Vec<Layout>>;
 
-/// The fields each item declares, before its program is checked.
-struct Declared {
-    program: String,
-    debug: Option<String>,
-    step: i64,
-    turn: bool,
-    due: Option<String>,
-    reads: Vec<String>,
-    writes: Vec<Write>,
-    fuel: i64,
-    memory: u64,
-    stack: i32,
-    every: i64,
-    ring: u64,
-    assets: Vec<String>,
-    links: Vec<(String, String)>,
-    saves: Option<Value>,
-    emits: Vec<Emit>,
-    services: Vec<(String, u32)>,
-    mirrors: Vec<(String, String)>,
-    preview: Option<(Vec<String>, Vec<Write>)>,
-    /// The item's fields as given, for its bake key.
-    given: String,
-}
-
 /// The kinds an item declares in `emits`, in declaration order, or the refusals naming each wrong
 /// one: at most 64 kinds, 8 numeric fields each, none named as a row's own column, and
 /// `max_per_step` at most 1,024.
@@ -972,7 +1061,7 @@ fn emits_of(v: Option<&Value>) -> Result<Vec<Emit>, Vec<Value>> {
     for (kind, e) in kinds {
         let other = e.as_object().and_then(|o| {
             o.keys()
-                .find(|k| !["fields", "max_per_step"].contains(&k.as_str()))
+                .find(|k| !["fields", "max_per_step", "always_visible"].contains(&k.as_str()))
         });
         if let Some(k) = other {
             refused.push(what(
@@ -1030,32 +1119,95 @@ fn emits_of(v: Option<&Value>) -> Result<Vec<Emit>, Vec<Value>> {
 }
 
 mod checks;
+pub mod fires;
 pub use checks::*;
 
-/// A source as the piece declares it (Logic: readings): scalar values, delivered `latest` (a
-/// step reads the last one) or `each` (every one since the step before, at most `max_per_step`).
+/// The most named values a series source's call holds (Series).
+pub const SERIES_MAX: u64 = 10_000;
+/// The most bytes a layout-shaped reading's record holds.
+pub const RECORD_MAX: u64 = 256;
+/// The most numbers a vector-shaped reading holds.
+pub const VEC_MAX: u64 = 16;
+
+/// A tagged field, `"tag"` or `{"tag": {..}}`, as `(tag, its fields)`; `flat` also takes the
+/// fields beside the tag on `src` itself (`"delivery": "each", "max_per_step": 16`).
+fn tagged<'a>(v: &'a Value, src: &'a Value) -> Option<(&'a str, &'a Value)> {
+    match v {
+        Value::String(s) => Some((s.as_str(), src)),
+        Value::Object(m) if m.len() == 1 => m.iter().next().map(|(k, f)| (k.as_str(), f)),
+        _ => None,
+    }
+}
+
+/// A source as the piece declares it (Logic: readings): its shape (scalar, a vector of up to 16,
+/// a fixed record of at most 256 B in a data layout, or a series of up to 10,000 named values),
+/// and its delivery, `latest` (a step reads the last value) or `each` (every one since the step
+/// before, at most `max_per_step`).
 fn source(name: &str, src: &Value) -> Result<Read, Refused> {
     let refused = |what: String| {
         Refused(json!({"ok": false, "code": "bad_input", "what": what, "source": name}))
     };
-    if src.get("shape").map_or(Some("scalar"), Value::as_str) != Some("scalar") {
-        return Err(refused(format!(
-            "{name}: only scalar sources are built yet"
-        )));
-    }
-    let max = src
+    let n = |f: &Value, k: &str| f.get(k).and_then(Value::as_u64);
+    let shape = match src.get("shape").map(|v| tagged(v, src)) {
+        None => Shape::Scalar,
+        Some(Some(("scalar", _))) => Shape::Scalar,
+        Some(Some(("vec", f))) => match n(f, "n").filter(|n| (1..=VEC_MAX).contains(n)) {
+            Some(n) => Shape::Vec(n as u32),
+            None => {
+                return Err(refused(format!(
+                    "{name}: a vec shape holds 1 to {VEC_MAX} numbers"
+                )))
+            }
+        },
+        Some(Some(("layout", f))) => {
+            let layout = f
+                .get("name")
+                .or_else(|| f.get("layout"))
+                .and_then(Value::as_str);
+            match (layout.filter(|l| l.contains('@')), n(f, "bytes").filter(|b| (1..=RECORD_MAX).contains(b))) {
+                (Some(l), Some(b)) => Shape::Layout { name: l.to_string(), bytes: b as u32 },
+                _ => {
+                    return Err(refused(format!(
+                        "{name}: a layout shape names its data layout name@version and holds 1 to {RECORD_MAX} bytes"
+                    )))
+                }
+            }
+        }
+        Some(Some(("series", f))) => match n(f, "n").filter(|n| (1..=SERIES_MAX).contains(n)) {
+            Some(n) => Shape::Series(n as u32),
+            None => {
+                return Err(refused(format!(
+                    "{name}: a series holds 1 to {SERIES_MAX} named values"
+                )))
+            }
+        },
+        _ => {
+            return Err(refused(format!(
+                "{name}: shape is scalar, vec, layout or series"
+            )))
+        }
+    };
+    let (delivery, fields) = match src.get("delivery").map(|v| tagged(v, src)) {
+        None => ("latest", src),
+        Some(Some(d)) => d,
+        Some(None) => return Err(refused(format!("{name}: delivery is latest or each"))),
+    };
+    let max = fields
         .get("max_per_step")
+        .or_else(|| src.get("max_per_step"))
         .map_or(Some(PER_STEP as u64), Value::as_u64)
         .filter(|n| (1..=PER_STEP as u64).contains(n))
         .ok_or_else(|| refused(format!("{name}: max_per_step is 1 to {PER_STEP}")))?;
-    match src.get("delivery").map_or(Some("latest"), Value::as_str) {
-        Some("latest") => Ok(Read::Reading {
+    match delivery {
+        "latest" => Ok(Read::Reading {
             each: false,
             max: 1,
+            shape,
         }),
-        Some("each") => Ok(Read::Reading {
+        "each" => Ok(Read::Reading {
             each: true,
             max: max as u32,
+            shape,
         }),
         _ => Err(refused(format!("{name}: delivery is latest or each"))),
     }

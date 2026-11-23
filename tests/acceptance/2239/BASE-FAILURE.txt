@@ -1,0 +1,161 @@
+The #2239 suite at base commit 9d0256132 ("Merge pull request #2836 …"; no implementation of #2239), on macOS 27.2
+arm64 (shared; 1-minute load between 6 and 25 while it ran), Node 24.22.2, vitest 5.0.5, each file run alone with
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/2239 --no-file-parallelism --testTimeout=600000 \
+    --reporter=verbose <file>
+
+on the base's release deep-physics, already built in target/ (the suite's own cargo call found it made and copied it).
+
+Result: Test Files 6 failed (6); Tests 15 failed | 2 passed (17); each file under a second. Every file was run once
+as first written and once more as delivered, after changes that touch no judgement: how the helpers print an issue in
+a message (every file), and each start's outcome added to the two count messages (ac4 and ac5, a third run). Each
+run gave the same result for every test; the lines below are the last run's.
+
+Every failing test fails at an assertion in its own test file (expect(failures).toEqual([]), expect(passed.length)
+.toBe(9), expect(twin.refused).toBe('')); none fails in a helper, at an import or at a timeout, and none is BLOCKED or
+INCONCLUSIVE.
+
+Passing at the base, as they should
+-----------------------------------
+- ac5 "at step_rate 480, where each moves 0.042 m a step, the lint raises nothing and the two never swap order along x
+  at the end of any step, in any of the ten starts": neither ball is fast at 480 Hz, so the base's lint is silent and
+  the base's contacts stop the two. It is the fact the 120 Hz clause stands against; the program this criterion's
+  tests fail on is the base (the 120 Hz test) and the planted lint.
+    480 Hz, start 0: left never passes; left ends at x = -0.0515 m at -0.00 m/s, right at x = 0.0398 m at 0.00 m/s
+    480 Hz, start 9: left never passes; left ends at x = -0.0688 m at 0.00 m/s, right at x = 0.0312 m at 0.00 m/s
+    (all ten the same way; physics.fast_body raises [] in each)
+- ac6 "over #191's 200 m/s ball the kit writes the row as before": the base is "before".
+    rows [{"body":"ball","field":"ccd","value":true,"step":1,"move":1.6666668005264371,"half_extent":0.05,
+           "reason":"physics.fast_body: ball moves 1.6667 m in step 1, farther than half its thinnest extent …"}]
+
+Clauses that hold at the base inside tests that fail there (printed by the tests, asserted with the rest)
+-------------------------------------------------------------------------------------------------------
+- Criterion 1, "the ball is still at rest after the box has passed it, with ccd on the ball or off":
+    ccd off on the ball: bat x -0.910 -0.660 -0.410 -0.160 0.090 0.340 … 2.090; ball x 0.000 at every step
+    ccd on the ball:     bat x -0.910 -0.660 -0.410 -0.160 0.090 0.340 … 2.090; ball x 0.000 at every step
+- Criterion 2, "the ball is never behind the bat's leading face at the end of any step, it leaves at 59.41 m/s":
+    bat x -0.910 -0.660 -0.410 -0.160 0.089 0.334 … 2.049; ball x 0.000 0.000 0.000 0.000 0.149 0.644 … 4.109;
+    the ball leaves at 59.406 m/s, worked answer 59.406 m/s
+- Criterion 4, "with the resting ball's ccd off it never passes it in any start": in all ten starts the moving ball
+  never passes, and both end at 50.00 m/s, 0.1 m apart.
+
+Failing at the base
+-------------------
+ac1-kinematic-bat.test.ts (#2239.56aa2cc8)
+ × the ball is still at rest after the box has passed it, with ccd on the ball or off, and physics.fast_body raises one
+   issue of kind kinematic naming the box, step 1, its 0.25 m move and its 0.01 m half extent, with a fix that names no
+   ccd
+   AssertionError: the kinematic box and the resting ball:
+     bat: the fixture: physics.fast_body raises 0 issues, one of kind kinematic expected: []
+   (the base's lint watches dynamic bodies only)
+ × the same box with ccd: true is refused at check, naming the field bodies/bat/ccd and the backend rapier3d
+   AssertionError: the refusal of ccd on the kinematic box:
+     bodies/bat/ccd: the box with ccd: true: 0 error issues of code physics.backend_cap name the field, one expected;
+     its issues: []
+   (the base's check takes ccd on any body)
+ × a planted lint that treats the box as #191 treats a dynamic body offers ccd and fails, naming the fix
+   AssertionError: the planted lint runs: expected 'deep-physics --planted lint_kinematic_as_dynamic exits 2 with 1 of
+   1 replies; stdout: {"ok":false,"code":"bad_input"} …' to be ''
+   (the base has no such planted name; the same for each planted test below)
+
+ac2-dynamic-bat.test.ts (#2239.242f65d6)
+ × the ball is never behind the bat's leading face at the end of any step, it leaves at 59.41 m/s within 1%, and the
+   lint raises nothing
+   AssertionError: the dynamic bat with ccd:
+     the dynamic bat with ccd: physics.fast_body raises {"kind":null,"ids":["ball"],"step":4,
+     "move":0.14851483702659607,"half_extent":0.05,"severity":"warning","fix":"Turn the body's ccd on, or slow it."},
+     where nothing is expected
+   (the base flags the struck ball: once hit it moves farther than 0.05 m a step with ccd off, and the recorded fix,
+   ccd on the ball, is the one the issue's opening says makes two bodies no sweep holds)
+ × a planted wrapper that drops the body's ccd leaves the ball at rest behind the bat and fails, naming the ball and
+   step 4
+   AssertionError: the planted wrapper runs: expected 'deep-physics --planted wrapper_drops_body_ccd exits 2 …' to be ''
+
+ac3-turning-bar.test.ts (#2239.42a90e17)
+ × a bar turning at 720°/s in place with ccd off raises physics.fast_body naming the bar, its fastest point's 0.105 m
+   move in a step and its 0.01 m half extent, and the default turns ccd on with one assumption row
+   AssertionError: the turning bar:
+     bar: the turning bar: physics.fast_body raises 0 issues, one naming bar expected: []
+     bar: the turning bar with ccd unset: the kit's world has ccd undefined on it, not true
+     bar: the turning bar with ccd unset: 0 assumption rows, one expected: []
+   (the base's lint reads only the body's move, which is 0 m: it is the program `lint_reads_move_only` names)
+ × a planted lint that reads only the body's move raises nothing and fails, naming the bar
+   AssertionError: the planted lint runs: expected 'deep-physics --planted lint_reads_move_only exits 2 …' to be ''
+
+ac4-fast-ball-resting-ball.test.ts (#2239.fdc08cd1)
+ × with the resting ball's ccd off the moving ball never passes it in any of the ten starts, and the lint raises
+   nothing
+   AssertionError: with ccd off on the resting ball:
+     ccd off on resting, start 0 (moving from x = -2.5500 m): physics.fast_body raises {"kind":null,
+     "ids":["resting"],"step":4,"move":0.4166666679084301,"half_extent":0.05,"severity":"warning",
+     "fix":"Turn the body's ccd on, or slow it."}, where nothing is expected
+     … (the same for starts 1 to 9, the move from 0.400 m down to 0.067 m)
+    each start:
+     ccd off on resting, start 0 (moving from x = -2.5500 m): moving never passes; moving ends at x = 3.6750 m at
+     50.00 m/s, resting at x = 3.7750 m at 50.00 m/s
+     … (starts 1 to 9 the same way, each 0.0417 m shorter)
+   (as ac2: the base flags the struck ball, and offers the fix that the second world shows holds nothing)
+ × with ccd: true on the resting ball too, the lint raises one issue of kind pair naming both balls, whose fix says to
+   turn ccd off on the resting one
+   AssertionError: with ccd on both balls:
+     ccd on both, start 0 (moving from x = -2.5500 m): physics.fast_body raises 0 issues, one of kind pair naming
+     moving and resting expected: []
+     … (the same for starts 1 to 9)
+   (the base's lint reads one body at a time: it is the program `lint_one_body_at_a_time` names)
+ × on Rapier 0.36.1, while both have ccd on, the moving ball passes through the resting one in nine of the ten starts
+   AssertionError: the moving ball passes through the resting one in 0 of the ten starts, nine expected:
+     ccd on both, start 0 (moving from x = -2.5500 m): moving never passes; moving ends at x = 3.6750 m at 50.00 m/s,
+     resting at x = 3.7750 m at 50.00 m/s
+     … (starts 1 to 9 the same way: never passes, both end at 50.00 m/s)
+   THIS ONE FAILS FOR ANOTHER REASON THAN THE REST. The issue states the clause as what the pinned backend does, so it
+   was expected to pass here. It doesn't, through deep-physics at this base: the wrapper builds every body that has
+   ccd: true with the engine's contact prediction out to solver.max_speed ÷ step_rate as well as its sweep (#191,
+   crates/deep-physics-rapier/src/lib.rs, where bodies are built: "a body with ccd is also met by the contacts its
+   next step reaches"), and that prediction holds two such bodies whatever their sweeps do. With no sweep and no
+   prediction at all (the base's own `--planted swept_collision_off`, probed apart from the suite) the same ten starts
+   give the issue's count: start 0 never passes, starts 1 to 9 are past at the end of step 4. README: Where the issue
+   and the base disagree.
+ × a planted lint that reads one body at a time raises nothing for the second world and fails
+   AssertionError: the planted lint runs: expected 'deep-physics --planted lint_one_body_at_a_time exits 2 …' to be ''
+
+ac5-head-on.test.ts (#2239.89f47a10)
+ × at step_rate 120 the two raise one issue of kind pair naming both, whose fix names step_rate and no ccd
+   AssertionError: head on at 120 Hz:
+     120 Hz, start 0 (left 0.0000 m farther back): the issue's kind is undefined, not "pair"
+     120 Hz, start 0 (left 0.0000 m farther back): the issue names ["right"], not both left and right
+     120 Hz, start 0 (left 0.0000 m farther back): the issue's fix doesn't name step_rate: "Turn the body's ccd on, or
+     slow it."
+     120 Hz, start 0 (left 0.0000 m farther back): the issue's fix names ccd, which can't settle two fast bodies:
+     "Turn the body's ccd on, or slow it."
+     … (the same four for starts 1 to 9)
+   (the base flags `right` alone, at step 1 for its 0.167 m move, and offers ccd. At the base `left` is past `right`
+   at the end of step 6 in start 0 and the two stop each other in starts 1 to 9.)
+ × a planted lint that calls a pair held whenever one of the two has ccd on raises nothing at 120 Hz and fails
+   AssertionError: the planted lint runs: expected 'deep-physics --planted lint_pair_held_by_one_ccd exits 2 …' to be ''
+
+ac6-kit.test.ts (#2239.4166d996)
+ × a kit run over the first criterion's world writes no assumption row for the box, and its playtest fails, naming the
+   box
+   AssertionError: the kit over parity/physics/fast-bat.scene:
+     the kit over parity/physics/fast-bat.scene: the kit's run (call expand, with the scene and its world's ID) gives
+     no world and rows: it is refused at (no field), capacity: {"ok":false,"issues":[{"check":"document.validate",
+     "code":"out_of_range","severity":"error","ids":[],"path":"","actual":"court","t":null,"what":"the world must be
+     an object", …},{… "code":"physics.missing_field" … "path":"capacity" …}]}
+   (the base's expand takes a world document only, so no kit can run over a world whose box follows a scene's channel)
+ × a planted kit that turns ccd on for the kinematic box produces a world that is refused at check, and fails, naming
+   the field bodies/bat/ccd
+   AssertionError: the planted kit runs: expected 'deep-physics --planted kit_turns_ccd_on_kinematic exits 2 …' to be ''
+
+Probed apart from the suite on the base's release binary (README: Readings at the base)
+---------------------------------------------------------------------------------------
+- The fixture with ccd: true on the kinematic box: accepted at check, and its bake strikes the ball:
+    bat x -0.91 -0.66 -0.41 -0.16 0.09 0.34 …; ball x 0 0 0 0 0.15 0.40 0.65 …, at 30 m/s from step 4
+  (the same prediction; the issue's opening says the box passes through whatever ccd either holds).
+- Criterion 2's world under the base's `--planted swept_collision_off`: bat x … 0.09 0.34 … at 30 m/s throughout, the
+  ball at rest at x = 0: what `wrapper_drops_body_ccd` is to leave.
+- Criterion 4's second world (ccd on both) as shipped: 0 of 10 pass, at first gaps of 0.5, 1, 2, 3.3, 5, 10 and 60 m
+  as well as this suite's 2.55 m. Under `--planted swept_collision_off`: 9 of 10 pass at 2.55 m.
+- Two balls head on at 100 m/s each at 120 Hz, 4 m apart: ccd on one, 6 of 10 pass; on both, 0 of 10; on neither, 10
+  of 10. At 20 m/s each, 2 m apart: ccd on one, 1 of 10; on both, 0 of 10; on neither, 3 of 10.
+- The bar, 12 steps: its centre never moves; no issue; expand writes no row.

@@ -216,42 +216,7 @@ pub struct Run {
     pub shaped: Arc<Shaped>,
 }
 
-impl Canonical for TextSpec {
-    fn encode(&self, out: &mut Vec<u8>) {
-        self.text.encode(out);
-        self.font.encode(out);
-        self.family.unwrap_or("").encode(out);
-        self.fallback.len().encode(out);
-        for family in &self.fallback {
-            family.encode(out);
-        }
-        self.lang.as_deref().unwrap_or("").encode(out);
-        self.size.encode(out);
-        self.weight.encode(out);
-        self.width.encode(out);
-        self.max_lines.encode(out);
-        self.mask.encode(out);
-        (self.align as u8).encode(out);
-        self.bound.encode(out);
-        // #1964: a run with styled spans; one without encodes as it did before them.
-        if !self.spans.is_empty() {
-            format!("{:?}", self.spans).encode(out);
-        }
-    }
-}
-
-impl Canonical for Run {
-    fn encode(&self, out: &mut Vec<u8>) {
-        self.spec.encode(out);
-        let s = &self.shaped;
-        s.glyphs.len().encode(out);
-        for g in &s.glyphs {
-            (g.font.index, g.size, g.id, g.x, g.y, g.grapheme).encode(out);
-        }
-        (s.width, s.height, s.lines, s.ellipsized).encode(out);
-        s.shown.encode(out);
-    }
-}
+mod runs;
 
 /// The text module's shapers: a fixed count, never one taken from the machine, so texts shaping
 /// on several of the scheduler's threads don't wait on one (#857). Each holds only the bundled
@@ -501,7 +466,7 @@ fn animate(v: &mut View<'_>) -> Result<(), OpError> {
     let reduced = v.reduced_motion()?;
     let t = 0;
     let id = v.id().unwrap_or_default().to_string();
-    let mut out: Vec<[f64; 2]> = vec![[0.0, 1.0]; run.shaped.glyphs.len()];
+    let mut out = vec![crate::animated::UNIT; run.shaped.glyphs.len()];
     let animators = fields
         .get("params")
         .and_then(|p| p.get("animators"))
@@ -532,15 +497,9 @@ fn animate(v: &mut View<'_>) -> Result<(), OpError> {
             }
         }
     }
-    // #466 (#2456): a reveal at the progress this frame evaluated, each glyph by its unit's share.
+    // #466 (#2456): a reveal at the progress this frame evaluated, as a fade or a write draws it.
     if let Some(Value::Object(params)) = fields.get("params") {
-        if let Some(shares) =
-            crate::animator::reveal_opacity(params, &run.shaped, &id).map_err(refused)?
-        {
-            for (unit, share) in out.iter_mut().zip(shares) {
-                unit[1] *= share;
-            }
-        }
+        crate::animated::reveal(&mut out, params, &run.shaped, &id).map_err(refused)?;
     }
     v.write("text.animated", Val::typed(out))
 }
@@ -880,27 +839,40 @@ pub fn look_tokens(look: &crate::look::Look) -> BTreeMap<String, Value> {
             (bundled.family(role) != Some(family)).then(|| (role.clone(), json!(family)))
         })
         .collect();
-    if !fonts.is_empty() {
-        out.insert(TYPE_TOKEN.into(), json!({ "fonts": fonts }));
+    // #297: and its fallback faces, so a grapheme the run's face lacks is set in the first that
+    // has it, as an entry text's range assumes.
+    let fallback = &look.light_type.fallback;
+    if !fonts.is_empty() || !fallback.is_empty() {
+        out.insert(
+            TYPE_TOKEN.into(),
+            json!({ "fonts": fonts, "fallback": fallback }),
+        );
     }
     out
 }
 
-/// The type a session's tokens set text in: [`TYPE_TOKEN`]'s font roles over the bundled ones.
+/// The type a session's tokens set text in: [`TYPE_TOKEN`]'s font roles over the bundled ones,
+/// and its fallback faces.
 fn type_of(tokens: &BTreeMap<String, Value>) -> scene::Type {
     let mut ty = scene::Type::default();
     let fonts = tokens
         .get(TYPE_TOKEN)
         .and_then(|t| t.get("fonts"))
         .and_then(Value::as_object);
+    let face = |f: &Value| {
+        let f = f.as_str()?;
+        deep_text::FACES.iter().find(|face| face.family == f)
+    };
     for (role, family) in fonts.into_iter().flatten() {
-        let face = family
-            .as_str()
-            .and_then(|f| deep_text::FACES.iter().find(|face| face.family == f));
-        if let Some(face) = face {
+        if let Some(face) = face(family) {
             ty.fonts.insert(role.clone(), face.family);
         }
     }
+    let fallback = tokens.get(TYPE_TOKEN).and_then(|t| t.get("fallback"));
+    let fallback = fallback.and_then(Value::as_array).into_iter().flatten();
+    ty.fallback = fallback
+        .filter_map(|f| face(f).map(|face| face.family))
+        .collect();
     ty
 }
 
@@ -1025,6 +997,8 @@ fn register_data(r: &mut Registrar, decimate: fn(&mut View<'_>) -> Result<(), Op
     crate::axes3d::register(r);
     // #225: the vector field, its stream table and flow, and its `follow_stream` entry.
     crate::vector_field::register(r);
+    // #2776: what each path does with the two kinds drawn as marks in 3D.
+    r.paths(include_str!("paths.json"));
     // A scale it can't read raises marks2d's `scale_type` or `bad_scale`, which mark sets and
     // axes raise through the same scale.
     r.fixture("points", points_board(), None).sidecar(json!({
@@ -1041,6 +1015,7 @@ fn register_data(r: &mut Registrar, decimate: fn(&mut View<'_>) -> Result<(), Op
         "codes": ["unknown_kind"],
         "twin": {"path": "items/ys/params/range", "value": [190, 30]},
     }));
+    crate::arrays::fixture(r, points_board());
     r.fixture("decimated", decimated_board(), None)
         .sidecar(json!({
             "checks": [{"kind": "document.validate"}],
@@ -1241,13 +1216,15 @@ pub fn marks2d_planted(planted: relations::Planted) -> Module {
     }
 }
 
-/// What the frame draws: the draw list, each text's shaped run and each animated text's units as
-/// `[lift, opacity]`. The status marks are the text module's (`text.status`).
+/// What the frame draws: the draw list, each text's shaped run and each animated text's units
+/// ([`crate::animated::Unit`]). The status marks are the text module's (`text.status`).
 #[derive(Debug)]
 pub struct Drawing {
     pub frame: Frame,
-    pub runs: BTreeMap<String, Arc<Run>>,
-    pub animated: BTreeMap<String, Vec<[f64; 2]>>,
+    /// Each text's run and each animated text's units, shared with the next frame that replaces
+    /// marks in this one's list (#2660), never copied.
+    pub runs: Arc<BTreeMap<String, Arc<Run>>>,
+    pub animated: Arc<BTreeMap<String, Vec<crate::animated::Unit>>>,
     /// The marks this frame put into its draw list: every mark when it built the list, the
     /// changed items' when it replaced them in the last one (#896).
     pub built: usize,
@@ -1288,7 +1265,7 @@ impl Canonical for Frame {
 
 impl deep_canvas::schedule::Canonical for Drawing {
     fn encode(&self, out: &mut Vec<u8>) {
-        deep_canvas::schedule::Canonical::encode(&(&self.frame, &self.runs, &self.animated), out);
+        deep_canvas::schedule::Canonical::encode(&(&self.frame, &*self.runs, &*self.animated), out);
     }
 }
 
@@ -1303,10 +1280,7 @@ fn register_marks2d_with(r: &mut Registrar, planted: relations::Planted) {
         json!({"form": "path", "fixture": crate::outline_sources::path_fixture()}),
         crate::outline_sources::path_fill,
     );
-    // #221: placement by relation, the module's entries in the core's `constraint@1`.
-    for (name, value) in relations::entries(planted) {
-        r.entry("constraint@1", name, value, "R2");
-    }
+    relations::register(r, planted, marks_board());
     // Each frame, every placed item's world position from its relations, solved in one order
     // over the evaluated boxes; then each placed item's own transform there.
     r.array("marks2d.places", "places", "document", "transform", "items");
@@ -1403,6 +1377,10 @@ fn register_marks2d_with(r: &mut Registrar, planted: relations::Planted) {
         &["marks2d.frame"],
     )
     .document()
+    // A light is no mark (#1634): the frame builds nothing from one, and costs nothing on it.
+    .applies(|_, _, item| {
+        !(item.get("kind").and_then(Value::as_str)).is_some_and(|k| k.starts_with("light."))
+    })
     .run(frame);
     r.code(
         "bad_doc",
@@ -1731,15 +1709,21 @@ fn item(v: &mut View<'_>) -> Result<(), OpError> {
     v.write("marks2d.item", Val::typed(placed))
 }
 
-/// What a frame reads of the document beside its items: every other member, as written.
-fn envelope_of(doc: &Value) -> Key {
+/// What a frame reads of the document beside its items: every other member, as written. The
+/// revision's own key of them stands in for hashing them again, with the ID, which it leaves out
+/// (#2660).
+fn envelope_of(v: &mut View<'_>, doc: &Value) -> Result<Key, OpError> {
     let mut h = Hasher::new("marks2d.envelope");
+    if let Some(kept) = v.envelope()? {
+        let id = doc.get("id").and_then(Value::as_str).unwrap_or_default();
+        return Ok(h.key(&kept).text(id).finish());
+    }
     for (k, v) in doc.as_object().into_iter().flatten() {
         if k != "items" {
             h.text(k).bytes(&canonical(v));
         }
     }
-    h.finish()
+    Ok(h.finish())
 }
 
 /// The last frame's draw list with the marks of the items whose own marks changed replaced in
@@ -1819,8 +1803,8 @@ fn replaced(v: &mut View<'_>, envelope: Key) -> Result<Option<Drawing>, OpError>
     }
     Ok(Some(Drawing {
         frame,
-        runs: last.runs.clone(),
-        animated: last.animated.clone(),
+        runs: Arc::clone(&last.runs),
+        animated: Arc::clone(&last.animated),
         built,
         damage,
         basis: Some(Basis {
@@ -1870,7 +1854,7 @@ fn warp_time(v: &mut View<'_>) -> Result<(), OpError> {
 /// The frame's draw list from every item's evaluated fields and transform.
 fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     let doc = v.document()?;
-    let envelope = envelope_of(doc);
+    let envelope = envelope_of(v, doc)?;
     if let Some(drawing) = replaced(v, envelope)? {
         return v.write("marks2d.frame", Val::typed(drawing));
     }
@@ -1943,7 +1927,7 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     }
     let mut animated = BTreeMap::new();
     for (id, a) in v.every("text.animated")? {
-        if let Some(units) = a.as_typed::<Vec<[f64; 2]>>() {
+        if let Some(units) = a.as_typed::<Vec<crate::animated::Unit>>() {
             animated.insert(id.to_string(), (*units).clone());
         }
     }
@@ -1964,7 +1948,7 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     // #223's twin: a flow that finds its stream table by a vector field's kind.
     let planted = match v.planted() {
         Some(crate::warp::FLOW_BY_KIND) => scene::Planted::WarpFlowByKind,
-        _ => scene::Planted::None,
+        p => crate::atlas::planted(p, &mut items),
     };
     let (frame, basis) = match scene::frame_prebuilt(
         doc,
@@ -2011,8 +1995,8 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
         "marks2d.frame",
         Val::typed(Drawing {
             frame,
-            runs,
-            animated,
+            runs: Arc::new(runs),
+            animated: Arc::new(animated),
             built,
             damage: Vec::new(),
             basis,

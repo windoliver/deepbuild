@@ -74,6 +74,16 @@ impl Class {
         }
     }
 
+    /// The light policy's `fill_shaded` (#1634; Light and the light policy): the fill lights a
+    /// document of this class may hold. A class under a figure takes a figure's.
+    pub fn fill_shaded(self) -> usize {
+        match self {
+            Class::CoreView | Class::DataView | Class::Figure => 32,
+            Class::WorkProduct => 512,
+            Class::Showpiece | Class::Export => 2048,
+        }
+    }
+
     /// The table's "when hidden": whether a live view of this class draws in a window that is
     /// `visible` and `focused`. Every class pauses while hidden; a showpiece also while unfocused.
     pub fn draws(self, visible: bool, focused: bool) -> bool {

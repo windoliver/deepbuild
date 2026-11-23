@@ -49,8 +49,52 @@ pub fn evaluate(
     if let Some(d) = doc.as_object_mut() {
         d.insert("size".into(), json!(size));
     }
+    #[cfg(feature = "physics")]
     deep_canvas_physics::skin::write(&mut doc, t);
+    // #2248: and each readout a world's output writes shows that output's value at `t`.
+    #[cfg(feature = "physics")]
+    deep_canvas_physics::written::readouts(&mut doc, t);
     let look = look_of(&doc, palette);
     let scene = evaluate_any(&doc, t, &look, labels, Some(assets), fills)?;
     Ok((scene, look))
+}
+
+#[cfg(all(test, feature = "physics"))]
+mod tests {
+    use super::*;
+
+    /// #2248: a readout a world's output writes draws what that output writes at the frame's
+    /// time, through its template's `{value}` slot.
+    #[test]
+    fn a_readout_draws_what_its_output_writes_at_the_frames_time() {
+        let step = |k: u64, y: f64| json!({"step": k, "changed": [[0, 1]], "values": [[0, [[0.0, y, 0.0]]]]});
+        let doc = json!({
+            "format": 1, "profile": "scene", "title": "T", "description": "D", "size": [64, 64], "camera": "cam",
+            "layers": {"main": {"writer": "agent-a", "title": "Main", "order": "a0"}},
+            "worlds": {"rig": {"outputs": {"fall": {"from": "ball", "read": "velocity", "to": "vy"}}}},
+            "arrays": {"rig.fall.value": {"type": "vec3", "count": 1, "every": 11_760_000, "linear": false,
+                                          "hold": false, "steps": [step(0, 0.0), step(1, -0.5)]}},
+            "items": {
+                "cam": {"id": "cam", "kind": "camera@1", "layer": "main", "name": "C", "order": "a0",
+                    "params": {"projection": "perspective", "target": [0, 0, 0], "position": [0, 0, 20], "fov": 40}},
+                "vy": {"id": "vy", "kind": "overlay.text@1", "layer": "main", "name": "vy", "order": "a1",
+                    "params": {"anchor": "corner", "role": "readout", "template": "{value/1} m/s"}}}});
+        let shown = |t: i64| {
+            let (palette, mut labels) = (Palette::new(), Labels::new());
+            let none: Assets<'_> = &|_| None;
+            let scene = evaluate(
+                &doc,
+                t,
+                &palette,
+                [64, 64],
+                &mut labels,
+                none,
+                Fills::default(),
+            );
+            let (scene, _) = scene.expect("the scene evaluates");
+            scene.readouts[0].text.clone()
+        };
+        assert_eq!(shown(0), "0 m/s");
+        assert_eq!(shown(11_760_000), "-0.5 m/s");
+    }
 }

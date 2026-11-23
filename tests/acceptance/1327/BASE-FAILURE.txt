@@ -1,0 +1,239 @@
+Base: 58d3e19ee3e956709c1570b87c098350e285a19a (origin/main), Node v24.22.0, Darwin arm64, 2026-11-20T09:57Z
+Command: node --test 'tests/acceptance/1327/*.test.mjs'
+
+✖ #1327.73a69977 a new suite whose folder holds a lane.json runs in the alone block (affected.mjs and the unit lane), and the guard passes its commit with no approval tag (4717.263125ms)
+✖ #1327.1272c2b3 changing a landed lane.json with no approval fails the guard, naming the file (3920.281ms)
+✖ #1327.1272c2b3 removing a landed lane.json with no approval fails the guard, naming the file (5510.465917ms)
+✖ #1327.57d2718c a planted lane.json that asks for a skip ({"skip":true}) is refused, naming the file (4639.659042ms)
+✖ #1327.57d2718c a planted lane.json that asks for by-hand ({"byHand":true}) is refused, naming the file (6280.270792ms)
+✖ #1327.57d2718c a planted lane.json that asks for a timed grant ({"timed":true}) is refused, naming the file (5555.763792ms)
+✖ #1327.57d2718c a planted lane.json in another issue's folder is refused the same way, naming the file (9711.134041ms)
+✔ #1327.f28ef522 on the merge base's suites, the lanes put the same tests in the same blocks before and after the change (88729.348791ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 1
+ℹ fail 7
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 88806.915209
+
+✖ failing tests:
+
+test at tests/acceptance/1327/alone.test.mjs:13:1
+✖ #1327.73a69977 a new suite whose folder holds a lane.json runs in the alone block (affected.mjs and the unit lane), and the guard passes its commit with no approval tag (4717.263125ms)
+  AssertionError [ERR_ASSERTION]: affected.mjs does not put the suite with a lane.json in the alone block
+  {
+    "tests/acceptance/9327/suite.test.ts": {
+      "block": "parallel/vitest",
+      "group": null,
+      "lists": {
+        "alone": false,
+        "exclusive": false,
+        "byHand": false,
+        "timed": false,
+        "slow": false,
+        "ownLane": false
+      },
+      "unit": "parallel"
+    },
+    "tests/acceptance/9331/suite.test.ts": {
+      "block": "parallel/vitest",
+      "group": null,
+      "lists": {
+        "alone": false,
+        "exclusive": false,
+        "byHand": false,
+        "timed": false,
+        "slow": false,
+        "ownLane": false
+      },
+      "unit": "parallel"
+    }
+  }
+  + actual - expected
+  
+  + 'parallel/vitest'
+  - 'alone/vitest'
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1327/alone.test.mjs:24:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'parallel/vitest',
+    expected: 'alone/vitest',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1327/landed.test.mjs:16:1
+✖ #1327.1272c2b3 changing a landed lane.json with no approval fails the guard, naming the file (3920.281ms)
+  AssertionError [ERR_ASSERTION]: the guard exits 0 when a commit changes tests/acceptance/9330/lane.json with no approval
+  exit 0
+  stdout:
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+  proof: wall time 2.3 s
+  
+  stderr:
+  
+      at assertRefused (file://<checkout>/tests/acceptance/1327/landed.test.mjs:12:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1327/landed.test.mjs:18:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1327/landed.test.mjs:21:1
+✖ #1327.1272c2b3 removing a landed lane.json with no approval fails the guard, naming the file (5510.465917ms)
+  AssertionError [ERR_ASSERTION]: the guard exits 0 when a commit removes tests/acceptance/9330/lane.json with no approval
+  exit 0
+  stdout:
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+  proof: wall time 3.0 s
+  
+  stderr:
+  
+      at assertRefused (file://<checkout>/tests/acceptance/1327/landed.test.mjs:12:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1327/landed.test.mjs:23:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1327/plants.test.mjs:20:3
+✖ #1327.57d2718c a planted lane.json that asks for a skip ({"skip":true}) is refused, naming the file (4639.659042ms)
+  AssertionError [ERR_ASSERTION]: neither the guard nor the lanes refuse tests/acceptance/9327/lane.json, naming it, when it asks for a skip
+  guard: exit 0
+  stdout:
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+  proof: wall time 2.5 s
+  
+  stderr:
+  
+  lanes: exit 0
+  stdout:
+  {"tests/acceptance/9327/suite.test.ts":{"block":"parallel/vitest","group":null,"lists":{"alone":false,"exclusive":false,"byHand":false,"timed":false,"slow":false,"ownLane":false},"unit":"parallel"}}
+  stderr:
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1327/plants.test.mjs:23:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1327/plants.test.mjs:20:3
+✖ #1327.57d2718c a planted lane.json that asks for by-hand ({"byHand":true}) is refused, naming the file (6280.270792ms)
+  AssertionError [ERR_ASSERTION]: neither the guard nor the lanes refuse tests/acceptance/9327/lane.json, naming it, when it asks for by-hand
+  guard: exit 0
+  stdout:
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+  proof: wall time 2.9 s
+  
+  stderr:
+  
+  lanes: exit 0
+  stdout:
+  {"tests/acceptance/9327/suite.test.ts":{"block":"parallel/vitest","group":null,"lists":{"alone":false,"exclusive":false,"byHand":false,"timed":false,"slow":false,"ownLane":false},"unit":"parallel"}}
+  stderr:
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1327/plants.test.mjs:23:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1327/plants.test.mjs:20:3
+✖ #1327.57d2718c a planted lane.json that asks for a timed grant ({"timed":true}) is refused, naming the file (5555.763792ms)
+  AssertionError [ERR_ASSERTION]: neither the guard nor the lanes refuse tests/acceptance/9327/lane.json, naming it, when it asks for a timed grant
+  guard: exit 0
+  stdout:
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+  proof: wall time 2.6 s
+  
+  stderr:
+  
+  lanes: exit 0
+  stdout:
+  {"tests/acceptance/9327/suite.test.ts":{"block":"parallel/vitest","group":null,"lists":{"alone":false,"exclusive":false,"byHand":false,"timed":false,"slow":false,"ownLane":false},"unit":"parallel"}}
+  stderr:
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1327/plants.test.mjs:23:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1327/plants.test.mjs:29:1
+✖ #1327.57d2718c a planted lane.json in another issue's folder is refused the same way, naming the file (9711.134041ms)
+  AssertionError [ERR_ASSERTION]: neither the guard nor the lanes refuse tests/acceptance/9328/lane.json, a lane.json a change Part of #9327 plants in #9328's folder, naming it
+  guard: exit 0
+  stdout:
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+  proof: wall time 3.7 s
+  
+  stderr:
+  
+  lanes: exit 0
+  stdout:
+  {"tests/acceptance/9327/suite.test.ts":{"block":"parallel/vitest","group":null,"lists":{"alone":false,"exclusive":false,"byHand":false,"timed":false,"slow":false,"ownLane":false},"unit":"parallel"},"tests/acceptance/9328/suite.test.ts":{"block":"parallel/vitest","group":null,"lists":{"alone":false,"exclusive":false,"byHand":false,"timed":false,"slow":false,"ownLane":false},"unit":"parallel"}}
+  stderr:
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1327/plants.test.mjs:34:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+exit 1

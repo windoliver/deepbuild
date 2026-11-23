@@ -64,10 +64,19 @@ pub fn values(sched: &Scheduler<'_>, s: &Session, paths: &[String]) -> Value {
             let (v, _) = item_value(sched, s, id, "params")?;
             v.get("d").or_else(|| v.pointer("/outline/d")).cloned()
         };
+        // #2248: a readout's text as the frame shows it: its template, each slot filled from the
+        // frame's document, the value a world's output writes there included.
+        let shown = || {
+            let doc = s.document()?;
+            let template = doc.get("items")?.get(id)?.pointer("/params/template")?;
+            let text = deep_canvas::template::expand_in(doc, id, template.as_str()?);
+            text.ok().map(Value::String)
+        };
         item_value(sched, s, id, field)
             .map(|(v, _)| v)
             .or_else(drawn)
             .or_else(|| (field == "path").then(outline).flatten())
+            .or_else(|| (field == "params/text").then(shown).flatten())
     };
     Value::Object(
         paths
@@ -90,6 +99,7 @@ pub fn array(sched: &Scheduler<'_>, s: &Session, name: &str, t: i64) -> Value {
         .as_ref()
         .and_then(|v| v.as_typed::<f64>())
         .map(|x| json!(*x));
+    #[cfg(feature = "logic")]
     let logic = || {
         let state = s.array(sched, deep_logic::module::STATE)?;
         let state = state.as_typed::<deep_logic::module::State>()?;
@@ -98,6 +108,8 @@ pub fn array(sched: &Scheduler<'_>, s: &Session, name: &str, t: i64) -> Value {
             _ => None,
         }
     };
+    #[cfg(not(feature = "logic"))]
+    let logic = || None;
     let bands = || {
         s.document()
             .and_then(|d| deep_canvas::columns::map(d.get("arrays")?.get(name)?, t, None, false))

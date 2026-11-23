@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 
 use super::fixtures::{fixture, material, world, G, HZ};
 use super::{Fixture, Measure, Tolerance};
-use crate::backend::{BodyState, State, VehicleState};
+use crate::backend::{rotate, BodyState, State, VehicleState};
 use deep_canvas::ops;
 
 /// The car's wheel radius and suspension rest, m: its chassis's mount points sit rest + radius
@@ -284,7 +284,80 @@ fn platform() -> Fixture {
     f
 }
 
-/// The nine, in report order.
+/// #2307: the fixture car set on a static slope of `deg`, facing up it, its springs at rest
+/// length: the floor and the car turned about X so the floor's top still passes the origin.
+fn on_slope(deg: f64) -> Value {
+    let mut w = car_world(0.0);
+    let (sin, cos) = (ops::sin(ops::rad(deg)), ops::cos(ops::rad(deg)));
+    let rot = json!([-deg, 0, 0]);
+    w["bodies"]["floor"]["pose"] = json!({"pos": [0.0, -0.1 * cos, 0.1 * sin], "rot": rot.clone()});
+    let up = REST + RADIUS;
+    w["bodies"]["car"]["pose"] = json!({"pos": [0.0, up * cos, -up * sin], "rot": rot});
+    w
+}
+
+/// The slope: braked at 4,000 N facing up a 10° slope, after 2 s to settle it moves less than
+/// 1 mm over the next 10 s.
+fn slope() -> Fixture {
+    let (from, to) = (SETTLE as usize, SETTLE as usize + 10 * HZ as usize);
+    let m = Measure::Parked {
+        body: "car",
+        from,
+        to,
+    };
+    vehicle(
+        fixture(
+            "vehicle_slope",
+            on_slope(10.0),
+            to as u64,
+            m,
+            0.0,
+            Tolerance::M(0.001),
+        ),
+        json!([entry(0, "brake", json!({"force": 4000}))]),
+    )
+}
+
+/// The weak brake: with brakes of 1,000 N in all facing up a 20° slope, it slides at
+/// 4 × (g × sin 20° − 1) = 9.42 m/s at 4 s, within 1%.
+fn weak_brake() -> Fixture {
+    let step = 4 * HZ as usize;
+    let m = Measure::Speed { body: "car", step };
+    vehicle(
+        fixture(
+            "vehicle_weak_brake",
+            on_slope(20.0),
+            step as u64,
+            m,
+            4.0 * (G * ops::sin(ops::rad(20.0)) - 1.0),
+            Tolerance::Relative(0.01),
+        ),
+        json!([entry(0, "brake", json!({"force": 1000}))]),
+    )
+}
+
+/// The sleeping drive: asleep on level ground 4 s on, a drive of 2,000 N reaches 4 m/s in 2 s,
+/// within 2%.
+fn sleeping_drive() -> Fixture {
+    let mut w = car_world(0.0);
+    w["bodies"]["car"]["sleep"] = json!(true);
+    let at = 4 * HZ as usize;
+    let step = at + 2 * HZ as usize;
+    let m = Measure::Speed { body: "car", step };
+    vehicle(
+        fixture(
+            "vehicle_sleeping_drive",
+            w,
+            step as u64,
+            m,
+            4.0,
+            Tolerance::Relative(0.02),
+        ),
+        json!([entry(at as u64, "drive", json!({"force": 2000}))]),
+    )
+}
+
+/// The twelve, in report order.
 pub fn all() -> Vec<Fixture> {
     vec![
         sag(),
@@ -296,6 +369,9 @@ pub fn all() -> Vec<Fixture> {
         beam(),
         slab_back(),
         platform(),
+        slope(),
+        weak_brake(),
+        sleeping_drive(),
     ]
 }
 
@@ -375,21 +451,6 @@ pub fn circle_of(states: &[State], id: &str, point: [f64; 3], step: usize) -> Op
         }
     }
     fit(&pts)
-}
-
-/// `v` turned by the quaternion `q` (`[x, y, z, w]`).
-fn rotate(q: [f64; 4], v: [f64; 3]) -> [f64; 3] {
-    let (u, w) = ([q[0], q[1], q[2]], q[3]);
-    let cross = |a: [f64; 3], b: [f64; 3]| {
-        [
-            a[1] * b[2] - a[2] * b[1],
-            a[2] * b[0] - a[0] * b[2],
-            a[0] * b[1] - a[1] * b[0],
-        ]
-    };
-    let t = cross(u, v).map(|x| 2.0 * x);
-    let c = cross(u, t);
-    [0, 1, 2].map(|i| v[i] + w * t[i] + c[i])
 }
 
 /// The least-squares circle through `pts` (Kåsa's fit about their mean), its radius.

@@ -19,14 +19,18 @@ use crate::cut::{quat, rotated, MAX_ELEMENTS};
 use crate::scene::{local_of, matmul, Affine3, Assets, Layer3, Material, Refused, Shape, Solid};
 use crate::spec::P;
 
-/// An instancer's columns that may read an array, besides its `attrs`.
-const COLUMNS: [&str; 8] = [
-    "pos", "rot", "yaw", "scale", "proto", "hidden", "live", "gen",
+/// An instancer's columns that may read an array, besides its `attrs`. #552: `seen` holds bit i
+/// where player i + 1 sees the element.
+const COLUMNS: [&str; 9] = [
+    "pos", "rot", "yaw", "scale", "proto", "hidden", "live", "gen", "seen",
 ];
 
 /// The planted instancer that addresses an element by its slot alone (#537 criterion 1): its
 /// elements are `<instancer>#<slot>`, so a selection follows a slot onto its next occupant.
 pub const SLOT_ALONE: &str = "instancer_addresses_by_slot";
+
+/// #552's planted `seen` column, which reads player 1's bit on every copy.
+pub const SEEN_PLAYER_ONE: &str = "seen_reads_player_one";
 
 /// `params` with the columns a fed instancer adds: `live` and `gen` (Instance `instance@1`:
 /// logic columns), and its part poses.
@@ -38,6 +42,7 @@ pub(crate) fn params(mut params: Vec<P>) -> Vec<P> {
     for (name, ty, form) in [
         ("live", "bool column", column),
         ("gen", "u32 column", column),
+        ("seen", "i32 column", column),
         ("parts", parts, posed),
     ] {
         params.push(P {
@@ -232,6 +237,8 @@ pub(crate) struct Unit {
     pub at: Affine3,
     /// Each posed part's turn, by node, in its parent's axes.
     pub poses: BTreeMap<String, [[f64; 3]; 3]>,
+    /// #290's planted hidden view alone holds one: a row its `seen` column hides on this copy.
+    pub unseen: bool,
 }
 
 /// The rotation of `deg` about x, y and z, as items turn (Rz · Ry · Rx).
@@ -352,9 +359,22 @@ pub(crate) fn units(
         .and_then(Value::as_f64)
         .unwrap_or(0.0);
     let scale_all = params["scale"].as_f64().unwrap_or(1.0);
+    // #552: this copy's player, a view value the host gives the frame's document; an element
+    // whose `seen` lacks its bit is hidden on this copy as one that isn't live is.
+    // The planted column reads player 1's bit on every copy.
+    let me = match map.get("planted").and_then(Value::as_str) {
+        Some(SEEN_PLAYER_ONE) => Some(1),
+        _ => deep_canvas::columns::match_me(map.get("match.me").unwrap_or(&Value::Null)),
+    };
+    // #290's planted hidden view keeps each row `seen` hides, for its own pass alone.
+    let keeps = map.get("planted").and_then(Value::as_str) == Some(crate::hidden::IGNORES_SEEN);
     let mut out = Vec::new();
     for slot in 0..n {
-        if one("live", slot) != Some(1.0) {
+        let seen = match (one("seen", slot), me) {
+            (Some(bits), Some(me)) => (bits as i64) >> (me - 1) & 1 == 1,
+            _ => true,
+        };
+        if one("live", slot) != Some(1.0) || !(seen || keeps) {
             continue;
         }
         let shown = one("hidden", slot).is_none_or(|h| h == 0.0)
@@ -393,6 +413,7 @@ pub(crate) fn units(
             proto: one("proto", slot).unwrap_or(0.0) as usize,
             at,
             poses,
+            unseen: !seen,
         };
         out.push((unit, shown));
     }
@@ -491,7 +512,12 @@ pub(crate) fn place<'a>(
             s.batch = batch;
             s.model = matmul(&place, &s.model);
             s.op = None;
-            bounds.extend(s.points());
+            // The planted row no pass draws but the hidden view's (crate::hidden::IGNORES_SEEN).
+            if unit.unseen {
+                (s.cast_only, s.cast_shadow) = (true, false);
+            } else {
+                bounds.extend(s.points());
+            }
             layer.solids.push(s);
         }
     }
@@ -523,7 +549,8 @@ pub fn reading(
     if !fed(params) {
         return Ok(None);
     }
-    let (n, units) = units(map, id, params, t)?;
+    let (n, mut units) = units(map, id, params, t)?;
+    units.retain(|(u, _)| !u.unseen);
     if field == "elements" {
         let doc_seed = map.get("seed").and_then(Value::as_u64).unwrap_or(0);
         let alone = planted == Some(SLOT_ALONE);
@@ -605,7 +632,8 @@ pub fn drop_stale(
         let live = held.entry(item.to_string()).or_insert_with(|| {
             let params = map.get("items")?.get(item)?.get("params")?;
             let (_, units) = units(map, item, params, t).ok().filter(|_| fed(params))?;
-            Some(units.iter().map(|(u, _)| (u.slot, u.gen)).collect())
+            let seen = units.iter().filter(|(u, _)| !u.unseen);
+            Some(seen.map(|(u, _)| (u.slot, u.gen)).collect())
         });
         let Some(live) = live else {
             return true;

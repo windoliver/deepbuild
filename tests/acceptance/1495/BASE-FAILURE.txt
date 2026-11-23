@@ -1,0 +1,1146 @@
+The base run of tests/acceptance/1495, once per file, on 2026-11-18, at d4cef00fb (origin/main, "Merge pull request
+#2787"), on this Mac (macOS, Apple silicon, Node 24.22.2, a load near 100), after `npm ci && npm run build
+--workspaces`, with the suite's files untracked beside the commit and no scripts/release.mjs. The checkout's path is
+shown as <checkout>.
+
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/1495 --testTimeout=600000 versions.test.ts
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/1495 --testTimeout=600000 preflight.test.ts
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/1495 --testTimeout=600000 rerun.test.ts
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/1495 --testTimeout=600000 known-limits.test.ts
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/1495 --testTimeout=600000 verify.test.ts
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/1495 --testTimeout=600000 looks.test.ts
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/1495 --testTimeout=600000 app-download.test.ts
+
+Result: 25 failed, 0 passed (25 tests, 7 files), each in about a second.
+
+  versions.test.ts      AC1, 2 tests       FAIL at `release.mjs bump`: Cannot find module <checkout>/scripts/release.mjs
+  preflight.test.ts     AC2, 1 test        FAIL at `release.mjs notes`: the same
+  rerun.test.ts         AC3, AC8, 4 tests  FAIL at `release.mjs notes`: the same
+  known-limits.test.ts  AC4, 1 test        FAIL at `release.mjs notes`: the same
+  verify.test.ts        AC5, AC6, 5 tests  FAIL at `release.mjs notes`: the same
+  looks.test.ts         AC9-AC12, 9 tests  FAIL at `release.mjs notes`: the same
+  app-download.test.ts  AC7, 3 tests       FAIL before any build: scripts/release.mjs does not exist
+
+Reason, every test: the surface doesn't exist on the base. The release script is missing, so nothing past the first
+call to it ran, and nothing is a pass. The plant tests fail the same way: with no release there is no plant either.
+app-download.test.ts checks for the script before it builds the app download, so the base run built nothing; on the
+base the app's runtime folder also has no canvas core (scripts/release-stage.mjs ships no deep-show), so its still
+couldn't export even if the release existed.
+
+The raw output of each file follows.
+
+==================== versions.test.ts ====================
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1495
+
+ ❯ versions.test.ts (2 tests | 2 failed) 465ms
+   ❯ AC1 #1495.2599b24d One crate left at the old version refuses the tag, naming the file and both versions (2)
+     × AC1 #1495.2599b24d the twin: bump moves every version source from 1.2.0 to 1.3.0 in one commit holding only those files, and with every version agreeing the tag goes through 209ms
+     × AC1 #1495.2599b24d one crate left at 1.2.0 refuses the tag, naming crates/deep-show/Cargo.toml, 1.2.0 and 1.3.0; nothing is tagged or published 180ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  versions.test.ts > AC1 #1495.2599b24d One crate left at the old version refuses the tag, naming the file and both versions > AC1 #1495.2599b24d the twin: bump moves every version source from 1.2.0 to 1.3.0 in one commit holding only those files, and with every version agreeing the tag goes through
+AssertionError: release.mjs bump --version 1.3.0 exits 0:
+exit 1
+--- stdout
+
+--- stderr
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/release.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ versions.test.ts:29:78
+     27|     const before = initRepo(w, '1.2.0');
+     28|     const r = bump(w, '1.3.0');
+     29|     expect(r.code, `release.mjs bump --version 1.3.0 exits 0:\n${shown…
+       |                                                                              ^
+     30|
+     31|     const head = git(w, 'rev-parse', 'HEAD');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  versions.test.ts > AC1 #1495.2599b24d One crate left at the old version refuses the tag, naming the file and both versions > AC1 #1495.2599b24d one crate left at 1.2.0 refuses the tag, naming crates/deep-show/Cargo.toml, 1.2.0 and 1.3.0; nothing is tagged or published
+AssertionError: release.mjs bump --version 1.3.0 exits 0:
+exit 1
+--- stdout
+
+--- stderr
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/release.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ versions.test.ts:58:78
+     56|     initRepo(w, '1.2.0');
+     57|     const r = bump(w, '1.3.0');
+     58|     expect(r.code, `release.mjs bump --version 1.3.0 exits 0:\n${shown…
+       |                                                                              ^
+     59|     // One crate left behind, by hand, and committed: the tree is clea…
+     60|     const file = join(w.repo, 'crates/deep-show/Cargo.toml');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  10:47:00
+   Duration  676ms (tests 92%, import 5%, transform 3%, worker 1%)
+
+
+==================== preflight.test.ts ====================
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1495
+
+ ❯ preflight.test.ts (1 test | 1 failed) 509ms
+   ❯ AC2 #1495.33e806c7 A preflight record for another commit refuses the tag, naming both commits (1)
+     × AC2 #1495.33e806c7 a PASS report on the commit before refuses the tag, naming both commits, on a first run and on a rerun over a packed folder; the report for the release commit lets it through 474ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  preflight.test.ts > AC2 #1495.33e806c7 A preflight record for another commit refuses the tag, naming both commits > AC2 #1495.33e806c7 a PASS report on the commit before refuses the tag, naming both commits, on a first run and on a rerun over a packed folder; the report for the release commit lets it through
+AssertionError: release.mjs notes exits 0:
+exit 1
+--- stdout
+
+--- stderr
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/release.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ preflight.test.ts:29:63
+     27|     const fresh = preflight(w, head);
+     28|     const n = notes(w, head, fresh);
+     29|     expect(n.code, `release.mjs notes exits 0:\n${shown(n)}`).toBe(0);
+       |                                                               ^
+     30|
+     31|     // A first run: nothing packed yet.
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  10:47:01
+   Duration  691ms (tests 93%, import 3%, transform 3%, worker 1%)
+
+
+==================== rerun.test.ts ====================
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1495
+
+ ❯ rerun.test.ts (4 tests | 4 failed) 2030ms
+   ❯ AC3 #1495.4e3f9f7e A run stopped after the first artifact, run again, publishes only the rest and reports what it skipped (1)
+     × AC3 #1495.4e3f9f7e the rerun publishes the second and third artifacts, leaves the first as published, reports it skipped the first and tags the release 376ms
+   ❯ AC8 #1495.1fbd7770 A rerun hashes the first artifact, skips it on the manifest's digest, verifies the other two once each, and refuses it when one byte changed (3)
+     × AC8 #1495.1fbd7770 with the first of three verified and published, the rerun neither verifies nor publishes it again, and verifies the other two once each 473ms
+     × AC8 #1495.1fbd7770 with one byte of the first artifact changed before the rerun, the rerun refuses it, naming the manifest's digest and the changed one 508ms
+     × AC8 #1495.1fbd7770 (wrong program) trust-file-name skips the changed artifact because its file is published, and fails this test 521ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  rerun.test.ts > AC3 #1495.4e3f9f7e A run stopped after the first artifact, run again, publishes only the rest and reports what it skipped > AC3 #1495.4e3f9f7e the rerun publishes the second and third artifacts, leaves the first as published, reports it skipped the first and tags the release
+AssertionError: release.mjs notes exits 0:
+exit 1
+--- stdout
+
+--- stderr
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/release.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ stoppedAfterFirst rerun.test.ts:42:61
+     40|   const report = preflight(w, commit);
+     41|   const n = notes(w, commit, report);
+     42|   expect(n.code, `release.mjs notes exits 0:\n${shown(n)}`).toBe(0);
+       |                                                             ^
+     43|   // The publish folder refuses the second artifact: a folder holds it…
+     44|   const squatter = join(w.publish, artifacts[1].file);
+ ❯ rerun.test.ts:59:57
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  rerun.test.ts > AC8 #1495.1fbd7770 A rerun hashes the first artifact, skips it on the manifest's digest, verifies the other two once each, and refuses it when one byte changed > AC8 #1495.1fbd7770 with the first of three verified and published, the rerun neither verifies nor publishes it again, and verifies the other two once each
+AssertionError: release.mjs notes exits 0:
+exit 1
+--- stdout
+
+--- stderr
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/release.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ stoppedAfterFirst rerun.test.ts:42:61
+     40|   const report = preflight(w, commit);
+     41|   const n = notes(w, commit, report);
+     42|   expect(n.code, `release.mjs notes exits 0:\n${shown(n)}`).toBe(0);
+       |                                                             ^
+     43|   // The publish folder refuses the second artifact: a folder holds it…
+     44|   const squatter = join(w.publish, artifacts[1].file);
+ ❯ rerun.test.ts:99:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  rerun.test.ts > AC8 #1495.1fbd7770 A rerun hashes the first artifact, skips it on the manifest's digest, verifies the other two once each, and refuses it when one byte changed > AC8 #1495.1fbd7770 with one byte of the first artifact changed before the rerun, the rerun refuses it, naming the manifest's digest and the changed one
+AssertionError: release.mjs notes exits 0:
+exit 1
+--- stdout
+
+--- stderr
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/release.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ stoppedAfterFirst rerun.test.ts:42:61
+     40|   const report = preflight(w, commit);
+     41|   const n = notes(w, commit, report);
+     42|   expect(n.code, `release.mjs notes exits 0:\n${shown(n)}`).toBe(0);
+       |                                                             ^
+     43|   // The publish folder refuses the second artifact: a folder holds it…
+     44|   const squatter = join(w.publish, artifacts[1].file);
+ ❯ rerun.test.ts:113:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  rerun.test.ts > AC8 #1495.1fbd7770 A rerun hashes the first artifact, skips it on the manifest's digest, verifies the other two once each, and refuses it when one byte changed > AC8 #1495.1fbd7770 (wrong program) trust-file-name skips the changed artifact because its file is published, and fails this test
+AssertionError: release.mjs notes exits 0:
+exit 1
+--- stdout
+
+--- stderr
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/release.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ stoppedAfterFirst rerun.test.ts:42:61
+     40|   const report = preflight(w, commit);
+     41|   const n = notes(w, commit, report);
+     42|   expect(n.code, `release.mjs notes exits 0:\n${shown(n)}`).toBe(0);
+       |                                                             ^
+     43|   // The publish folder refuses the second artifact: a folder holds it…
+     44|   const squatter = join(w.publish, artifacts[1].file);
+ ❯ rerun.test.ts:120:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  10:47:02
+   Duration  2.25s (tests 98%, import 1%)
+
+
+==================== known-limits.test.ts ====================
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1495
+
+ ❯ known-limits.test.ts (1 test | 1 failed) 727ms
+   ❯ AC4 #1495.7d91f999 A planted lane reading BLOCKED appears in Known limits, and removing it by hand fails the release check, naming the lane (1)
+     × AC4 #1495.7d91f999 the BLOCKED lane is in the release README's Known limits and no lane that passed is; with its line removed by hand the tag is refused, naming it; with the README as written the tag goes through 660ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  known-limits.test.ts > AC4 #1495.7d91f999 A planted lane reading BLOCKED appears in Known limits, and removing it by hand fails the release check, naming the lane > AC4 #1495.7d91f999 the BLOCKED lane is in the release README's Known limits and no lane that passed is; with its line removed by hand the tag is refused, naming it; with the README as written the tag goes through
+AssertionError: release.mjs notes exits 0:
+exit 1
+--- stdout
+
+--- stderr
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/release.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ known-limits.test.ts:31:63
+     29|     writeOut(w, commit, [hook]);
+     30|     const n = notes(w, commit, report);
+     31|     expect(n.code, `release.mjs notes exits 0:\n${shown(n)}`).toBe(0);
+       |                                                               ^
+     32|
+     33|     const readme = join(w.out, 'README.md');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  10:47:05
+   Duration  1.13s (tests 90%, import 7%, transform 3%, worker 1%)
+
+
+==================== verify.test.ts ====================
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1495
+
+ ❯ verify.test.ts (5 tests | 5 failed) 2968ms
+   ❯ AC5 #1495.c2b38fd8 An app download with one first-party pack's folder removed and its version string unchanged fails verification (3)
+     × AC5 #1495.c2b38fd8 the twin: the app download with every pack verifies and is published, with the artifacts around it 730ms
+     × AC5 #1495.c2b38fd8 with foley-1.0.0's folder left out and the versions unchanged, verification fails naming the pack and the artifact, and nothing after it is published 647ms
+     × AC5 #1495.c2b38fd8 (wrong program) version-verifier passes the app download on its version strings, publishes it, and fails this test 502ms
+   ❯ AC6 #1495.1a706da4 An artifact built at another commit, left in the output folder under the release's file name and version, is refused by its sha256 (2)
+     × AC6 #1495.1a706da4 the release refuses it by its sha256, naming the artifact, the manifest's digest and its own, and publishes nothing of it 516ms
+     × AC6 #1495.1a706da4 (wrong program) name-version-verifier publishes it, and fails this test 413ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  verify.test.ts > AC5 #1495.c2b38fd8 An app download with one first-party pack's folder removed and its version string unchanged fails verification > AC5 #1495.c2b38fd8 the twin: the app download with every pack verifies and is published, with the artifacts around it
+AssertionError: release.mjs notes exits 0:
+exit 1
+--- stdout
+
+--- stderr
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/release.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ withApp verify.test.ts:44:61
+     42|   const report = preflight(w, commit);
+     43|   const n = notes(w, commit, report);
+     44|   expect(n.code, `release.mjs notes exits 0:\n${shown(n)}`).toBe(0);
+       |                                                             ^
+     45|   return { w, commit, report, before, app, after };
+     46| }
+ ❯ verify.test.ts:61:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  verify.test.ts > AC5 #1495.c2b38fd8 An app download with one first-party pack's folder removed and its version string unchanged fails verification > AC5 #1495.c2b38fd8 with foley-1.0.0's folder left out and the versions unchanged, verification fails naming the pack and the artifact, and nothing after it is published
+AssertionError: release.mjs notes exits 0:
+exit 1
+--- stdout
+
+--- stderr
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/release.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ withApp verify.test.ts:44:61
+     42|   const report = preflight(w, commit);
+     43|   const n = notes(w, commit, report);
+     44|   expect(n.code, `release.mjs notes exits 0:\n${shown(n)}`).toBe(0);
+       |                                                             ^
+     45|   return { w, commit, report, before, app, after };
+     46| }
+ ❯ verify.test.ts:69:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  verify.test.ts > AC5 #1495.c2b38fd8 An app download with one first-party pack's folder removed and its version string unchanged fails verification > AC5 #1495.c2b38fd8 (wrong program) version-verifier passes the app download on its version strings, publishes it, and fails this test
+AssertionError: release.mjs notes exits 0:
+exit 1
+--- stdout
+
+--- stderr
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/release.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ withApp verify.test.ts:44:61
+     42|   const report = preflight(w, commit);
+     43|   const n = notes(w, commit, report);
+     44|   expect(n.code, `release.mjs notes exits 0:\n${shown(n)}`).toBe(0);
+       |                                                             ^
+     45|   return { w, commit, report, before, app, after };
+     46| }
+ ❯ verify.test.ts:75:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  verify.test.ts > AC6 #1495.1a706da4 An artifact built at another commit, left in the output folder under the release's file name and version, is refused by its sha256 > AC6 #1495.1a706da4 the release refuses it by its sha256, naming the artifact, the manifest's digest and its own, and publishes nothing of it
+AssertionError: release.mjs notes exits 0:
+exit 1
+--- stdout
+
+--- stderr
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/release.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ withStale verify.test.ts:99:61
+     97|   const report = preflight(w, commit);
+     98|   const n = notes(w, commit, report);
+     99|   expect(n.code, `release.mjs notes exits 0:\n${shown(n)}`).toBe(0);
+       |                                                             ^
+    100|   return { w, commit, report, own, stale };
+    101| }
+ ❯ verify.test.ts:115:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  verify.test.ts > AC6 #1495.1a706da4 An artifact built at another commit, left in the output folder under the release's file name and version, is refused by its sha256 > AC6 #1495.1a706da4 (wrong program) name-version-verifier publishes it, and fails this test
+AssertionError: release.mjs notes exits 0:
+exit 1
+--- stdout
+
+--- stderr
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/release.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ withStale verify.test.ts:99:61
+     97|   const report = preflight(w, commit);
+     98|   const n = notes(w, commit, report);
+     99|   expect(n.code, `release.mjs notes exits 0:\n${shown(n)}`).toBe(0);
+       |                                                             ^
+    100|   return { w, commit, report, own, stale };
+    101| }
+ ❯ verify.test.ts:121:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed (5)
+   Start at  10:47:07
+   Duration  3.34s (tests 97%, import 1%, transform 1%)
+
+
+==================== looks.test.ts ====================
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1495
+
+ ❯ looks.test.ts (9 tests | 9 failed) 6874ms
+   ❯ AC9 #1495.a1f2c768 Both blessing decisions since the previous tag are listed under Looks that moved (2)
+     × AC9 #1495.a1f2c768 the golden and the corpus document each have a row with their fixture, kind and cause, the golden's with 3.2% and 9; the decision from before the tag has none 970ms
+     × AC9 #1495.a1f2c768 (wrong program) contract-diff-only lists neither decision and fails, naming the first decision 1342ms
+   ❯ AC10 #1495.f010e08b The figures in each row equal the ones in the comparison the decision answered (2)
+     × AC10 #1495.f010e08b the golden's row reads 3.2% and 9 and the corpus document's 1.1% and 4, as their comparisons recorded 571ms
+     × AC10 #1495.f010e08b (wrong program) self-compare prints 0% and 0 for both rows and fails, naming the fixture and both values 681ms
+   ❯ AC11 #1495.84b5e71f A fixture release with no blessing decision prints Looks that moved: none (2)
+     × AC11 #1495.84b5e71f with no blessing decision since release/1.2.0, the notes say Looks that moved: none 550ms
+     × AC11 #1495.84b5e71f (wrong program) drop-empty-heading fails, naming the heading 414ms
+   ❯ AC12 #1495.e029821e With one of the two rows removed by hand, the tag is refused, naming the decision the row stood for (3)
+     × AC12 #1495.e029821e the twin: with both rows as the release wrote them, the tag goes through 571ms
+     × AC12 #1495.e029821e with the corpus document's row removed, the tag is refused, naming dec-0002-c03e7d1a8f62 728ms
+     × AC12 #1495.e029821e (wrong program) heading-only tags the release with the row missing, and fails this test 633ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  looks.test.ts > AC9 #1495.a1f2c768 Both blessing decisions since the previous tag are listed under Looks that moved > AC9 #1495.a1f2c768 the golden and the corpus document each have a row with their fixture, kind and cause, the golden's with 3.2% and 9; the decision from before the tag has none
+AssertionError: release.mjs notes exits 0:
+exit 1
+--- stdout
+
+--- stderr
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/release.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ notesOf looks.test.ts:38:61
+     36| /** The notes a run of `notes` wrote into `out`, after checking it ran…
+     37| function notesOf(r: Ran, out: string): string {
+     38|   expect(r.code, `release.mjs notes exits 0:\n${shown(r)}`).toBe(0);
+       |                                                             ^
+     39|   const file = join(out, 'NOTES.md');
+     40|   expect(existsSync(file), `notes writes ${file}`).toBe(true);
+ ❯ looks.test.ts:84:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  looks.test.ts > AC9 #1495.a1f2c768 Both blessing decisions since the previous tag are listed under Looks that moved > AC9 #1495.a1f2c768 (wrong program) contract-diff-only lists neither decision and fails, naming the first decision
+AssertionError: release.mjs notes exits 0:
+exit 1
+--- stdout
+
+--- stderr
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/release.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ notesOf looks.test.ts:38:61
+     36| /** The notes a run of `notes` wrote into `out`, after checking it ran…
+     37| function notesOf(r: Ran, out: string): string {
+     38|   expect(r.code, `release.mjs notes exits 0:\n${shown(r)}`).toBe(0);
+       |                                                             ^
+     39|   const file = join(out, 'NOTES.md');
+     40|   expect(existsSync(file), `notes writes ${file}`).toBe(true);
+ ❯ looks.test.ts:92:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  looks.test.ts > AC10 #1495.f010e08b The figures in each row equal the ones in the comparison the decision answered > AC10 #1495.f010e08b the golden's row reads 3.2% and 9 and the corpus document's 1.1% and 4, as their comparisons recorded
+AssertionError: release.mjs notes exits 0:
+exit 1
+--- stdout
+
+--- stderr
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/release.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ notesOf looks.test.ts:38:61
+     36| /** The notes a run of `notes` wrote into `out`, after checking it ran…
+     37| function notesOf(r: Ran, out: string): string {
+     38|   expect(r.code, `release.mjs notes exits 0:\n${shown(r)}`).toBe(0);
+       |                                                             ^
+     39|   const file = join(out, 'NOTES.md');
+     40|   expect(existsSync(file), `notes writes ${file}`).toBe(true);
+ ❯ looks.test.ts:104:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  looks.test.ts > AC10 #1495.f010e08b The figures in each row equal the ones in the comparison the decision answered > AC10 #1495.f010e08b (wrong program) self-compare prints 0% and 0 for both rows and fails, naming the fixture and both values
+AssertionError: release.mjs notes exits 0:
+exit 1
+--- stdout
+
+--- stderr
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/release.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ notesOf looks.test.ts:38:61
+     36| /** The notes a run of `notes` wrote into `out`, after checking it ran…
+     37| function notesOf(r: Ran, out: string): string {
+     38|   expect(r.code, `release.mjs notes exits 0:\n${shown(r)}`).toBe(0);
+       |                                                             ^
+     39|   const file = join(out, 'NOTES.md');
+     40|   expect(existsSync(file), `notes writes ${file}`).toBe(true);
+ ❯ looks.test.ts:112:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  looks.test.ts > AC11 #1495.84b5e71f A fixture release with no blessing decision prints Looks that moved: none > AC11 #1495.84b5e71f with no blessing decision since release/1.2.0, the notes say Looks that moved: none
+AssertionError: release.mjs notes exits 0:
+exit 1
+--- stdout
+
+--- stderr
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/release.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ notesOf looks.test.ts:38:61
+     36| /** The notes a run of `notes` wrote into `out`, after checking it ran…
+     37| function notesOf(r: Ran, out: string): string {
+     38|   expect(r.code, `release.mjs notes exits 0:\n${shown(r)}`).toBe(0);
+       |                                                             ^
+     39|   const file = join(out, 'NOTES.md');
+     40|   expect(existsSync(file), `notes writes ${file}`).toBe(true);
+ ❯ looks.test.ts:129:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  looks.test.ts > AC11 #1495.84b5e71f A fixture release with no blessing decision prints Looks that moved: none > AC11 #1495.84b5e71f (wrong program) drop-empty-heading fails, naming the heading
+AssertionError: release.mjs notes exits 0:
+exit 1
+--- stdout
+
+--- stderr
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/release.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ notesOf looks.test.ts:38:61
+     36| /** The notes a run of `notes` wrote into `out`, after checking it ran…
+     37| function notesOf(r: Ran, out: string): string {
+     38|   expect(r.code, `release.mjs notes exits 0:\n${shown(r)}`).toBe(0);
+       |                                                             ^
+     39|   const file = join(out, 'NOTES.md');
+     40|   expect(existsSync(file), `notes writes ${file}`).toBe(true);
+ ❯ looks.test.ts:137:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  looks.test.ts > AC12 #1495.e029821e With one of the two rows removed by hand, the tag is refused, naming the decision the row stood for > AC12 #1495.e029821e the twin: with both rows as the release wrote them, the tag goes through
+AssertionError: release.mjs notes exits 0:
+exit 1
+--- stdout
+
+--- stderr
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/release.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ notesOf looks.test.ts:38:61
+     36| /** The notes a run of `notes` wrote into `out`, after checking it ran…
+     37| function notesOf(r: Ran, out: string): string {
+     38|   expect(r.code, `release.mjs notes exits 0:\n${shown(r)}`).toBe(0);
+       |                                                             ^
+     39|   const file = join(out, 'NOTES.md');
+     40|   expect(existsSync(file), `notes writes ${file}`).toBe(true);
+ ❯ cutWithBlessings looks.test.ts:150:3
+ ❯ looks.test.ts:164:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+ FAIL  looks.test.ts > AC12 #1495.e029821e With one of the two rows removed by hand, the tag is refused, naming the decision the row stood for > AC12 #1495.e029821e with the corpus document's row removed, the tag is refused, naming dec-0002-c03e7d1a8f62
+AssertionError: release.mjs notes exits 0:
+exit 1
+--- stdout
+
+--- stderr
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/release.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ notesOf looks.test.ts:38:61
+     36| /** The notes a run of `notes` wrote into `out`, after checking it ran…
+     37| function notesOf(r: Ran, out: string): string {
+     38|   expect(r.code, `release.mjs notes exits 0:\n${shown(r)}`).toBe(0);
+       |                                                             ^
+     39|   const file = join(out, 'NOTES.md');
+     40|   expect(existsSync(file), `notes writes ${file}`).toBe(true);
+ ❯ cutWithBlessings looks.test.ts:150:3
+ ❯ looks.test.ts:171:46
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/9]⎯
+
+ FAIL  looks.test.ts > AC12 #1495.e029821e With one of the two rows removed by hand, the tag is refused, naming the decision the row stood for > AC12 #1495.e029821e (wrong program) heading-only tags the release with the row missing, and fails this test
+AssertionError: release.mjs notes exits 0:
+exit 1
+--- stdout
+
+--- stderr
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/release.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ notesOf looks.test.ts:38:61
+     36| /** The notes a run of `notes` wrote into `out`, after checking it ran…
+     37| function notesOf(r: Ran, out: string): string {
+     38|   expect(r.code, `release.mjs notes exits 0:\n${shown(r)}`).toBe(0);
+       |                                                             ^
+     39|   const file = join(out, 'NOTES.md');
+     40|   expect(existsSync(file), `notes writes ${file}`).toBe(true);
+ ❯ cutWithBlessings looks.test.ts:150:3
+ ❯ looks.test.ts:178:46
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  9 failed (9)
+   Start at  10:47:11
+   Duration  7.11s (tests 99%)
+
+
+==================== app-download.test.ts ====================
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1495
+
+ ❯ app-download.test.ts (3 tests | 3 failed) 11ms
+   ❯ AC7 #1495.7644dc0b From the extracted app download, under the sandbox, deep --version prints the release's version and the fixture film's still exports (3)
+     × AC7 #1495.7644dc0b the release's check passes the real app download: it is verified, published and tagged 7ms
+     × AC7 #1495.7644dc0b from its extracted copy, with reads outside it and a fresh HOME refused and no network, deep --version prints the version and the still exports 0ms
+     × AC7 #1495.7644dc0b (wrong program) the checkout-font bundle exports outside the sandbox, and the release refuses it, naming the font's path in the checkout 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  app-download.test.ts > AC7 #1495.7644dc0b From the extracted app download, under the sandbox, deep --version prints the release's version and the fixture film's still exports > AC7 #1495.7644dc0b the release's check passes the real app download: it is verified, published and tagged
+ FAIL  app-download.test.ts > AC7 #1495.7644dc0b From the extracted app download, under the sandbox, deep --version prints the release's version and the fixture film's still exports > AC7 #1495.7644dc0b from its extracted copy, with reads outside it and a fresh HOME refused and no network, deep --version prints the version and the still exports
+Error: scripts/release.mjs does not exist: there is no release to verify an app download, so nothing here was checked
+ ❯ app-download.test.ts:104:38
+    102|   if (!made) {
+    103|     made = (async () => {
+    104|       if (!existsSync(SCRIPT)) throw Error('scripts/release.mjs does n…
+       |                                      ^
+    105|       if (process.platform !== 'darwin') blocked(`the app download and…
+    106|       const head = await long('git', ['rev-parse', 'HEAD'], { cwd: REP…
+ ❯ download app-download.test.ts:141:6
+ ❯ app-download.test.ts:189:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  app-download.test.ts > AC7 #1495.7644dc0b From the extracted app download, under the sandbox, deep --version prints the release's version and the fixture film's still exports > AC7 #1495.7644dc0b (wrong program) the checkout-font bundle exports outside the sandbox, and the release refuses it, naming the font's path in the checkout
+Error: scripts/release.mjs does not exist: there is no release to verify an app download, so nothing here was checked
+ ❯ app-download.test.ts:104:38
+    102|   if (!made) {
+    103|     made = (async () => {
+    104|       if (!existsSync(SCRIPT)) throw Error('scripts/release.mjs does n…
+       |                                      ^
+    105|       if (process.platform !== 'darwin') blocked(`the app download and…
+    106|       const head = await long('git', ['rev-parse', 'HEAD'], { cwd: REP…
+ ❯ download app-download.test.ts:141:6
+ ❯ app-download.test.ts:229:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  10:47:18
+   Duration  790ms (transform 52%, import 43%, tests 3%, worker 2%)
+

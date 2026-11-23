@@ -2,11 +2,15 @@
 //! bundle's `gpu_needs` (its features, and its limits laid over WebGPU's spec defaults), never the
 //! adapter's own limits, so WebGPU's validation catches any use past them on every machine. Each
 //! frame's pixels, sRGB-encoded RGBA, are uploaded and drawn onto the page's canvas, whose
-//! format keeps them as they are: an sRGB canvas.
+//! format keeps them as they are: an sRGB canvas. Only the full set (#1490) carries the GPU layer
+//! and scene3d's renderer, for its 3D frames.
 
+#[cfg(feature = "full")]
 use std::sync::Arc;
 
+#[cfg(feature = "full")]
 use deep_canvas_scene3d::look::Look3;
+#[cfg(feature = "full")]
 use deep_canvas_scene3d::scene::Scene;
 use serde_json::Value;
 use wasm_bindgen::prelude::*;
@@ -40,6 +44,7 @@ fn features(needs: &Value) -> wgpu::Features {
     {
         out |= match name {
             "depth-clip-control" => wgpu::Features::DEPTH_CLIP_CONTROL,
+            "clip-distances" => wgpu::Features::CLIP_DISTANCES,
             "depth32float-stencil8" => wgpu::Features::DEPTH32FLOAT_STENCIL8,
             "texture-compression-bc" => wgpu::Features::TEXTURE_COMPRESSION_BC,
             "texture-compression-etc2" => wgpu::Features::TEXTURE_COMPRESSION_ETC2,
@@ -116,13 +121,44 @@ pub struct Gpu {
     /// writer layers over a 3D frame.
     over: wgpu::RenderPipeline,
     /// The device as the 3D renderer draws on it, and the renderer, made on the first 3D frame.
+    #[cfg(feature = "full")]
     deep: Arc<deep_gpu::device::Device>,
+    #[cfg(feature = "full")]
     scene: Option<deep_scene3d_render::Renderer>,
     layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     size: [u32; 2],
     backend: String,
     adapter: String,
+    /// The features the device was asked for and given.
+    #[cfg_attr(not(feature = "full"), allow(dead_code))]
+    features: wgpu::Features,
+}
+
+/// #1217: a read back of a frame's object-ID target under way.
+#[cfg(feature = "full")]
+pub struct IdsRead {
+    staging: wgpu::Buffer,
+    mapped: std::sync::mpsc::Receiver<bool>,
+    row: usize,
+    padded: usize,
+}
+
+#[cfg(feature = "full")]
+impl IdsRead {
+    /// The target's bytes, each pixel's pick as a u32 in little-endian, rows top-down, once the
+    /// device has mapped them: `None` until then, empty when it couldn't.
+    pub fn take(&self) -> Option<Vec<u8>> {
+        let ok = self.mapped.try_recv().ok()?;
+        let mut out = Vec::new();
+        if let (true, Ok(view)) = (ok, self.staging.slice(..).get_mapped_range()) {
+            for line in view.chunks_exact(self.padded) {
+                out.extend_from_slice(&line[..self.row]);
+            }
+        }
+        self.staging.unmap();
+        Some(out)
+    }
 }
 
 /// A WebGPU device for `canvas` asking exactly `needs` (the bundle's `gpu_needs`, as JSON).
@@ -263,6 +299,7 @@ pub async fn open_gpu(canvas: web_sys::HtmlCanvasElement, needs: String) -> Resu
         ..Default::default()
     });
     let info = adapter.get_info();
+    #[cfg(feature = "full")]
     let deep = deep_gpu::device::Device::from_parts(
         device.clone(),
         queue.clone(),
@@ -285,7 +322,9 @@ pub async fn open_gpu(canvas: web_sys::HtmlCanvasElement, needs: String) -> Resu
         format,
         pipeline,
         over,
+        #[cfg(feature = "full")]
         deep,
+        #[cfg(feature = "full")]
         scene: None,
         layout,
         sampler,
@@ -296,6 +335,7 @@ pub async fn open_gpu(canvas: web_sys::HtmlCanvasElement, needs: String) -> Resu
         } else {
             adapter_name
         },
+        features: features(&needs),
     })
 }
 
@@ -320,6 +360,26 @@ impl Gpu {
         self.size
     }
 
+    /// The block formats the device samples (Material: texture maps): BC where it has
+    /// texture-compression-bc, else ASTC 4 × 4 where it has texture-compression-astc, else none.
+    #[cfg(feature = "full")]
+    pub fn blocks(&self) -> deep_codecs::maps::Blocks {
+        use deep_codecs::maps::Blocks;
+        if self
+            .features
+            .contains(wgpu::Features::TEXTURE_COMPRESSION_BC)
+        {
+            Blocks::Bc
+        } else if self
+            .features
+            .contains(wgpu::Features::TEXTURE_COMPRESSION_ASTC)
+        {
+            Blocks::Astc
+        } else {
+            Blocks::None
+        }
+    }
+
     /// Draws `rgba` (sRGB-encoded, straight, rows top-down, `size` pixels) onto the canvas.
     pub fn show(&self, rgba: &[u8], size: [u32; 2]) -> bool {
         let Some(frame) = self.frame() else {
@@ -335,6 +395,7 @@ impl Gpu {
 
     /// Draws `scene` in `look` onto the canvas with scene3d's renderer, as the app's 3D frames are
     /// drawn, and `over` (the 2D writer layers, straight RGBA with no ground) over it.
+    #[cfg(feature = "full")]
     pub fn show3d(&mut self, scene: &Scene, look: &Look3, over: &[u8], size: [u32; 2]) -> bool {
         let Some(frame) = self.frame() else {
             return false;
@@ -353,6 +414,59 @@ impl Gpu {
         self.queue.submit([encoder.finish()]);
         self.queue.present(frame);
         true
+    }
+
+    /// #1217: the last 3D frame's object-ID target, read back for a measure's click. The device
+    /// maps it only once the page's thread yields, so the read is taken later ([`IdsRead::take`]).
+    #[cfg(feature = "full")]
+    pub fn read_ids(&self) -> Option<IdsRead> {
+        let (_, ids, size) = self.scene.as_ref()?.light_source()?;
+        let row = size[0] * 4;
+        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let padded = row.div_ceil(align) * align;
+        let staging = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("measure ids"),
+            size: u64::from(padded) * u64::from(size[1]),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        encoder.copy_texture_to_buffer(
+            ids.texture().as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &staging,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded),
+                    rows_per_image: Some(size[1]),
+                },
+            },
+            wgpu::Extent3d {
+                width: size[0],
+                height: size[1],
+                depth_or_array_layers: 1,
+            },
+        );
+        self.queue.submit([encoder.finish()]);
+        let (tx, mapped) = std::sync::mpsc::channel();
+        staging.slice(..).map_async(wgpu::MapMode::Read, move |r| {
+            let _ = tx.send(r.is_ok());
+        });
+        Some(IdsRead {
+            staging,
+            mapped,
+            row: row as usize,
+            padded: padded as usize,
+        })
+    }
+
+    /// #1217: that target's size, and the item each pick in it stands for.
+    #[cfg(feature = "full")]
+    pub fn picks(&self) -> Option<([u32; 2], std::collections::BTreeMap<u32, String>)> {
+        let renderer = self.scene.as_ref()?;
+        let (_, _, size) = renderer.light_source()?;
+        let picks = renderer.picks().iter().map(|(id, p)| (*p, id.clone()));
+        Some((size, picks.collect()))
     }
 
     fn frame(&self) -> Option<wgpu::SurfaceTexture> {

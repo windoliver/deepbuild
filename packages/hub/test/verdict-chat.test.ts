@@ -2,6 +2,7 @@
 // A claim's checks as the receipt reads them from the record, a check proven on a stand-in marked so (#874).
 import { fixtures, type JsonValue } from '@deepbuild/contracts';
 import { openRecord, testStorage, type Connection } from '@deepbuild/record';
+import type { LineState } from '@deepbuild/verdicts';
 import { describe, expect, it } from 'vitest';
 import { claimState, isStatusQuestion, statusAnswer } from '../src/verdict-chat.js';
 
@@ -34,6 +35,20 @@ describe('statusAnswer', () => {
     expect(a).toContain('resume: codex resume 0b1dba30-7d4e-4c66-83df-ce84df27db32');
     expect(statusAnswer({ ...claim, verdictAt: 0 }, { ...facts, now: 7_200_000 })).toContain('(for 2h)');
     expect(statusAnswer({ ...claim, verdictAt: 0 }, { ...facts, now: 2 * 86_400_000 })).toContain('(for 2d)');
+  });
+  it("a line too wide for the room the count leaves gives its reasons way, never its outcome, and ends in the count (#1810)", () => {
+    const answer = (state: LineState) =>
+      statusAnswer({ task: 'task:T', session: facts.session, created: 10_000, checks: [], verdictAt: 40_000, state }, { ...facts, needsYou: 3 }).split('\n')[0]!;
+    const held = answer({ outcome: null, requirements: [], running: [], held: [{ check: 'e2e', reason: 'the pool is full, its lease is held by another run' }, { check: 'unit', reason: 'the pool is full, its lease is held by another run' }] });
+    expect(held).toBe('says done · 2 checks wait for the loop · next: DeepBuild (for 1m) · needs you: 3');
+    const four = [1, 2, 3, 4].map((n) => ({ req: `req:D#R${n}`, outcome: 'PASS' as const, smallest: null, points_to: null }));
+    const watch = answer({ outcome: 'PASS', requirements: four, running: [], tests: 12, watch: { why: "hooks don't reach DeepBuild", unsent: false } });
+    expect(watch).toBe('watch-only · PASS 4/4 · 12 tests · next: you (for 1m) · needs you: 3');
+    // Narrower than what it never drops, the line keeps it whole, as #83's does, with its reasons, since dropping them
+    // wouldn't make it fit, and still ends in the count.
+    const twelve = Array.from({ length: 12 }, (_, n) => ({ req: `req:D#R${n + 1}`, outcome: 'INCONCLUSIVE' as const, smallest: null, points_to: null }));
+    const inconclusive = answer({ outcome: 'INCONCLUSIVE', requirements: twelve, running: [], watch: { why: "hooks don't reach DeepBuild", unsent: false } });
+    expect(inconclusive).toBe(`watch-only: hooks don't reach DeepBuild · not verified: ${twelve.map((_, n) => `R${n + 1}`).join(', ')} · INCONCLUSIVE 0/12 (for 1m) · needs you: 3`);
   });
 });
 

@@ -1,0 +1,127 @@
+Base-commit run of tests/acceptance/2647 (issue #2647), written blind.
+
+Base: 6a2b68d44 (origin/main), nothing of #2647 applied. This Mac, 2026-11-19, Node 24.22.0, after npm ci and
+npm run build --workspaces in this worktree, at the 1-minute load shown in the first line (other sessions' work).
+Command: npx vitest run tests/acceptance/2647, then tsc --noEmit -p tests/acceptance/2647/tsconfig.json.
+
+Expected on the base: AC1, AC3 and AC5 fail at their assertions naming the counts (5,990 pattern compilations,
+15 git processes, 14 and 12 opens). AC2 and AC4 pass on the base (behavior equal to itself) and fail on their
+planted twins (twins.json), which the before lane judges.
+
+load: { 16.12 28.81 28.69 }  head: 6a2b68d44  node: v24.22.0
+
+ RUN  v5.0.5 <worktree>
+
+ ❯ tests/acceptance/2647/ac5-codex-reads.test.ts (3 tests | 3 failed) 76ms
+   ❯ #2647.799c3768 one modified call opens codex-hooks.json and hooks.json once each, and returns what the merge base returns for an untouched file, an edited entry and a removed entry (3)
+     × #2647.799c3768 an untouched file: one open of each file, and the merge base's list 16ms
+     × #2647.799c3768 an edited entry (the Stop timeout changed): one open of each file, and the merge base's list 10ms
+     × #2647.799c3768 a removed entry (PreCompact gone): one open of each file, and the merge base's list 10ms
+ ❯ tests/acceptance/2647/ac3-needs-you-git.test.ts (1 test | 1 failed) 445ms
+   ❯ #2647.c2acca3a a Needs you load with five asks of one session pinned to one commit, whose head has moved, starts three git processes and shows the merge base's cards (1)
+     × #2647.c2acca3a five asks pinned to C1, head at C2: one needsYou starts three git processes, each card showing C1 to C2 417ms
+ ❯ tests/acceptance/2647/ac1-verdict-patterns.test.ts (1 test | 1 failed) 955ms
+   ❯ #2647.c40dfa9f a claim that changed 300 files under 20 test-runner configs: a stop's verdict reads compile each pattern once, counted by a preload that wraps RegExp (1)
+     × #2647.c40dfa9f a stop and ten verdict reads compile each of the claim's own-change patterns at most once, and the reads after the first none 655ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2647/ac1-verdict-patterns.test.ts > #2647.c40dfa9f a claim that changed 300 files under 20 test-runner configs: a stop's verdict reads compile each pattern once, counted by a preload that wraps RegExp > #2647.c40dfa9f a stop and ten verdict reads compile each of the claim's own-change patterns at most once, and the reads after the first none
+AssertionError: the claim's own-change patterns were compiled 5990 times over its stop and 10 verdict reads (0 at the stop, then 599, 599, 599, 599, 599, 599, 599, 599, 599, 599 at each read), for 599 distinct patterns: 599 of them more than once, and 5391 compilations in the reads after the first: expected { compiledMoreThanOnce: 599, …(1) } to deeply equal { compiledMoreThanOnce: +0, …(1) }
+
+- Expected
++ Received
+
+  {
+-   "compiledInReadsAfterTheFirst": 0,
+-   "compiledMoreThanOnce": 0,
++   "compiledInReadsAfterTheFirst": 5391,
++   "compiledMoreThanOnce": 599,
+  }
+
+ ❯ tests/acceptance/2647/ac1-verdict-patterns.test.ts:73:7
+     71|       `the claim's own-change patterns were compiled ${ours} times ove…
+     72|       + `for ${bySource.size} distinct patterns: ${twice} of them more…
+     73|     ).toEqual({ compiledMoreThanOnce: 0, compiledInReadsAfterTheFirst:…
+       |       ^
+     74|   }, 60_000);
+     75| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/acceptance/2647/ac3-needs-you-git.test.ts > #2647.c2acca3a a Needs you load with five asks of one session pinned to one commit, whose head has moved, starts three git processes and shows the merge base's cards > #2647.c2acca3a five asks pinned to C1, head at C2: one needsYou starts three git processes, each card showing C1 to C2
+AssertionError: one Needs you load of five asks pinned to one commit started 15 git processes, where three run each git command once per worktree and commit: git rev-parse HEAD ×5, git diff --name-only ×5, git diff ×5: expected 15 to be 3 // Object.is equality
+
+- Expected
++ Received
+
+- 3
++ 15
+
+ ❯ tests/acceptance/2647/ac3-needs-you-git.test.ts:54:209
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/2647/ac5-codex-reads.test.ts > #2647.799c3768 one modified call opens codex-hooks.json and hooks.json once each, and returns what the merge base returns for an untouched file, an edited entry and a removed entry > #2647.799c3768 an untouched file: one open of each file, and the merge base's list
+AssertionError: one modified call for an untouched file opened codex-hooks.json 14 times and hooks.json 12 times, where once each would do: expected { 'codex-hooks.json': 14, …(1) } to deeply equal { 'codex-hooks.json': 1, …(1) }
+
+- Expected
++ Received
+
+  {
+-   "codex-hooks.json": 1,
+-   "hooks.json": 1,
++   "codex-hooks.json": 14,
++   "hooks.json": 12,
+  }
+
+ ❯ tests/acceptance/2647/ac5-codex-reads.test.ts:62:188
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/acceptance/2647/ac5-codex-reads.test.ts > #2647.799c3768 one modified call opens codex-hooks.json and hooks.json once each, and returns what the merge base returns for an untouched file, an edited entry and a removed entry > #2647.799c3768 an edited entry (the Stop timeout changed): one open of each file, and the merge base's list
+AssertionError: one modified call for an edited entry (the Stop timeout changed) opened codex-hooks.json 14 times and hooks.json 12 times, where once each would do: expected { 'codex-hooks.json': 14, …(1) } to deeply equal { 'codex-hooks.json': 1, …(1) }
+
+- Expected
++ Received
+
+  {
+-   "codex-hooks.json": 1,
+-   "hooks.json": 1,
++   "codex-hooks.json": 14,
++   "hooks.json": 12,
+  }
+
+ ❯ tests/acceptance/2647/ac5-codex-reads.test.ts:62:188
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/acceptance/2647/ac5-codex-reads.test.ts > #2647.799c3768 one modified call opens codex-hooks.json and hooks.json once each, and returns what the merge base returns for an untouched file, an edited entry and a removed entry > #2647.799c3768 a removed entry (PreCompact gone): one open of each file, and the merge base's list
+AssertionError: one modified call for a removed entry (PreCompact gone) opened codex-hooks.json 14 times and hooks.json 12 times, where once each would do: expected { 'codex-hooks.json': 14, …(1) } to deeply equal { 'codex-hooks.json': 1, …(1) }
+
+- Expected
++ Received
+
+  {
+-   "codex-hooks.json": 1,
+-   "hooks.json": 1,
++   "codex-hooks.json": 14,
++   "hooks.json": 12,
+  }
+
+ ❯ tests/acceptance/2647/ac5-codex-reads.test.ts:62:188
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  3 failed | 2 passed (5)
+      Tests  5 failed | 3 passed (8)
+   Start at  21:01:55
+   Duration  1.11s (tests 85%, import 8%, transform 6%, setup 1%)
+
+VITEST_EXIT=1
+TSC_EXIT=0

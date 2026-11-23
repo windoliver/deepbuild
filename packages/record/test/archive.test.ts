@@ -42,3 +42,22 @@ it('searches a session at its newest archived copy, before and after the index c
   expect(await found('BackoffJit')).toEqual({ store: [], reader: [] });
   await record.close();
 });
+
+it('findable excludes transcript-copy evidence', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'deep-findable-'));
+  roots.push(root);
+  const record = await openRecord({ path: join(root, 'ledger.db'), now: () => T0 });
+  const core: Connection = { writer: 'core', actor: 'you', scope: 'you' };
+  const put = (n: string, kind: string, type: string) => record.append(core, {
+    v: 1, id: ulid(T0 + Number(n)), kind: 'evidence.stored', ts: T0 + Number(n),
+    data: { sha256: n.repeat(64), kind, type, size: 10, origin: 'deepbuild', redaction: 'complete', license: 'own', derived_from: [], step_times: [] },
+  });
+  await put('1', 'note', 'text');
+  await put('2', 'transcript', 'text');
+  await put('3', 'transcript-copy', 'text');
+  await record.sync();
+  const reader = openRecordReader({ path: join(root, 'ledger.db') });
+  try {
+    expect(await reader.findable()).toEqual([`ev:${'1'.repeat(64)}`]);
+  } finally { reader.close(); await record.close(); }
+});

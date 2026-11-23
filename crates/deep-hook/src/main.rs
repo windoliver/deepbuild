@@ -15,19 +15,22 @@ use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{env, io};
 
-use deep_contracts::{parse, Value};
+use deep_contracts::{parse, parse_lossy, Value};
 
 use deep_hook::matcher;
 
 mod actions;
+mod cow;
 mod heavy;
 mod remote;
 mod spool_file;
 mod tool_paths;
+
+use cow::clone;
 
 /// How long the hub has to acknowledge a request, from the hook's start: the 20 ms the hub has to acknowledge
 /// once it reads it. The rest of the design's 50 ms is for the process to start, decide, spool and exit.
@@ -114,7 +117,15 @@ fn setting(section: &str, key: &str) -> Option<Value> {
 }
 
 /// The hook's working folder, once its payload is read: a worktree `deep hub use --root` sent to a dev hub.
-static CWD: OnceLock<PathBuf> = OnceLock::new();
+static CWD: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+fn set_cwd(path: PathBuf) {
+    *CWD.lock().unwrap_or_else(|e| e.into_inner()) = Some(path);
+}
+
+fn current_cwd() -> Option<PathBuf> {
+    CWD.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
 
 /// The one address setting: `hub.address` in ~/.deepbuild/config.json, `unix:<path>`; absent, ~/.deepbuild/hub.sock.
 /// A worktree named in `hub.use`, `{<worktree>: "unix:<path>"}`, which `deep hub use --root` writes once the OS
@@ -133,13 +144,29 @@ fn address() -> PathBuf {
     }
 }
 
+/// The address one forwarded hook reads, once its payload's folder is known: config.json is read for it at most once
+/// (#2651). Unset in the modes that outlive one hook, which read the setting again at each use.
+static HOOK_ADDRESS: OnceLock<PathBuf> = OnceLock::new();
+
+/// Whether this process forwards one hook, its folder read: its address is then read once and kept.
+static ONE_HOOK: AtomicBool = AtomicBool::new(false);
+
+/// The hub's address for this process: one forwarded hook's kept one, or the setting as it reads now.
+fn hub_address() -> PathBuf {
+    if ONE_HOOK.load(Ordering::SeqCst) {
+        HOOK_ADDRESS.get_or_init(address).clone()
+    } else {
+        address()
+    }
+}
+
 /// The dev hub `deep hub use --root` sent this worktree to in `uses`, the `hub.use` setting, the longest such
 /// worktree winning.
 fn worktree_hub(uses: Option<&Value>) -> Option<PathBuf> {
-    let (Some(cwd), Some(Value::Object(uses))) = (CWD.get(), uses) else {
+    let (Some(cwd), Some(Value::Object(uses))) = (current_cwd(), uses) else {
         return None;
     };
-    let real = fs::canonicalize(cwd).unwrap_or_else(|_| cwd.clone());
+    let real = fs::canonicalize(&cwd).unwrap_or_else(|_| cwd.clone());
     uses.iter()
         .filter_map(|(worktree, value)| match value {
             Value::String(a) if a.starts_with("unix:") => Some((Path::new(worktree), &a[5..])),
@@ -205,6 +232,8 @@ struct Guard {
     fail_closed: bool,
     reason: String,
     next_step: String,
+    /// Set when this deep-hook can't read the entry whole (#2219), saying it is older than it: it meets every call.
+    unread: Option<String>,
 }
 
 /// What deep-hook reads of rules.json: its entries, what each tool the hub counted counts as, and the cloud owners
@@ -221,7 +250,8 @@ const REMOVED: &str = "was removed after setup (`deep setup` writes it again)";
 
 /// ~/.deepbuild/rules.json, `{"v": 1, "entries": {<name>: guard@1}, "classes": {<tool>: <class>}}`; nothing when it
 /// is missing before setup has finished, and why not when it was removed since, can't be read or isn't that shape.
-/// Other members, such as each entry's planted call and twin, are the hub's.
+/// Other members are the hub's. Each entry's planted call and twin are in proofs.json beside it, which deep-hook never
+/// opens (#2695); a rules.json an older hub wrote still holds them, and they are parsed with it until the next install.
 fn rules() -> Result<Rules, String> {
     // The planted wrong program for #304's AC1 reads no entry: its one rule is compiled in.
     if cfg!(feature = "plant-compiled-rule") {
@@ -271,39 +301,16 @@ fn standing(value: Option<&Value>) -> Vec<String> {
         .collect()
 }
 
-/// The cloud owner a command creates its resource under, as the hub names it: an AWS command's account, by its
-/// `--profile`'s `sso_account_id` in ~/.aws/config (`aws:<account>`), else the profile (`aws-profile:<name>`).
-fn cloud_owner(command: &str) -> Option<String> {
-    let words: Vec<&str> = command.split_whitespace().collect();
-    if words.first().map(|w| w.trim_matches(['"', '\''])) != Some("aws") {
-        return None;
+/// The cloud owner an AWS profile creates its resource under, as the hub names it: the profile's `sso_account_id` in
+/// ~/.aws/config (`aws:<account>`), else the profile (`aws-profile:<name>`).
+fn cloud_owner(profile: &str) -> String {
+    let aws = PathBuf::from(env::var_os("HOME").unwrap_or_default()).join(".aws");
+    let config = fs::read_to_string(aws.join("config")).unwrap_or_default();
+    let credentials = fs::read_to_string(aws.join("credentials")).unwrap_or_default();
+    match matcher::aws_account(&config, &credentials, profile) {
+        Some(account) => format!("aws:{account}"),
+        None => format!("aws-profile:{profile}"),
     }
-    let profile = words
-        .iter()
-        .position(|w| *w == "--profile" || w.starts_with("--profile="))
-        .and_then(|i| match words[i].strip_prefix("--profile=") {
-            Some(p) => Some(p),
-            None => words.get(i + 1).copied(),
-        })
-        .unwrap_or("default")
-        .trim_matches(['"', '\'']);
-    let config = fs::read_to_string(
-        PathBuf::from(env::var_os("HOME").unwrap_or_default()).join(".aws/config"),
-    )
-    .unwrap_or_default();
-    let mut section = String::new();
-    for line in config.lines().map(str::trim) {
-        if let Some(head) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
-            section = head.trim_start_matches("profile ").trim().to_string();
-        } else if section == profile {
-            if let Some((key, value)) = line.split_once('=') {
-                if key.trim() == "sso_account_id" {
-                    return Some(format!("aws:{}", value.trim()));
-                }
-            }
-        }
-    }
-    Some(format!("aws-profile:{profile}"))
 }
 
 /// A `classes` member, `{<tool>: read | change | send | destructive}`; none when it is absent.
@@ -327,7 +334,8 @@ fn classes(value: Option<&Value>) -> Result<Vec<(String, String)>, String> {
         .collect()
 }
 
-/// One entry as guard@1 has it: every field there and of its type, and no other; None when it isn't one.
+/// One entry as guard@1 has it; None when it isn't an object or its `mode` or `fail_closed` can't be read. One with a
+/// field this deep-hook doesn't know or can't read, its `match` included, is unread (#2219).
 fn guard(name: &str, entry: &Value) -> Option<Guard> {
     let Value::Object(fields) = entry else {
         return None;
@@ -340,12 +348,6 @@ fn guard(name: &str, entry: &Value) -> Option<Guard> {
         "next_step",
         "fail_closed",
     ];
-    if fields
-        .iter()
-        .any(|(key, _)| !FIELDS.contains(&key.as_str()))
-    {
-        return None;
-    }
     let text = |key: &str| match member(entry, key) {
         Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
         _ => None,
@@ -353,18 +355,34 @@ fn guard(name: &str, entry: &Value) -> Option<Guard> {
     let Some(Value::Bool(fail_closed)) = member(entry, "fail_closed") else {
         return None;
     };
-    text("scope")?;
     if !["watch", "warn", "block"].contains(&text("mode")?.as_str()) {
         return None;
     }
-    let pattern = text("match").filter(|m| matcher::known(m))?;
+    let pattern = text("match").filter(|m| matcher::known(m));
+    let whole = pattern.is_some()
+        && ["scope", "reason", "next_step"]
+            .iter()
+            .all(|key| text(key).is_some())
+        && fields.iter().all(|(key, _)| FIELDS.contains(&key.as_str()));
     Some(Guard {
         name: name.to_string(),
-        pattern,
+        pattern: pattern.unwrap_or_default(),
         fail_closed: *fail_closed,
-        reason: text("reason")?,
-        next_step: text("next_step")?,
+        reason: text("reason").unwrap_or_default(),
+        next_step: text("next_step").unwrap_or_default(),
+        unread: (!whole).then(|| format!("This deep-hook is older than the entry {name} in ~/.deepbuild/rules.json and can't read it whole, so it counts every call as one the entry may hold.")),
     })
+}
+
+/// The entries a call meets: those whose `match` reads it, and each one this deep-hook can't read whole (#2219).
+fn met<'a>(guards: &'a [Guard], called: Option<&matcher::Call>) -> Vec<(&'a Guard, matcher::Hit)> {
+    guards
+        .iter()
+        .filter_map(|g| match g.unread.clone() {
+            Some(why) => Some((g, matcher::Hit { detail: Some(why) })),
+            None => called?.matches(&g.pattern).map(|hit| (g, hit)),
+        })
+        .collect()
 }
 
 /// The tools whose calls deep-hook reads itself; the planted wrong program for #304's AC5 counts only these.
@@ -460,7 +478,7 @@ fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> 
         (&paths, &args, names),
         cwd.as_deref(),
         &home,
-        &address(),
+        &hub_address(),
     );
     call.counts = counts;
     Some(call)
@@ -542,7 +560,8 @@ fn check() -> ExitCode {
     let Ok(value) = parse(&input) else {
         return refuse("stdin isn't JSON");
     };
-    let Some(entry) = member(&value, "entry").and_then(|e| guard("entry", e)) else {
+    let entry = member(&value, "entry").and_then(|e| guard("entry", e));
+    let Some(entry) = entry.filter(|g| g.unread.is_none()) else {
         return refuse("entry isn't a guard@1 entry whose match deep-hook reads");
     };
     let classes = match classes(member(&value, "classes")) {
@@ -559,17 +578,13 @@ fn check() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// Whether a standing rule the hub copied covers the cloud resource this call creates (#23).
-fn covered(parsed: Option<&Value>, rules: &Rules) -> bool {
-    match parsed
-        .and_then(|p| member(p, "tool_input"))
-        .and_then(|i| member(i, "command"))
-    {
-        Some(Value::String(c)) => {
-            cloud_owner(c).is_some_and(|owner| rules.standing.contains(&owner))
-        }
-        _ => false,
-    }
+/// Whether a standing rule the hub copied covers the cloud resource this call creates (#23): the owner is read from
+/// the one run that creates it, when the reader can know its profile; a call with more than one such run is covered by
+/// none (#2134).
+fn covered(called: Option<&matcher::Call>, rules: &Rules) -> bool {
+    called
+        .and_then(matcher::Call::aws_profile)
+        .is_some_and(|profile| rules.standing.contains(&cloud_owner(&profile)))
 }
 
 /// What each fail_closed entry a call matched says, denying it with the hub away.
@@ -650,7 +665,7 @@ fn matching() -> ExitCode {
         let Ok(input) = input else { break };
         let parsed = parse(&input).ok();
         if let Some(Value::String(cwd)) = parsed.as_ref().and_then(|p| member(p, "cwd")) {
-            let _ = CWD.set(PathBuf::from(cwd));
+            set_cwd(PathBuf::from(cwd));
         }
         let reply = match rules() {
             _ if parsed.is_none() => "{\"unread\":true,\"matched\":[],\"denials\":[]}".to_string(),
@@ -662,20 +677,13 @@ fn matching() -> ExitCode {
             ),
             Ok(rules) => {
                 let called = parsed.as_ref().and_then(|p| call(p, &rules.classes));
-                let matched: Vec<(&Guard, matcher::Hit)> = match &called {
-                    Some(call) => rules
-                        .guards
-                        .iter()
-                        .filter_map(|g| call.matches(&g.pattern).map(|hit| (g, hit)))
-                        .collect(),
-                    None => Vec::new(),
-                };
+                let matched = met(&rules.guards, called.as_ref());
                 let names = matched
                     .iter()
                     .map(|(g, _)| quoted(&g.name))
                     .collect::<Vec<_>>()
                     .join(",");
-                let denied = denials(&matched, covered(parsed.as_ref(), &rules))
+                let denied = denials(&matched, covered(called.as_ref(), &rules))
                     .iter()
                     .map(|d| quoted(d))
                     .collect::<Vec<_>>()
@@ -794,7 +802,7 @@ fn exchange(
             Some(stream) => stream,
             None => return (None, late, String::new()),
         },
-        None => match UnixStream::connect(address()) {
+        None => match UnixStream::connect(hub_address()) {
             Ok(stream) => {
                 REACHED.store(true, Ordering::SeqCst);
                 remote::Stream::Unix(stream)
@@ -814,7 +822,7 @@ fn exchange(
     // A hub older than one this machine has seen of it is a copy left behind: nothing goes to it (#1338).
     let hub = match member(&hello_value, "hub") {
         Some(Value::String(id)) => id.clone(),
-        _ => format!("unix:{}", address().display()),
+        _ => format!("unix:{}", hub_address().display()),
     };
     if let Some(why) =
         remote::refused_generation(&home(), &hub, integer(member(&hello_value, "generation")))
@@ -1047,6 +1055,60 @@ fn sleep_until(start: Instant, after: Duration) {
     }
 }
 
+/// Why a call whose lone halves deep-hook read as U+FFFD can't be matched as read, or None when it can. An MCP
+/// server is sent the escapes as they came, and its reader may make other text of them than U+FFFD (Python's
+/// surrogateescape turns them back into the bytes of any path), so such a call is one deep-hook can't read. The
+/// agent's own tools run in Node, which writes each lone half as U+FFFD, as deep-hook reads it.
+fn foreign_halves(halves: bool, read: &Result<Value, String>) -> Option<String> {
+    let tool = read.as_ref().ok().and_then(|p| member(p, "tool_name"));
+    (halves && matches!(tool, Some(Value::String(name)) if name.starts_with("mcp__")))
+        .then(|| "holds a lone surrogate escape in an MCP tool's call, which its server may read as other text".to_string())
+}
+
+/// What a payload that ends before its JSON is whole is, in its denial.
+const CUT: &str = "is cut short: it ends before its JSON is whole";
+
+/// Why a hook payload deep-hook can't read can't be read, in its denial's words (#2042), or None for one it can:
+/// `utf8` is Ok when its bytes were UTF-8, else whether they stop inside a character; `text` is what they read as, and `read` is the reader's verdict on it.
+fn unreadable(utf8: Result<(), bool>, text: &str, read: &Result<Value, String>) -> Option<String> {
+    match utf8 {
+        Err(true) => return Some(CUT.to_string()),
+        Err(false) => return Some("isn't UTF-8 text".to_string()),
+        Ok(()) => {}
+    }
+    let error = match read {
+        Ok(Value::Object(_)) => return None,
+        Ok(_) => return Some("is JSON but not an object".to_string()),
+        Err(error) => error,
+    };
+    if text.trim().is_empty() {
+        return Some("is empty".to_string());
+    }
+    if error.contains("nesting too deep") {
+        return Some("is nested past the 256 arrays or objects deep-hook reads".to_string());
+    }
+    if error.contains("no finite double") {
+        return Some("holds a number with no value (past what a double holds)".to_string());
+    }
+    // Cut short: the reader stopped where the text ends, or in a word, an escape's hex or a number the end cut.
+    let at = error
+        .rsplit_once("at byte ")
+        .and_then(|(_, at)| at.parse::<usize>().ok())
+        .unwrap_or(0);
+    let rest = text.get(at..).unwrap_or_default().trim_end();
+    let cut = rest.is_empty()
+        || ["true", "false", "null"]
+            .iter()
+            .any(|word| rest.len() < word.len() && word.starts_with(rest))
+        || (rest.len() < 4
+            && text.get(..at).is_some_and(|before| before.ends_with("\\u"))
+            && rest.bytes().all(|b| b.is_ascii_hexdigit()));
+    if cut {
+        return Some(CUT.to_string());
+    }
+    Some(format!("is {error}"))
+}
+
 /// Marks a request line late: a call let through because the hub was late is spooled so.
 fn mark_late(request: &mut String) {
     request.truncate(request.len() - 2);
@@ -1112,7 +1174,8 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     }
     READ_RULES.store(true, Ordering::SeqCst);
     // The call is one JSON object: read up to its end, or stdin's. An agent the machine gives no time may close stdin
-    // well after it wrote the call. Not UTF-8, it reads as nothing, as read_to_string leaves it.
+    // well after it wrote the call. Not UTF-8, it reads as nothing, as read_to_string leaves it. A lone surrogate
+    // escape reads as U+FFFD (#2042): a JavaScript JSON writer emits one for a string that holds half a pair.
     let mut bytes = Vec::new();
     let mut chunk = [0u8; 8192];
     loop {
@@ -1122,7 +1185,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
                 bytes.extend_from_slice(&chunk[..n]);
                 let whole = bytes.trim_ascii_end().ends_with(b"}")
                     && std::str::from_utf8(&bytes)
-                        .is_ok_and(|text| matches!(parse(text.trim()), Ok(Value::Object(_))));
+                        .is_ok_and(|text| matches!(parse_lossy(text.trim()), Ok(Value::Object(_))));
                 if whole {
                     break;
                 }
@@ -1131,13 +1194,41 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             Err(_) => break,
         }
     }
-    let mut input = String::from_utf8(bytes).unwrap_or_default();
-    let parsed = parse(&input).ok();
-    if let Some(Value::String(cwd)) = parsed.as_ref().and_then(|p| member(p, "cwd")) {
-        let _ = CWD.set(PathBuf::from(cwd));
+    let text = String::from_utf8(bytes);
+    // Bytes that stop inside a character are cut short, not some other text.
+    let utf8 = match &text {
+        Ok(_) => Ok(()),
+        Err(error) => Err(error.utf8_error().error_len().is_none()),
+    };
+    let mut input = text.unwrap_or_default();
+    // Strictly first: the hub reads only JSON both languages read alike, which a lone surrogate isn't (#2042).
+    let strict = parse(&input);
+    let halves = strict.is_err();
+    let read = strict.or_else(|_| parse_lossy(&input));
+    // A payload deep-hook can't read holds no call it can match, so with a fail_closed entry installed it is denied
+    // (#2042): the denial is deep-hook's own, with the hub away and with it answering. It still goes on as it came.
+    let held = rules
+        .as_ref()
+        .is_ok_and(|r| r.guards.iter().any(|g| g.fail_closed))
+        .then(|| unreadable(utf8, &input, &read).or_else(|| foreign_halves(halves, &read)))
+        .flatten()
+        .map(|why| format!("DeepBuild blocked this: the {event} payload deep-hook was given {why}, so it can't read the call and check it against the guards that hold it. Retry it; if this comes again, the agent wrote a call deep-hook can't read."));
+    if let Some(held) = &held {
+        let _ = DENIAL.set(held.clone());
     }
+    let parsed = read.ok();
+    // Read with its lone halves as U+FFFD, the call goes on as deep-hook read it, so the hub matches the same call.
+    let relaid = parsed.as_ref().filter(|_| halves).map(deep_contracts::jcs);
+    if let Some(Value::String(cwd)) = parsed.as_ref().and_then(|p| member(p, "cwd")) {
+        set_cwd(PathBuf::from(cwd));
+    }
+    ONE_HOOK.store(true, Ordering::SeqCst);
     // A clone of a project this machine joined reaches that project's hub, and the watchdog waits the route's time.
-    let joined = REMOTE.get_or_init(|| CWD.get().and_then(|cwd| remote::joined(&home(), cwd)));
+    let joined = REMOTE.get_or_init(|| {
+        current_cwd()
+            .as_deref()
+            .and_then(|cwd| remote::joined(&home(), cwd))
+    });
     if joined.is_some() {
         WATCH_MS.store(
             (remote::FAIL_OPEN - Duration::from_millis(2)).as_millis() as u64,
@@ -1145,7 +1236,9 @@ fn forward(agent: &str, event: &str) -> ExitCode {
         );
     }
     // The agent's hook JSON goes as it came: a raw newline in valid JSON is only whitespace, so it becomes a space.
-    let payload = if parsed.is_some() {
+    let payload = if let Some(relaid) = relaid {
+        relaid
+    } else if parsed.is_some() {
         // In the text's own buffer, which nothing reads again: a tool's output can pass 1 MiB, and a
         // second copy of it counts against the hook's memory. A space for a newline keeps it UTF-8.
         let mut bytes = std::mem::take(&mut input).into_bytes();
@@ -1167,17 +1260,10 @@ fn forward(agent: &str, event: &str) -> ExitCode {
         .as_ref()
         .filter(|_| ruling)
         .and_then(|p| call(p, &rules.classes));
-    let matched: Vec<(&Guard, matcher::Hit)> = match &called {
-        Some(call) => rules
-            .guards
-            .iter()
-            .filter_map(|g| call.matches(&g.pattern).map(|hit| (g, hit)))
-            .collect(),
-        None => Vec::new(),
-    };
+    let matched = met(&rules.guards, called.as_ref());
     // A cloud resource a standing rule the hub copied covers is let through, and spooled like any call (#23).
     // With the hub away, each fail_closed entry the call matched still denies it, each in its own words.
-    let denied = denials(&matched, covered(parsed.as_ref(), &rules));
+    let denied = denials(&matched, covered(called.as_ref(), &rules));
     if !denied.is_empty() {
         let _ = DENIAL.set(denied.join("\n"));
     }
@@ -1278,6 +1364,10 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             decide();
             if let Some(why) = unread {
                 eprintln!("DeepBuild blocked this: ~/.deepbuild/rules.json {why}, so deep-hook matched this call against no guard. Retry it; if this comes again, fix that file.");
+                return ExitCode::from(2);
+            }
+            if let Some(held) = held {
+                eprintln!("{held}");
                 return ExitCode::from(2);
             }
             print!("{stdout}");
@@ -1809,132 +1899,6 @@ fn waiter() -> ExitCode {
             }
             Waited::Done => return ExitCode::SUCCESS,
             Waited::Away => std::thread::sleep(WAITER_LOOK),
-        }
-    }
-}
-
-#[cfg(target_os = "macos")]
-extern "C" {
-    fn clonefile(src: *const std::ffi::c_char, dst: *const std::ffi::c_char, flags: u32) -> i32;
-}
-
-#[cfg(target_os = "linux")]
-extern "C" {
-    fn ioctl(fd: std::ffi::c_int, request: std::ffi::c_ulong, ...) -> std::ffi::c_int;
-}
-
-/// One copy-on-write clone of `from` at `to`, which must not exist: a folder whole, a link as a link (APFS's
-/// clonefile(2); on Linux each file a reflink, FICLONE, as btrfs and XFS make; elsewhere staging isn't built yet).
-/// Unsupported, leaving nothing at `to`, where the file system can't make one.
-fn clone_one(from: &Path, to: &Path) -> io::Result<()> {
-    #[cfg(target_os = "linux")]
-    {
-        use std::os::unix::io::AsRawFd;
-        const FICLONE: std::ffi::c_ulong = 0x4004_9409;
-        let meta = fs::symlink_metadata(from)?;
-        let kind = meta.file_type();
-        if kind.is_symlink() {
-            return std::os::unix::fs::symlink(fs::read_link(from)?, to);
-        }
-        if kind.is_dir() {
-            fs::create_dir(to)?;
-            let made = (|| {
-                for entry in fs::read_dir(from)? {
-                    let entry = entry?;
-                    clone_one(&entry.path(), &to.join(entry.file_name()))?;
-                }
-                fs::set_permissions(to, meta.permissions())
-            })();
-            if made.is_err() {
-                let _ = fs::remove_dir_all(to);
-            }
-            return made;
-        }
-        if !kind.is_file() {
-            // A FIFO, socket or device has no copy-on-write copy.
-            return Err(io::Error::from(ErrorKind::Unsupported));
-        }
-        let source = fs::File::open(from)?;
-        let copy = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(to)?;
-        // SAFETY: two open descriptors that live through the call.
-        if unsafe { ioctl(copy.as_raw_fd(), FICLONE, source.as_raw_fd()) } != 0 {
-            let e = io::Error::last_os_error();
-            drop(copy);
-            let _ = fs::remove_file(to);
-            // EOPNOTSUPP, EINVAL or EXDEV: no reflink on this file system, or not between these two.
-            return Err(if matches!(e.raw_os_error(), Some(95 | 22 | 18)) {
-                io::Error::from(ErrorKind::Unsupported)
-            } else {
-                e
-            });
-        }
-        copy.set_permissions(meta.permissions())?;
-        copy.set_modified(meta.modified()?)?;
-        Ok(())
-    }
-    #[cfg(target_os = "macos")]
-    {
-        use std::os::unix::ffi::OsStrExt;
-        let c = |p: &Path| {
-            std::ffi::CString::new(p.as_os_str().as_bytes())
-                .map_err(|e| io::Error::new(ErrorKind::InvalidInput, e))
-        };
-        const CLONE_NOFOLLOW: u32 = 1;
-        // SAFETY: both are NUL-terminated paths that live through the call.
-        if unsafe { clonefile(c(from)?.as_ptr(), c(to)?.as_ptr(), CLONE_NOFOLLOW) } == 0 {
-            return Ok(());
-        }
-        Err(io::Error::last_os_error())
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    {
-        let _ = (from, to);
-        Err(io::Error::from(ErrorKind::Unsupported))
-    }
-}
-
-/// `deep-hook clone <from> <to>`: `from` cloned copy-on-write at `to` (#347). Into a folder that is there, each entry
-/// is cloned over the one of its name and nothing else there is touched, so a staged folder puts back what a run
-/// deleted. Exit 0 cloned, 3 when this file system can't make a copy-on-write copy there, 1 another failure.
-fn clone(from: &Path, to: &Path) -> ExitCode {
-    fn over(from: &Path, to: &Path) -> io::Result<()> {
-        let there = match fs::symlink_metadata(to) {
-            Err(e) if e.kind() == ErrorKind::NotFound => return clone_one(from, to),
-            other => other?,
-        };
-        if there.is_dir() && fs::symlink_metadata(from)?.is_dir() {
-            for entry in fs::read_dir(from)? {
-                let entry = entry?;
-                over(&entry.path(), &to.join(entry.file_name()))?;
-            }
-            return Ok(());
-        }
-        if there.is_dir() {
-            fs::remove_dir_all(to)?;
-        } else {
-            fs::remove_file(to)?;
-        }
-        clone_one(from, to)
-    }
-    match over(from, to) {
-        Ok(()) => ExitCode::SUCCESS,
-        // ENOTSUP and EXDEV: no copy-on-write on this volume, or not between these two.
-        Err(e)
-            if e.kind() == ErrorKind::Unsupported || matches!(e.raw_os_error(), Some(18 | 45)) =>
-        {
-            eprintln!("deep-hook clone: this file system can't make a copy-on-write copy of {} at {}: {e}", from.display(), to.display());
-            ExitCode::from(3)
-        }
-        Err(e) => {
-            eprintln!(
-                "deep-hook clone: {} at {}: {e}",
-                from.display(),
-                to.display()
-            );
-            ExitCode::from(1)
         }
     }
 }

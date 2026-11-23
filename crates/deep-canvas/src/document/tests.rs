@@ -99,12 +99,13 @@ fn the_incremental_recheck_gives_the_full_checks_issues() {
             continue;
         };
         let changed = patched.changed(&doc);
+        let lent = doc.to_string();
         let incremental =
-            recheck(&doc, &issues, &changed, &crate::registry::core()).expect("items only");
+            recheck(&mut doc, &issues, &changed, &crate::registry::core()).expect("items only");
         let full = check(&doc).issues;
         assert_eq!(key(&incremental), key(&full), "patch {n}: {op}");
         let indexed = recheck_with(
-            &doc,
+            &mut doc,
             &issues,
             &changed,
             &crate::registry::core(),
@@ -117,6 +118,7 @@ fn the_incremental_recheck_gives_the_full_checks_issues() {
             key(&full),
             "patch {n}, by its referrers: {op}"
         );
+        assert_eq!(doc.to_string(), lent, "patch {n}: a recheck changed {op}");
         for (id, was) in &patched.before {
             referrers.update(id, was.as_ref(), doc["items"].get(id));
         }
@@ -440,6 +442,35 @@ fn a_control_or_a_time_remap_that_is_not_an_object_is_refused() {
         );
         assert!(!result.ok);
     }
+}
+
+/// #1217: a document offers its viewer the measure tool with `viewer_tools: {measure: bool}`;
+/// anything else there is refused, naming the field.
+#[test]
+fn viewer_tools_holds_measure_as_a_bool_and_nothing_else() {
+    let with = |tools: Value| {
+        let mut doc = base();
+        doc["viewer_tools"] = tools;
+        check(&doc)
+    };
+    let about = |r: &CheckResult| -> Vec<String> {
+        let named = r
+            .issues
+            .iter()
+            .filter(|i| i.path.starts_with("viewer_tools"));
+        named.map(|i| format!("{} {}", i.code, i.path)).collect()
+    };
+    assert!(about(&with(json!({"measure": true}))).is_empty());
+    assert!(about(&with(json!({"measure": false}))).is_empty());
+    assert_eq!(
+        about(&with(json!({"measure": 1}))),
+        ["out_of_range viewer_tools/measure"]
+    );
+    assert_eq!(
+        about(&with(json!({"ruler": true}))),
+        ["unknown_field viewer_tools/ruler"]
+    );
+    assert_eq!(about(&with(json!(true))), ["out_of_range viewer_tools"]);
 }
 
 #[test]

@@ -126,6 +126,8 @@ impl Selection {
             &mut choices,
             deep_scene3d_render::shadow_texels(scene, side),
         );
+        deep_scene3d_render::proxy::made(scene);
+        drawn_triangles(scene, &mut choices);
         lod::resolve(scene, &choices);
         (choices, policy)
     }
@@ -170,6 +172,37 @@ impl Selection {
             .collect();
         scene.light_cut = Some(policy.clone());
         policy
+    }
+}
+
+/// #2738: a choice of an item drawn from a mesh without levels counts the triangles its bands
+/// draw in the color pass, as a leveled one does: the full mesh, the proxy the renderer made (the
+/// full mesh where it made none), a box's 12. Choices are in `select`'s order.
+fn drawn_triangles(scene: &Scene, choices: &mut [Choice]) {
+    let leveled = scene
+        .layers
+        .iter()
+        .flat_map(|l| &l.solids)
+        .filter(|s| s.lod.is_some());
+    for (c, s) in choices.iter_mut().zip(leveled) {
+        let (None, Some(lod), Some(mesh)) = (c.triangles, &s.lod, &s.mesh) else {
+            continue;
+        };
+        let full = mesh.triangles() as u64;
+        c.triangles = Some(
+            c.bands
+                .iter()
+                .map(|b| match b {
+                    Show::Full => full,
+                    Show::Proxy => lod
+                        .proxy_mesh
+                        .as_ref()
+                        .map_or(full, |l| l.mesh.triangles() as u64),
+                    Show::Box => 12,
+                    _ => 0,
+                })
+                .sum(),
+        );
     }
 }
 
@@ -269,10 +302,65 @@ pub fn tiles_of(scene: &Scene, item: &str) -> Tiles {
         .collect()
 }
 
+/// What a frame's ground points read the plate's light from (#1381): the scene, the key sun's
+/// last cascade's far end along the view axis (none without its cascades), and the plants.
+pub struct Light<'a> {
+    pub scene: &'a Scene,
+    pub last_split: Option<f64>,
+    pub unbaked: bool,
+    pub by_slope: bool,
+}
+
+impl Light<'_> {
+    /// The key sun's visibility and the sky's occlusion the plate's pixels read at `p`
+    /// (tests/acceptance/1381/README.md: Assumed surfaces 3), from the same table, sun and
+    /// interpolation as scene3d.wgsl's `horizon_at`. The visibility past the last cascade is the
+    /// horizon's; nearer, the cascades' own shadow, which the CPU doesn't hold, reads null. A
+    /// plate without a table reads 1 and 1.
+    fn read(
+        &self,
+        mesh: &deep_canvas_scene3d::geom::Mesh,
+        model: &deep_canvas_scene3d::scene::Affine3,
+        p: [f64; 3],
+    ) -> (Value, f64) {
+        let table = mesh.horizon.as_deref().filter(|_| !self.unbaked);
+        let cam = &self.scene.camera;
+        let depth = (0..3)
+            .map(|k| (p[k] - cam.eye[k]) * cam.forward[k])
+            .sum::<f64>();
+        let sun = self.scene.sun.as_ref().filter(|s| s.shadow);
+        let toward = sun.map_or([0.0, 1.0, 0.0], |s| s.toward);
+        let [lit, sky] = table.map_or([1.0, 1.0], |h| {
+            deep_canvas_scene3d::horizon::reading(h, model, p, toward)
+        });
+        let lit = match self.last_split {
+            None => json!(1.0),
+            Some(far) if depth > far => json!(lit),
+            Some(_) => Value::Null,
+        };
+        let sky = match table {
+            Some(h) if self.by_slope => {
+                0.5 + 0.5
+                    * deep_canvas_scene3d::horizon::full_normal(h, mesh, model, p)
+                        .map_or(1.0, |n| n[1])
+            }
+            _ => sky,
+        };
+        (lit, sky)
+    }
+}
+
 /// The frame's `ground_points` (#2017; Assumed surfaces 2): for each (x, z) asked, the tile of
 /// `item` that holds it, the level this frame draws that tile at, and the height of the surface
-/// it draws there, from the level's own triangles as the vertex stage places them.
-pub fn ground_points(item: &str, at: &[[f64; 2]], tiles: &Tiles, choices: &[Choice]) -> Value {
+/// it draws there, from the level's own triangles as the vertex stage places them; and there the
+/// key sun's visibility and the sky's occlusion the plate reads (#1381).
+pub fn ground_points(
+    item: &str,
+    at: &[[f64; 2]],
+    tiles: &Tiles,
+    choices: &[Choice],
+    light: &Light<'_>,
+) -> Value {
     json!(at
         .iter()
         .map(|&[x, z]| {
@@ -283,20 +371,23 @@ pub fn ground_points(item: &str, at: &[[f64; 2]], tiles: &Tiles, choices: &[Choi
                     .level?;
                 let mesh = &lod.levels.get(level)?.mesh;
                 let y = deep_canvas_scene3d::terrain::drawn_height(mesh, model, x, z)?;
-                Some((*tile, level, y))
+                Some((*tile, level, y, light.read(mesh, model, [x, y, z])))
             });
             match hit {
-                Some((tile, level, y)) => {
-                    json!({"at": [x, z], "tile": tile, "level": level, "y": y})
-                }
+                Some((tile, level, y, (lit, sky))) => json!({
+                    "at": [x, z], "tile": tile, "level": level, "y": y,
+                    "sun_visibility": lit, "occlusion": sky,
+                }),
                 None => json!({"at": [x, z], "tile": null, "level": null, "y": null}),
             }
         })
         .collect::<Vec<_>>())
 }
 
-/// The frame's `light_cut` (Assumed surfaces 2).
+/// The frame's `light_cut` (Assumed surfaces 2): the key lights the policy shades and leaves
+/// out, and the fill lights the view shades, in the policy's order, each with its range (#1634).
 pub fn cut_json(scene: &Scene, policy: &Policy) -> Value {
+    let scores = light::scores(&scene.lights, &scene.camera);
     json!({
         "shaded": policy
             .shaded
@@ -304,5 +395,9 @@ pub fn cut_json(scene: &Scene, policy: &Policy) -> Value {
             .map(|&(i, w)| json!({"light": scene.lights[i].id, "weight": w}))
             .collect::<Vec<_>>(),
         "left_out": policy.left_out,
+        "fill": light::fill_order(&scene.lights, &scores)
+            .iter()
+            .map(|&(i, _)| json!({"light": scene.lights[i].id, "range": scene.lights[i].range}))
+            .collect::<Vec<_>>(),
     })
 }

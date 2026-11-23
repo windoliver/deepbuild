@@ -221,8 +221,52 @@ pub struct Estimate {
     pub gpu_mb: f64,
     /// Each item's nanoseconds of CPU and GPU together, in item order.
     pub by_item: Vec<(String, f64)>,
+    /// Each item's share by term, in item order (#1801): what `deep_query`'s `cost` ranks.
+    pub items: Vec<ItemCost>,
+    /// What no one item costs: each pass's work per pixel of the frame and its targets' bytes,
+    /// by pass, in plan order.
+    pub passes: Vec<ItemCost>,
+    /// The bytes the assets' decodes hold, in MB (Image `image@1`; Material: texture maps).
+    pub decoded_mb: f64,
+    /// Each asset the items draw whose size is known, in the order the items first name them.
+    pub assets: Vec<AssetCost>,
     /// Each frame operator's ms of CPU over the items it evaluates, by key, in plan order (#1417).
     pub by_op: Vec<(String, f64)>,
+}
+
+/// An asset's size on the device (#1801; Image `image@1`, Material: texture maps, Cost): the
+/// bytes it holds there once decoded, and the vertices it draws, read from its file by the
+/// process that holds the evidence store; the pure check never reads a file.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct AssetSize {
+    /// On the device: an image's levels, a mesh's vertex and index buffers.
+    pub bytes: f64,
+    /// What its decode holds: an image's pixels, a mesh's buffers.
+    pub decoded: f64,
+    pub vertices: f64,
+}
+
+/// The sizes of a document's assets, by SHA-256.
+pub type Sizes = BTreeMap<String, AssetSize>;
+
+/// One asset's part of the estimate (#1801): its bytes on the device, counted once however many
+/// items draw it, and those items, in item order.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct AssetCost {
+    pub sha256: String,
+    pub bytes: f64,
+    pub decoded: f64,
+    pub items: Vec<String>,
+}
+
+/// One item's part of the estimate (#1801), or the frame's own: nanoseconds of CPU and of GPU per
+/// frame, and bytes of GPU memory.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ItemCost {
+    pub id: String,
+    pub cpu_ns: f64,
+    pub gpu_ns: f64,
+    pub bytes: f64,
 }
 
 impl Estimate {
@@ -292,10 +336,14 @@ pub(crate) struct Facts<'e> {
     named: Vec<(usize, &'e str)>,
     /// Whether each item is `visible: false`, which no pass draws (#1938).
     hidden: Vec<bool>,
+    /// The vertices each item's passes draw every frame (#1801): a builder's as its module
+    /// counts them and a mesh asset's, where its operators' terms keep the item's own counts.
+    drawn: Vec<f64>,
 }
 
 fn facts<'e>(
     doc: &Value,
+    sealed: &Sealed,
     items: &Map<String, Value>,
     item_ops: &[&SealedOp],
     run: &[Entry<'e>],
@@ -306,17 +354,23 @@ fn facts<'e>(
         applies: Vec::with_capacity(run.len() * item_ops.len()),
         named: Vec::new(),
         hidden: Vec::with_capacity(run.len()),
+        drawn: Vec::with_capacity(run.len()),
     };
     for &(i, id, item) in run {
         f.hidden
             .push(item.get("visible") == Some(&Value::Bool(false)));
-        f.fulls.push(
-            item.get("kind")
-                .and_then(Value::as_str)
-                .and_then(|k| k.split('@').next())
-                .unwrap_or(""),
-        );
-        f.counts.push(counts(item));
+        let full = item
+            .get("kind")
+            .and_then(Value::as_str)
+            .and_then(|k| k.split('@').next())
+            .unwrap_or("");
+        f.fulls.push(full);
+        let c = counts(item);
+        // #1801: a kind whose module counts what it builds, such as a builder's mesh, is drawn
+        // with those vertices; its build is kept by content key, so its operators keep their terms.
+        let drawn = sealed.vertices_for(full).and_then(|v| v(doc, id, item));
+        f.drawn.push(drawn.unwrap_or(c.vertices));
+        f.counts.push(c);
         f.applies.extend(
             item_ops
                 .iter()
@@ -351,7 +405,18 @@ fn item_ids_in<'d>(v: &'d Value, items: &Map<String, Value>, out: &mut Vec<&'d s
 /// top of its terms, moving or not.
 /// GPU memory holds every item, moving or not.
 pub fn estimate(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -> Estimate {
-    estimate_by(doc, sealed, coefficients, |entries, work| {
+    estimate_sized(doc, sealed, coefficients, &Sizes::new())
+}
+
+/// [`estimate`] with the sizes of the document's assets (#1801): each asset an item draws holds
+/// its bytes of GPU memory once, and a mesh's vertices are its item's to draw.
+pub fn estimate_sized(
+    doc: &Value,
+    sealed: &Sealed,
+    coefficients: &Coefficients,
+    sizes: &Sizes,
+) -> Estimate {
+    estimate_by(doc, sealed, coefficients, sizes, |entries, work| {
         vec![work(entries)]
     })
 }
@@ -363,6 +428,7 @@ pub(crate) fn estimate_by(
     doc: &Value,
     sealed: &Sealed,
     coefficients: &Coefficients,
+    sizes: &Sizes,
     split: impl for<'e> FnOnce(
         &mut [Entry<'e>],
         &(dyn Fn(&mut [Entry<'e>]) -> Facts<'e> + Sync),
@@ -399,17 +465,55 @@ pub(crate) fn estimate_by(
         applies: Vec::with_capacity(items.len() * item_ops.len()),
         named: Vec::new(),
         hidden: Vec::with_capacity(items.len()),
+        drawn: Vec::with_capacity(items.len()),
     };
-    for part in split(&mut entries, &|run| facts(doc, items, &item_ops, run)) {
+    for part in split(&mut entries, &|run| {
+        facts(doc, sealed, items, &item_ops, run)
+    }) {
         f.fulls.extend(part.fulls);
         f.counts.extend(part.counts);
         f.applies.extend(part.applies);
         f.named.extend(part.named);
         f.hidden.extend(part.hidden);
+        f.drawn.extend(part.drawn);
     }
     let ids: Vec<&str> = items.keys().map(String::as_str).collect();
+    // #1801: the assets each item draws, sized, each held once; a mesh's vertices are its item's.
+    if !sizes.is_empty() {
+        let index: BTreeMap<&str, usize> = ids.iter().enumerate().map(|(i, id)| (*id, i)).collect();
+        for r in crate::refs::refs(doc, sealed) {
+            let crate::refs::Name::Asset(sha) = &r.name else {
+                continue;
+            };
+            let (Some(size), Some(id)) = (sizes.get(sha), r.row.strip_prefix("items/")) else {
+                continue;
+            };
+            let Some(&i) = index.get(id) else { continue };
+            match out.assets.iter_mut().find(|a| &a.sha256 == sha) {
+                Some(a) if a.items.iter().any(|x| x == id) => continue,
+                Some(a) => a.items.push(id.to_string()),
+                None => {
+                    bytes += size.bytes;
+                    out.assets.push(AssetCost {
+                        sha256: sha.clone(),
+                        bytes: size.bytes,
+                        decoded: size.decoded,
+                        items: vec![id.to_string()],
+                    });
+                }
+            }
+            f.drawn[i] += size.vertices;
+        }
+    }
     let evaluated = moving(&item_ops, &f, &ids);
     let mut by_item = vec![0.0; items.len()];
+    let mut parts: Vec<ItemCost> = ids
+        .iter()
+        .map(|id| ItemCost {
+            id: id.to_string(),
+            ..ItemCost::default()
+        })
+        .collect();
     // The next item operator's row in `f.applies`.
     let mut k = 0;
     for op in &sealed.ops {
@@ -427,11 +531,17 @@ pub(crate) fn estimate_by(
             k - 1
         });
         let mut op_ns = 0.0;
-        for (i, item) in items.values().enumerate() {
+        for (i, (id, item)) in items.iter().enumerate() {
             if row.is_some_and(|k| !f.applies[i * item_ops.len() + k]) {
                 continue;
             }
+            // A document's operator that says which items it works over costs nothing on the
+            // rest (#1634: the 2D frame builds no mark from a light).
+            if document && op.op.applies.is_some_and(|a| !a(doc, id, item)) {
+                continue;
+            }
             bytes += t.bytes_per_item;
+            parts[i].bytes += t.bytes_per_item;
             // #1938: an item `visible: false` draws nothing, and the frame's evaluation skips
             // it; a document's operator still works over it.
             if f.hidden[i] && !document {
@@ -449,6 +559,7 @@ pub(crate) fn estimate_by(
             cpu_ns += ns;
             op_ns += ns;
             by_item[i] += ns;
+            parts[i].cpu_ns += ns;
         }
         out.by_op.push((op.key.clone(), op_ns / 1e6));
     }
@@ -457,7 +568,8 @@ pub(crate) fn estimate_by(
             .shapes
             .kinds
             .iter()
-            .map(|k| format!("{}.{}", k.entry.family, k.entry.name))
+            // A core-named kind (`plate`, `material`) has no family: its full name is bare.
+            .map(|k| k.entry.full_name())
             .collect();
         // A GPU operator item (`gpu.*`, #429) runs as its own pass, never as the module's
         // shipped ones, so it doesn't charge them; nor does an item `visible: false` (#1938),
@@ -476,11 +588,19 @@ pub(crate) fn estimate_by(
             let t = coefficients.get(&pass.name);
             gpu_ns += t.ns_per_px * px;
             bytes += t.bytes_per_px * px;
+            out.passes.push(ItemCost {
+                id: pass.name.clone(),
+                cpu_ns: 0.0,
+                gpu_ns: t.ns_per_px * px,
+                bytes: t.bytes_per_px * px,
+            });
             for &i in &drawn {
-                let ns = t.ns_per_vertex * f.counts[i].vertices + t.ns_per_item;
+                let ns = t.ns_per_vertex * f.drawn[i] + t.ns_per_item;
                 gpu_ns += ns;
                 bytes += t.bytes_per_item;
                 by_item[i] += ns;
+                parts[i].gpu_ns += ns;
+                parts[i].bytes += t.bytes_per_item;
             }
         }
     }
@@ -496,12 +616,15 @@ pub(crate) fn estimate_by(
             let ns = c(item) * 1e6;
             cpu_ns += ns;
             by_item[i] += ns;
+            parts[i].cpu_ns += ns;
         }
     }
     out.cpu_ms = cpu_ns / 1e6;
     out.gpu_ms = gpu_ns / 1e6;
     out.gpu_mb = bytes / 1e6;
     out.by_item = items.keys().cloned().zip(by_item).collect();
+    out.items = parts;
+    out.decoded_mb = out.assets.iter().map(|a| a.decoded).sum::<f64>() / 1e6;
     out
 }
 
@@ -664,7 +787,7 @@ mod tests {
             json!({"kind": "rect@1", "params": {"box": [0, 0, 1, 1], "rows": 3}});
         assert!(over(&crate::document::check_in(&after, &sealed).issues));
         let changed = std::collections::BTreeSet::from(["s0".to_string()]);
-        let rechecked = crate::document::recheck(&after, &prev, &changed, &sealed);
+        let rechecked = crate::document::recheck(&mut after, &prev, &changed, &sealed);
         assert!(rechecked.is_none_or(|issues| over(&issues)));
     }
 
@@ -740,7 +863,7 @@ mod tests {
         let mut after = before.clone();
         after["items"]["s0"]["params"]["box"] = json!([0, 0, 2, 2]);
         let changed = std::collections::BTreeSet::from(["s0".to_string()]);
-        assert!(crate::document::recheck(&after, &prev, &changed, &sealed).is_some());
+        assert!(crate::document::recheck(&mut after, &prev, &changed, &sealed).is_some());
     }
 
     #[test]
@@ -788,7 +911,7 @@ mod tests {
         let mut after = before.clone();
         after["items"]["m"]["params"]["rows"] = json!(20);
         let changed = std::collections::BTreeSet::from(["m".to_string()]);
-        let rechecked = crate::document::recheck(&after, &prev, &changed, &sealed);
+        let rechecked = crate::document::recheck(&mut after, &prev, &changed, &sealed);
         assert!(
             rechecked.is_none_or(|issues| issues.iter().any(|i| i.code == "over_budget")),
             "a recheck of the patched item alone misses the other's 10 ms"
