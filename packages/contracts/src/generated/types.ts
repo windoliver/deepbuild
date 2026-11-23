@@ -5977,25 +5977,6 @@ export interface AskSuperseded {
   evidence?: Array<string>;
 }
 
-/** ask.taken_over@1 */
-export interface AskTakenOver {
-  v: 1;
-  id: string;
-  kind: "ask.taken_over";
-  subject: string;
-  writer: "core";
-  actor: string;
-  scope: string;
-  ts: number;
-  seq?: bigint;
-  log_pos?: number;
-  data: {
-    device: string;
-    revision: number;
-  };
-  evidence?: Array<string>;
-}
-
 /** attempt.started@1 */
 export interface AttemptStarted {
   v: 1;
@@ -6335,6 +6316,25 @@ export interface CapabilityRefused {
     broke: "grant" | "quota" | "schema";
     clause: string;
     digest: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** card.taken_over@1 */
+export interface CardTakenOver {
+  v: 1;
+  id: string;
+  kind: "card.taken_over";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    device: string;
+    revision: number;
   };
   evidence?: Array<string>;
 }
