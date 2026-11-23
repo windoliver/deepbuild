@@ -1,0 +1,80 @@
+# #3137 acceptance tests on the base, c52dc3e73
+
+One run of each file, on a Mac17,10 (18 cores) shared by many sessions, through the machine's throttle:
+
+  node scripts/throttle.mjs test --wait 30 -- scripts/lease node --test <file>
+
+Neither test reads this machine's load or model: the budget test's reference Mac and load are data in its fixture, and
+the unit-lane test runs in a sandboxed HOME with its own throttle table. Stack frames below are cut to the first line
+that names this folder's file. The budget run's output went through `tail -150`, which cut its summary lines; all
+seven of its tests are listed below as failing.
+
+## budget.test.mjs (AC2, #3137.3f5777c3): 7 tests, 7 fail          (load 17.9 at the end, 2026-11-23 00:27)
+
+Every one fails at its assertion, on the base's blanket refusal of a second preflight move,
+"Budget preflight changed or disappeared; restore its frozen definition", approved or not:
+
+✖ #3137.3f5777c3 a commit that moves the preflight budget, approved by the maintainer's signed tag naming that move and recording the measured full run it moves for, passes validateBudgets with the approvals' items (270.232083ms)
+  AssertionError [ERR_ASSERTION]: validateBudgets refused the approved move of preflight's elapsedMs from 900000 to 1500000, recording {"date":"2026-11-22","machine":"Mac15,12","load":3.4,"elapsedMs":1320017}: Budget preflight changed or disappeared; restore its frozen definition
+      at TestContext.<anonymous> (tests/acceptance/3137/budget.test.mjs:107:10)
+
+✖ #3137.3f5777c3 the same move with no approval is refused, naming the item that would approve it, and so is one tagged by a key the approvers list doesn't hold (0.515792ms)
+  AssertionError [ERR_ASSERTION]: the refusal of the unapproved move doesn't name the item that would approve it, benchmarks/budgets.json › preflight › elapsedMs 900000 → 1500000: Budget preflight changed or disappeared; restore its frozen definition
+      at TestContext.<anonymous> (tests/acceptance/3137/budget.test.mjs:113:10)
+
+✖ #3137.3f5777c3 an approval naming another move doesn't approve this one: items for another number, another limit, the reverse move or a task's budget leave it refused, naming its own item (0.464292ms)
+  AssertionError [ERR_ASSERTION]: the refusal doesn't name the item that would approve the move, benchmarks/budgets.json › preflight › elapsedMs 900000 → 1500000: Budget preflight changed or disappeared; restore its frozen definition
+      at TestContext.<anonymous> (tests/acceptance/3137/budget.test.mjs:135:10)
+
+✖ #3137.3f5777c3 an approved move that records no measured run, or one missing its day, machine, load or elapsed time, is refused, where the same move recording its run is accepted (0.530833ms)
+  AssertionError [ERR_ASSERTION]: the approved move recording its measured run was refused: Budget preflight changed or disappeared; restore its frozen definition
+      at TestContext.<anonymous> (tests/acceptance/3137/budget.test.mjs:140:10)
+
+✖ #3137.3f5777c3 an approved move whose measured run isn't on a reference Mac is refused, where the same run on Mac15,12 is accepted (0.546542ms)
+  AssertionError [ERR_ASSERTION]: the approved move measured on Mac15,12 was refused: Budget preflight changed or disappeared; restore its frozen definition
+      at TestContext.<anonymous> (tests/acceptance/3137/budget.test.mjs:150:10)
+
+✖ #3137.3f5777c3 an approved move whose measured run's one-minute load isn't below that Mac's cores is refused, at its core count and above it, though under another reference Mac's (0.251667ms)
+  AssertionError [ERR_ASSERTION]: the approved move measured at load 3.4 on Mac15,12 (8 cores) was refused: Budget preflight changed or disappeared; restore its frozen definition
+      at TestContext.<anonymous> (tests/acceptance/3137/budget.test.mjs:160:10)
+
+✖ #3137.3f5777c3 once a move recorded its run, the next approved move records a run of its own: the same run again, or the earlier reason kept, is refused (0.464541ms)
+  AssertionError [ERR_ASSERTION]: an approved further move recording a new run was refused: Budget preflight changed or disappeared; restore its frozen definition
+      at TestContext.<anonymous> (tests/acceptance/3137/budget.test.mjs:173:10)
+
+## unit-lane.test.mjs (AC1's decision, #3137.b240111e): 1 test, 1 fail      (95 s; load 23.8 at the end, 00:29)
+
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+
+✖ #3137.b240111e the preflight's unit lane runs its alone block in shards, two folders at once on one jobserver, then the exclusive folder, then the timed file under a timed grant, with the slow file, and its record holds each test's state (94825.124375ms)
+  AssertionError [ERR_ASSERTION]: the two alone folders ran one after the other, not side by side
+      at TestContext.<anonymous> (tests/acceptance/3137/unit-lane.test.mjs:134:10)
+
+The base's unit lane runs its alone command as one vitest run in the worktree, one file at a time (the message's run
+output, with the lease's echo of the 1,101-word command cut):
+
+   RUN  v5.0.5 /private/var/folders/…/T/deep-3137-lane-mYkN95/tree
+   ✓ tests/acceptance/149/t3137-b.test.ts (1 test) 91157ms
+   ✓ tests/acceptance/1633/t3137-a.test.ts (1 test) 1078ms
+   ❯ tests/acceptance/1633/t3137-fails.test.ts (1 test | 1 failed) 44ms
+   ✓ tests/acceptance/16/t3137-x.test.ts (1 test) 372ms
+   ✓ tests/acceptance/1018/budgets.test.ts (1 test) 41ms
+   ✓ tests/acceptance/1633/reopened.test.ts (1 test) 44ms
+   Test Files  1 failed | 5 passed (6)
+  FAIL unit: tests/acceptance/1633/t3137-fails.test.ts › fails: the planted failure: expected 1 to be 2 // Object.is equality
+
+and the probes' notes (t in ms from b's start; every cwd the scratch repository's worktree, every grant the lane's
+build grant build:1a63dca06bbb474b, no jobserver):
+
+  b      start      0   end  91090   (waited its full 90 s for a, which hadn't started)
+  a      start  91238   end  92240
+  fails  start  92387   end  92387
+  x      start  92503   end  92805
+  timed  start  92943   end  92943   (under the build grant, not a timed one)
+  slow   start  93051   end  93051
+
+So the base fails at the first assertion of the decision's behavior: no two alone folders ran at once, none ran in a
+shard, and the timed file ran before the slow one under no timed grant. The record assertions after it are never
+reached; on the base the lane did read FAIL on the planted test (its last line above).
