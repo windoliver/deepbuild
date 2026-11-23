@@ -1,0 +1,89 @@
+Base commit: c52dc3e73 ("Merge pull request #3153 ...", main on Nov 22), branch blind-2086-suite.
+Machine: macOS 27.2 on Apple silicon (Mac17,10, 18 cores), the shared Mac this job ran on, one-minute load 100 to 450.
+Rust: rustup (Homebrew, /opt/homebrew/opt/rustup/bin, not on PATH; the tests put it first), the checkout's pin 1.99.1
+      with clippy. Every child ran with RUSTUP_AUTO_INSTALL=0 and rustup's servers at a closed local port; nothing was
+      installed or downloaded.
+IDs: the first 8 hex digits of SHA-256 of each criterion line of the issue body, "- [ ] " dropped, trimmed, whitespace
+     collapsed: 248ca2cc, a865933b, as briefed.
+Setup: node_modules linked to the main checkout's; target/debug cloned (APFS) from a warmed checkout before the first
+       build. scripts/lease ran every command unleased here ("no deep on PATH and no built CLI at packages/cli/dist").
+Type-check: node node_modules/typescript/bin/tsc -p tests/acceptance/2086-redraft-2047/tsconfig.json exits 0.
+
+== A probe before the tests were written (not the suite): the issue's command with --keep-going at the base
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH RUSTUP_AUTO_INSTALL=0 CARGO_BUILD_JOBS=6 sh scripts/lease nice -n 10 \
+    cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
+  exit 101 after about 7 min (23:39 to 23:46 Nov 22). Four findings, in three libraries:
+    error: the `Err`-variant returned from this function is very large   --> crates/deep-canvas-sandbox/src/link.rs:331:34
+    error: very complex type used. Consider factoring parts into `type` definitions
+                                                                          --> crates/deep-canvas-sandbox/src/link.rs:331:34
+    error: the `Err`-variant returned from this closure is very large    --> crates/deep-relay/src/relay.rs:179:17
+    error: using `chunks_exact_mut` with a constant chunk size           --> crates/deep-canvas-marks/src/light.rs:226:29
+    error: could not compile `deep-canvas-sandbox` (lib) due to 2 previous errors   (and `deep-relay` (lib), 1;
+           `deep-canvas-marks` (lib), 1; the same three again as (lib test))
+  With those three libraries failing, cargo linted none of the crates behind them, --keep-going or not: deep-show,
+  deep-app, deep-player, deep-canvas-motion, deep-canvas-scene3d and the rest never appear. deep-canvas (OpError's crate)
+  was linted and is clean. Vendored warnings, which don't fail the command: vendor/quickjs-jit-runtime 3 (the issue's
+  three), vendor/mitex-spec 2.
+
+== The suite, once, at the base (00:09 Nov 23 end; 1186 s in all)
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH RUSTUP_AUTO_INSTALL=0 CARGO_BUILD_JOBS=6 NO_COLOR=1 sh scripts/lease nice -n 10 \
+    node node_modules/vitest/vitest.mjs run --no-file-parallelism --testTimeout=600000 --hookTimeout=600000 \
+    tests/acceptance/2086-redraft-2047/
+  Test Files  1 failed | 1 passed (2); Tests  1 failed | 1 passed (2); Duration 1185.68 s; load 307 at the start, 270
+  at the end.
+
+  AC1 #2086.248ca2cc FAILS at its every-finding-left assertion (34 s, warm after the probe):
+    AssertionError: clippy exited 101, and every finding left is one scripts/known-failures.json lists under lint, as
+    many times as found (4 found):
+      clippy: crates/deep-relay/src/relay.rs the `Err`-variant returned from this closure is very large (found 1, listed 0)
+      clippy: crates/deep-canvas-sandbox/src/link.rs the `Err`-variant returned from this function is very large (found 1, listed 0)
+      clippy: crates/deep-canvas-sandbox/src/link.rs very complex type used. Consider factoring parts into `type` definitions (found 1, listed 0)
+      clippy: crates/deep-canvas-marks/src/light.rs using `chunks_exact_mut` with a constant chunk size (found 1, listed 0)
+    (ac1-workspace-clippy.test.ts, the `none` of unlisted findings). The guards before it held at the base: the lint
+    lane's clippy step is the issue's command, and nothing switches a lint off for the workspace.
+    After this run the file's cargo helper also reads the lease's own BLOCKED or INCONCLUSIVE line as INCONCLUSIVE (it
+    decides nothing else); AC1 was rerun alone with -t "AC1" on the final file at 00:09: the same failure, the same four
+    findings, at line 126, in 17 s.
+
+  AC2 #2086.a865933b PASSES at the base (about 19 min: deep-show's build, then #1732's 9 tests). The base already
+    holds what #2086 first changed (OpError's found value boxed, `OpError::with`, the issue's `actual` from
+    `e.actual.as_deref().cloned()`), and #1732's suite, byte for byte the base's, passes 9 of 9 on it. AC2 is a guard of
+    behavior that must not change: it fails on a wrong program that loses what the operator found (found-dropped,
+    below) and on any edit to the suite.
+
+== The twins (laid over a scratch copy of the base: git archive c52dc3e73, this folder copied in, node_modules linked,
+   no .git, its own target/; never committed)
+
+  limit-raised (AC1), 5 s: fails at the switched-off assertion (line 113), before any build:
+    AssertionError: nothing in the checkout switches a lint off for the workspace:
+      clippy.toml: clippy reads it for crates/deep-contracts, a clippy configuration for the workspace the base has none
+      of (a raised limit or an allowance there switches a lint off)
+
+  err-past-limit (AC1), 498 s with a cold target/ for the copy's crates: fails at the every-finding-left assertion
+    (line 126) with 5 unlisted findings: the base's four and
+      clippy: crates/deep-canvas/examples/op_error_unboxed.rs the `Err`-variant returned from this function is very large (found 1, listed 0)
+    So cargo found the example and clippy fired result_large_err on the unboxed error, as the issue's 123 did.
+
+  A stand-in, to show the twin fails for its own finding: the copy's scripts/known-failures.json with the base's four
+  findings listed under lint (count 1 each). On the stand-in alone AC1 fails later, at the no-library-fails assertion
+  (line 128, 25 s): "deep-relay (lib)", "deep-canvas-sandbox (lib)", "deep-canvas-marks (lib)". With err-past-limit laid
+  over the stand-in it fails at the every-finding-left assertion (line 126, 23 s) with one unlisted finding, the
+  example's. The copy's known-failures.json was put back to the base's after.
+
+  found-dropped (AC2), 772 s (deep-show built cold in the copy, then the suite): fails at the pass assertion (line 102).
+    #1732's suite reported its 9 tests in its 5 files; 8 passed, and its six-chairs refusal test failed:
+      ac3-six-chairs.test.ts: ... the revision is refused with arrange_unsatisfied, naming a chair's next_to table
+      relation ... is failed: AssertionError: the refusal's missed relations is an array, got undefined
+    The refusal still came, without what the operator found: the twin's one changed line is the scheduler's
+    `actual: None` where the base has `actual: e.actual.as_deref().cloned()`.
+
+  A control for AC2's unchanged assertion: a blank line added to the copy's tests/acceptance/1732/helpers.ts fails AC2
+    at its first assertion (line 67) in 1 s, before anything builds:
+      tests/acceptance/1732/helpers.ts is 4566e107..., not the base's f5818c8a...
+    The file was put back after.
+
+  Not run: either test on a program where AC1 passes (none exists here: clearing the base's three libraries lets cargo
+  lint the crates behind them, whose findings no one has seen), so AC1's lane-reading half and its pass path were run
+  only as code, not to a pass; and the proof lanes themselves (scripts/proof.mjs).
