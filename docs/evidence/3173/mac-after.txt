@@ -1,22 +1,4 @@
-# 61aa8eb06 + regenerated full.json, Mac18,1, cargo test -p deep-show --bin deep-show --locked
-    --> vendor/quickjs-jit-runtime/src/compiler/optimized.rs:8795:5
-     |
-     |     ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_diagnostic_key`
-     |
-     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
-    --> vendor/quickjs-jit-runtime/src/lib.rs:1387:4
-     |
-     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-     |
-     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
-    --> vendor/quickjs-jit-runtime/src/compiler/baseline.rs:1985:5
-     |
-     |            --------------- field in this struct
-     |     ^^^^^^^^^^^^^^^^^^^
-     |
-     = note: `RelocatableCode` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 2m 20s
-     Running unittests src/main.rs (target/debug/deps/deep_show-3b99cb4db2bd8d00)
+# 61aa8eb06 + regenerated full.json, Mac18,1, cargo test -p deep-show --bin deep-show --locked (trimmed: test lines, panic messages, results)
 running 58 tests
 test clip::write::tests::sixty_a_second_gives_thirty_with_delays_of_three_three_four ... ok
 test clip::write::tests::the_planted_every_frame_clip_has_delays_under_two ... ok
@@ -79,6 +61,9 @@ test kit::goldens::tests::a_store_read_during_a_save_is_whole has been running f
 test kit::goldens::tests::a_store_read_during_a_save_is_whole ... ok
 failures:
 thread 'kinds::tests::every_structured_field_prints_forms_that_take_its_own_values' (121695702) panicked at crates/deep-show/src/kinds.rs:1471:9:
+cut.words@1.recording: `asset name` doesn't read: `asset name` is no type the form language names
+cut.words@1.keep: `[word index | [first, last]]` doesn't read: `word index` is no type the form language names
+"cut.words@1"."recording": prints no form
+"cut.words@1"."keep": prints no form
 failures:
-    kinds::tests::every_structured_field_prints_forms_that_take_its_own_values
 test result: FAILED. 57 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 72.54s
