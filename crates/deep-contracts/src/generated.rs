@@ -68371,10 +68371,10 @@ pub struct ProcessEndedV2V;
 
 impl Contract for ProcessEndedV2V {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        deep_contracts::constant(value, at, "1").map(|()| Self)
+        deep_contracts::constant(value, at, "2").map(|()| Self)
     }
     fn to_json(&self) -> Value {
-        deep_contracts::parse("1").expect("a constant is JSON")
+        deep_contracts::parse("2").expect("a constant is JSON")
     }
 }
 
@@ -74245,10 +74245,10 @@ pub struct RunFinishedV4V;
 
 impl Contract for RunFinishedV4V {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        deep_contracts::constant(value, at, "3").map(|()| Self)
+        deep_contracts::constant(value, at, "4").map(|()| Self)
     }
     fn to_json(&self) -> Value {
-        deep_contracts::parse("3").expect("a constant is JSON")
+        deep_contracts::parse("4").expect("a constant is JSON")
     }
 }
 

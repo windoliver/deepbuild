@@ -12,7 +12,7 @@
   "type": "object",
   "properties": {
     "v": {
-      "const": 3,
+      "const": 4,
       "description": "The kind's schema version."
     },
     "id": {

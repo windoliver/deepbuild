@@ -8916,7 +8916,7 @@ export interface ProcessEnded {
 
 /** process.ended@2 */
 export interface ProcessEndedV2 {
-  v: 1;
+  v: 2;
   id: string;
   kind: "process.ended";
   subject?: string;
@@ -9719,7 +9719,7 @@ export interface RunFinishedV3 {
 
 /** run.finished@4 */
 export interface RunFinishedV4 {
-  v: 3;
+  v: 4;
   id: string;
   kind: "run.finished";
   subject?: string;
