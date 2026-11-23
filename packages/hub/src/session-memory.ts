@@ -10,7 +10,7 @@ import { type Asks } from '@deepbuild/asks';
 import { sha256Hex } from '@deepbuild/contracts';
 import { type EvidenceStore } from '@deepbuild/evidence';
 
-import { openRecordReader, type RecordStore } from '@deepbuild/record';
+import { openRecordReader, TEXT_CUT, type RecordStore } from '@deepbuild/record';
 import type { Runner } from '@deepbuild/runner';
 import type { DecisionsProvider } from './decisions-port.js';
 
@@ -190,6 +190,7 @@ export class SessionMemory {
   private async saveTyped(prompt: string): Promise<Set<string>> {
     const out = new Set<string>();
     if (prompt.includes('<task-notification>')) return out;
+    let queued = false;
     const have = new Set([...(await this.typedRules()).map((t) => t.target), ...this.typing.keys()]);
     for (const m of prompt.matchAll(TYPED_RULE)) {
       const text = m[1]!.trim();
@@ -199,6 +200,7 @@ export class SessionMemory {
       if (have.has(target)) continue;
       have.add(target);
       this.typing.set(target, text);
+      queued = true;
       // Saved behind the prompt's reply, after the rules typed before it: its evidence's event and the change commit
       // behind any evidence sync, which the reply never waits for (#2539). The rule's own words are its evidence, never
       // the rest of the prompt.
@@ -209,6 +211,10 @@ export class SessionMemory {
       }).catch((error: unknown) => { process.stderr.write(`deep hub: your rule ${target} was not saved: ${error instanceof Error ? error.message : String(error)}\n`); })
         .finally(() => this.typing.delete(target));
     }
+    // A prompt within the record's cut names no evidence, so its commit syncs none: its reply waits for its rules' save,
+    // and a hook after it reads them in the record (#2066). A longer one's whole text is evidence its commit syncs
+    // first, and the save lands behind that commit, so its reply doesn't wait (#2539).
+    if (queued && prompt.length <= TEXT_CUT) await this.saving;
     return out;
   }
 

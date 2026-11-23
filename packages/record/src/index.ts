@@ -181,7 +181,8 @@ export const asCore = (connection: Connection): Connection => ({ writer: 'core',
 export const toJson = (event: Event): string => JSON.stringify(event, (_, v: unknown) => (typeof v === 'bigint' ? v.toString() : v));
 
 /** A field longer than this is scrubbed whole, then cut; the whole scrubbed text is evidence by hash. */
-const CUT = 8192;
+export const TEXT_CUT = 8192;
+const CUT = TEXT_CUT;
 /** Log positions are handed out from a block recorded durably before any of it is used. */
 const BLOCK = 1024;
 const SCHEMA_VERSION = 1;
