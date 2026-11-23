@@ -16,6 +16,8 @@ FAIL size: tests/acceptance/2042/twins/reads-1-mib-at-most/crates/deep-hook/src/
   Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
 FAIL size: tests/acceptance/2134/twins/owner-from-the-lines-first-profile/crates/deep-hook/src/main.rs: 2077 lines, over 1500 with no ceiling
   Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2136/twins/alone-excludes-nothing/scripts/lanes.mjs: 2016 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
 FAIL size: tests/acceptance/2204-redraft-ac3/twins/away-denial-dropped/crates/deep-hook/src/main.rs: 1974 lines, over 1500 with no ceiling
   Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
 FAIL size: tests/acceptance/2204-redraft-ac3/twins/away-denial-unnamed/crates/deep-hook/src/main.rs: 1978 lines, over 1500 with no ceiling
@@ -37,6 +39,12 @@ FAIL size: tests/acceptance/2647/twins/reuses-first-diff/packages/asks/src/index
 FAIL size: tests/acceptance/2694/twins/drops_kept_write/crates/deep-show/src/main.rs: 3087 lines, over 1500 with no ceiling
   Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
 FAIL size: tests/acceptance/2694/twins/reads_hold_the_clock/crates/deep-show/src/main.rs: 3093 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2695/twins/guards-off-without-proofs/crates/deep-hook/src/main.rs: 2078 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2695/twins/old-rules-refused/crates/deep-hook/src/main.rs: 2078 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2732/twins/keeps-pipe/packages/hub/src/core.ts: 2636 lines, over 1500 with no ceiling
   Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
 FAIL size: tests/acceptance/2973/twins/bad-file-reads-empty/packages/hub/src/server.ts: 1538 lines, over 1500 with no ceiling
   Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
@@ -67,5 +75,7 @@ FAIL size: tests/acceptance/2975/twins/dev-signal-exits-75/packages/hub/src/serv
 FAIL size: tests/acceptance/2975/twins/signal-75-during-confirmed-stop/packages/hub/src/server.ts: 1531 lines, over 1500 with no ceiling
   Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
 FAIL size: tests/acceptance/2975/twins/signal-waits-restart-after/packages/hub/src/server.ts: 1532 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/3066/twins/leaves-a-lane/scripts/lanes.mjs: 2222 lines, over 1500 with no ceiling
   Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
 exit 1
