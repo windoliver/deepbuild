@@ -799,6 +799,8 @@
   "tests/acceptance/315/reading.test.ts": 1,
   "tests/acceptance/316/helpers.ts": 5,
   "tests/acceptance/317/helpers.ts": 6,
+  "tests/acceptance/3170/twins/blocked-reads-pass/crates/deep-hook/tests/cli.rs": 8,
+  "tests/acceptance/3170/twins/clone-drops-mode/crates/deep-hook/src/main.rs": 4,
   "tests/acceptance/319/restart-redraft/hub.ts": 1,
   "tests/acceptance/319/restart-redraft/restart.test.ts": 1,
   "tests/acceptance/319/scenarios.ts": 1,

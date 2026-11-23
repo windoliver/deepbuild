@@ -43,6 +43,8 @@
   "tests/acceptance/1407/twins/plant-inert/crates/deep-hook/src/matcher.rs": 1939,
   "tests/acceptance/21/twins/ack-waits-long/crates/deep-hook/src/main.rs": 1564,
   "tests/acceptance/21/twins/hook-lingers-hub-up/crates/deep-hook/src/main.rs": 1565,
+  "tests/acceptance/3170/twins/clone-drops-mode/crates/deep-hook/src/main.rs": 2064,
+  "tests/acceptance/3170/twins/lane-names-var-tmp/scripts/lanes.mjs": 2385,
   "tests/acceptance/39-redraft/twins/job-hooks-as-session/packages/hub/src/core.ts": 2641,
   "tests/acceptance/83/twins/answers-any-origin/packages/hub/src/core.ts": 2641,
   "tests/acceptance/83/twins/plant-ignored/packages/hub/src/core.ts": 2641
