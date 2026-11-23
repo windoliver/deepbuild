@@ -224,6 +224,16 @@ pub fn rotate(q: [f64; 4], v: [f64; 3]) -> [f64; 3] {
     [0, 1, 2].map(|i| v[i] + w * t[i] + c[i])
 }
 
+/// #2288: the rotation `b` then `a`, the quaternion product a·b (`[x, y, z, w]`).
+pub fn product(a: [f64; 4], b: [f64; 4]) -> [f64; 4] {
+    [
+        a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
+        a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
+        a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
+        a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2],
+    ]
+}
+
 /// #523: the whole turns a hinge gains over a step from angle `a0` to `a1` (deg, each in
 /// (−180, 180]): ±1 when the step's shortest signed change carries it across the wrap (Joint).
 pub fn turn(a0: f64, a1: f64) -> i32 {
