@@ -45,6 +45,7 @@ export const aloneReasons = {};
 for (const [reason, entries] of Object.entries({
   binary: [
     'tests/acceptance/2386/', 'tests/acceptance/2086-redraft-2047/', 'tests/acceptance/172-redraft-ac4/', 'tests/acceptance/1490-redraft-2892/', 'tests/acceptance/192/packs-redraft-2892/', 'tests/acceptance/2386-redraft-ac6-hashes/', 'tests/acceptance/323-redraft-2171/', 'tests/acceptance/2896/',
+    'tests/acceptance/2700/heap.test.mjs', 'tests/acceptance/2700/equal.test.mjs', 'tests/acceptance/2700/data-row.test.mjs', 'tests/acceptance/2700/as-given.test.mjs',
     'tests/acceptance/1523/', 'tests/acceptance/84/', 'tests/acceptance/994/hub.test.ts', 'tests/acceptance/994/deadline-redraft/', 'tests/acceptance/20/', 'tests/acceptance/65/',
     'tests/acceptance/82/', 'tests/acceptance/1202/', 'tests/acceptance/55/', 'tests/acceptance/356/', 'tests/acceptance/24/', 'tests/acceptance/26/', 'tests/acceptance/1632/',
     'tests/acceptance/389/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/855/', 'tests/acceptance/857/', 'tests/acceptance/1487/',
@@ -121,7 +122,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/2776/listing.test.ts', 'tests/acceptance/2457/', 'tests/acceptance/2500/', 'tests/acceptance/211/', 'tests/acceptance/981/', 'tests/acceptance/189/saves/',
     'tests/acceptance/189-oracle/', 'tests/acceptance/189/lab-redraft/', 'tests/acceptance/276/record/', 'tests/acceptance/276/match/', 'tests/acceptance/2109/',
     'tests/acceptance/953/', 'tests/acceptance/953-oracle/', 'tests/acceptance/1250/', 'tests/acceptance/1576/', 'tests/acceptance/2661/', 'tests/acceptance/980/',
-    'tests/acceptance/1861/', 'tests/acceptance/2897/', 'tests/acceptance/2897-redraft-ac6/',
+    'tests/acceptance/1861/', 'tests/acceptance/2897/', 'tests/acceptance/2897-redraft-ac6/', 'tests/acceptance/2697/', 'tests/acceptance/409-redraft-2697/',
   ],
   timing: [
     'tests/acceptance/2513-redraft-2047/',
@@ -587,6 +588,9 @@ export function cargoResults(output, status, workspace) {
   // the test's own thread there (lines the test printed can look like one, so the last). A custom harness that runs its
   // cases on the main thread prints a case's panic just before its result line, or its message first in a
   // `---- <test> ----` block after it.
+  // #3172: a custom harness that runs nothing says why in its last line, of its own name, as
+  // `card_size: INCONCLUSIVE; <reason>`.
+  const said = new Map(), reported = new Set();
   let target = null, block = null, next = null, uncaught = null;
   for (const line of output.split('\n')) {
     const test = line.match(/^test (.+?) \.\.\. (ok|FAILED|BLOCKED|INVALID|INCONCLUSIVE)$/);
@@ -603,6 +607,12 @@ export function cargoResults(output, status, workspace) {
     if (thread && (block ? block.captured && thread === block.test : thread === 'main')) next = 'panic';
     const started = cargoTarget(line, targets);
     if (started !== undefined) target = started;
+    if (/^test /.test(line)) reported.add(target);
+    // cargo names each failed target by the arguments that rerun it.
+    const rerun = line.match(/(?:to rerun pass |^\s+)`(-p \S+ --\w+(?: \S+)?)`\s*$/)?.[1];
+    const own = line.match(/^(\w+): (INCONCLUSIVE|BLOCKED); (.+)$/);
+    if (own && target?.split(' ').at(-1) === own[1]) said.set(target, { state: own[2], message: own[3] });
+    else if (line.trim() && !rerun) said.delete(target);
     if (test && test[2] === 'ok') passed.push(`cargo ${target} › ${test[1]}`);
     if (test && test[2] !== 'ok') failures.push({ id: `cargo ${target} › ${test[1]}`, ...test[2] === 'FAILED' ? { state: stateOf(uncaught ?? ''), message: uncaught ?? '' } : { state: test[2], message: '' } }), failed.add(target);
     if (test || started !== undefined) uncaught = null;
@@ -611,9 +621,7 @@ export function cargoResults(output, status, workspace) {
     // Custom harnesses report unrun cases too; a listed target must not turn those into passes.
     const unproven = line.match(/^test result: (BLOCKED|INVALID|INCONCLUSIVE)\b/)?.[1];
     if (unproven) failures.push({ id: `cargo ${target}`, state: unproven, message: line.slice(13) }), failed.add(target);
-    // cargo names each failed target by the arguments that rerun it.
-    const rerun = line.match(/(?:to rerun pass |^\s+)`(-p \S+ --\w+(?: \S+)?)`\s*$/)?.[1];
-    if (rerun && !failed.has(rerun)) failures.push({ id: `cargo ${rerun}`, state: 'FAIL', message: 'the target failed outside any test it reported' }), failed.add(rerun);
+    if (rerun && !failed.has(rerun)) failures.push({ id: `cargo ${rerun}`, ...((!reported.has(rerun) && said.get(rerun)) || { state: 'FAIL', message: 'the target failed outside any test it reported' }) }), failed.add(rerun);
   }
   if (status !== 0 && !failed.size) failures.push({ id: 'cargo test', state: 'FAIL', message: output.split('\n').find((line) => /^error/.test(line)) ?? `exited ${status}` });
   return { failures, passed, ...(skips.length && { skips }) };

@@ -5,10 +5,11 @@
 // opens a budget window (section 12a): a timed grant that waits for every slot to empty, around budget-window.mjs.
 // `throttle.mjs load [--report]` reads the machine's load by who made it (#3067), its GPU time and the cores idle beside
 // the requests in line (#3240): a sample a minute, and their table.
+// An affected.mjs run's test grant is its admission, and its jobs take turns on one pool of job tokens (#3221).
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { appendFileSync, existsSync, linkSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { constants, cpus, freemem, homedir, loadavg, totalmem, userInfo } from 'node:os';
+import { appendFileSync, closeSync, existsSync, linkSync, mkdirSync, mkdtempSync, constants as modes, openSync, readdirSync, readFileSync, readSync, realpathSync, renameSync, rmSync, statfsSync, statSync, writeFileSync, writeSync } from 'node:fs';
+import { constants, cpus, freemem, homedir, loadavg, tmpdir, totalmem, userInfo } from 'node:os';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -33,13 +34,14 @@ const SETTLING_MS = 5 * 60_000;
  * less a run's for each held grant still settling (or of no known time), leaves room for one more run. Without
  * readings, as for a test's own table given none, only the ceiling decides.
  */
-export function roomForTest(held, readings, now = Date.now()) {
+export function roomForTest(held, readings, now = Date.now(), run = false) {
   if (!held.length) return true;
   if (held.length >= LIMITS.test) return false;
   if (!readings) return true;
   const { memory, load, cores } = readings;
   const settling = held.filter((grant) => !(now - grant.at >= SETTLING_MS)).length;
-  return load < cores && memory - settling * RUN_MEMORY >= RUN_MEMORY;
+  // A run's admission doesn't read the load: the pool bounds what admitted runs run (#3221).
+  return (run || load < cores) && memory - settling * RUN_MEMORY >= RUN_MEMORY;
 }
 
 /**
@@ -144,10 +146,7 @@ export function machineReadings() {
  */
 function readings() {
   const file = process.env.DEEP_THROTTLE_READINGS;
-  // By real path, so a trailing slash or a HOME linked to the real one is still the machine's table.
-  const machine = join(userInfo().homedir, '.deepbuild', 'throttle');
-  mkdirSync(folder(), { recursive: true, mode: 0o700 });
-  if (realpathSync(folder()) === (existsSync(machine) ? realpathSync(machine) : machine)) {
+  if (!own()) {
     if (file !== undefined) throw Error('DEEP_THROTTLE_READINGS is read only for a test\'s own table, inside a test run (node --test or vitest); unset it to use the machine\'s readings');
     return machineReadings();
   }
@@ -164,6 +163,20 @@ function readings() {
   }
   return { memory, load, cores };
 }
+/** Whether the table is a test's own, by real path, so a trailing slash or a HOME linked to the real one is still the machine's. */
+function own() {
+  const machine = join(userInfo().homedir, '.deepbuild', 'throttle');
+  mkdirSync(folder(), { recursive: true, mode: 0o700 });
+  return realpathSync(folder()) !== (existsSync(machine) ? realpathSync(machine) : machine);
+}
+// The pool of job tokens every admitted run's jobs take turns on (#3221): a core less one, at least one; a test's own
+// table counts its readings' cores.
+const pool = () => Math.max(1, (own() ? readings()?.cores ?? cpus().length : cpus().length) - 1);
+// The disk free under HOME, where a run's shards are (section 7a).
+const freeDisk = () => {
+  const stat = statfsSync(homedir());
+  return stat.bavail * stat.bsize;
+};
 
 // The table is one file, rewritten whole under a lock file only one process can create, held for a read and a write;
 // a request's ps runs before it is taken; a timed-out drain's and a past-bound holder's, inside it. The lock names
@@ -234,11 +247,16 @@ function locked(act) {
       if (error.code !== 'ENOENT') throw Error(`${file} can't be read (${error.message}); once no throttle runs on this machine, remove it`);
       table = { grants: [], requests: [], seq: 0 };
     }
-    // A holder's or a waiter's death releases what it held or asked for.
+    // A holder's or a waiter's death releases what it held or asked for; a run's, the turns its jobs hold or wait for (#3221).
     const gave = table.grants.filter(ended);
-    for (const grant of gave) log({ event: 'released', class: grant.class, id: grant.id, pid: grant.pid, reason: 'holder gone' });
+    for (const grant of gave) log({ event: 'released', class: grant.class, id: grant.id, pid: grant.pid, ...grant.run && { run: grant.run }, reason: 'holder gone' });
     table.grants = table.grants.filter((grant) => !gave.includes(grant));
-    table.requests = table.requests.filter((request) => !ended(request));
+    const runs = new Set(table.grants.filter((grant) => grant.run === true).map((grant) => grant.id));
+    const orphans = table.grants.filter((grant) => grant.class === 'turn' && !runs.has(grant.run));
+    for (const grant of orphans) log({ event: 'released', class: 'turn', id: grant.id, pid: grant.pid, run: grant.run, reason: 'run gone' });
+    table.grants = table.grants.filter((grant) => !orphans.includes(grant));
+    for (const grant of gave) served(table, grant);
+    table.requests = table.requests.filter((request) => !ended(request) && (request.class !== 'turn' || runs.has(request.run)));
     const result = act(table, processes());
     write(`${file}.${process.pid}`, JSON.stringify(table));
     renameSync(`${file}.${process.pid}`, file);
@@ -254,6 +272,11 @@ function locked(act) {
 }
 function log(entry) {
   appendFileSync(join(folder(), 'log'), `${JSON.stringify({ at: new Date().toISOString(), ...entry })}\n`);
+}
+// A turn given back adds its time to its run's, which the next turn goes by (#3221).
+function served(table, turn, now = Date.now()) {
+  const run = turn.class === 'turn' && table.grants.find((grant) => grant.id === turn.run);
+  if (run) run.used = (run.used ?? 0) + now - turn.at;
 }
 
 /**
@@ -282,26 +305,42 @@ function blockers(table, procs, request) {
 
 // Requests in the order they are served: those nested in a current holder's chain first, then by arrival.
 const order = (a, b) => Number(b.nested) - Number(a.nested) || a.seq - b.seq;
+/**
+ * The waiting job a free token goes to (#3221): of the run whose jobs have had the least time on turns, those ended and
+ * those in flight, the one that asked first; none while the pool's tokens are all dealt or lent.
+ */
+function nextTurn(table, now = Date.now()) {
+  const turns = table.grants.filter((grant) => grant.class === 'turn');
+  if (turns.reduce((sum, grant) => sum + 1 + grant.lent, 0) >= pool()) return null;
+  const time = (run) => (table.grants.find((grant) => grant.id === run)?.used ?? 0) + turns.filter((grant) => grant.run === run).reduce((sum, grant) => sum + now - grant.at, 0);
+  return table.requests.filter((other) => other.class === 'turn').sort((a, b) => time(a.run) - time(b.run) || a.seq - b.seq)[0]?.id;
+}
 function grantable(table, procs, request, seen) {
   const mine = chain(procs, request.pid);
   const outside = table.grants.filter((grant) => !mine.includes(grant.pid));
   // timed is exclusive of every class outside its own chain.
   if (outside.some((grant) => grant.class === 'timed')) return false;
+  // A pending timed request drains: no new top-level grant starts, unless a held grant blocked a drain to its bound
+  // (#2744). A drain can't finish until that holder ends, by itself or by its bound, so meanwhile the machine goes
+  // on. A window drains whatever is held (section 12a). No turn is dealt meanwhile, nested or not (#3221), but for a
+  // window: it waits for every grant to end, so the runs admitted before it take turns until they do.
+  const marked = table.grants.some((grant) => grant.blocked);
+  const draining = table.requests.some((other) => other.class === 'timed' && (other.window || !marked));
+  if (request.class === 'turn') return !table.requests.some((other) => other.class === 'timed' && !other.window && !marked) && nextTurn(table) === request.id;
   // A request is served in order only while the limit it was made under has room, so the largest limit among the
   // live waiters is the machine's (#2902). One that records none comes from a checkout older than that and counts as
   // allowing one grant: its own code still takes a slot when it is first in its own view and below its own limit.
-  // timed counts no grants: its chain and its blockers decide it.
-  const held = table.grants.filter((grant) => grant.class === request.class).length;
+  // timed counts no grants: its chain and its blockers decide it. A run admitted under a caller's grant takes no slot.
+  const slots = table.grants.filter((grant) => grant.class === request.class && !(grant.run && grant.nested));
+  const held = slots.length;
   const room = (other) => other.class === 'timed' || held < (other.limit ?? 1);
   const first = table.requests.filter((other) => other.class === request.class && room(other)).sort(order)[0];
   if (first?.id !== request.id) return false;
   if (request.class !== 'timed') {
-    // A pending timed request drains: no new top-level grant starts, unless a held grant blocked a drain to its bound
-    // (#2744). A drain can't finish until that holder ends, by itself or by its bound, so meanwhile the machine goes
-    // on. A window drains whatever is held (section 12a).
-    const marked = table.grants.some((grant) => grant.blocked);
-    if (!request.nested && table.requests.some((other) => other.class === 'timed' && (other.window || !marked))) return false;
-    return request.class === 'test' ? roomForTest(table.grants.filter((grant) => grant.class === 'test'), seen) : held < LIMITS[request.class];
+    if (!request.nested && draining) return false;
+    if (request.class !== 'test') return held < LIMITS[request.class];
+    // A run's admission also waits for the free disk its shards need (#3221).
+    return (!request.disk || freeDisk() >= request.disk) && roomForTest(slots, seen, Date.now(), request.run);
   }
   if (blockers(table, procs, request).length) return false;
   // A top-level request waits for load below the cores, as the log shows. A nested one, in a chain that holds a grant
@@ -319,7 +358,7 @@ let blocked = [];
  * and is released with it. The grant's `token` is what DEEP_THROTTLE carries to the holder's descendants. A wait doesn't
  * run down while a window is open: a window outlasts a wait, and only its end decides when the next build starts.
  */
-export function acquire(cls, { wait = 30, window = false } = {}) {
+export function acquire(cls, { wait = 30, window = false, run } = {}) {
   if (!LIMITS[cls]) throw Error(`no throttle class ${cls}; the classes are ${CLASSES.join(', ')}`);
   const pid = process.pid;
   // A readings variable the table can't take is refused before anything is asked.
@@ -327,15 +366,32 @@ export function acquire(cls, { wait = 30, window = false } = {}) {
   let deadline = Date.now() + wait * 60_000, polled = Date.now();
   const request = locked((table, procs) => {
     const held = inherited(table, procs, chain(procs, pid));
+    const id = randomBytes(8).toString('hex'), start = procs.get(pid).start, seq = () => (table.seq = (table.seq ?? 0) + 1);
     if (held.length && (cls === 'build' || cls === 'test' || (cls === 'timed' && held.some((grant) => grant.class === 'timed')))) {
+      // A run asked under a caller's grant is admitted at once, with no slot; inside an admitted run, a request under no
+      // turn waits for one (#3221).
+      const turn = held.some((grant) => grant.class === 'turn');
+      const admitted = !turn && cls !== 'timed' && held.find((grant) => grant.run === true);
+      if (!turn && !admitted && cls === 'test' && run !== undefined) {
+        const entry = { id, class: cls, pid, start, nested: true, run: true, used: 0, at: Date.now() };
+        table.grants.push(entry);
+        log({ event: 'granted', class: cls, grant: 'nested', id, pid, run: true });
+        return { granted: entry };
+      }
       log({ event: 'passed', class: cls, pid, through: process.env.DEEP_THROTTLE });
-      return { pass: true };
+      if (!admitted) return { pass: true };
+      const entry = { id, class: 'turn', run: admitted.id, pid, start, nested: true, seq: seq() };
+      table.requests.push(entry);
+      return entry;
     }
-    const entry = { id: randomBytes(8).toString('hex'), class: cls, pid, start: procs.get(pid).start, nested: held.length > 0, window, limit: LIMITS[cls], seq: (table.seq = (table.seq ?? 0) + 1) };
+    const entry = { id, class: cls, pid, start, nested: held.length > 0, window, limit: LIMITS[cls], seq: seq(), ...cls === 'test' && run !== undefined && { run: true, disk: run } };
     table.requests.push(entry);
     return entry;
   });
   if (request.pass) return { class: cls, token: process.env.DEEP_THROTTLE, pass: true };
+  if (request.granted) return { class: cls, id: request.granted.id, token: `${cls}:${request.granted.id}`, pass: false };
+  // A turn has no wait limit: its run was admitted (#3221).
+  if (request.class === 'turn') deadline = Infinity;
   // A full disk leaves the table as it was (#2869): a waiting request's look whose write fails with ENOSPC is one more
   // look with no grant, and the request keeps its place. Once the wait has run out the ENOSPC is thrown, marked
   // `waited`, rather than no grant returned: the request it couldn't take out of the table stays there until this
@@ -356,7 +412,7 @@ export function acquire(cls, { wait = 30, window = false } = {}) {
       const now = Date.now();
       if ([...table.grants, ...table.requests].some((other) => other.window && other.id !== request.id)) deadline += now - polled;
       polled = now;
-      const seen = cls === 'test' ? readings() : undefined;
+      const seen = pending.class === 'test' ? readings() : undefined;
       if (!grantable(table, procs, pending, seen)) {
         if (now <= deadline) return null;
         table.requests.splice(table.requests.indexOf(pending), 1);
@@ -370,12 +426,18 @@ export function acquire(cls, { wait = 30, window = false } = {}) {
         return 'timeout';
       }
       table.requests.splice(table.requests.indexOf(pending), 1);
+      if (pending.class === 'turn') {
+        const entry = { id: request.id, class: 'turn', run: pending.run, pid, start: request.start, nested: true, at: now, lent: 0 };
+        table.grants.push(entry);
+        log({ event: 'turn', id: entry.id, run: entry.run, pid });
+        return entry;
+      }
       const taken = new Set(table.grants.filter((other) => other.class === cls).map((other) => other.index));
       const index = Array.from({ length: LIMITS[cls] }, (_, k) => k + 1).find((k) => !taken.has(k));
-      const entry = { id: request.id, class: cls, pid, start: request.start, nested: request.nested, window, index, at: now };
+      const entry = { id: request.id, class: cls, pid, start: request.start, nested: request.nested, window, index, at: now, ...pending.run && { run: true, used: 0 } };
       table.grants.push(entry);
       const load = loadavg()[0], cores = cpus().length;
-      log({ event: 'granted', class: cls, grant: entry.nested ? 'nested' : 'top-level', id: entry.id, pid, index, load, cores, wait, ...cls === 'test' ? { readings: seen } : {} });
+      log({ event: 'granted', class: cls, grant: entry.nested ? 'nested' : 'top-level', id: entry.id, pid, index, load, cores, wait, ...entry.run && { run: true }, ...cls === 'test' ? { readings: seen } : {} });
       return entry;
     });
     if (grant === 'timeout') {
@@ -387,6 +449,8 @@ export function acquire(cls, { wait = 30, window = false } = {}) {
       }
       return null;
     }
+    // A turn's command keeps its run's grant as DEEP_THROTTLE, as a job passing through on it always has.
+    if (grant?.class === 'turn') return { class: 'turn', id: grant.id, run: grant.run, token: process.env.DEEP_THROTTLE, pass: false };
     if (grant) return { class: cls, id: grant.id, index: grant.index, token: `${cls}:${grant.id}`, pass: false };
     sleep(POLL_MS * (0.75 + Math.random() / 2));
   }
@@ -400,6 +464,8 @@ export const holds = (cls, { window = false } = {}) => locked((table, procs) => 
   const mine = chain(procs, process.pid);
   return table.grants.some((grant) => grant.class === cls && (!window || grant.window) && mine.includes(grant.pid));
 });
+/** Whether process `pid` waits in the table, for a grant or a turn: what it was asked to run hasn't started. */
+export const asking = (pid) => locked((table) => table.requests.some((request) => request.pid === pid));
 
 /**
  * Gives a grant back; a passed-through one is its ancestor's to release. A release the table can't take is tried for
@@ -412,14 +478,67 @@ export function release(grant) {
       return locked((table) => {
         const at = table.grants.findIndex((other) => other.id === grant.id);
         if (at < 0) return;
-        table.grants.splice(at, 1);
-        log({ event: 'released', class: grant.class, id: grant.id, pid: process.pid });
+        const [gone] = table.grants.splice(at, 1);
+        served(table, gone);
+        log({ event: 'released', class: grant.class, id: grant.id, pid: process.pid, ...gone.run && { run: gone.run } });
       });
     } catch (error) {
       if (attempt === 9) throw error;
       sleep(POLL_MS);
     }
   }
+}
+
+/**
+ * A turn's compiles (#3221): a jobserver of the job's own, GNU make's named pipe through CARGO_MAKEFLAGS, empty at first,
+ * since cargo runs its first compile on no token, the turn's. Each look takes back what the pipe holds unread and lends
+ * it the pool's free tokens up to an even share, the pool over the turns held less the turn's own, or none while a job
+ * waits for a turn. A token a killed build held stays lent until the turn goes back. `look` says false once the turn
+ * is gone.
+ */
+function lender(turn) {
+  const dir = mkdtempSync(join(tmpdir(), 'deep-turn-')), fifo = join(dir, 'tokens');
+  const made = spawnSync('mkfifo', ['-m', '600', fifo], { encoding: 'utf8' });
+  if (made.status !== 0) throw Error(`mkfifo failed: ${made.error?.message ?? made.stderr.trim()}`);
+  // Held open by the job's throttle, so the pipe keeps its tokens while no build has it open, and never blocking.
+  const fd = openSync(fifo, modes.O_RDWR | modes.O_NONBLOCK);
+  const take = () => {
+    const buffer = Buffer.alloc(4096);
+    let free = 0;
+    for (;;) {
+      try { const read = readSync(fd, buffer, 0, buffer.length, null); if (read <= 0) break; free += read; } catch { break; }
+    }
+    return free;
+  };
+  return {
+    flags: `-j --jobserver-auth=fifo:${fifo}`,
+    look: () => {
+      const free = take();
+      let more;
+      try {
+        more = locked((table) => {
+          const me = table.grants.find((grant) => grant.id === turn.id);
+          if (!me) return null;
+          const turns = table.grants.filter((grant) => grant.class === 'turn');
+          me.lent = Math.max(0, me.lent - free);
+          const share = table.requests.some((other) => other.class === 'turn') ? 0 : Math.floor(pool() / turns.length) - 1;
+          const lend = Math.max(0, Math.min(share - me.lent, pool() - turns.reduce((sum, grant) => sum + 1 + grant.lent, 0)));
+          me.lent += lend;
+          return lend;
+        });
+      } catch (error) {
+        // The table still counts them lent, so they go back in the pipe.
+        if (free) writeSync(fd, '+'.repeat(free));
+        throw error;
+      }
+      if (more) writeSync(fd, '+'.repeat(more));
+      return more !== null;
+    },
+    close: () => {
+      closeSync(fd);
+      rmSync(dir, { recursive: true, force: true });
+    },
+  };
 }
 
 // The load, by who made it (#3067, section 6): a reading. It takes no grant and no lock, and stops no process.
@@ -486,6 +605,8 @@ function sample() {
       held = requests = [];
     }
     if (!Array.isArray(held) || !Array.isArray(requests)) throw Error('the table can\'t be read');
+    // A turn's job runs under its run's grant, the outermost, so a turn has no entry of its own (#3221).
+    held = held.filter((grant) => grant.class !== 'turn');
     if (process.platform !== 'darwin') unread = 'no GPU reading on this machine';
     else {
       try {
@@ -675,9 +796,16 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== 'l
     console.log(`BLOCKED throttle: usage: throttle.mjs <${CLASSES.join('|')}> [--wait <min>] [--hold <min>] -- <command>, throttle.mjs window [--wait <min>], or throttle.mjs load [--report]`);
     process.exit(2);
   }
+  // A run's admission names the free disk its shards need (#3221); its command doesn't inherit the mark.
+  const { DEEP_THROTTLE_RUN: admits, ...env } = process.env;
+  const run = cls === 'test' && admits !== undefined ? Number(admits) : undefined;
+  if (!(run === undefined || run >= 0)) {
+    console.log(`BLOCKED throttle: DEEP_THROTTLE_RUN is the free disk a run's shards need, in bytes, not ${JSON.stringify(admits)}`);
+    process.exit(2);
+  }
   let grant;
   try {
-    grant = acquire(cls, { wait, window });
+    grant = acquire(cls, { wait, window, run });
   } catch (error) {
     // A wait that ran out on a full disk is no grant (#2869).
     if (error.waited) grant = null;
@@ -695,8 +823,20 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== 'l
     process.exit(3);
   }
   if (window) log({ event: 'window-open', id: grant.id, pid: process.pid });
+  // A turn's command gets a jobserver of its own, lent from the pool (#3221).
+  let pipe = null;
+  if (grant.class === 'turn') {
+    try {
+      pipe = lender(grant);
+      pipe.look();
+    } catch (error) {
+      try { release(grant); } catch {}
+      console.log(`BLOCKED throttle: ${error.message}\n  Fix: Repair what the line names: mkfifo runnable, the temporary folder this user's to write.`);
+      process.exit(2);
+    }
+  }
   // A window's record names its grant, as the log's window-open and window-close lines do (#2674).
-  const child = spawn(command[0], command.slice(1), { stdio: 'inherit', env: { ...process.env, DEEP_THROTTLE: grant.token, ...window && { DEEP_WINDOW: grant.id } } });
+  const child = spawn(command[0], command.slice(1), { stdio: 'inherit', env: { ...env, DEEP_THROTTLE: grant.token, ...window && { DEEP_WINDOW: grant.id }, ...pipe && { CARGO_MAKEFLAGS: pipe.flags } } });
   // A terminal's SIGINT reaches the whole group, the command too, so it isn't sent again; a SIGTERM or SIGHUP sent to
   // this process alone is passed on.
   process.on('SIGINT', () => {});
@@ -707,21 +847,60 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== 'l
       if (window) log({ event: 'window-close', id: grant.id, pid: process.pid });
       release(grant);
     } catch {}
+    try { pipe?.close(); } catch {}
   };
   child.on('error', (error) => {
     giveBack();
     console.log(`BLOCKED throttle: ${command[0]} could not start: ${error.message}`);
     process.exit(127);
   });
-  // A grant held past its bound while a request from outside this tree waits ends (#2744): SIGTERM to the command,
-  // and 10 s later SIGKILL to every process of the tree as it stood then, by PID and start.
-  let tree = null;
+  // A grant held past its bound while a request from outside this tree waits ends (#2744), and so does a turn whose
+  // run is gone (#3221): SIGTERM to the command, and 10 s later SIGKILL to every process of the tree as it stood then,
+  // by PID and start.
+  let tree = null, why = null;
   const mine = () => descendants(process.pid);
   // Only a process listed now with the start it had then: a number since taken is someone else's.
   const stop = () => killTree(tree);
-  if (!grant.pass && !window) {
+  // Nothing here may throw: this process would die holding nothing, its command running on uncounted. Without a
+  // listing the next look tries again; a log that can't be written is no reason to let the command run on; and
+  // when ps fails after the SIGTERM, the command itself is still this process's child to SIGKILL.
+  const end = (line, note = () => {}) => {
+    try {
+      tree = mine();
+    } catch {
+      return;
+    }
+    why = line;
+    try {
+      note();
+    } catch {}
+    child.kill('SIGTERM');
+    setTimeout(() => {
+      try {
+        tree.push(...mine());
+        stop();
+      } catch {
+        child.kill('SIGKILL');
+      }
+    }, 10_000).unref();
+  };
+  if (pipe) {
+    // A turn lends its pipe each second; once it has gone back while its job runs, its run is gone.
+    const watch = setInterval(() => {
+      if (tree) return;
+      let kept;
+      try {
+        kept = pipe.look();
+      } catch {
+        return;
+      }
+      if (!kept) end(`INCONCLUSIVE throttle: the run of turn ${grant.id} ended while its job ran; the job was stopped\n  Fix: Run it again; its run is gone.`);
+    }, 1_000);
+    watch.unref();
+  } else if (!grant.pass && !window) {
     // A monotonic clock, so a machine that slept doesn't count the sleep. A request waits once it was pending at the
     // last look too, so one about to be granted at once doesn't count; and a grant given back early has nothing to end.
+    // A job waiting for its turn isn't waiting on a slot, so a run's bound is as #2744 left it.
     const since = performance.now();
     let seen = new Set();
     const watch = setInterval(() => {
@@ -731,7 +910,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== 'l
         waited = locked((table) => {
           if (!table.grants.some((other) => other.id === grant.id)) return clearInterval(watch), false;
           const procs = processes({ fresh: true });
-          const outside = table.requests.filter((other) => !chain(procs, other.pid).includes(process.pid)).map((other) => other.id);
+          const outside = table.requests.filter((other) => other.class !== 'turn' && !chain(procs, other.pid).includes(process.pid)).map((other) => other.id);
           const again = outside.some((id) => seen.has(id));
           seen = new Set(outside);
           return again;
@@ -739,35 +918,15 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== 'l
       } catch {
         return;
       }
-      if (!waited) return;
-      // Nothing here may throw: this process would die holding nothing, its command running on uncounted. Without a
-      // listing the next look tries again; a log that can't be written is no reason to let the command run on; and
-      // when ps fails after the SIGTERM, the command itself is still this process's child to SIGKILL.
-      try {
-        tree = mine();
-      } catch {
-        return;
-      }
-      try {
-        log({ event: 'expired', class: cls, id: grant.id, pid: process.pid, hold });
-      } catch {}
-      child.kill('SIGTERM');
-      setTimeout(() => {
-        try {
-          tree.push(...mine());
-          stop();
-        } catch {
-          child.kill('SIGKILL');
-        }
-      }, 10_000).unref();
+      if (waited) end(`INCONCLUSIVE throttle: the ${cls} grant ${grant.id} was held past its ${hold} min bound while another request waited; its command was stopped\n  Fix: Find why the command didn't end (a leaked child, a hung test), then run again.`, () => log({ event: 'expired', class: cls, id: grant.id, pid: process.pid, hold }));
     }, 1_000);
     watch.unref();
   }
   child.on('exit', (status, signal) => {
     if (tree) try { stop(); } catch {}
     giveBack();
-    if (tree) {
-      console.log(`INCONCLUSIVE throttle: the ${cls} grant ${grant.id} was held past its ${hold} min bound while another request waited; its command was stopped\n  Fix: Find why the command didn't end (a leaked child, a hung test), then run again.`);
+    if (why) {
+      console.log(why);
       process.exit(3);
     }
     process.exit(signal ? 128 + constants.signals[signal] : status);

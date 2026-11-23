@@ -128,7 +128,8 @@ struct Local {
     pos: vec4<f32>,
     // Its near plane, its first layer, tan of half a map's field, and 1 for a cube.
     info: vec4<f32>,
-    // The light's radius in m, and the share of its shadow the policy keeps.
+    // The light's radius in m, the share of its shadow the policy keeps, and a tile's side
+    // with its planted bit (tiles.wgsl; 0 for a map in layers).
     size: vec4<f32>,
 };
 
@@ -154,11 +155,12 @@ struct Lights {
     // x: tan of half the key sun's angle; y: 1 with a contact shadow; z: 1 when a sample index
     // turns the disk, w its angle in radians (under samples per frame).
     key: vec4<f32>,
-    // Each local map's side in texels in x.
+    // Each local map's side in texels in x; under tiles, the side that sizes their filter in x
+    // and the atlas's in y (#2034).
     local_size: vec4<f32>,
     // x: 1 with a light grid; y and z: its far and near planes.
     grid: vec4<f32>,
-    locals: array<Local, 12>,
+    locals: array<Local, 32>,
     items: array<Light, 32>,
     // Each shaded light's x: the policy's weight near the cut (in its color too); y: a hash of
     // its ID (u32 bits), for a light response (#485).
@@ -1713,6 +1715,9 @@ fn cascade_pcss(i: u32, p: vec3<f32>, n: vec3<f32>, t: Tap, size: f32, px: vec2<
 // its radius sizes, its taps read wherever each lands, so a disk crosses a cube's faces; the
 // tent without soft shadows.
 fn local_lit(l: Local, world: vec3<f32>, n: vec3<f32>, px: vec2<f32>) -> f32 {
+    if l.size.z > 0.5 {
+        return tile_lit(l, world, n, px);
+    }
     let to = world - l.pos.xyz;
     let dist = max(length(to), 1e-4);
     let ray = to / dist;

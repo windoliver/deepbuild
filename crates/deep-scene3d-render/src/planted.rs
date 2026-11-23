@@ -145,6 +145,8 @@ pub struct Planted {
     pub horizon_unbaked: bool,
     /// #1381: a terrain plate's sky occlusion from its slope alone, (1 + n.y) ÷ 2.
     pub occlusion_from_slope: bool,
+    /// #290: the hidden view's wrong programs.
+    pub hidden: crate::hidden::Planted,
     /// #3016: the mirror's view compiles its own pipelines, listed in a log of its own, as each
     /// renderer did before a scene's views shared them.
     pub mirror_compiles_own: bool,

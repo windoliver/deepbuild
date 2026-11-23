@@ -1,0 +1,131 @@
+# #3218 acceptance suite on the base commit f8c6cff82 2026-11-23 (origin/main), Node v24.22.2, macOS.
+# Every criterion's test fails at this base for a missing surface or a wrong behavior, never a typo: the table has no
+# units (a 4th argument to lease() is ignored, so a pool counts holders and every unit-named lease is granted), no
+# ask(), no lease.acquired@3, no BLOCKED 'size'; the heavy queue has no unitsOf and takes each kind in turn; the Lease
+# section is the merge base's; benchmarks/budgets.json has no lease-ask task. What passes here, and why:
+# - AC2: tests/acceptance/237 unchanged, and #237's suite passing: part of the criterion, true at the base.
+# - AC1's two twins: the base counts holders and has pool-as-exact-key, so each scenario fails where the twin should.
+# - AC7's restart twin: the base's fold has no units, so the 5 is granted after the restart, as on the twin.
+# - AC9's merge-base test: the merge base appends a grant and a release, as the criterion says.
+# The timing tests (AC11) never reach a timing here: the base grants no units and has no ask.
+# The typecheck fails only on the surface the README declares; against that surface, in a scratch copy of this
+# checkout outside the repo with the declared types (and a stand-in implementation), it exits 0.
+
+$ npx vitest run --root tests/acceptance/3218 --no-file-parallelism --testTimeout=600000 --reporter=verbose
+(exit 1; each test, the reporter's reason under each failure, and the totals)
+
+ ✓ compat.test.ts > AC2 #3218.da893eed #237's tests pass unchanged, and a record written on the merge base folds with each lease at 1 > AC2 #3218.da893eed tests/acceptance/237 is unchanged from the merge base 46ms
+ ✓ compat.test.ts > AC2 #3218.da893eed #237's tests pass unchanged, and a record written on the merge base folds with each lease at 1 > AC2 #3218.da893eed #237's acceptance tests pass, run as they are 7043ms
+ × compat.test.ts > AC2 #3218.da893eed #237's tests pass unchanged, and a record written on the merge base folds with each lease at 1 > AC2 #3218.da893eed a record written on the merge base's table folds with each lease at 1: a pool(4) holding three of its leases has room for one unit, not two 92ms
+   → each folds with 1 unit: [{"id":"lease:01M83WBFRH1VCW4NF6FD1Z7S75","resource":{"host":"local","kind":"cpu.slot","key":"slot"},"holder":"session:01M83WBFT1R6Q0SZEM89NPZQRT"},{"id":"lease:01M83WBFRH9FQ1J0CHDQ2VV29V","resource":{"host":"local","kind":"test.four","key":"k"},"holder":"session:01M83WBFT1TX8AWME6AJ34TE85"},{"id":"lease:01M83WBFRHKGP494Y4XRRS68FY","resource":{"host":"local","kind":"test.four","key":"k"},"holder":"session:01M83WBFSSMRBT449PVPSG5M93"},{"id":"lease:01M83WBFRHXXMS6XSV0W8DE088","resource":{"host":"local","kind":"test.four","key":"k"},"holder":"session:01M83WBFT0JYE5JC9PGFCTZ9N2"}]: expected [ [ 'cpu.slot', undefined ], …(3) ] to deeply equal [ [ 'cpu.slot', 1 ], …(3) ]
+ × queue.test.ts > AC8 #3218.b4429bec first in line holds > AC8 #3218.b4429bec with a waiter for 800 units first in line and 300 free, a later waiter for 100 units of the same pool waits behind it, and one that needs none of that pool starts 51ms
+   → the waiter for 800 units, with 300 free, waits: {"status":"granted","ticket":"lease-wait:26dc0c8cbfae","secret":"d55f0fbdf6a9f3beca7e83601a295197","run":"run:LEASE26DC0C8CBFAEMWT2PV5L","leases":["lease:01M83WBFYV9JCCE945E6AK916P","lease:01M83WBFYV57ZZHJGBA0SRKDZN"]}: expected 'granted' to be 'waiting' // Object.is equality
+ × queue.test.ts > AC8 #3218.b4429bec first in line holds > AC8 #3218.b4429bec (wrong program) a queue that serves whichever fits starts the later one and fails this test 47ms
+   → expected [Function] to throw error matching /a later waiter for 100 units of the s…/ but got 'the waiter for 800 units, with 300 fr…'
+ × queue.test.ts > AC9 #3218.44836290 `deep lease` takes the kinds it names in one ask > AC9 #3218.44836290 `deep lease` with two kinds, the second held by another session, appends no grant for the first 40ms
+   → `deep lease` with two kinds, the second held by another session, appends no grant for the first, but appended: lease.acquired@2 lease:01M83WBG1Y6Q3QT4AQVSCEYR51 {"resource":{"host":"local","kind":"cpu.slot","key":"slow"},"holder":"session:MINE","mode":"exclusive","expires":1795513130046,"run":"run:LEASE6B4F463A5913MWT2PV81"}; lease.acquired@2 lease:01M83WBG1Y6ZYN8RKF9GK6KP13 {"resource":{"host":"local","kind":"test.first","key":"test.first"},"holder":"session:MINE","mode":"exclusive","expires":1795513130046,"run":"run:LEASE6B4F463A5913MWT2PV81"}; lease.released@2 lease:01M83WBG1Y6Q3QT4AQVSCEYR51 {"resource":{"host":"local","kind":"cpu.slot","key":"slow"},"holder":"session:MINE","mode":"exclusive","expires":1795513130046,"proof":[]}; lease.released@2 lease:01M83WBG1Y6ZYN8RKF9GK6KP13 {"resource":{"host":"local","kind":"test.first","key":"test.first"},"holder":"session:MINE","mode":"exclusive","expires":1795513130046,"proof":[]}; lease.acquired@2 lease:01M83WBG1YHFHGDH61G8CM4Z41 {"resource":{"host":"local","kind":"cpu.slot","key":"slow"},"holder":"session:MINE","mode":"exclusive","expires":1795513130046,"run":"run:LEASE6B4F463A5913MWT2PV83"}; lease.acquired@2 lease:01M83WBG1Y3MC7GQ974H2A7WA8 {"resource":{"host":"local","kind":"test.first","key":"test.first"},"holder":"session:MINE","mode":"exclusive","expires":1795513130046,"run":"run:LEASE6B4F463A5913MWT2PV83"}; lease.released@2 lease:01M83WBG1YHFHGDH61G8CM4Z41 {"resource":{"host":"local","kind":"cpu.slot","key":"slow"},"holder":"session:MINE","mode":"exclusive","expires":1795513130046,"proof":[]}; lease.released@2 lease:01M83WBG1Y3MC7GQ974H2A7WA8 {"resource":{"host":"local","kind":"test.first","key":"test.first"},"holder":"session:MINE","mode":"exclusive","expires":1795513130046,"proof":[]}; lease.acquired@2 lease:01M83WBG1Y05WAM4KQRTDZ7134 {"resource":{"host":"local","kind":"cpu.slot","key":"slow"},"holder":"session:MINE","mode":"exclusive","expires":1795513130046,"run":"run:LEASE6B4F463A5913MWT2PV84"}; lease.acquired@2 lease:01M83WBG1YTRATY7RE62W780MS {"resource":{"host":"local","kind":"test.first","key":"test.first"},"holder":"session:MINE","mode":"exclusive","expires":1795513130046,"run":"run:LEASE6B4F463A5913MWT2PV84"}; lease.released@2 lease:01M83WBG1Y05WAM4KQRTDZ7134 {"resource":{"host":"local","kind":"cpu.slot","key":"slow"},"holder":"session:MINE","mode":"exclusive","expires":1795513130046,"proof":[]}; lease.released@2 lease:01M83WBG1YTRATY7RE62W780MS {"resource":{"host":"local","kind":"test.first","key":"test.first"},"holder":"session:MINE","mode":"exclusive","expires":1795513130046,"proof":[]}; lease.acquired@2 lease:01M83WBG1YJ7NACDGW7BVHHXA3 {"resource":{"host":"local","kind":"cpu.slot","key":"slow"},"holder":"session:MINE","mode":"exclusive","expires":1795513130046,"run":"run:LEASE6B4F463A5913MWT2PV85"}; lease.acquired@2 lease:01M83WBG1YP95WPN0670122NCT {"resource":{"host":"local","kind":"test.first","key":"test.first"},"holder":"session:MINE","mode":"exclusive","expires":1795513130046,"run":"run:LEASE6B4F463A5913MWT2PV85"}; lease.released@2 lease:01M83WBG1YJ7NACDGW7BVHHXA3 {"resource":{"host":"local","kind":"cpu.slot","key":"slow"},"holder":"session:MINE","mode":"exclusive","expires":1795513130046,"proof":[]}; lease.released@2 lease:01M83WBG1YP95WPN0670122NCT {"resource":{"host":"local","kind":"test.first","key":"test.first"},"holder":"session:MINE","mode":"exclusive","expires":1795513130046,"proof":[]}: expected [ { v: 2, …(10) }, …(15) ] to deeply equal []
+ ✓ queue.test.ts > AC9 #3218.44836290 `deep lease` takes the kinds it names in one ask > AC9 #3218.44836290 (the merge base) on the merge base it appends a grant and a release 256ms
+ × table.test.ts > AC1 #3218.8958c7b7 a pool(1000) takes units > AC1 #3218.8958c7b7 leases of 400 and 500 units are granted, a third of 200 is refused naming the pool and the 100 free, and it is granted once the 400 has ended 44ms
+   → a third lease of 200 units, with 100 of the 1,000 free, is refused: {"status":"granted","lease":{"id":"lease:01M83WBGEQ6N7R9E4B6WTEWD2K","resource":{"host":"local","kind":"test.mem","key":"test.mem"},"holder":"session:01M83WBGF834CVYA6FYGWB8TFQ","mode":"exclusive","expires":1795513130455}}: expected 'granted' to be 'refused' // Object.is equality
+ ✓ table.test.ts > AC1 #3218.8958c7b7 a pool(1000) takes units > AC1 #3218.8958c7b7 (wrong program) a table that counts holders grants all three and fails this test 35ms
+ ✓ table.test.ts > AC1 #3218.8958c7b7 a pool(1000) takes units > AC1 #3218.8958c7b7 (wrong program) a table that treats the pool as one key refuses the second and fails this test 31ms
+ × table.test.ts > AC2 #3218.da893eed a lease that names no units takes 1 > AC2 #3218.da893eed with a pool(3), three leases that name no units are granted with 1 unit each and a fourth is refused; the record's lease.acquired@3 carries units 1; an exact kind's lease carries no units 31ms
+   → each lease that names no units takes 1: expected [ undefined, undefined, undefined ] to deeply equal [ 1, 1, 1 ]
+ × table.test.ts > AC3 #3218.86874d33 an ask past the pool's size > AC3 #3218.86874d33 an ask for 1,200 units of the pool(1000) is BLOCKED at once, naming the pool's size 32ms
+   → an ask for 1,200 units of the pool(1000) is BLOCKED: {"status":"granted","lease":{"id":"lease:01M83WBGK4D6J9119MXZ6HMBZZ","resource":{"host":"local","kind":"test.mem","key":"test.mem"},"holder":"session:01M83WBGKHGCJ3GFK7H8HCJQSC","mode":"exclusive","expires":1795513130596}}: expected 'granted' to be 'BLOCKED' // Object.is equality
+ × table.test.ts > AC3 #3218.86874d33 an ask past the pool's size > AC3 #3218.86874d33 (wrong program) a table that queues it never answers and fails this test 31ms
+   → expected [Function] to throw error matching /is answered at once: no answer within…/ but got 'an ask for 1,200 units of the pool(10…'
+ × table.test.ts > AC5 #3218.94bd049e units on a kind that isn't a pool > AC5 #3218.94bd049e units on test.exact, matched by exact, are refused naming the kind, alone and in an ask for several 27ms
+   → a lease of 2 units on test.exact (exact) is refused:  {"status":"granted","lease":{"id":"lease:01M83WBGN4E7E6C91NVCC3YZ4J","resource":{"host":"local","kind":"test.exact","key":"rig-1"},"holder":"session:01M83WBGNEADDWXR7KYRW5KE9F","mode":"exclusive","expires":1795513130660}}: expected 'granted' not to be 'granted' // Object.is equality
+ × table.test.ts > AC5 #3218.94bd049e units on a kind that isn't a pool > AC5 #3218.94bd049e units on test.glob, matched by glob, are refused naming the kind, alone and in an ask for several 35ms
+   → a lease of 2 units on test.glob (glob) is refused:  {"status":"granted","lease":{"id":"lease:01M83WBGNZTHATE3MPE8JT0XWA","resource":{"host":"local","kind":"test.glob","key":"src/**"},"holder":"session:01M83WBGPESJDY1ZDJVKY92Y4B","mode":"exclusive","expires":1795513130687}}: expected 'granted' not to be 'granted' // Object.is equality
+ × table.test.ts > AC5 #3218.94bd049e units on a kind that isn't a pool > AC5 #3218.94bd049e units on test.prefix, matched by prefix, are refused naming the kind, alone and in an ask for several 33ms
+   → a lease of 2 units on test.prefix (prefix) is refused:  {"status":"granted","lease":{"id":"lease:01M83WBGQ276YQRVWJ48TY78HM","resource":{"host":"local","kind":"test.prefix","key":"doc.fig"},"holder":"session:01M83WBGQH27E5BYH0F4NAQWN3","mode":"exclusive","expires":1795513130722}}: expected 'granted' not to be 'granted' // Object.is equality
+ × table.test.ts > AC6 #3218.d49806d0 a pool counts on each host > AC6 #3218.d49806d0 with the pool(1000) on local and on a test host h2, 1,000 units are granted on each 24ms
+   → each carries its 1,000 units: expected [ undefined, undefined ] to deeply equal [ 1000, 1000 ]
+ × table.test.ts > AC6 #3218.d49806d0 a pool counts on each host > AC6 #3218.d49806d0 (wrong program) a table that sums across hosts refuses the second and fails this test 37ms
+   → expected [Function] to throw error matching /1,000 units on h2: expected a grant/ but got 'each carries its 1,000 units: expecte…'
+ × sequences.test.ts > AC7 #3218.82a6e5ee the table against a reference that keeps one sum per host and pool > AC7 #3218.82a6e5ee over 1,000 seeded sequences of asks and ends on two pools and two hosts, the table agrees with the reference at every step, and after the restart holds the same leases with the same units 39ms
+   → Property failed after 1 tests
+     (fast-check's report: Got TypeError: w.table.ask is not a function)
+ × sequences.test.ts > AC7 #3218.82a6e5ee the table against a reference that keeps one sum per host and pool > AC7 #3218.82a6e5ee a lease of 7 units of a pool(10): after the restart, an ask for 5 is refused naming it 64ms
+   → after the restart, an ask for 5 units with 3 free is refused, but it is granted: the pool holds lease:01M83WBGYPT6G1ZTQ8SY4TVF8K of 7 units: {"status":"granted","lease":{"id":"lease:01M83WBGYPGYDCF4BHW170ECXV","resource":{"host":"local","kind":"test.p1","key":"k"},"holder":"ext:five","mode":"exclusive","expires":1795513130966}}: expected 'granted' to be 'refused' // Object.is equality
+ ✓ sequences.test.ts > AC7 #3218.82a6e5ee the table against a reference that keeps one sum per host and pool > AC7 #3218.82a6e5ee (wrong program) a fold that drops the units grants past n after the restart and fails this test, naming the lease 56ms
+ × sequences.test.ts > AC7 #3218.82a6e5ee the table against a reference that keeps one sum per host and pool > AC7 #3218.82a6e5ee (wrong program) a fold that drops the units fails the seeded sequences after the restart, naming the lease 30ms
+   → expected [Function] to throw error matching /after the restart, \S+ \(test\.p\d on…/ but got 'Property failed after 1 tests\n{ seed…'
+ × budgets.test.ts > AC11 #3218.776b3d1a budgets, compared with the merge base > AC11 #3218.776b3d1a the perf lane's budgets are valid against the merge base's, and a task lease-ask, a #3218 first measurement, times the ask 36ms
+   → benchmarks/budgets.json has a task lease-ask: expected undefined to be defined
+ × budgets.test.ts > AC11 #3218.776b3d1a budgets, compared with the merge base > AC11 #3218.776b3d1a `node benchmarks/lease-ask.mjs` runs and exits 0 31ms
+   → Command failed: /opt/homebrew/Cellar/node@24/24.22.2_2/bin/node <checkout>/benchmarks/lease-ask.mjs
+ × budgets.test.ts > AC11 #3218.776b3d1a budgets, compared with the merge base > AC11 #3218.776b3d1a on the reference Mac, a lease with units is granted in under 50 ms, on a record already holding 100 leases 65ms
+   → it carries its 7 units: expected undefined to be 7 // Object.is equality
+ × budgets.test.ts > AC11 #3218.776b3d1a budgets, compared with the merge base > AC11 #3218.776b3d1a on the reference Mac, an ask for four resources is decided in under 1 ms with 1,000 leases held 22ms
+   → w.table.ask is not a function
+ × ask.test.ts > AC4 #3218.fe1eb34b an ask for several resources is granted whole or refused whole > AC4 #3218.fe1eb34b an ask for one cpu.slot and 600 units, with 500 free, grants neither and appends nothing 40ms
+   → w.table.ask is not a function
+ × ask.test.ts > AC4 #3218.fe1eb34b an ask for several resources is granted whole or refused whole > AC4 #3218.fe1eb34b with the read held open until two such asks are in, of which one fits, released in the order 1, 2: exactly one is granted 26ms
+   → w.table.ask is not a function
+ × ask.test.ts > AC4 #3218.fe1eb34b an ask for several resources is granted whole or refused whole > AC4 #3218.fe1eb34b with the read held open until two such asks are in, of which one fits, released in the order 2, 1: exactly one is granted 25ms
+   → w.table.ask is not a function
+ × ask.test.ts > AC4 #3218.fe1eb34b an ask for several resources is granted whole or refused whole > AC4 #3218.fe1eb34b (wrong program) a table that takes them one at a time appends a grant and a release for the ask that doesn't fit, and fails this test naming the events 28ms
+   → expected [Function] to throw error matching /appends nothing, but appended: lease\…/ but got 'w.table.ask is not a function'
+ × ask.test.ts > AC4 #3218.fe1eb34b an ask for several resources is granted whole or refused whole > AC4 #3218.fe1eb34b (wrong program) a table that takes them one at a time appends a grant and a release for the loser of the race, and fails this test naming the events 28ms
+   → expected [Function] to throw error matching /the losing ask appends nothing, but a…/ but got 'w.table.ask is not a function'
+ × design.test.ts > AC10 #3218.7172f4c8 the Lease section states the rule, the decisions and what a pool with units can never do > AC10 #3218.7172f4c8 the Lease section states the rule, each of the seven decisions with what wasn't taken, and the six things a pool with units can never do 33ms
+   → the Lease section changed from the merge base's: expected '#### Lease\n\n**What it is, and its s…' not to be '#### Lease\n\n**What it is, and its s…' // Object.is equality
+ × design.test.ts > AC10 #3218.7172f4c8 the Lease section states the rule, the decisions and what a pool with units can never do > AC10 #3218.7172f4c8 (live) the doc lanes (design links and names, catalogue drift, public text) find nothing the change brings 17ms
+   → the Lease section changed from the merge base's, for the doc lanes to hold: expected false to be true // Object.is equality
+
+ Test Files  7 failed (7)
+      Tests  27 failed | 6 passed (33)
+   Duration  9.29s (tests 96%, import 3%, transform 1%)
+
+$ node node_modules/typescript/bin/tsc -p tests/acceptance/3218/tsconfig.json
+(exit 2)
+
+tests/acceptance/3218/ask.test.ts(7,15): error TS2305: Module '"@deepbuild/leases"' has no exported member 'Need'.
+tests/acceptance/3218/ask.test.ts(18,68): error TS2554: Expected 3 arguments, but got 4.
+tests/acceptance/3218/ask.test.ts(21,29): error TS2339: Property 'ask' does not exist on type 'LeaseTable'.
+tests/acceptance/3218/ask.test.ts(45,48): error TS2339: Property 'ask' does not exist on type 'LeaseTable'.
+tests/acceptance/3218/ask.test.ts(52,38): error TS7006: Parameter 'r' implicitly has an 'any' type.
+tests/acceptance/3218/ask.test.ts(52,41): error TS7006: Parameter 'i' implicitly has an 'any' type.
+tests/acceptance/3218/ask.test.ts(80,25): error TS2345: Argument of type '"one-kind-at-a-time"' is not assignable to parameter of type 'Plant | undefined'.
+tests/acceptance/3218/ask.test.ts(83,31): error TS2345: Argument of type '"one-kind-at-a-time"' is not assignable to parameter of type 'Plant | undefined'.
+tests/acceptance/3218/budgets.test.ts(20,15): error TS2305: Module '"@deepbuild/leases"' has no exported member 'Need'.
+tests/acceptance/3218/budgets.test.ts(68,99): error TS2554: Expected 3 arguments, but got 4.
+tests/acceptance/3218/budgets.test.ts(73,75): error TS2554: Expected 3 arguments, but got 4.
+tests/acceptance/3218/budgets.test.ts(95,37): error TS2339: Property 'ask' does not exist on type 'LeaseTable'.
+tests/acceptance/3218/budgets.test.ts(111,35): error TS2339: Property 'ask' does not exist on type 'LeaseTable'.
+tests/acceptance/3218/compat.test.ts(59,73): error TS2554: Expected 3 arguments, but got 4.
+tests/acceptance/3218/compat.test.ts(62,81): error TS2554: Expected 3 arguments, but got 4.
+tests/acceptance/3218/queue.test.ts(16,39): error TS2339: Property 'unitsOf' does not exist on type 'HeavyOptions'.
+tests/acceptance/3218/queue.test.ts(16,56): error TS7031: Binding element 'kind' implicitly has an 'any' type.
+tests/acceptance/3218/queue.test.ts(16,62): error TS7031: Binding element 'command' implicitly has an 'any' type.
+tests/acceptance/3218/queue.test.ts(24,65): error TS2554: Expected 3 arguments, but got 4.
+tests/acceptance/3218/sequences.test.ts(19,22): error TS2305: Module '"@deepbuild/leases"' has no exported member 'Need'.
+tests/acceptance/3218/sequences.test.ts(93,38): error TS2339: Property 'ask' does not exist on type 'LeaseTable'.
+tests/acceptance/3218/sequences.test.ts(134,92): error TS2554: Expected 3 arguments, but got 4.
+tests/acceptance/3218/sequences.test.ts(136,79): error TS2554: Expected 3 arguments, but got 4.
+tests/acceptance/3218/sequences.test.ts(161,35): error TS2345: Argument of type '"fold-drops-units"' is not assignable to parameter of type 'Plant | undefined'.
+tests/acceptance/3218/sequences.test.ts(164,87): error TS2345: Argument of type '"fold-drops-units"' is not assignable to parameter of type 'Plant | undefined'.
+tests/acceptance/3218/table.test.ts(20,70): error TS2554: Expected 3 arguments, but got 4.
+tests/acceptance/3218/table.test.ts(21,70): error TS2554: Expected 3 arguments, but got 4.
+tests/acceptance/3218/table.test.ts(22,62): error TS2554: Expected 3 arguments, but got 4.
+tests/acceptance/3218/table.test.ts(38,74): error TS2554: Expected 3 arguments, but got 4.
+tests/acceptance/3218/table.test.ts(51,27): error TS2345: Argument of type '"counts-holders"' is not assignable to parameter of type 'Plant | undefined'.
+tests/acceptance/3218/table.test.ts(72,35): error TS2339: Property 'ask' does not exist on type 'LeaseTable'.
+tests/acceptance/3218/table.test.ts(103,74): error TS2554: Expected 3 arguments, but got 4.
+tests/acceptance/3218/table.test.ts(111,42): error TS2339: Property 'ask' does not exist on type 'LeaseTable'.
+tests/acceptance/3218/table.test.ts(113,12): error TS18046: 'several' is of type 'unknown'.
+tests/acceptance/3218/table.test.ts(114,9): error TS18046: 'several' is of type 'unknown'.
+tests/acceptance/3218/table.test.ts(115,12): error TS18046: 'several' is of type 'unknown'.
+tests/acceptance/3218/table.test.ts(116,12): error TS18046: 'several' is of type 'unknown'.
+tests/acceptance/3218/table.test.ts(117,12): error TS18046: 'several' is of type 'unknown'.
+tests/acceptance/3218/table.test.ts(131,25): error TS2345: Argument of type '"queues-past-size"' is not assignable to parameter of type 'Plant | undefined'.
+tests/acceptance/3218/table.test.ts(149,76): error TS2554: Expected 3 arguments, but got 4.
+tests/acceptance/3218/table.test.ts(152,45): error TS2339: Property 'ask' does not exist on type 'LeaseTable'.
+tests/acceptance/3218/table.test.ts(173,77): error TS2554: Expected 3 arguments, but got 4.
+tests/acceptance/3218/table.test.ts(174,74): error TS2554: Expected 3 arguments, but got 4.
+tests/acceptance/3218/table.test.ts(178,71): error TS2554: Expected 3 arguments, but got 4.
+tests/acceptance/3218/world.ts(13,31): error TS2305: Module '"@deepbuild/leases"' has no exported member 'AskResult'.
+tests/acceptance/3218/world.ts(138,143): error TS2339: Property 'unitsOf' does not exist on type 'HeavyOptions'.

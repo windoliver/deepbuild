@@ -9,7 +9,7 @@
 // stale. It ends when its holder has ended (its SessionEnd, or its agent's process gone by ID and start time) and
 // every process the supervisor recorded for its run is proven gone, and the release cites those events.
 import { execFile } from 'node:child_process';
-import { availableParallelism } from 'node:os';
+import { availableParallelism, totalmem } from 'node:os';
 import { validate } from '@deepbuild/contracts';
 import { readSince, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
 
@@ -28,7 +28,13 @@ export interface DeclaredKind extends LeaseKind { plugin: string }
 /** `host` is 'local' in R1; leases on two hosts never overlap. */
 export interface Resource { host: string; kind: string; key: string }
 export type Mode = 'exclusive' | 'shared';
-export interface Lease { id: string; resource: Resource; holder: string; mode: Mode; expires: number }
+export interface Lease {
+  id: string; resource: Resource; holder: string; mode: Mode; expires: number;
+  /** On a pool(n) kind only: the units of its n the lease takes, fixed for its life; 1 unless its ask named more. */
+  units?: number;
+}
+/** One resource an ask names, with its mode and, on a pool(n) kind, the units it takes: 1 unless named. */
+export interface Need { resource: Resource; mode: Mode; units?: number }
 /** Who asks: in the hub, `deep.lease(resource, mode)` fills this from the caller's connection and session. */
 export interface Caller {
   holder: string;
@@ -37,10 +43,13 @@ export interface Caller {
   /** The holder session's agent process, by ID and start time (`ps -o lstart=` under LC_ALL=C). */
   agent?: { pid: number; start: string };
 }
-export type LeaseResult =
-  | { status: 'granted'; lease: Lease }
-  | { status: 'refused'; reason: 'held' | 'pool' | 'cooldown' | 'taken'; holders: Lease[]; message: string }
-  | { status: 'BLOCKED'; reason: 'cap'; holders: Lease[]; message: string };
+/** A refusal: `free` is a pool's units left on the host; BLOCKED `size` is an ask for more units than its pool holds. */
+export type Refusal =
+  | { status: 'refused'; reason: 'held' | 'pool' | 'cooldown' | 'taken'; holders: Lease[]; message: string; free?: number }
+  | { status: 'BLOCKED'; reason: 'cap' | 'size'; holders: Lease[]; message: string };
+export type LeaseResult = { status: 'granted'; lease: Lease } | Refusal;
+/** An ask for several resources: every lease granted, or the first resource that couldn't be, and why. */
+export type AskResult = { status: 'granted'; leases: Lease[] } | (Refusal & { resource: Resource });
 /** A lease held now. `reading` is set while stale, and names each process recorded for it that still runs. */
 export interface LeaseView { lease: Lease; state: 'held' | 'stale'; reading?: string }
 
@@ -50,7 +59,8 @@ export type Overlap = (form: 'glob' | 'prefix', a: string, b: string) => boolean
 export type Plant =
   | 'ignores-mode' | 'pool-as-exact-key' | 'pool-ignores-n' | 'any-match-form' | 'redeclare-replaces' | 'fixed-kinds'
   | 'releases-at-expiry' | 'ignores-cooldown' | 'ignores-cap' | 'checks-held-mode-only' | 'await-before-append'
-  | 'pid-only-liveness' | 'host-blind' | 'pool-across-hosts' | 'fills-every-slot';
+  | 'pid-only-liveness' | 'host-blind' | 'pool-across-hosts' | 'fills-every-slot'
+  | 'counts-holders' | 'queues-past-size' | 'one-kind-at-a-time' | 'fold-drops-units';
 export interface LeasesOptions {
   /** Grants, stale marks and releases are appended here as `core`; holders' ends and the supervisor's proofs are read from it. */
   record: RecordStore;
@@ -58,6 +68,8 @@ export interface LeasesOptions {
   now: () => number;
   /** The cores `cpu.slot` is half of, on each host; this machine's unless given. */
   cores?: number;
+  /** The memory `mem` is counted from, in bytes, on each host; this machine's unless given. */
+  memory?: number;
   /** How long a lease is granted for; past it, a lease whose holder still runs is only stale. A day unless a test sets it. */
   lease_ms?: number;
   plant?: Plant;
@@ -67,7 +79,13 @@ export interface LeaseTable {
   declare(plugin: string, kind: LeaseKind, free?: (key: string) => Promise<boolean>): Promise<void>;
   kinds(): Promise<DeclaredKind[]>;
   /** One grant or refusal, decided on the log state it read, with no await between that decision and its append. */
-  lease(caller: Caller, resource: Resource, mode: Mode): Promise<LeaseResult>;
+  lease(caller: Caller, resource: Resource, mode: Mode, units?: number): Promise<LeaseResult>;
+  /**
+   * Every resource a run needs, granted whole or refused whole: decided on one read of the log and appended together
+   * or not at all. A refusal names the first resource that couldn't be granted. Units on a kind that isn't a pool are
+   * refused, naming the kind.
+   */
+  ask(caller: Caller, needs: readonly Need[]): Promise<AskResult>;
   /** Marks leases past their expiry stale, and ends each whose holder has ended and whose processes are proven gone. */
   tick(): Promise<void>;
   /**
@@ -127,6 +145,8 @@ const FORM = /^(?:exact|glob|prefix|pool\(([1-9][0-9]*)\))$/;
  * all but one slot, so the last is kept for a held stop's fast-lane checks.
  */
 export const SLOW_SLOT = 'slow';
+/** The MB of a host's memory `mem` leaves out of its pool: 4 GiB, drafted (#3218). */
+export const MEM_KEPT_MB = 4096;
 /** The kinds a table with a fixed list of resources leases: the planted wrong program of AC4. */
 const FIXED = ['port', 'cpu.slot'];
 /** The kinds the table's state is folded from. */
@@ -135,7 +155,11 @@ const FOLDED = ['lease.acquired', 'lease.stale', 'lease.released', 'session.star
 interface Kind extends DeclaredKind { n?: number; free?: (key: string) => Promise<boolean> }
 interface Held { lease: Lease; run?: string; agent?: { pid: number; start: string }; stale: boolean }
 const keyOf = (r: Resource): string => JSON.stringify([r.host, r.kind, r.key]);
-const names = (leases: Lease[]): string => leases.map((l) => `${l.holder} (${l.id}, ${l.mode})`).join(', ');
+const names = (leases: Lease[]): string => leases.map((l) => `${l.holder} (${l.id}, ${l.mode}${l.units !== undefined ? `, ${l.units} units` : ''})`).join(', ');
+/** The units a pool's leases take: each 1 unless its ask named more. */
+const sum = (leases: readonly Lease[]): number => leases.reduce((n, l) => n + (l.units ?? 1), 0);
+/** A lease's units are a u32. */
+const U32 = 4_294_967_295;
 
 /**
  * A process's start time as `ps -o lstart=` prints it under LC_ALL=C; null when no process has the ID, which `ps`
@@ -195,6 +219,9 @@ class Table implements LeaseTable {
         if (this.held.has(id)) break;
         const run = (d.run as string | undefined) ?? (e.subject?.startsWith('run:') ? e.subject : undefined);
         const lease: Lease = { id, resource: { ...resource! }, holder: d.holder as string, mode: d.mode as Mode, expires: d.expires as number };
+        // A pool lease's units, from lease.acquired@3; a lease recorded before them takes 1 once its kind is a pool.
+        const units = typeof d.units === 'number' && this.plant !== 'fold-drops-units' ? d.units : this.kindsByName.get(lease.resource.kind)?.n !== undefined ? 1 : undefined;
+        if (units !== undefined) lease.units = units;
         this.held.set(id, { lease, ...(run ? { run } : {}), ...(d.agent ? { agent: d.agent as { pid: number; start: string } } : {}), stale: false });
         break;
       }
@@ -248,50 +275,103 @@ class Table implements LeaseTable {
     if (holder && this.plant !== 'redeclare-replaces') throw Error(`the kind ${kind.name} is already declared by ${holder.plugin}`);
     if (this.plant === 'fixed-kinds' && !FIXED.includes(kind.name)) return;
     this.kindsByName.set(kind.name, { ...kind, plugin, ...(form?.[1] ? { n: Number(form[1]) } : {}), ...(free ? { free } : {}) });
+    // Leases folded before their kind was declared: on a pool, each recorded with no units takes 1.
+    if (form?.[1]) for (const h of this.held.values()) if (h.lease.resource.kind === kind.name && h.lease.units === undefined) h.lease.units = 1;
   }
 
   async kinds(): Promise<DeclaredKind[]> {
     return [...this.kindsByName.values()].map(({ name, match, cap, cooldown, cost, plugin }) => ({ name, match, cap, cooldown, cost, plugin }));
   }
 
-  async lease(caller: Caller, resource: Resource, mode: Mode): Promise<LeaseResult> {
+  async lease(caller: Caller, resource: Resource, mode: Mode, units?: number): Promise<LeaseResult> {
+    const r = await this.ask(caller, [{ resource, mode, ...(units !== undefined ? { units } : {}) }]);
+    if (r.status === 'granted') return { status: 'granted', lease: r.leases[0]! };
+    const { resource: _named, ...refusal } = r;
+    return refusal;
+  }
+
+  async ask(caller: Caller, asks: readonly Need[]): Promise<AskResult> {
     await this.sync();
-    const kind = this.kindsByName.get(resource.kind);
-    if (!kind) {
-      if (this.plant === 'fixed-kinds') return { status: 'refused', reason: 'taken', holders: [], message: `${resource.kind} is not one of the resources this table knows` };
-      throw Error(`no lease.kind@1 named ${resource.kind} is declared`);
+    if (!asks.length) throw Error('an ask names at least one resource');
+    const kinds: Kind[] = [];
+    for (const ask of asks) {
+      const kind = this.kindsByName.get(ask.resource.kind);
+      if (!kind) {
+        if (this.plant === 'fixed-kinds') return { status: 'refused', reason: 'taken', holders: [], message: `${ask.resource.kind} is not one of the resources this table knows`, resource: ask.resource };
+        throw Error(`no lease.kind@1 named ${ask.resource.kind} is declared`);
+      }
+      if (ask.units !== undefined) {
+        if (kind.n === undefined) throw Error(`${kind.name} matches by ${kind.match}, not a pool: only a lease on a pool(n) kind takes units`);
+        if (!Number.isInteger(ask.units) || ask.units < 1 || ask.units > U32) throw Error(`${String(ask.units)} units of ${kind.name}: name a whole number from 1 to ${U32}`);
+      }
+      kinds.push(kind);
     }
-    let refused = this.decide(caller, kind, resource, mode);
+    // The planted wrong program of #3218's AC4: one kind at a time, each granted and appended, and given back on a refusal.
+    if (this.plant === 'one-kind-at-a-time') return this.oneAtATime(caller, asks, kinds);
+    // The planted wrong program of #3218's AC3: an ask past its pool's size waits for room that never comes.
+    while (this.plant === 'queues-past-size' && asks.some((ask, i) => (ask.units ?? 1) > (kinds[i]!.n ?? Infinity))) await new Promise((r) => setTimeout(r, 250).unref());
+    return this.grant(caller, asks, kinds);
+  }
+
+  /** Decides the needs on what the table holds, asks the free checks, decides again, and holds and appends them all. */
+  private async grant(caller: Caller, asks: readonly Need[], kinds: Kind[]): Promise<AskResult> {
+    let refused = this.decideAll(caller, asks, kinds);
     if (refused) return refused;
     // A key nobody here holds is asked of its kind's free check: one something outside DeepBuild holds is refused.
-    // Other requests go on while it is open, so the decision is taken again once it answers.
-    if (kind.free && !this.overlapping(kind, resource).length) {
-      if (!(await kind.free(resource.key).catch(() => false))) {
-        return { status: 'refused', reason: 'taken', holders: [], message: `${resource.kind} ${resource.key} on ${resource.host} is taken outside DeepBuild: its free check said so` };
+    // Other requests go on while it is open, so the decision is taken again once every check answers.
+    const checks = asks.flatMap((ask, i) => (kinds[i]!.free && !this.overlapping(kinds[i]!, ask.resource).length ? [i] : []));
+    if (checks.length) {
+      const answers = await Promise.all(checks.map((i) => kinds[i]!.free!(asks[i]!.resource.key).catch(() => false)));
+      const taken = checks.find((_, j) => !answers[j]);
+      if (taken !== undefined) {
+        const { resource } = asks[taken]!;
+        return { status: 'refused', reason: 'taken', holders: [], message: `${resource.kind} ${resource.key} on ${resource.host} is taken outside DeepBuild: its free check said so`, resource };
       }
-      refused = this.decide(caller, kind, resource, mode);
+      refused = this.decideAll(caller, asks, kinds);
       if (refused) return refused;
     }
     if (this.plant === 'await-before-append') await Promise.resolve();
-    const now = this.options.now();
-    const id = ulid(now);
-    const lease: Lease = { id: `lease:${id}`, resource: { host: resource.host, kind: resource.kind, key: resource.key }, holder: caller.holder, mode, expires: now + (this.options.lease_ms ?? DAY) };
-    // Held before the append's first await, so every later decision sees it.
-    this.held.set(lease.id, { lease, ...(caller.run ? { run: caller.run } : {}), ...(caller.agent ? { agent: caller.agent } : {}), stale: false });
+    // Held before the appends' first await, so every later decision sees them all; appended in one commit of the record.
+    const leases = asks.map((ask, i) => this.hold(caller, kinds[i]!, ask));
     try {
-      await this.append('lease.acquired', 2, lease.id, {
-        resource: lease.resource, holder: lease.holder, mode, expires: lease.expires, ...(caller.run ? { run: caller.run } : {}), ...(caller.agent ? { agent: caller.agent } : {}),
-      }, now, id);
+      await Promise.all(leases.map((lease) => this.appendGrant(caller, lease)));
     } catch (error) {
-      this.held.delete(lease.id);
+      for (const lease of leases) this.held.delete(lease.id);
       throw error;
     }
-    return { status: 'granted', lease: structuredClone(lease) };
+    return { status: 'granted', leases: leases.map((l) => structuredClone(l)) };
   }
 
-  /** The kind's leases on the resource's host. */
-  private onHost(kind: Kind, host: string, everyHost = false): Lease[] {
-    return [...this.held.values()].map((h) => h.lease).filter((l) => l.resource.kind === kind.name && (everyHost || l.resource.host === host));
+  /** A lease for the ask, held here now; its event is the caller's to append. */
+  private hold(caller: Caller, kind: Kind, ask: Need): Lease {
+    const now = this.options.now();
+    const { host, kind: name, key } = ask.resource;
+    const lease: Lease = { id: `lease:${ulid(now)}`, resource: { host, kind: name, key }, holder: caller.holder, mode: ask.mode, expires: now + (this.options.lease_ms ?? DAY), ...(kind.n !== undefined ? { units: ask.units ?? 1 } : {}) };
+    this.held.set(lease.id, { lease, ...(caller.run ? { run: caller.run } : {}), ...(caller.agent ? { agent: caller.agent } : {}), stale: false });
+    return lease;
+  }
+  private appendGrant(caller: Caller, lease: Lease): Promise<void> {
+    return this.append('lease.acquired', 3, lease.id, {
+      resource: lease.resource, holder: lease.holder, mode: lease.mode, expires: lease.expires, ...(lease.units !== undefined ? { units: lease.units } : {}),
+      ...(caller.run ? { run: caller.run } : {}), ...(caller.agent ? { agent: caller.agent } : {}),
+    }, this.options.now(), lease.id.slice('lease:'.length));
+  }
+  private async oneAtATime(caller: Caller, asks: readonly Need[], kinds: Kind[]): Promise<AskResult> {
+    const got: Lease[] = [];
+    for (const [i, ask] of asks.entries()) {
+      const r = await this.grant(caller, [ask], [kinds[i]!]);
+      if (r.status !== 'granted') {
+        for (const lease of got) await this.end(this.held.get(lease.id)!, []);
+        return r;
+      }
+      got.push(...r.leases);
+    }
+    return { status: 'granted', leases: got };
+  }
+
+  /** The kind's leases on the host, with those an ask being decided takes before them. */
+  private onHost(kind: Kind, host: string, everyHost = false, taking: readonly Lease[] = []): Lease[] {
+    return [...this.held.values()].map((h) => h.lease).concat(taking).filter((l) => l.resource.kind === kind.name && (everyHost || l.resource.host === host));
   }
   /** Leases whose key could match the resource's. */
   private overlapping(kind: Kind, resource: Resource): Lease[] {
@@ -300,18 +380,36 @@ class Table implements LeaseTable {
       ? overlap(form, l.resource.key, resource.key)
       : form === 'exact' && l.resource.key === resource.key));
   }
-  /** A refusal on what the table holds now, or undefined when the lease may be granted. Never awaits. */
-  private decide(caller: Caller, kind: Kind, resource: Resource, mode: Mode): LeaseResult | undefined {
+  /** The first refusal among an ask's resources, each decided beside those before it, or undefined. Never awaits. */
+  private decideAll(caller: Caller, asks: readonly Need[], kinds: Kind[]): (Refusal & { resource: Resource }) | undefined {
+    const taking: Lease[] = [];
+    for (const [i, ask] of asks.entries()) {
+      const refused = this.decide(caller, kinds[i]!, ask, taking);
+      if (refused) return { ...refused, resource: ask.resource };
+      taking.push({ id: '', resource: ask.resource, holder: caller.holder, mode: ask.mode, expires: 0, ...(kinds[i]!.n !== undefined ? { units: ask.units ?? 1 } : {}) });
+    }
+    return undefined;
+  }
+  /** A refusal on what the table holds now and what the ask takes before this resource, or undefined. Never awaits. */
+  private decide(caller: Caller, kind: Kind, ask: Need, taking: readonly Lease[]): Refusal | undefined {
+    const { resource, mode } = ask;
     const now = this.options.now();
     const where = `${kind.name} on ${resource.host}`;
     if (kind.n !== undefined && this.plant !== 'pool-as-exact-key') {
-      const pool = this.onHost(kind, resource.host, this.plant === 'pool-across-hosts');
-      if (this.plant !== 'pool-ignores-n' && pool.length >= kind.n) {
-        return { status: 'refused', reason: 'pool', holders: pool, message: `the pool ${where} is full: ${pool.length} of ${kind.n} held, by ${names(pool)}` };
+      const units = ask.units ?? 1;
+      const pool = this.onHost(kind, resource.host, this.plant === 'pool-across-hosts', taking);
+      // An ask past the pool's size can never fit, so it never waits.
+      if (units > kind.n) {
+        return { status: 'BLOCKED', reason: 'size', holders: [], message: `the pool ${where} holds ${kind.n} units in all, so an ask for ${units} can never be granted` };
+      }
+      const used = this.plant === 'counts-holders' ? pool.length : sum(pool);
+      if (this.plant !== 'pool-ignores-n' && used + (this.plant === 'counts-holders' ? 1 : units) > kind.n) {
+        const free = Math.max(0, kind.n - used);
+        return { status: 'refused', reason: 'pool', holders: pool, free, message: `the pool ${where} is full for ${units}: ${used} of ${kind.n} held, ${free} free, by ${names(pool)}` };
       }
       const slow = pool.filter((l) => l.resource.key === SLOW_SLOT);
-      if (kind.name === 'cpu.slot' && resource.key === SLOW_SLOT && kind.n > 1 && slow.length >= kind.n - 1 && this.plant !== 'fills-every-slot') {
-        return { status: 'refused', reason: 'pool', holders: slow, message: `the pool ${where} keeps its last slot for a held stop's fast-lane checks: slow work holds ${slow.length} of ${kind.n}, by ${names(slow)}` };
+      if (kind.name === 'cpu.slot' && resource.key === SLOW_SLOT && kind.n > 1 && sum(slow) + units > kind.n - 1 && this.plant !== 'fills-every-slot') {
+        return { status: 'refused', reason: 'pool', holders: slow, free: Math.max(0, kind.n - used), message: `the pool ${where} keeps its last slot for a held stop's fast-lane checks: slow work holds ${sum(slow)} of ${kind.n}, by ${names(slow)}` };
       }
     } else {
       const conflicts = (held: Mode): boolean => (this.plant === 'ignores-mode' ? true
@@ -325,7 +423,7 @@ class Table implements LeaseTable {
       const blocking = this.overlapping(kind, resource).filter((l) => other(l) && conflicts(l.mode));
       if (blocking.length) return { status: 'refused', reason: 'held', holders: blocking, message: `${where} ${resource.key} is held by ${names(blocking)}` };
     }
-    const all = this.onHost(kind, resource.host);
+    const all = this.onHost(kind, resource.host, false, taking);
     if (this.plant !== 'ignores-cap' && all.length >= kind.cap) {
       return { status: 'BLOCKED', reason: 'cap', holders: all, message: `${where} is at its cap of ${kind.cap} leases held at once` };
     }
@@ -433,12 +531,15 @@ class Table implements LeaseTable {
   }
 }
 
-/** Opens the table on the record, its state folded from the log; the core declares `cpu.slot` before it resolves. */
+/** Opens the table on the record, its state folded from the log; the core declares `cpu.slot` and `mem` before it resolves. */
 export async function openLeases(options: LeasesOptions): Promise<LeaseTable> {
   const table = new Table(options);
   await table.sync();
   // Half the cores are the gate runner's machine slots; the cap is the cores themselves, which the pool keeps clear of.
   const cores = Math.max(1, options.cores ?? availableParallelism());
   await table.declare('core', { name: 'cpu.slot', match: `pool(${Math.max(1, Math.floor(cores / 2))})`, cap: cores, cooldown: 0, cost: 0 });
+  // Memory in MB, less 4 GiB (drafted), read when the kind is declared; a run takes its expected peak (#3220).
+  const mb = Math.floor((options.memory ?? totalmem()) / 2 ** 20) - MEM_KEPT_MB;
+  await table.declare('core', { name: 'mem', match: `pool(${Math.min(999_999, Math.max(1, mb))})`, cap: 1000, cooldown: 0, cost: 0 });
   return table;
 }
