@@ -1,0 +1,1 @@
+{ "alone": true, "why": "timing: ac2-held-busy.test.mjs holds the spike harness's canvas core busy for seconds and reads the wait of a call behind it; it starts that harness's hub, which runs deep-show from this checkout's target/" }
