@@ -72,6 +72,24 @@ const resolvedLooser = (base, ours, theirs, result) => {
     return how ? [{ ...now, how }] : [];
   });
 };
+// A merge conflict in lanes.mjs, whose lists both sides add test paths to, weakens no check when its resolution only
+// keeps both sides' lines (#3165): read from the top, each line of the result is the next line of one parent or of
+// both, and both parents end with it. So every line either parent holds is there, each parent's in its own order, a
+// line both hold at one place once, and no line neither holds. No other check file is read so: its lines are code,
+// where both sides' together may say what neither did.
+const LANES_LIST = 'scripts/lanes.mjs';
+const additive = (ours, theirs, result) => {
+  if ([ours, theirs, result].includes(null)) return false;
+  const [one, other, lines] = [ours, theirs, result].map((text) => text.split('\n'));
+  let i = 0, j = 0;
+  for (const line of lines) {
+    const mine = one[i] === line, yours = other[j] === line;
+    if (!mine && !yours) return false;
+    i += mine;
+    j += yours;
+  }
+  return i === one.length && j === other.length;
+};
 // A path no file is at, as one under a folder made a file, is no link.
 const isLink = (path) => {
   try {
@@ -206,7 +224,10 @@ export function guard({ root, change, issue }, approvals, say) {
       }
     };
     for (const path of commit.merge?.conflicts ?? []) for (const edit of conflictEdits(root, commit, path, relevant)) judge(edit, path, ...edit.test ? [named(path, edit.test)] : []);
-    if (lanesOnMain) for (const path of (commit.merge?.conflicts ?? []).filter(isCheck)) judge(checkEdit(path, ' in resolving a merge conflict'), path);
+    for (const path of lanesOnMain ? (commit.merge?.conflicts ?? []).filter(isCheck) : []) {
+      if (path === LANES_LIST && additive(...[...commit.merge.parents, commit.sha].map((rev) => show(root, rev, path)))) say('PASS', 'guard', `${path}: a merge conflict resolved by keeping both sides' lines, each in its own order, and no other (${at})`);
+      else judge(checkEdit(path, ' in resolving a merge conflict'), path);
+    }
     // A suite's lane file: one landed on main is a check, as a test is; one the change adds or edits must have the one
     // shape lanes.mjs reads, which no approval changes, and a new one lands only in the folder of the issue the change names.
     const laneEdits = (path, edited, how) => {
