@@ -505,6 +505,7 @@ export class Core {
       }),
       acking: (session) => this.acking(session), queue: (work) => void this.queue(work).catch(() => undefined), wake: (session, text) => this.noticeWake(session, text),
       over: (session) => { const s = this.sessionStarts.runOf(session); return s !== undefined && !this.sessionStarts.live(s.run); },
+      gone: (hook) => this.abandoned.has(hook),
     });
     this.delivery.answers = new Answers({
       raw: this.raw, settled: (except) => Promise.allSettled([...this.inflight].flatMap(([append, id]) => (id === except ? [] : [append]))),
@@ -2366,8 +2367,8 @@ export class Core {
         const later = r.later.splice(0).filter((text) => !prompt.includes(text)).map((text) => ({ name: 'continues', text }));
         // A notice waiting for the session goes with this prompt, once: one its own task told, or one a status question left waiting (#2669).
         const notices = (r.notices ?? []).splice(0).map((text) => ({ name: 'notices', text }));
-        // Both wait again if deep-hook lets the prompt through without reading this reply, or already has (#3305).
-        this.delivery.inPromptReply(meta.id, meta.session, later.map((p) => p.text), notices.map((p) => p.text), this.abandoned.has(meta.id));
+        // These, your notes and the promised check wait again if deep-hook lets the prompt through without reading this reply, or already has (#3305, #3309).
+        this.delivery.inPromptReply(meta.id, meta.session, later.map((p) => p.text), notices.map((p) => p.text), this.abandoned.has(meta.id), { notes, promised });
         const context = await this.fitted(meta, [{ name: 'rules', ...(rules ? { pieces: rules } : {}) }, { name: 'answers', text: answers, keep: true }, { name: 'promised checks', text: promised }, { name: 'notes', text: notes ? this.delivery.noteText(notes) : undefined }, ...later, ...notices, { name: 'verdict', text: landed ? `DeepBuild: ${landed}` : undefined }, { name: 'slow verdicts', text: slow }, { name: 'acknowledgement', text: ack.context, keep: true }, { name: 'taste', text: taste }, { name: 'sibling sessions', text: siblings }]);
         const message = [status, ack.message].filter(Boolean).join('\n');
         return { ...(context ? { context } : {}), ...(message ? { message } : {}) };

@@ -176,17 +176,22 @@ export class AnswerDelivery {
     (r.notices ??= []).push(text);
   }
 
-  /** The continues and notices a prompt's reply carries, by its hook ID, kept 60 s as Siblings keeps its notices (#3305). */
-  private readonly inReply = new Map<string, { session: string; later: string[]; notices: string[]; at: number }>();
+  /**
+   * The continues, notices, your notes from the app and the promised check a prompt's reply carries, by its hook ID,
+   * kept 60 s as Siblings keeps its notices (#3305, #3309).
+   */
+  private readonly inReply = new Map<string, { session: string; later: string[]; notices: string[]; notes: Note[]; promise: string | undefined; at: number }>();
 
   /**
    * A prompt's reply carries these: kept while deep-hook could still report its hook gone before reading it, and given
    * back at once when it already has, while the reply was being built.
    */
-  inPromptReply(hook: string, session: string, later: string[], notices: string[], gone: boolean): void {
+  inPromptReply(hook: string, session: string, later: string[], notices: string[], gone: boolean, also: { notes?: Note[] | undefined; promised?: string | undefined } = {}): void {
     const now = this.options.services.now();
     for (const [id, c] of this.inReply) if (c.at < now - 60_000) this.inReply.delete(id);
-    if (later.length || notices.length) this.inReply.set(hook, { session, later, notices, at: now });
+    const notes = also.notes ?? [];
+    const promise = also.promised ? this.promises.get(session)?.id : undefined;
+    if (later.length || notices.length || notes.length || promise) this.inReply.set(hook, { session, later, notices, notes, promise, at: now });
     if (gone) this.promptReplyGone(hook);
   }
 
@@ -198,6 +203,17 @@ export class AnswerDelivery {
     const r = this.routesOf(c.session);
     r.later.unshift(...c.later);
     if (c.notices.length) r.notices = [...c.notices, ...(r.notices ?? [])];
+    if (c.notes.length) this.carried.set(c.session, [...c.notes, ...(this.carried.get(c.session) ?? [])]);
+    // The promised check it carried is due again, for the session's next prompt or stop, and the record says so.
+    const p = c.promise ? this.promises.get(c.session) : undefined;
+    if (p && p.id === c.promise && p.status === 'woken') {
+      p.status = 'due';
+      const agent = this.options.state().sessions.get(c.session)?.agent ?? 'claude-code';
+      void this.options.schedule.queue(async () => {
+        await this.options.events.appendSession(c.session, agent, 'promise.due', { promise: p.id, due: p.due, route: 'next_hook' });
+        this.options.schedule.askingSoon();
+      }).catch(() => undefined);
+    }
   }
 
   /**

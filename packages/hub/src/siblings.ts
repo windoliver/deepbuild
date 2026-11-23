@@ -96,6 +96,8 @@ export interface SiblingOptions {
   now(): number;
   /** Whether a session DeepBuild started has ended: its agent is gone, though it may have sent no SessionEnd. */
   over(session: string): boolean;
+  /** Whether deep-hook let this hook through before reading its reply, while the reply was being built (#3309). */
+  gone?(hook: string): boolean;
 }
 /** A merged pull request's first line, as GitHub writes it: the number and the branch, nothing of its title. */
 const MERGED = /^Merge pull request #(\d+) from [^/\s]+\/(\S+)$/;
@@ -351,6 +353,8 @@ export class Siblings {
       const now = this.o.now();
       for (const [hook, r] of this.inReply) if (r.at < now - IN_REPLY_MS) this.inReply.delete(hook);
       this.inReply.set(meta.id, { session: meta.session, notices: [...waiting.values()], at: now });
+      // Already gone while this reply was built: no report of it is still to come, so they wait again now (#3309).
+      if (this.o.gone?.(meta.id)) this.gone(meta.id);
     }
     return texts.length ? texts.join('\n') : undefined;
   }
