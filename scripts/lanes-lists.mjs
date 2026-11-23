@@ -1404,6 +1404,10 @@ byHand.push('tests/acceptance/980/ac09-budget.test.ts');
 // #689's blind redraft: AC2 builds and tests the whole workspace on 1.99.1; AC4 builds deep-app's hub_client test.
 slow.push('tests/acceptance/689-redraft-2047/ac2-checks.test.mjs', 'tests/acceptance/689-redraft-2047/ac4-app-in-unit-lane.test.mjs');
 
+// #2173's blind redraft: AC1 runs scripts/repo-rules.mjs over every file git lists in the checkout, untracked ones too,
+// so a suite writing into the checkout beside it could add a finding that isn't this change's.
+alone.push('tests/acceptance/2173-redraft-2047/');
+
 // #3100's acceptance tests: AC1 builds the whole workspace; AC2 builds and tests it.
 slow.push('tests/acceptance/3100/ac1-build.test.mjs', 'tests/acceptance/3100/ac2-test.test.mjs');
 

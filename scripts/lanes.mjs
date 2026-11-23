@@ -190,7 +190,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/1942/', 'tests/acceptance/1945/', 'tests/acceptance/1946/', 'tests/acceptance/1943/', 'tests/acceptance/1942-redraft-2073/',
   ],
   "shared: the checkout's source files": [
-    'tests/acceptance/1901/', 'tests/acceptance/2497/',
+    'tests/acceptance/1901/', 'tests/acceptance/2497/', 'tests/acceptance/2173-redraft-2047/',
   ],
   'shared: the sandbox log stream': [
     'tests/acceptance/67/', 'tests/acceptance/66/', 'tests/acceptance/103/', 'tests/acceptance/363/', 'tests/acceptance/365/', 'tests/acceptance/262/', 'tests/acceptance/366/',
