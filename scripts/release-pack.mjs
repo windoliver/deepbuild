@@ -16,13 +16,16 @@ import { fileURLToPath } from 'node:url';
 import { preflightRefusal } from './preflight-record.mjs';
 import { contentsOf, extract } from './release-artifacts.mjs';
 
-// process.exit skips the finally below, so a refusal removes the temporary folder itself.
+// process.exit and a stop signal both skip the finally below, so each removes the temporary folder itself. A stop
+// that lands during a spawnSync is handled once that child, stopped with the same process group, returns.
 let work;
+const drop = () => { if (work) rmSync(work, { recursive: true, force: true }); };
 const fail = (message) => {
   console.error(`release-pack: ${message}`);
-  if (work) rmSync(work, { recursive: true, force: true });
+  drop();
   process.exit(1);
 };
+for (const [signal, number] of [['SIGINT', 2], ['SIGTERM', 15], ['SIGHUP', 1]]) process.once(signal, () => { drop(); process.exit(128 + number); });
 const run = (cmd, args, cwd) => {
   const r = spawnSync(cmd, args, { cwd, encoding: 'utf8', maxBuffer: 1 << 28 });
   if (r.status !== 0) fail(`${cmd} ${args.join(' ')} failed: ${r.stderr || r.error}`);

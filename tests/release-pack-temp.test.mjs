@@ -1,8 +1,8 @@
 // A refused pack removes its temporary folder. fail() exits the process, which skips the finally that removes it,
 // so every refused pack used to leave its whole clean checkout behind in the temp folder (6-7 GB each on a Mac).
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -27,4 +27,36 @@ test('a pack refused for a missing bin leaves no release-pack folder in the temp
   assert.equal(r.status, 1, r.stderr);
   assert.match(r.stderr, /bin bin\/missing\.js is not in the archive/);
   assert.deepEqual(readdirSync(temp).filter((n) => n.startsWith('release-pack-')), []);
+});
+
+test('a pack whose process group is stopped by SIGTERM or SIGINT leaves no release-pack folder', async (t) => {
+  for (const signal of ['SIGTERM', 'SIGINT']) {
+    const root = mkdtempSync(join(tmpdir(), 'release-pack-temp-test-'));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const repo = join(root, 'repo');
+    const temp = join(root, 'temp');
+    const bin = join(root, 'bin');
+    for (const d of [repo, temp, bin]) mkdirSync(d);
+    // A git whose clone hangs after it finishes, so the stop lands while the pack's temp folder holds a checkout.
+    const realGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
+    writeFileSync(join(bin, 'git'), `#!/bin/sh\nif [ "$1" = clone ]; then "${realGit}" "$@" && exec sleep 60; fi\nexec "${realGit}" "$@"\n`, { mode: 0o755 });
+    writeFileSync(join(repo, 'package.json'), JSON.stringify({ name: 'planted', version: '1.0.0' }));
+    const env = { PATH: `${bin}:${process.env.PATH ?? ''}`, HOME: root, TMPDIR: temp, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' };
+    const git = (...args) => execFileSync(realGit, args, { cwd: repo, env, encoding: 'utf8' }).trim();
+    git('init', '-q');
+    git('add', '-A');
+    git('commit', '-qm', 'planted');
+    const child = spawn(process.execPath, [script, '--repo', repo, '--commit', git('rev-parse', 'HEAD'), '--out', join(root, 'out')], { env, detached: true, stdio: 'ignore' });
+    const exited = new Promise((done) => child.on('exit', (code, sig) => done({ code, sig })));
+    const packed = () => readdirSync(temp).filter((n) => n.startsWith('release-pack-'));
+    // deadline: bounds the wait for the pack's clone to land, which the planted git then holds open
+    for (const end = Date.now() + 30_000; !packed().some((n) => existsSync(join(temp, n, 'checkout', 'package.json'))); ) {
+      assert.ok(Date.now() < end, `${signal}: the pack never cloned into its temp folder`);
+      await new Promise((r) => setImmediate(r));
+    }
+    process.kill(-child.pid, signal);
+    const { code } = await exited;
+    assert.notEqual(code, 0, `${signal}: a stopped pack must not report success`);
+    assert.deepEqual(packed(), [], `${signal}: the stopped pack left its temp folder`);
+  }
 });
