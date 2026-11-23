@@ -1,0 +1,65 @@
+# `node node_modules/vitest/vitest.mjs run --root tests/acceptance/1864 --reporter=verbose`, run once from the repo's root on the
+# unchanged base 0fffd8fcfd8eb56f7224a950cafef81cd909ff67 (2026-11-23, 02:10 UTC; vitest prints its own start in local time),
+# with Node v24.22.0, on macOS (darwin-arm64), at load averages 63.97 68.25 62.69 (1, 5 and 15 minutes) on 12 cores.
+# Below: the run's own output and the command's exit status, with the repo's path replaced by <repo>; nothing else is
+# changed. 3 failed, 0 passed, 0 skipped: each test fails at an expect of its own, in approved-revision.test.ts.
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1864
+
+ × approved-revision.test.ts > #1864.c1fc5bdd a unit check whose run line a write the guard did not recognize changed to true still fails on the next claim, and a proposal names .deepbuild/done.yaml > #1864.c1fc5bdd with unit failing and its run line rewritten on disk to "true" by a write no hook saw, the next claim's run of unit ends failed, and a proposal names .deepbuild/done.yaml 32790ms
+   → unit's run line was rewritten on disk to "true" by a write the guard didn't recognize, which changes no check: every run of unit on the next claim runs the line the base commit holds, `node --test tests/unit.test.js`, whose test fails while checkToken takes a token whose exp has passed, so each ends failed: claim:01M832PW3CR6XE6ET2AHKNGCG5: verdict INCONCLUSIVE [".deepbuild/checks/says-rejects.sh: runs still to come","unit: 0 of 1 clean runs"], then verdict INVALID [".deepbuild/checks/says-rejects.sh: can't fail: the report can't record a failure: its control deepbuild control b1b401a2083a failed at .deepbuild/checks/says-rejects.test.js:8, not at .deepbuild/checks/says-rejects.test.js:10",".deepbuild/checks/says-rejects.sh: has no run on the merge base, so nothing proves the fix","unit: 0 of 1 clean runs"]; its runs: unit ("true") uncounted, .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") uncounted: expected [ 'uncounted' ] to deeply equal []
+ × approved-revision.test.ts > #1864.0771441b with done.yaml deleted by the same kind of write, the next claim's spec checks run from the kept revision, and a proposal names the file > #1864.0771441b with .deepbuild/done.yaml deleted on disk by a write no hook saw, unit and typecheck still run on the next claim from the revision its base commit holds and pass, and a proposal names .deepbuild/done.yaml 3376ms
+   → .deepbuild/done.yaml was deleted on disk by a write the guard didn't recognize, which changes no check: the revision the base commit holds names unit on the done claim (`node --test tests/unit.test.js`), so unit still runs on the next claim: claim:01M832QW06M95H6Y49485BHT3B: verdict PASS [".deepbuild/checks/says-rejects.sh: PASS on 1 clean run"]; its runs: .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") passed, .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") failed: expected 0 to be greater than 0
+ × approved-revision.test.ts > #1864.5912e17b an outside entry added to done.yaml by the same kind of write moves no check out of the sandbox and runs no build > #1864.5912e17b with an outside entry naming unit, with a build, added on disk to .deepbuild/done.yaml by a write no hook saw, no build runs, and the next claim's run of unit stays in the sandbox, which refuses its write outside the checkout and records it 3000ms
+   → the outside entry was added on disk to .deepbuild/done.yaml by a write the guard didn't recognize, which changes no check: the revision the base commit holds has no outside block, so no build runs for the next claim; the entry's build ran and wrote /private/tmp/dh322-Nk8W2y/built: claim:01M832QZAHNNF1WWQBZJXS09TK: verdict FAIL ["unit: failed on every real run: a write outside the checkout is refused"]; its runs: .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") passed, unit ("node --test tests/unit.test.js") failed, .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") failed, unit ("node --test tests/unit.test.js") failed: expected true to be false // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  approved-revision.test.ts > #1864.c1fc5bdd a unit check whose run line a write the guard did not recognize changed to true still fails on the next claim, and a proposal names .deepbuild/done.yaml > #1864.c1fc5bdd with unit failing and its run line rewritten on disk to "true" by a write no hook saw, the next claim's run of unit ends failed, and a proposal names .deepbuild/done.yaml
+AssertionError: unit's run line was rewritten on disk to "true" by a write the guard didn't recognize, which changes no check: every run of unit on the next claim runs the line the base commit holds, `node --test tests/unit.test.js`, whose test fails while checkToken takes a token whose exp has passed, so each ends failed: claim:01M832PW3CR6XE6ET2AHKNGCG5: verdict INCONCLUSIVE [".deepbuild/checks/says-rejects.sh: runs still to come","unit: 0 of 1 clean runs"], then verdict INVALID [".deepbuild/checks/says-rejects.sh: can't fail: the report can't record a failure: its control deepbuild control b1b401a2083a failed at .deepbuild/checks/says-rejects.test.js:8, not at .deepbuild/checks/says-rejects.test.js:10",".deepbuild/checks/says-rejects.sh: has no run on the merge base, so nothing proves the fix","unit: 0 of 1 clean runs"]; its runs: unit ("true") uncounted, .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") uncounted: expected [ 'uncounted' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "uncounted",
++ ]
+
+ ❯ approved-revision.test.ts:32:379
+
+ ❯ verdict ../322/helpers.ts:75:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  approved-revision.test.ts > #1864.0771441b with done.yaml deleted by the same kind of write, the next claim's spec checks run from the kept revision, and a proposal names the file > #1864.0771441b with .deepbuild/done.yaml deleted on disk by a write no hook saw, unit and typecheck still run on the next claim from the revision its base commit holds and pass, and a proposal names .deepbuild/done.yaml
+AssertionError: .deepbuild/done.yaml was deleted on disk by a write the guard didn't recognize, which changes no check: the revision the base commit holds names unit on the done claim (`node --test tests/unit.test.js`), so unit still runs on the next claim: claim:01M832QW06M95H6Y49485BHT3B: verdict PASS [".deepbuild/checks/says-rejects.sh: PASS on 1 clean run"]; its runs: .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") passed, .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") failed: expected 0 to be greater than 0
+ ❯ approved-revision.test.ts:45:291
+
+ ❯ verdict ../322/helpers.ts:75:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  approved-revision.test.ts > #1864.5912e17b an outside entry added to done.yaml by the same kind of write moves no check out of the sandbox and runs no build > #1864.5912e17b with an outside entry naming unit, with a build, added on disk to .deepbuild/done.yaml by a write no hook saw, no build runs, and the next claim's run of unit stays in the sandbox, which refuses its write outside the checkout and records it
+AssertionError: the outside entry was added on disk to .deepbuild/done.yaml by a write the guard didn't recognize, which changes no check: the revision the base commit holds has no outside block, so no build runs for the next claim; the entry's build ran and wrote /private/tmp/dh322-Nk8W2y/built: claim:01M832QZAHNNF1WWQBZJXS09TK: verdict FAIL ["unit: failed on every real run: a write outside the checkout is refused"]; its runs: .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") passed, unit ("node --test tests/unit.test.js") failed, .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") failed, unit ("node --test tests/unit.test.js") failed: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ approved-revision.test.ts:63:312
+
+ ❯ verdict ../322/helpers.ts:75:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  18:10:38
+   Duration  39.34s (tests 100%)
+
+exit status 1

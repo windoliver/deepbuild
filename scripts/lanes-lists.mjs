@@ -1298,6 +1298,9 @@ timed.push('tests/acceptance/1489/ui-thread.test.ts');
 
 // #2777's files each build deep-show (full, and with the test.tone module), and its preflight file times the lane.
 alone.push('tests/acceptance/2777/');
+// The alone block's files that call a timing helper and weren't timed (#3137): run in shards, they would run beside
+// other shards, so they run last, one at a time, under a timed grant, as #1114's list holds.
+timed.push('tests/acceptance/2777/preflight.test.ts', 'tests/acceptance/194/ac11-budgets.test.ts', 'tests/acceptance/2402/budget.test.ts', 'tests/acceptance/277/ac4-budgets.test.ts', 'tests/acceptance/278/ac5-budgets.test.ts', 'tests/acceptance/518/handoff.test.ts', 'tests/acceptance/518/planes.test.ts');
 // #211's files build deep-logic and deep-show, start Chrome and hold page stores of hundreds of MiB;
 // ac8-budgets times release builds.
 alone.push('tests/acceptance/211/');
@@ -1400,9 +1403,16 @@ timed.push('tests/acceptance/980/ac09-budget.test.ts');
 alone.push('tests/acceptance/980-redraft-ac9/');
 timed.push('tests/acceptance/980-redraft-ac9/ac9-budget.test.ts');
 byHand.push('tests/acceptance/980/ac09-budget.test.ts');
+// #1841's first draft fails the next page's read only when that read binds two values; since #1576 it also binds the
+// page's byte cap, so the failure is never injected and the test reads BLOCKED. Its blind redraft runs in its place.
+byHand.push('tests/acceptance/1841/events-read.test.ts');
 
 // #689's blind redraft: AC2 builds and tests the whole workspace on 1.99.1; AC4 builds deep-app's hub_client test.
 slow.push('tests/acceptance/689-redraft-2047/ac2-checks.test.mjs', 'tests/acceptance/689-redraft-2047/ac4-app-in-unit-lane.test.mjs');
+
+// #2173's blind redraft: AC1 runs scripts/repo-rules.mjs over every file git lists in the checkout, untracked ones too,
+// so a suite writing into the checkout beside it could add a finding that isn't this change's.
+alone.push('tests/acceptance/2173-redraft-2047/');
 
 // #3100's acceptance tests: AC1 builds the whole workspace; AC2 builds and tests it.
 slow.push('tests/acceptance/3100/ac1-build.test.mjs', 'tests/acceptance/3100/ac2-test.test.mjs');
@@ -1426,3 +1436,11 @@ timed.push('tests/acceptance/2740/as-on-main.test.ts');
 alone.push('tests/acceptance/2215/');
 // #2215's AC5 redraft (blind) builds deep-gpu and draws its four-document corpus on the GPU, once under a plant; no timing.
 alone.push('tests/acceptance/2215-redraft-ac5/');
+
+// #269's folder (blind) runs alone by its lane.json; ac6-budgets.test.ts times a 256 × 256 grid image's frame GPU with
+// judgeLimit, as its blind redraft of AC6 does.
+alone.push('tests/acceptance/269-redraft-ac6/');
+timed.push('tests/acceptance/269/ac6-budgets.test.ts', 'tests/acceptance/269-redraft-ac6/ac6-budgets.test.ts');
+// #269's first AC6 draft is kept by hand until the owner swaps it: its budget program runs out of the default fuel at
+// step 0, so its grid never changes; its blind redraft, 269-redraft-ac6/, runs in its place.
+byHand.push('tests/acceptance/269/ac6-budgets.test.ts');

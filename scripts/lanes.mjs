@@ -133,7 +133,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/29/budgets.test.ts', 'tests/acceptance/23/match/budgets.test.ts', 'tests/acceptance/120/budgets.test.ts', 'tests/acceptance/120/budgets-idle-redraft.test.ts',
     'tests/acceptance/27/budgets.test.ts', 'tests/acceptance/1868/', 'tests/acceptance/2573/', 'tests/acceptance/194-redraft-ac11/', 'tests/acceptance/1477/',
     'tests/acceptance/2569/', 'tests/acceptance/408-redraft-ac5/', 'tests/acceptance/405-redraft-ac4/', 'tests/acceptance/1405/', 'tests/acceptance/724-redraft-1405/',
-    'tests/acceptance/1575-redraft-ac1/', 'tests/acceptance/2026-redraft-ac3/', 'tests/acceptance/518-redraft-ac10/', 'tests/acceptance/538-redraft-ac8/',
+    'tests/acceptance/1575-redraft-ac1/', 'tests/acceptance/2026-redraft-ac3/', 'tests/acceptance/518-redraft-ac10/', 'tests/acceptance/538-redraft-ac8/', 'tests/acceptance/269-redraft-ac6/',
     'tests/acceptance/525-device/', 'tests/acceptance/222-redraft-ac7/', 'tests/acceptance/280/', 'tests/acceptance/277/', 'tests/acceptance/556-redraft-ac5/',
     'tests/acceptance/2032-redraft-ac8/', 'tests/acceptance/1017/budgets.test.ts', 'tests/acceptance/1097/budgets.test.ts', 'tests/acceptance/111/budgets.test.ts',
     'tests/acceptance/304/budgets.test.ts', 'tests/acceptance/308/budgets.test.ts', 'tests/acceptance/31/budgets.test.ts', 'tests/acceptance/40/budgets.test.ts',
@@ -190,7 +190,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/1942/', 'tests/acceptance/1945/', 'tests/acceptance/1946/', 'tests/acceptance/1943/', 'tests/acceptance/1942-redraft-2073/',
   ],
   "shared: the checkout's source files": [
-    'tests/acceptance/1901/', 'tests/acceptance/2497/',
+    'tests/acceptance/1901/', 'tests/acceptance/2497/', 'tests/acceptance/2173-redraft-2047/',
   ],
   'shared: the sandbox log stream': [
     'tests/acceptance/67/', 'tests/acceptance/66/', 'tests/acceptance/103/', 'tests/acceptance/363/', 'tests/acceptance/365/', 'tests/acceptance/262/', 'tests/acceptance/366/',
@@ -219,9 +219,21 @@ for (const entry of alone) {
   if (why) aloneReasons[entry] = why[1];
 }
 
+/**
+ * The unit lane's alone block (see the lane): the vitest files it lists, each folder's run with no file beside it. runLanes
+ * runs it as affected.mjs runs the block (#3137; docs/parallel-proof.md, section 7a), through that script's own entry:
+ * `affected.mjs --alone` takes the files this command lists and runs its folders side by side, each in a shard of its
+ * own, on the run's one jobserver, then the exclusive folders one at a time, and its slow and timed files in full, the
+ * timed ones last, one at a time.
+ */
+export const aloneCommand = [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--no-file-parallelism', ...alone, ...[...ownLane, ...byHand].flatMap((path) => ['--exclude', path.endsWith('.ts') ? path : `${path}**`])];
+const sharded = [process.execPath, 'scripts/affected.mjs', '--alone', '--slow', '--timed'];
+/** The command runLanes runs for a lane command: the alone block's in shards, any other as it is. */
+const runOf = (command) => (command === aloneCommand ? sharded : command);
+
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
-  { name: 'lint', commands: [['cargo', 'fmt', '--all', '--', '--check'], [process.execPath, 'scripts/repo-rules.mjs'], ['cargo', 'clippy', '--workspace', '--all-targets', '--locked', '--', '-D', 'warnings'], [process.execPath, 'scripts/vendor-rebase.mjs', 'check'], [process.execPath, 'scripts/canvas-lint.mjs'], [process.execPath, 'scripts/size-ratchet.mjs'], [process.execPath, 'scripts/wait-ratchet.mjs'], [process.execPath, 'scripts/doc-ceilings.mjs'], [process.execPath, 'scripts/reading-rule.mjs'], [process.execPath, 'scripts/conformance-lint.mjs'], [process.execPath, 'scripts/slots-check.mjs'], [process.execPath, 'scripts/canvas-closures.mjs', 'closures'], [process.execPath, 'scripts/canvas-closures.mjs', 'drift'], [process.execPath, 'scripts/canvas-closures.mjs', 'paths'], [process.execPath, 'scripts/record-reader-guard.mjs'], [process.execPath, 'scripts/render-lint.mjs'], [process.execPath, 'scripts/plant-lint.mjs'], [process.execPath, 'scripts/loads-lint.mjs'], [process.execPath, 'scripts/budget-table.mjs', 'check'], [process.execPath, 'scripts/cache-lint.mjs'], [process.execPath, 'scripts/blocking-call-guard.mjs'], [process.execPath, 'scripts/ask-sources-guard.mjs'], [process.execPath, 'scripts/keymap-guard.mjs'], [process.execPath, 'scripts/color-literal-guard.mjs'], [process.execPath, 'scripts/guide.mjs', '--check'], [process.execPath, 'scripts/panel-catalog.mjs'], [process.execPath, 'scripts/known-failures-check.mjs'], [process.execPath, 'scripts/fetch-lock.mjs', 'lint'], [process.execPath, 'scripts/exit-lint.mjs'], [process.execPath, 'scripts/app-copy-lint.mjs'], [process.execPath, 'scripts/alone-lint.mjs']], fix: 'Format Rust with cargo fmt, follow the Fix line under each repo rule above, fix the clippy warnings, follow the Fix line under each canvas-lint finding, each size FAIL line, each waits FAIL line, each doc-ceilings FAIL line and each reading rule FAIL line, or repair the enum closure, code mapping, rule fake or planted code each conformance-lint FAIL line names, declare the slot each slots-check FAIL line names with its interface, kit and planted fill, give each canvas list a closure-lint FAIL line names its closure or make the reference table and packages/contracts/canvas-closures.json agree where a drift FAIL line says they differ, give each holder a paths FAIL line names its line in its section\'s Paths row of docs/canvas-primitives.md saying what packages/contracts/canvas-paths.json holds (the deep-show unit test the_paths_listing_is_what_the_full_set_seals prints that file from the seal), and each same a check kind or fixture that holds it, read the record through the one reader in crates/deep-app/src/record.rs from each module a record-reader FAIL line names, put each plant read a plant FAIL line names under its cargo feature, give each judgeLimit call a loads FAIL line names its loads, rewrite benchmarks/windows/numbers.md from the window records where a budget-table FAIL line names a row (node scripts/budget-table.mjs write), move each blocking call a blocking-call FAIL line names off the UI thread or give it its reason, give each source an ask-source FAIL line names its row in packages/asks/sources.json, give each chord a keymap FAIL line names a free key, no ⌃, or the variant_of its ⌥ needs, draw each color a color-literal FAIL line names from the role it names, regenerate the extension guide with node scripts/guide.mjs, follow the Fix line under each panel-catalog FAIL line, or give each known failure a known-failures FAIL line names an open issue and the date it was added, fixing it or taking it out once 14 days have passed, or pin each scripts/fetch-lock.json row a fetch-lock FAIL line names to a commit with its sha256, size and credit, or exit with 0, 1, 2 or 3 where an exits FAIL line names a command that can exit another code, or draw each string a copy FAIL line names from a key of crates/deep-app/copy/en.json through crate::copy, its numbers through the table\'s placeholders and plural forms, or follow the Fix line under each alone FAIL line.' },
+  { name: 'lint', commands: [['cargo', 'fmt', '--all', '--', '--check'], [process.execPath, 'scripts/repo-rules.mjs'], ['cargo', 'clippy', '--workspace', '--all-targets', '--locked', '--', '-D', 'warnings'], [process.execPath, 'scripts/vendor-rebase.mjs', 'check'], [process.execPath, 'scripts/canvas-lint.mjs'], [process.execPath, 'scripts/size-ratchet.mjs'], [process.execPath, 'scripts/wait-ratchet.mjs'], [process.execPath, 'scripts/doc-ceilings.mjs'], [process.execPath, 'scripts/reading-rule.mjs'], [process.execPath, 'scripts/conformance-lint.mjs'], [process.execPath, 'scripts/slots-check.mjs'], [process.execPath, 'scripts/canvas-closures.mjs', 'closures'], [process.execPath, 'scripts/canvas-closures.mjs', 'drift'], [process.execPath, 'scripts/canvas-closures.mjs', 'paths'], [process.execPath, 'scripts/record-reader-guard.mjs'], [process.execPath, 'scripts/render-lint.mjs'], [process.execPath, 'scripts/plant-lint.mjs'], [process.execPath, 'scripts/loads-lint.mjs'], [process.execPath, 'scripts/budget-table.mjs', 'check'], [process.execPath, 'scripts/cache-lint.mjs'], [process.execPath, 'scripts/blocking-call-guard.mjs'], [process.execPath, 'scripts/ask-sources-guard.mjs'], [process.execPath, 'scripts/keymap-guard.mjs'], [process.execPath, 'scripts/color-literal-guard.mjs'], [process.execPath, 'scripts/guide.mjs', '--check'], [process.execPath, 'scripts/panel-catalog.mjs'], [process.execPath, 'scripts/known-failures-check.mjs'], [process.execPath, 'scripts/fetch-lock.mjs', 'lint'], [process.execPath, 'scripts/exit-lint.mjs'], [process.execPath, 'scripts/app-copy-lint.mjs'], [process.execPath, 'scripts/alone-lint.mjs'], [process.execPath, 'scripts/built-escapes.mjs']], fix: 'Format Rust with cargo fmt, follow the Fix line under each repo rule above, fix the clippy warnings, follow the Fix line under each canvas-lint finding, each size FAIL line, each waits FAIL line, each doc-ceilings FAIL line and each reading rule FAIL line, or repair the enum closure, code mapping, rule fake or planted code each conformance-lint FAIL line names, declare the slot each slots-check FAIL line names with its interface, kit and planted fill, give each canvas list a closure-lint FAIL line names its closure or make the reference table and packages/contracts/canvas-closures.json agree where a drift FAIL line says they differ, give each holder a paths FAIL line names its line in its section\'s Paths row of docs/canvas-primitives.md saying what packages/contracts/canvas-paths.json holds (the deep-show unit test the_paths_listing_is_what_the_full_set_seals prints that file from the seal), and each same a check kind or fixture that holds it, read the record through the one reader in crates/deep-app/src/record.rs from each module a record-reader FAIL line names, put each plant read a plant FAIL line names under its cargo feature, give each judgeLimit call a loads FAIL line names its loads, rewrite benchmarks/windows/numbers.md from the window records where a budget-table FAIL line names a row (node scripts/budget-table.mjs write), move each blocking call a blocking-call FAIL line names off the UI thread or give it its reason, give each source an ask-source FAIL line names its row in packages/asks/sources.json, give each chord a keymap FAIL line names a free key, no ⌃, or the variant_of its ⌥ needs, draw each color a color-literal FAIL line names from the role it names, regenerate the extension guide with node scripts/guide.mjs, follow the Fix line under each panel-catalog FAIL line, or give each known failure a known-failures FAIL line names an open issue and the date it was added, fixing it or taking it out once 14 days have passed, or pin each scripts/fetch-lock.json row a fetch-lock FAIL line names to a commit with its sha256, size and credit, or exit with 0, 1, 2 or 3 where an exits FAIL line names a command that can exit another code, or draw each string a copy FAIL line names from a key of crates/deep-app/copy/en.json through crate::copy, its numbers through the table\'s placeholders and plural forms, or follow the Fix line under each alone FAIL line, or build again each package a built-escapes FAIL line names, so the last step of its build writes each character above U+00FF as an escape.' },
   { name: 'unit', commands: [
     // The canvas, text and marks acceptance files each build a binary before spawning it, and cargo
     // clones the binary into target/debug anew on every build, fresh or not, so a file spawning it
@@ -233,7 +245,7 @@ export const checks = [
     // supervisor's files (#236) too: they read the system's one sandbox log stream. And deep-hook's
     // files (#315), and #666's checkpoint through it: they build it and time it to 50 ms.
     [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', ...[...alone, ...ownLane, ...byHand].flatMap((path) => ['--exclude', path.endsWith('.ts') ? path : `${path}**`])],
-    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--no-file-parallelism', ...alone, ...[...ownLane, ...byHand].flatMap((path) => ['--exclude', path.endsWith('.ts') ? path : `${path}**`])],
+    aloneCommand,
     // A listed failure must not prevent later targets from reporting unlisted failures.
     ['cargo', 'test', '--workspace', '--locked', '--no-fail-fast'],
     // Node's acceptance suites under tests/acceptance/ run by hand, as their READMEs say: #48's live
@@ -575,6 +587,9 @@ export function cargoResults(output, status, workspace) {
   // the test's own thread there (lines the test printed can look like one, so the last). A custom harness that runs its
   // cases on the main thread prints a case's panic just before its result line, or its message first in a
   // `---- <test> ----` block after it.
+  // #3172: a custom harness that runs nothing says why in its last line, of its own name, as
+  // `card_size: INCONCLUSIVE; <reason>`.
+  const said = new Map(), reported = new Set();
   let target = null, block = null, next = null, uncaught = null;
   for (const line of output.split('\n')) {
     const test = line.match(/^test (.+?) \.\.\. (ok|FAILED|BLOCKED|INVALID|INCONCLUSIVE)$/);
@@ -591,6 +606,12 @@ export function cargoResults(output, status, workspace) {
     if (thread && (block ? block.captured && thread === block.test : thread === 'main')) next = 'panic';
     const started = cargoTarget(line, targets);
     if (started !== undefined) target = started;
+    if (/^test /.test(line)) reported.add(target);
+    // cargo names each failed target by the arguments that rerun it.
+    const rerun = line.match(/(?:to rerun pass |^\s+)`(-p \S+ --\w+(?: \S+)?)`\s*$/)?.[1];
+    const own = line.match(/^(\w+): (INCONCLUSIVE|BLOCKED); (.+)$/);
+    if (own && target?.split(' ').at(-1) === own[1]) said.set(target, { state: own[2], message: own[3] });
+    else if (line.trim() && !rerun) said.delete(target);
     if (test && test[2] === 'ok') passed.push(`cargo ${target} › ${test[1]}`);
     if (test && test[2] !== 'ok') failures.push({ id: `cargo ${target} › ${test[1]}`, ...test[2] === 'FAILED' ? { state: stateOf(uncaught ?? ''), message: uncaught ?? '' } : { state: test[2], message: '' } }), failed.add(target);
     if (test || started !== undefined) uncaught = null;
@@ -599,9 +620,7 @@ export function cargoResults(output, status, workspace) {
     // Custom harnesses report unrun cases too; a listed target must not turn those into passes.
     const unproven = line.match(/^test result: (BLOCKED|INVALID|INCONCLUSIVE)\b/)?.[1];
     if (unproven) failures.push({ id: `cargo ${target}`, state: unproven, message: line.slice(13) }), failed.add(target);
-    // cargo names each failed target by the arguments that rerun it.
-    const rerun = line.match(/(?:to rerun pass |^\s+)`(-p \S+ --\w+(?: \S+)?)`\s*$/)?.[1];
-    if (rerun && !failed.has(rerun)) failures.push({ id: `cargo ${rerun}`, state: 'FAIL', message: 'the target failed outside any test it reported' }), failed.add(rerun);
+    if (rerun && !failed.has(rerun)) failures.push({ id: `cargo ${rerun}`, ...((!reported.has(rerun) && said.get(rerun)) || { state: 'FAIL', message: 'the target failed outside any test it reported' }) }), failed.add(rerun);
   }
   if (status !== 0 && !failed.size) failures.push({ id: 'cargo test', state: 'FAIL', message: output.split('\n').find((line) => /^error/.test(line)) ?? `exited ${status}` });
   return { failures, passed, ...(skips.length && { skips }) };
@@ -743,6 +762,8 @@ export function reporting([command, ...args], report) {
   const at = args.findIndex((arg) => arg.endsWith('vitest.mjs'));
   if (at >= 0) return { command: [command, ...args.slice(0, at + 2), '--reporter=default', `--reporter=${vitestReporter}`, ...args.slice(at + 2)], env: { DEEP_PROOF_VITEST_REPORT: report } };
   if (command === process.execPath && args[0] === '--test') return { command: [command, '--test', `--test-reporter=${nodeReporter}`, `--test-reporter-destination=${report}`, '--test-reporter=spec', '--test-reporter-destination=stdout', ...args.slice(1)] };
+  // The alone block's run (#3137): affected.mjs writes each test's result into its --results file.
+  if (command === process.execPath && args[0] === 'scripts/affected.mjs') return { command: [command, ...args, `--results=${report}`] };
   return null;
 }
 
@@ -751,6 +772,7 @@ export function testsOf([command, ...args], cwd, { report, output, status }) {
   if (command === 'cargo' && args[0] === 'test') return cargoResults(output, status, crates(cwd));
   if (!existsSync(report)) return null;
   try {
+    if (args[0] === 'scripts/affected.mjs') return JSON.parse(readFileSync(report, 'utf8')).tests ?? null;
     const results = reportResults(cwd, readFileSync(report, 'utf8'), args.some((arg) => arg.endsWith('vitest.mjs')) ? 'vitest' : '');
     if (results.cut) return null;
     // vitest's -t leaves every other test skipped with no note: a filter's choice, not a skip.
@@ -816,16 +838,44 @@ export function exactTree(cwd) {
 }
 
 /**
- * A tree's lane records merged as remote lanes merge (parallel-proof §8): the worst state among them stands, so a lane's
- * FAIL wins over another's pass, and `lanes` names each lane whose own state is that state.
+ * A tree's lane records merged as remote lanes merge (parallel-proof §8): each lane's records, a Mac's and any other
+ * machine's, merge per test ID. A row that ran stands over a skipped row of the same ID, and among the rows that ran the
+ * worst state stands, so a Spark FAIL wins over a Mac pass. A record's `findings`, and a state its rows and findings
+ * don't explain, count as they are. A lane with no Mac record is never PASS, and another machine's lint record is a reading, left out. The
+ * tree's state is the worst of its lanes' (`states`), and `lanes` names each lane holding it.
  */
 export function mergeRecords(tree) {
   const folder = join(homedir(), '.deepbuild', 'lanes');
   const records = (existsSync(folder) ? readdirSync(folder) : [])
     .filter((name) => name.startsWith(`${tree}-`) && name.endsWith('.json'))
     .map((name) => JSON.parse(readFileSync(join(folder, name), 'utf8')));
-  const state = worst(records.map((r) => r.state)) ?? 'PASS';
-  return { tree, state, lanes: records.filter((r) => r.state === state).map((r) => r.lane) };
+  // A state the lanes don't write is no pass.
+  const read = (state) => (['PASS', 'LISTED', 'FAIL', 'INVALID', 'BLOCKED', 'INCONCLUSIVE'].includes(state) ? state : 'INVALID');
+  const states = {};
+  for (const lane of new Set(records.map((r) => r.lane))) {
+    const mac = records.filter((r) => r.lane === lane && String(r.platform).startsWith('darwin'));
+    const group = lane === 'lint' ? mac : records.filter((r) => r.lane === lane);
+    // A lane only Macs ran reads as it did before any merge: its records' own states.
+    if (mac.length && group.length === mac.length) {
+      states[lane] = worst(mac.map((r) => read(r.state))) ?? 'PASS';
+      continue;
+    }
+    // Each record's rows by ID first: within one record a skipped row and a row that ran stay what that lane read.
+    const rows = new Map(), own = [];
+    for (const r of group) {
+      const tests = (r.tests ?? []).map((row) => ({ ...row, state: read(row.state) })), findings = (r.findings ?? []).map((found) => read(found.state));
+      for (const id of new Set(tests.map((row) => row.id))) {
+        const same = tests.filter((row) => row.id === id);
+        rows.set(id, [...(rows.get(id) ?? []), { state: worst(same.map((row) => row.state)), skipped: same.every((row) => row.skipped) }]);
+      }
+      // What a lane found outside any test, and a state neither that nor its rows explain, count whatever the rows merge to.
+      own.push(...findings, ...(read(r.state) === (worst([...tests.map((row) => row.state), ...findings]) ?? 'PASS') ? [] : [read(r.state)]));
+    }
+    const merged = [...rows.values()].map((same) => worst((same.some((row) => !row.skipped) ? same.filter((row) => !row.skipped) : same).map((row) => row.state)));
+    states[lane] = worst([...merged, ...own, ...(mac.length ? [] : ['INCONCLUSIVE'])]) ?? 'PASS';
+  }
+  const state = worst(Object.values(states)) ?? 'PASS';
+  return { tree, state, lanes: Object.keys(states).filter((lane) => states[lane] === state), states };
 }
 
 /** A lane's evidence record, which T7 and T8 read: its state, where it ran, on what tree, and each test's state. */
@@ -874,10 +924,10 @@ export function runLanes(lanes, { cwd = root } = {}) {
       const started = performance.now();
       console.log(`RUN ${lane.name}`);
       let failure = lane.commands.length ? undefined : { state: 'BLOCKED', error: 'No check was run' };
-      const tree = exactTree(cwd), tests = [], unproven = [], listedTests = [];
+      const tree = exactTree(cwd), tests = [], unproven = [], listedTests = [], findings = [];
       // The tests the lane's whole cargo test commands list, or null once a listing failed; whether any cargo test ran.
       let listedCargo, cargoRan = false;
-      for (const [command, ...args] of lane.commands) {
+      for (const [command, ...args] of lane.commands.map(runOf)) {
         let directory, descriptor, result, results, output = '';
         try {
           directory = mkdtempSync(join(tmpdir(), 'deep-preflight-output-'));
@@ -888,7 +938,7 @@ export function runLanes(lanes, { cwd = root } = {}) {
             try {
               const { binaryNames, buildBinaries, commandFiles, watchBinaries } = require('./proof-binaries.mjs');
               watchBinaries(binaries);
-              const files = selected.flatMap((lane) => lane.commands).flatMap((command) => commandFiles(cwd, command));
+              const files = selected.flatMap((lane) => lane.commands.map(runOf)).flatMap((command) => commandFiles(cwd, command));
               buildBinaries(cwd, join(binaries, 'bin'), binaryNames(cwd, files), undefined, { timeout: 0 });
             } catch (error) { binaryError = error; }
           }
@@ -929,8 +979,11 @@ export function runLanes(lanes, { cwd = root } = {}) {
           // A diagnostic that names its own state keeps it: a check that couldn't run reads BLOCKED, not
           // FAIL, and one that couldn't read all it checks reads INCONCLUSIVE.
           const [, state, rest] = error.match(/^(FAIL|INVALID|BLOCKED|INCONCLUSIVE)\s+(.+)/) ?? [];
-          found = { state: state ?? (result.error ? 'BLOCKED' : 'FAIL'), error: rest ?? error };
+          found = { state: state ?? (result.error ? 'BLOCKED' : 'FAIL'), error: rest ?? error, lone: !failed };
         }
+        // What no test's row carries, as a missing grant or a runner that died, is the lane's own finding: the record
+        // names it, so a merge with another machine's rows (parallel-proof §8) can't lose it.
+        if (found && (found.lone || (results?.noGrant && found.error === results.noGrant) || !run.tests.some(({ state }) => state === found.state))) findings.push({ state: found.state, note: found.error });
         if (stands(found, failure)) failure = found;
         if (command === 'cargo' && args[0] === 'test') {
           cargoRan = true;
@@ -970,7 +1023,7 @@ export function runLanes(lanes, { cwd = root } = {}) {
       if (failure) failures.push(`${failure.state} ${lane.name}${platform}: ${failure.error}\n${lines}  Fix: ${lane.fix}\n  Elapsed: ${elapsed} s`);
       else console.log(`PASS ${lane.name} (${elapsed} s)`);
       try {
-        if (tree !== null) writeRecord(lane.name, failure?.state ?? 'PASS', tree, tests, more);
+        if (tree !== null) writeRecord(lane.name, failure?.state ?? 'PASS', tree, tests, findings.length ? { ...more, findings } : more);
       } catch (error) {
         // A lane that FAILed, or read INVALID or BLOCKED, keeps its one verdict: the missing record outranks only less.
         if (failure && failure.state !== 'INCONCLUSIVE') console.log(`NOTE ${lane.name}: no evidence record: ${error.message}`);

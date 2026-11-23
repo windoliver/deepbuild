@@ -1,0 +1,9 @@
+{"at":"2026-11-23T05:52:31.953Z","event":"granted","class":"timed","grant":"nested","id":"4ee6476207682eb8","pid":81136,"index":1,"load":52.23828125,"cores":12,"wait":60}
+{"at":"2026-11-23T06:57:58.502Z","event":"released","class":"timed","id":"4ee6476207682eb8","pid":81136}
+{"at":"2026-11-23T07:16:08.789Z","event":"granted","class":"timed","grant":"nested","id":"4e9f20f829456501","pid":53375,"index":1,"load":28.78564453125,"cores":12,"wait":60}
+{"at":"2026-11-23T07:40:48.111Z","event":"released","class":"timed","id":"4e9f20f829456501","pid":53375}
+{"at":"2026-11-23T09:48:43.944Z","event":"granted","class":"timed","grant":"nested","id":"5123df4818605869","pid":66882,"index":1,"load":33.1728515625,"cores":12,"wait":60}
+{"at":"2026-11-23T10:14:05.606Z","event":"released","class":"timed","id":"5123df4818605869","pid":66882}
+{"at":"2026-11-23T10:30:18.403Z","event":"granted","class":"timed","grant":"nested","id":"1978810ece097845","pid":41387,"index":1,"load":110.47119140625,"cores":12,"wait":60}
+{"at":"2026-11-23T10:56:34.668Z","event":"released","class":"timed","id":"1978810ece097845","pid":41387}
+{"at":"2026-11-23T11:03:14.303Z","event":"granted","class":"timed","grant":"nested","id":"bab39f69c6d4798a","pid":56681,"index":1,"load":56.41748046875,"cores":12,"wait":60}
