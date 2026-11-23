@@ -1,0 +1,147 @@
+#290 at the base, 16c400dcf (main at 8fcfcb677 with the branch of #552 merged in), each file run once on 2026-11-21
+between 07:43Z and 08:31Z, in the blind job's worktree: a checkout of the base with only this folder added
+(uncommitted; the lanes line is the implementer's to add). The machine: a Mac17,10 with 18 cores, Node v24.22.2,
+vitest 5.0.5, TypeScript 5.9.3, the 1-minute load between about 125 and 320 (the machine was shared; no test reads a
+time or the load). The hub wasn't running, so `scripts/lease` ran each command with no lease and said so once a run;
+those lines are left out below.
+
+Every test fails at the base: 14 of 14 in the 8 files. None passes, so none is a guard. Every failure is an
+AssertionError at an expect line of the test's own file, with that line's own message; none is a TypeError, an import
+error, a timeout, a BLOCKED or an INCONCLUSIVE.
+
+The commands (the build hooks found the base's builds made beforehand through the build slot: `cargo build --locked
+-j 6 --bin deep-gpu`, then `cargo build --locked -j 6 --bin deep-show --no-default-features --features full`, exit 0):
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/290/tsconfig.json     # exit 0, no output
+  PATH="$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH" NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node scripts/throttle.mjs build --wait 180 -- sh scripts/lease \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/290 --no-file-parallelism --testTimeout=600000 <files>
+
+Two grants of the build slot: `ac1-sphere.test.ts` alone (granted 07:43:46Z after 29 minutes in the queue; 2 tests
+failed, 8.9 s), then the other seven files in one command, one file at a time (granted 08:29:43Z after 73 minutes;
+7 files and 12 tests failed, 55 s). No file was run twice. After ac1's run `helpers.ts` changed once, while the
+second command still waited for its grant: the lamp of criterion 3's fixture went from 3,000 lm to 1,000 lm, which
+only `sphereDoc`'s `shadows` option reads, so both runs are runs of the code as delivered (a comment on that line
+was reworded after them). The type check above was run again after the last change to a `.ts` file: exit 0.
+
+The two runs' output was kept in the checkout's `target/blind-290/`. The checkout's whole `target/` folder, the base's
+builds with it, was found gone at 09:45Z (the checkout's folder was last changed at 09:38Z), removed by something
+other than this job, so the lines below are those copied out of the logs before then: each test's AssertionError and
+the first line of what it received. Nothing was run after that but the type check.
+
+ac1-sphere.test.ts (2 failed)
+  × AC1 #290.052fe5e4 pixels where the wall covers the sphere equal the wall's color blended toward the sphere's shaded color at 0.4 within 1/255, and pixels where the sphere shows directly are byte for byte as without the hidden view
+    AssertionError: where the wall covers the sphere, 10178 of 10178 pixels aren't the wall's color blended toward the sphere's shaded color at 0.4 within 1/255: expected [ …(40) ] to deeply equal []
+    + "pixel (228, 99) reads 171, 164, 152, not the wall's color blended toward the sphere's shaded color at 0.4, 142.6, 150.4, 174.1 (the wall alone 170.5, 163.6, 151.6, the sphere alone 77.7, 127.2, 202.1)",
+    ❯ ac1-sphere.test.ts:75:193
+  × AC1 #290.052fe5e4 a planted pass that also draws where the sphere is visible fails, naming the pixel
+    AssertionError: --planted hidden_view_draws_where_visible draws the two frames: expected [ Array(1) ] to deeply equal []
+    + "deep-gpu run --planted hidden_view_draws_where_visible answered {\"ok\":false,\"code\":\"bad_input\"} (exit 2; stderr empty)",
+    ❯ ac1-sphere.test.ts:94:101
+
+ac2-torus.test.ts (2 failed)
+  × AC2 #290.8310b458 where the torus's two layers overlap behind the wall, the color is one layer's blend: the wall's color blended toward the torus's nearest surface at 0.4 within 1/255
+    AssertionError: where the two layers overlap, 2566 of 2566 pixels aren't one layer's blend: expected [ …(40) ] to deeply equal []
+    + "pixel (184, 162) reads 131, 148, 177, not the wall's color blended toward the torus's shaded color at 0.4, 158.9, 146.7, 146.7 (the wall alone 130.7, 148.2, 177.0, the torus alone 192.0, 144.6, 73.0)",
+    ❯ ac2-torus.test.ts:65:132
+  × AC2 #290.8310b458 a planted pass without its own depth pass stacks two layers and fails, naming the pixel
+    AssertionError: --planted hidden_view_without_own_depth draws the three frames, and the fixture holds: expected [ Array(1) ] to deeply equal []
+    + "deep-gpu run --planted hidden_view_without_own_depth answered {\"ok\":false,\"code\":\"bad_input\"} (exit 2; stderr empty)",
+    ❯ ac2-torus.test.ts:71:110
+
+ac3-shadow-ids.test.ts (2 failed)
+  × AC3 #290.a677630a shadow maps and the object-ID pass are byte for byte as at opacity 0, and a pick on the hidden sphere's pixels returns the wall
+    AssertionError: view3d draws the four frames with their `shadow` target (README: The surface under test): expected [ …(4) ] to deeply equal []
+    + "the sphere at opacity 0.4 was refused: {\"code\":\"bad_input\",\"reason\":\"targets are final, linear, ids, pre_tone, pre_curve, dirt, scene, backdrop, depth, reflection, foam, normal, coc, surface, window_linear, velocity and checks\"}",
+      (and the same for the other three frames)
+    ❯ ac3-shadow-ids.test.ts:58:127
+  × AC3 #290.a677630a a planted pass that writes object IDs returns the sphere and fails
+    AssertionError: --planted hidden_view_writes_ids draws the frame: expected [ Array(1) ] to deeply equal []
+    + "deep-gpu run --planted hidden_view_writes_ids answered {\"ok\":false,\"code\":\"bad_input\"} (exit 2; stderr empty)",
+    ❯ ac3-shadow-ids.test.ts:91:110
+
+ac4-match-me.test.ts (2 failed)
+  × AC4 #290.fba001a7 two copies, each setting opacity from match.me and a logic array of the players' characters, each show only their own character through the wall while their full-state hashes match
+    AssertionError: the characters' piece is presented and its match plays (README: The surface under test): expected [ Array(1) ] to deeply equal []
+    + "AC4 the characters' piece: the piece is refused at check, not presented: unknown_field at items/hero_1/hidden_view: not a field of an item; unknown_field at items/hero_2/hidden_view: not a field of an item",
+    ❯ ac4-match-me.test.ts:43:115
+  × AC4 #290.fba001a7 a planted opacity that ignores match.me shows both characters on both copies and fails, naming the copy
+    AssertionError: the planted program presents the piece and plays its match: expected [ Array(1) ] to deeply equal []
+    + "AC4 the characters' piece (planted hidden_view_opacity_ignores_match_me): deep-show run doesn't take the scenario: … deep-show run answers the scenario ok (it takes the planted hidden_view_opacity_ignores_match_me); got {\"ok\":false,\"code\":\"bad_input\"}: expected false to be true // Object.is equality",
+    ❯ ac4-match-me.test.ts:55:85
+
+ac5-seen.test.ts (2 failed)
+  × AC5 #290.9e8b88d3 a row that a seen column hides on this copy draws no hidden view, where a row this copy's player sees shows through the wall
+    AssertionError: the rows' piece is presented and its match plays (README: The surface under test): expected [ Array(1) ] to deeply equal []
+    + "AC5 the rows' piece: the piece is refused at check, not presented: unknown_field at items/enemies/hidden_view: not a field of an item",
+    ❯ ac5-seen.test.ts:41:109
+  × AC5 #290.9e8b88d3 a planted pass that ignores seen draws it and fails, naming the row
+    AssertionError: the planted program presents the piece and plays its match: expected [ Array(1) ] to deeply equal []
+    + "AC5 the rows' piece (planted hidden_view_ignores_seen): deep-show run doesn't take the scenario: … deep-show run answers the scenario ok (it takes the planted hidden_view_ignores_seen); got {\"ok\":false,\"code\":\"bad_input\"}: expected false to be true // Object.is equality",
+    ❯ ac5-seen.test.ts:48:85
+
+ac6-status.test.ts (2 failed)
+  × AC6 #290.69fa44f2 the outline and badge of a status-bound gauge before the wall keep the exact fail color where the hidden view draws all around them
+    AssertionError: the hidden view is drawn around the status color: 0 of 7062 wall pixels over the sphere differ from the frame with no hidden view by more than 2 codes, at least 90% must: expected 0 to be greater than or equal to 6355.8
+    ❯ ac6-status.test.ts:62:210
+  × AC6 #290.69fa44f2 a planted pass drawn after the status guard tints it and fails, naming the pixel
+    AssertionError: --planted hidden_view_after_status draws the two frames, and the fixture holds: expected [ Array(1) ] to deeply equal []
+    + "deep-gpu run --planted hidden_view_after_status answered {\"ok\":false,\"code\":\"bad_input\"} (exit 2; stderr empty)",
+    ❯ ac6-status.test.ts:69:105
+
+ac7-seek-count.test.ts (1 failed)
+  × AC7 #290.f96ca349 frames sought and a render-back equal the frames played, by pixel hash; at opacity 0 the item adds no pass, and above 0 exactly one depth pass and one blended draw
+    AssertionError: the channel on the hidden view's opacity moves the frame: frames 0, 10 and 25 are three pictures: expected [ true, true ] to deeply equal [ false, false ]
+    ❯ ac7-seek-count.test.ts:60:184
+
+ac8-taste.test.ts (1 failed)
+  × AC8 #290.005a3986 the check run takes the sphere, the torus and the two copies of a match from the renderer's own output, and the recorded call on exactly those pictures says they look right; with none the run is INCONCLUSIVE, never PASS
+    AssertionError: each frame lists the hidden view's blended draw of its item: expected [ [], [] ] to deeply equal [ [ 'hidden_view sphere' ], …(1) ]
+    ❯ ac8-taste.test.ts:54:8
+    (it stops before any picture is written: docs/evidence/290/ wasn't made)
+
+Why they fail, by file (the base's behaviour is the README's "What the base already does"):
+
+- ac1, ac2: `view3d` draws the item with no hidden view, so every judged pixel under the wall reads the wall alone:
+  all 10,178 of the sphere's and all 2,566 of the torus's. The fixture's guards before that line hold at the base
+  (the regions' sizes, the object-ID targets against the rays, the blend standing apart from the wall on every pixel).
+- ac3: `view3d` refuses the `shadow` target, `bad_input`, so none of the four frames is drawn.
+- ac4, ac5: `deep show` refuses the piece, `unknown_field` at each item's `hidden_view`.
+- ac6: the two frames are one picture: nothing changes around the status color, 0 of 7,062 pixels. The fixture's
+  guards hold (663 status-colored pixels where the wall covers the sphere).
+- ac7: the channel on `items/sphere/hidden_view/opacity` is accepted and moves nothing, so frames 0, 10 and 25 are one
+  picture. The line before it holds at the base (frame 0 is the picture of the document with no hidden view).
+- ac8: no frame lists a `hidden_view` draw.
+- The six planted tests: the base holds none of the names. `deep-gpu run --planted <name>` answers `{"ok":false,
+  "code":"bad_input"}` and exits 2; `deep-show run` with the scenario's `planted` answers the same and exits 0.
+
+What couldn't be run at the base, and what was run in its place (scratch scripts and one scratch test file, none
+committed; each drove the base's own `deep-gpu` and `deep-show`):
+
+- No planted program exists at the base, so no planted test got past its first line, and no right program exists, so
+  no check ran to a pass. In their place:
+  - The blend judge (ac1, ac2) on the base's adjust opacity (#424's), a sphere at 0.4 before a wall, with the wall
+    alone and the sphere alone as its references: 0 of 20,194 pixels fail, the largest error under 0.75 code. So a
+    renderer that blends in its linear target passes the 1/255 as this suite judges it.
+  - The byte-for-byte judge (ac1) on the base's frames: the sphere beside the wall against the sphere alone, 0 of
+    10,016 pixels differ; the wall before the sphere against the wall alone, 0 of 10,178.
+  - The pinhole and the rays: no pixel of either region strays from the base's object-ID targets; the five clicks all
+    answer `wall` at the base, each at least 4 px inside the region; the torus's triangles give the ID target's
+    silhouette and the depth target's nearest crossing within 13 mm.
+  - Criterion 3's fixture: three shadow passes, two cascades and the spot's map reported; the maps' keys differ when
+    the sphere casts and when it doesn't; no judged pixel at white.
+  - Criterion 7's calls: every played frame carries a pixel hash and its draws, captured or not; under the look with
+    one sample in both classes a seek, a render-back and an export of a moving frame have the played frame's hash,
+    and under the default look the render-back doesn't (16 samples), with no hidden view anywhere.
+  - `match.ts`'s `play` and the views' judges (ac4, ac5) on pieces the base accepts: the rows' piece with no hidden
+    view is presented and plays 120 steps, each view reads its own `match.me`, and the judge names the four seen rows
+    as drawing no hidden view; with the wall left out each copy's frame shows exactly its player's rows at the pixels
+    the judge reads. The characters' piece with each character lifted over the wall by `cast.owner` (a driver on the
+    base's `at/pos/1`) plays 200 steps with 4 hashes shared, and each view shows the lifted character where and when
+    the array says. `cast`'s bytes run in Node's own WebAssembly write [1, 2] through step 99 and [2, 1] from 100.
+  - The views' judges on made-up pictures: a right program's (each copy its own character; each copy its seen rows)
+    gives no failure; both characters on both copies gives "copy 1 at step 60 shows hero_2, player 2's character" and
+    "copy 2 at step 60 shows hero_1, player 1's character"; every row on both copies gives "copy 1 at step 100 draws a
+    hidden view of row 1 (enemies#1.1)" and "copy 2 … row 2 (enemies#2.1)", four failures in all.
+- Not tried on any program: the planted checks of ac1, ac2, ac3 and ac6 on a frame that fails them, since nothing at
+  the base draws a hidden view to plant against.
