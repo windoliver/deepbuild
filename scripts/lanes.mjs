@@ -571,11 +571,6 @@ alone.push('tests/acceptance/2029/');
 // #1101's files build deep-drive with test-confirm, plain and planted, start real hubs on a stepped clock, run real git
 // pushes and draw the held and answered asks' pages.
 alone.push('tests/acceptance/1101/');
-// #1101's first draft of AC1 reads origin after the hub's clock has passed the hold, so it counts a push let through at
-// 10 s as one before; its blind redraft, 1101-redraft-ac1/, runs in place of push.test.ts (AC3 copied unchanged), and
-// the first draft's file runs by hand (tests/acceptance/1101-redraft-ac1/DISPUTE.md).
-alone.push('tests/acceptance/1101-redraft-ac1/');
-byHand.push('tests/acceptance/1101/push.test.ts');
 // #1056's files build deep-gpu and draw #464's pixel fixtures; records.test.ts runs #464's two-GPU tests.
 alone.push('tests/acceptance/1056/');
 // #404's parts: #1897's files each build deep-show in their own feature set and hold the GPU for the pixel hash;
