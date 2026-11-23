@@ -21,12 +21,22 @@ The checker still exits 1 at the merged head (`rules-after.txt`). All 146 FAIL l
 - key-shaped strings;
 - twins' own `package.json` and `Cargo.toml` dependencies.
 
-Open issue #3139 holds them, and it waits on an owner decision about how the lints treat `tests/acceptance/`. #3138 (PR #3153, merged) cleared every finding outside that folder. The blind job read AC1 as "exits 0, or exits 1 with every failing line under `tests/acceptance/`" and recorded that reading as its choice in its README. A literal exit 0 holds once #3139 lands.
+#3139 held them. #3138 (PR #3153, merged) cleared every finding outside that folder. The blind job read AC1 as "exits 0, or exits 1 with every failing line under `tests/acceptance/`" and recorded that reading as its choice in its README.
+
+## After #3139: a literal exit 0
+
+#3139's change then landed on main, and main `2a5bd60fd` printed no line under `tests/acceptance/`. It printed one new line outside it: `FAIL deps: crates/deep-codecs/Cargo.toml dependencies png ^0.18 is not in scripts/repo-rules.json`. #1488 (PR #3148) added that dependency with its reason as a manifest comment but no row. This change adds that row, with the comment's reason.
+
+With it, at the merge `ed824b3f7` plus the row:
+- `node scripts/repo-rules.mjs` exits 0 with no FAIL, INVALID or BLOCKED line (`rules-after-3139.txt`).
+- The blind AC1 test passes with no line set apart (`ac1-after-3139.txt`).
 
 ## The captures
 
 - `rules-before.txt`: the checker on the blind base. The base is this worktree at `c52dc3e73` with `scripts/repo-rules.json` from `a3db8f131`, put back afterwards.
 - `rules-after.txt`: the checker at the merged head `823ddf1d7` (main `28bfe9a9b`).
 - `suite-head.txt`: the blind suite once at the merged head: 4 of 4 pass, in 40.7 s.
+- `rules-after-3139.txt` and `ac1-after-3139.txt`: the checker, and the AC1 test, after #3139 and with the `png` row.
+- At the merge `ed824b3f7` without the row, AC2's three tests passed and AC1 failed on the `png` line alone.
 
 Home folders read `~`.
