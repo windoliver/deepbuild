@@ -2,8 +2,6 @@
 // deadline, the clean runs and the test count its entry declares. A key of done.yaml no reader takes is never
 // dropped: it stands on the claim as a check of the spec's own, BLOCKED naming each such key and its line (#2205's
 // checks the gate can't run stand beside it the same way).
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { isAlias, isMap, isScalar, LineCounter, parseDocument } from 'yaml';
 import { duration } from '@deepbuild/asks';
 import type { JsonValue } from '@deepbuild/contracts';
@@ -13,8 +11,8 @@ import type { ClaimCheck } from './gate-runner.js';
 import type { McpOperationsPort } from './hub-ports.js';
 import { isObj } from './hub-shared.js';
 import { blocked, cantRun, specEntries } from './release.js';
+import { SPEC } from './approved-spec.js';
 
-const SPEC = '.deepbuild/done.yaml';
 /** The top-level keys a reader takes: the gate's own, teardowns' `resources`, the stack's `environment`, the `asks` settings and deep-hook's `heavy_commands`. */
 const TOP = new Set(['claims', 'checks', 'outside', 'release', 'switches', 'resources', 'environment', 'asks', 'heavy_commands']);
 /** The keys a reader takes on a check entry: a command's, and a document check's (#1723). */
@@ -38,10 +36,9 @@ export function unreadKeys(text: string): { key: string; line: number; check?: s
  * The repo's spec checks (#322): each check the spec's `done` claim names (or, with no claims block, every check),
  * as a command run in the claim's checkout, the repo's own, covering the claim as a whole. A key no reader takes stands
  * beside them as the spec's own check, missing a key the hub reads, and a count it can't read on the check that writes it.
+ * `text` is the spec's text that `spec` was read from: the approved revision's (#1864), never the worktree's.
  */
-export function specChecks(cwd: string, spec: unknown, checks: ReturnType<McpOperationsPort['checksOf']>, docs: Map<string, DocCheck>): ClaimCheck[] {
-  let text = '';
-  try { text = readFileSync(join(cwd, SPEC), 'utf8'); } catch { /* gone since it was read: it writes no key */ }
+export function specChecks(text: string, spec: unknown, checks: ReturnType<McpOperationsPort['checksOf']>, docs: Map<string, DocCheck>): ClaimCheck[] {
   const unread = unreadKeys(text);
   const done = isObj(spec) && isObj(spec.claims) && isObj(spec.claims.done) && Array.isArray(spec.claims.done.checks) ? spec.claims.done.checks.map(String) : [...new Set([...checks.keys(), ...docs.keys(), ...specEntries(spec)])];
   return [

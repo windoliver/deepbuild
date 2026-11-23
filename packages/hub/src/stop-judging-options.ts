@@ -28,7 +28,6 @@ import type { CoreOptions } from './wire.js';
 
 export interface StopJudgingOptions {
   settings: CoreOptions & { forge: string };
-  doneSpec(cwd: string): unknown;
   services: {
     readonly tasks: AskTasks;
     readonly openItems: OpenItems;
@@ -58,7 +57,7 @@ export interface StopJudgingOptions {
     readonly canvasSide: HubCanvas;
   };
   state: () => Pick<SessionStatePort, "attention" | "live" | "sessions" | "startOf">;
-  mcp: () => Pick<McpOperationsPort, "checksOf" | "pinOf">;
+  mcp: () => Pick<McpOperationsPort, "pinOf">;
   delivery: () => Pick<AnswerDeliveryPort, "cap" | "deliver" | "handed" | "offer" | "promiseCarried" | "releases" | "unwoken" | "waiting" | "answers">;
   transcripts: () => Pick<TranscriptsPort, "cursors">;
   control: () => Pick<HubControlPort, "onSwitchedTree">;
