@@ -3,7 +3,7 @@
 version = 4
 
 [[package]]
-name = "acceptance-2700-probe"
+name = "acceptance-2700-reached-probe"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",

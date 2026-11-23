@@ -27,10 +27,12 @@ compare-all passes it by definition. The issue's owner added `#2700.dad8fae2` fo
 
 ## The surface
 
-`deep_canvas::schedule::{Scheduler, Options, Session}` (`Session::new`, `Session::load`, `Session::revise_items(&mut
-self, s, doc, ids, reached)`) and `deep_canvas::registry::{Registry, BuildSet}`. Calls go only through the public
-entry. "Revised without the whole load" means `revise_items` answers `Some(issues)`. `None` sends its caller to
-`load`, as `crates/deep-show/src/efficiency.rs` does.
+`deep_canvas::schedule::{Scheduler, Options, Session}` (`Session::new`, `Session::load`,
+`Session::revise_items(&mut self, s, doc, ids, reached)`, `Session::document`) and
+`deep_canvas::registry::{Registry, BuildSet}`. Calls go only through the public entry. "Revised without the whole
+load" means two things. First, `revise_items` answers `Some(issues)`; `None` sends its caller to `load`, as
+`crates/deep-show/src/efficiency.rs` does. Second, the session's current revision (`Session::document`) then holds
+the patched item.
 
 The probe is `probe-reached/`, a crate apart from `probe/`. Its release profile turns **debug assertions off**.
 `revise_items` debug-asserts that no member outside `reached` changed, and that unnamed member is exactly the
@@ -47,17 +49,25 @@ load, even when another member differs`.
 The board has two `rect@1` items, `data` and `assets`. For each member, `data` and then `assets`, a fresh session
 loads it. Then `revise_items` gets a revision that changes item `a`'s box and that one member, with `ids = ["a"]` and
 `reached = []`. The test first checks the scenario: the member differs, and nothing but `items` and the member
-differs. A failure there is `BLOCKED`. Then it asserts the call answered `Some`. As a record only, the probe also makes
-the same call with `reached = [member]`; on the base that is `None`.
+differs. A failure there is `BLOCKED`. Then it asserts three things, in this order:
+
+1. The call answered `Some`.
+2. `Session::document()` then holds item `a` with the patched box `[3, 0, 12, 10]`, so it was revised, not merely
+   answered.
+3. The same patch on a fresh session, with `reached = [member]`, answers `None`, the Scope's "compares only those".
 
 Run: `node --test tests/acceptance/2700/reached.test.mjs` from the checkout root, Node 24, cargo (arm64) on `PATH`.
 The output on the base is in `REVISE-ITEMS-BASE.txt`, and it passes.
 
 ## How it can fail
 
-- A `revise_items` that answers `None` for an unnamed member that differs fails at the assertion: "revise_items
+- A `revise_items` that answers `None` for an unnamed member that differs fails at assertion 1: "revise_items
   answered None (the whole load) for a patch whose reached names no member outside items: it compared the member
-  `data`, which differs from the revision before and which the patch did not name as reached".
+  `data`, which differs from the revision before and which the patch did not name as reached". This is the twin
+  below.
+- A `revise_items` that answers `Some` without revising (for example, `Some(Vec::new())` at its top) fails at
+  assertion 2, naming item `a`'s box in the session's revision against the patched one.
+- A `revise_items` that compares nothing, ignoring `reached`, fails at assertion 3, naming the member.
 - A probe that does not build (for example, the change renames `revise_items` or gives it other parameters), does not
   run or prints no report fails as `BLOCKED`.
 

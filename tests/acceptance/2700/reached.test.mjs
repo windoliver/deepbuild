@@ -5,7 +5,9 @@
 // The probe (probe-reached/, REVISE-ITEMS.md) loads a board in a session and hands
 // `deep_canvas::schedule::Session::revise_items` a revision that changes item `a` and one member outside `items`
 // (`data`, then `assets`), with `reached` empty. "Revised without the whole load" is `revise_items` answering
-// (`Some`), not `None`, which sends its caller to `load`. The probe is a release build with debug assertions off:
+// (`Some`), not `None`, which sends its caller to `load`, and the session's revision (`Session::document`) then
+// holding the patched item. The same patch with the member named in `reached` must answer `None` (Scope: "compares
+// only those"). The probe is a release build with debug assertions off:
 // `revise_items` debug-asserts that no member outside `reached` changed, and this is that case on purpose.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -65,5 +67,12 @@ test(`${AC_REACHED} a patch whose reached names no member outside items is revis
     assert.equal(c.not_reached.revised, true,
       `revise_items answered None (the whole load) for a patch whose reached names no member outside items: ` +
       `it compared the member \`${c.member}\`, which differs from the revision before and which the patch did not name as reached`);
+    // Revised, not merely answered: the session's revision now holds the patched item.
+    assert.deepEqual(c.not_reached.box_after, c.box_patched,
+      `revise_items answered Some for the patch with reached [] (\`${c.member}\` differs), but the session's revision (Session::document) ` +
+      `holds item \`a\` with box ${shown(c.not_reached.box_after)}, not the patched ${shown(c.box_patched)} (before: ${shown(c.box_before)}): it was not revised`);
+    // Compares those it names: the same patch with the member named as reached takes the whole load.
+    assert.equal(c.reached.revised, false,
+      `revise_items revised a patch whose reached names the member \`${c.member}\`, which differs from the revision before: it did not compare the member it was told the patch reached`);
   }
 });
