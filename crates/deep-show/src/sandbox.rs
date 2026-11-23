@@ -132,7 +132,7 @@ impl Host {
             return r.clone();
         }
         self.checks += 1;
-        let out = match self.sandbox.rewrite(bytes, role, &budget) {
+        let out = match self.sandbox.rewrite(bytes, role, budget) {
             Ok((rw, _)) => {
                 self.rewrites += 1;
                 Ok(rw)
@@ -735,7 +735,7 @@ impl Host {
                 out["code"] = json!("validator_refused");
                 out["what"] = json!(refusals_what(&r));
             }
-            Ok(rw) => match {
+            Ok(rw) => {
                 // #416: the run's own time, its instance made and sized, the bytes copied in and
                 // `validate` returned, past the program's once-per-program check and rewrite.
                 let started = Instant::now();
@@ -747,30 +747,30 @@ impl Host {
                     input,
                 );
                 out["ms"] = json!(started.elapsed().as_secs_f64() * 1e3);
-                ran
-            } {
-                Ok(Ran { trap: Some(t), .. }) => {
-                    out["code"] = json!("layout_trap");
-                    out["trap"] = trap_json(&Some(t));
+                match ran {
+                    Ok(Ran { trap: Some(t), .. }) => {
+                        out["code"] = json!("layout_trap");
+                        out["trap"] = trap_json(&Some(t));
+                    }
+                    Ok(Ran {
+                        result: Some(-1), ..
+                    }) => {
+                        out["outcome"] = json!("admitted");
+                    }
+                    Ok(Ran {
+                        result: Some(o), ..
+                    }) => {
+                        out["code"] = json!("layout_refused");
+                        out["offset"] = json!(o);
+                        out["field"] = json!(field.map(|f| f(input, o.max(0) as u64)));
+                    }
+                    Ok(_) => out["code"] = json!("layout_refused"),
+                    Err(e) => {
+                        out["code"] = json!("run_failed");
+                        out["what"] = json!(e);
+                    }
                 }
-                Ok(Ran {
-                    result: Some(-1), ..
-                }) => {
-                    out["outcome"] = json!("admitted");
-                }
-                Ok(Ran {
-                    result: Some(o), ..
-                }) => {
-                    out["code"] = json!("layout_refused");
-                    out["offset"] = json!(o);
-                    out["field"] = json!(field.map(|f| f(input, o.max(0) as u64)));
-                }
-                Ok(_) => out["code"] = json!("layout_refused"),
-                Err(e) => {
-                    out["code"] = json!("run_failed");
-                    out["what"] = json!(e);
-                }
-            },
+            }
         }
         self.validated.insert(key, out.clone());
         out

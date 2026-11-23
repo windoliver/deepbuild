@@ -1064,9 +1064,9 @@ fn run_view(
                 for axis in [cam.right, cam.up] {
                     let along: f64 = (0..3).map(|k| cam.target[k] * axis[k]).sum();
                     let by = (along / 0.1).round() * 0.1 - along;
-                    for k in 0..3 {
-                        cam.eye[k] += by * axis[k];
-                        cam.target[k] += by * axis[k];
+                    for (k, a) in axis.iter().enumerate() {
+                        cam.eye[k] += by * a;
+                        cam.target[k] += by * a;
                     }
                 }
                 moving = Arc::new(sc);

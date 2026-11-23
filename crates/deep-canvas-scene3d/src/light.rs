@@ -1440,7 +1440,8 @@ mod tests {
             1.0,
         )
         .expect("a fill light");
-        assert!(fill_order(&[far.clone()], &scores(&[far], &cam)).is_empty());
+        let far = std::slice::from_ref(&far);
+        assert!(fill_order(far, &scores(far, &cam)).is_empty());
     }
 
     #[test]

@@ -832,7 +832,7 @@ impl Shipped {
                     .filter_map(|i| keyboard_id(&items[pinned + i]))
                     .filter(|id| rows.iter().any(|row| row.id == *id));
                 let nearest = if scroll.span(at).0 >= top_at {
-                    shown.last()
+                    shown.next_back()
                 } else {
                     shown.next()
                 };

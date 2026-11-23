@@ -6528,7 +6528,7 @@ impl Renderer {
 
     /// Each cluster's fill lights as the frame just drawn walked them, by ID with their weights
     /// (#1634), read back from the pass's lists.
-    pub fn read_clusters(&self, device: &Device) -> Vec<([u32; 3], Vec<(String, f32)>)> {
+    pub fn read_clusters(&self, device: &Device) -> Vec<fill::Cluster> {
         self.fill.read(device, &self.cluster_buffer)
     }
 

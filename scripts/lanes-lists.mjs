@@ -1401,6 +1401,10 @@ byHand.push('tests/acceptance/980/ac09-budget.test.ts');
 // #689's blind redraft: AC2 builds and tests the whole workspace on 1.99.1; AC4 builds deep-app's hub_client test.
 slow.push('tests/acceptance/689-redraft-2047/ac2-checks.test.mjs', 'tests/acceptance/689-redraft-2047/ac4-app-in-unit-lane.test.mjs');
 
+// #2086's blind redraft: AC1 runs whole-workspace clippy; AC2 runs #1732's suite, whose files each build deep-show.
+alone.push('tests/acceptance/2086-redraft-2047/');
+slow.push('tests/acceptance/2086-redraft-2047/ac1-workspace-clippy.test.ts', 'tests/acceptance/2086-redraft-2047/ac2-1732-unchanged.test.ts');
+
 // #1500's files (blind) each build deep-show and play hundreds of frames of a game whose revisions land mid-play;
 // ac08-join-time.test.ts judges a join's time on the reference Mac. The Oracle lane plays upstream's pile.
 alone.push('tests/acceptance/1500/', 'tests/acceptance/1500-oracle/');
