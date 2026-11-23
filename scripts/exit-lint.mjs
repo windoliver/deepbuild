@@ -4,8 +4,10 @@
 // returns, a variable's every assignment, a parameter's argument at every call, an object's field, and what a promise
 // is resolved with. A planted wrong program's arm (a condition that reads the plant a test selects) isn't the shipped
 // program's. A command that runs another program ends with that program's code, so `deep lease` and `deep mcp-exec` are
-// left out by name. Prints the table, one `exit <n> <path>:<line>` line per place, and one `FAIL exits: <path>:<line>: …`
-// line per code outside it, or `PASS exits`; exit 1 on a finding. `--root <dir>` reads another checkout's code.
+// left out by name. So is the installed hub's restart exit, `RESTART_EXIT` in packages/hub/src/server.ts: only launchd
+// or systemd reads it, as #2973's and #2975's acceptance tests pin it, and no other 75 is left out. Prints the table, one
+// `exit <n> <path>:<line>` line per place, and one `FAIL exits: <path>:<line>: …` line per code outside it, or
+// `PASS exits`; exit 1 on a finding. `--root <dir>` reads another checkout's code.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +17,8 @@ import ts from 'typescript';
 const PACKAGES = ['cli', 'hub', 'reading', 'conformance'];
 /** The commands that end with the code of the program they run, by the function that runs each. */
 const RUNS_ANOTHER = { leaseCommand: 'deep lease', mcpExecCommand: 'deep mcp-exec' };
+/** The exits only the hub's service manager reads, by the file and the constant that names each (#2973, #2975). */
+const SERVICE_EXITS = { 'packages/hub/src/server.ts': { RESTART_EXIT: "the installed hub's restart, which launchd or systemd reads (#2973, #2975)" } };
 const MEANING = ['done', 'failed or refused', 'not understood, nothing ran', 'not decided or not checked'];
 
 const at = process.argv.indexOf('--root');
@@ -96,6 +100,7 @@ function planted(node) {
 
 // ---- The values an expression can take: numbers with their place, and object literals whose fields are read.
 const left = new Set();
+const forService = new Set();
 const seen = new Map();
 function values(node) {
   if (!node) return [];
@@ -132,6 +137,11 @@ function identifierValues(id) {
   const symbol = ts.isShorthandPropertyAssignment(id.parent) && id.parent.name === id ? checker.getShorthandAssignmentValueSymbol(id.parent) : checker.getSymbolAtLocation(id);
   const decl = symbol?.valueDeclaration;
   if (!decl || !ours(decl)) return [];
+  const service = ts.isVariableDeclaration(decl) && SERVICE_EXITS[relative(root, decl.getSourceFile().fileName)]?.[decl.name.getText()];
+  if (service) {
+    forService.add(service);
+    return [];
+  }
   if (ts.isVariableDeclaration(decl)) {
     // Its first value and every later assignment in its scope.
     const scope = decl.parent?.parent?.parent ?? decl.getSourceFile();
@@ -193,8 +203,10 @@ const rows = [...table.values()].sort(([a, x], [b, y]) => a.localeCompare(b, 'en
 console.log(`The exits a deep command can reach, read from the code; exit.code@1 holds ${codes.join(', ')}:`);
 for (const [where, code] of rows) console.log(`exit ${code} ${where}  ${MEANING[code] ?? 'outside the table'}`);
 console.log(`Left out by name, ending with the code of the program they run: ${[...left].sort().join(', ') || 'none'}`);
+console.log(`Left out by name, read only by the hub's service manager: ${[...forService].sort().join(', ') || 'none'}`);
 const wrong = rows.filter(([, code]) => !codes.includes(code));
 for (const [where, code] of wrong) console.log(`FAIL exits: ${where}: a command can exit ${code}, which exit.code@1 doesn't hold\n  Fix: exit with 0 done, 1 failed or refused, 2 not understood, nothing ran, or 3 not decided or not checked`);
 if (!rows.length) console.log('FAIL exits: no exit was read from the code, so the table proves nothing');
-if (wrong.length || !rows.length) process.exit(1);
-console.log(`PASS exits: ${rows.length} rows, each ${codes.join(', ')}`);
+// exitCode, never process.exit(): exiting at once can cut off what is still being written to a pipe, the FAIL line with it.
+if (wrong.length || !rows.length) process.exitCode = 1;
+else console.log(`PASS exits: ${rows.length} rows, each ${codes.join(', ')}`);

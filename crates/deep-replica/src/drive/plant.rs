@@ -60,6 +60,12 @@ pub enum Plant {
     /// A play under `piece_seed: run` keeps the document's seed, so every run generates the same floors (#556
     /// criterion 3).
     KeepsDocumentSeed,
+    /// #851: a game shell's pause lets the level's clock run.
+    ShellPauseRunsClock,
+    /// #851: a game shell leaves focus on a control that turns disabled.
+    ShellFocusStaysDisabled,
+    /// #851: a game shell's prompts keep the keys' glyphs whatever device wrote last.
+    ShellPromptsKeepKeys,
     /// The process's footprint read fails, as the system call does on any error (#1431 criterion 2).
     FootprintReadFails,
     /// A reader that gives 0 for a footprint read that failed (#1431 criterion 2).
@@ -69,6 +75,11 @@ pub enum Plant {
     LeaksUngaugedBuffer,
     /// The picture arm's image element asks for a frame at every vsync while it animates (#1489 criterion 3).
     PictureFrameEachVsync,
+    /// A piece played alone takes its bits from the platform's secure source, not hash(the run's seed, the draw's
+    /// number) (#552 criterion 5).
+    AloneBitsFromSecure,
+    /// A draw hashes its drawn step in place of its number (#552 criterion 5).
+    DrawHashesStep,
 }
 
 impl Plant {
@@ -97,10 +108,15 @@ impl Plant {
             "wheel-notifies-every-event" => Some(Plant::WheelNotifiesEveryEvent),
             "reuse-drops-accessibility" => Some(Plant::ReuseDropsAccessibility),
             "keeps-document-seed" => Some(Plant::KeepsDocumentSeed),
+            "pause-runs-level-clock" => Some(Plant::ShellPauseRunsClock),
+            "focus-stays-on-disabled" => Some(Plant::ShellFocusStaysDisabled),
+            "prompts-keep-key-glyphs" => Some(Plant::ShellPromptsKeepKeys),
             "footprint-read-fails" => Some(Plant::FootprintReadFails),
             "footprint-reads-zero" => Some(Plant::FootprintReadsZero),
             "leaks-ungauged-buffer" => Some(Plant::LeaksUngaugedBuffer),
             "picture-frame-each-vsync" => Some(Plant::PictureFrameEachVsync),
+            "alone-bits-from-secure" => Some(Plant::AloneBitsFromSecure),
+            "draw-hashes-step" => Some(Plant::DrawHashesStep),
             _ => None,
         }
     }

@@ -12,6 +12,8 @@
 //! (or `y2`), a path and an area as one line through the rows in order (an area down to the
 //! zero), symbols, and images from an `asset` column with its `alt`. A key is unique across rows.
 
+mod series_rows;
+
 use serde_json::{json, Map, Value};
 
 use deep_canvas::color::Oklab;
@@ -1006,8 +1008,9 @@ pub fn base_rows(id: &str, item: &Value, bound: &BoundRows) -> Result<Rows, Refu
     // nothing measured.
     let mut hidden = std::collections::BTreeSet::new();
     // The rows the column view hid: a value its reader can't narrow to (Array and table: column
-    // view) doesn't draw for as long as it lasts, nor does a row whose `alive` is false (#535).
-    for c in columns.values().chain(p.get("alive")) {
+    // view) doesn't draw for as long as it lasts, nor does a row whose `alive` is false (#535),
+    // nor one this copy's player doesn't see (#552).
+    for c in columns.values().chain(p.get("alive")).chain(p.get("seen")) {
         if let Some(Value::Array(rows)) = c.get("hide") {
             hidden.extend(rows.iter().filter_map(Value::as_f64).map(|r| r as usize));
         }
@@ -1073,8 +1076,7 @@ pub fn base_rows(id: &str, item: &Value, bound: &BoundRows) -> Result<Rows, Refu
     })
 }
 
-/// A mark set's rows as marks, each named `<id>#<key>`. `bound` holds the readings bound to its
-/// cells.
+/// A mark set's rows as marks, each named `<id>#<key>`; `bound` holds its cells' bound readings.
 pub fn mark_set(
     id: &str,
     item: &Value,
@@ -1301,6 +1303,7 @@ pub fn mark_set(
                     adjust: crate::paint::Adjust::default(),
                     tile: None,
                     turn: 0.0,
+                    grid: None,
                 });
             }
             "text" => out.push(Mark::Text {
@@ -1439,26 +1442,6 @@ pub struct Decimated {
     pub v: Vec<f64>,
     pub columns: Vec<Vec<usize>>,
     pub window: (f64, f64),
-}
-
-impl Decimated {
-    /// Every kept row, in draw order, each once.
-    pub fn rows(&self) -> Vec<usize> {
-        self.columns.iter().flatten().copied().collect()
-    }
-
-    /// The raw row nearest a time, never a decimated vertex: the crosshair's snap.
-    pub fn nearest(&self, at: f64) -> Option<usize> {
-        let i = self.t.partition_point(|&t| t < at);
-        match (i.checked_sub(1), (i < self.t.len()).then_some(i)) {
-            (Some(a), Some(b)) => Some(if at - self.t[a] <= self.t[b] - at {
-                a
-            } else {
-                b
-            }),
-            (a, b) => a.or(b),
-        }
-    }
 }
 
 /// The time-and-value columns of a line series and the rows each pixel column keeps.

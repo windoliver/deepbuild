@@ -1,0 +1,655 @@
+The whole suite at the base, ee05e7257 (origin/main), on this Mac, then each twin's criterion laid over the base
+(twins.json). The checkout's path is replaced by <repo> (a twin's copy by <twin-NAME>), the home folder by ~.
+Section 1: the base. 18 tests: 13 fail at their assertion (each allowed, exit 0, where a denial is required), 5 pass
+(AC5's four and AC1's 2 MiB read-whole scope test). Sections 2 and 3: those passing tests fail on their twins.
+Section 4: the redraft of AC5's two no-fail_closed tests (a dispute), on the base and on its twin.
+
+======== 1. base ========
+# date: 2026-11-21T01:55:56Z
+# base: ee05e7257cc7c7b90b1ca6ba965d21ec36da4e05 (Merge pull request #2963 from windoliver/claude/fix-1884-doctor-hub-versions-d7c)
+# load average: { 113.05 134.18 104.00 }
+# command: npx vitest run tests/acceptance/2042 --reporter=verbose 
+
+ RUN  v5.0.5 <repo>
+
+ × tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 the PreToolUse for `git push origin main` with a member nested inside 300 arrays is denied, naming the payload and the depth 2669ms
+   → with the hub stopped, the `git push origin main` PreToolUse payload with a member nested inside 300 arrays must be denied: exit 0 after 18 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+ × tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 scope: with the hub stopped, a payload that isn't JSON is denied, naming the payload 2696ms
+   → with the hub stopped, a PreToolUse payload that isn't JSON (`not json {`) must be denied: exit 0 after 30 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+ × tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 scope: with the hub stopped, a push payload whose bytes aren't UTF-8 is denied, naming the payload 3414ms
+   → with the hub stopped, the `git push origin main` PreToolUse payload with bytes that aren't UTF-8 must be denied: exit 0 after 19 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+ × tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 scope: with the hub stopped, a 2 MiB push payload cut short is denied, naming the payload 2501ms
+   → with the hub stopped, the `git push origin main` PreToolUse payload with 2 MiB of padding, cut short after 1 MiB must be denied: exit 0 after 91 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+ ✓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 scope: hub stopped, a 2 MiB push payload read whole > #2042.4ee175d8 scope: with the hub stopped, the 2 MiB push payload read whole is decided as the plain push is, not as unreadable 3223ms
+ × tests/acceptance/2042/payload-unreadable.test.ts > #2042.822bacc4 hub stopped: the same payload cut off after its first 40 bytes, and an empty stdin > #2042.822bacc4 the payload cut off after its first 40 bytes is denied, naming the payload as cut short 2583ms
+   → with the hub stopped, the `git push origin main` PreToolUse payload cut off after its first 40 bytes must be denied: exit 0 after 35 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+ × tests/acceptance/2042/payload-unreadable.test.ts > #2042.822bacc4 hub stopped: the same payload cut off after its first 40 bytes, and an empty stdin > #2042.822bacc4 an empty stdin is denied, naming the payload as empty 2247ms
+   → with the hub stopped, an empty stdin (PreToolUse) must be denied: exit 0 after 22 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+ × tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 the push payload with a member nested inside 300 arrays: denied with the hub running, in the words deep-hook uses with it stopped 3117ms
+   → with the hub running, the `git push origin main` PreToolUse payload with a member nested inside 300 arrays must be denied: exit 0 after 31 ms, stdout "", stderr "deep-hook: spooled 01M7XX3B273PMBJHC7HEZJ66J0, but its sync didn't finish within the hook's 50 ms\n": expected 'allow' to be 'deny' // Object.is equality
+ × tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 the payload cut off after its first 40 bytes: denied with the hub running, in the words deep-hook uses with it stopped 2585ms
+   → with the hub running, the `git push origin main` PreToolUse payload cut off after its first 40 bytes must be denied: exit 0 after 31 ms, stdout "", stderr "deep-hook: spooled 01M7XX3DNQE5QVZT34NB4VBJ6Q, but its sync didn't finish within the hook's 50 ms\n": expected 'allow' to be 'deny' // Object.is equality
+ × tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 an empty stdin: denied with the hub running, in the words deep-hook uses with it stopped 2906ms
+   → with the hub running, an empty stdin (PreToolUse) must be denied: exit 0 after 30 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+ × tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 scope: a payload that isn't JSON: denied with the hub running, in the words deep-hook uses with it stopped 4266ms
+   → with the hub running, a PreToolUse payload that isn't JSON (`not json {`) must be denied: exit 0 after 32 ms, stdout "", stderr "deep-hook: spooled 01M7XX3MPBK7R97BHSJP1YENZ1, but its sync didn't finish within the hook's 50 ms\n": expected 'allow' to be 'deny' // Object.is equality
+ × tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 scope: a push payload whose bytes aren't UTF-8: denied with the hub running, in the words deep-hook uses with it stopped 5185ms
+   → with the hub running, the `git push origin main` PreToolUse payload with bytes that aren't UTF-8 must be denied: exit 0 after 24 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+ × tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 scope: a 2 MiB push payload cut short: denied with the hub running, in the words deep-hook uses with it stopped 4865ms
+   → with the hub running, the `git push origin main` PreToolUse payload with 2 MiB of padding, cut short after 1 MiB must be denied: exit 0 after 133 ms, stdout "", stderr "deep-hook: spooled 01M7XX3Y9HP4NAP6X2AGDH2DTM, but its sync didn't finish within the hook's 50 ms\n": expected 'allow' to be 'deny' // Object.is equality
+ × tests/acceptance/2042/payload-unreadable.test.ts > #2042.aa23ca0b a lone \ud800 escape reads as U+FFFD: the push is denied by the push entry, `ls` runs > #2042.aa23ca0b with the hub running, `git push origin main` holding "\ud800" is denied naming the push entry, and `ls` holding it runs 5141ms
+   → the `git push origin main` payload whose tool_input holds the lone escape \ud800 must be denied: exit 0 after 20 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+ ✓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with no fail_closed entry installed and the hub stopped, each unreadable PreToolUse payload exits 0 2667ms
+ ✓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with the first-party entries installed and the hub stopped, each unreadable PostToolUse payload exits 0 2655ms
+ ✓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with no fail_closed entry installed and the hub running, each unreadable PreToolUse payload exits 0 3612ms
+ ✓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with the first-party entries installed and the hub running, each unreadable PostToolUse payload exits 0 5556ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 13 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 the PreToolUse for `git push origin main` with a member nested inside 300 arrays is denied, naming the payload and the depth
+AssertionError: with the hub stopped, the `git push origin main` PreToolUse payload with a member nested inside 300 arrays must be denied: exit 0 after 18 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+
+Expected: "deny"
+Received: "allow"
+
+ ❯ tests/acceptance/2042/payload-unreadable.test.ts:83:88
+     81|     const p = nested(h);
+     82|     const r = await hook(h, 'PreToolUse', p);
+     83|     expect(decision(r), `with the hub stopped, ${p.name} must be denie…
+       |                                                                                        ^
+     84|     expect(words(r), `the denial must name the payload: ${shown(r)}`).…
+     85|     expect(words(r), `the denial must name the depth the payload nests…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/13]⎯
+
+ FAIL  tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 scope: with the hub stopped, a payload that isn't JSON is denied, naming the payload
+AssertionError: with the hub stopped, a PreToolUse payload that isn't JSON (`not json {`) must be denied: exit 0 after 30 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+
+Expected: "deny"
+Received: "allow"
+
+ ❯ tests/acceptance/2042/payload-unreadable.test.ts:95:90
+     93|       const p = make(h);
+     94|       const r = await hook(h, 'PreToolUse', p);
+     95|       expect(decision(r), `with the hub stopped, ${p.name} must be den…
+       |                                                                                          ^
+     96|       expect(words(r), `the denial must name the payload: ${shown(r)}`…
+     97|       if (why) expect(words(r), `the denial must say the payload was c…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/13]⎯
+
+ FAIL  tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 scope: with the hub stopped, a push payload whose bytes aren't UTF-8 is denied, naming the payload
+AssertionError: with the hub stopped, the `git push origin main` PreToolUse payload with bytes that aren't UTF-8 must be denied: exit 0 after 19 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+
+Expected: "deny"
+Received: "allow"
+
+ ❯ tests/acceptance/2042/payload-unreadable.test.ts:95:90
+     93|       const p = make(h);
+     94|       const r = await hook(h, 'PreToolUse', p);
+     95|       expect(decision(r), `with the hub stopped, ${p.name} must be den…
+       |                                                                                          ^
+     96|       expect(words(r), `the denial must name the payload: ${shown(r)}`…
+     97|       if (why) expect(words(r), `the denial must say the payload was c…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/13]⎯
+
+ FAIL  tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 scope: with the hub stopped, a 2 MiB push payload cut short is denied, naming the payload
+AssertionError: with the hub stopped, the `git push origin main` PreToolUse payload with 2 MiB of padding, cut short after 1 MiB must be denied: exit 0 after 91 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+
+Expected: "deny"
+Received: "allow"
+
+ ❯ tests/acceptance/2042/payload-unreadable.test.ts:95:90
+     93|       const p = make(h);
+     94|       const r = await hook(h, 'PreToolUse', p);
+     95|       expect(decision(r), `with the hub stopped, ${p.name} must be den…
+       |                                                                                          ^
+     96|       expect(words(r), `the denial must name the payload: ${shown(r)}`…
+     97|       if (why) expect(words(r), `the denial must say the payload was c…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/13]⎯
+
+ FAIL  tests/acceptance/2042/payload-unreadable.test.ts > #2042.822bacc4 hub stopped: the same payload cut off after its first 40 bytes, and an empty stdin > #2042.822bacc4 the payload cut off after its first 40 bytes is denied, naming the payload as cut short
+AssertionError: with the hub stopped, the `git push origin main` PreToolUse payload cut off after its first 40 bytes must be denied: exit 0 after 35 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+
+Expected: "deny"
+Received: "allow"
+
+ ❯ tests/acceptance/2042/payload-unreadable.test.ts:122:90
+    120|       const p = make(h);
+    121|       const r = await hook(h, 'PreToolUse', p);
+    122|       expect(decision(r), `with the hub stopped, ${p.name} must be den…
+       |                                                                                          ^
+    123|       expect(words(r), `the denial must name the payload: ${shown(r)}`…
+    124|       expect(words(r), `the denial must name the payload as ${what}: $…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/13]⎯
+
+ FAIL  tests/acceptance/2042/payload-unreadable.test.ts > #2042.822bacc4 hub stopped: the same payload cut off after its first 40 bytes, and an empty stdin > #2042.822bacc4 an empty stdin is denied, naming the payload as empty
+AssertionError: with the hub stopped, an empty stdin (PreToolUse) must be denied: exit 0 after 22 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+
+Expected: "deny"
+Received: "allow"
+
+ ❯ tests/acceptance/2042/payload-unreadable.test.ts:122:90
+    120|       const p = make(h);
+    121|       const r = await hook(h, 'PreToolUse', p);
+    122|       expect(decision(r), `with the hub stopped, ${p.name} must be den…
+       |                                                                                          ^
+    123|       expect(words(r), `the denial must name the payload: ${shown(r)}`…
+    124|       expect(words(r), `the denial must name the payload as ${what}: $…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/13]⎯
+
+ FAIL  tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 the push payload with a member nested inside 300 arrays: denied with the hub running, in the words deep-hook uses with it stopped
+AssertionError: with the hub running, the `git push origin main` PreToolUse payload with a member nested inside 300 arrays must be denied: exit 0 after 31 ms, stdout "", stderr "deep-hook: spooled 01M7XX3B273PMBJHC7HEZJ66J0, but its sync didn't finish within the hook's 50 ms\n": expected 'allow' to be 'deny' // Object.is equality
+
+Expected: "deny"
+Received: "allow"
+
+ ❯ tests/acceptance/2042/payload-unreadable.test.ts:145:90
+    143|       await stopHub(hub);
+    144|       const down = await hook(h, 'PreToolUse', make(h));
+    145|       expect(decision(r), `with the hub running, ${p.name} must be den…
+       |                                                                                          ^
+    146|       expect(words(r), `the denial must name the payload: ${shown(r)}`…
+    147|       if (why) expect(words(r), `the denial must say why the payload c…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/13]⎯
+
+ FAIL  tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 the payload cut off after its first 40 bytes: denied with the hub running, in the words deep-hook uses with it stopped
+AssertionError: with the hub running, the `git push origin main` PreToolUse payload cut off after its first 40 bytes must be denied: exit 0 after 31 ms, stdout "", stderr "deep-hook: spooled 01M7XX3DNQE5QVZT34NB4VBJ6Q, but its sync didn't finish within the hook's 50 ms\n": expected 'allow' to be 'deny' // Object.is equality
+
+Expected: "deny"
+Received: "allow"
+
+ ❯ tests/acceptance/2042/payload-unreadable.test.ts:145:90
+    143|       await stopHub(hub);
+    144|       const down = await hook(h, 'PreToolUse', make(h));
+    145|       expect(decision(r), `with the hub running, ${p.name} must be den…
+       |                                                                                          ^
+    146|       expect(words(r), `the denial must name the payload: ${shown(r)}`…
+    147|       if (why) expect(words(r), `the denial must say why the payload c…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/13]⎯
+
+ FAIL  tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 an empty stdin: denied with the hub running, in the words deep-hook uses with it stopped
+AssertionError: with the hub running, an empty stdin (PreToolUse) must be denied: exit 0 after 30 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+
+Expected: "deny"
+Received: "allow"
+
+ ❯ tests/acceptance/2042/payload-unreadable.test.ts:145:90
+    143|       await stopHub(hub);
+    144|       const down = await hook(h, 'PreToolUse', make(h));
+    145|       expect(decision(r), `with the hub running, ${p.name} must be den…
+       |                                                                                          ^
+    146|       expect(words(r), `the denial must name the payload: ${shown(r)}`…
+    147|       if (why) expect(words(r), `the denial must say why the payload c…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/13]⎯
+
+ FAIL  tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 scope: a payload that isn't JSON: denied with the hub running, in the words deep-hook uses with it stopped
+AssertionError: with the hub running, a PreToolUse payload that isn't JSON (`not json {`) must be denied: exit 0 after 32 ms, stdout "", stderr "deep-hook: spooled 01M7XX3MPBK7R97BHSJP1YENZ1, but its sync didn't finish within the hook's 50 ms\n": expected 'allow' to be 'deny' // Object.is equality
+
+Expected: "deny"
+Received: "allow"
+
+ ❯ tests/acceptance/2042/payload-unreadable.test.ts:145:90
+    143|       await stopHub(hub);
+    144|       const down = await hook(h, 'PreToolUse', make(h));
+    145|       expect(decision(r), `with the hub running, ${p.name} must be den…
+       |                                                                                          ^
+    146|       expect(words(r), `the denial must name the payload: ${shown(r)}`…
+    147|       if (why) expect(words(r), `the denial must say why the payload c…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/13]⎯
+
+ FAIL  tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 scope: a push payload whose bytes aren't UTF-8: denied with the hub running, in the words deep-hook uses with it stopped
+AssertionError: with the hub running, the `git push origin main` PreToolUse payload with bytes that aren't UTF-8 must be denied: exit 0 after 24 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+
+Expected: "deny"
+Received: "allow"
+
+ ❯ tests/acceptance/2042/payload-unreadable.test.ts:145:90
+    143|       await stopHub(hub);
+    144|       const down = await hook(h, 'PreToolUse', make(h));
+    145|       expect(decision(r), `with the hub running, ${p.name} must be den…
+       |                                                                                          ^
+    146|       expect(words(r), `the denial must name the payload: ${shown(r)}`…
+    147|       if (why) expect(words(r), `the denial must say why the payload c…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/13]⎯
+
+ FAIL  tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 scope: a 2 MiB push payload cut short: denied with the hub running, in the words deep-hook uses with it stopped
+AssertionError: with the hub running, the `git push origin main` PreToolUse payload with 2 MiB of padding, cut short after 1 MiB must be denied: exit 0 after 133 ms, stdout "", stderr "deep-hook: spooled 01M7XX3Y9HP4NAP6X2AGDH2DTM, but its sync didn't finish within the hook's 50 ms\n": expected 'allow' to be 'deny' // Object.is equality
+
+Expected: "deny"
+Received: "allow"
+
+ ❯ tests/acceptance/2042/payload-unreadable.test.ts:145:90
+    143|       await stopHub(hub);
+    144|       const down = await hook(h, 'PreToolUse', make(h));
+    145|       expect(decision(r), `with the hub running, ${p.name} must be den…
+       |                                                                                          ^
+    146|       expect(words(r), `the denial must name the payload: ${shown(r)}`…
+    147|       if (why) expect(words(r), `the denial must say why the payload c…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/13]⎯
+
+ FAIL  tests/acceptance/2042/payload-unreadable.test.ts > #2042.aa23ca0b a lone \ud800 escape reads as U+FFFD: the push is denied by the push entry, `ls` runs > #2042.aa23ca0b with the hub running, `git push origin main` holding "\ud800" is denied naming the push entry, and `ls` holding it runs
+AssertionError: the `git push origin main` payload whose tool_input holds the lone escape \ud800 must be denied: exit 0 after 20 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+
+Expected: "deny"
+Received: "allow"
+
+ ❯ tests/acceptance/2042/payload-unreadable.test.ts:160:81
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/13]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  13 failed | 5 passed (18)
+   Start at  17:56:00
+   Duration  63.89s (tests 100%)
+
+# load average after: { 93.58 124.26 102.65 }
+
+======== 2. twin denies-every-unread-payload (AC5, #2042.c82ae59d) ========
+# date: 2026-11-21T01:55:32Z
+# base: ee05e7257cc7c7b90b1ca6ba965d21ec36da4e05 (Merge pull request #2963 from windoliver/claude/fix-1884-doctor-hub-versions-d7c)
+# load average: { 130.14 139.05 104.77 }
+# command: npx vitest run tests/acceptance/2042 --reporter=verbose -t c82ae59d
+
+ RUN  v5.0.5 <twin-denies-every-unread-payload>
+
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 the PreToolUse for `git push origin main` with a member nested inside 300 arrays is denied, naming the payload and the depth
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 scope: with the hub stopped, a payload that isn't JSON is denied, naming the payload
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 scope: with the hub stopped, a push payload whose bytes aren't UTF-8 is denied, naming the payload
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 scope: with the hub stopped, a 2 MiB push payload cut short is denied, naming the payload
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 scope: hub stopped, a 2 MiB push payload read whole > #2042.4ee175d8 scope: with the hub stopped, the 2 MiB push payload read whole is decided as the plain push is, not as unreadable
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.822bacc4 hub stopped: the same payload cut off after its first 40 bytes, and an empty stdin > #2042.822bacc4 the payload cut off after its first 40 bytes is denied, naming the payload as cut short
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.822bacc4 hub stopped: the same payload cut off after its first 40 bytes, and an empty stdin > #2042.822bacc4 an empty stdin is denied, naming the payload as empty
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 the push payload with a member nested inside 300 arrays: denied with the hub running, in the words deep-hook uses with it stopped
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 the payload cut off after its first 40 bytes: denied with the hub running, in the words deep-hook uses with it stopped
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 an empty stdin: denied with the hub running, in the words deep-hook uses with it stopped
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 scope: a payload that isn't JSON: denied with the hub running, in the words deep-hook uses with it stopped
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 scope: a push payload whose bytes aren't UTF-8: denied with the hub running, in the words deep-hook uses with it stopped
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 scope: a 2 MiB push payload cut short: denied with the hub running, in the words deep-hook uses with it stopped
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.aa23ca0b a lone \ud800 escape reads as U+FFFD: the push is denied by the push entry, `ls` runs > #2042.aa23ca0b with the hub running, `git push origin main` holding "\ud800" is denied naming the push entry, and `ls` holding it runs
+ × tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with no fail_closed entry installed and the hub stopped, each unreadable PreToolUse payload exits 0 2358ms
+   → with no fail_closed entry installed and the hub stopped, each unreadable PreToolUse payload must exit 0; these didn't: PreToolUse: the `git push origin main` PreToolUse payload with a member nested inside 300 arrays exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: the `git push origin main` PreToolUse payload cut off after its first 40 bytes exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: an empty stdin (PreToolUse) exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: a PreToolUse payload that isn't JSON (`not json {`) exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: the `git push origin main` PreToolUse payload with bytes that aren't UTF-8 exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: the `git push origin main` PreToolUse payload with 2 MiB of padding, cut short after 1 MiB exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n": expected [ …(6) ] to deeply equal []
+ × tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with the first-party entries installed and the hub stopped, each unreadable PostToolUse payload exits 0 2276ms
+   → with the fail_closed entries installed and the hub stopped, each unreadable PostToolUse payload must exit 0; these didn't: PostToolUse: the `git push origin main` PostToolUse payload with a member nested inside 300 arrays exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\n"; PostToolUse: the `git push origin main` PostToolUse payload cut off after its first 40 bytes exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\n"; PostToolUse: an empty stdin (PostToolUse) exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\n"; PostToolUse: a PostToolUse payload that isn't JSON (`not json {`) exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\n"; PostToolUse: the `git push origin main` PostToolUse payload with bytes that aren't UTF-8 exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\n"; PostToolUse: the `git push origin main` PostToolUse payload with 2 MiB of padding, cut short after 1 MiB exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\n": expected [ …(6) ] to deeply equal []
+ × tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with no fail_closed entry installed and the hub running, each unreadable PreToolUse payload exits 0 2344ms
+   → with no fail_closed entry installed and the hub running, each unreadable PreToolUse payload must exit 0; these didn't: PreToolUse: the `git push origin main` PreToolUse payload with a member nested inside 300 arrays exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: the `git push origin main` PreToolUse payload cut off after its first 40 bytes exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: an empty stdin (PreToolUse) exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: a PreToolUse payload that isn't JSON (`not json {`) exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: the `git push origin main` PreToolUse payload with bytes that aren't UTF-8 exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: the `git push origin main` PreToolUse payload with 2 MiB of padding, cut short after 1 MiB exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n": expected [ …(6) ] to deeply equal []
+ × tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with the first-party entries installed and the hub running, each unreadable PostToolUse payload exits 0 2303ms
+   → with the fail_closed entries installed and the hub running, each unreadable PostToolUse payload must exit 0; these didn't: PostToolUse: the `git push origin main` PostToolUse payload with a member nested inside 300 arrays exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\n"; PostToolUse: the `git push origin main` PostToolUse payload cut off after its first 40 bytes exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\n"; PostToolUse: an empty stdin (PostToolUse) exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\n"; PostToolUse: a PostToolUse payload that isn't JSON (`not json {`) exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\n"; PostToolUse: the `git push origin main` PostToolUse payload with bytes that aren't UTF-8 exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\n"; PostToolUse: the `git push origin main` PostToolUse payload with 2 MiB of padding, cut short after 1 MiB exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\n": expected [ …(6) ] to deeply equal []
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with no fail_closed entry installed and the hub stopped, each unreadable PreToolUse payload exits 0
+AssertionError: with no fail_closed entry installed and the hub stopped, each unreadable PreToolUse payload must exit 0; these didn't: PreToolUse: the `git push origin main` PreToolUse payload with a member nested inside 300 arrays exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: the `git push origin main` PreToolUse payload cut off after its first 40 bytes exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: an empty stdin (PreToolUse) exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: a PreToolUse payload that isn't JSON (`not json {`) exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: the `git push origin main` PreToolUse payload with bytes that aren't UTF-8 exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: the `git push origin main` PreToolUse payload with 2 MiB of padding, cut short after 1 MiB exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n": expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "PreToolUse: the `git push origin main` PreToolUse payload with a member nested inside 300 arrays exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\\n\"",
++   "PreToolUse: the `git push origin main` PreToolUse payload cut off after its first 40 bytes exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\\n\"",
++   "PreToolUse: an empty stdin (PreToolUse) exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\\n\"",
++   "PreToolUse: a PreToolUse payload that isn't JSON (`not json {`) exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\\n\"",
++   "PreToolUse: the `git push origin main` PreToolUse payload with bytes that aren't UTF-8 exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\\n\"",
++   "PreToolUse: the `git push origin main` PreToolUse payload with 2 MiB of padding, cut short after 1 MiB exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\\n\"",
++ ]
+
+ ❯ tests/acceptance/2042/payload-unreadable.test.ts:182:156
+    180|       const at = up ? await running({ failClosed: false }) : { h: awai…
+    181|       const wrong = await exits(at.h, 'PreToolUse', at.hub);
+    182|       expect(wrong, `with no fail_closed entry installed and ${where},…
+       |                                                                                                                                                            ^
+    183|     }, T);
+    184|     it(`${AC5} with the first-party entries installed and ${where}, ea…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with the first-party entries installed and the hub stopped, each unreadable PostToolUse payload exits 0
+AssertionError: with the fail_closed entries installed and the hub stopped, each unreadable PostToolUse payload must exit 0; these didn't: PostToolUse: the `git push origin main` PostToolUse payload with a member nested inside 300 arrays exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\n"; PostToolUse: the `git push origin main` PostToolUse payload cut off after its first 40 bytes exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\n"; PostToolUse: an empty stdin (PostToolUse) exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\n"; PostToolUse: a PostToolUse payload that isn't JSON (`not json {`) exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\n"; PostToolUse: the `git push origin main` PostToolUse payload with bytes that aren't UTF-8 exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\n"; PostToolUse: the `git push origin main` PostToolUse payload with 2 MiB of padding, cut short after 1 MiB exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\n": expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "PostToolUse: the `git push origin main` PostToolUse payload with a member nested inside 300 arrays exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\\n\"",
++   "PostToolUse: the `git push origin main` PostToolUse payload cut off after its first 40 bytes exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\\n\"",
++   "PostToolUse: an empty stdin (PostToolUse) exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\\n\"",
++   "PostToolUse: a PostToolUse payload that isn't JSON (`not json {`) exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\\n\"",
++   "PostToolUse: the `git push origin main` PostToolUse payload with bytes that aren't UTF-8 exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\\n\"",
++   "PostToolUse: the `git push origin main` PostToolUse payload with 2 MiB of padding, cut short after 1 MiB exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\\n\"",
++ ]
+
+ ❯ tests/acceptance/2042/payload-unreadable.test.ts:187:160
+    185|       const at = up ? await running() : { h: await stopped(), hub: und…
+    186|       const wrong = await exits(at.h, 'PostToolUse', at.hub);
+    187|       expect(wrong, `with the fail_closed entries installed and ${wher…
+       |                                                                                                                                                                ^
+    188|     }, T);
+    189|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with no fail_closed entry installed and the hub running, each unreadable PreToolUse payload exits 0
+AssertionError: with no fail_closed entry installed and the hub running, each unreadable PreToolUse payload must exit 0; these didn't: PreToolUse: the `git push origin main` PreToolUse payload with a member nested inside 300 arrays exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: the `git push origin main` PreToolUse payload cut off after its first 40 bytes exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: an empty stdin (PreToolUse) exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: a PreToolUse payload that isn't JSON (`not json {`) exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: the `git push origin main` PreToolUse payload with bytes that aren't UTF-8 exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: the `git push origin main` PreToolUse payload with 2 MiB of padding, cut short after 1 MiB exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n": expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "PreToolUse: the `git push origin main` PreToolUse payload with a member nested inside 300 arrays exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\\n\"",
++   "PreToolUse: the `git push origin main` PreToolUse payload cut off after its first 40 bytes exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\\n\"",
++   "PreToolUse: an empty stdin (PreToolUse) exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\\n\"",
++   "PreToolUse: a PreToolUse payload that isn't JSON (`not json {`) exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\\n\"",
++   "PreToolUse: the `git push origin main` PreToolUse payload with bytes that aren't UTF-8 exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\\n\"",
++   "PreToolUse: the `git push origin main` PreToolUse payload with 2 MiB of padding, cut short after 1 MiB exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\\n\"",
++ ]
+
+ ❯ tests/acceptance/2042/payload-unreadable.test.ts:182:156
+    180|       const at = up ? await running({ failClosed: false }) : { h: awai…
+    181|       const wrong = await exits(at.h, 'PreToolUse', at.hub);
+    182|       expect(wrong, `with no fail_closed entry installed and ${where},…
+       |                                                                                                                                                            ^
+    183|     }, T);
+    184|     it(`${AC5} with the first-party entries installed and ${where}, ea…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with the first-party entries installed and the hub running, each unreadable PostToolUse payload exits 0
+AssertionError: with the fail_closed entries installed and the hub running, each unreadable PostToolUse payload must exit 0; these didn't: PostToolUse: the `git push origin main` PostToolUse payload with a member nested inside 300 arrays exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\n"; PostToolUse: the `git push origin main` PostToolUse payload cut off after its first 40 bytes exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\n"; PostToolUse: an empty stdin (PostToolUse) exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\n"; PostToolUse: a PostToolUse payload that isn't JSON (`not json {`) exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\n"; PostToolUse: the `git push origin main` PostToolUse payload with bytes that aren't UTF-8 exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\n"; PostToolUse: the `git push origin main` PostToolUse payload with 2 MiB of padding, cut short after 1 MiB exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\n": expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "PostToolUse: the `git push origin main` PostToolUse payload with a member nested inside 300 arrays exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\\n\"",
++   "PostToolUse: the `git push origin main` PostToolUse payload cut off after its first 40 bytes exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\\n\"",
++   "PostToolUse: an empty stdin (PostToolUse) exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\\n\"",
++   "PostToolUse: a PostToolUse payload that isn't JSON (`not json {`) exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\\n\"",
++   "PostToolUse: the `git push origin main` PostToolUse payload with bytes that aren't UTF-8 exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\\n\"",
++   "PostToolUse: the `git push origin main` PostToolUse payload with 2 MiB of padding, cut short after 1 MiB exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PostToolUse payload, so it is denied.\\n\"",
++ ]
+
+ ❯ tests/acceptance/2042/payload-unreadable.test.ts:187:160
+    185|       const at = up ? await running() : { h: await stopped(), hub: und…
+    186|       const wrong = await exits(at.h, 'PostToolUse', at.hub);
+    187|       expect(wrong, `with the fail_closed entries installed and ${wher…
+       |                                                                                                                                                                ^
+    188|     }, T);
+    189|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 14 skipped (18)
+   Start at  17:55:37
+   Duration  12.23s (tests 96%, transform 3%, import 1%)
+
+# load average after: { 115.66 135.04 104.12 }
+
+======== 3. twin reads-1-mib-at-most (AC1, #2042.4ee175d8) ========
+# date: 2026-11-21T01:54:21Z
+# base: ee05e7257cc7c7b90b1ca6ba965d21ec36da4e05 (Merge pull request #2963 from windoliver/claude/fix-1884-doctor-hub-versions-d7c)
+# load average: { 182.75 147.56 104.60 }
+# command: npx vitest run tests/acceptance/2042 --reporter=verbose -t 4ee175d8
+
+ RUN  v5.0.5 <twin-reads-1-mib-at-most>
+
+ × tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 the PreToolUse for `git push origin main` with a member nested inside 300 arrays is denied, naming the payload and the depth 2531ms
+   → with the hub stopped, the `git push origin main` PreToolUse payload with a member nested inside 300 arrays must be denied: exit 0 after 29 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+ × tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 scope: with the hub stopped, a payload that isn't JSON is denied, naming the payload 2668ms
+   → with the hub stopped, a PreToolUse payload that isn't JSON (`not json {`) must be denied: exit 0 after 19 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+ × tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 scope: with the hub stopped, a push payload whose bytes aren't UTF-8 is denied, naming the payload 2456ms
+   → with the hub stopped, the `git push origin main` PreToolUse payload with bytes that aren't UTF-8 must be denied: exit 0 after 27 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+ × tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 scope: with the hub stopped, a 2 MiB push payload cut short is denied, naming the payload 2941ms
+   → with the hub stopped, the `git push origin main` PreToolUse payload with 2 MiB of padding, cut short after 1 MiB must be denied: exit 0 after 90 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+ × tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 scope: hub stopped, a 2 MiB push payload read whole > #2042.4ee175d8 scope: with the hub stopped, the 2 MiB push payload read whole is decided as the plain push is, not as unreadable 4058ms
+   → with the hub stopped, the `git push origin main` PreToolUse payload with 2 MiB of padding must be decided as the plain push is (exit 0 after 17 ms, stdout "", stderr ""): exit 2 after 103 ms, stdout "", stderr "DeepBuild blocked this: deep-hook can't read this payload: it is over 1 MiB, past what the reader reads.\n": expected 'deny' to be 'allow' // Object.is equality
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.822bacc4 hub stopped: the same payload cut off after its first 40 bytes, and an empty stdin > #2042.822bacc4 the payload cut off after its first 40 bytes is denied, naming the payload as cut short
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.822bacc4 hub stopped: the same payload cut off after its first 40 bytes, and an empty stdin > #2042.822bacc4 an empty stdin is denied, naming the payload as empty
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 the push payload with a member nested inside 300 arrays: denied with the hub running, in the words deep-hook uses with it stopped
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 the payload cut off after its first 40 bytes: denied with the hub running, in the words deep-hook uses with it stopped
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 an empty stdin: denied with the hub running, in the words deep-hook uses with it stopped
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 scope: a payload that isn't JSON: denied with the hub running, in the words deep-hook uses with it stopped
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 scope: a push payload whose bytes aren't UTF-8: denied with the hub running, in the words deep-hook uses with it stopped
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 scope: a 2 MiB push payload cut short: denied with the hub running, in the words deep-hook uses with it stopped
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.aa23ca0b a lone \ud800 escape reads as U+FFFD: the push is denied by the push entry, `ls` runs > #2042.aa23ca0b with the hub running, `git push origin main` holding "\ud800" is denied naming the push entry, and `ls` holding it runs
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with no fail_closed entry installed and the hub stopped, each unreadable PreToolUse payload exits 0
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with the first-party entries installed and the hub stopped, each unreadable PostToolUse payload exits 0
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with no fail_closed entry installed and the hub running, each unreadable PreToolUse payload exits 0
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with the first-party entries installed and the hub running, each unreadable PostToolUse payload exits 0
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 the PreToolUse for `git push origin main` with a member nested inside 300 arrays is denied, naming the payload and the depth
+AssertionError: with the hub stopped, the `git push origin main` PreToolUse payload with a member nested inside 300 arrays must be denied: exit 0 after 29 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+
+Expected: "deny"
+Received: "allow"
+
+ ❯ tests/acceptance/2042/payload-unreadable.test.ts:83:88
+     81|     const p = nested(h);
+     82|     const r = await hook(h, 'PreToolUse', p);
+     83|     expect(decision(r), `with the hub stopped, ${p.name} must be denie…
+       |                                                                                        ^
+     84|     expect(words(r), `the denial must name the payload: ${shown(r)}`).…
+     85|     expect(words(r), `the denial must name the depth the payload nests…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 scope: with the hub stopped, a payload that isn't JSON is denied, naming the payload
+AssertionError: with the hub stopped, a PreToolUse payload that isn't JSON (`not json {`) must be denied: exit 0 after 19 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+
+Expected: "deny"
+Received: "allow"
+
+ ❯ tests/acceptance/2042/payload-unreadable.test.ts:95:90
+     93|       const p = make(h);
+     94|       const r = await hook(h, 'PreToolUse', p);
+     95|       expect(decision(r), `with the hub stopped, ${p.name} must be den…
+       |                                                                                          ^
+     96|       expect(words(r), `the denial must name the payload: ${shown(r)}`…
+     97|       if (why) expect(words(r), `the denial must say the payload was c…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 scope: with the hub stopped, a push payload whose bytes aren't UTF-8 is denied, naming the payload
+AssertionError: with the hub stopped, the `git push origin main` PreToolUse payload with bytes that aren't UTF-8 must be denied: exit 0 after 27 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+
+Expected: "deny"
+Received: "allow"
+
+ ❯ tests/acceptance/2042/payload-unreadable.test.ts:95:90
+     93|       const p = make(h);
+     94|       const r = await hook(h, 'PreToolUse', p);
+     95|       expect(decision(r), `with the hub stopped, ${p.name} must be den…
+       |                                                                                          ^
+     96|       expect(words(r), `the denial must name the payload: ${shown(r)}`…
+     97|       if (why) expect(words(r), `the denial must say the payload was c…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 scope: with the hub stopped, a 2 MiB push payload cut short is denied, naming the payload
+AssertionError: with the hub stopped, the `git push origin main` PreToolUse payload with 2 MiB of padding, cut short after 1 MiB must be denied: exit 0 after 90 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+
+Expected: "deny"
+Received: "allow"
+
+ ❯ tests/acceptance/2042/payload-unreadable.test.ts:95:90
+     93|       const p = make(h);
+     94|       const r = await hook(h, 'PreToolUse', p);
+     95|       expect(decision(r), `with the hub stopped, ${p.name} must be den…
+       |                                                                                          ^
+     96|       expect(words(r), `the denial must name the payload: ${shown(r)}`…
+     97|       if (why) expect(words(r), `the denial must say the payload was c…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 scope: hub stopped, a 2 MiB push payload read whole > #2042.4ee175d8 scope: with the hub stopped, the 2 MiB push payload read whole is decided as the plain push is, not as unreadable
+AssertionError: with the hub stopped, the `git push origin main` PreToolUse payload with 2 MiB of padding must be decided as the plain push is (exit 0 after 17 ms, stdout "", stderr ""): exit 2 after 103 ms, stdout "", stderr "DeepBuild blocked this: deep-hook can't read this payload: it is over 1 MiB, past what the reader reads.\n": expected 'deny' to be 'allow' // Object.is equality
+
+Expected: "allow"
+Received: "deny"
+
+ ❯ tests/acceptance/2042/payload-unreadable.test.ts:111:128
+    109|     const p = oversized(h);
+    110|     const r = await hook(h, 'PreToolUse', p);
+    111|     expect(decision(r), `with the hub stopped, ${p.name} must be decid…
+       |                                                                                                                                ^
+    112|     expect(words(r), `${p.name} is readable, so no denial may call it …
+    113|   }, T);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 13 skipped (18)
+   Start at  17:54:37
+   Duration  16.50s (tests 99%)
+
+# load average after: { 152.76 143.45 104.81 }
+
+======== 4. redraft (dispute): AC5's two no-fail_closed tests, base then twin denies-every-unread-payload ========
+The hub installs its own fail_closed entry (no-product-store-write) when it starts, so these homes now clear every
+entry's fail_closed after the hub has started, and a control reads rules.json before each payload (BLOCKED if any
+fail_closed entry is there). Sections 1 and 2 hold these two tests as first drafted; this section replaces them.
+
+---- 4a. base ----
+# date: 2026-11-21T02:12:43Z
+# base: ee05e7257cc7c7b90b1ca6ba965d21ec36da4e05 (Merge pull request #2963 from windoliver/claude/fix-1884-doctor-hub-versions-d7c)
+# load average: { 145.00 147.16 130.41 }
+# command: npx vitest run tests/acceptance/2042 --reporter=verbose -t no.fail_closed.entry.installed
+
+ RUN  v5.0.5 <repo>
+
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 the PreToolUse for `git push origin main` with a member nested inside 300 arrays is denied, naming the payload and the depth
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 scope: with the hub stopped, a payload that isn't JSON is denied, naming the payload
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 scope: with the hub stopped, a push payload whose bytes aren't UTF-8 is denied, naming the payload
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 scope: with the hub stopped, a 2 MiB push payload cut short is denied, naming the payload
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 scope: hub stopped, a 2 MiB push payload read whole > #2042.4ee175d8 scope: with the hub stopped, the 2 MiB push payload read whole is decided as the plain push is, not as unreadable
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.822bacc4 hub stopped: the same payload cut off after its first 40 bytes, and an empty stdin > #2042.822bacc4 the payload cut off after its first 40 bytes is denied, naming the payload as cut short
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.822bacc4 hub stopped: the same payload cut off after its first 40 bytes, and an empty stdin > #2042.822bacc4 an empty stdin is denied, naming the payload as empty
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 the push payload with a member nested inside 300 arrays: denied with the hub running, in the words deep-hook uses with it stopped
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 the payload cut off after its first 40 bytes: denied with the hub running, in the words deep-hook uses with it stopped
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 an empty stdin: denied with the hub running, in the words deep-hook uses with it stopped
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 scope: a payload that isn't JSON: denied with the hub running, in the words deep-hook uses with it stopped
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 scope: a push payload whose bytes aren't UTF-8: denied with the hub running, in the words deep-hook uses with it stopped
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 scope: a 2 MiB push payload cut short: denied with the hub running, in the words deep-hook uses with it stopped
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.aa23ca0b a lone \ud800 escape reads as U+FFFD: the push is denied by the push entry, `ls` runs > #2042.aa23ca0b with the hub running, `git push origin main` holding "\ud800" is denied naming the push entry, and `ls` holding it runs
+ ✓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with no fail_closed entry installed and the hub stopped, each unreadable PreToolUse payload exits 0 2453ms
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with the first-party entries installed and the hub stopped, each unreadable PostToolUse payload exits 0
+ ✓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with no fail_closed entry installed and the hub running, each unreadable PreToolUse payload exits 0 4578ms
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with the first-party entries installed and the hub running, each unreadable PostToolUse payload exits 0
+
+ Test Files  1 passed (1)
+      Tests  2 passed | 16 skipped (18)
+   Start at  18:12:48
+   Duration  9.71s (tests 99%, transform 1%)
+
+# load average after: { 149.05 147.91 130.97 }
+
+---- 4b. twin denies-every-unread-payload ----
+# date: 2026-11-21T02:12:58Z
+# base: ee05e7257cc7c7b90b1ca6ba965d21ec36da4e05 (Merge pull request #2963 from windoliver/claude/fix-1884-doctor-hub-versions-d7c)
+# load average: { 149.05 147.91 130.97 }
+# command: npx vitest run tests/acceptance/2042 --reporter=verbose -t no.fail_closed.entry.installed
+
+ RUN  v5.0.5 <twin-denies-every-unread-payload>
+
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 the PreToolUse for `git push origin main` with a member nested inside 300 arrays is denied, naming the payload and the depth
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 scope: with the hub stopped, a payload that isn't JSON is denied, naming the payload
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 scope: with the hub stopped, a push payload whose bytes aren't UTF-8 is denied, naming the payload
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 hub stopped, first-party entries installed: the push payload with a member nested inside 300 arrays > #2042.4ee175d8 scope: with the hub stopped, a 2 MiB push payload cut short is denied, naming the payload
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.4ee175d8 scope: hub stopped, a 2 MiB push payload read whole > #2042.4ee175d8 scope: with the hub stopped, the 2 MiB push payload read whole is decided as the plain push is, not as unreadable
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.822bacc4 hub stopped: the same payload cut off after its first 40 bytes, and an empty stdin > #2042.822bacc4 the payload cut off after its first 40 bytes is denied, naming the payload as cut short
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.822bacc4 hub stopped: the same payload cut off after its first 40 bytes, and an empty stdin > #2042.822bacc4 an empty stdin is denied, naming the payload as empty
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 the push payload with a member nested inside 300 arrays: denied with the hub running, in the words deep-hook uses with it stopped
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 the payload cut off after its first 40 bytes: denied with the hub running, in the words deep-hook uses with it stopped
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 an empty stdin: denied with the hub running, in the words deep-hook uses with it stopped
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 scope: a payload that isn't JSON: denied with the hub running, in the words deep-hook uses with it stopped
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 scope: a push payload whose bytes aren't UTF-8: denied with the hub running, in the words deep-hook uses with it stopped
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.5b3849c3 hub running: each of those three payloads is denied in the same words > #2042.5b3849c3 scope: a 2 MiB push payload cut short: denied with the hub running, in the words deep-hook uses with it stopped
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.aa23ca0b a lone \ud800 escape reads as U+FFFD: the push is denied by the push entry, `ls` runs > #2042.aa23ca0b with the hub running, `git push origin main` holding "\ud800" is denied naming the push entry, and `ls` holding it runs
+ × tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with no fail_closed entry installed and the hub stopped, each unreadable PreToolUse payload exits 0 2791ms
+   → with no fail_closed entry installed and the hub stopped, each unreadable PreToolUse payload must exit 0; these didn't: PreToolUse: the `git push origin main` PreToolUse payload with a member nested inside 300 arrays exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: the `git push origin main` PreToolUse payload cut off after its first 40 bytes exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: an empty stdin (PreToolUse) exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: a PreToolUse payload that isn't JSON (`not json {`) exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: the `git push origin main` PreToolUse payload with bytes that aren't UTF-8 exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: the `git push origin main` PreToolUse payload with 2 MiB of padding, cut short after 1 MiB exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n": expected [ …(6) ] to deeply equal []
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with the first-party entries installed and the hub stopped, each unreadable PostToolUse payload exits 0
+ × tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with no fail_closed entry installed and the hub running, each unreadable PreToolUse payload exits 0 2777ms
+   → with no fail_closed entry installed and the hub running, each unreadable PreToolUse payload must exit 0; these didn't: PreToolUse: the `git push origin main` PreToolUse payload with a member nested inside 300 arrays exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: the `git push origin main` PreToolUse payload cut off after its first 40 bytes exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: an empty stdin (PreToolUse) exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: a PreToolUse payload that isn't JSON (`not json {`) exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: the `git push origin main` PreToolUse payload with bytes that aren't UTF-8 exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: the `git push origin main` PreToolUse payload with 2 MiB of padding, cut short after 1 MiB exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n": expected [ …(6) ] to deeply equal []
+ ↓ tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with the first-party entries installed and the hub running, each unreadable PostToolUse payload exits 0
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with no fail_closed entry installed and the hub stopped, each unreadable PreToolUse payload exits 0
+AssertionError: with no fail_closed entry installed and the hub stopped, each unreadable PreToolUse payload must exit 0; these didn't: PreToolUse: the `git push origin main` PreToolUse payload with a member nested inside 300 arrays exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: the `git push origin main` PreToolUse payload cut off after its first 40 bytes exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: an empty stdin (PreToolUse) exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: a PreToolUse payload that isn't JSON (`not json {`) exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: the `git push origin main` PreToolUse payload with bytes that aren't UTF-8 exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: the `git push origin main` PreToolUse payload with 2 MiB of padding, cut short after 1 MiB exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n": expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "PreToolUse: the `git push origin main` PreToolUse payload with a member nested inside 300 arrays exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\\n\"",
++   "PreToolUse: the `git push origin main` PreToolUse payload cut off after its first 40 bytes exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\\n\"",
++   "PreToolUse: an empty stdin (PreToolUse) exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\\n\"",
++   "PreToolUse: a PreToolUse payload that isn't JSON (`not json {`) exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\\n\"",
++   "PreToolUse: the `git push origin main` PreToolUse payload with bytes that aren't UTF-8 exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\\n\"",
++   "PreToolUse: the `git push origin main` PreToolUse payload with 2 MiB of padding, cut short after 1 MiB exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\\n\"",
++ ]
+
+ ❯ tests/acceptance/2042/payload-unreadable.test.ts:191:156
+    189|       clearFailClosed(at.h);
+    190|       const wrong = await exits(at.h, 'PreToolUse', at.hub, noneInstal…
+    191|       expect(wrong, `with no fail_closed entry installed and ${where},…
+       |                                                                                                                                                            ^
+    192|     }, T);
+    193|     it(`${AC5} with the first-party entries installed and ${where}, ea…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/2042/payload-unreadable.test.ts > #2042.c82ae59d no fail_closed entry, or a PostToolUse: each unreadable payload exits 0 as today > #2042.c82ae59d with no fail_closed entry installed and the hub running, each unreadable PreToolUse payload exits 0
+AssertionError: with no fail_closed entry installed and the hub running, each unreadable PreToolUse payload must exit 0; these didn't: PreToolUse: the `git push origin main` PreToolUse payload with a member nested inside 300 arrays exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: the `git push origin main` PreToolUse payload cut off after its first 40 bytes exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: an empty stdin (PreToolUse) exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: a PreToolUse payload that isn't JSON (`not json {`) exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: the `git push origin main` PreToolUse payload with bytes that aren't UTF-8 exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n"; PreToolUse: the `git push origin main` PreToolUse payload with 2 MiB of padding, cut short after 1 MiB exited 2, stderr "DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\n": expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "PreToolUse: the `git push origin main` PreToolUse payload with a member nested inside 300 arrays exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\\n\"",
++   "PreToolUse: the `git push origin main` PreToolUse payload cut off after its first 40 bytes exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\\n\"",
++   "PreToolUse: an empty stdin (PreToolUse) exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\\n\"",
++   "PreToolUse: a PreToolUse payload that isn't JSON (`not json {`) exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\\n\"",
++   "PreToolUse: the `git push origin main` PreToolUse payload with bytes that aren't UTF-8 exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\\n\"",
++   "PreToolUse: the `git push origin main` PreToolUse payload with 2 MiB of padding, cut short after 1 MiB exited 2, stderr \"DeepBuild blocked this: deep-hook can't read this PreToolUse payload, so it is denied.\\n\"",
++ ]
+
+ ❯ tests/acceptance/2042/payload-unreadable.test.ts:191:156
+    189|       clearFailClosed(at.h);
+    190|       const wrong = await exits(at.h, 'PreToolUse', at.hub, noneInstal…
+    191|       expect(wrong, `with no fail_closed entry installed and ${where},…
+       |                                                                                                                                                            ^
+    192|     }, T);
+    193|     it(`${AC5} with the first-party entries installed and ${where}, ea…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 16 skipped (18)
+   Start at  18:13:03
+   Duration  8.28s (tests 95%, transform 4%, import 1%, setup 1%)
+
+# load average after: { 144.55 146.94 130.92 }

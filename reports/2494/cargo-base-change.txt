@@ -1,0 +1,36 @@
+The 17 cargo targets that fail in the affected run, run again on the base (9550dc0f0):
+change: 31 failing tests; base: 31 failing tests
+failing only on the change:
+failing only on the base:
+failing on both:
+  test #1425.30ab78a9 the load path timed with the module check and without it, for each of the 12 panels
+  test #1425.3d839088 the view each panel registers in a slot draws the merge base's tree, byte for byte
+  test #1425.711d0cb9 planted: a pack check that skips the per-frame check passes the panel, and the judge fails it naming the panel
+  test #1425.782e7a69 planted: a host that skips the load check loads the gpui-kit panel, and the load judge fails it naming the panel
+  test a_line_its_clip_cuts_is_still_audited_past_its_frame
+  test a_replica_at_scale_1_answers_in_1x_device_pixels
+  test a_state_is_read_as_its_status_map_entry
+  test ac11_after_a_power_cut_drops_900_to_905_the_app_sees_the_new_start_id_redoes_its_reads_and_no_longer_shows_them
+  test ac16_a_typed_yes_on_a_push_card_says_it_wont_run_and_only_allow_runs_the_plan
+  test ac1_with_30_sessions_and_200000_streamed_events_the_apps_resident_memory_stays_under_300_mb
+  test ac2_each_sessions_state_title_and_open_asks_and_the_notifiers_posts_and_withdrawals_equal_the_merge_bases
+  test ac2_only_one_device_plays_a_sound
+  test ac3_a_sidebar_render_and_a_notifier_tick_take_under_4_ms_with_200000_events_held_independent_of_the_count
+  test ac3_a_view_that_draws_another_rows_status_entry_fails_naming_the_surface_and_the_row
+  test ac3_inconclusive_on_every_surface
+  test ac3_invalid_on_every_surface
+  test ac3_with_notifications_denied_an_open_asks_row_says_not_notified_and_nothing_posts
+  test ac6_a_batched_approval_shows_the_diff_public_and_undo_and_approving_part_runs_only_those
+  test ac6_each_kind_renders_from_its_fixture_with_question_options_deadline_default_and_its_fields
+  test an_export_draws_a_recipe_instance_like_the_items_it_derives
+  test needs_you_and_session_page_share_each_log_pos
+  test render_back_draws_the_sprite_as_the_base_commit_did
+  test replica_equals_live_tree
+  test scope_a_refused_poll_is_shown_the_same_way
+  test scope_one_count_the_same_on_every_device
+  test scope_the_count_says_the_hub_isnt_answering_while_it_cant_read
+  test scope_withdrawn_from_every_device
+  test the_fixture_loads_and_paints_its_words_in_the_sidebar_slot
+  test the_snapshot_holds_the_menu_bar_title_and_the_ringed_row_as_focus
+  test wrong_fixture_dialog_from_gpui_base_is_refused_and_never_loads
+  test wrong_fixture_with_no_words_paints_no_ink

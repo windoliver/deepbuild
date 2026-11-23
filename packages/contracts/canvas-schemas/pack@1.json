@@ -106,6 +106,37 @@
       "type": "object",
       "additionalProperties": { "type": "string" }
     },
+    "libs": {
+      "$comment": "#190: each WebAssembly library, name@version, kept as data until a logic item links it (Logic: linked libraries); #416: the interfaces it implements.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "asset": { "type": "string" },
+          "exports": { "type": "array", "items": { "type": "string" } },
+          "fixtures": { "type": "array", "items": { "type": "string" } },
+          "needs": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "asset": { "type": "string" } }, "required": ["name", "asset"] } },
+          "implements": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["asset", "exports"]
+      }
+    },
+    "interfaces": {
+      "$comment": "#416: each library interface, name@major, with its exports, state layout, fixtures, planted libraries and digest (Logic: library interfaces).",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "exports": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "params": { "type": "array", "items": { "type": "string" } }, "results": { "type": "array", "items": { "type": "string" } } }, "required": ["name", "params", "results"] } },
+          "layout": { "type": ["string", "null"] },
+          "fixtures": { "type": "array", "items": { "type": "string" } },
+          "planted": { "type": "array", "items": { "type": "string" } },
+          "digest": { "type": "string" },
+          "twins": { "type": "array", "items": { "type": "object", "properties": { "planted": { "type": "string" }, "example": { "type": "string" }, "expect": { "type": "string" } }, "required": ["planted", "example", "expect"] } }
+        },
+        "required": ["exports", "fixtures", "planted", "digest"]
+      }
+    },
     "layouts": {
       "type": "object",
       "additionalProperties": {

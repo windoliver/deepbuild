@@ -10,15 +10,19 @@
 // runLanes: under the machine's throttle grants and `deep lease`, with no hosted CI and no model. A failure that
 // known-failures.json doesn't list runs again alone. One that passes on a repeat is flaky: INCONCLUSIVE, filed with its
 // runs, and nothing pauses. One that holds pauses landings, and is bisected with only the failing test over the
-// landings since the last clean run, to name the landing and its issue. A pull request reverts that landing and is
-// merged once the failing test passes on it and nothing else fails there; the issue reopens naming the failure, and
-// landings open again. A revert that conflicts or doesn't clear main starts an attempt on that issue, a headless agent
-// run, and only once that has ended with main still red is a person asked, once: a GitHub issue titled `Ask: …`.
-// State is kept under ~/.deepbuild/main-watch/, one file per watched checkout.
+// landings since the last clean run, to name the landing and its issue. A `timing` ID's failure is excused only at a
+// load above the core count, as INCONCLUSIVE; and a listed test that passed or a listed skip that ran fails the tick,
+// naming the entry (#1873). A pull request reverts that landing and is merged once the failing test passes on it and
+// nothing else fails there; the issue reopens naming the failure, and landings open again. A revert that conflicts or
+// doesn't clear main starts an attempt on that issue, a headless agent run, and only once that has ended with main
+// still red is a person asked, once: a GitHub issue titled `Ask: …`.
+// State is kept under ~/.deepbuild/main-watch/, one file per watched checkout. Each run of main's head also writes
+// settled.json there: the acceptance suites of closed issues that were clean in its last 10 runs, which affected.mjs
+// leaves to this job (#3064).
 import { spawnSync } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { homedir, tmpdir } from 'node:os';
+import { availableParallelism, homedir, loadavg, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const LANDINGS = 5;
@@ -26,6 +30,7 @@ const HOURS = 6;
 const REPEATS = 3;
 const LANES = ['unit', 'lint'];
 const ATTEMPT_HOURS = 4;
+const SETTLED_RUNS = 10;
 
 const git = (cwd, ...args) => {
   const run = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 2 ** 28 });
@@ -65,7 +70,7 @@ function save(state) {
 const paused = (state) => Object.values(state.reds ?? {});
 
 function gh(...args) {
-  const run = spawnSync('gh', args, { cwd: repo, encoding: 'utf8' });
+  const run = spawnSync('gh', args, { cwd: repo, encoding: 'utf8', maxBuffer: 2 ** 28 });
   if (run.status !== 0) throw Error(`gh ${args.slice(0, 2).join(' ')}: ${(run.error?.message ?? run.stderr).trim()}`);
   return run.stdout.trim();
 }
@@ -137,12 +142,14 @@ writeFileSync(out, JSON.stringify({ status, lanes: result }));
 
 /**
  * What a run of `lanes` at `sha` found: each failing ID with its message, the IDs that passed, the listed failures, and
- * the lanes that read neither PASS nor FAIL, so proved nothing. `lanes` may be a function of the checkout.
+ * the lanes that read neither PASS nor FAIL, so proved nothing. `lanes` may be a function of the checkout. `excuse`, set
+ * only for the tick's own run of main's head, excuses a listed timing budget's FAIL under load; every run after it
+ * (repeats, bisection, a revert's) reads a budget strictly, as any unlisted one.
  */
-function runAt(sha, lanes = { names: LANES }) {
+function runAt(sha, lanes = { names: LANES }, excuse = false) {
   const cwd = checkout(sha);
   if (typeof lanes === 'function') lanes = lanes();
-  if (!lanes) return { failing: new Map(), passed: new Set(), listed: [], unproven: [] };
+  if (!lanes) return { failing: new Map(), passed: new Set(), listed: [], unproven: [], stale: new Set(), excused: new Set() };
   const scratch = mkdtempSync(join(tmpdir(), 'deep-main-watch-'));
   try {
     const out = join(scratch, 'result.json');
@@ -150,12 +157,16 @@ function runAt(sha, lanes = { names: LANES }) {
     const result = existsSync(out) ? JSON.parse(readFileSync(out, 'utf8')) : { lanes: [] };
     const known = (() => {
       try {
-        return { failures: {}, lint: {}, timing: [], ...JSON.parse(readFileSync(join(cwd, 'scripts/known-failures.json'), 'utf8')) };
+        return { failures: {}, lint: {}, timing: [], skips: [], ...JSON.parse(readFileSync(join(cwd, 'scripts/known-failures.json'), 'utf8')) };
       } catch {
-        return { failures: {}, lint: {}, timing: [] };
+        return { failures: {}, lint: {}, timing: [], skips: [] };
       }
     })();
-    const failing = new Map(), passed = new Set(), listed = [], unproven = [];
+    // A timing budget is excused only where the Mac can't measure it, at a load above the core count, as classify in
+    // affected.mjs reads it (#1406); at or below it, its failure is new (#1873).
+    const loadNow = process.env.DEEP_MAIN_WATCH_LOAD ? Number(process.env.DEEP_MAIN_WATCH_LOAD) : loadavg()[0];
+    const loaded = excuse && loadNow > availableParallelism();
+    const failing = new Map(), passed = new Set(), listed = [], unproven = [], stale = new Set(), excused = new Set();
     for (const { name, record, findings } of result.lanes) {
       if (!record) {
         failing.set(`lane ${name}`, 'the lane left no evidence record');
@@ -164,10 +175,19 @@ function runAt(sha, lanes = { names: LANES }) {
       if (record.state === 'PASS') passed.add(`lane ${name}`);
       else if (record.state !== 'FAIL') unproven.push(`${record.state} ${name}`);
       for (const test of record.tests ?? []) {
-        if (test.state === 'PASS') passed.add(test.id);
-        else if (test.state !== 'FAIL') continue;
-        else if (known.failures[test.id] || known.timing.includes(test.id)) listed.push(test.id);
-        else failing.set(test.id, test.note ?? '');
+        // An entry whose test ran to an end it doesn't list is no longer true, and takes the tick down with it (#1873).
+        // A skip a `skips` entry covers reads LISTED (readRun, lanes.mjs), so a PASS or FAIL is a test that ran.
+        if ((test.state === 'PASS' || test.state === 'FAIL') && known.skips.some(({ id }) => id === test.id)) stale.add(`${test.id} is listed in skips, but its test ran to ${test.state}`);
+        if (test.state === 'PASS') {
+          passed.add(test.id);
+          if (Object.hasOwn(known.failures, test.id)) stale.add(`${test.id} is listed in failures, but its test passed`);
+          if (known.timing.includes(test.id)) stale.add(`${test.id} is listed in timing, but its test passed`);
+        } else if (test.state !== 'FAIL') continue;
+        else if (known.failures[test.id]) listed.push(test.id);
+        else if (loaded && known.timing.includes(test.id)) {
+          excused.add(test.id);
+          unproven.push(`INCONCLUSIVE ${test.id}: a timing budget, unmeasured at load ${loadNow.toFixed(1)} above ${availableParallelism()} cores`);
+        } else failing.set(test.id, test.note ?? '');
       }
       if (record.state !== 'FAIL' || (record.tests ?? []).some(({ state }) => state === 'FAIL')) continue;
       if (!findings) failing.set(`lane ${name}`, `the ${name} lane failed outside any test`);
@@ -182,7 +202,7 @@ function runAt(sha, lanes = { names: LANES }) {
       }
     }
     if (!result.lanes.length) failing.set('lane runner', 'the lanes could not be run');
-    return { failing, passed, listed, unproven };
+    return { failing, passed, listed, unproven, stale, excused, tests: result.lanes.flatMap(({ record }) => record?.tests ?? []) };
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
@@ -337,6 +357,53 @@ function settle(state, red, head, failingAtHead) {
   return 'red';
 }
 
+/**
+ * The settled list (#3064; docs/parallel-proof.md, section 12b), written after each run of main's head: each suite
+ * tests/acceptance/<issue>/ whose issue is closed as completed and which was clean in the last SETTLED_RUNS runs, by the
+ * ID of its folder in the tree that ran. A suite is clean in a run when every test file of its folder reported a test
+ * and every test they reported read PASS; any other run, and a change to the folder, start its count again. affected.mjs
+ * leaves a listed suite to this job. A list that can't be worked out is removed and every count starts again, so
+ * nothing stays settled on an old one.
+ */
+function writeSettled(state, head, tests) {
+  const file = join(home, 'settled.json');
+  try {
+    const folders = git(repo, 'ls-tree', head, 'tests/acceptance/').split('\n').flatMap((line) => {
+      const [, id, path] = line.match(/^\d+ tree (\w+)\t(tests\/acceptance\/\d+)$/) ?? [];
+      return id ? [[`${path}/`, id]] : [];
+    });
+    const files = git(repo, 'ls-tree', '-r', '--name-only', head, 'tests/acceptance/').split('\n').filter((path) => /\.test\.(?:mjs|js|ts)$/.test(path));
+    const before = state.suites ?? {};
+    state.suites = {};
+    // A row of the test runner's own that names no file, as a report that ends before its run did or an unhandled error
+    // (reportResults, lanes.mjs), leaves every file's tests unknown: no suite was clean in such a run. A report with a
+    // line that doesn't parse leaves no row at all (testsOf), so its command's suites have no reporting file.
+    const whole = !tests.some((test) => /^vitest (?:report|› unhandled error)$/.test(test.id));
+    for (const [folder, id] of folders) {
+      const own = files.filter((path) => path.startsWith(folder)), results = tests.filter((test) => test.id.startsWith(folder));
+      const clean = whole && own.length > 0 && own.every((path) => results.some((test) => test.id.startsWith(`${path} `))) && results.every((test) => test.state === 'PASS');
+      state.suites[folder] = { files: id, runs: clean ? (before[folder]?.files === id ? before[folder].runs : 0) + 1 : 0 };
+    }
+    const due = folders.filter(([folder]) => state.suites[folder].runs >= SETTLED_RUNS);
+    let closed = new Set(), unread = '';
+    if (due.length) {
+      try {
+        closed = new Set(JSON.parse(gh('issue', 'list', '--state', 'closed', '--limit', '100000', '--json', 'number,stateReason')).filter(({ stateReason }) => stateReason === 'COMPLETED').map(({ number }) => String(number)));
+      } catch (error) {
+        unread = `; ${due.length} had ${SETTLED_RUNS} clean runs, but which issues are closed can't be read (${error.message})`;
+      }
+    }
+    const suites = Object.fromEntries(due.filter(([folder]) => closed.has(folder.split('/')[2])));
+    writeFileSync(`${file}.tmp`, `${JSON.stringify({ tree: git(repo, 'rev-parse', `${head}^{tree}`), suites }, null, 2)}\n`);
+    renameSync(`${file}.tmp`, file);
+    say(`SETTLED main-watch: ${Object.keys(suites).length} of ${folders.length} suites on main at ${short(head)}${unread}`);
+  } catch (error) {
+    state.suites = {};
+    for (const path of [file, `${file}.tmp`]) rmSync(path, { force: true });
+    say(`NOTE main-watch: no settled list for ${short(head)}: ${error.message}`);
+  }
+}
+
 function tick() {
   mkdirSync(home, { recursive: true, mode: 0o700 });
   const lock = join(home, `${key}.lock`);
@@ -373,13 +440,21 @@ function run() {
     if (landings < LANDINGS && hours < HOURS) return say(`main-watch: not due: ${landings} of ${LANDINGS} landings since ${short(state.last.head)}, ${hours.toFixed(1)} of ${HOURS} hours`);
   }
   say(`RUN main-watch: the ${LANES.join(' and ')} lanes on main at ${short(head)}`);
-  const { failing, listed, unproven } = runAt(head);
+  const { failing, listed, unproven, stale, excused, tests } = runAt(head, undefined, true);
   state.last = { head, at: Date.now() };
+  writeSettled(state, head, tests);
+  // The counts are kept with the list, whatever becomes of the tick after it; the rest of the state is saved as before.
+  save({ ...load(), suites: state.suites });
   for (const id of listed) say(`KNOWN ${id}`);
+  // A stale entry would read a later failure of its test as known: the tick fails, naming it, so the list is mended.
+  // It pauses no landing, since nothing on main broke, but the run isn't a clean one.
+  for (const line of stale) say(`FAIL main-watch: ${line} on main at ${short(head)}: take it out of scripts/known-failures.json`);
+  if (stale.size) process.exitCode = 1;
   for (const lane of unproven) say(`INCONCLUSIVE main-watch: ${lane} on main at ${short(head)}, so this run isn't a clean one`);
-  // A held failure no longer failing is cleared; a new one runs again alone, and pauses landings only if it holds. A tree
-  // the landing queue read back as other than its verdict's (#1331) is no test's: it holds until its revert lands.
-  for (const [id, red] of Object.entries(state.reds)) if (!failing.has(id) && !red.readBack) delete state.reds[id];
+  // A held failure no longer failing is cleared, unless it failed unmeasured under load (#1873); a new one runs again
+  // alone, and pauses landings only if it holds. A tree the landing queue read back as other than its verdict's (#1331)
+  // is no test's: it holds until its revert lands.
+  for (const [id, red] of Object.entries(state.reds)) if (!failing.has(id) && !excused.has(id) && !red.readBack) delete state.reds[id];
   for (const [id, message] of failing) {
     if (state.reds[id]) continue;
     const runs = [`FAIL on ${short(head)} in the ${LANES.join(' and ')} lanes`];
@@ -399,19 +474,20 @@ function run() {
   }
   let landed = false;
   for (const red of paused(state)) {
-    if (settle(state, red, head, failing) !== 'landed') continue;
+    // A revert's run reads budgets strictly, so what the head's run excused is the head's too, not the revert's (#1873).
+    if (settle(state, red, head, new Set([...failing.keys(), ...excused])) !== 'landed') continue;
     // The revert's tree was run whole. Main is clean there if it holds nothing else and nothing else landed since;
     // otherwise the failure stays held until a tick runs the lanes on main without it.
     landed = true;
     const now = fetchHead();
     if (paused(state).length === 1 && git(repo, 'rev-parse', `${now}^{tree}`) === git(tree, 'rev-parse', 'HEAD^{tree}')) {
       delete state.reds[red.id];
-      state.clean = now;
+      if (!stale.size) state.clean = now;
       state.last = { head: now, at: Date.now() };
     }
     break;
   }
-  if (!landed && !paused(state).length && !unproven.length) state.clean = head;
+  if (!landed && !paused(state).length && !unproven.length && !stale.size) state.clean = head;
   save(state);
   say(paused(state).length ? `landings paused: main is red: ${paused(state).map(({ id }) => id).join(', ')}` : 'landings open');
 }

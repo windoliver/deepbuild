@@ -4,7 +4,7 @@
 // the check is for. It prints the reply as one JSON line with --json, and exits by the deep commands' table.
 import { readFileSync } from 'node:fs';
 import { call, notAnswered } from './client.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { hubControl } from './paths.js';
 import { startOf } from './wire.js';
 
 const USAGE = 'Usage: deep show --doc <doc ID> --document <file> [--removes id,id] [--t <time>] [--size WxH] [--include issues,audit,timing,pixels] [--check] [--snap] [--claim <claim>] [--json]';
@@ -42,11 +42,11 @@ export async function showCommand(args: readonly string[]): Promise<number> {
     ...(flags.has('--check') ? { check: true } : {}),
     ...(opts.has('--claim') ? { claim: opts.get('--claim') } : {}),
   };
-  const at = rootOf(installedRoot());
   const peer = { pid: process.pid, start: (await startOf(process.pid)) ?? '' };
   let reply;
   try {
-    reply = await call(hubAddress().path, readFileSync(at.token, 'utf8').trim(), 'canvas.show', params, peer);
+    const { path: socket, token } = hubControl();
+    reply = await call(socket, token, 'canvas.show', params, peer);
   } catch (error) {
     return notAnswered(error);
   }

@@ -56,10 +56,10 @@ pub struct Drawn {
     /// reads; the level is the one the drawing's scale takes.
     pictures: Arc<Pictures>,
     /// Each text's run as the text module shaped it (#387), drawn as it is when its spec is the
-    /// mark's.
-    runs: BTreeMap<String, Arc<Run>>,
+    /// mark's; shared with the drawing, never copied (#2660).
+    runs: Arc<BTreeMap<String, Arc<Run>>>,
     /// Each animated text's units ([`animated::Unit`]), one per glyph.
-    animated: BTreeMap<String, Vec<animated::Unit>>,
+    animated: Arc<BTreeMap<String, Vec<animated::Unit>>>,
     /// #493: a 2D film's camera, from the document's units to its own pixels, where a shot
     /// moves it; the legend stays where it is.
     pub view: Option<Affine>,
@@ -511,6 +511,7 @@ fn decode_all(
     let mut drawn = std::collections::HashSet::new();
     let mut held = 0;
     for d in frame.layers.iter().flat_map(|l| &l.marks) {
+        // #269: a grid image draws its grid, no stored picture.
         let Mark::Image {
             item,
             asset,
@@ -518,6 +519,7 @@ fn decode_all(
             fit,
             crop,
             tile,
+            grid: None,
             ..
         } = &d.mark
         else {
@@ -689,8 +691,8 @@ impl Renderer {
             status,
             images,
             pictures,
-            runs: BTreeMap::new(),
-            animated: BTreeMap::new(),
+            runs: Arc::default(),
+            animated: Arc::default(),
             view: None,
             noise,
         })
@@ -715,8 +717,8 @@ impl Renderer {
                 status,
                 images: BTreeMap::new(),
                 pictures: Arc::default(),
-                runs: BTreeMap::new(),
-                animated: BTreeMap::new(),
+                runs: Arc::default(),
+                animated: Arc::default(),
                 view: None,
                 noise: BTreeMap::new(),
             });
@@ -1075,7 +1077,11 @@ impl Renderer {
                 crop,
                 tile,
                 turn,
+                grid,
             } => {
+                if let Some(g) = grid {
+                    return deep_marks_vello::grid(ctx, item, g, *bounds, scales(at).0);
+                }
                 // #1486: a still picture draws the level the drawing's scale takes, cut as its
                 // request is; a video's frame draws whole, cut by its crop.
                 let still = drawn

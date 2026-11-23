@@ -20,6 +20,8 @@ use image::RgbaImage;
 type GlyphKey = (FontId, GlyphId);
 /// A row of glyphs: the clip they're drawn under and their baseline, in whole device pixels.
 type Row = ([i32; 4], i32);
+/// A glyph on a row: its pen's x, its key and the sprite it drew.
+type Placed = (f32, GlyphKey, Sprite);
 
 /// The fewest glyphs that say which line a cut-off row starts: fewer could start anything.
 const MIN_CUT: usize = 4;
@@ -94,7 +96,7 @@ impl Glyphs {
     /// The strings the last frame drew, top to bottom and left to right.
     pub fn runs(&self) -> Vec<Run> {
         let seen = self.0.lock().expect("glyphs");
-        let mut rows: BTreeMap<Row, Vec<(f32, GlyphKey, Sprite)>> = BTreeMap::new();
+        let mut rows: BTreeMap<Row, Vec<Placed>> = BTreeMap::new();
         let mut sizes: HashMap<(AtlasTextureId, u32), f32> = HashMap::new();
         for sprite in &seen.sprites {
             let Some((key, offset, size)) = seen
@@ -119,15 +121,14 @@ impl Glyphs {
         // A mark shaped off its line's baseline, as Arabic's are, paints up to about half an em from it (#1808): under one
         // clip, a row within half an em of a larger row is that row's. Lines under one clip are a line's height apart.
         let scale = seen.scale.unwrap_or(2.);
-        let mut clips: BTreeMap<[i32; 4], Vec<(i32, Vec<(f32, GlyphKey, Sprite)>)>> =
-            BTreeMap::new();
+        let mut clips: BTreeMap<[i32; 4], Vec<(i32, Vec<Placed>)>> = BTreeMap::new();
         for ((clip, y), glyphs) in rows {
             clips.entry(clip).or_default().push((y, glyphs));
         }
-        let mut lines: Vec<Vec<(f32, GlyphKey, Sprite)>> = Vec::new();
+        let mut lines: Vec<Vec<Placed>> = Vec::new();
         for (_, mut rows) in clips {
             rows.sort_by_key(|(y, glyphs)| (std::cmp::Reverse(glyphs.len()), *y));
-            let mut anchors: Vec<(i32, f32, Vec<(f32, GlyphKey, Sprite)>)> = Vec::new();
+            let mut anchors: Vec<(i32, f32, Vec<Placed>)> = Vec::new();
             for (y, glyphs) in rows {
                 let em = glyphs
                     .iter()

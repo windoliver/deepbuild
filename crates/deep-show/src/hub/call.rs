@@ -26,6 +26,11 @@ pub enum Call {
     },
     /// #1901: the machine fingerprint kept output is keyed by.
     Fingerprint,
+    /// #2892: `ship.bytes` for a web bundle and its test server's record, served to `chrome`.
+    Ship {
+        bundle: String,
+        chrome: String,
+    },
     /// #1431: the process's footprint, its heap, every gauge and what's left unaccounted.
     Footprint,
     /// #1901: a document's frame, capture or final at a time, through the kept-output cache.
@@ -177,6 +182,8 @@ pub enum Call {
     Determinism(crate::time::Determinism),
     /// `count` frames of a session from `from`, `step` apart, with the scheduler's own costs.
     Frames(Box<Frames>),
+    /// #1500: a document played live frame by frame, its revisions joining the run.
+    PlayFrames(Box<crate::joins::Play>),
     /// #856: the shaped-run cache's runs of a text, the times each was shaped and who draws it.
     ShapedRuns(String),
     /// #854: patches to a shared document, each timed from its arrival to the settled frame.
@@ -230,6 +237,14 @@ pub enum Call {
     Scope(String),
     /// The frames a panel presented up to now (#383).
     Presented(String),
+    /// #1250: those frames, each from `from` on with its index target as the live play drew it.
+    PresentedIndices(String, i64),
+    /// #1250: a player control run in a panel (Save clip, Save still), and a panel's cards.
+    Clip {
+        panel: String,
+        action: crate::clip::Action,
+    },
+    Clips(String),
     /// Your pop-out of a panel's view onto a display, with your input's serial (#400).
     PopOut {
         panel: String,

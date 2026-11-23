@@ -150,7 +150,8 @@ impl Hub<'_> {
         // #194: what the items fire, baked before the worlds that take it.
         if deep_play::fires::any(form) {
             if let Some(p) = self.logic_piece(form, track)? {
-                deep_play::fires::inline(form, p, track)?;
+                let planted = self.scenario.logic_planted.unwrap_or_default();
+                deep_play::fires::inline(form, p, track, planted)?;
             }
         }
         self.inline_worlds(form, track)?;
@@ -428,7 +429,14 @@ impl Hub<'_> {
 }
 
 /// #1164: the logic twins a scenario's `planted` may name, alone or as a list applied together.
-const PLANTED: [&str; 2] = ["restore_zeroes_move_count", "check_compares_step_hashes"];
+const PLANTED: [&str; 4] = [
+    "restore_zeroes_move_count",
+    "check_compares_step_hashes",
+    // #1250: the planted piece that reads the wall clock, in the live play and its clip's replica.
+    "logic_reads_wall_clock",
+    // #1834: a logic module that writes each fire one of its steps late.
+    "fire_one_step_late",
+];
 
 /// A scenario's `planted` as logic twins: `Some(None)` when it names none, `None` (bad input)
 /// for a list holding any other name.

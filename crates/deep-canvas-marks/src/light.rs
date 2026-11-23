@@ -4,7 +4,9 @@
 //! pixel is decoded to linear light, multiplied by `ambient` plus the sum of energy × reach ×
 //! color over the lights, clamped to 1 and encoded once. An item with `unlit`, or one a status
 //! binding paints, keeps full brightness. This is the CPU reference the GPU layer's light pass
-//! (`deep-gpu-layer`'s `lightfx`) follows in f32.
+//! (`deep-groups-render`'s `lightfx`) follows in f32. #2053: on an image with a `normal` page a
+//! point light's term is also multiplied by max(0, N·L) ÷ L.z, L built from `at` minus the pixel
+//! and the light's `height`, so a flat page changes nothing and a page only turns the surface.
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -35,6 +37,79 @@ pub struct Light {
     pub occluders: shadow::Occluders,
     /// The wrong program planted in how it lights, which both renderers follow.
     pub plant: Plant,
+    /// #2053: the normal page of the one image this light's run holds, if it has one.
+    pub page: Option<Page>,
+}
+
+/// #2053: an image's normal page, as a lit group's light reads it on that image alone.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Page {
+    /// The image item.
+    pub item: String,
+    /// The page's asset, its sha256 in hex.
+    pub asset: String,
+    /// Its texels and where they draw, once a renderer has read them from its store.
+    pub normals: Option<Arc<Normals>>,
+}
+
+/// #2053: a normal page's texels as stored, placed where its image draws.
+#[derive(Debug, PartialEq)]
+pub struct Normals {
+    /// Its size in px, the image's own.
+    pub size: [u32; 2],
+    /// RGBA, as stored: red and green hold x and y in the image's own frame, +y toward its top.
+    pub texels: Vec<u8>,
+    /// A point of the frame (u) to the page's texel space (px): `[a, b, c, d, e, f]`, x′ = a x +
+    /// c y + e, y′ = b x + d y + f.
+    pub back: [f64; 6],
+    /// The image's turn, `[sin, cos]`, which turns its normals with it.
+    pub turn: [f64; 2],
+}
+
+impl Normals {
+    /// The page's normal at `p` (u) in the frame's axes, y down and z toward the viewer: its
+    /// nearest texel's red and green read as `c ÷ 255 × 2 − 1`, z rebuilt and the whole made
+    /// unit, turned with the image; `None` outside the page.
+    pub fn at(&self, p: [f64; 2], plant: Plant) -> Option<[f64; 3]> {
+        let [a, b, c, d, e, f] = self.back;
+        let (tx, ty) = (a * p[0] + c * p[1] + e, b * p[0] + d * p[1] + f);
+        let [w, h] = self.size.map(f64::from);
+        if !(tx >= 0.0 && ty >= 0.0 && tx < w && ty < h) {
+            return None;
+        }
+        let (x, y) = (tx.floor() as usize, ty.floor() as usize);
+        let i = (y * self.size[0] as usize + x) * 4;
+        let code = |k: usize| f64::from(self.texels[i + k]) / 255.0 * 2.0 - 1.0;
+        let (nx, mut ny) = (code(0), code(1));
+        if plant == Plant::FlippedGreen {
+            ny = -ny;
+        }
+        let nz = ops::sqrt((1.0 - nx * nx - ny * ny).max(0.0));
+        let len = ops::sqrt(nx * nx + ny * ny + nz * nz);
+        // +y toward the image's top edge is -y in the frame, which runs down.
+        let (x, y, z) = (nx / len, -ny / len, nz / len);
+        if plant == Plant::Unturned {
+            return Some([x, y, z]);
+        }
+        let [s, c] = self.turn;
+        Some([c * x - s * y, s * x + c * y, z])
+    }
+}
+
+/// #2053: the share of a light a surface of normal `n` at `p` takes beside what a flat one does:
+/// max(0, N·L) ÷ L.z, L the unit vector toward the light at `at` and `height` above the frame,
+/// which is max(0, n·v) ÷ v.z for v = (at − p, height); 1 with no page or for a sun, which has no
+/// elevation.
+pub fn turned(n: Option<[f64; 3]>, p: [f64; 2], l: &Point, plant: Plant) -> f64 {
+    let Some(n) = n.filter(|_| l.sun.is_none() && l.height > 0.0) else {
+        return 1.0;
+    };
+    let v = [l.at[0] - p[0], l.at[1] - p[1], l.height];
+    let dot = (n[0] * v[0] + n[1] * v[1] + n[2] * v[2]).max(0.0);
+    match plant {
+        Plant::DotAlone => dot / ops::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]),
+        _ => dot / v[2],
+    }
 }
 
 /// One point light, where it draws; or a sun (#2032), which has no `at` and reaches everywhere.
@@ -49,6 +124,9 @@ pub struct Point {
     pub color: [f64; 3],
     /// A sun's `angle` through the group's transform: the unit direction its shadows run in.
     pub sun: Option<[f64; 2]>,
+    /// #2053: its `height` above the frame scaled with the group, u, `range ÷ 4` unless named;
+    /// only an image's normal page reads it, and a sun's is 0.
+    pub height: f64,
 }
 
 /// A wrong program a light's tests plant.
@@ -60,6 +138,12 @@ pub enum Plant {
     LinearFalloff,
     /// The lights' terms add to the encoded color rather than in linear light.
     EncodedSum,
+    /// #2053's: a normal page's green read the other way up.
+    FlippedGreen,
+    /// #2053's: a paged pixel's term multiplied by max(0, N·L) alone, not ÷ L.z.
+    DotAlone,
+    /// #2053's: a page's normals left unturned when its image turns.
+    Unturned,
 }
 
 /// The closed-form reach at squared distance `d2` from a light of `range`.
@@ -80,16 +164,22 @@ pub fn reach(d2: f64, range: f64, plant: Plant) -> f64 {
 impl Light {
     /// Each light's term at `p` (u), per channel: energy × reach × color, times the `share` of
     /// the light no occluder blocks there (#2032).
+    /// #2053: `n`, the page's normal at `p` if the run has one, turns each point light's term.
     fn terms<'a>(
         &'a self,
         p: [f64; 2],
-        plant: Plant,
+        n: Option<[f64; 3]>,
         share: &'a dyn Fn(usize) -> f64,
     ) -> impl Iterator<Item = [f64; 3]> + 'a {
+        let plant = self.plant;
         self.lights.iter().enumerate().map(move |(k, l)| {
             let (dx, dy) = (p[0] - l.at[0], p[1] - l.at[1]);
             let r = l.energy * reach(dx * dx + dy * dy, l.range, plant);
-            let r = if r == 0.0 { r } else { r * share(k) };
+            let r = if r == 0.0 {
+                r
+            } else {
+                r * share(k) * turned(n, p, l, plant)
+            };
             l.color.map(|c| r * c)
         })
     }
@@ -99,11 +189,13 @@ impl Light {
     /// encoded-sum plant encodes the ambient's and each light's product apart and adds those.
     pub fn lit(&self, rgb: [f64; 3], p: [f64; 2], share: &dyn Fn(usize) -> f64) -> [f64; 3] {
         let plant = self.plant;
+        let normals = self.page.as_ref().and_then(|g| g.normals.as_deref());
+        let n = normals.and_then(|n| n.at(p, plant));
         let linear = rgb.map(srgb_decode);
         let encode = |v: f64| srgb_encode(v.clamp(0.0, 1.0));
         if plant == Plant::EncodedSum {
             let mut out = linear.map(|c| encode(c * self.ambient));
-            for t in self.terms(p, plant, share) {
+            for t in self.terms(p, n, share) {
                 for k in 0..3 {
                     out[k] += encode(linear[k] * t[k]);
                 }
@@ -111,7 +203,7 @@ impl Light {
             return out.map(|v| v.clamp(0.0, 1.0));
         }
         let mut sum = [self.ambient; 3];
-        for t in self.terms(p, plant, share) {
+        for t in self.terms(p, n, share) {
             for k in 0..3 {
                 sum[k] += t[k];
             }
@@ -131,7 +223,7 @@ impl Light {
         at: impl Fn(f64, f64) -> [f64; 2],
     ) {
         let shadows = shadow::build(&self.lights, &self.occluders.outlines, zoom);
-        for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+        for (i, px) in rgba.as_chunks_mut::<4>().0.iter_mut().enumerate() {
             if px[3] == 0 {
                 continue;
             }
@@ -259,6 +351,8 @@ pub fn ranges(doc: &Map<String, Value>) -> Vec<Problem> {
     let outside = |field: &str, v: &Value| match field {
         "ambient" => !num(Some(v)).is_some_and(|a| (0.0..=1.0).contains(&a)),
         "range" => !num(Some(v)).is_some_and(|r| r >= 0.0),
+        // #2053: a light's height is above 0.
+        "height" => !num(Some(v)).is_some_and(|h| h > 0.0),
         _ => false,
     };
     let problem = |id: &str, path: String, v: &Value| Problem {
@@ -266,7 +360,8 @@ pub fn ranges(doc: &Map<String, Value>) -> Vec<Problem> {
         id: id.to_string(),
         actual: v.clone(),
         what: format!(
-            "{path} reads {v}: a lit group's ambient is within 0..1 and a light's range at least 0"
+            "{path} reads {v}: a lit group's ambient is within 0..1, a light's range at least 0 \
+             and its height above 0"
         ),
         path,
     };
@@ -287,6 +382,12 @@ pub fn ranges(doc: &Map<String, Value>) -> Vec<Problem> {
         for (k, l) in lights.into_iter().flatten().enumerate() {
             if let Some(r) = l.get("range").filter(|r| outside("range", r)) {
                 out.push(problem(id, format!("{base}/lights/{k}/range"), r));
+            }
+            if let Some(h) = l
+                .get("height")
+                .filter(|h| !h.is_null() && outside("height", h))
+            {
+                out.push(problem(id, format!("{base}/lights/{k}/height"), h));
             }
         }
     }
@@ -401,17 +502,30 @@ pub(crate) fn read(
         let Some(rgb) = palette.get(role) else {
             return bad("role_unresolved", format!("{}: {role}", path("color")));
         };
+        // #2053: a point light's height, a quarter of its range unless named; a sun has none.
+        let height = match (sun, l.get("height")) {
+            (Some(_), _) => 0.0,
+            (None, None | Some(Value::Null)) => range / 4.0,
+            (None, h) => match num(h) {
+                Some(h) => h * grow,
+                None => return bad("out_of_range", path("height")),
+            },
+        };
         lights.push(Point {
             at,
             range,
             energy,
             color: rgb.map(|c| srgb_decode(f64::from(c) / 255.0)),
             sun,
+            height,
         });
     }
     let plant = match planted {
         Planted::LightLinearFalloff => Plant::LinearFalloff,
         Planted::LightEncodedSum => Plant::EncodedSum,
+        Planted::NormalFlippedGreen => Plant::FlippedGreen,
+        Planted::NormalDotAlone => Plant::DotAlone,
+        Planted::NormalUnturned => Plant::Unturned,
         _ => Plant::None,
     };
     let occluders = shadow::occluders(items, id)?;
@@ -420,6 +534,7 @@ pub(crate) fn read(
         lights,
         occluders,
         plant,
+        page: None,
     }))
 }
 
@@ -479,6 +594,46 @@ pub(crate) fn scope(group: &str, light: &Arc<Light>) -> Scope {
     }
 }
 
+/// #2053: the asset of an `image@1`'s `normal` page, if it names one.
+pub fn normal_of(item: &Value) -> Option<&str> {
+    if item.get("kind").and_then(Value::as_str) != Some("image@1") {
+        return None;
+    }
+    item.pointer("/params/normal").and_then(Value::as_str)
+}
+
+/// The scope the lit item `id` draws in: its group's, or for an image with a `normal` page a run
+/// of its own (#2053), whose light reads that page once a renderer has read it.
+pub(crate) fn scope_for(group: &str, light: &Arc<Light>, id: &str, item: &Value) -> Scope {
+    let Some(asset) = normal_of(item) else {
+        return scope(group, light);
+    };
+    let page = Page {
+        item: id.to_string(),
+        asset: asset.to_ascii_lowercase(),
+        normals: None,
+    };
+    let paged = Light {
+        page: Some(page),
+        ..(**light).clone()
+    };
+    Scope::Opacity {
+        item: format!("{group}#light#{id}"),
+        alpha: 1.0,
+        blend: Some(Blend::Normal),
+        effect: Some(Arc::new(Effect {
+            light: Some(Arc::new(paged)),
+            ..Effect::default()
+        })),
+    }
+}
+
+/// The lit group a light scope's item names: `<group>#light`, or `<group>#light#<image>` for a
+/// paged image's own run (#2053).
+pub fn group_of(scope_item: &str) -> Option<&str> {
+    scope_item.split_once("#light").map(|(g, _)| g)
+}
+
 /// A lit group's light list as evaluated at t, in its own units, each default filled in: what the
 /// `path` surface reports of the group. `None` for a group with no `light`.
 pub fn evaluated(item: &Value) -> Option<Value> {
@@ -495,14 +650,44 @@ pub fn evaluated(item: &Value) -> Option<Value> {
                 let (angle, color) = (l.get("angle"), l.get("color"));
                 return json!({"kind": "sun", "angle": angle, "color": color, "energy": energy});
             }
+            // #2053: a point light's height, a quarter of its range unless named.
+            let height = l.get("height").filter(|h| !h.is_null()).cloned();
+            let quarter = num(l.get("range")).map(|r| json!(r / 4.0));
             json!({
                 "at": l.get("at"), "color": l.get("color"), "range": l.get("range"),
-                "energy": energy,
+                "energy": energy, "height": height.or(quarter),
             })
         })
         .collect();
     let ambient = light.get("ambient").filter(|a| !a.is_null());
     Some(json!({"ambient": ambient.cloned().unwrap_or(json!(AMBIENT)), "lights": lights}))
+}
+
+/// #2053: one notice for each image with a `normal` page outside a lit group, which draws as it
+/// would without the page, naming the image.
+pub fn unlit_pages(items: &Map<String, Value>) -> Vec<Value> {
+    let lit_above = |id: &str| {
+        let mut at = items.get(id)?.get("parent").and_then(Value::as_str);
+        for _ in 0..=items.len() {
+            let group = items.get(at?)?;
+            if lit_group(group) {
+                return Some(());
+            }
+            at = group.get("parent").and_then(Value::as_str);
+        }
+        None
+    };
+    let paged = items.iter().filter(|(_, i)| normal_of(i).is_some());
+    paged
+        .filter(|(id, _)| lit_above(id).is_none())
+        .map(|(id, _)| {
+            json!({
+                "code": "normal_unlit", "severity": "notice", "ids": [id],
+                "path": format!("items/{id}/params/normal"), "actual": {"image": id},
+                "what": format!("the image {id} has a normal page outside a lit group, so it draws as it would without one"),
+            })
+        })
+        .collect()
 }
 
 /// The light of the lit group above `id`, if one is (a planted pass that lights status marks

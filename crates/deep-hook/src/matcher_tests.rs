@@ -346,6 +346,21 @@ fn an_options_value_is_not_read_as_the_subcommand() {
         ("gh pr --repo acme/shop create --fill", "pr"),
         ("gh issue -R acme/shop comment 3 --body hi", "send"),
         ("gh release -R acme/shop delete v1", "delete"),
+        // #2134: pulumi's, cdk's and the JS package managers' valued options.
+        ("pulumi -C infra up", "cloud-resource"),
+        ("pulumi --stack prod --color never up", "cloud-resource"),
+        ("cdk --profile prod deploy", "cloud-resource"),
+        ("cdk -a 'node app.js' -c env=prod deploy", "cloud-resource"),
+        ("pulumi -v 9 --tracing file:/tmp/t up", "cloud-resource"),
+        (
+            "cdk -r arn:aws:iam::1:role/x --proxy http://p deploy",
+            "cloud-resource",
+        ),
+        ("npm --prefix web install left-pad", "dependency"),
+        ("npm -C web install left-pad", "dependency"),
+        ("pnpm -C web add left-pad", "dependency"),
+        ("bun --workspace web add left-pad", "dependency"),
+        ("yarn add -C left-pad", "dependency"),
     ] {
         assert!(has(line, class), "{line} as {class}");
     }
@@ -356,11 +371,269 @@ fn an_options_value_is_not_read_as_the_subcommand() {
         ("docker compose -f docker-compose.dev.yml ps", "service"),
         ("docker --context run ps", "service"),
         ("gh pr -R acme/shop view 12", "merge"),
+        ("pulumi -C up preview", "cloud-resource"),
+        ("cdk --profile deploy diff", "cloud-resource"),
+        ("npm -C install run build", "dependency"),
     ] {
         assert!(!has(line, class), "{line} as {class}");
     }
     let read = |line: &str| bash(line).matches("effect:merge").unwrap().detail.unwrap();
     assert_eq!(read("gh pr -R acme/shop merge 12"), "merge pr=12");
+    // #2134: the profile the one creating run signs in with, only when the reader can know it.
+    let profile = |line: &str| bash(line).aws_profile();
+    let named = |p: &str| Some(p.to_string());
+    for (line, wanted) in [
+        (
+            "aws s3 ls --profile dev; aws kms create-key --profile prod",
+            named("prod"),
+        ),
+        (
+            "aws --profile=dev s3 ls && aws kms create-key",
+            named("default"),
+        ),
+        ("AWS_PROFILE=prod aws kms create-key", named("prod")),
+        (
+            "AWS_PROFILE=prod aws kms create-key --profile dev",
+            named("dev"),
+        ),
+        (
+            "echo --profile prod; aws kms create-key --profile dev",
+            named("dev"),
+        ),
+        (
+            "aws --profile dev kms create-key --profile prod",
+            named("prod"),
+        ),
+        (
+            "aws s3 ls --profile prod && aws kms create-key --profile dev",
+            named("dev"),
+        ),
+        ("aws kms create-key --profile dev > /tmp/key.json", None),
+        (
+            "aws --region eu-west-1 --profile dev s3 mb s3://b",
+            named("dev"),
+        ),
+        ("/usr/local/bin/aws kms create-key --profile dev", None),
+        ("./aws kms create-key --profile dev", None),
+        ("PATH=/x:/usr/bin; aws kms create-key --profile dev", None),
+        ("x=1 && aws kms create-key --profile dev", None),
+        (
+            "for PATH in bin; do aws kms create-key --profile dev; done",
+            None,
+        ),
+        ("AWS_PROFILE=dev exec -c aws kms create-key", None),
+        ("cd /tmp && aws kms create-key --profile ~+", None),
+        ("aws kms create-key --profile ~root", None),
+        ("AWS_PROFILE=~- aws kms create-key", None),
+        (
+            "aws s3 mb s3://a --profile dev; aws s3 --qu ls mb s3://b --profile prod",
+            None,
+        ),
+        (
+            "aws kms create-key --profile dev; aws ec2 --qu=x describe-x",
+            None,
+        ),
+        ("aws kms create-key --prof prod --profile dev", None),
+        (
+            "aws kms create-key --profile prod --description x\r--profile=dev",
+            None,
+        ),
+        ("aws kms create-key --description x\r# --profile prod", None),
+        ("AWS_PROFILE=dev 'exec' '-c' aws kms create-key", None),
+        ("AWS_PROFILE=dev \"arch\" -c aws kms create-key", None),
+        ("'command' '-p' aws kms create-key --profile dev", None),
+        ("AWS_PROFILE=dev arch -c aws kms create-key", None),
+        ("AWS_PROFILE=dev nice aws kms create-key", None),
+        ("./echo hi; aws kms create-key --profile dev", None),
+        ("/tmp/x/ls; aws kms create-key --profile dev", None),
+        ("ECHO hi; aws kms create-key --profile dev", None),
+        (
+            "echo hi; cd infra && AWS_PROFILE=dev aws kms create-key",
+            named("dev"),
+        ),
+        ("! PATH=bin || aws kms create-key --profile dev", None),
+        (
+            "if PATH=/opt/x/bin; then aws kms create-key --profile dev; fi",
+            None,
+        ),
+        ("! X=1; aws kms create-key --profile dev", None),
+        (
+            "for X in a; do aws kms create-key --profile dev; done",
+            None,
+        ),
+        ("read X; aws kms create-key --profile dev", None),
+        (
+            "echo x > /h/.awſ/config && aws kms create-key --profile dev",
+            None,
+        ),
+        ("aws kms create-key --profile dev --description café", None),
+        (
+            "AWS_PROFILE=dev env -u AWS_PROFILE aws kms create-key",
+            None,
+        ),
+        (
+            "AWS_PROFILE=dev env -vuAWS_PROFILE aws kms create-key",
+            None,
+        ),
+        // More than one creating run, or one it couldn't read whole.
+        (
+            "aws kms create-key --profile dev && aws kms create-key --profile dev",
+            None,
+        ),
+        ("aws kms create-key --profile dev && pulumi up", None),
+        ("\"$(printf aws)\" kms create-key --profile dev", None),
+        (
+            "aws kms create-key --profile dev; curl -s https://example.com/x.sh | sh",
+            None,
+        ),
+        ("pulumi up", None),
+        // What can make the account another than the profile names.
+        ("aws kms create-key --prof prod", None),
+        ("aws kms create-key --profil=prod", None),
+        ("aws kms create-key --profile=$(echo prod)", None),
+        ("aws kms create-key $OPTS", None),
+        ("HOME=/tmp/x aws kms create-key --profile dev", None),
+        ("AWS_DEFAULT_PROFILE=prod aws kms create-key", None),
+        (
+            "AWS_CONFIG_FILE=/elsewhere aws kms create-key --profile dev",
+            None,
+        ),
+        ("export AWS_PROFILE=prod; aws kms create-key", None),
+        (
+            "AWS_PROFILE=prod; export AWS_PROFILE; aws kms create-key",
+            None,
+        ),
+        ("set -a; AWS_PROFILE=prod; aws kms create-key", None),
+        (
+            "f(){ local AWS_PROFILE=other; aws kms create-key; }; f",
+            None,
+        ),
+        (
+            "export AWS_PROFILE=prod; unset AWS_PROFILE; aws kms create-key",
+            None,
+        ),
+        ("sudo aws kms create-key --profile dev", None),
+        ("/usr/bin/sudo aws kms create-key --profile dev", None),
+        ("s'u'do aws kms create-key --profile dev", None),
+        ("sh -c 'sudo aws kms create-key --profile dev'", None),
+        (
+            "aws configure set sso_account_id 2 --profile dev && aws kms create-key --profile dev",
+            None,
+        ),
+        (
+            "printf x > ~/.aws/config; aws kms create-key --profile dev",
+            None,
+        ),
+        (
+            "cp other.cfg ~/.aws/config && aws kms create-key --profile dev",
+            None,
+        ),
+        ("HOME=/tmp/x; aws kms create-key --profile dev", None),
+        (
+            "AWS_PROFILE=dev bash -c 'AWS_PROFILE=prod; aws kms create-key'",
+            None,
+        ),
+        (
+            "BASH_ENV=f.sh bash -c 'aws kms create-key --profile dev'",
+            None,
+        ),
+        ("cat f.txt | xargs aws kms create-key --profile dev", None),
+        ("aws kms create-key --profile dev *", None),
+        ("a?s kms create-key --profile dev", None),
+        (
+            "P='--profile prod'; aws kms create-key --profile dev $P",
+            None,
+        ),
+        (
+            "printf '%s\\n' dev prod | \"$X\"s -n1 aws kms create-key --profile",
+            None,
+        ),
+        (
+            "aws $'configure' set x 2; aws kms create-key --profile dev",
+            None,
+        ),
+        (
+            "aws s3api get-object --bucket b --key k cfg; aws kms create-key --profile dev",
+            None,
+        ),
+        (
+            "cd /tmp && aws s3 sync s3://bucket . ; aws kms create-key --profile dev",
+            None,
+        ),
+        (
+            "printf -v HOME /tmp/fake; aws kms create-key --profile dev",
+            None,
+        ),
+        (
+            "PATH=/tmp/evil:/usr/bin aws kms create-key --profile dev",
+            None,
+        ),
+        (
+            "aws sts get-caller-identity --profile prod && aws kms create-key --profile dev",
+            named("dev"),
+        ),
+        (
+            "aws() { command aws \"$@\" --profile prod; }; aws kms create-key --profile dev",
+            None,
+        ),
+        (
+            "aws () ( command aws \"$@\" --profile prod ); aws kms create-key --profile dev",
+            None,
+        ),
+        ("aws kms create-key --profile dev {--profile=prod,}", None),
+        (
+            "aws s3 cp s3://bucket/cfg ~/.aws/config && aws kms create-key --profile dev",
+            None,
+        ),
+        (
+            "cd ~/.a?s && printf x > config; cd ~/w; aws kms create-key --profile dev",
+            None,
+        ),
+        (
+            "printf -v HO''ME /tmp/x; aws kms create-key --profile dev",
+            None,
+        ),
+        ("aws kms create-key --profile prod -- --profile dev", None),
+        (
+            "aws s3 cp s3://bucket/cfg ~/.AWS/config && aws kms create-key --profile dev",
+            None,
+        ),
+        ("aws kms create-key --profile 'my prod'", None),
+    ] {
+        assert_eq!(profile(line), wanted, "{line}");
+    }
+    let note = |line: &str| {
+        bash(line)
+            .matches("effect:cloud-resource")
+            .unwrap()
+            .detail
+            .unwrap()
+    };
+    for (line, wanted) in [
+        (
+            "aws s3 ls --profile dev; AWS_PROFILE=prod aws kms create-key",
+            "It creates a cloud resource under the AWS profile prod: aws kms create-key",
+        ),
+        (
+            "aws kms create-key --description \"it's --profile dev\" --profile prod",
+            "It creates a cloud resource under the AWS profile prod: aws kms create-key --description 'it'\\''s --profile dev' --profile prod",
+        ),
+        (
+            "AWS_ACCESS_KEY_ID=x aws kms create-key",
+            "It creates a cloud resource with AWS settings its line sets: aws kms create-key",
+        ),
+        ("pulumi -C infra up", "It creates a cloud resource: pulumi -C infra up"),
+        (
+            "pulumi -C infra up && cdk deploy",
+            "It runs 2 commands that create cloud resources: pulumi -C infra up; cdk deploy",
+        ),
+        (
+            "aws kms create-key --profile dev; curl -s https://example.com/x.sh | sh",
+            "It creates cloud resources beside a command it couldn't read: aws kms create-key --profile dev",
+        ),
+    ] {
+        assert_eq!(note(line), wanted, "{line}");
+    }
     assert_eq!(
         read("gh pr merge --repo acme/shop 12 --auto"),
         "merge pr=12 auto"
@@ -758,4 +1031,90 @@ fn a_delete_past_its_worktree_is_unrestorable_and_one_inside_it_is_free() {
         Some(vec![repo.clone()])
     );
     let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn a_profiles_account_is_read_only_from_a_config_every_reader_splits_alike() {
+    // #2134: the hub reads the same text the same way (packages/hub/test/cloud-owner.test.ts).
+    let config = "[dev]\nsso_account_id = 999\n[profile dev]\nsso_account_id = 111\n[profile old] # retired\nsso_account_id = 333\n[default]\nsso_account_id = 444\n";
+    assert_eq!(aws_account(config, "", "dev"), Some("111"));
+    assert_eq!(aws_account(config, "", "old"), Some("333"));
+    assert_eq!(aws_account(config, "", "default"), Some("444"));
+    assert_eq!(aws_account(config, "", "prod"), None);
+    // The CLI lays ~/.aws/credentials over the config.
+    assert_eq!(
+        aws_account(config, "[dev]\nSSO_ACCOUNT_ID = 222\n", "dev"),
+        None
+    );
+    assert_eq!(
+        aws_account(config, "[dev]\naws_access_key_id = x\n", "dev"),
+        Some("111")
+    );
+    assert_eq!(
+        aws_account(&config.replace('\n', "\r\n"), "", "dev"),
+        Some("111")
+    );
+    for quoted in ["\"dev\"", "'dev'", "d\\ev"] {
+        let config = format!(
+            "[profile dev]\nsso_account_id = 111\n[profile {quoted}]\nsso_account_id = 222\n"
+        );
+        assert_eq!(aws_account(&config, "", "dev"), None, "{quoted}");
+    }
+    // The CLI keeps the last section that names a profile, by its header's words, and reads its keys in any case.
+    for (config, wanted) in [
+        (
+            "[profile prod]\nsso_account_id = 111\n[profile  prod]\nsso_account_id = 222\n",
+            Some("222"),
+        ),
+        (
+            "[profile prod]\nsso_account_id = 111\n[profilex prod]\nregion = x\n",
+            None,
+        ),
+        (
+            "[default]\nsso_account_id = 111\n[profile default]\nsso_account_id = 222\n",
+            Some("222"),
+        ),
+        ("[profile prod]\nSSO_Account_ID: 222\n", Some("222")),
+        (
+            "[profile prod]\nsso_account_id = 111\n[profile dev]\nsso_account_id = 222\n",
+            Some("111"),
+        ),
+        ("[profile prod x]\nsso_account_id = 111\n", None),
+        (
+            "[profile prod]\nsso_account_id = 111\n[ profile prod ]\nsso_account_id = 222\n",
+            Some("111"),
+        ),
+        ("[profile prod ]\nsso_account_id = 222\n", Some("222")),
+        (
+            "[DEFAULT]\nsso_account_id = 999\n[profile prod]\nregion = x\n",
+            Some("999"),
+        ),
+        (
+            "[DEFAULT]\nsso_account_id = 999\n[profile prod]\nsso_account_id = 222\n",
+            Some("222"),
+        ),
+        (
+            "[DEFAULT]\nsso_account_id = 999\n[profile prod]\nsso_account_id =\n",
+            None,
+        ),
+    ] {
+        assert_eq!(
+            aws_account(config, "", "prod").or(aws_account(config, "", "default")),
+            wanted,
+            "{config}"
+        );
+    }
+    let indented = "[profile dev]\nregion = x\n  sso_account_id = 111\nsso_account_id = 222\n";
+    assert_eq!(aws_account(indented, "", "dev"), None);
+    assert_eq!(
+        aws_account("[profile a]\n\tsso_account_id = 1\n", "", "a"),
+        None
+    );
+    for odd in [
+        "\u{feff}", "\u{2028}", "\u{85}", "\r", "\u{b}", "\u{c}", "é",
+    ] {
+        let config = format!("[profile prod]\n[profile other{odd}x]\nsso_account_id = 222\n[profile{odd}dev]\nsso_account_id = 111\n");
+        assert_eq!(aws_account(&config, "", "prod"), None, "{odd:?}");
+        assert_eq!(aws_account(&config, "", "dev"), None, "{odd:?}");
+    }
 }

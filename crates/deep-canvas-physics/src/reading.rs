@@ -177,12 +177,13 @@ fn held(read: Read, v: Vec<f64>) -> Value {
 /// the mean of the read over the `average` steps that end there, and only those of the last
 /// `keep`; with a `to`, what it writes there at each frame is under `written`. Any other has one
 /// value a frame of `frame` flicks, the two steps around the frame mixed, or the earlier with
-/// `hold`.
+/// `hold`; #2035: or the later, with no blend, where `cuts` lists it for a body the output reads.
 pub fn series(
     outputs: &mut Value,
     w: &World,
     values: &BTreeMap<String, Vec<Vec<f64>>>,
     frame: i64,
+    cuts: &crate::cut::Cuts,
 ) {
     let step = step_flicks(w);
     let hash = outputs["hash"].as_str().unwrap_or_default().to_string();
@@ -201,6 +202,7 @@ pub fn series(
                     let v = match rem {
                         0 => at[s].clone(),
                         _ if o.hold => at[s].clone(),
+                        _ if crate::cut::at(cuts, o, s as u64 + 1) => at[s + 1].clone(),
                         _ => mixed(o.read, &at[s], &at[s + 1], rem as f64 / step as f64),
                     };
                     held(o.read, v)
@@ -325,7 +327,7 @@ mod tests {
         )]);
         let run = |w: &World, frame: i64| {
             let mut outputs = json!({"hash": "", "series": {}});
-            series(&mut outputs, w, &values, frame);
+            series(&mut outputs, w, &values, frame, &Default::default());
             outputs["series"]["fall"].clone()
         };
         assert_eq!(

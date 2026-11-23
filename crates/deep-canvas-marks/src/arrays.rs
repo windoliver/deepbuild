@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use deep_canvas::columns::{data_of, hidden_rows, map, Mapped};
+use deep_canvas::columns::{data_of, hidden_rows, map, match_me, unseen_rows, Mapped};
 use deep_canvas::registry::Registrar;
 use deep_canvas::schedule::core_ops::{Datum, Edit, Edits};
 use deep_canvas::schedule::{OpError, Val, View};
@@ -30,6 +30,8 @@ pub(crate) fn register(r: &mut Registrar) {
     )
     .applies(reads_array)
     .run(columns);
+    // #269: each grid image's grid, mapped as the columns are.
+    crate::grid_image::register(r);
 }
 
 /// #2363: `points` with a column read from a baked array at frame zero, and a follower on a
@@ -75,14 +77,16 @@ pub const PLANTED: [&str; 6] = [
     SPECTRUM_ROW_LATE,
 ];
 
-/// A mark set whose columns or `alive` read an array, which the column view baked.
+/// A mark set whose columns, `alive` or `seen` read an array, which the column view baked.
 fn reads_array(_: &Value, _: &str, item: &Value) -> bool {
     let p = item.get("params");
-    p.and_then(|p| p.get("alive"))
-        .is_some_and(|a| a.get("steps").is_some())
-        || p.and_then(|p| p.get("columns"))
-            .and_then(Value::as_object)
-            .is_some_and(|c| c.values().any(|c| c.get("steps").is_some()))
+    ["alive", "seen"].iter().any(|k| {
+        p.and_then(|p| p.get(k))
+            .is_some_and(|a| a.get("steps").is_some())
+    }) || p
+        .and_then(|p| p.get("columns"))
+        .and_then(Value::as_object)
+        .is_some_and(|c| c.values().any(|c| c.get("steps").is_some()))
 }
 
 /// The set's array columns at t (`data.columns`), each as its values and hidden rows, and their
@@ -104,9 +108,15 @@ fn columns(v: &mut View<'_>) -> Result<(), OpError> {
         .filter(|(_, c)| c.get("steps").is_some())
         .map(|(n, c)| (vec!["params".into(), "columns".into(), n.clone()], c))
         .collect();
-    if p["alive"].get("steps").is_some() {
-        readers.push((vec!["params".into(), "alive".into()], &p["alive"]));
+    for k in ["alive", "seen"] {
+        if p[k].get("steps").is_some() {
+            readers.push((vec!["params".into(), k.into()], &p[k]));
+        }
     }
+    // #552: this copy's player, which the core's column view stamps on the set's `seen` column
+    // from the form's `match.me`: the set's content key holds it, so each player's frames cache
+    // apart.
+    let me = match_me(&p["seen"]["me"]);
     let mut edits = Vec::new();
     let mut mapped = BTreeMap::new();
     for (path, column) in readers {
@@ -142,8 +152,11 @@ fn columns(v: &mut View<'_>) -> Result<(), OpError> {
             continue;
         };
         let at = |leaf: &str| [path.clone(), vec![leaf.to_string()]].concat();
-        let alive = path.last().map(String::as_str) == Some("alive");
-        let hide = hidden_rows(&m, alive);
+        let leaf = path.last().map(String::as_str);
+        let hide = match leaf {
+            Some("seen") => unseen_rows(&m, me),
+            _ => hidden_rows(&m, leaf == Some("alive")),
+        };
         edits.push(Edit {
             add: false,
             path: at("data"),

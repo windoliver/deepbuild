@@ -31,8 +31,10 @@ const REPORTS = 'sender == "Sandbox" AND eventMessage CONTAINS "dev.deepbuild.ru
 const REPORTS_BY_SUBSYSTEM = `subsystem == "com.apple.sandbox.reporting" AND ${REPORTS}`;
 /** The same reports by the process that writes them, the kernel, whose sandbox extension is their sender: the log sends the stream the kernel's messages alone. */
 const REPORTS_BY_KERNEL = `process == "kernel" AND ${REPORTS}`;
-/** The stream's filters, the cheapest for `log` first: the next is tried when one shows no report of a canary's. */
+/** The stream's filters, the cheapest for `log` first: each is warmed at once, and the cheapest that shows a canary's report is kept. */
 const FILTERS: readonly string[] = [REPORTS_BY_SUBSYSTEM, REPORTS_BY_KERNEL, REPORTS];
+/** How long after a dearer filter's stream shows a canary's report a cheaper one still running may show it too, before the dearer one is kept. */
+const SHOWN_MS = 1000;
 /** The planted world of the fallback's test: a macOS whose reports carry another subsystem than the filter names. */
 const REPORTS_ELSEWHERE = `subsystem == "com.apple.sandbox.elsewhere" AND ${REPORTS}`;
 /** And the planted world of the last fallback's: one whose reports another process than the filter names writes. */
@@ -128,12 +130,17 @@ class LocalSupervisor implements Supervisor {
   private beatFrom = 0;
   /** The timer's scan while it is queued or runs. */
   private timed: Promise<void> | undefined;
+  /** The denial stream kept, once one showed a canary's report. */
   private log: ChildProcess | undefined;
-  /** The canary run whose report shows the denial stream is live, and when it last came through. */
+  /** The streams being warmed, one per filter, until one is kept: then that one alone. */
+  private streams: Stream[] = [];
+  /** The canary run whose report shows the denial stream is live, and when it last came through the kept stream. */
   private canary = '';
-  private warmAt = 0;
+  private warmAt = -Infinity;
   /** The first warm-up of the denial stream; a sandboxed launch waits for it, opening doesn't. */
   private warming: Promise<unknown> = Promise.resolve();
+  /** Each warm-up's canary probe while it runs, and its end: reaped, so nothing this process started outlives it (#2998). */
+  private readonly probes = new Map<ChildProcess, Promise<unknown>>();
   private ticking: Promise<void> | undefined;
   private readonly cleaning = new Set<Promise<unknown>>();
   /** Each run between leaving the queue and its launch settling. */
@@ -370,13 +377,30 @@ class LocalSupervisor implements Supervisor {
    * and after a while idle macOS drops the first reports of a program that isn't Apple's, so it counts as ready
    * only once it has seen a denial of its own: the helper, refused a write in a canary's sandbox, until its report
    * comes through. A macOS whose reports carry another subsystem, or none, shows the canary's through that filter
-   * never: the stream then starts again on the next filter, the kernel's messages, and only where that shows none
-   * either on the sender alone. The stream writes nothing while no report matches, so no closed pipe tells it that
-   * this process has gone: it runs on the helper's leash, which ends it when this process ends, however it ends.
+   * never, so a stream starts on each filter at once, the wider ones too: the kernel's messages, then the sender
+   * alone. The cheapest that shows a canary's report is kept and the others end, so such a macOS waits for the first
+   * report, not out a whole warm-up per filter (#2977). The stream writes nothing while no report matches, so no
+   * closed pipe tells it that this process has gone: it runs on the helper's leash, which ends it when this process
+   * ends, however it ends.
    */
-  private watchDenials([filter, ...wider]: readonly string[]): void {
-    const log = spawn(HELPER, ['leash', '/usr/bin/log', 'stream', '--style', 'ndjson', '--predicate', filter!], { stdio: ['ignore', 'pipe', 'ignore'] });
-    this.log = log;
+  private watchDenials(filters: readonly string[]): void {
+    const streams = filters.map((filter) => this.stream(filter));
+    this.streams = streams;
+    this.warming = this.warm(10_000).then((shown) => {
+      // With none shown the widest stays, unwarmed: a later sandboxed start warms it again.
+      const kept = shown ?? streams.at(-1)!;
+      if (!shown && !this.closed) process.stderr.write('deep supervisor: the system log never showed a sandbox report, so denials go unrecorded\n');
+      for (const s of streams) if (s !== kept && s.log.pid) try { process.kill(s.log.pid, 'SIGTERM'); } catch { /* gone */ }
+      this.streams = [kept];
+      this.log = kept.log;
+      this.warmAt = kept.shownAt;
+    });
+  }
+
+  /** A denial stream on one filter. */
+  private stream(filter: string): Stream {
+    const log = spawn(HELPER, ['leash', '/usr/bin/log', 'stream', '--style', 'ndjson', '--predicate', filter], { stdio: ['ignore', 'pipe', 'ignore'] });
+    const s: Stream = { log, shownAt: -Infinity };
     log.unref();
     (log.stdout as unknown as { unref?: () => void }).unref?.();
     let buffer = '';
@@ -389,7 +413,9 @@ class LocalSupervisor implements Supervisor {
         let message = '';
         try { message = String((JSON.parse(line) as { eventMessage?: unknown }).eventMessage ?? ''); } catch { continue; }
         const m = /deny\(\d+\) (\S+) (.*?)\s*\ndev\.deepbuild\.(run:[0-9A-Za-z]+)/.exec(message);
-        if (m) this.warmAt = Date.now();
+        if (m) s.shownAt = performance.now();
+        if (m && log === this.log) this.warmAt = s.shownAt;
+        // Any stream still running records, each refusal once: a run kept from before a restart may be refused mid-warm.
         if (!m || !this.runs.has(m[3]!)) continue;
         const [, operation, target, run] = m as unknown as [string, string, string, string];
         const seen = `${run} ${operation} ${target}`;
@@ -398,13 +424,7 @@ class LocalSupervisor implements Supervisor {
         void this.recordDenial(run, operation, target || '(none)').catch(() => undefined);
       }
     });
-    this.warming = this.warm(10_000).then((live) => {
-      if (live || this.closed) return undefined;
-      if (!wider.length) return void process.stderr.write('deep supervisor: the system log never showed a sandbox report, so denials go unrecorded\n');
-      if (log.pid) try { process.kill(log.pid, 'SIGTERM'); } catch { /* gone */ }
-      this.watchDenials(wider);
-      return this.warming;
-    });
+    return s;
   }
 
   /** A refusal on the run's record, naming who holds the port it tried, when another run holds it (#580). */
@@ -463,18 +483,38 @@ class LocalSupervisor implements Supervisor {
     });
   }
 
-  /** Until the stream shows a canary's report, or `ms` pass; whether it did. */
-  private async warm(ms: number): Promise<boolean> {
-    const since = Date.now();
+  /**
+   * Until a stream shows a canary's report and no cheaper one still running can, or `ms` pass: the cheapest stream
+   * that showed it. A report reaches every stream at once, so a cheaper one that hasn't shown it within SHOWN_MS of
+   * a dearer one's showing it never will.
+   */
+  private async warm(ms: number): Promise<Stream | undefined> {
+    const since = performance.now();
+    const streams = this.streams;
+    const shown = (): Stream | undefined => streams.find((s) => s.shownAt >= since);
+    // When a stream first showed one: each later report moves a stream's shownAt on.
+    let first = 0;
+    const settled = (): boolean => {
+      const best = shown();
+      if (!best) return false;
+      first ||= performance.now();
+      return performance.now() >= first + SHOWN_MS || !streams.slice(0, streams.indexOf(best)).some((s) => s.log.exitCode === null);
+    };
     this.canary = `run:canary${randomBytes(8).toString('hex')}`;
     const profile = `(version 1)\n(deny default (with message "dev.deepbuild.${this.canary}"))\n(import "system.sb")\n(allow file-read* process-exec)`;
     // Each try refused on a path of its own: the kernel folds identical reports into one, later.
-    for (let n = 0; this.warmAt < since && this.log?.exitCode === null && Date.now() < since + ms; n++) {
+    // A closed supervisor starts no probe: one started as the hub stops would outlive it, never reaped (#2998).
+    for (let n = 0; !settled() && !this.closed && streams.some((s) => s.log.exitCode === null) && performance.now() < since + ms; n++) {
       const target = `/tmp/deep-canary-${this.canary.slice(4)}-${n}`;
-      await new Promise((done) => spawn('/usr/bin/sandbox-exec', ['-p', profile, HELPER, 'probe', '/dev/null', 'write', target], { stdio: 'ignore' }).on('close', done).on('error', done));
-      for (let i = 0; i < 10 && this.warmAt < since; i++) await sleep(25);
+      const child = spawn('/usr/bin/sandbox-exec', ['-p', profile, HELPER, 'probe', '/dev/null', 'write', target], { stdio: 'ignore' });
+      const ended = new Promise((done) => child.on('close', done).on('error', done));
+      // Launches that start together re-warm side by side, each loop with a probe of its own.
+      this.probes.set(child, ended);
+      await ended;
+      this.probes.delete(child);
+      for (let i = 0; i < 10 && !settled(); i++) await sleep(25);
     }
-    return this.warmAt >= since;
+    return shown();
   }
 
   // ---- host@1.
@@ -664,7 +704,7 @@ class LocalSupervisor implements Supervisor {
       : { argv: spec.argv, cwd, env };
     // After a minute with no report, the stream is shown live again before a process can be refused anything.
     if (sandboxed) await this.warming;
-    if (sandboxed && this.log && Date.now() - this.warmAt > WARM_MS) await this.warm(2000);
+    if (sandboxed && this.log && performance.now() - this.warmAt > WARM_MS) await this.warm(2000);
     const r: Run = { ...blank(spec.run, cwd, 'running'), sandboxed, token: sha256(token), leases, ...(spec.holder ? { holder: spec.holder } : {}), ...(egress ? { egress } : {}), ...(spec.limits ? { limits: spec.limits } : {}) };
     this.runs.set(spec.run, r);
     this.scanSoon();
@@ -1145,13 +1185,19 @@ class LocalSupervisor implements Supervisor {
   async close(): Promise<void> {
     this.closed = true;
     if (this.timer) clearInterval(this.timer);
+    // The warm-ups' probes in flight are ended and waited for, so they are reaped here, not left to whoever outlives us.
+    for (const child of this.probes.keys()) child.kill('SIGKILL');
+    await Promise.all(this.probes.values());
     await Promise.allSettled([this.scanning, this.pumping, this.ticking, ...this.cleaning]);
     await Promise.allSettled([...this.runs.values()].map((r) => r.egress?.close()));
-    if (this.log?.pid) try { process.kill(this.log.pid, 'SIGTERM'); } catch { /* gone */ }
+    for (const { log } of this.streams) if (log.pid) try { process.kill(log.pid, 'SIGTERM'); } catch { /* gone */ }
     // The watcher ends at the end of its input.
     this.watcher?.stdin?.end();
   }
 }
+
+/** A `log stream` on one filter, and when it last showed a canary's report. */
+interface Stream { log: ChildProcess; shownAt: number }
 
 /** The SHA-256 of a kept run's output file. */
 function sha256File(file: string): Promise<string> {

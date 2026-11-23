@@ -14,8 +14,9 @@ use crate::doc::{Pose, Refusal, Shape, World};
 use crate::occurrence::Raw;
 
 /// What a step reads of its scene at its own time, evaluated before the solve: each kinematic
-/// body's position from its `follow` path, each motor target a path sets, and each coordinate a
-/// kinematic solve drives (deg for a hinge, m for a slider, as written).
+/// body's position from its `follow` path, each motor target a path sets, each coordinate a
+/// kinematic solve drives (deg for a hinge, m for a slider, as written), and each force's channel
+/// (#2371).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Targets {
     /// body → position, m; its rotation stays its pose's.
@@ -23,6 +24,8 @@ pub struct Targets {
     pub motors: BTreeMap<String, f64>,
     /// joint → coordinate, in the solve's order.
     pub coords: Vec<(String, f64)>,
+    /// force → what its channel holds: a drag's medium, m/s, or a spring's point, m.
+    pub forces: BTreeMap<String, [f64; 3]>,
 }
 
 /// One entry of the world's input track (Input track entries).
@@ -219,6 +222,16 @@ pub fn rotate(q: [f64; 4], v: [f64; 3]) -> [f64; 3] {
     let t = cross(u, v).map(|x| 2.0 * x);
     let c = cross(u, t);
     [0, 1, 2].map(|i| v[i] + w * t[i] + c[i])
+}
+
+/// #2288: the rotation `b` then `a`, the quaternion product a·b (`[x, y, z, w]`).
+pub fn product(a: [f64; 4], b: [f64; 4]) -> [f64; 4] {
+    [
+        a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
+        a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
+        a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
+        a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2],
+    ]
 }
 
 /// #523: the whole turns a hinge gains over a step from angle `a0` to `a1` (deg, each in
