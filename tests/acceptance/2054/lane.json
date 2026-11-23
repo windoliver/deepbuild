@@ -1,0 +1,1 @@
+{ "alone": true, "why": "each file builds deep-show, and squares.test.ts also builds deep-gpu and draws on Metal, as #433 and #1634 do" }

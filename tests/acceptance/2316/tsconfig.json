@@ -6,5 +6,5 @@
     "rootDir": "../../.."
   },
   "include": ["./**/*.ts"],
-  "exclude": ["./twins/**", "./node_modules/**"]
+  "exclude": ["./twins/**"]
 }

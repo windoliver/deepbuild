@@ -1694,8 +1694,8 @@ export class Core {
         }).catch(failed);
       }
     }
-    // A turn ends at its stop, or at the next prompt when it ended with none (an interrupt): its sends go with it.
-    if (drafts.some((d) => (d.kind === 'agent.stop' && !d.data.child) || d.kind === 'user.ask')) this.turnSends.delete(session);
+    // A turn ends at its stop, or at the next prompt (not a Codex subagent's, #39) when it ended with none: its sends go with it.
+    if (drafts.some((d) => (d.kind === 'agent.stop' && !d.data.child) || (d.kind === 'user.ask' && !childPrompt(meta)))) this.turnSends.delete(session);
     // A session's sends wait past its end for a resume; what it denied and saw run is the record's from then on.
     if (meta.event === 'SessionEnd') { this.denials.delete(session); this.overrides.delete(session); }
     if (meta.event === 'SessionStart') {
@@ -2573,11 +2573,10 @@ export class Core {
     for (const p of this.delivery.promises.values()) clearTimeout(p.timer);
     this.claudeSettings.close();
     for (const waits of [this.delivery.waiting, this.delivery.settling]) for (const set of [...waits.values()]) for (const wake of set) wake();
-    try {
-      await this.ready;
-    } catch {
-      return;
-    }
+    const started = await this.ready.then(() => true, () => false);
+    // The job pool a start made after the first pass found none, whether the start finished or failed (#2732).
+    this.pool?.close(true);
+    if (!started) return;
     // A stop that came while the core was starting cleared the timers before the start armed its own and opened the
     // work runs (#2573): those go now, and the archive's pass under way ends before the record closes. Up to 5 s: a
     // pass can take minutes, and the hub gives its whole stop 20 s. One that runs longer reads a closed record, as before.

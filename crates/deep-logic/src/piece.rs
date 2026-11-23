@@ -333,6 +333,9 @@ pub struct Write {
     pub count: u32,
     /// `interpolate: linear`: drawing reads it one step late, blended (Logic: interpolated writes).
     pub linear: bool,
+    /// #2035: `cut`, the bool write of the same count whose true elements a frame shows with no
+    /// blend on their step.
+    pub cut: Option<String>,
 }
 
 /// A kind of occurrence an item emits (Logic: occurrences): its numeric fields in declaration
