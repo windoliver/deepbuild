@@ -194,6 +194,9 @@ async function checkCommand(options) {
   const failures = [];
   const { clean, facts } = await replayAll(options.corpus, options.facts, say);
   for (const [agent, { path, facts: file }] of Object.entries(facts)) {
+    // A facts file that lists no hook events, such as #148's sync entries for Cursor and OpenCode, maps no payload, so
+    // it has no set to hold (#3136).
+    if (!file.events?.versions) continue;
     for (const version of file.versions ?? []) {
       const where = relative(root, path) || path;
       const sessions = existsSync(join(options.corpus, agent, version)) ? readSet(options.corpus, agent, version) : [];

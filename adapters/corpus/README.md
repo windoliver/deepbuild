@@ -10,7 +10,7 @@ adapters/corpus/<agent>/<version>/<session>/
 ```
 
 - `node scripts/corpus.mjs replay` maps every payload through its adapter as a live event of its set's version and compares the events with `expect`, field by field, both ways.
-- `node scripts/corpus.mjs check` is the preflight's corpus lane: each version a facts file covers has a set holding every event the facts list for it, each set replays clean, and the corpus stays under 200 MB.
+- `node scripts/corpus.mjs check` is the preflight's corpus lane: each version a facts file that lists hook events (`events.versions`) covers has a set holding every event the facts list for it, each set replays clean, and the corpus stays under 200 MB.
 - `node scripts/corpus.mjs record --agent claude-code|codex|pi|paseo --out <dir>` records a fresh set into `<dir>`, with no `expect`, for a new version. It joins the corpus only through a diff you approve, after its expected events are written and reviewed.
 
 ## Recording and redaction
