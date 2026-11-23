@@ -1196,6 +1196,9 @@ alone.push('tests/acceptance/1411/');
 
 // #1512's suite starts hubs of its own with a fake reviewer, as #1537's and #1862's do.
 alone.push('tests/acceptance/1512/');
+// #2748's files (blind) each start hubs of their own with a planted reviewer, as #1512's do; budgets.test.ts times a Stop hook's hold.
+alone.push('tests/acceptance/2748/');
+timed.push('tests/acceptance/2748/budgets.test.ts');
 
 // #1509's files each start a hub that gates dependencies against a registry served on loopback: one file at a time.
 alone.push('tests/acceptance/1509/');
