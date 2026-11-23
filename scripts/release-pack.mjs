@@ -11,7 +11,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash, createPrivateKey, sign } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { preflightRefusal } from './preflight-record.mjs';
 import { contentsOf, extract } from './release-artifacts.mjs';
@@ -19,9 +19,14 @@ import { contentsOf, extract } from './release-artifacts.mjs';
 // process.exit and a stop signal both skip the finally below, so each removes the temporary folder itself. A child
 // stopped with the pack's process group fails its step. A listener runs only on an event-loop turn, which this
 // synchronous script would never give before it finished, so it yields one after each step and before writing <out>:
-// a stop that left the child running, or landed between steps, then ends the pack there.
+// a stop that left the child running, or landed between steps, then ends the pack there. One that lands while <out>
+// is written removes what this run wrote there, and the last turn comes after the cleanup, before success is said.
 let work;
-const drop = () => { if (work) rmSync(work, { recursive: true, force: true }); };
+const written = [];
+const drop = () => {
+  if (work) rmSync(work, { recursive: true, force: true });
+  for (const file of written) rmSync(file, { force: true });
+};
 const fail = (message) => {
   console.error(`release-pack: ${message}`);
   drop();
@@ -66,6 +71,8 @@ if (keyArg) {
   }
 }
 
+await turn();
+const archives = [];
 work = mkdtempSync(join(tmpdir(), 'release-pack-'));
 try {
   const clean = join(work, 'checkout');
@@ -84,7 +91,6 @@ try {
 
   const staged = join(work, 'archives');
   mkdirSync(staged);
-  const archives = [];
   const problems = [];
   // A repo whose published packages are laid out by a build (#41) has scripts/release-stage.mjs: it runs in the
   // clean checkout, and each folder its stage.json lists is packed and read back like a workspace package. One with a
@@ -135,13 +141,18 @@ try {
   if (problems.length) fail(`nothing was written or published:\n  ${problems.join('\n  ')}`);
 
   mkdirSync(out, { recursive: true });
-  for (const a of archives) copyFileSync(join(staged, a.file), join(out, a.file));
+  const put = (file, bytes) => {
+    written.push(file);
+    if (bytes) writeFileSync(file, bytes);
+    else copyFileSync(join(staged, basename(file)), file);
+  };
+  for (const a of archives) put(join(out, a.file));
   const manifest = Buffer.from(`${JSON.stringify({ commit: wanted, archives }, null, 2)}\n`);
-  writeFileSync(join(out, 'manifest.json'), manifest);
+  put(join(out, 'manifest.json'), manifest);
   // Ed25519 over exactly the manifest's bytes, as the installer checks it.
-  if (key) writeFileSync(join(out, 'manifest.json.sig'), sign(null, manifest, key));
-  await turn();
-  console.log(`release-pack: ${archives.length} archives from ${wanted} recorded in ${join(out, 'manifest.json')}`);
+  if (key) put(join(out, 'manifest.json.sig'), sign(null, manifest, key));
 } finally {
   rmSync(work, { recursive: true, force: true });
 }
+await turn();
+console.log(`release-pack: ${archives.length} archives from ${wanted} recorded in ${join(out, 'manifest.json')}`);

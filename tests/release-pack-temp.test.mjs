@@ -1,5 +1,6 @@
-// A refused pack removes its temporary folder. fail() exits the process, which skips the finally that removes it,
-// so every refused pack used to leave its whole clean checkout behind in the temp folder (6-7 GB each on a Mac).
+// A refused or stopped pack removes its temporary folder and never reports success. fail() exits the process and a
+// stop signal ends it, both skipping the finally that removes the folder, so each used to leave its whole clean
+// checkout behind in the temp folder (6-7 GB each on a Mac); a stop the pack's synchronous run never read let it finish.
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -18,7 +19,7 @@ test('a pack refused for a missing bin leaves no release-pack folder in the temp
   mkdirSync(repo);
   mkdirSync(temp);
   writeFileSync(join(repo, 'package.json'), JSON.stringify({ name: 'planted', version: '1.0.0', bin: { planted: 'bin/missing.js' } }));
-  const env = { PATH: process.env.PATH ?? '', HOME: root, TMPDIR: temp, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t', npm_config_registry: 'http://127.0.0.1:9' };
+  const env = { PATH: process.env.PATH ?? '', HOME: root, TMPDIR: temp, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' };
   const git = (...args) => execFileSync('git', args, { cwd: repo, env, encoding: 'utf8' }).trim();
   git('init', '-q');
   git('add', '-A');
@@ -50,6 +51,7 @@ test('a pack whose process group is stopped by SIGTERM or SIGINT leaves no relea
     git('add', '-A');
     git('commit', '-qm', 'planted');
     const child = spawn(process.execPath, [script, '--repo', repo, '--commit', git('rev-parse', 'HEAD'), '--out', join(root, 'out')], { env, detached: true, stdio: 'ignore' });
+    t.after(() => { try { process.kill(-child.pid, 'SIGKILL'); } catch { /* gone */ } });
     const exited = new Promise((done) => child.on('exit', (code, sig) => done({ code, sig })));
     const packed = () => readdirSync(temp).filter((n) => n.startsWith('release-pack-'));
     // deadline: bounds the wait for the pack's clone to land, which the planted git then holds open
