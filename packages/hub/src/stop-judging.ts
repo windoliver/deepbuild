@@ -338,7 +338,7 @@ export class StopJudging {
   private async deliveryHeld(session: string, issue: number, task: string): Promise<string | undefined> {
     const cwd = this.options.state().live.get(session)?.cwd;
     if (!cwd) return undefined;
-    const [row] = (await this.options.services.record.raw(`SELECT base_commit FROM definitions WHERE task_ref = ? AND state = 'locked' LIMIT 1`, [task])) as { base_commit: string | null }[];
+    const [row] = (await this.options.services.record.raw(`SELECT base_commit FROM definitions WHERE task_ref = ? LIMIT 1`, [task])) as { base_commit: string | null }[];
     const base = row?.base_commit ?? (await headOf(cwd).catch(() => undefined))?.sha;
     // The release checks and switches of the revision you approved (#1864): the task's base commit's spec, never the worktree's.
     const approved = (await approvedSpec(cwd, base ?? '')).spec;
@@ -1168,7 +1168,7 @@ export class StopJudging {
 
   /**
    * Where a claim's spec is read (#1864): its folder and base commit, as its judging set them, or from the record for a
-   * claim judged before a restart: its task's locked definition's base commit. Never a claim's own commit, which can be
+   * claim judged before a restart: its task's definition's base commit, which the hub read at the folder's HEAD. Never a claim's own commit, which can be
    * a snapshot of the worktree or one an agent named; with no base the run stays in the sandbox.
    */
   private async claimScope(claim: string): Promise<{ cwd: string; base: string } | undefined> {
@@ -1177,7 +1177,7 @@ export class StopJudging {
     const [row] = (await this.options.services.raw(`SELECT session_id, json_extract(data, '$.task_ref') AS task FROM events WHERE kind = 'claim.made' AND id = ? LIMIT 1`, [claim.replace(/^claim:/, '')])) as { session_id: string | null; task: string | null }[];
     const cwd = row?.session_id ? this.options.state().sessions.get(row.session_id)?.cwd : undefined;
     if (!row || !cwd) return undefined;
-    const [definition] = (await this.options.services.raw(`SELECT base_commit FROM definitions WHERE task_ref = ? AND state = 'locked' LIMIT 1`, [row.task ?? ''])) as { base_commit: string | null }[];
+    const [definition] = (await this.options.services.raw(`SELECT base_commit FROM definitions WHERE task_ref = ? LIMIT 1`, [row.task ?? ''])) as { base_commit: string | null }[];
     const base = definition?.base_commit;
     return base ? { cwd, base } : undefined;
   }
