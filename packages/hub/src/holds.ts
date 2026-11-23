@@ -42,8 +42,11 @@ interface HoldOptions {
   pin(cwd: string, question: string): Promise<Obj>;
   /** A session.reading on the session's row. */
   reading(session: string, agent: string, reading: string): Promise<void>;
-  /** Copies the session's transcript into the record, so a target it read is placed as read. */
-  archived(session: string): Promise<void>;
+  /**
+   * Copies the session's transcript into the record, so a target it read is placed as read: from `transcript`, the
+   * hook's transcript_path ('' when it named none), which the archive reads only where its facts put that session.
+   */
+  archived(session: string, transcript: string): Promise<void>;
 }
 
 /**
@@ -275,7 +278,7 @@ export class Holds {
       const asked = await this.askOf(k);
       if (asked?.decision !== 'allow') {
         const handle = asked ? `ask:${asked.id}` : await this.raise(meta.session, meta.agent, meta.cwd, source, k,
-          `Run \`${call.label}\`? It ${does}, and no request in this thread names that.`, ANSWERS[effect]!, planFor(source, `Run \`${call.label}\`, which ${does}`, [call.label], open.some((o) => o.effect === 'push') ? pushTargets(call.label) : []));
+          `Run \`${call.label}\`? It ${does}, and no request in this thread names that.`, ANSWERS[effect]!, planFor(source, `Run \`${call.label}\`, which ${does}`, [call.label], await this.placed(meta, open.some((o) => o.effect === 'push') ? pushTargets(call.label) : [])));
         return `DeepBuild denied this (guard ${rule}): no request you typed in this thread names it. ${await this.waiting(handle, call.label)}`;
       }
     }
@@ -325,6 +328,15 @@ export class Holds {
       return `DeepBuild held this: \`${call.label}\` needs your authority, and no ask could be raised for it (${error.message}).`;
     }
   }
+  /**
+   * `targets`, once the session's transcript is copied so the ask can place each where the session read it (#1098),
+   * waiting at most ARCHIVE_WAIT_MS. A failed or late copy leaves a target the session read as unknown, which asks
+   * you all the same.
+   */
+  private async placed(meta: HookMeta, targets: ReturnType<typeof pushTargets>): Promise<ReturnType<typeof pushTargets>> {
+    if (targets.length) await Promise.race([this.o.archived(meta.session, meta.transcript).catch(() => undefined), sleep(ARCHIVE_WAIT_MS)]);
+    return targets;
+  }
   /** The ask holding a call whose effect needs authority in the turn a proceed started, or undefined. */
   private async heldEffect(meta: HookMeta, call: Gated): Promise<string | undefined> {
     const classes = call.classes.filter((c) => AUTHORITY.has(c));
@@ -340,9 +352,7 @@ export class Holds {
     const question = turn
       ? `Run \`${call.label}\`? It ${classes.map((c) => DOES[c]).join(' and ')}, in the turn a "proceed" started for "${turn.question}" (rule ${turn.rule}); no proceed covers a call that needs your authority.`
       : `Run \`${call.label}\`? It replies in your name to a reviewer's thread on the pull request, a send that needs your authority.`;
-    const targets = classes.includes('push') ? pushTargets(call.label) : [];
-    // A failed or late copy leaves a target the session read as unknown, which asks you all the same.
-    if (targets.length) await Promise.race([this.o.archived(meta.session).catch(() => undefined), sleep(ARCHIVE_WAIT_MS)]);
+    const targets = await this.placed(meta, classes.includes('push') ? pushTargets(call.label) : []);
     return this.raise(meta.session, meta.agent, meta.cwd, source, k, question, ANSWERS[classes[0]!]!, planFor(source, `Run \`${call.label}\`, which ${classes.map((c) => DOES[c]).join(' and ')}`, [call.label], targets));
   }
 

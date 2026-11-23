@@ -1,0 +1,179 @@
+start 2026-11-22T04:28:42-08:00 commit b7bf13b79d06e5fe8e73f6724c5ea09ddee3e683 Linux aarch64 node v24.22.0 load 11.27 11.24 10.49 umask 0002
+$ node --test tests/acceptance/1121/record.test.mjs
+﹣ #1121.95fa4a52 the Mac's cargo test writes each target's `cargo test -- --list` into its evidence record (1.042531ms) # INCONCLUSIVE (platform): this needs the reference list's machine, a Mac, and this machine is linux-arm64; it is unrun here
+✔ #1121.95fa4a52 a Spark run's record lists each test absent by platform against the Mac's list, and its lane is INCONCLUSIVE (platform), not PASS (974.2064ms)
+✔ #1121.95fa4a52 a Spark run with no reference list from the Mac is never PASS (823.550325ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 1851.739115
+exit 0
+$ node --test tests/acceptance/1121/spool.test.mjs
+✔ #1121.23cb368c deep-hook on aarch64 refuses a symlinked spool path: the file it leads to is never written (364.700669ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 420.325642
+exit 0
+$ node --test tests/acceptance/1121/lsof.test.mjs
+✔ #1121.301969cb env-local finds a free port on Linux, by an lsof that is there (16934.263782ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 16985.211122
+exit 0
+$ node --test tests/acceptance/1121/build.test.mjs
+✖ #1121.73d8f179 every crate of the workspace builds on the Spark, 27 of 27 when the issue was written (95618.316361ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 95681.499758
+
+✖ failing tests:
+
+test at tests/acceptance/1121/build.test.mjs:9:1
+✖ #1121.73d8f179 every crate of the workspace builds on the Spark, 27 of 27 when the issue was written (95618.316361ms)
+  AssertionError [ERR_ASSERTION]: 53 of 54 crates build on linux-arm64; these don't: deep-player
+  error: could not compile `deep-player` (lib) due to 6 previous errors
+  + actual - expected
+  
+  + [
+  +   'deep-player'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<clone>/tests/acceptance/1121/build.test.mjs:23:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'deep-player' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+exit 1
+$ node --test tests/acceptance/1121/cargo-test.test.mjs
+✖ #1121.b915783e the workspace's cargo test on the Spark has no FAIL and no BLOCKED (5850.640988ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5889.375222
+
+✖ failing tests:
+
+test at tests/acceptance/1121/cargo-test.test.mjs:18:1
+✖ #1121.b915783e the workspace's cargo test on the Spark has no FAIL and no BLOCKED (5850.640988ms)
+  AssertionError [ERR_ASSERTION]: cargo test --workspace --locked --no-fail-fast ran tests on linux-arm64 (exit 101):
+  er/src/net.rs:94:18
+     |
+  94 |     let crypto = js_sys::Reflect::get(&js_sys::global(), &"crypto".into()).ok();
+     |                  ^^^^^^ use of unresolved module or unlinked crate `js_sys`
+     |
+     = help: if you wanted to use a crate named `js_sys`, use `cargo add js_sys` to add it to your `Cargo.toml`
+  
+  error[E0433]: cannot find module or crate `js_sys` in this scope
+    --> crates/deep-player/src/net.rs:97:23
+     |
+  97 |         .and_then(|c| js_sys::Reflect::get(c, &"getRandomValues".into()).ok())
+     |                       ^^^^^^ use of unresolved module or unlinked crate `js_sys`
+     |
+     = help: if you wanted to use a crate named `js_sys`, use `cargo add js_sys` to add it to your `Cargo.toml`
+  
+  error[E0433]: cannot find module or crate `js_sys` in this scope
+    --> crates/deep-player/src/net.rs:94:40
+     |
+  94 |     let crypto = js_sys::Reflect::get(&js_sys::global(), &"crypto".into()).ok();
+     |                                        ^^^^^^ use of unresolved module or unlinked crate `js_sys`
+     |
+     = help: if you wanted to use a crate named `js_sys`, use `cargo add js_sys` to add it to your `Cargo.toml`
+  
+  error[E0433]: cannot find module or crate `js_sys` in this scope
+    --> crates/deep-player/src/net.rs:98:36
+     |
+  98 |         .and_then(|f| f.dyn_into::<js_sys::Function>().ok());
+     |                                    ^^^^^^ use of unresolved module or unlinked crate `js_sys`
+     |
+     = help: if you wanted to use a crate named `js_sys`, use `cargo add js_sys` to add it to your `Cargo.toml`
+  
+  Some errors have detailed explanations: E0432, E0433.
+  For more information about an error, try `rustc --explain E0432`.
+  error: could not compile `deep-player` (lib) due to 6 previous errors
+  warning: build failed, waiting for other jobs to finish...
+  error: could not compile `deep-player` (lib test) due to 6 previous errors
+  warning: unused import: `gpui_kit`
+    --> crates/deep-app/src/gpu_view.rs:12:5
+     |
+  12 | use gpui_kit::*;
+     |     ^^^^^^^^
+     |
+     = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+  
+  warning: static `GLYPHS` is never used
+    --> crates/deep-app/src/footprint.rs:15:8
+     |
+  15 | static GLYPHS: Gauge = Gauge::new(
+     |        ^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+  
+  warning: static `SPRITES` is never used
+    --> crates/deep-app/src/footprint.rs:22:8
+     |
+  22 | static SPRITES: Gauge = Gauge::new(
+     |        ^^^^^^^
+  
+  warning: static `TARGETS` is never used
+    --> crates/deep-app/src/footprint.rs:29:8
+     |
+  29 | static TARGETS: Gauge = Gauge::new(
+     |        ^^^^^^^
+  
+  warning: static `INSTANCES` is never used
+    --> crates/deep-app/src/footprint.rs:36:8
+     |
+  36 | static INSTANCES: Gauge = Gauge::new(
+     |        ^^^^^^^^^
+  
+  warning: static `DRAWABLES` is never used
+    --> crates/deep-app/src/footprint.rs:43:8
+     |
+  43 | static DRAWABLES: Gauge = Gauge::new("CAMetalLayer::drawables", Place::Device, 48, 1_024_000_000);
+     |        ^^^^^^^^^
+  
+  warning: `deep-app` (lib) generated 6 warnings
+  
+      at TestContext.<anonymous> (file://<clone>/tests/acceptance/1121/cargo-test.test.mjs:29:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+exit 1
+EXIT 2026-11-22T04:30:43-08:00
