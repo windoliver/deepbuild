@@ -468,6 +468,48 @@
       "approval": "#2551, the owner's decision of 2026-11-14 (the owner's touch-key tag on this commit)"
     },
     {
+      "id": "tests/acceptance/313-redraft-2551/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 adapter.facts@1 lists the twelve rules in the design's order, each with an id (redraft 2551)",
+      "note": "",
+      "reason": "retired by #2551, whose owner's choice of 2026-11-22 has the design name all thirteen rules, #1801's reads-count-as-read among them: this redraft holds twelve phrases, and its wrong programs are twelve-rule lists, so 2551/rules.test.ts, which reads the design's list and x-rules both, is AC12's test",
+      "approval": "#2551, the owner's choice of 2026-11-22 (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/313-redraft-2551/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 (wrong program) a list that lacks a rule in the middle fails this test (redraft 2551)",
+      "note": "",
+      "reason": "retired by #2551, whose owner's choice of 2026-11-22 has the design name all thirteen rules, #1801's reads-count-as-read among them: this redraft holds twelve phrases, and its wrong programs are twelve-rule lists, so 2551/rules.test.ts, which reads the design's list and x-rules both, is AC12's test",
+      "approval": "#2551, the owner's choice of 2026-11-22 (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/313-redraft-2551/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 (wrong program) a list with a thirteenth rule the design doesn't name fails this test (redraft 2551)",
+      "note": "",
+      "reason": "retired by #2551, whose owner's choice of 2026-11-22 has the design name all thirteen rules, #1801's reads-count-as-read among them: this redraft holds twelve phrases, and its wrong programs are twelve-rule lists, so 2551/rules.test.ts, which reads the design's list and x-rules both, is AC12's test",
+      "approval": "#2551, the owner's choice of 2026-11-22 (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/313-redraft-2551/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 (wrong program) a list with the last two rules swapped fails this test, naming rule 11 and the design's phrase (redraft 2551)",
+      "note": "",
+      "reason": "retired by #2551, whose owner's choice of 2026-11-22 has the design name all thirteen rules, #1801's reads-count-as-read among them: this redraft holds twelve phrases, and its wrong programs are twelve-rule lists, so 2551/rules.test.ts, which reads the design's list and x-rules both, is AC12's test",
+      "approval": "#2551, the owner's choice of 2026-11-22 (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/313-redraft-2551/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 (wrong program) a list with two of the first ten rules swapped fails this test, naming the first of them (redraft 2551)",
+      "note": "",
+      "reason": "retired by #2551, whose owner's choice of 2026-11-22 has the design name all thirteen rules, #1801's reads-count-as-read among them: this redraft holds twelve phrases, and its wrong programs are twelve-rule lists, so 2551/rules.test.ts, which reads the design's list and x-rules both, is AC12's test",
+      "approval": "#2551, the owner's choice of 2026-11-22 (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/313-redraft-2551/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 (wrong program) a list whose twelfth rule says something else fails this test, naming rule 12 and the design's phrase (redraft 2551)",
+      "note": "",
+      "reason": "retired by #2551, whose owner's choice of 2026-11-22 has the design name all thirteen rules, #1801's reads-count-as-read among them: this redraft holds twelve phrases, and its wrong programs are twelve-rule lists, so 2551/rules.test.ts, which reads the design's list and x-rules both, is AC12's test",
+      "approval": "#2551, the owner's choice of 2026-11-22 (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/313-redraft-2551/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 (wrong program) a list with one id used twice, or an id out of form, fails this test (redraft 2551)",
+      "note": "",
+      "reason": "retired by #2551, whose owner's choice of 2026-11-22 has the design name all thirteen rules, #1801's reads-count-as-read among them: this redraft holds twelve phrases, and its wrong programs are twelve-rule lists, so 2551/rules.test.ts, which reads the design's list and x-rules both, is AC12's test",
+      "approval": "#2551, the owner's choice of 2026-11-22 (the owner's touch-key tag on this commit)"
+    },
+    {
       "id": "tests/acceptance/313/generator.test.ts › AC15 a generator draws valid instances and four mutations for every schema, at 1,000 cases from the recorded seed › AC15 each mutation names its kind, its code (required, enum, range, unlisted_field) and a JSON Pointer; every kind the schema affords is drawn",
       "note": "",
       "reason": "retired by #2560: vitest's default 5 s judges it, and its walk over every schema's 1,000 draws takes longer (13.3 s on the Linux dev machine): 313-redraft-2560/generator.test.ts is its test, with the neighbouring AC15 test's 600 s",
