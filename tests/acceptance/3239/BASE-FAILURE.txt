@@ -1,0 +1,162 @@
+# #3239 acceptance tests: each test's run on the base, and the throwaway change's
+
+Run on a Mac17,10 (M5 Max, 18 cores) shared with other sessions, at 1-minute loads of 14 to 73 (each run's "started" and
+"exit" lines). Each node process the tests start reads a pinned load of 2 (README: The sandbox). The pinned toolchain
+is 1.99.1. Messages write the sandbox as <sandbox>, a home folder (the machine's and a sandbox's) as ~, the machine's
+name as <host>, and this job's scratch folder as <scratch>. Lines of node's own summary and stack frames are left out.
+
+## The base (f8c6cff82, origin/main), each file once
+
+$ node --test tests/acceptance/3239/ac1-bare-builds.test.mjs tests/acceptance/3239/ac2-outside-build.test.mjs \
+    tests/acceptance/3239/ac3-unit-lane.test.mjs tests/acceptance/3239/ac4-design.test.mjs
+
+| Test | Verdict | Why |
+|---|---|---|
+| #3239.ce662817 AC1 | FAIL at its assertion | every cargo each of the four scripts started ran under the cargo home's wrapper: 141 cargos, each named. The base sets no wrapper variable (RUSTC_WRAPPER unset in every call), so the machine's config decides |
+| #3239.9d1b4fd0 AC2 | PASS | the base is no wrong program for AC2: the outside build's two units were each logged. Twin repo-wide-off fails it (TWINS-RUN.txt) |
+| #3239.cb760c49 AC3 | PASS | the base is no wrong program for AC3: before and after are one tree, the four files' 24 tests passed and main lists none of them. Twin requires-caller fails it (TWINS-RUN.txt) |
+| #3239.cd5b51c3 AC4 | FAIL at its assertion | section 4 names no rule that the four scripts empty RUSTC_WRAPPER, and says the reference Mac's budgets "stay unwrapped", not that it may run the cache |
+
+started 2026-11-23T09:25:45.722Z, load 28.1
+✖ #3239.ce662817 AC1 with the test's own cargo home naming a logging wrapper, no build benchmark.mjs, perf.mjs, budget-window.mjs or preflight.mjs starts logs a call, and a build started outside them still does
+  (its AC1 diagnostics and message: as in the second run below, with each script named by its file name alone)
+✔ #3239.9d1b4fd0 AC2 the same wrapper logs a call for each unit a cargo build started outside the four scripts compiles
+✔ #3239.cb760c49 AC3 the unit lane's own tests of the four scripts fail on this checkout exactly where main's known failures say they do
+✖ #3239.cd5b51c3 AC4 section 4 states that the four scripts' builds are bare by their own RUSTC_WRAPPER setting and that a reference Mac may run the cache
+ℹ tests 4
+ℹ pass 2
+ℹ fail 2
+ℹ duration_ms 56411.660708
+
+
+The failures (AC1's as below):
+✖ #3239.cd5b51c3 AC4 section 4 states that the four scripts' builds are bare by their own RUSTC_WRAPPER setting and that a reference Mac may run the cache
+  AssertionError [ERR_ASSERTION]: section 4 doesn't state the rule:
+  no paragraph or bullet names RUSTC_WRAPPER together with perf.mjs, budget-window.mjs, benchmark.mjs, preflight.mjs: the rule that the four scripts start their cargos with it
+  no sentence says a reference Mac may run the cache: one naming the reference Mac, "may" or "can", and the cache, sccache or the wrapper
+  its sentences naming the reference Mac or RUSTC_WRAPPER:
+    > a machine without sccache would fail every build, and the reference Mac's budgets stay unwrapped.
+    > - **Off where a build must be bare.** `RUSTC_WRAPPER=` (empty) in a child's environment is no wrapper, over the config, and `CARGO_BUILD_RUSTC_WRAPPER=` likewise;
+
+After that run, two edits changed AC1's messages only: each script is named by its path (scripts/benchmark.mjs), and a
+variable given as empty reads "empty". Others added one diagnostic line per file to AC3 and a `// deadline:` comment to
+helpers.mjs's one timer; no assertion changed. AC1 then ran once more on the base to record the final form, with the
+same verdict. That second run is the one below, and it is the wrapper's
+log for each script on the merge base, as the issue's Proof asks.
+
+$ node --test tests/acceptance/3239/ac1-bare-builds.test.mjs
+
+started 2026-11-23T09:33:30.069Z, load 50.3
+✖ #3239.ce662817 AC1 with the test's own cargo home naming a logging wrapper, no build benchmark.mjs, perf.mjs, budget-window.mjs or preflight.mjs starts logs a call, and a build started outside them still does
+ℹ scripts/benchmark.mjs: 2 cargo calls, 2 of them builds; the wrapper logged 7 compiles (fixture_core, fixture_core, fixture_app, fixture_core, fixture_core, fixture_app, fixture_app) and 6 other calls from them
+  call 1: cargo test --workspace --locked --no-run in <sandbox>/work, RUSTC_WRAPPER unset: 3 compiles (fixture_core, fixture_core, fixture_app) and 3 other calls; 9 units in <sandbox>/work/target
+  call 2: cargo clippy --workspace --all-targets --locked -- -D warnings in <sandbox>/work, RUSTC_WRAPPER unset: 4 compiles (fixture_core, fixture_core, fixture_app, fixture_app) and 3 other calls; 9 units in <sandbox>/work/target
+  then a build outside it (exit 0): 2 compiles (fixture_core, fixture_app) and 3 other calls
+ℹ scripts/perf.mjs: 45 cargo calls, 45 of them builds; the wrapper logged 13 compiles (fixture_core, fixture_core, fixture_app, fixture_core, fixture_core, fixture_app, fixture_app, fixture_core, fixture_app, fixture_core, fixture_app, fixture_core, fixture_app) and 135 other calls from them
+  call 1: cargo test --workspace --locked --no-run in ~/.cache/deepbuild-perf/<host>-c53b1fefa7fd/base/copy, RUSTC_WRAPPER unset: 3 compiles (fixture_core, fixture_core, fixture_app) and 3 other calls; 11 units in ~/.cache/deepbuild-perf/<host>-c53b1fefa7fd/base/target
+  call 2: cargo clippy --workspace --all-targets --locked -- -D warnings in ~/.cache/deepbuild-perf/<host>-c53b1fefa7fd/base/copy, RUSTC_WRAPPER unset: 4 compiles (fixture_core, fixture_core, fixture_app, fixture_app) and 3 other calls; 11 units in ~/.cache/deepbuild-perf/<host>-c53b1fefa7fd/base/target
+  call 3: cargo build --workspace --locked --profile checks in ~/.cache/deepbuild-perf/<host>-c53b1fefa7fd/base/copy, RUSTC_WRAPPER unset: 2 compiles (fixture_core, fixture_app) and 3 other calls; 11 units in ~/.cache/deepbuild-perf/<host>-c53b1fefa7fd/base/target
+  calls 4…44 (21): cargo build --locked --release -p fixture-app in <sandbox>/work, RUSTC_WRAPPER unset: 2 compiles (fixture_core, fixture_app) and 63 other calls; 4 units in <sandbox>/work/target
+  calls 5…45 (21): cargo build --locked --release -p fixture-app in ~/.cache/deepbuild-perf/<host>-c53b1fefa7fd/base/copy, RUSTC_WRAPPER unset: 2 compiles (fixture_core, fixture_app) and 63 other calls; 11 units in ~/.cache/deepbuild-perf/<host>-c53b1fefa7fd/base/target
+  then a build outside it (exit 0): 2 compiles (fixture_core, fixture_app) and 3 other calls
+ℹ scripts/budget-window.mjs: 46 cargo calls, 46 of them builds; the wrapper logged 18 compiles (fixture_core, fixture_core, fixture_app, fixture_core, fixture_core, fixture_app, fixture_app, fixture_core, fixture_core, fixture_app, fixture_core, fixture_core, fixture_app, fixture_app, fixture_core, fixture_app, fixture_core, fixture_app) and 138 other calls from them
+  call 1: cargo test --workspace --locked --no-run in ~/.deepbuild/budget-window/change/copy, RUSTC_WRAPPER unset: 3 compiles (fixture_core, fixture_core, fixture_app) and 3 other calls; 9 units in ~/.deepbuild/budget-window/change/target
+  call 2: cargo clippy --workspace --all-targets --locked -- -D warnings in ~/.deepbuild/budget-window/change/copy, RUSTC_WRAPPER unset: 4 compiles (fixture_core, fixture_core, fixture_app, fixture_app) and 3 other calls; 9 units in ~/.deepbuild/budget-window/change/target
+  call 3: cargo test --workspace --locked --no-run in ~/.deepbuild/budget-window/base/copy, RUSTC_WRAPPER unset: 3 compiles (fixture_core, fixture_core, fixture_app) and 3 other calls; 9 units in ~/.deepbuild/budget-window/base/target
+  call 4: cargo clippy --workspace --all-targets --locked -- -D warnings in ~/.deepbuild/budget-window/base/copy, RUSTC_WRAPPER unset: 4 compiles (fixture_core, fixture_core, fixture_app, fixture_app) and 3 other calls; 9 units in ~/.deepbuild/budget-window/base/target
+  calls 5…45 (21): cargo build --locked --release -p fixture-app in ~/.deepbuild/budget-window/change/copy, RUSTC_WRAPPER unset: 2 compiles (fixture_core, fixture_app) and 63 other calls; 9 units in ~/.deepbuild/budget-window/change/target
+  calls 6…46 (21): cargo build --locked --release -p fixture-app in ~/.deepbuild/budget-window/base/copy, RUSTC_WRAPPER unset: 2 compiles (fixture_core, fixture_app) and 63 other calls; 9 units in ~/.deepbuild/budget-window/base/target
+  then a build outside it (exit 0): 2 compiles (fixture_core, fixture_app) and 3 other calls
+ℹ scripts/preflight.mjs: 48 cargo calls, 48 of them builds; the wrapper logged 22 compiles (fixture_core, fixture_core, fixture_app, fixture_core, fixture_core, fixture_app, fixture_app, fixture_core, fixture_app, fixture_core, fixture_core, fixture_app, fixture_core, fixture_core, fixture_app, fixture_app, fixture_core, fixture_app, fixture_core, fixture_app, fixture_core, fixture_app) and 144 other calls from them
+  call 1: cargo test --workspace --locked --no-run in <sandbox>/work, RUSTC_WRAPPER unset: 3 compiles (fixture_core, fixture_core, fixture_app) and 3 other calls; 13 units in <sandbox>/work/target
+  call 2: cargo clippy --workspace --all-targets --locked -- -D warnings in <sandbox>/work, RUSTC_WRAPPER unset: 4 compiles (fixture_core, fixture_core, fixture_app, fixture_app) and 3 other calls; 13 units in <sandbox>/work/target
+  call 3: cargo build --workspace --locked --profile checks in <sandbox>/work, RUSTC_WRAPPER unset: 2 compiles (fixture_core, fixture_app) and 3 other calls; 13 units in <sandbox>/work/target
+  call 4: cargo test --workspace --locked --no-run in ~/.cache/deepbuild-perf/<host>-85eadcaa91f8/base/copy, RUSTC_WRAPPER unset: 3 compiles (fixture_core, fixture_core, fixture_app) and 3 other calls; 11 units in ~/.cache/deepbuild-perf/<host>-85eadcaa91f8/base/target
+  call 5: cargo clippy --workspace --all-targets --locked -- -D warnings in ~/.cache/deepbuild-perf/<host>-85eadcaa91f8/base/copy, RUSTC_WRAPPER unset: 4 compiles (fixture_core, fixture_core, fixture_app, fixture_app) and 3 other calls; 11 units in ~/.cache/deepbuild-perf/<host>-85eadcaa91f8/base/target
+  call 6: cargo build --workspace --locked --profile checks in ~/.cache/deepbuild-perf/<host>-85eadcaa91f8/base/copy, RUSTC_WRAPPER unset: 2 compiles (fixture_core, fixture_app) and 3 other calls; 11 units in ~/.cache/deepbuild-perf/<host>-85eadcaa91f8/base/target
+  calls 7…47 (21): cargo build --locked --release -p fixture-app in <sandbox>/work, RUSTC_WRAPPER unset: 2 compiles (fixture_core, fixture_app) and 63 other calls; 13 units in <sandbox>/work/target
+  calls 8…48 (21): cargo build --locked --release -p fixture-app in ~/.cache/deepbuild-perf/<host>-85eadcaa91f8/base/copy, RUSTC_WRAPPER unset: 2 compiles (fixture_core, fixture_app) and 63 other calls; 11 units in ~/.cache/deepbuild-perf/<host>-85eadcaa91f8/base/target
+  then a build outside it (exit 0): 2 compiles (fixture_core, fixture_app) and 3 other calls
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+ℹ duration_ms 15095.7135
+
+The failures:
+✖ #3239.ce662817 AC1 with the test's own cargo home naming a logging wrapper, no build benchmark.mjs, perf.mjs, budget-window.mjs or preflight.mjs starts logs a call, and a build started outside them still does
+  AssertionError [ERR_ASSERTION]: a build these scripts started ran under the cargo home's wrapper:
+  scripts/benchmark.mjs: its cargo 1 of 2, `cargo test --workspace --locked --no-run` in <sandbox>/work (RUSTC_WRAPPER unset, CARGO_BUILD_RUSTC_WRAPPER unset), ran under the wrapper: 3 compiles (fixture_core, fixture_core, fixture_app) and 3 other calls
+  scripts/benchmark.mjs: its cargo 2 of 2, `cargo clippy --workspace --all-targets --locked -- -D warnings` in <sandbox>/work (RUSTC_WRAPPER unset, CARGO_BUILD_RUSTC_WRAPPER unset), ran under the wrapper: 4 compiles (fixture_core, fixture_core, fixture_app, fixture_app) and 3 other calls
+  scripts/perf.mjs: its cargo 1 of 45, `cargo test --workspace --locked --no-run` in ~/.cache/deepbuild-perf/<host>-c53b1fefa7fd/base/copy (RUSTC_WRAPPER unset, CARGO_BUILD_RUSTC_WRAPPER unset), ran under the wrapper: 3 compiles (fixture_core, fixture_core, fixture_app) and 3 other calls
+  scripts/perf.mjs: its cargo 2 of 45, `cargo clippy --workspace --all-targets --locked -- -D warnings` in ~/.cache/deepbuild-perf/<host>-c53b1fefa7fd/base/copy (RUSTC_WRAPPER unset, CARGO_BUILD_RUSTC_WRAPPER unset), ran under the wrapper: 4 compiles (fixture_core, fixture_core, fixture_app, fixture_app) and 3 other calls
+  scripts/perf.mjs: its cargo 3 of 45, `cargo build --workspace --locked --profile checks` in ~/.cache/deepbuild-perf/<host>-c53b1fefa7fd/base/copy (RUSTC_WRAPPER unset, CARGO_BUILD_RUSTC_WRAPPER unset), ran under the wrapper: 2 compiles (fixture_core, fixture_app) and 3 other calls
+  scripts/perf.mjs: its cargo 4 of 45, `cargo build --locked --release -p fixture-app` in <sandbox>/work (RUSTC_WRAPPER unset, CARGO_BUILD_RUSTC_WRAPPER unset), ran under the wrapper: 2 compiles (fixture_core, fixture_app) and 3 other calls
+  scripts/perf.mjs: its cargo 5 of 45, `cargo build --locked --release -p fixture-app` in ~/.cache/deepbuild-perf/<host>-c53b1fefa7fd/base/copy (RUSTC_WRAPPER unset, CARGO_BUILD_RUSTC_WRAPPER unset), ran under the wrapper: 2 compiles (fixture_core, fixture_app) and 3 other calls
+  … (141 lines in all, one per cargo the four scripts started: 2 of benchmark.mjs, 45 of perf.mjs, 46 of
+  budget-window.mjs, 48 of preflight.mjs; a no-op build logs cargo's three probe calls and no compile)
+
+## The throwaway change (a scratch copy, not kept; README: Wrong programs)
+
+benchmark.mjs gives warm()'s cargos, measureOnce's command and judgeTargets' runs RUSTC_WRAPPER empty; perf.mjs,
+budget-window.mjs and preflight.mjs set process.env.RUSTC_WRAPPER = '' near their top; section 4 names the rule. AC2
+doesn't read the scripts, and passes on it as on the base. This is the wrapper's log for each script on a change that
+meets AC1.
+
+$ node --test tests/acceptance/3239/ac1-bare-builds.test.mjs tests/acceptance/3239/ac4-design.test.mjs \
+    tests/acceptance/3239/ac2-outside-build.test.mjs
+
+started 2026-11-23T09:34:04.374Z, load 65.5
+✔ #3239.ce662817 AC1 with the test's own cargo home naming a logging wrapper, no build benchmark.mjs, perf.mjs, budget-window.mjs or preflight.mjs starts logs a call, and a build started outside them still does
+ℹ scripts/benchmark.mjs: 2 cargo calls, 2 of them builds; the wrapper logged 0 compiles (none) and 0 other calls from them
+  call 1: cargo test --workspace --locked --no-run in <sandbox>/work, RUSTC_WRAPPER empty: 0 compiles (none) and 0 other calls; 9 units in <sandbox>/work/target
+  call 2: cargo clippy --workspace --all-targets --locked -- -D warnings in <sandbox>/work, RUSTC_WRAPPER empty: 0 compiles (none) and 0 other calls; 9 units in <sandbox>/work/target
+  then a build outside it (exit 0): 2 compiles (fixture_core, fixture_app) and 3 other calls
+ℹ scripts/perf.mjs: 45 cargo calls, 45 of them builds; the wrapper logged 0 compiles (none) and 0 other calls from them
+  call 1: cargo test --workspace --locked --no-run in ~/.cache/deepbuild-perf/<host>-e1a67af88161/base/copy, RUSTC_WRAPPER empty: 0 compiles (none) and 0 other calls; 11 units in ~/.cache/deepbuild-perf/<host>-e1a67af88161/base/target
+  call 2: cargo clippy --workspace --all-targets --locked -- -D warnings in ~/.cache/deepbuild-perf/<host>-e1a67af88161/base/copy, RUSTC_WRAPPER empty: 0 compiles (none) and 0 other calls; 11 units in ~/.cache/deepbuild-perf/<host>-e1a67af88161/base/target
+  call 3: cargo build --workspace --locked --profile checks in ~/.cache/deepbuild-perf/<host>-e1a67af88161/base/copy, RUSTC_WRAPPER empty: 0 compiles (none) and 0 other calls; 11 units in ~/.cache/deepbuild-perf/<host>-e1a67af88161/base/target
+  calls 4…44 (21): cargo build --locked --release -p fixture-app in <sandbox>/work, RUSTC_WRAPPER empty: 0 compiles (none) and 0 other calls; 4 units in <sandbox>/work/target
+  calls 5…45 (21): cargo build --locked --release -p fixture-app in ~/.cache/deepbuild-perf/<host>-e1a67af88161/base/copy, RUSTC_WRAPPER empty: 0 compiles (none) and 0 other calls; 11 units in ~/.cache/deepbuild-perf/<host>-e1a67af88161/base/target
+  then a build outside it (exit 0): 2 compiles (fixture_core, fixture_app) and 3 other calls
+ℹ scripts/budget-window.mjs: 46 cargo calls, 46 of them builds; the wrapper logged 0 compiles (none) and 0 other calls from them
+  call 1: cargo test --workspace --locked --no-run in ~/.deepbuild/budget-window/change/copy, RUSTC_WRAPPER empty: 0 compiles (none) and 0 other calls; 9 units in ~/.deepbuild/budget-window/change/target
+  call 2: cargo clippy --workspace --all-targets --locked -- -D warnings in ~/.deepbuild/budget-window/change/copy, RUSTC_WRAPPER empty: 0 compiles (none) and 0 other calls; 9 units in ~/.deepbuild/budget-window/change/target
+  call 3: cargo test --workspace --locked --no-run in ~/.deepbuild/budget-window/base/copy, RUSTC_WRAPPER empty: 0 compiles (none) and 0 other calls; 9 units in ~/.deepbuild/budget-window/base/target
+  call 4: cargo clippy --workspace --all-targets --locked -- -D warnings in ~/.deepbuild/budget-window/base/copy, RUSTC_WRAPPER empty: 0 compiles (none) and 0 other calls; 9 units in ~/.deepbuild/budget-window/base/target
+  calls 5…45 (21): cargo build --locked --release -p fixture-app in ~/.deepbuild/budget-window/change/copy, RUSTC_WRAPPER empty: 0 compiles (none) and 0 other calls; 9 units in ~/.deepbuild/budget-window/change/target
+  calls 6…46 (21): cargo build --locked --release -p fixture-app in ~/.deepbuild/budget-window/base/copy, RUSTC_WRAPPER empty: 0 compiles (none) and 0 other calls; 9 units in ~/.deepbuild/budget-window/base/target
+  then a build outside it (exit 0): 2 compiles (fixture_core, fixture_app) and 3 other calls
+ℹ scripts/preflight.mjs: 48 cargo calls, 48 of them builds; the wrapper logged 0 compiles (none) and 0 other calls from them
+  call 1: cargo test --workspace --locked --no-run in <sandbox>/work, RUSTC_WRAPPER empty: 0 compiles (none) and 0 other calls; 13 units in <sandbox>/work/target
+  call 2: cargo clippy --workspace --all-targets --locked -- -D warnings in <sandbox>/work, RUSTC_WRAPPER empty: 0 compiles (none) and 0 other calls; 13 units in <sandbox>/work/target
+  call 3: cargo build --workspace --locked --profile checks in <sandbox>/work, RUSTC_WRAPPER empty: 0 compiles (none) and 0 other calls; 13 units in <sandbox>/work/target
+  call 4: cargo test --workspace --locked --no-run in ~/.cache/deepbuild-perf/<host>-a32d6dfa13c7/base/copy, RUSTC_WRAPPER empty: 0 compiles (none) and 0 other calls; 11 units in ~/.cache/deepbuild-perf/<host>-a32d6dfa13c7/base/target
+  call 5: cargo clippy --workspace --all-targets --locked -- -D warnings in ~/.cache/deepbuild-perf/<host>-a32d6dfa13c7/base/copy, RUSTC_WRAPPER empty: 0 compiles (none) and 0 other calls; 11 units in ~/.cache/deepbuild-perf/<host>-a32d6dfa13c7/base/target
+  call 6: cargo build --workspace --locked --profile checks in ~/.cache/deepbuild-perf/<host>-a32d6dfa13c7/base/copy, RUSTC_WRAPPER empty: 0 compiles (none) and 0 other calls; 11 units in ~/.cache/deepbuild-perf/<host>-a32d6dfa13c7/base/target
+  calls 7…47 (21): cargo build --locked --release -p fixture-app in <sandbox>/work, RUSTC_WRAPPER empty: 0 compiles (none) and 0 other calls; 13 units in <sandbox>/work/target
+  calls 8…48 (21): cargo build --locked --release -p fixture-app in ~/.cache/deepbuild-perf/<host>-a32d6dfa13c7/base/copy, RUSTC_WRAPPER empty: 0 compiles (none) and 0 other calls; 11 units in ~/.cache/deepbuild-perf/<host>-a32d6dfa13c7/base/target
+  then a build outside it (exit 0): 2 compiles (fixture_core, fixture_app) and 3 other calls
+✔ #3239.9d1b4fd0 AC2 the same wrapper logs a call for each unit a cargo build started outside the four scripts compiles
+✔ #3239.cd5b51c3 AC4 section 4 states that the four scripts' builds are bare by their own RUSTC_WRAPPER setting and that a reference Mac may run the cache
+ℹ tests 3
+ℹ pass 3
+ℹ fail 0
+ℹ duration_ms 15423.356125
+exit 0 after 15 s, load 72.9
+
+AC3 needs this worktree's git for its merge base, so the throwaway's four scripts were laid into the worktree for one
+run and the base's files put back after:
+
+$ node --test tests/acceptance/3239/ac3-unit-lane.test.mjs
+
+started 2026-11-23T09:28:08.059Z, load 21.6
+✔ #3239.cb760c49 AC3 the unit lane's own tests of the four scripts fail on this checkout exactly where main's known failures say they do
+ℹ tests/budget-window.test.mjs: 2 passed, 0 FAIL (0 listed on main), 0 proved nothing
+ℹ tests/perf.test.mjs: 20 passed, 0 FAIL (0 listed on main), 0 proved nothing
+ℹ tests/preflight-exclusion.test.mjs: 1 passed, 0 FAIL (0 listed on main), 0 proved nothing
+ℹ tests/preflight-selection.test.mjs: 1 passed, 0 FAIL (0 listed on main), 0 proved nothing
+ℹ tests 1
+ℹ pass 1
+ℹ fail 0
+ℹ duration_ms 57445.171459
+exit 0 after 57 s, load 14.3
