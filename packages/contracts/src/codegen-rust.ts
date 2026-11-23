@@ -197,6 +197,11 @@ impl Contract for ${name} {
 pub enum ${name} {
 ${arms.map((v) => `    ${v.variant},\n`).join('')}}
 
+impl ${name} {
+    /// Every value, in the schema's order (#2854: the handshake list's newest is its last).
+    pub const ALL: &'static [Self] = &[${arms.map((v) => `Self::${v.variant}`).join(', ')}];
+}
+
 impl Contract for ${name} {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         match deep_contracts::string(value, at)? {
