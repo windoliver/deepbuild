@@ -85,8 +85,15 @@ async function escapeBuilt(folder) {
   for (const { path, text } of found) {
     const json = JSON_FILE.test(path);
     if (!SCRIPT.test(path) && !json) throw new Error(`${path}:${lineOf(text, text.search(ABOVE))}: a character above U+00FF in a built file that is neither a script nor JSON`);
-    // In JSON such a character can only stand in a string, where \uXXXX is the same character.
+    // In JSON such a character can only stand in a string, where \uXXXX is the same character: what parses before
+    // and after must be the same value, and what doesn't parse, such as a file led by a byte order mark, is refused.
     const out = json ? text.replace(/[^\x00-\xff]+/g, units) : escaped(ts, path, text);
+    if (json) {
+      const value = (code) => { try { return JSON.stringify(JSON.parse(code)); } catch (error) { return error; } };
+      const was = value(text);
+      if (typeof was !== 'string') throw new Error(`${path}: a character above U+00FF in a file that is not JSON: ${was.message}`);
+      if (value(out) !== was) throw new Error(`${path}: the escapes changed the JSON's value`);
+    }
     if (ABOVE.test(out) || lineOf(out, out.length) !== lineOf(text, text.length)) throw new Error(`${path}: the escapes left a character above U+00FF or changed the line count`);
     writeFileSync(path, out);
   }
