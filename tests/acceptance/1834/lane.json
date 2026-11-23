@@ -1,0 +1,1 @@
+{ "alone": true, "why": "each file builds deep-show (the full set) and #544's assembler with cargo, and ac1 builds deep-physics too" }

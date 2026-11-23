@@ -1685,7 +1685,7 @@
               "check": ".deepbuild/checks/vitest.sh",
               "on_base": "fails",
               "asserts": [
-                "test/cart.test.mjs:5"
+                "test/cart.test.js:5"
               ],
               "depth": "unit",
               "oracle": "code",
