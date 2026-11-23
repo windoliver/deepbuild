@@ -29,7 +29,7 @@ pub fn played(
     #[cfg(feature = "logic")]
     if crate::fires::any(&form) {
         if let Some(p) = crate::logic::logic_piece(sealed, &form, track, read, false)? {
-            crate::fires::inline(&mut form, p, track)?;
+            crate::fires::inline(&mut form, p, track, Default::default())?;
         }
     }
     #[cfg(feature = "physics")]

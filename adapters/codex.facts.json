@@ -842,7 +842,7 @@
   "stop": {
     "readBy": "each agent.stop names its cause from the stop's closed set and carries its usage (#603); the turn is the rollout's entries from the first carrying the payload's turn_id to the first carrying another",
     "conformance": "codex/stop/cause-and-usage",
-    "turn": { "payload": "turn_id", "transcript": "payload.turn_id" },
+    "turn": { "payload": "turn_id", "transcript": "payload.turn_id", "elsewhere": "agent_id" },
     "cause": {
       "readBy": "the first that names a cause, never the agent's text: an error event of the turn by its codex_error_info (codex-rs/protocol CodexErrorInfo), then the turn's last token_count rate_limits: a limit reached (rate_limit_reached_type) is plan_window_spent, resetting when the spent window (used_percent 100) does, resets_at being Unix seconds; one with no reset time is rate_limited; Codex's Stop payload carries no error; anything else is unknown",
       "errors": {
@@ -906,7 +906,7 @@
     "readBy": "a turn no prompt hook started opens with a user.ask whose origin the rollout's opening user message names; goals and heartbeats are continuations, never your asks",
     "conformance": "codex/turnWithoutPrompt/goal",
     "payloadField": "turn_id",
-    "startedBy": ["UserPromptSubmit", "SessionStart"],
+    "startedBy": ["UserPromptSubmit", "SessionStart", "SubagentStart"],
     "turnEntry": "turn_context",
     "turnField": "payload.turn_id",
     "messageRole": { "path": "payload.role", "value": "user" },

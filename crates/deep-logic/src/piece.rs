@@ -333,6 +333,9 @@ pub struct Write {
     pub count: u32,
     /// `interpolate: linear`: drawing reads it one step late, blended (Logic: interpolated writes).
     pub linear: bool,
+    /// #2035: `cut`, the bool write of the same count whose true elements a frame shows with no
+    /// blend on their step.
+    pub cut: Option<String>,
 }
 
 /// A kind of occurrence an item emits (Logic: occurrences): its numeric fields in declaration
@@ -532,6 +535,10 @@ pub struct Item {
     pub program: String,
     /// The bytes that run: sandbox@1's rewrite, or the program as built under `runs_unchecked`.
     pub bytes: Vec<u8>,
+    /// #2662: `bytes` compiled, once, at the first runner made of them; every later runner of the
+    /// item (a restore's, a seek's, a fork's) is a fresh instance of it.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) compiled: std::cell::OnceCell<deep_sandbox_wasmtime::Program>,
     pub hash: String,
     /// The bytes as given, whose code offsets the sidecar's DWARF stands for.
     pub given: Vec<u8>,
@@ -586,6 +593,9 @@ pub struct Item {
     /// The table its `separation` declares, its movers and minima checked, whose bytes are its
     /// asset 0 (#1255).
     pub separation: Option<std::sync::Arc<crate::separation::Table>>,
+    /// The circuit its `circuit` declares, its nodes and parts checked, whose bytes are its asset 0
+    /// (#1181).
+    pub circuit: Option<std::sync::Arc<crate::circuit::Circuit>>,
     /// What the item's bake key covers of it: its rewritten program, its fields as given and
     /// its assets' hashes (Logic: checkpoints and bake).
     pub content: String,

@@ -7772,7 +7772,7 @@ export interface DocPatchedV2 {
 
 /** doctor.item@1 */
 export interface DoctorItem {
-  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "hook_program_missing" | "notifications_off" | "service_unpromoted" | "statusline_shadowed" | "pack_refused" | "polkit_action_missing" | "hooks_modified" | "mod_overrides_guard" | "not_loaded" | "handler_set_aside" | "footprint_unknown" | "unknown";
+  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "hook_program_missing" | "notifications_off" | "service_unpromoted" | "statusline_shadowed" | "pack_refused" | "polkit_action_missing" | "hooks_modified" | "mod_overrides_guard" | "not_loaded" | "handler_set_aside" | "footprint_unknown" | "proofs_unreadable" | "unknown";
   level: "ok" | "warn" | "fail" | "skip";
   evidence: string;
   fix: string;
@@ -8750,6 +8750,37 @@ export interface LeaseAcquiredV2 {
     holder: string;
     mode: "exclusive" | "shared";
     expires: number;
+    run?: string;
+    agent?: {
+      pid: number;
+      start: string;
+    };
+  };
+  evidence?: Array<string>;
+}
+
+/** lease.acquired@3 */
+export interface LeaseAcquiredV3 {
+  v: 3;
+  id: string;
+  kind: "lease.acquired";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    resource: {
+      host: string;
+      kind: string;
+      key: string;
+    };
+    holder: string;
+    mode: "exclusive" | "shared";
+    expires: number;
+    units?: number;
     run?: string;
     agent?: {
       pid: number;

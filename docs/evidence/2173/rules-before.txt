@@ -1,0 +1,315 @@
+# node scripts/repo-rules.mjs, 2026-11-23T04:34:31.491Z
+# checkout: HEAD c52dc3e7308c33edbcbe91913f1f6f1590ed8978; working tree = blind base a3db8f131 (that HEAD with the accesskit_macos row taken out of scripts/repo-rules.json)
+# PATH starts with /opt/homebrew/opt/rustup/bin (cargo, for the physics-build lane); Node v24.22.2; one-minute load 137
+# exit 1 in 26.3 s; 147 FAIL/INVALID/BLOCKED lines, 1 of them outside tests/acceptance/
+#   FAIL deps: crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies accesskit_macos ^0.26 is not in scripts/repo-rules.json
+# FAIL lines naming accesskit_macos: 1 (the NOTE for vendor/accesskit_macos/Cargo.toml is the vendored crate itself)
+FAIL secrets: tests/acceptance/1527/BASE-FAILURE.txt:9:14: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2175/BASE-FAILURE.txt:22:42: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2175/BASE-FAILURE.txt:38:29: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2175/BASE-FAILURE.txt:39:42: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2175/BASE-FAILURE.txt:57:29: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2175/BASE-FAILURE.txt:58:42: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2175/BASE-FAILURE.txt:76:42: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2175/BASE-FAILURE.txt:94:42: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2456/BASE-RUN.txt:12:14: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2649/BASE-FAILURE.txt:29:24: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2649/BASE-FAILURE.txt:30:42: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2649/BASE-FAILURE.txt:54:24: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2649/BASE-FAILURE.txt:55:42: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2649/BASE-FAILURE.txt:81:24: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2649/BASE-FAILURE.txt:82:42: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2649/BASE-FAILURE.txt:108:24: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2649/BASE-FAILURE.txt:109:42: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2649/BASE-FAILURE.txt:135:24: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2649/BASE-FAILURE.txt:136:42: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2651/lib.mjs:293:112: API key
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2651/lib.mjs:293:170: API key
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2742/BASE-FAILURE.txt:21:14: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/276/match/BASE-FAILURE.txt:13:14: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:9:65: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:10:65: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:13:50: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:14:52: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:18:65: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:19:65: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:22:50: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:23:52: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:26:65: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:27:65: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:30:50: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:31:52: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:35:65: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:36:65: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:39:50: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:40:52: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:58:65: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:59:67: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:62:52: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:63:54: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:87:65: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:88:67: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:91:52: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:92:54: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:121:65: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:122:67: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:125:52: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2817/BASE-FAILURE.txt:126:54: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:14:65: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:15:65: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:17:50: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:18:52: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:21:65: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:22:65: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:23:67: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:25:50: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:26:52: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:34:65: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:35:65: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:36:101: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:37:67: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:40:50: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:41:52: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:114:65: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:115:67: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:116:103: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:117:69: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:120:52: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/2835/BASE-FAILURE.txt:121:54: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/3019/BASE-FAILURE.txt:34:36: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/3019/BASE-FAILURE.txt:34:101: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/3019/BASE-FAILURE.txt:34:168: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/3019/BASE-FAILURE.txt:42:36: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/3019/BASE-FAILURE.txt:42:101: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/3019/BASE-FAILURE.txt:42:168: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/3019/BASE-FAILURE.txt:44:36: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/3019/BASE-FAILURE.txt:44:101: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/3019/BASE-FAILURE.txt:44:168: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/3019/BASE-FAILURE.txt:48:78: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/3019/BASE-FAILURE.txt:55:36: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/3019/BASE-FAILURE.txt:55:101: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/3019/BASE-FAILURE.txt:55:168: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/3023/BASE-FAILURE.txt:53:14: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/594/TWINS-RUN.txt:50:29: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL deps: tests/acceptance/1898/twins/cli-type-error/packages/cli/package.json dependencies @deepbuild/conformance 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/1898/twins/cli-type-error/packages/cli/package.json dependencies @deepbuild/contracts 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/1898/twins/cli-type-error/packages/cli/package.json dependencies @deepbuild/evidence 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/1898/twins/cli-type-error/packages/cli/package.json dependencies @deepbuild/hub 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/1898/twins/cli-type-error/packages/cli/package.json dependencies @deepbuild/otlp 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/1898/twins/cli-type-error/packages/cli/package.json dependencies @deepbuild/reading 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/cli/package.json dependencies @deepbuild/conformance 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/cli/package.json dependencies @deepbuild/contracts 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/cli/package.json dependencies @deepbuild/evidence 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/cli/package.json dependencies @deepbuild/hub 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/cli/package.json dependencies @deepbuild/otlp 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/cli/package.json dependencies @deepbuild/reading 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/adapters 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/archive 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/asks 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/briefs 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/budget 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/checks-command 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/checks-numbers 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/checks-review 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/checks-work 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/config-eval 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/conformance 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/contracts 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/env-local 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/evidence 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/extension-host 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/gate 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/github 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/leases 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/reading 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/readings 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/record 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/resolver-decisions 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/runner 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/supervisor 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/verdicts 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/wiki 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/workspaces 0.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies better-sqlite3 13.0.3 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies yaml 2.9.1 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies accesskit_macos ^0.26 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/851/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/851/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/189/carry/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/189/carry/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/189/saves/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/189/saves/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/192/dungeon/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/192/dungeon/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/276/match/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/276/match/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/276/record/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/276/record/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/276/web/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/276/web/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/416/interfaces/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/416/interfaces/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/416/layouts/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/416/layouts/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+PASS workflows: .github/workflows/ has no entries
+PASS agent-hooks: no hooks, plugins or hook switch-off in .claude settings, no .codex/ folder
+PASS cards: 41 packages and 54 crates have cards with the four headings; 136 deviations, each naming a file that exists
+PASS security: SECURITY.md names the private report form, .github/ISSUE_TEMPLATE/config.yml links it, and CONTRIBUTING.md and SECURITY.md state the rule in the same words
+PASS physics-build: rapier3d 0.36.1 [alloc, dim3, enhanced-determinism, f32, serde-serialize, std], parry3d 0.31.1, rapier2d 0.36.1 [alloc, dim2, enhanced-determinism, f32, serde-serialize, std], parry2d 0.31.1, none of simd8, parallel, block-solver, fem, unsync-callbacks, fast-math, and no rustflags with target-cpu=native or +fma
+NOTE deps: vendor/accesskit_macos/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/gpui-pre-apple/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/gpui-pre-macos/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/gpui-pre/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/llrt_crypto/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/mitex-spec-gen/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/mitex-spec/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/quickjs-jit-runtime/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/symphonia-codec-vorbis/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE size: +315 -4 handwritten lines against merge base c52dc3e73, lockfiles and binary files excluded (guideline: about 400)

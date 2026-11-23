@@ -1,0 +1,12 @@
+before: 2026-11-23T08:43:04Z; HEAD c52dc3e73; load { 31.39 38.42 71.42 }
+$ node node_modules/vitest/vitest.mjs run packages/hub/test/memory-overrule.test.ts
+
+ RUN  v5.0.5 <worktree>
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  03:43:04
+   Duration  3.42s (tests 98%, import 1%, transform 1%)
+
+exit 0; after: 2026-11-23T08:43:07Z; HEAD c52dc3e73; load { 30.00 38.02 71.09 }

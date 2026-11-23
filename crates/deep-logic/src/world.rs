@@ -10,8 +10,11 @@
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use deep_canvas_sandbox::rewrite::{self, BLOCK, FUEL, GLOBAL, PAGES, START};
+#[cfg(not(target_arch = "wasm32"))]
+use deep_sandbox_wasmtime::Program;
 use deep_sandbox_wasmtime::Val;
 use deep_sandbox_wasmtime::{Call, Faults, Runner};
 use serde_json::{json, Map, Value};
@@ -123,9 +126,27 @@ pub struct Record {
     /// #551: checkpoints record no deep hash, which costs a pass over the whole memory in the
     /// step; a reader restores the checkpoint for one (a match's copy, whose frames are timed).
     pub deferred: bool,
+    /// #2662: nothing reads this record, so a step builds nothing for it.
+    pub(crate) none: bool,
+}
+
+static RECORD_VALUES: AtomicU64 = AtomicU64::new(0);
+
+/// #2662: how many step rows this process's worlds have built for a record.
+pub fn record_values() -> u64 {
+    RECORD_VALUES.load(Ordering::Relaxed)
 }
 
 impl Record {
+    /// #2662: a record for steps nothing reads, a live view's: it keeps no row, range, whole
+    /// arrays or checkpoint, and no deep hash is taken for it. It still takes traps and issues.
+    pub fn none() -> Record {
+        Record {
+            none: true,
+            deferred: true,
+            ..Record::default()
+        }
+    }
     /// Each step's items (hash, fuel, failed, pages) and arrays, by step.
     pub fn rows(&self) -> &BTreeMap<i64, StepRow> {
         &self.steps
@@ -196,6 +217,9 @@ impl Record {
         .occurrences(piece)
     }
     pub(crate) fn checkpoint(&mut self, id: &str, step: i64, deep: u64, arrays: &[u8]) {
+        if self.none {
+            return;
+        }
         self.whole(id, step, arrays);
         let list = self
             .checkpoints
@@ -277,6 +301,10 @@ pub(crate) struct Live {
     /// A second instance of the program that previews run on, each on a copy of this state
     /// (Logic: preview), built at the first preview and kept across seeks.
     spare: Option<Runner>,
+    /// #2662's planted `forks_share_store`: the runner this item's first fork was given. The web
+    /// player's engine has no shared runner, so there it stays empty.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    forked: Option<Runner>,
     /// What the last preview ran on: the step the state is at and its read region's bytes.
     previewed: Option<(i64, Vec<u8>)>,
     /// The preview's write region as the last preview left it: zero before one and after a trap.
@@ -343,7 +371,8 @@ impl Live {
             // A dropped checkpoint's map changes go to the next one the ring stores; later
             // changes win.
             if let (Some(c), Some(st)) = (carry_map, self.paged.as_mut()) {
-                let (crate::pages::MapPart::Whole(mut all) | crate::pages::MapPart::Changes(mut all)) = c.map;
+                let (crate::pages::MapPart::Whole(mut all)
+                | crate::pages::MapPart::Changes(mut all)) = c.map;
                 all.extend(std::mem::take(&mut st.changed));
                 st.changed = all;
             }
@@ -756,6 +785,10 @@ fn report(
     pages: Vec<u32>,
     rows: &Rows,
 ) {
+    if rec.none {
+        return;
+    }
+    RECORD_VALUES.fetch_add(1, Ordering::Relaxed);
     // #860: a step a closed branch ran, run again on the current one, takes its row anew.
     if rec.frozen.remove(&k) {
         rec.steps.remove(&k);
@@ -875,17 +908,19 @@ pub fn arrays_of<'a>(
 /// Each item's arrays as a frame at `t` (flicks) draws them from what it `shown`, by
 /// `<item>.<write>` (Logic: interpolated writes): a held write as its last step stored it; a
 /// linear write from the value before that step toward it by α = (t − that step's time) ÷ the
-/// step length, so it reads one step late. Nothing else reads this: steps, hashes and checks read
-/// the stored. The planted blend draws toward the next step, as a physics output blends.
+/// step length, so it reads one step late. #2035: an element whose `cut` that step left true shows
+/// that step's value with no blend. Nothing else reads this: steps, hashes and checks read the
+/// stored. The planted blend draws toward the next step, as a physics output blends; the planted
+/// evaluator `cut_ignored` blends across a cut.
 pub fn drawn<'a>(
     piece: &Piece,
     shown: impl Iterator<Item = (i64, &'a [u8], &'a [u8])>,
     t: i64,
-    forward: bool,
+    planted: &Planted,
 ) -> Map<String, Value> {
     let mut out = Map::new();
     for (item, (last, prev, arrays)) in piece.items.iter().zip(shown) {
-        let since = if forward {
+        let since = if planted.linear_blends_forward {
             t.rem_euclid(item.step)
         } else {
             (t - last * item.step).clamp(0, item.step)
@@ -894,10 +929,13 @@ pub fn drawn<'a>(
             let e = item.write(&w.name).expect("a write entry");
             let size = w.ty.size() as usize;
             let at = e.offset as usize;
+            let cut = w.cut.as_deref().filter(|_| !planted.cut_ignored);
+            let cut = cut.and_then(|c| item.write(c)).map(|c| c.offset as usize);
+            let jumps = |n: usize| cut.is_some_and(|c| arrays[c + 4 * n..][..4] != [0; 4]);
             let values: Vec<Value> = (0..w.count as usize)
                 .map(|n| {
                     let to = &arrays[at + n * size..][..size];
-                    if !w.linear || prev.is_empty() || last < 0 || since >= item.step {
+                    if !w.linear || prev.is_empty() || last < 0 || since >= item.step || jumps(n) {
                         return w.ty.value(to);
                     }
                     let from = &prev[at + n * size..][..size];

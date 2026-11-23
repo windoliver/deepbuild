@@ -35,3 +35,28 @@ libc = "0.2"
 [[bin]]
 name = "deep-logic"
 path = "src/main.rs"
+
+# Issue #2662: the acceptance tests, written blind in tests/acceptance/2662.
+[[test]]
+name = "acceptance_2662_step_bytes"
+path = "../../tests/acceptance/2662/step_bytes.rs"
+
+[[test]]
+name = "acceptance_2662_seek_compiles"
+path = "../../tests/acceptance/2662/seek_compiles.rs"
+
+[[test]]
+name = "acceptance_2662_forks"
+path = "../../tests/acceptance/2662/forks.rs"
+
+[[test]]
+name = "acceptance_2662_forks_planted"
+path = "../../tests/acceptance/2662/forks_planted.rs"
+
+[[test]]
+name = "acceptance_2662_live_record"
+path = "../../tests/acceptance/2662/live_record.rs"
+
+[[test]]
+name = "acceptance_2662_goldens"
+path = "../../tests/acceptance/2662/goldens.rs"
