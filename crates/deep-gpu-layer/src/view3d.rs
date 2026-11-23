@@ -45,8 +45,13 @@ struct Window3 {
     card: Option<crate::window::Card>,
 }
 
+mod captured;
 mod parse;
+mod reports;
 pub(crate) use parse::*;
+
+use captured::captured;
+use reports::light_reports;
 
 /// #462's planted `status_in_look`: the status map of the look a render draws in, where it has
 /// one of its own; `None` for the shipped program, which draws the document's.
@@ -162,6 +167,7 @@ fn run_view(
     deep_canvas_effects::effect::lower(&mut args.doc);
     crate::physics::bake(&mut args.doc, &call["tracks"], &args.assets)?;
     crate::particles::refuse(&args.doc, app.planted)?;
+    crate::trails::refuse(&args.doc)?;
     // The frames the call draws and how each is reached (#173), the ones logic runs at first.
     let reached = history::order(args.from, args.frames, &args.seeks, &args.history, args.fps);
     let order: Vec<u64> = reached.iter().map(|(n, _)| *n).collect();
@@ -360,6 +366,7 @@ fn run_view(
     // The scene the session drew last, which #431's planted velocity target reads.
     let mut last_drawn: Option<Arc<Scene>> = None;
     let mut hover: Option<String> = None;
+    let mut edges = None;
     let mut viewer_selection: Vec<String> = Vec::new();
     // #462: at most two looks in one frame outside a transition window, checked before any
     // frame draws; status draws in the document's look whatever look a shot or region takes.
@@ -390,8 +397,11 @@ fn run_view(
             Some(Planted::CreaseBelowAngle) => Some("crease_below_angle"),
             Some(Planted::EdgesDeriveEveryFrame) => Some("edges_derive_every_frame"),
             Some(Planted::EdgesDashOtherSpace) => Some("edges_dash_other_space"),
+            Some(Planted::HiddenLines(name)) => Some(name),
             _ => None,
         };
+        // #1782: the spans this run holds from frame to frame, for what it reports of them.
+        let mut kept_spans = deep_canvas_scene3d::spans::Kept::default();
         for &(n, reach) in &reached {
             let frame_started = std::time::Instant::now();
             if args.lose_at == Some(n) && device_losses == 0 {
@@ -477,6 +487,8 @@ fn run_view(
                 *memo.borrow_mut() = Default::default();
             }
             let plant = crate::axes::plant_name(app.planted);
+            // #298: the view values its drivers read, bound on the frame's document.
+            let composed = edged(composed, t, app.planted, &mut edges)?;
             let outlines = deep_canvas_scene3d::contributed::Fills {
                 memo: Some(&memo),
                 ..deep_canvas_scene3d::contributed::Fills::of(pack_sealed()?, plant)
@@ -488,6 +500,12 @@ fn run_view(
                 crate::particles::meshes(&composed, &scene, t as f64 / 705_600_000.0, app.planted)?
             {
                 scene = evaluate_sourced(&fed, t, &args.look, &mut labels, &read, outlines)?;
+            }
+            // #265's planted trails through a linear array's stored steps.
+            if app.planted == Some(Planted::TrailReadsStoredSteps) {
+                let stored = crate::trails::stored(&composed);
+                let held = evaluate_sourced(&stored, t, &args.look, &mut labels, &read, outlines)?;
+                crate::trails::take_trails(&mut scene, &held);
             }
             axes_mapped = memo.borrow_mut().take_mapped();
             if args.axes {
@@ -563,7 +581,7 @@ fn run_view(
                 scene.set_cutaway(Some(cut));
             }
             if n == args.from {
-                receipt = made;
+                receipt = crate::textures::listed(made, &scene, app.planted);
             }
             // #420 AC6's wrong programs: mesh edges unwelded, or drawn over their faces.
             scene.plant_edges(
@@ -622,6 +640,21 @@ fn run_view(
                 .flat_map(|l| &l.lines)
                 .filter_map(|l| Some((l.id.clone(), json!(u32::from(l.edges.as_ref()?.derived)))))
                 .collect();
+            // #1782: each hidden-style line's spans in this frame's view, the stretches of them
+            // the frame inks, and how many times this frame computed the spans.
+            let mut edge_spans = [Map::new(), Map::new(), Map::new()];
+            for l in scene.layers.iter().flat_map(|l| &l.lines) {
+                let Some(r) = deep_canvas_scene3d::spans::report(&scene, l, &mut kept_spans) else {
+                    continue;
+                };
+                let rows = |list: &[deep_canvas_scene3d::spans::Span]| -> Value {
+                    let row = |s: &deep_canvas_scene3d::spans::Span| json!({"edge": s.edge, "from": s.from, "to": s.to, "hidden": s.hidden});
+                    list.iter().map(row).collect()
+                };
+                edge_spans[0].insert(l.id.clone(), rows(&r.spans));
+                edge_spans[1].insert(l.id.clone(), rows(&r.dashes));
+                edge_spans[2].insert(l.id.clone(), json!(u32::from(r.computed)));
+            }
             // Each mesh-edge line's segments, in world metres, as `counts` reports them.
             let edge_segments: Map<String, Value> = scene
                 .layers
@@ -663,6 +696,7 @@ fn run_view(
                 .any(|s| s.stroke.is_some());
             // #450: the planted trail, then each asked trail as it draws.
             crate::trails::plant(&mut scene, app.planted, t);
+            crate::trails::plant_wake(&mut scene, app.planted, t);
             let trails = crate::trails::report(&scene, &call["trails"]);
             let scene = Arc::new(scene);
             // #1381: the horizon tables this frame's build baked: those no earlier frame drew.
@@ -1030,9 +1064,9 @@ fn run_view(
                 for axis in [cam.right, cam.up] {
                     let along: f64 = (0..3).map(|k| cam.target[k] * axis[k]).sum();
                     let by = (along / 0.1).round() * 0.1 - along;
-                    for k in 0..3 {
-                        cam.eye[k] += by * axis[k];
-                        cam.target[k] += by * axis[k];
+                    for (k, a) in axis.iter().enumerate() {
+                        cam.eye[k] += by * a;
+                        cam.target[k] += by * a;
                     }
                 }
                 moving = Arc::new(sc);
@@ -1632,19 +1666,7 @@ fn run_view(
             }
             frame.insert("samples".into(), samples_report);
             if args.overlays {
-                let rows: Vec<Value> = anchored
-                    .iter()
-                    .map(|o| {
-                        let mut row = json!({"id": o.id, "at": o.origin});
-                        // #468: where its leader ends, or null while it hides.
-                        if let Some(l) = &o.leader {
-                            let to = l.points.as_ref().and_then(|p| p.last());
-                            row["leader"] = to.map_or(Value::Null, |to| json!({"to": to}));
-                        }
-                        row
-                    })
-                    .collect();
-                frame.insert("overlays".into(), Value::Array(rows));
+                frame.insert("overlays".into(), overlay_rows(&anchored));
             }
             frame.insert(
                 "history".into(),
@@ -1752,195 +1774,23 @@ fn run_view(
                 json!(drawn.bytes.as_ref().map(|b| hex(b))),
             );
             if capture {
-                if let (Some(bgra), true) = (&drawn.bytes, args.targets.contains("final")) {
-                    frame.insert("final".into(), json!(write_final(out, bgra, size)?));
-                }
-                // The frame before the viewer's marks (#419).
-                if let (Some(bgra), true) = (&scene_bytes, args.targets.contains("scene")) {
-                    frame.insert("scene".into(), json!(write_final(out, bgra, size)?));
-                }
-                // The opaque scene's copy, each mip a file of its own (#431).
-                if let (Some(levels), true) = (&drawn.backdrop, args.targets.contains("backdrop")) {
-                    let mut rows = Vec::new();
-                    for (size, texels) in levels {
-                        rows.push(json!({"size": size, "file": write_named(out, texels, "f32")?}));
-                    }
-                    if let Some(first) = rows.first().cloned() {
-                        frame.insert("backdrop".into(), json!({"format": "rgba16float", "size": first["size"], "file": first["file"], "levels": rows}));
-                    }
-                }
-                if let (Some(pre), true) = (&drawn.pre_tone, args.targets.contains("pre_tone")) {
-                    frame.insert("pre_tone".into(), json!(write_named(out, pre, "f32")?));
-                }
-                // #971: the linear values the tone curve reads: that image after the look's
-                // local tone map, the exposure and the grade's white balance.
-                if let (Some(pre), true) = (
-                    drawn.toned.as_ref().or(drawn.pre_tone.as_ref()),
-                    args.targets.contains("pre_curve"),
-                ) {
-                    let scale = scene.exposure.unwrap_or(args.look.exposure);
-                    let balance = args.look.grade.white_balance();
-                    let read: Vec<u8> = pre
-                        .as_chunks::<16>()
-                        .0
-                        .iter()
-                        .flat_map(|p| {
-                            let c =
-                                |k: usize| f32::from_le_bytes([p[k], p[k + 1], p[k + 2], p[k + 3]]);
-                            let lit = [0, 4, 8].map(|k| f64::from(c(k)) * scale);
-                            let rgb = deep_canvas_marks::finish::mul(&balance, lit);
-                            let e = |x: f64| (x as f32).to_le_bytes();
-                            [e(rgb[0]), e(rgb[1]), e(rgb[2]), c(12).to_le_bytes()].concat()
-                        })
-                        .collect();
-                    frame.insert("pre_curve".into(), json!(write_named(out, &read, "f32")?));
-                }
-                if let Some(name) = &dirt_file {
-                    frame.insert("dirt".into(), json!(name));
-                }
-                // #166: the view-axis depth and each mirror part's lookup.
-                if let (Some(d), true) = (&drawn.view_depth, args.targets.contains("depth")) {
-                    frame.insert("depth".into(), json!(write_named(out, d, "f32")?));
-                }
-                if let (Some(r), true) = (&drawn.reflection, args.targets.contains("reflection")) {
-                    frame.insert("reflection".into(), json!(write_named(out, r, "f32")?));
-                }
-                if let Some(rings) = &rings {
-                    frame.insert("rings".into(), json!(rings));
-                }
-                if let (Some(f), true) = (&drawn.foam, args.targets.contains("foam")) {
-                    frame.insert("foam".into(), json!(write_named(out, f, "f32")?));
-                }
-                if let (Some(n), true) = (&drawn.normal, args.targets.contains("normal")) {
-                    frame.insert("normal".into(), json!(write_named(out, n, "f32")?));
-                }
-                // #458: the core's velocity target as the frame built it, two f32 a pixel.
-                if let (Some(v), true) = (&drawn.velocity, args.targets.contains("velocity")) {
-                    frame.insert("velocity".into(), json!(write_named(out, v, "f32")?));
-                }
-                // #458: what a relation reads beside these: the solids' normals, and the linear
-                // image the tone map reads, after exposure.
-                if let (Some(n), true) = (
-                    &drawn.geometry_normal,
-                    app.relation_reads.contains("geometry_normal"),
-                ) {
-                    frame.insert("geometry_normal".into(), json!(write_named(out, n, "f32")?));
-                }
-                if let (Some(pre), true) = (&drawn.pre_tone, app.relation_reads.contains("exposed"))
-                {
-                    // The planted output pass exposes after the tone map, so what the tone map
-                    // reads isn't exposed.
-                    let scale = if app.planted == Some(Planted::ExposureAfterToneMap) {
-                        1.0
-                    } else {
-                        scene.exposure.unwrap_or(args.look.exposure)
-                    };
-                    let exposed: Vec<u8> = pre
-                        .as_chunks::<16>()
-                        .0
-                        .iter()
-                        .flat_map(|p| {
-                            let c =
-                                |k: usize| f32::from_le_bytes([p[k], p[k + 1], p[k + 2], p[k + 3]]);
-                            let e = |k: usize| ((f64::from(c(k)) * scale) as f32).to_le_bytes();
-                            [e(0), e(4), e(8), c(12).to_le_bytes()].concat()
-                        })
-                        .collect();
-                    frame.insert("exposed".into(), json!(write_named(out, &exposed, "f32")?));
-                }
-                // #468: each pixel's signed circle of confusion, f32.
-                if let (Some(c), true) = (&drawn.coc, args.targets.contains("coc")) {
-                    frame.insert("coc".into(), json!(write_named(out, c, "f32")?));
-                }
-                if let Some((material, f)) = &shore {
-                    let bytes: Vec<u8> = f.cells.iter().flat_map(|c| c.to_le_bytes()).collect();
-                    frame.insert(
-                        "shore".into(),
-                        json!({
-                            "material": material,
-                            "key": f.key,
-                            "field": write_named(out, &bytes, "bin")?,
-                            "bake_ms": f.bake_ms,
-                        }),
-                    );
-                }
-                if !args.read.is_empty() {
-                    // Each operator output as it stood when this frame drew (#483), and each point
-                    // set's points in its item's space (#503).
-                    let (keys, fx2, dir) = (args.read.clone(), fx.clone(), out.to_string());
-                    let models = crate::video::models(&evaluated);
-                    let read = app.worker.call(move |state| -> Result<Value, Value> {
-                        let device = state.gpu.device();
-                        let fx = lock(&fx2);
-                        let ops = fx.docops.as_ref().ok_or_else(|| {
-                            refused(
-                                "bad_input",
-                                "read names an operator output, and the document runs no operator",
-                            )
-                        });
-                        let points =
-                            |k: &str| crate::video::read_points(&device, &fx, k, &models, &dir);
-                        let mut m = serde_json::Map::new();
-                        for k in &keys {
-                            if let Some(r) = points(k) {
-                                m.insert(k.clone(), r?);
-                                continue;
-                            }
-                            let ops = ops.as_ref().map_err(Value::clone)?;
-                            let mut r = crate::opframe::read_one(
-                                &device,
-                                ops,
-                                &Default::default(),
-                                k,
-                                &dir,
-                            )?;
-                            // The class its writer computes, which a golden compares it under (#252).
-                            let item = k.split_once('.').map_or(k.as_str(), |(i, _)| i);
-                            if let (Some(o), Some(c)) = (r.as_object_mut(), ops.class_of(item)) {
-                                o.insert("class".into(), json!(c.name()));
-                            }
-                            m.insert(k.clone(), r);
-                        }
-                        Ok(Value::Object(m))
-                    })?;
-                    frame.insert("read".into(), read);
-                }
-                // #508: what a check reads back from the frame, each as raw rows named by their
-                // SHA-256: the color where the document's operators read the chain (before any
-                // display-only pass), the object IDs and the view-axis depth.
-                if args.targets.contains("checks") && !noop {
-                    let fx2 = fx.clone();
-                    let color = app
-                        .worker
-                        .call(move |state| lock(&fx2).read_checks(&state.gpu.device()));
-                    let mut checks = Map::new();
-                    let parts = [
-                        ("color", color.as_deref()),
-                        ("ids", drawn.targets.as_ref().map(|(_, ids)| ids.as_slice())),
-                        ("depth", drawn.view_depth.as_deref()),
-                    ];
-                    for (name, bytes) in parts {
-                        if let Some(b) = bytes {
-                            checks.insert(name.into(), json!(write_named(out, b, "bin")?));
-                        }
-                    }
-                    frame.insert("checks".into(), Value::Object(checks));
-                }
-                if let Some((linear, ids)) = &drawn.targets {
-                    if args.targets.contains("linear") {
-                        frame.insert("linear".into(), json!(write_named(out, linear, "f32")?));
-                    }
-                    if args.targets.contains("ids") {
-                        frame.insert(
-                            "ids".into(),
-                            json!(write_named(out, &png(ids, size)?, "png")?),
-                        );
-                        frame.insert("picks".into(), picks_json(&drawn.picks));
-                    }
-                }
-                if let Some(name) = window_name {
-                    frame.insert("window".into(), json!(name));
-                }
+                captured(
+                    &mut frame,
+                    app,
+                    out,
+                    size,
+                    &args,
+                    &drawn,
+                    &scene,
+                    &scene_bytes,
+                    &dirt_file,
+                    &rings,
+                    &shore,
+                    &fx,
+                    &evaluated,
+                    noop,
+                    window_name,
+                )?;
             }
             if let Some((labels, pages)) = label_report {
                 frame.insert("labels".into(), labels);
@@ -2034,6 +1884,10 @@ fn run_view(
                 frame.insert("compiled".into(), json!(compiled));
                 frame.insert("segments".into(), Value::Object(edge_segments));
                 frame.insert("edge_sets_derived".into(), Value::Object(edge_sets_derived));
+                let [spans, dashes, computed] = edge_spans;
+                frame.insert("spans".into(), Value::Object(spans));
+                frame.insert("dashes".into(), Value::Object(dashes));
+                frame.insert("edge_spans_computed".into(), Value::Object(computed));
             }
             if args.lod {
                 frame.insert("lod".into(), crate::lod::rows(&choices));
@@ -2074,72 +1928,7 @@ fn run_view(
             if args.light_cut {
                 frame.insert("light_cut".into(), crate::lod::cut_json(&evaluated, &cut));
             }
-            if args.clusters && capture {
-                let rows: Vec<Value> = session3::clusters(app)
-                    .into_iter()
-                    .map(|(cluster, lights)| {
-                        let lights: Vec<Value> = lights
-                            .into_iter()
-                            .map(|(light, weight)| json!({"light": light, "weight": weight}))
-                            .collect();
-                        json!({"cluster": cluster, "lights": lights})
-                    })
-                    .collect();
-                frame.insert("clusters".into(), json!(rows));
-            }
-            if args.masks && capture && !noop {
-                let mut rows = Vec::new();
-                for c in choices.iter().filter(|c| c.bands.len() == 2) {
-                    let (Some(level), Some(&(_, key))) =
-                        (c.blend, drawn.picks.iter().find(|(id, _)| *id == c.item))
-                    else {
-                        continue;
-                    };
-                    for (pass, size, bytes) in session3::masks(app, key, level) {
-                        let file = write_named(out, &bytes, "u8")?;
-                        rows.push(
-                            json!({"item": c.item, "pass": pass, "size": size, "file": file}),
-                        );
-                    }
-                }
-                frame.insert("masks".into(), json!(rows));
-            }
-            if args.cascades {
-                // Each shadow map the key sun draws: its key, which holds the planes that cut its
-                // casters, and its texel in m (#424).
-                let maps: Vec<Value> = drawn
-                    .counts
-                    .shadow_maps
-                    .iter()
-                    .enumerate()
-                    .map(|(i, (key, texel, clip))| {
-                        let drawn = drawn.counts.cascades_drawn.contains(&(i as u32));
-                        json!({"key": format!("{key:016x}"), "texel_m": texel, "clip": clip, "drawn": drawn})
-                    })
-                    .collect();
-                frame.insert(
-                    "cascades".into(),
-                    json!({"splits": drawn.counts.cascade_splits, "maps": maps}),
-                );
-            }
-            if args.shadows {
-                let counts = &drawn.counts;
-                let mut passes = counts.cascades_drawn.len() as u32;
-                let maps: Vec<Value> = counts
-                    .local_maps
-                    .iter()
-                    .map(|m| {
-                        passes += if m.drawn { m.faces } else { 0 };
-                        let kind = match m.faces {
-                            1 => "spot",
-                            5 => "area",
-                            _ => "point",
-                        };
-                        json!({"light": m.light, "kind": kind, "key": format!("{:016x}", m.key), "drawn": m.drawn})
-                    })
-                    .collect();
-                frame.insert("shadows".into(), json!({"passes": passes, "maps": maps}));
-            }
+            light_reports(&mut frame, app, out, &args, &drawn, &choices, capture, noop)?;
             if let Some((gpu_ms, passes)) = &drawn.timing {
                 frame.insert("gpu_ms".into(), json!(gpu_ms));
                 frame.insert("cpu_ms".into(), json!(cpu_ms));

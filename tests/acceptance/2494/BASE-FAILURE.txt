@@ -1,0 +1,67 @@
+#2494's suite at the base, 9550dc0f0 ("Merge pull request #2831 …"), on this Mac (Mac17,10), November 18, 2026.
+
+Not run: this job builds no Rust and runs no suite that builds, on a machine other sessions share (its brief).
+What each test meets at the base, read from the base's code. Every step before the failing assertion exists at the
+base, so each test fails there at an assertion of its own, not at a missing build or mode.
+
+  $ cargo build --locked --release -p deep-app --bin deep-app --features canvas-fixture   # builds at the base (#1485's feature)
+  $ cargo build --locked --bin deep-show                                                  # builds at the base
+  $ deep hub run, deep show --doc … --document fixtures/sliding-box.json --json           # both at the base (#806)
+
+What the steps before the assertion give at the base:
+
+  - deep show: the hub's canvas core checks the document and makes it revision 1. The decision's own run of a camera
+    and one mark.box@1 through `deep-show canvas` came back presented. The fixture adds a sky@1, an unlit material@1
+    and a channel on the box's at/pos/0, in the shapes #1401's revision test stores and patches through the same
+    core. Whether this exact document is presented was not run; if it is refused, both files fail at
+    "deep show of the fixture's 3D document says presented", with the reply, and the fixture is this job's to redraft.
+  - canvas.drawn, as the app: {"presented": [{doc, rev: 1, rect: [0, 0, 480, 360], layers: [{layer, owner, band,
+    outline: false, name: null, doc, items, picture: null}], session: null}]}. `presented_revision`
+    (crates/deep-show/src/hub.rs) makes a layer's picture with the 2D raster's Renderer::prepare alone and keeps null
+    where it fails; the decision's run got "picture": null. The hub's `recordRevision` hands over doc, rev, rect,
+    layers and session, and no hash.
+  - deep-app --canvas (crates/deep-app/src/canvas_fixture.rs): Scenario::read takes evidence, window, decode_ms,
+    run_ms and revisions and ignores `capture_ms` and `out`. The panel takes the revision (`present`: no picture is
+    missing, so it shows at once) and draws every vsync for run_ms. `CanvasPanel::render` paints a picture where a
+    layer has one, and an outline and name for an agent's layer; this layer is yours and has no picture, so it
+    paints nothing. The report is {"canvas": 1485, "scale", "frames": [{frame, at_ms, cpu_ms, pictures: []}],
+    "handed": [{rev: 1, frame}]}: no `slots`, no `readback_buffers`, no `capture`.
+  - the short run with nothing to show, before each run: the base's own path, frames reported.
+
+  ac2-slot-on-screen.test.ts
+    × AC2 #2494.99fbfc41 … the layer is painted from a GPU-layer slot, the slot's frame shows the document, and the
+      window shows the slot's frame in the layer's place
+        fails at its first assertion on the report: of the window's frames, 0 painted a GPU-layer slot for the 3D
+        layer ("expected 0 to be greater than 0"); the message lists the pictures the panel painted instead: [].
+        This is the failure the criterion names, as the decision corrects it: the base's panel has no GPU-layer
+        view (gpu_view::paint has no caller in show.rs), so nothing it paints comes from a slot, and for a 3D
+        layer it paints no picture either. No frame is captured, so no pixel is compared.
+
+  ac3-no-readback.test.ts
+    × AC3 #2494.b45bba38 while the app's panel plays a 3D document, the app's device makes no read-back buffer and
+      the slot is handed off zero copy
+        fails at "a 3D frame played in the app": no frame painted a slot, so the first such frame is null
+        ("expected null not to be null"). The base's app plays no 3D frame, so there is nothing to count: its
+        read-back per frame is in `deep-show`'s process (draw_offscreen), and none of its pictures reaches the
+        panel for a 3D layer.
+    × AC3 #2494.b45bba38 planted reads_every_frame_back …
+        the base's canvas-fixture build reads DEEP_CANVAS_PLANT only for `decodes_in_place`
+        (canvas_fixture::in_place), so the name selects nothing and the run is the honest base's: the same
+        failure at "a 3D frame played in the app".
+
+Off macOS every test skips INCONCLUSIVE before any of this. Where the window can't draw (no display, a locked
+screen), every test skips INCONCLUSIVE at the short run.
+
+What was run here:
+
+  $ node node_modules/typescript/bin/tsc -p tests/acceptance/2494/tsconfig.json
+  (no output, exit 0)
+
+  The suite's own logic, once, against a throwaway stand-in for the app that printed reports in the README's shapes
+  (deleted after; no cargo, no hub, no window): the report's parser, the comparison of a slot's frame with a
+  capture, the blank guard, the counts and the INCONCLUSIVE paths. A report in the base's shape failed AC2 and AC3
+  at the assertions named above; an honest one passed; a planted one failed the count naming it; a copy-path one
+  failed on the path; a capture showing another picture, or the box elsewhere, failed the comparison; a blank slot
+  read BLOCKED; a view that never drew a second frame, and an app that couldn't open a window, read INCONCLUSIVE.
+  And `canvas.drawn` as the app against a throwaway socket that spoke the hub's hello. Neither proves anything
+  about the product. The hub, `deep show`, the app's window and both cargo builds were never run by this job.

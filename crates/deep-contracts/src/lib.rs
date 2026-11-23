@@ -60,9 +60,21 @@ fn here(at: &str) -> &str {
 }
 
 pub fn parse(text: &str) -> Result<Value, String> {
+    read(text, false)
+}
+
+/// As `parse`, but a lone surrogate escape such as `"\ud800"` reads as U+FFFD, the replacement character: a
+/// JavaScript JSON writer emits one for a string that holds half a pair, so a hook payload may carry it (#2042).
+pub fn parse_lossy(text: &str) -> Result<Value, String> {
+    read(text, true)
+}
+
+fn read(text: &str, lossy: bool) -> Result<Value, String> {
     let mut parser = Parser {
         bytes: text.as_bytes(),
         at: 0,
+        lossy,
+        replaced: false,
     };
     parser.space();
     let value = parser.value(0)?;
@@ -76,6 +88,10 @@ pub fn parse(text: &str) -> Result<Value, String> {
 struct Parser<'a> {
     bytes: &'a [u8],
     at: usize,
+    /// A lone surrogate escape reads as U+FFFD instead of refusing the text.
+    lossy: bool,
+    /// Set when a lone surrogate was read as U+FFFD.
+    replaced: bool,
 }
 
 impl Parser<'_> {
@@ -212,19 +228,34 @@ impl Parser<'_> {
                         b'u' => {
                             let high = self.hex4()?;
                             let code = if (0xD800..0xDC00).contains(&high) {
-                                if !self.bytes[self.at..].starts_with(b"\\u") {
-                                    return Err(self.error("a lone surrogate"));
+                                let mark = self.at;
+                                let low = if self.bytes[self.at..].starts_with(b"\\u") {
+                                    self.at += 2;
+                                    Some(self.hex4()?).filter(|low| (0xDC00..0xE000).contains(low))
+                                } else {
+                                    None
+                                };
+                                match low {
+                                    Some(low) => 0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00),
+                                    // The escape after a lone high half is read on its own, as JavaScript reads it.
+                                    None if self.lossy => {
+                                        self.at = mark;
+                                        self.replaced = true;
+                                        0xFFFD
+                                    }
+                                    None => return Err(self.error("a lone surrogate")),
                                 }
-                                self.at += 2;
-                                let low = self.hex4()?;
-                                if !(0xDC00..0xE000).contains(&low) {
-                                    return Err(self.error("a lone surrogate"));
-                                }
-                                0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00)
                             } else {
                                 high
                             };
-                            char::from_u32(code).ok_or_else(|| self.error("a lone surrogate"))?
+                            match char::from_u32(code) {
+                                Some(c) => c,
+                                None if self.lossy => {
+                                    self.replaced = true;
+                                    '\u{FFFD}'
+                                }
+                                None => return Err(self.error("a lone surrogate")),
+                            }
                         }
                         _ => return Err(self.error("an unknown escape")),
                     };
@@ -274,7 +305,12 @@ impl Parser<'_> {
         }
         loop {
             self.space();
+            self.replaced = false;
             let key = self.string()?;
+            // Two keys apart by their lone halves would read as one, and keep one value of the two: refused.
+            if self.replaced {
+                return Err(self.error("a lone surrogate in a key"));
+            }
             self.space();
             self.expect(b':')?;
             self.space();

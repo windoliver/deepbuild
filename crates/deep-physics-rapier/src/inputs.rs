@@ -145,6 +145,9 @@ impl Rapier {
             };
             // #182: a character body's move, jump, launch, place and crouch.
             if self.character_input(&i.kind, &i.target, d) {
+                if i.kind == "place" {
+                    self.placed.push(i.target.clone());
+                }
                 continue;
             }
             // #2310: a body of an articulation moves by its joints' coordinates alone, so an
@@ -300,6 +303,7 @@ impl Rapier {
                     if self.vehicles.plant != crate::VehiclePlant::PlaceKeepsAngular {
                         rb.set_angvel(Vector::ZERO, true);
                     }
+                    self.placed.push(i.target.clone());
                 }
                 other => {
                     let what = format!("the input {other} isn't run by this backend interface");

@@ -1,5 +1,9 @@
 use super::*;
 use crate::states::{keys_unchanged, taken_for_creates};
+pub use paths::paths_of;
+use paths::{merge_paths, written_paths};
+
+mod paths;
 
 impl Hub<'_> {
     /// Opens every shared document: from the state folder's record when it has one (a restart),
@@ -421,6 +425,12 @@ impl Hub<'_> {
                 shared.owners = owners.clone();
             }
         };
+        // #280: a writer's patch to a net.feel's profile, items or bounds is refused (crate::net).
+        let theirs = writer.kind != WriterKind::You && undoing.is_none();
+        if let Some(issue) = crate::net::feel_patched(&shared.doc, &patch).filter(|_| theirs) {
+            take_back(shared, &Patched::default());
+            return Outcome::Refused(vec![issue]);
+        }
         // Planted (#1415): a create of an ID the document holds replaces the item that holds it.
         let overwritten = match self.scenario.planted == Some(Planted::CreateOverwrites) {
             true if undoing.is_none() => taken_for_creates(&mut shared.doc, &patch),
@@ -878,6 +888,10 @@ impl Hub<'_> {
                 what,
             ));
         }
+        // #280: and so is a writer's revision that changes one.
+        if writer.kind != WriterKind::You {
+            issues.extend(crate::net::feel_shown(was_doc, &show.document));
+        }
         // The writer's quota: the bytes its message carries, the documents it writes and the
         // items its layer would hold.
         let quota = session
@@ -1292,12 +1306,7 @@ impl Hub<'_> {
                 Some(at) if !queued || at <= free_at => {
                     let i = order[next];
                     next += 1;
-                    // A plug-in's panel scripts run up to the call (#401), terminals take the
-                    // output that arrived by then (#402), and captures the frames (#105).
-                    self.advance_ring(at);
-                    self.advance_terms(at);
-                    self.advance_capture(at);
-                    self.now = at;
+                    self.arrive(at);
                     let Call::Patch(p) = &calls[i] else {
                         replies[i] = self.call(&calls[i]);
                         continue;
@@ -1404,53 +1413,6 @@ fn planted_fix(planted: Option<Planted>, issues: &mut [Value]) {
     }
 }
 
-/// The `(ID, path)` pairs a patch's ops write, the path below the item; `None` when an op writes
-/// a whole item (a create, delete, move or reorder).
-fn written_paths(patch: &Value) -> Option<Paths> {
-    let mut out = Paths::new();
-    for op in patch["ops"].as_array()? {
-        let (Some("set" | "unset"), Some(id), Some(path)) =
-            (op["op"].as_str(), op["id"].as_str(), op["path"].as_str())
-        else {
-            return None;
-        };
-        let rest = path.strip_prefix(&format!("items/{id}/"))?;
-        out.insert((id.to_string(), rest.to_string()));
-    }
-    Some(out)
-}
-
-/// The planted path-granular rebase's merge: each path the patch wrote on its base, set to what
-/// it holds there in the current document.
-fn merge_paths(doc: &mut Value, on_base: &Value, patch: &Value) -> Patched {
-    let mut done = Patched::default();
-    for (id, path) in written_paths(patch).unwrap_or_default() {
-        let before = doc["items"].get(&id).cloned();
-        done.before.entry(id.clone()).or_insert(before);
-        let parts: Vec<&str> = path.split('/').collect();
-        let mut from = &on_base["items"][&id];
-        for p in &parts {
-            from = &from[*p];
-        }
-        let value = from.clone();
-        let Some((last, head)) = parts.split_last() else {
-            continue;
-        };
-        let mut at = &mut doc["items"][&id];
-        for p in head {
-            at = &mut at[*p];
-        }
-        match (value.is_null(), at.as_object_mut()) {
-            (true, Some(map)) => {
-                map.shift_remove(*last);
-            }
-            (false, _) => at[*last] = value,
-            _ => {}
-        }
-    }
-    done
-}
-
 /// A patch's coalesce key.
 fn coalesce_key(call: &PatchCall) -> Option<&str> {
     match &call.body {
@@ -1488,40 +1450,6 @@ impl Hub<'_> {
             "current": null,
         })
     }
-}
-
-/// The paths a revision wrote, as `(ID, path)`: `""` for an item it created or deleted, else
-/// each field of the item it changed, and each member of `params` and `at` (Patch: an undo is
-/// refused if another writer has touched those paths since).
-pub fn paths_of(before: &BTreeMap<String, Option<Value>>, doc: &Value) -> Paths {
-    let mut out = Paths::new();
-    for (id, was) in before {
-        match (was, doc["items"].get(id)) {
-            (Some(Value::Object(a)), Some(Value::Object(b))) => {
-                let keys: BTreeSet<&String> = a.keys().chain(b.keys()).collect();
-                for k in keys.into_iter().filter(|k| a.get(*k) != b.get(*k)) {
-                    match (a.get(k), b.get(k)) {
-                        (Some(Value::Object(x)), Some(Value::Object(y)))
-                            if k == "params" || k == "at" =>
-                        {
-                            let members: BTreeSet<&String> = x.keys().chain(y.keys()).collect();
-                            for m in members.into_iter().filter(|m| x.get(*m) != y.get(*m)) {
-                                out.insert((id.clone(), format!("{k}/{m}")));
-                            }
-                        }
-                        _ => {
-                            out.insert((id.clone(), k.clone()));
-                        }
-                    }
-                }
-            }
-            (a, b) if a.as_ref() != b => {
-                out.insert((id.clone(), String::new()));
-            }
-            _ => {}
-        }
-    }
-    out
 }
 
 /// #1801: the patch less its `delete` ops that name no item but an entry of another map keyed

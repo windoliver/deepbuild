@@ -1,0 +1,96 @@
+#1250 at the base, 7a256fd4b9651f5ed1f5255d3520603320803eb4 ("Merge pull request #2947"), each file run once on
+2026-11-21 from 07:48Z to 07:50Z, in the blind job's worktree: a checkout of the base with only this folder and the
+scripts/lanes.mjs line added (uncommitted). The machine: a Mac17,10 (Apple M5 Max) with 18 cores, Node v24.22.2,
+vitest 5.0.5, the 1-minute load 100 to 113 when each file began (shared; only AC7 reads the machine's state). The hub
+wasn't running, so `scripts/lease` ran each command with no lease and said so once a file; those lines are left out.
+
+Every test fails at the base: 9 of 9 in the 7 files. None passes, so none is a guard. AC1 to AC6 fail on an assertion
+these files name (an AssertionError with the file's own message); AC7 reads INCONCLUSIVE (the thermal state was fair).
+None is a TypeError or a timeout.
+
+The commands are the README's (Run them), one file at a time, in this order; the build hooks found the base's `full`
+build made beforehand by `cargo build --locked --bin deep-show --no-default-features --features full` (16m43s on the
+loaded machine):
+
+  export PATH="$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH"
+  node node_modules/typescript/bin/tsc -p tests/acceptance/1250/tsconfig.json          # exit 0
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 sh scripts/lease \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/1250 <file>.test.ts --testTimeout=600000 --silent=false
+
+Why they fail, by file. Every scenario but AC7's carries `clips` (and AC6's an `action` input; AC2's and AC4's second
+a planted name), which the base's `deep-show run` doesn't know, so it answers the whole scenario
+`{"ok": false, "code": "bad_input"}`: the surface isn't there, and nothing was built to prove more.
+
+##### ac1-gif (07:48:39Z to 07:48:57Z, exit 1)
+     × AC1 #1250.a789fb24 after 40 s of the scripted play, ⌘⇧C writes a 512 × 384 GIF of 300 frames over [30 s, 40 s) whose colour table is the palette in order, whose frames halved are the live index frames, with delays 3, 3, 4 summing to 1,000, looping forever 5083ms
+     × AC1 #1250.a789fb24 a planted clip that re-quantizes through a median cut fails, naming the frame and the pixel, on a frame of 16 colours with the dithered gradient 1604ms
+AssertionError: the 40 s play and its clip: deep-show run answers the scenario ok; got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+AssertionError: the 40 s play and its clip (planted clip_requantizes_median_cut): deep-show run answers the scenario ok; got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+      Tests  2 failed (2)
+
+##### ac2-delays (07:48:57Z to 07:49:10Z, exit 1)
+     × AC2 #1250.fb20b3cc the planted clip_gif_every_frame: 600 frames with delays of 1 and 2, and the GIF check fails naming the first frame whose delay is under 2 3793ms
+AssertionError: the 12 s play and its clip (planted clip_gif_every_frame): deep-show run answers the scenario ok; got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+      Tests  1 failed (1)
+
+##### ac3-mp4 (07:49:10Z to 07:49:21Z, exit 1)
+     × AC3 #1250.ba96e86c the tone piece's clip of [3 s, 13 s) is an MP4 whose 600 frames each read at least 40 dB PSNR-Y against the range export's raw frames from the same track, with the piece's sound over that range 4019ms
+AssertionError: the 13 s play and its clip: deep-show run answers the scenario ok; got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+      Tests  1 failed (1)
+
+##### ac4-short-and-desync (07:49:22Z to 07:49:33Z, exit 1)
+     × AC4 #1250.60cb9b00 Save clip 5 s into the play writes [0, 5 s): 150 frames whose delays sum to 500 hundredths, the first the play's first frame 3295ms
+     × AC4 #1250.60cb9b00 under the planted piece that reads the wall clock, Save clip at 20 s writes nothing, and its card names clip.desync, the first step that differs (at or before step 600), module logic and field game.x 867ms
+AssertionError: the 5 s play and its clip: deep-show run answers the scenario ok; got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+AssertionError: the 20 s play under the wall-clock piece (planted logic_reads_wall_clock): deep-show run answers the scenario ok; got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+      Tests  2 failed (2)
+
+##### ac5-sidebar (07:49:33Z to 07:49:44Z, exit 1)
+     × AC5 #1250.d8e39d5f with a bright sidebar beside the game's panel, the clip is 512 × 384 and every pixel of every frame is a palette colour 3192ms
+AssertionError: the game beside a bright sidebar on panel side: deep-show run answers the scenario ok; got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+      Tests  1 failed (1)
+
+##### ac6-still (07:49:44Z to 07:49:55Z, exit 1)
+     × AC6 #1250.5ed3407b half a frame after 7 s, Save still writes a 512 × 384 indexed PNG whose palette is the look's in order and whose pixels are the frame presented at 7 s 3320ms
+AssertionError: the 7 s play and its still: deep-show run answers the scenario ok; got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+      Tests  1 failed (1)
+
+##### ac7-budgets (07:49:55Z to 07:50:03Z, exit 1)
+     × AC7 #1250.7b1c7063 on a reference Mac, five runs: the 10 s clip written within 3 s of the key, the play's p95 frame time within 1000/60 ms meanwhile, and the 60-minute track kept in under 8 MiB 1286ms
+AssertionError: INCONCLUSIVE: the budgets count only on a reference Mac in a fit state, so the runs aren't made here: the thermal state is fair, not nominal; this is not a pass
+      Tests  1 failed (1)
+
+AC7 made no run here: this Mac is a reference Mac, but its thermal state was fair. In a fit state its first run (the
+warm-up) would meet the same `bad_input` as the others, since its scenario carries `clips`.
+
+----------------------------------------------------------------------------------------------------------------------
+Before the base runs, at the same base, three throwaway runs (not committed), each once:
+
+1. The fixtures through calls the base has (a scenario of `deep show`, `input`, `track`, `presented`, `logic`, `eval`):
+   the indexed game, the tone piece and the sidebar each `presented` with no issue; the `control` inputs appended
+   `{"t":352800000,"control":"move","value":2,"writer":"you","serial":1}` and the like; ⌘⇧C committed a gesture and
+   appended nothing; `logic` stepped `game` with `game.x` 202, 204, 206, 208 … and `game.y` 162, 164, 166 … from step
+   0; `presented` at 2 s listed one frame (vsync 11,760,000), so the base's panel doesn't present each step of the
+   game. (A first version of the game's look gave the palette's first colour the role `ground`; the base's look guard
+   refused that look, since the ink loses its contrast on so dark a ground, and the game came back `role_unresolved`
+   for `g1`. So the palette's roles are now `p0` … `p15`, and the look keeps its own ground.)
+
+2. The suite's readers against FFmpeg's own decode (ffmpeg on PATH via /opt/homebrew/bin):
+   moving 66 50 40 loop 0 delays 3,4,3,3,4,3 rects 0x0x66x50 65x49x1x1 0x4x12x10 65x49x1x1 transp ,255,255,255 local 0 disp 1,1,1,1
+   diff 66 50 40 loop 0 delays 3,4,3,3,4,3 rects 0x0x66x50 0x0x66x50 0x0x66x50 0x0x66x50 transp ,15,15,15 local 39 disp 1,1,1,1
+   nodiff 66 50 40 loop 0 delays 3,4,3,3,4,3 rects 0x0x66x50 0x0x66x50 0x0x66x50 0x0x66x50 transp ,15,15,15 local 39 disp 1,1,1,1
+   16 67 45 type 3 depth 8 plte 256
+   4 67 45 type 3 depth 8 plte 256
+   2 67 45 type 3 depth 8 plte 256
+   200 67 45 type 3 depth 8 plte 256
+   Every composited GIF frame (40 of each, with sub-rectangles, transparency and local tables) and every indexed PNG
+   pixel equalled FFmpeg's rgb24 decode: 2 tests passed.
+
+3. `checkGif` on GIFs FFmpeg wrote from 30 index frames made like the game's (the gradient, its 4 × 4 dithered steps and
+   a moving hero; all 16 colours in every frame), upscaled by 2:
+   exact (paletteuse onto the 16 colours, no dither): no pixel named (only FFmpeg's own table layout and its 3, 4, 3
+     delays, which aren't the clip writer's);
+   cut (FFmpeg's median-cut palettegen to 16 colours, then paletteuse): "frame 0 pixel (280, 0): decoded #9ede93, where
+     the live frame shows index 9 (#86d79a) at target pixel (140, 0)";
+   sixty (the same frames at 60 a second): delays 2,1,2,2,1,2,2,1 and "frame 1: delay 1 hundredths, under 2 (the first
+     delay under 2)".

@@ -4,6 +4,9 @@
 // with origin/main, so a file new over 1,500 lines (no ceiling at the base) fails. Out of scope: generated files (a
 // `@generated`, "auto-generated" or "do not edit" marker in their first five lines) and vendored code (a `vendor/`
 // folder). Lines are lines of text, a last line without a newline counted, as the work tree holds them.
+// A blind suite under tests/acceptance/ is never edited once it lands (AGENTS.md, Proof; #3139). So a planted twin, a
+// file under a twins/ folder there, is out: it copies our own code at a base. A suite's own file is judged in the change
+// that adds it; once the merge base holds it, a file with no ceiling is out.
 // One `FAIL size: <path>: <lines> lines, …` line per finding, or one PASS line; exit 1 on a finding.
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -14,6 +17,8 @@ const LIMIT = 1500;
 const CEILINGS = 'scripts/size-ceilings.json';
 const SOURCE = /\.(?:rs|ts|tsx|mts|cts|js|jsx|mjs|cjs|swift|py|wgsl|c|h|cc|cpp|m|mm|lean|sh)$/;
 const GENERATED = /@generated|auto-generated|do not edit/i;
+const BLIND = 'tests/acceptance/';
+const TWIN = /^tests\/acceptance\/(?:[^/]+\/)*twins\//;
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 });
@@ -32,8 +37,11 @@ try {
 }
 // The base's ceilings, or null when there is no origin/main or the base predates the ratchet (its first ceilings).
 let base = null;
+// The blind suites' files the merge base holds.
+let landed = new Set();
 try {
   const at = git('merge-base', 'HEAD', 'origin/main').trim();
+  landed = new Set(git('ls-tree', '-r', '-z', '--name-only', at, '--', BLIND).split('\0'));
   if (git('ls-tree', '--name-only', at, '--', CEILINGS).trim()) base = parse(git('show', `${at}:${CEILINGS}`), `${CEILINGS} at the merge base`);
 } catch {}
 
@@ -54,7 +62,7 @@ const generated = (bytes) => {
 
 const findings = [];
 const fail = (path, why, fix) => findings.push(`FAIL size: ${path}: ${why}\n  Fix: ${fix}`);
-const sources = new Set(git('ls-files', '-z', '--cached', '--others', '--exclude-standard').split('\0').filter((path) => SOURCE.test(path) && !/(?:^|\/)vendor\//.test(path)));
+const sources = new Set(git('ls-files', '-z', '--cached', '--others', '--exclude-standard').split('\0').filter((path) => SOURCE.test(path) && !/(?:^|\/)vendor\//.test(path) && !TWIN.test(path)));
 let over = 0;
 for (const path of sources) {
   let bytes;
@@ -66,7 +74,7 @@ for (const path of sources) {
   }
   const ceiling = ceilings[path];
   // Fewer bytes than the limit can't hold more lines than it.
-  if (ceiling === undefined && bytes.length <= LIMIT) continue;
+  if (ceiling === undefined && (bytes.length <= LIMIT || landed.has(path))) continue;
   if (generated(bytes)) {
     if (ceiling !== undefined) fail(path, `generated, with a ceiling of ${ceiling}`, `Remove its entry from ${CEILINGS}: generated files are out of scope.`);
     continue;

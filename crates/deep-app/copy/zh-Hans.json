@@ -231,6 +231,10 @@
     "text": "未回答即关闭",
     "source": "424e3d339750cb9e5690c5acbeba9d76dd419826cdb5346ff00984bc99ddb9ba"
   },
+  "codes.cant_undo": {
+    "text": "无法撤销",
+    "source": "1446e0d7271f73627d7d1e170f08480807f7fe633f0f4b8963b60f1dfee2cf8d"
+  },
   "codes.not_a_pass": {
     "text": "不是 PASS：{0}",
     "source": "14d54f7aa74880747ab3ff3de152269ebf7b945dbc9015fce21e77d849f7be9e"
@@ -1023,6 +1027,10 @@
     "text": "以往的决定：{0} · {1}",
     "source": "8449dd9bb30798937c9d13b904ee32b510065a0bd8b37744d072d289626220c6"
   },
+  "question.ran_for_good": {
+    "text": "已运行 · 无法撤销",
+    "source": "349e97289e370be38ae56e43d57fd459861e87e83f3005cb747625834151e17a"
+  },
   "question.read_to_the_end": {
     "text": "请先滚动到底部",
     "source": "a177db26f3506eb00d3355255b82a10e6decc57e6cbcf55932e4a3ad32e6bbba"
@@ -1058,6 +1066,12 @@
   "question.sign_in": {
     "text": "登录",
     "source": "bfd402b2f6f3812529b55596136d3a11c51616317e3b1cd999928e2d4eae7d3f"
+  },
+  "question.starts_in": {
+    "text": {
+      "other": "{0} 秒后开始"
+    },
+    "source": "1abad02b41c083435ebdff62c4ea05a3a09106393241cab66ee0947de3bfe74f"
   },
   "question.step_not_undoable": {
     "text": "{0} · 不可撤销",
@@ -1462,6 +1476,10 @@
     "text": "所有仓库",
     "source": "d32667b9181b75951bc9a3319d781c90073c8bdf5b0ae94c50bfab3bf0b51be7"
   },
+  "views.feature_absent": {
+    "text": "feature_absent：{0}",
+    "source": "0e0d3b45b497b3add6cdf57ffa5a4e6b22900507132da463495f51ca88db7456"
+  },
   "views.hours": {
     "text": "{0} 小时",
     "source": "477a1b5f11304d3e4904bcc5f70ea9f89a78fd3a25058562e0278fa4675c570f"
@@ -1485,6 +1503,10 @@
   "views.mcp_servers": {
     "text": "MCP 服务器",
     "source": "22a7559f09bf8f82c510280f934bf50db4c45cc611fd4dd47d7cbf7c7d4f5b82"
+  },
+  "views.module_missing": {
+    "text": "module_missing：{0}",
+    "source": "e5478626ebfeeb1233dce4925f9f11bc15f3110ae4afcf098fe80697f9b4b2f6"
   },
   "views.needs_you": {
     "text": "待你处理",

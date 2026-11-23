@@ -1,7 +1,7 @@
-//! #194: what a document's logic items fire into its worlds, as far as #1834's `fires` is built
-//! (canvas primitives: Check input: logic kinds, As built (#194)). At check each fired input must
-//! be one the world declares with `on: {logic: <item>}`, and each such input one the item's `fires`
-//! lists; an item that both fires into a world and reads it is refused until #1834. The piece the
+//! #194, #1834: what a document's logic items fire into its worlds (canvas primitives: Logic
+//! `logic@1`, its fire region). At check each fired input must be one the world declares with
+//! `on: {logic: <item>}`, and each such input one the item's `fires` lists; an item that both
+//! fires into a world and reads it is refused until #164 runs the two in turn. The piece the
 //! logic module checks takes each input's number fields, in its kind's order, so the program's slot
 //! holds them after its count. The fires are baked before the worlds that take them, and kept in
 //! the form as `logic_fires`, which the shared derivation (derive.rs) reads.
@@ -82,7 +82,7 @@ pub fn expand(form: &Value, piece: &mut Value) -> Result<(), Box<Issue>> {
                 .any(|r| r.starts_with(&format!("{w}.")))
         }) {
             let what =
-                format!("{item} both fires into world {world} and reads it, which waits on #1834");
+                format!("{item} both fires into world {world} and reads it, which waits on #164");
             return Err(Box::new(refused(
                 json!({"ok": false, "code": "logic_refused", "item": item,
                 "refusals": [{"rule": "fires_and_reads", "what": what, "field": "fires", "world": world}]}),
@@ -116,9 +116,14 @@ pub fn expand(form: &Value, piece: &mut Value) -> Result<(), Box<Issue>> {
     Ok(())
 }
 
-/// `form`'s logic fires, baked from `piece` on `track` over the transport's span, kept in the
-/// form as `logic_fires`: `[{item, step, t, world, input, data}]`, `t` in flicks.
-pub fn inline(form: &mut Value, piece: Piece, track: &[Value]) -> Result<(), Box<Issue>> {
+/// `form`'s logic fires, baked from `piece` on `track` over the transport's span with `planted`'s
+/// twins (#1834: `fire_one_step_late`), kept in the form as `logic_fires`: `[{item, step, t, world, input, data}]`, `t` in flicks.
+pub fn inline(
+    form: &mut Value,
+    piece: Piece,
+    track: &[Value],
+    planted: deep_logic::Planted,
+) -> Result<(), Box<Issue>> {
     let entries: Vec<Entry> = track
         .iter()
         .filter(|e| e.get("present").is_none())
@@ -139,7 +144,7 @@ pub fn inline(form: &mut Value, piece: Piece, track: &[Value]) -> Result<(), Box
         piece.clone(),
         track_of(&entries),
         false,
-        Default::default(),
+        planted,
         &mut rec,
         None,
     )

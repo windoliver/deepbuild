@@ -30,6 +30,41 @@ fn only(doc: &Value, keep: impl Fn(&str) -> bool) -> Value {
     out
 }
 
+/// #298: `doc` with the view values its drivers read at t bound on it for a frame of `size`
+/// (Overlay: clamped to the edge), as `view3d` binds them, so the 3D frame and the 2D raster of
+/// an overlay's own items read one `edge` and `edge_angle`; none where no driver reads one.
+fn edged(doc: &Value, t: i64, size: [u16; 2]) -> Result<Option<Value>, Unfit> {
+    use deep_canvas_scene3d::scene::{bound, view_values, Refused};
+    let unfit = |r: Refused| Unfit {
+        code: r.code,
+        path: r.path,
+    };
+    let reads = |d: &Value| {
+        let vars = d.get("vars").and_then(Value::as_object);
+        let mut names = vars.into_iter().flatten().filter_map(|(_, v)| v.as_str());
+        names.any(|v| v.ends_with(".edge") || v.ends_with(".edge_angle"))
+    };
+    let drivers = doc.get("drivers").and_then(Value::as_object);
+    if !drivers.into_iter().flatten().any(|(_, d)| reads(d)) {
+        return Ok(None);
+    }
+    // The values are the frame's: its size is the one the camera projects onto.
+    let mut sized = doc.clone();
+    sized["size"] = json!(size);
+    let values = view_values(&sized, t, None).map_err(unfit)?;
+    if values.is_empty() {
+        return Ok(None);
+    }
+    let mut out = bound(&sized, t, &values).map_err(unfit)?;
+    if let Some(o) = out.as_object_mut() {
+        match doc.get("size") {
+            Some(own) => o.insert("size".into(), own.clone()),
+            None => o.remove("size"),
+        };
+    }
+    Ok(Some(out))
+}
+
 impl Hub<'_> {
     /// Each picture `scene` draws (an inset's, or a module's mark's, #2450), rastered into its
     /// texels under its key and kept by key between frames.
@@ -109,6 +144,43 @@ impl Hub<'_> {
         Ok((rgba, scene))
     }
 
+    /// #3017: `doc`'s 3D frame at `t` and `size` ([`Hub::painted3d`]) with its visible table,
+    /// read from the object-ID pass that frame drew. Under the planted `visible_table_as_boxes`
+    /// nothing is read; under `visible_picks_before_cutaway` the frame is drawn again without its
+    /// cutaway for its picks.
+    pub(crate) fn shown3d(
+        &mut self,
+        doc: &Value,
+        t: i64,
+        size: [u16; 2],
+    ) -> Result<(Vec<u8>, crate::scene3d::Shown), Unfit> {
+        use crate::scene3d::{Shown, AS_BOXES, BEFORE_CUTAWAY};
+        let edged = edged(doc, t, size)?;
+        let doc = edged.as_ref().unwrap_or(doc);
+        let (rgba, scene) = self.painted3d(doc, t, size)?;
+        let plant = self.scenario.module_planted.clone();
+        let plant = plant.as_deref();
+        if plant == Some(AS_BOXES) {
+            return Ok((rgba, Shown::of_boxes(scene.boxes(), size)));
+        }
+        let unfit = || Unfit {
+            code: "unsupported_platform",
+            path: String::new(),
+        };
+        let targets = if plant == Some(BEFORE_CUTAWAY) {
+            let posed = crate::film::posed(doc, t);
+            let (_, look) = self.evaluate3d(posed.as_ref().unwrap_or(doc), t, size)?;
+            let mut uncut = scene.clone();
+            uncut.set_cutaway(None);
+            let gpu = self.gpu3().ok_or_else(unfit)?;
+            gpu.draw_scene(&uncut, &look, false).ok_or_else(unfit)?.1
+        } else {
+            let gpu = self.gpu3().ok_or_else(unfit)?;
+            gpu.targets(size.map(u32::from), false).ok_or_else(unfit)?
+        };
+        Ok((rgba, targets.shown(scene.boxes(), size, plant)))
+    }
+
     /// `doc`'s frame at `t` and `size` with what #506 sets in and over it (see the module's note).
     /// `drawing`, where given, is the 2D items as the session's operators drew them; else the
     /// document's own 2D items are drawn.
@@ -119,6 +191,8 @@ impl Hub<'_> {
         size: [u16; 2],
         drawing: Option<&crate::frames::Painted>,
     ) -> Result<Vec<u8>, Unfit> {
+        let edged = edged(doc, t, size)?;
+        let doc = edged.as_ref().unwrap_or(doc);
         let (mut rgba, scene) = self.painted3d(doc, t, size)?;
         let shown = crate::shared::drawable(doc);
         let overlays = deep_canvas_scene3d::views::framed(doc);
@@ -209,5 +283,54 @@ impl Hub<'_> {
             Err(u) if u.code == "unsupported_platform" => Ok(None),
             Err(u) => Err(json!({"code": u.code, "path": u.path})),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #298: a tag on a post near the frame's right side, and an arrow in it a driver turns by
+    /// the tag's `edge_angle`. The post's top projects 0.9 of the half width right of the center.
+    fn tagged(vars: Value) -> Value {
+        let item = |kind: &str, order: &str, params: Value| json!({"kind": kind, "order": order, "params": params});
+        let cam = json!({"projection": "perspective", "position": [0, 0, 9.6], "target": [0, 0, 0], "fov": 90, "near": 0.05, "far": 500});
+        let mut post = item("mark.box@1", "a1", json!({"size": [0.6, 2.4, 0.6]}));
+        post["at"] = json!({"pos": [8.64, 1.2, 0]});
+        let mut arrow = item("path@1", "a4", json!({"d": "M -16 -14 L 16 0 L -16 14 Z"}));
+        arrow["parent"] = json!("tag-frame");
+        arrow["at"] = json!({"pos": [24, 24, 0], "rot": [0, 0, 0]});
+        let tag = json!({"frame": "tag-frame", "anchor": {"item": "post", "point": [0, 1.2, 0]}, "offset": [-24, -24], "hide": "clamp"});
+        json!({"size": [320, 180], "camera": "cam", "safe": 48, "transport": {"span": "1s"},
+            "items": {"cam": item("camera@1", "a0", cam), "post": post, "tag-frame": item("frame@1", "a2", json!({"box": [0, 0, 48, 48]})),
+                "tag": item("overlay.frame@1", "a3", tag), "arrow": arrow},
+            "drivers": {"turn": {"target": "items/arrow/at/rot/2", "expr": "a", "vars": vars}}})
+    }
+
+    #[test]
+    fn a_frame_binds_the_edge_values_its_drivers_read_at_the_frames_own_size() {
+        let doc = tagged(json!({"a": "tag.edge_angle"}));
+        let bound = |size| {
+            edged(&doc, 0, size)
+                .expect("it evaluates")
+                .expect("a driver reads it")
+        };
+        // On 1920 x 1080 the top projects to (1824, 300), inside the safe frame: the tag rests on
+        // it, and its arrow turns toward it, atan2(-240, 864) = 344.476 deg.
+        let wide = bound([1920, 1080]);
+        assert_eq!(
+            wide["size"],
+            json!([320, 180]),
+            "the document keeps its own size"
+        );
+        assert_eq!(wide["items"]["tag"]["edge"], json!(0));
+        let turn = wide["items"]["arrow"]["at"]["rot"][2]
+            .as_f64()
+            .expect("the arrow's turn");
+        assert!((turn - 344.4759).abs() < 1e-3, "{turn}");
+        // On 320 x 180 it projects to (304, 50), past the 48 px margin: clamped.
+        assert_eq!(bound([320, 180])["items"]["tag"]["edge"], json!(1));
+        let other = tagged(json!({"a": "time"}));
+        assert_eq!(edged(&other, 0, [1920, 1080]).expect("it evaluates"), None);
     }
 }

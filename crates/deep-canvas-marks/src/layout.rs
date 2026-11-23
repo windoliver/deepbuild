@@ -159,8 +159,7 @@ struct Doc<'a> {
 }
 
 impl<'a> Doc<'a> {
-    fn new(doc: &'a Value) -> Option<Self> {
-        let items = doc.get("items")?.as_object()?;
+    fn new(items: &'a Map<String, Value>, bound_values: Option<&'a Value>) -> Self {
         let mut children: BTreeMap<&str, Vec<(&str, &str)>> = BTreeMap::new();
         for (id, item) in items {
             if let Some(parent) = item.get("parent").and_then(Value::as_str) {
@@ -179,8 +178,7 @@ impl<'a> Doc<'a> {
                 (parent, kids.into_iter().map(|(_, id)| id).collect())
             })
             .collect();
-        let bound = doc
-            .get("bound_values")
+        let bound = bound_values
             .and_then(Value::as_object)
             .into_iter()
             .flat_map(|b| b.values())
@@ -188,12 +186,12 @@ impl<'a> Doc<'a> {
             .filter_map(|t| t.strip_prefix("items/")?.strip_suffix("/params/text"))
             .map(str::to_string)
             .collect();
-        Some(Doc {
+        Doc {
             items,
             children,
             bound,
             empty: Map::new(),
-        })
+        }
     }
 
     fn kind(&self, id: &str) -> &str {
@@ -663,9 +661,19 @@ impl Tree<'_, '_, '_> {
 /// out. A frame whose parent doesn't lay it out is a root at its `at.pos` plus its box's corner,
 /// in its parent's space; it hugs its children unless its box fixes a side.
 pub fn solve(doc: &Value, shaper: &mut Shaper) -> Result<BTreeMap<String, Rect4>, Refusal> {
-    let Some(doc) = Doc::new(doc) else {
+    let Some(items) = doc.get("items").and_then(Value::as_object) else {
         return refuse("bad_input", "");
     };
+    solve_items(items, doc.get("bound_values"), shaper)
+}
+
+/// [`solve`] over a document's `items` and `bound_values` where they are, never copied (#2660).
+pub fn solve_items(
+    items: &Map<String, Value>,
+    bound_values: Option<&Value>,
+    shaper: &mut Shaper,
+) -> Result<BTreeMap<String, Rect4>, Refusal> {
+    let doc = Doc::new(items, bound_values);
     let mut out = BTreeMap::new();
     for (id, item) in doc.items {
         let parent = item.get("parent").and_then(Value::as_str);

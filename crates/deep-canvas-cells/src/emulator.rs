@@ -261,6 +261,8 @@ pub struct Terminal {
     pub links: BTreeMap<u32, String>,
     state: State,
     params: Vec<u8>,
+    /// The numbers of the sequence being acted on, a buffer kept between sequences (#2660).
+    numbers: Vec<u16>,
     osc: Vec<u8>,
     /// A UTF-8 sequence being read.
     utf8: Vec<u8>,
@@ -279,6 +281,32 @@ pub struct Terminal {
     pub colors: [[u8; 3]; 2],
     /// The progressive keyboard protocol's flags the program pushed, a stack per screen.
     flags: [Vec<u8>; 2],
+}
+
+/// Each `;` or `:` separated number of a control sequence's parameter bytes, its intermediates
+/// left out, as `str::parse::<u16>` reads it, 0 where it doesn't parse: an empty part, a part
+/// with another byte, or one past `u16::MAX`. Written into `out`, a buffer kept between sequences
+/// (#2660).
+fn numbers(body: &[u8], out: &mut Vec<u16>) {
+    out.clear();
+    // The part read so far, `None` while empty; and whether it can't parse.
+    let (mut part, mut failed) = (None::<u32>, false);
+    for &b in body.iter().filter(|b| !(0x20..=0x2f).contains(*b)) {
+        match b {
+            b';' | b':' => {
+                out.push(part.filter(|_| !failed).map_or(0, |v| v as u16));
+                (part, failed) = (None, false);
+            }
+            b'0'..=b'9' if !failed => {
+                let v = part.unwrap_or(0) * 10 + u32::from(b - b'0');
+                failed = v > u32::from(u16::MAX);
+                part = Some(v);
+            }
+            b'0'..=b'9' => {}
+            _ => failed = true,
+        }
+    }
+    out.push(part.filter(|_| !failed).map_or(0, |v| v as u16));
 }
 
 impl Terminal {
@@ -306,6 +334,7 @@ impl Terminal {
             links: BTreeMap::new(),
             state: State::Ground,
             params: Vec::new(),
+            numbers: Vec::new(),
             osc: Vec::new(),
             utf8: Vec::new(),
             dirty: vec![false; usize::from(rows.max(1))],
@@ -536,9 +565,12 @@ impl Terminal {
             State::Csi => match b {
                 0x20..=0x3f => self.params.push(b),
                 0x40..=0x7e => {
-                    let params = std::mem::take(&mut self.params);
+                    let mut params = std::mem::take(&mut self.params);
                     self.state = State::Ground;
                     self.csi(&params, b);
+                    // The buffer goes back for the next sequence (#2660).
+                    params.clear();
+                    self.params = params;
                 }
                 0x1b => self.state = State::Escape,
                 0x18 | 0x1a => self.state = State::Ground,
@@ -881,16 +913,8 @@ impl Terminal {
             .rev()
             .find(|b| (0x20..=0x2f).contains(*b))
             .copied();
-        let digits: Vec<u8> = body
-            .iter()
-            .copied()
-            .filter(|b| !(0x20..=0x2f).contains(b))
-            .collect();
-        let params: Vec<u16> = std::str::from_utf8(&digits)
-            .unwrap_or("")
-            .split([';', ':'])
-            .map(|p| p.parse::<u16>().unwrap_or(0))
-            .collect();
+        let mut params = std::mem::take(&mut self.numbers);
+        numbers(body, &mut params);
         let p = |i: usize, d: u16| params.get(i).copied().filter(|v| *v != 0).unwrap_or(d);
         let (cols, rows) = (self.cols, self.rows);
         match (lead, intermediate, end) {
@@ -966,7 +990,7 @@ impl Terminal {
                 self.blink = n == 0 || n % 2 == 1;
             }
             _ if private => {}
-            (_, _, b'm') => self.sgr(&digits),
+            (_, _, b'm') => self.sgr(&params),
             (_, _, b'A') => {
                 let s = self.screen_mut();
                 s.y = s.y.saturating_sub(p(0, 1));
@@ -1041,6 +1065,7 @@ impl Terminal {
             (_, _, b'u') => self.restore(),
             _ => {}
         }
+        self.numbers = params;
     }
 
     fn private_mode(&mut self, m: u16, on: bool) {
@@ -1072,15 +1097,9 @@ impl Terminal {
         }
     }
 
-    fn sgr(&mut self, digits: &[u8]) {
-        let text = std::str::from_utf8(digits).unwrap_or("");
-        let parts: Vec<u16> = if text.is_empty() {
-            vec![0]
-        } else {
-            text.split([';', ':'])
-                .map(|p| p.parse::<u16>().unwrap_or(0))
-                .collect()
-        };
+    /// Select graphic rendition by the sequence's numbers, read once with its other actions'
+    /// (#2660): none is a reset, as `0` is.
+    fn sgr(&mut self, parts: &[u16]) {
         let mut i = 0;
         while i < parts.len() {
             let n = parts[i];

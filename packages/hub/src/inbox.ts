@@ -2,9 +2,8 @@
 // undo of a default, through the hub's socket as the cli role. An answer or an undo counts only once the OS confirms
 // you, which the hub asks for; run inside an agent's process tree, the command acts as that agent's session, and no
 // agent answers.
-import { readFileSync } from 'node:fs';
 import { call, notAnswered, UNDECIDED_CODES, withPrompt, type Reply } from './client.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { hubAddress, hubControl } from './paths.js';
 import { asksNeedYou, databaseRead, hubDown, when } from './list.js';
 import { elapsed } from './promises.js';
 import { activePlant } from './plant.js';
@@ -21,7 +20,7 @@ const USAGE_CODES = new Set(['handle_syntax', 'not_found', 'enum']);
 /** How far back `deep inbox` lists what was decided for you. */
 const DAY_MS = 86_400_000;
 
-interface Row { opens?: { kind: string; name?: string; command?: string }; ask: string; kind: string; session: string; status: string; outcome: string; age: number; question: string; options: string[]; plan?: { hash: string; steps: Step[] } | null; decision: string | null; answer?: string | null; folded?: string | null }
+interface Row { opens?: { kind: string; name?: string; command?: string }; ask: string; kind: string; session: string; status: string; outcome: string; closed_at?: number | null; age: number; question: string; options: string[]; plan?: { hash: string; steps: Step[] } | null; decision: string | null; answer?: string | null; folded?: string | null }
 /** A plan's step, as an authority ask shows it (#69). */
 interface Step { does: string; changes: string[]; undo: string; cost: number }
 /** A permission you said yes to in the terminal, offered back as a decision to save (#23). */
@@ -44,19 +43,24 @@ export async function inboxCommand(args: readonly string[], setUp: () => Promise
   }
   const stopped = await setUp();
   if (stopped) return stopped;
-  const at = rootOf(installedRoot());
   let reply: Reply;
   /** When the hub stopped answering, for a list read from its database. */
   let down: number | undefined;
   try {
-    const token = readFileSync(at.token, 'utf8').trim();
+    const { path: socket, token } = hubControl();
     // Only an answer or an undo is judged by the peer check, so only they pay for the `ps` that names this process.
     const peer = answering || undoing || saving ? { pid: process.pid, start: (await startOf(process.pid)) ?? '' } : undefined;
     reply = answering
-      ? await withPrompt(() => call(hubAddress().path, token, 'ask.answer', { ask: args[1], option: args[2] }, peer))
-      : undoing ? await withPrompt(() => call(hubAddress().path, token, 'ask.undo', { ask: args[1] }, peer))
-      : saving ? await withPrompt(() => call(hubAddress().path, token, 'offer.save', { offer: args[1] }, peer))
-      : await call(hubAddress().path, token, 'inbox.read', {});
+      ? await withPrompt(() => call(socket, token, 'ask.answer', { ask: args[1], option: args[2] }, peer))
+      : undoing ? await withPrompt(() => call(socket, token, 'ask.undo', { ask: args[1] }, peer))
+      : saving ? await withPrompt(() => call(socket, token, 'offer.save', { offer: args[1] }, peer))
+      : await call(socket, token, 'inbox.read', {});
+    // The settled asks come a page at a time, newest first (#1576): what was decided for you in the last day is read on
+    // while a page's oldest closed within it.
+    for (let page = reply; !answering && !undoing && !saving && 'result' in page && typeof page.result.next === 'string' && Number((page.result.asks as Row[]).at(-1)?.closed_at) > Date.now() - DAY_MS;) {
+      page = await call(socket, token, 'inbox.read', { page: page.result.next });
+      if ('result' in page && 'result' in reply) (reply.result.asks as Row[]).push(...(page.result.asks as Row[]));
+    }
   } catch (error) {
     // With the hub down the list reads its database, as deep does, and says so and since when (#2026).
     const read = answering || undoing || saving ? undefined : await databaseRead(hubAddress().path, false).catch(() => undefined);
@@ -70,11 +74,17 @@ export async function inboxCommand(args: readonly string[], setUp: () => Promise
   }
   if (answering) {
     // A block's task (#85), a fold and an ask with no repo or session save no decision; the sentence says only what the record holds.
+    if (reply.result.held === true) {
+      say(`${String(reply.result.ask)}: your yes is held, and its step that can't be undone starts in 10 s; deep inbox undo ${String(reply.result.ask)} withdraws it until then`);
+      return 0;
+    }
     say(`${String(reply.result.ask)} answered ${String(reply.result.answer)}${reply.result.scope === null ? '; no decision saved' : `, saved as a decision for ${String(reply.result.scope)}`}`);
     return 0;
   }
   if (undoing) {
-    say(`${String(reply.result.ask)} is open again, its default undone; it now takes its default ${when(Number(reply.result.deadline))}`);
+    say(reply.result.withdrawn === true
+      ? `${String(reply.result.ask)} is open again: your yes is withdrawn, and its step never started`
+      : `${String(reply.result.ask)} is open again, its default undone; it now takes its default ${when(Number(reply.result.deadline))}`);
     return 0;
   }
   if (saving) {
@@ -142,7 +152,8 @@ export async function inboxCommand(args: readonly string[], setUp: () => Promise
 
 /** The list's unread rows as deep status reads them, for #2028's planted count. */
 async function unreadRows(): Promise<number> {
-  const reply = await call(hubAddress().path, readFileSync(rootOf(installedRoot()).token, 'utf8').trim(), 'rows.read', {});
+  const { path: socket, token } = hubControl();
+  const reply = await call(socket, token, 'rows.read', {});
   return 'error' in reply ? 0 : ((reply.result.rows ?? []) as ListRow[]).filter((r) => r.unread).length;
 }
 
@@ -154,8 +165,8 @@ export async function raceCommand(args: readonly string[]): Promise<number> {
   }
   let reply: Reply;
   try {
-    const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
-    reply = await call(hubAddress().path, token, 'race.start', { issue: Number(args[0]) }, { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
+    const { path: socket, token } = hubControl();
+    reply = await call(socket, token, 'race.start', { issue: Number(args[0]) }, { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
   } catch (error) {
     return notAnswered(error);
   }

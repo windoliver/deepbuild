@@ -221,8 +221,12 @@ pub enum Planted {
     Audit(crate::geometry_audit::Planted),
     /// #1921's: a world's outputs' wrong programs, which the physics host names.
     Physics(crate::physics::Planted),
+    /// #1500's: a run carried on across a revision.
+    Join(crate::joins::Planted),
     /// #525's live worlds' wrong programs.
     Ahead(crate::stepped::Planted),
+    /// #1250's planted clips.
+    Clip(crate::clip::write::Plant),
     /// #202: a kind_rules requirement counts the working agent's own pack rule as its cover.
     OwnRuleCountsAsCover,
     /// #202: the kind_rules check evaluates a pack kind's recipe rules a second time.
@@ -430,6 +434,8 @@ pub enum Planted {
     GateTrustsDocumentSound,
     /// #210: the web export writes a port into its bundle.
     WebExportKeepsPort,
+    /// #211: the web export compares only an init asset's size with `web_max`, never `written_max`.
+    WebExportChecksInitOnly,
     /// #498: the gate trusts a shipped panel: its own request to play sounds.
     ShippedPanelsUngated,
     /// #498: the reserved-sound comparer refuses only an asset whose hash is a reserved sound's.
@@ -705,7 +711,11 @@ pub enum Body {
 }
 
 mod call;
+mod planted;
+mod presented;
 pub use call::*;
+use planted::read_programs;
+pub(crate) use planted::{clock_noise, export_noise};
 
 /// A background job (#857): a playtest batch's replicas of a document's session, or a bake of
 /// one, each evaluated frame after frame at the background priority.
@@ -762,6 +772,8 @@ pub struct Hub<'a> {
     pub forms: BTreeMap<String, Value>,
     /// Each document's session.
     pub sessions: BTreeMap<String, DocSession>,
+    /// #1250: each piece's live play as the app keeps it for clips, and each panel's cards.
+    pub(crate) clips: crate::clip::Clips,
     /// Panels a `panel` call showed or hid.
     pub panels_shown: BTreeMap<String, bool>,
     /// The GPU 3D revisions draw on (#378): unopened until the first, `None` inside where there
@@ -806,6 +818,8 @@ pub struct Hub<'a> {
     pub expansion_cache: BTreeMap<String, Expansion>,
     /// #544's planted start_on: each session's first evaluated time since its revision loaded.
     pub first_frames: BTreeMap<String, i64>,
+    /// #1500's planted capture: each step a carried-on run ran, by document, as the logic call's row.
+    pub carried_rows: BTreeMap<String, BTreeMap<i64, Value>>,
     /// #538's planted lookup: each copy table's key order in its document's first revision.
     pub first_orders: BTreeMap<String, Vec<String>>,
     /// The displays, the windows on them and the card's placement (#400).
@@ -840,8 +854,8 @@ pub struct Hub<'a> {
 /// A document's item count, and its mode visible table as first seen at that count.
 pub type ModeIds = (usize, Vec<(String, [f64; 4])>);
 
-/// A snapshot's straight RGBA, its size and each item's box in its pixels.
-pub type Raster = (Vec<u8>, [u16; 2], Vec<(String, [f64; 4])>);
+/// A 3D snapshot's straight RGBA, its size and its visible table (#3017).
+pub type Raster = (Vec<u8>, [u16; 2], crate::scene3d::Shown);
 
 /// Which half of a press, or a key repeat (#327).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -974,6 +988,7 @@ impl<'a> Hub<'a> {
             ),
             sched,
             sessions: BTreeMap::new(),
+            clips: Default::default(),
             background: Vec::new(),
             panels_shown: BTreeMap::new(),
             gpu3: None,
@@ -1003,6 +1018,7 @@ impl<'a> Hub<'a> {
             expansions: BTreeMap::new(),
             expansion_cache: BTreeMap::new(),
             first_frames: BTreeMap::new(),
+            carried_rows: BTreeMap::new(),
             first_orders: BTreeMap::new(),
             placement: Placement::open(
                 scenario.displays.clone(),
@@ -1193,9 +1209,10 @@ impl<'a> Hub<'a> {
             snapshot::px([0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(1.0)))
         });
         // #493: a shot writes the camera's pose the 3D frame is drawn through; #1729: its assets
-        // and maps from the evidence store; #506: its insets' pictures drawn in (over3d.rs).
-        self.painted3d(doc, t, size)
-            .map(|(rgba, scene)| (rgba, size, scene.boxes()))
+        // and maps from the evidence store; #506: its insets' pictures drawn in (over3d.rs);
+        // #3017: its visible table from the object-ID pass it drew.
+        self.shown3d(doc, t, size)
+            .map(|(rgba, shown)| (rgba, size, shown))
     }
 
     /// Whether a panel is on screen: as the scenario set it, or as a `panel` call left it.
@@ -1584,6 +1601,11 @@ impl<'a> Hub<'a> {
             Call::Migrate(to) => self.migrate(*to),
             Call::Keys { doc, runs } => self.keys(doc, *runs),
             Call::Fingerprint => self.fingerprint_reply(),
+            Call::Ship { bundle, chrome } => crate::export::ship::measure(
+                std::path::Path::new(bundle),
+                std::path::Path::new(chrome),
+                self.planted(Planted::Export(crate::export::Guard::ShipBytesSumsInflated)),
+            ),
             Call::Footprint => {
                 json!({"reading": deep_gpu::footprint::read(deep_gpu::footprint::SYSTEM).json()})
             }
@@ -1610,6 +1632,7 @@ impl<'a> Hub<'a> {
             } => self.play(doc, *display_hz, *to, *presented),
             Call::Determinism(d) => self.determinism(d),
             Call::Frames(f) => self.frames(f),
+            Call::PlayFrames(p) => self.play_frames(p),
             Call::ShapedRuns(text) => self.shaped_runs(text),
             Call::Settle(s) => self.settle_patches(s),
             Call::Query(q) => self.query(q),
@@ -1669,6 +1692,9 @@ impl<'a> Hub<'a> {
             Call::Net(c) => self.net_call(c),
             Call::Scope(panel) => self.scope_reply(panel),
             Call::Presented(panel) => self.presented(panel),
+            Call::PresentedIndices(panel, from) => self.presented_indices(panel, *from),
+            Call::Clip { panel, action } => self.player_action(panel, action),
+            Call::Clips(panel) => self.clips_reply(panel),
             Call::PopOut {
                 panel,
                 display,
@@ -1772,73 +1798,6 @@ impl<'a> Hub<'a> {
         }
         self.stamp(&mut reply);
         reply
-    }
-
-    /// #806: a document's current revision as the hub records it once presented: its writer, the
-    /// layer the connection stamped and its canonical document, kept in the evidence store by the
-    /// hash it names; and every layer on screen on its panel, back to front, as the app draws them.
-    pub fn presented_revision(&self, doc: &str) -> Option<Value> {
-        let row = self.current(doc)?;
-        let canonical = canonical_in(&row.doc, &self.startup.sealed.kinds()).ok()?;
-        let hash = evidence::put(&self.scenario.evidence, canonical.bytes.as_bytes()).ok()?;
-        let items: Vec<&String> = row.doc["items"].as_object()?.keys().collect();
-        let panel = self.scenario.docs.get(doc)?;
-        let rect = self.slot(panel)?;
-        let size = snapshot::px([rect[2], rect[3]]);
-        let record = self.record();
-        let layers: Vec<Value> = self
-            .bands()
-            .iter()
-            .filter(|b| {
-                b.doc
-                    .as_deref()
-                    .is_some_and(|d| self.scenario.docs.get(d) == Some(panel))
-            })
-            .map(|b| {
-                let mut out = b.to_json();
-                let current = b.doc.as_deref().and_then(|d| self.current(d));
-                // The presented document's items this layer draws; another document's layer on the
-                // panel draws none of them.
-                let drawn: Vec<String> = current
-                    .filter(|_| b.doc.as_deref() == Some(doc))
-                    .and_then(|r| r.doc["items"].as_object())
-                    .map(|m| m.keys().cloned().collect())
-                    .unwrap_or_default();
-                // The layer's picture in its panel, with no ground, as the compositor rasterizes it:
-                // kept in the evidence store for the app to draw, by its hash.
-                let picture = current.and_then(|r| {
-                    let doc = r.doc.as_object()?;
-                    let mut renderer = Renderer::new();
-                    let d = renderer
-                        .prepare(
-                            doc,
-                            0,
-                            &self.look.light,
-                            self.look.status.as_ref(),
-                            &record,
-                            &self.scenario.evidence,
-                        )
-                        .ok()?;
-                    let png = snapshot::png(renderer.raster(&d, size, None), size);
-                    evidence::put(&self.scenario.evidence, &png).ok()
-                });
-                out["doc"] = json!(b.doc);
-                out["items"] = json!(drawn);
-                out["picture"] = json!(picture);
-                out
-            })
-            .collect();
-        Some(json!({
-            "doc": doc,
-            "rev": row.rev,
-            "hash": hash,
-            "writer": row.writer.to_json(),
-            "layer": row.writer.layer_id(),
-            "items": items,
-            "panel": panel,
-            "rect": rect,
-            "layers": layers,
-        }))
     }
 
     /// Every canvas reply carries the core's version and the module-set digest (#305;
@@ -2448,22 +2407,16 @@ impl<'a> Hub<'a> {
                         }
                     }
                     let pixels = match drawn3d {
-                        Some(drawn3d) => drawn3d.ok().map(|(mut rgba, size, boxes)| {
+                        Some(drawn3d) => drawn3d.ok().map(|(mut rgba, size, mut shown)| {
                             // The 2D items over the 3D frame, with no ground of their own.
-                            let mut boxes = boxes;
                             if let Some(d) = drawn {
                                 let (over, drew) =
                                     self.renderer.raster_batched(d, size, None, &instanced);
                                 batches = drew;
                                 snapshot::over(&mut rgba, &over);
-                                let scale = d.scale(size);
-                                boxes.extend(
-                                    d.boxes()
-                                        .into_iter()
-                                        .map(|(id, b)| (id, b.map(|v| v * scale))),
-                                );
+                                shown.over(d.boxes(), d.scale(size), size);
                             }
-                            (rgba, size, boxes)
+                            (rgba, size, shown)
                         }),
                         None => {
                             let drawn = drawn.expect("a revision with no error was drawn");
@@ -2473,10 +2426,10 @@ impl<'a> Hub<'a> {
                                 self.renderer
                                     .raster_batched(drawn, size, Some(ground), &instanced);
                             batches = drew;
-                            Some((rgba, size, Vec::new()))
+                            Some((rgba, size, Default::default()))
                         }
                     };
-                    let Some((mut rgba, size, boxes3d)) = pixels else {
+                    let Some((mut rgba, size, shown)) = pixels else {
                         reply.insert("outcome".into(), json!("not_presented"));
                         reply.insert("reason".into(), json!("timeout"));
                         if show.check {
@@ -2502,10 +2455,13 @@ impl<'a> Hub<'a> {
                                     e
                                 }
                             };
-                            let rows = match drawn.filter(|_| !three) {
-                                Some(d) => snapshot::visible(d.boxes(), d.scale(size), size),
-                                None => snapshot::visible(boxes3d, 1.0, size),
-                            };
+                            match drawn.filter(|_| !three) {
+                                Some(d) => {
+                                    let rows = snapshot::visible(d.boxes(), d.scale(size), size);
+                                    reply.insert("visible".into(), rows);
+                                }
+                                None => shown.put(&mut reply),
+                            }
                             // #464: a 2D print look adds this machine's GPU snapshot, display
                             // only, beside the Vello CPU one.
                             let gpu = match drawn.filter(|_| !three) {
@@ -2516,7 +2472,6 @@ impl<'a> Hub<'a> {
                                 "snapshots".into(),
                                 json!([entry].into_iter().chain(gpu).collect::<Vec<_>>()),
                             );
-                            reply.insert("visible".into(), rows);
                             // The instanced batches the 2D draw made: none for a 3D frame, which
                             // scene3d draws and reports on its own (#378).
                             reply.insert("batches".into(), crate::packs::batches(&batches));
@@ -2605,59 +2560,6 @@ impl<'a> Hub<'a> {
                 Some(claim) if claim.deliverables.contains(&show.doc) => "PASS",
                 Some(_) => "INCONCLUSIVE",
             },
-        }
-    }
-}
-
-/// The planted renderer's grain: a few pixels' red nudged by a xorshift seeded from the clock's
-/// nanoseconds, what an honest render-back never reads (Channel and key: it can never read the
-/// clock), so two runs draw two pictures (#670).
-pub(crate) fn clock_noise(rgba: &mut [u8]) {
-    seeded_noise(rgba, now_nanos());
-}
-
-/// #1163's [`clock_noise`] in an export, seeded from the clock once per process and by the
-/// frame's time: another process draws another picture, and a frame drawn again in the same
-/// export draws the same one, as #157's redraw holds every frame to.
-pub(crate) fn export_noise(rgba: &mut [u8], t: i64) {
-    static SEED: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
-    seeded_noise(rgba, *SEED.get_or_init(now_nanos) ^ t as u64);
-}
-
-fn now_nanos() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_nanos() as u64)
-}
-
-fn seeded_noise(rgba: &mut [u8], seed: u64) {
-    let mut x = seed | 1;
-    let pixels = (rgba.len() / 4) as u64;
-    for _ in 0..64 {
-        x ^= x << 13;
-        x ^= x >> 7;
-        x ^= x << 17;
-        let i = (x % pixels) as usize * 4;
-        rgba[i] = rgba[i].wrapping_add((x >> 56) as u8 | 1);
-    }
-}
-
-/// The planted check that opens a logic program's bytes from the evidence store by its hash
-/// before the document is refused: what the honest check never does (#305).
-fn read_programs(doc: &Value, evidence: &std::path::Path) {
-    let Some(items) = doc.get("items").and_then(Value::as_object) else {
-        return;
-    };
-    for item in items.values() {
-        let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
-        let program = item
-            .get("params")
-            .and_then(|p| p.get("program"))
-            .and_then(Value::as_str);
-        if let (true, Some(sha)) = (kind.starts_with("logic@"), program) {
-            if sha.len() == 64 && sha.bytes().all(|b| b.is_ascii_hexdigit()) {
-                let _ = std::fs::read(evidence.join(&sha[..2]).join(&sha[2..]));
-            }
         }
     }
 }

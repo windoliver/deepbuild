@@ -1,0 +1,28 @@
+worktree: ~/deepbuild-runs-1119/clone/.claude/worktrees/a
+head: 654c560c1468816186f16ab34830840b96746f0c  origin/main: 654c560c1468816186f16ab34830840b96746f0c
+MacBook-Pro.local
+Mac18,1
+12
+34359738368
+ProductName:		macOS ProductVersion:		27.2.1 BuildVersion:		26B7131 
+v24.22.0
+cargo 1.99.1 (5f94df478 2026-08-27)
+== start 2026-11-22T11:32:54Z
+ 3:32  up 2 days,  7:59, 4 users, load averages: 155.19 141.04 132.29
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22610019)	100%; charged; 0:00 remaining present: true
+/dev/disk3s5   926Gi   719Gi   172Gi    81%    8.7M  1.8G    0%   /System/Volumes/Data
+180K	~/Library/Caches/deepbuild-perf
+perf exit: 3
+== end 2026-11-22T12:32:54Z
+ 4:32  up 2 days,  8:59, 4 users, load averages: 101.11 89.10 89.91
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22610019)	100%; charged; 0:00 remaining present: true
+/dev/disk3s5   926Gi   831Gi    56Gi    94%    8.9M  590M    1%   /System/Volumes/Data
+180K	~/Library/Caches/deepbuild-perf

@@ -69,13 +69,22 @@ pub(super) fn expand_one(
             continue;
         };
         if let Some(what) = input_fault(input, value) {
-            issues.push(Issue::error(
+            let mut issue = Issue::error(
                 "out_of_range",
                 id,
                 at(&format!("params/{name}")),
                 value.clone(),
                 &format!("{what}: {}'s input `{name}`", recipe.id),
-            ));
+            );
+            // An input held to one value, such as a falloff only the inverse square draws (#2054):
+            // its fix names that value.
+            if let Some(only) = input.min.filter(|m| input.max == Some(*m)) {
+                issue.fix = format!(
+                    "Write {only}, the one value {}'s `{name}` takes.",
+                    recipe.id
+                );
+            }
+            issues.push(issue);
             ok = false;
         }
     }

@@ -1,0 +1,15 @@
+{
+  "#3065.AC1": [
+    "reads-helper-source",
+    "sees-bin-dir-only"
+  ],
+  "#3065.AC2": [
+    "writes-empty-rows"
+  ],
+  "#3065.AC3": [
+    "drops-no-row-tests"
+  ],
+  "#3065.AC4": [
+    "keeps-environment"
+  ]
+}

@@ -1,0 +1,27 @@
+#1490 criterion 2, the blind redraft after #2892: how the test meets the base 5f5791e2d ("Merge pull request #3068").
+
+Read, not run. The Mac stood at a one-minute load of 120 to 200, and the test needs deep-show (full) and deep-logic
+built and three exports. What ran: the type check (node node_modules/typescript/bin/tsc -p
+tests/acceptance/1490-redraft-2892/tsconfig.json, exit 0), `vitest list` (1 test collected), and the scratch probe
+of the shared reader described in ../172-redraft-2892/BASE-FAILURE.txt (figure's committed player_bg.wasm, stored
+gzip, reads back to that file's SHA-256). A second scratch probe (not committed) ran both `setFailures` on bundle
+folders made by hand as #2892 stores them (the set's player gzip under the SHA-256 of its stored bytes, which the
+receipt's `player.hash` names; the glue as it is): this redraft's returns no failure for figure's bundle, the first
+draft's fails it; with the player's file removed this redraft names figure's e361ec71…; on a bundle of full's player
+and glue it names figure and "holds the set full's player".
+
+At the base: expected to pass. The base already meets the criterion and stores every file as it is.
+- crates/deep-show/src/export/web.rs takes the smallest set that holds the document's modules (figure for the slider
+  fixture, full for the lab; `web_picks_full_set` takes full), writes the set's player as `<its sha256>.wasm` and its
+  glue as `<its sha256>.js`, both raw, and the receipt's `player` gives `module_set`, `module_set_digest` (the set's
+  `set_digest`) and `hash` (the raw player's sha256), which is a receipt file's `sha256`.
+- So `setFailures` reads every file as stored: the player file `player.hash` names hashes to figure's
+  `wasm.sha256`; figure's player and glue are held; no other set's player is. The gzip twin stores that file gzip
+  under its name and the reader inflates it back to figure's player: no failure. The twin without it removes the one
+  file that reads as figure's player: failures name e361ec71… (the receipt's player is no file of the bundle; the
+  bundle doesn't hold the set figure's player). The lab: the same for full. The plant: the receipt names full, its
+  digest and player are full's, so failures name figure.
+
+Under #2892, the first draft this replaces (read): its `setFailures` compares `player.hash`, now the SHA-256 of the
+gzip-stored player, with figure's raw `wasm.sha256`, and looks for that raw hash among the stored files' hashes; both
+miss on a right program, and it fails at "the receipt's player … is not the set figure's …".
