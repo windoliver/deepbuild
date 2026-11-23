@@ -18,8 +18,9 @@ const files = (args) => run('git', [...args, '-z']).split('\0').filter(Boolean);
 // BLOCKED: perf could not compare. FAIL: a measurement broke its budget.
 const blocked = (message, fix) => Object.assign(Error(message), { fix });
 const regressed = 'Restore the regressed budget; budgets are frozen once they reach main.';
-// Where every result's instructions retired came from; GNU time has no counter.
-const counter = process.platform === 'darwin' ? '/usr/bin/time -l and scripts/count-children.c: instructions retired, children included' : null;
+// Where every result's instructions retired came from: on Linux the kernel's counter, which GNU time doesn't read.
+const counter = process.platform === 'darwin' ? '/usr/bin/time -l and scripts/count-children.c: instructions retired, children included'
+  : process.platform === 'linux' ? "scripts/count-linux.c: the kernel's instructions retired in user space, children included" : null;
 // Each side's copy lives at the same path every run, in this user's cache directory under a name
 // for this machine and clone, not for a checkout, with its Cargo builds kept beside it, so a preflight
 // from any worktree, a new one too, doesn't rebuild what the last run on the machine built (#594, #1119).
@@ -327,7 +328,8 @@ try {
     }
     if (instructions?.status === 'FAIL') verdicts.push(['FAIL', `${budget.id}: instructions: ${instructions.reason}`, `Bring ${budget.id}'s instructions retired back within 2% of the merge base's.`]);
     if (instructions?.status === 'INCONCLUSIVE') verdicts.push(['INCONCLUSIVE', `${budget.id}: instructions: ${instructions.reason}`, instructions.uncounted.length ? "Have the budget's command wait for each child it starts, from a process that isn't a platform binary such as /bin/sh."
-      : instructions.change === null ? "Run perf on macOS, whose /usr/bin/time -l reports instructions retired."
+      : instructions.change === null ? (process.platform === 'linux' ? "Make sure cc can build scripts/count-linux.c, the runner that counts instructions retired through the kernel's counter."
+        : 'Run perf on macOS, whose /usr/bin/time -l reports instructions retired.')
       : `Rerun perf with both sides at the same QoS on a machine whose load is under its cores, or have ${budget.id} count work that doesn't wait by spinning or on a lock: that waiting counts, so it moves with the schedule.`]);
     for (const [metric, { status, reason }] of Object.entries(limits)) {
       if (status === 'PASS') continue;
