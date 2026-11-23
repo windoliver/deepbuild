@@ -1,0 +1,184 @@
+head 26ed84911, dirty files 2, build: exit 0 throttle exit 0 , 2026-11-22 01:51:09
+ac1-reference:  Tests 2 passed (2) | exit 0 | 0 INCONCLUSIVE lines
+ac2-spline-homography:  Tests 1 passed (1) | exit 0 | 0 INCONCLUSIVE lines
+ac3-pack-check:  Tests 2 passed (2) | exit 0 | 0 INCONCLUSIVE lines
+ac4-cost:  Tests 2 passed (2) | exit 0 | 0 INCONCLUSIVE lines
+ac5-status-guard:  Tests 1 passed (1) | exit 0 | 0 INCONCLUSIVE lines
+ac6-budgets:  Tests 3 passed (3) | exit 0 | 0 INCONCLUSIVE lines
+ac7-slice-shift:  Tests 2 passed (2) | exit 0 | 0 INCONCLUSIVE lines
+ac8-invert-premultiplied:  Tests 2 passed (2) | exit 0 | 0 INCONCLUSIVE lines
+ac9-alpha-guard:  Tests 2 passed (2) | exit 0 | 0 INCONCLUSIVE lines
+ac10-moved-group:  Tests 2 passed (2) | exit 0 | 0 INCONCLUSIVE lines
+ac11-internal-scale:  Tests 2 passed (2) | exit 0 | 0 INCONCLUSIVE lines
+ac12-linear-color-key:  Tests 2 passed (2) | exit 0 | 0 INCONCLUSIVE lines
+ac13-taste:  Tests 1 passed (1) | exit 0 | 0 INCONCLUSIVE lines
+done 02:28:36
+
+==== ac1-reference.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac1-reference.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  02:27:18
+   Duration  6.30s (tests 100%)
+
+exit 0
+
+==== ac2-spline-homography.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac2-spline-homography.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  02:27:25
+   Duration  3.28s (tests 99%)
+
+exit 0
+
+==== ac3-pack-check.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac3-pack-check.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  02:27:28
+   Duration  4.49s (tests 100%)
+
+exit 0
+
+==== ac4-cost.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac4-cost.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  02:27:33
+   Duration  3.77s (tests 99%)
+
+exit 0
+
+==== ac5-status-guard.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac5-status-guard.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  02:27:38
+   Duration  5.42s (tests 100%)
+
+exit 0
+
+==== ac6-budgets.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac6-budgets.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  02:27:43
+   Duration  8.89s (tests 100%)
+
+exit 0
+
+==== ac7-slice-shift.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac7-slice-shift.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  02:27:53
+   Duration  13.00s (tests 100%)
+
+exit 0
+
+==== ac8-invert-premultiplied.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac8-invert-premultiplied.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  02:28:06
+   Duration  4.31s (tests 99%)
+
+exit 0
+
+==== ac9-alpha-guard.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac9-alpha-guard.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  02:28:11
+   Duration  4.30s (tests 99%)
+
+exit 0
+
+==== ac10-moved-group.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac10-moved-group.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  02:28:16
+   Duration  4.55s (tests 100%)
+
+exit 0
+
+==== ac11-internal-scale.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac11-internal-scale.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  02:28:21
+   Duration  4.63s (tests 99%)
+
+exit 0
+
+==== ac12-linear-color-key.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac12-linear-color-key.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  02:28:26
+   Duration  4.12s (tests 99%)
+
+exit 0
+
+==== ac13-taste.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac13-taste.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  02:28:30
+   Duration  5.66s (tests 100%)
+
+exit 0

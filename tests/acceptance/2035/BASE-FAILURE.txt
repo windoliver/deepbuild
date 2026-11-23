@@ -1,0 +1,86 @@
+The #2035 suite run once at base commit 5f5791e2d ("Merge pull request #3068 …"; no implementation of #2035), on
+macOS arm64 (Mac17,10, rustc 1.99.1, Node 24.22.2, vitest 5.0.5).
+
+The builds came first, in one build grant: `cargo build --locked --bin deep-physics`, `cargo build --locked --bin
+deep-logic`, then #545's assembler (`tests/acceptance/545/wat`, into `target/acceptance-545-wat`). Each is the exact
+call the suite's helpers make. A probe then confirmed each of the suite's own cargo calls was a no-op.
+
+Then the run, under a test grant:
+
+  NO_COLOR=1 PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node scripts/throttle.mjs test --wait 300 -- sh scripts/lease nice -n 10 \
+    npx vitest run --root tests/acceptance/2035 --testTimeout=600000 --no-file-parallelism
+
+scripts/lease said: "no deep on PATH and no built CLI at packages/cli/dist, so … runs unleased".
+
+The assembler's lock: at this base, `cargo build --locked` of `tests/acceptance/545/wat` refuses its Cargo.lock. Main's
+root manifest gained four [patch] entries that the lock doesn't list as unused. The run used that lock refreshed in the worktree with `cargo metadata --offline --format-version 1`.
+That changes only its [[patch.unused]] list (+19/−2 lines, no dependency) and is not part of this commit.
+
+Result: Test Files 5 failed (5); Tests 13 failed (13); 6.95 s.
+
+Every failure is at an assertion because the surface is absent. None is in the harness, and none is BLOCKED or
+INCONCLUSIVE. Each main test fails only at the cut's frame: 241 for the place, 401 for the wrap. Every other frame of
+each window already draws what the criterion asks. So the fixtures are as described: the character rests at
+x = 40 m, the place moves and turns it, and the kart sits still within 0.25 m a step. Each twin test fails because the
+base doesn't know the planted name.
+
+Each failing test, trimmed to its failing assertion:
+
+ac1-place-position.test.ts (#2035.577758f2)
+- (cut):
+    AssertionError: the character's drawn frames:
+      item hero_figure (output hero_pose of the character hero) at frame 241 (2.008333 s) draws x = 20 m, neither
+      40 m nor 0 m within 1e-6 m
+- (twin: place_blends):
+    AssertionError: deep-physics --planted place_blends (the character placed from x = 40 m to x = 0 m at step 120)
+    exits 0; stdout: {"ok":false,"code":"bad_input"}; stderr: : expected 2 to be +0
+
+ac2-place-heading.test.ts (#2035.9b03a44c)
+- (cut):
+    AssertionError: the character's drawn headings:
+      item hero_figure (output hero_pose of the character hero) at frame 241 (2.008333 s) draws a heading of
+      44.9999996°, between 1° and 89°
+- (twin: place_blends_rotation):
+    AssertionError: deep-physics --planted place_blends_rotation (…) exits 0; stdout: {"ok":false,"code":"bad_input"};
+    expected 2 to be +0
+
+ac3-vehicle-place.test.ts (#2035.e60b6f6d)
+- (cut):
+    AssertionError: the kart's drawn frames:
+      the chassis kart (item kart_body) at frame 241 (2.008333 s) is drawn 20 m from its pose at step 120 and 20 m
+      from its pose at step 121
+      wheel kart#fl (item kart_fl) at frame 241 (2.008333 s) is drawn 19.9999996 m from its pose at step 120 and
+      19.9999996 m from its pose at step 121, 19.9999996 m from its place on the chassis drawn there
+      (and the same for kart#fr, kart#rl, kart#rr, 20.0000004 m, 19.9999996 m, 20.0000004 m)
+- (twin: place_blends_wheels):
+    AssertionError: deep-physics --planted place_blends_wheels (…) exits 0; stdout: {"ok":false,"code":"bad_input"};
+    expected 2 to be +0
+
+ac4-logic-cut.test.ts (#2035.4a4b7836)
+- (cut):
+    AssertionError: the ship's drawn frames:
+      ship.pos at frame 401 (3.341667 s) draws x = 9.95 m, between 1 m and 19 m
+- (twin: cut_ignored):
+    AssertionError: view opened the piece (span 4): {"ok":false,"code":"bad_input"}: expected false to be true
+    (deep-logic --planted cut_ignored refuses the name and exits 2)
+- (refusal):
+    AssertionError: the ship whose cut names its f64 write speed is refused by the logic module's check:
+    {"ok":true,"items":{"ship":{…}},"issues":[]}: expected [ true, undefined ] to deeply equal [ false, 'logic_refused' ]
+    (the base admits a write's `cut` and ignores it; the same piece with cut: wrapped was admitted just before)
+
+ac5-seek.test.ts (#2035.65049ccc)
+- (place):
+    AssertionError: the character at frame 241, played and sought:
+      item hero_figure (output hero_pose of the character hero) at frame 241 (2.008333 s): playing draws x = 20 m,
+      a blend across the place
+      the seek to frame 241 (2.008333 s) doesn't answer: {"ok":false,"code":"bad_input"}
+- (wrap):
+    AssertionError: the ship at frame 401, played and sought:
+      ship.pos at frame 401 (3.341667 s): playing draws x = 9.95 m, a blend across the wrap
+    (the base's seek back to frame 401 draws what its playing draws, the same blend, so only playing's blend fails)
+- (twin: restore_forgets_place):
+    AssertionError: deep-physics --planted restore_forgets_place (…) exits 0; stdout: {"ok":false,"code":"bad_input"};
+    expected 2 to be +0
+- (twin: restore_forgets_cut):
+    AssertionError: view opened the piece (span 4): {"ok":false,"code":"bad_input"}: expected false to be true

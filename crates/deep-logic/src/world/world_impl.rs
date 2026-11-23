@@ -536,7 +536,7 @@ impl World {
             .lives
             .iter()
             .map(|l| (l.last, &l.prev[..], &l.arrays[..]));
-        drawn(&self.piece, shown, t, self.planted.linear_blends_forward)
+        drawn(&self.piece, shown, t, &self.planted)
     }
 
     pub(super) fn step(
@@ -1451,6 +1451,15 @@ impl World {
         live.last = s.step - 1;
         live.spacing = self.lives[i].spacing;
         live.arrays = s.arrays.clone();
+        if self.planted.restore_forgets_cut {
+            let cuts = item
+                .writes
+                .iter()
+                .filter_map(|w| item.write(w.cut.as_deref()?));
+            for c in cuts {
+                live.arrays[c.offset as usize..][..c.size as usize].fill(0);
+            }
+        }
         if !self.planted.seek_restores_arrays_only {
             live.prev = s.prev.clone();
         }
