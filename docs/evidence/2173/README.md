@@ -31,6 +31,8 @@ With it, at the merge `ed824b3f7` plus the row:
 - `node scripts/repo-rules.mjs` exits 0 with no FAIL, INVALID or BLOCKED line (`rules-after-3139.txt`).
 - The blind AC1 test passes with no line set apart (`ac1-after-3139.txt`).
 
+Main `98347e837` then brought `FAIL secrets: docs/evidence/1834/render.test.ts.txt:10:9: home path`, from #1834's evidence commit `410526eea`. That line of the run record now writes the home folder as `~`, as AGENTS.md asks. At the merge `5c3358350` with that redaction, the blind AC1 test passes again with no line set apart.
+
 ## The captures
 
 - `rules-before.txt`: the checker on the blind base. The base is this worktree at `c52dc3e73` with `scripts/repo-rules.json` from `a3db8f131`, put back afterwards.
