@@ -768,7 +768,7 @@ impl Reader {
         let taken = tap.buffer.lock().unwrap_or_else(|e| e.into_inner()).take();
         let (buffer, size) = taken.ok_or("the index target wasn't drawn")?;
         let words = read_indices(d, &buffer, size)?;
-        Ok(words.chunks_exact(2).map(|w| w[0]).collect())
+        Ok(words.as_chunks::<2>().0.iter().map(|w| w[0]).collect())
     }
 }
 

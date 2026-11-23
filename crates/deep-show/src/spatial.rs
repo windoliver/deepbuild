@@ -217,7 +217,7 @@ mod tests {
         let diamond = [[0.21, 0.13], [0.13, 0.05], [0.05, 0.13], [0.13, 0.21]];
         let [x, y, w, h] = super::outline_box(&diamond);
         assert_eq!([x, y], [0.05, 0.05]);
-        assert!(0.05 + (0.21 - 0.05) < 0.21, "the span alone falls short");
+        assert!(x + (0.21 - x) < 0.21, "the span alone falls short");
         assert!(x + w >= 0.21 && y + h >= 0.21, "{w} {h}");
         assert!(w < 0.17 && h < 0.17, "{w} {h}");
     }

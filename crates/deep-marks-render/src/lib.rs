@@ -1083,6 +1083,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                     || p == "drops_cells_by_corner_signs"
                     || p == "decodes_before_header"
                     || p == "cap_counts_copies_only"
+                    || p == "decoder_ignores_orientation"
                     || vertical_plant(p).is_some() =>
             {
                 (Planted::None, false, false)
@@ -1355,6 +1356,9 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 Some(Value::String(p)) if p == "drops_glyph" => (false, true, false),
                 Some(Value::String(p)) if p == "stock_bt601_fragment" => (false, false, true),
                 Some(Value::String(p)) if p == "cap_counts_copies_only" => (false, false, false),
+                Some(Value::String(p)) if p == "decoder_ignores_orientation" => {
+                    (false, false, false)
+                }
                 Some(_) => return None,
             };
             Request::Render {
@@ -1370,6 +1374,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 stock_fragment,
                 image_plant: match input.get("planted").and_then(Value::as_str) {
                     Some("cap_counts_copies_only") => asset::Plant::CapCountsCopiesOnly,
+                    Some("decoder_ignores_orientation") => asset::Plant::IgnoresOrientation,
                     _ => asset::Plant::None,
                 },
             }

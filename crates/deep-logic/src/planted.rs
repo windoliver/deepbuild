@@ -49,6 +49,9 @@ pub struct Planted {
     pub cut_ignored: bool,
     /// #2035: a restore that clears the cut writes' elements it restores.
     pub restore_forgets_cut: bool,
+    /// #1834: a logic module that writes each fire as if the step after the one that marked it
+    /// had marked it.
+    pub fire_one_step_late: bool,
     pub open_span_reads_zero: bool,
     pub judder_checks_shots_only: bool,
     pub budget_holds_steps_to_fuel_budget: bool,
@@ -92,6 +95,8 @@ pub struct Planted {
     /// #1250: a piece that reads the wall clock: after every step of the first item, the wall
     /// clock's nanoseconds join the first value of its first array, in a play and its replica alike.
     pub reads_wall_clock: bool,
+    /// #2662: a runner that shares one store between a world's forks of an item.
+    pub forks_share_store: bool,
 }
 
 impl Planted {
@@ -140,6 +145,7 @@ impl Planted {
             "seek_restores_arrays_only" => p.seek_restores_arrays_only = true,
             "cut_ignored" => p.cut_ignored = true,
             "restore_forgets_cut" => p.restore_forgets_cut = true,
+            "fire_one_step_late" => p.fire_one_step_late = true,
             "open_span_reads_zero" => p.open_span_reads_zero = true,
             "judder_checks_shots_only" => p.judder_checks_shots_only = true,
             "budget_holds_steps_to_fuel_budget" => p.budget_holds_steps_to_fuel_budget = true,
