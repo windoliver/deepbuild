@@ -1412,6 +1412,10 @@ byHand.push('tests/acceptance/980/ac09-budget.test.ts');
 // #689's blind redraft: AC2 builds and tests the whole workspace on 1.99.1; AC4 builds deep-app's hub_client test.
 slow.push('tests/acceptance/689-redraft-2047/ac2-checks.test.mjs', 'tests/acceptance/689-redraft-2047/ac4-app-in-unit-lane.test.mjs');
 
+// #2173's blind redraft: AC1 runs scripts/repo-rules.mjs over every file git lists in the checkout, untracked ones too,
+// so a suite writing into the checkout beside it could add a finding that isn't this change's.
+alone.push('tests/acceptance/2173-redraft-2047/');
+
 // #1500's files (blind) each build deep-show and play hundreds of frames of a game whose revisions land mid-play;
 // ac08-join-time.test.ts judges a join's time on the reference Mac. The Oracle lane plays upstream's pile.
 alone.push('tests/acceptance/1500/', 'tests/acceptance/1500-oracle/');
@@ -1596,7 +1600,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/1942/', 'tests/acceptance/1945/', 'tests/acceptance/1946/', 'tests/acceptance/1943/', 'tests/acceptance/1942-redraft-2073/',
   ],
   "shared: the checkout's source files": [
-    'tests/acceptance/1901/', 'tests/acceptance/2497/',
+    'tests/acceptance/1901/', 'tests/acceptance/2497/', 'tests/acceptance/2173-redraft-2047/',
   ],
   'shared: the sandbox log stream': [
     'tests/acceptance/67/', 'tests/acceptance/66/', 'tests/acceptance/103/', 'tests/acceptance/363/', 'tests/acceptance/365/', 'tests/acceptance/262/', 'tests/acceptance/366/',
