@@ -112,7 +112,7 @@ export async function admit(table: LeaseTable, holder: string, run: string, lane
         const available = memory?.available && (await memFree(table)) >= memory.mb ? await memory.available() : undefined;
         if (available !== undefined && available < memory!.mb) tell({ on: 'outside', available });
         else {
-          const got = await table.leaseAll({ holder, run }, asks);
+          const got = await table.ask({ holder, run }, asks);
           if (got.status === 'granted') return got.leases;
           if (got.status === 'BLOCKED') throw Error(got.message);
           if (got.resource.kind === MEM.kind) tell({ on: 'pool', holders: got.holders, free: got.free ?? 0 });
