@@ -23,6 +23,7 @@ mod columns;
 mod compare;
 mod compile;
 mod conformance;
+mod counting;
 mod effects;
 mod envelope;
 #[cfg(feature = "test-faults")]
@@ -36,6 +37,7 @@ mod flows2d;
 mod frames;
 mod full_lane;
 mod golden;
+mod grids2d;
 mod guard;
 mod hdr;
 mod host;
@@ -178,6 +180,9 @@ pub enum Planted {
     /// plate whose horizon table is never read, and its sky occlusion from its slope alone.
     TerrainNoHorizonBake,
     TerrainOcclusionFromSlope,
+    /// #2215's wrong program (tests/acceptance/2215/README.md: Assumed surfaces 3): the frame's
+    /// receipt lists no part that refracts through the round lobe.
+    RasterListsNothing,
     /// #378's wrong programs (tests/acceptance/378/README.md: Planted programs).
     ForwardZ,
     EncodesTwice,
@@ -589,6 +594,10 @@ pub enum Planted {
     NormalDotAlone,
     NormalUnturned,
     LightStaleHeight,
+    /// #269's wrong programs (tests/acceptance/269/README.md: Plants): a played frame's grid image
+    /// holds the step before its own; a pixel takes its cell's role before the rebuild.
+    GridKeepsPreviousStep,
+    GridRoleBeforeRebuild,
 }
 
 impl Planted {
@@ -780,6 +789,8 @@ impl Planted {
             "puff_block_copy" => Planted::PuffBlockCopy,
             "resolve_accumulates_frames" => Planted::ResolveAccumulatesFrames,
             "shifts_fill_two_codes" => Planted::ShiftsFillTwoCodes,
+            "grid_keeps_previous_step" => Planted::GridKeepsPreviousStep,
+            "grid_role_before_rebuild" => Planted::GridRoleBeforeRebuild,
             "shifts_glyph_quads" => Planted::ShiftsGlyphQuads,
             "ignores_spike" => Planted::IgnoresSpike,
             "sectors_source_over" => Planted::SectorsSourceOver,
@@ -979,6 +990,7 @@ impl Planted {
             "part_pose_in_world_space" => Planted::PartPoseInWorldSpace,
             "terrain_no_horizon_bake" => Planted::TerrainNoHorizonBake,
             "terrain_occlusion_from_slope" => Planted::TerrainOcclusionFromSlope,
+            "raster_lists_nothing" => Planted::RasterListsNothing,
             _ => {
                 let planted = deep_canvas_scene3d::spans::PLANTED;
                 Planted::HiddenLines(planted.iter().find(|p| p.0 == name)?.0)
@@ -1271,38 +1283,6 @@ impl App {
         }
     }
 }
-
-/// The counting allocator (issue #379, `test-meter` builds only): every allocation is offered to
-/// the core's count, which keeps only the frame path's own.
-#[cfg(feature = "test-meter")]
-struct Counting;
-
-#[cfg(feature = "test-meter")]
-// SAFETY: every call passes straight to the system allocator.
-unsafe impl std::alloc::GlobalAlloc for Counting {
-    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
-        deep_gpu::alloc::note();
-        unsafe { std::alloc::System.alloc(layout) }
-    }
-
-    unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {
-        deep_gpu::alloc::note();
-        unsafe { std::alloc::System.alloc_zeroed(layout) }
-    }
-
-    unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, size: usize) -> *mut u8 {
-        deep_gpu::alloc::note();
-        unsafe { std::alloc::System.realloc(ptr, layout, size) }
-    }
-
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
-        unsafe { std::alloc::System.dealloc(ptr, layout) }
-    }
-}
-
-#[cfg(feature = "test-meter")]
-#[global_allocator]
-static COUNTING: Counting = Counting;
 
 fn bad_input() -> ! {
     println!("{}", json!({"ok": false, "code": "bad_input"}));

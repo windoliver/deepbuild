@@ -1,0 +1,470 @@
+# #3066 acceptance suite at the base c7dc0edc3690706adb84d678806301c3d14456ca (origin/main), 2026-11-21.
+# macOS arm64 (Darwin 27.2.0), node v24.22.0, 1-minute load 82.05 at the start and 78.23 at the end (sysctl -n vm.loadavg).
+# Run: node --test --test-reporter=spec 'tests/acceptance/3066/*.test.mjs', in a fresh clone checked out at the base.
+# The checkout's path is written <checkout>, the temp folder <tmp>, and each scene's folder deep-3066-XXXXXX.
+#
+# 8 tests: 6 fail, each at the assertion its criterion names, and 2 pass.
+# - AC1 by-reason.test.mjs: `node scripts/lanes.mjs alone --by-reason` exits 0 and prints nothing: the base's lanes.mjs
+#   has no command line, so no count line for binary, timing or shared.
+# - AC1 lint-plants.test.mjs (2 tests): no command of the base's lint lane names the planted entry: it reads no reason.
+#   The commands that fail in the bare scene fail for the crates and docs it lacks, before and after a plant alike.
+# - AC3 lint-plants.test.mjs, #236's folder: the base's lint lane reads the same before and after the planted move.
+# - AC3 lint-plants.test.mjs, a timing entry: the base's lanes.mjs carries no reason, so no entry reads timing.
+# - AC2 moved-run.test.mjs: the run places the moved folder in the parallel block beside 5 files, its test reads
+#   target/debug/deep-hook and passes (the planted tests' notes), and no FAIL line names tests/acceptance/9367/. The
+#   run's exit 1 and its 1,926 NEW FAIL lines are the bare scene's lint findings, which name no planted file.
+# - AC4 same-failures.test.mjs (2 tests) passes: on the base, before and after are one tree. Each is proven by a planted
+#   wrong program (README: Twins), not by the base.
+
+✖ #3066.08445d81 `node scripts/lanes.mjs alone --by-reason` prints a count for each of binary, timing and shared, the counts sum to the alone list's length, and every alone entry carries one of the three (124.357583ms)
+✖ #3066.08445d81 a planted alone entry with no reason fails the lint lane, naming the entry (2668.981833ms)
+✖ #3066.08445d81 a planted alone entry with a fourth reason ("habit") fails the lint lane, naming the entry (1341.303167ms)
+✖ #3066.67d86604 a planted move of #236's folder out of alone fails the lint lane (1813.686375ms)
+✖ #3066.67d86604 a planted move of an alone entry whose reason is timing fails the lint lane (65.35225ms)
+✖ #3066.5466dab5 a planted move of a folder that still reads target/debug/deep-hook fails in the affected.mjs run that holds it in the parallel block with 4 files beside it, naming the folder (8042.056958ms)
+✔ #3066.4268aebb scripts/known-failures.json names the same failures as on the merge base: the same test IDs, lint findings, timing IDs and skips (43.468333ms)
+✔ #3066.4268aebb every test file of the merge base still runs where it ran: timed, slow, by hand or in a lane of its own as before, or in affected.mjs's parallel or alone block as before (10975.5045ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 2
+ℹ fail 6
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 11079.935041
+
+✖ failing tests:
+
+test at tests/acceptance/3066/by-reason.test.mjs:11:1
+✖ #3066.08445d81 `node scripts/lanes.mjs alone --by-reason` prints a count for each of binary, timing and shared, the counts sum to the alone list's length, and every alone entry carries one of the three (124.357583ms)
+  AssertionError [ERR_ASSERTION]: `node scripts/lanes.mjs alone --by-reason` does not print a count line for each of binary, timing, shared
+  exit 0
+  stdout:
+  
+  stderr:
+  
+  + actual - expected
+  
+  + []
+  - [
+  -   'binary',
+  -   'shared',
+  -   'timing'
+  - ]
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3066/by-reason.test.mjs:18:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [ 'binary', 'shared', 'timing' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3066/lint-plants.test.mjs:13:1
+✖ #3066.08445d81 a planted alone entry with no reason fails the lint lane, naming the entry (2668.981833ms)
+  AssertionError [ERR_ASSERTION]: no command of the lint lane fails naming tests/acceptance/9366/, an alone entry planted with no reason
+  node scripts/repo-rules.mjs: exit 1
+      FAIL secrets: scripts/repo-rules.json allows an API key in tests/acceptance/45-redraft/billing.test.ts that isn't there
+        Fix: Remove the allowedFindings entry, or correct its path, kind or sha256.
+      FAIL secrets: scripts/repo-rules.json allows a home path in tests/acceptance/402/cellgrid.test.ts that isn't there
+        Fix: Remove the allowedFindings entry, or correct its path, kind or sha256.
+  node scripts/vendor-rebase.mjs check: exit 1
+      FAIL vendor/gpui-pre-apple/upstream/README.md: no carried-patch table under ## Carried patches
+  node scripts/canvas-lint.mjs: exit 2
+      BLOCKED canvas-lint: <tmp>/deep-3066-XXXXXX/scene has no Cargo.toml
+        Fix: Install Rust with Cargo and clippy, which preflight already needs, and make the workspace build.
+  node scripts/size-ratchet.mjs: exit 1
+      FAIL size: scripts/lanes.mjs: 1970 lines, over 1500 with no ceiling
+        Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+      FAIL size: crates/deep-app/src/views.rs: not a hand-written source file the work tree holds, with a ceiling of 3606
+        Fix: Remove its entry from scripts/size-ceilings.json.
+  node scripts/wait-ratchet.mjs: exit 1
+      FAIL waits: crates/deep-contracts/tests/jcs.rs: not a test file the work tree holds, with a ceiling of 2
+        Fix: Remove its entry from scripts/wait-ceilings.json.
+      FAIL waits: crates/deep-gpu/tests/noop.rs: not a test file the work tree holds, with a ceiling of 1
+        Fix: Remove its entry from scripts/wait-ceilings.json.
+  node scripts/doc-ceilings.mjs: exit 1
+      node:fs:483
+          return binding.readFileUtf8(path, stringToFlags(options.flag));
+                         ^
+      Error: ENOENT: no such file or directory, open 'docs/technical-design.md'
+  node scripts/reading-rule.mjs: exit 1
+      node:fs:483
+          return binding.readFileUtf8(path, stringToFlags(options.flag));
+                         ^
+      Error: ENOENT: no such file or directory, open 'AGENTS.md'
+  node scripts/conformance-lint.mjs: exit 3
+      BLOCKED conformance lint: packages/conformance/dist is not built; run npm run build --workspaces
+  node scripts/slots-check.mjs: exit 3
+      BLOCKED slots: packages/conformance/dist or packages/contracts/dist is not built; run npm run build --workspaces
+  node scripts/canvas-closures.mjs closures: exit 0
+      PASS closures: 0 lists in 0 canvas schemas each carry a closure
+  node scripts/canvas-closures.mjs drift: exit 3
+      BLOCKED drift: <tmp>/deep-3066-XXXXXX/scene/docs/canvas-primitives.md is missing
+  node scripts/canvas-closures.mjs paths: exit 3
+      BLOCKED paths: <tmp>/deep-3066-XXXXXX/scene/docs/canvas-primitives.md is missing
+  node scripts/record-reader-guard.mjs: exit 1
+      node:fs:1630
+        const result = binding.readdir(
+                               ^
+      Error: ENOENT: no such file or directory, scandir '<tmp>/deep-3066-XXXXXX/scene/crates/deep-app/src'
+  node scripts/render-lint.mjs: exit 1
+      node:fs:1630
+        const result = binding.readdir(
+                               ^
+      Error: ENOENT: no such file or directory, scandir '<tmp>/deep-3066-XXXXXX/scene/crates/deep-app/src'
+  node scripts/plant-lint.mjs: exit 1
+      node:fs:1630
+        const result = binding.readdir(
+                               ^
+      Error: ENOENT: no such file or directory, scandir '<tmp>/deep-3066-XXXXXX/scene/crates/deep-app/src'
+  node scripts/loads-lint.mjs: exit 0
+      PASS loads
+  node scripts/budget-table.mjs check: exit 1
+      FAIL budget-table: row Hook overhead: the table's line isn't what the records here give: null, where they give "| Hook overhead | deep-hook-overhead (a reading), deep-hook-day-overhead (a reading) | unmeasured: no task carries the 10 ms p95; the overhead tasks print overheadP95Ms with no limit, and 
+      FAIL budget-table: row Fail-open time: the table's line isn't what the records here give: null, where they give "| Fail-open time | deep-hook-fail-open (a reading), deep-hook-day-fail-open (a reading) | unmeasured: no task carries the 50 ms; the fail-open tasks print failOpenP95Ms with no limit, and
+      FAIL budget-table: row Event intake: the table's line isn't what the records here give: null, where they give "| Event intake | record-append-20k (a reading) | unmeasured: no task carries 5,000 events a second; tests/acceptance/14/budgets.test.ts judges it outside the window |  |  |  |  |  |  |  |"
+      FAIL budget-table: row The app: the table's line isn't what the records here give: null, where they give "| The app | deep-inbox-30d (a reading) | unmeasured: no task launches the app's first screen; tests/acceptance/2026/load.test.ts judges the 1 s outside the window |  |  |  |  |  |  |  |"
+  node scripts/cache-lint.mjs: exit 0
+      PASS cache: 0 long-lived caches declare a bound in entries and in bytes
+  node scripts/blocking-call-guard.mjs: exit 1
+      node:fs:1630
+        const result = binding.readdir(
+                               ^
+      Error: ENOENT: no such file or directory, scandir '<tmp>/deep-3066-XXXXXX/scene/crates/deep-app/src'
+  node scripts/ask-sources-guard.mjs: exit 2
+      BLOCKED ask source: packages/asks/sources.json isn't there
+  node scripts/keymap-guard.mjs: exit 2
+      BLOCKED keymap: crates/deep-app/src/actions.json doesn't exist
+  node scripts/color-literal-guard.mjs: exit 0
+      PASS color literal: crates/deep-app/src and crates/deep-app/panels read every color from the look's roles
+      PASS size literal: crates/deep-app/src reads every size from the look's roles
+  node scripts/guide.mjs --check: exit 1
+      node:fs:483
+          return binding.readFileUtf8(path, stringToFlags(options.flag));
+                         ^
+      Error: ENOENT: no such file or directory, open '<tmp>/deep-3066-XXXXXX/scene/packages/contracts/extension-api.json'
+  node scripts/panel-catalog.mjs: exit 1
+      node:fs:483
+          return binding.readFileUtf8(path, stringToFlags(options.flag));
+                         ^
+      Error: ENOENT: no such file or directory, open '<tmp>/deep-3066-XXXXXX/scene/crates/deep-app/panel-catalog.json'
+  node scripts/known-failures-check.mjs: exit 1
+      node:fs:1630
+        const result = binding.readdir(
+                               ^
+      Error: ENOENT: no such file or directory, scandir '<tmp>/deep-3066-XXXXXX/scene/crates'
+  node scripts/fetch-lock.mjs lint: exit 0
+      PASS fetch-lock: scripts/fetch-lock.json pins 36 files, each at a commit with its sha256, size and credit
+  node scripts/exit-lint.mjs: exit 1
+      node:fs:483
+          return binding.readFileUtf8(path, stringToFlags(options.flag));
+                         ^
+      Error: ENOENT: no such file or directory, open '<tmp>/deep-3066-XXXXXX/scene/packages/contracts/schemas/exit.code@1.json'
+  node scripts/app-copy-lint.mjs: exit 1
+      FAIL copy: no app source at <tmp>/deep-3066-XXXXXX/scene/crates/deep-app/src
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3066/lint-plants.test.mjs:23:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [],
+    operator: 'notDeepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3066/lint-plants.test.mjs:26:1
+✖ #3066.08445d81 a planted alone entry with a fourth reason ("habit") fails the lint lane, naming the entry (1341.303167ms)
+  AssertionError [ERR_ASSERTION]: no command of the lint lane fails naming tests/acceptance/9367/, an alone entry planted with the reason "habit"
+  node scripts/repo-rules.mjs: exit 1
+      FAIL secrets: scripts/repo-rules.json allows an API key in tests/acceptance/45-redraft/billing.test.ts that isn't there
+        Fix: Remove the allowedFindings entry, or correct its path, kind or sha256.
+      FAIL secrets: scripts/repo-rules.json allows a home path in tests/acceptance/402/cellgrid.test.ts that isn't there
+        Fix: Remove the allowedFindings entry, or correct its path, kind or sha256.
+  node scripts/vendor-rebase.mjs check: exit 1
+      FAIL vendor/gpui-pre-apple/upstream/README.md: no carried-patch table under ## Carried patches
+  node scripts/canvas-lint.mjs: exit 2
+      BLOCKED canvas-lint: <tmp>/deep-3066-XXXXXX/scene has no Cargo.toml
+        Fix: Install Rust with Cargo and clippy, which preflight already needs, and make the workspace build.
+  node scripts/size-ratchet.mjs: exit 1
+      FAIL size: scripts/lanes.mjs: 1967 lines, over 1500 with no ceiling
+        Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+      FAIL size: crates/deep-app/src/views.rs: not a hand-written source file the work tree holds, with a ceiling of 3606
+        Fix: Remove its entry from scripts/size-ceilings.json.
+  node scripts/wait-ratchet.mjs: exit 1
+      FAIL waits: crates/deep-contracts/tests/jcs.rs: not a test file the work tree holds, with a ceiling of 2
+        Fix: Remove its entry from scripts/wait-ceilings.json.
+      FAIL waits: crates/deep-gpu/tests/noop.rs: not a test file the work tree holds, with a ceiling of 1
+        Fix: Remove its entry from scripts/wait-ceilings.json.
+  node scripts/doc-ceilings.mjs: exit 1
+      node:fs:483
+          return binding.readFileUtf8(path, stringToFlags(options.flag));
+                         ^
+      Error: ENOENT: no such file or directory, open 'docs/technical-design.md'
+  node scripts/reading-rule.mjs: exit 1
+      node:fs:483
+          return binding.readFileUtf8(path, stringToFlags(options.flag));
+                         ^
+      Error: ENOENT: no such file or directory, open 'AGENTS.md'
+  node scripts/conformance-lint.mjs: exit 3
+      BLOCKED conformance lint: packages/conformance/dist is not built; run npm run build --workspaces
+  node scripts/slots-check.mjs: exit 3
+      BLOCKED slots: packages/conformance/dist or packages/contracts/dist is not built; run npm run build --workspaces
+  node scripts/canvas-closures.mjs closures: exit 0
+      PASS closures: 0 lists in 0 canvas schemas each carry a closure
+  node scripts/canvas-closures.mjs drift: exit 3
+      BLOCKED drift: <tmp>/deep-3066-XXXXXX/scene/docs/canvas-primitives.md is missing
+  node scripts/canvas-closures.mjs paths: exit 3
+      BLOCKED paths: <tmp>/deep-3066-XXXXXX/scene/docs/canvas-primitives.md is missing
+  node scripts/record-reader-guard.mjs: exit 1
+      node:fs:1630
+        const result = binding.readdir(
+                               ^
+      Error: ENOENT: no such file or directory, scandir '<tmp>/deep-3066-XXXXXX/scene/crates/deep-app/src'
+  node scripts/render-lint.mjs: exit 1
+      node:fs:1630
+        const result = binding.readdir(
+                               ^
+      Error: ENOENT: no such file or directory, scandir '<tmp>/deep-3066-XXXXXX/scene/crates/deep-app/src'
+  node scripts/plant-lint.mjs: exit 1
+      node:fs:1630
+        const result = binding.readdir(
+                               ^
+      Error: ENOENT: no such file or directory, scandir '<tmp>/deep-3066-XXXXXX/scene/crates/deep-app/src'
+  node scripts/loads-lint.mjs: exit 0
+      PASS loads
+  node scripts/budget-table.mjs check: exit 1
+      FAIL budget-table: row Hook overhead: the table's line isn't what the records here give: null, where they give "| Hook overhead | deep-hook-overhead (a reading), deep-hook-day-overhead (a reading) | unmeasured: no task carries the 10 ms p95; the overhead tasks print overheadP95Ms with no limit, and 
+      FAIL budget-table: row Fail-open time: the table's line isn't what the records here give: null, where they give "| Fail-open time | deep-hook-fail-open (a reading), deep-hook-day-fail-open (a reading) | unmeasured: no task carries the 50 ms; the fail-open tasks print failOpenP95Ms with no limit, and
+      FAIL budget-table: row Event intake: the table's line isn't what the records here give: null, where they give "| Event intake | record-append-20k (a reading) | unmeasured: no task carries 5,000 events a second; tests/acceptance/14/budgets.test.ts judges it outside the window |  |  |  |  |  |  |  |"
+      FAIL budget-table: row The app: the table's line isn't what the records here give: null, where they give "| The app | deep-inbox-30d (a reading) | unmeasured: no task launches the app's first screen; tests/acceptance/2026/load.test.ts judges the 1 s outside the window |  |  |  |  |  |  |  |"
+  node scripts/cache-lint.mjs: exit 0
+      PASS cache: 0 long-lived caches declare a bound in entries and in bytes
+  node scripts/blocking-call-guard.mjs: exit 1
+      node:fs:1630
+        const result = binding.readdir(
+                               ^
+      Error: ENOENT: no such file or directory, scandir '<tmp>/deep-3066-XXXXXX/scene/crates/deep-app/src'
+  node scripts/ask-sources-guard.mjs: exit 2
+      BLOCKED ask source: packages/asks/sources.json isn't there
+  node scripts/keymap-guard.mjs: exit 2
+      BLOCKED keymap: crates/deep-app/src/actions.json doesn't exist
+  node scripts/color-literal-guard.mjs: exit 0
+      PASS color literal: crates/deep-app/src and crates/deep-app/panels read every color from the look's roles
+      PASS size literal: crates/deep-app/src reads every size from the look's roles
+  node scripts/guide.mjs --check: exit 1
+      node:fs:483
+          return binding.readFileUtf8(path, stringToFlags(options.flag));
+                         ^
+      Error: ENOENT: no such file or directory, open '<tmp>/deep-3066-XXXXXX/scene/packages/contracts/extension-api.json'
+  node scripts/panel-catalog.mjs: exit 1
+      node:fs:483
+          return binding.readFileUtf8(path, stringToFlags(options.flag));
+                         ^
+      Error: ENOENT: no such file or directory, open '<tmp>/deep-3066-XXXXXX/scene/crates/deep-app/panel-catalog.json'
+  node scripts/known-failures-check.mjs: exit 1
+      node:fs:1630
+        const result = binding.readdir(
+                               ^
+      Error: ENOENT: no such file or directory, scandir '<tmp>/deep-3066-XXXXXX/scene/crates'
+  node scripts/fetch-lock.mjs lint: exit 0
+      PASS fetch-lock: scripts/fetch-lock.json pins 36 files, each at a commit with its sha256, size and credit
+  node scripts/exit-lint.mjs: exit 1
+      node:fs:483
+          return binding.readFileUtf8(path, stringToFlags(options.flag));
+                         ^
+      Error: ENOENT: no such file or directory, open '<tmp>/deep-3066-XXXXXX/scene/packages/contracts/schemas/exit.code@1.json'
+  node scripts/app-copy-lint.mjs: exit 1
+      FAIL copy: no app source at <tmp>/deep-3066-XXXXXX/scene/crates/deep-app/src
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3066/lint-plants.test.mjs:31:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [],
+    operator: 'notDeepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3066/lint-plants.test.mjs:59:1
+✖ #3066.67d86604 a planted move of #236's folder out of alone fails the lint lane (1813.686375ms)
+  AssertionError [ERR_ASSERTION]: the lint lane does not fail for tests/acceptance/236/ (the sandbox log stream it shares) moved out of alone
+  node scripts/repo-rules.mjs: exit 1
+      FAIL secrets: scripts/repo-rules.json allows an API key in tests/acceptance/45-redraft/billing.test.ts that isn't there
+        Fix: Remove the allowedFindings entry, or correct its path, kind or sha256.
+      FAIL secrets: scripts/repo-rules.json allows a home path in tests/acceptance/402/cellgrid.test.ts that isn't there
+        Fix: Remove the allowedFindings entry, or correct its path, kind or sha256.
+  node scripts/vendor-rebase.mjs check: exit 1
+      FAIL vendor/gpui-pre-apple/upstream/README.md: no carried-patch table under ## Carried patches
+  node scripts/canvas-lint.mjs: exit 2
+      BLOCKED canvas-lint: <tmp>/deep-3066-XXXXXX/scene has no Cargo.toml
+        Fix: Install Rust with Cargo and clippy, which preflight already needs, and make the workspace build.
+  node scripts/size-ratchet.mjs: exit 1
+      FAIL size: scripts/lanes.mjs: 1967 lines, over 1500 with no ceiling
+        Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+      FAIL size: crates/deep-app/src/views.rs: not a hand-written source file the work tree holds, with a ceiling of 3606
+        Fix: Remove its entry from scripts/size-ceilings.json.
+  node scripts/wait-ratchet.mjs: exit 1
+      FAIL waits: crates/deep-contracts/tests/jcs.rs: not a test file the work tree holds, with a ceiling of 2
+        Fix: Remove its entry from scripts/wait-ceilings.json.
+      FAIL waits: crates/deep-gpu/tests/noop.rs: not a test file the work tree holds, with a ceiling of 1
+        Fix: Remove its entry from scripts/wait-ceilings.json.
+  node scripts/doc-ceilings.mjs: exit 1
+      node:fs:483
+          return binding.readFileUtf8(path, stringToFlags(options.flag));
+                         ^
+      Error: ENOENT: no such file or directory, open 'docs/technical-design.md'
+  node scripts/reading-rule.mjs: exit 1
+      node:fs:483
+          return binding.readFileUtf8(path, stringToFlags(options.flag));
+                         ^
+      Error: ENOENT: no such file or directory, open 'AGENTS.md'
+  node scripts/conformance-lint.mjs: exit 3
+      BLOCKED conformance lint: packages/conformance/dist is not built; run npm run build --workspaces
+  node scripts/slots-check.mjs: exit 3
+      BLOCKED slots: packages/conformance/dist or packages/contracts/dist is not built; run npm run build --workspaces
+  node scripts/canvas-closures.mjs closures: exit 0
+      PASS closures: 0 lists in 0 canvas schemas each carry a closure
+  node scripts/canvas-closures.mjs drift: exit 3
+      BLOCKED drift: <tmp>/deep-3066-XXXXXX/scene/docs/canvas-primitives.md is missing
+  node scripts/canvas-closures.mjs paths: exit 3
+      BLOCKED paths: <tmp>/deep-3066-XXXXXX/scene/docs/canvas-primitives.md is missing
+  node scripts/record-reader-guard.mjs: exit 1
+      node:fs:1630
+        const result = binding.readdir(
+                               ^
+      Error: ENOENT: no such file or directory, scandir '<tmp>/deep-3066-XXXXXX/scene/crates/deep-app/src'
+  node scripts/render-lint.mjs: exit 1
+      node:fs:1630
+        const result = binding.readdir(
+                               ^
+      Error: ENOENT: no such file or directory, scandir '<tmp>/deep-3066-XXXXXX/scene/crates/deep-app/src'
+  node scripts/plant-lint.mjs: exit 1
+      node:fs:1630
+        const result = binding.readdir(
+                               ^
+      Error: ENOENT: no such file or directory, scandir '<tmp>/deep-3066-XXXXXX/scene/crates/deep-app/src'
+  node scripts/loads-lint.mjs: exit 0
+      PASS loads
+  node scripts/budget-table.mjs check: exit 1
+      FAIL budget-table: row Hook overhead: the table's line isn't what the records here give: null, where they give "| Hook overhead | deep-hook-overhead (a reading), deep-hook-day-overhead (a reading) | unmeasured: no task carries the 10 ms p95; the overhead tasks print overheadP95Ms with no limit, and 
+      FAIL budget-table: row Fail-open time: the table's line isn't what the records here give: null, where they give "| Fail-open time | deep-hook-fail-open (a reading), deep-hook-day-fail-open (a reading) | unmeasured: no task carries the 50 ms; the fail-open tasks print failOpenP95Ms with no limit, and
+      FAIL budget-table: row Event intake: the table's line isn't what the records here give: null, where they give "| Event intake | record-append-20k (a reading) | unmeasured: no task carries 5,000 events a second; tests/acceptance/14/budgets.test.ts judges it outside the window |  |  |  |  |  |  |  |"
+      FAIL budget-table: row The app: the table's line isn't what the records here give: null, where they give "| The app | deep-inbox-30d (a reading) | unmeasured: no task launches the app's first screen; tests/acceptance/2026/load.test.ts judges the 1 s outside the window |  |  |  |  |  |  |  |"
+  node scripts/cache-lint.mjs: exit 0
+      PASS cache: 0 long-lived caches declare a bound in entries and in bytes
+  node scripts/blocking-call-guard.mjs: exit 1
+      node:fs:1630
+        const result = binding.readdir(
+                               ^
+      Error: ENOENT: no such file or directory, scandir '<tmp>/deep-3066-XXXXXX/scene/crates/deep-app/src'
+  node scripts/ask-sources-guard.mjs: exit 2
+      BLOCKED ask source: packages/asks/sources.json isn't there
+  node scripts/keymap-guard.mjs: exit 2
+      BLOCKED keymap: crates/deep-app/src/actions.json doesn't exist
+  node scripts/color-literal-guard.mjs: exit 0
+      PASS color literal: crates/deep-app/src and crates/deep-app/panels read every color from the look's roles
+      PASS size literal: crates/deep-app/src reads every size from the look's roles
+  node scripts/guide.mjs --check: exit 1
+      node:fs:483
+          return binding.readFileUtf8(path, stringToFlags(options.flag));
+                         ^
+      Error: ENOENT: no such file or directory, open '<tmp>/deep-3066-XXXXXX/scene/packages/contracts/extension-api.json'
+  node scripts/panel-catalog.mjs: exit 1
+      node:fs:483
+          return binding.readFileUtf8(path, stringToFlags(options.flag));
+                         ^
+      Error: ENOENT: no such file or directory, open '<tmp>/deep-3066-XXXXXX/scene/crates/deep-app/panel-catalog.json'
+  node scripts/known-failures-check.mjs: exit 1
+      node:fs:1630
+        const result = binding.readdir(
+                               ^
+      Error: ENOENT: no such file or directory, scandir '<tmp>/deep-3066-XXXXXX/scene/crates'
+  node scripts/fetch-lock.mjs lint: exit 0
+      PASS fetch-lock: scripts/fetch-lock.json pins 36 files, each at a commit with its sha256, size and credit
+  node scripts/exit-lint.mjs: exit 1
+      node:fs:483
+          return binding.readFileUtf8(path, stringToFlags(options.flag));
+                         ^
+      Error: ENOENT: no such file or directory, open '<tmp>/deep-3066-XXXXXX/scene/packages/contracts/schemas/exit.code@1.json'
+  node scripts/app-copy-lint.mjs: exit 1
+      FAIL copy: no app source at <tmp>/deep-3066-XXXXXX/scene/crates/deep-app/src
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3066/lint-plants.test.mjs:61:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [],
+    operator: 'notDeepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3066/lint-plants.test.mjs:64:1
+✖ #3066.67d86604 a planted move of an alone entry whose reason is timing fails the lint lane (65.35225ms)
+  AssertionError [ERR_ASSERTION]: no alone entry of scripts/lanes.mjs carries the reason timing (aloneReasons), so none can be planted as moved
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3066/lint-plants.test.mjs:68:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3066/moved-run.test.mjs:18:1
+✖ #3066.5466dab5 a planted move of a folder that still reads target/debug/deep-hook fails in the affected.mjs run that holds it in the parallel block with 4 files beside it, naming the folder (8042.056958ms)
+  AssertionError [ERR_ASSERTION]: no FAIL line of the run names tests/acceptance/9367/, moved to the parallel block while its file still reads target/debug/deep-hook
+  exit 1
+  stdout (1926 NEW FAIL lines that name no planted file left out):
+  parallel node: tests/acceptance/9367/hook.test.mjs tests/acceptance/9368/hook.test.mjs tests/fixture-3066/plain-1.test.mjs tests/fixture-3066/plain-2.test.mjs tests/fixture-3066/plain-3.test.mjs tests/fixture-3066/plain-4.test.mjs
+  alone node: tests/acceptance/9369/hook.test.mjs
+  BINARIES <tmp>/deep-3066-XXXXXX/scene/: deep-hook (DEEP_BIN_DIR); built in 0 s, before the test grant
+  JOBSERVER fuser can't see the run's pipe, so tokens a killed build held are not given back (#2848)
+  INVALID canvas-lint: no workspace crate has the deep-canvas prefix or registers a check kind
+  BLOCKED conformance lint: packages/conformance/dist is not built; run npm run build --workspaces
+  BLOCKED slots: packages/conformance/dist or packages/contracts/dist is not built; run npm run build --workspaces
+  BLOCKED paths: <tmp>/deep-3066-XXXXXX/scene/docs/canvas-primitives.md is missing
+  BLOCKED paths: <tmp>/deep-3066-XXXXXX/scene/docs/canvas-primitives.md is missing
+  BLOCKED paths: <tmp>/deep-3066-XXXXXX/scene/docs/canvas-primitives.md is missing
+  BLOCKED ask source: packages/asks/sources.json isn't there
+  BLOCKED keymap: crates/deep-app/src/actions.json doesn't exist
+  FAIL affected: 1926 new, 0 already failing on main, 8 inconclusive or blocked, 0 listed skips, 7 passed, in 3 s at load 78; logs in <tmp>/deep-3066-XXXXXX/tmp/deep-affected-Sd6kS4
+  
+  stderr:
+  
+  planted tests' notes:
+  {"file":"tests/fixture-3066/plain-2.test.mjs","root":"<tmp>/deep-3066-XXXXXX/scene"}
+  {"file":"tests/fixture-3066/plain-3.test.mjs","root":"<tmp>/deep-3066-XXXXXX/scene"}
+  {"file":"tests/fixture-3066/plain-1.test.mjs","root":"<tmp>/deep-3066-XXXXXX/scene"}
+  {"file":"tests/fixture-3066/plain-4.test.mjs","root":"<tmp>/deep-3066-XXXXXX/scene"}
+  {"file":"tests/acceptance/9367/hook.test.mjs","root":"<tmp>/deep-3066-XXXXXX/scene","bin":"<tmp>/deep-3066-XXXXXX/scene/target/debug/deep-hook","status":0,"stdout":"deep-hook b65d3f9ded3b"}
+  {"file":"tests/acceptance/9368/hook.test.mjs","root":"<tmp>/deep-3066-XXXXXX/scene","bin":"<tmp>/deep-3066-XXXXXX/tmp/deep-affected-Sd6kS4/binaries/0/bin/deep-hook","status":0,"stdout":"deep-hook b65d3f9ded3b"}
+  {"file":"tests/acceptance/9369/hook.test.mjs","root":"<tmp>/deep-3066-XXXXXX/scene","bin":"<tmp>/deep-3066-XXXXXX/scene/target/debug/deep-hook","status":0,"stdout":"deep-hook b65d3f9ded3b"}
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3066/moved-run.test.mjs:43:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [],
+    operator: 'notDeepStrictEqual',
+    diff: 'simple'
+  }

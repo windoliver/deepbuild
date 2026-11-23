@@ -1,4 +1,5 @@
 // `deep memory overrule` end to end (#111): a kept lesson's guard goes and it is listed again; a rejection overruled can be said again.
+import { appendFileSync } from 'node:fs';
 import { afterAll, describe, expect, it } from 'vitest';
 import { hook, newSession, payload } from '../../../tests/acceptance/316/helpers.ts';
 import { claudeSession, cleanup, compile, decision, deep, memoryHome, toolCallIn, type Mem } from '../../../tests/acceptance/111/helpers.ts';
@@ -30,7 +31,10 @@ describe('deep memory overrule', () => {
     expect(decision(await toolCallIn(m, m.api, 'sh scripts/live.sh kafka'))).toBe('allow');
     const s = newSession(m.h.home, m.api);
     await hook(m.h.home, s, 'SessionStart', payload(s, 'SessionStart'));
-    await hook(m.h.home, s, 'UserPromptSubmit', { ...payload(s, 'UserPromptSubmit'), prompt: 'Again no. rejected: `kafka`.' } as never);
+    // Only a prompt you typed saves a rejection (#1621): its transcript entry as Claude Code writes it, joined by prompt_id.
+    const prompt = 'Again no. rejected: `kafka`.';
+    appendFileSync(s.transcript, `${JSON.stringify({ type: 'user', uuid: 'p-again', promptId: 'p-again', message: { role: 'user', content: prompt }, origin: { kind: 'human' }, turnOrigin: 'human' })}\n`);
+    await hook(m.h.home, s, 'UserPromptSubmit', { ...payload(s, 'UserPromptSubmit'), prompt, prompt_id: 'p-again' } as never);
     for (const until = Date.now() + 10_000; Date.now() < until && !(await listed(m)).rejected.length; await new Promise((r) => setTimeout(r, 100)));
     expect((await listed(m)).rejected.map((r) => r.direction)).toEqual(['kafka']);
     expect(decision(await toolCallIn(m, m.api, 'sh scripts/live.sh kafka'))).toBe('deny');

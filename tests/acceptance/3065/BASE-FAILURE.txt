@@ -1,0 +1,545 @@
+# #3065 acceptance suite at base c7dc0edc3 (origin/main), macOS arm64 (Darwin 27.2.0), 12 cores, one-minute load 116
+# (load averages 116.14 106.24 92.84 before and after the run), cargo 1.99.1, Node v24.22.0.
+# Run: node --test --test-reporter=spec tests/acceptance/3065/*.test.mjs, once, exit 1.
+# The checkout's path is shortened to <checkout>.
+#
+# Expected failures at the base, all 12 tests, each at an assertion of the suite's (ERR_ASSERTION, thrown in
+# tests/acceptance/3065/helpers.mjs):
+# - scripts/reach.mjs does not exist at the base, so `node scripts/reach.mjs record` in the fixture exits 1
+#   (MODULE_NOT_FOUND, in the message) and writes nothing. Every test first reads the one record the recording run
+#   left under ~/.deepbuild/reach/ of the sandbox's HOME, and fails there: "the recording run left 0 records under
+#   ~/.deepbuild/reach/ of its HOME, not the one <tree>.json the issue names".
+# - AC1 (2 tests), AC2's record half (3) and AC4 (1), in record.test.mjs: no record, so no row to read.
+# - AC2's compare half (3) and AC3 (3), in compare.test.mjs: no record; they stop before `reach.mjs compare`,
+#   which would fail the same way (no such script, so no count printed).
+# No test passes at the base: the suite holds no guard of existing behaviour. The fixture itself was checked apart
+# from this run: the base's unit lane in it takes 5 s and ends FAIL on the killed file, with the skipped one
+# INCONCLUSIVE and the eight other planted tests that run passing, and `affected.mjs --list` selects for each change the files
+# the README's tables name.
+
+✖ #3065.AC2 compare counts a selected test file that didn't run, with no row, as reaching the change (658.151625ms)
+✖ #3065.AC2 compare counts a selected test file that was skipped, with no row, as reaching the change (0.324166ms)
+✖ #3065.AC2 compare counts a selected test file that had its process killed, with no row, as reaching the change (0.066417ms)
+✖ #3065.AC3 compare on a one-line change to the hub source file prints selected, recorded as reaching and recorded as not reaching, summing to selected (0.101708ms)
+✖ #3065.AC3 compare on a one-line change to the canvas crate prints selected, recorded as reaching and recorded as not reaching, summing to selected (0.053625ms)
+✖ #3065.AC3 compare on a one-line change to the design doc prints selected, recorded as reaching and recorded as not reaching, summing to selected (0.048667ms)
+✖ #3065.AC1 a test that imports a helper naming deep-hook and never starts it has no binary in the record, and its twin that starts it has deep-hook (624.059208ms)
+✖ #3065.AC1 a test that starts deep-hook by its path under target/ has deep-hook in the record (0.403041ms)
+✖ #3065.AC2 a test file that didn't run has no row in the record (0.103833ms)
+✖ #3065.AC2 a test file that was skipped has no row in the record (0.076958ms)
+✖ #3065.AC2 a test file that had its process killed has no row in the record (0.078791ms)
+✖ #3065.AC4 the record holds no file content, argument or environment value: paths and binary names only (0.123875ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 0
+ℹ fail 12
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 793.3445
+
+✖ failing tests:
+
+test at tests/acceptance/3065/compare.test.mjs:11:3
+✖ #3065.AC2 compare counts a selected test file that didn't run, with no row, as reaching the change (658.151625ms)
+  AssertionError [ERR_ASSERTION]: the recording run left 0 records under ~/.deepbuild/reach/ of its HOME, not the one <tree>.json the issue names
+  node scripts/reach.mjs record:
+  exit 1
+  stdout:
+  
+  stderr:
+  …al/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-1115-df9z3Y/tree/scripts/reach.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.0
+  
+  
+  0 !== 1
+  
+      at theRecord (file://<checkout>/tests/acceptance/3065/helpers.mjs:243:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3065/compare.test.mjs:13:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3065/compare.test.mjs:11:3
+✖ #3065.AC2 compare counts a selected test file that was skipped, with no row, as reaching the change (0.324166ms)
+  AssertionError [ERR_ASSERTION]: the recording run left 0 records under ~/.deepbuild/reach/ of its HOME, not the one <tree>.json the issue names
+  node scripts/reach.mjs record:
+  exit 1
+  stdout:
+  
+  stderr:
+  …al/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-1115-df9z3Y/tree/scripts/reach.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.0
+  
+  
+  0 !== 1
+  
+      at theRecord (file://<checkout>/tests/acceptance/3065/helpers.mjs:243:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3065/compare.test.mjs:13:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3065/compare.test.mjs:11:3
+✖ #3065.AC2 compare counts a selected test file that had its process killed, with no row, as reaching the change (0.066417ms)
+  AssertionError [ERR_ASSERTION]: the recording run left 0 records under ~/.deepbuild/reach/ of its HOME, not the one <tree>.json the issue names
+  node scripts/reach.mjs record:
+  exit 1
+  stdout:
+  
+  stderr:
+  …al/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-1115-df9z3Y/tree/scripts/reach.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.0
+  
+  
+  0 !== 1
+  
+      at theRecord (file://<checkout>/tests/acceptance/3065/helpers.mjs:243:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3065/compare.test.mjs:13:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3065/compare.test.mjs:33:3
+✖ #3065.AC3 compare on a one-line change to the hub source file prints selected, recorded as reaching and recorded as not reaching, summing to selected (0.101708ms)
+  AssertionError [ERR_ASSERTION]: the recording run left 0 records under ~/.deepbuild/reach/ of its HOME, not the one <tree>.json the issue names
+  node scripts/reach.mjs record:
+  exit 1
+  stdout:
+  
+  stderr:
+  …al/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-1115-df9z3Y/tree/scripts/reach.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.0
+  
+  
+  0 !== 1
+  
+      at theRecord (file://<checkout>/tests/acceptance/3065/helpers.mjs:243:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3065/compare.test.mjs:35:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3065/compare.test.mjs:33:3
+✖ #3065.AC3 compare on a one-line change to the canvas crate prints selected, recorded as reaching and recorded as not reaching, summing to selected (0.053625ms)
+  AssertionError [ERR_ASSERTION]: the recording run left 0 records under ~/.deepbuild/reach/ of its HOME, not the one <tree>.json the issue names
+  node scripts/reach.mjs record:
+  exit 1
+  stdout:
+  
+  stderr:
+  …al/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-1115-df9z3Y/tree/scripts/reach.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.0
+  
+  
+  0 !== 1
+  
+      at theRecord (file://<checkout>/tests/acceptance/3065/helpers.mjs:243:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3065/compare.test.mjs:35:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3065/compare.test.mjs:33:3
+✖ #3065.AC3 compare on a one-line change to the design doc prints selected, recorded as reaching and recorded as not reaching, summing to selected (0.048667ms)
+  AssertionError [ERR_ASSERTION]: the recording run left 0 records under ~/.deepbuild/reach/ of its HOME, not the one <tree>.json the issue names
+  node scripts/reach.mjs record:
+  exit 1
+  stdout:
+  
+  stderr:
+  …al/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-1115-df9z3Y/tree/scripts/reach.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.0
+  
+  
+  0 !== 1
+  
+      at theRecord (file://<checkout>/tests/acceptance/3065/helpers.mjs:243:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3065/compare.test.mjs:35:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3065/record.test.mjs:10:1
+✖ #3065.AC1 a test that imports a helper naming deep-hook and never starts it has no binary in the record, and its twin that starts it has deep-hook (624.059208ms)
+  AssertionError [ERR_ASSERTION]: the recording run left 0 records under ~/.deepbuild/reach/ of its HOME, not the one <tree>.json the issue names
+  node scripts/reach.mjs record:
+  exit 1
+  stdout:
+  
+  stderr:
+  …al/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-1115-AdcUXb/tree/scripts/reach.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.0
+  
+  
+  0 !== 1
+  
+      at theRecord (file://<checkout>/tests/acceptance/3065/helpers.mjs:243:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3065/record.test.mjs:12:26)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3065/record.test.mjs:23:1
+✖ #3065.AC1 a test that starts deep-hook by its path under target/ has deep-hook in the record (0.403041ms)
+  AssertionError [ERR_ASSERTION]: the recording run left 0 records under ~/.deepbuild/reach/ of its HOME, not the one <tree>.json the issue names
+  node scripts/reach.mjs record:
+  exit 1
+  stdout:
+  
+  stderr:
+  …al/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-1115-AdcUXb/tree/scripts/reach.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.0
+  
+  
+  0 !== 1
+  
+      at theRecord (file://<checkout>/tests/acceptance/3065/helpers.mjs:243:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3065/record.test.mjs:25:26)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3065/record.test.mjs:32:3
+✖ #3065.AC2 a test file that didn't run has no row in the record (0.103833ms)
+  AssertionError [ERR_ASSERTION]: the recording run left 0 records under ~/.deepbuild/reach/ of its HOME, not the one <tree>.json the issue names
+  node scripts/reach.mjs record:
+  exit 1
+  stdout:
+  
+  stderr:
+  …al/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-1115-AdcUXb/tree/scripts/reach.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.0
+  
+  
+  0 !== 1
+  
+      at theRecord (file://<checkout>/tests/acceptance/3065/helpers.mjs:243:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3065/record.test.mjs:34:28)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3065/record.test.mjs:32:3
+✖ #3065.AC2 a test file that was skipped has no row in the record (0.076958ms)
+  AssertionError [ERR_ASSERTION]: the recording run left 0 records under ~/.deepbuild/reach/ of its HOME, not the one <tree>.json the issue names
+  node scripts/reach.mjs record:
+  exit 1
+  stdout:
+  
+  stderr:
+  …al/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-1115-AdcUXb/tree/scripts/reach.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.0
+  
+  
+  0 !== 1
+  
+      at theRecord (file://<checkout>/tests/acceptance/3065/helpers.mjs:243:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3065/record.test.mjs:34:28)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3065/record.test.mjs:32:3
+✖ #3065.AC2 a test file that had its process killed has no row in the record (0.078791ms)
+  AssertionError [ERR_ASSERTION]: the recording run left 0 records under ~/.deepbuild/reach/ of its HOME, not the one <tree>.json the issue names
+  node scripts/reach.mjs record:
+  exit 1
+  stdout:
+  
+  stderr:
+  …al/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-1115-AdcUXb/tree/scripts/reach.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.0
+  
+  
+  0 !== 1
+  
+      at theRecord (file://<checkout>/tests/acceptance/3065/helpers.mjs:243:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3065/record.test.mjs:34:28)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3065/record.test.mjs:42:1
+✖ #3065.AC4 the record holds no file content, argument or environment value: paths and binary names only (0.123875ms)
+  AssertionError [ERR_ASSERTION]: the recording run left 0 records under ~/.deepbuild/reach/ of its HOME, not the one <tree>.json the issue names
+  node scripts/reach.mjs record:
+  exit 1
+  stdout:
+  
+  stderr:
+  …al/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-1115-AdcUXb/tree/scripts/reach.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.0
+  
+  
+  0 !== 1
+  
+      at theRecord (file://<checkout>/tests/acceptance/3065/helpers.mjs:243:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3065/record.test.mjs:44:32)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

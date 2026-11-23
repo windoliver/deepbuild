@@ -1,0 +1,188 @@
+{
+  "name": "kettle",
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "240fab6fbde89571ac7ed7e0e20ebdfc7635f836c19cd8c5a2f006b4cbc2e2e6",
+      "step_rate": 120,
+      "reads": [
+        "kettle_on"
+      ],
+      "writes": {
+        "v": {
+          "type": "f64",
+          "count": 3
+        },
+        "i_rms": {
+          "type": "f64",
+          "count": 4
+        },
+        "i": {
+          "type": "f64",
+          "count": 4
+        },
+        "p": {
+          "type": "f64",
+          "count": 4
+        },
+        "r": {
+          "type": "f64",
+          "count": 4
+        },
+        "on": {
+          "type": "i32",
+          "count": 4
+        },
+        "energy": {
+          "type": "f64",
+          "count": 4
+        },
+        "kwh": {
+          "type": "f64",
+          "count": 4
+        },
+        "drift": {
+          "type": "f64",
+          "count": 4
+        },
+        "drift_x": {
+          "type": "f64",
+          "count": 4
+        }
+      },
+      "circuit": {
+        "nodes": [
+          "neutral",
+          "live",
+          "element"
+        ],
+        "parts": [
+          {
+            "id": "mains",
+            "kind": "source_ac",
+            "from": "neutral",
+            "to": "live",
+            "v_rms": 230,
+            "f": 50
+          },
+          {
+            "id": "switch",
+            "kind": "switch",
+            "from": "live",
+            "to": "element",
+            "closed_by": "kettle_on"
+          },
+          {
+            "id": "kettle",
+            "kind": "load",
+            "from": "element",
+            "to": "neutral",
+            "p_rated": 2400,
+            "v_rated": 230
+          },
+          {
+            "id": "meter",
+            "kind": "meter",
+            "on": "kettle"
+          }
+        ]
+      },
+      "budget": {
+        "fuel": 10000000
+      }
+    }
+  },
+  "controls": {
+    "kettle_on": {
+      "kind": "slider"
+    }
+  },
+  "track": [
+    {
+      "t": 0,
+      "seq": 1,
+      "control": "kettle_on",
+      "value": 0,
+      "writer": "you",
+      "player": 1
+    },
+    {
+      "t": 11760000,
+      "seq": 2,
+      "control": "kettle_on",
+      "value": 1,
+      "writer": "you",
+      "player": 1
+    }
+  ],
+  "steps": 4,
+  "expect": {
+    "arrays": {
+      "1": {
+        "p": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "energy": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "on": [
+          1,
+          0,
+          1,
+          0
+        ]
+      },
+      "2": {
+        "i_rms": [
+          10.434782608695652,
+          10.434782608695652,
+          10.434782608695652,
+          0
+        ],
+        "p": [
+          2400,
+          0,
+          2400,
+          0
+        ],
+        "energy": [
+          0,
+          0,
+          0,
+          20
+        ],
+        "on": [
+          1,
+          1,
+          1,
+          0
+        ]
+      },
+      "3": {
+        "energy": [
+          0,
+          0,
+          0,
+          40
+        ],
+        "kwh": [
+          0,
+          0,
+          0,
+          0.000011111111111111112
+        ]
+      }
+    },
+    "tolerance": {
+      "abs": 1e-15,
+      "rel": 1e-9
+    }
+  },
+  "answer": "The kettle is 230² ÷ 2,400 = 22.0417 Ω, so on 230 V it takes 2,400 W and 2,400 ÷ 230 = 10.4348 A. At 120 steps a second a step is 1/120 s: 2,400 W × 1/120 s = 20 J a step. The switch is open at steps 0 and 1: no current, no power, the meter at 0. Closed from step 2: 20 J at step 2 and 40 J (1.11 × 10⁻⁵ kWh) at step 3, each step's own power included."
+}

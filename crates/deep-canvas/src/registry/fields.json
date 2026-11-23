@@ -137,6 +137,8 @@
 {"list":"mark.line@1.ends.start","closed":"draw_path","reopens_if":"a line needs an end shape the list lacks","instead":"a `path@1` item drawn at the end"},
 {"list":"mark.line@1.join","closed":"draw_path","reopens_if":"never: the three joins every stroke draws","instead":"nothing"},
 {"list":"mark.line@1.points.rows","closed":"determinism","reopens_if":"never: all reads every row of the array","instead":"a range `[from, to]` of rows"},
+{"list":"mark.line@1.trail.space","closed":"determinism","reopens_if":"a trail needs its places held in a frame other than the world's or its source's parent's","instead":"nothing"},
+{"list":"mark.line@1.trail.window","closed":"determinism","reopens_if":"a trail needs a stretch of its source's path that none of span, since and whole draws","instead":"several trails on one source, each with its own window"},
 {"list":"mark.point@1.from","closed":"ring","reopens_if":"a point cloud needs a source other than a video's depth","instead":"points written as data rows"},
 {"list":"mark.point@1.from.video.depth","closed":"determinism","reopens_if":"a point cloud needs its depth from another channel of the video","instead":"nothing"},
 {"list":"marks@1.columns.<name>.as","closed":"determinism","reopens_if":"a logic array holds a value type none of the seven is","instead":"leave `as` out to read the array as its own type"},

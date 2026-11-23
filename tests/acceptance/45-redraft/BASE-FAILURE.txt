@@ -1,7 +1,7 @@
 base commit: 244a3455f2c2ecb03d57d933dadfdbefa701cbbd
 command: npx vitest run tests/acceptance/45-redraft/ --reporter=verbose
 
- RUN  v5.0.5 /private/tmp/claude-501/-Users-sophiawj-private-deepbuild-core--claude-worktrees-issue-45-implementation-e83eea/6091b0b3-29a6-4f66-8d31-82491c73f3fa/scratchpad/redraft/base
+ RUN  v5.0.5 /private/tmp/claude-501/-Users-<name>-private-deepbuild-core--claude-worktrees-issue-45-implementation-e83eea/6091b0b3-29a6-4f66-8d31-82491c73f3fa/scratchpad/redraft/base
 
  × tests/acceptance/45-redraft/billing.test.ts > #45.7c1e4a90 AC6 a session started with ANTHROPIC_API_KEY set shows as billing an API key, its twin without the key does not, and the value is stored nowhere 5967ms
    → the session started with ANTHROPIC_API_KEY set shows as billing an API key:
