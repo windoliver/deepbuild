@@ -1,0 +1,10 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "rootDir": "../../.."
+  },
+  "include": ["./**/*.ts"],
+  "exclude": ["./twins/**", "./node_modules/**"]
+}
