@@ -71120,6 +71120,288 @@ impl Contract for ResourceCreated {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct ReviewPassV;
+
+impl Contract for ReviewPassV {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "1").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("1").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReviewPassKind;
+
+impl Contract for ReviewPassKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"review.pass\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"review.pass\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReviewPassWriter;
+
+impl Contract for ReviewPassWriter {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"core\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"core\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReviewPassDataSentItemSitesItem {
+    pub file: String,
+    pub line: i64,
+    pub quote: String,
+}
+
+impl Contract for ReviewPassDataSentItemSitesItem {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["file", "line", "quote"])?;
+        deep_contracts::check_member(members, at, "file", &RULE_6)?;
+        deep_contracts::check_member(members, at, "line", &RULE_5)?;
+        deep_contracts::check_member(members, at, "quote", &RULE_6)?;
+        Ok(Self {
+            file: deep_contracts::required(members, at, "file")?,
+            line: deep_contracts::required(members, at, "line")?,
+            quote: deep_contracts::required(members, at, "quote")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("file".to_string(), self.file.to_json()));
+        members.push(("line".to_string(), self.line.to_json()));
+        members.push(("quote".to_string(), self.quote.to_json()));
+        Value::Object(members)
+    }
+}
+
+static RULE_285: deep_contracts::Rule = deep_contracts::Rule::Array { min: Some(1), max: Some(4096), items: None };
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReviewPassDataSentItem {
+    pub rule: String,
+    pub sites: Vec<ReviewPassDataSentItemSitesItem>,
+}
+
+impl Contract for ReviewPassDataSentItem {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["rule", "sites"])?;
+        deep_contracts::check_member(members, at, "rule", &RULE_6)?;
+        deep_contracts::check_member(members, at, "sites", &RULE_285)?;
+        Ok(Self {
+            rule: deep_contracts::required(members, at, "rule")?,
+            sites: deep_contracts::required(members, at, "sites")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("rule".to_string(), self.rule.to_json()));
+        members.push(("sites".to_string(), self.sites.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReviewPassDataFollowUpsItem {
+    pub file: String,
+    pub line: i64,
+    pub quote: String,
+}
+
+impl Contract for ReviewPassDataFollowUpsItem {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["file", "line", "quote"])?;
+        deep_contracts::check_member(members, at, "file", &RULE_6)?;
+        deep_contracts::check_member(members, at, "line", &RULE_5)?;
+        deep_contracts::check_member(members, at, "quote", &RULE_6)?;
+        Ok(Self {
+            file: deep_contracts::required(members, at, "file")?,
+            line: deep_contracts::required(members, at, "line")?,
+            quote: deep_contracts::required(members, at, "quote")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("file".to_string(), self.file.to_json()));
+        members.push(("line".to_string(), self.line.to_json()));
+        members.push(("quote".to_string(), self.quote.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReviewPassDataReplaysItemCarried;
+
+impl Contract for ReviewPassDataReplaysItemCarried {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "true").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("true").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReviewPassDataReplaysItem {
+    pub pr: i64,
+    pub head: String,
+    pub key: String,
+    pub found: i64,
+    pub of: i64,
+    pub carried: Option<ReviewPassDataReplaysItemCarried>,
+}
+
+impl Contract for ReviewPassDataReplaysItem {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["pr", "head", "key", "found", "of", "carried"])?;
+        deep_contracts::check_member(members, at, "pr", &RULE_5)?;
+        deep_contracts::check_member(members, at, "head", &RULE_98)?;
+        deep_contracts::check_member(members, at, "key", &RULE_86)?;
+        deep_contracts::check_member(members, at, "found", &RULE_150)?;
+        deep_contracts::check_member(members, at, "of", &RULE_150)?;
+        Ok(Self {
+            pr: deep_contracts::required(members, at, "pr")?,
+            head: deep_contracts::required(members, at, "head")?,
+            key: deep_contracts::required(members, at, "key")?,
+            found: deep_contracts::required(members, at, "found")?,
+            of: deep_contracts::required(members, at, "of")?,
+            carried: deep_contracts::optional(members, at, "carried")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("pr".to_string(), self.pr.to_json()));
+        members.push(("head".to_string(), self.head.to_json()));
+        members.push(("key".to_string(), self.key.to_json()));
+        members.push(("found".to_string(), self.found.to_json()));
+        members.push(("of".to_string(), self.of.to_json()));
+        if let Some(value) = &self.carried {
+            members.push(("carried".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReviewPassData {
+    pub claim: String,
+    pub commit: String,
+    pub pass: String,
+    pub model: String,
+    pub sent: Vec<ReviewPassDataSentItem>,
+    pub follow_ups: Vec<ReviewPassDataFollowUpsItem>,
+    pub replays: Vec<ReviewPassDataReplaysItem>,
+}
+
+impl Contract for ReviewPassData {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["claim", "commit", "pass", "model", "sent", "follow_ups", "replays"])?;
+        deep_contracts::check_member(members, at, "claim", &RULE_143)?;
+        deep_contracts::check_member(members, at, "commit", &RULE_98)?;
+        deep_contracts::check_member(members, at, "pass", &RULE_6)?;
+        deep_contracts::check_member(members, at, "model", &RULE_6)?;
+        deep_contracts::check_member(members, at, "sent", &RULE_203)?;
+        deep_contracts::check_member(members, at, "follow_ups", &RULE_88)?;
+        deep_contracts::check_member(members, at, "replays", &RULE_88)?;
+        Ok(Self {
+            claim: deep_contracts::required(members, at, "claim")?,
+            commit: deep_contracts::required(members, at, "commit")?,
+            pass: deep_contracts::required(members, at, "pass")?,
+            model: deep_contracts::required(members, at, "model")?,
+            sent: deep_contracts::required(members, at, "sent")?,
+            follow_ups: deep_contracts::required(members, at, "follow_ups")?,
+            replays: deep_contracts::required(members, at, "replays")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("claim".to_string(), self.claim.to_json()));
+        members.push(("commit".to_string(), self.commit.to_json()));
+        members.push(("pass".to_string(), self.pass.to_json()));
+        members.push(("model".to_string(), self.model.to_json()));
+        members.push(("sent".to_string(), self.sent.to_json()));
+        members.push(("follow_ups".to_string(), self.follow_ups.to_json()));
+        members.push(("replays".to_string(), self.replays.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReviewPass {
+    pub v: ReviewPassV,
+    pub id: String,
+    pub kind: ReviewPassKind,
+    pub subject: Option<String>,
+    pub writer: ReviewPassWriter,
+    pub actor: String,
+    pub scope: String,
+    pub ts: i64,
+    pub seq: Option<deep_contracts::Seq>,
+    pub log_pos: Option<i64>,
+    pub data: ReviewPassData,
+    pub evidence: Option<Vec<String>>,
+}
+
+impl Contract for ReviewPass {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["v", "id", "kind", "subject", "writer", "actor", "scope", "ts", "seq", "log_pos", "data", "evidence"])?;
+        deep_contracts::check_member(members, at, "id", &RULE_0)?;
+        deep_contracts::check_member(members, at, "subject", &RULE_2)?;
+        deep_contracts::check_member(members, at, "actor", &RULE_3)?;
+        deep_contracts::check_member(members, at, "scope", &RULE_3)?;
+        deep_contracts::check_member(members, at, "ts", &RULE_4)?;
+        deep_contracts::check_member(members, at, "log_pos", &RULE_5)?;
+        deep_contracts::check_member(members, at, "evidence", &RULE_9)?;
+        Ok(Self {
+            v: deep_contracts::required(members, at, "v")?,
+            id: deep_contracts::required(members, at, "id")?,
+            kind: deep_contracts::required(members, at, "kind")?,
+            subject: deep_contracts::optional(members, at, "subject")?,
+            writer: deep_contracts::required(members, at, "writer")?,
+            actor: deep_contracts::required(members, at, "actor")?,
+            scope: deep_contracts::required(members, at, "scope")?,
+            ts: deep_contracts::required(members, at, "ts")?,
+            seq: deep_contracts::optional(members, at, "seq")?,
+            log_pos: deep_contracts::optional(members, at, "log_pos")?,
+            data: deep_contracts::required(members, at, "data")?,
+            evidence: deep_contracts::optional(members, at, "evidence")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("v".to_string(), self.v.to_json()));
+        members.push(("id".to_string(), self.id.to_json()));
+        members.push(("kind".to_string(), self.kind.to_json()));
+        if let Some(value) = &self.subject {
+            members.push(("subject".to_string(), value.to_json()));
+        }
+        members.push(("writer".to_string(), self.writer.to_json()));
+        members.push(("actor".to_string(), self.actor.to_json()));
+        members.push(("scope".to_string(), self.scope.to_json()));
+        members.push(("ts".to_string(), self.ts.to_json()));
+        if let Some(value) = &self.seq {
+            members.push(("seq".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.log_pos {
+            members.push(("log_pos".to_string(), value.to_json()));
+        }
+        members.push(("data".to_string(), self.data.to_json()));
+        if let Some(value) = &self.evidence {
+            members.push(("evidence".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct ReviewReadV;
 
 impl Contract for ReviewReadV {
@@ -71182,8 +71464,6 @@ impl Contract for ReviewReadDataSentItemSitesItem {
         Value::Object(members)
     }
 }
-
-static RULE_285: deep_contracts::Rule = deep_contracts::Rule::Array { min: Some(1), max: Some(4096), items: None };
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReviewReadDataSentItem {
@@ -101791,6 +102071,7 @@ pub fn roundtrip(schema: &str, json: &str) -> Result<String, String> {
         "ref.unguarded@1" => <RefUnguarded as Contract>::from_json(&value, "")?.to_json(),
         "request.cost@1" => <RequestCost as Contract>::from_json(&value, "")?.to_json(),
         "resource.created@1" => <ResourceCreated as Contract>::from_json(&value, "")?.to_json(),
+        "review.pass@1" => <ReviewPass as Contract>::from_json(&value, "")?.to_json(),
         "review.read@1" => <ReviewRead as Contract>::from_json(&value, "")?.to_json(),
         "review.settled@1" => <ReviewSettled as Contract>::from_json(&value, "")?.to_json(),
         "row.set@1" => <RowSet as Contract>::from_json(&value, "")?.to_json(),

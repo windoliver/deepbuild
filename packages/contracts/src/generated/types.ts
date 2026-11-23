@@ -9315,6 +9315,48 @@ export interface ResourceCreated {
   evidence?: Array<string>;
 }
 
+/** review.pass@1 */
+export interface ReviewPass {
+  v: 1;
+  id: string;
+  kind: "review.pass";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    claim: string;
+    commit: string;
+    pass: string;
+    model: string;
+    sent: Array<{
+      rule: string;
+      sites: Array<{
+        file: string;
+        line: number;
+        quote: string;
+      }>;
+    }>;
+    follow_ups: Array<{
+      file: string;
+      line: number;
+      quote: string;
+    }>;
+    replays: Array<{
+      pr: number;
+      head: string;
+      key: string;
+      found: number;
+      of: number;
+      carried?: true;
+    }>;
+  };
+  evidence?: Array<string>;
+}
+
 /** review.read@1 */
 export interface ReviewRead {
   v: 1;
