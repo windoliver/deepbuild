@@ -1,0 +1,87 @@
+#3169's acceptance tests at the base ccafae68f (origin/main), on both machines, 2026-11-22. Output trimmed to what
+matters. Each machine ran `node --test tests/acceptance/3169/*.test.mjs` (Node v24.22.0), which runs
+`cargo test -p deep-scene3d-render --locked --no-fail-fast --test held_memory --test acceptance_3016_metal --test acceptance_3016_views`
+and reads it through lanes.mjs (cargoResults, crates, readRun, isPlatform).
+
+== The Spark (linux-arm64, NVIDIA GB10 through Vulkan): a fresh clone at ccafae68f, cargo -j 4
+
+load:  19:25:07 up 2 days, 23:01,  4 users,  load average: 8.65, 7.77, 7.10
+
+﹣ #3169.bb7defda on the Mac the nine tests run and judge as they do today # INCONCLUSIVE (platform): this needs the Mac, whose GPU device is Metal, and this machine is linux-arm64; it is unrun here
+✖ #3169.7cec9f4a off Metal each of the nine tests states it needs Metal or the reference Mac and the unit lane reads it INCONCLUSIVE (platform) (19792 ms)
+  AssertionError [ERR_ASSERTION]: cargo test -p deep-scene3d-render --locked --no-fail-fast --test held_memory --test acceptance_3016_metal --test acceptance_3016_views on linux-arm64, read by lanes.mjs: 8 of the 8 named tests aren't INCONCLUSIVE (platform) with a note naming Metal or the reference Mac:
+    cargo -p deep-scene3d-render --test held_memory › a_scene_that_stopped_using_them_holds_none_of_their_memory: FAIL: thread '…' panicked at crates/deep-scene3d-render/tests/held_memory.rs:113:45: Metal reports what it holds
+    cargo -p deep-scene3d-render --test held_memory › a_frame_no_post_module_reads_the_key_lights_map_in_holds_no_map: FAIL: … held_memory.rs:113:45: Metal reports what it holds
+    cargo -p deep-scene3d-render --test held_memory › a_scene_with_no_label_holds_no_glyph_atlas: FAIL: … held_memory.rs:113:45: Metal reports what it holds
+    cargo -p deep-scene3d-render --test acceptance_3016_metal › ac3_the_third_scene_holds_the_scene_once_and_each_views_own_targets: FAIL: … tests/acceptance/3016/fixture.rs:376:45: Metal reports what it holds
+    cargo -p deep-scene3d-render --test acceptance_3016_metal › ac7_the_estimate_counts_what_each_view_holds: FAIL: … fixture.rs:376:45: Metal reports what it holds
+    cargo -p deep-scene3d-render --test acceptance_3016_views › ac7_planted_estimate_counting_the_maps_per_view_fails_naming_the_bytes: FAIL: … fixture.rs:376:45: Metal reports what it holds
+    cargo -p deep-scene3d-render --test acceptance_3016_metal › ac5_a_view_insets_frame_hashes_as_on_the_merge_base: FAIL: … fixture.rs:357:5: assertion `left == right` failed: BLOCKED: the merge base's hash was read on a Mac17,10, this machine is a : a same-machine hash can't be compared
+    cargo -p deep-scene3d-render --test acceptance_3016_views › ac5_planted_inset_takes_the_views_cascades_fails_naming_the_frame: FAIL: … fixture.rs:357:5: (the same BLOCKED panic)
+    at TestContext.<anonymous> (tests/acceptance/3169/off-metal.test.mjs:26:10)
+exit 1
+
+As expected: criterion 1's test fails at its assertion (node:assert, in the test file). All eight read FAIL through
+cargoResults, since libtest prints FAILED for a panic, including the two whose panic says BLOCKED.
+
+The Proof's whole crate, `cargo test -p deep-scene3d-render --locked --no-fail-fast` (19:25:27, load 8.37; exit 101):
+the eight above FAIL, and the lib and every other target passes, except five tests that no part of this issue names,
+each panicking INCONCLUSIVE in its own words and read FAIL by cargoResults:
+  --test acceptance_2657_maps_lookup › ac3_a_frame_of_2000_textured_materials_costs_at_most_1_1_times_the_instructions_per_material_of_200   (INCONCLUSIVE: #2657.4baeffe3: this machine doesn't count instructions retired (macOS's proc_pid_rusage) …)
+  --test acceptance_2657_sway › ac6_on_metal_frames_where_the_tree_moves_differ_and_equal_the_base_by_hash   (INCONCLUSIVE: #2657.92acfd65: the base's hashes were drawn on "Apple M5 Max", this GPU is NVIDIA GB10)
+  --test acceptance_2657_sway › ac6_on_metal_planted_sway_first_frame_only_fails_naming_the_frame   (same)
+  --test acceptance_3024_pixels › ac2_on_metal_a_renderer_that_keeps_its_first_mirrored_picture_fails_naming_the_frame   (INCONCLUSIVE: #3024.324d6742: … drawn on "Apple M5 Max", this GPU is NVIDIA GB10)
+  --test acceptance_3024_pixels › ac2_on_metal_a_lakes_frames_equal_the_base_by_hash_and_its_reflection_moves   (same)
+  --test acceptance_3016_noop › ac8_device_bytes_reading ... ignored, criterion 8's reading: run by tests/acceptance/3016/query.test.ts
+No ninth test of the issue's kind (the device's held memory or the Mac17,10 hash) fails. The issue's "nine" names eight.
+
+Twins of #3169.7cec9f4a, each laid over the base on the Spark (held_memory.rs replaced, then restored):
+  unplatformed-note (19:26:18, load 20.36): ✖ at its assertion (off-metal.test.mjs:26), first rows:
+    … held_memory › a_scene_that_stopped_using_them_holds_none_of_their_memory: skipped and read INCONCLUSIVE, not a platform skip: its note is "the device reports no allocated size here"
+    (the same for the other two held_memory tests; the five 3016 tests FAIL as at the base)
+  blocked-note (19:26:40, load 16.61): ✖ at its assertion (off-metal.test.mjs:26), first rows:
+    … held_memory › a_scene_that_stopped_using_them_holds_none_of_their_memory: skipped and read BLOCKED, not a platform skip: its note is "BLOCKED: no Metal device reports its allocated size"
+    (the same for the other two)
+
+A planted right program, to show the test can pass (not committed): each of the eight given
+`#[cfg_attr(not(target_os = "macos"), ignore = "needs Metal: the device's allocated size or the reference Mac's hash")]`
+in held_memory.rs and in a scratch copy of 3016's metal.rs and views.rs (restored after):
+  (19:27:04, load 21.38) ✔ #3169.7cec9f4a off Metal each of the nine tests … INCONCLUSIVE (platform)   exit 0
+
+== The Mac (darwin-arm64, Mac18,1, Metal): this checkout, a fresh clone at ccafae68f
+
+The Mac18,1 isn't the reference Mac. The merge-base hash fixture of #3016 names a Mac17,10.
+
+First run, with criterion 2's test as first drafted, which required every memory test to PASS on any Mac:
+load:  19:30  up 2 days, 23:56, load averages: 111.33 91.05 87.03 (ended 19:38, 119.90)
+✖ #3169.bb7defda … 1 of the 8 named tests don't run and judge as today:
+    cargo -p deep-scene3d-render --test acceptance_3016_metal › ac3_the_third_scene_holds_the_scene_once_and_each_views_own_targets: FAIL: … tests/acceptance/3016/metal.rs:90:5: AC3 #3016.127ccb4d: the third scene holds 531103744 B (506.5 MiB) on the device; the plain one 174.6 MiB, plus each extra view's own … and 4 MiB, allows 505.9 MiB: 0.6 MiB more, 0.01 times the plain scene's 85.3 MiB of maps
+The other seven judged as expected: the five other memory tests PASS, and the two hash tests FAIL with their BLOCKED panic.
+
+ac3 rerun alone, `cargo test … --test acceptance_3016_metal -- ac3_the_third_scene` (19:45, load 150.67):
+  test ac3_the_third_scene_holds_the_scene_once_and_each_views_own_targets ... ok
+In a second whole-target run (19:39, load 131.93) ac3 failed again beside the two hash tests: acceptance_3016_metal
+read "1 passed; 2 failed". So on this Mac, ac3 fails when its target runs whole and passes alone. The device's
+allocated size is the process's Metal device's, which every test of the target shares. ac5 panics BLOCKED mid-frame
+on this Mac, which may leave its renderer's memory being freed while ac3 measures. That is my reading, not proven.
+On the reference Mac, ac5 passes. I couldn't run there.
+
+So criterion 2's test was redrafted before commit (the committed version). On every Mac it asserts that each of the
+eight runs (none ignored). On the reference Mac it asserts that each one PASSes. On any other Mac it asserts that the
+hash tests read their BLOCKED panic, then skips INCONCLUSIVE (platform), never PASS. The committed test's run:
+load:  19:48  up 3 days, 15 mins, load averages: 80.84 109.02 110.54 (ended 19:51, 80.96)
+﹣ #3169.7cec9f4a off Metal … # INCONCLUSIVE (platform): this needs a machine whose GPU device is not Metal (the Spark, Linux on aarch64), and this machine is darwin-arm64; it is unrun here
+﹣ #3169.bb7defda on the Mac the nine tests run and judge as they do today # INCONCLUSIVE (platform): each named test ran on this Mac18,1 (a_scene_that_stopped_using_them_holds_none_of_their_memory PASS, a_frame_no_post_module_reads_the_key_lights_map_in_holds_no_map PASS, a_scene_with_no_label_holds_no_glyph_atlas PASS, ac3_the_third_scene_holds_the_scene_once_and_each_views_own_targets FAIL, ac7_the_estimate_counts_what_each_view_holds PASS, ac7_planted_estimate_counting_the_maps_per_view_fails_naming_the_bytes PASS, ac5_a_view_insets_frame_hashes_as_on_the_merge_base FAIL, ac5_planted_inset_takes_the_views_cascades_fails_naming_the_frame FAIL); their verdicts are judged only on the reference Mac, a Mac17,10, so this Mac doesn't prove them; unproven here
+exit 0
+
+Criterion 2 on the base is therefore unproven on this Mac. It is neither a pass nor a fail at its assertion. On a
+Mac17,10 it requires all eight to PASS, which hasn't been run.
+
+Twin of #3169.bb7defda, laid over the base on the Mac (held_memory.rs replaced, then restored):
+  ignored-on-mac (19:51, load 80.96): ✖ at its assertion (on-mac.test.mjs), rows:
+    … held_memory › a_scene_that_stopped_using_them_holds_none_of_their_memory: skipped on the Mac, read INCONCLUSIVE, with the note "needs Metal"; today it runs
+    … held_memory › a_frame_no_post_module_reads_the_key_lights_map_in_holds_no_map: skipped on the Mac, … "needs Metal"; today it runs
+    … held_memory › a_scene_with_no_label_holds_no_glyph_atlas: skipped on the Mac, … "needs Metal"; today it runs
+  exit 1
+
+On the Mac, the Spark twins only skip criterion 1's test, and on the Spark the Mac twin only skips criterion 2's.
