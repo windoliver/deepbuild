@@ -5,7 +5,8 @@ import { countUsage, readingsOf, recompute } from '../../../packages/readings/sr
 import { ask, FIXTURE, T0, usage } from './events.ts';
 
 const MODEL = 'claude-sonnet-4-5-20250929';
-const CARD = { name: 'fixture-card', models: { [MODEL]: { input: 3, output: 15, cache_write: 3.75, cache_read: 0.3 } } };
+// The base's RateCard prices a model only when its row holds both write prices: five minutes (cache_write) and one hour.
+const CARD = { name: 'fixture-card', models: { [MODEL]: { input: 3, output: 15, cache_write: 3.75, cache_write_1h: 6, cache_read: 0.3 } } };
 
 describe('AC5 the Claude Code fixture against a hand count', () => {
   it('#45.2a583af6 AC5 subagents, a resume and /compact give 635 input, 195 output, 1,160 cache write and 3,200 cache read: a repeated message once, a resume\'s replayed messages once', () => {
@@ -49,7 +50,8 @@ describe('AC7 every cost says reported, estimated or unpriced', () => {
     expect(cost.basis).toBe('estimated');
     if (cost.basis !== 'estimated') return;
     expect(cost.rate_card).toBe('fixture-card');
-    // Per million: 635 x 3 + 195 x 15 + 1,160 x 3.75 + 3,200 x 0.30 = 10,140, so $0.01014.
+    // Per million: 635 x 3 + 195 x 15 + 1,160 x 3.75 + 3,200 x 0.30 = 10,140, so $0.01014. No fixture write names a
+    // lifetime, so all 1,160 are priced at the five-minute rate and the one-hour price multiplies zero tokens.
     expect(cost.usd).toBeCloseTo(0.01014, 8);
   });
 

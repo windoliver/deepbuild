@@ -181,6 +181,36 @@ function toolResultFactsCase(file, name, facts) {
   return missing.length ? [[`the ${name} facts (${file}) lack ${missing.join('; ')}, so no deep_* reply knows what ${name} keeps of it`, fix]] : [];
 }
 
+/**
+ * The adapter-facts case for the MCP handshake (#2854): per version, the revision the agent's MCP client opens
+ * initialize with must be one DeepBuild's servers hold (mcp.handshake@1), and its recorded request must name it.
+ * A version with no entry or with two, an unheld revision, a request that isn't the recording of a version its entry
+ * covers, or one that names another revision fails, naming the agent and the version (and the revision when there is one).
+ */
+function handshakeFactsCase(file, facts) {
+  if (!facts) return [];
+  const held = JSON.parse(readFileSync(join(root, 'packages/contracts/schemas/mcp.handshake@1.json'), 'utf8')).properties.protocolVersion.enum;
+  const fix = `Give adapters/${file} an mcpHandshake entry per version: the revision its MCP client's initialize names and the recorded request it was read from; a revision DeepBuild's servers don't hold goes into packages/contracts/schemas/mcp.handshake@1.json once the four servers are checked against it.`;
+  const entries = Array.isArray(facts.mcpHandshake?.entries) ? facts.mcpHandshake.entries : [];
+  const failures = [];
+  const dir = file.replace(/\.facts\.json$/, '');
+  for (const version of facts.versions ?? []) {
+    const covering = entries.filter((x) => Array.isArray(x?.versions) && x.versions.includes(version));
+    const e = covering[0];
+    if (!e) { failures.push([`the ${facts.agent} facts (${file}) name no MCP handshake revision for ${facts.agent} ${version}`, fix]); continue; }
+    if (covering.length > 1) { failures.push([`the ${facts.agent} facts (${file}) give ${facts.agent} ${version} more than one MCP handshake entry`, fix]); continue; }
+    if (!held.includes(e.revision)) failures.push([`${facts.agent} ${version}'s MCP client opens with revision ${e.revision}, which DeepBuild's MCP servers don't hold (mcp.handshake@1 lists ${held.join(', ')})`, fix]);
+    // The request must be one of this entry's versions' own recording, made by that version's client.
+    const own = e.versions.find((v) => e.request === `adapters/corpus/${dir}/${v}/mcp-initialize.json`);
+    let request;
+    try { request = JSON.parse(readFileSync(join(root, e.request), 'utf8')); } catch { request = undefined; }
+    if (own === undefined || request?.params?.clientInfo?.version !== own) { failures.push([`${facts.agent} ${version}'s MCP handshake entry cites ${e.request}, which is not the recorded initialize request of a version that entry covers (adapters/corpus/${dir}/<version>/mcp-initialize.json, from that version's client)`, fix]); continue; }
+    const asked = request.params?.protocolVersion;
+    if (asked !== e.revision) failures.push([`${facts.agent} ${version}'s recorded initialize request (${e.request}) names ${asked ?? 'no revision'}, not the facts' revision ${e.revision}`, fix]);
+  }
+  return failures;
+}
+
 async function replayCommand(options) {
   const started = performance.now();
   let failed = false;
@@ -214,6 +244,7 @@ async function checkCommand(options) {
   failures.push(...retriesFactsCase(facts['claude-code']?.facts));
   failures.push(...ruleLoadFactsCase('claude-code.facts.json', 'Claude Code', facts['claude-code']?.facts), ...ruleLoadFactsCase('codex.facts.json', 'Codex', facts.codex?.facts));
   failures.push(...toolResultFactsCase('claude-code.facts.json', 'Claude Code', facts['claude-code']?.facts), ...toolResultFactsCase('codex.facts.json', 'Codex', facts.codex?.facts));
+  failures.push(...handshakeFactsCase('claude-code.facts.json', facts['claude-code']?.facts), ...handshakeFactsCase('codex.facts.json', facts.codex?.facts));
   const bytes = size(options.corpus);
   say({ type: 'size', bytes, limit: LIMIT });
   if (bytes >= LIMIT) failures.push([`the corpus is ${bytes} bytes, over the 200 MB limit (${LIMIT} bytes)`, 'Trim transcripts or drop sessions that add no event, version or tag.']);
