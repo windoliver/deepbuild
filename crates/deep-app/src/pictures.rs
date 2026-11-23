@@ -1,6 +1,7 @@
 //! Issue #3234: what a taste call judges is the pictures its evidence lists by hash: stills, a sheet's cells, a film's
 //! contact sheet and the two sides of a before and after. The ask is pinned to that evidence, a manifest
-//! `{"pictures": [{"sha256", "size": [w, h]}]}` in the evidence store; an `ask.moved` pins it to another. The option that
+//! `{"pictures": [{"sha256", "size": [w, h]}]}` in the evidence store, or to a document revision whose canonical document
+//! lists them so; the document's next `doc.patched` is a picture replaced under the card. The option that
 //! accepts arms only once each picture was drawn whole inside the window, at no less than half its pixel size, for the
 //! arming interval; the answer's record says, for each, whether it was shown, the largest scale it was drawn whole at
 //! and how long it was drawn whole.
@@ -167,17 +168,28 @@ impl Pictures {
     }
 }
 
-/// What `handle` is pinned to now: the newest `ask.moved` the core wrote for it, else what it was raised pinned to.
-fn pin<'a>(events: &'a [Value], handle: &str, ask: &'a Value) -> &'a Value {
+/// The manifest a taste ask's pin names: an evidence pin's own hash, or for a pin to `doc:<id>@<rev>` the canonical
+/// document of that document's newest recorded revision, the `doc.patched` with the highest `rev`, held under its
+/// `hash`. A newer revision is how a picture is replaced under a presented card.
+fn manifest_of<'a>(events: &'a [Value], ask: &'a Value) -> Option<&'a str> {
+    let pin = &ask["data"]["pinned_to"];
+    let at = pin["ref"].as_str()?;
+    if pin["kind"] == "evidence" {
+        return Some(at);
+    }
+    let doc = pinned_doc(pin)?;
     events
         .iter()
-        .rev()
-        .find(|event| {
-            event["kind"] == "ask.moved" && event["writer"] == "core" && event["subject"] == handle
-        })
-        .map_or(&ask["data"]["pinned_to"], |moved| {
-            &moved["data"]["pinned_to"]
-        })
+        .filter(|event| event["kind"] == "doc.patched" && event["data"]["doc"] == doc)
+        .filter_map(|event| Some((event["data"]["rev"].as_u64()?, event["data"]["hash"].as_str()?)))
+        .max_by_key(|(rev, _)| *rev)
+        .map(|(_, hash)| hash)
+}
+
+/// The document `doc:<id>` a pin to one of its revisions, `doc:<id>@<rev>`, names; none for another pin.
+pub fn pinned_doc(pin: &Value) -> Option<&str> {
+    let at = pin["ref"].as_str().filter(|_| pin["kind"] == "doc_revision")?;
+    at.rsplit_once('@').map(|(doc, _)| doc).filter(|doc| doc.starts_with("doc:"))
 }
 
 thread_local! {
@@ -193,14 +205,13 @@ fn stored(sha256: &str) -> Option<std::path::PathBuf> {
     Some(crate::hub::root().join("evidence").join(head).join(rest))
 }
 
-/// The pictures a taste ask (`ask.created`, its handle `handle`) judges: those its evidence's manifest lists, in its
-/// order; none for another kind, or a pin that isn't such a manifest.
-pub fn of(events: &[Value], handle: &str, ask: &Value) -> Vec<Listed> {
+/// The pictures a taste ask (`ask.created`) judges: those its pin's manifest lists, in its order; none for another
+/// kind, or a pin that names no such manifest.
+pub fn of(events: &[Value], ask: &Value) -> Vec<Listed> {
     if ask["data"]["kind"] != "taste" {
         return Vec::new();
     }
-    let pin = pin(events, handle, ask);
-    let Some(manifest) = pin["ref"].as_str().filter(|_| pin["kind"] == "evidence") else {
+    let Some(manifest) = manifest_of(events, ask) else {
         return Vec::new();
     };
     MANIFESTS.with(|kept| {
