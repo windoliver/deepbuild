@@ -195,7 +195,9 @@ function map(facts, payload, transcript) {
   const common = fill(facts.mapping.common, payload);
   const event = { kind: rule.kind, data: { ...common, ...fill(rule.data, payload) }, rule: pointer('mapping', hook) };
   if (rule.origin) {
-    const found = origin(rule.origin, payload, transcript);
+    // A prompt whose payload names a subagent (the common template's `subagent`) is a child's, which its parent wrote:
+    // never yours, as the core reads a Codex child's prompt (#39).
+    const found = common.subagent ? { from: 'subagent', rule: pointer('mapping', 'common', 'subagent') } : origin(rule.origin, payload, transcript);
     Object.assign(event, { data: { ...common, from: found.from, ...fill(rule.data, payload) }, rule: found.rule });
   }
   if (rule.call) {
