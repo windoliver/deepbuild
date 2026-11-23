@@ -1,0 +1,69 @@
+$ DEEP_3163_SCRIPTS=<tmp>/base/scripts node --test tests/acceptance/3163-redraft/guard.test.mjs
+# base 83b82f94a (scripts/ and package.json exported with git archive); Node v24.22.0; 2026-11-22 18:08 PST; load at launch 29.46 14.91 19.06; 380 s in all
+
+load at start: 42.68 22.39 21.59 (1, 5, 15 min; 8 cores)
+criterion 1: not finished at 60 s, 1948 git processes; load at start 42.68 22.39 21.59 (1, 5, 15 min; 8 cores); load now 25.01 21.20 21.21 (1, 5, 15 min; 8 cores) (the guard still running)
+✖ #3163.9c395067 on PR #3093's branch in a fresh GitHub clone with npm ci, node scripts/proof.mjs guard finishes in under 60 s wall, with the load at start and end recorded, and starts no more than 200 git processes (133468.172959ms)
+load at end: 35.36 28.86 24.48 (1, 5, 15 min; 8 cores)
+✖ #3163.d0eabe65 on that same clone and commit, node scripts/proof.mjs guard prints the same verdict lines as before the change, ignoring the proof: wall time line, and exits with the same code (240005.67ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 379820.432084
+
+✖ failing tests:
+
+test at tests/acceptance/3163-redraft/guard.test.mjs:110:1
+✖ #3163.9c395067 on PR #3093's branch in a fresh GitHub clone with npm ci, node scripts/proof.mjs guard finishes in under 60 s wall, with the load at start and end recorded, and starts no more than 200 git processes (133468.172959ms)
+  AssertionError [ERR_ASSERTION]: node scripts/proof.mjs guard exceeded the 60 s wall limit: it had not finished after 60 s, and the 200 git process limit: it started 1948 in its first 60 s
+  still running; 1948 git processes started
+  load at start: 42.68 22.39 21.59 (1, 5, 15 min; 8 cores)
+  load at end: 25.01 21.20 21.21 (1, 5, 15 min; 8 cores) (the guard still running)
+  stdout:
+  
+  stderr:
+  
+  + actual - expected
+  
+  + [
+  +   'the 60 s wall limit: it had not finished after 60 s',
+  +   'the 200 git process limit: it started 1948 in its first 60 s'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3163-redraft/guard.test.mjs:119:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'the 60 s wall limit: it had not finished after 60 s', 'the 200 git process limit: it started 1948 in its first 60 s' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3163-redraft/guard.test.mjs:122:1
+✖ #3163.d0eabe65 on that same clone and commit, node scripts/proof.mjs guard prints the same verdict lines as before the change, ignoring the proof: wall time line, and exits with the same code (240005.67ms)
+  AssertionError [ERR_ASSERTION]: node scripts/proof.mjs guard printed no verdict: it was stopped after 300 s, the longest this test waits
+  exit null (SIGKILL) after 300.0 s; 11533 git processes started
+  load at start: 42.68 22.39 21.59 (1, 5, 15 min; 8 cores)
+  load at end: 35.36 28.86 24.48 (1, 5, 15 min; 8 cores)
+  stdout:
+  
+  stderr:
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3163-redraft/guard.test.mjs:126:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

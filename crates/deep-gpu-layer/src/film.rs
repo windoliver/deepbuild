@@ -552,6 +552,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     }
     let baseline = frames::baseline_ns(app);
     let packs = Arc::new(packs_of(call)?);
+    // #2053: the store the film's images and normal pages are read from.
+    let store = call["store"].as_str().map(std::path::PathBuf::from);
     let frame2 =
         |layers, n, look: &(Palette, Type), page: Option<Arc<Page>>, print, indexed| Frame2 {
             indexed,
@@ -563,6 +565,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             page,
             print,
             mix: None,
+            store: store.clone(),
         };
     // The frame at `n`: drawn in its first side's look (`own`, the film's, outside every shot),
     // with each other look it mixes (#462) drawn as a frame of its own; its ground and its
@@ -580,7 +583,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 BTreeMap<String, Volume>,
             );
             let mut one = |d: Drawing<'_>, origin: Option<[u32; 2]>| -> Result<One, Value> {
-                let (drawn, ground, view, lamps, items, volumes) = marks_at(
+                let (mut drawn, ground, view, lamps, items, volumes) = marks_at(
                     &doc,
                     &program,
                     &mut state,
@@ -591,6 +594,15 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     planted,
                     origin,
                 )?;
+                // #2053: each lit image's normal page, read as stored.
+                for layer in &mut drawn {
+                    for m in layer.iter_mut() {
+                        let paged = deep_marks_render::gpu::paged(m, store.as_deref())?;
+                        if let Some(p) = paged {
+                            *m = Arc::new(p);
+                        }
+                    }
+                }
                 let print = printing_at(n, d.def, d.look, &items, view.as_ref(), ground)?;
                 let index = index_frame(d.ix, &drawn, &items);
                 let page = d
@@ -650,6 +662,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
 
     let mut listed = Vec::with_capacity(count as usize);
     let mut lumas: Vec<Vec<f32>> = Vec::new();
+    // #161: each frame's marks and time, and the packs' operators, for the reseed rule.
+    let mut seen: Vec<crate::reseed::Seen> = Vec::new();
+    let mut named = Arc::new(Vec::new());
     let mut switches = Vec::new();
     let mut movie = Movie::new(out, export, size);
     let played = (|| -> Result<(), Value> {
@@ -685,6 +700,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             // #1619: what the look's finish pass is given for this frame, on any backend.
             let finish_hash = frame.print.as_ref().map(|p| p.finish_hash(size));
+            if checks_flicker {
+                seen.push((frame.layers.clone(), at(n)));
+                named = frame.packs.clone();
+            }
             *marks.lock().unwrap_or_else(|e| e.into_inner()) = Arc::new(frame);
             {
                 let win = app.window.as_ref().expect("opened");
@@ -802,6 +821,11 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     }
     if checks_flicker {
         reply["flicker"] = crate::print2d::flicker(&lumas, fps as f64);
+        let reseed = crate::reseed::reseeded(&seen, &lumas, &named);
+        if !reseed.is_empty() {
+            reply["flicker"]["verdict"] = json!("FAIL");
+            reply["flicker"]["reseed"] = json!(reseed);
+        }
     }
     if export {
         reply["export"] = movie.finish()?;

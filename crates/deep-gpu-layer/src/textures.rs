@@ -139,6 +139,30 @@ pub fn prepare(
     Ok((texels, json!({"decoded_bytes": decoded, "maps": receipt})))
 }
 
+/// #2215: the frame's receipt, with a `warnings` entry for each part that is see-through and
+/// anisotropic at once. Raster refracts through the round lobe, which a final stretches as its
+/// reflection does, so the frame says so instead of differing silently.
+pub fn listed(mut receipt: Value, scene: &Scene, planted: Option<Planted>) -> Value {
+    let parts: BTreeSet<&str> = scene
+        .layers
+        .iter()
+        .flat_map(|l| &l.solids)
+        .filter(|s| {
+            s.material
+                .as_ref()
+                .is_some_and(|m| m.lobes.transmission > 0.0 && m.lobes.anisotropy != 0.0)
+        })
+        .map(|s| s.id.as_str())
+        .collect();
+    if !parts.is_empty() && planted != Some(Planted::RasterListsNothing) {
+        receipt["warnings"] = parts
+            .iter()
+            .map(|p| json!({"item": p, "what": "anisotropic_transmission"}))
+            .collect();
+    }
+    receipt
+}
+
 /// The run's helper processes and their jobs, as deep-show's `workers` call lists them.
 pub fn workers(app: &App) -> Value {
     json!({"workers": app.made.decoder.iter().map(Helper::json).collect::<Vec<_>>()})

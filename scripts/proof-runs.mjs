@@ -307,7 +307,8 @@ function inBay(root, role, use, overlay, early = false) {
       return { directory: null, modules: null, refused: `cannot be laid over the change: ${firstLine(error.message)}` };
     }
   }
-  const blocked = failed ?? build(bay);
+  // A build of the same key kept from an earlier use is laid back instead (#3019).
+  const blocked = failed ?? pair.build(role, () => build(bay));
   if (role === 'change') undoBuild(root, bay, early ? [...overlay.keys()] : [], bay);
   if (early) lay(bay, overlay);
   return { directory: bay, modules: bay, blocked };

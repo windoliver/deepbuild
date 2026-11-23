@@ -505,7 +505,10 @@ fn plate(
     fills: Fills<'_>,
 ) -> Result<Mesh, Refused> {
     let terrain = item.get("kind").and_then(Value::as_str) == Some("plate@1")
-        && item.get("params").and_then(crate::terrain::of_params).is_some();
+        && item
+            .get("params")
+            .and_then(crate::terrain::of_params)
+            .is_some();
     let Some(memo) = ask.memo.filter(|_| terrain) else {
         return crate::scene::mesh_of(doc, id, item, seconds, fills);
     };

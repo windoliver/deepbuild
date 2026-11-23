@@ -1,0 +1,5 @@
+22:01  up  2:28, 3 users, load averages: 101.99 117.38 122.37
+stdout | pages.test.ts > #2896 AC2: each paging reply's full page as each client receives it > AC2 #2896.4f78f2ef every paging reply's full page is at most 8,000 tokens as the Codex stand-in receives it, and at most 40,000 characters and 20,000 tokens as the Claude Code stand-in does
+AC2 each page as its client receives it:
+ ✓ pages.test.ts (1 test) 106549ms
+22:16  up  2:42, 3 users, load averages: 61.98 72.43 87.87

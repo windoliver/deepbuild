@@ -1,0 +1,270 @@
+# #2339 acceptance tests: the run on the base, and the planted wrong programs
+
+## The base (2eaaeb0e6, origin/main, no implementation), in this checkout
+
+$ node --test 'tests/acceptance/2339/*.test.mjs'
+(Node v24.22.0, Linux; stack-trace lines dropped; gh signed in, so the live file ran rather than skipped)
+
+All 13 fail, each for its expected reason:
+- The five tests that read the real docs (ac1-section, ac2 first, ac3 first, ac4 first, both in lane.live) fail
+  because docs/technical-design.md has no heading "Principles".
+- The seven planted cases run the real design links lane on a scratch copy. At the base the copy has no section, so
+  helpers.mjs puts in a stand-in one; the unplanted copy passes the lane (the control), and so does every planted
+  copy: the lane exits 0 on a fifth line with no link, a line of two sentences, AGENTS.md or the section edited
+  alone, a line naming scripts/no-such-check.mjs, a line naming no check, and a canvas reference with no link to
+  the section. Each test fails on "the lane passed …".
+
+✖ #2339.2ae5a05d criterion 1: a planted section whose fifth line has no link into the design fails the design links lane, naming the line (417.419203ms)
+✖ #2339.2ae5a05d criterion 1: a planted line of two sentences fails the design links lane, naming it (364.277026ms)
+✖ #2339.2ae5a05d criterion 1: docs/technical-design.md has a "Principles" section before "What version 0 builds, and what waits", of 8 to 12 lines, each one sentence of at most 160 characters with a link into the design (6.907362ms)
+✖ #2339.a190c5fb criterion 2: the section opens with the four invariants, each word for word as AGENTS.md has it (6.504737ms)
+✖ #2339.a190c5fb criterion 2: AGENTS.md edited alone (invariant 2 reworded) fails the design links lane, naming the invariant (433.978865ms)
+✖ #2339.a190c5fb criterion 2: the design edited alone (invariant 4 reworded in the section) fails the design links lane, naming the invariant (402.381995ms)
+✖ #2339.b90141c9 criterion 3: each line of the section names at least one check that exists, a file under scripts/ or a lane in scripts/lanes.mjs, and none that does not (6.707234ms)
+✖ #2339.b90141c9 criterion 3: a planted line naming scripts/no-such-check.mjs fails the design links lane, naming the line and the name (477.122231ms)
+✖ #2339.b90141c9 criterion 3: a planted line naming no check fails the design links lane, naming the line (457.438785ms)
+✖ #2339.6eaafe21 criterion 4: the canvas reference's "Conventions every primitive uses" opens with a link to the Principles section (10.493981ms)
+✖ #2339.6eaafe21 criterion 4: a planted canvas reference without the link fails the design links lane, naming the heading it belongs under (410.5048ms)
+✖ #2339.2ae5a05d criterion 1: the design links lane passes on this checkout, with the Principles section in the design (6.381361ms)
+✖ #2339.6eaafe21 criterion 4: the design links lane passes on this checkout, with the canvas reference's link to the section landing (3.786923ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 0
+ℹ fail 13
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1003.538052
+
+✖ failing tests:
+
+test at tests/acceptance/2339/ac1-planted.test.mjs:7:1
+✖ #2339.2ae5a05d criterion 1: a planted section whose fifth line has no link into the design fails the design links lane, naming the line (417.419203ms)
+  AssertionError [ERR_ASSERTION]: the lane passed a section whose fifth line (docs/technical-design.md:13, stand-in section) has no link: exit 0, output:
+  design links and names: 169 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2339/ac1-planted.test.mjs:20:1
+✖ #2339.2ae5a05d criterion 1: a planted line of two sentences fails the design links lane, naming it (364.277026ms)
+  AssertionError [ERR_ASSERTION]: the lane passed a line of two sentences (docs/technical-design.md:16, stand-in section): exit 0, output:
+  design links and names: 170 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2339/ac1-section.test.mjs:7:1
+✖ #2339.2ae5a05d criterion 1: docs/technical-design.md has a "Principles" section before "What version 0 builds, and what waits", of 8 to 12 lines, each one sentence of at most 160 characters with a link into the design (6.907362ms)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no heading "Principles"
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2339/ac2-invariants.test.mjs:7:1
+✖ #2339.a190c5fb criterion 2: the section opens with the four invariants, each word for word as AGENTS.md has it (6.504737ms)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no heading "Principles"
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2339/ac2-invariants.test.mjs:17:1
+✖ #2339.a190c5fb criterion 2: AGENTS.md edited alone (invariant 2 reworded) fails the design links lane, naming the invariant (433.978865ms)
+  AssertionError [ERR_ASSERTION]: the lane passed with AGENTS.md's invariant 2 reworded and the design (stand-in section) left as it was: exit 0, output:
+  design links and names: 170 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2339/ac2-invariants.test.mjs:30:1
+✖ #2339.a190c5fb criterion 2: the design edited alone (invariant 4 reworded in the section) fails the design links lane, naming the invariant (402.381995ms)
+  AssertionError [ERR_ASSERTION]: the lane passed with the section's invariant 4 reworded (docs/technical-design.md:12, stand-in section) and AGENTS.md left as it was: exit 0, output:
+  design links and names: 170 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2339/ac3-checks.test.mjs:10:1
+✖ #2339.b90141c9 criterion 3: each line of the section names at least one check that exists, a file under scripts/ or a lane in scripts/lanes.mjs, and none that does not (6.707234ms)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no heading "Principles"
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2339/ac3-checks.test.mjs:24:1
+✖ #2339.b90141c9 criterion 3: a planted line naming scripts/no-such-check.mjs fails the design links lane, naming the line and the name (477.122231ms)
+  AssertionError [ERR_ASSERTION]: the lane passed a line naming scripts/no-such-check.mjs (docs/technical-design.md:16, stand-in section): exit 0, output:
+  design links and names: 170 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2339/ac3-checks.test.mjs:51:1
+✖ #2339.b90141c9 criterion 3: a planted line naming no check fails the design links lane, naming the line (457.438785ms)
+  AssertionError [ERR_ASSERTION]: the lane passed a line naming no check (docs/technical-design.md:18, stand-in section): exit 0, output:
+  design links and names: 170 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2339/ac4-canvas.test.mjs:32:1
+✖ #2339.6eaafe21 criterion 4: the canvas reference's "Conventions every primitive uses" opens with a link to the Principles section (10.493981ms)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no heading "Principles"
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2339/ac4-canvas.test.mjs:41:1
+✖ #2339.6eaafe21 criterion 4: a planted canvas reference without the link fails the design links lane, naming the heading it belongs under (410.5048ms)
+  AssertionError [ERR_ASSERTION]: the lane passed a canvas reference whose "Conventions every primitive uses" has no link to the Principles section (stand-in section): exit 0, output:
+  design links and names: 170 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2339/lane.live.test.mjs:31:1
+✖ #2339.2ae5a05d criterion 1: the design links lane passes on this checkout, with the Principles section in the design (6.381361ms)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no heading "Principles", so the lane has no section to pass on
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2339/lane.live.test.mjs:38:1
+✖ #2339.6eaafe21 criterion 4: the design links lane passes on this checkout, with the canvas reference's link to the section landing (3.786923ms)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no heading "Principles", so no link to it can land
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+## The planted fix and its wrong programs (run in a scratch tree, never in this checkout)
+
+A scratch tree held this checkout's top-level files, scripts/, docs/*.md and these tests. The planted fix added a
+"## Principles" section above `<a id="scope">` (an <a id="principles">, an intro paragraph, then a numbered list of
+ten lines: the four invariants word for word, each followed by a parenthesised design link and check, and six
+lines with the link inside the sentence and the check named as `scripts/<file>`, a `[scripts/x.mjs](../scripts/x.mjs)`
+link or "the `<lane>` lane"), a line under "Conventions every primitive uses" linking
+./technical-design.md#principles, and a block at the end of scripts/design-links.mjs checking each rule and printing
+`docs/technical-design.md:<n> <problem>`. All 13 tests passed on it, the live file included (gh signed in, 1,184 open
+issues). Then one change at a time, each caught as listed (the tests that failed):
+
+- lane: no link rule
+    ✖ #2339.2ae5a05d criterion 1: a planted section whose fifth line has no link into the design fails the design links lane, naming the line
+- lane: no sentence rule
+    ✖ #2339.2ae5a05d criterion 1: a planted line of two sentences fails the design links lane, naming it
+- lane: no invariant rule
+    ✖ #2339.a190c5fb criterion 2: AGENTS.md edited alone (invariant 2 reworded) fails the design links lane, naming the invariant
+    ✖ #2339.a190c5fb criterion 2: the design edited alone (invariant 4 reworded in the section) fails the design links lane, naming the invariant
+- lane: no missing-script rule
+    ✖ #2339.b90141c9 criterion 3: a planted line naming scripts/no-such-check.mjs fails the design links lane, naming the line and the name
+- lane: no names-no-check rule
+    ✖ #2339.b90141c9 criterion 3: a planted line naming no check fails the design links lane, naming the line
+- lane: no canvas rule
+    ✖ #2339.6eaafe21 criterion 4: a planted canvas reference without the link fails the design links lane, naming the heading it belongs under
+- lane: names no line
+    ✖ #2339.2ae5a05d criterion 1: a planted line of two sentences fails the design links lane, naming it
+    ✖ #2339.2ae5a05d criterion 1: a planted section whose fifth line has no link into the design fails the design links lane, naming the line
+    ✖ #2339.a190c5fb criterion 2: AGENTS.md edited alone (invariant 2 reworded) fails the design links lane, naming the invariant
+    ✖ #2339.a190c5fb criterion 2: the design edited alone (invariant 4 reworded in the section) fails the design links lane, naming the invariant
+    ✖ #2339.b90141c9 criterion 3: a planted line naming no check fails the design links lane, naming the line
+    ✖ #2339.b90141c9 criterion 3: a planted line naming scripts/no-such-check.mjs fails the design links lane, naming the line and the name
+- lane: names the missing script but not the line
+    ✖ #2339.b90141c9 criterion 3: a planted line naming scripts/no-such-check.mjs fails the design links lane, naming the line and the name
+- lane: canvas failure without the heading
+    ✖ #2339.6eaafe21 criterion 4: a planted canvas reference without the link fails the design links lane, naming the heading it belongs under
+- doc: 13 lines
+    ✖ #2339.2ae5a05d criterion 1: docs/technical-design.md has a "Principles" section before "What version 0 builds, and what waits", of 8 to 12 lines, each one sentence of at most 160 characters with a link into the design
+- doc: a line over 160
+    ✖ #2339.2ae5a05d criterion 1: a planted line of two sentences fails the design links lane, naming it
+    ✖ #2339.2ae5a05d criterion 1: a planted section whose fifth line has no link into the design fails the design links lane, naming the line
+    ✖ #2339.2ae5a05d criterion 1: docs/technical-design.md has a "Principles" section before "What version 0 builds, and what waits", of 8 to 12 lines, each one sentence of at most 160 characters with a link into the design
+    ✖ #2339.2ae5a05d criterion 1: the design links lane passes on this checkout, with the Principles section in the design
+    ✖ #2339.6eaafe21 criterion 4: a planted canvas reference without the link fails the design links lane, naming the heading it belongs under
+    ✖ #2339.6eaafe21 criterion 4: the design links lane passes on this checkout, with the canvas reference's link to the section landing
+    ✖ #2339.a190c5fb criterion 2: AGENTS.md edited alone (invariant 2 reworded) fails the design links lane, naming the invariant
+    ✖ #2339.a190c5fb criterion 2: the design edited alone (invariant 4 reworded in the section) fails the design links lane, naming the invariant
+    ✖ #2339.b90141c9 criterion 3: a planted line naming no check fails the design links lane, naming the line
+    ✖ #2339.b90141c9 criterion 3: a planted line naming scripts/no-such-check.mjs fails the design links lane, naming the line and the name
+- doc: invariant 3 reworded in both files
+- doc: a line with no check
+    ✖ #2339.2ae5a05d criterion 1: a planted line of two sentences fails the design links lane, naming it
+    ✖ #2339.2ae5a05d criterion 1: a planted section whose fifth line has no link into the design fails the design links lane, naming the line
+    ✖ #2339.2ae5a05d criterion 1: the design links lane passes on this checkout, with the Principles section in the design
+    ✖ #2339.6eaafe21 criterion 4: a planted canvas reference without the link fails the design links lane, naming the heading it belongs under
+    ✖ #2339.6eaafe21 criterion 4: the design links lane passes on this checkout, with the canvas reference's link to the section landing
+    ✖ #2339.a190c5fb criterion 2: AGENTS.md edited alone (invariant 2 reworded) fails the design links lane, naming the invariant
+    ✖ #2339.a190c5fb criterion 2: the design edited alone (invariant 4 reworded in the section) fails the design links lane, naming the invariant
+    ✖ #2339.b90141c9 criterion 3: a planted line naming no check fails the design links lane, naming the line
+    ✖ #2339.b90141c9 criterion 3: a planted line naming scripts/no-such-check.mjs fails the design links lane, naming the line and the name
+    ✖ #2339.b90141c9 criterion 3: each line of the section names at least one check that exists, a file under scripts/ or a lane in scripts/lanes.mjs, and none that does not
+- doc: canvas link dropped
+    ✖ #2339.2ae5a05d criterion 1: a planted line of two sentences fails the design links lane, naming it
+    ✖ #2339.2ae5a05d criterion 1: a planted section whose fifth line has no link into the design fails the design links lane, naming the line
+    ✖ #2339.2ae5a05d criterion 1: the design links lane passes on this checkout, with the Principles section in the design
+    ✖ #2339.6eaafe21 criterion 4: a planted canvas reference without the link fails the design links lane, naming the heading it belongs under
+    ✖ #2339.6eaafe21 criterion 4: the canvas reference's "Conventions every primitive uses" opens with a link to the Principles section
+    ✖ #2339.6eaafe21 criterion 4: the design links lane passes on this checkout, with the canvas reference's link to the section landing
+    ✖ #2339.a190c5fb criterion 2: AGENTS.md edited alone (invariant 2 reworded) fails the design links lane, naming the invariant
+    ✖ #2339.a190c5fb criterion 2: the design edited alone (invariant 4 reworded in the section) fails the design links lane, naming the invariant
+    ✖ #2339.b90141c9 criterion 3: a planted line naming no check fails the design links lane, naming the line
+    ✖ #2339.b90141c9 criterion 3: a planted line naming scripts/no-such-check.mjs fails the design links lane, naming the line and the name
+- doc: section after What version 0 builds
+    ✖ #2339.2ae5a05d criterion 1: docs/technical-design.md has a "Principles" section before "What version 0 builds, and what waits", of 8 to 12 lines, each one sentence of at most 160 characters with a link into the design
+
+"invariant 3 reworded in both files" is a control, not a wrong program: both files still agree word for word, so
+nothing should fail, and nothing did. "a line over 160" and "a line with no check" make the unplanted copy fail the
+lane, so every planted test stops at its control as well as the test written for that rule.
+
+Offline: with a gh first on PATH that fails as gh does without network, lane.live.test.mjs's two tests skip with
+`INCONCLUSIVE: gh could not list the open issues: …`, never pass.

@@ -614,6 +614,145 @@ impl Call {
         }
     }
 
+    /// The runs that create a cloud resource, as `effect:cloud-resource` reads them; None when a run the reader couldn't
+    /// read whole may create one too (#2134).
+    pub fn cloud_creates(&self) -> Option<Vec<&Run>> {
+        if self.runs.iter().any(|r| r.unread.is_some()) {
+            return None;
+        }
+        Some(self.runs.iter().filter(|r| creates_cloud(r)).collect())
+    }
+
+    /// The AWS profile the one run that creates a cloud resource signs in with, when the reader can know it: a
+    /// standing rule for its account may cover the call (#2134). None when no single aws run creates one, or the
+    /// account could be another than the profile names: a word the line computes or a shortened `--profile`, a `HOME`
+    /// or an `AWS_` variable besides `AWS_PROFILE` in its environment, a builtin that changes what later programs get,
+    /// or a wrapper that changes who runs it.
+    pub fn aws_profile(&self) -> Option<String> {
+        let creates = self.cloud_creates()?;
+        let [run] = creates.as_slice() else {
+            return None;
+        };
+        // The CLI takes a long option by any prefix of it, so a shortened valued one hides its value from `first_two`.
+        let shortened = |w: &&str| {
+            let name = w.split('=').next().unwrap_or_default();
+            name.len() > 2
+                && name.starts_with("--")
+                && !AWS_VALUED.contains(&name)
+                && AWS_VALUED.iter().any(|o| o.starts_with(name))
+        };
+        let words = run.words();
+        let line = self.command.as_deref().unwrap_or_default();
+        // The line's words as a program would be named by them: quotes taken out, a path's last part.
+        let tokens: Vec<String> = line
+            .split(|c: char| c.is_whitespace() || ";&|()<>`".contains(c))
+            .map(|w| {
+                let w: String = w.chars().filter(|c| !"'\"\\".contains(*c)).collect();
+                same_name(w.rsplit('/').next().unwrap_or_default())
+            })
+            .collect();
+        // The line with its quotes taken out, so a name split by quotes reads whole, and what it holds outside quotes,
+        // where the shell expands braces and defines functions.
+        let bare: String = line.chars().filter(|c| !"'\"\\".contains(*c)).collect();
+        let mut unquoted = String::new();
+        let mut quote: Option<char> = None;
+        let mut escaped = false;
+        for c in line.chars() {
+            match (quote, c) {
+                _ if escaped => escaped = false,
+                (Some('\''), '\'') => quote = None,
+                (Some('\''), _) => {}
+                (_, '\\') => escaped = true,
+                (Some('"'), '"') => quote = None,
+                (Some(_), _) => {}
+                (None, '\'' | '"') => quote = Some(c),
+                (None, _) => unquoted.push(c),
+            }
+        }
+        let pattern = |p: &Path| p.to_string_lossy().contains(['*', '?', '[']);
+        let assignment = |w: &&str| {
+            w.split_once('=').is_some_and(|(n, _)| {
+                n.chars()
+                    .next()
+                    .is_some_and(|c| c == '_' || c.is_ascii_alphabetic())
+                    && n.chars().all(|c| c == '_' || c.is_ascii_alphanumeric())
+            })
+        };
+        let own_profile = run.env.iter().any(|(n, _)| n == "AWS_PROFILE");
+        let aws_words = bare.matches("AWS_").count();
+        if !run.is("aws")
+            || run.glob
+            || run.args.iter().any(|a| a.text.is_none() || a.glob)
+            || self.runs.iter().filter(|r| r.is("aws")).any(|r| {
+                let words = r.words();
+                words.iter().any(shortened) || words.contains(&"--")
+            })
+            // What the shell would expand, split or decode, the reader may read otherwise than it runs.
+            || line.contains(['$', '`', '\\', '~'])
+            || unquoted.contains(['*', '?', '['])
+            || run.env.iter().any(|(n, _)| n != "AWS_PROFILE")
+            // The only AWS_ setting it reads is the creating run's own AWS_PROFILE.
+            || aws_words > usize::from(own_profile)
+            || (aws_words == 1 && bare.matches("AWS_PROFILE=").count() != 1)
+            // What picks the program aws runs as, or the files it reads its account from.
+            || ["HOME", "BASH_ENV", "PATH", "PYTHON", "DYLD_", "LD_"].iter().any(|w| bare.contains(w))
+            || bare.to_lowercase().contains(".aws")
+            // Brace expansion, and a function that may stand in for aws.
+            || unquoted.contains(['{', '}'])
+            || unquoted.replace(char::is_whitespace, "").contains("()")
+            || tokens
+                .iter()
+                .any(|t| AS_ANOTHER.contains(&t.as_str()))
+            || self
+                .runs
+                .iter()
+                .any(|r| !std::ptr::eq(r, *run) && !reads_only(r))
+            // A write can reach what decides the account: the CLI's files, its program, the interpreter it runs on.
+            || !self.writes.is_empty()
+            // A disk that ignores case folds letters beyond ASCII onto those names, and the reader breaks words at a
+            // carriage return where bash doesn't.
+            || !line.chars().all(|c| c == '\t' || c == '\n' || (' '..='~').contains(&c))
+            // An aws named by a path may be any program.
+            || bare
+                .split(|c: char| c.is_whitespace() || ";&|()<>".contains(c))
+                .any(|w| w != "aws" && w.rsplit('/').next() == Some("aws"))
+            // An assignment of its own changes what every later program gets, an exported one as a prefix doesn't. Each
+            // statement runs aws or a read-only program, named bare.
+            // Read with its quotes dropped, never its quoted words, so a quoted wrapper is still its program.
+            || bare.split([';', '&', '|', '\n', '(', ')']).any(|statement| {
+                let words: Vec<&str> = statement.split_whitespace().collect();
+                let assigns = words.iter().take_while(|w| assignment(w)).count();
+                (assigns > 0 && assigns == words.len())
+                    || words[..assigns].iter().any(|w| !w.starts_with("AWS_PROFILE="))
+                    // Its program by its bare name, never a wrapper, a shell word or a path, which may be any program
+                    // or run it with another environment.
+                    || words
+                        .get(assigns)
+                        .is_some_and(|w| *w != "aws" && !READ_ONLY.contains(w))
+            })
+            || self.runs.iter().any(|r| r.cwd.as_deref().is_none_or(pattern))
+        {
+            return None;
+        }
+        // The CLI keeps the last --profile it's given.
+        let named = words
+            .iter()
+            .enumerate()
+            .filter_map(|(k, w)| match *w {
+                "--profile" => Some(words.get(k + 1).copied().unwrap_or("")),
+                _ => w.strip_prefix("--profile="),
+            })
+            .next_back();
+        let env = || {
+            run.env
+                .iter()
+                .rev()
+                .find(|(n, _)| n == "AWS_PROFILE")
+                .map(|(_, v)| v.as_str())
+        };
+        Some(named.or_else(env).unwrap_or("default").to_string()).filter(|p| plain_profile(p))
+    }
+
     /// A `kill` of the hub's process or its group, the hub's PID read from its socket's peer.
     fn kills_hub(&self) -> Option<Hit> {
         let kills: Vec<&Run> = self.runs.iter().filter(|r| r.is("kill")).collect();
@@ -660,6 +799,46 @@ impl Call {
             })?;
             return Some(Hit {
                 detail: Some(format!("It makes the top-level folder {}.", new.display())),
+            });
+        }
+        // The hub reads the owner of a create from this note, as deep-hook reads it (#2134): only the first two
+        // forms name one, and the profile is said whole, so the hub never splits the command again.
+        if class == "cloud-resource" {
+            let creates: Vec<&Run> = self.runs.iter().filter(|r| creates_cloud(r)).collect();
+            let lines = || {
+                creates
+                    .iter()
+                    .map(|r| command_of(r))
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            };
+            let detail = match (self.cloud_creates().as_deref(), creates.as_slice()) {
+                (_, []) => return None,
+                (Some([run]), _) if !run.is("aws") => {
+                    format!("It creates a cloud resource: {}", command_of(run))
+                }
+                (Some([run]), _) => match self.aws_profile() {
+                    Some(profile) => format!(
+                        "It creates a cloud resource under the AWS profile {profile}: {}",
+                        command_of(run)
+                    ),
+                    None => format!(
+                        "It creates a cloud resource with AWS settings its line sets: {}",
+                        command_of(run)
+                    ),
+                },
+                (Some(several), _) => format!(
+                    "It runs {} commands that create cloud resources: {}",
+                    several.len(),
+                    lines()
+                ),
+                (None, _) => format!(
+                    "It creates cloud resources beside a command it couldn't read: {}",
+                    lines()
+                ),
+            };
+            return Some(Hit {
+                detail: Some(detail),
             });
         }
         let found = self.runs.iter().find(|r| self.has_effect(r, class));
@@ -755,6 +934,113 @@ fn command_of(run: &Run) -> String {
     let mut line = vec![run.program.clone()];
     line.extend(run.words().iter().map(|w| quote(w)));
     line.join(" ")
+}
+
+/// The account a profile signs into by an ~/.aws/config's text and ~/.aws/credentials': its section's `sso_account_id`, else none (#2134). A
+/// config holding anything but printable ASCII, tabs and line ends, an indented line, or a quote or backslash, is read
+/// as naming no account:
+/// readers split such text into lines and words differently, the hub's and the CLI's among them.
+pub fn aws_account<'a>(config: &'a str, credentials: &str, profile: &str) -> Option<&'a str> {
+    // The CLI lays ~/.aws/credentials over the config, an account named there over the config's.
+    if credentials.to_ascii_lowercase().contains("sso_account_id")
+        || !config
+        .replace("\r\n", "\n")
+        .chars()
+        .all(|c| c == '\t' || c == '\n' || (' '..='~').contains(&c))
+        // The CLI reads an indented line as going on with the value above it, and a header's quotes and escapes away.
+        || config.lines().any(|l| l.starts_with([' ', '\t']))
+        || config.contains(['\'', '"', '\\'])
+    {
+        return None;
+    }
+    // The CLI's profile is its last section to name it, read whole: one header's words are `profile <name>`, after
+    // any word that starts with profile, or `default`.
+    // A `[DEFAULT]` key is every profile's that doesn't set it.
+    let (mut section, mut shared, mut found) = (None, false, false);
+    let (mut own, mut fallback) = (None, None);
+    for line in config.lines().map(str::trim) {
+        // A header is read as the CLI's parser reads it: up to its last `]`, whatever follows.
+        if let Some(head) = line
+            .strip_prefix('[')
+            .and_then(|l| l.rfind(']').map(|k| &l[..k]))
+            .filter(|h| !h.is_empty())
+        {
+            let words: Vec<&str> = head.split_whitespace().collect();
+            shared = head == "DEFAULT";
+            section = match words[..] {
+                _ if head == "default" => Some("default"),
+                [_, name] if head.starts_with("profile") => Some(name),
+                _ => None,
+            };
+            if section == Some(profile) {
+                (own, found) = (None, true);
+            }
+        } else if shared || section == Some(profile) {
+            // A key ends at its first `=` or `:`, in any case.
+            if let Some(k) = line.find(['=', ':']) {
+                if line[..k].trim().eq_ignore_ascii_case("sso_account_id") {
+                    let value = Some(line[k + 1..].trim());
+                    if shared {
+                        fallback = value;
+                    } else {
+                        own = value;
+                    }
+                }
+            }
+        }
+    }
+    own.or(fallback)
+        .filter(|v| found && !v.is_empty() && !v.contains(char::is_whitespace))
+}
+
+/// Whether a run beside the one a standing rule covers only reads: one of READ_ONLY, or an aws run that lists,
+/// describes or says who you are (#2134).
+fn reads_only(run: &Run) -> bool {
+    if run.is("aws") {
+        let [service, op] = first_two(&run.words(), AWS_VALUED);
+        return op == "ls"
+            || op.starts_with("list-")
+            || op.starts_with("describe-")
+            || (service == "sts" && op == "get-caller-identity");
+    }
+    READ_ONLY.iter().any(|p| run.is(p))
+}
+
+/// The programs a line may run beside the one aws run a standing rule covers: none changes the account that run
+/// signs in with (#2134).
+const READ_ONLY: &[&str] = &["echo", "cd", "pwd", "true", "ls", "sleep", "date"];
+
+/// The words that change what a run is given or who runs it: a wrapper that changes its user, its environment or its
+/// words, the aws command that rewrites a profile, and the shell words that assign a variable or guard a statement, so
+/// an assignment in it is no statement's own.
+const AS_ANOTHER: &[&str] = &[
+    "sudo",
+    "doas",
+    "su",
+    "runuser",
+    "pkexec",
+    "env",
+    "xargs",
+    "parallel",
+    "configure",
+    "for",
+    "select",
+    "if",
+    "while",
+    "until",
+    "case",
+    "!",
+    "read",
+    "let",
+    "getopts",
+    "mapfile",
+    "readarray",
+    "coproc",
+];
+
+/// Whether a profile can be said in a note and read back whole: printable ASCII with no space and no colon.
+fn plain_profile(profile: &str) -> bool {
+    !profile.is_empty() && profile.chars().all(|c| c.is_ascii_graphic() && c != ':')
 }
 
 /// A match on a run, naming it: the command for you to run yourself, if you mean it.
@@ -1118,10 +1404,43 @@ fn creates_cloud(run: &Run) -> bool {
     }
     (run.is("gsutil") && op(0) == "mb")
         || ((run.is("terraform") || run.is("tofu")) && op(0) == "apply")
-        || (run.is("pulumi") && op(0) == "up")
-        || ((run.is("cdk") || run.is("sam") || run.is("serverless") || run.is("sls"))
-            && op(0) == "deploy")
+        || (run.is("pulumi") && first_two(&words, PULUMI_VALUED)[0] == "up")
+        || (run.is("cdk") && first_two(&words, CDK_VALUED)[0] == "deploy")
+        || ((run.is("sam") || run.is("serverless") || run.is("sls")) && op(0) == "deploy")
 }
+
+/// pulumi's options that take a value before its subcommand (#2134).
+const PULUMI_VALUED: &[&str] = &[
+    "-C",
+    "--cwd",
+    "-s",
+    "--stack",
+    "--color",
+    "-v",
+    "--verbose",
+    "--tracing",
+    "--tracing-header",
+    "--profiling",
+    "--memprofilerate",
+];
+
+/// cdk's options that take a value before its subcommand (#2134).
+const CDK_VALUED: &[&str] = &[
+    "--profile",
+    "--app",
+    "-a",
+    "-o",
+    "--output",
+    "-c",
+    "--context",
+    "-r",
+    "--role-arn",
+    "-p",
+    "--plugin",
+    "--proxy",
+    "--build",
+    "--ca-bundle-path",
+];
 
 /// A `gh` run whose first two plain words are one of `subs`.
 /// A `gh api` call that posts in your name: a POST (by `--method` or `-X`, or by a field, which makes gh post) to an
