@@ -635,9 +635,10 @@ impl<S: Stepper> Copy<S> {
     /// Frames of player `p`'s messages for steps `from..to` that it holds, to the other copies.
     fn forward(&mut self, p: usize, from: i64, to: i64) {
         let mut steps: Vec<Vec<u8>> = Vec::new();
-        let mut first = from.max(0);
+        let from = from.max(0);
+        let mut first = from;
         let mut bytes = wire::HEADER;
-        for k in first..to.min(self.through[p]) {
+        for k in from..to.min(self.through[p]) {
             let Some(m) = self.message_of(p, k) else {
                 break;
             };

@@ -1,0 +1,61 @@
+// Evidence for #1834: the lab fired by the coach's logic, rendered and read step by step, beside the planted late fire.
+// Not a test of record: it drives the blind suite's own fixture (tests/acceptance/1834/helpers.ts) through deep-show and
+// writes frames and readings to OUT for the evidence page.
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { it } from 'vitest';
+import {
+  BALL_PATH, DOC, FIRES, LATE, coachProgram, evalCall, labScene, physicsBakeCall, plantedScenario, prebuild, prebuildShows,
+  putEvidence, runShow, showCall, showWith, useTemp, valuesOf, type JsonObject,
+} from '~/dev/claude-worktrees/doneright/github-issue-1834-7630f6/tests/acceptance/1834/helpers.ts';
+
+const OUT = process.env['EVIDENCE_OUT']!;
+prebuild();
+prebuildShows([[]]);
+const temp = useTemp();
+
+/** The blind suite's lab scene, with the floor and the goal drawn too (the world is unchanged). */
+function drawnLab(program: ReturnType<typeof coachProgram>): JsonObject {
+  const s = labScene(program, { fires: FIRES });
+  const items = s['items'] as Record<string, JsonObject>;
+  const paint = (id: string, base_color: number[], order: string): void => {
+    items[id] = { id, name: id, order, kind: 'material@1', params: { base_color, metallic: 0, roughness: 0.6 } };
+  };
+  paint('ball-paint', [1, 0.35, 0.05, 1], 'a800');
+  paint('grass', [0.18, 0.42, 0.2, 1], 'a801');
+  paint('goal-white', [0.95, 0.95, 0.95, 1], 'a802');
+  items['sky'] = { id: 'sky', name: 'sky', order: 'a803', kind: 'sky@1', params: { top: [0.15, 0.3, 0.75, 1], low: [0.6, 0.7, 0.85, 1], ambient_top: [0.35, 0.35, 0.35], ambient_low: [0.15, 0.15, 0.15] } };
+  items['ball'] = { ...items['ball']!, material: 'ball-paint' };
+  const add = (id: string, size: number[], pos: number[], order: string, material: string): void => {
+    items[id] = { id, name: id, order, kind: 'mark.box@1', params: { size }, at: { pos }, material };
+  };
+  add('floor', [30, 0.1, 30], [0, -0.05, 0], 'a900', 'grass');
+  add('post_left', [0.12, 2.0, 0.12], [8, 1.0, -1.5], 'a901', 'goal-white');
+  add('post_right', [0.12, 2.0, 0.12], [8, 1.0, 1.5], 'a902', 'goal-white');
+  add('crossbar', [0.12, 0.12, 3.12], [8, 2.06, 0], 'a903', 'goal-white');
+  return s;
+}
+
+for (const run of [{ name: 'fired', planted: undefined }, { name: 'late', planted: LATE }] as const) {
+  it(`renders and reads the lab, ${run.name}`, () => {
+    const program = coachProgram();
+    const ev = temp();
+    putEvidence(ev, program.bytes);
+    const doc = DOC(run.name === 'fired' ? 11 : 12);
+    const frames = join(OUT, run.name, 'frames');
+    mkdirSync(join(OUT, run.name), { recursive: true });
+    const evals = Array.from({ length: 240 }, (_, f) => evalCall(doc, f, [BALL_PATH]));
+    const r = runShow(showWith([]), plantedScenario(ev, [doc], [
+      showCall(doc, drawnLab(program)),
+      physicsBakeCall(doc),
+      { call: 'world', doc, world: 'lab' },
+      ...evals,
+      { call: 'export', doc, out: frames, video: { codec: 'png_seq' }, frame_rate: [60, 1] },
+    ], run.planted), `the lab, ${run.name}`);
+    const ball = evals.map((_, f) => valuesOf(r[3 + f], `frame ${f}`)[BALL_PATH]);
+    writeFileSync(join(OUT, run.name, 'replies.json'), JSON.stringify({
+      shown: r[0], bake: r[1], world: { ok: r[2]?.['ok'], step_hashes: r[2]?.['step_hashes'], inputs: r[2]?.['inputs'], bodies: r[2]?.['bodies'] },
+      ball, exported: r[r.length - 1],
+    }));
+  }, 3_600_000);
+}

@@ -208,7 +208,7 @@ export class Core {
   /** Only real questions reach you (#84): what a stop ends on, and the question cards a turn raises, sorted. */
   private questions!: Questions;
   /** One session's transcript copied into the record now; unset until the archive opens. */
-  private archiveSession?: (session: string) => Promise<void>;
+  private archiveSession?: (session: string, transcript?: string) => Promise<void>;
   /** The sessions whose transcripts their agents moved to an archived folder; unset until the archive opens. */
   private archivedSessions?: () => Promise<Set<string>>;
   /** The archive pass under way, if one is: a stop waits for it before the record closes (#2573). */
@@ -404,7 +404,7 @@ export class Core {
       raw: this.raw, asks: () => this.asks, now: this.now, plant: options.plant, sorter: options.sorter,
       append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
       pin: (cwd, question) => this.mcp.pinOf(cwd, question), heard: (ask) => this.delivery.heardBy(ask),
-      archived: async (session) => { await this.archiveSession?.(session); },
+      archived: async (session, transcript) => { await this.archiveSession?.(session, transcript); },
       reading: (session, agent, reading) => this.appendReading(session, agent, reading),
     });
     this.questions = new Questions({
@@ -1015,7 +1015,7 @@ export class Core {
     };
     archivePass();
     this.archiving = () => archiving;
-    this.archiveSession = (session) => archive.session(session);
+    this.archiveSession = (session, transcript) => archive.session(session, transcript);
     this.archivedSessions = () => archive.archived();
     this.every('archived-threads', ARCHIVED_THREADS_MS, () => this.state.archivedThreads());
     // Setup's wiki build (#356) starts from a pass of its own, after the one at start has finished.
@@ -1368,7 +1368,7 @@ export class Core {
     if (drafts.some((d) => d.kind === 'session.end')) {
       void this.control.leftProject(meta.session);
       // Copied now, verified or not: a desktop app deletes what follows this hook (#342), and a copy changes nothing.
-      void this.archiveSession?.(meta.session).catch((error: unknown) => process.stderr.write(`deep hub: archive of ${meta.session}: ${error instanceof Error ? error.message : String(error)}\n`));
+      void this.archiveSession?.(meta.session, meta.transcript).catch((error: unknown) => process.stderr.write(`deep hub: archive of ${meta.session}: ${error instanceof Error ? error.message : String(error)}\n`));
     }
     if (meta.printed) void this.sessionStarts.refusals(meta.session, meta.toolUse, meta.printed).catch(() => undefined);
     if (meta.ran && meta.cwd) void this.teardowns.saw({ session: meta.session, agent: meta.agent, cwd: meta.cwd, call: meta.toolUse ?? meta.id, ...meta.ran }).catch(() => undefined);
@@ -2573,11 +2573,10 @@ export class Core {
     for (const p of this.delivery.promises.values()) clearTimeout(p.timer);
     this.claudeSettings.close();
     for (const waits of [this.delivery.waiting, this.delivery.settling]) for (const set of [...waits.values()]) for (const wake of set) wake();
-    try {
-      await this.ready;
-    } catch {
-      return;
-    }
+    const started = await this.ready.then(() => true, () => false);
+    // The job pool a start made after the first pass found none, whether the start finished or failed (#2732).
+    this.pool?.close(true);
+    if (!started) return;
     // A stop that came while the core was starting cleared the timers before the start armed its own and opened the
     // work runs (#2573): those go now, and the archive's pass under way ends before the record closes. Up to 5 s: a
     // pass can take minutes, and the hub gives its whole stop 20 s. One that runs longer reads a closed record, as before.
