@@ -5822,35 +5822,6 @@ export interface AskMootV2 {
   evidence?: Array<string>;
 }
 
-export type AskMovedPinnedTo = {
-  kind: "commit";
-  ref: string;
-} | {
-  kind: "doc_revision";
-  ref: string;
-} | {
-  kind: "evidence";
-  ref: string;
-};
-
-/** ask.moved@1 */
-export interface AskMoved {
-  v: 1;
-  id: string;
-  kind: "ask.moved";
-  subject: string;
-  writer: "core";
-  actor: string;
-  scope: string;
-  ts: number;
-  seq?: bigint;
-  log_pos?: number;
-  data: {
-    pinned_to: AskMovedPinnedTo;
-  };
-  evidence?: Array<string>;
-}
-
 export type AskSourcesPinnedTo = {
   kind: "commit";
   ref: string;

@@ -71,7 +71,7 @@ const CORE = { writer: 'core' } as const;
  */
 const PAGE = 100;
 /** The kinds `apply` reads, which the core's reads of the log name: an event of any other kind is never decoded (#2646). */
-const APPLIED = ['session.start', 'agent.stop', 'session.continued', 'session.end', 'task.closed', 'ask.created', 'plan.proposed', 'decision.created', 'decision.revoked', 'decision.overruled', 'decision.judged', 'decision.applied', 'ask.answered', 'ask.defaulted', 'ask.escalated', 'ask.cancelled', 'ask.superseded', 'ask.moot', 'default.undone', 'deadline.moved', 'ask.moved', 'ask.batched', 'ask.later', 'approval.held', 'approval.started', 'approval.withdrawn', 'tool.before', 'user.ask', 'verdict.made', 'claim.made', 'tool.after'];
+const APPLIED = ['session.start', 'agent.stop', 'session.continued', 'session.end', 'task.closed', 'ask.created', 'plan.proposed', 'decision.created', 'decision.revoked', 'decision.overruled', 'decision.judged', 'decision.applied', 'ask.answered', 'ask.defaulted', 'ask.escalated', 'ask.cancelled', 'ask.superseded', 'ask.moot', 'default.undone', 'deadline.moved', 'doc.patched', 'ask.batched', 'ask.later', 'approval.held', 'approval.started', 'approval.withdrawn', 'tool.before', 'user.ask', 'verdict.made', 'claim.made', 'tool.after'];
 /** Time the hub didn't run, down or with the Mac asleep, moves deadlines once it is longer than this (#908). */
 const AWAY = 10_000;
 /** How many ended sessions' closed asks stay in memory; the record keeps them all. */
@@ -118,6 +118,8 @@ class AsksCore implements Asks {
   private readonly signInAgents = new Map<string, string>();
   /** Each agent's newest sign-in probe reading. */
   private readonly probed = new Map<string, { signedIn: boolean | null; account: string | null; at: number }>();
+  /** Each document's newest recorded revision, `doc:<id>` → its rev and canonical document's hash (#3234). */
+  private readonly revisions = new Map<string, { rev: number; hash: string }>();
   /** The stops a task covers, so a session's stop raises or joins one task once. */
   private readonly covered = new Set<string>();
   /** Sessions whose newest stop the core hasn't read yet, and block tasks closed on their check whose sessions resume. */
@@ -320,7 +322,10 @@ class AsksCore implements Asks {
    */
   private picturesOf(ask: Ask, via: 'card' | 'inbox' | 'channel', given: unknown): JsonValue[] | undefined {
     const pin = ask.data.pinned_to as { kind?: unknown; ref?: unknown } | undefined;
-    const listed = ask.data.kind === 'taste' && pin?.kind === 'evidence' && typeof pin.ref === 'string' ? this.options.pictures?.(pin.ref) : undefined;
+    // An evidence pin names its manifest; a document revision's, its document's newest revision's canonical document.
+    const doc = pin?.kind === 'doc_revision' && typeof pin.ref === 'string' ? pin.ref.slice(0, pin.ref.lastIndexOf('@')) : undefined;
+    const manifest = pin?.kind === 'evidence' && typeof pin.ref === 'string' ? pin.ref : doc ? this.revisions.get(doc)?.hash : undefined;
+    const listed = ask.data.kind === 'taste' && manifest ? this.options.pictures?.(manifest) : undefined;
     if (given === undefined) return listed?.length ? listed.map((sha256) => ({ sha256, shown: false, scale: 0, ms: 0 })) : undefined;
     if (via !== 'card') throw new AskRefused('only the question card draws pictures: an answer from anywhere else records them not shown', { field: 'pictures' });
     const entry = (p: unknown): boolean => isObj(p) && Object.keys(p).length === 4 && typeof p.sha256 === 'string' && SHA256.test(p.sha256) && typeof p.shown === 'boolean'
@@ -1532,11 +1537,12 @@ class AsksCore implements Asks {
         target.data = { ...target.data, deadline: d.deadline };
         if (d.because !== 'away') target.due = d.deadline;
         return;
-      case 'ask.moved':
-        // It shows another revision of what it's pinned to, as a taste call's evidence with a picture replaced (#3234).
-        if (!target || target.closed || e.writer !== 'core' || !isObj(d.pinned_to)) return;
-        target.data = { ...target.data, pinned_to: d.pinned_to };
+      case 'doc.patched': {
+        // A document's next revision: a taste call pinned to it judges the pictures this one lists (#3234).
+        const kept = typeof d.doc === 'string' ? this.revisions.get(d.doc) : undefined;
+        if (typeof d.doc === 'string' && Number.isInteger(d.rev) && typeof d.hash === 'string' && (!kept || (d.rev as number) > kept.rev)) this.revisions.set(d.doc, { rev: d.rev as number, hash: d.hash });
         return;
+      }
       case 'ask.batched':
         this.showing.apply(e, d);
         return;
