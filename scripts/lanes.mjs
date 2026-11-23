@@ -1975,9 +1975,17 @@ function cargoTarget(line, targets) {
 export function cargoResults(output, status, workspace) {
   const targets = rerunTargets(workspace);
   const failures = [], passed = [], skips = [], failed = new Set();
+  // A custom harness that runs nothing says why in its last line, of its own name, as `card_size: INCONCLUSIVE; <reason>`.
+  const said = new Map(), reported = new Set();
   let target = null;
   for (const line of output.split('\n')) {
     target = cargoTarget(line, targets) ?? target;
+    if (/^test /.test(line)) reported.add(target);
+    // cargo names each failed target by the arguments that rerun it.
+    const rerun = line.match(/(?:to rerun pass |^\s+)`(-p \S+ --\w+(?: \S+)?)`\s*$/)?.[1];
+    const own = line.match(/^(\w+): (INCONCLUSIVE|BLOCKED); (.+)$/);
+    if (own && target?.split(' ').at(-1) === own[1]) said.set(target, { state: own[2], message: own[3] });
+    else if (line.trim() && !rerun) said.delete(target);
     const test = line.match(/^test (.+?) \.\.\. (ok|FAILED|BLOCKED|INVALID|INCONCLUSIVE)$/);
     if (test && test[2] === 'ok') passed.push(`cargo ${target} › ${test[1]}`);
     if (test && test[2] !== 'ok') failures.push({ id: `cargo ${target} › ${test[1]}`, state: test[2] === 'FAILED' ? 'FAIL' : test[2], message: '' }), failed.add(target);
@@ -1986,9 +1994,7 @@ export function cargoResults(output, status, workspace) {
     // Custom harnesses report unrun cases too; a listed target must not turn those into passes.
     const unproven = line.match(/^test result: (BLOCKED|INVALID|INCONCLUSIVE)\b/)?.[1];
     if (unproven) failures.push({ id: `cargo ${target}`, state: unproven, message: line.slice(13) }), failed.add(target);
-    // cargo names each failed target by the arguments that rerun it.
-    const rerun = line.match(/(?:to rerun pass |^\s+)`(-p \S+ --\w+(?: \S+)?)`\s*$/)?.[1];
-    if (rerun && !failed.has(rerun)) failures.push({ id: `cargo ${rerun}`, state: 'FAIL', message: 'the target failed outside any test it reported' }), failed.add(rerun);
+    if (rerun && !failed.has(rerun)) failures.push({ id: `cargo ${rerun}`, ...((!reported.has(rerun) && said.get(rerun)) || { state: 'FAIL', message: 'the target failed outside any test it reported' }) }), failed.add(rerun);
   }
   if (status !== 0 && !failed.size) failures.push({ id: 'cargo test', state: 'FAIL', message: output.split('\n').find((line) => /^error/.test(line)) ?? `exited ${status}` });
   return { failures, passed, ...(skips.length && { skips }) };
