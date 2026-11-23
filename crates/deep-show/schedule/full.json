@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "bb0741260c1e1fee93f7e3e8e7708c9ebc7e5a3d48d73668c99c09fbdc89d526",
+  "set_digest": "46ce7e0f35472549cc8fb8914d52391a28651b34c89c0a5da4290b3a3d3fb11f",
   "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
   "interfaces": {
     "building@1": {
@@ -64,7 +64,7 @@
       }
     },
     "data@1": {
-      "digest": "75d055f587754b84d7405262fad9f52dbb0b16a8560d1534e1875f49df412e97",
+      "digest": "2142cd1c512dd10e5b453dab41ba1e5ef47ce50d06b00be35d1009ef26d0fb29",
       "reference": "data",
       "kit": [
         "fixtures",
@@ -209,7 +209,7 @@
       }
     },
     "logic@1": {
-      "digest": "3f668143e49fc0b78f42c4e527222f3604f820879190e949df9cfdd882fdfa48",
+      "digest": "00525830ddf183ebfdad91a9c82de67864ddcc1a9f1d0cc9e6e30382243bf930",
       "reference": "logic",
       "kit": [
         "fixtures",
@@ -885,6 +885,21 @@
         "per": "item"
       },
       {
+        "operator": "data.grid_image",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "t",
+          "refs"
+        ],
+        "writes": [
+          "data.grid",
+          "data.grid_mapped"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "data.vector_field",
         "module": "data",
         "version": "1.0.0",
@@ -1408,6 +1423,7 @@
   "contributions": {
     "core.fields": [
       "data.columns",
+      "data.grid",
       "data.vector_field",
       "marks2d.warp",
       "motion.fields",

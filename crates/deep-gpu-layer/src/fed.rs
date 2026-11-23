@@ -162,6 +162,11 @@ pub(crate) fn bake(
 }
 
 impl Baked {
+    /// #269: the arrays the bake left out of the document.
+    pub(crate) fn into_arrays(self) -> Map<String, Value> {
+        self.arrays
+    }
+
     /// Writes into `doc`'s `arrays` each baked array as a frame at `t` reads it: one step holding
     /// every row as the steps through t's left it, so scene3d's readers fold it at t as they
     /// would the whole bake. From the rows a frame at an earlier t of this session settled, only

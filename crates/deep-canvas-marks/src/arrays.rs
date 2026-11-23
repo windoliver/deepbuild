@@ -30,6 +30,8 @@ pub(crate) fn register(r: &mut Registrar) {
     )
     .applies(reads_array)
     .run(columns);
+    // #269: each grid image's grid, mapped as the columns are.
+    crate::grid_image::register(r);
 }
 
 /// #2363: `points` with a column read from a baked array at frame zero, and a follower on a

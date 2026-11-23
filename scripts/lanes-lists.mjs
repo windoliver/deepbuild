@@ -1406,6 +1406,9 @@ timed.push('tests/acceptance/980/ac09-budget.test.ts');
 alone.push('tests/acceptance/980-redraft-ac9/');
 timed.push('tests/acceptance/980-redraft-ac9/ac9-budget.test.ts');
 byHand.push('tests/acceptance/980/ac09-budget.test.ts');
+// #1841's first draft fails the next page's read only when that read binds two values; since #1576 it also binds the
+// page's byte cap, so the failure is never injected and the test reads BLOCKED. Its blind redraft runs in its place.
+byHand.push('tests/acceptance/1841/events-read.test.ts');
 
 // #689's blind redraft: AC2 builds and tests the whole workspace on 1.99.1; AC4 builds deep-app's hub_client test.
 slow.push('tests/acceptance/689-redraft-2047/ac2-checks.test.mjs', 'tests/acceptance/689-redraft-2047/ac4-app-in-unit-lane.test.mjs');
@@ -1436,3 +1439,11 @@ timed.push('tests/acceptance/2740/as-on-main.test.ts');
 alone.push('tests/acceptance/2215/');
 // #2215's AC5 redraft (blind) builds deep-gpu and draws its four-document corpus on the GPU, once under a plant; no timing.
 alone.push('tests/acceptance/2215-redraft-ac5/');
+
+// #269's folder (blind) runs alone by its lane.json; ac6-budgets.test.ts times a 256 × 256 grid image's frame GPU with
+// judgeLimit, as its blind redraft of AC6 does.
+alone.push('tests/acceptance/269-redraft-ac6/');
+timed.push('tests/acceptance/269/ac6-budgets.test.ts', 'tests/acceptance/269-redraft-ac6/ac6-budgets.test.ts');
+// #269's first AC6 draft is kept by hand until the owner swaps it: its budget program runs out of the default fuel at
+// step 0, so its grid never changes; its blind redraft, 269-redraft-ac6/, runs in its place.
+byHand.push('tests/acceptance/269/ac6-budgets.test.ts');

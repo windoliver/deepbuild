@@ -1,6 +1,6 @@
 ---
 name: deepbuild-canvas
-description: Teaches writing DeepBuild canvas documents (figures, films, boards and pieces) as JSON, and the craft rules their checks hold them to. Use it to draw in DeepBuild. Generated from DeepBuild 0.0.0's kinds' schemas, module set b696b0368c564077b1164b35a522ca604fa447c1add9798ec1aca4c560cdb592; never edit by hand.
+description: Teaches writing DeepBuild canvas documents (figures, films, boards and pieces) as JSON, and the craft rules their checks hold them to. Use it to draw in DeepBuild. Generated from DeepBuild 0.0.0's kinds' schemas, module set 46ce7e0f35472549cc8fb8914d52391a28651b34c89c0a5da4290b3a3d3fb11f; never edit by hand.
 version: 0.0.0
 ---
 
@@ -119,7 +119,7 @@ A film's brief names the checks it wants; each runs only when named and never pa
 }
 ```
 
-## Kinds (module set b696b0368c564077b1164b35a522ca604fa447c1add9798ec1aca4c560cdb592)
+## Kinds (module set 46ce7e0f35472549cc8fb8914d52391a28651b34c89c0a5da4290b3a3d3fb11f)
 
 Each entry as name@major, with its origin when not first party and its stability when not stable; then its fields as name: type, unit, [min, max] and = default, each left out when it has none. Entries with no fields share one line.
 
@@ -192,7 +192,7 @@ Each entry as name@major, with its origin when not first party and its stability
 - text@1: text.copy: string; text.args: [path | {path, widest: string} | {copy: text (<table>[<array path>])}] ≤ 4; data.copy.<locale>.<table>.<key>: string | {zero, one, two, few, many, other: string} (key an i32; other required in a plural entry); data.copy.<locale>.<table>.missing: string = ""
 - marks@1: columns.<name>.array: string; columns.<name>.as: string; columns.<name>.part: string; columns.<name>.range: [min, max] (a row outside it hides); alive.array: string; grid.shape: string = "square"; grid.hex.orient: string = "pointy"; grid.hex.offset: string = "odd"; recipe.rules: string; recipe.precedence: [<terrain>] (edges_6: an edge takes the neighbour's terrain where it comes first); columns.<name>.copy: string; columns.<name>.key: string; columns.<name>.args: [column] ≤ 4
 - group@1: flip.keys: [{t: time, show: child ID | none}]; flip.from: string; flip.array: string; flip.map: {value → child ID} (an unmapped value shows none)
-- rect@1, path@1, image@1, axis@1, scale@1, mask@1, star@1, frame@1, matte@1, axes3d@1, vector_field@1, overlay.frame@1
+- rect@1, path@1, image@1, axis@1, scale@1, mask@1, star@1, frame@1, matte@1, axes3d@1, vector_field@1, grid_image@1, overlay.frame@1
 
 ### check.kind.doc@1
 

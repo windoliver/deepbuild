@@ -14,7 +14,6 @@ plan.overlay #1260
 archive.scene #2036
 user.pan #2056
 lease.gpu #2133
-job.status #2136
 layer.puffs #2142
 holds.ts #2764
 hub.address #2958
@@ -23,3 +22,4 @@ hub.restart #2975
 hub.health #2975
 setup.installs #3088
 setup.needs #3088
+spend.usd #3250

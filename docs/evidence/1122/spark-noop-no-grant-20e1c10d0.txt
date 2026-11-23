@@ -1,0 +1,4 @@
+INCONCLUSIVE no grant: no build grant came within 30 min
+  Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+BLOCKED lane-remote: npm ci got no build grant or failed, as the line above says, so the lane was not run
+BLOCKED lane-remote: spark brought no record of noop on tree 11b5bbe003597081b7da4fa0985833449734189e back
