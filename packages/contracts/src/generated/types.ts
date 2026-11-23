@@ -8864,6 +8864,38 @@ export interface LeaseAcquiredV3 {
   evidence?: Array<string>;
 }
 
+/** lease.acquired@4 */
+export interface LeaseAcquiredV4 {
+  v: 4;
+  id: string;
+  kind: "lease.acquired";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    resource: {
+      host: string;
+      kind: string;
+      key: string;
+    };
+    holder: string;
+    mode: "exclusive" | "shared";
+    expires: number;
+    units?: number;
+    run?: string;
+    agent?: {
+      pid: number;
+      start: string;
+    };
+    asked?: number;
+  };
+  evidence?: Array<string>;
+}
+
 /** lease.denied@1 */
 export interface LeaseDenied {
   v: 1;
