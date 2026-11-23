@@ -189,6 +189,7 @@
   "tests/acceptance/1118/twins/lock-blind-install/scripts/bays.mjs": 1,
   "tests/acceptance/1119/helpers.mjs": 1,
   "tests/acceptance/1119/twins/path-keyed-copy/scripts/perf.mjs": 1,
+  "tests/acceptance/1121/twins/x86-nofollow/crates/deep-hook/src/spool_file.rs": 1,
   "tests/acceptance/1141/app/memory.rs": 1,
   "tests/acceptance/1156/fixtures/claude-code.mjs": 4,
   "tests/acceptance/1156/helpers.ts": 9,

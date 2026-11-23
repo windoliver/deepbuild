@@ -1,0 +1,204 @@
+$ node cargo-lane.mjs  (runLanes: unit lane, cargo test --workspace --locked --no-fail-fast)
+RUN unit
+[cargo's own output, 5755 lines, cut: the same command's output is spark-test-0c73a8a4.txt]
+FAIL unit: cargo -p deep-app --test acceptance_1141 › ac2_each_sessions_state_title_and_open_asks_and_the_notifiers_posts_and_withdrawals_equal_the_merge_bases
+  INCONCLUSIVE cargo -p deep-app --test acceptance_1141 › plant_drops_close_a_reader_that_drops_an_asks_close_fails_naming_the_ask: the plant runs only in a build with --features plant-drops-close
+  INCONCLUSIVE cargo -p deep-app --test acceptance_1141 › plant_walks_events_a_reader_that_walks_every_event_per_render_fails_at_100000_events: the plant runs only in a build with --features plant-walks-events
+  INCONCLUSIVE cargo -p deep-app --test acceptance_2117 › plant_panel_ticks_ac1_789c5dd8_a_timer_that_notifies_every_second_fails_naming_the_view: the plant runs only in a build with --features plant-panel-ticks
+  INCONCLUSIVE cargo -p deep-app --test acceptance_2117 › plant_panel_grays_on_reading_ac2_ebc91643_a_panel_that_waits_for_the_next_reading_fails_naming_the_element: the plant runs only in a build with --features plant-panel-grays-on-reading
+  INCONCLUSIVE cargo -p deep-app --test acceptance_2117 › plant_panel_waits_for_redraw_ac4_0504b71f_a_panel_that_waits_for_another_views_redraw_fails_naming_the_source: the plant runs only in a build with --features plant-panel-waits-for-redraw
+  INCONCLUSIVE cargo -p deep-gpu --lib › structural::timing::timings: skipped with no note
+  INCONCLUSIVE cargo -p deep-motion --test acceptance_1468 › child: the child process the #1468 tests run; it does nothing without DEEP_1468_CHILD
+  INCONCLUSIVE cargo -p deep-physics-rapier --test snapshot_roundtrip › pyramid_stress_scene_full: full-size stress scene: ~43k bodies, minutes to run
+  INCONCLUSIVE cargo -p deep-scene3d-render --test acceptance_3016_noop › ac8_device_bytes_reading: criterion 8's reading: run by tests/acceptance/3016/query.test.ts
+  INCONCLUSIVE cargo -p deep-app --lib › scene_view::tests::a_document_the_view_cannot_draw_whole_gives_its_reason: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-app --lib › scene_view::tests::a_frame_fits_its_room_at_the_documents_own_shape: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-codecs --lib › export::tests::a_join_encodes_its_pcm_to_aac: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-codecs --lib › export::tests::a_part_tags_its_colour_and_keys_the_frames_asked: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-codecs --lib › export::tests::piped_frames_give_the_part_file_frames_give: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-codecs --lib › export::tests::the_same_frames_give_the_same_h264_part: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-codecs --lib › export::tests::two_shards_join_into_a_movie_with_sound_and_timecode: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-codecs --lib › stream::tests::a_delivery_streams_back_its_frames_at_their_times: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-codecs --lib › stream::tests::aac_through_the_stream_and_its_edit_is_the_pcm_at_lag_0: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-codecs --lib › stream::tests::prores_4444_reads_back_limited_colour_and_full_alpha: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-codecs --lib › stream::tests::the_colour_probe_reads_back_within_2_through_each_codec: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-codecs --lib › tests::a_delivery_has_its_moov_before_its_mdat: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-codecs --lib › tests::a_video_sample_past_the_end_of_the_file_reads_as_empty: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-gpu --lib › footprint::tests::the_system_reads_this_process: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-gpu --test footprint_heap › freeing_heap_blocks_leaves_the_footprint_less_the_heap_where_it_was: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-gpu --test footprint_purgeable › volatile_purgeable_memory_leaves_the_footprint_less_the_heap_where_it_was: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-gpu --test footprint_realloc › blocks_realloc_moves_leave_the_footprint_less_the_heap_where_it_was: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-gpu-layer --test drawn_live › a_paper_tooth_read_from_an_image_draws_in_the_live_window_as_film2d_draws_it: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-gpu-layer --test drawn_live › a_size_written_against_the_frame_converts_at_the_documents_size_in_the_live_window: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-hook --lib › matcher::tests::a_link_a_program_and_its_arguments_read_as_the_mac_reads_them: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-hook --lib › matcher::tests::a_name_the_mac_takes_for_a_guarded_one_is_guarded: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-hook --lib › matcher::tests::a_script_whose_interpreter_the_mac_finds_is_read: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-hook --lib › matcher::tests::each_letter_that_folds_to_ascii_reads_as_its_fold: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-marks-render --test marks › a_session_reports_each_change_s_dirty_class: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-marks-render --test marks › an_image_from_the_store_draws_inside_its_mask_and_nowhere_else: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-marks-render --test marks › an_image_is_refused_when_its_bytes_are_missing_or_are_not_the_hash_it_names: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-marks-render --test status › a_bound_number_that_does_not_fit_its_box_fails_rather_than_draws_cut_short: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-marks-render --test status › a_stroke_rings_its_item_a_badge_marks_its_corner_and_a_fill_colors_a_circle: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-marks-render --test status › the_look_s_outline_rings_every_status_mark_and_its_core_has_a_least_size: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --bin deep-live › live::tests::agreeing_trees_pair_and_take_appkit_frames: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --bin deep-live › live::tests::each_disagreement_is_refused: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --bin deep-live › live::tests::values_read_as_appkit_prints_them: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test drive › a_canvas_item_is_acted_on_where_it_was_drawn: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test drive › a_launch_names_the_locale_it_ran_and_refuses_one_that_is_no_tag: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test drive › a_line_its_clip_cuts_is_still_audited_past_its_frame: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test drive › a_notice_never_covers_the_boxs_send: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test drive › a_replica_at_scale_1_answers_in_1x_device_pixels: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test drive › a_replica_launched_dark_draws_its_chrome_dark: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test drive › an_action_with_its_target_in_a_drags_drop_field_is_refused_naming_locator: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test tree_state › a_state_is_read_as_its_status_map_entry: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test tree_state › the_question_card_is_valued_by_its_arming_state_and_holds_the_keyboard: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test tree_state › the_snapshot_holds_the_menu_bar_title_and_the_ringed_row_as_focus: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test tree_state › what_an_agents_panel_draws_sits_under_a_node_saying_an_agent_wrote_it: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test view_kit › a_view_keyed_by_place_fails_naming_the_first_session: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test view_kit › a_view_keyed_by_session_ids_that_draws_no_id_passes: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test view_kit › a_view_that_draws_a_title_alone_fails_naming_the_session_and_its_missing_words: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-show --bin deep-show › efficiency::tests::a_redrawn_rect_leaves_the_pixels_a_whole_draw_leaves: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-show --bin deep-show › momentum::tests::a_scroll_tail_reads_its_momentum_phase_and_the_touch_none: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-show --test arranged_screen › the_frame_draws_the_arranged_places: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-show --test drawn_frames › a_paper_tooth_read_from_an_image_draws_in_a_frame: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-show --test full_screen › the_full_screen_button_is_drawn_and_full_screen_fills_the_window: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-text-render --test frame › a_label_that_fills_the_atlas_is_drawn_whole_and_so_are_its_neighbors: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-text-render --test frame › two_labels_of_different_text_on_one_page_are_one_upload: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-app --test screens › window_screen: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-app --test screens › welcome_screen: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-app --test screens › claude_code_panel_screen: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-app --test screens › codex_panel_screen: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-app --test spike_402 › spike_402: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_1425 › #1425.782e7a69 a panel importing "gpui-kit" is refused at pack check, naming the module and line: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_1425 › #1425.782e7a69 a panel importing "gpui-kit" is refused at load, naming the module and line: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_1425 › #1425.229fbfbb a panel using a name off the catalog is refused at pack check and at load, naming it and the closest catalog name: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_1425 › #1425.229fbfbb every catalog name renders in a replica in light and dark: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_1425 › #1425.711d0cb9 a panel whose list runs script per frame is refused at pack check, naming the component: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_1425 › #1425.3d839088 the view each panel registers in a slot draws the merge base's tree, byte for byte: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_1425 › #1425.782e7a69 planted: a host that skips the load check loads the gpui-kit panel, and the load judge fails it naming the panel: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_1425 › #1425.30ab78a9 the load path timed with the module check and without it, for each of the 12 panels: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_1425 › #1425.711d0cb9 planted: a pack check that skips the per-frame check passes the panel, and the judge fails it naming the panel: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_1425_ac3 › a panel using a component off the catalog is refused at pack check and at load, naming the component and the closest catalog name #1425.229fbfbb: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_1425_ac3 › every catalog name renders in a replica in light and dark #1425.229fbfbb: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_1454_panel_redraft › the_kit_refuses_the_fixture_for_its_dialog: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_1454_panel_redraft › the_fixture_loads_and_paints_its_words_in_the_sidebar_slot: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_1454_panel_redraft › wrong_fixture_with_no_words_paints_no_ink: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_1454_panel_redraft › wrong_fixture_dialog_from_gpui_base_is_refused_and_never_loads: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_1620_planted_loader › bare_gpui_shell_loader_is_rejected: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_1620_planted_loader › refuse_after_fetching_loader_is_rejected: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_1620_planted_loader › refuse_without_naming_loader_is_rejected: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_panels › git_dependency_refused_at_install_and_never_fetched: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_panels › four_faults_refused_each_with_its_own_message: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_panels › the_card_is_drawn_at_its_rect: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_panels › nothing_covers_the_card: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_panels › needs_you_and_session_page_share_each_log_pos: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_panels_planted › network_only_host_fails_naming_the_other_three: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_panels_planted › network_fixture_connects_when_granted: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_panels_planted › a_view_with_its_own_subscription_disagrees: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_panels_planted › clip_only_host_fails_on_the_dialog: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_panels_planted › unclipped_layouts_paint_outside_their_slot: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_panels_planted › base_loader_reaches_the_network: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_panels_planted_redraft › clip_only_host_fails_on_the_dialog: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_panels_planted_redraft › unclipped_layouts_paint_outside_their_slot: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_surfaces › ac2_an_ask_answered_0_9_s_after_it_shows_fires_no_notification: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_surfaces › ac2_an_ask_still_open_1_s_after_it_shows_fires_exactly_one: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_surfaces › ac2_an_ask_from_the_session_open_in_the_focused_window_fires_none: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_surfaces › ac2_a_notifier_that_fires_at_once_fails_naming_the_ask: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_surfaces › ac2_finished_work_makes_no_sound_and_never_sounds_like_a_question: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_surfaces › scope_a_notification_opens_its_asks_card_and_answers_nothing: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_surfaces › ac3_queued_on_every_surface: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_surfaces › ac3_working_on_every_surface: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_surfaces › ac3_says_done_on_every_surface: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_surfaces › ac3_pass_on_every_surface: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_surfaces › ac3_sent_back_on_every_surface: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_surfaces › ac3_blocked_on_every_surface: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_surfaces › ac3_needs_you_on_every_surface: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_surfaces › ac3_stale_on_every_surface: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_surfaces › ac3_quiet_on_every_surface: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_surfaces › ac3_a_view_that_shows_pass_for_a_stale_verdict_fails_naming_the_surface_and_the_row: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_surfaces › ac3_a_view_that_shows_done_for_says_done_fails_naming_the_surface_and_the_row: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_surfaces › ac2_only_one_device_plays_a_sound: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_surfaces › scope_one_count_the_same_on_every_device: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_surfaces › ac3_invalid_on_every_surface: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_surfaces › ac3_inconclusive_on_every_surface: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_surfaces › ac3_a_view_that_draws_another_rows_status_entry_fails_naming_the_surface_and_the_row: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_card › ac2_a_hardware_click_on_c_sends_option_c_not_the_recommended_b_drawn_first: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_card › ac4_a_click_inside_the_arm_interval_never_answers: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_card › ac4_a_synthetic_click_answers_only_after_the_os_confirms_you: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_card › ac5_an_unknown_client_action_answers_only_after_the_os_confirms_you: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_card › ac5_a_test_client_that_cant_pass_the_confirmation_never_answers: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_card › ac5_with_full_keyboard_access_tab_reaches_each_option_of_every_kind_and_space_answers_once_armed: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_card › ac8_a_taste_card_lists_your_past_calls_on_the_same_screen_and_step: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_card › ac9_a_provisional_choice_whose_pin_moved_shows_the_diff_and_its_checks_before_arming: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_card › ac10_killing_the_app_with_an_armed_card_answers_nothing_and_relaunch_presents_unarmed: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_card › ac11_one_confirmation_answers_one_card_and_the_next_card_raises_a_new_prompt: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_card › ac12_a_1x1_slot_or_one_scrolled_1_px_out_never_arms_and_a_press_is_refused: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_card › ac13_three_presented_one_refused_one_answer_and_one_undo_produce_exactly_those_rows: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_card › ac15_typing_with_no_option_says_answers_this_ask_only_and_sends_the_words_alone: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_card › ac5_with_voice_control_every_card_kind_can_be_answered_through_the_confirmation: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_card › ac5_with_switch_control_every_card_kind_can_be_answered_through_the_confirmation: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_card › ac5_voiceover_reads_each_cards_question_options_deadline_and_default: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_card › ac6_each_kind_renders_from_its_fixture_with_question_options_deadline_default_and_its_fields: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_card › ac6_a_batched_approval_shows_the_diff_public_and_undo_and_approving_part_runs_only_those: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_card › ac16_a_typed_yes_on_a_push_card_says_it_wont_run_and_only_allow_runs_the_plan: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_planted › ac2_a_card_that_maps_the_click_to_the_records_index_delivers_b_and_fails_naming_the_option: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_planted › ac3_a_notification_action_that_writes_an_answer_fails: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_planted › ac6_a_card_that_leaves_out_the_default_fails_naming_the_kind: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_planted › ac9_a_card_that_shows_the_diff_only_after_the_answer_fails: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_planted › ac10_a_shell_that_writes_an_answer_or_a_default_on_exit_fails_naming_the_ask: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_planted › ac11_a_shell_that_reuses_the_first_confirmation_fails_naming_the_second_ask: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_planted › ac13_an_app_that_records_only_answers_fails_naming_the_missing_row: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_planted › ac15_a_card_that_answers_the_second_ask_from_the_first_ones_words_fails_naming_the_ask: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_327_planted › ac16_a_card_that_reads_the_typed_yes_as_allow_fails_naming_the_card: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_883 › ac1_an_ask_answered_in_the_cli_leaves_notification_center_within_2_s: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_883 › ac2_two_asks_from_one_session_30_s_apart_leave_one_the_seconds: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_883 › ac2_two_asks_from_two_sessions_leave_two: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_883 › ac3_a_default_at_16_40_today_reads_at_16_40: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_883 › ac4_quitting_and_reopening_the_app_then_restarting_the_hub_posts_nothing_again: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_883 › scope_withdrawn_when_superseded: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_883 › scope_withdrawn_when_moot: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_883 › scope_withdrawn_when_its_deadline_passes: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_883 › scope_an_ask_you_saw_on_screen_posts_nothing_after_restarts_or_a_reconnect: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_883 › scope_an_ask_that_notified_posts_nothing_after_a_channel_reconnect: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_883 › scope_the_title_names_deepbuild_and_the_sessions_task: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_883 › planted_ac1_the_notifier_on_main_leaves_it_and_fails_naming_the_ask: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_883 › planted_ac2_the_notifier_on_main_leaves_both_of_one_sessions_asks: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_883 › planted_ac3_a_text_with_in_2_h_fails: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_883 › planted_ac4_a_notifier_that_queues_every_open_ask_on_start_fails_naming_the_ask: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_883 › planted_scope_the_notifier_on_main_fails_each_withdrawal: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_883 › planted_scope_queueing_on_start_fails_an_ask_you_saw_on_screen: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_883 › scope_withdrawn_from_every_device: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_883_ac3_redraft › ac3_a_default_at_16_40_tomorrow_reads_tomorrow_16_40: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_883_ac3_redraft › planted_ac3_the_judge_fails_each_forbidden_form_and_passes_the_right_one: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_994_sound › ac4_ten_asks_across_four_sessions_in_one_tick_play_one_sound_and_leave_four_notifications: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_994_sound › scope_asks_due_within_2_s_share_one_sound_and_a_later_ask_plays_its_own: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_994_window › scope_the_count_says_notifications_are_off_with_the_fix: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_994_window › scope_alerts_set_to_none_read_as_off_on_the_row_and_the_count: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_994_window › scope_the_app_reads_the_setting_again_when_it_becomes_active: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_994_window › ac3_with_notifications_denied_an_open_asks_row_says_not_notified_and_nothing_posts: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_994_window › scope_the_count_says_the_hub_isnt_answering_while_it_cant_read: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_994_window › scope_a_refused_poll_is_shown_the_same_way: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test card_size › a_card_drawn_taller_than_its_slot_stays_presented: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test headless › replica_launch_under_two_seconds: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test headless › needs_you_view_snapshot: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test headless › sidebar_view_snapshot: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test headless › session_view_snapshot: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test headless › session_readout_in_pixels: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test headless › fixture_panel_rows_match_projection: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test headless › fixture_panel_passes_needs_you_kit: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test headless › planted_cap20_fails_kit: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test headless › planted_drop_folded_fails_kit: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test headless › planted_list_superseded_fails_kit: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test headless › planted_hide_newest_fails_kit: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test headless › scale1_replica_differs_at_first_node: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test headless › slot_sidebar_from_registry: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test headless › slot_home_from_registry: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test headless › slot_tab_from_registry: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test headless › slot_line_from_registry: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test headless › slot_replace_needs_you_from_registry: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test headless › canvas_component_in_registry: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test headless › replica_equals_live_tree: absent on this platform (linux-arm64): in the Mac's reference list
+  INCONCLUSIVE cargo -p deep-replica --test acceptance_326_panels_redraft › needs_you_and_session_page_share_each_log_pos: absent on this platform (linux-arm64): in the Mac's reference list
+  Fix: Repair the behavior named by the failing test.
+  Elapsed: 1034.25 s
+exit 1
