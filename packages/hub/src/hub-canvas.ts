@@ -1,7 +1,8 @@
 
 import { readFileSync } from 'node:fs';
 import type { CheckResult } from '@deepbuild/conformance';
-import { canvasClaim, docCheckOf, docResult, revisionLine, shownResult, worst, type DocCheck, type DocSpec, type Revision } from './doc-checks.js';
+import { docChecksIn } from './spec-entries.js';
+import { canvasClaim, docResult, revisionLine, shownResult, worst, type DocCheck, type DocSpec, type Revision } from './doc-checks.js';
 
 import { join } from 'node:path';
 
@@ -25,6 +26,8 @@ import type { Session, CallContext } from './session-types.js';
 type Obj = Record<string, unknown>;
 /** A handle's ID, as the record's tables keep it. */
 const bare = (handle: string): string => handle.replace(/^[a-z_]+:/, '');
+/** Whether a document pins a pack, the only way it reaches what a pack fills. */
+const pinsPacks = (document: unknown): boolean => isObj(document) && Array.isArray(document.packs) && document.packs.length > 0;
 export interface HubCanvasOptions {
   doneSpec(cwd: string): unknown;
   root: Root; now: () => number; plant: Plant | undefined;
@@ -81,7 +84,7 @@ export class HubCanvas {
     else if (kind === 'ask.created') this.asksBehind.add(input.id);
     else if (kind === 'ask.batched') { for (const a of isObj(data) && Array.isArray(data.asks) ? data.asks : []) if (isObj(a) && typeof a.ask === 'string') this.asksBehind.add(bare(a.ask)); }
     else if (kind === 'decision.applied') { if (isObj(data) && typeof data.ask === 'string') this.asksBehind.add(bare(data.ask)); }
-    else if ((kind.startsWith('ask.') || kind === 'default.undone' || kind === 'approval.withdrawn') && typeof input.subject === 'string') this.asksBehind.add(bare(input.subject));
+    else if ((kind.startsWith('ask.') || kind === 'card.taken_over' || kind === 'default.undone' || kind === 'approval.withdrawn') && typeof input.subject === 'string') this.asksBehind.add(bare(input.subject));
   }
 
   /** One at a time, so two calls never read the same change twice out of order. */
@@ -124,9 +127,18 @@ export class HubCanvas {
     }
   }
 
+  /**
+   * Whether a call has needed a pack (#3044): deep_kinds, or a document that pins one. Until then the canvas core holds
+   * no pack, so no call waits for the release's pack check, seconds of the core's time; a document that pins no pack
+   * reads nothing a pack fills (Registry: entries resolve per document through the pinned pack), so it answers the
+   * same with or without them.
+   */
+  private packsNeeded = false;
+
   /** The world the canvas core reads: the hub's live sessions, the record's asks and readings, and the world file. */
   private async canvasWorld(): Promise<CanvasWorld> {
-    const file: Obj = { ...this.worldFile.read(), packs: await this.options.libraries()?.packs.installed(this.canvas()) ?? [] };
+    const packs = this.packsNeeded ? await this.options.libraries()?.packs.installed(this.canvas()) : undefined;
+    const file: Obj = { ...this.worldFile.read(), packs: packs ?? [] };
     // The hub slot check.kind@1's fills deep_kinds lists: each check kind a plug-in registered, with its kit at install (#1415).
     const host = this.options.extensions();
     const kits = (await host?.installed() ?? []).flatMap((p) => p.kits).filter((k) => k.slot === 'check.kind@1');
@@ -214,6 +226,7 @@ export class HubCanvas {
    */
   async show(as: { session: string | null } | { you: true }, call: Obj): Promise<Obj> {
     if (typeof call.doc === 'string') this.shownDocs.add(call.doc);
+    if (pinsPacks(call.document) || (call.patch !== undefined && JSON.stringify(call.patch).includes('packs'))) this.packsNeeded = true;
     // The planted hub stamps the writer the payload claims (#806's wrong program): a session whose thread it names.
     if (this.options.plant === 'deep-show-writer-from-payload' && 'session' in as && isObj(call.document) && typeof call.document.writer === 'string') {
       const claimed = [...this.options.sessions().values()].find((s) => `agent:${s.thread}` === (call.document as Obj).writer);
@@ -251,7 +264,10 @@ export class HubCanvas {
     const { reply: drawn, presented } = await this.canvas().call(world, { call: name, ...via, ...call });
     const reply = game.assets.length ? { ...drawn, assets: game.assets } : drawn;
     if (presented) await this.recordRevision(as, presented, reply);
-    if (call.check === true && typeof reply.result === 'string') {
+    // A claim the world file defines keeps the canvas core's verdict on its deliverables (#393 AC3, which #806's
+    // replay holds the hub to): that verdict is the check the core just ran, and no spec gives the claim a run (#3044).
+    const fixture = typeof call.claim === 'string';
+    if (call.check === true && typeof reply.result === 'string' && !fixture) {
       const hash = typeof presented?.hash === 'string' ? presented.hash : (await this.docRevision(String(call.doc)))?.hash;
       reply.result = worst([reply.result, hash ? await this.recordedResult(String(call.doc), hash, ofHub) : 'INCONCLUSIVE']);
     }
@@ -320,6 +336,7 @@ export class HubCanvas {
   async kinds(args: Obj): Promise<Obj> {
     // Asset search and fetch (#1731) span the enabled libraries, which the hub reads; the canvas core holds none.
     if (args.op === 'assets' || args.op === 'fetch') return this.assets(args);
+    this.packsNeeded = true;
     const call: Obj = { call: 'deep_kinds' };
     for (const [k, v] of Object.entries(args)) if (v !== null) call[k] = v;
     const reply = await this.canvasCall(call);
@@ -389,9 +406,7 @@ export class HubCanvas {
 
   /** The document checks a worktree's spec names (#1723). */
   docChecksOf(worktree: string): Map<string, DocCheck> {
-    const spec = this.options.doneSpec(worktree);
-    const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
-    return new Map(Object.entries(checks).flatMap(([name, c]) => { const d = docCheckOf(c); return d ? [[name, d] as const] : []; }));
+    return docChecksIn(this.options.doneSpec(worktree));
   }
   /** A document's newest recorded revision. */
   async docRevision(doc: string): Promise<Revision | undefined> {
@@ -437,7 +452,7 @@ export class HubCanvas {
     const libraries = this.options.libraries();
     if (!libraries) return { status: 'BLOCKED', outcome: 'refused', cause: 'The asset host is not ready.', snapshots: [] };
     // #1958: a pack version the store lacks doesn't refuse the document; the canvas core opens it, its instances kept and skipped.
-    await libraries.packs.shipped(this.canvas());
+    if (pinsPacks(document)) await libraries.packs.shipped(this.canvas());
     for (const { pack, asset } of libraries.packs.used(document)) {
       const fetched = await libraries.fetchPack(pack, asset.path);
       if (fetched.status !== 'fetched') return { ...fetched, outcome: 'refused', code: 'asset_blocked', issues: [{ severity: 'error', code: 'asset.blocked', ids: [asset.path], message: `BLOCKED: ${JSON.stringify(fetched)}` }], snapshots: [] };

@@ -1,0 +1,9 @@
+// #2651 AC4's watching package: it keeps each tool.before it is handed, the value itself, and its read action `seen`
+// reports them as they are when it is asked, after the delivery: a value another package changed since shows changed.
+const held: unknown[] = [];
+const object = (properties: Record<string, unknown>) => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
+
+export default function (deep: any): void {
+  deep.on('tool.before', (event: unknown) => { held.push(event); });
+  deep.registerAction('ext.__NAME__.seen', { declares: 'read', input: object({}), output: object({ seen: { type: 'string' } }) }, async () => ({ seen: JSON.stringify(held) }));
+}

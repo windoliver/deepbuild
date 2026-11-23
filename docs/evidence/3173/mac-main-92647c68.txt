@@ -1,0 +1,68 @@
+# main 92647c689 (this branch merged with it; schedule/ is main's), Mac18,1, cargo test -p deep-show --bin deep-show --locked (trimmed: test lines, panic messages, results)
+running 58 tests
+test export::lottie::tests::the_fidelity_frames_are_floor_i_n_over_20 ... ok
+test clip::write::tests::rates_at_or_under_fifty_keep_every_frame_and_odd_rates_carry ... ok
+test device::tests::a_short_ring_counts_one_underrun_and_its_length_and_plays_silence_for_it ... ok
+test device::tests::a_ring_holding_every_ask_counts_no_underrun_across_wraps ... ok
+test clip::write::tests::the_planted_every_frame_clip_has_delays_under_two ... ok
+test clip::write::tests::sixty_a_second_gives_thirty_with_delays_of_three_three_four ... ok
+test clip::write::tests::the_median_cut_merges_colors_of_a_sixteen_color_palette ... ok
+test export::lottie::tests::a_stored_zip_has_its_signatures ... ok
+test generator::tests::numbers_print_as_the_hub_prints_them ... ok
+test export::page::tests::a_target_box_is_the_largest_rectangle_of_its_own_pixels ... ok
+test film_audit::craft::tests::brief_times_and_entries ... ok
+test film_audit::craft::timeline::tests::shot_length_warns_past_max_and_lowers_the_minimum_only_inside_a_montage ... ok
+test film_audit::craft::timeline::tests::camera_grammar_holds_pushes_in_a_row_accents_and_neighbours ... ok
+test geometry_audit::tests::a_collection_the_document_lacks_is_never_passed_over ... ok
+test geometry_audit::tests::a_turned_piece_is_snapped_by_ops_and_a_parented_one_in_words ... ok
+test export::pdf::tests::each_page_reads_back_as_written_with_its_notes ... ok
+test kit::trial::tests::keep_and_drop_move_nothing_and_close_the_trial ... ok
+test mixdown::synth::tests::dotted_names_become_plain_vars ... ok
+test narration::tests::only_a_license_that_says_shareable_true_allows_sharing ... ok
+test modes::tests::physics_shapes_draws_each_body_at_its_baked_pose_at_t ... ok
+test over3d::tests::a_frame_binds_the_edge_values_its_drivers_read_at_the_frames_own_size ... ok
+test placement::tests::a_gesture_serial_is_fresh_under_thirty_seconds_in_its_own_panel ... ok
+test played::tests::a_choice_naming_a_set_is_view_class_unless_it_says_otherwise ... ok
+test physics::tests::a_reading_reads_the_body_after_each_step_through_the_column_view ... ok
+test played::tests::a_document_choice_picks_from_its_entry_on_and_its_default_before ... ok
+test played::tests::a_stage_a_revision_renamed_leaves_the_form_and_the_program_compiles ... ok
+test probe::tests::a_render_back_takes_up_to_64_probes ... ok
+test registries::tests::the_closed_lists_schema_holds_the_cores_lists ... ok
+test registries::tests::the_cores_registries_are_their_contract_rows ... ok
+test review::tests::a_crop_is_the_frames_px_in_its_box_clamped_to_the_frame ... ok
+test review::tests::the_outline_names_every_item_and_no_param ... ok
+test ring::tests::a_chord_has_one_spelling_and_the_escape_chord_is_known_in_any ... ok
+test serve::tests::a_program_started_later_does_not_inherit_a_pty_master ... ok
+test export::pptx::tests::the_reader_apart_from_the_writer_reads_each_slide_as_written ... ok
+test spatial::tests::an_outline_s_box_reaches_its_far_sides ... ok
+test terminal::tests::a_terminal_draws_the_looks_sixteen_colors_and_a_programs_own_as_sent ... ok
+test tests::a_batch_column_whose_length_overflows_is_no_call ... ok
+test momentum::tests::a_scroll_tail_reads_its_momentum_phase_and_the_touch_none ... ok
+test tests::a_kit_call_that_runs_nothing_is_invalid_and_a_partial_run_writes_no_ledger ... ok
+test tests::a_scrubbed_view_shows_the_revision_current_then_and_compare_names_what_changed ... ok
+test tests::core_version_is_the_canvas_crates_version ... ok
+test tests::a_golden_store_that_cant_be_read_or_written_refuses_a_record_and_a_decision ... ok
+test tests::every_shared_document_reply_is_stamped_on_the_clock_too ... ok
+test tests::run_takes_planted_and_costs_once_each_and_nothing_else ... ok
+test frames::story_tests::a_session_shows_what_the_rows_hold_at_t_in_every_reader ... ok
+test track_call::tests::an_entry_reads_back_as_the_track_wrote_it ... ok
+test voiced::tests::a_dropped_voice_fades_over_the_samples_it_reports ... ok
+test kit::ledger::tests::physics_holds_a_behavior_part ... ok
+test film_viewer::tests::the_keymap_names_each_viewer_key_a_film_control_holds ... ok
+test registries::tests::the_paths_listing_is_what_the_full_set_seals ... ok
+test spatial::tests::a_click_on_a_hex_set_selects_the_cell_whose_hexagon_holds_it ... ok
+test kinds::tests::every_structured_field_prints_forms_that_take_its_own_values ... FAILED
+test kinds::tests::lists_the_character_body_from_the_physics_module ... ok
+test efficiency::tests::a_redrawn_rect_leaves_the_pixels_a_whole_draw_leaves ... ok
+test tests::every_seal_in_the_process_counts ... ok
+test tests::the_published_schedule_matches_its_committed_snapshot ... ok
+test efficiency::tests::a_replaced_draw_list_is_the_list_a_whole_build_gives ... ok
+test kit::goldens::tests::a_store_read_during_a_save_is_whole ... ok
+failures:
+thread 'kinds::tests::every_structured_field_prints_forms_that_take_its_own_values' (142795809) panicked at crates/deep-show/src/kinds/tests.rs:64:5:
+cut.words@1.recording: `asset name` doesn't read: `asset name` is no type the form language names
+cut.words@1.keep: `[word index | [first, last]]` doesn't read: `word index` is no type the form language names
+"cut.words@1"."recording": prints no form
+"cut.words@1"."keep": prints no form
+failures:
+test result: FAILED. 57 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 31.81s

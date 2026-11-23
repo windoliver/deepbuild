@@ -1,0 +1,675 @@
+Base runs of #2662's acceptance tests: tests/acceptance/2662/
+Base: 3c500c0c8 (origin/main, "Merge pull request #3097 ..."). macOS, Apple M3, rustc 1.99.1, dev profile,
+CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0, through `node scripts/throttle.mjs build --wait 120 -- cargo ...`.
+The seven [[test]] entries of README.md (Run them) were added to crates/deep-logic/Cargo.toml and
+crates/deep-canvas-sandbox/Cargo.toml for these runs and removed after. Paths are repository-relative; one build
+warning repeated for every binary (the toolchain's rust-objcopy can't load libLLVM here; it strips nothing and
+changes no result) is left out, as are thread numbers. Each block starts and ends with the machine's load
+(`sysctl -n vm.loadavg`); no run waited for a quiet machine, and no test reads a time.
+
+Where each test fails:
+  #2662.bce5379f ac1_a_step_of_one_item_among_100_...        run 1, at its assertion: 6,757,909 bytes in 349 allocations
+  #2662.a74c0d37 ac2_a_seek_across_100_restores_...          run 1, no build (compiles); run 2, at its assertion: 101 compiles
+  #2662.a74c0d37 ac2_two_forks_of_one_item_...               passes on the base; fails on the planted runner (run 2, plant lines)
+  #2662.a74c0d37 ac2_planted_forks_share_store_...           run 1, no build (forks_share_store); run 2, the plant fails as needed
+  #2662.393785f9 ac3_a_fork_... (three tests)                pass on the base; fail on the planted runner (run 2, plant lines)
+  #2662.393785f9 ac3_planted_forks_share_store_...           run 1, no build (forks_share_store); run 2, the plant fails as needed
+  #2662.5dd46ae5 ac4_a_check_of_a_1_mb_program_...           run 1, at its assertion: 2,670,020 allocations, 0 fewer
+  #2662.671c059c ac5_a_live_view_stepped_1000_times_...      run 1, no build (record_values); run 2, at its assertion: 1,001 values
+  #2662.7a6f9cf9 ac6_a_golden_recorded_on_the_merge_base_... passes on the base; fails on replay_changes_step_37 (plant lines)
+  #2662.7a6f9cf9 ac6_planted_replay_changes_step_37_...      passes on the base: the plant fails as needed, naming a's step 37
+
+====================================================================================================
+RUN 1: the base as it stands
+====================================================================================================
+
+$ cargo test --locked -p deep-canvas-sandbox --no-fail-fast --test acceptance_2662_check_allocations
+
+load: { 25.09 26.97 23.93 }
+   Compiling deep-canvas-sandbox v0.0.0 (crates/deep-canvas-sandbox)
+    Finished `test` profile [unoptimized] target(s) in 4.76s
+     Running ../../tests/acceptance/2662/check_allocations.rs (target/debug/deps/acceptance_2662_check_allocations-398da8b79bca6fca)
+
+running 1 test
+test ac4_a_check_of_a_1_mb_program_with_2000_functions_makes_2000_fewer_allocations ... FAILED
+
+failures:
+
+---- ac4_a_check_of_a_1_mb_program_with_2000_functions_makes_2000_fewer_allocations stdout ----
+#2662.5dd46ae5: a check of the 1071102-byte program with 2000 functions makes 2670020 allocations; the merge base ("3c500c0c8") makes 2670020
+
+thread 'ac4_a_check_of_a_1_mb_program_with_2000_functions_makes_2000_fewer_allocations' panicked at crates/deep-canvas-sandbox/../../tests/acceptance/2662/check_allocations.rs:266:5:
+#2662.5dd46ae5: a check of a 1071102-byte program with 2000 functions makes 2670020 allocations, 0 fewer than the merge base's 2670020, not at least 2000 fewer
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    ac4_a_check_of_a_1_mb_program_with_2000_functions_makes_2000_fewer_allocations
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.59s
+
+error: test failed, to rerun pass `-p deep-canvas-sandbox --test acceptance_2662_check_allocations`
+error: 1 target failed:
+    `-p deep-canvas-sandbox --test acceptance_2662_check_allocations`
+exit: 101
+load: { 23.56 26.62 23.82 }
+
+$ cargo test --locked -p deep-logic --no-fail-fast --test acceptance_2662_step_bytes --test acceptance_2662_forks --test acceptance_2662_goldens
+
+load: { 23.56 26.62 23.82 }
+   Compiling deep-canvas-sandbox v0.0.0 (crates/deep-canvas-sandbox)
+   Compiling deep-sandbox-wasmtime v0.0.0 (crates/deep-sandbox-wasmtime)
+   Compiling deep-logic v0.0.0 (crates/deep-logic)
+    Finished `test` profile [unoptimized] target(s) in 37.11s
+     Running ../../tests/acceptance/2662/forks.rs (target/debug/deps/acceptance_2662_forks-4afb868733aac40c)
+
+running 4 tests
+test ac2_two_forks_of_one_item_each_keep_their_own_memory ... ok
+test ac3_a_fork_run_to_its_memory_limit_traps_and_the_other_steps_on ... ok
+test ac3_a_fork_that_traps_stays_failed_and_the_other_steps_on ... ok
+test ac3_a_fork_run_to_its_fuel_traps_and_the_other_steps_on ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running ../../tests/acceptance/2662/goldens.rs (target/debug/deps/acceptance_2662_goldens-c161658eeffdbd09)
+
+running 2 tests
+test ac6_planted_replay_changes_step_37_fails_the_merge_bases_golden_naming_step_37 ... ok
+test ac6_a_golden_recorded_on_the_merge_base_matches_step_for_step ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+     Running ../../tests/acceptance/2662/step_bytes.rs (target/debug/deps/acceptance_2662_step_bytes-a5f64881435f01e1)
+
+running 1 test
+test ac1_a_step_of_one_item_among_100_allocates_no_copy_of_every_items_arrays ... FAILED
+
+failures:
+
+---- ac1_a_step_of_one_item_among_100_allocates_no_copy_of_every_items_arrays stdout ----
+#2662.bce5379f: z's step 5 among 100 items of 65536 bytes of arrays each asked the heap for 6757909 bytes in 349 allocations
+
+thread 'ac1_a_step_of_one_item_among_100_allocates_no_copy_of_every_items_arrays' panicked at crates/deep-logic/../../tests/acceptance/2662/step_bytes.rs:106:5:
+#2662.bce5379f: a step of a world of 100 items with 65536 bytes of arrays each, in which one item steps and writes, asked the heap for 6757909 bytes in 349 allocations (1.03 copies of every item's arrays), not under 262144 (256 KB)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    ac1_a_step_of_one_item_among_100_allocates_no_copy_of_every_items_arrays
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.29s
+
+error: test failed, to rerun pass `-p deep-logic --test acceptance_2662_step_bytes`
+error: 1 target failed:
+    `-p deep-logic --test acceptance_2662_step_bytes`
+exit: 101
+load: { 25.74 26.80 24.01 }
+
+$ cargo test --locked -p deep-logic --no-fail-fast --test acceptance_2662_seek_compiles
+
+load: { 25.74 26.80 24.01 }
+   Compiling deep-logic v0.0.0 (crates/deep-logic)
+error[E0425]: cannot find function `compiles` in crate `deep_sandbox_wasmtime`
+  --> crates/deep-logic/../../tests/acceptance/2662/seek_compiles.rs:42:41
+   |
+42 |     let before = deep_sandbox_wasmtime::compiles();
+   |                                         ^^^^^^^^ not found in `deep_sandbox_wasmtime`
+
+error[E0425]: cannot find function `compiles` in crate `deep_sandbox_wasmtime`
+  --> crates/deep-logic/../../tests/acceptance/2662/seek_compiles.rs:46:42
+   |
+46 |     let started = deep_sandbox_wasmtime::compiles();
+   |                                          ^^^^^^^^ not found in `deep_sandbox_wasmtime`
+
+error[E0425]: cannot find function `compiles` in crate `deep_sandbox_wasmtime`
+  --> crates/deep-logic/../../tests/acceptance/2662/seek_compiles.rs:75:40
+   |
+75 |     let ended = deep_sandbox_wasmtime::compiles();
+   |                                        ^^^^^^^^ not found in `deep_sandbox_wasmtime`
+
+For more information about this error, try `rustc --explain E0425`.
+error: could not compile `deep-logic` (test "acceptance_2662_seek_compiles") due to 3 previous errors
+exit: 101
+load: { 25.74 26.80 24.01 }
+
+$ cargo test --locked -p deep-logic --no-fail-fast --test acceptance_2662_forks_planted
+
+load: { 25.74 26.80 24.01 }
+   Compiling deep-logic v0.0.0 (crates/deep-logic)
+error[E0560]: struct `deep_logic::Planted` has no field named `forks_share_store`
+  --> crates/deep-logic/../../tests/acceptance/2662/forks_planted.rs:17:15
+   |
+17 |     Planted { forks_share_store: true, ..Planted::default() }
+   |               ^^^^^^^^^^^^^^^^^ `deep_logic::Planted` does not have this field
+   |
+   = note: available fields are: `rewrite`, `runs_unchecked`, `digest_total_sizes`, `mapper_ignores_shift`, `budget_first_line` ... and 57 others
+
+For more information about this error, try `rustc --explain E0560`.
+error: could not compile `deep-logic` (test "acceptance_2662_forks_planted") due to 1 previous error
+exit: 101
+load: { 26.08 26.85 24.05 }
+
+$ cargo test --locked -p deep-logic --no-fail-fast --test acceptance_2662_live_record
+
+load: { 26.08 26.85 24.05 }
+   Compiling deep-logic v0.0.0 (crates/deep-logic)
+error[E0425]: cannot find function `record_values` in module `deep_logic::world`
+  --> crates/deep-logic/../../tests/acceptance/2662/live_record.rs:61:37
+   |
+61 |     let before = deep_logic::world::record_values();
+   |                                     ^^^^^^^^^^^^^ not found in `deep_logic::world`
+
+error[E0425]: cannot find function `record_values` in module `deep_logic::world`
+  --> crates/deep-logic/../../tests/acceptance/2662/live_record.rs:73:36
+   |
+73 |     let built = deep_logic::world::record_values() - before;
+   |                                    ^^^^^^^^^^^^^ not found in `deep_logic::world`
+
+For more information about this error, try `rustc --explain E0425`.
+error: could not compile `deep-logic` (test "acceptance_2662_live_record") due to 2 previous errors
+exit: 101
+load: { 26.08 26.85 24.05 }
+
+====================================================================================================
+RUN 2: the base with the three surfaces added, its behavior unchanged, and the planted runner wired
+====================================================================================================
+
+A probe this job applied and reverted (the diff is at the end of this file): `deep_sandbox_wasmtime::compiles()`
+counts each `Module::new`; `deep_logic::world::record_values()` counts each row `report` builds;
+`Planted::forks_share_store` makes `World::fork` give the forks of one world's item one store and instance.
+With no plant set, every step, hash and trap is the base's (forks.rs and goldens.rs pass as in run 1, and
+step_bytes.rs reads the same 6,757,909 bytes in 349 allocations).
+
+$ cargo test --locked -p deep-logic --no-fail-fast --test acceptance_2662_step_bytes --test acceptance_2662_seek_compiles --test acceptance_2662_forks --test acceptance_2662_forks_planted --test acceptance_2662_live_record --test acceptance_2662_goldens
+
+load: { 26.08 26.85 24.05 }
+   Compiling deep-sandbox-wasmtime v0.0.0 (crates/deep-sandbox-wasmtime)
+   Compiling deep-logic v0.0.0 (crates/deep-logic)
+    Finished `test` profile [unoptimized] target(s) in 58.89s
+     Running ../../tests/acceptance/2662/forks.rs (target/debug/deps/acceptance_2662_forks-4afb868733aac40c)
+
+running 4 tests
+test ac2_two_forks_of_one_item_each_keep_their_own_memory ... ok
+test ac3_a_fork_run_to_its_fuel_traps_and_the_other_steps_on ... ok
+test ac3_a_fork_run_to_its_memory_limit_traps_and_the_other_steps_on ... ok
+test ac3_a_fork_that_traps_stays_failed_and_the_other_steps_on ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running ../../tests/acceptance/2662/forks_planted.rs (target/debug/deps/acceptance_2662_forks_planted-d8270e5173626b05)
+
+running 2 tests
+test ac2_planted_forks_share_store_fails_naming_the_fork_whose_memory_changed ... ok
+test ac3_planted_forks_share_store_fails_the_fork_that_steps_on ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running ../../tests/acceptance/2662/goldens.rs (target/debug/deps/acceptance_2662_goldens-c161658eeffdbd09)
+
+running 2 tests
+test ac6_planted_replay_changes_step_37_fails_the_merge_bases_golden_naming_step_37 ... ok
+test ac6_a_golden_recorded_on_the_merge_base_matches_step_for_step ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s
+
+     Running ../../tests/acceptance/2662/live_record.rs (target/debug/deps/acceptance_2662_live_record-a348020f2a032999)
+
+running 1 test
+test ac5_a_live_view_stepped_1000_times_with_no_reader_builds_no_record_value ... FAILED
+
+failures:
+
+---- ac5_a_live_view_stepped_1000_times_with_no_reader_builds_no_record_value stdout ----
+#2662.671c059c: the view's 1000 steps built 1001 record values
+
+thread 'ac5_a_live_view_stepped_1000_times_with_no_reader_builds_no_record_value' panicked at crates/deep-logic/../../tests/acceptance/2662/live_record.rs:107:5:
+assertion `left == right` failed: #2662.671c059c: a live view stepped 1000 times with no reader built 1001 record values, each dropped unread, not none
+  left: 1001
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    ac5_a_live_view_stepped_1000_times_with_no_reader_builds_no_record_value
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s
+
+error: test failed, to rerun pass `-p deep-logic --test acceptance_2662_live_record`
+     Running ../../tests/acceptance/2662/seek_compiles.rs (target/debug/deps/acceptance_2662_seek_compiles-ed27cc67d098d6c4)
+
+running 1 test
+test ac2_a_seek_across_100_restores_of_one_item_compiles_its_module_once ... FAILED
+
+failures:
+
+---- ac2_a_seek_across_100_restores_of_one_item_compiles_its_module_once stdout ----
+#2662.a74c0d37: one item's world and 100 restores compiled 101 modules, 100 of them in the restores
+
+thread 'ac2_a_seek_across_100_restores_of_one_item_compiles_its_module_once' panicked at crates/deep-logic/../../tests/acceptance/2662/seek_compiles.rs:78:5:
+assertion `left == right` failed: #2662.a74c0d37: a seek across 100 restores of one item compiled its module 100 times in the restores, 101 times with the world's own start, not once
+  left: 101
+ right: 1
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    ac2_a_seek_across_100_restores_of_one_item_compiles_its_module_once
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.35s
+
+error: test failed, to rerun pass `-p deep-logic --test acceptance_2662_seek_compiles`
+     Running ../../tests/acceptance/2662/step_bytes.rs (target/debug/deps/acceptance_2662_step_bytes-a5f64881435f01e1)
+
+running 1 test
+test ac1_a_step_of_one_item_among_100_allocates_no_copy_of_every_items_arrays ... FAILED
+
+failures:
+
+---- ac1_a_step_of_one_item_among_100_allocates_no_copy_of_every_items_arrays stdout ----
+#2662.bce5379f: z's step 5 among 100 items of 65536 bytes of arrays each asked the heap for 6757909 bytes in 349 allocations
+
+thread 'ac1_a_step_of_one_item_among_100_allocates_no_copy_of_every_items_arrays' panicked at crates/deep-logic/../../tests/acceptance/2662/step_bytes.rs:106:5:
+#2662.bce5379f: a step of a world of 100 items with 65536 bytes of arrays each, in which one item steps and writes, asked the heap for 6757909 bytes in 349 allocations (1.03 copies of every item's arrays), not under 262144 (256 KB)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    ac1_a_step_of_one_item_among_100_allocates_no_copy_of_every_items_arrays
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.22s
+
+error: test failed, to rerun pass `-p deep-logic --test acceptance_2662_step_bytes`
+error: 3 targets failed:
+    `-p deep-logic --test acceptance_2662_live_record`
+    `-p deep-logic --test acceptance_2662_seek_compiles`
+    `-p deep-logic --test acceptance_2662_step_bytes`
+exit: 101
+load: { 29.25 27.53 24.50 }
+
+What the plants' checks reported (the planted tests pass when the plant fails the check; these lines are their
+stderr, from a run of the same probe with `-- --nocapture`):
+
+#2662.a74c0d37: planted forks_share_store fails with: ["fork B's memory changed while fork A stepped: byte 264 first", "fork A's memory changed while fork B stepped: byte 264 first"]
+#2662.393785f9: planted forks_share_store fails with: ["fork B's step 10 left {\"hash\":\"558e2c13d3acc2eb\",\"fuel\":30,\"failed\":false,\"pages\":[0]}, not the straight run's {\"hash\":\"3dfce2a999eb539c\",\"fuel\":30,\"failed\":false,\"pages\":[0]}", "fork B's step 11 left {\"hash\":\"bc9f6fdad9f6b5d8\",\"fuel\":30,\"failed\":false,\"pages\":[0]}, not the straight run's {\"hash\":\"0ac9d105005d663e\",\"fuel\":30,\"failed\":false,\"pages\":[0]}", "fork B's step 12 left {\"hash\":\"1532a97c7822d5a3\",\"fuel\":30,\"failed\":false,\"pages\":[0]}, not the straight run's {\"hash\":\"1c70e60a2805f1df\",\"fuel\":30,\"failed\":false,\"pages\":[0]}", "fork B's step 13 left {\"hash\":\"293448e61a2771a3\",\"fuel\":30,\"failed\":false,\"pages\":[0]}, not the straight run's {\"hash\":\"3c01aeba2acdfce3\",\"fuel\":30,\"failed\":false,\"pages\":[0]}", "fork B's step 14 left {\"hash\":\"ba08bcba362a3a ...
+#2662.7a6f9cf9: planted replay_changes_step_37 fails with: ["a's step 37 hashes \"b57238b985e7e6b4\", not the merge base's \"ecbacb2a3d702492\"", "b's step 38 hashes \"a3aee52a155cb9c2\", not the merge base's \"55ba63506009993c\"", "b's checkpoint 2 is {\"step\":60,\"deep_hash\":\"11d11ee3e8a10392\"}, not the merge base's {\"step\":60,\"deep_hash\":\"9ceaf9944b0e4ecc\"}", "c's step 38 hashes \"6bba1f699e8ed8f2\", not the merge base's \"955fc8e64e96d689\"", "c's checkpoint 2 is {\"step\":60,\"deep_hash\":\"7419050743cc093d\"}, not the merge base's {\"step\":60,\"deep_hash\":\"93fe0f1b6ead9c97\"}"]
+
+====================================================================================================
+RUN 3: the audit's own changes for F8 and F13 on top of the probe (reverted too)
+====================================================================================================
+
+F8: `run_while` takes the published arrays (`std::mem::take`) for the group's steps and puts them back, copying
+only the arrays of the items that stepped. F13: `rewrite_as` reuses one `FuncValidatorAllocations` across the
+function bodies. Both limits can be met: the step asks for 136,373 bytes in 247 allocations, and the check makes
+2,658,887 allocations, 11,133 fewer than the base's 2,670,020 (read with DEEP_2662_PRINT=1 and --nocapture in an
+earlier run of the same change; a passing test prints nothing here).
+
+$ cargo test --locked -p deep-canvas-sandbox --no-fail-fast --test acceptance_2662_check_allocations
+
+load: { 29.25 27.53 24.50 }
+   Compiling deep-canvas-sandbox v0.0.0 (crates/deep-canvas-sandbox)
+    Finished `test` profile [unoptimized] target(s) in 6.44s
+     Running ../../tests/acceptance/2662/check_allocations.rs (target/debug/deps/acceptance_2662_check_allocations-398da8b79bca6fca)
+
+running 1 test
+test ac4_a_check_of_a_1_mb_program_with_2000_functions_makes_2000_fewer_allocations ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.18s
+
+exit: 0
+load: { 26.50 27.00 24.35 }
+
+$ cargo test --locked -p deep-logic --no-fail-fast --test acceptance_2662_step_bytes --test acceptance_2662_forks --test acceptance_2662_goldens
+
+load: { 26.50 27.00 24.35 }
+   Compiling deep-canvas-sandbox v0.0.0 (crates/deep-canvas-sandbox)
+   Compiling deep-sandbox-wasmtime v0.0.0 (crates/deep-sandbox-wasmtime)
+   Compiling deep-logic v0.0.0 (crates/deep-logic)
+    Finished `test` profile [unoptimized] target(s) in 45.25s
+     Running ../../tests/acceptance/2662/forks.rs (target/debug/deps/acceptance_2662_forks-4afb868733aac40c)
+
+running 4 tests
+test ac2_two_forks_of_one_item_each_keep_their_own_memory ... ok
+test ac3_a_fork_run_to_its_fuel_traps_and_the_other_steps_on ... ok
+test ac3_a_fork_run_to_its_memory_limit_traps_and_the_other_steps_on ... ok
+test ac3_a_fork_that_traps_stays_failed_and_the_other_steps_on ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running ../../tests/acceptance/2662/goldens.rs (target/debug/deps/acceptance_2662_goldens-c161658eeffdbd09)
+
+running 2 tests
+test ac6_planted_replay_changes_step_37_fails_the_merge_bases_golden_naming_step_37 ... ok
+test ac6_a_golden_recorded_on_the_merge_base_matches_step_for_step ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+     Running ../../tests/acceptance/2662/step_bytes.rs (target/debug/deps/acceptance_2662_step_bytes-a5f64881435f01e1)
+
+running 1 test
+test ac1_a_step_of_one_item_among_100_allocates_no_copy_of_every_items_arrays ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.69s
+
+exit: 0
+load: { 28.90 27.38 24.62 }
+
+====================================================================================================
+The probe of run 2 (reverted): git diff of crates/ at the base
+====================================================================================================
+
+diff --git a/crates/deep-logic/src/planted.rs b/crates/deep-logic/src/planted.rs
+index d40ff074a..2f9da7661 100644
+--- a/crates/deep-logic/src/planted.rs
++++ b/crates/deep-logic/src/planted.rs
+@@ -92,6 +92,8 @@ pub struct Planted {
+     /// #1250: a piece that reads the wall clock: after every step of the first item, the wall
+     /// clock's nanoseconds join the first value of its first array, in a play and its replica alike.
+     pub reads_wall_clock: bool,
++    /// #2662: the forks of one world run each item on one store.
++    pub forks_share_store: bool,
+ }
+ 
+ impl Planted {
+diff --git a/crates/deep-logic/src/world.rs b/crates/deep-logic/src/world.rs
+index 9f49c3d27..66ff8a302 100644
+--- a/crates/deep-logic/src/world.rs
++++ b/crates/deep-logic/src/world.rs
+@@ -757,6 +757,7 @@ fn report(
+     pages: Vec<u32>,
+     rows: &Rows,
+ ) {
++    RECORD_VALUES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+     // #860: a step a closed branch ran, run again on the current one, takes its row anew.
+     if rec.frozen.remove(&k) {
+         rec.steps.remove(&k);
+@@ -783,6 +784,13 @@ fn report(
+     }
+ }
+ 
++static RECORD_VALUES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
++
++/// How many step rows this process's worlds have built for a record.
++pub fn record_values() -> u64 {
++    RECORD_VALUES.load(std::sync::atomic::Ordering::Relaxed)
++}
++
+ /// An item's arrays by `<item ID>.<name>`, each value as its type reads.
+ pub(crate) fn arrays_json(item: &Item, bytes: &[u8]) -> Map<String, Value> {
+     item.writes
+diff --git a/crates/deep-logic/src/world/world_impl.rs b/crates/deep-logic/src/world/world_impl.rs
+index 90b307ccf..e3d027874 100644
+--- a/crates/deep-logic/src/world/world_impl.rs
++++ b/crates/deep-logic/src/world/world_impl.rs
+@@ -1,5 +1,10 @@
+ use super::*;
+ 
++thread_local! {
++    /// PROBE ONLY: the store the forks of one world's item share under the plant.
++    static SHARED: std::cell::RefCell<std::collections::HashMap<(usize, usize), Runner>> = std::cell::RefCell::new(std::collections::HashMap::new());
++}
++
+ impl World {
+     pub(super) fn runner(bytes: &[u8], id: &str) -> Result<Runner, Failed> {
+         Runner::new(bytes, Faults::default(), true)
+@@ -1581,6 +1586,11 @@ impl World {
+             };
+             let l = &self.lives[i];
+             let mut live = World::load(&item.bytes, item, &memory, &globals)?;
++            if self.planted.forks_share_store {
++                let key = (Rc::as_ptr(&self.piece) as usize, i);
++                let shared = SHARED.with(|s| s.borrow_mut().entry(key).or_insert_with(|| live.runner.shared()).shared());
++                live.runner = shared;
++            }
+             live.failed = l.failed;
+             live.next = l.next;
+             live.ran = l.ran;
+diff --git a/crates/deep-sandbox-wasmtime/src/lib.rs b/crates/deep-sandbox-wasmtime/src/lib.rs
+index 3590f8dd6..37bd752bd 100644
+--- a/crates/deep-sandbox-wasmtime/src/lib.rs
++++ b/crates/deep-sandbox-wasmtime/src/lib.rs
+@@ -27,6 +27,14 @@ use wasmtime::{Config, Engine, Instance, Module, Store, WasmBacktrace};
+ #[cfg(target_arch = "wasm32")]
+ pub use web::{Runner, Val};
+ 
++static COMPILES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
++
++/// How many modules this process has compiled.
++#[cfg(not(target_arch = "wasm32"))]
++pub fn compiles() -> u64 {
++    COMPILES.load(std::sync::atomic::Ordering::Relaxed)
++}
++
+ /// The wasmtime this engine links.
+ pub const WASMTIME: &str = "49.0.5";
+ 
+@@ -66,7 +74,7 @@ pub struct Outcome {
+ #[cfg(not(target_arch = "wasm32"))]
+ pub struct Runner {
+     engine: Engine,
+-    store: Store<()>,
++    store: std::rc::Rc<std::cell::UnsafeCell<Store<()>>>,
+     instance: Instance,
+     /// The rewrite's offset map, and whether a trap names the offset in the program as written.
+     map: Vec<Entry>,
+@@ -111,6 +119,7 @@ impl Runner {
+             .wasm_custom_page_sizes(false)
+             .wasm_wide_arithmetic(false);
+         let engine = Engine::new(&config).map_err(|e| e.to_string())?;
++        COMPILES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+         let module = Module::new(&engine, &sized).map_err(|e| e.to_string())?;
+         let mut store = Store::new(&engine, ());
+         store.set_epoch_deadline(1);
+@@ -120,7 +129,7 @@ impl Runner {
+         let instance = Instance::new(&mut store, &module, &[]).map_err(|e| e.to_string())?;
+         Ok(Runner {
+             engine,
+-            store,
++            store: std::rc::Rc::new(std::cell::UnsafeCell::new(store)),
+             instance,
+             map: offsets(bytes),
+             shift,
+@@ -129,52 +138,71 @@ impl Runner {
+         })
+     }
+ 
++    #[allow(clippy::mut_from_ref)]
++    fn st(&self) -> &mut Store<()> {
++        // PROBE ONLY: one store behind two runners.
++        unsafe { &mut *self.store.get() }
++    }
++
++    /// PROBE ONLY: a second runner on this one's store and instance.
++    pub fn shared(&self) -> Runner {
++        Runner {
++            engine: self.engine.clone(),
++            store: self.store.clone(),
++            instance: self.instance,
++            map: self.map.clone(),
++            shift: self.shift,
++            written: self.written,
++            faults: self.faults,
++        }
++    }
++
+     /// Sets an exported mutable global.
+     pub fn set(&mut self, name: &str, v: Val) -> Result<(), String> {
+         let g = self
+             .instance
+-            .get_global(&mut self.store, name)
++            .get_global(self.st(), name)
+             .ok_or_else(|| format!("the rewritten program lacks {name}"))?;
+-        g.set(&mut self.store, v).map_err(|e| e.to_string())
++        g.set(self.st(), v).map_err(|e| e.to_string())
+     }
+ 
+     /// A global's value, by its export name.
+     pub fn global(&mut self, name: &str) -> Option<Val> {
+-        let g = self.instance.get_global(&mut self.store, name)?;
+-        Some(g.get(&mut self.store))
++        let g = self.instance.get_global(self.st(), name)?;
++        Some(g.get(self.st()))
+     }
+ 
+     /// Whether the program exports a function of this name.
+     pub fn exports(&mut self, name: &str) -> bool {
+-        self.instance.get_func(&mut self.store, name).is_some()
++        self.instance.get_func(self.st(), name).is_some()
+     }
+ 
+     /// The exported memory's bytes.
+     pub fn memory(&mut self, name: &str) -> Option<&[u8]> {
+-        let m = self.instance.get_memory(&mut self.store, name)?;
+-        Some(m.data(&self.store))
++        let m = self.instance.get_memory(self.st(), name)?;
++        Some(m.data(&*self.st()))
+     }
+ 
+     /// The exported memory's bytes, to write in place.
+     pub fn memory_mut(&mut self, name: &str) -> Option<&mut [u8]> {
+-        let m = self.instance.get_memory(&mut self.store, name)?;
+-        Some(m.data_mut(&mut self.store))
++        let m = self.instance.get_memory(self.st(), name)?;
++        Some(m.data_mut(self.st()))
+     }
+ 
+     /// Writes bytes into the exported memory at `at`.
+     pub fn write(&mut self, name: &str, at: usize, bytes: &[u8]) -> Result<(), String> {
+         let m = self
+             .instance
+-            .get_memory(&mut self.store, name)
++            .get_memory(self.st(), name)
+             .ok_or_else(|| format!("the program exports no memory {name}"))?;
+-        m.write(&mut self.store, at, bytes)
++        m.write(self.st(), at, bytes)
+             .map_err(|e| e.to_string())
+     }
+ 
+     pub fn call(&mut self, call: &Call) -> Result<Outcome, String> {
+         if self.faults.wasmtime_fuel {
+             // wasmtime's own fuel in place of the rewrite's, which is set past any budget.
+-            self.store
++            self.st()
+                 .set_fuel(call.fuel.max(0) as u64)
+                 .map_err(|e| e.to_string())?;
+             self.set(FUEL, Val::I64(i64::MAX))?;
+@@ -186,11 +214,11 @@ impl Runner {
+         self.set(TRAP, Val::I32(0))?;
+         let f = self
+             .instance
+-            .get_func(&mut self.store, &call.export)
++            .get_func(self.st(), &call.export)
+             .ok_or_else(|| format!("the program exports no function {}", call.export))?;
+-        let n = f.ty(&self.store).results().len();
++        let n = f.ty(&*self.st()).results().len();
+         let mut results = vec![Val::I32(0); n];
+-        self.store.set_epoch_deadline(1);
++        self.st().set_epoch_deadline(1);
+         let (done, wait) = mpsc::channel::<()>();
+         let watchdog = call.deadline.map(|limit| {
+             let engine = self.engine.clone();
+@@ -200,7 +228,7 @@ impl Runner {
+                 }
+             })
+         });
+-        let ran = f.call(&mut self.store, &call.args, &mut results);
++        let ran = f.call(self.st(), &call.args, &mut results);
+         let _ = done.send(());
+         if let Some(w) = watchdog {
+             drop(w.join());
+
+====================================================================================================
+The changes of run 3 (reverted): git diff at the base of the two files they touch (world_impl.rs's hunks of
+run 2's probe included)
+====================================================================================================
+
+diff --git a/crates/deep-canvas-sandbox/src/rewrite.rs b/crates/deep-canvas-sandbox/src/rewrite.rs
+index 54edb1da8..bee4c903d 100644
+--- a/crates/deep-canvas-sandbox/src/rewrite.rs
++++ b/crates/deep-canvas-sandbox/src/rewrite.rs
+@@ -155,6 +155,7 @@ pub fn rewrite_as(bytes: &[u8], faults: Faults, mode: Mode) -> Result<Rewritten,
+     let mut exports = ExportSection::new();
+     let mut start = None;
+     let mut bodies: Vec<Body> = Vec::new();
++    let mut allocs = FuncValidatorAllocations::default();
+     for payload in Parser::new(0).parse_all(bytes) {
+         let payload = payload.map_err(err)?;
+         let valid = validator.payload(&payload).map_err(err)?;
+@@ -211,7 +212,7 @@ pub fn rewrite_as(bytes: &[u8], faults: Faults, mode: Mode) -> Result<Rewritten,
+                 let ValidPayload::Func(to_validate, _) = valid else {
+                     return Err("a function body the validator didn't hand back".into());
+                 };
+-                let mut fv = to_validate.into_validator(FuncValidatorAllocations::default());
++                let mut fv = to_validate.into_validator(std::mem::take(&mut allocs));
+                 let mut reader = body.get_binary_reader();
+                 fv.read_locals(&mut reader).map_err(err)?;
+                 let mut locals = Vec::new();
+@@ -237,6 +238,7 @@ pub fn rewrite_as(bytes: &[u8], faults: Faults, mode: Mode) -> Result<Rewritten,
+                     at,
+                     height,
+                 });
++                allocs = fv.into_allocations();
+             }
+             Payload::End(_) | Payload::Version { .. } => {}
+             _ => {
+diff --git a/crates/deep-logic/src/world/world_impl.rs b/crates/deep-logic/src/world/world_impl.rs
+index 90b307ccf..0648d2ec5 100644
+--- a/crates/deep-logic/src/world/world_impl.rs
++++ b/crates/deep-logic/src/world/world_impl.rs
+@@ -1,5 +1,10 @@
+ use super::*;
+ 
++thread_local! {
++    /// PROBE ONLY: the store the forks of one world's item share under the plant.
++    static SHARED: std::cell::RefCell<std::collections::HashMap<(usize, usize), Runner>> = std::cell::RefCell::new(std::collections::HashMap::new());
++}
++
+ impl World {
+     pub(super) fn runner(bytes: &[u8], id: &str) -> Result<Runner, Failed> {
+         Runner::new(bytes, Faults::default(), true)
+@@ -399,7 +404,7 @@ impl World {
+             if group.is_empty() {
+                 continue;
+             }
+-            let snapshot = self.published.clone();
++            let snapshot = std::mem::take(&mut self.published);
+             let mut held = Vec::new();
+             self.seen += 1;
+             let stops = self
+@@ -407,13 +412,12 @@ impl World {
+                 .rewind
+                 .as_ref()
+                 .is_some_and(|r| group.contains(&r.item));
+-            for i in group {
++            for &i in &group {
+                 let started = rec.ns.is_some().then(std::time::Instant::now);
+                 self.step(i, &snapshot, rec, &mut held);
+                 if let (Some(ns), Some(s)) = (rec.ns.as_mut(), started) {
+                     ns.push((i, s.elapsed().as_nanos() as u64));
+                 }
+-                self.published[i] = self.lives[i].arrays.clone();
+                 // Right after the step, before any checkpoint or step k + 1 (Logic: between-step
+                 // services); the planted module answers after the next checkpoint instead.
+                 if self.planted.services_after_checkpoint {
+@@ -422,6 +426,10 @@ impl World {
+                     self.serve(i, rec);
+                 }
+             }
++            self.published = snapshot;
++            for &i in &group {
++                self.published[i].clone_from(&self.lives[i].arrays);
++            }
+             mirrors::pend(held, &mut self.lives);
+             if stops {
+                 self.mark(rec);
+@@ -1581,6 +1589,11 @@ impl World {
+             };
+             let l = &self.lives[i];
+             let mut live = World::load(&item.bytes, item, &memory, &globals)?;
++            if self.planted.forks_share_store {
++                let key = (Rc::as_ptr(&self.piece) as usize, i);
++                let shared = SHARED.with(|s| s.borrow_mut().entry(key).or_insert_with(|| live.runner.shared()).shared());
++                live.runner = shared;
++            }
+             live.failed = l.failed;
+             live.next = l.next;
+             live.ran = l.ran;

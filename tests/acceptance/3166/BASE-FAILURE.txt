@@ -1,0 +1,535 @@
+#3166 acceptance suite on the untouched merge base, and each planted wrong program laid over a copy of it.
+
+Base: 3c500c0c8f9b43172d733decddd04705f73317b6 (fresh clone of main, nothing changed outside tests/acceptance/3166/)
+Node: v24.22.0; git 2.54.0; macOS arm64; date 2026-11-22; load average { 57.80 45.90 37.46 }
+Command: node --test tests/acceptance/3166/guard.test.mjs
+Result on base: 10 tests, 2 fail at an assertion on the guard's output, 8 pass, 0 skipped; no crash, missing symbol or fixture error.
+  fail  #3166.b0866dde  (AC1)  wrong program: the merge base, which reads approvals only from a tag on the commit itself
+  fail  #3166.3b5fa948  (AC5)  wrong program: the merge base, which fails the edit without the words the criterion quotes (twin whole-commit below too)
+  pass  #3166.5abaecb6  (AC2, 1 test)   fails on twin pools-items
+  pass  #3166.9778b6a7  (AC3, 3 tests)  fail on twin any-commit-id
+  pass  #3166.127971be  (AC4, 2 tests)  fail on twin unchecked-signature
+  pass  #3166.3acb8f5a  (AC6, 1 test)   fails on twin plain-lines-ignored
+  pass  #3166.b04433e1  (AC7, 1 test)   fails on twin approval-lifts-refusal
+Local paths are redacted as <BASE>, <COPY>, <HOME>.
+
+================ 1. The suite on the untouched base ================
+✖ #3166.b0866dde two proposal commits, each editing a different tagged test, pass the guard under one signed tag on the last commit holding an @<sha> line for each (3841.981458ms)
+ℹ one tag, a line for each commit: exit 1
+FAIL guard: tests/first.test.mjs › #93166.3134fce7 the first receipt is checked: skipped (criterion #93166.3134fce7) (commit e83f3ef14e90)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+FAIL guard: tests/second.test.mjs › #93166.ab660f61 the second receipt is checked: skipped (criterion #93166.ab660f61) (commit baddb0f5253e; the approved commit carries more than the files it names)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+proof: wall time 1.5 s
+
+✔ #3166.5abaecb6 the first commit's test named with the second commit's ID, and the second's with the first's, lets neither edit through, and the guard names the first test (2461.224667ms)
+ℹ crossed lines: exit 1
+FAIL guard: tests/first.test.mjs › #93166.3134fce7 the first receipt is checked: skipped (criterion #93166.3134fce7) (commit 87f8e1532207)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+FAIL guard: tests/second.test.mjs › #93166.ab660f61 the second receipt is checked: skipped (criterion #93166.ab660f61) (commit ca09700faa56; the approved commit carries more than the files it names)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+proof: wall time 1.5 s
+
+✔ #3166.9778b6a7 a line whose ID names a commit made after the tagged commit approves nothing, and the guard fails naming the edit (2762.306084ms)
+ℹ a commit made after the tagged commit: exit 1
+FAIL guard: tests/first.test.mjs › #93166.3134fce7 the first receipt is checked: skipped (criterion #93166.3134fce7) (commit c02bb2bcfd9d)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+proof: wall time 1.7 s
+
+✔ #3166.9778b6a7 a line whose ID names a commit on another branch approves nothing, and the guard fails naming the edit (5920.93575ms)
+ℹ a commit on a branch the change does not hold: exit 1
+FAIL guard: tests/first.test.mjs › #93166.3134fce7 the first receipt is checked: skipped (criterion #93166.3134fce7) (commit 1adf143c45da; the approved commit carries more than the files it names)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+proof: wall time 1.3 s
+
+ℹ a commit on a side branch merged after the tagged commit: exit 1
+FAIL guard: tests/first.test.mjs › #93166.3134fce7 the first receipt is checked: skipped (criterion #93166.3134fce7) (commit a6460bbaba43)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+proof: wall time 2.1 s
+
+✔ #3166.9778b6a7 a line whose ID is abbreviated to twelve digits approves nothing, and the guard fails naming the edit (2752.3475ms)
+ℹ an ID abbreviated to twelve digits: exit 1
+FAIL guard: tests/first.test.mjs › #93166.3134fce7 the first receipt is checked: skipped (criterion #93166.3134fce7) (commit 2fd5da04f3e1)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+proof: wall time 1.7 s
+
+✔ #3166.127971be the same tag unsigned approves nothing (2622.8435ms)
+ℹ the tag unsigned: exit 1
+FAIL guard: tests/first.test.mjs › #93166.3134fce7 the first receipt is checked: skipped (criterion #93166.3134fce7) (commit eb3057fb4db6)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+FAIL guard: tests/second.test.mjs › #93166.ab660f61 the second receipt is checked: skipped (criterion #93166.ab660f61) (commit b271fbc7ad79)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+proof: wall time 1.5 s
+
+✔ #3166.127971be the same tag signed by a key the approvers file doesn't list approves nothing (2818.555ms)
+ℹ the tag signed by an unlisted key: exit 1
+FAIL guard: tests/first.test.mjs › #93166.3134fce7 the first receipt is checked: skipped (criterion #93166.3134fce7) (commit a79784823606)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+FAIL guard: tests/second.test.mjs › #93166.ab660f61 the second receipt is checked: skipped (criterion #93166.ab660f61) (commit b8cf82c8422f)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+proof: wall time 1.7 s
+
+✖ #3166.3b5fa948 a proposal commit approved by a later tag that also touches a file the tag doesn't name for it fails the guard, naming "the approved commit carries more than the files it names" (3097.232292ms)
+ℹ an over-wide proposal commit under a later tag: exit 1
+FAIL guard: tests/first.test.mjs › #93166.3134fce7 the first receipt is checked: skipped (criterion #93166.3134fce7) (commit 47feaa45135b)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+proof: wall time 1.8 s
+
+✔ #3166.3acb8f5a a tag on a proposal commit with plain Approves: <item> lines passes as before (2624.410458ms)
+ℹ plain lines on the proposal commit: exit 0
+PASS guard: tests/first.test.mjs › #93166.3134fce7 the first receipt is checked: skipped (criterion #93166.3134fce7), by approved proposal (commit d53d0aeb0960)
+PASS guard: tests/second.test.mjs › #93166.ab660f61 the second receipt is checked: skipped (criterion #93166.ab660f61), by approved proposal (commit d53d0aeb0960)
+PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+proof: wall time 1.3 s
+
+✔ #3166.b04433e1 a tolerance raised in place fails even when a later tag approves it (3526.087708ms)
+ℹ a tolerance raised in place under a later tag: exit 1
+FAIL guard: tests/fixtures/bounds.jsonl: case sum: tolerance raised from 1e-6 to 1e-4; read by tests/bounds.test.mjs › #93166.7488d446 the sum is within its bound (commit b97c80b9328c; refused even as an approved proposal)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+proof: wall time 1.4 s
+
+ℹ tests 10
+ℹ suites 0
+ℹ pass 8
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 32489.008667
+
+✖ failing tests:
+
+test at tests/acceptance/3166/guard.test.mjs:18:1
+✖ #3166.b0866dde two proposal commits, each editing a different tagged test, pass the guard under one signed tag on the last commit holding an @<sha> line for each (3841.981458ms)
+  AssertionError [ERR_ASSERTION]: one tag on the last commit approves both proposal commits: the guard must pass
+  FAIL guard: tests/first.test.mjs › #93166.3134fce7 the first receipt is checked: skipped (criterion #93166.3134fce7) (commit e83f3ef14e90)
+    Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+  FAIL guard: tests/second.test.mjs › #93166.ab660f61 the second receipt is checked: skipped (criterion #93166.ab660f61) (commit baddb0f5253e; the approved commit carries more than the files it names)
+    Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+  proof: wall time 1.5 s
+  
+  
+  1 !== 0
+  
+      at passes (file://<BASE>/tests/acceptance/3166/fixtures.mjs:85:10)
+      at TestContext.<anonymous> (file://<BASE>/tests/acceptance/3166/guard.test.mjs:22:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3166/guard.test.mjs:95:1
+✖ #3166.3b5fa948 a proposal commit approved by a later tag that also touches a file the tag doesn't name for it fails the guard, naming "the approved commit carries more than the files it names" (3097.232292ms)
+  AssertionError [ERR_ASSERTION]: the over-wide commit is refused by name: a FAIL guard line must say "the approved commit carries more than the files it names"
+  FAIL guard: tests/first.test.mjs › #93166.3134fce7 the first receipt is checked: skipped (criterion #93166.3134fce7) (commit 47feaa45135b)
+    Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+  proof: wall time 1.8 s
+  
+      at says (file://<BASE>/tests/acceptance/3166/fixtures.mjs:101:10)
+      at TestContext.<anonymous> (file://<BASE>/tests/acceptance/3166/guard.test.mjs:106:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+================ Twin pools-items ================
+A copy of the base's scripts/ with tests/acceptance/3166/twins/pools-items/scripts/ laid over it, the same command run in the copy.
+Per test:
+  ✔ #3166.b0866dde two proposal commits, each editing a different tagged test, pass the guard under one signed tag on the last commit holding an @<sha> line for each (1443.6755ms)
+  ✖ #3166.5abaecb6 the first commit's test named with the second commit's ID, and the second's with the first's, lets neither edit through, and the guard names the first test (1596.036833ms)
+  ✔ #3166.9778b6a7 a line whose ID names a commit made after the tagged commit approves nothing, and the guard fails naming the edit (1416.898333ms)
+  ✔ #3166.9778b6a7 a line whose ID names a commit on another branch approves nothing, and the guard fails naming the edit (3197.747125ms)
+  ✔ #3166.9778b6a7 a line whose ID is abbreviated to twelve digits approves nothing, and the guard fails naming the edit (1622.794917ms)
+  ✔ #3166.127971be the same tag unsigned approves nothing (1405.655ms)
+  ✔ #3166.127971be the same tag signed by a key the approvers file doesn't list approves nothing (1642.494416ms)
+  ✔ #3166.3b5fa948 a proposal commit approved by a later tag that also touches a file the tag doesn't name for it fails the guard, naming "the approved commit carries more than the files it names" (1883.048583ms)
+  ✔ #3166.3acb8f5a a tag on a proposal commit with plain Approves: <item> lines passes as before (1317.38075ms)
+  ✔ #3166.b04433e1 a tolerance raised in place fails even when a later tag approves it (1592.642583ms)
+Totals:
+  ℹ tests 10
+  ℹ pass 9
+  ℹ fail 1
+Failures in full:
+✖ failing tests:
+
+test at tests/acceptance/3166/guard.test.mjs:25:1
+✖ #3166.5abaecb6 the first commit's test named with the second commit's ID, and the second's with the first's, lets neither edit through, and the guard names the first test (1596.036833ms)
+  AssertionError [ERR_ASSERTION]: a line approves its item for the commit it names alone: the guard must fail
+  PASS guard: tests/first.test.mjs › #93166.3134fce7 the first receipt is checked: skipped (criterion #93166.3134fce7), by approved proposal (commit d2d61c3b71f3)
+  PASS guard: tests/second.test.mjs › #93166.ab660f61 the second receipt is checked: skipped (criterion #93166.ab660f61), by approved proposal (commit 0d13ae504cae)
+  PASS guard: 2 commits checked: no guarded edit lacks its own approved proposal
+  proof: wall time 0.7 s
+  
+  
+  0 !== 1
+  
+      at fails (file://<COPY>/tests/acceptance/3166/fixtures.mjs:92:10)
+      at TestContext.<anonymous> (file://<COPY>/tests/acceptance/3166/guard.test.mjs:29:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+================ Twin any-commit-id ================
+A copy of the base's scripts/ with tests/acceptance/3166/twins/any-commit-id/scripts/ laid over it, the same command run in the copy.
+Per test:
+  ✔ #3166.b0866dde two proposal commits, each editing a different tagged test, pass the guard under one signed tag on the last commit holding an @<sha> line for each (1573.338916ms)
+  ✔ #3166.5abaecb6 the first commit's test named with the second commit's ID, and the second's with the first's, lets neither edit through, and the guard names the first test (1586.481292ms)
+  ✖ #3166.9778b6a7 a line whose ID names a commit made after the tagged commit approves nothing, and the guard fails naming the edit (1679.739208ms)
+  ✖ #3166.9778b6a7 a line whose ID names a commit on another branch approves nothing, and the guard fails naming the edit (3586.936208ms)
+  ✖ #3166.9778b6a7 a line whose ID is abbreviated to twelve digits approves nothing, and the guard fails naming the edit (1716.202ms)
+  ✔ #3166.127971be the same tag unsigned approves nothing (1637.900958ms)
+  ✔ #3166.127971be the same tag signed by a key the approvers file doesn't list approves nothing (1714.821417ms)
+  ✔ #3166.3b5fa948 a proposal commit approved by a later tag that also touches a file the tag doesn't name for it fails the guard, naming "the approved commit carries more than the files it names" (1739.30575ms)
+  ✔ #3166.3acb8f5a a tag on a proposal commit with plain Approves: <item> lines passes as before (1405.785042ms)
+  ✔ #3166.b04433e1 a tolerance raised in place fails even when a later tag approves it (1756.633459ms)
+Totals:
+  ℹ tests 10
+  ℹ pass 7
+  ℹ fail 3
+Failures in full:
+✖ failing tests:
+
+test at tests/acceptance/3166/guard.test.mjs:32:1
+✖ #3166.9778b6a7 a line whose ID names a commit made after the tagged commit approves nothing, and the guard fails naming the edit (1679.739208ms)
+  AssertionError [ERR_ASSERTION]: the tagged commit does not descend from the commit the line names: the guard must fail
+  PASS guard: tests/first.test.mjs › #93166.3134fce7 the first receipt is checked: skipped (criterion #93166.3134fce7), by approved proposal (commit 0e5cb5f7d124)
+  PASS guard: 2 commits checked: no guarded edit lacks its own approved proposal
+  proof: wall time 0.9 s
+  
+  
+  0 !== 1
+  
+      at fails (file://<COPY>/tests/acceptance/3166/fixtures.mjs:92:10)
+      at TestContext.<anonymous> (file://<COPY>/tests/acceptance/3166/guard.test.mjs:40:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3166/guard.test.mjs:43:1
+✖ #3166.9778b6a7 a line whose ID names a commit on another branch approves nothing, and the guard fails naming the edit (3586.936208ms)
+  AssertionError [ERR_ASSERTION]: the tagged commit does not descend from the side branch's commit: the guard must fail
+  PASS guard: tests/first.test.mjs › #93166.3134fce7 the first receipt is checked: skipped (criterion #93166.3134fce7), by approved proposal (commit 1afd72eb13d8)
+  PASS guard: 3 commits checked: no guarded edit lacks its own approved proposal
+  proof: wall time 0.9 s
+  
+  
+  0 !== 1
+  
+      at fails (file://<COPY>/tests/acceptance/3166/fixtures.mjs:92:10)
+      at TestContext.<anonymous> (file://<COPY>/tests/acceptance/3166/guard.test.mjs:67:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3166/guard.test.mjs:70:1
+✖ #3166.9778b6a7 a line whose ID is abbreviated to twelve digits approves nothing, and the guard fails naming the edit (1716.202ms)
+  AssertionError [ERR_ASSERTION]: only a full commit ID approves: the guard must fail
+  PASS guard: tests/first.test.mjs › #93166.3134fce7 the first receipt is checked: skipped (criterion #93166.3134fce7), by approved proposal (commit 08ba98db7130)
+  PASS guard: 2 commits checked: no guarded edit lacks its own approved proposal
+  proof: wall time 0.8 s
+  
+  
+  0 !== 1
+  
+      at fails (file://<COPY>/tests/acceptance/3166/fixtures.mjs:92:10)
+      at TestContext.<anonymous> (file://<COPY>/tests/acceptance/3166/guard.test.mjs:78:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+================ Twin unchecked-signature ================
+A copy of the base's scripts/ with tests/acceptance/3166/twins/unchecked-signature/scripts/ laid over it, the same command run in the copy.
+Per test:
+  ✔ #3166.b0866dde two proposal commits, each editing a different tagged test, pass the guard under one signed tag on the last commit holding an @<sha> line for each (1987.088792ms)
+  ✔ #3166.5abaecb6 the first commit's test named with the second commit's ID, and the second's with the first's, lets neither edit through, and the guard names the first test (1768.357625ms)
+  ✔ #3166.9778b6a7 a line whose ID names a commit made after the tagged commit approves nothing, and the guard fails naming the edit (1399.856166ms)
+  ✔ #3166.9778b6a7 a line whose ID names a commit on another branch approves nothing, and the guard fails naming the edit (5037.796958ms)
+  ✔ #3166.9778b6a7 a line whose ID is abbreviated to twelve digits approves nothing, and the guard fails naming the edit (1933.726583ms)
+  ✖ #3166.127971be the same tag unsigned approves nothing (1612.271ms)
+  ✖ #3166.127971be the same tag signed by a key the approvers file doesn't list approves nothing (1753.541125ms)
+  ✔ #3166.3b5fa948 a proposal commit approved by a later tag that also touches a file the tag doesn't name for it fails the guard, naming "the approved commit carries more than the files it names" (1636.283958ms)
+  ✔ #3166.3acb8f5a a tag on a proposal commit with plain Approves: <item> lines passes as before (1818.968792ms)
+  ✔ #3166.b04433e1 a tolerance raised in place fails even when a later tag approves it (1725.577625ms)
+Totals:
+  ℹ tests 10
+  ℹ pass 8
+  ℹ fail 2
+Failures in full:
+✖ failing tests:
+
+test at tests/acceptance/3166/guard.test.mjs:81:1
+✖ #3166.127971be the same tag unsigned approves nothing (1612.271ms)
+  AssertionError [ERR_ASSERTION]: an unsigned tag approves nothing: the guard must fail
+  PASS guard: tests/first.test.mjs › #93166.3134fce7 the first receipt is checked: skipped (criterion #93166.3134fce7), by approved proposal (commit 284eaa120e84)
+  PASS guard: tests/second.test.mjs › #93166.ab660f61 the second receipt is checked: skipped (criterion #93166.ab660f61), by approved proposal (commit 6357ba9d76e0)
+  PASS guard: 2 commits checked: no guarded edit lacks its own approved proposal
+  proof: wall time 0.8 s
+  
+  
+  0 !== 1
+  
+      at fails (file://<COPY>/tests/acceptance/3166/fixtures.mjs:92:10)
+      at TestContext.<anonymous> (file://<COPY>/tests/acceptance/3166/guard.test.mjs:85:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3166/guard.test.mjs:88:1
+✖ #3166.127971be the same tag signed by a key the approvers file doesn't list approves nothing (1753.541125ms)
+  AssertionError [ERR_ASSERTION]: a key the approvers file does not list approves nothing: the guard must fail
+  PASS guard: tests/first.test.mjs › #93166.3134fce7 the first receipt is checked: skipped (criterion #93166.3134fce7), by approved proposal (commit 280ca7e32dc0)
+  PASS guard: tests/second.test.mjs › #93166.ab660f61 the second receipt is checked: skipped (criterion #93166.ab660f61), by approved proposal (commit 036bf871d6cf)
+  PASS guard: 2 commits checked: no guarded edit lacks its own approved proposal
+  proof: wall time 0.9 s
+  
+  
+  0 !== 1
+  
+      at fails (file://<COPY>/tests/acceptance/3166/fixtures.mjs:92:10)
+      at TestContext.<anonymous> (file://<COPY>/tests/acceptance/3166/guard.test.mjs:92:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+================ Twin whole-commit ================
+A copy of the base's scripts/ with tests/acceptance/3166/twins/whole-commit/scripts/ laid over it, the same command run in the copy.
+Per test:
+  ✔ #3166.b0866dde two proposal commits, each editing a different tagged test, pass the guard under one signed tag on the last commit holding an @<sha> line for each (1727.375792ms)
+  ✖ #3166.5abaecb6 the first commit's test named with the second commit's ID, and the second's with the first's, lets neither edit through, and the guard names the first test (1878.830916ms)
+  ✔ #3166.9778b6a7 a line whose ID names a commit made after the tagged commit approves nothing, and the guard fails naming the edit (2268.376208ms)
+  ✔ #3166.9778b6a7 a line whose ID names a commit on another branch approves nothing, and the guard fails naming the edit (3947.128333ms)
+  ✔ #3166.9778b6a7 a line whose ID is abbreviated to twelve digits approves nothing, and the guard fails naming the edit (1988.351292ms)
+  ✔ #3166.127971be the same tag unsigned approves nothing (1386.249333ms)
+  ✔ #3166.127971be the same tag signed by a key the approvers file doesn't list approves nothing (1451.613541ms)
+  ✖ #3166.3b5fa948 a proposal commit approved by a later tag that also touches a file the tag doesn't name for it fails the guard, naming "the approved commit carries more than the files it names" (1541.201875ms)
+  ✔ #3166.3acb8f5a a tag on a proposal commit with plain Approves: <item> lines passes as before (1268.781542ms)
+  ✔ #3166.b04433e1 a tolerance raised in place fails even when a later tag approves it (2251.712791ms)
+Totals:
+  ℹ tests 10
+  ℹ pass 8
+  ℹ fail 2
+Failures in full:
+✖ failing tests:
+
+test at tests/acceptance/3166/guard.test.mjs:25:1
+✖ #3166.5abaecb6 the first commit's test named with the second commit's ID, and the second's with the first's, lets neither edit through, and the guard names the first test (1878.830916ms)
+  AssertionError [ERR_ASSERTION]: a line approves its item for the commit it names alone: the guard must fail
+  PASS guard: tests/first.test.mjs › #93166.3134fce7 the first receipt is checked: skipped (criterion #93166.3134fce7), by approved proposal (commit 6ad6690e3ec8)
+  PASS guard: tests/second.test.mjs › #93166.ab660f61 the second receipt is checked: skipped (criterion #93166.ab660f61), by approved proposal (commit dc1347663329)
+  PASS guard: 2 commits checked: no guarded edit lacks its own approved proposal
+  proof: wall time 0.8 s
+  
+  
+  0 !== 1
+  
+      at fails (file://<COPY>/tests/acceptance/3166/fixtures.mjs:92:10)
+      at TestContext.<anonymous> (file://<COPY>/tests/acceptance/3166/guard.test.mjs:29:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3166/guard.test.mjs:95:1
+✖ #3166.3b5fa948 a proposal commit approved by a later tag that also touches a file the tag doesn't name for it fails the guard, naming "the approved commit carries more than the files it names" (1541.201875ms)
+  AssertionError [ERR_ASSERTION]: a proposal commit touches only the files its approval names: the guard must fail
+  PASS guard: tests/first.test.mjs › #93166.3134fce7 the first receipt is checked: skipped (criterion #93166.3134fce7), by approved proposal (commit 33a6c192ea00)
+  PASS guard: 2 commits checked: no guarded edit lacks its own approved proposal
+  proof: wall time 0.8 s
+  
+  
+  0 !== 1
+  
+      at fails (file://<COPY>/tests/acceptance/3166/fixtures.mjs:92:10)
+      at TestContext.<anonymous> (file://<COPY>/tests/acceptance/3166/guard.test.mjs:105:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+================ Twin plain-lines-ignored ================
+A copy of the base's scripts/ with tests/acceptance/3166/twins/plain-lines-ignored/scripts/ laid over it, the same command run in the copy.
+Per test:
+  ✔ #3166.b0866dde two proposal commits, each editing a different tagged test, pass the guard under one signed tag on the last commit holding an @<sha> line for each (2034.367ms)
+  ✔ #3166.5abaecb6 the first commit's test named with the second commit's ID, and the second's with the first's, lets neither edit through, and the guard names the first test (1705.369792ms)
+  ✔ #3166.9778b6a7 a line whose ID names a commit made after the tagged commit approves nothing, and the guard fails naming the edit (1552.830125ms)
+  ✔ #3166.9778b6a7 a line whose ID names a commit on another branch approves nothing, and the guard fails naming the edit (3255.232ms)
+  ✔ #3166.9778b6a7 a line whose ID is abbreviated to twelve digits approves nothing, and the guard fails naming the edit (1444.4645ms)
+  ✔ #3166.127971be the same tag unsigned approves nothing (1416.489667ms)
+  ✔ #3166.127971be the same tag signed by a key the approvers file doesn't list approves nothing (1581.33875ms)
+  ✔ #3166.3b5fa948 a proposal commit approved by a later tag that also touches a file the tag doesn't name for it fails the guard, naming "the approved commit carries more than the files it names" (1786.129125ms)
+  ✖ #3166.3acb8f5a a tag on a proposal commit with plain Approves: <item> lines passes as before (1542.110583ms)
+  ✔ #3166.b04433e1 a tolerance raised in place fails even when a later tag approves it (1741.653542ms)
+Totals:
+  ℹ tests 10
+  ℹ pass 9
+  ℹ fail 1
+Failures in full:
+✖ failing tests:
+
+test at tests/acceptance/3166/guard.test.mjs:109:1
+✖ #3166.3acb8f5a a tag on a proposal commit with plain Approves: <item> lines passes as before (1542.110583ms)
+  AssertionError [ERR_ASSERTION]: a line with no @<sha> approves its item for the tagged commit: the guard must pass
+  FAIL guard: tests/first.test.mjs › #93166.3134fce7 the first receipt is checked: skipped (criterion #93166.3134fce7) (commit 8fb24a38d80e)
+    Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+  FAIL guard: tests/second.test.mjs › #93166.ab660f61 the second receipt is checked: skipped (criterion #93166.ab660f61) (commit 8fb24a38d80e)
+    Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+  proof: wall time 0.7 s
+  
+  
+  1 !== 0
+  
+      at passes (file://<COPY>/tests/acceptance/3166/fixtures.mjs:85:10)
+      at TestContext.<anonymous> (file://<COPY>/tests/acceptance/3166/guard.test.mjs:116:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+================ Twin approval-lifts-refusal ================
+A copy of the base's scripts/ with tests/acceptance/3166/twins/approval-lifts-refusal/scripts/ laid over it, the same command run in the copy.
+Per test:
+  ✔ #3166.b0866dde two proposal commits, each editing a different tagged test, pass the guard under one signed tag on the last commit holding an @<sha> line for each (1881.980708ms)
+  ✔ #3166.5abaecb6 the first commit's test named with the second commit's ID, and the second's with the first's, lets neither edit through, and the guard names the first test (1701.791375ms)
+  ✔ #3166.9778b6a7 a line whose ID names a commit made after the tagged commit approves nothing, and the guard fails naming the edit (1500.540417ms)
+  ✔ #3166.9778b6a7 a line whose ID names a commit on another branch approves nothing, and the guard fails naming the edit (3456.464875ms)
+  ✔ #3166.9778b6a7 a line whose ID is abbreviated to twelve digits approves nothing, and the guard fails naming the edit (1527.738416ms)
+  ✔ #3166.127971be the same tag unsigned approves nothing (1639.823791ms)
+  ✔ #3166.127971be the same tag signed by a key the approvers file doesn't list approves nothing (2190.964417ms)
+  ✔ #3166.3b5fa948 a proposal commit approved by a later tag that also touches a file the tag doesn't name for it fails the guard, naming "the approved commit carries more than the files it names" (2647.778916ms)
+  ✔ #3166.3acb8f5a a tag on a proposal commit with plain Approves: <item> lines passes as before (2500.850167ms)
+  ✖ #3166.b04433e1 a tolerance raised in place fails even when a later tag approves it (2750.264333ms)
+Totals:
+  ℹ tests 10
+  ℹ pass 9
+  ℹ fail 1
+Failures in full:
+✖ failing tests:
+
+test at tests/acceptance/3166/guard.test.mjs:119:1
+✖ #3166.b04433e1 a tolerance raised in place fails even when a later tag approves it (2750.264333ms)
+  AssertionError [ERR_ASSERTION]: an edit refused even as an approved proposal stays refused: the guard must fail
+  PASS guard: tests/fixtures/bounds.jsonl: case sum: tolerance raised from 1e-6 to 1e-4; read by tests/bounds.test.mjs › #93166.7488d446 the sum is within its bound, by approved proposal (commit 0ac47021eb5e)
+  PASS guard: 2 commits checked: no guarded edit lacks its own approved proposal
+  proof: wall time 1.2 s
+  
+  
+  0 !== 1
+  
+      at fails (file://<COPY>/tests/acceptance/3166/fixtures.mjs:92:10)
+      at TestContext.<anonymous> (file://<COPY>/tests/acceptance/3166/guard.test.mjs:127:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

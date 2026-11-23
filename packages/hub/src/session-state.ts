@@ -740,12 +740,19 @@ export class SessionState {
    * Whose a hook is: a job's, when its session ID is the one the runner read from that job's own output and it was
    * sent inside the job's run; held, when it comes from a running job's folder before that ID is read; otherwise
    * the session's own, with a reading when it only looks like a job's. It reads the jobs the runner holds in memory,
-   * so a hook from an older ended job's folder or session is the session's own with no reading (#2650).
+   * so a hook from an older ended job's folder or session is the session's own with no reading (#2650), and of those
+   * only the ones of the hook's session or folder (#2651).
    */
   async whose(meta: HookMeta, seq: string | undefined): Promise<{ job?: string; wait?: string; reading?: { job: string; text: string } }> {
-    const jobs = await this.options.services.runner.recent();
+    // Only the jobs of its session or its folder are read, never a copy of every job (#2651).
+    const jobs = await this.options.services.runner.near(meta.session, meta.cwd);
     const at = seq ? Number(BigInt(seq) / 1_000_000n) : Date.now();
     const during = (j: JobRecord) => j.ran !== undefined && at >= j.ran.from && (j.ran.to === undefined || at <= j.ran.to);
+    // The planted wrong program looks only at the sessions of running jobs: no folder, no ended job.
+    if (this.options.settings.plant === 'whose-running-sessions-only') {
+      const running = jobs.find((j) => meta.session && j.session === meta.session && j.state === 'running');
+      return running ? { job: running.job } : {};
+    }
     const own = jobs.find((j) => meta.session && j.session === meta.session && during(j));
     if (own) return { job: own.job };
     const there = jobs.find((j) => meta.cwd && (meta.cwd === j.folder || isUnder(meta.cwd, j.folder)));

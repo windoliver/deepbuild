@@ -14,8 +14,17 @@ const CANVAS_CLOCK: (i64, i64, i64) = (120, 1_411_200, 352_800);
 const CANVAS_SPACING: i64 = 10 * (shared::FLICKS / 120);
 
 /// #2694: calls that change no document, session, window or terminal state. Each is answered at
-/// its time and not kept: playing it again would change no later reply.
-const READS: [&str; 5] = ["deep_kinds", "cells", "cell", "updates", "revisions"];
+/// its time and not kept: playing it again would change no later reply. deep_query is one (#2896):
+/// its cursor is a row index on the revision it names, and a walk paged to fit its client would
+/// otherwise evaluate every earlier page again on each new one.
+const READS: [&str; 6] = [
+    "deep_kinds",
+    "cells",
+    "cell",
+    "updates",
+    "revisions",
+    "deep_query",
+];
 
 struct CanvasSide {
     /// The world but its record's objects, which `record` holds.
@@ -46,7 +55,7 @@ pub(super) fn serve(
     let mut carried = None;
     while let Some(line) = carried.take().or_else(&mut next) {
         let played = line.as_deref().map(|l| side.line(startup, l));
-        let (scenario, doc) = match played {
+        let (scenario, doc, room) = match played {
             None => {
                 answer(bad_input());
                 continue;
@@ -58,7 +67,9 @@ pub(super) fn serve(
             Some(Ok(play)) => play,
         };
         let mut hub = hub::Hub::new(&scenario, startup);
+        query::set_room(room);
         let reply = hub.run_calls().pop().unwrap_or(Value::Null);
+        query::set_room(None);
         answer(side.answer(&hub, reply, doc.as_deref()));
         while let Some(line) = next() {
             match line.as_deref().and_then(|l| side.read(&mut hub, l)) {
@@ -101,8 +112,13 @@ impl CanvasSide {
     }
 
     /// A line answered here (the world, a line that can't be read, the window drawn), or the
-    /// scenario its call plays in, after every kept call, with the document the call names.
-    fn line(&mut self, startup: &Startup, line: &str) -> Result<(Scenario, Option<String>), Value> {
+    /// scenario its call plays in, after every kept call, with the document the call names and
+    /// the room its reply may take.
+    fn line(
+        &mut self,
+        startup: &Startup,
+        line: &str,
+    ) -> Result<(Scenario, Option<String>, Option<usize>), Value> {
         let Ok(Value::Object(input)) = serde_json::from_str::<Value>(line) else {
             return Err(bad_input());
         };
@@ -130,6 +146,7 @@ impl CanvasSide {
         };
         let mut call = call.clone();
         let out = call.remove("out");
+        let room = room(&mut call);
         let doc = call.get("doc").and_then(Value::as_str).map(str::to_string);
         let read = READS.contains(&call.get("call").and_then(Value::as_str).unwrap_or_default());
         self.timed(&mut call);
@@ -155,7 +172,7 @@ impl CanvasSide {
                 }
                 Err(json!({"ok": true, "reply": reply, "held": self.calls.len()}))
             }
-            _ => Ok((scenario, doc)),
+            _ => Ok((scenario, doc, room)),
         }
     }
 
@@ -191,11 +208,22 @@ impl CanvasSide {
             return None;
         }
         let mut call = call.clone();
+        let room = room(&mut call);
         self.timed(&mut call);
         let parsed = crate::call(&call)?;
         self.played += 1;
         hub.arrive(self.played * CANVAS_SPACING);
+        query::set_room(room);
         let reply = hub.call(&parsed);
+        query::set_room(None);
         Some(self.answer(hub, reply, call.get("doc").and_then(Value::as_str)))
     }
+}
+
+/// #2896: the bytes a call's reply may take, a fifth under what its client keeps. It is the hub's,
+/// never one of the call's fields, so it is taken off the call before the call is read or kept.
+fn room(call: &mut Map<String, Value>) -> Option<usize> {
+    call.remove("room")
+        .and_then(|r| r.as_u64())
+        .map(|r| r as usize)
 }

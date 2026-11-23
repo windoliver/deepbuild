@@ -1,0 +1,63 @@
+# #1181 suite at the base: every test fails at its first deep-logic step, for the missing interface
+
+Base: ae1566b5a (this worktree's HEAD, detached, "Merge pull request #3047 …"), with only this job's files added. No
+implementation of #1181 exists.
+Host: Mac17,10, macOS 27.2, arm64; the one-minute load was about 120 when the run was granted (other sessions).
+The build slot was held by another session for hours with ten builds queued before this job's, so `npm ci`, the
+type-check and the run went through one test slot instead, as #980's README runs its suite.
+
+What was run, once (checkout path redacted as <checkout>):
+
+  cd <checkout> && node scripts/throttle.mjs test --wait 300 -- sh -c "npm ci --no-audit --no-fund; sh scripts/lease nice -n 10 sh <run>"
+  where <run> did, with PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0:
+    node node_modules/typescript/bin/tsc -p tests/acceptance/1181/tsconfig.json                      → exit 0, no output
+    (a scratch check of the suite's programs, README: Checked before the base run)                   → 11 passed
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/1181 --no-file-parallelism --testTimeout=600000
+
+  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `nice -n 10 sh …` runs unleased
+  (expected here). deep-logic was built by the first file's prebuild (#190's logicBin, cargo exit 0).
+
+   Test Files  10 failed (10)
+        Tests  19 failed (19)
+     Duration  120.06s
+
+No test passes at the base. Every test first runs its own node-side checks (the values worked by hand against
+model.ts), which pass, then calls `circuitLib()` (helpers.ts), which sends `{"call": "first_party"}` and expects a
+first-party pack that declares circuit@1. The base lists six packs and none does, so each test fails on the same
+assertion, reached from its own line:
+
+  AssertionError: a first-party pack declares circuit@1 (packs: interfaces@1.0.0, lanes@1.0.0, modslib@1.0.0,
+  process@1.0.0, separation@1.0.0, sense@1.0.0): expected undefined to be defined
+   ❯ circuitLib helpers.ts:54
+
+Results (each test, with the line of its file that reached the assertion):
+
+ × ac01-mains.test.ts   #1181.08b7e139 a 230 V rms, 50 Hz source through a closed connector into a 4.6 W load at 1/1000 s: 11,500 Ω, 0.02 A rms, 4.6 W, 0.028284 A at step 5, and circuit.kcl and circuit.power pass at every step of 10 s   ❯ ac01-mains.test.ts:30:15
+ × ac02-plug.test.ts    #1181.44ca3e33 with the connector's input open, the load's current and power are 0 at every step, the meter doesn't move, and the first step after the input closes carries the current above   ❯ ac02-plug.test.ts:32:15
+ × ac02-plug.test.ts    #1181.44ca3e33 a planted library that keeps the last current while the connector is open fails circuit.kcl, naming the step and the node   ❯ ac02-plug.test.ts:60:15
+ × ac03-drift.test.ts   #1181.9a9ac998 a 0.75 mm² copper wire on that load: the rms drift speed is 1.9581e-6 m/s and the displacement swings with an amplitude of 8.8146e-9 m, each within 1e-4 relative   ❯ ac03-drift.test.ts:39:15
+ × ac03-drift.test.ts   #1181.9a9ac998 after 3,600 s, which is 180,000 whole cycles, the displacement is 0 within 1e-15 m   ❯ ac03-drift.test.ts:57:15
+ × ac04-meter.test.ts   #1181.5880f671 a meter on a 2,400 W kettle closed for 135 s reads 324,000 J and 0.09 kWh to 1e-9 relative, and circuit.power passes at every step   ❯ ac04-meter.test.ts:29:15
+ × ac04-meter.test.ts   #1181.5880f671 a planted meter that counts from the rated power while the kettle's switch is open fails circuit.power, naming the step   ❯ ac04-meter.test.ts:49:15
+ × ac05-fuse.test.ts    #1181.d116aeee a 3 A fast fuse in series with a 1 Ω fault from live to an earthed case opens within the curve's time at 230 A, within one step; after it opens no part carries current; before the fault the earth wire carries 0 A at every step   ❯ ac05-fuse.test.ts:34:15
+ × ac05-fuse.test.ts    #1181.d116aeee a planted fuse that opens at 10 times its curve's time fails circuit.fuse, naming the fuse and the step   ❯ ac05-fuse.test.ts:65:15
+ × ac06-diode.test.ts   #1181.9ae37d13 a circuit with a diode part is refused at check, naming the part   ❯ ac06-diode.test.ts:18:15
+ × ac07-hosts.test.ts   #1181.eb06b860 the same fixtures give the same step hashes on this core and in headless Chrome   ❯ ac07-hosts.test.ts:51:15
+ × ac07-hosts.test.ts   #1181.eb06b860 the same input track gives the same outputs byte for byte twice   ❯ ac07-hosts.test.ts:71:15
+ × ac07-hosts.test.ts   #1181.eb06b860 the interface's pack is refused without its planted library   ❯ ac07-hosts.test.ts:86:15
+ × ac08-readout.test.ts #1181.9b64dca3 a bound value reading the load's current shows 0.02 A at 20 sampled steps   ❯ ac08-readout.test.ts:45:32 (setup)
+ × ac08-readout.test.ts #1181.9b64dca3 a planted label typed as "0.02 A" fails honest numbers, naming the item   ❯ ac08-readout.test.ts:70:32 (setup)
+ × ac09-budget.test.ts  #1181.c7d086b8 a circuit of 64 nodes and 128 parts solves: the currents of a nodal solve, and its kind rules pass   ❯ ac09-budget.test.ts:39:15
+ × ac09-budget.test.ts  #1181.c7d086b8 budget: a circuit of 64 nodes and 128 parts solves in under 0.1 ms a step on the reference Mac   ❯ ac09-budget.test.ts:52:15
+ × ac10-kit.test.ts     #1181.726c5f11 each rule's planted twin fails with that rule's code   ❯ ac10-kit.test.ts:38:15
+ × ac10-kit.test.ts     #1181.726c5f11 every example builds to the same bytes twice, and every clean example passes   ❯ ac10-kit.test.ts:64:15
+
+Not reached at the base, by design: the timing's frames and judgeLimit (it fails before any frame, so it reads the
+missing interface, not INCONCLUSIVE); headless Chrome (ac07 fails before starting it); the deep-show build (ac08
+builds it only after circuit@1 is found, so the base run never built it).
+
+Past that first step the base also lacks the rest of the surface. Asked directly of the base's `deep-logic` (a
+scratch probe, since deleted):
+
+  check of an item with `circuit`  → {"ok":false,"code":"logic_refused","item":"plugged","refusals":[{"rule":"field","what":"logic@1 has no field circuit","field":"circuit"}]}
+  judge of an item with `circuit`  → the same logic_refused

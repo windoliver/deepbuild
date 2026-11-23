@@ -137,7 +137,8 @@ pub fn added(run: &Run) -> Option<Added> {
     let mut k = 0;
     while k < rest.len() {
         let w = rest[k];
-        if valued.contains(&w) {
+        // npm's, pnpm's and bun's -C takes a folder; yarn's is a flag (#2134).
+        if valued.contains(&w) || (w == "-C" && matches!(program, "npm" | "pnpm" | "bun")) {
             if matches!(w, "-r" | "--requirement") && registry == Registry::Pypi {
                 requirements.push(rest.get(k + 1).copied().unwrap_or_default());
             }

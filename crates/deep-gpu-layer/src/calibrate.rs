@@ -544,6 +544,17 @@ pub fn calibrate(app: &mut App) -> Value {
         stages: vec![shipped::blur(axis)],
         measured: true,
     }));
+    // #161: fx@1's operators, each timed in its own pass against the cost it declares.
+    graphs.extend(
+        deep_canvas_effects::fx::library()
+            .into_iter()
+            .map(|n| Graph {
+                name: n.name,
+                origin: "pack",
+                stages: vec![n.graph],
+                measured: true,
+            }),
+    );
     app.worker.call(move |state| {
         let device = state.gpu.device();
         let Some(period) = device.timestamps.period_ns.map(f64::from) else {
@@ -604,11 +615,15 @@ pub fn calibrate(app: &mut App) -> Value {
             if !g.measured && (estimate - measured).abs() > BOUND * measured {
                 outside.push(json!({"name": g.name, "steps": names, "estimate_ns": estimate, "measured_ns": measured}));
             }
-            rows.push(json!({
+            let mut row = json!({
                 "name": g.name, "origin": g.origin, "uses_noise": noise, "own_pass": true, "warmup": true,
                 "p95_ns": runs, "estimate_ns": estimate, "stages": g.stages.len(),
                 "costed_by": if g.measured { "measurement" } else { "estimate" }, "measured_ns": measured,
-            }));
+            });
+            if g.origin == "pack" {
+                row["declared_ns"] = g.stages[0]["cost"]["ns_per_px"].clone();
+            }
+            rows.push(row);
         }
         let pass = outside.is_empty();
         json!({

@@ -1,0 +1,92 @@
+tests/acceptance/806/{replay393,closed,replay384}.test.ts on main 2f05ccb3e (fresh GitHub clone) and on b3870b835, one side after the other:
+== main 2f05ccb3eab0 start 11:05:39 load { 51.25 72.08 79.92 }
+== main end 12:49:38 load { 26.96 37.92 48.81 }
+ × tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#3
+ ✓ tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#
+ × tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#3
+ × tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#3
+ × tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#3
+ × tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#3
+ × tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#3
+ × tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#3
+ × tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#3
+ × tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#3
+ × tests/acceptance/806/closed.test.ts > AC4 with the app closed, deep_show of the same figure still returns presented with a snapshot from the headless worker, equal by pixel hash to the one taken w
+ ✓ tests/acceptance/806/closed.test.ts > AC4 with the app closed, deep_show of the same figure still returns presented with a snapshot from the headless worker, equal by pixel hash to the one taken 
+ ✓ tests/acceptance/806/replay384.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#
+ × tests/acceptance/806/replay384.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#3
+ × tests/acceptance/806/replay384.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#3
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  12 failed | 3 passed (15)
+== change b3870b8357a3 start 12:49:38 load { 26.96 37.92 48.81 }
+== change end 13:22:16 load { 5.19 14.73 28.54 }
+ × tests/acceptance/806/replay384.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#3
+ × tests/acceptance/806/replay384.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#3
+ × tests/acceptance/806/replay384.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#3
+ × tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#3
+ ✓ tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#
+ ✓ tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#
+ × tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#3
+ × tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#3
+ × tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#3
+ × tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#3
+ × tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#3
+ × tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#3
+ × tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#3
+ × tests/acceptance/806/closed.test.ts > AC4 with the app closed, deep_show of the same figure still returns presented with a snapshot from the headless worker, equal by pixel hash to the one taken w
+ ✓ tests/acceptance/806/closed.test.ts > AC4 with the app closed, deep_show of the same figure still returns presented with a snapshot from the headless worker, equal by pixel hash to the one taken 
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  12 failed | 3 passed (15)
+AB806-DONE
+
+== main: each failure's first lines
+  AC4 with the app open the figure is presented with a snapshot; 
+AssertionError: a snapshot from the headless worker equal by pixel hash to the app-open one, within 2 s: expected [ Array(1) ] to deeply equal []
+  AC1 #384 AC2
+Error: no reply to canvas.messages within 30000 ms
+  AC1 #384 AC3
+AssertionError: #384 AC3, the caption deleted at revision 15 before the session reads: detached, the ask-task open, render-back of revision 14 unchanged: the hub's replies against the stand-in's: expected [ …(47) ] to 
+  AC1 #393 AC4
+AssertionError: #393 AC4, AC6, writer layers: stamped from the connection, the peer check, no session, a payload that names its layer or writer: the hub's replies against the stand-in's: expected [ …(24) ] to deeply eq
+  AC1 #393 AC7
+Error: no reply to canvas.revisions within 30000 ms
+  AC1 #393 AC9
+Error: the agent stand-in failed mcp: Error: deep mcp gave no reply to tools/call#33 in 120000 ms
+  AC1 #393 AC3
+AssertionError: #393 AC3, `deep show --check --snap` for a claim whose deliverable is another document, and for one whose deliverable is the document: the hub's replies against the stand-in's: expected [ Array(1) ] to de
+  AC1 #393 AC2
+Error: Test timed out in 600000ms.
+  AC1 #393 AC1
+Error: deep-show run: spawnSync <scratch>/base/target/debug/deep-sh
+  AC1 #393 AC1
+AssertionError: #393 AC1, deep_show, the frame held by rebuild_queue for 10000 ms: call 1 answers within 2 s (35228 ms): expected 35228.31108300015 to be less than or equal to 2750
+  AC1 #393 AC1
+AssertionError: #393 AC1, deep_show, the frame held by asset_decode for 1500 ms: the hub's replies against the stand-in's: expected [ …(21) ] to deeply equal []
+  AC1 #393 AC8
+TypeError: Cannot read properties of undefined (reading 'map')
+
+== change: each failure's first lines
+  AC4 with the app open the figure is presented with a snapshot; 
+AssertionError: a snapshot from the headless worker equal by pixel hash to the app-open one, within 2 s: expected [ Array(1) ] to deeply equal []
+  AC1 #384 AC1
+Error: no reply to canvas.messages within 30000 ms
+  AC1 #384 AC2
+Error: no reply to canvas.messages within 30000 ms
+  AC1 #384 AC3
+AssertionError: #384 AC3, the caption deleted at revision 15 before the session reads: detached, the ask-task open, render-back of revision 14 unchanged: the hub's replies against the stand-in's: expected [ …(15) ] to 
+  AC1 #393 AC4
+AssertionError: #393 AC4, AC6, writer layers: stamped from the connection, the peer check, no session, a payload that names its layer or writer: the hub's replies against the stand-in's: expected [ …(5) ] to deeply equ
+  AC1 #393 AC9
+AssertionError: #393 AC9, 5,000 unnamed marks refused: the read cap, truncated, and the full list by its evidence hash: the hub's replies against the stand-in's: expected [ …(2) ] to deeply equal []
+  AC1 #393 AC3
+AssertionError: #393 AC3, `deep show --check --snap` for a claim whose deliverable is another document, and for one whose deliverable is the document: the hub's replies against the stand-in's: expected [ Array(1) ] to de
+  AC1 #393 AC2
+AssertionError: #393 AC2, deep_show on a hidden panel: call 2 answers within 2 s (7986 ms): expected 7985.769625000015 to be less than or equal to 2750
+  AC1 #393 AC1
+AssertionError: #393 AC1, deep_show, the frame held by fallback_pipeline for 10000 ms: call 1 answers within 2 s (28197 ms): expected 28196.772292000067 to be less than or equal to 2750
+  AC1 #393 AC1
+AssertionError: #393 AC1, deep_show, the frame held by rebuild_queue for 10000 ms: call 1 answers within 2 s (22838 ms): expected 22838.338665999938 to be less than or equal to 2750
+  AC1 #393 AC1
+AssertionError: #393 AC1, deep_show, the frame held by asset_decode for 10000 ms: call 1 answers within 2 s (23044 ms): expected 23043.756458000047 to be less than or equal to 2750
+  AC1 #393 AC8
+TypeError: Cannot read properties of undefined (reading 'map')

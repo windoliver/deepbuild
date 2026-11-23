@@ -1,0 +1,124 @@
+# Base run of tests/acceptance/1885 at eb027b613c7f372ea097d3912a38aac1e7ed43fe (nothing of #1885 implemented), 2026-11-20T11:58Z, Node v24.22.0, macOS 27.2.1 (arm64), load 9.25 8.33 16.60
+# node node_modules/vitest/vitest.mjs run tests/acceptance/1885
+
+
+ RUN  v5.0.5 <repo>
+
+ ❯ tests/acceptance/1885/commands.test.ts (6 tests | 3 failed) 1902ms
+   ❯ AC1: with the config pointing at a hub run with --root in another folder, each command is answered by that hub (3)
+     × #1885.a4029057 deep inbox is answered by the dev hub 1136ms
+     × #1885.a4029057 deep undo is answered by the dev hub 39ms
+     × #1885.a4029057 deep memory is answered by the dev hub 62ms
+ ❯ tests/acceptance/1885/sources.test.ts (1 test | 1 failed) 1829ms
+   × #1885.704c440e at most one source file of the command packages reads control.token itself: the one helper's 1770ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1885/commands.test.ts > AC1: with the config pointing at a hub run with --root in another folder, each command is answered by that hub > #1885.a4029057 deep inbox is answered by the dev hub
+AssertionError: deep inbox with hub.address at the dev hub (unix:/private/tmp/dh16-tn4gCi/dev/hub.sock), whose hello refuses the installed root's token with: credential:
+exit 3
+stdout: "The hub isn't answering, since 03:58; start it with deep hub start. This is the list its database holds.\n"
+stderr: "": expected 'The hub isn\'t answering, since 03:58…' not to match /isn't answering/
+
+- Expected:
+/isn't answering/
+
++ Received:
+"The hub isn't answering, since 03:58; start it with deep hub start. This is the list its database holds.
+"
+
+ ❯ tests/acceptance/1885/commands.test.ts:90:47
+     88|     const why = `deep inbox ${inDev(w)}:\n${shown(r)}`;
+     89|     // An answer from inbox.read: the count line, no "isn't answering"…
+     90|     expect(`${r.stdout}${r.stderr}`, why).not.toMatch(/isn't answering…
+       |                                               ^
+     91|     expect(lastLine(r.stdout), why).toBe('Nothing needs you');
+     92|     expect(r.code, why).toBe(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/acceptance/1885/commands.test.ts > AC1: with the config pointing at a hub run with --root in another folder, each command is answered by that hub > #1885.a4029057 deep undo is answered by the dev hub
+AssertionError: deep undo staged:01M7WD4N6AGDQ6575H44T2YWQS with hub.address at the dev hub (unix:/private/tmp/dh16-tn4gCi/dev/hub.sock), whose hello refuses the installed root's token with: credential:
+exit 3
+stdout: ""
+stderr: "the hub closed the connection before it answered\n": expected 'the hub closed the connection before …' to contain 'No staging staged:01M7WD4N6AGDQ6575H4…'
+
+- Expected
++ Received
+
+- No staging staged:01M7WD4N6AGDQ6575H44T2YWQS in the record.
++ the hub closed the connection before it answered
++
+
+ ❯ tests/acceptance/1885/commands.test.ts:101:27
+     99|     const why = `deep undo ${handle} ${inDev(w)}:\n${shown(r)}`;
+    100|     // An answer from staged.undo: the dev hub's record holds no such …
+    101|     expect(r.stderr, why).toContain(`No staging ${handle} in the recor…
+       |                           ^
+    102|     expect(r.code, why).toBe(1);
+    103|   }, TIMEOUT);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/acceptance/1885/commands.test.ts > AC1: with the config pointing at a hub run with --root in another folder, each command is answered by that hub > #1885.a4029057 deep memory is answered by the dev hub
+AssertionError: deep memory with hub.address at the dev hub (unix:/private/tmp/dh16-tn4gCi/dev/hub.sock), whose hello refuses the installed root's token with: credential:
+exit 3
+stdout: ""
+stderr: "the hub closed the connection before it answered\n": expected '' to contain 'No lessons to keep or remove.'
+
+- Expected
++ Received
+
+- No lessons to keep or remove.
+
+ ❯ tests/acceptance/1885/commands.test.ts:110:27
+    108|     const why = `deep memory ${inDev(w)}:\n${shown(r)}`;
+    109|     // An answer from memory.list: the dev hub's record holds no lesso…
+    110|     expect(r.stdout, why).toContain('No lessons to keep or remove.');
+       |                           ^
+    111|     expect(r.code, why).toBe(0);
+    112|   }, TIMEOUT);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/acceptance/1885/sources.test.ts > #1885.704c440e at most one source file of the command packages reads control.token itself: the one helper's
+AssertionError: 23 files read control.token themselves; at most one, the helper that returns the socket with its token, may:
+packages/hub/src/authority.ts (line 17)
+packages/hub/src/backup.ts (line 34)
+packages/hub/src/client.ts (line 147)
+packages/hub/src/doctor.ts (line 122)
+packages/hub/src/env.ts (line 38)
+packages/hub/src/eval-report.ts (line 13)
+packages/hub/src/fix-command.ts (line 17)
+packages/hub/src/heavy.ts (line 581)
+packages/hub/src/hosts.ts (lines 635, 668)
+packages/hub/src/inbox.ts (lines 49, 127, 139)
+packages/hub/src/land-command.ts (line 24)
+packages/hub/src/list.ts (line 145)
+packages/hub/src/mcp-exec.ts (line 18)
+packages/hub/src/memory.ts (line 236)
+packages/hub/src/service.ts (line 287)
+packages/hub/src/setup.ts (lines 204, 229, 610)
+packages/hub/src/show.ts (line 49)
+packages/hub/src/start-command.ts (line 72)
+packages/hub/src/status.ts (line 650)
+packages/hub/src/undo.ts (line 18)
+packages/hub/src/words-command.ts (line 27)
+packages/hub/src/workspace-command.ts (line 73)
+packages/cli/src/main.ts (line 134): expected 23 to be less than or equal to 1
+ ❯ tests/acceptance/1885/sources.test.ts:117:170
+    115|   const found = readers();
+    116|   const named = found.map((r) => `${r.file} (line${r.lines.length === …
+    117|   expect(found.length, `${found.length} files read control.token thems…
+       |                                                                                                                                                                          ^
+    118| }, 300_000);
+    119|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  4 failed | 3 passed (7)
+   Start at  03:58:15
+   Duration  2.04s (tests 95%, import 3%, transform 2%)
+

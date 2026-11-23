@@ -1,0 +1,37 @@
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/fix-2896-reply-fits-client-d66389
+
+ ❯ tests/acceptance/806-redraft-393ac9/ac1-393-ac9.test.ts (2 tests | 1 failed) 51879ms
+   ❯ AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#393 AC9, redrafted) (2)
+     × AC1 #393 AC9: 5,000 unnamed marks sent with deep_show give the stand-in's reply field for field, the full issue list compared by content 27650ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/806-redraft-393ac9/ac1-393-ac9.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#393 AC9, redrafted) > AC1 #393 AC9: 5,000 unnamed marks sent with deep_show give the stand-in's reply field for field, the full issue list compared by content
+AssertionError: deep_show: the hub's reply against the stand-in's: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "call 1 (deep_show): field `issues` is [{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[\"m-1\"],\"path\":\"items/m-1/name\",\"actual\":null,\"what\":\"not a string\",\"fix\":\"Give the field a value of its type inside its range.\"},{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[\"m-10\"],\"path\":\" on the hub, [{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[\"m-1\"],\"path\":\"items/m-1/name\",\"actual\":null,\"what\":\"not a string\",\"fix\":\"Give the field a value of its type inside its range.\"},{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[\"m-10\"],\"path\":\" on the stand-in",
++   "call 1 (deep_show): field `truncated` is {\"shown\":34,\"total\":5000,\"by_code\":{\"out_of_range\":5000}} on the hub, {\"shown\":38,\"total\":5000,\"by_code\":{\"out_of_range\":5000}} on the stand-in",
++ ]
+
+ ❯ tests/acceptance/806-redraft-393ac9/ac1-393-ac9.test.ts:76:76
+     74|
+     75|       // The criterion: the hub's reply is the stand-in's, field for f…
+     76|       expect(r.failures, `${via}: the hub's reply against the stand-in…
+       |                                                                            ^
+     77|       expect(Object.keys(hub).sort(), `${via}: the hub's reply has the…
+     78|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  14:56:02
+   Duration  52.03s (tests 100%)
+
