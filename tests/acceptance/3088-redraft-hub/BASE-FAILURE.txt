@@ -1,0 +1,33 @@
+#3088 blind redraft, tests/acceptance/3088-redraft-hub, at the blind commit 004cf6d21 (base b4e6a09c0 + the first
+blind suite) plus this folder, fresh GitHub clones, after npm ci, npm run build --workspaces and
+cargo build --locked -p deep-hook. Host names and home paths redacted (<home>, <clone>).
+
+== Linux (aarch64, Ubuntu 24.04), Node v24.22.0, load 20.56 ==
+tsc -p tests/acceptance/3088-redraft-hub/tsconfig.json: exit 0
+node node_modules/vitest/vitest.mjs run tests/acceptance/3088-redraft-hub: exit 1
+  x #3088.bb512932 on Linux (Linux only): both cases play their claim and their twin, each verdict one the case
+    expects (deep-conformance gate run)  246 ms  FAILED at an assertion (play.test.ts:32):
+    AssertionError: reporting-vitest-setup's claim plays to a verdict the case expects, so the kit judges it PASS:
+    INCONCLUSIVE reporting-vitest-setup claim: none — Command failed: /bin/cp -R --reflink=auto
+    <clone>/node_modules/@rolldown/binding-darwin-arm64 /tmp/b3088-k-…/gk-…/repo/node_modules/@rolldown/binding-darwin-arm64:
+    expected 'INCONCLUSIVE' to be 'PASS'
+    (the kit's run: exit 3 after 0 s; all four plays, reporting-vitest-setup claim and twin and
+    reporting-rewrite-on-import claim and twin, INCONCLUSIVE with
+    "/bin/cp: cannot stat '<clone>/node_modules/@rolldown/binding-darwin-arm64': No such file or directory")
+    The preconditions (packages/cli/dist/main.js and target/debug/deep-hook built) held.
+  ↓ #3088.301242f7 on macOS arm64 (macOS arm64 only): … skipped (not macOS arm64)
+  Tests 1 failed | 1 skipped (2)
+
+== macOS arm64, Node v24.22.0, load 99.75 ==
+tsc -p tests/acceptance/3088-redraft-hub/tsconfig.json: exit 0
+node node_modules/vitest/vitest.mjs run tests/acceptance/3088-redraft-hub: exit 0 (run twice, both the same)
+  ↓ #3088.bb512932 on Linux (Linux only): … skipped (not Linux)
+  ✓ #3088.301242f7 on macOS arm64 (macOS arm64 only): both cases still play their claim and their twin to expected
+    verdicts (deep-conformance gate run)  11373 ms  PASSED on the base, as the issue's "still" allows:
+    gate run exit 0 after 11 s:
+      PASS reporting-rewrite-on-import claim: INVALID — …
+      PASS reporting-vitest-setup claim: INCONCLUSIVE — …
+      PASS reporting-vitest-setup twin: PASS
+      PASS reporting-rewrite-on-import twin: PASS
+      PASS gate@1: 2 cases
+  Tests 1 passed | 1 skipped (2)
