@@ -67,7 +67,9 @@ const PRESENT = 0x01 | 0x04;
 /**
  * Approval items by the commit they approve. An approval is an annotated tag under
  * refs/tags/deep/approved/ on a commit of the change, SSH-signed by a key that `.deepbuild/approvers`
- * lists at the merge base, with one `Approves: <item>` line per item. The list is never read from the
+ * lists at the merge base, with one `Approves: <item>` line per item. A line `Approves: <item> @<sha>` approves its item for
+ * that commit alone: a commit of the change, by its full ID, that the tagged commit is or descends
+ * from (#3166); any other ID approves nothing. The list is never read from the
  * working tree, a home folder or a variable, so every checkout reads the same one (#1326). Only keys
  * of a type that needs a touch or a biometric count, and only a signature whose authenticator says
  * one was made: so no agent running as a person can make one. A signature by a listed key without
@@ -102,8 +104,12 @@ export function readApprovals(root, change, issue) {
         continue;
       }
       const message = tag.slice(0, at).split('\n\n').slice(1).join('\n\n');
-      const items = [...message.matchAll(/^Approves: (.+?)\s*$/gm)].map(([, item]) => item).filter(keep);
-      approvals.set(target, [...(approvals.get(target) ?? []), ...items]);
+      for (const [, line] of message.matchAll(/^Approves: (.+?)\s*$/gm)) {
+        // One tag for the commits before it too (#3166): the signature on a commit commits to each commit it descends from.
+        const [, item, sha] = (presence && /^(.+?) @([0-9a-f]{40})$/.exec(line)) || [null, line, target];
+        if (!keep(item) || !shas.has(sha) || (sha !== target && spawnSync('git', ['merge-base', '--is-ancestor', sha, target], { cwd: root }).status !== 0)) continue;
+        approvals.set(sha, [...(approvals.get(sha) ?? []), item]);
+      }
     }
   };
   try {
