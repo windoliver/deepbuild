@@ -2,32 +2,38 @@
 // release checks and its `outside` block come from `.deepbuild/done.yaml` as the claim's base commit holds it, never
 // from the file in the folder the agent works in, which a command's child can write with no guard seeing it.
 import { execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { gitEnv } from '@deepbuild/gate';
 import { parseYaml } from './yaml.js';
 
 export const SPEC = '.deepbuild/done.yaml';
+interface Revision { text: string; oid: string }
 /** Each commit's spec, read once: a commit never changes. */
-const read = new Map<string, string | undefined>();
+const read = new Map<string, Revision | undefined>();
 /** Git off the hub's event loop, with none of this process's git location settings. */
 const git = (folder: string, args: string[]): Promise<string> => new Promise((done, fail) => execFile('git', ['-C', folder, ...args], { env: gitEnv(), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 20_000 }, (error, out) => (error ? fail(error) : done(out))));
 
 /**
- * The spec as `base` holds it in the repo `folder` is in: undefined when that commit has none, and for a folder with
- * no commit to hold one. A base commit that can't be read throws: its revision is unknown, never the worktree's.
+ * The spec as `base` holds it in the repo `folder` is in, with its blob's id: undefined when that commit has none, and
+ * for a folder with no commit to hold one (no base, or an unborn HEAD's zeros). A base that isn't a commit id, or that
+ * can't be read, throws: its revision is unknown, never the worktree's.
  */
-export async function specAt(folder: string, base: string): Promise<string | undefined> {
-  if (!/^[0-9a-f]{40}$/.test(base) || /^0+$/.test(base)) return undefined;
+async function specAt(folder: string, base: string): Promise<Revision | undefined> {
+  if (base === '' || /^0+$/.test(base)) return undefined;
+  if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(base)) throw Error(`the claim's base ${base.slice(0, 64)} is no commit, so the revision of ${SPEC} you approved is unknown`);
   const key = `${folder}\n${base}`;
   if (read.has(key)) return read.get(key);
-  let text: string | undefined;
+  let revision: Revision | undefined;
   try {
-    text = (await git(folder, ['ls-tree', base, '--', `./${SPEC}`])).trim() ? await git(folder, ['show', `${base}:./${SPEC}`]) : undefined;
+    const oid = /^\d+ blob ([0-9a-f]+)\t/.exec(await git(folder, ['ls-tree', base, '--', `./${SPEC}`]))?.[1];
+    revision = oid ? { text: await git(folder, ['cat-file', 'blob', oid]), oid } : undefined;
   } catch {
     throw Error(`${SPEC} couldn't be read at the claim's base commit ${base.slice(0, 12)}, so the revision you approved is unknown`);
   }
   if (read.size >= 256) read.delete(read.keys().next().value!);
-  read.set(key, text);
-  return text;
+  read.set(key, revision);
+  return revision;
 }
 
 /**
@@ -35,8 +41,14 @@ export async function specAt(folder: string, base: string): Promise<string | und
  * apart from the repo's history yet, so the base commit stands in, never the worktree. `parsed` is false for a text
  * that doesn't parse, which the claim names as BLOCKED.
  */
-export async function approvedSpec(folder: string, base: string): Promise<{ text: string | undefined; spec: unknown; parsed: boolean }> {
-  const text = await specAt(folder, base);
-  if (text === undefined) return { text, spec: undefined, parsed: true };
-  try { return { text, spec: parseYaml(text), parsed: true }; } catch { return { text, spec: undefined, parsed: false }; }
+export async function approvedSpec(folder: string, base: string): Promise<{ text: string | undefined; oid: string | undefined; spec: unknown; parsed: boolean }> {
+  const revision = await specAt(folder, base);
+  if (!revision) return { text: undefined, oid: undefined, spec: undefined, parsed: true };
+  try { return { ...revision, spec: parseYaml(revision.text), parsed: true }; } catch { return { ...revision, spec: undefined, parsed: false }; }
+}
+
+/** The blob id git gives the spec in `folder` now, through the repo's own filters; undefined when there is none. */
+export async function specOnDisk(folder: string): Promise<string | undefined> {
+  if (!existsSync(join(folder, SPEC))) return undefined;
+  return (await git(folder, ['hash-object', '--', `./${SPEC}`])).trim();
 }

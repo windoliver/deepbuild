@@ -36,7 +36,7 @@ import { coveredBy } from './adapter-facts.js';
 import { mergedWithMain, releaseSpec, switchesOff, unreadSpec } from './release.js';
 import { specChecks } from './spec-checks.js';
 import { checksIn, docChecksIn } from './spec-entries.js';
-import { approvedSpec, SPEC } from './approved-spec.js';
+import { approvedSpec, SPEC, specOnDisk } from './approved-spec.js';
 import { repoOf } from './shared-runs.js';
 import { GateRecord, type GateAsk } from './gate-record.js';
 import { headOf } from './session-facts.js';
@@ -338,7 +338,7 @@ export class StopJudging {
   private async deliveryHeld(session: string, issue: number, task: string): Promise<string | undefined> {
     const cwd = this.options.state().live.get(session)?.cwd;
     if (!cwd) return undefined;
-    const [row] = (await this.options.services.record.raw(`SELECT base_commit FROM definitions WHERE task_ref = ? LIMIT 1`, [task])) as { base_commit: string | null }[];
+    const [row] = (await this.options.services.record.raw(`SELECT base_commit FROM definitions WHERE task_ref = ? AND state = 'locked' LIMIT 1`, [task])) as { base_commit: string | null }[];
     const base = row?.base_commit ?? (await headOf(cwd).catch(() => undefined))?.sha;
     // The release checks and switches of the revision you approved (#1864): the task's base commit's spec, never the worktree's.
     const approved = (await approvedSpec(cwd, base ?? '')).spec;
@@ -354,7 +354,7 @@ export class StopJudging {
       if ('commit' in merged) {
         // Only a run of the command the approved revision gives the check counts (#1864): a deep_run of the worktree's
         // line under the same name on that commit is the agent's own run, never the release check's.
-        const rows = (await this.options.services.record.raw(`SELECT r.check_id, r.outcome, json_extract(e.data, '$.command') AS command FROM runs r JOIN events e ON e.kind = 'run.started' AND e.subject = 'run:' || r.id
+        const rows = (await this.options.services.record.raw(`SELECT r.check_id, r.outcome, json_extract(e.data, '$.command') AS command FROM runs r JOIN events e ON e.kind = 'run.started' AND e.writer = 'core' AND e.subject = 'run:' || r.id
           WHERE r.commit_sha = ? AND r.ended IS NOT NULL ORDER BY r.started`, [merged.commit])) as { check_id: string; outcome: string | null; command: string | null }[];
         const last = new Map(rows.filter((r) => r.command === checks.get(r.check_id)?.run).map((r) => [r.check_id, r.outcome]));
         const open = spec.checks.filter((c) => last.get(c) !== 'passed');
@@ -1056,7 +1056,7 @@ export class StopJudging {
       // log for the validity gate and the project's trust for its spec checks, none of which waits on another (#82).
       // The spec as you approved it (#1864): the claim's base commit's, never the worktree's; a difference is a proposal.
       const approved = r.joins ? undefined : await approvedSpec(r.cwd, r.base);
-      if (approved) await this.proposeSpecDrift(r, approved.text);
+      if (approved) await this.proposeSpecDrift(r, approved.oid).catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s spec drift was not proposed: ${error instanceof Error ? error.message : String(error)}\n`));
       const spec = approved ? this.specChecks(approved) : [];
       const releaseNames = approved && await this.prOf(r.session) ? releaseSpec(approved.spec).checks : [], hasSpec = spec.length > 0 || releaseNames.length > 0;
       const reads = Promise.all([r.definition === 'pending' ? undefined : this.sessionLog(r.session), hasSpec ? this.projectTrusted(r.cwd) : false]);
@@ -1183,13 +1183,11 @@ export class StopJudging {
    * A spec in the claim's folder that differs from the approved revision, a deleted one included, changes no check:
    * the difference is a proposal naming the file (#1864), as a drafted check's is, once per difference.
    */
-  private async proposeSpecDrift(r: { claim: string; session: string; cwd: string }, approved: string | undefined): Promise<void> {
-    let now: Buffer | undefined;
-    try { now = readFileSync(join(r.cwd, SPEC)); } catch { now = undefined; }
-    const was = approved === undefined ? undefined : sha256Hex(new TextEncoder().encode(approved));
-    const is = now === undefined ? undefined : sha256Hex(now);
+  private async proposeSpecDrift(r: { claim: string; session: string; cwd: string }, was: string | undefined): Promise<void> {
+    // Blob ids, as git makes them through the repo's own filters, so a checkout's line endings are no difference.
+    const is = await specOnDisk(r.cwd);
     if (was === is) return;
-    const diff = `${SPEC} in ${r.cwd}: approved sha256 ${was ?? 'none'}, now ${is ?? 'deleted'}`;
+    const diff = `${SPEC} in ${r.cwd}: approved blob ${was ?? 'none'}, now ${is ?? 'deleted'}`;
     if ((await this.options.services.raw(`SELECT 1 FROM events WHERE kind = 'learn.proposed' AND json_extract(data, '$.diff') = ? LIMIT 1`, [diff])).length) return;
     const at = this.options.services.now();
     const agent = this.options.state().live.get(r.session)?.agent ?? 'claude-code';
@@ -1374,8 +1372,11 @@ export class StopJudging {
       if (out.status !== 'started') throw Error(out.status === 'BLOCKED' ? (out.cause === 'price' ? `${out.missing} is unknown` : `the budget for ${paid.task} has no room for it (${out.ask})`) : `it waits for your answer, ${out.ask}`);
     }
     // A check your repo's spec lists under `outside` runs as you, outside the sandbox, once its checkout is built (#33).
+    // Only the approved run goes outside: a drafted check's approved bytes, or the command the approved spec gives the
+    // check, never a deep_run of the worktree's line or a told command under a name the block lists (#1864).
     const scope = await this.claimScope(r.claim);
-    const outside = scope ? this.outsideOf((await approvedSpec(scope.cwd, scope.base)).spec, r.check) : undefined;
+    const approved = scope && (await approvedSpec(scope.cwd, scope.base)).spec;
+    const outside = approved && (r.approved !== null || checksIn(approved).get(r.check)?.run === r.command) ? this.outsideOf(approved, r.check) : undefined;
     if (outside) await this.builtOutside(r.cwd, outside.build);
     // A check of another kind runs its spec through the kinds the hub holds, within its kind's budget unless it names a deadline (#1537).
     const kinded = this.kindChecks.get(r.claim)?.get(r.check);
