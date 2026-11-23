@@ -37,9 +37,18 @@ pub(crate) fn evaluate_sourced(
     assets: deep_canvas_scene3d::scene::Assets<'_>,
     outlines: deep_canvas_scene3d::scene::Outlines<'_>,
 ) -> Result<Scene, Value> {
+    // #3036's planted plate keeps its surface from the last frame this process drew.
+    let keeps = outlines.planted == Some(deep_canvas_scene3d::tracks::KEEPS_LAST_FRAME);
+    let kept = outlines.memo.filter(|_| keeps);
+    if let Some(memo) = kept {
+        memo.borrow_mut().tracks = crate::trails::kept_tracks().clone();
+    }
     let mut scene =
         deep_canvas_scene3d::scene::evaluate_sourced(doc, t, look, labels, assets, outlines)
             .map_err(|r| crate::touches::refusal(refused(r.code, r.path), outlines.memo))?;
+    if let Some(memo) = kept {
+        crate::trails::kept_tracks().clone_from(&memo.borrow().tracks);
+    }
     follow_effects(&mut scene, doc)?;
     Ok(scene)
 }

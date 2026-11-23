@@ -25,6 +25,7 @@ use crate::label::{AtlasPage, Glyph, WORLD_EM_PX};
 use crate::light;
 pub use crate::light::{Light, Material};
 use crate::look::Look3;
+use crate::trail::frame_interval;
 
 /// Why a document can't be drawn: a closed-list code and the path it names.
 #[derive(Clone, Debug, PartialEq)]
@@ -2261,9 +2262,11 @@ pub(crate) fn evaluate_compiled(
                     // #2017: a plate with levels draws as its tiles, each at the level its error
                     // projected at the view chooses; one split by material draws whole.
                     if k == "plate@1" && uniform(&model) && whole.is_none() {
-                        let plate = layer.solids.last().expect("just pushed");
-                        let built = plate.mesh.as_ref().expect("a built mesh");
-                        if let Some(tiles) = crate::terrain::tiles(params, built, hash) {
+                        let plate = layer.solids.last_mut().expect("just pushed");
+                        // #3036: its tracks lower and darken what it draws, tiles and all.
+                        let read = (doc, map, program, t);
+                        let (built, hash) = crate::tracks::of(plate, read, &memo, &items, &ask)?;
+                        if let Some(tiles) = crate::terrain::tiles(params, &built, hash) {
                             let plate = layer.solids.pop().expect("just pushed");
                             let lod_px = crate::lod::lod_px(map);
                             for t in tiles.iter() {
@@ -2946,16 +2949,6 @@ pub(crate) fn evaluate_compiled(
     }
     labels.places = memo.into_inner();
     Ok(scene)
-}
-
-/// The document's frame interval in flicks: its transport's `frame_rate`, 60/1 by default.
-fn frame_interval(map: &Map<String, Value>) -> i64 {
-    let (p, q) = map
-        .get("transport")
-        .and_then(deep_canvas::document::frame_rate_of)
-        .filter(|(p, q)| *p > 0 && *q > 0)
-        .unwrap_or((60, 1));
-    deep_canvas::camera::FLICKS_PER_SECOND * i64::from(q) / i64::from(p)
 }
 
 /// Item `id`'s world origin at `t`, through the chain its channels and parents give: what a

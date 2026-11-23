@@ -42,6 +42,9 @@ pub struct Memo {
     /// #2760: the issue of the refusal the last evaluation ended on, where it names more than
     /// its path.
     pub(crate) refused: Option<Value>,
+    /// #3036's planted plate (`tracks_keep_last_frame`): each plate's lowering as the frame
+    /// before left it, a share of the depth a vertex.
+    pub tracks: BTreeMap<String, Vec<f64>>,
 }
 
 impl Memo {

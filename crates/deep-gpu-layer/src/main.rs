@@ -175,6 +175,8 @@ pub enum Planted {
     /// plate whose horizon table is never read, and its sky occlusion from its slope alone.
     TerrainNoHorizonBake,
     TerrainOcclusionFromSlope,
+    /// #3036's wrong program: a plate that keeps the surface the frame before drew.
+    TracksKeepLastFrame,
     /// #378's wrong programs (tests/acceptance/378/README.md: Planted programs).
     ForwardZ,
     EncodesTwice,
@@ -941,6 +943,7 @@ impl Planted {
             "part_pose_in_world_space" => Planted::PartPoseInWorldSpace,
             "terrain_no_horizon_bake" => Planted::TerrainNoHorizonBake,
             "terrain_occlusion_from_slope" => Planted::TerrainOcclusionFromSlope,
+            deep_canvas_scene3d::tracks::KEEPS_LAST_FRAME => Planted::TracksKeepLastFrame,
             _ => {
                 let planted = deep_canvas_scene3d::spans::PLANTED;
                 Planted::HiddenLines(planted.iter().find(|p| p.0 == name)?.0)
