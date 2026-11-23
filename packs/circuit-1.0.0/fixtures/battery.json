@@ -1,0 +1,311 @@
+{
+  "name": "battery",
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "a67da8f6bd67e44a901a10964af25abb8ebdd3ca36bf45e7ebd7b24630efd64c",
+      "step_rate": 10,
+      "reads": [
+        "fuse_reset"
+      ],
+      "writes": {
+        "v": {
+          "type": "f64",
+          "count": 3
+        },
+        "i_rms": {
+          "type": "f64",
+          "count": 5
+        },
+        "i": {
+          "type": "f64",
+          "count": 5
+        },
+        "p": {
+          "type": "f64",
+          "count": 5
+        },
+        "r": {
+          "type": "f64",
+          "count": 5
+        },
+        "on": {
+          "type": "i32",
+          "count": 5
+        },
+        "energy": {
+          "type": "f64",
+          "count": 5
+        },
+        "kwh": {
+          "type": "f64",
+          "count": 5
+        },
+        "drift": {
+          "type": "f64",
+          "count": 5
+        },
+        "drift_x": {
+          "type": "f64",
+          "count": 5
+        }
+      },
+      "circuit": {
+        "nodes": [
+          "minus",
+          "plus",
+          "fused"
+        ],
+        "parts": [
+          {
+            "id": "cell",
+            "kind": "source_dc",
+            "from": "minus",
+            "to": "plus",
+            "v": 12,
+            "r_internal": 0.5
+          },
+          {
+            "id": "fuse",
+            "kind": "fuse",
+            "from": "plus",
+            "to": "fused",
+            "rating": 1,
+            "curve": "slow",
+            "reset_by": "fuse_reset"
+          },
+          {
+            "id": "heater",
+            "kind": "resistor",
+            "from": "fused",
+            "to": "minus",
+            "r": 5.5
+          },
+          {
+            "id": "meter",
+            "kind": "meter",
+            "on": "cell"
+          },
+          {
+            "id": "lead",
+            "kind": "wire",
+            "part": "heater",
+            "length": 1,
+            "area": 1,
+            "material": "aluminium"
+          }
+        ]
+      },
+      "budget": {
+        "fuel": 10000000
+      }
+    }
+  },
+  "controls": {
+    "fuse_reset": {
+      "kind": "slider"
+    }
+  },
+  "track": [
+    {
+      "t": 2469600000,
+      "seq": 1,
+      "control": "fuse_reset",
+      "value": 1,
+      "writer": "you",
+      "player": 1
+    }
+  ],
+  "steps": 70,
+  "expect": {
+    "arrays": {
+      "0": {
+        "v": [
+          0,
+          11,
+          11
+        ],
+        "i_rms": [
+          2,
+          2,
+          2,
+          0,
+          0
+        ],
+        "i": [
+          2,
+          2,
+          2,
+          0,
+          0
+        ],
+        "p": [
+          22,
+          0,
+          22,
+          0,
+          0
+        ],
+        "r": [
+          0.5,
+          0,
+          5.5,
+          0,
+          0
+        ],
+        "on": [
+          1,
+          1,
+          1,
+          0,
+          0
+        ],
+        "energy": [
+          0,
+          0,
+          0,
+          2.2,
+          0
+        ],
+        "drift": [
+          0,
+          0,
+          0,
+          0,
+          0.00006935010082734182
+        ],
+        "drift_x": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "10": {
+        "drift_x": [
+          0,
+          0,
+          0,
+          0,
+          0.00006935010082734182
+        ]
+      },
+      "28": {
+        "on": [
+          1,
+          1,
+          1,
+          0,
+          0
+        ],
+        "energy": [
+          0,
+          0,
+          0,
+          63.800000000000004,
+          0
+        ]
+      },
+      "29": {
+        "i_rms": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "p": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "on": [
+          1,
+          0,
+          1,
+          0,
+          0
+        ],
+        "energy": [
+          0,
+          0,
+          0,
+          63.800000000000004,
+          0
+        ],
+        "drift_x": [
+          0,
+          0,
+          0,
+          0,
+          0.00020111529239929125
+        ]
+      },
+      "34": {
+        "on": [
+          1,
+          0,
+          1,
+          0,
+          0
+        ],
+        "drift_x": [
+          0,
+          0,
+          0,
+          0,
+          0.00020111529239929125
+        ]
+      },
+      "35": {
+        "i_rms": [
+          2,
+          2,
+          2,
+          0,
+          0
+        ],
+        "on": [
+          1,
+          1,
+          1,
+          0,
+          0
+        ]
+      },
+      "63": {
+        "on": [
+          1,
+          1,
+          1,
+          0,
+          0
+        ]
+      },
+      "64": {
+        "on": [
+          1,
+          0,
+          1,
+          0,
+          0
+        ],
+        "energy": [
+          0,
+          0,
+          0,
+          127.60000000000001,
+          0
+        ]
+      }
+    },
+    "tolerance": {
+      "abs": 1e-15,
+      "rel": 1e-9
+    }
+  },
+  "answer": "12 V behind 0.5 Ω into 5.5 Ω: I = 12 ÷ 6 = 2 A, the terminals at 12 − 2 × 0.5 = 11 V, the battery giving 11 × 2 = 22 W at them and the heater taking 2² × 5.5 = 22 W. A step is 0.1 s, so the meter adds 2.2 J a step. 1 mm² of aluminium (1.8 × 10²⁹ m⁻³, constants.carriers) drifts at 2 ÷ (1.8 × 10²⁹ × 10⁻⁶ × 1.602176634 × 10⁻¹⁹) = 6.9350 × 10⁻⁵ m/s, and with a steady current the electrons move that much a second: 6.9350 × 10⁻⁵ m by step 10 (t = 1 s). The slow fuse (τ 10 s) at twice its rating opens after 10 s × ln(2² ÷ (2² − 1)) = 2.8768 s, 28.77 steps: at step 29, after 29 steps of 2.2 J, and the displacement stays where the current stopped, 2.9 s of drift. fuse_reset turns on at step 35: the fuse closes cold, carries 2 A again and opens 29 steps later, at step 64, after 58 steps of 2.2 J in all."
+}
