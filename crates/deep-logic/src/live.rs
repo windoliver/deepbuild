@@ -504,7 +504,7 @@ fn front(
             &piece,
             shown.iter().map(|(l, p, a)| (*l, &p[..], &a[..])),
             t,
-            planted.linear_blends_forward,
+            &planted,
         );
         let drawn = hashes(
             due,

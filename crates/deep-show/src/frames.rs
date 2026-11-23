@@ -942,7 +942,7 @@ impl<'a> Hub<'a> {
     }
 
     /// A whole revision of `doc` from whoever sent its last one, admitted as a deep_show call is.
-    fn revise(&mut self, doc: &str, document: &Value) -> Value {
+    pub(crate) fn revise(&mut self, doc: &str, document: &Value) -> Value {
         let Some(via) = self.vias.get(doc).cloned() else {
             return json!({"outcome": "refused", "code": "no_session"});
         };
