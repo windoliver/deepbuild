@@ -1,0 +1,221 @@
+# #1111's blind redraft (#2047's sweep) on its base, commit 2d1ec171 (docs/parallel-proof.md absent, the design's budget
+# line reading "in the local preflight"), then on a stand-in for a correct
+# tree and on each twin laid over that stand-in. <checkout> stands for the checkout's path.
+#
+#   node --test tests/acceptance/1111-redraft-2047/criteria.test.mjs
+#
+# Run on 2026-11-22 with Node v24.22.0 on macOS. One-minute, five-minute and fifteen-minute load: 4.00 4.11 3.76 before the
+# runs, 4.00 4.11 3.76 after them. No test here reads a clock.
+#
+# Each run was made with node's spec reporter (the base's is shown whole, NO_COLOR=1) and with the proof lane's own
+# reporter (scripts/proof-reporter.mjs), whose failures were judged by scripts/proof-runs.mjs's own frames, asserted and
+# atAssertion, their source evaluated by a scratch script: "at its assertion" below is that function's answer.
+#
+# The stand-in is the base's scripts/ and docs/*.md with two files changed, built outside the checkout and never
+# committed: a short docs/parallel-proof.md whose headings carry the ten slugs the T0–T10 issues link and whose section
+# 12a holds the reading rule in the issue's words, and docs/technical-design.md with "by a benchmark in the local
+# preflight" made "by a benchmark in the scheduled budget window (see [Budget windows](./parallel-proof.md#12a-…))".
+# A twin was laid by copying its files over the stand-in's docs/ for one run, and the stand-in's docs/ put back after.
+
+
+## The base: all five tests fail at their assertion
+
+$ node --test tests/acceptance/1111-redraft-2047/criteria.test.mjs
+✖ AC1 #1111.19901108 the design-links check passes on the twelve T0–T10 issues, having read all twelve and checked every link of theirs into docs/*.md (65.314083ms)
+✖ AC1 #1111.19901108 docs/parallel-proof.md exists and every link to it from the twelve T0–T10 issues resolves to a heading (0.37025ms)
+✖ AC2 #1111.893a5670 docs/parallel-proof.md states that "in the local preflight" in an existing budget criterion is met by the budget window's record for that commit, and nowhere that it is met another way (0.058042ms)
+✖ AC3 #1111.9ef2c17c docs/technical-design.md no longer says budgets are measured in the local preflight (15.023542ms)
+✖ AC3 #1111.9ef2c17c docs/technical-design.md says budgets are measured in the scheduled budget window (13.96225ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 0
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 126.20925
+
+✖ failing tests:
+
+test at tests/acceptance/1111-redraft-2047/criteria.test.mjs:69:1
+✖ AC1 #1111.19901108 the design-links check passes on the twelve T0–T10 issues, having read all twelve and checked every link of theirs into docs/*.md (65.314083ms)
+  AssertionError [ERR_ASSERTION]: node scripts/design-links.mjs, given the twelve T0–T10 issues as open, exits 1, not 0:
+  FAIL 15 links into docs/*.md land on no heading, 0 names are not in the design, 0 planned names are stale
+    docs/technical-design.md:2457 ./parallel-proof.md (docs/parallel-proof.md does not exist)
+    #1112 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#9-hygiene-do-first-no-design-needed (docs/parallel-proof.md does not exist)
+    #1113 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#6-scheduling-a-per-machine-throttle-table (docs/parallel-proof.md does not exist)
+    #1114 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#12-rollout-and-proof-of-each-step (docs/parallel-proof.md does not exist)
+    #1115 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#12-rollout-and-proof-of-each-step (docs/parallel-proof.md does not exist)
+    #1115 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#10a-open-owner-decision-gates-t9 (docs/parallel-proof.md does not exist)
+    #1116 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#12a-budget-windows-owner-decision-2026-11-02 (docs/parallel-proof.md does not exist)
+    #1117 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#4-build-reuse-fixed-path-workspaces-not-relocated-targets (docs/parallel-proof.md does not exist)
+    #1118 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#4-build-reuse-fixed-path-workspaces-not-relocated-targets (docs/parallel-proof.md does not exist)
+    #1119 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#5-proof-run-cost-cuts-inside-one-run (docs/parallel-proof.md does not exist)
+    #1120 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#5-proof-run-cost-cuts-inside-one-run (docs/parallel-proof.md does not exist)
+    #1121 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#3-placement-what-runs-where (docs/parallel-proof.md does not exist)
+    #1122 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#8-remote-lanes (docs/parallel-proof.md does not exist)
+    #1123 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#7-the-alone-block-split-by-reason (docs/parallel-proof.md does not exist)
+    #1123 https://github.com/windoliver/deepbuild/blob/main/docs/parallel-proof.md#5-proof-run-cost-cuts-inside-one-run (docs/parallel-proof.md does not exist)
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1111-redraft-2047/criteria.test.mjs:73:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1111-redraft-2047/criteria.test.mjs:82:1
+✖ AC1 #1111.19901108 docs/parallel-proof.md exists and every link to it from the twelve T0–T10 issues resolves to a heading (0.37025ms)
+  AssertionError [ERR_ASSERTION]: docs/parallel-proof.md does not exist, so none of the 14 links to it from the T0–T10 issues resolves
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1111-redraft-2047/criteria.test.mjs:84:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1111-redraft-2047/criteria.test.mjs:128:1
+✖ AC2 #1111.893a5670 docs/parallel-proof.md states that "in the local preflight" in an existing budget criterion is met by the budget window's record for that commit, and nowhere that it is met another way (0.058042ms)
+  AssertionError [ERR_ASSERTION]: docs/parallel-proof.md does not exist, so it states nothing
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1111-redraft-2047/criteria.test.mjs:129:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1111-redraft-2047/criteria.test.mjs:135:1
+✖ AC3 #1111.9ef2c17c docs/technical-design.md no longer says budgets are measured in the local preflight (15.023542ms)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md still says budgets are measured in the local preflight, in 1 sentence
+  + actual - expected
+  
+  + [
+  +   "each issue's acceptance criteria name its time (p50 and p95), its memory (peak and idle) and, where they apply, gpu time, disk and plan share, measured on a reference mac by a benchmark in the local preflight, and compared with the merge base."
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1111-redraft-2047/criteria.test.mjs:137:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ "each issue's acceptance criteria name its time (p50 and p95), its memory (peak and idle) and, where they apply, gpu time, disk and plan share, measured on a reference mac by a benchmark in the local preflight, and compared with the merge base." ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1111-redraft-2047/criteria.test.mjs:140:1
+✖ AC3 #1111.9ef2c17c docs/technical-design.md says budgets are measured in the scheduled budget window (13.96225ms)
+  AssertionError [ERR_ASSERTION]: no sentence of docs/technical-design.md about budgets says they are measured in the scheduled budget window. Its sentences on budgets with "measured" and a preflight or a budget window:
+  each issue's acceptance criteria name its time (p50 and p95), its memory (peak and idle) and, where they apply, gpu time, disk and plan share, measured on a reference mac by a benchmark in the local preflight, and compared with the merge base.
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1111-redraft-2047/criteria.test.mjs:144:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+exit 1
+
+
+## The base, by the proof lane's reporter and atAssertion
+
+  FAIL  at its assertion (AssertionError [ERR_ASSERTION]: node scripts/design-links.mjs, given the twelve T0–T10 issues as open, exits 1, not 0:)  AC1 #1111.19901108 the design-links check passes on the twelve T0–T10 issues, having read all twelve and checked every link of theirs into docs/*.md
+  FAIL  at its assertion (AssertionError [ERR_ASSERTION]: docs/parallel-proof.md does not exist, so none of the 14 links to it from the T0–T10 issues resolves)  AC1 #1111.19901108 docs/parallel-proof.md exists and every link to it from the twelve T0–T10 issues resolves to a heading
+  FAIL  at its assertion (AssertionError [ERR_ASSERTION]: docs/parallel-proof.md does not exist, so it states nothing)  AC2 #1111.893a5670 docs/parallel-proof.md states that "in the local preflight" in an existing budget criterion is met by the budget window's record for that commit, and nowhere that it is met another way
+  FAIL  at its assertion (AssertionError [ERR_ASSERTION]: docs/technical-design.md still says budgets are measured in the local preflight, in 1 sentence)  AC3 #1111.9ef2c17c docs/technical-design.md no longer says budgets are measured in the local preflight
+  FAIL  at its assertion (AssertionError [ERR_ASSERTION]: no sentence of docs/technical-design.md about budgets says they are measured in the scheduled budget window. Its sentences on budgets with "measured" )  AC3 #1111.9ef2c17c docs/technical-design.md says budgets are measured in the scheduled budget window
+
+
+## The stand-in, and each twin laid over it
+
+== stand-in (load: 4.00 4.11 3.76)
+  pass  AC1 #1111.19901108 the design-links check passes on the twelve T0–T10 issues, having read all twelve and checked every link of theirs into docs/*.md
+  pass  AC1 #1111.19901108 docs/parallel-proof.md exists and every link to it from the twelve T0–T10 issues resolves to a heading
+  pass  AC2 #1111.893a5670 docs/parallel-proof.md states that "in the local preflight" in an existing budget criterion is met by the budget window's record for that commit, and nowhere that it is met another way
+  pass  AC3 #1111.9ef2c17c docs/technical-design.md no longer says budgets are measured in the local preflight
+  pass  AC3 #1111.9ef2c17c docs/technical-design.md says budgets are measured in the scheduled budget window
+== twin both-statements (load: 4.00 4.11 3.76)
+  FAIL  at its assertion (AssertionError [ERR_ASSERTION]: node scripts/design-links.mjs, given the twelve T0–T10 issues as open, exits 1, not 0:)  AC1 #1111.19901108 the design-links check passes on the twelve T0–T10 issues, having read all twelve and checked every link of theirs into docs/*.md
+  pass  AC1 #1111.19901108 docs/parallel-proof.md exists and every link to it from the twelve T0–T10 issues resolves to a heading
+  pass  AC2 #1111.893a5670 docs/parallel-proof.md states that "in the local preflight" in an existing budget criterion is met by the budget window's record for that commit, and nowhere that it is met another way
+  FAIL  at its assertion (AssertionError [ERR_ASSERTION]: docs/technical-design.md still says budgets are measured in the local preflight, in 1 sentence)  AC3 #1111.9ef2c17c docs/technical-design.md no longer says budgets are measured in the local preflight
+  pass  AC3 #1111.9ef2c17c docs/technical-design.md says budgets are measured in the scheduled budget window
+== twin decisions-folded (load: 4.00 4.11 3.76)
+  FAIL  at its assertion (AssertionError [ERR_ASSERTION]: node scripts/design-links.mjs, given the twelve T0–T10 issues as open, exits 1, not 0:)  AC1 #1111.19901108 the design-links check passes on the twelve T0–T10 issues, having read all twelve and checked every link of theirs into docs/*.md
+  FAIL  at its assertion (AssertionError [ERR_ASSERTION]: 1 of the 14 links from the T0–T10 issues to docs/parallel-proof.md resolve to no heading of it)  AC1 #1111.19901108 docs/parallel-proof.md exists and every link to it from the twelve T0–T10 issues resolves to a heading
+  pass  AC2 #1111.893a5670 docs/parallel-proof.md states that "in the local preflight" in an existing budget criterion is met by the budget window's record for that commit, and nowhere that it is met another way
+  pass  AC3 #1111.9ef2c17c docs/technical-design.md no longer says budgets are measured in the local preflight
+  pass  AC3 #1111.9ef2c17c docs/technical-design.md says budgets are measured in the scheduled budget window
+== twin headings-retitled (load: 4.00 4.11 3.76)
+  FAIL  at its assertion (AssertionError [ERR_ASSERTION]: node scripts/design-links.mjs, given the twelve T0–T10 issues as open, exits 1, not 0:)  AC1 #1111.19901108 the design-links check passes on the twelve T0–T10 issues, having read all twelve and checked every link of theirs into docs/*.md
+  FAIL  at its assertion (AssertionError [ERR_ASSERTION]: 13 of the 14 links from the T0–T10 issues to docs/parallel-proof.md resolve to no heading of it)  AC1 #1111.19901108 docs/parallel-proof.md exists and every link to it from the twelve T0–T10 issues resolves to a heading
+  pass  AC2 #1111.893a5670 docs/parallel-proof.md states that "in the local preflight" in an existing budget criterion is met by the budget window's record for that commit, and nowhere that it is met another way
+  pass  AC3 #1111.9ef2c17c docs/technical-design.md no longer says budgets are measured in the local preflight
+  pass  AC3 #1111.9ef2c17c docs/technical-design.md says budgets are measured in the scheduled budget window
+== twin release-preflight (load: 4.00 4.11 3.76)
+  FAIL  at its assertion (AssertionError [ERR_ASSERTION]: node scripts/design-links.mjs, given the twelve T0–T10 issues as open, exits 1, not 0:)  AC1 #1111.19901108 the design-links check passes on the twelve T0–T10 issues, having read all twelve and checked every link of theirs into docs/*.md
+  pass  AC1 #1111.19901108 docs/parallel-proof.md exists and every link to it from the twelve T0–T10 issues resolves to a heading
+  pass  AC2 #1111.893a5670 docs/parallel-proof.md states that "in the local preflight" in an existing budget criterion is met by the budget window's record for that commit, and nowhere that it is met another way
+  pass  AC3 #1111.9ef2c17c docs/technical-design.md no longer says budgets are measured in the local preflight
+  FAIL  at its assertion (AssertionError [ERR_ASSERTION]: no sentence of docs/technical-design.md about budgets says they are measured in the scheduled budget window. Its sentences on budgets with "measured" )  AC3 #1111.9ef2c17c docs/technical-design.md says budgets are measured in the scheduled budget window
+== twin rule-contradicted (load: 4.00 4.11 3.76)
+  pass  AC1 #1111.19901108 the design-links check passes on the twelve T0–T10 issues, having read all twelve and checked every link of theirs into docs/*.md
+  pass  AC1 #1111.19901108 docs/parallel-proof.md exists and every link to it from the twelve T0–T10 issues resolves to a heading
+  FAIL  at its assertion (AssertionError [ERR_ASSERTION]: docs/parallel-proof.md also says "in the local preflight" is met another way, or not met)  AC2 #1111.893a5670 docs/parallel-proof.md states that "in the local preflight" in an existing budget criterion is met by the budget window's record for that commit, and nowhere that it is met another way
+  pass  AC3 #1111.9ef2c17c docs/technical-design.md no longer says budgets are measured in the local preflight
+  pass  AC3 #1111.9ef2c17c docs/technical-design.md says budgets are measured in the scheduled budget window
+== twin rule-reversed (load: 4.00 4.11 3.76)
+  pass  AC1 #1111.19901108 the design-links check passes on the twelve T0–T10 issues, having read all twelve and checked every link of theirs into docs/*.md
+  pass  AC1 #1111.19901108 docs/parallel-proof.md exists and every link to it from the twelve T0–T10 issues resolves to a heading
+  FAIL  at its assertion (AssertionError [ERR_ASSERTION]: no sentence of docs/parallel-proof.md says a budget criterion's "in the local preflight" is met by the budget window's record for the commit. Its sent)  AC2 #1111.893a5670 docs/parallel-proof.md states that "in the local preflight" in an existing budget criterion is met by the budget window's record for that commit, and nowhere that it is met another way
+  pass  AC3 #1111.9ef2c17c docs/technical-design.md no longer says budgets are measured in the local preflight
+  pass  AC3 #1111.9ef2c17c docs/technical-design.md says budgets are measured in the scheduled budget window
+== twin window-denied (load: 4.00 4.11 3.76)
+  FAIL  at its assertion (AssertionError [ERR_ASSERTION]: node scripts/design-links.mjs, given the twelve T0–T10 issues as open, exits 1, not 0:)  AC1 #1111.19901108 the design-links check passes on the twelve T0–T10 issues, having read all twelve and checked every link of theirs into docs/*.md
+  pass  AC1 #1111.19901108 docs/parallel-proof.md exists and every link to it from the twelve T0–T10 issues resolves to a heading
+  pass  AC2 #1111.893a5670 docs/parallel-proof.md states that "in the local preflight" in an existing budget criterion is met by the budget window's record for that commit, and nowhere that it is met another way
+  FAIL  at its assertion (AssertionError [ERR_ASSERTION]: docs/technical-design.md still says budgets are measured in the local preflight, in 1 sentence)  AC3 #1111.9ef2c17c docs/technical-design.md no longer says budgets are measured in the local preflight
+  FAIL  at its assertion (AssertionError [ERR_ASSERTION]: no sentence of docs/technical-design.md about budgets says they are measured in the scheduled budget window. Its sentences on budgets with "measured" )  AC3 #1111.9ef2c17c docs/technical-design.md says budgets are measured in the scheduled budget window
+== stand-in again (load: 4.00 4.11 3.76)
+  pass  AC1 #1111.19901108 the design-links check passes on the twelve T0–T10 issues, having read all twelve and checked every link of theirs into docs/*.md
+  pass  AC1 #1111.19901108 docs/parallel-proof.md exists and every link to it from the twelve T0–T10 issues resolves to a heading
+  pass  AC2 #1111.893a5670 docs/parallel-proof.md states that "in the local preflight" in an existing budget criterion is met by the budget window's record for that commit, and nowhere that it is met another way
+  pass  AC3 #1111.9ef2c17c docs/technical-design.md no longer says budgets are measured in the local preflight
+  pass  AC3 #1111.9ef2c17c docs/technical-design.md says budgets are measured in the scheduled budget window

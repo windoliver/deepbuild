@@ -182,6 +182,8 @@ pub enum Call {
     Determinism(crate::time::Determinism),
     /// `count` frames of a session from `from`, `step` apart, with the scheduler's own costs.
     Frames(Box<Frames>),
+    /// #1500: a document played live frame by frame, its revisions joining the run.
+    PlayFrames(Box<crate::joins::Play>),
     /// #856: the shaped-run cache's runs of a text, the times each was shaped and who draws it.
     ShapedRuns(String),
     /// #854: patches to a shared document, each timed from its arrival to the settled frame.
