@@ -1430,3 +1430,7 @@ timed.push('tests/acceptance/2740/as-on-main.test.ts');
 alone.push('tests/acceptance/2215/');
 // #2215's AC5 redraft (blind) builds deep-gpu and draws its four-document corpus on the GPU, once under a plant; no timing.
 alone.push('tests/acceptance/2215-redraft-ac5/');
+
+// #269's folder (blind) runs alone by its lane.json; ac6-budgets.test.ts times a 256 × 256 grid image's frame GPU with
+// judgeLimit.
+timed.push('tests/acceptance/269/ac6-budgets.test.ts');

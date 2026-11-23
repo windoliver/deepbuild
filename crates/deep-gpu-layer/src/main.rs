@@ -37,6 +37,7 @@ mod flows2d;
 mod frames;
 mod full_lane;
 mod golden;
+mod grids2d;
 mod guard;
 mod hdr;
 mod host;
@@ -593,6 +594,10 @@ pub enum Planted {
     NormalDotAlone,
     NormalUnturned,
     LightStaleHeight,
+    /// #269's wrong programs (tests/acceptance/269/README.md: Plants): a played frame's grid image
+    /// holds the step before its own; a pixel takes its cell's role before the rebuild.
+    GridKeepsPreviousStep,
+    GridRoleBeforeRebuild,
 }
 
 impl Planted {
@@ -784,6 +789,8 @@ impl Planted {
             "puff_block_copy" => Planted::PuffBlockCopy,
             "resolve_accumulates_frames" => Planted::ResolveAccumulatesFrames,
             "shifts_fill_two_codes" => Planted::ShiftsFillTwoCodes,
+            "grid_keeps_previous_step" => Planted::GridKeepsPreviousStep,
+            "grid_role_before_rebuild" => Planted::GridRoleBeforeRebuild,
             "shifts_glyph_quads" => Planted::ShiftsGlyphQuads,
             "ignores_spike" => Planted::IgnoresSpike,
             "sectors_source_over" => Planted::SectorsSourceOver,

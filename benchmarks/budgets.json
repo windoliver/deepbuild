@@ -2269,6 +2269,23 @@
       ]
     },
     {
+      "id": "canvas-grid-image",
+      "command": [
+        "node",
+        "benchmarks/canvas-world.mjs",
+        "tests/acceptance/269/ac6-budgets.test.ts"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "frame_gpu_p95_ms": 2
+      },
+      "initialReason": "Issue #269 first measurement (#269.6ad7e180): the merge base draws no grid image and has no such task. A 256 x 256 logic grid whose every step changes 2% of its cells, drawn smooth at 2 px a cell (512 x 512 px), a data view; the vitest file runs the blind acceptance test itself, which builds a release deep-gpu, plays the film's 60 frames on the GPU layer with timings, five runs after a warm-up one, each a fresh process, and judges each run's p95 of gpu_ms over frames 5 to 59 against 2 ms by scripts/benchmark.mjs's judgeLimit (PASS only on a reference Mac at rest), printing the grid image's median draw_ms as the reading; the benchmark prints that verdict and exits 0, and its judge gives it as the target. Once main has this task, p50 and peak memory of the whole command get a 50% merge-base margin.",
+      "criteria": [
+        "#269.6ad7e180"
+      ]
+    },
+    {
       "id": "net-rooms",
       "command": ["node", "benchmarks/net-rooms.mjs"],
       "margin": 0.5,

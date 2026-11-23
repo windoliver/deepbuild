@@ -38,7 +38,7 @@ use serde_json::{json, Map, Value};
 use crate::drawn::Page;
 use crate::groups::{self, Clock, Groups, Picture};
 use crate::session3::On;
-use crate::view3d::{pair, png, write_named};
+use crate::view3d::{pair, png, write_named, FLICKS_PER_SECOND};
 use crate::{effects, frames, parity, refused, status, App, Planted};
 
 /// One writer layer as the live view sees it.
@@ -87,7 +87,7 @@ pub(crate) fn packs_of(call: &Value) -> Result<Vec<Named>, Value> {
 
 fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
     let bad = |what: &str| refused("bad_input", what);
-    let doc = call["doc"]
+    let mut doc = call["doc"]
         .as_object()
         .cloned()
         .ok_or_else(|| bad("doc is an object"))?;
@@ -109,6 +109,9 @@ fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
         }
     }
     let t = call["t"].as_i64().unwrap_or(0);
+    // #269: the document's logic items run from the call's assets through t.
+    let frames = [t.max(0) as u64];
+    crate::grids2d::bake(&mut doc, call, (&frames, FLICKS_PER_SECOND), app.planted)?;
     let record = Record {
         pinned: t,
         ..deep_marks_render::record(call.as_object().expect("a call is an object"))
@@ -118,6 +121,7 @@ fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
     let mut state = program.state();
     program.evaluate(t, eval::Validity::Full, &mut state);
     let mut items = eval::items(&doc, &program, &state);
+    crate::grids2d::fill(&doc, &mut items, t);
     // #149: a 2D film's camera places its items, and no 3D layer comes of it.
     let view = deep_canvas_marks::drawn::view_of(&doc, &mut items);
     if let Some(v) = &view {
@@ -305,6 +309,17 @@ fn path_of(app: &App, l: &Layer2) -> Value {
     gpu::refusal(marks()).unwrap_or_else(|| json!("gpu_layer"))
 }
 
+/// The GPU layer's drawing options a planted program sets.
+fn options_of(planted: Option<Planted>) -> Options {
+    Options {
+        shifts_fill: planted == Some(Planted::ShiftsFillTwoCodes),
+        multiply_as_screen: planted == Some(Planted::GpuLayerMultiplyAsScreen),
+        grid_picks_first: planted == Some(Planted::GridRoleBeforeRebuild),
+        grid_keeps_previous: planted == Some(Planted::GridKeepsPreviousStep),
+        ..Options::default()
+    }
+}
+
 /// What a drawing on the app's device asks beyond its marks.
 #[derive(Default)]
 struct Asks {
@@ -415,11 +430,7 @@ fn draw2(
         "vello_cpu" => layer::vello(marks, size),
         "gpu_layer" => {
             gate(app, marks)?;
-            let options = Options {
-                shifts_fill: app.planted == Some(Planted::ShiftsFillTwoCodes),
-                multiply_as_screen: app.planted == Some(Planted::GpuLayerMultiplyAsScreen),
-                ..Options::default()
-            };
+            let options = options_of(app.planted);
             let asks = Asks {
                 options,
                 ..Asks::default()
@@ -929,6 +940,12 @@ impl RenderModule for Module2 {
             let vello = vello.clone();
             move || vello.lock().unwrap_or_else(|e| e.into_inner()).fills() - before
         };
+        // #269: a film's grid images timed as it asks, and what they did handed over.
+        if let Some(enc) = &encoded {
+            let mut v = vello.lock().unwrap_or_else(|e| e.into_inner());
+            v.time_grids(&device.device, &device.queue, enc.grid_timings);
+        }
+        let grids = vello.clone();
         let Some(mix) = frame.mix.clone() else {
             let draw = self.painter.draw(
                 device,
@@ -945,6 +962,8 @@ impl RenderModule for Module2 {
                 if let Some(enc) = &encoded {
                     *enc.at.lock().unwrap_or_else(|e| e.into_inner()) =
                         Some((Instant::now(), fills()));
+                    let did = grids.lock().unwrap_or_else(|e| e.into_inner()).grid_frame();
+                    *enc.grids.lock().unwrap_or_else(|e| e.into_inner()) = Some(did);
                 }
                 *error.lock().unwrap_or_else(|e| e.into_inner()) = drawn.err();
             });
@@ -1053,11 +1072,7 @@ pub(crate) fn open2(
         planted: app.planted,
         vello: None,
         built: None,
-        options: Options {
-            shifts_fill: app.planted == Some(Planted::ShiftsFillTwoCodes),
-            multiply_as_screen: app.planted == Some(Planted::GpuLayerMultiplyAsScreen),
-            ..Options::default()
-        },
+        options: options_of(app.planted),
         error: error.clone(),
         encoded,
         taps,
