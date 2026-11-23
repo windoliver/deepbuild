@@ -193,17 +193,20 @@ fn lacks(doc: &Value) -> Option<String> {
     let kind = items.filter_map(|i| i["kind"].as_str()).find_map(|k| {
         let flat = deep_canvas_marks::scene::KINDS.contains(&k);
         let hosted = ["arrange@1", "overlay.view@1"].contains(&k);
-        (flat.then(|| "module_missing: marks2d".to_owned())).or(hosted.then(|| absent(k)))
+        (flat.then(|| missing("marks2d"))).or(hosted.then(|| absent(k)))
     });
     let field = ["look", "shots"].into_iter().find(|f| doc.get(f).is_some());
-    (module.map(|m| format!("module_missing: {m}")))
-        .or(kind)
-        .or(field.map(absent))
+    (module.map(|m| missing(m))).or(kind).or(field.map(absent))
+}
+
+/// The reason for a canvas module the view doesn't hold.
+fn missing(module: &str) -> String {
+    crate::copy::fill("views.module_missing", &[&module])
 }
 
 /// The reason for a part of the frame the view doesn't draw.
 fn absent(what: &str) -> String {
-    format!("feature_absent: {what}")
+    crate::copy::fill("views.feature_absent", &[&what])
 }
 
 /// `doc`'s frame scaled to fit `room` px, as render-back fits a layer's picture to its panel.

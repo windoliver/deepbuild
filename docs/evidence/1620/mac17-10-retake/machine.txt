@@ -1,0 +1,4 @@
+Mac17,10 (the reference Mac), macOS 27.2 (26B8119), built-in XDR display at scale 2, screen unlocked
+rustc 1.99.1 (58cf8f9c3 2026-10-13), node v24.22.2
+time zone: America/New_York (set Nov 22 23:20; the stored Nov 10 trees were taken in US Pacific time)
+base: main 98347e837 (Nov 23, #3190 merged); taken Nov 23 2026, 01:00-01:35 EST, load averages 60-200

@@ -700,7 +700,7 @@ pub fn shadows(app: &App) -> Result<Vec<u8>, Value> {
 
 /// #1634: each cluster's fill lights as the frame the session drew last walked them, read back
 /// from the cluster pass's lists: nothing on the noop lane, which runs no pass.
-pub fn clusters(app: &App) -> Vec<([u32; 3], Vec<(String, f32)>)> {
+pub fn clusters(app: &App) -> Vec<deep_scene3d_render::fill::Cluster> {
     if app.backend == Backend::Noop {
         return Vec::new();
     }

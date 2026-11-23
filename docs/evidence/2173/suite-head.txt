@@ -1,0 +1,14 @@
+# node --test --test-concurrency=1 'tests/acceptance/2173-redraft-2047/*.test.mjs' at the merged head 823ddf1d7 (main 28bfe9a9b), Node v24.22.2, one-minute load 64, exit 0 in 40.7 s
+✔ AC1 #2173.222063e6 node scripts/repo-rules.mjs exits 0 on main, apart from the lines under tests/acceptance/ open issue #3139 holds (15365.714416ms)
+ℹ 146 failing lines set apart as #3139's (each about a file under tests/acceptance/)
+✔ AC2 #2173.2db46adb with its entry taken out of scripts/repo-rules.json, deep-app's accesskit_macos fails the deps lane, naming crates/deep-app/Cargo.toml and accesskit_macos (21794.820583ms)
+✔ AC2 #2173.2db46adb a dependency planted in crates/deep-app/Cargo.toml's macOS table with no entry fails the deps lane, naming the manifest and the dependency (0.288ms)
+✔ AC2 #2173.2db46adb a package.json planted with a dependency and no entry fails the deps lane, naming the manifest and the dependency (0.289375ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 40588.514583

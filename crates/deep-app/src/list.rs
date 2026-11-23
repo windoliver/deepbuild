@@ -395,6 +395,12 @@ pub fn read_now(now: u64) -> std::rc::Rc<(Vec<Ask>, Vec<Session>)> {
     .unwrap_or_default()
 }
 
+/// Forgets the last reading: a record installed since is read afresh, though it stands at the `log_pos` and second the
+/// last reading was keyed by (#3100).
+pub(crate) fn forget_reading() {
+    READ.with(|cell| cell.borrow_mut().take());
+}
+
 /// How many of the list's rows are unread: what #2028's planted counts add to the asks.
 pub fn unread_rows() -> usize {
     crate::record::with_view(|view| {

@@ -116,6 +116,8 @@ pub enum Plant {
     EvictorIgnoresTwoFrames,
     /// #1489 AC1: an animation's decoder that decodes every frame up front and keeps them all.
     DecoderHoldsAllFrames,
+    /// #1488 AC1: a decoder that ignores a photo's EXIF orientation and draws it as stored.
+    IgnoresOrientation,
 }
 
 impl Plant {
@@ -129,6 +131,7 @@ impl Plant {
             "queue_without_cancel" => Plant::QueueWithoutCancel,
             "evictor_ignores_two_frames" => Plant::EvictorIgnoresTwoFrames,
             "decoder_holds_all_frames" => Plant::DecoderHoldsAllFrames,
+            "decoder_ignores_orientation" => Plant::IgnoresOrientation,
             _ => return None,
         })
     }
@@ -366,7 +369,8 @@ impl Images {
             }
         };
         let decodes_first = plant == Plant::DecodesBeforeHeader;
-        let size = source::header(store, hash, decodes_first)?;
+        let ignores = plant == Plant::IgnoresOrientation;
+        let size = source::header(store, hash, decodes_first, ignores)?;
         let mut s = self.lock();
         if decodes_first {
             s.stats.source_reads += 1;
@@ -887,7 +891,12 @@ fn log(shared: &Shared, op: &'static str, key: Key) {
 }
 
 /// The decoded source of `key`: an atlas cell reuses the source the last cut came from.
-fn source_of(shared: &Shared, store: &Store, key: &Key) -> Result<Arc<image::RgbaImage>, Refused> {
+fn source_of(
+    shared: &Shared,
+    store: &Store,
+    key: &Key,
+    plant: Plant,
+) -> Result<Arc<image::RgbaImage>, Refused> {
     let last = || shared.source.lock().unwrap_or_else(|p| p.into_inner());
     if let Some((hash, rgba)) = last().as_ref() {
         if *hash == key.hash {
@@ -896,7 +905,7 @@ fn source_of(shared: &Shared, store: &Store, key: &Key) -> Result<Arc<image::Rgb
     }
     let bytes = store.read(&key.hash)?;
     lock(shared).stats.source_reads += 1;
-    let rgba = Arc::new(source::decode(&bytes)?);
+    let rgba = Arc::new(source::decode(&bytes, plant == Plant::IgnoresOrientation)?);
     if key.crop != [0, 0, rgba.width(), rgba.height()] {
         *last() = Some((key.hash, rgba.clone()));
     }
@@ -969,7 +978,7 @@ fn make(
         }
     }
     log(shared, "decode", key);
-    let decoded = source_of(shared, store, &key)?;
+    let decoded = source_of(shared, store, &key, plant)?;
     let [x, y, w, h] = key.crop;
     if u64::from(x) + u64::from(w) > u64::from(decoded.width())
         || u64::from(y) + u64::from(h) > u64::from(decoded.height())

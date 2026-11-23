@@ -7,7 +7,7 @@
 # Cargo.lock). planted.test.ts's Linux test is BLOCKED: no linux/amd64 rust:1.99.1-slim-bookworm image here.
 
 
- RUN  v5.0.5 /private/tmp/claude-502/-Users-tafeng-dev-claude-worktrees-doneright-github-issue-238-27e1de/dced5deb-175e-4bff-98e7-3bb0c484aa4d/scratchpad/base238/tests/acceptance/238
+ RUN  v5.0.5 /private/tmp/claude-502/-Users-<name>-dev-claude-worktrees-doneright-github-issue-238-27e1de/dced5deb-175e-4bff-98e7-3bb0c484aa4d/scratchpad/base238/tests/acceptance/238
 
  ❯ kit.test.ts (4 tests | 4 failed) 39361ms
    ❯ #238.6e920ef3 sandbox@1's kit gives the same results with wasmtime 49.0.2 on macOS arm64, on Linux x86_64 and in headless Chrome (4)
