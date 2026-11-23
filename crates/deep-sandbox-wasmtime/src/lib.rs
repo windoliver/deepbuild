@@ -62,6 +62,43 @@ pub struct Outcome {
     pub trap: Option<Trap>,
 }
 
+/// A thread's compiled programs: by whether wasmtime's own fuel counts and the program's bytes.
+#[cfg(not(target_arch = "wasm32"))]
+type Compiled = std::collections::HashMap<(bool, Vec<u8>), (Engine, Module)>;
+
+#[cfg(not(target_arch = "wasm32"))]
+thread_local! {
+    /// #1172: each program this thread compiled, with the engine it was compiled for. A pack's
+    /// check runs one program many times, and a fresh canvas core's first reply paid for
+    /// compiling it each time. A runner still gets a store and an instance of its own. The cache
+    /// is per thread because a runner's deadline interrupts by its engine's epoch: an engine
+    /// shared across threads would let one call's deadline stop another's.
+    static COMPILED: std::cell::RefCell<Compiled> = Default::default();
+}
+
+/// The most programs a thread keeps compiled; past it, the thread starts over.
+#[cfg(not(target_arch = "wasm32"))]
+const COMPILED_MAX: usize = 256;
+
+/// `bytes` compiled for `config`, or this thread's earlier compile of the same bytes.
+#[cfg(not(target_arch = "wasm32"))]
+fn compiled(config: &Config, fuel: bool, bytes: Vec<u8>) -> Result<(Engine, Module), String> {
+    let key = (fuel, bytes);
+    if let Some(hit) = COMPILED.with(|c| c.borrow().get(&key).cloned()) {
+        return Ok(hit);
+    }
+    let engine = Engine::new(config).map_err(|e| e.to_string())?;
+    let module = Module::new(&engine, &key.1).map_err(|e| e.to_string())?;
+    COMPILED.with(|c| {
+        let mut c = c.borrow_mut();
+        if c.len() >= COMPILED_MAX {
+            c.clear();
+        }
+        c.insert(key, (engine.clone(), module.clone()));
+    });
+    Ok((engine, module))
+}
+
 /// A program instantiated once; calls run in turn on its memory and globals.
 #[cfg(not(target_arch = "wasm32"))]
 pub struct Runner {
@@ -110,8 +147,7 @@ impl Runner {
             .wasm_extended_const(false)
             .wasm_custom_page_sizes(false)
             .wasm_wide_arithmetic(false);
-        let engine = Engine::new(&config).map_err(|e| e.to_string())?;
-        let module = Module::new(&engine, &sized).map_err(|e| e.to_string())?;
+        let (engine, module) = compiled(&config, faults.wasmtime_fuel, sized)?;
         let mut store = Store::new(&engine, ());
         store.set_epoch_deadline(1);
         if faults.wasmtime_fuel {

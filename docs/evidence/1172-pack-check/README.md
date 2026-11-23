@@ -84,3 +84,28 @@ that rests on review (two rounds, whose findings 09d3cb5f8 and d893a7390 fix).
 call whose world drops one pack misses for each pack after it, since its other packs differ, and takes 4.0 to 5.3 s
 once. Not covered: a planted twin of another pack under the same `id@version` gives the same key; it needs two
 scenarios in one `run` process.
+
+## The first call's breakdown, and a compile cache (2026-11-22)
+
+The Mac round at 4670fcd16 with #3077's a6bcb6351 (load 25 to 74) failed both suites in setup again. In a new process
+with every pack, its first call took 10,257 ms; later calls took 201 and 157 ms. On the Spark, a fresh home's first
+`canvas.user` path (the store's release check on the hub's core, then the call on the same core) spent 16.7 s in the
+check and 374 ms in the call, at load 106. The check is the whole first call.
+
+Each sandbox run made a new wasmtime engine and compiled its program again, even bytes the same thread had compiled.
+`deep-sandbox-wasmtime` now keeps each thread's compiled programs, keyed by the bytes and whether wasmtime's own fuel
+counts. Each runner still gets its own store and instance. The cache is per thread so that one call's deadline,
+which interrupts by its engine's epoch, can't stop a call on another thread.
+
+`crates/deep-sandbox-wasmtime/tests/compile_once.rs` reads the cost as a ratio: a later runner of the same program
+must start in under a quarter of the first's time.
+- Without the cache it fails (`compile-once-fails-first.txt`): a later runner took 0.292 s against the first's 0.590 s.
+- With the cache it passes (`compile-once-passes.txt`): 0.227 s first, later runners under 1 ms.
+- Its second test checks that two runners of one program keep their own global and memory.
+
+`check-cpu-compile-cache.txt`: checking all 18 packs in one process took 16.1 and 16.3 s of user CPU at 4670fcd16,
+and 13.1 and 12.1 s with the cache, with identical pack rows. That is about a fifth less, at load 156 to 162.
+
+The rest is not compiles. `foley` alone is 5.6 s: its sweep renders 90 presets about 27 times each for 2 s at 48 kHz,
+in optimized code. `process` is 3.5 s. The owner chose this cache only, with no change to what a call waits on
+(2026-11-22), so the first call may still pass 10 s on a loaded Mac.
