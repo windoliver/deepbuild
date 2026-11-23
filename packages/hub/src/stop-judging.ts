@@ -1187,7 +1187,8 @@ export class StopJudging {
    * the difference is a proposal naming the file (#1864), as a drafted check's is, once per difference.
    */
   private async proposeSpecDrift(r: { claim: string; session: string; cwd: string }, was: string | undefined): Promise<void> {
-    // Blob ids, as git makes them through the repo's own filters, so a checkout's line endings are no difference.
+    // Blob ids of the bytes as they are: no repo filter runs, since a clean filter is a program the repo names, so a
+    // checkout that converts line endings shows as a difference.
     const is = await specOnDisk(r.cwd);
     if (was === is) return;
     const diff = `${SPEC} in ${r.cwd}: approved blob ${was ?? 'none'}, now ${is ?? 'deleted'}`;
