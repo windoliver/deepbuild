@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: each file builds the suite's probe with cargo under target/ and counts a process's live heap; unchanged.test.ts runs the 488 and 532 suites" }
