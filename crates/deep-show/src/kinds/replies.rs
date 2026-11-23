@@ -358,7 +358,14 @@ impl Hub<'_> {
             .and_then(|(a, b)| Some((a.parse::<usize>().ok()?, b.parse::<usize>().ok()?)))
             .unwrap_or((0, 0));
         let mut out = l.header.clone();
-        out["packs"] = self.packs_listed();
+        // #3108: the modules, interfaces and packs go on the first page only. Repeated on every
+        // page they took a small room (#2896) whole, so each page held one entry.
+        if (row0, entry0) == (0, 0) {
+            out["packs"] = self.packs_listed();
+        } else if let Some(o) = out.as_object_mut() {
+            o.remove("modules");
+            o.remove("interfaces");
+        }
         let mut size = out.to_string().len() + 64;
         let mut page: Vec<Value> = Vec::new();
         let mut next = None;
