@@ -178,7 +178,19 @@ pub const ITEM_KEYS: &[&str] = &[
     "tone",
     "halo",
     "relations",
+    // Object: hidden view (#290): `{opacity: channel = 0, color: role | base = base}`.
+    "hidden_view",
 ];
+
+/// Whether `<group>/<name>` is one of an item's own channels: a field of its `adjust`, or its
+/// hidden view's opacity (Object: hidden view).
+pub(crate) fn item_channel(group: &str, name: &str) -> bool {
+    match group {
+        "adjust" => ADJUST_FIELDS.contains(&name),
+        "hidden_view" => name == "opacity",
+        _ => false,
+    }
+}
 
 /// The item fields a path or an op may reach besides `params` and `at`.
 pub const ITEM_OWN_FIELDS: &[&str] = &[

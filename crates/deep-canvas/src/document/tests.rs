@@ -99,12 +99,13 @@ fn the_incremental_recheck_gives_the_full_checks_issues() {
             continue;
         };
         let changed = patched.changed(&doc);
+        let lent = doc.to_string();
         let incremental =
-            recheck(&doc, &issues, &changed, &crate::registry::core()).expect("items only");
+            recheck(&mut doc, &issues, &changed, &crate::registry::core()).expect("items only");
         let full = check(&doc).issues;
         assert_eq!(key(&incremental), key(&full), "patch {n}: {op}");
         let indexed = recheck_with(
-            &doc,
+            &mut doc,
             &issues,
             &changed,
             &crate::registry::core(),
@@ -117,6 +118,7 @@ fn the_incremental_recheck_gives_the_full_checks_issues() {
             key(&full),
             "patch {n}, by its referrers: {op}"
         );
+        assert_eq!(doc.to_string(), lent, "patch {n}: a recheck changed {op}");
         for (id, was) in &patched.before {
             referrers.update(id, was.as_ref(), doc["items"].get(id));
         }

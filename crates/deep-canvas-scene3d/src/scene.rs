@@ -485,6 +485,8 @@ pub struct Layer3 {
     /// #1636: what its solids draw, by item and shape: the item whose mesh it is (an element's
     /// prototype) and its material's ID ("" for none), as a draw's report names them.
     pub draw_names: BTreeMap<(String, Shape), (String, String)>,
+    /// #290: the hidden view of each item whose solids draw here with one above opacity 0.
+    pub hidden: BTreeMap<String, crate::hidden::HiddenView>,
 }
 
 /// A soft cloud sprite at t (#422; Puff `puff@1`): where it is in world m, its size, and how the
@@ -1274,7 +1276,7 @@ impl<'a> Items<'a> {
     }
 
     /// The items in document order. `written` holds some of them in that order too.
-    fn iter(&self) -> impl Iterator<Item = (&'a String, &'a Value)> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (&'a String, &'a Value)> {
         let mut written = self.written.iter().peekable();
         self.doc
             .iter()
@@ -2680,6 +2682,7 @@ pub(crate) fn evaluate_compiled(
             }
         }
     }
+    crate::hidden::read(look, &items, &mut layers, (map, t))?;
     // The class's GPU memory, at 16 B a fragment (Object: see-through order).
     let budget = Value::Object(
         map.get("budget")
