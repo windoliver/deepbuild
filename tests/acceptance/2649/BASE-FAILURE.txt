@@ -26,8 +26,8 @@ test at tests/acceptance/2649/spike.test.mjs:15:1
   + ]
   - []
   
-      at holds (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:8:36)
-      at TestContext.<anonymous> (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:11:3)
+      at holds (file://~/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:8:36)
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:11:3)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.start (node:internal/test_runner/test:1262:17)
@@ -51,8 +51,8 @@ test at tests/acceptance/2649/spike.test.mjs:16:1
   + ]
   - []
   
-      at holds (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:8:36)
-      at TestContext.<anonymous> (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:11:3)
+      at holds (file://~/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:8:36)
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:11:3)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
@@ -78,8 +78,8 @@ test at tests/acceptance/2649/spike.test.mjs:17:1
   + ]
   - []
   
-      at holds (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:8:36)
-      at TestContext.<anonymous> (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:11:3)
+      at holds (file://~/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:8:36)
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:11:3)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
@@ -105,8 +105,8 @@ test at tests/acceptance/2649/spike.test.mjs:18:1
   + ]
   - []
   
-      at holds (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:8:36)
-      at TestContext.<anonymous> (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:11:3)
+      at holds (file://~/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:8:36)
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:11:3)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
@@ -132,8 +132,8 @@ test at tests/acceptance/2649/spike.test.mjs:19:1
   + ]
   - []
   
-      at holds (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:8:36)
-      at TestContext.<anonymous> (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:11:3)
+      at holds (file://~/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:8:36)
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/tests/acceptance/2649/spike.test.mjs:11:3)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)

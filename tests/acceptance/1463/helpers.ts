@@ -473,8 +473,13 @@ export function tableFailures(rows: readonly Row[], table: readonly TableRow[], 
 }
 /** The words that go (Scope): `gone quiet`, a count of states read as `2 need you`, and every multi-word "never call it" of states::TABLE. */
 export function retiredFailures(text: string, table: readonly TableRow[], who: string): string[] {
-  const retired = [/\bgone quiet\b/, /\b\d+ need you\b/, ...table.flatMap((t) => t.never.filter((w) => w.includes(' ')).map((w) => new RegExp(`\\b${w}\\b`, 'i')))];
-  return retired.flatMap((re) => { const m = re.exec(text); return m ? [`${who} prints "${m[0]}", a word no state goes by`] : []; });
+  const retired = [/\bgone quiet\b/i, /\b\d+ need you\b/i, ...table.flatMap((t) => t.never.filter((w) => w.includes(' ')).map((w) => new RegExp(`\\b${w}\\b`, 'i')))];
+  return retired.flatMap((re) => {
+    const phrase = re.exec(text)?.[0];
+    if (!phrase) return [];
+    const folded = phrase.toLowerCase();
+    return [`${who} prints "${phrase}", a word no state goes by${folded === phrase ? '' : ` ("${folded}")`}`];
+  });
 }
 /** `deep inbox`: each open ask's question, then (for `withDefault`) its default as the notification says it, then its handle, last on its line. */
 export function inboxFailures(text: string, asks: readonly FixtureAsk[], withDefault: readonly FixtureAsk[] = []): string[] {

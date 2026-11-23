@@ -1,0 +1,39 @@
+Base run of the #1500 suite at 5f5791e2d (branch blind-1500-suite), Nov 22 2026, on this Mac (load about 130 to 280).
+
+One file was run, as the brief asks (a single quick run shows the surface is absent):
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 sh scripts/lease \
+    npx vitest run --root tests/acceptance/1500 ac01-material --testTimeout=600000 --hookTimeout=600000
+
+deep-show had been built at the base just before (cargo build --locked -p deep-show --bin deep-show, 28 min 21 s at
+load about 280), so the file’s build was a no-op. Result: 2 tests, 2 failed, 7.3 s.
+
+  × AC1 #1500.969af07a the material patched at step 300 shows at step 301, and the logic and physics state hashes there equal an unpatched run’s  5457ms
+  × AC1 #1500.969af07a a planted restart (join_restarts) fails, naming step 301  134ms
+
+Both fail at the same assertion, after the region-map probe presented the jumper and read its offsets:
+
+  AssertionError: the unpatched run: deep-show run takes the scenario: {"ok":false,"code":"bad_input"}: expected false to be true
+   ❯ runShow helpers.ts:143:86
+   ❯ play helpers.ts:416:13
+
+The base has no play_frames call, so a scenario holding one is refused whole as bad_input. The other nine files drive
+the same play_frames call in their first process and so stop at the same assertion; they were not run.
+
+Checked at the base before the tests were written, with scratch vitest probes (not committed) on the same binary:
+
+- the jumper, its revisions (blue material, rule 2, layout B, no crate, gravity -19.62), the 64 MiB game (BIG1, BIG2,
+  span 6 s) and the Oracle lane’s two piles each present with no issue; the 64 MiB game presents and steps in 0.4 s.
+- deep_query’s logic read gives the region map (reads: jump; writes: score, presses, pressed_at, rule, since).
+- track (load) then logic over 400 steps with jump entries at t = 61, 201 and 291 steps (rule 1): step 291 and step 300
+  read score 3, presses 3, pressed_at 291, rule 1, since -1; the logic call’s checkpoints list game only (its logic
+  reads no world).
+- world (the base’s bake of lab, every body after each step) with a jump at 291: the ball’s height’s second difference
+  over steps 297 to 304 is -0.0027250 (gravity -9.81) and -0.0054500 (gravity -19.62), each within 1e-7 of g/3600.
+- eval at step 300 with paths items/paint/params/base_color gives [0.8, 0.1, 0.1, 1]; its arrays come back as numbers
+  (game.score: 3) and its carried rows hold one row, logic.state, with a SHA-256.
+- golden_record of the jumper (240 steps, rule 1 and rule 2 with gravity -19.62) gives the SHA-256 of nothing at every
+  step: this document’s golden hashes no node at the base.
+
+Note: the test titles above are shown as they read in the commit; the run printed them without the leading "AC1 ",
+which was added to every title afterwards (helpers.ts: AC). Nothing else changed in the files run.

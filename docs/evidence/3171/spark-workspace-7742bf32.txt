@@ -1,0 +1,155 @@
+# #3171: three whole-workspace cargo test runs on the Spark (the issue's Proof line), 2026-11-23
+#
+# A fresh clone at 7742bf320. Its crates/deep-gpu/src/spans.rs is byte-identical to this change's (git hash-object
+# 6fb30579732e); it also carried a scripts/lanes.mjs change since dropped (it belongs to #3100), under which the
+# 'as the lanes read it' lines below read the span test's INCONCLUSIVE: panic as INCONCLUSIVE. On main's lanes that
+# panic reads FAIL until #3100's third criterion lands. npm ci and npm run build --workspaces first; cargo with -j 4,
+# no sccache, no debug info. Each run: its header, the span test's reading, deep-gpu's lib target (passing lines and
+# the Vulkan loader's freedreno lines cut), and every libtest FAILED line of the run (the rest are other issues').
+
+######## workspace run 1: cargo test --workspace --locked --no-fail-fast -j 4
+head 7742bf320; start 2026-11-23T04:40:57Z; load 91.92 79.22 44.44
+cargo exit 101 at 2026-11-23T05:02:22Z
+--- the span test, as the lanes at that head read it:
+{"span":[{"id":"cargo -p deep-gpu --lib › spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it","state":"INCONCLUSIVE","message":"INCONCLUSIVE: the GPU was shared, so the gap can't be told apart: trial 0: 524.5648639798164 ms covered, the passes' own 13.681695997714996; the GPU ran others' work for 1158.526655972004 ms while this test's passes and their span ends waited"}],"counts":{"passed":1820,"failures":48}}
+
+--- deep-gpu lib target:
+     Running unittests src/lib.rs (target/debug/deps/deep_gpu-fb31c23b3446d1ae)
+
+running 54 tests
+test structural::timing::timings ... ignored
+test spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it ... FAILED
+
+failures:
+
+---- spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it stdout ----
+trial 0: 524.5648639798164 ms covered, the passes' own 13.681695997714996; the heavy pass's own 13.666079998016357; this test's work waited behind others' for 1158.526655972004
+trial 1: 49.89084801077843 ms covered, the passes' own 13.67900800704956; the heavy pass's own 13.66448000073433; this test's work waited behind others' for 252.30591997504234
+trial 2: 16.3408320248127 ms covered, the passes' own 13.685600012540817; the heavy pass's own 13.671200007200241; this test's work waited behind others' for 42.73148798942566
+trial 3: 21.882912009954453 ms covered, the passes' own 13.675935983657837; the heavy pass's own 13.661567986011505; this test's work waited behind others' for 34.59577602148056
+
+thread 'spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it' (<tid>) panicked at crates/deep-gpu/src/spans.rs:576:13:
+INCONCLUSIVE: the GPU was shared, so the gap can't be told apart: trial 0: 524.5648639798164 ms covered, the passes' own 13.681695997714996; the GPU ran others' work for 1158.526655972004 ms while this test's passes and their span ends waited
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it
+
+test result: FAILED. 52 passed; 1 failed; 1 ignored; 0 measured; 0 filtered out; finished in 5.57s
+--- every FAILED test line in the run:
+test ac2_each_sessions_state_title_and_open_asks_and_the_notifiers_posts_and_withdrawals_equal_the_merge_bases ... FAILED
+test ac3_a_sidebar_render_and_a_notifier_tick_take_under_4_ms_with_200000_events_held_independent_of_the_count ... FAILED
+test ac1_with_30_sessions_and_200000_streamed_events_the_apps_resident_memory_stays_under_300_mb ... FAILED
+test ac11_after_a_power_cut_drops_900_to_905_the_app_sees_the_new_start_id_redoes_its_reads_and_no_longer_shows_them ... FAILED
+test the_pictures_no_shown_revision_uses_are_freed_from_the_gpu ... FAILED
+test document::packs::tests::the_pack_schema_holds_the_checks_keys_and_lists ... FAILED
+test spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it ... FAILED
+test ac1_a_million_opening_parens_are_refused_in_a_child_in_under_50_ms ... FAILED
+test ac1_a_million_bangs_are_refused_in_a_child_in_under_50_ms ... FAILED
+test ac1_a_million_minus_signs_are_refused_in_a_child_in_under_50_ms ... FAILED
+test ac1_a_million_abs_calls_are_refused_in_a_child_in_under_50_ms ... FAILED
+test ac1_a_million_conditionals_are_refused_in_a_child_in_under_50_ms ... FAILED
+test ac3_a_frame_of_2000_textured_materials_costs_at_most_1_1_times_the_instructions_per_material_of_200 ... FAILED
+test ac6_on_metal_frames_where_the_tree_moves_differ_and_equal_the_base_by_hash ... FAILED
+test ac6_on_metal_planted_sway_first_frame_only_fails_naming_the_frame ... FAILED
+test ac3_the_third_scene_holds_the_scene_once_and_each_views_own_targets ... FAILED
+test ac5_a_view_insets_frame_hashes_as_on_the_merge_base ... FAILED
+test ac7_the_estimate_counts_what_each_view_holds ... FAILED
+test ac5_planted_inset_takes_the_views_cascades_fails_naming_the_frame ... FAILED
+test ac7_planted_estimate_counting_the_maps_per_view_fails_naming_the_bytes ... FAILED
+test ac2_on_metal_a_renderer_that_keeps_its_first_mirrored_picture_fails_naming_the_frame ... FAILED
+test ac2_on_metal_a_lakes_frames_equal_the_base_by_hash_and_its_reflection_moves ... FAILED
+test a_frame_no_post_module_reads_the_key_lights_map_in_holds_no_map ... FAILED
+test a_scene_that_stopped_using_them_holds_none_of_their_memory ... FAILED
+test a_scene_with_no_label_holds_no_glyph_atlas ... FAILED
+test kinds::tests::every_structured_field_prints_forms_that_take_its_own_values ... FAILED
+test tests::the_published_schedule_matches_its_committed_snapshot ... FAILED
+test an_export_draws_a_recipe_instance_like_the_items_it_derives ... FAILED
+test render_back_draws_the_sprite_as_the_base_commit_did ... FAILED
+######## workspace run 2: cargo test --workspace --locked --no-fail-fast -j 4
+head 7742bf320; start 2026-11-23T05:02:22Z; load 13.43 31.08 43.22
+cargo exit 101 at 2026-11-23T05:06:21Z
+--- the span test, as the lanes at that head read it:
+{"span":[{"id":"cargo -p deep-gpu --lib › spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it","state":"PASS"}],"counts":{"passed":1819,"failures":49}}
+
+--- deep-gpu lib target:
+     Running unittests src/lib.rs (target/debug/deps/deep_gpu-fb31c23b3446d1ae)
+
+running 54 tests
+test structural::timing::timings ... ignored
+
+test result: ok. 53 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 6.06s
+--- every FAILED test line in the run:
+test ac2_each_sessions_state_title_and_open_asks_and_the_notifiers_posts_and_withdrawals_equal_the_merge_bases ... FAILED
+test ac3_a_sidebar_render_and_a_notifier_tick_take_under_4_ms_with_200000_events_held_independent_of_the_count ... FAILED
+test ac1_with_30_sessions_and_200000_streamed_events_the_apps_resident_memory_stays_under_300_mb ... FAILED
+test ac11_after_a_power_cut_drops_900_to_905_the_app_sees_the_new_start_id_redoes_its_reads_and_no_longer_shows_them ... FAILED
+test the_pictures_no_shown_revision_uses_are_freed_from_the_gpu ... FAILED
+test document::packs::tests::the_pack_schema_holds_the_checks_keys_and_lists ... FAILED
+test a_call_its_agent_sends_past_the_watchdog_is_still_spooled ... FAILED
+test a_hook_given_no_time_past_the_watchdog_with_its_call_sent_is_still_spooled ... FAILED
+test ac1_a_million_minus_signs_are_refused_in_a_child_in_under_50_ms ... FAILED
+test ac1_a_million_bangs_are_refused_in_a_child_in_under_50_ms ... FAILED
+test ac1_a_million_conditionals_are_refused_in_a_child_in_under_50_ms ... FAILED
+test ac1_a_million_opening_parens_are_refused_in_a_child_in_under_50_ms ... FAILED
+test ac1_a_million_abs_calls_are_refused_in_a_child_in_under_50_ms ... FAILED
+test ac3_a_frame_of_2000_textured_materials_costs_at_most_1_1_times_the_instructions_per_material_of_200 ... FAILED
+test ac6_on_metal_planted_sway_first_frame_only_fails_naming_the_frame ... FAILED
+test ac6_on_metal_frames_where_the_tree_moves_differ_and_equal_the_base_by_hash ... FAILED
+test ac3_the_third_scene_holds_the_scene_once_and_each_views_own_targets ... FAILED
+test ac5_a_view_insets_frame_hashes_as_on_the_merge_base ... FAILED
+test ac7_the_estimate_counts_what_each_view_holds ... FAILED
+test ac7_planted_estimate_counting_the_maps_per_view_fails_naming_the_bytes ... FAILED
+test ac5_planted_inset_takes_the_views_cascades_fails_naming_the_frame ... FAILED
+test ac2_on_metal_a_lakes_frames_equal_the_base_by_hash_and_its_reflection_moves ... FAILED
+test ac2_on_metal_a_renderer_that_keeps_its_first_mirrored_picture_fails_naming_the_frame ... FAILED
+test a_frame_no_post_module_reads_the_key_lights_map_in_holds_no_map ... FAILED
+test a_scene_that_stopped_using_them_holds_none_of_their_memory ... FAILED
+test a_scene_with_no_label_holds_no_glyph_atlas ... FAILED
+test kinds::tests::every_structured_field_prints_forms_that_take_its_own_values ... FAILED
+test tests::the_published_schedule_matches_its_committed_snapshot ... FAILED
+test an_export_draws_a_recipe_instance_like_the_items_it_derives ... FAILED
+test render_back_draws_the_sprite_as_the_base_commit_did ... FAILED
+######## workspace run 3: cargo test --workspace --locked --no-fail-fast -j 4
+head 7742bf320; start 2026-11-23T05:06:21Z; load 24.01 25.31 37.95
+cargo exit 101 at 2026-11-23T05:09:56Z
+--- the span test, as the lanes at that head read it:
+{"span":[{"id":"cargo -p deep-gpu --lib › spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it","state":"PASS"}],"counts":{"passed":1821,"failures":47}}
+
+--- deep-gpu lib target:
+     Running unittests src/lib.rs (target/debug/deps/deep_gpu-fb31c23b3446d1ae)
+
+running 54 tests
+test structural::timing::timings ... ignored
+
+test result: ok. 53 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 7.03s
+--- every FAILED test line in the run:
+test ac2_each_sessions_state_title_and_open_asks_and_the_notifiers_posts_and_withdrawals_equal_the_merge_bases ... FAILED
+test ac3_a_sidebar_render_and_a_notifier_tick_take_under_4_ms_with_200000_events_held_independent_of_the_count ... FAILED
+test ac1_with_30_sessions_and_200000_streamed_events_the_apps_resident_memory_stays_under_300_mb ... FAILED
+test ac11_after_a_power_cut_drops_900_to_905_the_app_sees_the_new_start_id_redoes_its_reads_and_no_longer_shows_them ... FAILED
+test the_pictures_no_shown_revision_uses_are_freed_from_the_gpu ... FAILED
+test document::packs::tests::the_pack_schema_holds_the_checks_keys_and_lists ... FAILED
+test ac1_a_million_minus_signs_are_refused_in_a_child_in_under_50_ms ... FAILED
+test ac1_a_million_bangs_are_refused_in_a_child_in_under_50_ms ... FAILED
+test ac1_a_million_opening_parens_are_refused_in_a_child_in_under_50_ms ... FAILED
+test ac1_a_million_abs_calls_are_refused_in_a_child_in_under_50_ms ... FAILED
+test ac1_a_million_conditionals_are_refused_in_a_child_in_under_50_ms ... FAILED
+test ac3_a_frame_of_2000_textured_materials_costs_at_most_1_1_times_the_instructions_per_material_of_200 ... FAILED
+test ac6_on_metal_frames_where_the_tree_moves_differ_and_equal_the_base_by_hash ... FAILED
+test ac6_on_metal_planted_sway_first_frame_only_fails_naming_the_frame ... FAILED
+test ac3_the_third_scene_holds_the_scene_once_and_each_views_own_targets ... FAILED
+test ac5_a_view_insets_frame_hashes_as_on_the_merge_base ... FAILED
+test ac7_the_estimate_counts_what_each_view_holds ... FAILED
+test ac5_planted_inset_takes_the_views_cascades_fails_naming_the_frame ... FAILED
+test ac7_planted_estimate_counting_the_maps_per_view_fails_naming_the_bytes ... FAILED
+test ac2_on_metal_a_lakes_frames_equal_the_base_by_hash_and_its_reflection_moves ... FAILED
+test ac2_on_metal_a_renderer_that_keeps_its_first_mirrored_picture_fails_naming_the_frame ... FAILED
+test a_frame_no_post_module_reads_the_key_lights_map_in_holds_no_map ... FAILED
+test a_scene_that_stopped_using_them_holds_none_of_their_memory ... FAILED
+test a_scene_with_no_label_holds_no_glyph_atlas ... FAILED
+test kinds::tests::every_structured_field_prints_forms_that_take_its_own_values ... FAILED
+test tests::the_published_schedule_matches_its_committed_snapshot ... FAILED
+test an_export_draws_a_recipe_instance_like_the_items_it_derives ... FAILED
+test render_back_draws_the_sprite_as_the_base_commit_did ... FAILED

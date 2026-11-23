@@ -18,7 +18,7 @@ Every test fails. Why each fails there:
 The run's output follows.
 
 
- RUN  v5.0.5 /private/tmp/claude-501/-Users-sophiawj-private-deepbuild-core--claude-worktrees-issue-376-implementation-22897e/48eddeb3-874b-4f3d-9dd6-cccd678b5697/scratchpad/base/tests/acceptance/376
+ RUN  v5.0.5 /private/tmp/claude-501/-Users-<name>-private-deepbuild-core--claude-worktrees-issue-376-implementation-22897e/48eddeb3-874b-4f3d-9dd6-cccd678b5697/scratchpad/base/tests/acceptance/376
 
  × replica.test.ts > AC1 in a replica the figure's accessibility tree and its announcements are data > AC1 the tree has one node per part and control, with its name and role 2946ms
    → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality

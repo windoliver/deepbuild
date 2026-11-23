@@ -23,6 +23,7 @@ mod columns;
 mod compare;
 mod compile;
 mod conformance;
+mod counting;
 mod effects;
 mod envelope;
 #[cfg(feature = "test-faults")]
@@ -36,6 +37,7 @@ mod flows2d;
 mod frames;
 mod full_lane;
 mod golden;
+mod grids2d;
 mod guard;
 mod hdr;
 mod host;
@@ -59,6 +61,7 @@ mod records;
 mod reference;
 mod regions;
 mod relation;
+mod reseed;
 mod scene;
 mod seam;
 mod session3;
@@ -133,6 +136,8 @@ pub enum Planted {
     LaneAdapterFromConfiguration,
     AbsoluteF32WorldPositions,
     LightCutAbsoluteIlluminance,
+    /// #2054's: a local light faded by (1 − (d ÷ range)²)², not the design's window.
+    LightWindowSquared,
     /// #430's wrong programs (tests/acceptance/430/README.md: Planted programs).
     GroupPassAtLayerEnd,
     GroupPassReadsEarlier,
@@ -175,6 +180,9 @@ pub enum Planted {
     /// plate whose horizon table is never read, and its sky occlusion from its slope alone.
     TerrainNoHorizonBake,
     TerrainOcclusionFromSlope,
+    /// #2215's wrong program (tests/acceptance/2215/README.md: Assumed surfaces 3): the frame's
+    /// receipt lists no part that refracts through the round lobe.
+    RasterListsNothing,
     /// #378's wrong programs (tests/acceptance/378/README.md: Planted programs).
     ForwardZ,
     EncodesTwice,
@@ -197,6 +205,14 @@ pub enum Planted {
     PassOffByTwo,
     BloomWithoutKaris,
     PassesOneGpu,
+    /// #161's wrong programs (tests/acceptance/161/README.md: Planted programs).
+    FxLevelsGpuOffByTwo,
+    SliceShiftSeededByFrame,
+    InvertOnPremultiplied,
+    InvertWithoutAlphaGuard,
+    TwirlCenterFromFrameOrigin,
+    BlurRadiusInDevicePx,
+    KeyKeepsColorAtAlpha0,
     /// #508's wrong programs (tests/acceptance/508/README.md: Surfaces this job invents, 10): a
     /// plume's haze run before the check readbacks are taken, so they read its bent pixels; and
     /// the film effects taking their time from the wall clock instead of the frame's t.
@@ -578,6 +594,10 @@ pub enum Planted {
     NormalDotAlone,
     NormalUnturned,
     LightStaleHeight,
+    /// #269's wrong programs (tests/acceptance/269/README.md: Plants): a played frame's grid image
+    /// holds the step before its own; a pixel takes its cell's role before the rebuild.
+    GridKeepsPreviousStep,
+    GridRoleBeforeRebuild,
 }
 
 impl Planted {
@@ -610,6 +630,12 @@ impl Planted {
             Planted::NormalDotAlone => P::NormalDotAlone,
             Planted::NormalUnturned => P::NormalUnturned,
             Planted::LightStaleHeight => P::LightStaleHeight,
+            Planted::SliceShiftSeededByFrame => P::SliceShiftSeededByFrame,
+            Planted::InvertOnPremultiplied => P::InvertOnPremultiplied,
+            Planted::InvertWithoutAlphaGuard => P::InvertWithoutAlphaGuard,
+            Planted::TwirlCenterFromFrameOrigin => P::TwirlCenterFromFrameOrigin,
+            Planted::BlurRadiusInDevicePx => P::BlurRadiusInDevicePx,
+            Planted::KeyKeepsColorAtAlpha0 => P::KeyKeepsColorAtAlpha0,
             _ => return None,
         })
     }
@@ -637,6 +663,7 @@ impl Planted {
             "lane_adapter_from_configuration" => Planted::LaneAdapterFromConfiguration,
             "absolute_f32_world_positions" => Planted::AbsoluteF32WorldPositions,
             "light_cut_absolute_illuminance" => Planted::LightCutAbsoluteIlluminance,
+            "light_window_squared" => Planted::LightWindowSquared,
             "group_pass_at_layer_end" => Planted::GroupPassAtLayerEnd,
             "group_pass_reads_earlier" => Planted::GroupPassReadsEarlier,
             "group_pass_past_grow" => Planted::GroupPassPastGrow,
@@ -695,6 +722,13 @@ impl Planted {
             "noise_from_frame_counter" => Planted::NoiseFromFrameCounter,
             "noise_from_clock" => Planted::NoiseFromClock,
             "pass_off_by_two" => Planted::PassOffByTwo,
+            "fx_levels_gpu_off_by_two" => Planted::FxLevelsGpuOffByTwo,
+            "slice_shift_seeded_by_frame" => Planted::SliceShiftSeededByFrame,
+            "invert_on_premultiplied" => Planted::InvertOnPremultiplied,
+            "invert_without_alpha_guard" => Planted::InvertWithoutAlphaGuard,
+            "twirl_center_from_frame_origin" => Planted::TwirlCenterFromFrameOrigin,
+            "blur_radius_in_device_px" => Planted::BlurRadiusInDevicePx,
+            "key_keeps_color_at_alpha_0" => Planted::KeyKeepsColorAtAlpha0,
             "bloom_without_karis" => Planted::BloomWithoutKaris,
             "passes_one_gpu" => Planted::PassesOneGpu,
             "haze_feeds_check_readback" => Planted::HazeFeedsCheckReadback,
@@ -755,6 +789,8 @@ impl Planted {
             "puff_block_copy" => Planted::PuffBlockCopy,
             "resolve_accumulates_frames" => Planted::ResolveAccumulatesFrames,
             "shifts_fill_two_codes" => Planted::ShiftsFillTwoCodes,
+            "grid_keeps_previous_step" => Planted::GridKeepsPreviousStep,
+            "grid_role_before_rebuild" => Planted::GridRoleBeforeRebuild,
             "shifts_glyph_quads" => Planted::ShiftsGlyphQuads,
             "ignores_spike" => Planted::IgnoresSpike,
             "sectors_source_over" => Planted::SectorsSourceOver,
@@ -954,6 +990,7 @@ impl Planted {
             "part_pose_in_world_space" => Planted::PartPoseInWorldSpace,
             "terrain_no_horizon_bake" => Planted::TerrainNoHorizonBake,
             "terrain_occlusion_from_slope" => Planted::TerrainOcclusionFromSlope,
+            "raster_lists_nothing" => Planted::RasterListsNothing,
             _ => {
                 let planted = deep_canvas_scene3d::spans::PLANTED;
                 Planted::HiddenLines(planted.iter().find(|p| p.0 == name)?.0)
@@ -1246,38 +1283,6 @@ impl App {
         }
     }
 }
-
-/// The counting allocator (issue #379, `test-meter` builds only): every allocation is offered to
-/// the core's count, which keeps only the frame path's own.
-#[cfg(feature = "test-meter")]
-struct Counting;
-
-#[cfg(feature = "test-meter")]
-// SAFETY: every call passes straight to the system allocator.
-unsafe impl std::alloc::GlobalAlloc for Counting {
-    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
-        deep_gpu::alloc::note();
-        unsafe { std::alloc::System.alloc(layout) }
-    }
-
-    unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {
-        deep_gpu::alloc::note();
-        unsafe { std::alloc::System.alloc_zeroed(layout) }
-    }
-
-    unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, size: usize) -> *mut u8 {
-        deep_gpu::alloc::note();
-        unsafe { std::alloc::System.realloc(ptr, layout, size) }
-    }
-
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
-        unsafe { std::alloc::System.dealloc(ptr, layout) }
-    }
-}
-
-#[cfg(feature = "test-meter")]
-#[global_allocator]
-static COUNTING: Counting = Counting;
 
 fn bad_input() -> ! {
     println!("{}", json!({"ok": false, "code": "bad_input"}));

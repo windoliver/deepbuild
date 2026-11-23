@@ -150,7 +150,9 @@ impl Given {
             Given::Record(b) => b.clone(),
             // No read region holds a rewind or a draw's entry; a carry record fills its own entry
             // (`carry::fill`).
-            Given::Rewind(_) | Given::Draw(_) | Given::Carry { .. } | Given::Profile { .. } => Vec::new(),
+            Given::Rewind(_) | Given::Draw(_) | Given::Carry { .. } | Given::Profile { .. } => {
+                Vec::new()
+            }
         }
     }
 }

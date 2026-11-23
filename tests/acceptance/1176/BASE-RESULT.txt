@@ -1,0 +1,37 @@
+Base: 61aa8eb06 (origin/main), a fresh GitHub clone, macOS (MacBook Pro), Node 24.22.0, after npm ci, npm run build --workspaces,
+cargo build -p deep-hook and cargo build --bin deep-show. Each file run alone:
+  npx vitest run --root tests/acceptance/1176 --no-file-parallelism <file>
+
+2026-11-22 19:51  diff.test.ts    load ~80 (1-min)
+  PASS  #1176.9980ad17 the redraft keeps every test name ... no hub source            (1.6 s)
+
+2026-11-22 20:49  stamps.test.ts  load 108.68 137.07 143.83
+  PASS  #1176.56faa14e before each deep_claim and deep_show of AC2 ...                (24 s)
+
+2026-11-22 20:50  suite.test.ts   load 100.09 128.45 140.06 at start, 105.60 125.47 127.41 at end
+  PASS  #1176.3cc34af6 sessions.test.ts passes all 7 tests ... fails the two Codex deep_claim tests with unbound   (1624 s)
+        After (main's tests/acceptance/806): 7 of 7 passed.
+        Before (main's folder, redraft 43d428e86's diff of helpers.ts, figure.ts and sessions.test.ts applied in reverse):
+        6 tests; exactly "AC2 the Codex session's deep_show ..." and "AC2 each agent's figure ... same panel" failed,
+        each on "deep_claim of the Codex: release notes session must succeed" with code unbound.
+
+Twin runs (APFS clone per twin, twin file laid over packages/hub/src/mcp-operations.ts, npm run build --workspaces there):
+  stamp-ignores-arguments  stamps.test.ts  FAIL at stamps.test.ts:57 "deep_claim under a stamp for other arguments binds to
+                           no session": expected undefined to be 'unbound' (the call was filed)          2026-11-22 21:09, load 107
+  stamp-ignores-tool       stamps.test.ts  FAIL at stamps.test.ts:65 "deep_claim under a stamp naming mcp__deep__deep_show binds
+                           to no session": expected undefined to be 'unbound'                            2026-11-22 21:28, load 79
+  binds-by-process         stamps.test.ts  FAIL at stamps.test.ts:57, as stamp-ignores-arguments          2026-11-22 21:19, load 74
+  stamp-ignores-arguments  suite.test.ts   (the old single file) started 21:29, stopped by hand at 21:37 before it ended:
+                           superseded by the split below, no result.
+
+Revision after review (2026-11-22 21:39): suite.test.ts split into after.test.ts and before.test.ts (lane 20-min cap), the
+redraft pinned to 43d428e86, the first draft laid by git show 43d428e86^:<path>, stamps.test.ts's deep_show check tightened to
+outcome presented with no code, its errorOf check dropped.
+  21:39  diff.test.ts    load 59.49 74.04 85.57   PASS (1 s)
+  21:39  stamps.test.ts  load 57.77 73.44 85.29   PASS (4 s)
+  21:39  after.test.ts   load 54.39 at start, 79.32 at end   PASS (29 s): 7 of 7 passed
+  21:39  before.test.ts  load 79.32 at start, 73.49 at end   PASS (15 s): the two Codex deep_claim tests ran and both failed on
+         unbound; its 1176-before-<pid> folder was removed after
+  (The old combined file's 1624 s was mostly the first cargo build of deep-replica-canvas inside the suite's useApp.)
+NOT RUN on any twin since the revision: after.test.ts, before.test.ts (binds-by-process, stamp-ignores-arguments), and the revised
+stamps.test.ts (the twin runs above are of the earlier stamps.test.ts, whose failing assertions at lines 57 and 65 are unchanged).
