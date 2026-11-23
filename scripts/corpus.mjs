@@ -458,10 +458,11 @@ async function recordClaude(out, bin, facts, only, version) {
 // Codex trusts a folder by writing it into your config the first time it runs there, exec included,
 // so every Codex session runs in a folder your config already trusts, DEEP_CORPUS_CODEX_TRUSTED,
 // with its files in a folder of its own inside it, and recording writes nothing into your config.
-async function recordCodex(out, bin, facts) {
+async function recordCodex(out, bin, facts, only, version) {
   const trusted = process.env.DEEP_CORPUS_CODEX_TRUSTED;
   if (!trusted) return [{ scenario: 'all', dir: out, blocked: 'set DEEP_CORPUS_CODEX_TRUSTED to a folder your Codex config already trusts', payloads: [] }];
-  const hooks = [...new Set(Object.values(facts.events?.versions ?? {}).flatMap((events) => Object.keys(events)))];
+  const listed = Object.keys(facts.events?.versions?.[version] ?? {});
+  const hooks = listed.length ? listed : [...new Set(Object.values(facts.events?.versions ?? {}).flatMap((events) => Object.keys(events)))];
   const job = facts.launch.readOnlyJob.args;
   const model = ['-m', job[job.indexOf('-m') + 1], '-c', 'model_reasoning_effort="low"'];
   const hookArgs = (dir) => {
@@ -475,9 +476,11 @@ async function recordCodex(out, bin, facts) {
     { name: 'tools', prompts: (f) => [`Run the shell command: echo corpus-probe. Then use your apply_patch tool to add the file ${f}/added.txt containing the line one. Then run the shell command: ls /definitely/not/here. Then reply done.`] },
     { name: 'patches', prompts: (f) => [shell(patch(f, '')), shell(patch(f, '  '))] },
     { name: 'crash', prompts: () => ['Run the shell command: sleep 30 && echo slept'], crash: true },
+    // A spawned child (#3136): SubagentStart, and SubagentStop in place of the child's own Stop.
+    { name: 'subagent', prompts: () => ['Use your spawn_agent tool to start one subagent with the task: run the shell command echo from-subagent and reply with its output. Then use your wait_agent tool to wait for it to finish, and reply with what it said.'] },
   ];
   const results = [];
-  for (const scenario of scenarios) {
+  for (const scenario of scenarios.filter(({ name }) => !only || only.includes(name))) {
     const dir = join(out, scenario.name), folder = `deep-corpus-${scenario.name}-${Date.now()}`, files = join(trusted, folder);
     mkdirSync(dir, { recursive: true });
     mkdirSync(files);
@@ -500,15 +503,20 @@ async function recordCodex(out, bin, facts) {
   let models = [];
   try { models = JSON.parse(readFileSync(join(process.env.CODEX_HOME ?? join(homedir(), '.codex'), 'models_cache.json'), 'utf8')).models.map(({ slug }) => slug); } catch {}
   const quiet = models.length ? ['-c', `tui.model_availability_nux={ ${models.map((slug) => `${JSON.stringify(slug)} = 100`).join(', ')} }`] : [];
-  const tui = async (name, args, prompt, stops) => {
+  const tui = async (name, args, steps) => {
+    if (only && !only.includes(name)) return;
     const dir = join(out, name);
     mkdirSync(dir, { recursive: true });
     const argv = [bin, ...model, ...hookArgs(dir), ...(args.includes('-s') ? [] : ['-s', 'workspace-write']), ...args, '-c', 'check_for_update_on_startup=false', ...quiet];
-    results.push({ scenario: name, dir, ...(await session({ argv, cwd: trusted, dir, terminal: true, steps: Object.assign([{ type: prompt }, ...(stops ? [{ stops }] : [])], { exit: '/quit' }), startAfter: (text) => /›/.test(text) && text.length > 200 })) });
+    results.push({ scenario: name, dir, ...(await session({ argv, cwd: trusted, dir, terminal: true, steps: Object.assign(steps, { exit: '/quit' }), startAfter: (text) => /›/.test(text) && text.length > 200 })) });
   };
   const made = join(trusted, `deep-corpus-permission-${Date.now()}.txt`), goal = join(trusted, `deep-corpus-goal-${Date.now()}.txt`);
-  await tui('permission', ['-s', 'read-only', '-a', 'on-request'], `Run the shell command: touch ${made}. The sandbox is read-only, so request escalated permissions for it. Then reply done.`);
-  await tui('goal', ['-a', 'never'], `Create a goal with your create_goal tool: write the numbers 1, 2 and 3 into ${goal}, one number per turn, ending each turn after writing one number. Then write 1 and end your turn.`, 2);
+  await tui('permission', ['-s', 'read-only', '-a', 'on-request'], [{ type: `Run the shell command: touch ${made}. The sandbox is read-only, so request escalated permissions for it. Then reply done.` }]);
+  await tui('goal', ['-a', 'never'], [{ type: `Create a goal with your create_goal tool: write the numbers 1, 2 and 3 into ${goal}, one number per turn, ending each turn after writing one number. Then write 1 and end your turn.` }, { stops: 2 }]);
+  // Compaction (#3136): /compact in the terminal UI fires PreCompact and PostCompact, trigger manual.
+  await tui('compact', ['-a', 'never'], [{ type: 'Run the shell command: echo before-compact' }, { type: '/compact', until: hook('PostCompact') }]);
+  // An interrupt (#3136): Esc while a shell call runs ends the turn with Interrupt, not Stop, on a version that lists it.
+  if (hooks.includes('Interrupt')) await tui('interrupt', ['-a', 'never'], [{ type: 'Run the shell command: sleep 30 && echo slept', until: hook('PreToolUse') }, { wait: 2000 }, { keys: '\x1b', until: hook('Interrupt') }]);
   for (const file of [made, goal]) rmSync(file, { force: true });
   return results;
 }
@@ -531,7 +539,7 @@ async function recordCommand(options) {
   const version = spawnSync(bin, ['--version'], { encoding: 'utf8' }).stdout.match(/\d+\.\d+\.\d+(?:[-+][\w.]+)?/)?.[0];
   const scratch = mkdtempSync(process.platform === 'darwin' ? '/private/tmp/deep-corpus-' : '/tmp/deep-corpus-');
   const only = options.scenarios?.split(',');
-  const results = agent === 'codex' ? await recordCodex(scratch, bin, facts) : await recordClaude(scratch, bin, facts, only, version);
+  const results = agent === 'codex' ? await recordCodex(scratch, bin, facts, only, version) : await recordClaude(scratch, bin, facts, only, version);
   const redact = redactor();
   for (const { scenario, blocked, payloads } of results) {
     if (!payloads.length) { say({ type: 'session', scenario, blocked: blocked ?? 'no payload was recorded' }); continue; }
