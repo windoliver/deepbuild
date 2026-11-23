@@ -1,7 +1,7 @@
 {
   "id": "deepbuild/speech",
   "version": "1.0.0",
-  "digest": "d1:a77b1a7ba5f5239f04cee30673d6365f76a40fe04dbaba651e68a149a198b244",
+  "digest": "d1:3a7a8171a73689b7bad877dc72105d13114419470efce7efab49323749cfe39e",
   "checks": [
     "speech.audio",
     "narration.transcript_record"
