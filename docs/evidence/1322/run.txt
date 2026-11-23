@@ -1,0 +1,53 @@
+#1322 e2e hand run of measureOnce (scripts/benchmark.mjs): fresh GitHub clone of claude/issue-1322-measureonce-04bebe
+HEAD a734e8599 Twins for #1322: one planted wrong measureOnce per criterion of the blind suite
+Fix 8545c5bee (group kill): in HEAD's history. Branch vs merge base b4e6a09c0: 11 files, 0 outside tests/acceptance/1322/
+Darwin arm64, node v24.22.0, 2026-11-23 12:26 PST
+
+== Timeout: a command that started a child, stopped at its 3000 ms timeout (follow = false)
+  measureOnce threw ETIMEDOUT after 3003 ms (expected ETIMEDOUT); the measured command ran under /usr/bin/time
+  parent PID 16597, child PID 16601, both recorded while the run was going
+  both gone after 50 ms of polling; ps -p 16597,16601 lists 0 of 2
+  check: ETIMEDOUT at 3000-4000 ms under /usr/bin/time, nothing left: yes
+
+== Timeout with follow = true: the counting runner wraps the measured command
+  measureOnce threw ETIMEDOUT after 3007 ms (expected ETIMEDOUT); the measured command ran under the counting runner
+  parent PID 17048, child PID 17052, both recorded while the run was going
+  both gone after 50 ms of polling; ps -p 17048,17052 lists 0 of 2
+  check: ETIMEDOUT at 3000-4000 ms under the counting runner, nothing left: yes
+
+== maxBuffer: a command that started a child and wrote 40 MiB past the 32 MiB maxBuffer (60 s timeout, follow = false)
+  measureOnce threw ENOBUFS after 166 ms (expected ENOBUFS); the measured command ran under /usr/bin/time
+  parent PID 17240, child PID 17252, both recorded while the run was going
+  both gone after 50 ms of polling; ps -p 17240,17252 lists 0 of 2
+  check: ENOBUFS well before the timeout, nothing left: yes
+
+== maxBuffer with follow = true
+  measureOnce threw ENOBUFS after 87 ms (expected ENOBUFS); the measured command ran under the counting runner
+  parent PID 17263, child PID 17267, both recorded while the run was going
+  both gone after 50 ms of polling; ps -p 17263,17267 lists 0 of 2
+  check: ENOBUFS well before the timeout under the counting runner, nothing left: yes
+
+== In time: a run that finishes before its 60 s timeout
+  status 0, stdout "done\n", elapsed 584 ms, CPU 530 ms, peak RSS 50.5 MiB (the command burns 500 ms of CPU)
+  check: status 0, stdout "done\n", elapsed and CPU >= 500 ms, RSS > 10 MiB: yes
+  a run that exited in time (status 0) leaving a background child in its group: child PID 17358 still running, as it should be
+  check: the in-time run was not stopped with its group: yes
+
+== The wrong program: twin timeout-group-left-running (no group kill after ETIMEDOUT), same timeout case
+  measureOnce threw ETIMEDOUT after 3008 ms (expected ETIMEDOUT); the measured command ran under /usr/bin/time
+  parent PID 17415, child PID 17418, both recorded while the run was going
+  parent and child left running; ps -p 17415,17418 lists 2 of 2
+  check: the twin leaves both processes (what the suite catches); this script then stops them: yes
+
+RESULT: PASS (7 of 7 checks)
+
+== Suites (node --test) on the clone
+  tests/benchmark.test.mjs: exit 0, tests 18, pass 18, fail 0
+  tests/acceptance/1322/*.test.mjs: exit 0, tests 7, pass 7, fail 0
+  clone after the runs: 0 files changed
+
+== The new suite on each twin of benchmark.mjs laid over a copy of the clone
+  timeout-group-left-running: fails #1322.0e535c64 x2, passes 5 of 7; only tests of its twins.json tag fail: yes
+  overflow-group-left-running: fails #1322.2df04a4b x1, passes 6 of 7; only tests of its twins.json tag fail: yes
+  in-time-group-killed: fails #1322.160d30bf x1, passes 6 of 7; only tests of its twins.json tag fail: yes
+  in-time-cpu-in-seconds: fails #1322.160d30bf x3, passes 4 of 7; only tests of its twins.json tag fail: yes
