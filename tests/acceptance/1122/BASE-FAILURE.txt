@@ -1,0 +1,195 @@
+# #1122 acceptance tests: the run on the base, and the planted wrong programs
+
+## The base (c948b6473: no scripts/lane-remote.mjs, mergeRecords merging whole records), in this worktree
+
+Run once on 2026-11-22 (2026-11-23T01:59:48Z), on the 12-core Mac this was drafted on, node v24.22.0, with node_modules from
+npm ci and the packages built. Load before: 86.66 66.58 49.65; after: 62.12 70.22 54.37. Wall time 151 s, most of it
+the deep-hook scene's cold build of the crate's tests before it reaches the missing script.
+
+$ node --test tests/acceptance/1122/*.test.mjs        (exit 1)
+(stack-trace and assertion-object lines dropped; home paths read ~, each test's sandbox <sandbox>)
+
+✔ #1122.e6c3b0b8 a Spark FAIL and a Mac pass of the same test id merge to FAIL, naming the lane (204.528042ms)
+✖ #1122.7d260bb4 a row the Mac ran stands over the Spark's skipped row of the same id, so the merge reads PASS as a full Mac run does (322.413375ms)
+✖ #1122.7d260bb4 a lane with a Spark record and none from a Mac is never PASS: it reads INCONCLUSIVE (99.073458ms)
+✖ #1122.821346f6 a Spark lint FAIL beside the Mac's lint PASS leaves the lint verdict the Mac's, and the Mac's lint FAIL stands beside a Spark PASS (87.415459ms)
+✖ #1122.821346f6 a Spark lint PASS with no Mac lint record is no lint verdict: the tree reads INCONCLUSIVE, naming lint (70.770291ms)
+✖ #1122.7d260bb4 a tree that passes: the merged unit verdict is PASS, as the full Mac run of the same tree (8769.54ms)
+✖ #1122.7d260bb4 a bug in a darwin-only branch, which the Spark passes: the merged unit verdict is FAIL, as the full Mac run (6382.800625ms)
+✖ #1122.7d260bb4 a failing test the Spark skipped: the merged unit verdict is FAIL, as the full Mac run (7476.643625ms)
+✖ #1122.7d260bb4 a failing test only the Spark ran: the merged unit verdict is FAIL, as the full Mac run (5992.446708ms)
+✖ #1122.e6c3b0b8 the Spark's FAIL of a test the Mac's --only run passes merges to FAIL: "FAIL unit (merged)", exit 1 (7092.282708ms)
+✖ #1122.7d260bb4 with no fetched record of the tree and lane, --only runs nothing: BLOCKED lane-remote, exit 3 (928.181125ms)
+✖ #1122.b0863068 a planted bug in the darwin-only branch of packages/record/src/storage.ts makes the merged unit verdict FAIL (19450.524125ms)
+✖ #1122.b0863068 a planted bug in deep-hook's macOS args_of makes the merged unit verdict FAIL (130720.877083ms)
+✖ #1122.51c750de an untracked tagged test in the session worktree runs on the far machine, and its row comes back in the fetched record (1895.571416ms)
+✖ #1122.394befd9 a shipped merge base that differs from the one the far end computes refuses the run, naming both (1675.828417ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 1
+ℹ fail 14
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 150857.8185
+
+Each failure, at its assertion:
+
+✖ #1122.7d260bb4 a row the Mac ran stands over the Spark's skipped row of the same id, so the merge reads PASS as a full Mac run does (322.413375ms)
+  AssertionError [ERR_ASSERTION]: every test id ran and passed on one machine or the other, as on a full Mac run: {"tree":"ba1aef73f32518a65569b1e61622dd9cd2b8f856","state":"INCONCLUSIVE","lanes":["unit"]}
+  + 'INCONCLUSIVE'
+  - 'PASS'
+
+✖ #1122.7d260bb4 a lane with a Spark record and none from a Mac is never PASS: it reads INCONCLUSIVE (99.073458ms)
+  AssertionError [ERR_ASSERTION]: what only the Mac can run is unrun, so the tree is not PASS: {"tree":"7c0ddad635b5083a48ea77210d0d7a2bcfd87687","state":"PASS","lanes":["unit"]}
+  + 'PASS'
+  - 'INCONCLUSIVE'
+
+✖ #1122.821346f6 a Spark lint FAIL beside the Mac's lint PASS leaves the lint verdict the Mac's, and the Mac's lint FAIL stands beside a Spark PASS (87.415459ms)
+  AssertionError [ERR_ASSERTION]: the Spark's lint record is a reading, left out whatever its state: {"tree":"df313fd08c0a034fe6ceb51293e4efa1022a33eb","state":"FAIL","lanes":["lint"]}
+
+✖ #1122.821346f6 a Spark lint PASS with no Mac lint record is no lint verdict: the tree reads INCONCLUSIVE, naming lint (70.770291ms)
+  AssertionError [ERR_ASSERTION]: a Spark lint PASS never counts as the lint verdict: {"tree":"0e5f0c2256c5916a86fb352edae4ea484bbad15a","state":"PASS","lanes":["lint","unit","unit"]}
+  + 'PASS'
+  - 'INCONCLUSIVE'
+
+✖ #1122.7d260bb4 a tree that passes: the merged unit verdict is PASS, as the full Mac run of the same tree (8769.54ms)
+  AssertionError [ERR_ASSERTION]: node scripts/lane-remote.mjs --only unit ends with "PASS unit (merged)", the full Mac run's state
+  (stderr) Error: Cannot find module '<sandbox>/session/scripts/lane-remote.mjs'
+
+✖ #1122.7d260bb4 a bug in a darwin-only branch, which the Spark passes: the merged unit verdict is FAIL, as the full Mac run (6382.800625ms)
+  AssertionError [ERR_ASSERTION]: node scripts/lane-remote.mjs --only unit ends with "FAIL unit (merged)", the full Mac run's state
+  (stderr) Error: Cannot find module '<sandbox>/session/scripts/lane-remote.mjs'
+
+✖ #1122.7d260bb4 a failing test the Spark skipped: the merged unit verdict is FAIL, as the full Mac run (7476.643625ms)
+  AssertionError [ERR_ASSERTION]: node scripts/lane-remote.mjs --only unit ends with "FAIL unit (merged)", the full Mac run's state
+  (stderr) Error: Cannot find module '<sandbox>/session/scripts/lane-remote.mjs'
+
+✖ #1122.7d260bb4 a failing test only the Spark ran: the merged unit verdict is FAIL, as the full Mac run (5992.446708ms)
+  AssertionError [ERR_ASSERTION]: node scripts/lane-remote.mjs --only unit ends with "FAIL unit (merged)", the full Mac run's state
+  (stderr) Error: Cannot find module '<sandbox>/session/scripts/lane-remote.mjs'
+
+✖ #1122.e6c3b0b8 the Spark's FAIL of a test the Mac's --only run passes merges to FAIL: "FAIL unit (merged)", exit 1 (7092.282708ms)
+  AssertionError [ERR_ASSERTION]: the Mac's --only run ran the same test id and passed it
+  - 'PASS'
+  (stderr) Error: Cannot find module '<sandbox>/session/scripts/lane-remote.mjs'
+
+✖ #1122.7d260bb4 with no fetched record of the tree and lane, --only runs nothing: BLOCKED lane-remote, exit 3 (928.181125ms)
+  AssertionError [ERR_ASSERTION]: the run reads "BLOCKED lane-remote"
+  (stderr) Error: Cannot find module '<sandbox>/session/scripts/lane-remote.mjs'
+
+✖ #1122.b0863068 a planted bug in the darwin-only branch of packages/record/src/storage.ts makes the merged unit verdict FAIL (19450.524125ms)
+  AssertionError [ERR_ASSERTION]: before the plant, node scripts/lane-remote.mjs --only unit ends with its merged line, "<STATE> unit (merged)"
+  (stderr) Error: Cannot find module '<sandbox>/session/scripts/lane-remote.mjs'
+
+✖ #1122.b0863068 a planted bug in deep-hook's macOS args_of makes the merged unit verdict FAIL (130720.877083ms)
+  AssertionError [ERR_ASSERTION]: before the plant, node scripts/lane-remote.mjs --only unit ends with its merged line, "<STATE> unit (merged)"
+  (stderr) Error: Cannot find module '<sandbox>/session/scripts/lane-remote.mjs'
+
+✖ #1122.51c750de an untracked tagged test in the session worktree runs on the far machine, and its row comes back in the fetched record (1895.571416ms)
+  AssertionError [ERR_ASSERTION]: node scripts/lane-remote.mjs --host far-1122 unit exits 0 on a tree whose unit lane passes
+  (stderr) Error: Cannot find module '<sandbox>/session/scripts/lane-remote.mjs'
+
+✖ #1122.394befd9 a shipped merge base that differs from the one the far end computes refuses the run, naming both (1675.828417ms)
+  AssertionError [ERR_ASSERTION]: a shipment whose merge base the far end computes too runs the lane
+  (stderr) Error: Cannot find module '<sandbox>/session/scripts/lane-remote.mjs'
+
+14 of 15 fail at their own assertion, each because the base has no scripts/lane-remote.mjs or merges whole records.
+The one that passes, "a Spark FAIL and a Mac pass of the same test id merge to FAIL", passes because the base takes
+the worst record: its wrong program is the twin mac-pass-wins, below.
+
+An earlier run of an earlier draft on the same base, at a load of 34 to 46 beside this job's other runs, read the
+deep-hook scene differently: the crate's own unreadable_payloads test
+a_payload_deep_hook_cannot_read_is_denied_with_the_hub_up_and_down failed in the full Mac run before any plant. That
+scene now runs deep-hook's tests one at a time (RUST_TEST_THREADS=1) and, when the unit lane FAILs before the plant,
+skips with a note starting INCONCLUSIVE and naming the failing tests (invariant 2), since nothing could then be shown
+of the plant.
+
+## The twin kept as a file: twins/mac-pass-wins/scripts/lanes.mjs
+
+Laid over scripts/lanes.mjs in a copy of the checkout, then
+$ node --test tests/acceptance/1122/merge.test.mjs
+
+✖ #1122.e6c3b0b8 a Spark FAIL and a Mac pass of the same test id merge to FAIL, naming the lane (60.604833ms)
+✔ #1122.7d260bb4 a row the Mac ran stands over the Spark's skipped row of the same id, so the merge reads PASS as a full Mac run does (65.004125ms)
+✔ #1122.7d260bb4 a lane with a Spark record and none from a Mac is never PASS: it reads INCONCLUSIVE (51.098417ms)
+✔ #1122.821346f6 a Spark lint FAIL beside the Mac's lint PASS leaves the lint verdict the Mac's, and the Mac's lint FAIL stands beside a Spark PASS (112.337584ms)
+✔ #1122.821346f6 a Spark lint PASS with no Mac lint record is no lint verdict: the tree reads INCONCLUSIVE, naming lint (50.803458ms)
+
+## A throwaway implementation (not kept, not the program under test)
+
+A stand-in scripts/lane-remote.mjs (near end, far end, --only) and a mergeRecords per test ID, written in this job's
+scratch folder into a copy of the checkout, only to tell a test bug from a real failure. Run on 2026-11-22
+(2026-11-23T01:55:28Z), load before: 59.32 48.86 39.37; after: 86.66 66.58 49.65. Wall time 259 s.
+
+$ node --test tests/acceptance/1122/*.test.mjs        (exit 0)
+
+✔ #1122.e6c3b0b8 a Spark FAIL and a Mac pass of the same test id merge to FAIL, naming the lane (73.175292ms)
+✔ #1122.7d260bb4 a row the Mac ran stands over the Spark's skipped row of the same id, so the merge reads PASS as a full Mac run does (59.025166ms)
+✔ #1122.7d260bb4 a lane with a Spark record and none from a Mac is never PASS: it reads INCONCLUSIVE (46.838542ms)
+✔ #1122.821346f6 a Spark lint FAIL beside the Mac's lint PASS leaves the lint verdict the Mac's, and the Mac's lint FAIL stands beside a Spark PASS (104.351084ms)
+✔ #1122.821346f6 a Spark lint PASS with no Mac lint record is no lint verdict: the tree reads INCONCLUSIVE, naming lint (59.991541ms)
+✔ #1122.7d260bb4 a tree that passes: the merged unit verdict is PASS, as the full Mac run of the same tree (8785.435ms)
+✔ #1122.7d260bb4 a bug in a darwin-only branch, which the Spark passes: the merged unit verdict is FAIL, as the full Mac run (8583.376125ms)
+✔ #1122.7d260bb4 a failing test the Spark skipped: the merged unit verdict is FAIL, as the full Mac run (7779.605ms)
+✔ #1122.7d260bb4 a failing test only the Spark ran: the merged unit verdict is FAIL, as the full Mac run (9017.296958ms)
+✔ #1122.e6c3b0b8 the Spark's FAIL of a test the Mac's --only run passes merges to FAIL: "FAIL unit (merged)", exit 1 (10269.357625ms)
+✔ #1122.7d260bb4 with no fetched record of the tree and lane, --only runs nothing: BLOCKED lane-remote, exit 3 (1077.9805ms)
+✔ #1122.b0863068 a planted bug in the darwin-only branch of packages/record/src/storage.ts makes the merged unit verdict FAIL (40349.929125ms)
+✔ #1122.b0863068 a planted bug in deep-hook's macOS args_of makes the merged unit verdict FAIL (218173.288292ms)
+✔ #1122.51c750de an untracked tagged test in the session worktree runs on the far machine, and its row comes back in the fetched record (8475.175667ms)
+✔ #1122.394befd9 a shipped merge base that differs from the one the far end computes refuses the run, naming both (9384.397375ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 258742.4925
+
+## The planted wrong programs, each one fault in the throwaway implementation
+
+The tests each fault failed; every other test of the files run passed. The merge faults ran merge.test.mjs and
+only.test.mjs; the shipping faults ship.test.mjs; the two --only faults only.test.mjs and planted.test.mjs.
+summary-trusted (the near end reads the far end's exit status, not the fetched record's state) is in no criterion
+and no test here fails it: README, What stays unproven. Run one fault at a time, starting 2026-11-23T02:02:31Z,
+load before: 62.13 69.85 54.51; after: 54.94 69.05 62.68.
+
+mac-pass-wins
+  ✖ #1122.e6c3b0b8 a Spark FAIL and a Mac pass of the same test id merge to FAIL, naming the lane
+  ✖ #1122.e6c3b0b8 the Spark's FAIL of a test the Mac's --only run passes merges to FAIL: "FAIL unit (merged)", exit 1
+
+spark-lint-counts
+  ✖ #1122.821346f6 a Spark lint FAIL beside the Mac's lint PASS leaves the lint verdict the Mac's, and the Mac's lint FAIL stands beside a Spark PASS
+
+skipped-row-stands
+  ✖ #1122.7d260bb4 a row the Mac ran stands over the Spark's skipped row of the same id, so the merge reads PASS as a full Mac run does
+  ✖ #1122.7d260bb4 a tree that passes: the merged unit verdict is PASS, as the full Mac run of the same tree
+
+spark-alone-passes
+  ✖ #1122.7d260bb4 a lane with a Spark record and none from a Mac is never PASS: it reads INCONCLUSIVE
+
+trusted-base
+  ✖ #1122.394befd9 a shipped merge base that differs from the one the far end computes refuses the run, naming both
+
+tracked-only
+  ✖ #1122.51c750de an untracked tagged test in the session worktree runs on the far machine, and its row comes back in the fetched record
+
+summary-trusted
+  (no test failed)
+
+only-skipped-rows
+  ✖ #1122.7d260bb4 a bug in a darwin-only branch, which the Spark passes: the merged unit verdict is FAIL, as the full Mac run
+  ✖ #1122.7d260bb4 a failing test only the Spark ran: the merged unit verdict is FAIL, as the full Mac run
+  ✖ #1122.7d260bb4 a failing test the Spark skipped: the merged unit verdict is FAIL, as the full Mac run
+  ✖ #1122.7d260bb4 a tree that passes: the merged unit verdict is PASS, as the full Mac run of the same tree
+  ✖ #1122.b0863068 a planted bug in deep-hook's macOS args_of makes the merged unit verdict FAIL
+  ✖ #1122.b0863068 a planted bug in the darwin-only branch of packages/record/src/storage.ts makes the merged unit verdict FAIL
+  ✖ #1122.e6c3b0b8 the Spark's FAIL of a test the Mac's --only run passes merges to FAIL: "FAIL unit (merged)", exit 1
+
+only-platform-sources
+  ✖ #1122.7d260bb4 a bug in a darwin-only branch, which the Spark passes: the merged unit verdict is FAIL, as the full Mac run
+  ✖ #1122.7d260bb4 a failing test only the Spark ran: the merged unit verdict is FAIL, as the full Mac run
+  ✖ #1122.7d260bb4 a failing test the Spark skipped: the merged unit verdict is FAIL, as the full Mac run
+  ✖ #1122.7d260bb4 a tree that passes: the merged unit verdict is PASS, as the full Mac run of the same tree

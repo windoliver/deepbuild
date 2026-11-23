@@ -1,0 +1,32 @@
+worktree: ~/deepbuild-runs-1119/clone/.claude/worktrees/a
+head: 61aa8eb06bb8e41f93ddff044b5a9df8771fbab6  origin/main: 61aa8eb06bb8e41f93ddff044b5a9df8771fbab6
+MacBook-Pro.local
+Mac18,1
+12
+34359738368
+ProductName:		macOS ProductVersion:		27.2.1 BuildVersion:		26B7131 
+v24.22.0
+cargo 1.99.1 (5f94df478 2026-08-27)
+command: node scripts/throttle.mjs build --wait 720 -- node scripts/perf.mjs '{"status":0,"elapsedMs":1,"cpuMs":1,"peakBytes":1}'
+== start 2026-11-23T09:18:41Z
+ 1:18  up 3 days,  5:45, 4 users, load averages: 41.11 70.08 95.40
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22610019)	100%; charged; 0:00 remaining present: true
+/dev/disk3s5   926Gi   753Gi   129Gi    86%     11M  1.4G    1%   /System/Volumes/Data
+139G	~/Library/Caches/deepbuild-perf/MacBook-Pro-3b7e28487b8d
+exit: 1
+base-copy Compiling lines: 79
+cargo calls logged:      171
+== end 2026-11-23T10:14:10Z
+ 2:14  up 3 days,  6:40, 4 users, load averages: 18.19 23.63 30.36
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22610019)	100%; charged; 0:00 remaining present: true
+/dev/disk3s5   926Gi   742Gi   145Gi    84%     11M  1.5G    1%   /System/Volumes/Data
+139G	~/Library/Caches/deepbuild-perf/MacBook-Pro-3b7e28487b8d
+kept copy idle after 0x30 s

@@ -5,22 +5,32 @@
 import net from 'node:net';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { createInterface } from 'node:readline';
 import { expect, it } from 'vitest';
 import { ulid } from '../src/wire.js';
 import { hookLine, send, session, withHub } from './hub.js';
 
 type Line = Record<string, any>;
 const MIB = 1 << 20;
-const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 const bytes = (events: Line[]) => events.reduce((sum, e) => sum + Buffer.byteLength(JSON.stringify(e)), 0);
 
-/** The app's connection: `call` resolves with a method's result, or throws its refusal. */
-async function asApp(root: string): Promise<{ call: (method: string, params: Line) => Promise<Line>; close: () => void }> {
+/**
+ * The app's connection: `call` resolves with a method's result, or throws its refusal; `streamed` subscribes to the
+ * whole stream from the log's start and resolves once the events it has streamed pass `test`.
+ */
+async function asApp(root: string): Promise<{ call: (method: string, params: Line) => Promise<Line>; streamed: (test: (events: Line[]) => boolean) => Promise<void>; close: () => void }> {
   const sock = net.connect(join(root, 'hub.sock'));
   const lines: Line[] = [];
-  let buf = '';
-  sock.on('data', (d) => { buf += d; let i; while ((i = buf.indexOf('\n')) >= 0) { lines.push(JSON.parse(buf.slice(0, i))); buf = buf.slice(i + 1); } });
-  const until = async <T>(f: () => T | undefined): Promise<T> => { for (let i = 0; i < 1200; i++) { const v = f(); if (v) return v; await sleep(50); } throw Error('no answer from the hub'); };
+  type Waiter = { look: () => void; fail: (e: Error) => void };
+  const waiting = new Set<Waiter>();
+  createInterface({ input: sock }).on('line', (raw) => { lines.push(JSON.parse(raw)); for (const w of [...waiting]) w.look(); });
+  sock.on('close', () => { for (const w of waiting) w.fail(Error('no answer from the hub: it hung up')); });
+  // The first line `f` picks, read already or when it comes.
+  const until = <T>(f: () => T | undefined): Promise<T> => new Promise((resolve, reject) => {
+    const w: Waiter = { look: () => { const v = f(); if (v) { waiting.delete(w); resolve(v); } }, fail: reject };
+    waiting.add(w);
+    w.look();
+  });
   await until(() => lines[0]);
   sock.write(`${JSON.stringify({ v: 1, hello: 'app', token: readFileSync(join(root, 'control.token'), 'utf8').trim() })}\n`);
   await until(() => lines.find((l) => l.role));
@@ -33,7 +43,11 @@ async function asApp(root: string): Promise<{ call: (method: string, params: Lin
       if (!reply.result) throw Error(`${method} was refused: ${JSON.stringify(reply.error)}`);
       return reply.result;
     },
-    close: () => sock.destroy(),
+    streamed: async (test) => {
+      sock.write(`${JSON.stringify({ v: 1, id: 'all', method: 'stream.subscribe', params: { after: 0 } })}\n`);
+      await until(() => test(lines.filter((l) => l.id === 'all' && l.event).map((l) => l.event as Line)) || undefined);
+    },
+    close: () => { waiting.clear(); sock.destroy(); },
   };
 }
 
@@ -61,9 +75,19 @@ it('events.read, a session\'s page and sessions.read each read a page a phone ca
     }
     await hook(d, 'SessionStart', { source: 'startup' });
     const app = await asApp(root);
-    // Settled: the log's end hasn't moved for a second.
-    const end = async () => { let after = 0; for (;;) { const p = await app.call('events.read', { after, limit: 1000 }); if (!p.events.length) return after; after = p.log_pos; } };
-    for (let was = -1, now = await end(); now !== was; was = now, await sleep(1000), now = await end());
+    // Settled, read off the stream as each event comes: every hook sent is on the record with its start's rules, A and
+    // B (whose windows are held to the log below) read finished, and D reads working in a state pass that came after
+    // every hook event of A and B. A state pass appends only what changed, so no pass after these adds to A or B.
+    await app.streamed((events) => {
+      const count = (kind: string) => events.filter((e) => e.kind === kind).length;
+      const state = (id: string) => events.filter((e) => e.session === id && e.kind === 'session.state').at(-1);
+      const live = state(d);
+      const hooked = events.filter((e) => (e.session === a || e.session === b) && ['session.start', 'user.ask', 'agent.stop'].includes(e.kind));
+      return count('session.start') === 3 + others.length && count('session.rules_delivered') === 3 + others.length
+        && count('user.ask') === 12 + 160 + others.length && count('agent.stop') === 13 + others.length
+        && state(a)?.data?.state === 'finished' && state(b)?.data?.state === 'finished' && live?.data?.state === 'working'
+        && hooked.every((e) => e.log_pos < live.log_pos);
+    });
 
     // events.read: each page's events past its first come to at most 1 MiB, a page the cap ended says `more`, and
     // paging on finds every event once, in order.

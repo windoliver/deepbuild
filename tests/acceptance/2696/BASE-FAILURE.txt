@@ -1,0 +1,159 @@
+#2696 acceptance suite on the base build, each file alone as the lanes run it (node --test <file>).
+Two runs on the same build: base.test.mjs after its heap test went from three readings a side to five; the other two files from the first run.
+
+== run of base.test.mjs ==
+base: 3c500c0c8f9b43172d733decddd04705f73317b6
+date: 2026-11-23T02:28:34Z
+uptime: 18:28  up 9 days, 11:30, 3 users, load averages: 200.05 160.15 99.29
+node: v24.22.0
+
+$ node --test tests/acceptance/2696/base.test.mjs
+✖ #2696.5a61170b after npm run build --workspaces no built file under packages/*/dist holds a character above U+00FF, where 53 or more do on the merge base (492493.646334ms)
+✔ #2696.6fbf771a every message that holds a character above U+00FF reads the same in this build as in the merge base's, character for character, and both builds of each package load, export and print the same (4802.089625ms)
+✔ #2696.534150b4 each built file has the same number of lines as on the merge base (75.787917ms)
+✔ #2696.534150b4 an error thrown from packages/hub/dist/core.js names the same line as on the merge base (847.705834ms)
+#2696 core thread heap after two full collections, MB: merge base 3c500c0c8 23.884, 23.867, 23.803, 23.882, 23.805 (median 23.867); this build 23.815, 23.876, 23.842, 23.892, 23.830 (median 23.842); 0.025 under
+✖ #2696.be4d3304 after a start on the 30-day record the core thread's heap after two full collections is at least 1.2 MB under the merge base's (206927.523042ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 3
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 708547.529625
+
+✖ failing tests:
+
+test at tests/acceptance/2696/base.test.mjs:20:1
+✖ #2696.5a61170b after npm run build --workspaces no built file under packages/*/dist holds a character above U+00FF, where 53 or more do on the merge base (492493.646334ms)
+  AssertionError [ERR_ASSERTION]: 78 of the 534 built text files under packages/*/dist hold a character above U+00FF (78 do on the merge base 3c500c0c8); the first is packages/asks/dist/model.d.ts:22 (U+2026)
+  
+  78 !== 0
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/2696/base.test.mjs:29:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 78,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2696/base.test.mjs:164:1
+✖ #2696.be4d3304 after a start on the 30-day record the core thread's heap after two full collections is at least 1.2 MB under the merge base's (206927.523042ms)
+  AssertionError [ERR_ASSERTION]: the core thread's heap after two full collections is 23.842 MB in this build (readings 23.815, 23.876, 23.842, 23.892, 23.830) and 23.867 MB on the merge base 3c500c0c8 (readings 23.884, 23.867, 23.803, 23.882, 23.805): 0.025 MB under it, where the criterion asks for at least 1.2 MB
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/2696/base.test.mjs:180:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+exit 1 (709 s)
+
+total 709 s; uptime after: 18:40  up 9 days, 11:42, 3 users, load averages: 61.92 115.05 112.53
+
+== first run (its base.test.mjs output, with three readings a side, left out) ==
+base: 3c500c0c8f9b43172d733decddd04705f73317b6
+date: 2026-11-23T02:16:19Z
+uptime: 18:16  up 9 days, 11:18, 3 users, load averages: 26.45 26.97 24.17
+node: v24.22.0
+
+$ node --test tests/acceptance/2696/newfile.test.mjs
+✖ #2696.ced33c08 a new source file with a curly quote in a message builds to a file with none (30856.479417ms)
+✔ #2696.6fbf771a the new source file's messages read as written once built, a raw template's value among them (1.993417ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 33755.729917
+
+✖ failing tests:
+
+test at tests/acceptance/2696/newfile.test.mjs:49:1
+✖ #2696.ced33c08 a new source file with a curly quote in a message builds to a file with none (30856.479417ms)
+  AssertionError [ERR_ASSERTION]: the new source file's messages were built with their characters above U+00FF left in: packages/verdicts/dist/planted2696.js:2 holds U+2019
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/2696/newfile.test.mjs:56:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+exit 1 (34 s)
+
+$ node --test tests/acceptance/2696/lint.test.mjs
+✖ #2696.ced33c08 the lint lane fails on a built file that a planted build left unescaped, naming it (295198.31375ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 296331.2965
+
+✖ failing tests:
+
+test at tests/acceptance/2696/lint.test.mjs:29:1
+✖ #2696.ced33c08 the lint lane fails on a built file that a planted build left unescaped, naming it (295198.31375ms)
+  AssertionError [ERR_ASSERTION]: no command of the lint lane failed naming packages/verdicts/dist/planted-2696-unescaped.js, a built file whose line 23 holds U+2019 and U+2026; its 28 node commands ran:
+  node scripts/repo-rules.mjs: exit 1
+  node scripts/vendor-rebase.mjs check: exit 1
+  node scripts/canvas-lint.mjs: exit 1
+  node scripts/size-ratchet.mjs: exit 1
+  node scripts/wait-ratchet.mjs: exit 1
+  node scripts/doc-ceilings.mjs: exit 1
+  node scripts/reading-rule.mjs: exit 0
+  node scripts/conformance-lint.mjs: exit 0
+  node scripts/slots-check.mjs: exit 0
+  node scripts/canvas-closures.mjs closures: exit 0
+  node scripts/canvas-closures.mjs drift: exit 1
+  node scripts/canvas-closures.mjs paths: exit 0
+  node scripts/record-reader-guard.mjs: exit 0
+  node scripts/render-lint.mjs: exit 0
+  node scripts/plant-lint.mjs: exit 0
+  node scripts/loads-lint.mjs: exit 0
+  node scripts/budget-table.mjs check: exit 0
+  node scripts/cache-lint.mjs: exit 0
+  node scripts/blocking-call-guard.mjs: exit 0
+  node scripts/ask-sources-guard.mjs: exit 0
+  node scripts/keymap-guard.mjs: exit 0
+  node scripts/color-literal-guard.mjs: exit 0
+  node scripts/guide.mjs --check: exit 0
+  node scripts/panel-catalog.mjs: exit 0
+  node scripts/known-failures-check.mjs: exit 1
+  node scripts/fetch-lock.mjs lint: exit 0
+  node scripts/exit-lint.mjs: exit 1
+  node scripts/app-copy-lint.mjs: exit 1
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/2696/lint.test.mjs:54:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+exit 1 (297 s)
+
+total 713 s; uptime after: 18:28  up 9 days, 11:30, 3 users, load averages: 199.86 157.28 96.85
