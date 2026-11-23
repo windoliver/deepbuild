@@ -1,6 +1,6 @@
 #!/bin/bash
 # The #1322 e2e hand run as recorded in run.txt and e2e-terminal.png (macOS: cp -c is an APFS clone). It clones the
-# PR branch fresh from GitHub into a temp folder; run.txt was taken on the commit that added this script. Scripts beside it:
+# PR branch fresh from GitHub into a temp folder; run.txt names the commit it was taken on (its HEAD line). Scripts beside it:
 # e2e.mjs (the measureOnce cases) and twin-tally.mjs (judges the suite's run on each twin against twins.json).
 export PATH="$HOME/.nvm/versions/node/v24.22.0/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 E="$(cd "$(dirname "$0")" && pwd)"
