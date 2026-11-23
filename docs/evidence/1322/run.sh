@@ -8,7 +8,7 @@ W="$(mktemp -d "${TMPDIR:-/tmp}/e2e-1322-run.XXXXXX")"
 C="$W/clone"
 T="$W/twin"
 trap 'rm -rf "$W"' EXIT
-git clone -q --branch claude/issue-1322-measureonce-04bebe https://github.com/windoliver/deepbuild.git "$C"
+git clone -q --branch claude/issue-1322-measureonce-04bebe https://github.com/windoliver/deepbuild.git "$C" || exit 1
 git -C "$C" fetch -q origin +refs/heads/main:refs/remotes/origin/main
 mkdir -p "$T"
 cp "$C/tests/acceptance/1322/twins/timeout-group-left-running/scripts/benchmark.mjs" "$C/scripts/proof-approvals.mjs" "$T/"
@@ -23,7 +23,7 @@ echo "$(uname -sm), node $(node --version), $(date '+%Y-%m-%d %H:%M %Z')"
 node "$E/e2e.mjs" "$C" "$T"
 echo
 echo "== Suites (node --test) on the clone"
-cd "$C"
+cd "$C" || exit 1
 for f in tests/benchmark.test.mjs 'tests/acceptance/1322/*.test.mjs'; do
   node --test "$f" > "$W/suite.log" 2>&1
   echo "  $f: exit $?, $(grep -e '^ℹ tests' -e '^ℹ pass' -e '^ℹ fail' "$W/suite.log" | sed 's/^ℹ //' | tr '\n' ',' | sed 's/,$//; s/,/, /g')"
@@ -34,10 +34,10 @@ echo "== The new suite on each twin of benchmark.mjs laid over a copy of the clo
 for tw in timeout-group-left-running overflow-group-left-running in-time-group-killed in-time-cpu-in-seconds; do
   rm -rf "$C-twin"; cp -cR "$C" "$C-twin"
   cp "$C/tests/acceptance/1322/twins/$tw/scripts/benchmark.mjs" "$C-twin/scripts/benchmark.mjs"
-  cd "$C-twin"
+  cd "$C-twin" || exit 1
   node --test --test-reporter=tap 'tests/acceptance/1322/*.test.mjs' > "$W/suite.log" 2>&1
   node "$E/twin-tally.mjs" "$C/tests/acceptance/1322/twins.json" "$tw" "$W/suite.log" $?
-  cd "$C"
+  cd "$C" || exit 1
 done
 cd /tmp
 } 2>&1 | tee "$W/run.log"
