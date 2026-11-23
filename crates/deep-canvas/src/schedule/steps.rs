@@ -12,8 +12,8 @@
 //! frame's time and steps forward from it, so seeking equals playing; without checkpoints it
 //! starts again from the timeline's start.
 //!
-//! The checkpoints are a ring with a byte budget (#2693; Checkpoint ring): the bytes the
-//! stepping modules declare for their `checkpoint` state, 16 MiB where they declare none. The
+//! The checkpoints are a ring with a byte budget (#2693; Checkpoint ring): what each stepping
+//! module declares for its `checkpoint` state, or 16 MiB for one that declares none, summed. The
 //! spacing starts at the input track's 0.5 s; when the ring passes its budget it lets go of
 //! every second checkpoint and the spacing doubles, as often as it takes. The checkpoint at
 //! the timeline's start is always kept, and every multiple of the spacing up to the newest is
@@ -53,12 +53,13 @@ pub(super) struct Steps {
     failed: BTreeMap<usize, OpError>,
     /// `failed` as of each checkpoint, which a seek onto it restores with the arrays.
     failed_at: BTreeMap<i64, BTreeMap<usize, OpError>>,
-    /// Each checkpoint's bytes, as the ring counts them against its budget.
+    /// Each checkpoint's bytes, as the ring counts them against its budget, and their sum.
     bytes: BTreeMap<i64, u64>,
+    total: u64,
     /// The ring's spacing: the input track's, doubled each time the ring passed its budget.
     spacing: i64,
     /// Whether the start's checkpoint and one more alone pass the budget, so the ring holds
-    /// only those two.
+    /// only those two from then until the steps start again.
     over_budget: bool,
 }
 
@@ -74,6 +75,7 @@ impl Default for Steps {
             failed: BTreeMap::new(),
             failed_at: BTreeMap::new(),
             bytes: BTreeMap::new(),
+            total: 0,
             spacing: CHECKPOINT_EVERY,
             over_budget: false,
         }
@@ -98,7 +100,8 @@ impl Steps {
     /// Takes the checkpoint at `c`, then keeps the ring within its budget: past it, every second
     /// checkpoint goes and the spacing doubles, until it fits or holds only two.
     fn take(&mut self, c: i64, budget: u64, planted: &Planted) {
-        self.bytes.insert(c, checkpoint_bytes(&self.values));
+        let bytes = checkpoint_bytes(&self.values, &self.failed);
+        self.total = self.total - self.bytes.insert(c, bytes).unwrap_or(0) + bytes;
         self.checkpoints.insert(c, self.values.clone());
         self.failed_at.insert(c, self.failed.clone());
         if planted.ring_newest_only {
@@ -109,7 +112,7 @@ impl Steps {
             self.keep(|t| t == 0 || t == c);
             return;
         }
-        while self.bytes.values().sum::<u64>() > budget {
+        while self.total > budget {
             if self.checkpoints.len() <= 2 {
                 self.over_budget = true;
                 self.keep(|t| t == 0 || t == c);
@@ -127,6 +130,7 @@ impl Steps {
         self.checkpoints.retain(|t, _| held(*t));
         self.failed_at.retain(|t, _| held(*t));
         self.bytes.retain(|t, _| held(*t));
+        self.total = self.bytes.values().sum();
     }
 
     /// The checkpoint a seek to `to` restores: the last at or before `to`; planted, the nearest
@@ -153,16 +157,19 @@ impl Steps {
 }
 
 /// The bytes the ring counts for a checkpoint: its state's (Checkpoint ring: `state: bytes`),
-/// each stepping array's canonical bytes, a JSON value's by its tree in memory. A value two
-/// checkpoints share counts in each; the maps that index them are the ring's, not the state's.
-fn checkpoint_bytes(values: &BTreeMap<String, Val>) -> u64 {
-    (values.values())
+/// each stepping array's canonical bytes, a JSON value's by its tree in memory, and each failed
+/// step's error by its path, at least one byte, so a ring of empty states is bounded too. A
+/// value two checkpoints share counts in each; the maps that index them are the ring's.
+fn checkpoint_bytes(values: &BTreeMap<String, Val>, failed: &BTreeMap<usize, OpError>) -> u64 {
+    let values: u64 = (values.values())
         .map(|v| match v {
             Val::None => 0,
             Val::Json(j) => json_bytes(j),
             Val::Typed(_) => v.bytes().len() as u64,
         })
-        .sum()
+        .sum();
+    let failed: u64 = failed.values().map(|e| e.path.len() as u64 + 1).sum();
+    (values + failed).max(1)
 }
 
 /// A JSON value's bytes in memory: each node, each string's bytes and each member's key.
@@ -178,21 +185,24 @@ fn json_bytes(v: &Value) -> u64 {
     }
 }
 
-/// The ring's budget for these stepping modules: the bytes they declare for their `checkpoint`
-/// carried state, or 16 MiB where they declare none.
+/// The ring's budget for these stepping modules, whose arrays it holds: what each declares for
+/// its `checkpoint` carried state, or 16 MiB for one that declares none.
 fn ring_budget<'a>(sealed: &Sealed, modules: impl Iterator<Item = &'a str>) -> u64 {
     let modules: BTreeSet<&str> = modules.collect();
-    let declared: u64 = (sealed.modules.iter())
+    (sealed.modules.iter())
         .filter(|m| modules.contains(m.name.as_str()))
-        .flat_map(|m| &m.shapes.carried)
-        .filter(|c| c.kind == "checkpoint")
-        .map(|c| c.bytes)
-        .fold(0, u64::saturating_add);
-    if declared == 0 {
-        RING_BUDGET
-    } else {
-        declared
-    }
+        .map(|m| {
+            let declared = (m.shapes.carried.iter())
+                .filter(|c| c.kind == "checkpoint")
+                .map(|c| c.bytes)
+                .fold(0, u64::saturating_add);
+            if declared == 0 {
+                RING_BUDGET
+            } else {
+                declared
+            }
+        })
+        .fold(0, u64::saturating_add)
 }
 
 /// One row of the core's carried-state list as a session holds it now (Carried state; #169):
@@ -435,5 +445,31 @@ impl Session {
             self.steps.checkpoint_through(to, budget, &planted);
         }
         self.steps.at = from.or(self.steps.at);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A stepper that writes nothing still takes a checkpoint every spacing: each counts at
+    /// least a byte, so an hour of them stays within the budget, start's kept (#2693).
+    #[test]
+    fn a_ring_of_empty_states_stays_within_its_budget() {
+        let mut steps = Steps::default();
+        steps.checkpoint_through(3_600 * 2 * CHECKPOINT_EVERY, 64, &Planted::default());
+        let held = steps.checkpoints.len();
+        assert!(
+            held <= 64,
+            "an hour of empty checkpoints holds {held} against a budget of 64 bytes"
+        );
+        assert!(
+            steps.checkpoints.contains_key(&0),
+            "the start's checkpoint is kept"
+        );
+        assert_eq!(
+            steps.total, held as u64,
+            "each empty checkpoint counts one byte"
+        );
     }
 }
