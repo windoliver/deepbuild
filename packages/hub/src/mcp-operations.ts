@@ -51,6 +51,9 @@ import { refuse, Refused, refusal, ulid, type CoreOptions, type Refusal } from '
 import type { CallContext, Stamp } from './session-types.js';
 import { HubCanvas } from './hub-canvas.js';
 import { docCommand, docSpec } from './doc-checks.js';
+import { checksIn } from './spec-entries.js';
+import { approvedSpec } from './approved-spec.js';
+import { headOf } from './session-facts.js';
 
 import { sql, letters, noWake, unseenTools, type Obj, isObj, isUnder, asRefused } from "./hub-shared.js";
 
@@ -476,21 +479,14 @@ export class McpOperations {
 
   /** The checks a worktree's spec names, by name, with the command each runs and its deadline, run count and test count as the spec writes them, where it gives one. */
   checksOf(worktree: string): Map<string, { run: string; deadline?: unknown; type?: string; host?: string; runs?: unknown; accept?: unknown; min_tests?: unknown }> {
-    const spec = this.options.doneSpec(worktree);
-    const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
-    return new Map(Object.entries(checks).flatMap(([name, c]) => {
-      if (!isObj(c) || typeof c.run !== 'string') return [];
-      const written = Object.fromEntries((['deadline', 'runs', 'accept', 'min_tests'] as const).flatMap((key) => (c[key] !== undefined ? [[key, c[key]]] : [])));
-      return [[name, { run: c.run, ...written, ...(typeof c.type === 'string' ? { type: c.type } : {}), ...(typeof c.host === 'string' ? { host: c.host } : {}) }] as const];
-    }));
+    return checksIn(this.options.doneSpec(worktree));
   }
 
   private checkNames(worktree: string): string[] {
     return [...this.checksOf(worktree).keys(), ...this.options.services.canvasSide.docChecksOf(worktree).keys()];
   }
 
-  private unknownCheck(worktree: string, check: unknown): Refused {
-    const names = this.checkNames(worktree);
+  private unknownCheck(names: string[], check: unknown): Refused {
     const near = typeof check === 'string' ? nearest(check, names) : undefined;
     return refuse('enum', '/params/arguments/check', near ? `Name ${near} in place of ${String(check)}.` : `Name a check this repo's .deepbuild/done.yaml names: ${names.join(', ') || 'it names none'}.`, check);
   }
@@ -509,7 +505,8 @@ export class McpOperations {
         if (!slackConfig(this.options.services.root.dir)) throw refuse('required', '/params/arguments/thread', 'No Slack connector: put your Slack user ID in the hub\'s slack.json as {"you": "U…"}, mode 0600, and enter your bot token with deep secret add slack token, to read this thread.', null);
       } else {
         need('check', 'Name the check in the repo\'s spec that will prove the task done; a task without one is refused, since nobody could tell it was done.');
-        if (!this.checksOf(s.cwd).has(String(args.check))) throw this.unknownCheck(s.cwd, args.check);
+        const approved = checksIn((await approvedSpec(s.cwd, (await headOf(s.cwd).catch(() => undefined))?.sha ?? '')).spec);
+        if (!approved.has(String(args.check))) throw this.unknownCheck([...approved.keys()], args.check);
       }
       need('steps', 'List the task\'s steps, in order.');
       need('where', 'Say where the person does the task.');
@@ -713,7 +710,7 @@ export class McpOperations {
     const cwd = this.options.state().sessions.get(session)!.cwd;
     const check = this.checksOf(cwd).get(String(args.check));
     const doc = check ? undefined : this.options.services.canvasSide.docChecksOf(cwd).get(String(args.check));
-    if (check === undefined && doc === undefined) throw this.unknownCheck(cwd, args.check);
+    if (check === undefined && doc === undefined) throw this.unknownCheck(this.checkNames(cwd), args.check);
     // A deadline the hub can't read is refused before the run starts, never taken as none (#822).
     const deadline = check?.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
     if (check?.deadline !== undefined && !deadline) {

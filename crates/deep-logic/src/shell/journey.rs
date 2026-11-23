@@ -5,8 +5,8 @@
 
 use serde_json::{json, Map, Value};
 
-use super::run::{Input, Plants, Run, Screens};
 use super::rules::PLAYING;
+use super::run::{Input, Plants, Run, Screens};
 use super::{Does, Kind, Shell, CREDITS, GAME_OVER, LEVELS, PAUSE, TITLE};
 
 /// Why a run stopped short of its script: a move its device can't make, or a refusal.
@@ -30,12 +30,30 @@ impl Policy {
             .and_then(Value::as_object)
             .into_iter()
             .flatten()
-            .map(|(a, s)| (a.clone(), s.as_array().into_iter().flatten().filter_map(Value::as_i64).collect()))
+            .map(|(a, s)| {
+                (
+                    a.clone(),
+                    s.as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(Value::as_i64)
+                        .collect(),
+                )
+            })
             .collect();
-        Policy { actions, span: v.and_then(|l| l.get("span")).and_then(Value::as_i64).unwrap_or(600) }
+        Policy {
+            actions,
+            span: v
+                .and_then(|l| l.get("span"))
+                .and_then(Value::as_i64)
+                .unwrap_or(600),
+        }
     }
     fn at(&self, k: i64) -> Option<&str> {
-        self.actions.iter().find(|(_, s)| s.contains(&k)).map(|(a, _)| a.as_str())
+        self.actions
+            .iter()
+            .find(|(_, s)| s.contains(&k))
+            .map(|(a, _)| a.as_str())
     }
 }
 
@@ -72,19 +90,35 @@ impl<'r, 'a> J<'r, 'a> {
     }
 
     fn screen_name(&self) -> String {
-        self.run.shown().map_or_else(|| "level".into(), |s| self.shell().screens[s].name.clone())
+        self.run
+            .shown()
+            .map_or_else(|| "level".into(), |s| self.shell().screens[s].name.clone())
     }
 
     /// The control on the shown screen whose `does` matches.
     fn find(&self, matches: &dyn Fn(&Does) -> bool) -> Option<String> {
         let s = self.run.shown()?;
-        self.shell().screens[s].controls.iter().find(|c| c.does.as_ref().is_some_and(matches)).map(|c| c.id.clone())
+        self.shell().screens[s]
+            .controls
+            .iter()
+            .find(|c| c.does.as_ref().is_some_and(matches))
+            .map(|c| c.id.clone())
     }
 
     /// Focus moved to control `i` of the shown screen with the device's up and down, the first input focusing.
     fn focus_to(&mut self, s: usize, i: usize, name: &str) -> Result<(), Stop> {
-        let (down, up) = if self.device == "pad" { ("down", "up") } else { ("ArrowDown", "ArrowUp") };
-        let input = |k: &str, dev: &str| if dev == "pad" { Input::Pad(k.into()) } else { Input::Key(k.into()) };
+        let (down, up) = if self.device == "pad" {
+            ("down", "up")
+        } else {
+            ("ArrowDown", "ArrowUp")
+        };
+        let input = |k: &str, dev: &str| {
+            if dev == "pad" {
+                Input::Pad(k.into())
+            } else {
+                Input::Key(k.into())
+            }
+        };
         if !self.run.engaged {
             let dev = self.device.clone();
             self.tick(Some(input(down, &dev)))?;
@@ -92,50 +126,100 @@ impl<'r, 'a> J<'r, 'a> {
         let order = self.run.order(s);
         let enabled = self.run.enabled(s);
         if !enabled.get(i).copied().unwrap_or(false) {
-            return Err(device_stop(&self.device, &self.shell().screens[s].name, name, "it is disabled"));
+            return Err(device_stop(
+                &self.device,
+                &self.shell().screens[s].name,
+                name,
+                "it is disabled",
+            ));
         }
         let live: Vec<usize> = order.iter().copied().filter(|j| enabled[*j]).collect();
         let pos = |f: Option<usize>| f.and_then(|f| live.iter().position(|j| *j == f));
         let (Some(to), Some(from)) = (pos(Some(i)), pos(self.run.focus)) else {
-            return Err(device_stop(&self.device, &self.shell().screens[s].name, name, "focus can't reach it"));
+            return Err(device_stop(
+                &self.device,
+                &self.shell().screens[s].name,
+                name,
+                "focus can't reach it",
+            ));
         };
         let n = live.len();
         let fwd = (to + n - from) % n;
-        let (key, count) = if fwd <= n - fwd { (down, fwd) } else { (up, n - fwd) };
+        let (key, count) = if fwd <= n - fwd {
+            (down, fwd)
+        } else {
+            (up, n - fwd)
+        };
         for _ in 0..count {
             let dev = self.device.clone();
             self.tick(Some(input(key, &dev)))?;
         }
         if self.run.focus != Some(i) {
-            return Err(device_stop(&self.device, &self.shell().screens[s].name, name, "focus didn't reach it"));
+            return Err(device_stop(
+                &self.device,
+                &self.shell().screens[s].name,
+                name,
+                "focus didn't reach it",
+            ));
         }
         Ok(())
     }
 
     fn center(&mut self, s: usize, i: usize, name: &str) -> Result<[f64; 4], Stop> {
-        self.run.control_boxes(s)[i].ok_or_else(|| device_stop(&self.device, &self.shell().screens[s].name, name, "it has no evaluated box to touch"))
+        self.run.control_boxes(s)[i].ok_or_else(|| {
+            device_stop(
+                &self.device,
+                &self.shell().screens[s].name,
+                name,
+                "it has no evaluated box to touch",
+            )
+        })
     }
 
     /// Activates control `id` on the shown screen with the device, then waits out any transition.
     fn activate(&mut self, id: &str) -> Result<(), Stop> {
-        let s = self.run.shown().ok_or_else(|| json!({"code": "shell.device", "message": format!("no screen shows {id}")}))?;
-        let i = self.shell().screens[s].controls.iter().position(|c| c.id == id).expect("a control the script found");
+        let s = self.run.shown().ok_or_else(
+            || json!({"code": "shell.device", "message": format!("no screen shows {id}")}),
+        )?;
+        let i = self.shell().screens[s]
+            .controls
+            .iter()
+            .position(|c| c.id == id)
+            .expect("a control the script found");
         let kind = self.shell().screens[s].controls[i].kind;
         if self.device == "touch" {
             let b = self.center(s, i, id)?;
             if kind == Kind::DragAlong {
-                return Err(device_stop("touch", &self.shell().screens[s].name, id, "it takes a drag, not a tap"));
+                return Err(device_stop(
+                    "touch",
+                    &self.shell().screens[s].name,
+                    id,
+                    "it takes a drag, not a tap",
+                ));
             }
             self.tick(Some(Input::Tap([b[0] + b[2] / 2.0, b[1] + b[3] / 2.0])))?;
         } else {
             if matches!(kind, Kind::DragAlong) {
-                return Err(device_stop(&self.device, &self.shell().screens[s].name, id, "it takes only a pointer drag"));
+                return Err(device_stop(
+                    &self.device,
+                    &self.shell().screens[s].name,
+                    id,
+                    "it takes only a pointer drag",
+                ));
             }
             self.focus_to(s, i, id)?;
-            let confirm = if self.device == "pad" { Input::Pad("south".into()) } else { Input::Key("Enter".into()) };
+            let confirm = if self.device == "pad" {
+                Input::Pad("south".into())
+            } else {
+                Input::Key("Enter".into())
+            };
             match kind {
                 Kind::Slider | Kind::Choice => {
-                    let right = if self.device == "pad" { Input::Pad("right".into()) } else { Input::Key("ArrowRight".into()) };
+                    let right = if self.device == "pad" {
+                        Input::Pad("right".into())
+                    } else {
+                        Input::Key("ArrowRight".into())
+                    };
                     self.tick(Some(right))?;
                 }
                 _ => self.tick(Some(confirm))?,
@@ -147,7 +231,11 @@ impl<'r, 'a> J<'r, 'a> {
     /// Sets a slider or a choice on the shown screen to the value `steps` increments (or options) above its least.
     fn set(&mut self, id: &str, steps: i64) -> Result<(), Stop> {
         let s = self.run.shown().expect("a screen shows");
-        let i = self.shell().screens[s].controls.iter().position(|c| c.id == id).expect("a control the script found");
+        let i = self.shell().screens[s]
+            .controls
+            .iter()
+            .position(|c| c.id == id)
+            .expect("a control the script found");
         let c = self.shell().screens[s].controls[i].clone();
         let screen = self.shell().screens[s].name.clone();
         let target = match c.kind {
@@ -161,26 +249,51 @@ impl<'r, 'a> J<'r, 'a> {
                 _ => b[0] + (target - c.range[0]) / (c.range[1] - c.range[0]).max(1e-9) * b[2],
             };
             let y = b[1] + b[3] / 2.0;
-            let input = if c.kind == Kind::DragAlong { Input::Drag(vec![[b[0] + 1.0, y], [x, y]]) } else { Input::Tap([x, y]) };
+            let input = if c.kind == Kind::DragAlong {
+                Input::Drag(vec![[b[0] + 1.0, y], [x, y]])
+            } else {
+                Input::Tap([x, y])
+            };
             self.tick(Some(input))?;
         } else {
             if c.kind == Kind::DragAlong {
-                return Err(device_stop(&self.device, &screen, id, "it takes only a pointer drag"));
+                return Err(device_stop(
+                    &self.device,
+                    &screen,
+                    id,
+                    "it takes only a pointer drag",
+                ));
             }
             self.focus_to(s, i, id)?;
-            let (left, right) = if self.device == "pad" { ("left", "right") } else { ("ArrowLeft", "ArrowRight") };
+            let (left, right) = if self.device == "pad" {
+                ("left", "right")
+            } else {
+                ("ArrowLeft", "ArrowRight")
+            };
             for _ in 0..64 {
                 let now = self.run.value(&c);
                 if (now - target).abs() < 1e-9 {
                     break;
                 }
                 let k = if now < target { right } else { left };
-                let input = if self.device == "pad" { Input::Pad(k.into()) } else { Input::Key(k.into()) };
+                let input = if self.device == "pad" {
+                    Input::Pad(k.into())
+                } else {
+                    Input::Key(k.into())
+                };
                 self.tick(Some(input))?;
             }
         }
         if (self.run.value(&c) - target).abs() > 1e-9 {
-            return Err(device_stop(&self.device, &screen, id, &format!("it reads {} where the journey set {target}", self.run.value(&c))));
+            return Err(device_stop(
+                &self.device,
+                &screen,
+                id,
+                &format!(
+                    "it reads {} where the journey set {target}",
+                    self.run.value(&c)
+                ),
+            ));
         }
         Ok(())
     }
@@ -206,11 +319,21 @@ impl<'r, 'a> J<'r, 'a> {
                         .controls
                         .iter()
                         .position(|c| c.does == Some(Does::Back))
-                        .or_else(|| screen.controls.iter().position(|c| to.is_some() && c.does == to))
+                        .or_else(|| {
+                            screen
+                                .controls
+                                .iter()
+                                .position(|c| to.is_some() && c.does == to)
+                        })
                         .filter(|i| enabled[*i]);
                     let Some(i) = found else {
                         let name = self.shell().screens[s].name.clone();
-                        return Err(device_stop("touch", &name, "back", "the screen has no Back control to tap"));
+                        return Err(device_stop(
+                            "touch",
+                            &name,
+                            "back",
+                            "the screen has no Back control to tap",
+                        ));
                     };
                     let id = self.shell().screens[s].controls[i].id.clone();
                     let b = self.center(s, i, &id)?;
@@ -226,12 +349,26 @@ impl<'r, 'a> J<'r, 'a> {
     /// The device's pause in a level: Escape, the pad's start, or a tap on the shell's pause button.
     fn pause(&mut self) -> Result<(), Stop> {
         let input = match self.device.as_str() {
-            "pad" => Input::Pad(self.shell().pause.pad.first().cloned().unwrap_or_else(|| "start".into())),
+            "pad" => Input::Pad(
+                self.shell()
+                    .pause
+                    .pad
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| "start".into()),
+            ),
             "touch" => {
                 let b = self.run.pause_button();
                 Input::Tap([b[0] + b[2] / 2.0, b[1] + b[3] / 2.0])
             }
-            _ => Input::Key(self.shell().pause.keys.first().cloned().unwrap_or_else(|| "Escape".into())),
+            _ => Input::Key(
+                self.shell()
+                    .pause
+                    .keys
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| "Escape".into()),
+            ),
         };
         self.tick(Some(input))?;
         self.settle()
@@ -244,10 +381,23 @@ impl<'r, 'a> J<'r, 'a> {
         let a = level.actions.iter().find(|a| a.name == name);
         let input = match self.device.as_str() {
             "pad" => a.and_then(|a| a.pad.first()).map(|p| Input::Pad(p.clone())),
-            "touch" => level.zones.iter().find(|(z, _)| z == name).map(|(_, b)| Input::Tap([b[0] + b[2] / 2.0, b[1] + b[3] / 2.0])),
-            _ => a.and_then(|a| a.keys.first()).map(|k| Input::Key(k.clone())),
+            "touch" => level
+                .zones
+                .iter()
+                .find(|(z, _)| z == name)
+                .map(|(_, b)| Input::Tap([b[0] + b[2] / 2.0, b[1] + b[3] / 2.0])),
+            _ => a
+                .and_then(|a| a.keys.first())
+                .map(|k| Input::Key(k.clone())),
         };
-        input.ok_or_else(|| device_stop(&self.device, &words, name, "the level gives the device no way to take this action"))
+        input.ok_or_else(|| {
+            device_stop(
+                &self.device,
+                &words,
+                name,
+                "the level gives the device no way to take this action",
+            )
+        })
     }
 
     /// Plays the loaded level with the policy until it is left, or until its own step `until`.
@@ -256,7 +406,9 @@ impl<'r, 'a> J<'r, 'a> {
         let start = self.run.step;
         while self.run.level.is_some() && self.run.state.screen == PLAYING {
             let k = self.run.level.as_ref().map_or(0, |l| l.steps);
-            if until.is_some_and(|u| k >= u) || self.run.step - start > policy.span + until.unwrap_or(0) + 240 {
+            if until.is_some_and(|u| k >= u)
+                || self.run.step - start > policy.span + until.unwrap_or(0) + 240
+            {
                 break;
             }
             let input = policy.at(k).map(|a| self.action(a)).transpose()?;
@@ -296,10 +448,14 @@ impl<'r, 'a> J<'r, 'a> {
             }
         }
         if !seen[target] {
-            if target == GAME_OVER as usize && self.shell().levels.iter().any(|l| l.lost.is_some()) {
+            if target == GAME_OVER as usize && self.shell().levels.iter().any(|l| l.lost.is_some())
+            {
                 // Game over comes only from a lost level: level 1 entered and played with no input until it is left.
                 self.enter(0)?;
-                let idle = Policy { actions: Vec::new(), span: policy.span };
+                let idle = Policy {
+                    actions: Vec::new(),
+                    span: policy.span,
+                };
                 self.play(&idle, None)?;
                 return Ok(self.run.shown() == Some(GAME_OVER as usize));
             }
@@ -319,7 +475,10 @@ impl<'r, 'a> J<'r, 'a> {
 
     /// Enters level `l` from the title: its start there, or the level select's.
     fn enter(&mut self, l: usize) -> Result<(), Stop> {
-        let starts = |d: &Does| matches!(d, Does::Start(Some(x)) if *x == l) || (l == 0 && matches!(d, Does::Start(None)));
+        let starts = |d: &Does| {
+            matches!(d, Does::Start(Some(x)) if *x == l)
+                || (l == 0 && matches!(d, Does::Start(None)))
+        };
         if let Some(c) = self.find(&starts) {
             return self.activate(&c);
         }
@@ -335,17 +494,35 @@ impl<'r, 'a> J<'r, 'a> {
                 return self.activate(&c);
             }
         }
-        Err(json!({"code": "shell.unlock", "message": format!("from the {} screen no control enters {}", self.screen_name(), super::level_words(&self.shell().levels, l))}))
+        Err(
+            json!({"code": "shell.unlock", "message": format!("from the {} screen no control enters {}", self.screen_name(), super::level_words(&self.shell().levels, l))}),
+        )
     }
 }
 
 /// The journey the call names, played with its device at its size.
-pub fn play(shell: &Shell, stored: &dyn Fn(&str) -> Option<Vec<u8>>, call: &Value, screens: &mut dyn Screens, plants: Plants) -> Result<Value, Value> {
+pub fn play(
+    shell: &Shell,
+    stored: &dyn Fn(&str) -> Option<Vec<u8>>,
+    call: &Value,
+    screens: &mut dyn Screens,
+    plants: Plants,
+) -> Result<Value, Value> {
     let spec = call.get("shell").cloned().unwrap_or(json!({}));
-    let journey = spec.get("journey").and_then(Value::as_str).unwrap_or("title_to_level").to_string();
-    let device = spec.get("device").and_then(Value::as_str).unwrap_or("keys").to_string();
+    let journey = spec
+        .get("journey")
+        .and_then(Value::as_str)
+        .unwrap_or("title_to_level")
+        .to_string();
+    let device = spec
+        .get("device")
+        .and_then(Value::as_str)
+        .unwrap_or("keys")
+        .to_string();
     if !["keys", "pad", "touch"].contains(&device.as_str()) {
-        return Err(json!({"ok": false, "code": "bad_input", "what": "shell.device is keys, pad or touch"}));
+        return Err(
+            json!({"ok": false, "code": "bad_input", "what": "shell.device is keys, pad or touch"}),
+        );
     }
     let size = spec
         .get("size")
@@ -356,7 +533,10 @@ pub fn play(shell: &Shell, stored: &dyn Fn(&str) -> Option<Vec<u8>>, call: &Valu
     let mut run = Run::new(shell, stored, screens, plants, size);
     let mut extra = Map::new();
     let stopped = {
-        let mut j = J { run: &mut run, device: device.clone() };
+        let mut j = J {
+            run: &mut run,
+            device: device.clone(),
+        };
         script(&mut j, &journey, &spec, &policy, &mut extra)
     };
     // Each screen's controls' and texts' boxes at the size, and its frame there.
@@ -400,7 +580,12 @@ pub fn play(shell: &Shell, stored: &dyn Fn(&str) -> Option<Vec<u8>>, call: &Valu
             v["ends"] = json!(e);
         }
         if !screen.prompts.is_empty() {
-            v["prompts"] = screen.prompts.iter().map(|p| (p.item.clone(), json!({"action": p.action}))).collect::<Map<_, _>>().into();
+            v["prompts"] = screen
+                .prompts
+                .iter()
+                .map(|p| (p.item.clone(), json!({"action": p.action})))
+                .collect::<Map<_, _>>()
+                .into();
         }
         if let super::Back::Nothing = screen.back {
             v["back"] = json!("none");
@@ -425,7 +610,13 @@ pub fn play(shell: &Shell, stored: &dyn Fn(&str) -> Option<Vec<u8>>, call: &Valu
 }
 
 /// A journey's moves, as its device plays them.
-fn script(j: &mut J, journey: &str, spec: &Value, policy: &Policy, extra: &mut Map<String, Value>) -> Result<(), Stop> {
+fn script(
+    j: &mut J,
+    journey: &str,
+    spec: &Value,
+    policy: &Policy,
+    extra: &mut Map<String, Value>,
+) -> Result<(), Stop> {
     j.tick(None)?;
     match journey {
         "title_to_level" => {
@@ -446,7 +637,12 @@ fn script(j: &mut J, journey: &str, spec: &Value, policy: &Policy, extra: &mut M
             if journey == "carry" {
                 // The carry journey keeps the scene change from level 1 to level 2 as one recording, from 20 steps
                 // before level 1's last press.
-                let last = policy.actions.iter().flat_map(|(_, s)| s.iter().copied()).max().unwrap_or(0);
+                let last = policy
+                    .actions
+                    .iter()
+                    .flat_map(|(_, s)| s.iter().copied())
+                    .max()
+                    .unwrap_or(0);
                 j.play(policy, Some((last - 20).max(0)))?;
                 j.run.keep_frames = true;
             }
@@ -463,9 +659,18 @@ fn script(j: &mut J, journey: &str, spec: &Value, policy: &Policy, extra: &mut M
         }
         "pause" => {
             // One play a call: never paused with `paused: false`, else paused at `at` and held `hold` seconds.
-            let at = spec.pointer("/pause/at").and_then(Value::as_i64).unwrap_or(1200);
-            let hold = spec.pointer("/pause/hold").and_then(Value::as_f64).unwrap_or(30.0);
-            let to = spec.pointer("/pause/to").and_then(Value::as_i64).unwrap_or(3600);
+            let at = spec
+                .pointer("/pause/at")
+                .and_then(Value::as_i64)
+                .unwrap_or(1200);
+            let hold = spec
+                .pointer("/pause/hold")
+                .and_then(Value::as_f64)
+                .unwrap_or(30.0);
+            let to = spec
+                .pointer("/pause/to")
+                .and_then(Value::as_i64)
+                .unwrap_or(3600);
             j.enter(0)?;
             if spec.get("paused") == Some(&Value::Bool(false)) {
                 j.play(policy, Some(to))?;
@@ -477,7 +682,12 @@ fn script(j: &mut J, journey: &str, spec: &Value, policy: &Policy, extra: &mut M
                     Some(c) => j.activate(&c)?,
                     None => {
                         let device = j.device.clone();
-                        return Err(device_stop(&device, "pause", "resume", "the pause screen has no Resume control"));
+                        return Err(device_stop(
+                            &device,
+                            "pause",
+                            "resume",
+                            "the pause screen has no Resume control",
+                        ));
                     }
                 }
                 j.play(policy, Some(to))?;
@@ -485,7 +695,9 @@ fn script(j: &mut J, journey: &str, spec: &Value, policy: &Policy, extra: &mut M
         }
         "credits" => {
             let Some(c) = j.find(&|d| *d == Does::Go(CREDITS as usize)) else {
-                return Err(json!({"code": "shell.credits", "message": "the title has no control that goes to the credits"}));
+                return Err(
+                    json!({"code": "shell.credits", "message": "the title has no control that goes to the credits"}),
+                );
             };
             j.activate(&c)?;
             let ends = j.shell().screens[CREDITS as usize].ends.unwrap_or(0);
@@ -496,7 +708,11 @@ fn script(j: &mut J, journey: &str, spec: &Value, policy: &Policy, extra: &mut M
             let n = j.shell().screens.len();
             for target in (1..n).chain([usize::MAX]) {
                 j.run.reset();
-                let name = if target == usize::MAX { "level".to_string() } else { j.shell().screens[target].name.clone() };
+                let name = if target == usize::MAX {
+                    "level".to_string()
+                } else {
+                    j.shell().screens[target].name.clone()
+                };
                 j.run.from = Some(name.clone());
                 j.tick(None)?;
                 let reached = if target == usize::MAX {
@@ -515,7 +731,12 @@ fn script(j: &mut J, journey: &str, spec: &Value, policy: &Policy, extra: &mut M
                         break;
                     }
                     if let Err(e) = j.back() {
-                        extra.entry("unreached").or_insert(json!([])).as_array_mut().expect("a list").push(json!({"from": name, "stop": e}));
+                        extra
+                            .entry("unreached")
+                            .or_insert(json!([]))
+                            .as_array_mut()
+                            .expect("a list")
+                            .push(json!({"from": name, "stop": e}));
                         break;
                     }
                 }
@@ -526,8 +747,16 @@ fn script(j: &mut J, journey: &str, spec: &Value, policy: &Policy, extra: &mut M
             let n = j.shell().screens.len();
             for target in 0..n {
                 let name = j.shell().screens[target].name.clone();
-                let ids: Vec<String> = j.shell().screens[target].controls.iter().map(|c| c.id.clone()).collect();
-                let sub: Vec<Option<String>> = if journey == "wired" { ids.into_iter().map(Some).collect() } else { vec![None] };
+                let ids: Vec<String> = j.shell().screens[target]
+                    .controls
+                    .iter()
+                    .map(|c| c.id.clone())
+                    .collect();
+                let sub: Vec<Option<String>> = if journey == "wired" {
+                    ids.into_iter().map(Some).collect()
+                } else {
+                    vec![None]
+                };
                 for control in sub {
                     j.run.reset();
                     j.run.from = Some(name.clone());
@@ -538,7 +767,11 @@ fn script(j: &mut J, journey: &str, spec: &Value, policy: &Policy, extra: &mut M
                     }
                     match (journey, control) {
                         ("wired", Some(c)) => {
-                            let i = j.shell().screens[target].controls.iter().position(|x| x.id == c).expect("its control");
+                            let i = j.shell().screens[target]
+                                .controls
+                                .iter()
+                                .position(|x| x.id == c)
+                                .expect("its control");
                             if !j.run.enabled(target)[i] {
                                 continue;
                             }
@@ -550,7 +783,12 @@ fn script(j: &mut J, journey: &str, spec: &Value, policy: &Policy, extra: &mut M
                                 _ => j.activate(&c),
                             };
                             if let Err(e) = r {
-                                extra.entry("unreached").or_insert(json!([])).as_array_mut().expect("a list").push(json!({"from": name, "control": c, "stop": e}));
+                                extra
+                                    .entry("unreached")
+                                    .or_insert(json!([]))
+                                    .as_array_mut()
+                                    .expect("a list")
+                                    .push(json!({"from": name, "control": c, "stop": e}));
                             }
                             j.wait(budget)?;
                         }
@@ -561,7 +799,9 @@ fn script(j: &mut J, journey: &str, spec: &Value, policy: &Policy, extra: &mut M
             }
         }
         "layout" => {}
-        other => return Err(json!({"code": "bad_input", "message": format!("no journey {other}")})),
+        other => {
+            return Err(json!({"code": "bad_input", "message": format!("no journey {other}")}))
+        }
     }
     Ok(())
 }
@@ -572,7 +812,11 @@ fn focus_walk(j: &mut J, s: usize) -> Result<(), Stop> {
         return Ok(());
     }
     let n = j.shell().screens[s].controls.len();
-    let down = if j.device == "pad" { Input::Pad("down".into()) } else { Input::Key("ArrowDown".into()) };
+    let down = if j.device == "pad" {
+        Input::Pad("down".into())
+    } else {
+        Input::Key("ArrowDown".into())
+    };
     j.tick(Some(down.clone()))?;
     for _ in 0..n {
         j.tick(Some(down.clone()))?;
