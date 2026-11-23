@@ -194,7 +194,7 @@ export function generate(rows = blocks()) {
     'Start from a piece recipe, or from a kind deep_kinds lists. Check the document with deep_show before you render it. Then render small and read its issues. Fix by patch, changing one item at a time, and render in full only once the numbers pass; judge by numbers, never by eye. When no kind or field does what the piece needs, raise an open item with deep_open_item naming the missing kind or field, instead of approximating it. When a logic step needs more fuel than its step ceiling, which deep_kinds lists by step rate, budget class and host, split the work across steps and keep the progress in memory. For a formula, run the typeset job with deep_job: it turns LaTeX or Typst into an SVG with one id per term, which a vector@1 item imports, so a step moves the terms two formulas share; never set a formula as text.',
     '',
     // craft@1's checks (#409) are a guide (#2697): a session that makes no film never loads them.
-    `A film's brief names the ${CRAFT.pack} checks it wants; before a film's first render, read each one's description, thresholds and fix in the guide \`${CRAFT_GUIDE}\` with deep_kinds.`,
+    `A film's brief names the craft checks it wants, which hold it to the brief's thresholds and never pass it on their own; before its first render, read each one's description, thresholds and fix in the guide \`${CRAFT_GUIDE}\` with deep_kinds.`,
     '',
   ].join('\n');
   return { descriptions, skill, guide: craftGuide(), instructions: instructions(used) };
@@ -246,5 +246,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   writeFileSync(join(ROOT, 'packages/hub/annotations.json'), `${JSON.stringify(annotations(), null, 2)}\n`);
   mkdirSync(join(ROOT, 'skills/deepbuild'), { recursive: true });
   writeFileSync(join(ROOT, 'skills/deepbuild/SKILL.md'), skill);
+  mkdirSync(join(ROOT, 'crates/deep-show/gallery'), { recursive: true });
   writeFileSync(join(ROOT, 'crates/deep-show/gallery', `${CRAFT_GUIDE}.md`), guide);
 }
