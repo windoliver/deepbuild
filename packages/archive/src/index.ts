@@ -6,9 +6,9 @@
 // raises archive.quiet when an agent kept working for a day with nothing captured. It only writes: what it has
 // already copied it reads back from the record, so a restart copies nothing twice.
 import { createHash } from 'node:crypto';
-import { readdir, stat } from 'node:fs/promises';
+import { lstat, readdir, stat } from 'node:fs/promises';
 import { readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { AdapterRegistry } from '@deepbuild/adapters';
 import type { Asks } from '@deepbuild/asks';
 import { scrubText, type EvidenceStore, type Writer } from '@deepbuild/evidence';
@@ -42,8 +42,11 @@ export interface ArchiveOptions {
 export interface Archive {
   /** Copies every source new or changed since its last copy, and every completed CI run not yet copied. */
   pass(): Promise<void>;
-  /** Copies one session's transcript now, so what it read so far is in the record for a question asked about it (#1156). */
-  session(id: string): Promise<void>;
+  /**
+   * Copies one session's transcript now, so what it read so far is in the record for a question asked about it (#1156):
+   * from `transcript`, the path its agent named, when that is where the facts put it, otherwise found under its folders.
+   */
+  session(id: string, transcript?: string): Promise<void>;
   /** The sessions whose transcript its agent moved to its archived folder, by their letters: Codex Desktop's Archive fires no hook (#342). */
   archived(): Promise<Set<string>>;
 }
@@ -90,35 +93,77 @@ function homeOf(home: unknown, env: ArchiveOptions['env']): string | undefined {
   return undefined;
 }
 
-/** Every transcript the adapters' facts name, walked one path segment at a time; with `archived`, only those in an agent's archived folder. */
-async function sources(options: ArchiveOptions, archived = false): Promise<Source[]> {
-  const found: Source[] = [];
-  const places: { agent: string; transcripts: unknown; folderNames?: number }[] = [...options.adapters.names().map((agent) => {
+/** Each agent's transcript folders, as its facts name them: where they are and the path patterns under it. */
+function places(options: ArchiveOptions, archived: boolean): { agent: string; home: string; path: string; folderNames?: number }[] {
+  const named: { agent: string; transcripts: unknown; folderNames?: number }[] = [...options.adapters.names().map((agent) => {
     const facts = options.adapters.get(agent).facts;
     return { agent, transcripts: isObj(facts) ? facts.transcripts : undefined };
   }), ...(options.transcripts ?? [])];
-  for (const { agent, transcripts, folderNames } of places) {
+  const out: { agent: string; home: string; path: string; folderNames?: number }[] = [];
+  for (const { agent, transcripts, folderNames } of named) {
     if (!isObj(transcripts) || typeof transcripts.path !== 'string') continue;
     const home = homeOf(transcripts.home, options.env);
     if (!home) continue;
     for (const path of archived ? [transcripts.archived] : [transcripts.path, transcripts.archived]) {
-      if (typeof path !== 'string') continue;
-      const segments = path.split('/').map(segmentPattern);
-      const walk = async (dir: string, depth: number, session: string | undefined): Promise<void> => {
-        const last = depth === segments.length - 1;
-        const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-        for (const entry of entries) {
-          const m = segments[depth]!.exec(entry.name);
-          if (!m || (last ? !entry.isFile() : !entry.isDirectory())) continue;
-          const id = m[1] ?? session;
-          if (last) { if (id) found.push({ agent, session: id, path: join(dir, entry.name), ...(folderNames === undefined ? {} : { folderNames }) }); }
-          else await walk(join(dir, entry.name), depth + 1, id);
-        }
-      };
-      await walk(home, 0, undefined);
+      if (typeof path === 'string') out.push({ agent, home, path, ...(folderNames === undefined ? {} : { folderNames }) });
     }
   }
+  return out;
+}
+
+/** Every transcript the adapters' facts name, walked one path segment at a time; with `archived`, only those in an agent's archived folder. */
+async function sources(options: ArchiveOptions, archived = false): Promise<Source[]> {
+  const found: Source[] = [];
+  for (const { agent, home, path, folderNames } of places(options, archived)) {
+    const segments = path.split('/').map(segmentPattern);
+    const walk = async (dir: string, depth: number, session: string | undefined): Promise<void> => {
+      const last = depth === segments.length - 1;
+      const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+      for (const entry of entries) {
+        const m = segments[depth]!.exec(entry.name);
+        if (!m || (last ? !entry.isFile() : !entry.isDirectory())) continue;
+        const id = m[1] ?? session;
+        if (last) { if (id) found.push({ agent, session: id, path: join(dir, entry.name), ...(folderNames === undefined ? {} : { folderNames }) }); }
+        else await walk(join(dir, entry.name), depth + 1, id);
+      }
+    };
+    await walk(home, 0, undefined);
+  }
   return found;
+}
+
+/**
+ * The transcript at a path its agent named for a session (a hook's `transcript_path`), when that path is one the walk
+ * would find for that session: under an agent's folder, each segment fitting its facts' pattern, every folder on the
+ * way a folder and the file a file, never a link. Undefined otherwise, and the walk finds it instead.
+ */
+async function sourceAt(options: ArchiveOptions, transcript: string, wanted: string): Promise<Source | undefined> {
+  if (!isAbsolute(transcript)) return undefined;
+  const target = resolve(transcript);
+  for (const { agent, home, path, folderNames } of places(options, false)) {
+    const rel = relative(resolve(home), target);
+    if (!rel || rel.startsWith('..') || isAbsolute(rel)) continue;
+    const names = rel.split(sep);
+    const segments = path.split('/').map(segmentPattern);
+    if (names.length !== segments.length) continue;
+    let id: string | undefined;
+    let fits = true;
+    for (let i = 0; i < names.length && fits; i++) {
+      const m = segments[i]!.exec(names[i]!);
+      if (!m) fits = false;
+      else id = m[1] ?? id;
+    }
+    if (!fits || id === undefined || letters(id) !== wanted) continue;
+    let dir = resolve(home);
+    let kinds = true;
+    for (let i = 0; i < names.length && kinds; i++) {
+      dir = join(dir, names[i]!);
+      const info = await lstat(dir).catch(() => undefined);
+      kinds = info !== undefined && (i === names.length - 1 ? info.isFile() : info.isDirectory());
+    }
+    if (kinds) return { agent, session: id, path: target, ...(folderNames === undefined ? {} : { folderNames }) };
+  }
+  return undefined;
 }
 
 /**
@@ -330,8 +375,10 @@ export async function openArchive(options: ArchiveOptions): Promise<Archive> {
       await quiet();
       if (failed.length) throw new AggregateError(failed, `the archive pass left ${failed.length} cop${failed.length === 1 ? 'y' : 'ies'} undone: ${failed.map(String).join('; ')}`);
     },
-    async session(id) {
+    async session(id, transcript) {
       const wanted = letters(id);
+      const known = transcript === undefined ? undefined : await sourceAt(options, transcript, wanted);
+      if (known) return copy(known);
       for (const source of await sources(options)) if (letters(source.session) === wanted) await copy(source);
     },
     async archived() {

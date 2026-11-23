@@ -1,0 +1,19 @@
+start 2026-11-22T04:20:50-08:00 commit 2d36d5d2e3540183e3d86cfa07780825ea53cd09 Linux aarch64
+$ cargo build --locked -p deep-app   (the head)
+warning: `deep-app` (lib) generated 6 warnings
+    Finished `dev` profile [unoptimized] target(s) in 2m 54s
+exit 0
+$ cargo build --locked -p deep-app   (twin mac-only-dependency planted)
+...
+   Compiling deep-app v0.0.0 (<clone>/crates/deep-app)
+error[E0433]: cannot find module or crate `objc2` in this scope
+For more information about this error, try `rustc --explain E0433`.
+error: could not compile `deep-app` (lib) due to 1 previous error; 1 warning emitted
+exit 101
+$ cargo test --locked -p deep-app --test hub_client
+test a_wrong_token_is_refused_and_a_hook_method_is_refused_for_the_app ... ok
+test the_hub_takes_the_views_the_app_reports_shown_and_hidden ... ok
+test the_app_reads_the_hubs_health_and_log_as_the_app ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.07s
+exit 0
+EXIT 2026-11-22T04:25:18-08:00

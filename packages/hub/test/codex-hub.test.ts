@@ -495,3 +495,27 @@ describe('deep hub status for a Codex version past its facts', () => {
     expect(await waitFor(async () => (await closed()) || undefined, 30_000, 'the session listed closed')).toBe(true);
   }, 120_000);
 });
+
+describe('a send the root made before its Codex subagent\'s prompt, in a turn cut off', () => {
+  // A Codex subagent's prompt carries the root's session ID (#39) and starts no turn of the root's, so it keeps the
+  // root's sends: once the session resumes, the identical send is denied as already made (#85, #1033).
+  const repeat = async (subagent: boolean) => {
+    const h = makeHome();
+    await hubWithSetup(h);
+    const t = newThread(h);
+    git(t.cwd, 'init', '-q', '-b', 'fix');
+    await begin(h, t, 'Open the pull request.');
+    await call(h, t, 'gh pr create --base main --title Fix --body Fix');
+    if (subagent) await codexHook(h, t, 'UserPromptSubmit', { prompt: 'Check the changelog.', agent_id: 'child-1' });
+    // Codex quits mid-turn: no Stop. The session resumes and makes the identical send again.
+    await codexHook(h, t, 'SessionEnd', { reason: 'other' });
+    await codexHook(h, t, 'SessionStart', { source: 'resume' });
+    return codexHook(h, t, 'PreToolUse', { tool_name: 'Bash', tool_input: { command: 'gh pr create --base main --title Fix --body Fix' }, tool_use_id: 'call_again' });
+  };
+  it('denies the identical send after the resume, as it does with no subagent', async () => {
+    for (const subagent of [false, true]) {
+      const again = await repeat(subagent);
+      expect(hookShown(again), `${subagent ? 'with' : 'without'} a subagent's prompt, the repeated send is denied as already made`).toMatch(/already made, and it completed/);
+    }
+  }, 240_000);
+});
