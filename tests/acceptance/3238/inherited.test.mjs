@@ -1,8 +1,8 @@
 // #3238 AC2: a command the script runs under an ancestor's `test` grant starts at once, and the throttle's log shows
 // `passed` for it and no build request, as a lint that affected.mjs runs through the script under its run's grant
 // does. Every build slot is held by a holder outside the run, and the readings leave no room for a second test grant,
-// so a request of the job's own of either class waits: the twin `own-grant`, which drops the inherited grant and asks
-// for one of its own, waits behind its own run and the holders, and fails here, naming the job.
+// so a request of the job's own of either class waits: the twin `own-test-grant` behind its own run's test grant, and
+// the twin `own-grant` (build) behind those holders. Each drops the inherited grant and fails here, naming the job.
 import assert from 'node:assert/strict';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';

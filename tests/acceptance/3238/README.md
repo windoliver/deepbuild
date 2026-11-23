@@ -10,9 +10,12 @@ Dogfooding parts of `docs/technical-design.md`, AGENTS.md and the base commit `f
 implementation. For surfaces only I read, at the base, `scripts/lease`, `scripts/throttle.mjs` (the CLI, `acquire`,
 the log's `granted`, `passed` and `timeout` entries, tables of a test's own), `packages/hub/src/heavy.ts`
 (`leaseCommand`, `unleased`), `packages/hub/src/paths.ts` (`hubAddress`: the hub is found under `HOME`),
-`packages/cli/src/main.ts`, `packages/hub/src/plant.ts`, `scripts/affected.mjs` (`LIGHT`, `run`) and
-`scripts/proof-change.mjs` (`criterionId`); for the house format, `tests/acceptance/2744/`, `2902/`, `2924/`, `1113/`,
-`2869/`, `3067/` and `1015/` with `1015/redraft/`.
+`scripts/affected.mjs` (`LIGHT`, `run`), `scripts/proof-change.mjs` (`criterionId`) and, by searching for a few words,
+`packages/cli/src/main.ts` and `packages/hub/src/plant.ts`; for the house format, `tests/acceptance/2869/` (README,
+helpers), parts of `3067/` and `2924/`, `1113/twins/README.md`, and `1015/` with `1015/redraft/`. `2744/` and `2902/`
+I only listed. Beyond the brief's list I also read, at the base, `packages/hub/src/paths.ts` (named above), parts of
+`tests/acceptance/18/mapping/helpers.ts` (which #1015's helpers import), of `scripts/proof-runs.mjs` (how it runs
+twins), and the headers of the lints a new suite must pass.
 
 `helpers.mjs` is this suite's own. `hub.test.ts` imports #1015's helpers (its world, scripted sessions and lease
 rows), as #1015's redraft does, since AC5 asks for the hub's table "as #1015's seventh criterion has it". No test
@@ -86,7 +89,7 @@ built CLI (the copy has no `packages/`). Starts two `scripts/lease node stub.mjs
 - Each stub's `DEEP_THROTTLE` is `build:<id>`, and the log has a `granted` entry of that ID with `class: "build"` and
   `grant: "top-level"`; the two IDs differ.
 
-On the base both run at once, with no grant: it fails at the first assertion, naming the second command. The twin
+On the base both run at once, with no grant: it fails at that assertion, naming the second command. The twin
 `runs-directly` fails the same way.
 
 ## AC2 `#3238.664c776d`: under an ancestor's test grant (`inherited.test.mjs`)
@@ -102,15 +105,18 @@ run's grant.
   `passed` entry through that grant; and it has no `granted` or `timeout` entry of class build but the holders'.
 
 On the base the job starts at once with the run's `DEEP_THROTTLE` in its environment, but nothing asked the throttle:
-it fails at the `passed` assertion ("the log shows no passed entry through the run's grant ... for the job"). The twin
-`own-grant` waits behind the held slots and its own run and fails at the first assertion, naming the job.
+it fails at the `passed` assertion ("the log shows no passed entry through the run's grant ... for the job"). Two twins
+drop the inherited grant and fail at the start assertion, naming the job. `own-test-grant` asks for a `test` grant: the
+readings leave no room for a second, so what it waits behind is its own run's grant, as the criterion has it.
+`own-grant` asks for a `build` grant, the class the decision names, and waits behind the holders outside the run: a
+`test` grant doesn't block a `build` request, so that one doesn't wait behind its own run.
 
 ## AC3 `#3238.4febe21a`: no grant, no run (`no-grant.test.mjs`)
 
 Plants every build slot held, and runs `scripts/lease node stub.mjs cargo-build exit` with `DEEP_LEASE_WAIT=0` and no
 inherited grant. Once it ends (5 min at most): the stub never started; a line of its output starts `INCONCLUSIVE no
 grant`; its exit status is non-zero; and the log has a build `timeout`. On the base the command starts at once: it
-fails at the first assertion. The twin `runs-after-wait` prints the throttle's line and then runs the command: it fails
+fails at the assertion that it never started. The twin `runs-after-wait` prints the throttle's line and then runs the command: it fails
 there too.
 
 ## AC4 `#3238.f2323033`: with the CLI built and no hub (`cli.test.mjs`)
@@ -149,8 +155,8 @@ never names `scripts/lease`.
 ## Wrong programs
 
 The tests of AC1, AC2, AC3 and AC6 fail on the base at their own assertions (`BASE-FAILURE.txt`). The three planted
-scripts the criteria name are twins (`twins.json`, `twins/README.md`), each run once against its test, failing as
-recorded at the end of `BASE-FAILURE.txt`. A throwaway reference script, the twins' source without their planted line,
+scripts the criteria name, and `own-grant` beside AC2's, are twins (`twins.json`, `twins/README.md`), each run once
+against its test, failing as recorded at the end of `BASE-FAILURE.txt`. A throwaway reference script, the twins' source without their planted line,
 passed the tests of AC1, AC2 and AC3 here and was never committed.
 
 **`cli.test.mjs` (AC4) and `hub.test.ts` (AC5) have not run yet, on the base or anywhere.** Both need the packages
