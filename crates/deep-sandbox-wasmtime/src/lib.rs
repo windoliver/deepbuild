@@ -12,7 +12,13 @@ pub mod service;
 mod web;
 
 #[cfg(not(target_arch = "wasm32"))]
-use std::sync::mpsc;
+use std::cell::UnsafeCell;
+#[cfg(not(target_arch = "wasm32"))]
+use std::rc::Rc;
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::atomic::{AtomicU64, Ordering};
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::{mpsc, Arc};
 use std::time::Duration;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -62,14 +68,105 @@ pub struct Outcome {
     pub trap: Option<Trap>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+static COMPILES: AtomicU64 = AtomicU64::new(0);
+
+/// #2662: how many modules this process has compiled; instantiating one doesn't count.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn compiles() -> u64 {
+    COMPILES.load(Ordering::Relaxed)
+}
+
+/// #2662: a program compiled once. Each `runner` is a fresh instance of it in a store of its own,
+/// so every runner keeps its own memory, globals, fuel and trap.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Clone)]
+pub struct Program {
+    engine: Engine,
+    module: Module,
+    map: Arc<[Entry]>,
+    shift: i64,
+    written: bool,
+    faults: Faults,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl std::fmt::Debug for Program {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Program")
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl Program {
+    /// `bytes` compiled, as `Runner::sized` takes them.
+    pub fn new(
+        bytes: &[u8],
+        pages: Option<u64>,
+        faults: Faults,
+        written: bool,
+    ) -> Result<Program, String> {
+        let (sized, shift) = match pages {
+            Some(p) => deep_canvas_sandbox::rewrite::sized(bytes, p)?,
+            None => (bytes.to_vec(), 0),
+        };
+        let mut config = Config::new();
+        config
+            .wasm_backtrace_max_frames(std::num::NonZeroUsize::new(1))
+            .cranelift_nan_canonicalization(false)
+            .consume_fuel(faults.wasmtime_fuel)
+            .epoch_interruption(true)
+            .max_wasm_stack(NATIVE_STACK)
+            .wasm_simd(false)
+            .wasm_relaxed_simd(false)
+            .wasm_tail_call(false)
+            .wasm_multi_memory(false)
+            .wasm_memory64(false)
+            .wasm_extended_const(false)
+            .wasm_custom_page_sizes(false)
+            .wasm_wide_arithmetic(false);
+        let engine = Engine::new(&config).map_err(|e| e.to_string())?;
+        COMPILES.fetch_add(1, Ordering::Relaxed);
+        let module = Module::new(&engine, &sized).map_err(|e| e.to_string())?;
+        Ok(Program {
+            engine,
+            module,
+            map: offsets(bytes).into(),
+            shift,
+            written,
+            faults,
+        })
+    }
+
+    /// A fresh instance, in the state the module starts in.
+    pub fn runner(&self) -> Result<Runner, String> {
+        let mut store = Store::new(&self.engine, ());
+        store.set_epoch_deadline(1);
+        if self.faults.wasmtime_fuel {
+            store.set_fuel(u64::MAX).map_err(|e| e.to_string())?;
+        }
+        let instance = Instance::new(&mut store, &self.module, &[]).map_err(|e| e.to_string())?;
+        Ok(Runner {
+            engine: self.engine.clone(),
+            store: Rc::new(UnsafeCell::new(store)),
+            instance,
+            map: self.map.clone(),
+            shift: self.shift,
+            written: self.written,
+            faults: self.faults,
+        })
+    }
+}
+
 /// A program instantiated once; calls run in turn on its memory and globals.
 #[cfg(not(target_arch = "wasm32"))]
 pub struct Runner {
     engine: Engine,
-    store: Store<()>,
+    /// Its own store, but for the planted `shared` runner's.
+    store: Rc<UnsafeCell<Store<()>>>,
     instance: Instance,
     /// The rewrite's offset map, and whether a trap names the offset in the program as written.
-    map: Vec<Entry>,
+    map: Arc<[Entry]>,
     /// How far a memory sized for the run moved the code (rewrite::sized), taken off an offset.
     shift: i64,
     written: bool,
@@ -91,90 +188,73 @@ impl Runner {
         faults: Faults,
         written: bool,
     ) -> Result<Runner, String> {
-        let (sized, shift) = match pages {
-            Some(p) => deep_canvas_sandbox::rewrite::sized(bytes, p)?,
-            None => (bytes.to_vec(), 0),
-        };
-        let mut config = Config::new();
-        config
-            .wasm_backtrace_max_frames(std::num::NonZeroUsize::new(1))
-            .cranelift_nan_canonicalization(false)
-            .consume_fuel(faults.wasmtime_fuel)
-            .epoch_interruption(true)
-            .max_wasm_stack(NATIVE_STACK)
-            .wasm_simd(false)
-            .wasm_relaxed_simd(false)
-            .wasm_tail_call(false)
-            .wasm_multi_memory(false)
-            .wasm_memory64(false)
-            .wasm_extended_const(false)
-            .wasm_custom_page_sizes(false)
-            .wasm_wide_arithmetic(false);
-        let engine = Engine::new(&config).map_err(|e| e.to_string())?;
-        let module = Module::new(&engine, &sized).map_err(|e| e.to_string())?;
-        let mut store = Store::new(&engine, ());
-        store.set_epoch_deadline(1);
-        if faults.wasmtime_fuel {
-            store.set_fuel(u64::MAX).map_err(|e| e.to_string())?;
+        Program::new(bytes, pages, faults, written)?.runner()
+    }
+
+    /// #2662's planted wrong engine: a second runner on this one's store and instance, so a call
+    /// on either writes the other's memory, globals and fuel.
+    ///
+    /// # Safety
+    /// No slice `memory` or `memory_mut` gave from one of the two is held across a call on the other.
+    #[doc(hidden)]
+    pub unsafe fn shared(&self) -> Runner {
+        Runner {
+            engine: self.engine.clone(),
+            store: self.store.clone(),
+            instance: self.instance,
+            map: self.map.clone(),
+            shift: self.shift,
+            written: self.written,
+            faults: self.faults,
         }
-        let instance = Instance::new(&mut store, &module, &[]).map_err(|e| e.to_string())?;
-        Ok(Runner {
-            engine,
-            store,
-            instance,
-            map: offsets(bytes),
-            shift,
-            written,
-            faults,
-        })
     }
 
     /// Sets an exported mutable global.
     pub fn set(&mut self, name: &str, v: Val) -> Result<(), String> {
         let g = self
             .instance
-            .get_global(&mut self.store, name)
+            .get_global(st(&mut self.store), name)
             .ok_or_else(|| format!("the rewritten program lacks {name}"))?;
-        g.set(&mut self.store, v).map_err(|e| e.to_string())
+        g.set(st(&mut self.store), v).map_err(|e| e.to_string())
     }
 
     /// A global's value, by its export name.
     pub fn global(&mut self, name: &str) -> Option<Val> {
-        let g = self.instance.get_global(&mut self.store, name)?;
-        Some(g.get(&mut self.store))
+        let g = self.instance.get_global(st(&mut self.store), name)?;
+        Some(g.get(st(&mut self.store)))
     }
 
     /// Whether the program exports a function of this name.
     pub fn exports(&mut self, name: &str) -> bool {
-        self.instance.get_func(&mut self.store, name).is_some()
+        self.instance.get_func(st(&mut self.store), name).is_some()
     }
 
     /// The exported memory's bytes.
     pub fn memory(&mut self, name: &str) -> Option<&[u8]> {
-        let m = self.instance.get_memory(&mut self.store, name)?;
-        Some(m.data(&self.store))
+        let m = self.instance.get_memory(st(&mut self.store), name)?;
+        Some(m.data(&*st(&mut self.store)))
     }
 
     /// The exported memory's bytes, to write in place.
     pub fn memory_mut(&mut self, name: &str) -> Option<&mut [u8]> {
-        let m = self.instance.get_memory(&mut self.store, name)?;
-        Some(m.data_mut(&mut self.store))
+        let m = self.instance.get_memory(st(&mut self.store), name)?;
+        Some(m.data_mut(st(&mut self.store)))
     }
 
     /// Writes bytes into the exported memory at `at`.
     pub fn write(&mut self, name: &str, at: usize, bytes: &[u8]) -> Result<(), String> {
         let m = self
             .instance
-            .get_memory(&mut self.store, name)
+            .get_memory(st(&mut self.store), name)
             .ok_or_else(|| format!("the program exports no memory {name}"))?;
-        m.write(&mut self.store, at, bytes)
+        m.write(st(&mut self.store), at, bytes)
             .map_err(|e| e.to_string())
     }
 
     pub fn call(&mut self, call: &Call) -> Result<Outcome, String> {
         if self.faults.wasmtime_fuel {
             // wasmtime's own fuel in place of the rewrite's, which is set past any budget.
-            self.store
+            st(&mut self.store)
                 .set_fuel(call.fuel.max(0) as u64)
                 .map_err(|e| e.to_string())?;
             self.set(FUEL, Val::I64(i64::MAX))?;
@@ -186,24 +266,26 @@ impl Runner {
         self.set(TRAP, Val::I32(0))?;
         let f = self
             .instance
-            .get_func(&mut self.store, &call.export)
+            .get_func(st(&mut self.store), &call.export)
             .ok_or_else(|| format!("the program exports no function {}", call.export))?;
-        let n = f.ty(&self.store).results().len();
+        let n = f.ty(&*st(&mut self.store)).results().len();
         let mut results = vec![Val::I32(0); n];
-        self.store.set_epoch_deadline(1);
-        let (done, wait) = mpsc::channel::<()>();
+        st(&mut self.store).set_epoch_deadline(1);
+        // The watchdog and its channel, only for a call with a deadline (#2662).
         let watchdog = call.deadline.map(|limit| {
+            let (done, wait) = mpsc::channel::<()>();
             let engine = self.engine.clone();
-            std::thread::spawn(move || {
+            let thread = std::thread::spawn(move || {
                 if wait.recv_timeout(limit).is_err() {
                     engine.increment_epoch();
                 }
-            })
+            });
+            (done, thread)
         });
-        let ran = f.call(&mut self.store, &call.args, &mut results);
-        let _ = done.send(());
-        if let Some(w) = watchdog {
-            drop(w.join());
+        let ran = f.call(st(&mut self.store), &call.args, &mut results);
+        if let Some((done, thread)) = watchdog {
+            let _ = done.send(());
+            drop(thread.join());
         }
         let e = match ran {
             Ok(()) => {
@@ -258,6 +340,14 @@ impl Runner {
             }),
         })
     }
+}
+
+/// A runner's store. Each runner's is its own, so its `&mut` is the only way in; the planted
+/// `shared` runner's safety rule covers the one case with two.
+#[cfg(not(target_arch = "wasm32"))]
+fn st(store: &mut Rc<UnsafeCell<Store<()>>>) -> &mut Store<()> {
+    // SAFETY: the `&mut` to the one handle a runner has, and `Runner::shared`'s rule for two.
+    unsafe { &mut *store.get() }
 }
 
 /// The kind of an engine's own trap.
