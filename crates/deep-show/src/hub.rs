@@ -781,6 +781,8 @@ pub struct Hub<'a> {
     /// The GPU 3D revisions draw on (#378): unopened until the first, `None` inside where there
     /// is none.
     pub gpu3: Option<Option<crate::scene3d::Gpu3>>,
+    /// #1719: the looks its 3D frames draw in, kept by their hash.
+    pub looks3: BTreeMap<String, crate::scene3d::look::Dressed>,
     /// The GPU pixel hash's pipeline, built on the first canonical render it hashes (#405).
     pub hash_pass: Option<deep_gpu::pixel_hash::PixelHash>,
     /// A 3D revision's snapshot drawn for the call being presented, with its size.
@@ -996,6 +998,7 @@ impl<'a> Hub<'a> {
             background: Vec::new(),
             panels_shown: BTreeMap::new(),
             gpu3: None,
+            looks3: BTreeMap::new(),
             hash_pass: None,
             pending3d: None,
             pending_light: None,
@@ -1264,37 +1267,6 @@ impl<'a> Hub<'a> {
             .collect()
     }
 
-    /// A new session for a document: its epochs from the scenario's start, the look's tokens
-    /// and the record's readings.
-    /// The look a document names by asset, resolved over the bundled faces (#1162).
-    pub(crate) fn look_of(&self, doc: &Value) -> Option<Look> {
-        let def = self.look_def_of(doc)?;
-        let bundled: Vec<&str> = deep_text::FACES.iter().map(|f| f.file).collect();
-        // The status distance holds wherever status can show: a document with a status binding
-        // (the status-color rule's first case); any other may use any palette (#464).
-        let binds = doc
-            .get("status_bindings")
-            .and_then(Value::as_object)
-            .is_some_and(|b| !b.is_empty());
-        let at = if binds {
-            look::Distance::Everywhere
-        } else {
-            look::Distance::WhereStatusShows
-        };
-        look::resolve_in(&def, &bundled, at).ok()
-    }
-
-    /// The look@1 a document names by asset, as the evidence store holds it.
-    pub(crate) fn look_def_of(&self, doc: &Value) -> Option<Value> {
-        let name = doc.pointer("/look/asset")?.as_str()?;
-        let id = name.split('@').next()?;
-        let sha = doc.pointer(&format!("/assets/{id}/sha256"))?.as_str()?;
-        let bytes = (sha.len() == 64)
-            .then(|| std::fs::read(self.scenario.evidence.join(&sha[..2]).join(&sha[2..])).ok())
-            .flatten()?;
-        serde_json::from_slice(&bytes).ok()
-    }
-
     /// Mark set columns that read the agent's table, inlined from the evidence store as
     /// `deep-canvas-render` reads them (#397, #1162): what every frame of a revision draws.
     pub(crate) fn inline_tables(
@@ -1369,6 +1341,8 @@ impl<'a> Hub<'a> {
         issues
     }
 
+    /// A new session for a document: its epochs from the scenario's start, the look's tokens
+    /// and the record's readings.
     pub(crate) fn new_session(&self) -> DocSession {
         let mut s = DocSession::new(
             self.scenario.epoch_start,
@@ -2392,9 +2366,7 @@ impl<'a> Hub<'a> {
                     // isn't in the store) is answered at what it names, never presented.
                     if let Some(Err(u)) = &drawn3d {
                         if u.code != "unsupported_platform" {
-                            let issue = json!({"code": u.code, "severity": "error",
-                                "ids": u.path.split('/').nth(1).into_iter().collect::<Vec<_>>(),
-                                "path": u.path, "what": "the 3D frame can't be drawn"});
+                            let issue = snapshot::issue(u);
                             match reply.get_mut("issues").and_then(Value::as_array_mut) {
                                 Some(list) => list.push(issue),
                                 None => {
@@ -2444,6 +2416,7 @@ impl<'a> Hub<'a> {
                     if self.scenario.planted == Some(Planted::SeedsNoiseFromClock) {
                         clock_noise(&mut rgba);
                     }
+                    let blank = three.then(|| snapshot::blank(&rgba)).flatten();
                     let png = snapshot::png(rgba, size);
                     match evidence::put(&self.scenario.evidence, &png) {
                         Ok(sha) => {
@@ -2465,6 +2438,12 @@ impl<'a> Hub<'a> {
                                     reply.insert("visible".into(), rows);
                                 }
                                 None => shown.put(&mut reply),
+                            }
+                            if let Some(b) = blank {
+                                let notices = reply.entry("notices").or_insert(json!([]));
+                                if let Some(list) = notices.as_array_mut() {
+                                    list.push(b.notice(&sha, None));
+                                }
                             }
                             // #464: a 2D print look adds this machine's GPU snapshot, display
                             // only, beside the Vello CPU one.

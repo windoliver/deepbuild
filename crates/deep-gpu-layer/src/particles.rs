@@ -1,26 +1,24 @@
-//! #449: particles@1 items that use a closed-form field (emit regions, bursts, bounces, kill,
-//! turbulence, landing), baked once per content key from the document and its evaluated scene
-//! (deep_canvas_effects::particles::bake), then each frame packed into the closed-form kernel's
-//! uniform and drawn as the shipped graph's items are.
+//! #449: particles@1 items that use a closed-form field, as the `particles` call reads them and
+//! `view3d` draws them (deep_effects_render::particles), with the planted programs.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-use deep_canvas_effects::particles::bake::{self, Inputs};
 use deep_canvas_effects::particles::draws::Ribbon;
 use deep_canvas_effects::particles::eval::{self, Baked};
-use deep_canvas_effects::particles::pack::{self, Tables};
+use deep_canvas_effects::particles::pack;
 use deep_canvas_effects::particles::{
     self as closed, bounds, rule, spec::Refusal, Planted as Plants,
 };
 use deep_canvas_scene3d::label::Labels;
 use deep_canvas_scene3d::look::Look3;
-use deep_canvas_scene3d::scene::{evaluate, Scene};
+use deep_canvas_scene3d::scene::{evaluate, Other, Scene};
 use deep_effects_render::frame::Settings;
+use deep_effects_render::particles::{self as shared, baked, flat, follow_effects, Held, Host};
 use deep_gpu::device::Backend;
 use serde_json::{json, Map, Value};
 
-use crate::effects::{item_pos, item_seed, resampled};
+use crate::effects::{item_pos, item_seed, Seeding};
 use crate::view3d::write_named;
 use crate::{refused, App, Planted};
 
@@ -42,49 +40,6 @@ pub(crate) fn evaluate_sourced(
             .map_err(|r| crate::touches::refusal(refused(r.code, r.path), outlines.memo))?;
     follow_effects(&mut scene, doc)?;
     Ok(scene)
-}
-
-/// #508: a plume's and an airflow's particles follow their effect's params as evaluated at t, so
-/// a driver on a reach, a heat or a speed moves them: each particles item `effect::lower` wrote
-/// takes the params its effect's evaluated params lower to (an airflow's paths read from `doc`).
-/// The bake, the draw, the footprint and the readings all read them from the scene. A driven
-/// value out of its range refuses the frame as view3d refuses such a document, naming the field.
-fn follow_effects(scene: &mut Scene, doc: &Value) -> Result<(), Value> {
-    use deep_canvas_effects::effect;
-    let mut items = Map::new();
-    let mut broken = Vec::new();
-    for o in scene.others.iter().filter(|o| o.kind == "effect@1") {
-        let mut item = doc["items"][&o.id].clone();
-        item["params"] = o.params.clone();
-        broken.extend(effect::item_issues(doc, &o.id, &item));
-        let paths: Vec<&str> = o.params["airflow"]["paths"]
-            .as_array()
-            .map_or(Vec::new(), |a| a.iter().filter_map(Value::as_str).collect());
-        if effect::kind_of(&item).is_none() || paths.iter().any(|c| doc["items"].get(c).is_none()) {
-            continue;
-        }
-        for c in paths {
-            items.insert(c.to_string(), doc["items"][c].clone());
-        }
-        items.insert(o.id.clone(), item);
-    }
-    if !broken.is_empty() {
-        return Err(json!({"code": "refused", "issues": broken}));
-    }
-    if items.is_empty() {
-        return Ok(());
-    }
-    let mut lowered = json!({ "items": items });
-    effect::lower(&mut lowered);
-    for o in scene.others.iter_mut().filter(|o| o.kind == "particles@1") {
-        if let Some(d) = lowered["items"]
-            .get(&o.id)
-            .filter(|d| d.get("lowered").is_some())
-        {
-            o.params = d["params"].clone();
-        }
-    }
-    Ok(())
 }
 
 /// The particle path's plants under `--planted`: the CPU and table switches, the kernel's flag
@@ -252,15 +207,6 @@ fn v3(v: [f64; 3]) -> Value {
     json!(v)
 }
 
-/// Vertices as the kernel's `now` buffer reads them.
-fn flat(v: Option<&[[f64; 3]]>) -> Vec<f32> {
-    v.into_iter()
-        .flatten()
-        .flatten()
-        .map(|x| *x as f32)
-        .collect()
-}
-
 /// The frames this process drew, s, in order: the planted inherit reads them.
 static DRAWN: Mutex<Vec<f64>> = Mutex::new(Vec::new());
 
@@ -375,241 +321,9 @@ fn reading(
     Ok(json!({"count": count, "particles": particles, "turbulence": turbulence, "at": at}))
 }
 
-/// A bake and its packed tables.
-pub(crate) type Held = Arc<(Baked, Tables)>;
-
-/// Bakes kept by content key, so a frame packs only its uniform.
-static BAKED: Mutex<BTreeMap<String, Held>> = Mutex::new(BTreeMap::new());
-/// At most this many bakes are kept.
-const KEPT: usize = 16;
-/// #265: each world-space emitter's anchors, by item, anchor, span and document hash.
-static ANCHORS: Mutex<BTreeMap<String, eval::Anchors>> = Mutex::new(BTreeMap::new());
-
 /// A refusal as the call's reply: its code, the path it names and the sentence naming why.
 pub(crate) fn refusal(r: &Refusal) -> Value {
     json!({"code": r.code, "reason": r.path, "path": r.path, "what": r.what})
-}
-
-/// Item `id`'s bake: kept, or baked now with every particles item it bursts at baked first; a
-/// chain of `emit.on.particles` that comes back to an item is refused, naming its items.
-pub(crate) fn baked(
-    doc: &Value,
-    scene: &Scene,
-    id: &str,
-    seed: u32,
-    plants: Plants,
-    chain: &mut Vec<String>,
-) -> Result<Held, Refusal> {
-    if chain.iter().any(|c| c == id) {
-        chain.push(id.to_string());
-        return Err(Refusal::new(
-            "cycle",
-            format!("items/{id}/params/emit/on/particles"),
-            format!(
-                "bursts at particles come back to {id}: {}",
-                chain.join(" → ")
-            ),
-        ));
-    }
-    let o = scene
-        .others
-        .iter()
-        .find(|o| o.id == id && o.kind == "particles@1")
-        .ok_or_else(|| {
-            Refusal::new(
-                "ref_unresolved",
-                format!("items/{id}"),
-                format!("{id} is no particles item"),
-            )
-        })?;
-    let p = &o.params;
-    let origin = p["emit"]["anchor"]
-        .as_str()
-        .and_then(|a| item_pos(scene, a))
-        .unwrap_or(o.pos);
-    let curve_id = p["motion"]["along"]["curve"]
-        .as_str()
-        .or(p["emit"]["shape"]["along"].as_str());
-    let curve = curve_id
-        .and_then(|c| scene.curves.get(c))
-        .map(|pts| resampled(pts))
-        .unwrap_or((Vec::new(), 0.0));
-    chain.push(id.to_string());
-    let parent_id = p["emit"]["on"]["particles"].as_str();
-    let doc_seed = doc["seed"].as_u64().unwrap_or(0);
-    let parent = match parent_id {
-        Some(pid) => Some(baked(
-            doc,
-            scene,
-            pid,
-            item_seed(doc_seed, pid),
-            plants,
-            chain,
-        )?),
-        None => None,
-    };
-    chain.pop();
-    let inputs = Inputs {
-        doc,
-        scene,
-        id,
-        params: p,
-        seed,
-        origin,
-        curve,
-        parent: parent_id.zip(parent.as_ref().map(|h| &h.0)),
-        planted: plants,
-    };
-    let spec = closed::spec::read(doc, id, p)?;
-    // #451: a world-space emitter reads its anchor at every birth bucket, so its bake is keyed by
-    // the whole document that moves the anchor, and a flow by the curves it runs along.
-    let world = p["emit"]["anchor"]
-        .as_str()
-        .filter(|_| spec.space == closed::spec::Space::World);
-    // #451: a flow along many curves, each as the scene lays it out.
-    let flows = match &spec.motion {
-        closed::spec::Motion::Along { many: Some(m), .. } => {
-            let names: Vec<String> = match &m.collection {
-                Some(c) => doc["collections"][c]["members"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(Value::as_str)
-                    .map(str::to_string)
-                    .collect(),
-                None => m.curves.clone(),
-            };
-            names
-                .iter()
-                .map(|n| {
-                    scene
-                        .curves
-                        .get(n)
-                        .map(|pts| closed::flows::Curve::new(pts.clone()))
-                        .ok_or_else(|| {
-                            Refusal::new(
-                                "ref_unresolved",
-                                format!("items/{id}/params/motion/along/curves"),
-                                format!("{id}: along.curves names {n}, which is no curve"),
-                            )
-                        })
-                })
-                .collect::<Result<Vec<_>, _>>()?
-        }
-        _ => Vec::new(),
-    };
-    let mut h = deep_canvas::schedule::Hasher::new("particles.flows");
-    if world.is_some() {
-        h.bytes(doc.to_string().as_bytes());
-    }
-    for x in flows.iter().flat_map(|c| c.points.iter().flatten()) {
-        h.bytes(&x.to_le_bytes());
-    }
-    let moved = h.finish().hex();
-    let key = format!("{}{:?}{moved}", bake::key(&inputs, &spec), plants);
-    if let Some(h) = BAKED.lock().unwrap_or_else(|e| e.into_inner()).get(&key) {
-        return Ok(h.clone());
-    }
-    let mut b = bake::bake(&inputs)?;
-    b.flows = flows;
-    if let Some(anchor) = world {
-        // #265: the anchors are the document's, whatever frame asks: kept by its hash, so a
-        // moving anchor that rekeys the bake each frame never reads its buckets again.
-        let kept = format!("{id}#{anchor}#{}#{moved}", spec.span);
-        let held = ANCHORS
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .get(&kept)
-            .cloned();
-        b.anchors = Some(match held {
-            Some(a) => a,
-            None => {
-                let a = anchors(doc, id, anchor, spec.span)?;
-                let mut all = ANCHORS.lock().unwrap_or_else(|e| e.into_inner());
-                if all.len() >= KEPT {
-                    all.clear();
-                }
-                all.insert(kept, a.clone());
-                a
-            }
-        });
-    }
-    let tables = pack::tables(&b);
-    let held: Held = Arc::new((b, tables));
-    let mut kept = BAKED.lock().unwrap_or_else(|e| e.into_inner());
-    if kept.len() >= KEPT {
-        kept.clear();
-    }
-    kept.insert(key, held.clone());
-    Ok(held)
-}
-
-/// A world-space emitter's anchor at each birth bucket of the document's span: its place at
-/// each whole multiple of its frame interval, through the chain a trail reads (channels, drivers
-/// reading a logic bake, constraints, a physics bake's outputs), never a pose kept from a frame
-/// and never a whole scene evaluated for it (#265).
-fn anchors(doc: &Value, id: &str, anchor: &str, emits: f64) -> Result<eval::Anchors, Refusal> {
-    let (p, q) = doc
-        .get("transport")
-        .and_then(deep_canvas::document::frame_rate_of)
-        .unwrap_or((60, 1));
-    let per = i64::from(q) * FLICKS as i64 / i64::from(p);
-    let span = doc
-        .pointer("/transport/span")
-        .and_then(|v| deep_canvas::document::duration(doc, v).ok())
-        .map_or(10.0, |f| f as f64 / FLICKS)
-        .min(emits);
-    let step = per as f64 / FLICKS;
-    let n = ((span / step).ceil() as usize + 1).min(1 << 16);
-    let bad = |what: String| {
-        Refusal::new(
-            "ref_unresolved",
-            format!("items/{id}/params/emit/anchor"),
-            what,
-        )
-    };
-    let map = doc
-        .as_object()
-        .ok_or_else(|| bad(format!("{id}: the document isn't an object")))?;
-    let times: Vec<i64> = (0..n as i64).map(|k| k * per).collect();
-    let at = deep_canvas_scene3d::trail::places(map, anchor, &times).map_err(|r| {
-        bad(format!(
-            "{id}: emit.anchor names {anchor}, which isn't placed ({}: {})",
-            r.code, r.path
-        ))
-    })?;
-    Ok(eval::Anchors { step, at })
-}
-
-/// Whether `bx`, grown by `reach` m and by `pad` px across the view, lies wholly outside what
-/// the camera draws: past one side of the view or behind the eye, where the draw hides a
-/// particle (particles.wgsl). Clip coordinates are linear in world ones, so a box all of whose
-/// corners lie past one such plane lies past it whole.
-fn outside(scene: &Scene, bx: [[f64; 3]; 2], reach: f64, pad: f64) -> bool {
-    let m = scene
-        .camera
-        .clip(deep_canvas_scene3d::scene::Depth::Reversed);
-    let [w, h] = scene.camera.size;
-    let (kx, ky) = (1.0 + 2.0 * pad / w.max(1.0), 1.0 + 2.0 * pad / h.max(1.0));
-    // Each corner's clip x, y and w.
-    let corners: Vec<[f64; 3]> = (0..8)
-        .map(|c: usize| {
-            let p = [0, 1, 2].map(|k| {
-                if c >> k & 1 == 1 {
-                    bx[1][k] + reach
-                } else {
-                    bx[0][k] - reach
-                }
-            });
-            [0, 1, 3].map(|r| m[r][0] * p[0] + m[r][1] * p[1] + m[r][2] * p[2] + m[r][3])
-        })
-        .collect();
-    let all = |f: &dyn Fn(&[f64; 3]) -> bool| corners.iter().all(f);
-    all(&|c| c[2] <= 0.0)
-        || all(&|c| c[0] > kx * c[2])
-        || all(&|c| -c[0] > kx * c[2])
-        || all(&|c| c[1] > ky * c[2])
-        || all(&|c| -c[1] > ky * c[2])
 }
 
 /// The evaluated-data hash of an item at t (tests/acceptance/449/README.md: view3d's
@@ -644,10 +358,64 @@ fn evaluated(
     (crate::frames::hex(&bytes), live)
 }
 
-/// Readies a frame's particles at `t`: every closed-form item in `settings` gets its frame's
-/// words (the rest keep the shipped graph), and an item whose closed-form bounds, grown by its
-/// sprites' size, lie outside the view is culled: neither dispatched nor drawn, unless the call
-/// says `particle_cull: "none"`. With `particles: [ids]` asked, the frame's report on each.
+/// `view3d`'s host of a frame's particles: the planted programs, and the report on the items its
+/// call asks for (`particles: [ids]`).
+struct View<'a> {
+    planted: Option<Planted>,
+    call: &'a Value,
+    asked: Vec<&'a str>,
+    t: f64,
+    report: Map<String, Value>,
+}
+
+impl Host for View<'_> {
+    fn plants(&self) -> Plants {
+        plants(self.planted).0
+    }
+
+    fn flags(&self) -> u32 {
+        plants(self.planted).1
+    }
+
+    fn culls(&self) -> bool {
+        self.call["particle_cull"] != "none"
+    }
+
+    fn held(&mut self, held: Held, scene: &Scene, o: &Other, t: f64) -> Held {
+        // The planted inherit reads the frames this process drew before.
+        let held = if self.plants().inherit_previous_frame && held.0.surface.is_some() {
+            let mut b = held.0.clone();
+            b.drawn = DRAWN.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            let tables = pack::tables(&b);
+            Arc::new((b, tables))
+        } else {
+            held
+        };
+        // #265's planted anchor, kept from the frames this process drew.
+        if self.planted == Some(Planted::AnchorKeptFromFrame) && held.0.anchors.is_some() {
+            return anchored_from_frames(&held, scene, &o.params, &o.id, t);
+        }
+        held
+    }
+
+    fn readied(
+        &mut self,
+        id: &str,
+        b: &Baked,
+        now: Option<&[[f64; 3]]>,
+        ribbon: Option<&Ribbon>,
+        culled: bool,
+    ) {
+        if self.asked.contains(&id) {
+            let (hash, live) = evaluated(b, self.t, now, ribbon);
+            let row = json!({"hash": hash, "live": live, "culled": culled});
+            self.report.insert(id.to_string(), row);
+        }
+    }
+}
+
+/// Readies a frame's particles at `t` (deep_effects_render::particles::frame), unculled when the
+/// call says `particle_cull: "none"`. With `particles: [ids]` asked, the frame's report on each.
 pub(crate) fn frame(
     settings: &mut Settings,
     doc: &Value,
@@ -656,320 +424,43 @@ pub(crate) fn frame(
     call: &Value,
     planted: Option<Planted>,
 ) -> Result<Option<Value>, Value> {
-    let (plants, flags, _) = plants(planted);
-    let cull = call["particle_cull"] != "none";
     let asked: Vec<&str> = call["particles"]
         .as_array()
         .map(|a| a.iter().filter_map(Value::as_str).collect())
         .unwrap_or_default();
-    let mut report = Map::new();
-    let mut kept = Vec::new();
-    for mut sp in std::mem::take(&mut settings.sparks) {
-        let Some(o) = scene.others.iter().find(|o| o.id == sp.item) else {
-            kept.push(sp);
-            continue;
-        };
-        let extended = closed::extended(&o.params);
-        // A closed-form item's bake refuses the frame; a shipped-graph item it can't read is
-        // drawn without culling, as before.
-        let held = match baked(doc, scene, &sp.item, sp.seed, plants, &mut Vec::new()) {
-            Ok(h) => Some(h),
-            Err(r) if extended => return Err(refusal(&r)),
-            Err(_) => None,
-        };
-        let mut culled = false;
-        // The planted inherit reads the frames this process drew before.
-        let held = match held {
-            Some(h) if plants.inherit_previous_frame && h.0.surface.is_some() => {
-                let mut b = h.0.clone();
-                b.drawn = DRAWN.lock().unwrap_or_else(|e| e.into_inner()).clone();
-                let tables = pack::tables(&b);
-                Some(Arc::new((b, tables)))
-            }
-            other => other,
-        };
-        // #265's planted anchor, kept from the frames this process drew.
-        let held = match held {
-            Some(h) if planted == Some(Planted::AnchorKeptFromFrame) && h.0.anchors.is_some() => {
-                Some(anchored_from_frames(&h, scene, &o.params, &sp.item, t))
-            }
-            other => other,
-        };
-        let now = held
-            .as_ref()
-            .and_then(|h| h.0.surface.as_ref().filter(|_| h.0.spec.follow))
-            .map(|sf| sf.now(scene));
-        // #450: a ribbon's rows back along its length, one dispatch a segment end.
-        let ribbon = closed::draws::read(&sp.item, &o.params)
-            .map_err(|r| refusal(&r))?
-            .ribbon;
-        if let Some(h) = &held {
-            let (b, tables) = &**h;
-            if extended {
-                sp.count = b.spec.count;
-                let uniforms = match &ribbon {
-                    Some(r) => pack::ribbon(b, r, t, tables, flags, true),
-                    None => vec![pack::uniform(b, t, tables, flags)],
-                };
-                sp.ribbon = ribbon.map(|r| (r.segments, r.width, r.taper, r.fade));
-                // Its rows draw as a ribbon's quads, never as sprites (particles.wgsl: kind 4).
-                if sp.ribbon.is_some() {
-                    sp.draw = 4;
-                }
-                sp.closed = Some((uniforms, tables.words.clone(), flat(now.as_deref())));
-            }
-            if cull {
-                let pad = 0.5 * sp.size[0].max(sp.size[1]).max(1.0) * sp.size_px + 2.0;
-                // A streak reaches a 30th of a second ahead, a ribbon its length behind (#450).
-                let reach = match (&ribbon, sp.draw) {
-                    (Some(r), _) => {
-                        bounds::speed(b, t).max(bounds::speed(b, t - r.length)) * r.length
-                    }
-                    (None, 3) => bounds::speed(b, t) / 30.0,
-                    _ => 0.0,
-                };
-                culled = bounds::bounds(b, t).is_none_or(|bx| outside(scene, bx, reach, pad));
-            }
-            if asked.contains(&sp.item.as_str()) {
-                let (hash, live) = evaluated(b, t, now.as_deref(), ribbon.as_ref());
-                report.insert(
-                    sp.item.clone(),
-                    json!({"hash": hash, "live": live, "culled": culled}),
-                );
-            }
-        }
-        // A mesh draw's particles draw as its instancer's elements (#450), never as sprites.
-        let mesh = closed::draws::read(&sp.item, &o.params).is_ok_and(|d| d.mesh.is_some());
-        if !culled && !mesh {
-            kept.push(sp);
-        }
-    }
-    settings.sparks = kept;
-    DRAWN.lock().unwrap_or_else(|e| e.into_inner()).push(t);
-    Ok((!asked.is_empty()).then_some(Value::Object(report)))
-}
-
-/// #508: the rect (px, x0 y0 x1 y1) holding a projected world box grown by `pad` px, clamped to
-/// the frame; the whole frame when a corner is behind the eye; `None` when it's empty.
-fn rect_of(
-    cam: &deep_canvas_scene3d::scene::Camera,
-    corners: &[[f64; 3]],
-    pad: f64,
-) -> Option<[f64; 4]> {
-    let [w, h] = cam.size;
-    let projected: Option<Vec<[f64; 3]>> = corners.iter().map(|c| cam.project(*c)).collect();
-    let r = match projected {
-        Some(c) => {
-            let (xs, ys) = (c.iter().map(|p| p[0]), c.iter().map(|p| p[1]));
-            [
-                xs.clone().fold(f64::INFINITY, f64::min) - pad,
-                ys.clone().fold(f64::INFINITY, f64::min) - pad,
-                xs.fold(f64::NEG_INFINITY, f64::max) + pad,
-                ys.fold(f64::NEG_INFINITY, f64::max) + pad,
-            ]
-        }
-        None => [0.0, 0.0, w, h],
+    let mut view = View {
+        planted,
+        call,
+        asked,
+        t,
+        report: Map::new(),
     };
-    let r = [
-        r[0].floor().clamp(0.0, w),
-        r[1].floor().clamp(0.0, h),
-        r[2].ceil().clamp(0.0, w),
-        r[3].ceil().clamp(0.0, h),
-    ];
-    (r[2] > r[0] && r[3] > r[1]).then_some(r)
+    shared::frame(settings, doc, scene, t, &mut view).map_err(|r| refusal(&r))?;
+    DRAWN.lock().unwrap_or_else(|e| e.into_inner()).push(t);
+    Ok((!view.asked.is_empty()).then_some(Value::Object(view.report)))
 }
 
-/// A box's eight corners.
-fn corners_of([lo, hi]: [[f64; 3]; 2]) -> Vec<[f64; 3]> {
-    (0..8usize)
-        .map(|c| [0, 1, 2].map(|k| if c >> k & 1 == 1 { hi[k] } else { lo[k] }))
-        .collect()
-}
-
-fn cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
-    [
-        a[1] * b[2] - a[2] * b[1],
-        a[2] * b[0] - a[0] * b[2],
-        a[0] * b[1] - a[1] * b[0],
-    ]
-}
-
-fn unit(a: [f64; 3]) -> [f64; 3] {
-    let l = deep_canvas::ops::sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]).max(1e-12);
-    a.map(|x| x / l)
-}
-
-fn union(a: Option<[f64; 4]>, b: [f64; 4]) -> [f64; 4] {
-    a.map_or(b, |a| {
-        [
-            a[0].min(b[0]),
-            a[1].min(b[1]),
-            a[2].max(b[2]),
-            a[3].max(b[3]),
-        ]
-    })
-}
-
-/// #508: each film effect's screen footprint this frame (Surfaces this job invents, 5), by item:
-/// the rect (px) holding everything it draws or displaces. A plume's or an airflow's is its
-/// particles' closed-form bounds at `t` projected and grown by their sprites' size; a wave
-/// field's its disc of `radius` on its plane; an arc's its ends' box grown by its jitter and its
-/// glow's reach. Each plume with a haze adds the haze over its footprint to `settings`, with its
-/// cell (its `scale` in px at the bounds' centre) and its flow (the plume's speed along its axis
-/// on screen, px/s). An effect that draws nothing in view this frame has no footprint.
+/// #508: each film effect's footprint this frame, its haze in `settings`
+/// (deep_effects_render::particles::effects).
 pub(crate) fn effects(
     settings: &mut Settings,
     doc: &Value,
     scene: &Scene,
     t: f64,
     planted: Option<Planted>,
-    seeding: crate::effects::Seeding,
+    seeding: Seeding,
 ) -> Result<Map<String, Value>, Value> {
-    use deep_canvas_effects::effect;
-    let (plants, _, _) = plants(planted);
-    let cam = &scene.camera;
-    let doc_seed = doc["seed"].as_u64().unwrap_or(0);
-    let mut out = Map::new();
-    for o in scene.others.iter().filter(|o| o.kind == "effect@1") {
-        let Some(kind) = o.params["kind"]
-            .as_str()
-            .filter(|k| effect::KINDS.contains(k))
-        else {
-            continue;
-        };
-        let p = &o.params;
-        let n = |f: &str| effect::num(p, kind, f);
-        let mut rect = None;
-        let mut centre = None;
-        match kind {
-            "plume" | "airflow" => {
-                for sp in settings
-                    .sparks
-                    .iter()
-                    .filter(|s| s.effect.as_deref() == Some(&o.id))
-                {
-                    let pad = 0.5 * sp.size[0].max(sp.size[1]).max(1.0) * sp.size_px + 2.0;
-                    let held = baked(doc, scene, &sp.item, sp.seed, plants, &mut Vec::new())
-                        .map_err(|r| refusal(&r))?;
-                    let Some(bx) = bounds::bounds(&held.0, t) else {
-                        continue;
-                    };
-                    centre = Some([0, 1, 2].map(|k| 0.5 * (bx[0][k] + bx[1][k])));
-                    if let Some(r) = rect_of(cam, &corners_of(bx), pad) {
-                        rect = Some(union(rect, r));
-                    }
-                }
-            }
-            "wave_field" | "arc" => {
-                let Some(e) = settings.emits.iter().find(|e| e.item == o.id) else {
-                    continue;
-                };
-                let v3 = |k: &str| -> [f64; 3] {
-                    let v = &e.params[k];
-                    [0, 1, 2].map(|i| v[i].as_f64().unwrap_or(0.0))
-                };
-                if kind == "wave_field" {
-                    let (c, a, r) = (v3("wave.point"), v3("wave.normal"), n("radius"));
-                    // Two directions across the axis.
-                    let other = if a[0].abs() < 0.9 {
-                        [1.0, 0.0, 0.0]
-                    } else {
-                        [0.0, 1.0, 0.0]
-                    };
-                    let u = unit(cross(a, other));
-                    let w = cross(a, u);
-                    let disc: Vec<[f64; 3]> = [(1.0, 1.0), (1.0, -1.0), (-1.0, 1.0), (-1.0, -1.0)]
-                        .iter()
-                        .map(|(i, j)| [0, 1, 2].map(|k| c[k] + r * (i * u[k] + j * w[k])))
-                        .collect();
-                    rect = rect_of(cam, &disc, 2.0);
-                } else {
-                    let reach = n("jitter") + 4.0 * n("width") + 2.0;
-                    rect = rect_of(cam, &[v3("arc.from"), v3("arc.to")], reach);
-                }
-            }
-            _ => {}
-        }
-        let Some(rect) = rect else {
-            continue;
-        };
-        if let (true, Some(centre)) = (kind == "plume" && n("haze/strength") > 0.0, centre) {
-            let at = cam.project(centre);
-            let px_per_m = at.map_or(1.0, |q| cam.px_per_m(q[2]));
-            let a = effect::axis(&p["axis"]);
-            let speed = n("reach") / effect::PLUME_LIFE;
-            let ahead = cam.project([0, 1, 2].map(|k| centre[k] + a[k] * speed));
-            let flow = match (at, ahead) {
-                (Some(q), Some(r)) => [r[0] - q[0], r[1] - q[1]],
-                _ => [0.0, 0.0],
-            };
-            settings.hazes.push(deep_effects_render::frame::Haze {
-                item: o.id.clone(),
-                params: std::collections::BTreeMap::from([
-                    ("haze.strength".to_string(), json!(n("haze/strength"))),
-                    (
-                        "haze.cell".to_string(),
-                        json!((n("haze/scale") * px_per_m).max(1.0)),
-                    ),
-                    ("haze.flow".to_string(), json!(flow)),
-                    ("haze.rect".to_string(), json!(rect)),
-                ]),
-                seed: crate::effects::effect_seed(doc_seed, o, seeding),
-            });
-        }
-        out.insert(o.id.clone(), json!({"box": rect}));
-    }
-    Ok(out)
+    shared::effects(settings, doc, scene, t, plants(planted).0, seeding).map_err(|r| refusal(&r))
 }
 
-/// #450: the document with each `draw: mesh` particles item's live particles at `t` (s) as the
-/// columns of an instancer of its prototypes, `<item>_mesh`, in the item's layer and order: its
-/// rows each live particle's slot, place, rotation and scale from the f64 closed form. `None`
-/// when no item draws meshes, so the scene drawn first stands.
+/// #450: the document with its mesh particles as instancers (deep_effects_render::particles::meshes).
 pub(crate) fn meshes(
     doc: &Value,
     scene: &Scene,
     t: f64,
     planted: Option<Planted>,
 ) -> Result<Option<Value>, Value> {
-    let (plants, _, _) = plants(planted);
-    let doc_seed = doc["seed"].as_u64().unwrap_or(0);
-    let mut out: Option<Value> = None;
-    for (id, item) in rule::items(doc) {
-        let Some(m) = closed::draws::read(id, &item["params"])
-            .map_err(|r| refusal(&r))?
-            .mesh
-        else {
-            continue;
-        };
-        let held = baked(
-            doc,
-            scene,
-            id,
-            item_seed(doc_seed, id),
-            plants,
-            &mut Vec::new(),
-        )
-        .map_err(|r| refusal(&r))?;
-        let b = &held.0;
-        let now = b
-            .surface
-            .as_ref()
-            .filter(|_| b.spec.follow)
-            .map(|sf| sf.now(scene));
-        let rows: Vec<(u32, closed::draws::Instance)> = (0..b.spec.count)
-            .filter_map(|e| Some((e, closed::draws::instance(b, &m, e, t, now.as_deref())?)))
-            .collect();
-        let col = |f: &dyn Fn(&closed::draws::Instance) -> Value| {
-            rows.iter().map(|(_, i)| f(i)).collect::<Vec<_>>()
-        };
-        let instancer = json!({"id": format!("{id}_mesh"), "kind": "instance@1", "layer": item["layer"], "order": item["order"],
-            "params": {"of": m.of, "ids": rows.iter().map(|(e, _)| e).collect::<Vec<_>>(), "pos": col(&|i| json!(i.pos)),
-                       "rot": col(&|i| json!(i.rot)), "scale": col(&|i| json!(i.scale)), "proto": col(&|i| json!(i.proto))}});
-        let fed = out.get_or_insert_with(|| doc.clone());
-        fed["items"][format!("{id}_mesh")] = instancer;
-    }
-    Ok(out)
+    shared::meshes(doc, scene, t, plants(planted).0).map_err(|r| refusal(&r))
 }
 
 /// The check's refusal of a document's particles before anything draws: `{"code": "refused",

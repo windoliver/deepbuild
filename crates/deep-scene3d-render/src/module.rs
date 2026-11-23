@@ -552,7 +552,7 @@ pub fn draw_offscreen(
     renderer: &mut Renderer,
     scene: &Scene,
     look: &Look3,
-    post: Option<&mut dyn Post>,
+    mut post: Option<&mut dyn Post>,
 ) -> Option<Vec<u8>> {
     let size = scene.size;
     let texture = texture2d(
@@ -562,6 +562,8 @@ pub fn draw_offscreen(
         FORMAT,
         wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
     );
+    // The instances outputs its instancers draw from, as a live frame's (#484, #1719).
+    renderer.feed(post.as_mut().map_or(Vec::new(), |p| p.sources(device)));
     renderer.prepare(device, scene, look);
     let mut encoder = device.device.create_command_encoder(&Default::default());
     for (_, job) in renderer.jobs(

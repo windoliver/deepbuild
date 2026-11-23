@@ -132,7 +132,7 @@ fn run_view(
             return Ok(());
         };
         let prefix = key.as_ref().map_or_else(String::new, |k| format!("{k}/"));
-        let ms = f.apply(app, profiler, &prefix, bytes, size, keep, true)?;
+        let ms = crate::look_ops::apply(f, app, profiler, &prefix, bytes, size, keep, true)?;
         if let (Some(ms), Some((gpu_ms, passes))) = (ms, timing) {
             *gpu_ms += ms;
             passes.insert(format!("{prefix}look.finish"), ms);
@@ -714,13 +714,7 @@ fn run_view(
             }
             let selected = levels.select(&composed, &scene);
             let settled = levels.settle(&selected);
-            let seeding = match app.planted {
-                Some(Planted::NoiseFromFrameCounter) => {
-                    effects::Seeding::FrameCounter(n - args.from)
-                }
-                Some(Planted::NoiseFromClock) => effects::Seeding::Clock,
-                _ => effects::Seeding::Item,
-            };
+            let seeding = effects::seeding(app.planted, n - args.from);
             // #420 AC1's wrong program steps the operators' clock from the last frame drawn,
             // so a seek starts it again at zero; the shipped one reads t itself.
             let fx_t = match app.planted {
