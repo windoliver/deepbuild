@@ -453,6 +453,33 @@ function changesOf(current, established) {
   return { lowered, loosened, other: !isDeepStrictEqual(rest(definition(current)), rest(definition(established))) };
 }
 
+/** Why `run` isn't a measured full preflight on a reference Mac at a load below its cores (#3137); null when it is one. */
+function unmeasured(run) {
+  const mac = references.find(({ model }) => model === run?.machine);
+  if (typeof run?.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(run.date) || Number.isNaN(Date.parse(run.date))) return `its date ${shown(run?.date)} isn't a day, YYYY-MM-DD`;
+  if (!mac) return `its machine ${shown(run.machine)} is none of the reference Macs' models (${references.map(({ model }) => model).join(', ')})`;
+  if (!Number.isFinite(run.load) || run.load < 0 || run.load >= mac.cores) return `its load ${shown(run.load)} isn't below the ${mac.cores} cores of ${mac.name}`;
+  if (!Number.isFinite(run.elapsedMs) || run.elapsedMs <= 0) return `its elapsedMs ${shown(run.elapsedMs)} isn't a time`;
+  return null;
+}
+
+/**
+ * The preflight's budget past its one move (#3137): it moves again only by an approved proposal, as a task's loosening
+ * does (#2665), one item for each limit that changes, and records the measured full run it moves for as `measured`
+ * ({date, machine, load, elapsedMs}), a run no earlier move recorded, with a changeReason of its own. Nothing else of
+ * it changes. Throws, naming what's missing.
+ */
+function movePreflight(current, established, approved) {
+  const rest = ({ limits, changeReason, measured, ...other } = {}) => other;
+  const moves = current && Object.keys({ ...established.limits, ...current.limits }).filter((field) => current.limits?.[field] !== established.limits[field]).map((field) => ({ field, before: established.limits[field], after: current.limits?.[field] }));
+  if (!moves?.length || !isDeepStrictEqual(rest(current), rest(established))) throw Error('Budget preflight changed or disappeared; restore its frozen definition');
+  const refused = moves.filter((move) => !approved.includes(proposal('preflight', move)));
+  if (refused.length) throw Error(`Budget preflight: ${refused.map(({ field, before, after }) => `its ${field} limit ${before === undefined ? `added at ${after}` : after === undefined ? `${before} removed` : `moved from ${before} to ${after}`}`).join('; ')}. It moves only by an approved proposal: restore it, or have the maintainer approve the commit with a signed tag under deep/approved/ holding ${refused.map((move) => `Approves: ${proposal('preflight', move)}`).join(', ')}`);
+  const why = unmeasured(current.measured) ?? (isDeepStrictEqual(current.measured, established.measured) ? 'it is the run an earlier move recorded' : null);
+  if (why) throw Error(`Budget preflight: a move records the measured full run it moves for as measured: {date, machine, load, elapsedMs}, and ${why}`);
+  if (typeof current.changeReason !== 'string' || !current.changeReason.trim() || current.changeReason === established.changeReason) throw Error('Budget preflight: a move gives a reason of its own as changeReason, naming the measured run');
+}
+
 /**
  * Checks a manifest against its merge base's, and returns each limit the change lowers, `{id, metric, old, new}`.
  * Ceilings only move down (#2665): a task main holds may lower a limit or narrow its margin, and a raised or removed
@@ -461,7 +488,7 @@ function changesOf(current, established) {
  */
 export function validateBudgets(current, base, approved = []) {
   if (!Array.isArray(current?.tasks)) throw Error('Missing budget tasks');
-  if (base?.preflight && !frozen(current.preflight, base.preflight)) throw Error('Budget preflight changed or disappeared; restore its frozen definition');
+  if (base?.preflight && !frozen(current.preflight, base.preflight)) movePreflight(current.preflight, base.preflight, approved);
   if (base?.harness && !frozen(current.harness, base.harness)) throw Error('Budget harness changed or disappeared; restore its frozen definition');
   const lowered = [], refused = [];
   for (const established of base?.tasks ?? []) {

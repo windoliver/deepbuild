@@ -2746,6 +2746,10 @@ Agents build DeepBuild and agents build on it, so its proof comes in layers, and
 
 **Where each layer runs.** Per change, the local preflight runs the lanes the change touches: the trace lane and the criteria lint, the edit guard and the merge-base run of each new or changed tagged test, the wrong programs its criteria name, generated tests at 1,000 cases, held-out variants of the acceptance tests it tags, the kits of the slots it fills, the generated edges of the schemas it changes, the verdict replay when it touches the gate, and the API diff. The release preflight adds the mutation lane, 100,000 generated cases and the ecosystem corpus, and the mutation lane also runs on demand for a change whose new code has a criterion that names no wrong program. The lifecycle enumerator and the crash suite run in the local preflight when a change touches a lifecycle table or the hub core's storage, and in full at release.
 
+### The preflight's unit lane and its budget
+
+The preflight's unit lane, local and release alike, runs its alone block in shards, as `scripts/affected.mjs` runs it ([Parallel proof, section 7a](parallel-proof.md#7a-shards-exclusive-folders-and-slow-files-in-affectedmjs-owner-decision-2026-11-07)): its folders side by side, each in a shard, on the run's one jobserver, then the exclusive folders one at a time, then the timed files one at a time, with the slow files among the rest, so every file still runs whole and the lane's record still holds each test. The `preflight` budget in `benchmarks/budgets.json` covers the checks with their builds, from the warm-up to the end of the check lanes, on the preflight's timed grant; perf, the harness budgets and the release lanes run outside it. It moved once with its reason, and moves again only by an approved proposal that records the measured full run it moves for: its day, a reference Mac, a load below that Mac's cores and its elapsed time. A move with no approval, or with no such run, is refused ([Budget windows](parallel-proof.md#12a-budget-windows-owner-decision-2026-11-02); owner decision on #3137, 2026-11-22).
+
 <a id="plan"></a>
 <a id="five-weeks-to-version-0"></a>
 
