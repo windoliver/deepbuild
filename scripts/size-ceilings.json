@@ -31,8 +31,8 @@
   "crates/deep-replica/src/drive/mod.rs": 2290,
   "crates/deep-scene3d-render/src/lib.rs": 8967,
   "crates/deep-scene3d-render/src/scene3d.wgsl": 3102,
-  "crates/deep-show/src/hub.rs": 2653,
-  "crates/deep-show/src/main.rs": 2944,
+  "crates/deep-show/src/hub.rs": 2609,
+  "crates/deep-show/src/main.rs": 2942,
   "packages/asks/src/index.ts": 2050,
   "packages/extension-host/src/host.ts": 3150,
   "packages/hub/src/core.ts": 2636

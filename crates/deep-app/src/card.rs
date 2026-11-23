@@ -1419,8 +1419,8 @@ impl Card {
         }
     }
 
-    /// A picture the card judges was replaced while it shows (#3234): the core pinned one of its asks to other evidence.
-    /// The card reads its asks again, and a new hash counts as not shown. Whether it did.
+    /// A picture the card judges was replaced while it shows (#3234): the document one of its asks is pinned to got a
+    /// new revision (`doc.patched`). The card reads its asks again, and a new hash counts as not shown. Whether it did.
     fn catch_up(&mut self) -> bool {
         let Some(controller) = self.controller.as_mut() else {
             return false;
@@ -1428,12 +1428,21 @@ impl Card {
         let since = self.moved_at;
         let asks = controller.judged_asks();
         let (at, moved) = crate::record::with_view(|view| {
+            let docs: Vec<&str> = view
+                .events
+                .iter()
+                .filter(|event| {
+                    event["kind"] == "ask.created"
+                        && asks.iter().any(|a| *a == crate::states::handle(event))
+                })
+                .filter_map(|event| crate::pictures::pinned_doc(&event["data"]["pinned_to"]))
+                .collect();
             let moved = view.events.iter().any(|event| {
-                event["kind"] == "ask.moved"
+                event["kind"] == "doc.patched"
                     && event["log_pos"].as_u64().is_some_and(|pos| pos > since)
-                    && event["subject"]
+                    && event["data"]["doc"]
                         .as_str()
-                        .is_some_and(|ask| asks.iter().any(|a| a == ask))
+                        .is_some_and(|doc| docs.contains(&doc))
             });
             (view.log_pos, moved)
         })

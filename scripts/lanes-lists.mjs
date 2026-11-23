@@ -1477,6 +1477,11 @@ byHand.push('tests/acceptance/3234/shown.test.ts');
 // (3234-redraft-ac3/DISPUTE.md).
 byHand.push('tests/acceptance/3234/answer.test.ts');
 alone.push('tests/acceptance/3234-redraft-ac3/');
+// #3234's AC6 runs as its blind redraft, 3234-redraft-ac6/, on the owner's ruling ("Redraft #3234", Nov 23): the first
+// draft feeds an ask.moved, a kind #606.9092f0b3 forbids, so no program passes both. Its card.test.ts, with AC1 and AC2,
+// is kept by hand (3234-redraft-ac6/DISPUTE.md).
+byHand.push('tests/acceptance/3234/card.test.ts');
+alone.push('tests/acceptance/3234-redraft-ac6/');
 
 // #3300: #854's and #896's made-up readings gave their runs no loads (and #854's idle runs no window), so since #1830
 // each test judging one through canvas.mjs judge read INCONCLUSIVE on every machine. Each original file, kept as
