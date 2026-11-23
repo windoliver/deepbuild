@@ -15,16 +15,21 @@ const ABOVE = /[^\x00-\xff]/;
 const RUNS = /\\*[^\x00-\xff]+/g;
 const SEPARATOR = /[\u{2028}\u{2029}]/u;
 const SCRIPT = /\.(?:[cm]?js|d\.[cm]?ts)$/;
+const JSON_FILE = /\.(?:json|tsbuildinfo)$/;
 const units = (text) => Array.from({ length: text.length }, (_, at) => `\\u${text.charCodeAt(at).toString(16).toUpperCase().padStart(4, '0')}`).join('');
 const lineOf = (text, at) => text.slice(0, at).split('\n').length;
 const filesOf = (folder) => readdirSync(folder, { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => join(entry.parentPath, entry.name)).sort();
 
-/** A file's text when it is UTF-8 text with a character above U+00FF, else null: other bytes hold no character. */
+/**
+ * A file's text when it holds a character above U+00FF, else null. A script or JSON file is read as the engine reads
+ * it, a byte that isn't UTF-8 as U+FFFD; any other file only when it is UTF-8 text, since a binary holds no character.
+ */
 function above(path) {
   const bytes = readFileSync(path);
-  if (!bytes.some((byte) => byte > 0xc3)) return null; // U+0100 and up start with a byte above 0xC3
+  if (!bytes.some((byte) => byte > 0x7f)) return null;
   const text = new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes);
-  return Buffer.from(text, 'utf8').equals(bytes) && ABOVE.test(text) ? text : null;
+  if (!ABOVE.test(text)) return null;
+  return SCRIPT.test(path) || JSON_FILE.test(path) || Buffer.from(text, 'utf8').equals(bytes) ? text : null;
 }
 
 /**
@@ -78,7 +83,7 @@ async function escapeBuilt(folder) {
   if (!found.length) return;
   const ts = (await import('typescript')).default;
   for (const { path, text } of found) {
-    const json = /\.(?:json|tsbuildinfo)$/.test(path);
+    const json = JSON_FILE.test(path);
     if (!SCRIPT.test(path) && !json) throw new Error(`${path}:${lineOf(text, text.search(ABOVE))}: a character above U+00FF in a built file that is neither a script nor JSON`);
     // In JSON such a character can only stand in a string, where \uXXXX is the same character.
     const out = json ? text.replace(/[^\x00-\xff]+/g, units) : escaped(ts, path, text);
