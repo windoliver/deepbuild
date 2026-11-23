@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: each file runs `deep hub run` from packages/cli/dist and target/debug/deep-hook; two use #906's planted late reply against deep-hook's 2 s prompt hold, and one stops deep-hook by PID inside a held forge read timed against the hub's 1 s read and its hold; under another suite's load those timings can miss and the run is BLOCKED" }
