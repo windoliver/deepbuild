@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 const ABOVE = /[^\x00-\xff]/;
 const RUNS = /\\*[^\x00-\xff]+/g;
-const SEPARATOR = /[\u{2028}\u{2029}]/u; // each ends a line outside a string, and continues one after a backslash
+const SEPARATOR = /[\u{2028}\u{2029}]/u;
 const SCRIPT = /\.(?:[cm]?js|d\.[cm]?ts)$/;
 const units = (text) => Array.from({ length: text.length }, (_, at) => `\\u${text.charCodeAt(at).toString(16).toUpperCase().padStart(4, '0')}`).join('');
 const lineOf = (text, at) => text.slice(0, at).split('\n').length;
@@ -53,6 +53,8 @@ function escaped(ts, path, text) {
     const slashes = run.search(ABOVE), chars = run.slice(slashes), first = at + slashes, odd = slashes % 2;
     const refuse = (why) => { throw new Error(`${path}:${lineOf(text, first)}: ${why}`); };
     const kept = '\\'.repeat(slashes - odd);
+    // The engine counts a line or paragraph separator as a line's end wherever it stands, in a string too.
+    if (SEPARATOR.test(chars)) refuse('a line or paragraph separator (U+2028, U+2029): the engine counts it as a line\'s end, so an escape would move every later line of a stack trace');
     const tag = within(raw, first);
     if (tag) {
       if (tag[2] !== 'String.raw') refuse(`${JSON.stringify(chars)} in a template tagged ${tag[2]}: an escape would change what the tag reads, so build the text outside the template`);
@@ -60,13 +62,9 @@ function escaped(ts, path, text) {
       return `${kept}\${"${odd ? '\\\\' : ''}${units(chars)}"}`;
     }
     if (within(names, first)) return run.slice(0, slashes) + Array.from(chars, (char) => `\\u{${char.codePointAt(0).toString(16).toUpperCase()}}`).join('');
-    if (within(literals, first)) {
-      if (odd && SEPARATOR.test(chars[0])) refuse('a backslash before a line or paragraph separator continues the line: an escape would add the character');
-      return kept + units(chars); // a backslash before such a character stands for the character alone, so the escape replaces both
-    }
-    // What is left is a comment, where a line separator ends a line as a newline does.
-    if (SEPARATOR.test(chars)) refuse('a line or paragraph separator (U+2028, U+2029) outside a string: an escape would join two lines');
-    return run.slice(0, slashes) + units(chars);
+    // A backslash before such a character stands for the character alone, so the escape replaces both.
+    if (within(literals, first)) return kept + units(chars);
+    return run.slice(0, slashes) + units(chars); // what is left is a comment
   });
   // Anywhere else, between two tokens, an escape is no program: the parser says so.
   const broke = parse(out).parseDiagnostics.find((found) => !source.parseDiagnostics.some((had) => had.code === found.code));
@@ -74,10 +72,10 @@ function escaped(ts, path, text) {
   return out;
 }
 
-/** Rewrites every file of a built folder that holds a character above U+00FF; returns how many it rewrote. */
-export async function escapeBuilt(folder) {
+/** Rewrites every file of a built folder that holds a character above U+00FF. */
+async function escapeBuilt(folder) {
   const found = filesOf(folder).map((path) => ({ path, text: above(path) })).filter(({ text }) => text !== null);
-  if (!found.length) return 0;
+  if (!found.length) return;
   const ts = (await import('typescript')).default;
   for (const { path, text } of found) {
     const json = /\.(?:json|tsbuildinfo)$/.test(path);
@@ -87,34 +85,40 @@ export async function escapeBuilt(folder) {
     if (ABOVE.test(out) || lineOf(out, out.length) !== lineOf(text, text.length)) throw new Error(`${path}: the escapes left a character above U+00FF or changed the line count`);
     writeFileSync(path, out);
   }
-  return found.length;
 }
 
-/** The lint: one FAIL line for each built file under packages/<name>/dist with such a character, naming its first line. */
-export function lint(root) {
+/**
+ * The lint: one FAIL line for each built file under packages/<name>/dist with such a character, naming its first
+ * line, and how many built files it read: none means nothing was built, which is no PASS.
+ */
+function lint(root) {
   const fails = [];
+  let read = 0;
   const packages = join(root, 'packages');
   for (const name of existsSync(packages) ? readdirSync(packages).sort() : []) {
     const dist = join(packages, name, 'dist');
     if (!existsSync(dist)) continue;
     for (const path of filesOf(dist)) {
+      read++;
       const text = above(path);
       if (text === null) continue;
       const at = text.search(ABOVE), code = text.codePointAt(at).toString(16).toUpperCase().padStart(4, '0');
       fails.push(`FAIL built-escapes ${relative(root, path)}:${lineOf(text, at)}: holds U+${code}, a character above U+00FF, so the engine keeps the file's whole source at two bytes a character\n  Fix: build the package again (npm run build -w packages/${name}): the last step of its build, node ../../scripts/built-escapes.mjs dist, writes the character as an escape.`);
     }
   }
-  return fails;
+  return { fails, read };
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const folder = process.argv[2];
-  if (folder) {
-    try { await escapeBuilt(folder); } catch (error) { console.error(`FAIL built-escapes ${error.message}`); process.exit(1); }
-  } else {
-    const fails = lint(fileURLToPath(new URL('..', import.meta.url)));
-    for (const fail of fails) console.log(fail);
-    if (fails.length) process.exit(1);
-    console.log('PASS built-escapes: no built file under packages/*/dist holds a character above U+00FF');
+const folder = process.argv[2];
+if (folder) {
+  try { await escapeBuilt(folder); } catch (error) { console.error(`FAIL built-escapes ${error.message}`); process.exit(1); }
+} else {
+  const { fails, read } = lint(fileURLToPath(new URL('..', import.meta.url)));
+  for (const fail of fails) console.log(fail);
+  if (fails.length) process.exit(1);
+  if (!read) {
+    console.log('BLOCKED built-escapes: no package has a built file under packages/*/dist; run npm run build --workspaces');
+    process.exit(3);
   }
+  console.log(`PASS built-escapes: none of the ${read} built files under packages/*/dist holds a character above U+00FF`);
 }
