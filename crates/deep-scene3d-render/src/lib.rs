@@ -102,6 +102,7 @@ pub const FORWARD_FAR: f64 = 10_000.0;
 const SHADER: &str = concat!(
     include_str!("scene3d.wgsl"),
     include_str!("scene3d_labels_sky.wgsl"),
+    include_str!("tiles.wgsl"),
     include_str!("ao_shade.wgsl"),
     include_str!("ambient.wgsl"),
     include_str!("tint.wgsl"),
@@ -427,7 +428,7 @@ struct LightsUniform {
     local_size: [f32; 4],
     /// x: 1 with a light grid; y: its far plane (#446).
     grid: [f32; 4],
-    locals: [LocalUniform; local::SLOTS],
+    locals: [LocalUniform; local::MAPS],
     items: [[[f32; 4]; 6]; SHADED],
     /// Each shaded light's weight near the cut and a hash of its ID (u32 bits), which a light
     /// response takes (#485).
@@ -3331,7 +3332,11 @@ impl Renderer {
             .filter(|&(i, _)| scene.lights[i].kind != LightKind::Sun)
             .collect();
         let planted = self.planted.local;
-        let fresh = self.locals.prepare(scene, &wanted, casters, planted);
+        let tiled = self.shadowing(scene).tiles;
+        let fresh = self.locals.prepare(scene, &wanted, casters, planted, tiled);
+        if tiled {
+            self.locals.clear(&device.device);
+        }
         if fresh {
             let device_size = (self.locals.size, self.locals.layers);
             self.locals.ensure(device, device_size, &self.frame_layout);
@@ -3340,10 +3345,11 @@ impl Renderer {
             // A frame with no shadowed local light lets go of their maps.
             self.rebind_lights(device);
         }
+        self.locals.grow_frames(device, &self.frame_layout);
         for slot in self.locals.stale.clone() {
             let (first, faces) = {
                 let m = &self.locals.list[slot];
-                (m.first, m.map.faces.clone())
+                (m.frame, m.map.faces.clone())
             };
             for (offset, clip) in faces {
                 let mut f = *frame;
@@ -3361,6 +3367,15 @@ impl Renderer {
             }
         }
         self.counts.local_maps = self.locals.reports();
+    }
+
+    /// The scene's shadow fields, or under #2034's planted twin the fixed rule's 2 spots.
+    fn shadowing(&self, scene: &Scene) -> light::Shadowing {
+        let mut s = scene.shadowing;
+        if self.planted.local.tile_keeps_fixed_caps && s.tiles {
+            (s.tiles, s.spots, s.points) = (false, 2, 0);
+        }
+        s
     }
 
     /// A light frame's cut (#424): the view's, unless removed geometry still casts
@@ -3687,9 +3702,15 @@ impl Renderer {
                 f32::from(scene.sample_turn.is_some()),
                 scene.sample_turn.unwrap_or(0.0) as f32,
             ],
-            local_size: [self.locals.size as f32; 4],
+            local_size: match self.locals.list.first() {
+                // Shadow tiles' filter side and their atlas's (#2034).
+                Some(m) if m.size > 0 => {
+                    [local::FILTER_SIDE as f32, self.locals.size as f32, 0.0, 0.0]
+                }
+                _ => [self.locals.size as f32; 4],
+            },
             grid: [0.0; 4],
-            locals: [LocalUniform::zeroed(); local::SLOTS],
+            locals: [LocalUniform::zeroed(); local::MAPS],
             items: [[[0.0; 4]; 6]; SHADED],
             answers: [[0.0; 4]; SHADED],
             fill: [[0.0; 4]; 2],
@@ -3723,7 +3744,12 @@ impl Renderer {
                     m.map.tan as f32,
                     f32::from(m.map.cube),
                 ],
-                size: [local::radius(l) as f32, m.share as f32, 0.0, 0.0],
+                size: [
+                    local::radius(l) as f32,
+                    m.share as f32,
+                    m.size as f32,
+                    f32::from(self.planted.local.tile_filter_in_texels && m.size > 0),
+                ],
             };
             local_of.insert(m.light, slot as u32 + 1);
         }
@@ -5582,7 +5608,7 @@ impl Renderer {
             .unwrap_or_else(|| light::policy(&scene.lights, &scene.camera));
         let scores = light::scores(&scene.lights, &scene.camera);
         self.counts.scoring_ms = scoring.elapsed().as_secs_f64() * 1e3;
-        let shadowed = light::shadowed(&scene.lights, &policy, &scene.shadowing, &scores);
+        let shadowed = light::shadowed(&scene.lights, &policy, &self.shadowing(scene), &scores);
         // The frame's one pass over its casters (#2657), for the key sun's cascades and, with
         // their culled elements, the shadowed local lights' maps.
         let locals = (shadowed.kept.iter()).any(|&(i, _)| scene.lights[i].kind != LightKind::Sun);
@@ -7184,10 +7210,11 @@ impl Renderer {
         self.shadow.clip?;
         let view = self.shadow_view(device);
         let bind = self.shadow.bind.clone();
-        Some(self.depth_job(SHADOW_PASS, view, bind, None, Some(cull::KEY_MAP)))
+        Some(self.depth_job(SHADOW_PASS, view, bind, None, Some(cull::KEY_MAP), None))
     }
 
-    /// The casters drawn depth-only into `view` under the light frame `bind` holds.
+    /// The casters drawn depth-only into `view` under the light frame `bind` holds; with `tile`,
+    /// into a shadow tile's place and side in an atlas, cleared first by its pipeline (#2034).
     fn depth_job(
         &self,
         label: &'static str,
@@ -7195,6 +7222,7 @@ impl Renderer {
         bind: wgpu::BindGroup,
         only: Option<&BTreeSet<String>>,
         cull_view: Option<usize>,
+        tile: Option<([u32; 3], wgpu::RenderPipeline)>,
     ) -> Job {
         // A cull's list holds no owners, so a caster set picks its elements from the instances;
         // a local map has no cull of its own and draws all it holds.
@@ -7213,7 +7241,10 @@ impl Renderer {
                     depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                         view: &view,
                         depth_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(1.0),
+                            load: match tile {
+                                Some(_) => wgpu::LoadOp::Load,
+                                None => wgpu::LoadOp::Clear(1.0),
+                            },
                             store: wgpu::StoreOp::Store,
                         }),
                         stencil_ops: None,
@@ -7221,6 +7252,13 @@ impl Renderer {
                     timestamp_writes,
                     ..Default::default()
                 });
+                if let Some(([x, y, side], clear)) = &tile {
+                    let (fx, fy, fs) = (*x as f32, *y as f32, *side as f32);
+                    pass.set_viewport(fx, fy, fs, fs, 0.0, 1.0);
+                    pass.set_scissor_rect(*x, *y, *side, *side);
+                    pass.set_pipeline(clear);
+                    pass.draw(0..3, 0..1);
+                }
                 pass.set_bind_group(0, &bind, &[]);
                 for d in &draws {
                     match (&d.cuts, &pipeline, &mask_pipeline, d.mask) {
@@ -7266,25 +7304,22 @@ impl Renderer {
                     c.frames[i].1.clone(),
                     c.casters.as_ref(),
                     Some(cull::CASCADES + i),
+                    None,
                 );
                 (CASCADE_PASS.to_string(), job)
             }));
         }
-        // One depth pass per face of each stale local map (#446).
-        if let Some((_, layers)) = &self.locals.texture {
-            for &slot in &self.locals.stale {
-                let m = &self.locals.list[slot];
-                for &(offset, _) in &m.map.faces {
-                    let layer = (m.first + offset) as usize;
-                    let job = self.depth_job(
-                        local::PASS,
-                        layers[layer].clone(),
-                        self.locals.frames[layer].1.clone(),
-                        Some(&m.casters),
-                        None,
-                    );
-                    jobs.push((local::PASS.to_string(), job));
-                }
+        // One depth pass per face of each stale local map (#446), or of each stale tile (#2034).
+        for &slot in &self.locals.stale {
+            let m = &self.locals.list[slot];
+            for &(offset, _) in &m.map.faces {
+                let Some((view, tile)) = self.locals.target(m, offset) else {
+                    continue;
+                };
+                let frame = self.locals.frames[(m.frame + offset) as usize].1.clone();
+                let tile = tile.zip(self.locals.clearing());
+                let job = self.depth_job(local::PASS, view, frame, Some(&m.casters), None, tile);
+                jobs.push((local::PASS.to_string(), job));
             }
         }
         jobs
