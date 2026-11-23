@@ -74,6 +74,7 @@ A Codex turn that no prompt started, such as a goal's continuation, opens with a
 | claude-code 2.1.308 `permission-terminal-closed` | the terminal closed while a Bash call's permission request shows: a PermissionRequest with no answer, PostToolUse, Stop or SessionEnd |
 | claude-code 2.1.308 `elicitation-answered` | an MCP tool's form elicitation accepted: Elicitation, its dialog's Notification, ElicitationResult and the response Notification |
 | claude-code 2.1.308 `elicitation-cancelled` | an MCP tool's form elicitation cancelled: Elicitation, ElicitationResult and the response Notification |
+| claude-code `deepbuild-tools` | DeepBuild's two servers as `deep setup` names them (#2897), with no hub in their home: `deep_status`, marked `anthropic/alwaysLoad`, called with no search that loads it, and `deep_search` called only after a ToolSearch loads it (before `deep_status` on 2.1.308, after it on 2.1.299 and 2.1.304); both calls answer that the hub is unreachable |
 | codex `tools` | shell calls, an `apply_patch` add, and a failing command, which Codex reports through PostToolUse |
 | codex `patches` | a patch through the shell tool, then a resume with a patch whose markers are indented |
 | codex `permission` | a permission request from the terminal UI: a write in a read-only sandbox under `-a on-request` |

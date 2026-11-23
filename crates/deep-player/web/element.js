@@ -37,6 +37,12 @@
 // line that the player hasn't started, with its link to the fallback page, is for a page whose script never ran:
 // removing it is the element's first act.
 //
+// A bundle weighs the same on any host (issue #2892): a file whose format doesn't compress its own data is stored as
+// gzip under the SHA-256 of its stored bytes, and the index gives what it inflates to. The player checks every file's
+// stored bytes against its name first, and only then inflates each with the browser's own stream inflater, into
+// exactly the size the index gives, stopping past it, and checks the result against the SHA-256 the document names it
+// by. So a changed file stops the player before it inflates anything, and no file can grow past its listed size.
+//
 // A piece that offers it has the viewer's measure tool (issue #1217; canvas primitives: Selection, viewer_tools.measure):
 // `measure` turns it on, a click on the canvas places a point where its ray meets the surface under it (A, then B, a
 // third A again), Esc clears both, and Tab and Enter place points at the parts' anchors. The core holds the points and
@@ -46,6 +52,30 @@
 const bundle = JSON.parse(document.getElementById('deep-bundle').textContent);
 const hex = (buf) => Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
 const sha256 = async (bytes) => hex(await crypto.subtle.digest('SHA-256', bytes));
+
+/** #2892: a stored file's bytes inflated by the browser's gzip stream inflater into the size the index gives (`f.inflated`),
+ * stopping as soon as they would pass it, and checked against the SHA-256 the document names the file by. */
+async function inflate(f, stored) {
+  const { bytes: size, sha256: want } = f.inflated;
+  const stop = (why) => Error(`the file ${f.path} ${why}; the player doesn't start`);
+  const out = new Uint8Array(size);
+  let at = 0;
+  const reader = new Blob([stored]).stream().pipeThrough(new DecompressionStream('gzip')).getReader();
+  for (;;) {
+    const { done, value } = await reader.read().catch((e) => { throw stop(`doesn't inflate (${e?.message ?? e})`); });
+    if (done) break;
+    if (value.length > size - at) {
+      reader.cancel().catch(() => {});
+      throw stop(`inflates past the ${size} bytes the index gives it`);
+    }
+    out.set(value, at);
+    at += value.length;
+  }
+  if (at !== size) throw stop(`inflates to ${at} bytes, not the ${size} the index gives it`);
+  const got = await sha256(out);
+  if (got !== want) throw stop(`inflates to bytes that don't match its SHA-256 ${want} (they hash to ${got})`);
+  return out;
+}
 
 /** The origin's store of saves in the browser's storage: one row a save, `{piece, slot, seq, hash, step, ended,
  * deep_hash, bytes}`, keyed by the piece, its slot and the save's number in it; of carry records, one row a record,
@@ -138,6 +168,8 @@ class DeepPlayer extends HTMLElement {
   #stage = null;
   #frames = 0;
   #firstFrameMs = null;
+  // #2892: the time the load spent inflating the bundle's stored files, in ms.
+  #inflateMs = null;
   #decoded = {};
   #last = 0;
   #canvas = null;
@@ -157,6 +189,7 @@ class DeepPlayer extends HTMLElement {
   #live = null;
   #said = new Map();
   #join = null;
+  #start = null;
   #socket = null;
   #waiting = null;
   // #2856: where a failure the player can't recover from stopped the play, `{step, message}`, or null.
@@ -306,6 +339,7 @@ class DeepPlayer extends HTMLElement {
     p.adapter = this.#adapter;
     p.frames = this.#frames;
     p.first_frame_ms = this.#firstFrameMs;
+    p.load = { inflate_ms: this.#inflateMs };
     p.decoded = { ...this.#decoded };
     p.saves = (await this.#kept()).map(({ slot, step, deep_hash }) => ({ slot, step, deep_hash }));
     p.records = (await this.#records()).map(({ hash, step, layout }) => ({ hash, step, layout }));
@@ -735,8 +769,17 @@ class DeepPlayer extends HTMLElement {
       location.replace(`./${bundle.fallback.index}`);
       return;
     }
+    // Every file's stored bytes are checked against its name before any is inflated (#2892).
+    const stored = [];
+    for (const f of bundle.files) stored.push([f, await this.#fetch(f.path, f.sha256)]);
     const files = new Map();
-    for (const f of bundle.files) files.set(f.sha256, await this.#fetch(f.path, f.sha256));
+    const inflating = performance.now();
+    for (let i = 0; i < stored.length; i++) {
+      const [f, bytes] = stored[i];
+      stored[i] = null;
+      files.set(f.inflated ? f.inflated.sha256 : f.sha256, f.inflated ? await inflate(f, bytes) : bytes);
+    }
+    this.#inflateMs = performance.now() - inflating;
     const glue = await import('deep-player-glue');
     await glue.default({ module_or_path: files.get(bundle.player.wasm) });
     for (const f of bundle.fonts) glue.provide_font(f.file, files.get(f.sha256));
@@ -805,6 +848,37 @@ class DeepPlayer extends HTMLElement {
     this.#join.setAttribute('data-deep-join', p.state);
     this.#join.firstChild.textContent = p.text;
     this.#join.lastChild.hidden = p.state !== 'open';
+    this.#startPrompt();
+  }
+
+  /** #278: the player's own Start, for the first player of a room once enough copies have joined, and again after a
+   * match finished: drawn by the player, never the piece, and pressed only by a person's click. */
+  #startPrompt() {
+    const p = this.#player.start_prompt ? JSON.parse(this.#player.start_prompt()) : null;
+    if (!p) { this.#start?.remove(); this.#start = null; if (this.#join) this.#join.hidden = false; return; }
+    if (!this.#start) {
+      this.#start = document.createElement('div');
+      this.#start.setAttribute('role', 'group');
+      this.#start.setAttribute('style', 'position:fixed;left:12px;bottom:12px;max-width:560px;padding:10px 12px;background:#1b1b20;color:#e8e8ec;border:1px solid #55555f;border-radius:6px');
+      const text = document.createElement('p');
+      text.setAttribute('style', 'margin:0 0 8px');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = 'Start';
+      // Only a person's click starts the match: an event a script dispatched carries no user activation.
+      button.addEventListener('click', (e) => {
+        if (!e.isTrusted || navigator.userActivation?.isActive === false) return;
+        const begin = this.#player.press_start(crypto.getRandomValues(new Uint8Array(16)));
+        if (begin && this.#socket?.readyState === WebSocket.OPEN) this.#socket.send(begin);
+        this.#startPrompt();
+      });
+      this.#start.append(text, button);
+      this.appendChild(this.#start);
+    }
+    this.#join.hidden = true;
+    this.#start.setAttribute('data-deep-start', p.state);
+    this.#start.firstChild.textContent = p.text;
+    this.#start.lastChild.hidden = p.state !== 'open';
   }
 
   /** A person clicked Join: the one connection the piece declares, the viewer's browser's own, with no credential. */
@@ -831,6 +905,8 @@ class DeepPlayer extends HTMLElement {
       if (frame.length && ws.readyState === WebSocket.OPEN) ws.send(frame);
       sends();
       this.#notify(this.#player.net_waiting(now));
+      // #278: a room's match that finished leaves the connection open, and the first player's Start shows again.
+      if (this.#start === null && this.#player.start_prompt && this.#player.start_prompt() !== 'null') this.#prompt();
       if (this.#player.net_ended()) { clearInterval(timer); ws.close(); this.#notify(0); this.#prompt(); }
     };
     // #277: a page about to be hidden says its copy is absent, at once; shown again, it catches up.

@@ -1081,8 +1081,11 @@ fn draw(req: &Request, kept: &RefCell<asset::Kept>) -> Result<Value, Value> {
         board.draw(&mut bare, crate::graphs::Placer::Honest);
         items = bare;
     }
-    let frame = scene::frame_planted(&req.doc, &items, (palette, ty), &record, zoom, req.planted)
-        .map_err(|r| refused(r.code, &r.path))?;
+    let mut frame =
+        scene::frame_planted(&req.doc, &items, (palette, ty), &record, zoom, req.planted)
+            .map_err(|r| refused(r.code, &r.path))?;
+    // #2053: each lit image's normal page, read as stored.
+    asset::pages(&mut frame, req.store.as_deref())?;
     let marks = scene::status_marks(&req.doc, &items, &record, req.look.status.as_ref(), palette)
         .map_err(|r| refused(r.code, &r.path))?;
     let (prims, _) = status::layout(&marks, &status::occupied(&frame), palette, frame.size, zoom);
@@ -1731,6 +1734,7 @@ pub fn planted_path(name: &str) -> Option<Planted> {
         "merge_zero_fills" => Some(Planted::MergeZeroFills),
         "repeater_evaluates_at_t" => Some(Planted::RepeaterEvaluatesAtT),
         "light_stale_list" => Some(Planted::LightStaleList),
+        "light_stale_height" => Some(Planted::LightStaleHeight),
         _ => {
             let op = name.strip_prefix("moved:")?;
             OPS.iter().find(|o| **o == op).map(|o| Planted::Moved(o))

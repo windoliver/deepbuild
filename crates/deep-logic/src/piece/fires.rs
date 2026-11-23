@@ -110,7 +110,7 @@ pub(crate) fn fired(item: &Item, memory: &[u8]) -> Vec<Value> {
 
 /// Keeps a step's fires in its row as `<item ID>.fires`, beside its arrays' hashes.
 pub(crate) fn record(rec: &mut Record, item: &Item, k: i64, fires: Vec<Value>) {
-    if !fires.is_empty() {
+    if !fires.is_empty() && !rec.none {
         let (_, arrays) = rec.steps.entry(k).or_default();
         arrays.insert(format!("{}.fires", item.id), Value::Array(fires));
     }
@@ -192,7 +192,7 @@ mod tests {
     #[test]
     fn an_item_that_fires_and_exports_no_fires_at_is_refused() {
         let bytes = wat::parse_str(
-            &FIRES_AT_3.replace(r#"(global (export "fires_at") i32 (i32.const 2048))"#, ""),
+            FIRES_AT_3.replace(r#"(global (export "fires_at") i32 (i32.const 2048))"#, ""),
         )
         .expect("it assembles");
         let sha = deep_canvas_sandbox::rewrite::hash(&bytes);

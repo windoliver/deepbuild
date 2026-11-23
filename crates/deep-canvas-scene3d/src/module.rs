@@ -7,7 +7,6 @@
 
 use deep_canvas::kinds::{Entry, Param, ParamType, Version};
 use deep_canvas::refs::{kind as names, Decl, Holds};
-use deep_canvas::registry::fields::{Closure, NOTHING};
 use deep_canvas::registry::{Dependency, Manifest, Module, Range, Registrar, Semver};
 use deep_canvas::schedule::{Canonical, OpError, Val, View};
 use serde_json::{json, Value};
@@ -315,23 +314,6 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         ),
         &[],
         "",
-    )
-    // #2777: a trail's space and window are closed lists (Marks in 3D: trail).
-    .closes(
-        "trail.space",
-        Closure::closed(
-            "determinism",
-            "a trail needs its places held in a frame other than the world's or its source's parent's",
-            NOTHING,
-        ),
-    )
-    .closes(
-        "trail.window",
-        Closure::closed(
-            "determinism",
-            "a trail needs a stretch of its source's path that none of span, since and whole draws",
-            "several trails on one source, each with its own window",
-        ),
     )
     // #1801: a line's points may be items it runs between.
     .refs(&[Decl::new("params/points", Holds::Item, names::TARGET)]);

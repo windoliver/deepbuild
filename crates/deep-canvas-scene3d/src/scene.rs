@@ -545,6 +545,8 @@ pub struct Overlay {
     pub shapes: Vec<Shape2>,
     /// #468: its leader to the part it names, when it has one.
     pub leader: Option<Leader>,
+    /// #298: its `edge` and `edge_angle`, when its `hide` is `clamp`.
+    pub edge: Option<Edge>,
 }
 
 /// An overlay's leader at t (#468; Overlay: `leader`): its line from the overlay's side nearest its
@@ -1716,6 +1718,8 @@ pub fn evaluate_with(
     evaluate_any(doc, t, look, labels, Some(assets), Outlines::default())
 }
 
+mod clamp;
+pub use clamp::{bound, view_values, Edge};
 mod scattered;
 pub use scattered::*;
 
@@ -2820,7 +2824,8 @@ pub(crate) fn evaluate_compiled(
     let mut overlays = Vec::new();
     for (layer, id) in overlay_items {
         let safe = map.get("safe").and_then(Value::as_f64).unwrap_or(24.0);
-        overlays.push(overlay(&items, &layer, &id, (&camera, safe), look)?);
+        let view = (&camera, safe);
+        overlays.push(overlay(&items, &layer, &id, view, look, outlines.planted)?);
     }
     // Puffs past the document's cap are refused, never dropped (#422).
     let cap = map
@@ -3151,6 +3156,7 @@ fn overlay(
     id: &str,
     (camera, safe): (&Camera, f64),
     look: &Look3,
+    planted: Option<&str>,
 ) -> Result<Overlay, Refused> {
     let path = format!("items/{id}/params");
     let params = &items[id]["params"];
@@ -3169,6 +3175,7 @@ fn overlay(
     let (fw, fh) = (size(2), size(3));
     let offset = xy(params.get("offset")).unwrap_or([0.0; 2]);
     let anchor = params.get("anchor");
+    let mut view = None;
     let mut origin = match anchor {
         Some(Value::String(edge)) => {
             if !["n", "e", "s", "w", "ne", "nw", "se", "sw"].contains(&edge.as_str()) {
@@ -3199,11 +3206,20 @@ fn overlay(
             }
             let local_point = vec3(anchor.and_then(|a| a.get("point"))).unwrap_or([0.0; 3]);
             let point = apply(&world(items, target), local_point);
-            camera
-                .project(point)
-                .map(|p| [p[0] + offset[0], p[1] + offset[1]])
+            // #298: on the safe frame's edge while the point is outside it or behind the eye.
+            let within = (camera, safe);
+            match clamp::placed((params, path.as_str()), within, [fw, fh], point, planted)? {
+                Some((at, e)) => {
+                    view = Some(e);
+                    Some(at)
+                }
+                None => camera
+                    .project(point)
+                    .map(|p| [p[0] + offset[0], p[1] + offset[1]]),
+            }
         }
     };
+    let clamped = view.is_some_and(|e: Edge| e.clamped) && planted != Some(clamp::LEADER_DRAWS);
     let leader = match params.get("leader").filter(|l| !l.is_null()) {
         None => None,
         Some(l) => {
@@ -3226,7 +3242,7 @@ fn overlay(
             });
             let hides = match params.get("hide").and_then(Value::as_str) {
                 None | Some("off_frame") => true,
-                Some("never") => false,
+                Some("never" | "clamp") => false,
                 Some(_) => return refused("out_of_range", format!("{path}/hide")),
             };
             if hides && !inside {
@@ -3249,8 +3265,8 @@ fn overlay(
             })?;
             let gap = num(l.get("gap")).unwrap_or(4.0);
             // From the overlay's side nearest the target, less the gap; with `elbow: horizontal`
-            // it leaves the label level and turns once toward the part.
-            let points = origin.zip(end).map(|(o, to)| {
+            // it leaves the label level and turns once toward the part. #298: none while clamped.
+            let points = origin.zip(end).filter(|_| !clamped).map(|(o, to)| {
                 let c = [o[0] + fw / 2.0, o[1] + fh / 2.0];
                 let d = [to[0] - c[0], to[1] - c[1]];
                 let half = [fw / 2.0 + gap, fh / 2.0 + gap];
@@ -3324,6 +3340,7 @@ fn overlay(
         origin,
         shapes,
         leader,
+        edge: view,
     })
 }
 

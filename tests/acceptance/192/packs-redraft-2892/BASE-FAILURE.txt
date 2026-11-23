@@ -1,0 +1,22 @@
+#192 criterion 6 (#192.562b7ffc), the blind redraft after #2892: how the test meets the base 5f5791e2d ("Merge pull
+request #3068").
+
+Read, not run. The Mac stood at a one-minute load of 120 to 200, and the test needs #544's assembler and deep-show
+(full,test-mesh-item) built. What ran: the type check (node node_modules/typescript/bin/tsc -p
+tests/acceptance/192/packs-redraft-2892/tsconfig.json, exit 0), `vitest list` (1 test collected), and the scratch
+probe of the shared reader described in ../../172-redraft-2892/BASE-FAILURE.txt.
+
+At the base: expected to pass. The base already meets the criterion and stores every file as it is.
+- The install half is the first draft's, which passed on #192's PR (its closing comment: all 13 criteria pass blind).
+- crates/deep-show/src/export/web.rs writes each file as `<sha256 of its bytes>.<ext>`, raw, and the index page's
+  manifest lists every file but the element's script with its `sha256` (the player's files, and the fallback page's
+  under `fallback.files`); the receipt lists every file with the SHA-256 of its bytes. So, read as stored: the mesh's
+  file hashes to the mesh's SHA-256, its name starts with it, the receipt lists it so, and the index page holds the
+  hash; the only WebAssembly is `<player.hash>.wasm`; no file holds the program. The program twin adds
+  `<sha256 of gzip(program)>.wasm`: read inflated it is WebAssembly and the program's bytes, two failures naming it.
+  The meshless twin removes the mesh's file: "the bundle holds no file that is the provider's mesh …".
+
+Under #2892, the first draft's web half (read): the mesh stored gzip is listed under the SHA-256 of its stored bytes,
+so `files.find((f) => f['sha256'] === meshSha)` finds nothing and it fails at "the bundle lists the provider's mesh
+… among its files" on a right program; and its byte search reads stored bytes, so a program inside a gzip-stored file
+passes it.

@@ -48,3 +48,4 @@ pub mod spring;
 pub mod tempo;
 pub mod trail;
 pub mod travel;
+pub mod view;

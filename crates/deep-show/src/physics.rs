@@ -171,7 +171,8 @@ pub(crate) fn poses_at(form: &Value, t: i64) -> Result<Vec<Posed>, Value> {
             .keys()
             .filter_map(|b| {
                 let states = reply["bodies"][b].as_array()?;
-                Some((b.clone(), pose_at(states, t.max(0), step, false)?))
+                let cuts = deep_canvas_physics::cut::of(&reply["outputs"], b);
+                Some((b.clone(), pose_at(states, t.max(0), step, false, &cuts)?))
             })
             .collect();
         out.push((id.clone(), w, poses));
@@ -199,7 +200,7 @@ impl Hub<'_> {
 
     /// #2457: `form` as the physics module reads it, which reads no store: with the mesh assets
     /// its worlds' soft volumes are built from, read from the evidence store.
-    fn sourced<'a>(&self, form: &'a Value) -> std::borrow::Cow<'a, Value> {
+    pub(crate) fn sourced<'a>(&self, form: &'a Value) -> std::borrow::Cow<'a, Value> {
         let root = &self.scenario.evidence;
         let mut out =
             deep_physics_rapier::source::sourced(form, &|sha| crate::evidence::read(root, sha));

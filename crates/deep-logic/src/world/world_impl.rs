@@ -1,9 +1,27 @@
 use super::*;
 
 impl World {
-    pub(super) fn runner(bytes: &[u8], id: &str) -> Result<Runner, Failed> {
-        Runner::new(bytes, Faults::default(), true)
-            .map_err(|e| json!({"ok": false, "code": "instantiate_failed", "item": id, "what": e}))
+    /// A fresh instance of `item` running `bytes`. #2662: its own program is compiled once, for
+    /// every world of the piece; other bytes (a counted rewrite) are compiled for this runner.
+    pub(super) fn runner(item: &Item, bytes: &[u8]) -> Result<Runner, Failed> {
+        #[cfg(not(target_arch = "wasm32"))]
+        let made = if std::ptr::eq(bytes, item.bytes.as_slice()) {
+            let compiled = match item.compiled.get() {
+                Some(p) => Ok(p.clone()),
+                None => Program::new(bytes, None, Faults::default(), true).inspect(|p| {
+                    let _ = item.compiled.set(p.clone());
+                }),
+            };
+            compiled.and_then(|p| p.runner())
+        } else {
+            Runner::new(bytes, Faults::default(), true)
+        };
+        // The web player's engine keeps each program it compiled by its bytes.
+        #[cfg(target_arch = "wasm32")]
+        let made = Runner::new(bytes, Faults::default(), true);
+        made.map_err(
+            |e| json!({"ok": false, "code": "instantiate_failed", "item": item.id, "what": e}),
+        )
     }
 
     /// Every item instantiated, its start function and `init` run under a step's budgets; a trap
@@ -24,7 +42,7 @@ impl World {
             let bytes = counted
                 .filter(|(c, _)| *c == i)
                 .map_or(item.bytes.as_slice(), |(_, b)| b);
-            let mut runner = World::runner(bytes, &item.id)?;
+            let mut runner = World::runner(item, bytes)?;
             let names = Rc::new(names(bytes));
             let mut failed = false;
             // The data assets, copied once before the start function: then they're memory.
@@ -97,6 +115,7 @@ impl World {
                 spacing: item.every,
                 rerun: false,
                 spare: None,
+                forked: None,
                 previewed: None,
                 preview: preview_region(item),
                 paged,
@@ -119,6 +138,7 @@ impl World {
             adapter: String::new(),
             cache: None,
             branches: Branches::default(),
+            draw: Default::default(),
         })
     }
 
@@ -398,7 +418,9 @@ impl World {
             if group.is_empty() {
                 continue;
             }
-            let snapshot = self.published.clone();
+            // #2662: the group reads every item's arrays as earlier steps left them, in place;
+            // its own are published after it.
+            let snapshot = std::mem::take(&mut self.published);
             let mut held = Vec::new();
             self.seen += 1;
             let stops = self
@@ -406,13 +428,12 @@ impl World {
                 .rewind
                 .as_ref()
                 .is_some_and(|r| group.contains(&r.item));
-            for i in group {
+            for &i in &group {
                 let started = rec.ns.is_some().then(std::time::Instant::now);
                 self.step(i, &snapshot, rec, &mut held);
                 if let (Some(ns), Some(s)) = (rec.ns.as_mut(), started) {
                     ns.push((i, s.elapsed().as_nanos() as u64));
                 }
-                self.published[i] = self.lives[i].arrays.clone();
                 // Right after the step, before any checkpoint or step k + 1 (Logic: between-step
                 // services); the planted module answers after the next checkpoint instead.
                 if self.planted.services_after_checkpoint {
@@ -420,6 +441,10 @@ impl World {
                 } else {
                     self.serve(i, rec);
                 }
+            }
+            self.published = snapshot;
+            for i in group {
+                self.published[i].clone_from(&self.lives[i].arrays);
             }
             mirrors::pend(held, &mut self.lives);
             if stops {
@@ -535,7 +560,7 @@ impl World {
             .lives
             .iter()
             .map(|l| (l.last, &l.prev[..], &l.arrays[..]));
-        drawn(&self.piece, shown, t, self.planted.linear_blends_forward)
+        drawn(&self.piece, shown, t, &self.planted)
     }
 
     pub(super) fn step(
@@ -761,6 +786,9 @@ impl World {
                         .is_some_and(|i| matches!(list[i].value, Given::Number(n) if n != 0.0));
                     region[at..at + 4].copy_from_slice(&i32::from(on).to_le_bytes());
                 }
+                Read::Draws => self
+                    .draw
+                    .fill(&self.track, (t - item.step, t), &mut region[at..]),
                 Read::Carry | Read::Profile => {
                     crate::profile::fill_read(item, &self.track, e, k, &mut region)
                 }
@@ -861,7 +889,9 @@ impl World {
             }
         }
         l.mark(pages.iter().copied());
-        rec.fuel.entry(i).or_default().push((k, fuel));
+        if !rec.none {
+            rec.fuel.entry(i).or_default().push((k, fuel));
+        }
         let trap = match out {
             Ok(o) => o.trap.map(|t| (t.kind, Some(t.function), Some(t.offset))),
             Err(e) => Some((format!("run_failed: {e}"), None, None)),
@@ -925,18 +955,22 @@ impl World {
         let started = web_time::Instant::now();
         let mut changed = bake::ranges(item, k, &l.arrays, &fresh);
         let ms = started.elapsed().as_secs_f64() * 1000.0;
-        rec.compares
-            .entry(item.id.clone())
-            .or_default()
-            .push((k, n, ms));
+        if !rec.none {
+            rec.compares
+                .entry(item.id.clone())
+                .or_default()
+                .push((k, n, ms));
+        }
         if self.planted.ranges_drop_second_at_step_5000 && k == 5000 && changed.len() > 1 {
             changed.remove(1);
         }
         mirrors::changed(&piece, i, &changed, held);
-        rec.ranges
-            .entry(item.id.clone())
-            .or_default()
-            .extend(changed);
+        if !rec.none {
+            rec.ranges
+                .entry(item.id.clone())
+                .or_default()
+                .extend(changed);
+        }
         l.arrays = fresh;
         // A slot number in `ends`, or else in `request`, saves that slot once the step ends.
         if let Some(s) = &item.saves {
@@ -994,7 +1028,7 @@ impl World {
                 continue;
             }
             if l.spare.is_none() && !self.planted.preview_writes_item_memory {
-                match World::runner(&item.bytes, &item.id) {
+                match World::runner(item, &item.bytes) {
                     Ok(r) => l.spare = Some(r),
                     Err(e) => {
                         traps.push(e);
@@ -1241,7 +1275,7 @@ impl World {
             let s = v.as_str()?.as_bytes();
             let digit = |c: u8| char::from(c).to_digit(16);
             (s.len() % 2 == 0).then_some(())?;
-            (s.chunks_exact(2))
+            (s.as_chunks::<2>().0.iter())
                 .map(|p| Some((digit(p[0])? * 16 + digit(p[1])?) as u8))
                 .collect()
         };
@@ -1313,6 +1347,7 @@ impl World {
             seen: 0,
             adapter: String::new(),
             branches: Branches::default(),
+            draw: Default::default(),
         })
     }
 
@@ -1446,6 +1481,15 @@ impl World {
         live.last = s.step - 1;
         live.spacing = self.lives[i].spacing;
         live.arrays = s.arrays.clone();
+        if self.planted.restore_forgets_cut {
+            let cuts = item
+                .writes
+                .iter()
+                .filter_map(|w| item.write(w.cut.as_deref()?));
+            for c in cuts {
+                live.arrays[c.offset as usize..][..c.size as usize].fill(0);
+            }
+        }
         if !self.planted.seek_restores_arrays_only {
             live.prev = s.prev.clone();
         }
@@ -1499,6 +1543,7 @@ impl World {
             adapter: String::new(),
             cache: None,
             branches: Branches::default(),
+            draw: Default::default(),
         }
     }
 
@@ -1508,7 +1553,7 @@ impl World {
         memory: &[u8],
         globals: &[Val],
     ) -> Result<Live, Failed> {
-        let mut runner = World::runner(bytes, &item.id)?;
+        let mut runner = World::runner(item, bytes)?;
         let names = Rc::new(names(bytes));
         runner
             .memory_mut("memory")
@@ -1547,6 +1592,7 @@ impl World {
             spacing: item.every,
             rerun: false,
             spare: None,
+            forked: None,
             previewed: None,
             preview: preview_region(item),
             paged: None,
@@ -1564,8 +1610,15 @@ impl World {
                 let l = &mut self.lives[i];
                 (l.memory().to_vec(), l.globals())
             };
-            let l = &self.lives[i];
             let mut live = World::load(&item.bytes, item, &memory, &globals)?;
+            // #2662's planted runner: this world's forks run the item on its first fork's store.
+            #[cfg(not(target_arch = "wasm32"))]
+            if self.planted.forks_share_store {
+                let first = self.lives[i].forked.get_or_insert(live.runner);
+                // SAFETY: a world reads a runner's memory within one call, and holds no slice of it.
+                live.runner = unsafe { first.shared() };
+            }
+            let l = &self.lives[i];
             live.failed = l.failed;
             live.next = l.next;
             live.ran = l.ran;
@@ -1612,6 +1665,7 @@ impl World {
             adapter: self.adapter.clone(),
             cache: None,
             branches,
+            draw: self.draw,
         })
     }
 
