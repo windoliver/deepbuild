@@ -805,6 +805,7 @@ pub struct Coded {
 // its bindings.
 mod decoder;
 mod encoder;
+pub mod still;
 pub use decoder::{Decoder, Image, Output};
 pub use encoder::{encode_h264, Codec, Encoder, Settings};
 

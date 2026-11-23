@@ -8,7 +8,7 @@ use deep_gpu::footprint::{self, Got, Readers};
 use deep_gpu::memory::{self, Planted};
 use serde_json::{json, Value};
 
-use super::{Fail, Plant};
+use super::Plant;
 
 /// The planted textures a suite asks to gauge: GPU memory, as the device reports it.
 pub static PLANTED: Gauge = Gauge::new("planted texture", Place::Device, 16, 16_000_000_000);
@@ -87,7 +87,7 @@ impl Memory {
     /// `{"texture": {"bytes", "gauge"}}`: a planted texture of `bytes` on the GPU, every byte written and held, counted
     /// by its gauge or by none.
     #[cfg(feature = "env-plants")]
-    pub fn texture(&mut self, call: &Value) -> Result<Value, Fail> {
+    pub fn texture(&mut self, call: &Value) -> Result<Value, super::Fail> {
         let t = &call["texture"];
         let (Some(bytes), Some(gauge)) =
             (t["bytes"].as_u64().filter(|b| *b > 0), t["gauge"].as_bool())
