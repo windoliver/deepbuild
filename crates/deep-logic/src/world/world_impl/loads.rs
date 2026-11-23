@@ -1,4 +1,4 @@
-//! A world from a saved state (`module`), and the worlds and instances a seek, save or fork loads.
+//! A world from a saved state (`module`), the worlds and instances a seek or save loads, and a fork.
 
 use super::*;
 
@@ -134,7 +134,7 @@ impl World {
         memory: &[u8],
         globals: &[Val],
     ) -> Result<Live, Failed> {
-        let mut runner = World::runner(bytes, &item.id)?;
+        let mut runner = World::runner(item, bytes)?;
         let names = Rc::new(names(bytes));
         runner
             .memory_mut("memory")
@@ -173,9 +173,80 @@ impl World {
             spacing: item.every,
             rerun: false,
             spare: None,
+            forked: None,
             previewed: None,
             preview: preview_region(item),
             paged: None,
+        })
+    }
+
+    /// A fresh instance per item holding this world's state now, on another track: the entries at
+    /// or after step `k` (those a step from k on reads) are replaced by `entries`.
+    pub fn fork(&mut self, entries: &[Entry]) -> Result<World, Failed> {
+        let k = self.at().unwrap_or(0);
+        let mut lives = Vec::new();
+        for i in 0..self.lives.len() {
+            let item = &self.piece.items[i];
+            let (memory, globals) = {
+                let l = &mut self.lives[i];
+                (l.memory().to_vec(), l.globals())
+            };
+            let mut live = World::load(&item.bytes, item, &memory, &globals)?;
+            // #2662's planted runner: this world's forks run the item on its first fork's store.
+            #[cfg(not(target_arch = "wasm32"))]
+            if self.planted.forks_share_store {
+                let first = self.lives[i].forked.get_or_insert(live.runner);
+                // SAFETY: a world reads a runner's memory within one call, and holds no slice of it.
+                live.runner = unsafe { first.shared() };
+            }
+            let l = &self.lives[i];
+            live.failed = l.failed;
+            live.next = l.next;
+            live.ran = l.ran;
+            live.last = l.last;
+            live.spacing = l.spacing;
+            live.arrays = l.arrays.clone();
+            live.prev = l.prev.clone();
+            live.cursor = l.cursor.clone();
+            live.pending = l.pending.clone();
+            live.mirrors = l.mirrors.clone();
+            live.paged = l.paged.clone();
+            lives.push(live);
+        }
+        let len = self.piece.items.first().map_or(0, |i| i.step);
+        let mut kept: Vec<Entry> = self
+            .track
+            .values()
+            .flatten()
+            .filter(|e| k > 0 && e.t <= (k - 1) * len)
+            .cloned()
+            .collect();
+        kept.extend(entries.iter().cloned());
+        let track = track_of(&kept);
+        let branches = Branches {
+            stops: self.stops_before(k),
+            taken: self
+                .branches
+                .taken
+                .min(track.get(REWIND).map_or(0, Vec::len)),
+            ..self.branches.clone()
+        };
+        Ok(World {
+            piece: self.piece.clone(),
+            track,
+            lives,
+            published: self.published.clone(),
+            store: self.piece.rewind.is_some(),
+            planted: self.planted,
+            saves_dir: None,
+            held: None,
+            saves_ns: 0,
+            saved: Vec::new(),
+            seen: self.seen,
+            adapter: self.adapter.clone(),
+            cache: None,
+            branches,
+            draw: self.draw,
         })
     }
 }

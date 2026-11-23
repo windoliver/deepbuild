@@ -535,6 +535,10 @@ pub struct Item {
     pub program: String,
     /// The bytes that run: sandbox@1's rewrite, or the program as built under `runs_unchecked`.
     pub bytes: Vec<u8>,
+    /// #2662: `bytes` compiled, once, at the first runner made of them; every later runner of the
+    /// item (a restore's, a seek's, a fork's) is a fresh instance of it.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) compiled: std::cell::OnceCell<deep_sandbox_wasmtime::Program>,
     pub hash: String,
     /// The bytes as given, whose code offsets the sidecar's DWARF stands for.
     pub given: Vec<u8>,
