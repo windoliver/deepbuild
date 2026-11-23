@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: play.test.ts runs gate@1 cases, whose hubs run deep-hook from target/debug and whose worlds run Vitest" }
