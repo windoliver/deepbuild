@@ -11,11 +11,13 @@ adapters/corpus/<agent>/<version>/<session>/
 
 - `node scripts/corpus.mjs replay` maps every payload through its adapter as a live event of its set's version and compares the events with `expect`, field by field, both ways.
 - `node scripts/corpus.mjs check` is the preflight's corpus lane: each version a facts file covers has a set holding every event the facts list for it, each set replays clean, and the corpus stays under 200 MB.
-- `node scripts/corpus.mjs record --agent claude-code|codex|pi --out <dir>` records a fresh set into `<dir>`, with no `expect`, for a new version. It joins the corpus only through a diff you approve, after its expected events are written and reviewed.
+- `node scripts/corpus.mjs record --agent claude-code|codex|pi|paseo --out <dir>` records a fresh set into `<dir>`, with no `expect`, for a new version. It joins the corpus only through a diff you approve, after its expected events are written and reviewed.
 
 ## Recording and redaction
 
 pi's sets (#40) are real pi in RPC mode with the package and a real hub, only the model scripted: a tee on the hub's socket keeps each payload the package sends, and the transcript is pi's session file. pi's hook names are its own (`input`, `tool_call`, `agent_before_settle`); `agent_start`, `agent_end` and `agent_settled` are `session.activity`, and only `agent_before_settle` is `agent.stop`.
+
+paseo's set (#3136) is a real paseo daemon at the version its facts pin, with DeepBuild's plugin (`packages/paseo`) and a stand-in provider (`scripts/corpus-paseo-provider`) for the agent and its model, as #55's real-paseo tests run it: the plugin's hook requests are kept where it finds the hub, and none is answered, so the stand-in's permission request is allowed in paseo itself, by `paseo permit allow`. The transcript is paseo's own record of the agent (`paseo inspect`). paseo's hook names are the plugin's (`agent.turn.before`, `agent.turn.after`, `agent.permission.before`, `agent.permission.after`), each carrying the session ID paseo reads for the agent: `agent.turn.before` is `session.activity` {session, activity: "turn_start"}, `agent.turn.after` is `agent.stop` {session, outcome}, `agent.permission.before` is `permission.request` {session, kind, tool} from its `permission_kind` and `tool_name`, and `agent.permission.after`, an answer given in paseo's own app, is no event: an answer counts for DeepBuild only through the trusted path (#55).
 
 Sessions are scripted (`record`'s scenarios) in a pseudo-terminal for Claude Code, through `codex exec` for Codex, and in Codex's terminal UI for a goal, with a hook on every event the adapter handles that keeps each payload byte for byte. Claude Code sessions use `--setting-sources project --strict-mcp-config`, Codex sessions `--ignore-user-config` where they can, and hooks come from the session's own settings, so your own hooks, MCP servers and instructions stay out. Codex's hooks run under `--dangerously-bypass-hook-trust`, so recording never writes trust into your Codex config; the goal session runs in a folder your config already trusts, named by `DEEP_CORPUS_CODEX_TRUSTED`.
 
@@ -44,6 +46,7 @@ Each event is reduced to the fields an adapter decides, `kind` and `data`. The h
 | Notification | `session.attention` {session, state} by `notification_type`: `permission_prompt`, `elicitation_dialog`, `elicitation_url_dialog` and `agent_needs_input` are `waiting`, `idle_prompt` is `finished`, `elicitation_complete` and `elicitation_response` are `working`; any other type maps to no event. A session-state signal, never an ask and never evidence |
 | Elicitation | `session.attention` {session, state: "waiting"} |
 | ElicitationResult | `session.attention` {session, state: "working"} |
+| FileChanged | none: a watched file's change is the route a line takes into the terminal while a call still runs (#120), never evidence |
 
 A Codex turn that no prompt started, such as a goal's continuation, opens with a `user.ask` {session, from, turn} before the first event of its first hook, `turn` being the payload's `turn_id`, since Codex fires no prompt hook for it.
 
@@ -75,6 +78,8 @@ A Codex turn that no prompt started, such as a goal's continuation, opens with a
 | claude-code 2.1.308 `elicitation-answered` | an MCP tool's form elicitation accepted: Elicitation, its dialog's Notification, ElicitationResult and the response Notification |
 | claude-code 2.1.308 `elicitation-cancelled` | an MCP tool's form elicitation cancelled: Elicitation, ElicitationResult and the response Notification |
 | claude-code `deepbuild-tools` | DeepBuild's two servers as `deep setup` names them (#2897), with no hub in their home: `deep_status`, marked `anthropic/alwaysLoad`, called with no search that loads it, and `deep_search` called only after a ToolSearch loads it (before `deep_status` on 2.1.308, after it on 2.1.299 and 2.1.304); both calls answer that the hub is unreachable |
+| claude-code `file-changed` | a file the session's FileChanged matcher names, in its folder, appended to by a shell call: FileChanged with `event` `change` (#3136) |
+| paseo 0.15.0 `permission-allowed` | one stand-in turn whose shell call asks for permission, allowed in paseo by `paseo permit allow`: the turn's start, the request, the turn's end and the answer from paseo's app (#3136) |
 | codex `tools` | shell calls, an `apply_patch` add, and a failing command, which Codex reports through PostToolUse |
 | codex `patches` | a patch through the shell tool, then a resume with a patch whose markers are indented |
 | codex `permission` | a permission request from the terminal UI: a write in a read-only sandbox under `-a on-request` |
@@ -85,7 +90,7 @@ A Codex turn that no prompt started, such as a goal's continuation, opens with a
 
 The subagent, resume, compact and crash sessions are also the usage-counting fixtures: their transcripts carry each turn's usage as the agent wrote it.
 
-Claude Code versions: 2.1.308 is the Claude Code the Claude desktop app bundles, recorded in the terminal from the app's copy (`~/Library/Application Support/Claude/claude-code/2.1.308`) first on PATH. Its SubagentStop also fires for Claude Code's internal agents (an empty `agent_type`), and a subagent that hands back through `SubagentHandback`, or an internal agent, may send no `last_assistant_message`, so for 2.1.308 that field is optional.
+Claude Code versions: the `file-changed` sets ran each version from its npm package (`@anthropic-ai/claude-code@<version>`) installed in a scratch folder and first on PATH. 2.1.308 is the Claude Code the Claude desktop app bundles, recorded in the terminal from the app's copy (`~/Library/Application Support/Claude/claude-code/2.1.308`) first on PATH. Its SubagentStop also fires for Claude Code's internal agents (an empty `agent_type`), and a subagent that hands back through `SubagentHandback`, or an internal agent, may send no `last_assistant_message`, so for 2.1.308 that field is optional.
 
 Codex versions: 0.144.0 is the CLI on PATH, 0.160.0 the Codex in the ChatGPT desktop app (whose app-server ran the heartbeat), and 0.163.0-alpha.10.2 the Codex in Codex.app; each covered version has its own full set. Desktop sessions record the hooks of their folder's own config: `.claude/settings.json` in a scratch folder for Claude, and `.codex/hooks.json` in the trusted `/private/tmp` for Codex, trusted once in the app and removed after.
 
