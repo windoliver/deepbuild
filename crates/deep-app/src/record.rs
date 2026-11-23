@@ -714,8 +714,10 @@ pub fn install_local(events: impl IntoIterator<Item = Value>) {
     for event in &record {
         view.apply(event.clone());
     }
-    // What the views draw first is all of it, so the events that built it are no move to compare (#1482).
+    // What the views draw first is all of it, so the events that built it are no move to compare (#1482), and the list
+    // reads it afresh, never an earlier record's reading at the same `log_pos` (#3100).
     let _ = take_touched();
+    crate::list::forget_reading();
     READER.with(|cell| {
         *cell.borrow_mut() = Some(Source::Local(Box::new(view), record, LocalHub::Answers))
     });

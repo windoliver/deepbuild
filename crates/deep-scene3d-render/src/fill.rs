@@ -19,6 +19,9 @@ use deep_gpu::encode::Job;
 
 use crate::{lock, read_back, Profiler};
 
+/// A cluster's cell and the fill lights its list holds, by ID with their weights (#1634).
+pub type Cluster = ([u32; 3], Vec<(String, f32)>);
+
 const SOURCE: &str = include_str!("fill.wgsl");
 /// The planted pass, in place of fill.wgsl's own from its `// ASSIGN` line on.
 const ARRIVAL: &str = include_str!("fill_arrival.wgsl");
@@ -431,7 +434,7 @@ impl Fill {
             let mut x = self.start;
             for k in (1..lights.len()).rev() {
                 x = x.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
-                lights.swap(k, (u64::from(x) * (k as u64 + 1) >> 32) as usize);
+                lights.swap(k, ((u64::from(x) * (k as u64 + 1)) >> 32) as usize);
             }
         }
         let (reach, mut spans): (Vec<Reach>, Vec<u32>) = lights.into_iter().unzip();
@@ -613,8 +616,10 @@ impl Fill {
         };
         let words = |bytes: &[u8]| -> Vec<u32> {
             bytes
-                .chunks_exact(4)
-                .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|&w| u32::from_le_bytes(w))
                 .collect()
         };
         let totals = read_back(device, PASS, (CELLS * 4) as u64, |e, staging| {
@@ -659,11 +664,7 @@ impl Fill {
 
     /// Each cell's list as the solids' shading walks it, read back from `grid`: its cluster, and
     /// the lights it holds by ID, each with its weight. Nothing while no fill light is in view.
-    pub fn read(
-        &self,
-        device: &Device,
-        grid: &wgpu::Buffer,
-    ) -> Vec<([u32; 3], Vec<(String, f32)>)> {
+    pub fn read(&self, device: &Device, grid: &wgpu::Buffer) -> Vec<Cluster> {
         if self.ids.is_empty() || self.cap == 0 {
             return Vec::new();
         }

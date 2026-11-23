@@ -634,8 +634,10 @@ impl Replica {
                 );
             }
             // The window opens where the app opens, unless the launch names a page (#1461). A panel with no area goes in
-            // the list's slot, as before; one registered to an area goes there; one replacing Needs you fills the list's
-            // first section.
+            // the list's slot, as before, but in a window too narrow for the list and the page together, where the list
+            // hides (#1461) and the window shows the page (#1808), it is the first page, as the app mounts one; one
+            // registered to an area goes there; one replacing Needs you fills the list's first section.
+            let narrow = deep_app::chrome::list_width(px(0.), px(size.0)).is_none();
             let base = Layout::shipped("needs-you");
             let mut layout = if center == NEEDS_YOU {
                 base
@@ -651,7 +653,12 @@ impl Replica {
                 layout.active = 0;
             }
             if panel.is_some() && area.is_none() && replaces.is_empty() {
-                layout.sidebar = deep_app::views::EXTENSION.into();
+                if narrow {
+                    layout.center.insert(0, deep_app::views::EXTENSION.into());
+                    layout.active = 0;
+                } else {
+                    layout.sidebar = deep_app::views::EXTENSION.into();
+                }
             }
             if !replaces.is_empty() {
                 layout.needs_you = format!("shell:deepbuild-panel/{replaces}");
@@ -703,10 +710,14 @@ impl Replica {
                         });
                         *into.borrow_mut() = match (loaded, failing) {
                             (Err(why), Some(name)) => {
-                                deep_app::open::place_extension(
-                                    deep_app::views::shipped(Kind::Sidebar, cx),
-                                    cx,
-                                );
+                                // Its slot shows the shipped list, as before; in a narrow window that slot is a page,
+                                // and the list's own slot already holds the list.
+                                if !narrow {
+                                    deep_app::open::place_extension(
+                                        deep_app::views::shipped(Kind::Sidebar, cx),
+                                        cx,
+                                    );
+                                }
                                 deep_app::installed::failed(&name, &why, cx);
                                 Ok(None)
                             }

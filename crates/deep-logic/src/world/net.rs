@@ -4,6 +4,9 @@
 
 use super::*;
 
+/// An item's ID with its globals, arrays and memory, as the full-state hash takes them.
+pub type ItemState = (String, Vec<u8>, Vec<u8>, Vec<u8>);
+
 impl World {
     /// #550: a hash for each field of each item's carried state, `(field, hash)` in the piece's
     /// order: `<item>.<write>` for each array, then `<item>.globals` and `<item>.memory`.
@@ -38,7 +41,7 @@ impl World {
     }
 
     /// #550: each item's globals, arrays and memory as the full-state hash takes them.
-    pub fn states(&mut self) -> Vec<(String, Vec<u8>, Vec<u8>, Vec<u8>)> {
+    pub fn states(&mut self) -> Vec<ItemState> {
         let ids: Vec<String> = self.piece.items.iter().map(|i| i.id.clone()).collect();
         ids.into_iter()
             .zip(self.lives.iter_mut())

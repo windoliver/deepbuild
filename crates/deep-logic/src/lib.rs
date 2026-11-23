@@ -15,6 +15,7 @@ pub mod bindings;
 pub mod budget;
 pub mod carry;
 pub mod checks;
+pub mod circuit;
 pub mod draws;
 pub mod first_party;
 mod fixtures;
