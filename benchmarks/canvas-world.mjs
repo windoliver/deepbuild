@@ -14,7 +14,7 @@ const TESTS = {
   'tests/acceptance/1868/canvas-cells.test.mjs': '#1868.f34f3f9c',
   'tests/acceptance/1868/status-runs.test.mjs': '#1868.bf84aa8b',
   'tests/acceptance/265/ac6-budgets.test.ts': '#265.e3eb2a00',
-  'tests/acceptance/269/ac6-budgets.test.ts': '#269.6ad7e180',
+  'tests/acceptance/269-redraft-ac6/ac6-budgets.test.ts': '#269.6ad7e180',
 };
 const CHECKOUT = fileURLToPath(new URL('..', import.meta.url));
 

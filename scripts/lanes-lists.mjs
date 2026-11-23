@@ -1435,5 +1435,9 @@ alone.push('tests/acceptance/2215/');
 alone.push('tests/acceptance/2215-redraft-ac5/');
 
 // #269's folder (blind) runs alone by its lane.json; ac6-budgets.test.ts times a 256 × 256 grid image's frame GPU with
-// judgeLimit.
-timed.push('tests/acceptance/269/ac6-budgets.test.ts');
+// judgeLimit, as its blind redraft of AC6 does.
+alone.push('tests/acceptance/269-redraft-ac6/');
+timed.push('tests/acceptance/269/ac6-budgets.test.ts', 'tests/acceptance/269-redraft-ac6/ac6-budgets.test.ts');
+// #269's first AC6 draft is kept by hand until the owner swaps it: its budget program runs out of the default fuel at
+// step 0, so its grid never changes; its blind redraft, 269-redraft-ac6/, runs in its place.
+byHand.push('tests/acceptance/269/ac6-budgets.test.ts');
