@@ -1,0 +1,20 @@
+{
+  "#290.052fe5e4": [
+    "hidden_view_draws_where_visible"
+  ],
+  "#290.8310b458": [
+    "hidden_view_without_own_depth"
+  ],
+  "#290.a677630a": [
+    "hidden_view_writes_ids"
+  ],
+  "#290.fba001a7": [
+    "hidden_view_opacity_ignores_match_me"
+  ],
+  "#290.9e8b88d3": [
+    "hidden_view_ignores_seen"
+  ],
+  "#290.69fa44f2": [
+    "hidden_view_after_status"
+  ]
+}

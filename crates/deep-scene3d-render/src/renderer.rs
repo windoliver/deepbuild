@@ -83,6 +83,8 @@ pub struct Renderer {
     pub(super) clear_pipelines: [Option<wgpu::RenderPipeline>; 6],
     /// Blend and add over the glass, which draws after the resolve (#428, #1173).
     pub(super) late_pipelines: [Option<wgpu::RenderPipeline>; 2],
+    /// #290: the hidden views' pipelines and targets, made when a frame first draws one.
+    pub(super) hidden: Option<hidden::Hidden>,
     /// This frame's adjust table (#424), each distinct adjust once, entry k + 1 at k.
     pub(super) adjust_buffer: wgpu::Buffer,
     pub(super) adjusts: Vec<AdjustEntry>,

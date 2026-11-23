@@ -21,6 +21,7 @@ pub mod flare;
 mod glass;
 pub mod hdr;
 pub mod held;
+pub mod hidden;
 pub mod history;
 pub mod inset;
 mod kept;
@@ -1319,6 +1320,8 @@ struct Batch {
     clear_draws: Vec<((Shape, u32), u8)>,
     /// Each see-through draw's material operator key (#431), 0 for none, as `clear_draws`.
     clear_ops: Vec<u64>,
+    /// #290: its solids' hidden views, drawn after the resolve where nearer surfaces hide them.
+    hidden: hidden::Records,
     /// #1636: each draw of a mesh its bundle records, with the instances it draws.
     calls: Vec<(Call, u32)>,
     /// The resources and draws the bundle binds and records, as it was encoded, and this
@@ -2723,6 +2726,7 @@ impl Renderer {
             filter_taps: 8,
             clear_pipelines: [None, None, None, None, None, None],
             late_pipelines: [None, None],
+            hidden: None,
             adjust_buffer,
             adjusts: Vec::new(),
             lobe_buffer,
@@ -4902,6 +4906,7 @@ impl Renderer {
             || leveled(scene)
             || self.order.len() != scene.layers.len()
             || self.batches.values().any(|b| !b.clear_draws.is_empty())
+            || self.batches.values().any(|b| !b.hidden.is_empty())
             || !self.adjusts.is_empty()
             || scene.mirror.is_some()
             || scene.water.is_some()
@@ -5771,6 +5776,9 @@ impl Renderer {
     fn prepare_batch(&mut self, device: &Device, layer: &Layer3, scene: &Scene) {
         let cam = &scene.camera;
         self.compiled += self.families.ensure(&device.device, layer, &mut self.names);
+        if !layer.hidden.is_empty() {
+            self.ensure_hidden(device, layer.hidden.keys().cloned());
+        }
         let clear = |s: &Solid| {
             s.per_pixel
                 || faded(s)
@@ -6052,8 +6060,8 @@ impl Renderer {
         let winding = !self.planted.winding_ignores_determinant;
         let by_position = self.planted.ids_by_draw_position;
         let adjusts = &mut self.adjusts;
-        let mut adjust_of = |s: &Solid| -> u32 {
-            let Some(a) = s.adjust.filter(Adjust3::colors) else {
+        let mut adjust_of = |a: Option<Adjust3>| -> u32 {
+            let Some(a) = a.filter(Adjust3::colors) else {
                 return 0;
             };
             let e = AdjustEntry::of(&a);
@@ -6105,8 +6113,9 @@ impl Renderer {
         // See-through parts and shadow catchers draw after the opaque ones, back to front by
         // view depth plus their sort_bias, ties by ID.
         let mut see_through = Vec::new();
+        batch.hidden.begin();
         for (s, slot) in order {
-            let adjust = adjust_of(s) | lobes_of(s);
+            let adjust = adjust_of(s.adjust) | lobes_of(s);
             let mut record = solid_record(
                 s,
                 slot.2,
@@ -6115,6 +6124,14 @@ impl Renderer {
                 slot.0 .1 & MAPS_INDEX != 0,
                 adjust,
             );
+            // #290: its item's hidden view draws it again, tinted, where something hides it.
+            let view = layer.hidden.get(created::item_of(&s.id));
+            // A cast-only level draws no hidden view; the planted row no pass draws does.
+            if let Some(v) = view.filter(|_| !s.cast_only || !s.cast_shadow) {
+                let mut again = record;
+                again.op[3] = adjust_of(hidden::adjust(s, v)) | lobes_of(s);
+                batch.hidden.push(s, slot.0 .1, again, v);
+            }
             if clear(s) {
                 let c = [s.model[0][3], s.model[1][3], s.model[2][3]];
                 let depth = (0..3)
@@ -6174,6 +6191,7 @@ impl Renderer {
             batch.clear_ops.push(*op);
         }
         batch.clear.finish(device, &mut next, &mut written);
+        batch.hidden.finish(device, &mut next, &mut written);
         batch.solid_slots = slots;
         for (key, set) in batch.solids.iter_mut().chain(batch.casters.iter_mut()) {
             if let Some(&n) = layer.fed.get(&key.3) {
@@ -7291,6 +7309,11 @@ impl Renderer {
             }
         };
         let cascades = self.cascade_jobs();
+        // #290: the hidden views; the planted hidden_view_after_status draws them last.
+        let (hidden_last, hidden) = match self.hidden_frame(device) {
+            h if self.planted.hidden.after_status => (h, None),
+            h => (None, h),
+        };
         let Some(t) = self.targets.as_ref() else {
             return Vec::new();
         };
@@ -7514,6 +7537,10 @@ impl Renderer {
                         timestamps,
                     );
                 });
+            }
+            // #290: the hidden views, over what the opaque and see-through parts left.
+            if let Some(h) = &hidden {
+                h.record(encoder, [&linear, &ids], clear_depth, crop, &profiler);
             }
             // Motion blur by velocity resolves the finished geometry, glass included, before the
             // effects (#419).
@@ -7892,6 +7919,20 @@ impl Renderer {
             ));
         }
         jobs.extend(colors);
+        if let (Some(h), Some(t)) = (hidden_last, self.targets.as_ref()) {
+            let (slot, ids, clear, profiler) = (
+                slot.clone(),
+                t.drawn.ids.clone(),
+                self.clear_depth(),
+                self.profiler.clone(),
+            );
+            let job: Job = Box::new(move |e| h.record(e, [&slot, &ids], clear, None, &profiler));
+            // Under the last pass's name, so the view's plan keeps it after that pass.
+            let last = jobs
+                .last()
+                .map_or(OUTPUT_PASS.to_string(), |(n, _)| n.clone());
+            jobs.push((last, job));
+        }
         if let Some(job) = self.hdr_job(device, slot) {
             jobs.push((hdr::HDR_PASS.into(), job));
         }
@@ -8290,6 +8331,7 @@ impl Renderer {
     /// #379), with its timestamp writes when given.
     pub fn record_geometry(
         &mut self,
+        device: &Device,
         encoder: &mut wgpu::CommandEncoder,
         timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
     ) {
@@ -8299,6 +8341,8 @@ impl Renderer {
         if let Some(job) = self.occlusion_job() {
             job(encoder);
         }
+        // #290: the hidden views, which the live path draws as a snapshot does.
+        let hidden = self.hidden_frame(device);
         let Some(t) = self.targets.as_ref() else {
             return;
         };
@@ -8325,6 +8369,11 @@ impl Renderer {
         );
         if let Some(core) = self.core_draws() {
             core.record(encoder);
+        }
+        if let Some(h) = &hidden {
+            let crop = self.crop.map(|c| crop_px(c, t.size));
+            let over = [&t.linear_view, &t.drawn.ids];
+            h.record(encoder, over, self.clear_depth(), crop, &self.profiler);
         }
     }
 

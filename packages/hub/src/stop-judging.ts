@@ -38,6 +38,7 @@ import { gatePrBodies } from './pr-commands.js';
 import { claimState, newestClaim, type ClaimState } from './verdict-chat.js';
 import { RUN_AS_YOU } from './runs.js';
 import type { ReviewOf } from './checks-port.js';
+import { passesAt } from './review-passes.js';
 import type { CheckSpec } from '@deepbuild/conformance';
 import { type StackWant } from './stacks.js';
 import { docCheckIn, docCommand, docSpec } from './doc-checks.js';
@@ -1024,7 +1025,11 @@ export class StopJudging {
       const approved = r.joins ? undefined : await approvedSpec(r.cwd, r.base);
       if (approved) void this.proposeSpecDrift(r, approved.oid).catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s spec drift was not proposed: ${error instanceof Error ? error.message : String(error)}\n`));
       const spec = approved ? this.specChecks(approved) : [];
-      const releaseNames = approved && await this.prOf(r.session) ? releaseSpec(approved.spec).checks : [], hasSpec = spec.length > 0 || releaseNames.length > 0;
+      const pr = r.joins ? undefined : await this.prOf(r.session);
+      const releaseNames = approved && pr ? releaseSpec(approved.spec).checks : [], hasSpec = spec.length > 0 || releaseNames.length > 0;
+      // The wiki's review passes for a claim on a PR (#2748), those whose scope covers what it changed, read beside what follows.
+      const passes = pr && this.options.settings.plant !== 'review-without-caller' ? passesAt(this.options.services.root.dir, this.options.settings.plant, r.cwd, r.base) : undefined;
+      passes?.catch(() => undefined);
       const reads = Promise.all([r.definition === 'pending' ? undefined : this.sessionLog(r.session), hasSpec ? this.projectTrusted(r.cwd) : false]);
       reads.catch(() => undefined);
       if (!r.joins) {
@@ -1096,7 +1101,14 @@ export class StopJudging {
           checks.push({ check, approved: null, command, covers: [], depth: 'unit', on_base: 'passes', asserts: [], source: 'spec', review: true });
           kinded.set(check, { spec, of });
         };
-        if (await this.prOf(r.session) && this.options.settings.plant !== 'review-without-caller') add('review', checkKinds.reviewSpec(r.base, r.commit, this.options.services.root.dir), `review ${r.base}..${r.commit}`);
+        if (passes) {
+          const review = checkKinds.reviewSpec(r.base, r.commit, this.options.services.root.dir);
+          add('review', review, `review ${r.base}..${r.commit}`);
+          // Before the PR says Closes, each review pass in scope runs as a check of its own (#2748): its finding sends
+          // the claim back and never passes it, and its run names the passes left out of scope.
+          const { run, out } = await passes;
+          for (const pass of run) add(`review pass ${pass.id}`, review && { ...review, pass, out } as CheckSpec, `review pass ${pass.id} ${r.base}..${r.commit}`);
+        }
         for (const n of await checkKinds.claimChecks(cited, r.cwd, r.base, r.definition === 'locked' ? (await this.options.services.tasks.scopeOf(r.task)).sample : null)) { checks.push(n.check); kinded.set(n.check.check, { spec: n.spec, of }); }
       }
       if (kinded.size) this.kindChecks.set(r.claim, kinded);

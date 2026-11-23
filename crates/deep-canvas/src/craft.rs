@@ -1,6 +1,7 @@
 //! Issue #409: craft@1 (canvas primitives: Film audit: craft@1). Its checks' table, `craft.json`:
 //! each check's name, its fields' defaults, and its own description, threshold and fix, which the
-//! check registry lists and `scripts/skill.mjs` writes into the skill, so the rule an agent reads
+//! check registry lists and `scripts/skill.mjs` writes into the guide `craft` that `deep_kinds`
+//! serves and the skill names (#2697), so the rule an agent reads
 //! is the rule the check runs. And its measures, as pure functions over what the caller read from
 //! the evaluated film: the share of 1/12 s frame pairs that move, read the way an export's 12 fps,
 //! 320 px gray resample reads them; the blank runs in that resample; each shot's camera move,

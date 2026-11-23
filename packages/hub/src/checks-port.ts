@@ -40,10 +40,16 @@ export interface CommandRun extends CheckResult {
   clock: number;
 }
 /** The session a review reads the change's model of: its transcript, and the route its adapter read at its starts, null where a start recorded none (#1886). */
-export interface ReviewOf { claim: string; task: string; agent: string; transcript: string | undefined; pr?: string | undefined; route: SessionRoute | null }
+export interface ReviewOf {
+  claim: string; task: string; agent: string; transcript: string | undefined; pr?: string | undefined; route: SessionRoute | null;
+  /** How many of a PR's bugs a review pass found on a replay the record keeps under `key` for `model` (#2748); undefined when it keeps none. */
+  kept?: (key: string, model: string) => Promise<number | undefined>;
+}
 export interface ReviewItem { rule: string; sites: { file: string; line: number; quote: string }[] }
 /** A counted round keeps its sent items separate from earlier ones still open. */
 export interface ReviewRound { sent: ReviewItem[]; open: ReviewItem[] }
+/** What a counted run of a review pass leaves for the record (#2748), review.pass@1's data beside its claim and commit: the item sent back under the pass's ID, the pre-existing findings, and each replay. */
+export interface PassRan { pass: string; model: string; sent: ReviewItem[]; follow_ups: ReviewItem['sites']; replays: { pr: number; head: string; key: string; found: number; of: number; carried?: true }[] }
 /** What a speed's or added terms' run reads beyond its checkout (#1863): its run's handle, the session's worktree and the hub's stop. */
 export interface RepoOf { run: string; worktree: string; stop: AbortSignal }
 export interface KindsOptions {
@@ -70,7 +76,7 @@ export interface CheckKinds {
   claimChecks(words: string, cwd: string, base: string, sample: string | null): Promise<{ check: ClaimCheck; spec: CheckSpec }[]>;
   uncited(words: string): string;
   reviewSpec(base: string, head: string, root: string): CheckSpec | undefined;
-  run(spec: CheckSpec, ctx: CheckContext, of: ReviewOf, repo?: RepoOf): Promise<CheckResult & { round?: ReviewRound; speed?: TimingReport }>;
+  run(spec: CheckSpec, ctx: CheckContext, of: ReviewOf, repo?: RepoOf): Promise<CheckResult & { round?: ReviewRound; speed?: TimingReport; pass?: PassRan }>;
 }
 export interface ChecksProvider {
   command(options: CommandCheck): Promise<CommandRun>;

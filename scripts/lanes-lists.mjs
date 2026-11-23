@@ -626,6 +626,11 @@ timed.push('tests/acceptance/1700/budgets.test.ts');
 alone.push('tests/acceptance/1781/');
 // #409's files each build deep-show and export films through the GPU; 409-oracle also runs the outside film gate.
 alone.push('tests/acceptance/409/', 'tests/acceptance/409-oracle/');
+// #2697 moved the craft checks' text from the skill to the guide deep_kinds serves: #409's skill test, kept as written,
+// runs by hand only, and its blind redraft, which reads the guide, runs in its place. Both build deep-show; #2697's own
+// files also build it in a copy of the checkout when the guide isn't in the copy's gallery, and run #26's drift test.
+byHand.push('tests/acceptance/409/skill.test.ts');
+alone.push('tests/acceptance/409-redraft-2697/', 'tests/acceptance/2697/');
 // #1163's files each build deep-show; exports.test.ts exports the 600-frame 1080p film six times.
 alone.push('tests/acceptance/1163/');
 // #1164's files build deep-show, deep-sandbox and a Rust program for wasm32, and play a game through the hub.
@@ -860,6 +865,9 @@ alone.push('tests/acceptance/277/');
 // #552's files each build deep-show (ac5 builds deep-drive with env-plants instead) and play matches in process; ac1,
 // ac2, ac6 and ac7 draw on the GPU, ac7 the app's window, and ac7 waits on your taste call in tests/acceptance/552/TASTE.json.
 alone.push('tests/acceptance/552/');
+// #290's files each build deep-gpu (ac4 and ac5 build deep-show instead, ac8 both) and draw on the GPU; ac4, ac5 and
+// ac8 play matches in process, and ac8 waits on your taste call in tests/acceptance/290/TASTE.json.
+alone.push('tests/acceptance/290/');
 // #553's files each build deep-show and play matches in process, rendering each copy's sound; ac1 runs the network
 // seam's interop part, which builds deep-show and the shipped relay and plays the app against headless Chrome's web
 // player through it, and ac4 reads net.budget's five runs (INCONCLUSIVE off a reference Mac or under load).
@@ -1157,6 +1165,12 @@ alone.push(...['cycles', 'planted-answers', 'planted-results', 'planted-jobs', '
 byHand.push('tests/acceptance/2650/budgets.long.test.ts');
 timed.push('tests/acceptance/2650/budgets.long.test.ts');
 
+// #2700's files each build their probe against deep-canvas and run it, so they run one at a time; budgets.long
+// measures two release benchmarks beside the merge base's and runs #896's and #854's suites, by hand.
+alone.push(...['heap', 'equal', 'data-row', 'as-given'].map((f) => `tests/acceptance/2700/${f}.test.mjs`));
+byHand.push('tests/acceptance/2700/budgets.long.test.mjs');
+timed.push('tests/acceptance/2700/budgets.long.test.mjs');
+
 // #1498's files each build deep-drive and run replicas.
 alone.push('tests/acceptance/1498/');
 
@@ -1196,6 +1210,9 @@ alone.push('tests/acceptance/1411/');
 
 // #1512's suite starts hubs of its own with a fake reviewer, as #1537's and #1862's do.
 alone.push('tests/acceptance/1512/');
+// #2748's files (blind) each start hubs of their own with a planted reviewer, as #1512's do; budgets.test.ts times a Stop hook's hold.
+alone.push('tests/acceptance/2748/');
+timed.push('tests/acceptance/2748/budgets.test.ts');
 
 // #1509's files each start a hub that gates dependencies against a registry served on loopback: one file at a time.
 alone.push('tests/acceptance/1509/');
