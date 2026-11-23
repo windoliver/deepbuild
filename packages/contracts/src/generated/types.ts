@@ -5822,35 +5822,6 @@ export interface AskMootV2 {
   evidence?: Array<string>;
 }
 
-export type AskMovedPinnedTo = {
-  kind: "commit";
-  ref: string;
-} | {
-  kind: "doc_revision";
-  ref: string;
-} | {
-  kind: "evidence";
-  ref: string;
-};
-
-/** ask.moved@1 */
-export interface AskMoved {
-  v: 1;
-  id: string;
-  kind: "ask.moved";
-  subject: string;
-  writer: "core";
-  actor: string;
-  scope: string;
-  ts: number;
-  seq?: bigint;
-  log_pos?: number;
-  data: {
-    pinned_to: AskMovedPinnedTo;
-  };
-  evidence?: Array<string>;
-}
-
 export type AskSourcesPinnedTo = {
   kind: "commit";
   ref: string;
@@ -5973,25 +5944,6 @@ export interface AskSuperseded {
   log_pos?: number;
   data: {
     by: string;
-  };
-  evidence?: Array<string>;
-}
-
-/** ask.taken_over@1 */
-export interface AskTakenOver {
-  v: 1;
-  id: string;
-  kind: "ask.taken_over";
-  subject: string;
-  writer: "core";
-  actor: string;
-  scope: string;
-  ts: number;
-  seq?: bigint;
-  log_pos?: number;
-  data: {
-    device: string;
-    revision: number;
   };
   evidence?: Array<string>;
 }
@@ -6335,6 +6287,25 @@ export interface CapabilityRefused {
     broke: "grant" | "quota" | "schema";
     clause: string;
     digest: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** card.taken_over@1 */
+export interface CardTakenOver {
+  v: 1;
+  id: string;
+  kind: "card.taken_over";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    device: string;
+    revision: number;
   };
   evidence?: Array<string>;
 }
@@ -8860,6 +8831,38 @@ export interface LeaseAcquiredV3 {
       pid: number;
       start: string;
     };
+  };
+  evidence?: Array<string>;
+}
+
+/** lease.acquired@4 */
+export interface LeaseAcquiredV4 {
+  v: 4;
+  id: string;
+  kind: "lease.acquired";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    resource: {
+      host: string;
+      kind: string;
+      key: string;
+    };
+    holder: string;
+    mode: "exclusive" | "shared";
+    expires: number;
+    units?: number;
+    run?: string;
+    agent?: {
+      pid: number;
+      start: string;
+    };
+    asked?: number;
   };
   evidence?: Array<string>;
 }
