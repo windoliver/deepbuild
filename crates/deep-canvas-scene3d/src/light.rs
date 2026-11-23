@@ -13,6 +13,9 @@ use deep_canvas::camera::Vec3;
 
 use crate::scene::{num, Camera, Depth, Refused};
 
+mod shadowing;
+pub use shadowing::{Contact, Shadowing, Soft, MOST_POINTS, MOST_SPOTS};
+
 /// The light kinds (Light and the light policy: `kind`), the field list `light.kind` (#2777).
 pub const KINDS: [&str; 4] = [
     "light.point@1",
@@ -982,74 +985,6 @@ pub fn light(
         fill: params.get("fill").and_then(Value::as_bool).unwrap_or(false),
         auto_range: kind != LightKind::Sun && num(params.get("range")).is_none(),
     })
-}
-
-/// PCSS or Castaño's filter (Light policy: soft shadows).
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Soft {
-    pub pcss: bool,
-    pub blocker_taps: u32,
-    pub filter_taps: u32,
-    /// The most a penumbra spreads, in shadow map texels.
-    pub max_penumbra: f64,
-}
-
-/// Screen-space contact shadows for the key light.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Contact {
-    pub length: f64,
-    pub samples: u32,
-}
-
-/// The light policy's shadow fields (Light policy: soft shadows, local shadows).
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Shadowing {
-    pub soft: Option<Soft>,
-    pub contact: Option<Contact>,
-    pub spots: usize,
-    /// Point lights and area lights with a shadow.
-    pub points: usize,
-    /// A spot's map's side and each cube face's, in texels.
-    pub local_map: u32,
-    /// `cache: static`: a map holds until its key changes.
-    pub cache: bool,
-    /// `per_cluster` (#1634): the fill lights a cluster shades at most.
-    pub per_cluster: usize,
-}
-
-/// The most spots a policy may shadow; points take four, which the budget class never raises.
-pub const MOST_SPOTS: usize = 8;
-pub const MOST_POINTS: usize = 4;
-
-impl Default for Shadowing {
-    /// A document that names no `light_policy`: the key sun's tent alone, as before it had one.
-    fn default() -> Shadowing {
-        Shadowing {
-            soft: None,
-            contact: None,
-            spots: 0,
-            points: 0,
-            local_map: 512,
-            cache: true,
-            per_cluster: PER_CLUSTER,
-        }
-    }
-}
-
-impl Shadowing {
-    /// A `light_policy`'s fields before it names any: PCSS and two shadowed spots.
-    pub fn named() -> Shadowing {
-        Shadowing {
-            soft: Some(Soft {
-                pcss: true,
-                blocker_taps: 16,
-                filter_taps: 16,
-                max_penumbra: 32.0,
-            }),
-            spots: 2,
-            ..Shadowing::default()
-        }
-    }
 }
 
 /// The shadows a view keeps: each light by its index with the share of its shadow the policy
