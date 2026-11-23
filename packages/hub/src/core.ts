@@ -6,7 +6,7 @@ import { parseYaml } from './yaml.js';
 import { UsageTail } from '@deepbuild/readings';
 import { Numbers } from './numbers.js';
 import { homedir } from 'node:os';
-import { isAbsolute, join, resolve } from 'node:path';
+import { basename, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ADAPTERS } from '@deepbuild/adapters';
 import { HOLD_PLANTS, openAsks, signInSignature, type Asks, type AsksPlant } from '@deepbuild/asks';
@@ -19,7 +19,7 @@ import type { DecisionsProvider } from './decisions-port.js';
 import type { EnvironmentProvider, ComposeResource } from './environment-port.js';
 import { openCheckouts, type Checkouts, type TaskListFacts } from '@deepbuild/gate';
 
-import { openLeases, SLOW_SLOT, type LeaseTable } from '@deepbuild/leases';
+import { MEM_KEPT_MB, openLeases, SLOW_SLOT, type LeaseTable } from '@deepbuild/leases';
 import { Acceptance } from './acceptance.js';
 import { Landing } from './landing.js';
 import { openRunner, type Agent, type JobRecord, type JobSpec, type Runner } from '@deepbuild/runner';
@@ -91,7 +91,7 @@ import { Work } from './work.js';
 
 import { Replicas, REPLICA_LEASE } from './drive.js';
 import { plantedStop } from './plant.js';
-import { draftedPools, HeavyQueue, JobPool, poolTokens } from './heavy.js';
+import { draftedPools, entryMemory, HeavyQueue, JobPool, poolTokens } from './heavy.js';
 import { Products } from './products.js';
 import { LogReads } from './log-reads.js';
 import { Hosts } from './hosts.js';
@@ -103,7 +103,7 @@ import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, MODS_
 import { disk, testVfs, writeAtomic, type Durable } from './vfs.js';
 import { EXTENSION_HOOK_MS, derivedId, refuse, signature, ulid, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Scope, SCREEN_TOOLS } from './wire.js';
 import type { CallContext, Session, Live, Cursor, Counter, Routes } from './session-types.js';
-import { CODEX_BINARY, CLAUDE_BINARY, HOUR, ARCHIVED_THREADS_MS, DRIFT_MS, DAY, sql, letters, ghToken, GITHUB_PASS_MS, HOOK_CHECK_MS, CALL_GRACE, SLEPT, said, TURN_ENTRIES, PROMPT_PLACE_MS, CORES, machineLoad, FOREIGN, HOLDS_NO_PROMPT, signInCommands, type Obj, isObj, watching, waitingOn, READS, AUTOMATIC_QUEUED, effectEntries, callOf, MODS_MS, sendKey, OWN_TURN, holdsTurns, childPrompt, readsLogged, streamed, crashing, receipting, counted, TYPED_RULE, wakeable, planOf, hubConfig } from "./hub-shared.js";
+import { CODEX_BINARY, CLAUDE_BINARY, HOUR, ARCHIVED_THREADS_MS, DRIFT_MS, DAY, sql, letters, ghToken, GITHUB_PASS_MS, HOOK_CHECK_MS, CALL_GRACE, SLEPT, said, TURN_ENTRIES, PROMPT_PLACE_MS, CORES, TEST_MEM_MB, machineLoad, FOREIGN, HOLDS_NO_PROMPT, signInCommands, type Obj, isObj, watching, waitingOn, READS, AUTOMATIC_QUEUED, effectEntries, callOf, MODS_MS, sendKey, OWN_TURN, holdsTurns, childPrompt, readsLogged, streamed, crashing, receipting, counted, TYPED_RULE, wakeable, planOf, hubConfig } from "./hub-shared.js";
 import { leasesScreen, offScreen } from './screen-gate.js';
 
 import { HubCanvas } from './hub-canvas.js';
@@ -567,9 +567,11 @@ export class Core {
       command: this.providers.checks.command,
       hosts: () => this.hosts,
       journalFile: this.root.runs, point: () => this.durable.point('journal_rewrite'), checkouts: join(this.root.dir, 'checkouts'), now: this.now, plant: options.plant, held: options.held,
+      // A lease holder as a waiting run's line names it (#3220): a session with its worktree's folder.
+      who: (holder) => { const id = holder.startsWith('session:') ? holder.slice('session:'.length) : undefined; const cwd = id ? [...this.state.sessions.values()].find((x) => letters(x.id) === id)?.cwd : undefined; return cwd ? `${holder} (${basename(cwd)})` : holder; },
       raw: this.raw, sync: () => this.record.sync(), appendAsCore: (input) => this.append(this.connection('core'), input as EventInput),
       appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), stored: (put, what) => this.control.stored(put, what),
-      invalid: (claim, commit, reason, outcome) => this.judging.invalid(claim, commit, reason, outcome), recorded: (run, record) => this.gate.recorded(run, record), keyed: (key, run, record) => this.gate.keyed(key, run, record),
+      invalid: (claim, commit, reason, outcome) => this.judging.invalid(claim, commit, reason, outcome), recorded: (run, record) => this.gate.recorded(run, record), keyed: (key, run, record, used) => this.gate.keyed(key, run, record, used),
       stopping: () => this.stopping, stacks: this.stacks, store: () => this.store, host: () => this.host, supervisor: () => this.supervisor, leases: () => this.leases, extensions: () => this.extensions,
       kind: async (run, checkout, deadline, stop) => {
         const of: ReviewOf = this.judging.kindChecks.get(run.claim)?.get(run.check)?.of ?? { claim: run.claim, task: '', agent: 'claude-code', transcript: undefined };
@@ -744,6 +746,7 @@ export class Core {
     // cpu.slot, and the supervisor takes every run's keys through it.
     const leases = this.leases = await openLeases({
       record: this.record, now: this.now, cores: CORES, ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}), ...(this.options.plant === 'fills-every-slot' ? { plant: this.options.plant } : {}),
+      ...(TEST_MEM_MB !== undefined ? { memory: (TEST_MEM_MB + MEM_KEPT_MB) * 2 ** 20 } : {}),
     });
     for (const kind of this.providers.environment.leaseKinds) await leases.declare('env-local', kind, [port, compose].find((k) => k.kind === kind.name)?.free);
     // deep_drive's replicas (#124): a replica's process ends with the hub that started it, whose pipe was its stdin,
@@ -770,6 +773,9 @@ export class Core {
       },
       worktreeOf: (s) => [...this.state.sessions.values()].find((x) => letters(x.id) === s || x.id === s)?.cwd,
       agentOf: (s) => { const x = this.state.sessions.get(s); return x ? { pid: x.pid, start: x.start } : undefined; },
+      // The supervisor opens after the queue: a command it can't follow yet records no use, never 0 (#3220).
+      supervisor: { follow: (run, pgid) => this.supervisor?.follow(run, pgid), unfollow: async (run) => this.supervisor?.unfollow(run) },
+      entryMemory,
     });
     await this.heavy.recover(this.raw);
     await this.heavy.tick();
@@ -822,7 +828,8 @@ export class Core {
       ...(this.options.plant === 'kept-in-service-cgroup' ? { plant: 'kept-in-service-cgroup' as const } : {}),
       ...(this.options.plant === 'env-holds-lease-for-helper' ? { plant: 'holds-lease-while-taken' as const } : {}),
       ...(this.options.plant === 'standin-value-in-env' || this.options.plant === 'standin-every-host' || this.options.plant === 'run-ca-in-login-keychain' || this.options.plant === 'sandbox-any-loopback'
-        || this.options.plant === 'egress-refusals-unrecorded' || this.options.plant === 'egress-refusal-once-per-operation' || this.options.plant === 'egress-refusals-seen-without-run' ? { plant: this.options.plant } : {}),
+        || this.options.plant === 'egress-refusals-unrecorded' || this.options.plant === 'egress-refusal-once-per-operation' || this.options.plant === 'egress-refusals-seen-without-run'
+        || this.options.plant === 'scan-keeps-first-sample' ? { plant: this.options.plant } : {}),
       ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}),
       ...(this.options.crash ? { crash: this.options.crash } : {}),
       // No run, run-as-you included, writes the record, the agents' config folders or the Node the hub runs on;

@@ -16,6 +16,8 @@ import { closeSync, constants, lstatSync, openSync, readFileSync, readSync, rmSy
 import { Socket } from 'node:net';
 import { availableParallelism, homedir, loadavg, totalmem } from 'node:os';
 import type { Caller, Lease, LeaseTable, Mode, Resource } from '@deepbuild/leases';
+import type { Supervisor, Used } from '@deepbuild/supervisor';
+import { admitOn, CLASS_MB, type Admission } from './admission.js';
 import { call, failure, type Reply } from './client.js';
 import { DISK_FLOOR, freeBytes } from './disk.js';
 import { controlToken, deepHook, hubAddress } from './paths.js';
@@ -222,6 +224,8 @@ const resourceOf = (kind: string, slow: string): Resource => (kind === 'cpu.slot
 interface Waiter {
   ticket: string; secret: string; holder: string; session?: string; command: string; cwd: string; needs: Need[]; jobs: Jobs;
   peer: { pid: number; start: string }; queued: number; seen: number; blockedOn?: string;
+  /** What it is admitted on (#3220): its entry's memory number, or its class's constant; never its own last run. */
+  memory: Admission;
   /** How long it waited for each reason, in ms, and when it last read one. */
   waits: Record<string, number>; last?: { reason: string; at: number };
 }
@@ -231,6 +235,8 @@ interface Held {
   tokens: number; pool?: JobPool; workers?: number;
   /** A command's own fixed job count, which the pool never holds back (#1411). */
   fixed?: number;
+  /** What it was admitted on (#3220). */
+  memory?: Admission;
 }
 
 export interface HeavyOptions {
@@ -257,6 +263,10 @@ export interface HeavyOptions {
   free?: (path: string) => number;
   /** A command joined the queue: the beat that ticks it starts again if it had stopped (#2648). */
   wake?: () => void;
+  /** The supervisor whose scan reads each command's process group as its run's tree, for what it used (#3220). */
+  supervisor?: Pick<Supervisor, 'follow' | 'unfollow'>;
+  /** The memory a command's heavy.command entry names, in MB, as deep-hook matches it in its folder (#3220). */
+  entryMemory?: (command: string, cwd: string) => Promise<number | undefined>;
 }
 
 const alive = (pid: number): boolean => { try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === 'EPERM'; } };
@@ -273,6 +283,8 @@ const RUN_PREFIX = 'run:LEASE';
 export class HeavyQueue {
   private readonly waiting: Waiter[] = [];
   private readonly held = new Map<string, Held>();
+  /** Each command's last peak, kept only for the planted wrong program that admits by it (#3220). */
+  private readonly lastPeak = new Map<string, number>();
   constructor(private readonly o: HeavyOptions) {}
 
   /** `lease.wait`: one place in the queue, granted or still waiting with the line to show; `session` is the caller's. */
@@ -287,9 +299,15 @@ export class HeavyQueue {
       if (!peer) throw Error('deep lease names no process, so whose session it runs for is unknown; run the deep command itself');
       const id = await session();
       const needs = [{ kind: 'cpu.slot', mode: 'exclusive' as Mode }, ...needsOf(params.kinds ?? [])];
+      const command = String(params.command ?? '').slice(0, 2000);
+      const cwd = String(params.cwd ?? '');
+      // Its entry's number, looked up here, never taken from the call; the planted wrong program for #3220's AC7 takes
+      // the same command's last run's peak instead.
+      const last = this.o.plant === 'admits-heavy-on-last-peak' ? this.lastPeak.get(command) : undefined;
+      const memory = admitOn(last !== undefined ? [last, last, last] : [], last !== undefined ? undefined : await this.o.entryMemory?.(command, cwd).catch(() => undefined), CLASS_MB.heavy);
       w = {
         ticket: `lease-wait:${randomBytes(6).toString('hex')}`, secret: randomBytes(16).toString('hex'), holder: id ? `session:${letters(id)}` : 'cli', ...(id ? { session: id } : {}),
-        command: String(params.command ?? '').slice(0, 2000), cwd: String(params.cwd ?? ''), needs, jobs: jobsOf(params.jobs), peer, queued: now, seen: now, waits: {},
+        command, cwd, needs, jobs: jobsOf(params.jobs), peer, queued: now, seen: now, waits: {}, memory,
       };
       this.waiting.push(w);
       this.o.wake?.();
@@ -373,7 +391,7 @@ export class HeavyQueue {
     const now = this.o.now();
     const waits = { ...w.waits };
     if (w.last) waits[w.last.reason] = (waits[w.last.reason] ?? 0) + (now - w.last.at);
-    this.held.set(w.ticket, { ticket: w.ticket, secret: w.secret, holder: w.holder, ...(w.session ? { session: w.session } : {}), command: w.command, cwd: w.cwd, run, leases: got, granted: now, peer: w.peer, waits, ...jobs });
+    this.held.set(w.ticket, { ticket: w.ticket, secret: w.secret, holder: w.holder, ...(w.session ? { session: w.session } : {}), command: w.command, cwd: w.cwd, run, leases: got, granted: now, peer: w.peer, waits, memory: w.memory, ...jobs });
     return undefined;
   }
   private level(): Promise<Pressure> {
@@ -452,6 +470,8 @@ export class HeavyQueue {
     h.group = Number.isInteger(Number(params.pgid)) && Number(params.pgid) > 1 ? Number(params.pgid) : pid;
     h.started = this.o.now();
     h.load = loadavg()[0]!;
+    // Its group is its run's tree: the supervisor's scan reads what it uses until it ends (#3220).
+    this.o.supervisor?.follow(h.run, h.group);
     const start = (await startOf(pid)) ?? new Date(h.started).toUTCString();
     await this.o.append('process.tracked', 1, { run: h.run, pid, start, pgid: h.group, cwd: typeof params.cwd === 'string' && params.cwd ? params.cwd : h.cwd || '/', token: null }, h.run, h.session);
     return { tracked: true };
@@ -518,8 +538,11 @@ export class HeavyQueue {
   }
   private async end(h: Held, early = false): Promise<void> {
     if (!this.held.delete(h.ticket)) return;
+    // What it used, read off the supervisor's scan of its group (#3220): null where no scan read it, never 0.
+    const used: Used | undefined = await this.o.supervisor?.unfollow(h.run);
+    if (typeof used?.memory_peak_mb === 'number') this.lastPeak.set(h.command, used.memory_peak_mb);
     const proof: string[] = [];
-    if (h.leader !== undefined) proof.push(await this.o.append('process.ended', 1, { run: h.run, pid: h.leader }, h.run, h.session));
+    if (h.leader !== undefined) proof.push(await this.o.append('process.ended', 2, { run: h.run, pid: h.leader, used: used ?? { memory_peak_mb: null, cpu_s: null } }, h.run, h.session));
     for (const l of h.leases) await this.o.table.release(l.id, early ? [] : proof).catch(() => undefined);
     // The tokens the hub took for it go back on the same proof; a planted pool of its own goes with it.
     if (h.pool && h.pool !== this.o.pool) h.pool.close(true);
@@ -528,10 +551,26 @@ export class HeavyQueue {
     // The command's reading: how long it waited, by reason, how long it ran, and the load when it started.
     if (h.session && h.started !== undefined) {
       const waited = Object.entries(h.waits).filter(([, ms]) => ms > 0).map(([why, ms]) => `${span(ms)} for ${why}`).join(', ');
-      const reading = `deep lease ran \`${h.command}\` for ${span(this.o.now() - h.started)}${waited ? ` after waiting ${waited}` : ' with no wait'}; load ${(h.load ?? 0).toFixed(1)} on ${availableParallelism()} cores when it started`;
+      const peak = used?.memory_peak_mb ?? null;
+      const use = h.memory ? `; admitted on ${h.memory.mb} MB (${h.memory.on === 'declared' ? 'its entry' : 'its class'}), peaked at ${peak === null ? 'an unread' : `${peak} MB`}${used?.cpu_s != null ? ` with ${used.cpu_s} CPU s` : ''}` : '';
+      const reading = `deep lease ran \`${h.command}\` for ${span(this.o.now() - h.started)}${waited ? ` after waiting ${waited}` : ' with no wait'}; load ${(h.load ?? 0).toFixed(1)} on ${availableParallelism()} cores when it started${use}`;
       await this.o.append('session.reading', 1, { reading }, undefined, h.session).catch(() => undefined);
     }
   }
+}
+
+/** The memory a command's heavy.command entry names, in MB, as deep-hook matches the command in its folder (#3220). */
+export function entryMemory(command: string, cwd: string): Promise<number | undefined> {
+  return new Promise((resolve) => {
+    const child = execFile(deepHook(), ['heavy'], { ...(cwd ? { cwd } : {}), encoding: 'utf8', timeout: 5000 }, (error, out) => {
+      if (error) return resolve(undefined);
+      try {
+        const memory = (JSON.parse(out) as { memory_mb?: unknown } | null)?.memory_mb;
+        resolve(typeof memory === 'number' && memory > 0 ? memory : undefined);
+      } catch { resolve(undefined); }
+    });
+    child.stdin?.on('error', () => undefined).end(command);
+  });
 }
 
 // ---- `deep lease [kind...] -- <command>`.

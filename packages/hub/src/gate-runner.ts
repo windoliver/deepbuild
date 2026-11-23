@@ -21,6 +21,8 @@ import { moreRuns, type BaseResult, type Result, type RunOutcome, type Verdict }
 import type { Plant } from './plant.js';
 import { contents, EMPTY, installsOf, keptRecord, keyId, keyPaths, namesOf, plain, repoOf, SharedRuns, stemOf, withheld, type KeyFacts, type Source } from './shared-runs.js';
 import type { StackWant } from './stacks.js';
+import type { Used } from '@deepbuild/supervisor';
+import { admitOn, CLASS_MB, CLEAN_RUNS, KeyHistory, type Admission } from './admission.js';
 
 /** The surface a drafted check declares it enters through (#874): #31's shape, its check the requirement's own. */
 export type Surface = { kind: string } & Record<string, unknown>;
@@ -51,6 +53,8 @@ export interface ClaimCheck {
   runs?: number; held_out?: { files: Record<string, string> }[];
   /** The fewest tests a passing run of it may count, as a spec check's `min_tests` names it (#2218). */
   min_tests?: number;
+  /** The memory it declares it takes, in MB, as a spec check's `memory_mb` names it (#3220): admitted on until its key has three clean runs. */
+  memory_mb?: number;
   /** A timing check (#352): a run that fails while the machine's load is past its core count is rerun alone once. */
   timing?: boolean;
   /** A document check's deliverable, by doc ID (#1723): the merge base holds no revision of it, so it never runs there. */
@@ -81,7 +85,7 @@ export interface GateOptions {
   append(connection: Connection, input: EventInput): Promise<void>;
   core: Connection;
   /** Starts one run of a claim's check in `cwd`, in its lane with its expected time; resolves with its run handle. */
-  start(r: { claim: string; check: string; approved: string | null; command: string; commit: string; cwd: string; lane: 'fast' | 'slow'; expected_ms: number | null; deadline_ms: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[]; references?: { path: string; sha256: string }[]; overlay?: Record<string, string>; key?: RunKey; stack?: StackWant }): Promise<string>;
+  start(r: { claim: string; check: string; approved: string | null; command: string; commit: string; cwd: string; lane: 'fast' | 'slow'; expected_ms: number | null; deadline_ms: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[]; references?: { path: string; sha256: string }[]; overlay?: Record<string, string>; key?: RunKey; stack?: StackWant; memory?: Admission }): Promise<string>;
   /** The start a check's stack needs now, added to its expected time (#580). */
   stackStart?(folder: string, worktree: string): Promise<number>;
   /** The planted wrong program's start of a stack at a claim, whatever its lane. */
@@ -185,10 +189,12 @@ async function changesOf(cwd: string, base: string): Promise<Changes> {
 }
 /** Run outcomes a key keeps: a result. Missing, stopped and uncounted runs say nothing of the key, so they never carry. */
 const KEPT = new Set(['passed', 'failed', 'overran', 'ran_nothing']);
+/** A clean run's peak memory, the one its key's next runs are admitted by (#3220): a passed run's, as the scan read it; none for any other. */
+const cleanPeak = (outcome: string, used: Used | undefined): number | undefined => (outcome === 'passed' && typeof used?.memory_peak_mb === 'number' ? used.memory_peak_mb : undefined);
 /** A base run that ended as a run: what a fix is proven by, on its key as on its claim. */
 const ON_BASE = new Set(['passed', 'failed', 'overran']);
 /** A run.finished that names a key (#1018), as a restarted hub reads it. */
-export type KeptRow = { run: string; check: string; outcome: string; tests_run: number; findings: string[]; evidence: string[]; key: KeyFacts };
+export type KeptRow = { run: string; check: string; outcome: string; tests_run: number; findings: string[]; evidence: string[]; key: KeyFacts; used?: Used };
 /**
  * What a send-back shows of a run's output (#323): its error output first, cut to its last 2,000 characters. A cut of
  * a string keeps the whole string it was cut from alive, so the tail is copied out: a recorded run holds 2,000
@@ -228,6 +234,8 @@ export class GateRunner {
   private readonly keyOf = new Map<string, string>();
   /** The keys a restart can't read whole: one of their kept runs lost in the record what makes its verdict, so none carries. */
   private readonly unread = new Set<string>();
+  /** Each key's clean runs' peaks (#3220), every keyed run's, one that never carries among them. */
+  private readonly keys = new KeyHistory();
   /** The runs going on a key, by the key (a base run's) or by stem and snapshot (a head run's): a run on an equal key waits for it. */
   private readonly going = new Map<string, { done: Promise<void>; session: string }>();
   /** Each worktree's repo, git's common folder, read once: it never changes under a worktree. */
@@ -255,7 +263,7 @@ export class GateRunner {
    * a base run's and a variant's were known before it ran. A run that ended as a result joins its key's group, where
    * every claim with an equal key reads it. Returns what run.finished keeps of the key.
    */
-  async keyed(key: RunKey, run: string, record: RecordedRun): Promise<KeyFacts> {
+  async keyed(key: RunKey, run: string, record: RecordedRun, used?: Used): Promise<KeyFacts> {
     const paths = key.paths ?? (this.o.plant === 'key-leaves-out-reads' ? [] : keyPaths(record.read));
     const id = key.id ?? keyId(key.stem, paths, await contents(key.dir, paths));
     const facts: KeyFacts = { id, stem: key.stem, paths, claim: key.claim, session: key.session, base: key.base, withheld: key.withheld, plain: plain(record) };
@@ -263,7 +271,22 @@ export class GateRunner {
     // a program the tracers can't see into reads nothing they record: its key can't tell a change to that code, so it never carries.
     const blind = key.paths === undefined && this.o.plant !== 'key-leaves-out-reads' && !paths.some((p) => p !== key.check && !ownRead(p));
     if (KEPT.has(record.outcome) && !blind) this.keyOf.set(run, this.shared.add(key.check, facts, run).id);
+    this.keys.add(key.check, facts, cleanPeak(record.outcome, used));
     return facts;
+  }
+  /**
+   * What a check's run is admitted on (#3220): with its key's stem, the key its files in `dir` make, and that key's
+   * clean peaks once it has three; else what the check declares, else its class's constant. A change to a file a key
+   * holds makes another key, with no history of its own.
+   */
+  private async admitted(check: ClaimCheck, stem?: string, dir?: string): Promise<Admission> {
+    const { key, peaks } = stem !== undefined && dir !== undefined ? await this.keys.of(check.check, stem, dir) : { key: undefined, peaks: [] };
+    const declared = check.memory_mb;
+    // The planted wrong programs: an admission on the class's constant whatever the key's history, and one on a key's
+    // last peak before it has three.
+    if (this.o.plant === 'admits-on-class-constant') return { mb: CLASS_MB.check, on: 'class', ...(declared ? { declared } : {}), ...(key ? { key } : {}) };
+    if (this.o.plant === 'admits-on-one-peak' && peaks.length > 0 && peaks.length < CLEAN_RUNS) return { mb: peaks.at(-1)!, on: 'runs', ...(declared ? { declared } : {}), ...(key ? { key } : {}) };
+    return { ...admitOn(peaks, declared, CLASS_MB.check), ...(declared ? { declared } : {}), ...(key ? { key } : {}) };
   }
   /**
    * The keys the record keeps, from each run.finished that names one, oldest first: a restarted hub reads them again.
@@ -275,6 +298,7 @@ export class GateRunner {
     const one = (path: string): string => { const held = names.get(path); if (held !== undefined) return held; names.set(path, path); return path; };
     const runs: { check: string; run: string; key: KeyFacts; record: RecordedRun }[] = [];
     for (const r of rows) {
+      this.keys.add(r.check, r.key, cleanPeak(r.outcome, r.used));
       if (!KEPT.has(r.outcome)) continue;
       // A key with a run that isn't whole in the record is read again for none of its runs: those left would decide alone.
       if (!r.key.plain) { this.unread.add(`${r.check}\0${r.key.id}`); continue; }
@@ -417,7 +441,8 @@ export class GateRunner {
     // A timing check's result is the machine's load's as much as its files', so its runs land on no key and never carry (#352).
     const shared = !this.onStack(e, dir) && !e.check.timing;
     const own = (async () => {
-      const start = () => this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd: dir, lane, expected_ms: expected, deadline_ms: e.check.deadline_ms ?? null, ...(e.check.references ? { references: e.check.references } : {}), ...stackOf(c, e.check), ...(shared ? { key } : {}) });
+      // Each run admitted on its key's history as it stands then: a spec check's later runs read its earlier ones (#3220).
+      const start = async () => this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd: dir, lane, expected_ms: expected, deadline_ms: e.check.deadline_ms ?? null, ...(e.check.references ? { references: e.check.references } : {}), ...stackOf(c, e.check), ...(shared ? { key } : {}), memory: await this.admitted(e.check, shared ? stem : undefined, dir) });
       let id: string | undefined;
       // What this claim's own runs ended as, each counted here whether or not its record was kept, so the runs always end.
       const mine: RunOutcome[] = [];
@@ -450,7 +475,7 @@ export class GateRunner {
         if (c.state) await hold(t.dir, c.state.files);
         const go = async (fresh: boolean): Promise<string> => {
           const run = await this.o.start({
-            claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd: t.dir, lane, expected_ms: null, deadline_ms: e.check.deadline_ms ?? null,
+            memory: await this.admitted(e.check), claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd: t.dir, lane, expected_ms: null, deadline_ms: e.check.deadline_ms ?? null,
             ...(e.check.references ? { references: e.check.references } : {}), ...stackOf(c, e.check, fresh ? { fresh } : {}), overlay: v.files, ...(g ? { key: { check: e.check.check, stem: g.stem, dir: t.dir, claim: c.claim, session: sessionOf(c.session), base: false, withheld: true, id: g.key, paths: g.paths } } : {}),
           });
           (e.variants ??= []).push(run);
@@ -845,7 +870,7 @@ export class GateRunner {
    */
   private async retried(c: Claim, e: Entry, cwd: string, outcome: string): Promise<string> {
     if (outcome !== 'uncounted' || e.stale || e.check.depth !== 'journey') return outcome;
-    const run = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd, lane: e.lane, expected_ms: null, deadline_ms: e.check.deadline_ms ?? null, ...stackOf(c, e.check, { fresh: true }) });
+    const run = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd, lane: e.lane, expected_ms: null, deadline_ms: e.check.deadline_ms ?? null, ...stackOf(c, e.check, { fresh: true }), memory: await this.admitted(e.check) });
     e.runs.push(run);
     return this.o.ended(run);
   }
@@ -917,7 +942,7 @@ export class GateRunner {
         const standIn = base.standIns.find((s) => s.check === check);
         const reach = standIn?.port ? { env: { DEEP_SURFACE_URL: `http://127.0.0.1:${standIn.port}` }, hosts: [`127.0.0.1:${standIn.port}`] }
           : standIn?.bin ? { standIns: [basename(standIn.bin)] } : {};
-        const run = await this.o.start({ claim: e.claim, check, approved: e.check.approved, command: e.check.command, commit: base.commit, cwd: base.dir, lane: e.lane, expected_ms: null, deadline_ms: e.check.deadline_ms ?? null, ...reach, ...stackOf(c, e.check, { base: true }), ...(shared && !this.onStack(e, base.dir) ? { key } : {}) });
+        const run = await this.o.start({ claim: e.claim, check, approved: e.check.approved, command: e.check.command, commit: base.commit, cwd: base.dir, lane: e.lane, expected_ms: null, deadline_ms: e.check.deadline_ms ?? null, ...reach, ...stackOf(c, e.check, { base: true }), ...(shared && !this.onStack(e, base.dir) ? { key } : {}), memory: await this.admitted(e.check) });
         e.base = run;
         e.baseFrom = { run, claim: c.claim, session: key.session, withheld: false };
         if (standIn) e.standIn = standIn;
@@ -953,7 +978,7 @@ export class GateRunner {
         try {
           const { dir } = await this.checkoutOf(c);
           await hold(dir, state.files);
-          const start = () => this.o.start({ claim: c.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd: dir, lane: 'slow', expected_ms: null, deadline_ms: e.check.deadline_ms ?? null, ...(e.check.references ? { references: e.check.references } : {}), ...stackOf(c, e.check) });
+          const start = async () => this.o.start({ claim: c.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd: dir, lane: 'slow', expected_ms: null, deadline_ms: e.check.deadline_ms ?? null, ...(e.check.references ? { references: e.check.references } : {}), ...stackOf(c, e.check), memory: await this.admitted(e.check) });
           const run = await start();
           e.runs.push(run);
           const ended = await this.retried(c, e, dir, await this.o.ended(run));
@@ -1223,7 +1248,7 @@ export class GateRunner {
         const begun = new Promise<void>((done) => { started = done; });
         const own = pinned ? (async () => {
           try {
-            const start = () => this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd, lane: 'slow', expected_ms: expected, deadline_ms: e.check.deadline_ms ?? null, ...stackOf(c, e.check) });
+            const start = async () => this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd, lane: 'slow', expected_ms: expected, deadline_ms: e.check.deadline_ms ?? null, ...stackOf(c, e.check), memory: await this.admitted(e.check) });
             const id = await start();
             e.runs.push(id);
             started();

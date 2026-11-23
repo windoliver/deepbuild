@@ -475,12 +475,12 @@ export class McpOperations {
   }
 
   /** The checks a worktree's spec names, by name, with the command each runs and its deadline, run count and test count as the spec writes them, where it gives one. */
-  checksOf(worktree: string): Map<string, { run: string; deadline?: unknown; type?: string; host?: string; runs?: unknown; accept?: unknown; min_tests?: unknown }> {
+  checksOf(worktree: string): Map<string, { run: string; deadline?: unknown; type?: string; host?: string; runs?: unknown; accept?: unknown; min_tests?: unknown; memory_mb?: unknown }> {
     const spec = this.options.doneSpec(worktree);
     const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
     return new Map(Object.entries(checks).flatMap(([name, c]) => {
       if (!isObj(c) || typeof c.run !== 'string') return [];
-      const written = Object.fromEntries((['deadline', 'runs', 'accept', 'min_tests'] as const).flatMap((key) => (c[key] !== undefined ? [[key, c[key]]] : [])));
+      const written = Object.fromEntries((['deadline', 'runs', 'accept', 'min_tests', 'memory_mb'] as const).flatMap((key) => (c[key] !== undefined ? [[key, c[key]]] : [])));
       return [[name, { run: c.run, ...written, ...(typeof c.type === 'string' ? { type: c.type } : {}), ...(typeof c.host === 'string' ? { host: c.host } : {}) }] as const];
     }));
   }
