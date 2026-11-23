@@ -62637,10 +62637,10 @@ impl Contract for HeavyCommandV2 {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["name", "argv_prefix", "kinds", "jobs", "jobs_flag", "memory_mb"])?;
         deep_contracts::check_member(members, at, "name", &RULE_53)?;
-        deep_contracts::check_member(members, at, "argv_prefix", &RULE_213)?;
-        deep_contracts::check_member(members, at, "kinds", &RULE_216)?;
-        deep_contracts::check_member(members, at, "jobs", &RULE_218)?;
-        deep_contracts::check_member(members, at, "jobs_flag", &RULE_220)?;
+        deep_contracts::check_member(members, at, "argv_prefix", &RULE_218)?;
+        deep_contracts::check_member(members, at, "kinds", &RULE_221)?;
+        deep_contracts::check_member(members, at, "jobs", &RULE_223)?;
+        deep_contracts::check_member(members, at, "jobs_flag", &RULE_225)?;
         deep_contracts::check_member(members, at, "memory_mb", &RULE_5)?;
         Ok(Self {
             name: deep_contracts::required(members, at, "name")?,
@@ -74654,8 +74654,8 @@ pub struct ProcessEndedV2DataUsed {
 impl Contract for ProcessEndedV2DataUsed {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["memory_peak_mb", "cpu_s"])?;
-        deep_contracts::check_member(members, at, "memory_peak_mb", &RULE_80)?;
-        deep_contracts::check_member(members, at, "cpu_s", &RULE_80)?;
+        deep_contracts::check_member(members, at, "memory_peak_mb", &RULE_84)?;
+        deep_contracts::check_member(members, at, "cpu_s", &RULE_84)?;
         Ok(Self {
             memory_peak_mb: deep_contracts::required(members, at, "memory_peak_mb")?,
             cpu_s: deep_contracts::required(members, at, "cpu_s")?,
@@ -74679,8 +74679,8 @@ pub struct ProcessEndedV2Data {
 impl Contract for ProcessEndedV2Data {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["run", "pid", "used"])?;
-        deep_contracts::check_member(members, at, "run", &RULE_129)?;
-        deep_contracts::check_member(members, at, "pid", &RULE_247)?;
+        deep_contracts::check_member(members, at, "run", &RULE_132)?;
+        deep_contracts::check_member(members, at, "pid", &RULE_252)?;
         Ok(Self {
             run: deep_contracts::required(members, at, "run")?,
             pid: deep_contracts::required(members, at, "pid")?,
@@ -80896,6 +80896,11 @@ pub enum RunFinishedV4DataOutcome {
     Uncounted,
 }
 
+impl RunFinishedV4DataOutcome {
+    /// Every value, in the schema's order (#2854: the handshake list's newest is its last).
+    pub const ALL: &'static [Self] = &[Self::Passed, Self::Failed, Self::RanNothing, Self::Missing, Self::Overran, Self::Stopped, Self::Uncounted];
+}
+
 impl Contract for RunFinishedV4DataOutcome {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         match deep_contracts::string(value, at)? {
@@ -80937,10 +80942,10 @@ pub struct RunFinishedV4DataKey {
 impl Contract for RunFinishedV4DataKey {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["id", "stem", "paths", "claim", "session", "base", "withheld", "plain"])?;
-        deep_contracts::check_member(members, at, "id", &RULE_86)?;
-        deep_contracts::check_member(members, at, "stem", &RULE_86)?;
+        deep_contracts::check_member(members, at, "id", &RULE_90)?;
+        deep_contracts::check_member(members, at, "stem", &RULE_90)?;
         deep_contracts::check_member(members, at, "paths", &RULE_13)?;
-        deep_contracts::check_member(members, at, "claim", &RULE_143)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_149)?;
         deep_contracts::check_member(members, at, "session", &RULE_6)?;
         Ok(Self {
             id: deep_contracts::required(members, at, "id")?,
@@ -80976,8 +80981,8 @@ pub struct RunFinishedV4DataUsed {
 impl Contract for RunFinishedV4DataUsed {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["memory_peak_mb", "cpu_s"])?;
-        deep_contracts::check_member(members, at, "memory_peak_mb", &RULE_80)?;
-        deep_contracts::check_member(members, at, "cpu_s", &RULE_80)?;
+        deep_contracts::check_member(members, at, "memory_peak_mb", &RULE_84)?;
+        deep_contracts::check_member(members, at, "cpu_s", &RULE_84)?;
         Ok(Self {
             memory_peak_mb: deep_contracts::required(members, at, "memory_peak_mb")?,
             cpu_s: deep_contracts::required(members, at, "cpu_s")?,
@@ -81015,11 +81020,11 @@ pub struct RunFinishedV4Data {
 impl Contract for RunFinishedV4Data {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["run", "outcome", "tests_run", "passed", "runs", "evidence", "check", "assertion", "expected", "actual", "step", "points_to", "findings", "environment", "key", "exit", "used"])?;
-        deep_contracts::check_member(members, at, "run", &RULE_129)?;
+        deep_contracts::check_member(members, at, "run", &RULE_132)?;
         deep_contracts::check_member(members, at, "tests_run", &RULE_4)?;
         deep_contracts::check_member(members, at, "passed", &RULE_4)?;
-        deep_contracts::check_member(members, at, "runs", &RULE_150)?;
-        deep_contracts::check_member(members, at, "evidence", &RULE_187)?;
+        deep_contracts::check_member(members, at, "runs", &RULE_156)?;
+        deep_contracts::check_member(members, at, "evidence", &RULE_192)?;
         deep_contracts::check_member(members, at, "check", &RULE_6)?;
         deep_contracts::check_member(members, at, "assertion", &RULE_16)?;
         deep_contracts::check_member(members, at, "expected", &RULE_16)?;
@@ -81028,7 +81033,7 @@ impl Contract for RunFinishedV4Data {
         deep_contracts::check_member(members, at, "points_to", &RULE_16)?;
         deep_contracts::check_member(members, at, "findings", &RULE_13)?;
         deep_contracts::check_member(members, at, "environment", &RULE_6)?;
-        deep_contracts::check_member(members, at, "exit", &RULE_294)?;
+        deep_contracts::check_member(members, at, "exit", &RULE_298)?;
         Ok(Self {
             run: deep_contracts::required(members, at, "run")?,
             outcome: deep_contracts::required(members, at, "outcome")?,
@@ -81099,7 +81104,7 @@ impl Contract for RunFinishedV4 {
         let members = deep_contracts::members(value, at, &["v", "id", "kind", "subject", "writer", "actor", "scope", "ts", "seq", "log_pos", "data", "evidence"])?;
         deep_contracts::check_member(members, at, "id", &RULE_0)?;
         deep_contracts::check_member(members, at, "subject", &RULE_2)?;
-        deep_contracts::check_member(members, at, "writer", &RULE_95)?;
+        deep_contracts::check_member(members, at, "writer", &RULE_99)?;
         deep_contracts::check_member(members, at, "actor", &RULE_3)?;
         deep_contracts::check_member(members, at, "scope", &RULE_3)?;
         deep_contracts::check_member(members, at, "ts", &RULE_4)?;
