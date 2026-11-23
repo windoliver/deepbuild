@@ -179,11 +179,15 @@ export class AnswerDelivery {
   /** The continues and notices a prompt's reply carries, by its hook ID, kept 60 s as Siblings keeps its notices (#3305). */
   private readonly inReply = new Map<string, { session: string; later: string[]; notices: string[]; at: number }>();
 
-  /** A prompt's reply carries these: kept while deep-hook could still report its hook gone before reading it. */
-  inPromptReply(hook: string, session: string, later: string[], notices: string[]): void {
+  /**
+   * A prompt's reply carries these: kept while deep-hook could still report its hook gone before reading it, and given
+   * back at once when it already has, while the reply was being built.
+   */
+  inPromptReply(hook: string, session: string, later: string[], notices: string[], gone: boolean): void {
     const now = this.options.services.now();
     for (const [id, c] of this.inReply) if (c.at < now - 60_000) this.inReply.delete(id);
     if (later.length || notices.length) this.inReply.set(hook, { session, later, notices, at: now });
+    if (gone) this.promptReplyGone(hook);
   }
 
   /** A prompt's reply deep-hook never read: what it carried reached no agent, so the session's next prompt carries it, first. */
