@@ -1,0 +1,82 @@
+✖ #3165.8f9dd502 a conflict in scripts/lanes.mjs resolved by keeping both parents' added lines, main's line first, passes the guard with no approval (8202.681ms)
+✖ #3165.8f9dd502 a conflict in scripts/lanes.mjs resolved by keeping both parents' added lines, the change's line first, passes the guard with no approval (7724.706375ms)
+✔ #3165.63b30585 the same conflict resolved by dropping main's added line fails the guard, naming scripts/lanes.mjs and the merge commit (7988.961084ms)
+✔ #3165.63b30585 the same conflict resolved by dropping the change's added line fails the guard, naming scripts/lanes.mjs and the merge commit (8008.573208ms)
+✔ #3165.63b30585 the same conflict resolved by keeping both lines and adding a third that neither parent holds fails the guard, naming scripts/lanes.mjs and the merge commit (8019.545042ms)
+✔ #3165.63b30585 the same conflict resolved by keeping both lines and removing a line both parents hold fails the guard, naming scripts/lanes.mjs and the merge commit (8021.211292ms)
+✔ #3165.63b30585 the same conflict resolved by keeping every line and swapping two that both parents hold fails the guard, naming scripts/lanes.mjs and the merge commit (7712.856334ms)
+✔ #3165.497038aa a conflict in scripts/proof-guard.mjs resolved by keeping both parents' added lines fails the guard without an approval, naming the file (7717.966333ms)
+✔ #3165.497038aa a conflict in a test runner's config, vitest.config.ts resolved by keeping both parents' added lines fails the guard without an approval, naming the file (8488.630791ms)
+✔ #3165.0b4ec1da the conflict resolved by dropping main's added line passes the guard with an approval naming scripts/lanes.mjs on the merge commit (7976.830875ms)
+✔ #3165.0b4ec1da the conflict resolved by dropping the change's added line passes the guard with an approval naming scripts/lanes.mjs on the merge commit (7869.583959ms)
+✔ #3165.0b4ec1da the conflict resolved by keeping both lines and adding a third that neither parent holds passes the guard with an approval naming scripts/lanes.mjs on the merge commit (8006.35975ms)
+✔ #3165.0b4ec1da the conflict resolved by keeping both lines and removing a line both parents hold passes the guard with an approval naming scripts/lanes.mjs on the merge commit (8000.202833ms)
+✔ #3165.0b4ec1da the conflict resolved by keeping every line and swapping two that both parents hold passes the guard with an approval naming scripts/lanes.mjs on the merge commit (9528.153541ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 12
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 113372.652167
+
+✖ failing tests:
+
+test at tests/acceptance/3165/guard.test.mjs:13:3
+✖ #3165.8f9dd502 a conflict in scripts/lanes.mjs resolved by keeping both parents' added lines, main's line first, passes the guard with no approval (8202.681ms)
+  AssertionError [ERR_ASSERTION]: exit 1
+  stdout:
+  PASS guard: scripts/lanes.mjs: the proof lanes' own code changed, by approved proposal (commit d81ba0fcf21a)
+  FAIL guard: scripts/lanes.mjs: the proof lanes' own code changed in resolving a merge conflict (commit 84f97d4f3ae9)
+    Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+  proof: wall time 6.0 s
+  
+  stderr:
+  
+  
+  1 !== 0
+  
+      at assertPasses (file://<checkout>/tests/acceptance/569/helpers.mjs:150:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3165/guard.test.mjs:16:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3165/guard.test.mjs:13:3
+✖ #3165.8f9dd502 a conflict in scripts/lanes.mjs resolved by keeping both parents' added lines, the change's line first, passes the guard with no approval (7724.706375ms)
+  AssertionError [ERR_ASSERTION]: exit 1
+  stdout:
+  PASS guard: scripts/lanes.mjs: the proof lanes' own code changed, by approved proposal (commit 40ab9e84fa4a)
+  FAIL guard: scripts/lanes.mjs: the proof lanes' own code changed in resolving a merge conflict (commit 2882bfaf2fee)
+    Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+  proof: wall time 5.7 s
+  
+  stderr:
+  
+  
+  1 !== 0
+  
+      at assertPasses (file://<checkout>/tests/acceptance/569/helpers.mjs:150:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3165/guard.test.mjs:16:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
