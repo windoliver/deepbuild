@@ -23,7 +23,8 @@
 //
 // The alone block's folders run side by side, each in a shard of its own (scripts/shards.mjs), so no sibling's cargo
 // build rewrites a binary under it; those lanes.mjs names exclusive run after, one at a time, with nothing beside them.
-// The builds of the shards and of the rest share one jobserver, so the run never compiles more at once than its cores.
+// The run's test grant is its admission, and each job takes a turn on the machine's pool of job tokens, which its
+// builds' compiles draw on too (throttle.mjs, #3221), so the runs never compile more at once than the pool.
 // The files lanes.mjs names slow run only with --slow, or when the change adds or edits them; unrun, they leave the run
 // INCONCLUSIVE, as the timed ones do.
 //
@@ -31,7 +32,7 @@
 // the selection without running it. A test that starts a package's build is selected when the change is in that
 // package or the test is in the changed file's own package; otherwise it is WIDE, and --wide also runs it (select, below).
 import { spawn, spawnSync } from 'node:child_process';
-import { closeSync, constants as modes, existsSync, mkdtempSync, openSync, readFileSync, readSync, realpathSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from 'node:fs';
+import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { availableParallelism, constants, homedir, loadavg, tmpdir } from 'node:os';
 import { dirname, join, posix, relative, resolve, sep } from 'node:path';
@@ -42,8 +43,8 @@ import { isTestFile, listFiles, named, underTestPaths } from './proof-change.mjs
 import { namedByConfig } from './proof-guard.mjs';
 import { childEnv } from './proof-runs.mjs';
 import { binaryNames, binaryPlan, buildBinaries, buildInPlace, commandFiles, watchBinaries } from './proof-binaries.mjs';
-import { claimShards, cloneBuilds, roomy } from './shards.mjs';
-import { acquire, descendants, killTree, release } from './throttle.mjs';
+import { claimShards, cloneBuilds, roomy, shardsRoom } from './shards.mjs';
+import { acquire, asking, descendants, killTree, release } from './throttle.mjs';
 
 export { cargoResults, crates, reportResults };
 
@@ -412,7 +413,7 @@ export function classify(failures, findings, baseline, load = loadavg()[0]) {
 
 // Each job runs through the machine's throttle table (docs/parallel-proof.md, section 6): the workspace build, clippy and
 // cargo test as build, the vitest and node --test blocks as test, each passing through on the run's one test grant
-// (queued, below), and the timed ones as timed, waiting at most 30 minutes for their own; each, its parallel blocks
+// (queued, below) and taking its turn on the machine's pool, and the timed ones as timed, waiting at most 30 minutes for their own; each, its parallel blocks
 // too, under a cpu.slot of the calling session's through scripts/lease (#1015). A lint script that builds nothing
 // (LIGHT) reads files for seconds on one core, so it asks for no grant. It still runs under the session's cpu.slot. A
 // shard's job runs in its shard.
@@ -433,11 +434,10 @@ let stopped = null;
 // before its 120 min tests with no result between, and the timed lane's limits reach 240 min (#416, #140). SIGTERM to the job, and
 // 10 s later SIGKILL to every process of its tree, by PID and start, as the throttle does for a grant past its bound
 // (#2744); the job's throttle, then, ends by itself and gives its grant back. The job ends once they have, and reads
-// by what it reported before the stop. DEEP_JOB_IDLE_MIN sets the bound in minutes, for tests.
+// by what it reported before the stop. A job still waiting for its turn has started nothing, so its wait never counts
+// (#3221). DEEP_JOB_IDLE_MIN sets the bound in minutes, for tests.
 const IDLE_MIN = Number(process.env.DEEP_JOB_IDLE_MIN ?? 360);
 const size = (path) => { try { return statSync(path).size; } catch { return 0; } };
-// The run's jobserver while its builds share it (jobserver, below); each job's end may fill it again.
-let pool = null;
 function run(logs, label, command, args, env = {}, cwd = root) {
   if (stopped) return Promise.resolve({ label, log: null, status: null, output: `stopped by ${stopped}` });
   const log = join(logs, `${label.replace(/\W+/g, '-')}.log`);
@@ -456,9 +456,11 @@ function run(logs, label, command, args, env = {}, cwd = root) {
         const now = `${size(log)} ${size(report)}`;
         if (now !== seen) [seen, since] = [now, performance.now()];
         else if (!idle && performance.now() - since >= IDLE_MIN * 60_000) {
-          // Without a listing, nothing is stopped: the next look tries again.
-          let tree;
-          try { tree = descendants(child.pid); } catch { return; }
+          // Without a listing, nothing is stopped: the next look tries again. A job whose throttle still asks the table
+          // has started nothing: it waits for its turn.
+          let tree, waits;
+          try { waits = asking(child.pid); tree = descendants(child.pid); } catch { return; }
+          if (waits) { since = performance.now(); return; }
           // What the report holds now stands; what a job writes as it is stopped, a cancelled file's error, is no result.
           idle = { cut: size(report), minutes: IDLE_MIN };
           child.kill('SIGTERM');
@@ -478,7 +480,6 @@ function run(logs, label, command, args, env = {}, cwd = root) {
       await idle?.killed;
       live.delete(child);
       closeSync(descriptor);
-      pool?.refill();
       done({ label, log, status, output: readFileSync(log, 'utf8'), idle });
     });
   });
@@ -486,74 +487,10 @@ function run(logs, label, command, args, env = {}, cwd = root) {
 
 // How many shards the alone block runs in: half the cores. An alone file keeps about one core busy (1,976 s of CPU in
 // 2,235 s for #1557's, 2026-11-07), so half the cores leave the rest to the parallel block beside it. DEEP_SHARDS sets
-// it for one run, and 1 runs the block one file at a time in the worktree, as before shards. A file whose test builds
-// with cargo asks for every core, so the builds share the run's jobserver, and the shards are at most the cores less
-// one, since each, like the worktree, runs one compile on no token (jobserver, below).
+// it for one run, and 1 runs the block one file at a time in the worktree, as before shards. Each shard's job takes a
+// turn on the machine's pool, a core less one (#3221), so the shards are at most the cores less one.
 const CORES = availableParallelism();
 const SHARDS = Math.min(Number(process.env.DEEP_SHARDS) || Math.max(1, Math.floor(CORES / 2)), CORES - 1);
-
-/**
- * The run's compiles at once (#2741): every cargo its jobs start, in a shard or in the worktree, joins one jobserver of
- * the run's, GNU make's named pipe through CARGO_MAKEFLAGS, and starts each compile past its first on a token read from
- * the pipe. Cargo builds one at a time in a folder's target/ and runs that first compile on no token, so the pipe holds
- * a token per core less one for the worktree and one for each of the `shards` running; `give` hands theirs back once
- * they have ended. `close` ends it, before the timed blocks, which compile as before. A cargo killed while it holds
- * tokens never writes them back (#2848), so as each job ends the run fills the pipe to its count again, as the hub's
- * pool does, but only while no process but the run has the pipe open: a live build may hold tokens, and none is added
- * beside them. `close` comes after every untimed job has ended, so the pipe should hold its count then; what it lacks
- * was lost while builds ran, so a build may have had less than its share, and it returns how many.
- */
-function jobserver(shards) {
-  const dir = mkdtempSync(join(tmpdir(), 'deep-jobserver-')), fifo = join(dir, 'tokens');
-  const made = spawnSync('mkfifo', ['-m', '600', fifo], { encoding: 'utf8' });
-  if (made.status !== 0) throw Error(`BLOCKED jobserver: mkfifo failed: ${made.error?.message ?? made.stderr.trim()}`);
-  // Held open by the run, so the pipe keeps its tokens while no build has it open, and never blocking the run.
-  const fd = openSync(fifo, modes.O_RDWR | modes.O_NONBLOCK);
-  let tokens = 0;
-  const give = (count) => { if (count > 0) { tokens += count; writeSync(fd, '+'.repeat(count)); } };
-  give(CORES - 1 - shards);
-  // Whether the run alone has the pipe open: fuser names every process that has, the run among them, so a fuser that
-  // can't see it, is missing or hangs on another mount says nothing.
-  const alone = () => {
-    const seen = spawnSync('fuser', [fifo], { encoding: 'utf8', timeout: 10_000 });
-    const pids = seen.status === null ? [] : seen.stdout.split(/\s+/).flatMap((word) => word.match(/^(\d+)\D*$/)?.[1] ?? []);
-    return pids.includes(String(process.pid)) && pids.every((pid) => pid === String(process.pid));
-  };
-  // No build has started yet, so a run that isn't alone here never can be: it never refills, and lost tokens stay lost.
-  const sees = alone();
-  if (!sees) console.log(`JOBSERVER fuser can't see the run's pipe, so tokens a killed build held are not given back (#2848)`);
-  const before = process.env.CARGO_MAKEFLAGS;
-  process.env.CARGO_MAKEFLAGS = `-j --jobserver-auth=fifo:${fifo}`;
-  let open = true;
-  // The free tokens, read out of the pipe.
-  const take = () => {
-    const buffer = Buffer.alloc(4096);
-    let free = 0;
-    for (;;) {
-      try { const read = readSync(fd, buffer, 0, buffer.length, null); if (read <= 0) break; free += read; } catch { break; }
-    }
-    return free;
-  };
-  return {
-    give,
-    refill: () => {
-      if (!open || !sees || !alone()) return;
-      // The free tokens are read out first, so a build that opens the pipe meanwhile takes none and is seen.
-      const free = take();
-      writeSync(fd, '+'.repeat(alone() ? tokens : free));
-    },
-    close: () => {
-      if (!open) return 0;
-      open = false;
-      const lost = Math.max(0, tokens - take());
-      if (before === undefined) delete process.env.CARGO_MAKEFLAGS;
-      else process.env.CARGO_MAKEFLAGS = before;
-      closeSync(fd);
-      rmSync(dir, { recursive: true, force: true });
-      return lost;
-    },
-  };
-}
 
 /**
  * Runs groups of the alone block (shardGroups), each one file at a time, in `places` taken in turn as each frees: shards,
@@ -577,14 +514,16 @@ async function runGroups(groups, places, files, vitest, node, label, env = {}, m
 // The run's one test grant (docs/parallel-proof.md, section 6; #2574): the run asks `throttle.mjs test --wait` once, before
 // any job, and runs again as its command, so each job's own request, a build's too, passes through on that grant from
 // its holder, an ancestor. The run that holds it is named by HELD: the file it marks as started, and the DEEP_THROTTLE it
-// was asked under. A run asked under a caller's build or test grant passes through on it, and takes none; one that took
-// its own gives it back before the timed files, which then ask as the caller would. With no grant in the wait, no job started, and every file reads INCONCLUSIVE.
+// was asked under. The grant is the run's admission (DEEP_THROTTLE_RUN, the free disk its shards need), and each job then
+// takes a turn on the machine's pool (#3221). A run asked under a caller's build or test grant is admitted at once with
+// no slot, and one asked under a job's turn passes through on it; one that took its own grant gives it back before the
+// timed files, which then ask as the caller would. With no grant in the wait, no job started, and every file reads INCONCLUSIVE.
 // DEEP_TEST_GRANT_WAIT sets the wait in minutes, for tests.
 const HELD = 'DEEP_AFFECTED_HELD';
 async function queued(args, files, started, prep) {
   const marker = join(mkdtempSync(join(tmpdir(), 'deep-affected-grant-')), 'started');
   const wait = process.env.DEEP_TEST_GRANT_WAIT ?? '30';
-  const child = spawn(process.execPath, [join(root, 'scripts/throttle.mjs'), 'test', '--wait', wait, '--', process.execPath, fileURLToPath(import.meta.url), ...args], { stdio: 'inherit', env: { ...process.env, [HELD]: JSON.stringify({ marker, before: process.env.DEEP_THROTTLE ?? '', prep }) } });
+  const child = spawn(process.execPath, [join(root, 'scripts/throttle.mjs'), 'test', '--wait', wait, '--', process.execPath, fileURLToPath(import.meta.url), ...args], { stdio: 'inherit', env: { ...process.env, DEEP_THROTTLE_RUN: String(shardsRoom(prep.shards.length)), [HELD]: JSON.stringify({ marker, before: process.env.DEEP_THROTTLE ?? '', prep }) } });
   // A terminal's SIGINT reaches the whole group; a SIGTERM or SIGHUP sent to this process alone is passed on.
   process.on('SIGINT', () => {});
   for (const signal of ['SIGTERM', 'SIGHUP']) process.on(signal, () => child.kill(signal));
@@ -801,8 +740,6 @@ async function main(args) {
       });
     }
     const groups = shardGroups([...blocks.alone.vitest, ...blocks.alone.node]);
-    // The binary builds ran before the grant, one at a time; from here the run's builds run at once, so they share its jobserver.
-    pool = jobserver(shards.length);
     // The preflight runs its lints in its lint lane, so its alone block runs none.
     const lints = block ? [] : checks.find(({ name }) => name === 'lint').commands.filter(([, script]) => script?.startsWith('scripts/'));
     if (selection.owners.length) lints.push(['cargo', 'fmt', '--all', '--', '--check'], ['cargo', 'clippy', '--locked', '--keep-going', '--all-targets', ...selection.owners.flatMap((name) => ['-p', name]), '--', '-D', 'warnings']);
@@ -826,16 +763,13 @@ async function main(args) {
       }
     } finally {
       for (const shard of shards) shard.release();
-      // The shards' compiles go back to the worktree's builds after them.
-      pool.give(shards.length);
       shards = [];
     }
     if (inShards && left.length) console.log(`SHARD ${left.length} alone ${left.length === 1 ? 'group runs' : 'groups run'} in the worktree: the disk fell under its floor`);
     // Without shards the block runs in the worktree after the rest, one group at a time; the exclusive groups always do.
     jobs.push(...(await runGroups([...left, ...groups.exclusive], [root], blocks.alone, vitest, node, 'alone-worktree')).jobs);
-    // The untimed jobs have ended, so the run's own grant and its jobserver go back, and each timed block asks for its
-    // timed grant as the run's caller would: nested in the caller's grant, or top-level.
-    const lost = pool.close();
+    // The untimed jobs have ended, so the run's own grant goes back, and each timed block asks for its timed grant as the
+    // run's caller would: nested in the caller's grant, or top-level.
     const [cls, id] = (process.env.DEEP_THROTTLE ?? '').split(':');
     if (id && process.env.DEEP_THROTTLE !== held.before) release({ class: cls, id });
     const own = { DEEP_THROTTLE: held.before };
@@ -845,8 +779,6 @@ async function main(args) {
 
     if (stopped) return console.log(`BLOCKED affected: stopped by ${stopped}; its jobs were stopped and none of their results is read; logs in ${logs}`), 128 + constants.signals[stopped];
     const failures = [], passed = [], findings = [], skips = [], partial = new Set();
-    // A build that ran short of its compile share may have timed out or run slow, so the run can't say it passed (#2848).
-    if (lost) failures.push({ id: 'jobserver', state: 'INCONCLUSIVE', message: `${lost} of the run's compile tokens were missing when its builds had ended, so a build may have had less than its share` });
     for (const job of jobs) {
       const tests = /^(?:vitest|node)/.test(job.label);
       let report = '';
@@ -909,7 +841,6 @@ async function main(args) {
     return error.message.startsWith('INCONCLUSIVE') ? 2 : 3;
   } finally {
     for (const shard of shards) shard.release();
-    pool?.close();
     rmSync(binRoot, { recursive: true, force: true });
   }
 }

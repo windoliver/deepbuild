@@ -132,6 +132,8 @@ pub struct CallRow {
     /// [`REVERTS`] or [`ATTEMPTS`]: the key of its words.
     pub sends: &'static str,
     pub applies: String,
+    /// The pictures its evidence lists (#3234), which its row arms on.
+    pub pictures: Vec<crate::pictures::Listed>,
 }
 /// What proves an agent's sign-in task (#1349), after the agent's id: its own sign-in probe, as the asks core names it.
 const SIGN_IN_PROBE: &str = " sign-in probe"; // copy-exception: a check's name, matched
@@ -169,6 +171,8 @@ pub struct Model {
     pub sign_in: Option<Vec<String>>,
     /// On an agent's sign-in task (#1349): its maker's price page, from the app's own facts, which the plan line opens.
     pub price_page: Option<String>,
+    /// On a taste call (#3234): the pictures its evidence lists by hash, which its accepting option arms on.
+    pub pictures: Vec<crate::pictures::Listed>,
 }
 
 /// Whether a plan step can be undone: its `undo` names how, unless it says it can't.
@@ -509,6 +513,7 @@ impl Model {
             calls,
             sign_in,
             price_page,
+            pictures: crate::pictures::of(events, handle, ask),
         })
     }
 
@@ -623,6 +628,7 @@ fn calls(events: &[Value], handle: &str, now: u64) -> Vec<CallRow> {
                 back,
                 sends: if landed { REVERTS } else { ATTEMPTS },
                 applies: states::moment(states::deadline(events, ask).unwrap_or(now), now),
+                pictures: crate::pictures::of(events, member, ask),
             })
         })
         .collect();

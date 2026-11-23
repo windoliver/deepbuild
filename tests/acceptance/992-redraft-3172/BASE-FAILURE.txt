@@ -1,0 +1,28 @@
+#3172.f7060cf1: `acceptance_992_app` off macOS states INCONCLUSIVE for its platform, as its 18 neighbours do
+
+Base 2fb3fe996 (origin/main), run on 2026-11-23 on macOS (Darwin arm64), rustc 1.99.1 (58cf8f9c3 2026-10-13).
+
+This is a cfg-flipped build, not a Linux run. The non-macOS branch can't be built through cargo on a Mac, so each
+file was copied into a scratch folder, every `target_os = "macos"` in it (three each) replaced with
+`target_os = "none_such"`, so that the `not(...)` branch is the one compiled here and `mod rows` (which needs
+deep_replica) is left out, and the copy built with std alone and run with no arguments and no DH992_APP_CASES:
+
+  sed 's/target_os = "macos"/target_os = "none_such"/g' <file> > ~/…/scratchpad/bf/<which>/app.rs
+  rustc --edition 2021 --crate-type bin app.rs -o app && ./app; echo "exit $?"
+
+The base's own file, tests/acceptance/992/app.rs (the wrong program):
+
+  acceptance_992_app: BLOCKED; the replica runs on macOS only, so no sidebar row was read
+  exit 1
+
+It states BLOCKED, not INCONCLUSIVE, so the criterion fails on it: the unit lane reads that line as BLOCKED
+(#3172's first criterion), and a platform that can't run is INCONCLUSIVE (invariant 2; docs/parallel-proof.md,
+section 3).
+
+This redraft, tests/acceptance/992-redraft-3172/app.rs:
+
+  acceptance_992_app: INCONCLUSIVE; the replica runs on macOS only, so no sidebar row was read
+  exit 1
+
+Neither build printed a compiler warning or error. On Linux itself, built by cargo as the `acceptance_992_app`
+target, the same branch is compiled without any flip; that run is not here.
